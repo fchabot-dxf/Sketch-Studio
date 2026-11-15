@@ -34,6 +34,7 @@ await (async () => {
       { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="edit"]').click()`, full: true },
     ];
     const open = async (h) => {
+      await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: each host starts from its own empty Untitled, not the previous host's sketches
       await navigate(`http://127.0.0.1:${port}${h.url}`, 8000);
       if (h.enter) { await sleep(800); await evalJs(h.enter); }
       await waitFor(`!!document.querySelector('.sk-browser .sk-sketch-node') && document.querySelector('.sk-browser').getClientRects().length > 0`, h.name + ' shows the browser');
@@ -112,6 +113,7 @@ await (async () => {
     const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
     const tap = async (p) => { await T('touchStart', [p]); await sleep(40); await T('touchEnd', []); await sleep(350); };
     for (const h of hosts) {
+      await resetBufferLive(cdp); // TASK 684: each host from its own empty Untitled (one shared open-tabs list)
       await navigate(`http://127.0.0.1:${port}${h.url}`, 8000);
       if (h.enter) { await sleep(800); await evalJs(h.enter); }
       await waitFor(`!!document.querySelector('.sk-browser .sk-sketch-node')`, h.name + ' (phone) has the tree'); await sleep(400);

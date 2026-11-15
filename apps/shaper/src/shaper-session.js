@@ -8,13 +8,16 @@
 // Not kept: the Review camera (it is placed from the tab's own stock and cuts on each entry, like a first visit), the Design canvas view (the buffer keeps it).
 import { store, setDoc, select } from './store.js';
 
-/** createShaperSession({ prepare, getVcarveView }) -> { capture, restore }. A part the host has not mounted (the kit has no Vcarve) is skipped. */
+/** createShaperSession({ prepare, getVcarveView }) -> { capture, restore, stored }. A part the host has not mounted (the kit has no Vcarve) is skipped. */
 export function createShaperSession({ prepare, getVcarveView = () => null }) {
   return {
     capture: () => {
       const v = getVcarveView();
       return { explore: { doc: store.doc, selected: store.selected }, prepare: prepare.captureSession(), vcarveView: v ? v.getView() : null };
     },
+    // TASK 684: what the shared open-tabs working buffer (IndexedDB) keeps across a reload or a GO TO: Prepare's selection + view and Vcarve's view. Not the
+    // Explore file (a live <svg> element: it cannot be stored, and it is a view of a file, not of the design).
+    stored: (s) => ({ explore: { doc: null, selected: null }, prepare: s.prepare, vcarveView: s.vcarveView }),
     restore: (s) => {
       setDoc(s ? s.explore.doc : null);
       if (s && s.explore.selected) select(s.explore.selected);

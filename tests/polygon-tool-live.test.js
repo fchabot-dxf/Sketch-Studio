@@ -4,6 +4,7 @@
 // N plain lines + N construction radii, and ONE Undo click removes the whole polygon.
 
 import assert from 'node:assert';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 import { launchBrowser } from './helpers/cdp-browser.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -25,7 +26,8 @@ await (async () => {
       await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers });
       await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers }); await sleep(150);
     };
-    const goto = async (url, canvasId, readyExpr) => { const loaded = once('Page.loadEventFired'); await send('Page.navigate', { url: `http://127.0.0.1:${port}${url}` }); await Promise.race([loaded, sleep(8000)]); await waitFor(readyExpr, 'the page to be ready'); if (canvasId) await waitForApp(canvasId); };
+    let lastApp = null; // TASK 684: the open tabs are ONE list for all apps: a new host starts from an empty Untitled, not the previous host's drawing
+    const goto = async (url, canvasId, readyExpr) => { const app = url.split('/')[2]; if (lastApp && lastApp !== app) await resetBufferLive(cdp); lastApp = app; const loaded = once('Page.loadEventFired'); await send('Page.navigate', { url: `http://127.0.0.1:${port}${url}` }); await Promise.race([loaded, sleep(8000)]); await waitFor(readyExpr, 'the page to be ready'); if (canvasId) await waitForApp(canvasId); };
     const frame = () => send('Page.captureScreenshot', { format: 'png' });
     // TASK 596: the on-canvas boxes (size R, sides N) after the centre click; N is typed with real keys, the second click places the polygon
     const boxes = () => evalJs(`[...document.querySelectorAll('.sk-dual-input')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => [...b.querySelectorAll('input')].map((i) => [i.placeholder, i.value]))`);

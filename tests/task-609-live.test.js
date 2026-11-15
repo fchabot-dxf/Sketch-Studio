@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { importViaMenu } from './helpers/import-via-menu.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const SVG = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'svg', 'import-basic.svg');
 
@@ -56,6 +57,7 @@ await (async () => {
     }
 
     // ---- Trace ---------------------------------------------------------------------------------------------------------------------------
+    await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: Trace starts from none, not from Shaper's tabs above
     await navigate(url('trace'), 10000);
     await waitFor(`!!document.querySelector('.sk-doctab-name')`, 'the Trace strip');
     const tab = (t) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${t}"]').click()`);

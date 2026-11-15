@@ -5,6 +5,7 @@
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, DEFAULT_VIEW } from '#core/constants.js';
 import { computeGeometryBounds } from '#core/geometry-bounds.js';
+import { computeDimLabelBounds } from '#ui/svg-renderer.js';
 
 // Local state for pan-zoom
 let panZoomState = {
@@ -88,18 +89,13 @@ export function fitViewToExtents(svg, view, state, options = {}) {
     const padding = options.padding || 1.2;
     const minWidth = options.minWidth || 10;
 
-    const bounds = computeGeometryBounds(state);
-    if (!bounds) {
+    const geoBounds = computeGeometryBounds(state);
+    if (!geoBounds) {
         view.x = DEFAULT_VIEW.x;
         view.y = DEFAULT_VIEW.y;
         view.w = DEFAULT_VIEW.w;
         view.h = DEFAULT_VIEW.h;
     } else {
-        const cx = (bounds.minX + bounds.maxX) / 2;
-        const cy = (bounds.minY + bounds.maxY) / 2;
-        const w = Math.max(1e-3, bounds.w);
-        const h = Math.max(1e-3, bounds.h);
-
         const rect = (svg.getBoundingClientRect && svg.getBoundingClientRect()) || null;
         const W = rect && rect.width > 0 ? rect.width : 0;
         const H = rect && rect.height > 0 ? rect.height : 0;
@@ -113,13 +109,46 @@ export function fitViewToExtents(svg, view, state, options = {}) {
         const safeH = hasInset ? Math.max(1, H - inset.top - inset.bottom) : H;
         const safeAspect = hasInset ? (safeW / safeH) : aspect;
 
-        const requiredSafeW = Math.max(w, h * safeAspect);
-        const fittedSafeW = Math.max(minWidth, requiredSafeW * padding);
-        view.w = hasInset ? fittedSafeW * (W / safeW) : fittedSafeW;
+        const frameBounds = (b) => {
+            const w = Math.max(1e-3, b.maxX - b.minX);
+            const h = Math.max(1e-3, b.maxY - b.minY);
+            const requiredSafeW = Math.max(w, h * safeAspect);
+            const fittedSafeW = Math.max(minWidth, requiredSafeW * padding);
+            const vw = hasInset ? fittedSafeW * (W / safeW) : fittedSafeW;
+            return {
+                cx: (b.minX + b.maxX) / 2,
+                cy: (b.minY + b.maxY) / 2,
+                vw,
+                zoom: W > 0 ? (vw / W) : 0,
+            };
+        };
+
+        let framed = frameBounds(geoBounds);
+        // Dimension labels (and narrow-dim stubs) scale with zoom (`scale(px) = px * zoom`), so iterate to a fixed point
+        // where geometry + every `.dim-label` box fit with the same margin padding.
+        if (state && Array.isArray(state.constraints) && state.constraints.length > 0) {
+            for (let iter = 0; iter < 6; iter++) {
+                const labelBounds = computeDimLabelBounds(state, framed.zoom);
+                if (!labelBounds) break;
+                const combined = {
+                    minX: Math.min(geoBounds.minX, labelBounds.minX),
+                    minY: Math.min(geoBounds.minY, labelBounds.minY),
+                    maxX: Math.max(geoBounds.maxX, labelBounds.maxX),
+                    maxY: Math.max(geoBounds.maxY, labelBounds.maxY),
+                };
+                const next = frameBounds(combined);
+                const converged = Math.abs(next.vw - framed.vw) <= 1e-6 * framed.vw
+                    && Math.abs(next.cx - framed.cx) <= 1e-6 * Math.max(1, framed.vw)
+                    && Math.abs(next.cy - framed.cy) <= 1e-6 * Math.max(1, framed.vw);
+                framed = next;
+                if (converged) break;
+            }
+        }
+
+        view.w = framed.vw;
         view.h = view.w / aspect;
-        const worldPerPx = W > 0 ? (view.w / W) : 0;
-        view.x = cx - ((inset.left - inset.right) / 2) * worldPerPx;
-        view.y = cy - ((inset.top - inset.bottom) / 2) * worldPerPx;
+        view.x = framed.cx - ((inset.left - inset.right) / 2) * framed.zoom;
+        view.y = framed.cy - ((inset.top - inset.bottom) / 2) * framed.zoom;
     }
 
     updateViewBox(svg, view);
@@ -134,9 +163,9 @@ export const FIT_MARGIN = 0.1;
 const pendingFits = new WeakMap(); // svg -> stop() of its armed "fit once the canvas has a size" observer
 
 /**
- * Frames the visible drawing (`computeGeometryBounds`: joints of visible shapes, arc extents, circles by radius, construction
- * included, dimension labels not) centred in `svg` with `margin` (default FIT_MARGIN) on each side, by setting the shared
- * `state.view`. An empty drawing leaves the view alone. Returns true when the view was set now.
+ * Frames the visible drawing (geometry extents + visible dimension labels' boxes) centred in `svg` with `margin`
+ * (default FIT_MARGIN) on each side, by setting the shared `state.view`. An empty drawing leaves the view alone.
+ * Returns true when the view was set now.
  * A canvas with no size yet (hidden tab) is not fitted: the fit is armed and runs at the first real size, unless the user
  * has panned or zoomed `state.view` in the meantime. The next call for the same svg replaces an armed fit.
  */

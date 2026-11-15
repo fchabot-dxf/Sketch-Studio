@@ -2,8 +2,8 @@
 // Polls the app state, and when it changed writes the document (packages/core/document.js serializeDocument + this host's
 // sidecar) into the app's CURRENT DESIGN through the project store (project-store.js: projects and designs on IndexedDB). It
 // also loads a design into the app (the initial restore, Open, New, Open from file) and offers the design actions a
-// sidebar needs. Because every Sketch-Studio app is same-origin and the store's "current" pointer is global, switching apps
-// via the shared app-switcher still carries the drawing: the next app restores the same current design.
+// sidebar needs. Every Sketch-Studio app is same-origin: the store's "current" pointer and the open-tabs buffer (below) are shared, so switching
+// apps via the shared app-switcher carries the open tabs and the shown design.
 //
 // THE SAVE RULE (owner, 2026-11-12: "Auto save only once I actually saved and named"; docs/DOCUMENT-TABS-DESIGN.md, Saving): a NEW
 // design (a fresh page, New design, a new tab) is an in-memory "Untitled" that is NOT stored anywhere until the user saves it the first
@@ -14,6 +14,15 @@
 // TABS (TASK 558, docs/DOCUMENT-TABS-DESIGN.md section 4): several designs open at once, ONE live state. Switching tabs saves the active
 // design, puts its document, undo/redo arrays, view and the host's session aside in a tab record, and loads the other tab's record
 // into the same state (a SWAP; measured ~30 ms at 300 constraints, about one frame's solve).
+//
+// ONE LIST OF OPEN TABS FOR ALL APPS (TASK 684, owner turns 1768-1775): the open tabs live in ONE shared working buffer (project-store.js readBuffer /
+// updateBuffer), so SketchStudio, Shaper, Pen Plotter and Trace show the same tabs, in the same order, with the same active tab; a GO TO lands on
+// the design you were on, unsaved Untitled tabs included. Each app shows ITS view of a document (its own sidecar, or its defaults when the document
+// has none) and passes every other app's through: the buffer keeps the WHOLE document (fullDoc: every app's sidecar) while an autosave still writes only
+// this app's sidecar (458). What stays per APP: the stage (each host's own MODE_KEY / STAGE_KEY), and each app's SESSION of a tab (hostSessions[app]:
+// Pen Plotter's toolpath undo + selection, Shaper's Explore / Prepare state, Trace's photo): written into the buffer under the app's own slot, the other
+// apps' slots passed through. The document's undo / redo history stays with the PAGE (in memory, not in the buffer: a reload or a GO TO starts with an
+// empty history, as a reload always did; an undo step is a whole-state snapshot of this app's state, which another app could not apply).
 //
 // DDCS Studio lessons this steals (already paid for there, not rediscovered — see web/data/fsHandles.js,
 // web/ui/fileSaveState.js:164):
@@ -40,7 +49,57 @@ import { browserFileSeam, serializeProjectFile, projectFileName } from '#ui/proj
 export const MAX_TABS = 10;
 /** The name an unsaved design shows. */
 export const UNTITLED = 'Untitled';
-const TAB_BUFFER_FIELDS = ['doc', 'sig', 'history', 'redoStack', 'view', 'hostSession', 'lastSig', 'emptySig', 'saveOk', 'designId', 'name'];
+const TAB_BUFFER_FIELDS = ['doc', 'history', 'redoStack', 'view', 'hostSessions', 'lastSig', 'emptySig', 'content', 'saveOk', 'designId', 'name'];
+/** The empty baseline of an unsaved Untitled the shared buffer says HAS content (TASK 684): no signature equals it, so the tab asks THE question when closed
+ *  (its own empty baseline was taken by another app or an earlier page, whose signature is not this app's). */
+const HAS_CONTENT = '';
+
+/**
+ * TASK 684: the ONE open-tabs working buffer is shared by every app and every page (browser tab) of this origin. A page writes it as a MERGE with what
+ * is stored, so two pages open at the same time never silently lose a tab or a tab's content (the simplest safe rule):
+ *   stored  the buffer as it is now (another page may have written it since this page last did); null = none
+ *   mine    this page's snapshot (captureBufferSnapshot); null = this page holds only an empty Untitled
+ *   base    Map key -> tabSig of the tabs this page has held, as it last READ or WROTE them (what "changed elsewhere" is measured against)
+ *   app     this page's app: each app owns ITS slot of a tab's hostSessions (the 458 rule, for sessions): the others are taken from `stored`
+ * Rules: a tab of mine is written as mine, unless another page changed it since (stored != base): then, if this page did not change it (mine == base),
+ * the other page's version is kept; if both changed it, mine is written AND theirs is kept as another tab. A tab this page never held (another page
+ * opened it) is kept after mine; one this page held and closed is dropped, unless another page changed it since. A stored design is listed once.
+ * Order and the active tab: this page's (the last writer's). Returns { buffer, wrote: Map key -> tabSig written as this page's }.
+ */
+export function tabSig(t) { return t.designId ? 'd:' + t.designId : 'u:' + JSON.stringify([t.name, t.doc]); }
+export function mergeTabBuffers(stored, mine, base, app) {
+  const theirs = (stored && Array.isArray(stored.tabs) ? stored.tabs : []).filter(Boolean);
+  const byKey = new Map(theirs.map((t) => [t.key, t]));
+  const own = mine ? mine.tabs : [];
+  const ownKeys = new Set(own.map((t) => t.key));
+  const sessionsOf = (t, other) => {
+    const out = { ...((other && other.hostSessions) || t.hostSessions || {}) };
+    if (t.hostSessions && t.hostSessions[app] !== undefined) out[app] = t.hostSessions[app]; else delete out[app];
+    return out;
+  };
+  const out = [], extra = [], wrote = new Map();
+  for (const t of own) {
+    const s = byKey.get(t.key), b = base.get(t.key), mineSig = tabSig(t);
+    const theirSig = s ? tabSig(s) : null;
+    if (!s || b === undefined || theirSig === b || theirSig === mineSig) { out.push({ ...t, hostSessions: sessionsOf(t, s) }); wrote.set(t.key, mineSig); continue; }
+    if (mineSig === b) { out.push({ ...s, hostSessions: sessionsOf(t, s) }); continue; } // changed only by another page: its newer version stays
+    out.push({ ...t, hostSessions: sessionsOf(t, s) }); wrote.set(t.key, mineSig);       // changed here AND there: mine, and theirs as another tab
+    extra.push({ ...s, key: s.key + '+' + Math.random().toString(36).slice(2, 7) });
+  }
+  for (const s of theirs) {
+    if (ownKeys.has(s.key)) continue;
+    const b = base.get(s.key);
+    if (b !== undefined && tabSig(s) === b) continue; // this page closed it and no other page changed it since
+    extra.push(s);
+  }
+  const ids = new Set(out.filter((t) => t.designId).map((t) => t.designId));
+  for (const t of extra) { if (t.designId) { if (ids.has(t.designId)) continue; ids.add(t.designId); } out.push(t); }
+  if (!out.length) return { buffer: null, wrote };
+  const has = (k) => k != null && out.some((t) => t.key === k);
+  const activeKey = mine && has(mine.activeKey) ? mine.activeKey : (stored && has(stored.activeKey) ? stored.activeKey : out[0].key);
+  const currentId = mine ? mine.currentId : (stored ? stored.currentId || null : null);
+  return { buffer: { v: 2, activeKey, currentId, tabs: out }, wrote };
+}
 
 /**
  * createDocumentBuffer({ state, app, hostName, getHostData, session, onRestored, store, pollMs, onStatusChange, canvas, doc, win })
@@ -48,9 +107,11 @@ const TAB_BUFFER_FIELDS = ['doc', 'sig', 'history', 'redoStack', 'view', 'hostSe
  *   app: the app id ('sketchstudio' | 'shaper' | 'penplotter'), stored on the design (who saved it last).
  *   hostName / getHostData: OPTIONAL — if given, getHostData() is called at save time and embedded
  *     under doc.hosts[hostName] (e.g. penplotter's pens/toolpaths). Omit for a host with no side-car data of its own.
- *   session: OPTIONAL { capture() -> data, restore(data | undefined) } — the host's IN-MEMORY per-design data that is not in the
- *     document (e.g. Pen Plotter's toolpath undo stacks): captured when a tab is put aside, restored when it comes back; restore(undefined)
- *     = a design that has none yet (reset). Omit for a host with nothing of that kind.
+ *   session: OPTIONAL { capture() -> data, restore(data | undefined), stored?(data) -> data } — the host's IN-MEMORY per-design data that is not in
+ *     the document (e.g. Pen Plotter's toolpath undo stacks): captured when a tab is put aside, restored when it comes back; restore(undefined)
+ *     = a design that has none yet (reset). Omit for a host with nothing of that kind. stored(data) (TASK 684): the part of it the open-tabs working
+ *     buffer keeps across a reload / a GO TO (the buffer is IndexedDB: plain, storable data only; no DOM element, canvas, nor a photo, TASK 567);
+ *     omitted = all of it is storable. It is applied to data that is already its own result too (a tab the buffer gave this page), so it must keep that.
  *   onRestored({ restored, hosts, name, reason }): OPTIONAL — called after the state was replaced (initial restore, openDesign, newDesign,
  *     openFile, a Drive conflict reload, a tab switch / new tab / close). `reason`: 'restore' | 'open' | 'new' | 'file' | 'conflict' |
  *     'switch'. The host re-solves / repaints and applies ITS sidecar from `hosts` (or resets its own state to defaults when
@@ -65,7 +126,7 @@ const TAB_BUFFER_FIELDS = ['doc', 'sig', 'history', 'redoStack', 'view', 'hostSe
  *   doc / win: the page's document and window (injectable for tests): when the tab goes hidden or is closing, the buffer saves pending
  *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
- * Returns { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
+ * Returns { restore, ready, start, stop, flush, keepTabs, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
  *   isStored, needsSavePrompt, discardUnsaved, tabs, openTab, openFileTab, newTab, activate, closeTab, store }.
  */
 export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
@@ -73,7 +134,9 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let lastSig = null;     // the document signature last written (or loaded): a different one = something to save
   let boundId = null;     // the stored design this buffer reads from / writes to; null = an unsaved Untitled (never written)
   let name = UNTITLED;    // the design's name as shown
-  let emptySig = null;    // an unsaved Untitled: the signature it started from (content = anything else); null for a stored design
+  let emptySig = null;    // an unsaved Untitled: the FULL signature it started from (content = anything else); null for a stored design
+  let foreign = {};       // TASK 684: the OTHER apps' sidecars of the shown document: kept in the shared buffer and in an Untitled's first named save, never autosaved (458)
+  let otherSessions = {}; // TASK 684: the OTHER apps' sessions of the shown tab (hostSessions minus this app's): passed through the shared buffer untouched
   let saveOk = true;      // the last autosave of the bound design succeeded
   let bufferOk = true;    // the last local working-buffer write succeeded (beforeunload arms on failure)
   let lastBufSig = null;  // JSON string of last successfully persisted open-tabs buffer
@@ -82,7 +145,10 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let offHistory = () => {};
   // ---- tabs: one record per open design, in strip order; `active` is the record whose design is in the state ----
   let tabSeq = 0;
-  const newRecord = () => ({ key: 't' + (++tabSeq) });
+  const pageTag = Math.random().toString(36).slice(2, 7); // TASK 684: keys are unique across pages (two pages share one buffer)
+  const newKey = () => 't' + (++tabSeq) + '-' + pageTag;
+  const newRecord = () => ({ key: newKey() });
+  const base = new Map(); // TASK 684: key -> tabSig of each tab as this page last read / wrote it in the shared buffer (mergeTabBuffers)
   let active = newRecord();
   const tabList = [active];
 
@@ -112,59 +178,53 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const notify = (s) => { if (canvas) canvas.dataset.saveState = s; try { onStatusChange && onStatusChange(s); } catch (_) {} };
   const restored = (out) => { try { onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); } return out; };
 
+  /** The document as THIS app writes it to the store: its own sidecar only (458: every other host's passes through in the store). */
   function currentDoc() {
     const hosts = (hostName && typeof getHostData === 'function') ? { [hostName]: getHostData() } : {};
     return serializeDocument(state, { hosts });
   }
   const sigNow = () => JSON.stringify(currentDoc());
+  /** TASK 684: the WHOLE document, the other apps' sidecars included: what the shared buffer keeps (an Untitled lives only there) and what an
+   *  Untitled's first named save stores, so no app's sidecar is lost on the way Studio -> Shaper -> Pen Plotter -> Trace. */
+  function fullDoc() { const d = currentDoc(); d.hosts = { ...foreign, ...d.hosts }; return d; }
+  const fullSigNow = () => JSON.stringify(fullDoc());
+  const splitHosts = (hosts) => { const o = { ...(hosts || {}) }; if (hostName) delete o[hostName]; return o; };
+  /** A tab's sessions with THIS app's slot set to `mine` (undefined = none). */
+  const withOwn = (sessions, mine) => { const o = { ...(sessions || {}) }; if (mine === undefined) delete o[app]; else o[app] = mine; return o; };
+  /** What of this app's session of a tab the working buffer may keep (session.stored; the in-memory capture can hold a DOM element or a photo). */
+  const storedSession = (data) => (data === undefined || !session || typeof session.stored !== 'function' ? data : session.stored(data));
+  /** The active design is an unsaved Untitled with content. */
+  const activeContent = () => !boundId && hasContent(fullSigNow(), emptySig);
 
-  /** Snapshot of the open tabs + active working state so page refresh / crash reopens what was open (local working buffer only, NOT a saved file). */
+  /** Snapshot of the open tabs + active working state so page refresh / crash / a GO TO reopens what was open (the shared working buffer, NOT a saved
+   *  file). null = only an empty Untitled is open (nothing to keep). */
   function captureBufferSnapshot() {
-    if (tabList.length === 1 && !boundId && !hasContent(sigNow(), emptySig)) return null;
-    const activeDoc = JSON.parse(sigNow());
+    if (tabList.length === 1 && !boundId && !activeContent()) return null;
     return {
-      v: 1,
-      app: app || null,
+      v: 2,
       activeKey: active.key,
       currentId: boundId || null,
-      tabs: tabList.map((t) => {
-        if (t === active) {
-          return {
-            key: t.key,
-            designId: boundId || null,
-            name,
-            emptySig: boundId ? null : emptySig,
-            saveOk,
-            doc: activeDoc,
-            view: state.view ? { ...state.view } : null,
-            hostSession: session ? session.capture() : undefined,
-          };
-        }
-        return {
-          key: t.key,
-          designId: t.designId || null,
-          name: t.name,
-          emptySig: t.designId ? null : t.emptySig,
-          saveOk: t.saveOk,
-          doc: t.doc,
-          view: t.view ? { ...t.view } : null,
-          hostSession: t.hostSession,
-        };
-      }),
+      tabs: tabList.map((t) => (t === active
+        ? { key: t.key, designId: boundId || null, name, content: activeContent(), saveOk, doc: fullDoc(), view: state.view ? { ...state.view } : null, hostSessions: withOwn(otherSessions, session ? storedSession(session.capture()) : undefined) }
+        : { key: t.key, designId: t.designId || null, name: t.name, content: !!t.content, saveOk: t.saveOk !== false, doc: t.doc, view: t.view ? { ...t.view } : null, hostSessions: withOwn(t.hostSessions, storedSession((t.hostSessions || {})[app])) })),
     };
   }
+  /** Write the snapshot into the SHARED buffer, merged with what other pages wrote there (mergeTabBuffers). Resolves false when it could not be written. */
   async function saveWorkingBuffer() {
-    if (!store.writeBuffer) return true;
+    if (!store.updateBuffer) return true;
     let payload;
-    try { payload = captureBufferSnapshot(); } catch (_) { return true; }
+    try { payload = captureBufferSnapshot(); } catch (e) { console.error('open-tabs snapshot failed', e); return true; } // a transient bad state: the next tick tries again
     const s = JSON.stringify(payload);
     if (s === lastBufSig && bufferOk) return true;
+    let wrote = null;
     try {
-      await store.writeBuffer(payload, { app });
+      await store.updateBuffer((stored) => { const m = mergeTabBuffers(stored, payload, base, app); wrote = m.wrote; return m.buffer; });
+      for (const [k, sig] of wrote) base.set(k, sig);
       lastBufSig = s;
       bufferOk = true;
       return true;
-    } catch (_) {
+    } catch (e) {
+      console.error('the open-tabs working buffer could not be written', e);
       bufferOk = false;
       return false;
     }
@@ -196,21 +256,25 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
 
   // ---- the binding: a stored design, or an unsaved Untitled ----------------------------------------------------------------------
   function bindStored(design) { boundId = design.id; name = design.name; emptySig = null; saveOk = true; lastSig = sigNow(); }
-  function bindUntitled() { boundId = null; name = UNTITLED; saveOk = true; lastSig = emptySig = sigNow(); }
+  function bindUntitled() { boundId = null; name = UNTITLED; saveOk = true; foreign = {}; otherSessions = {}; lastSig = sigNow(); emptySig = fullSigNow(); }
 
   /** Replace the app state with a stored design and tell the host. */
   function load(design, reason) {
     const result = deserializeDocument(design.document, state);
     if (!result.ok) return { restored: false, hosts: {}, name: design.name, reason: result.reason }; // e.g. a newer-version document
-    bindStored(design); // the just-restored state IS the baseline -- don't immediately re-save it as "new"
-    return restored({ restored: true, hosts: result.hosts, name: design.name, reason });
+    foreign = splitHosts(result.hosts);
+    if (reason !== 'conflict') otherSessions = {}; // a Drive conflict reloads the SAME tab: the other apps' sessions stay with it
+    bindStored(design);
+    const out = restored({ restored: true, hosts: result.hosts, name: design.name, reason });
+    lastSig = sigNow(); // TASK 684: the baseline is taken AFTER the host applied its sidecar (or its defaults when the design has none): showing a design never writes it
+    return out;
   }
   /** Replace the app state with an empty, UNSAVED Untitled (the same empty document a stored New design had) and tell the host. */
   function loadUntitled(reason, template = null) {
     const result = deserializeDocument(emptyDocument(), state);
     bindUntitled();
     let out = restored({ restored: true, hosts: result.hosts, name: UNTITLED, reason });
-    lastSig = emptySig = sigNow(); // the empty baseline is taken AFTER the host reset its own data (its sidecar is part of the signature)
+    lastSig = sigNow(); emptySig = fullSigNow(); // the empty baseline is taken AFTER the host reset its own data (its sidecar is part of the signature)
     if (template) {
       // TASK 651: a design started from a TEMPLATE ({ name, document }) is the same unsaved Untitled, shown under the template's name and holding its
       // drawing as its STARTING document (not an edit: the undo history stays empty). emptySig stays the EMPTY baseline, so it has content: closing it asks
@@ -218,6 +282,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       const r = deserializeDocument(template.document, state);
       if (!r.ok) throw new Error(`This template could not be opened: ${r.reason}`);
       name = template.name;
+      foreign = splitHosts(r.hosts);
       out = restored({ restored: true, hosts: r.hosts, name, reason });
       lastSig = sigNow();
     }
@@ -228,86 +293,73 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const hasContent = (sig, empty) => empty != null && sig !== empty;
   /** The decision a close / leave prompt asks for the ACTIVE design (or a tab record): 'unsaved' = an Untitled with content (Save… / Don't
    *  save / Cancel); 'save-failed' = a stored design whose last save failed; null = close without asking (autosaved). */
-  function promptFor(designId, sig, empty, ok) {
-    if (!designId) return hasContent(sig, empty) ? 'unsaved' : null;
+  function promptFor(designId, content, ok) {
+    if (!designId) return content ? 'unsaved' : null;
     const s = store.status ? store.status(designId) : null;
     return (!ok || (s && s.state === 'failed')) ? 'save-failed' : null;
   }
   function needsSavePrompt() {
-    let sig = null;
-    if (!boundId) { try { sig = sigNow(); } catch (_) { sig = null; } }
-    return promptFor(boundId, sig, emptySig, saveOk);
+    let content = false;
+    if (!boundId) { try { content = activeContent(); } catch (e) { console.error('the content test failed', e); content = true; } } // unreadable = assume content: never close it silently
+    return promptFor(boundId, content, saveOk);
   }
   const notSavedYet = () => new Error('This design is not saved yet. Save it with a name first (Save as…), or undo / clear it.');
   const refuseIfUnsaved = () => { if (needsSavePrompt() === 'unsaved') throw notSavedYet(); };
 
+  /** A tab of the SHARED buffer as a record of this page (TASK 684). Its baselines (lastSig, and an Untitled's emptySig) are left undefined: they
+   *  are taken when the tab is shown, by THIS app (bringIn); an Untitled the buffer says has content gets HAS_CONTENT instead (it asks when closed). */
+  // (a TASK 624 per-app buffer was converted to this form by the store's first read: project-store.js mergeLegacyBuffers)
+  function recordFromBuffer(t, key, { designId = null, name: n = t.name, doc = t.doc } = {}) {
+    const content = !designId && !!t.content;
+    return { key, designId, name: n || UNTITLED, content, emptySig: designId ? null : (content ? HAS_CONTENT : undefined), saveOk: true, lastSig: undefined, doc, view: t.view || null, hostSessions: t.hostSessions || {} };
+  }
+
+  /** The initial restore (TASK 684): the tabs of the SHARED buffer (whichever app wrote them; a stored design from the store, an Untitled from the buffer),
+   *  plus the current design when the buffer does not hold it (another page set it), which then shows; nothing = an unsaved Untitled. */
   async function restore() {
     try {
       let design = null;
-      try { design = await store.loadCurrent({ app }); } catch (_) { design = null; } // best-effort: no store = boot with an empty sketch (unchanged)
+      try { design = await store.loadCurrent({ app }); } catch (e) { console.error('the current design could not be read', e); design = null; } // best-effort: boot with an empty sketch
       let bufSnap = null;
-      try { bufSnap = store.readBuffer ? await store.readBuffer({ app }) : null; } catch (_) { bufSnap = null; }
-      if (bufSnap && Array.isArray(bufSnap.tabs) && bufSnap.tabs.length) {
-        let curId = design ? design.id : null;
-        if (!curId && store.currentId) { try { curId = await store.currentId(); } catch (_) { curId = null; } }
-        const resolvedBufCur = bufSnap.currentId && store.resolveId ? store.resolveId(bufSnap.currentId) : bufSnap.currentId;
-        const externalCurrent = !!(curId && curId !== resolvedBufCur && !bufSnap.tabs.some((t) => (store.resolveId ? store.resolveId(t.designId) : t.designId) === curId));
-        if (!externalCurrent) {
-          const restoredTabs = [];
-          for (const s of bufSnap.tabs) {
-            const key = s && s.key ? String(s.key) : ('t' + (++tabSeq));
-            const m = /^t(\d+)$/.exec(key); if (m) tabSeq = Math.max(tabSeq, Number(m[1]));
-            if (!s.designId) {
-              if (!validateDocument(s.doc).ok) continue;
-              restoredTabs.push({ key, designId: null, name: s.name || UNTITLED, emptySig: s.emptySig, saveOk: true, lastSig: JSON.stringify(s.doc), doc: s.doc, view: s.view || null, hostSession: s.hostSession });
-            } else {
-              const sid = store.resolveId ? store.resolveId(s.designId) : s.designId;
-              let d = (design && (design.id === sid || design.id === s.designId)) ? design : null;
-              let unreadable = false;
-              if (!d) {
-                try { d = await store.get(sid); } catch (_) { unreadable = true; }
-              }
-              if (!d && !unreadable) continue; // deleted on Drive out-of-band (with no local shadow): do not resurrect
-              const doc = d ? d.document : s.doc;
-              if (!validateDocument(doc).ok) continue;
-              restoredTabs.push({ key, designId: d ? d.id : sid, name: (d ? d.name : s.name) || UNTITLED, emptySig: null, saveOk: true, lastSig: JSON.stringify(doc), doc, view: s.view || null, hostSession: s.hostSession });
-            }
-          }
-          if (restoredTabs.length) {
-            tabList.length = 0;
-            tabList.push(...restoredTabs);
-            const target = tabList.find((x) => x.key === bufSnap.activeKey) || tabList[0];
-            active = target;
-            const result = deserializeDocument(target.doc, state);
-            if (result.ok) {
-              if (target.designId) {
-                boundId = target.designId; name = target.name; emptySig = null; saveOk = true;
-              } else {
-                boundId = null; name = target.name || UNTITLED; emptySig = target.emptySig; saveOk = true;
-              }
-              if (target.view && state.view) Object.assign(state.view, target.view);
-              const hostSession = target.hostSession;
-              for (const k of TAB_BUFFER_FIELDS) delete target[k];
-              const out = restored({ restored: true, hosts: result.hosts, name, reason: 'restore' });
-              if (session && hostSession !== undefined) session.restore(hostSession);
-              if (typeof state._notifyHistory === 'function') state._notifyHistory();
-              lastSig = sigNow();
-              if (boundId !== curId && store.setCurrent) { try { await store.setCurrent(boundId); } catch (_) {} }
-              notify(boundId ? 'saved' : 'idle');
-              return out;
-            }
-          }
-          // All buffered tabs vanished on Drive or failed validation: reset stale buffer cleanly to Untitled
-          active = newRecord();
-          tabList.length = 0; tabList.push(active);
-          if (store.writeBuffer) { try { await store.writeBuffer(null, { app }); } catch (_) {} }
-          if (curId && store.setCurrent) { try { await store.setCurrent(null); } catch (_) {} }
-          bindUntitled();
-          return { restored: false, hosts: {} };
+      try { bufSnap = store.readBuffer ? await store.readBuffer({ app }) : null; } catch (e) { console.error('the open-tabs working buffer could not be read', e); bufSnap = null; }
+      let curId = design ? design.id : null;
+      if (!curId && store.currentId) { try { curId = await store.currentId(); } catch (_) { curId = null; } }
+      const restoredTabs = [];
+      const ids = new Set();
+      for (const t of (bufSnap && Array.isArray(bufSnap.tabs) ? bufSnap.tabs : [])) {
+        if (!t) continue;
+        const key = t.key ? String(t.key) : newKey();
+        base.set(key, tabSig(t)); // held by this page from now on: a tab dropped below is dropped from the buffer too (mergeTabBuffers)
+        if (!t.designId) {
+          if (!validateDocument(t.doc).ok) continue;
+          restoredTabs.push(recordFromBuffer(t, key));
+          continue;
         }
+        const sid = store.resolveId ? store.resolveId(t.designId) : t.designId;
+        let d = (design && (design.id === sid || design.id === t.designId)) ? design : null;
+        let unreadable = false;
+        if (!d) {
+          try { d = await store.get(sid); } catch (_) { unreadable = true; }
+        }
+        if (!d && !unreadable) continue; // deleted on Drive out-of-band (with no local shadow): do not resurrect
+        const id = d ? d.id : sid;
+        if (ids.has(id)) continue; // a stored design is open once
+        const doc = d ? d.document : t.doc;
+        if (!validateDocument(doc).ok) continue;
+        ids.add(id);
+        restoredTabs.push(recordFromBuffer(t, key, { designId: id, name: d ? d.name : t.name, doc }));
       }
-      if (!design) { bindUntitled(); return { restored: false, hosts: {} }; } // nothing stored: the page shows an unsaved Untitled
-      return load(design, 'restore');
+      let target = restoredTabs.find((x) => x.key === (bufSnap && bufSnap.activeKey)) || restoredTabs[0] || null;
+      if (design && !ids.has(design.id) && validateDocument(design.document).ok) { // current, but not among the buffer's tabs: it opens as a tab of its own and shows
+        target = recordFromBuffer({ hostSessions: {} }, newKey(), { designId: design.id, name: design.name, doc: design.document });
+        restoredTabs.push(target);
+      }
+      if (!target) { bindUntitled(); return { restored: false, hosts: {} }; } // nothing open, nothing current: the page shows an unsaved Untitled
+      tabList.length = 0;
+      tabList.push(...restoredTabs);
+      const out = bringIn(target, 'restore');
+      if (boundId !== curId && store.setCurrent) { try { await store.setCurrent(boundId); } catch (e) { console.error('the current design pointer could not be set', e); } }
+      return out;
     } finally {
       markReady(); // input opens once the stored design (if any) has replaced the state AND the host's onRestored has run
     }
@@ -342,6 +394,9 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
   /** Save pending changes NOW (before an action that copies / exports the stored design, and when the tab hides), written through to Drive. */
   async function flush() { await poll(); await store.flushDrive(boundId || undefined); }
+  /** TASK 684: before a GO TO leaves the page: the pending autosave and the open tabs are written NOW (the next app reads the same tabs from the shared
+   *  buffer). Resolves false when the working buffer could not be written (the caller then stays: leaving would lose the tabs). */
+  async function keepTabs() { endInteraction(); await poll(); return saveWorkingBuffer(); }
 
   // ---- explicit design actions (they throw readable errors: the user asked for them) -------------------------------
   // They act on the ACTIVE tab. One that would replace an unsaved Untitled WITH content refuses: nothing is ever thrown away silently.
@@ -355,7 +410,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   async function saveAs(newName) {
     if (!boundId) {
       const sig = sigNow();
-      const d = await store.newDesign(newName, { app, document: JSON.parse(sig) }); // stored, named, current in one write
+      const d = await store.newDesign(newName, { app, document: fullDoc() }); // stored, named, current in one write; every app's sidecar goes with it (TASK 684)
       boundId = d.id; name = d.name; emptySig = null; saveOk = true; lastSig = sig;
       notify('saved');
       await saveWorkingBuffer();
@@ -371,7 +426,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
    *  Untitled's in-memory document (a file is not the project store: the save rule does not apply). */
   async function saveFile(seam = browserFileSeam, designId) {
     if (designId || boundId) { await flush(); return store.exportFile(designId || boundId, seam); }
-    return seam.save(serializeProjectFile({ app, name, document: JSON.parse(sigNow()) }), projectFileName(name));
+    return seam.save(serializeProjectFile({ app, name, document: fullDoc() }), projectFileName(name));
   }
   /** "Don't save": the unsaved Untitled is thrown away (an empty Untitled takes its place), so the action the user asked for can go on.
    *  A stored design is never discarded (it is autosaved). */
@@ -405,27 +460,34 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   async function putAside() {
     endInteraction();
     await poll();
-    const sig = sigNow();
     Object.assign(active, {
-      designId: boundId, name, emptySig, saveOk, lastSig, sig,
-      doc: JSON.parse(sig),
+      designId: boundId, name, emptySig, saveOk, lastSig,
+      content: activeContent(),
+      doc: fullDoc(),
       history: state.history, redoStack: state.redoStack,
       view: state.view ? { ...state.view } : null,
-      hostSession: session ? session.capture() : undefined,
+      hostSessions: withOwn(otherSessions, session ? session.capture() : undefined),
     });
     if (Array.isArray(state.history)) { state.history = []; state.redoStack = []; }
   }
-  /** Make record `rec` the active one, loading its document, history, view and host session into the state. */
-  function bringIn(rec) {
+  /** Make record `rec` the active one, loading its document, history, view and THIS app's session of it into the state (`reason` 'switch', or
+   *  'restore' for the initial restore: a tab without a session of this app then leaves the fresh page's session as it is). */
+  function bringIn(rec, reason = 'switch') {
     active = rec;
     const result = deserializeDocument(rec.doc, state);
-    boundId = rec.designId || null; name = rec.name; emptySig = rec.emptySig; saveOk = rec.saveOk; lastSig = rec.lastSig;
+    foreign = splitHosts(result.hosts);
+    const sessions = rec.hostSessions || {};
+    otherSessions = withOwn(sessions, undefined);
+    boundId = rec.designId || null; name = rec.name; emptySig = boundId ? null : rec.emptySig; saveOk = rec.saveOk !== false; lastSig = rec.lastSig;
     if (Array.isArray(rec.history)) { state.history = rec.history; state.redoStack = rec.redoStack; }
     if (rec.view && state.view) Object.assign(state.view, rec.view);
-    const hostSession = rec.hostSession;
     for (const k of TAB_BUFFER_FIELDS) delete rec[k];
-    const out = restored({ restored: true, hosts: result.hosts || {}, name, reason: 'switch' });
-    if (session) session.restore(hostSession);
+    const out = restored({ restored: true, hosts: result.hosts || {}, name, reason });
+    if (session && (reason !== 'restore' || sessions[app] !== undefined)) session.restore(sessions[app]);
+    // a tab from the shared buffer (another app, an earlier page): its baselines are THIS app's signatures, taken now that it shows (TASK 684). An empty
+    // Untitled's baseline is the document as shown, so it has no dot; the autosave baseline is the shown design, so showing it never writes it.
+    if (lastSig === undefined) lastSig = sigNow();
+    if (!boundId && emptySig === undefined) emptySig = fullSigNow();
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
     notify(boundId ? (saveOk ? 'saved' : 'error') : 'idle'); // the host's status text follows the tab now shown (an unsaved Untitled writes nothing: empty)
     return out;
@@ -440,7 +502,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     notify('idle');
     return out;
   }
-  const untouchedUntitled = () => !boundId && !hasContent(sigNow(), emptySig) && !(state.history && state.history.length) && !(state.redoStack && state.redoStack.length);
+  const untouchedUntitled = () => !boundId && !activeContent() && !(state.history && state.history.length) && !(state.redoStack && state.redoStack.length);
   const full = () => new Error(`Close a tab first: at most ${MAX_TABS} designs are open at once.`);
   const recordOf = (key) => { const r = tabList.find((x) => x.key === key); if (!r) throw new Error('That tab is not open.'); return r; };
 
@@ -454,7 +516,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     syncMovedIds();
     return tabList.map((t) => (t === active
       ? { key: t.key, designId: boundId, name, active: true, stored: !!boundId, needsSavePrompt: needsSavePrompt() }
-      : { key: t.key, designId: t.designId || null, name: t.name, active: false, stored: !!t.designId, needsSavePrompt: promptFor(t.designId, t.sig, t.emptySig, t.saveOk) }));
+      : { key: t.key, designId: t.designId || null, name: t.name, active: false, stored: !!t.designId, needsSavePrompt: promptFor(t.designId, t.content, t.saveOk !== false) }));
   }
   /** Open stored design `id` in a NEW tab (T2) at the right end; already open -> its tab is activated; the active tab an untouched
    *  Untitled -> it is reused. */
@@ -524,7 +586,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
 
   return {
-    restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves,
+    restore, ready, start, stop, flush, keepTabs, openDesign, newDesign, saveAs, saveFile, openFile, followMoves,
     designId: () => boundId, designName: () => name, isStored: () => !!boundId, needsSavePrompt, discardUnsaved,
     tabs, openTab, openFileTab, newTab, activate, closeTab, store,
   };

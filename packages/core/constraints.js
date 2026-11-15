@@ -8,6 +8,7 @@ import { ConstraintManager } from './constraint-manager.js';
 import { SolverConfig } from './solver-config.js';
 import { isDimension, nextDimensionName } from './parameters.js';
 import { angleSectorOf } from './angle-sector.js';
+import { offsetConstraintRecord } from './offset.js';
 
 /**
  * Given a constraint and the list of shapes, returns the joints and shapes affected by the constraint.
@@ -117,6 +118,11 @@ export function getConstrainedGeometry(constraint, shapes) {
             if (constraint.shapes) {
                 for (const sid of constraint.shapes) constraintShapes.add(sid);
             }
+            break;
+
+        case CONSTRAINT_TYPES.OFFSET:
+            // task 650: the source pieces and their offset pieces
+            if (constraint.shapes) for (const sid of constraint.shapes) constraintShapes.add(sid);
             break;
 
         case CONSTRAINT_TYPES.SYMMETRIC:
@@ -302,6 +308,12 @@ export function createConstraint(type, params) {
             if (Array.isArray(params.shapes) && params.shapes.length === 2) return { type: CONSTRAINT_TYPES.SYMMETRIC, shapes: params.shapes.slice(), line: params.line };
             if (Array.isArray(params.joints) && params.joints.length === 2) return { type: CONSTRAINT_TYPES.SYMMETRIC, joints: params.joints.slice(), line: params.line };
             return null;
+        }
+
+        case CONSTRAINT_TYPES.OFFSET: {
+            // task 650: the stored form is #core/offset.js offsetConstraintRecord's, plus the dimension state
+            const rec = offsetConstraintRecord(params);
+            return rec ? withDimensionState(rec, params) : null;
         }
 
         default:

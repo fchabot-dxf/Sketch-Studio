@@ -8,6 +8,7 @@ import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { setupTrimTool, resetTrimState } from '#ui/input-handlers/trim-tool.js';
 import { setupBreakTool, resetBreakState } from '#ui/input-handlers/break-tool.js';
 import { setupFilletTool, resetFilletState } from '#ui/input-handlers/fillet-tool.js';
+import { resetOffsetState } from '#ui/input-handlers/offset-tool.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
@@ -25,6 +26,7 @@ export function setupUI(state){
   try{ if(state.currentTool === TOOL_MODES.TRIM && t !== TOOL_MODES.TRIM) resetTrimState(); }catch(_){ }
   try{ if(state.currentTool === TOOL_MODES.BREAK && t !== TOOL_MODES.BREAK) resetBreakState(); }catch(_){ }
   try{ if(state.currentTool === TOOL_MODES.FILLET && t !== TOOL_MODES.FILLET) resetFilletState(); }catch(_){ }
+  if(state.currentTool === TOOL_MODES.OFFSET && t !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
 
   state.currentTool = t; 
   state.active = null; // clear any in-progress action

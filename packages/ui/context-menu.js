@@ -4,6 +4,7 @@
 // and passes the existing actions in, so every entry runs the same function as its key / ribbon twin.
 
 import { CONSTRAINT_TYPES } from '#core/constants.js';
+import { isDimension } from '#core/parameters.js';
 
 const STYLE_ID = 'sk-context-menu-styles';
 const CSS = `
@@ -163,9 +164,9 @@ export function showContextMenu({ x, y, items, returnFocusTo = null, touch = fal
   return el;
 }
 
-// The constraints whose GLYPH opens the 'constraint' menu (its Delete): every geometric constraint. (A distance / angle is a dimension:
+// The constraints whose GLYPH opens the 'constraint' menu (its Delete): every geometric constraint. (A distance / angle / offset is a dimension:
 // its own menu.) Task 571: the glyph wins the right-click over the geometry under it, so a geometric glyph must always open a menu.
-export const CONSTRAINT_MENU_TYPES = Object.freeze(Object.values(CONSTRAINT_TYPES).filter(t => t !== CONSTRAINT_TYPES.DISTANCE && t !== CONSTRAINT_TYPES.ANGLE));
+export const CONSTRAINT_MENU_TYPES = Object.freeze(Object.values(CONSTRAINT_TYPES).filter(t => !isDimension({ type: t }))); // a dimension (#core/parameters.js isDimension)
 
 // TASK 577: "Move to sketch ▸" is ONE row with a submenu: every sketch (a locked one, and the one the selection is already in, greyed out
 // with its reason) plus "New sketch…" (the selection moves into a new sketch). Only when the document has 2+ sketches.

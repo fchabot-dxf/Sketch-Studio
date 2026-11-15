@@ -37,6 +37,8 @@ import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, hand
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
 import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
+import { handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
+import { isDimension } from '#core/parameters.js';
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -693,6 +695,9 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.MIRROR: // TASK 585: the objects, then the mirror line (a click on nothing pans)
             handled = handleMirrorPointerDown(e, svg, state, hitJoint, hitShape);
             break;
+        case TOOL_MODES.OFFSET: // TASK 650: a curve picks its chain; a press elsewhere pans (a click there sets the side, on release)
+            handled = handleOffsetPointerDown(e, svg, state, hitShape);
+            break;
         case TOOL_MODES.COINCIDENT:
         case TOOL_MODES.HORIZONTAL_VERTICAL:
         case TOOL_MODES.PARALLEL:
@@ -821,6 +826,8 @@ function handlePointerMove(e, svg, state) {
             try { handleTrimPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
         case TOOL_MODES.FILLET:
             try { handleFilletPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
+        case TOOL_MODES.OFFSET: // TASK 650: the side follows the cursor; a pan started on empty canvas keeps panning
+            handleOffsetPointerMove(e, svg); handled = handlePanZoomPointerMove(e, svg, state); break;
         default: handled = handlePanZoomPointerMove(e, svg, state);
     }
     return handled; 
@@ -905,6 +912,7 @@ function handlePointerUp(e, svg, state) {
             try { handleTrimPointerUp(e, svg, state, state.view); } catch(_) {} break;
         case TOOL_MODES.FILLET:
             try { handleFilletPointerUp(e, svg, state, state.view); } catch(_) {} break;
+        case TOOL_MODES.OFFSET: handleOffsetPointerUp(e, svg); break; // TASK 650: a click / tap on the canvas sets the side
     }
     if (!handled) handled = handlePanZoomPointerUp(e, svg, state);
     // Force-hide magnifier on pointer up to ensure it doesn't persist after drag ends
@@ -951,6 +959,8 @@ function setupEventListeners(svg, state) {
             [TOOL_MODES.MIRROR]: { open: () => mirrorStep(state) !== null, done: () => finishMirrorStep(state), label: 'Mirror: next step' },
             // TASK 646: the open radius input; the check applies the fillet exactly as Enter does (commitFilletInput), beside the corner
             [TOOL_MODES.FILLET]: { open: filletInputOpen, done: commitFilletInput, label: 'Apply the fillet', end: filletCornerPoint },
+            // TASK 650: the open distance box; the check applies the offset exactly as Enter does (commitOffsetInput), beside the preview's anchor
+            [TOOL_MODES.OFFSET]: { open: offsetInputOpen, done: commitOffsetInput, label: 'Apply the offset', end: offsetAnchorPoint },
         };
         const doneAction = () => (isActiveFn() ? DONE_ACTIONS[state.currentTool] || null : null);
         let doneButton = null;
@@ -962,7 +972,7 @@ function setupEventListeners(svg, state) {
                     onDone: () => doneAction().done(),
                     label: () => doneAction().label,
                     anchor: () => { const a = doneAction(); const w = a && a.end && a.end(); return w ? worldToScreen(svg, w) : null; },
-                    avoid: () => [...document.querySelectorAll('.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle')].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
+                    avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #${OFFSET_INPUT_ID}`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
                 });
             }
             if (doneButton) doneButton.sync(e.pointerType === 'touch');
@@ -1222,6 +1232,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
             try{ if (handleFilletKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
         if (state.currentTool === TOOL_MODES.MIRROR && e.key === 'Enter') { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
+        if (state.currentTool === TOOL_MODES.OFFSET && handleOffsetKeyDown(e)) { e.preventDefault(); return; } // TASK 650
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
@@ -1318,7 +1329,7 @@ function pickContextTarget(svg, state, e) {
     // left click and the hover use it too); a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
     // (A left click is not this order: a joint wins there, then a glyph, then a shape.)
     const glyph = glyphAt(svg, state, e.clientX, e.clientY, e.pointerType === 'touch');
-    if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
+    if (glyph && isDimension(glyph)) return { kind: 'dimension', constraint: glyph }; // a distance / angle / offset (task 650): its own menu
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
     const scene = pickScene(state);
     const snap = findSnap(scene.joints, scene.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));
@@ -1440,6 +1451,7 @@ export function switchToTool(state, toolName) {
         if (state.currentTool === TOOL_MODES.FILLET && toolName !== TOOL_MODES.FILLET) {
             try { resetFilletState(); } catch(_) {}
         }
+        if (state.currentTool === TOOL_MODES.OFFSET && toolName !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
 
         state.currentTool = toolName;
         if (toolName === TOOL_MODES.TRIM) {
@@ -1518,6 +1530,7 @@ function handleEscape(state) {
     try{ resetBreakState(); }catch(_){ }  // TRACE-1
     try{ resetTrimState(); }catch(_){ }   // TRACE-1
     try{ resetFilletState(); }catch(_){ }
+    resetOffsetState(); // TASK 650
     try{ resetDrawingState(state); }catch(_){ }
     try{ resetSelectionState(); }catch(_){ }
     state.closeDrawStep(); // TASK 549: a draw cancelled by Esc leaves nothing and no undo step (a committed bezier / line chain is kept)

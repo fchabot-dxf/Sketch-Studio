@@ -8,6 +8,7 @@
 import { CONSTRAINT_TYPES } from './constants.js';
 import { getDist, getLineIntersection, isPointLineDistance } from './geometry.js';
 import { sceneJoints, sceneShapes } from './reference-lines.js';
+import { offsetDimensionEnds } from './offset.js';
 
 function projectFoot(pt, a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, det = dx * dx + dy * dy;
@@ -24,6 +25,7 @@ export function resolveDimEndpoints(c, joints, shapes) {
   const opJoints = sceneJoints(joints);
   const opShapes = sceneShapes(shapes);
   let j1 = null, j2 = null;
+  if (c.type === CONSTRAINT_TYPES.OFFSET) return offsetDimensionEnds(c, opJoints, opShapes); // task 650: source piece -> its offset
   if (c.isRadius && c.shape) {
     const shape = opShapes.find((s) => s.id === c.shape);
     if (shape && shape.joints && shape.joints.length >= 1) j1 = opJoints.get(shape.joints[0]) || null;
@@ -148,7 +150,7 @@ export function projectDimLabel(c, pos, joints, shapes) {
     delete c.labelPos;
     return true;
   }
-  if (c.type === CONSTRAINT_TYPES.DISTANCE) {
+  if (c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.OFFSET) {
     const { j1, j2 } = resolveDimEndpoints(c, joints, shapes);
     if (!j1 || !j2) return false;
     const frame = linearDimFrame(c, j1, j2);

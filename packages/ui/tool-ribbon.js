@@ -46,6 +46,8 @@ const EDIT = [
   // TASK 585: Mirror. `begin` runs when the button starts the tool (the pre-selection). TASK 647 (owner): in Modify after Fillet, not Create
   // (Fusion keeps Mirror under CREATE: a declared divergence).
   { tool: TOOL_MODES.MIRROR, icon: 'icon-tool-mirror',  label: 'Mirror', title: 'Mirror: the objects, then the mirror line, then Enter', begin: beginMirror },
+  // TASK 650: like Fusion's Create > Offset (owner ruling: in Modify). Icon: a curve and its dashed offset, in the Fillet icon's style.
+  { tool: TOOL_MODES.OFFSET, iconSvg: '<path d="M4 20V11a7 7 0 0 1 7-7h9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M9 20v-8a3 3 0 0 1 3-3h8" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none" stroke-linecap="round"/>', label: 'Offset', title: 'Offset: click a curve (its chain), choose the side, type the distance, Enter' },
 ];
 
 // Profile actions (COMBINE / UNCOMBINE): opt-in for hosts declaring profiles: true

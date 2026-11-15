@@ -2,7 +2,7 @@
 // PURE: no DOM, no #ui import. Nothing in the app calls planChange yet (slices 2-5 add the producers); today only tests do.
 //
 //   state.parameters   an array of USER parameters { name, unit, expression, comment? } (one list per DOCUMENT: decision O1).
-//   a dimension        a DISTANCE or ANGLE constraint; it carries `name` (always: d1, d2, ...) and `expression` (only when a formula
+//   a dimension        a DISTANCE, ANGLE or OFFSET (task 650: the offset distance) constraint; it carries `name` (always: d1, d2, ...) and `expression` (only when a formula
 //                      was typed). `value` stays the solver's truth; this module only computes what it SHOULD be.
 //
 // The dependency graph is built fresh on demand (never stored): node = every user parameter + every DRIVING dimension; edge = a
@@ -21,7 +21,7 @@ export const PARAMETER_UNITS = ['', 'mm', 'cm', 'in', 'deg', 'rad']; // O18  '' 
 const SAME_VALUE = 1e-9;                              // two values closer than this are the same value (the design's value == evaluate(expression) tolerance)
 
 // ── dimension helpers (the ONE definition of "a dimension" and "a reference dimension") ──
-export const isDimension = (c) => !!c && (c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.ANGLE);
+export const isDimension = (c) => !!c && (c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.ANGLE || c.type === CONSTRAINT_TYPES.OFFSET);
 export const isReferenceDimension = (c) => !!c && !!(c.isDriven || c.driven);
 const dimensionKind = (c) => (c.type === CONSTRAINT_TYPES.ANGLE ? 'angle' : 'length');
 

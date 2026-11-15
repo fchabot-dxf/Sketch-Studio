@@ -39,6 +39,7 @@ const VIOLATED = {
   equal: { type: 'equal', joints: ['a', 'b', 'c', 'd'] },
   angle: { type: 'angle', shapes: ['L1', 'L2'], value: 90 },
   symmetric: { type: 'symmetric', joints: ['a', 'm'], line: 'L2' },
+  offset: { type: 'offset', shapes: ['L1', 'L2'], rev: [false], sides: [1], joins: [], closed: false, value: 5 }, // task 650: L2 is not 5 from L1
 };
 
 let checked = 0;

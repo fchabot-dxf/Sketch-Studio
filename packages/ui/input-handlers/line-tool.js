@@ -353,14 +353,12 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     }
 
     if ((justCreatedActive || (state.active && state.active._tempStart)) && !localState.isDragging) {
-        // Determine if the pointerUp occurred at the same location as the start.
-        const startPt = state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null);
-        const movedSinceStart = startPt ? (Math.hypot((w.x - startPt.x), (w.y - startPt.y)) > 0.5) : false;
+        // Click vs drag compares raw screen pointer movement since pointerdown against SNAP.DRAG_THRESHOLD
+        // (never raw release vs snapped startPt, so clicking a few px off a joint still starts at that joint).
+        const movedSinceStart = checkDragThreshold(e, localState.dragStartScreen, SNAP.DRAG_THRESHOLD || 2);
 
-        // Clear the module-level flag — we began a new active but the user didn't drag far
-        // enough to be considered a "drag". Accept either the module-level `justCreatedActive`
-        // or the per-state `_tempStart` marker to make the logic deterministic across tests.
         justCreatedActive = false;
+        localState.dragStartScreen = null;
 
         if (state.active && state.active._tempStart) {
             const startId = state.genJ();

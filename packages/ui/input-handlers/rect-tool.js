@@ -36,8 +36,10 @@ export function setupRectTool(svg, state){
         },
         onPreview: (detail) => {
             dbg.log('rect-tool', '[DEBUG RECT] liveDimensionPreview:', detail);
-            if (detail.typed[0]) rectState.lockedWidth = detail.width > 0 ? detail.width : null;   // only a TYPED side locks; the other shows the live cursor size
-            if (detail.typed[1]) rectState.lockedHeight = detail.height > 0 ? detail.height : null;
+            if (detail.reset && detail.reset[0]) rectState.lockedWidth = null;
+            else if (detail.typed[0]) rectState.lockedWidth = detail.width > 0 ? detail.width : null;   // only a TYPED side locks; the other shows the live cursor size
+            if (detail.reset && detail.reset[1]) rectState.lockedHeight = null;
+            else if (detail.typed[1]) rectState.lockedHeight = detail.height > 0 ? detail.height : null;
             const c1 = state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null));
             if (c1 && (state.rectMode || RECT_MODES.TWO_POINT) === RECT_MODES.TWO_POINT) {
                 safeUpdatePreview(state, 'rect', [state.active.start], lockedCorner(c1, localState.cursor || c1), { mode: RECT_MODES.TWO_POINT });

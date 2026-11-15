@@ -9,6 +9,7 @@ import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
+import { undoRedoKeyAction } from '#ui/history-control.js';
 
 export const NUMERIC_INPUT_STYLE_ID = 'sk-numeric-input-styles';
 
@@ -174,6 +175,8 @@ let uiState = {
     dualKind: null, // TASK 596: who opened the box ('polygon': size x sides); null = the rect tool's W x H. Rides on every live event as detail.kind
     dualDigits: [1, 1], // decimals each field shows when the box opens
     typed: [false, false], // TASK 596: which field the user has typed in (a field showing the live value is NOT typed; only a typed one locks a size)
+    defaults: ['', ''], // TASK 675 C: opening default strings so Ctrl/Cmd+Z restores the default in one step
+    undoneToDefault: false, // TASK 675 C: a second Ctrl/Cmd+Z right after reverting a typed creation box does nothing
     
     // State
     rafId: null,
@@ -257,6 +260,27 @@ export function setupNumericInput(svg, state) {
     setupListeners();
 }
 
+/**
+ * TASK 675 C: Ctrl/Cmd+Z inside a numeric tool or edit box restores the opening default value in ONE step
+ * (never browser character-by-character undo and never undoing a document step while the box stays open).
+ * Returns true when the key was handled as undo.
+ */
+export function handleBoxUndoKey(ev, el, defaultValue, onReset, opts = {}) {
+    if (undoRedoKeyAction(ev) !== 'undo') return false;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const defStr = defaultValue == null ? '' : String(defaultValue);
+    const dirty = typeof opts.dirty === 'function' ? opts.dirty() : (el.value !== defStr);
+    if (dirty) {
+        el.value = defStr;
+        if (typeof el.select === 'function') el.select();
+        if (typeof onReset === 'function') onReset();
+        return true;
+    }
+    if (typeof opts.onAtDefault === 'function') opts.onAtDefault();
+    return true;
+}
+
 function setupListeners() {
     // Single Input Handler
     uiState.singleInput.addEventListener('keydown', (e) => {
@@ -264,17 +288,39 @@ function setupListeners() {
         if (uiState.mode === 'edit' && uiState.completion && uiState.completion.handleKey(e)) {
             e.stopImmediatePropagation(); return;
         }
+        if (handleBoxUndoKey(e, uiState.singleInput, uiState.defaults[0], () => {
+            if (uiState.mode === 'edit') {
+                updateAssist({ complete: false });
+            } else {
+                uiState.typed[0] = false;
+                uiState.undoneToDefault = true;
+                handlePreview(0);
+            }
+        }, uiState.mode === 'edit' ? undefined : {
+            dirty: () => !!uiState.typed[0],
+            onAtDefault: (!uiState.typed[0] && !uiState.undoneToDefault) ? handleCancel : null
+        })) return;
         if (e.key === 'Enter') handleCommit();
-        if (e.key === 'Escape' || drawUndoKey(e)) handleCancel();
+        if (e.key === 'Escape') handleCancel();
         e.stopPropagation(); // Prevent global shortcuts
     });
     
-    uiState.singleInput.addEventListener('input', () => { uiState.typed[0] = true; handlePreview(); updateAssist(); });
+    uiState.singleInput.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; handlePreview(); updateAssist(); });
 
     // Dual Input Handlers
     const handleDualKey = (e, field) => {
+        const idx = field === 'width' ? 0 : 1;
+        const el = idx === 0 ? uiState.dualInputW : uiState.dualInputH;
+        if (handleBoxUndoKey(e, el, uiState.defaults[idx], () => {
+            uiState.typed[idx] = false;
+            uiState.undoneToDefault = true;
+            handlePreview(idx);
+        }, {
+            dirty: () => !!uiState.typed[idx],
+            onAtDefault: (!uiState.typed[0] && !uiState.typed[1] && !uiState.undoneToDefault) ? handleCancel : null
+        })) return;
         if (e.key === 'Enter') handleCommit();
-        if (e.key === 'Escape' || drawUndoKey(e)) handleCancel();
+        if (e.key === 'Escape') handleCancel();
         if (e.key === 'Tab') {
             e.preventDefault();
             const next = field === 'width' ? uiState.dualInputH : uiState.dualInputW;
@@ -287,13 +333,8 @@ function setupListeners() {
     uiState.dualInputW.addEventListener('keydown', (e) => handleDualKey(e, 'width'));
     uiState.dualInputH.addEventListener('keydown', (e) => handleDualKey(e, 'height'));
     
-    uiState.dualInputW.addEventListener('input', () => { uiState.typed[0] = true; handlePreview(); });
-    uiState.dualInputH.addEventListener('input', () => { uiState.typed[1] = true; handlePreview(); });
-}
-
-/** TASK 597: Ctrl/Cmd+Z in a box of a drawing tool (not the dimension edit box) is the canvas's own Ctrl+Z mid-draw: it ends the draw like Esc (task 549). */
-function drawUndoKey(e) {
-    return (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && uiState.mode !== 'edit';
+    uiState.dualInputW.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; handlePreview(); });
+    uiState.dualInputH.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[1] = true; handlePreview(); });
 }
 
 // --- Public API ---
@@ -314,7 +355,9 @@ export function showSingleInput(x, y, value, field, initialKey = null, focus = t
     
     // Value. O15: a number being typed WHILE DRAWING stays a plain number, so a phone shows the decimal keypad here (the dimension EDIT box below is text)
     uiState.singleInput.inputMode = 'decimal';
-    uiState.singleInput.value = initialKey || (typeof value === 'number' ? value.toFixed(1) : '');
+    const defaultValue = typeof value === 'number' ? value.toFixed(1) : '';
+    uiState.defaults = [defaultValue, ''];
+    uiState.singleInput.value = initialKey || defaultValue;
     if (focus) {   // TASK 597: a touch opens the box WITHOUT focus (no phone keyboard on every click); tapping the box focuses it
         uiState.singleInput.focus();
         if (!initialKey) uiState.singleInput.select();
@@ -342,8 +385,11 @@ export function showDualInput(x, y, w, h, opts = {}) {
     showNumericInputEl(uiState.dualContainer);
     placeLiveBox(uiState.dualContainer, x, y);
 
-    uiState.dualInputW.value = w.toFixed(uiState.dualDigits[0]);
-    uiState.dualInputH.value = h.toFixed(uiState.dualDigits[1]);
+    const defW = w.toFixed(uiState.dualDigits[0]);
+    const defH = h.toFixed(uiState.dualDigits[1]);
+    uiState.defaults = [defW, defH];
+    uiState.dualInputW.value = defW;
+    uiState.dualInputH.value = defH;
     
     if (opts.focus !== false) {
         uiState.dualInputW.focus();
@@ -425,12 +471,13 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // TASK 535: a dimension driven by a formula opens with its FORMULA (the stored expression), otherwise with its value. O16: the box takes the full
     // text keyboard (names and "=" must be typable): no numeric inputmode.
     const hasFormula = typeof constraint.expression === 'string' && constraint.expression !== '';
-    uiState.singleInput.inputMode = 'text';
-    uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey
-        : hasFormula ? constraint.expression
+    const defaultValue = hasFormula ? constraint.expression
         : (typeof prefillValue === 'number'
             ? (isAngleDim ? prefillValue.toFixed(1) : formatUnit(prefillValue, docUnit()))
             : '');
+    uiState.defaults = [defaultValue, ''];
+    uiState.singleInput.inputMode = 'text';
+    uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : defaultValue;
     updateAssist({ complete: typeof initialKey === 'string' });
 
     requestAnimationFrame(() => {
@@ -527,13 +574,14 @@ function handleCommit() {
     }
 }
 
-function handlePreview() {
+function handlePreview(resetIdx = -1) {
     if (!uiState.active || uiState.mode === 'edit') return;
     
     const detail = { mode: uiState.mode === 'live-dual' ? 'dual' : 'single' };
     if (uiState.mode === 'live-dual') {
         detail.kind = uiState.dualKind;
         detail.typed = uiState.typed.slice();
+        if (resetIdx !== -1) detail.reset = [resetIdx === 0, resetIdx === 1];
         const w = parseFloat(uiState.dualInputW.value);
         const h = parseFloat(uiState.dualInputH.value);
         if (!isNaN(w)) detail.width = w;
@@ -541,6 +589,7 @@ function handlePreview() {
     } else {
         const v = parseFloat(uiState.singleInput.value);
         detail.typed = uiState.typed.slice();
+        if (resetIdx !== -1) detail.reset = [resetIdx === 0];
         if (!isNaN(v)) {
             detail.field = uiState.field;
             detail.value = v;
@@ -663,6 +712,8 @@ function resetState() {
     uiState.mode = null;
     uiState.target = null;
     uiState.field = null;
+    uiState.defaults = ['', ''];
+    uiState.undoneToDefault = false;
     
     if (uiState.singleInput) {
         uiState.singleInput.classList.remove('sk-live-box');

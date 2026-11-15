@@ -169,8 +169,10 @@ export function setupLineTool(svg, state) {
     setupDimensionListeners(state, TOOL_MODES.LINE, {
         guard: (detail) => detail.mode === 'dual' && detail.kind === 'line',
         onPreview: (detail) => {
-            if (detail.typed[0]) lineState.lockedLength = detail.width > 0 ? detail.width : null;   // only a TYPED field locks; the other shows the live cursor value
-            if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
+            if (detail.reset && detail.reset[0]) lineState.lockedLength = null;
+            else if (detail.typed[0]) lineState.lockedLength = detail.width > 0 ? detail.width : null;   // only a TYPED field locks; the other shows the live cursor value
+            if (detail.reset && detail.reset[1]) lineState.lockedAngle = null;
+            else if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
             redrawLinePreview(state);
         },
         onApply: (detail) => {

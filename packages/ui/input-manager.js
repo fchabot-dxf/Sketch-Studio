@@ -36,7 +36,7 @@ import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
-import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState } from '#ui/input-handlers/fillet-tool.js';
+import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -949,6 +949,8 @@ function setupEventListeners(svg, state) {
                 // a point the cursor does not move (see lineChainAnchor); Mirror has none, so it keeps the corner
                 end: () => lineChainAnchor(state) },
             [TOOL_MODES.MIRROR]: { open: () => mirrorStep(state) !== null, done: () => finishMirrorStep(state), label: 'Mirror: next step' },
+            // TASK 646: the open radius input; the check applies the fillet exactly as Enter does (commitFilletInput), beside the corner
+            [TOOL_MODES.FILLET]: { open: filletInputOpen, done: commitFilletInput, label: 'Apply the fillet', end: filletCornerPoint },
         };
         const doneAction = () => (isActiveFn() ? DONE_ACTIONS[state.currentTool] || null : null);
         let doneButton = null;
@@ -960,7 +962,7 @@ function setupEventListeners(svg, state) {
                     onDone: () => doneAction().done(),
                     label: () => doneAction().label,
                     anchor: () => { const a = doneAction(); const w = a && a.end && a.end(); return w ? worldToScreen(svg, w) : null; },
-                    avoid: () => [...document.querySelectorAll('.sk-dual-input, #liveDimSingleInput')].filter((el) => el.offsetParent !== null).map((el) => el.getBoundingClientRect()),
+                    avoid: () => [...document.querySelectorAll('.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle')].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
                 });
             }
             if (doneButton) doneButton.sync(e.pointerType === 'touch');

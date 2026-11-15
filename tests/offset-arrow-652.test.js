@@ -131,8 +131,9 @@ await (async () => {
       await P.tap(undoBtn); await sleep(250);
       assert.strictEqual((await lines()).length, 2, `[${kind}] Undo removed the offset`);
 
-      // ---- 2. Esc after a drag: no change, no undo step
+      // ---- 2. Esc after a drag: no change, no undo step (task 667: Enter above ended Offset, so reopen it)
       const h1 = await hist(), n1 = (await lines()).length;
+      await tool('tool-offset');
       await openOffset();
       const a1 = await arrow();
       await P.down(a1); for (let t = 5; t <= 40; t += 5) await P.move({ x: a1.x + a1.ux * t, y: a1.y + a1.uy * t }); await P.up(a1);

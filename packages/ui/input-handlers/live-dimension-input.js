@@ -154,8 +154,8 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
 function validateWithSandbox(state, config) {
     if (!state || !state.engine) return { success: true, isDriven: false };
 
-    // 1. Snapshot the solver state (joint positions and circle radii)
-    const savedPositions = snapshotSolverState(state.joints, state.shapes);
+    // 1. Snapshot the solver state (joint positions, circle radii and constraint scalar unknowns)
+    const savedPositions = snapshotSolverState(state.joints, state.shapes, state.constraints);
 
     // 2. Setup Test Scenario
     // If Editing: modify the existing constraint temporarily

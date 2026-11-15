@@ -492,10 +492,11 @@ function handleCommit() {
         const pv = previewDimensionInput(state, target, uiState.singleInput.value, { unit: docUnit() });
         if (!pv.ok && !pv.empty) { updateAssist({ complete: false }); return; }
         if (pv.ok) {
-            const isFirstValue = target.__newlyPlaced === true;
+            const isFirstValue = target.__newlyPlaced === true || target.__restoredDimension === true;
             target.isDriven = false;
             target.driven = false;
             target.__newlyPlaced = false;
+            delete target.__restoredDimension;
             target.__placing = false;
             if (state.placingConstraint === target) state.placingConstraint = null;
             const label = pv.kind === 'create' ? `create parameter ${pv.name}` : pv.kind === 'set' ? `change parameter ${pv.name}` : dimensionEditLabel(target, pv.value);
@@ -550,12 +551,16 @@ function handlePreview() {
 }
 
 function handleCancel() {
-    if (uiState.mode === 'edit' && uiState.target && uiState.target.__newlyPlaced) {
-        if (uiState.target.__newlyPlaced === true && typeof uiState.target.__birthHistoryLength === 'number' && uiState.appState && uiState.appState.discardSnapshotAt) {
+    if (uiState.mode === 'edit' && uiState.target && (uiState.target.__newlyPlaced || uiState.target.__restoredDimension)) {
+        if ((uiState.target.__newlyPlaced === true || uiState.target.__restoredDimension === true) && typeof uiState.target.__birthHistoryLength === 'number' && uiState.appState && uiState.appState.discardSnapshotAt) {
             uiState.appState.discardSnapshotAt(uiState.target.__birthHistoryLength);
         }
         const state = uiState.appState;
-        if (state && Array.isArray(state.constraints)) {
+        if (uiState.target.__restoredDimension) {
+            uiState.target.dimensioned = false;
+            delete uiState.target.name;
+            delete uiState.target.__restoredDimension;
+        } else if (state && Array.isArray(state.constraints)) {
             const idx = state.constraints.indexOf(uiState.target);
             if (idx !== -1) state.constraints.splice(idx, 1);
         }

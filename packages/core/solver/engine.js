@@ -15,16 +15,24 @@ export function hasRadiusUnknown(s) {
   return !!s && s.type === 'circle' && Array.isArray(s.joints) && s.joints.length === 1 && typeof s.radius === 'number' && Number.isFinite(s.radius);
 }
 
-// The solver state is joint x/y AND every circle radius: a caller that tries a solve and rolls it back snapshots and restores both here.
-export function snapshotSolverState(joints, shapes) {
-  const pos = new Map(), radii = new Map();
+// The solver state is joint x/y, circle radii AND any free constraint scalar unknowns (Definition.scalarUnknown):
+// a caller that tries a solve and rolls it back snapshots and restores all three here.
+export function snapshotSolverState(joints, shapes, constraints) {
+  const pos = new Map(), radii = new Map(), scalars = new Map();
   for (const [id, j] of joints) pos.set(id, { x: j.x, y: j.y });
   for (const s of (shapes || [])) if (hasRadiusUnknown(s)) radii.set(s, s.radius);
-  return { pos, radii };
+  for (const c of (constraints || [])) {
+    const def = c && Definitions[c.type];
+    if (def && typeof def.scalarUnknown === 'function' && !c.isDriven && !c.driven && def.scalarUnknown(c, shapes)) {
+      scalars.set(c, c.value);
+    }
+  }
+  return { pos, radii, scalars };
 }
 export function restoreSolverState(joints, shapes, snap) {
   for (const [id, j] of joints) { const p = snap.pos.get(id); if (p) { j.x = p.x; j.y = p.y; } }
   for (const [s, r] of snap.radii) s.radius = r;
+  if (snap.scalars) for (const [c, v] of snap.scalars) c.value = v;
 }
 
 // THE reachable directions of a point p(x) (task 538): its gradient with respect to the unknowns as sparse entries [{ col, gx, gy }]
@@ -176,24 +184,37 @@ export class NewtonSolver {
       freeReps.push(rep);
     }
 
-    // Build the solution vector: x,y of each free joint representative, then the radius of each circle (hasRadiusUnknown), in
-    // shapes order. Radius k is x[_nJointVars + k] here and positions[2 * joints.size + k] in the dense array the Definitions read.
+    // Build the solution vector: x,y of each free joint representative, then circle radii (hasRadiusUnknown), then any free
+    // constraint scalar unknowns (Definition.scalarUnknown). Scalar unknown k is x[_nJointVars + nR + k] and positions[2 * joints.size + nR + k].
     const nJ = freeReps.length * 2;
     this._radiusShapes = (this.shapes || []).filter(hasRadiusUnknown);
     this._radiusSlot = new Map(this._radiusShapes.map((s, k) => [s.id, k]));
-    const x = new Float64Array(nJ + this._radiusShapes.length);
+    this._scalarConstraints = [];
+    this._scalarSlot = new Map();
+    for (const c of (this.constraints || [])) {
+      if (!c || c.isDriven || c.driven) continue;
+      const def = Definitions[c.type];
+      if (def && typeof def.scalarUnknown === 'function' && def.scalarUnknown(c, this.shapes)) {
+        this._scalarSlot.set(c, this._scalarConstraints.length);
+        this._scalarConstraints.push(c);
+      }
+    }
+    const nR = this._radiusShapes.length, nS = this._scalarConstraints.length;
+    const x = new Float64Array(nJ + nR + nS);
     for (let i = 0; i < freeReps.length; ++i) {
       const j = this.joints.get(freeReps[i]); x[i*2] = j.x; x[i*2+1] = j.y;
     }
-    for (let k = 0; k < this._radiusShapes.length; ++k) x[nJ + k] = this._radiusShapes[k].radius;
+    for (let k = 0; k < nR; ++k) x[nJ + k] = this._radiusShapes[k].radius;
+    for (let k = 0; k < nS; ++k) x[nJ + nR + k] = Number(this._scalarConstraints[k].value) || 0;
     this._freeIds = freeReps;
     this._nJointVars = nJ;
-    // The layout _assemble reads (task 541): the J column of each dense index (a joint's x/y -> its cluster's variable, a circle radius ->
-    // its unknown, -1 = a constant: fixed or anchored) and the reusable row buffers.
-    const denseLen = this.joints.size * 2 + this._radiusShapes.length;
+    // The layout _assemble reads (task 541): the J column of each dense index (a joint's x/y -> its cluster's variable, a circle radius /
+    // constraint scalar -> its unknown, -1 = a constant: fixed or anchored) and the reusable row buffers.
+    const denseLen = this.joints.size * 2 + nR + nS;
     this._colOf = new Int32Array(denseLen).fill(-1);
     for (const [id, vi] of this._varIndex) { const d = this._jointIndex.get(id) * 2; this._colOf[d] = vi * 2; this._colOf[d + 1] = vi * 2 + 1; }
-    for (let k = 0; k < this._radiusShapes.length; ++k) this._colOf[this.joints.size * 2 + k] = nJ + k;
+    for (let k = 0; k < nR; ++k) this._colOf[this.joints.size * 2 + k] = nJ + k;
+    for (let k = 0; k < nS; ++k) this._colOf[this.joints.size * 2 + nR + k] = nJ + nR + k;
     this._rowBufs = [new Float64Array(denseLen), new Float64Array(denseLen)]; // zero between rows (_assemble's emitRow clears them)
     this._acc = new Float64Array(x.length);
     this._mark = new Uint8Array(x.length);
@@ -215,14 +236,27 @@ export class NewtonSolver {
         j.y = x[i*2+1];
       }
     }
-    // THE write-back of a circle's solved radius (shape.radius is its only store).
+    // THE write-back of a circle's solved radius (shape.radius is its only store) and any free constraint scalar unknown (c.value).
     for (let k = 0; k < this._radiusShapes.length; ++k) this._radiusShapes[k].radius = x[this._nJointVars + k];
+    const scalarBase = this._nJointVars + this._radiusShapes.length;
+    for (let k = 0; k < this._scalarConstraints.length; ++k) this._scalarConstraints[k].value = x[scalarBase + k];
+  }
+
+  _scalarsValid(x) {
+    if (!this._scalarConstraints || this._scalarConstraints.length === 0) return true;
+    const base = this._nJointVars + this._radiusShapes.length;
+    for (let k = 0; k < this._scalarConstraints.length; ++k) {
+      const c = this._scalarConstraints[k], def = Definitions[c.type];
+      if (def && typeof def.validScalar === 'function' && !def.validScalar(x[base + k], c)) return false;
+    }
+    return true;
   }
 
   // Build the dense array the Definitions read: x,y of every joint in insertion order of this.joints, then each circle radius
-  // (radius k at 2 * joints.size + k, see _radiusAt).
+  // (radius k at 2 * joints.size + k, see _radiusAt), then each free constraint scalar unknown.
   _positionsFromVector(x) {
-    const positions = new Float64Array(this.joints.size * 2 + this._radiusShapes.length);
+    const nR = this._radiusShapes.length, nS = this._scalarConstraints.length;
+    const positions = new Float64Array(this.joints.size * 2 + nR + nS);
     let idx = 0;
     for (const [id, j] of this.joints.entries()) {
       const varIdx = this._varIndex.has(id) ? this._varIndex.get(id) : -1;
@@ -235,7 +269,8 @@ export class NewtonSolver {
         positions[idx++] = j.x; positions[idx++] = j.y;
       }
     }
-    for (let k = 0; k < this._radiusShapes.length; ++k) positions[idx++] = x[this._nJointVars + k];
+    for (let k = 0; k < nR; ++k) positions[idx++] = x[this._nJointVars + k];
+    for (let k = 0; k < nS; ++k) positions[idx++] = x[this._nJointVars + nR + k];
     return positions;
   }
 
@@ -350,7 +385,7 @@ export class NewtonSolver {
     const operandsOf = (p) => {
       nOps = 0;
       if (Array.isArray(p.joints)) for (const j of p.joints) addJoint(j);
-      addAt(p.radiusAt); addJoint(p.rimJoint);
+      addAt(p.radiusAt); addAt(p.dAt); addJoint(p.rimJoint);
       if (Array.isArray(p.radiiAt)) for (const a of p.radiiAt) addAt(a);
       if (Array.isArray(p.rimJoints)) for (const j of p.rimJoints) addJoint(j);
       if (Array.isArray(p.terms)) for (const t of p.terms) if (t) { addAt(t.at); addJoint(t.a); addJoint(t.b); }
@@ -453,6 +488,7 @@ export class NewtonSolver {
 
       // Normalize parameters: map joint ids -> indices in densePositions
       const params = { ...c };
+      if (this._scalarSlot && this._scalarSlot.has(c)) params.dAt = this.joints.size * 2 + this._radiusShapes.length + this._scalarSlot.get(c);
       // Prefer explicit `c.joints` when present (tests may pass joint-index arrays)
       params.joints = (c.joints || []).map(id => jointIndexMap.get(id));
 
@@ -923,15 +959,19 @@ export class NewtonSolver {
         const pre = this._preRelax(x);
         x = pre.x;
         if (pre.converged) {
-          // Even a converged pre-pass deserves the rank check — the user may
-          // want to know the sketch has freedom even though we found a fit.
-          rankDeficient = this._checkRankDeficient(x);
-          this._unpack(x);
-          const { structuralError, dragReached } = this._splitResiduals(x, pre.residual, hasSpring);
-          if (cleanup) cleanup();
-          const outPre = { converged: true, error: pre.residual, rankDeficient, stalled: false, structuralError };
-          if (hasSpring) outPre.dragReached = dragReached;
-          return outPre;
+          if (!this._scalarsValid(x)) {
+            x = new Float64Array(x0);
+          } else {
+            // Even a converged pre-pass deserves the rank check — the user may
+            // want to know the sketch has freedom even though we found a fit.
+            rankDeficient = this._checkRankDeficient(x);
+            this._unpack(x);
+            const { structuralError, dragReached } = this._splitResiduals(x, pre.residual, hasSpring);
+            if (cleanup) cleanup();
+            const outPre = { converged: true, error: pre.residual, rankDeficient, stalled: false, structuralError };
+            if (hasSpring) outPre.dragReached = dragReached;
+            return outPre;
+          }
         }
       }
     }
@@ -1012,6 +1052,18 @@ export class NewtonSolver {
         }
       }
     } catch (_) { /* fail-open: polishing is optional */ }
+
+    if (!this._scalarsValid(x)) {
+      const { r: r0 } = this._assemble(x0, { jacobian: false });
+      let s0 = 0; for (let i = 0; i < r0.length; ++i) s0 += r0[i] * r0[i];
+      const err0 = Math.sqrt(s0);
+      this._unpack(x0);
+      const { structuralError, dragReached } = this._splitResiduals(x0, err0, hasSpring);
+      if (cleanup) cleanup();
+      const outRej = { converged: false, rejected: true, error: err0, rankDeficient: false, stalled: false, structuralError };
+      if (hasSpring) outRej.dragReached = dragReached;
+      return outRej;
+    }
 
     // write back
     this._unpack(x);

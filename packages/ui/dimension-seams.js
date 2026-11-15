@@ -8,7 +8,7 @@
 import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist, perpendicularDistance, isPointLineDistance, getLineIntersection } from '#core/geometry.js';
-import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
+import { measureShapeSizes, findCollapsedShape, withIndefiniteArticle } from '#core/constraint-verifier.js';
 import { seedFilletForRadius, filletHasCollapsedLine, filletLines, isLiveFillet } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
@@ -77,7 +77,8 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   }
   const joints = engine.getJoints ? engine.getJoints() : state.joints;
   const shapes = engine.getShapes ? engine.getShapes() : state.shapes;
-  const snap = snapshotSolverState(joints, shapes);
+  const constraints = engine.getConstraints ? engine.getConstraints() : state.constraints;
+  const snap = snapshotSolverState(joints, shapes, constraints);
   const oldValues = edits.map(e => e.c.value);
   const sizesBefore = measureShapeSizes(state);
   const restoreAll = () => { edits.forEach((e, i) => { e.c.value = oldValues[i]; }); restoreSolverState(joints, shapes, snap); };
@@ -136,7 +137,7 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     const collapsed = findCollapsedShape(state, sizesBefore, legs);
     if (collapsed) {
       const own = list.find((e, i) => !fillets[i]) || list[0];
-      return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse ${collapsed.type === 'arc' ? 'an' : 'a'} ${collapsed.type} to a point` });
+      return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse ${withIndefiniteArticle(collapsed.type)} to a point` });
     }
     if (result && result.converged === false) {
       const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');

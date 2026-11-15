@@ -31,8 +31,9 @@ try {
   const typeInto = (input, text) => { input.focus(); input.value = ''; app.type(text); };
   const polys = (b) => [...b.querySelectorAll('svg polygon')].map((p) => p.getAttribute('points'));
   const openIt = async () => { pressEl('.sk-tp-open'); await settle(400); await dontSave(); assert.strictEqual(q('.sk-tp-panel'), null, 'Open closed the modal'); };
-  const sameJoints = (want, m) => assert.deepStrictEqual([...st.joints].filter(([id]) => id !== 'j_origin').map(([id, j]) => [id, Math.round(j.x * 1e6) / 1e6 || 0, Math.round(j.y * 1e6) / 1e6 || 0]),
-    want.joints.map(([id, j]) => [id, j.x || 0, j.y || 0]), m);
+  // TASK 680: a recipe mints new joint ids on every build, so the drawing is compared point by point (every joint, sorted)
+  const pts = (list) => list.map(([, j]) => [Math.round(j.x * 1e6) / 1e6 || 0, Math.round(j.y * 1e6) / 1e6 || 0]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const sameJoints = (want, m) => assert.deepStrictEqual(pts([...st.joints]), pts(want.joints), m);
 
   // ---- the right-angle brace: a picker per corner, frame-calc's options and names
   await startOf('right-angle-brace');

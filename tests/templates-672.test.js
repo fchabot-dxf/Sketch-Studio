@@ -128,7 +128,8 @@ const sameDrawing = (S, polys, m) => {
   }
   // the default is today's build: 'V-Through' (the sides run the full length), the joint changes nothing else
   assert.strictEqual(t.params.joint.default, 'V-Through', 'box frame: the default joint is Vertical through');
-  assert.deepStrictEqual(buildTemplate(t).geometry.joints, buildTemplate(t, { joint: 'V-Through' }).geometry.joints, 'box frame: the default = Vertical through');
+  const pts = (doc) => doc.geometry.joints.map(([, j]) => [j.x, j.y]).sort((a, b) => a[0] - b[0] || a[1] - b[1]); // TASK 680: ids are minted per build
+  assert.deepStrictEqual(pts(buildTemplate(t)), pts(buildTemplate(t, { joint: 'V-Through' })), 'box frame: the default = Vertical through');
 }
 
 // ---- 3. the polygon frame at other N: no fold for side length / thickness x1.3, x0.7 (the task 670 path)
@@ -158,10 +159,14 @@ const setParameter = (S, name, text) => {
 const U = (S, id) => { const j = S.state.joints.get(id); return { x: j.x, y: -j.y }; };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const lineDist = (p, a, b) => Math.abs((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / dist(a, b);
-const loopOk = (S, m) => { // ONE closed outline: every joint of the solid pieces on exactly two of them
+const loopOk = (S, m) => { // ONE closed outline: every POINT of the solid pieces on exactly two of them
+  // TASK 680: drawn with the tools, a piece's end is its own joint tied to the next piece's by a coincident: a point = joints joined by coincidents
+  const point = new Map();
+  const root = (j) => { while (point.has(j) && point.get(j) !== j) j = point.get(j); return j; };
+  for (const c of S.state.constraints.filter((k) => k.type === 'coincident')) { const [a, b] = c.joints.map(root); if (a !== b) point.set(a < b ? b : a, a < b ? a : b); }
   const deg = new Map();
-  for (const sh of S.state.shapes.filter((x) => !x.isConstruction)) for (const j of (sh.type === 'arc' ? [sh.joints[1], sh.joints[2]] : sh.joints)) deg.set(j, (deg.get(j) || 0) + 1);
-  assert.ok([...deg.values()].every((n) => n === 2), `${m}: closed outlines (each joint on two pieces)`);
+  for (const sh of S.state.shapes.filter((x) => !x.isConstruction)) for (const j of (sh.type === 'arc' ? [sh.joints[1], sh.joints[2]] : sh.joints)) deg.set(root(j), (deg.get(root(j)) || 0) + 1);
+  assert.ok([...deg.values()].every((n) => n === 2), `${m}: closed outlines (each point on two pieces)`);
 };
 {
   const t = templateById('stair-stringer');

@@ -59,6 +59,9 @@ const variants = (t) => {
   return [{}];
 };
 
+// TASK 680: the distinct points of a joint list, sorted; the points a TOOL adds to a template (the Fillet tool keeps the sharp corner as a virtual point)
+const points = (list) => [...new Map(list.map((p) => [p.map((v) => Math.round(v * 1e4)).join(','), [R(p[0]), R(p[1])]])).values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+const TOOL_POINTS = { 'rounded-rectangle': [[-5, -35], [-5, 5], [55, -35], [55, 5]] };
 const golden = JSON.parse(fs.readFileSync(new URL('./fixtures/templates-default-geometry-670.json', import.meta.url), 'utf8'));
 let checks = 0;
 for (const t of TEMPLATES) {
@@ -109,7 +112,10 @@ for (const t of TEMPLATES) {
     for (const n of names) assert.ok(read.has(n), `${m}: the user parameter ${n} drives at least one dimension`);
     // ---- 3. the default geometry is the code before task 670 (the new template and the new layout have no "before")
     if (golden[t.id] && !extra.layout && !extra.joint) {
-      assert.deepStrictEqual(coords(S), golden[t.id].joints, `${m}: the default joints are identical to main 788f7f4`);
+      // TASK 680: drawn with the tools, a point may carry several joints (the Line tool's coincident ends), so the POINTS are compared; the only
+      // new points are the ones a tool adds (TOOL_POINTS: the Fillet tool's virtual sharp corners)
+      const want = points(golden[t.id].joints), got = points(coords(S)), extra = TOOL_POINTS[t.id] || [];
+      assert.deepStrictEqual(got, points([...want, ...extra]), `${m}: the default points are main 788f7f4's${extra.length ? ' + the points the tools add ' + JSON.stringify(extra) : ''}`);
       assert.deepStrictEqual(radii(S), golden[t.id].radii, `${m}: the default radii are identical to main 788f7f4`);
       checks++;
     }
@@ -188,13 +194,16 @@ const noFold = (S, horizontal, Lg, th, n, m) => {
     sameGeometry(geo(T), geo(open(t, { layout, thickness: 12 })), `${layout} thickness 12 = built at 12`);
     for (const n of [1, 2, 3]) noFold(open(t, { layout, compartments: n }), H, 1500, 18, n, `${layout} ${n} compartments`);
   }
-  // Horizontal = Vertical mirrored in the diagonal through the origin: (x, y) -> (y, x) in user coordinates, joint by joint (same builder, same ids)
+  // Horizontal = Vertical mirrored in the diagonal through the origin: (x, y) -> (y, x) in user coordinates, joint by joint (same builder; TASK 680:
+  // the ids are minted per build, so joint k of one build is joint k of the other, in creation order)
   const V = new Map([...open(t, { compartments: 3 }).state.joints].map(([id, j]) => [id, { x: j.x, y: j.y }]));
   const Hz = open(t, { compartments: 3, layout: 'Horizontal' });
-  for (const [id, j] of V) {
-    const k = Hz.state.joints.get(id);
-    assert.ok(k && Math.abs(k.x - -j.y) < 1e-6 && Math.abs(-k.y - j.x) < 1e-6, `Horizontal: joint ${id} is the vertical layout's mirrored (${JSON.stringify([j, k])})`);
-  }
+  const hz = [...Hz.state.joints.values()];
+  assert.strictEqual(hz.length, V.size, 'Horizontal: as many joints as the vertical layout');
+  [...V].forEach(([id, j], i) => {
+    const k = hz[i];
+    assert.ok(k && Math.abs(k.x - -j.y) < 1e-6 && Math.abs(-k.y - j.x) < 1e-6, `Horizontal: joint ${i} is the vertical layout's ${id} mirrored (${JSON.stringify([j, k])})`);
+  });
   const extent = (S) => { const p = [...(S instanceof Map ? S : S.state.joints).values()]; return [Math.max(...p.map((j) => j.x)) - Math.min(...p.map((j) => j.x)), Math.max(...p.map((j) => -j.y)) - Math.min(...p.map((j) => -j.y))]; };
   assert.deepStrictEqual(extent(Hz).map(R), [1500, 400], 'Horizontal: 1500 wide, 400 tall (the long direction horizontal)');
   assert.deepStrictEqual(extent(V).map(R), [400, 1500], 'Vertical: 400 wide, 1500 tall');

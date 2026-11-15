@@ -80,9 +80,9 @@ await (async () => {
     await press('#btn-recenter-view'); await sleep(500);
     await pressRibbonTool(evalJs, (p) => pointer(p.x, p.y), 'btn-parameters');
     await waitFor(`document.querySelectorAll('.sk-pwin tr.pt-user').length === 3`, 'the Parameters window with the 3 user parameters');
-    const userRows = () => evalJs(`[...document.querySelectorAll('.sk-pwin tr.pt-user')].map((r) => [...r.children].map((c) => c.textContent))`);
+    const userRows = () => evalJs(`[...document.querySelectorAll('.sk-pwin tr.pt-user')].map((r) => [...r.children].slice(0, 5).map((c) => { const i = c.querySelector('input'); return i ? i.value : c.textContent; }))`); // TASK 677: Name / Expression / Comment are inputs
     assert.deepStrictEqual(await userRows(), [['length', '1500 mm', '1500.0', 'mm', 'Overall length'], ['width', '400 mm', '400.0', 'mm', 'Width'], ['thickness', '18 mm', '18.0', 'mm', 'Plywood thickness']], 'the table shows the parameters');
-    const fx = await evalJs(`[...document.querySelectorAll('.sk-pwin tr.pt-dim')].map((r) => r.children[1].textContent)`);
+    const fx = await evalJs(`[...document.querySelectorAll('.sk-pwin tr.pt-dim')].map((r) => { const m = r.children[1].querySelector('.pt-fx:not([hidden])'); return (m ? m.textContent : '') + r.children[1].querySelector('input').value; })`);
     assert.ok(fx.length === 14 && fx.every((t) => t.startsWith('fx')), 'every sketch dimension row is a formula: ' + JSON.stringify(fx));
     await sleep(300); await shot('parameters-table-box-frame.png', '.sk-pwin', { pad: 4, scale: 2 });
     // thickness 18 -> 12 through the dimension box: a double click on the thickness dimension's label, `thickness = 12`, Enter

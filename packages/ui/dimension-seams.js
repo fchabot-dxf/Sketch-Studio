@@ -29,6 +29,11 @@ export function dimensionEditLabel(c, val) {
   const r = (v) => (typeof v === 'number' ? Number(v.toFixed(4)) : v);
   return `edit dimension ${r(c.value)} -> ${r(val)}`;
 }
+// TASK 677: the history label of a text typed into a dimension (`pv` = previewDimensionInput's result). ONE definition shared by the canvas box
+// and the Parameters window's Expression cell.
+export function dimensionInputLabel(c, pv) {
+  return pv.kind === 'create' ? `create parameter ${pv.name}` : pv.kind === 'set' ? `change parameter ${pv.name}` : dimensionEditLabel(c, pv.value);
+}
 
 // Commit a numeric edit to a DRIVING dimension's value: the ONE-ELEMENT case of commitDimensionEdits (TASK 535 slice 2), no second path.
 // Returns { reverted, clash, reason?, culprit? } so the caller can surface a message. No DOM, no notifications here.

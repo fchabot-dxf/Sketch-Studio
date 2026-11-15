@@ -1,6 +1,7 @@
 // packages/ui/parameters-window.js — TASK 535 slice 4: the "fx Parameters" pop-up (docs/PARAMETERS-DESIGN.md F, O13).
-// The shared tabbed dock panel as a modeless floating window over the canvas, holding the read-only Parameters table.
-//   createParametersWindow({ state, anchorEl, onClose }) -> { open, close, toggle, isOpen, destroy, el }
+// The shared tabbed dock panel as a modeless floating window over the canvas, holding the Parameters table (editable since TASK 677, slice 5).
+//   createParametersWindow({ state, anchorEl, onClose, history }) -> { open, close, toggle, isOpen, destroy, el }
+//   - history: the Design surface's undo source (input-manager sketchHistory), handed to the table for Ctrl+Z / Ctrl+Y typed in a cell.
 //   - anchorEl: the ribbon element. First run the window opens just below it (never over it); when there is no room below it (the
 //     phone-landscape rail runs to the bottom of the screen, TASK 602) it opens at the anchor's top instead, right-aligned (beside the rail), and
 //     no taller than the screen leaves; while the anchor is not on screen (a host's
@@ -34,9 +35,9 @@ function injectStyles() {
   stylesInjected = true;
 }
 
-export function createParametersWindow({ state, anchorEl = null, onClose = null } = {}) {
+export function createParametersWindow({ state, anchorEl = null, onClose = null, history = null } = {}) {
   injectStyles();
-  const table = createParameterTable({ state, getUnit: docUnit });
+  const table = createParameterTable({ state, getUnit: docUnit, history });
 
   // first run: right-aligned just below the anchor (the ribbon); a remembered position wins (the dock merges it over this)
   const a = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;

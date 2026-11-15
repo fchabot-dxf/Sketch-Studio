@@ -44,9 +44,9 @@ await (async () => {
     const winOpen = () => evalJs(`(() => { const e = document.querySelector('${W}'); return !!e && !e.hidden && e.getBoundingClientRect().width > 0; })()`);
     const active = () => evalJs(`(() => { const a = document.activeElement; return a ? (a.id || a.className || a.tagName) : null; })()`);
     const focusInWindow = () => evalJs(`(() => { const e = document.querySelector('${W}'); return !!e && e.contains(document.activeElement); })()`);
-    const rows = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} tr.sk-ptable-row')].map(r => ({ kind: r.dataset.kind, name: r.dataset.name, cells: [...r.children].map(c => c.textContent), cls: r.className, sel: r.getAttribute('aria-selected') })))`).then(JSON.parse);
+    const rows = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} tr.sk-ptable-row')].map(r => ({ kind: r.dataset.kind, name: r.dataset.name, cells: [...r.children].map(c => { const i = c.querySelector('input'); return i ? i.value : c.textContent; }), cls: r.className, sel: r.getAttribute('aria-selected') })))`).then(JSON.parse);
     const emptyTexts = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} td.pt-empty')].map(e => e.textContent))`).then(JSON.parse);
-    const groupHeads = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} th[scope="rowgroup"]')].map(e => e.textContent))`).then(JSON.parse);
+    const groupHeads = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} th[scope="rowgroup"]')].map(e => e.querySelector('.pt-title').textContent + e.querySelector('.pt-count').textContent))`).then(JSON.parse);
     const btnState = () => evalJs(`(() => { const b = document.getElementById('btn-parameters'); return b ? { label: b.getAttribute('aria-label'), pressed: b.getAttribute('aria-pressed'), popup: b.getAttribute('aria-haspopup'), title: b.title } : null; })()`);
     const shot = async (name, clip) => {
       const p = { format: 'png' };
@@ -227,10 +227,10 @@ await (async () => {
     assert(wr.t >= rb.b, `Shaper: the window does not overlap the ribbon (${wr.t} >= ${rb.b})`);
     // a formula row carries the fx mark (formulas have no UI producer yet: set it on the state like a loaded file would)
     await evalJs(`(() => { const c = window.__designController.state.constraints[0]; c.expression = '20 mm * 2'; })()`);
-    await waitFor(`document.querySelectorAll('${W} tr.pt-dim')[0].querySelector('.pt-fx')`, 'the fx mark on a formula row');
-    assert.strictEqual(await evalJs(`document.querySelectorAll('${W} tr.pt-dim')[0].children[1].textContent`), 'fx20 mm * 2', 'the formula text after its fx mark');
+    await waitFor(`document.querySelectorAll('${W} tr.pt-dim')[0].querySelector('.pt-fx:not([hidden])')`, 'the fx mark on a formula row');
+    assert.strictEqual(await evalJs(`(() => { const c = document.querySelectorAll('${W} tr.pt-dim')[0].children[1]; return c.querySelector('.pt-fx').textContent + c.querySelector('input').value; })()`), 'fx20 mm * 2', 'the formula text after its fx mark');
     await evalJs(`delete window.__designController.state.constraints[0].expression`);
-    await waitFor(`!document.querySelectorAll('${W} tr.pt-dim')[0].querySelector('.pt-fx')`, 'the fx mark to go');
+    await waitFor(`!document.querySelectorAll('${W} tr.pt-dim')[0].querySelector('.pt-fx:not([hidden])')`, 'the fx mark to go');
     // row hover -> canvas
     const lineStroke = (id) => evalJs(`(() => { const s = window.__designController.state; const sh = s.shapes.find(x => x.id === '${id}'); const els = [...document.querySelectorAll('#design-canvas .shape-elem')]; const e = els.find(x => x.getAttribute('data-id') === '${id}' || x.getAttribute('data-shape-id') === '${id}') || els[s.shapes.indexOf(sh)]; return e ? (e.getAttribute('stroke') || getComputedStyle(e).stroke) : null; })()`);
     const baseStroke = await lineStroke('L1');

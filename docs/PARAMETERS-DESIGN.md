@@ -466,6 +466,17 @@ Owner: "Writing a param name in an input box like `pa` should show results in a 
 - **Accessibility**: the dock gets `role="dialog"`, `aria-label="Parameters"`; the ribbon button `aria-haspopup="dialog"` and
   `aria-expanded`; a real `<table>` with `<th scope="col">`; group headings as `<th scope="rowgroup">`; error text linked with
   `aria-describedby`; focus returns to the ribbon button on close. Not modal, so no focus trap.
+- **AS BUILT (slice 5, task 677).** One pure `planTableEdit(state, edit)` in packages/ui/parameter-table.js turns a cell into its `planChange` plan
+  (a dimension's Expression through `previewDimensionInput`, the canvas box's own function); `commitTableEdit` applies it with
+  `applyParameterChange` (one undo step; nothing changes = no undo step). Choices the text above left open: (a) the + Add row has a Unit select
+  (`PARAMETER_UNITS`, starting at the document unit, Fusion's Add-dialog default); existing rows' units stay read only (planChange has no unit
+  change). (b) The bin stays in the Tab order after Comment (a keyboard can delete); it is `aria-disabled` (not `disabled`, so its tooltip
+  listing the users shows) and pressing it anyway writes the IN_USE message under the row. (c) Ctrl+Z / Ctrl+Y typed in a cell with no pending
+  text run the Design surface's own undo (`sketchHistory`, the header buttons' source); with pending text they are the input's own text undo.
+  (d) A dimension row is no longer a Tab stop of its own (its Name / Expression cells are); hovering or focusing any of its cells hovers it on
+  the canvas, a click outside its cells selects it. (e) Narrow screens: the row's tap shows the Comment in the Value's place (one row at a time);
+  focusing its Name / Expression, or leaving the Comment, shows the Value again. (f) An invalid text left by leaving the cell stays in the cell,
+  marked, with its message, until it is fixed or reverted (Esc); the stored expression is unchanged meanwhile.
 
 ---
 

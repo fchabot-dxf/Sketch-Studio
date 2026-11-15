@@ -6,7 +6,7 @@
 // → Shaper) from the SAME component. Self-contained: injects its <style> once + inject-IF-MISSING icon symbols
 // (reuses cursor-manager's ICONS, the single source of truth) so #icon-* resolve in any host.
 
-import { switchToTool, toggleFixedSelection, selectionLockState } from '#ui/input-manager.js';
+import { switchToTool, toggleFixedSelection, selectionLockState, sketchHistory } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
@@ -297,9 +297,10 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   const menus = [];    // TASK 607: popovers on document.body, removed in destroy()
   // TASK 535-4: the Parameters window is made on first use; closing it (button, X, Esc) returns focus to its button
   // (TASK 647: to its section's name when the button is not in the bar: it was opened from the dropdown).
+  // TASK 677: Ctrl+Z / Ctrl+Y typed in a table cell with no pending text run the Design surface's own history (sketchHistory: what the header buttons call).
   let paramsWin = null;
   const parametersWindow = () => paramsWin || (paramsWin = createParametersWindow({
-    state, anchorEl: el, onClose: () => {
+    state, anchorEl: el, history: sketchHistory(state), onClose: () => {
       refresh();
       const b = el.querySelector('#btn-parameters');
       if (b) (b.hidden ? sections.find((sec) => sec.items.some((it) => it.btn === b)).nameEl : b).focus();

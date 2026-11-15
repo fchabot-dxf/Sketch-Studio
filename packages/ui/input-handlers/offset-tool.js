@@ -25,7 +25,6 @@ const OVERLAY_ID = 'offset-tool-overlay';
 export const OFFSET_INPUT_ID = 'offset-distance-input';
 const PRESS_SLOP_PX = 6;
 const HINT_MS = 6000;
-export const OFFSET_HINT = 'Offset: click a line, an arc or a circle (its connected chain is taken), choose the side, type the distance, then Enter (the check on touch).';
 
 let currentDistance = null; // WORLD mm; the last distance used (survives tool switches for the session)
 let _distanceUnit = null;   // the document unit the default was seeded for; a unit change re-seeds it
@@ -40,9 +39,6 @@ function ensureDistance() {
   if (currentDistance == null || _distanceUnit !== unit) { currentDistance = defaultOffsetDistance(unit); _distanceUnit = unit; }
 }
 const pickRule = (state) => { const inert = inertEntities(state); return (s) => !isShapeInert(inert, s.id); }; // task 577: a locked / hidden sketch is out
-
-/** The ribbon's Offset button (begin): the step is announced. */
-export function beginOffset() { ensureDistance(); showNotification(OFFSET_HINT, 'info', HINT_MS); }
 
 /** The distance box is open (the check of the Done layer shows). */
 export function offsetInputOpen() { return !!_open; }

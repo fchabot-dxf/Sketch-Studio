@@ -39,7 +39,7 @@ function injectStyles() {
 .sk-doctabs { --sk-doctabs-h: 32px; --sk-doctab-inset: 0px; --sk-doctabs-gap: 3px; --sk-doctab-max: 240px; --sk-doctab-min: 72px; --sk-doctab-x: 24px; --sk-doctab-new-w: 30px;
   --sk-doctabs-font: 13px; --sk-doctab-dot: 7px;
   --sk-doctab-strip: var(--sk-doctabs-bg, color-mix(in srgb, var(--sk-header-fg, #334155) 13%, var(--sk-header-bg, #ffffff)));
-  --sk-doctab-line: color-mix(in srgb, var(--sk-header-fg, #334155) 34%, transparent);
+  --sk-doctab-line: color-mix(in srgb, var(--sk-header-fg, #334155) 45%, var(--sk-doctab-strip));
   --sk-doctab-acc: var(--sk-doctab-accent, var(--sk-selection, #3B82F6)); }
 @media (pointer: coarse) { .sk-doctabs { --sk-doctabs-h: 30px; --sk-doctabs-gap: 4px; --sk-doctab-min: 104px; --sk-doctab-x: 44px; --sk-doctab-new-w: 44px; } }
 .sk-doctabs { display: flex; align-items: flex-start; gap: var(--sk-doctabs-gap); padding: 0 8px; box-sizing: border-box; flex: 0 0 auto;
@@ -49,10 +49,10 @@ function injectStyles() {
 .sk-doctabs::-webkit-scrollbar { display: none; }
 .sk-doctabs * { box-sizing: border-box; }
 .sk-doctab { display: flex; align-items: stretch; flex: 0 1 var(--sk-doctab-max); min-width: var(--sk-doctab-min); height: var(--sk-doctabs-h);
-  border: 1px solid var(--sk-doctab-line); border-top: 3px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0;
+  border: 1px solid var(--sk-doctab-line); border-bottom: 0; border-radius: 6px 6px 0 0;
   color: color-mix(in srgb, var(--sk-header-fg, #334155) 82%, var(--sk-doctab-strip)); }
-.sk-doctab:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 16%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); border-top-color: var(--sk-doctab-line); }
-.sk-doctab.active { position: relative; z-index: 1; background: var(--sk-ribbon-bg, #ffffff); border-top-color: var(--sk-doctab-acc); color: var(--sk-header-fg, #334155);
+.sk-doctab:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 16%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); }
+.sk-doctab.active { position: relative; z-index: 1; background: var(--sk-ribbon-bg, #ffffff); border-top: 3px solid var(--sk-doctab-acc); color: var(--sk-header-fg, #334155);
   box-shadow: 0 1px 0 var(--sk-ribbon-bg, #ffffff); font-weight: 700; } /* the shadow paints over the strip's 1 px line: the tab runs into the work area */
 .sk-doctab-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; background: transparent; border: 0; color: inherit; font: inherit;
   cursor: pointer; padding: 0 2px 0 9px; }

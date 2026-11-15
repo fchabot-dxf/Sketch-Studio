@@ -44,7 +44,7 @@ await (async () => {
         activeBg: rgb(ac.backgroundColor), work, stripBg, activeWeight: +ac.fontWeight, inactiveWeight: +ic.fontWeight,
         activeVsStrip: ratio(rgb(ac.backgroundColor), stripBg),
         inactiveContrast: ratio(rgb(ic.color), stripBg), activeContrast: ratio(rgb(ac.color), rgb(ac.backgroundColor)),
-        outline: { w: parseFloat(ic.borderLeftWidth), vsStrip: ratio(rgb(ic.borderLeftColor), stripBg) },
+        outline: { w: parseFloat(ic.borderLeftWidth), vsStrip: ratio(rgb(ic.borderLeftColor), stripBg), topAlpha: (cv.clearRect(0, 0, 1, 1), cv.fillStyle = ic.borderTopColor, cv.fillRect(0, 0, 1, 1), cv.getImageData(0, 0, 1, 1).data[3]), topW: parseFloat(ic.borderTopWidth), topStyle: ic.borderTopStyle, topVsStrip: ratio(rgb(ic.borderTopColor), stripBg), rightW: parseFloat(ic.borderRightWidth), rightVsStrip: ratio(rgb(ic.borderRightColor), stripBg) },
         h: Math.round(ina.getBoundingClientRect().height), font: parseFloat(getComputedStyle(act.querySelector('.sk-doctab-name')).fontSize),
         plus: { border: parseFloat(nc.borderTopWidth), vsStrip: ratio(rgb(nc.borderTopColor), stripBg), w: Math.round(strip.querySelector('.sk-doctab-new').getBoundingClientRect().width) },
         xInside: x.getBoundingClientRect().right <= tabR.right + 0.5 && Math.abs(mid(x) - mid(ina)) < 4 && x.getBoundingClientRect().width >= 18,
@@ -81,7 +81,7 @@ await (async () => {
         assert.deepStrictEqual(m.activeBg, m.work, tag + ': the active tab has the work area background (--sk-ribbon-bg)');
         assert(m.activeVsStrip >= 1.15 && m.activeWeight >= 700 && m.inactiveWeight < m.activeWeight, tag + ': the active tab stands out from the strip and its title is bolder: ' + JSON.stringify([m.activeVsStrip, m.activeWeight, m.inactiveWeight]));
         assert(m.inactiveContrast >= 4.5 && m.activeContrast >= 4.5, tag + ': title contrast >= 4.5:1: ' + JSON.stringify([m.inactiveContrast, m.activeContrast]));
-        assert(m.outline.w >= 1 && m.outline.vsStrip >= 1.5, tag + ': an inactive tab has a visible outline against the strip: ' + JSON.stringify(m.outline));
+        assert(m.outline.w >= 1 && m.outline.vsStrip >= 1.5 && m.outline.rightW >= 1 && m.outline.rightVsStrip >= 1.5 && m.outline.topW >= 1 && m.outline.topAlpha > 100 && m.outline.topStyle === 'solid' && m.outline.topVsStrip >= 1.5, tag + ': an inactive tab has a complete visible outline (top, left, right) against the strip: ' + JSON.stringify(m.outline));
         assert.strictEqual(m.h, phone ? 30 : 32, tag + ': tab height (32 px mouse, 30 px finger: the TASK 608 thin phone strip kept)');
         assert.strictEqual(m.font, 13, tag + ': 13 px titles');
         assert(m.plus.border >= 1 && m.plus.vsStrip >= 1.5 && m.plus.w >= (phone ? 44 : 28), tag + ': "+" is an outlined button: ' + JSON.stringify(m.plus));

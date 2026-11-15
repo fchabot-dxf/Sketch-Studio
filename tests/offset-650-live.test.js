@@ -71,7 +71,7 @@ await (async () => {
       const tool = async (id) => { await evalJs(`document.querySelector('#${id}').click()`); await sleep(200); };
       // the ribbon: Offset in the Modify group, right after Mirror (TASK 647 moved Mirror into Modify)
       const rib = await evalJs(`(() => { const b = document.getElementById('tool-offset'); const g = b && b.closest('.sk-ribbon-group'); return g ? { label: g.querySelector('.sk-ribbon-group-label').textContent, ids: [...g.querySelectorAll('.sk-ribbon-btn')].map((x) => x.id) } : null; })()`);
-      assert(rib && rib.label === 'Modify' && rib.ids.indexOf('tool-offset') === rib.ids.indexOf('tool-mirror') + 1, `[${kind}] Offset in Modify after Mirror: ${JSON.stringify(rib)}`);
+      assert(rib && rib.label === 'Modify' && rib.ids.indexOf('tool-offset') === rib.ids.indexOf('tool-mirror') + 3, `[${kind}] Offset in Modify after Mirror and the two pattern tools (task 658): ${JSON.stringify(rib)}`);
       // the L, big against 5 mm: the corner low-left, arms up and right (screen px); then measured in world mm
       const arm = Math.min(cr.w * 0.32, 220);
       const K = { x: cr.l + cr.w * 0.5 - arm * 0.5, y: cr.t + cr.h * 0.62 };

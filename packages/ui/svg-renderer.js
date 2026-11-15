@@ -18,6 +18,7 @@ import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
 import { linearDimFrame, linearParamsToPoint, linearPointToParams, polarPointToParams, resolveDimEndpoints } from '#core/dim-label.js';
 import { symmetricOperands } from '#core/symmetric.js';
+import { isPatternConstraint, patternHandles, patternSpacing } from '#core/pattern.js';
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
@@ -199,7 +200,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const dimConstraintUnlessLit = (c, lit) => {
     out.dim = null;
     if (!dimsSketches || lit || !c || c.__isPreview) return;
-    const own = constraintSketch({ ...c, joints: (c.joints || []).filter((id) => id !== ORIGIN_JOINT_ID) }, { joints, shapes });
+    // a pattern (task 658) names its operands in `sources.shapes`; its label belongs to the sketch of those
+    const operands = isPatternConstraint(c) ? { shapes: c.sources.shapes } : { ...c, joints: (c.joints || []).filter((id) => id !== ORIGIN_JOINT_ID) };
+    const own = constraintSketch(operands, { joints, shapes });
     const ids = own instanceof Set ? [...own] : (own ? [own] : []);
     if (ids.length && !ids.includes(activeSketchState.activeSketchId)) out.dim = ids[0];
   };
@@ -2290,8 +2293,31 @@ switch(c.type){
     return pts.map(q => { const side = (q.x - a.x) * nx + (q.y - a.y) * ny < 0 ? -1 : 1; return { x: q.x + side * nx * offset, y: q.y + side * ny * offset }; });
   };
 
+  // TASK 658: a pattern's label(s) (no glyph): circular "N x A deg" beside the centre; rectangular "N x d" past each direction's last instance
+  // (d = the distance the dialog shows: the spacing, or the total). A `.dim-label`: a double-click / double-tap opens the pattern dialog on it.
+  const patternLabels = (c) => {
+    const cIdx = constraints.indexOf(c);
+    const isHovered = highlight.kind === 'constraint' && highlight.id === c, isSelected = selectedConstraints && selectedConstraints.has(c);
+    const color = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb', strokeW = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
+    const sc = { joints: opJoints, shapes: opShapes, constraints };
+    const fmtN = (v) => String(Number(Number(v).toFixed(2)));
+    const items = c.type === CONSTRAINT_TYPES.CIRCULAR_PATTERN
+      ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scale(34), y: h.point.y - scale(26), text: `${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
+      : patternHandles(sc, c).map((h) => ({ x: h.point.x + h.dir.x * (h.extent + scale(70)), y: h.point.y + h.dir.y * (h.extent + scale(70)), // past the pattern tool's arrow
+          text: `${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' total' : ''}` }));
+    items.forEach((it, i) => {
+      const w = scale(Math.max(50, 7 * it.text.length + 10));
+      out.push(`<g class="dim-label pattern-label" data-constraint-idx="${cIdx}" data-part="${i}" style="cursor:${currentTool === 'select' ? 'pointer' : 'default'}">
+        ${dimLabelRect(it.x, it.y, w, scale(18), scale(2), color, strokeW)}
+        <text ${placeDimLabel(it.x, it.y, null, null, it.text, w, false, color).attrs}>${it.text}</text>
+      </g>`);
+      if (i === 0) { try { c.glyphPos = { x: it.x, y: it.y }; } catch (_) { } }
+    });
+  };
+
   for(const c of constraints){
     dimConstraintUnlessLit(c, (selectedConstraints && selectedConstraints.has(c)) || hoveredConstraint === c);
+    if (isPatternConstraint(c)) { patternLabels(c); continue; }
     if(c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2){
       const a = getClusterLeader(c.joints[0]);
       const b = getClusterLeader(c.joints[1]);

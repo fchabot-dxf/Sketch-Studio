@@ -18,10 +18,10 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const diff = (a, b) => `got ${JSON.stringify([...a].sort())} expected ${JSON.stringify([...b].sort())}`;
 
 const EXPECTED = {
-  tools: ['select', 'line', 'rect', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'offset', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror'],
+  tools: ['select', 'line', 'rect', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'offset', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror', 'circularPattern', 'rectangularPattern'],
   notInRibbon: ['pan'],
-  constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric', 'offset'],
-  definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'offset', 'mouse_spring'],
+  constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern'],
+  definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern', 'mouse_spring'],
   shapeKinds: ['line', 'construction line', 'circle', 'arc (centre, start, end)', 'fillet arc', 'polygon side', 'rect side', 'bezier', 'point / joint'],
   shapeTypeLiterals: ['arc', 'bezier', 'circle', 'line'],
   dimensionModes: ['aligned', 'horizontal', 'vertical', 'line length', 'point-line', 'line-line', 'angle', 'radius'],
@@ -60,11 +60,15 @@ const COVER = {
     coincident: ['rows', 'coincident'], hv: ['rows', 'horizontal-2pt', 'vertical-2pt', 'horizontal-line', 'vertical-line'], parallel: ['rows', 'parallel'], perp: ['rows', 'perpendicular'],
     collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-3pt'], symmetric: ['rows', 'symmetric'],
     mirror: ['deferred', 'copies shapes + links them with the symmetric row (covered there): tests/mirror.test.js, mirror-fusion-node.test.js'],
-    offset: ['deferred', 'makes a NEW chain from one picked chain (no pair of existing operands, so no constraint x geometry cell): tests/offset-650.test.js, offset-tool-650-node.test.js'] },
+    offset: ['deferred', 'makes a NEW chain from one picked chain (no pair of existing operands, so no constraint x geometry cell): tests/offset-650.test.js, offset-tool-650-node.test.js'],
+    circularPattern: ['deferred', 'makes NEW copies of the picked objects about a centre (no pair of existing operands): tests/pattern-658.test.js, pattern-tool-658-node.test.js'],
+    rectangularPattern: ['deferred', 'makes NEW copies of the picked objects along two directions (no pair of existing operands): tests/pattern-658.test.js, pattern-tool-658-node.test.js'] },
   constraintTypes: { coincident: 'coincident', horizontal: 'horizontal-2pt', vertical: 'vertical-2pt', parallel: 'parallel', perpendicular: 'perpendicular', collinear: 'collinear', tangent: 'tangent',
     pointOnLine: 'dim-point-line', distance: 'dim-aligned', equal: 'equal', angle: 'dim-angle-xy', midpoint: 'midpoint-line', symmetric: 'symmetric' },
   // a constraint type no matrix row can make (made by a tool from one pick, not between two existing operands): deferred with its own tests
-  constraintTypesDeferred: { offset: 'made only by the Offset tool with its own new geometry (task 650): tests/offset-650.test.js (rows, Jacobian = finite differences, 0 DOF, edit, save / load)' },
+  constraintTypesDeferred: { offset: 'made only by the Offset tool with its own new geometry (task 650): tests/offset-650.test.js (rows, Jacobian = finite differences, 0 DOF, edit, save / load)',
+    circularPattern: 'made only by the Circular Pattern tool with its own copies (task 658): tests/pattern-658.test.js (rows, Jacobian = finite differences, 0 DOF, regenerate, save / load, undo, paste, delete)',
+    rectangularPattern: 'made only by the Rectangular Pattern tool with its own copies (task 658): tests/pattern-658.test.js (rows, Jacobian = finite differences, 0 DOF, regenerate, save / load, undo, paste, delete)' },
   definitionsDeferred: { mouse_spring: 'drag spring, not a user constraint' },
   dimensionModes: { aligned: 'dim-aligned', horizontal: 'dim-horizontal', vertical: 'dim-vertical', 'line length': 'dim-length', 'point-line': 'dim-point-line', 'line-line': 'dim-line-line', angle: 'dim-angle-xy', radius: 'dim-radius' },
   shapeKinds: { line: 'L', 'construction line': 'C', circle: 'O', 'arc (centre, start, end)': 'A', 'fillet arc': 'F', 'polygon side': 'S', 'rect side': 'R', bezier: 'B', 'point / joint': 'P' },

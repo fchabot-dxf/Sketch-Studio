@@ -1,6 +1,7 @@
 import { angleSectorOf } from '../angle-sector.js';
 import { symmetricRowCount } from '../symmetric.js';
 import { offsetRowCount, offsetRowValues } from '../offset.js';
+import { patternRowCount, patternRowValues } from '../pattern.js';
 
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
 // positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
@@ -134,6 +135,61 @@ const angleRow = (params, ux, uy, vx, vy) => {
   const S = k * (cross * ct - dot * st), C = k * (dot * ct + cross * st);
   return { k, ct, st, S, C, far: C < 0, sgn: S < 0 ? -1 : 1, lu: Math.hypot(ux, uy), lv: Math.hypot(vx, vy) };
 };
+
+// TASK 658: the pattern rows (#core/pattern.js patternOperands, engine.js maps them to dense indices).
+const patternError = (params, positions) => (params.patternOps ? patternRowValues(params.patternOps,
+  (i) => ({ x: positions[i*2], y: positions[i*2+1] }), (o) => radiusValue(positions, o.at, o.radius, o.rim, o.centre)) : []);
+function patternJacobian(params, positions, outRows) {
+  const ops = params.patternOps;
+  if (!ops) return;
+  const X = (i) => positions[i*2], Y = (i) => positions[i*2+1];
+  const circular = ops.kind === 'circularPattern';
+  // a direction's unit vector and, for a line, its ends and length (d u / d b = (I - u u^T) / L, d u / d a = -(that))
+  const dirs = circular ? [] : ops.dirs.map((d) => {
+    if (d.a === undefined) return { u: { x: d.x, y: d.y } };
+    const dx = X(d.b) - X(d.a), dy = Y(d.b) - Y(d.a), L = Math.hypot(dx, dy) || 1e-12;
+    return { a: d.a, b: d.b, L, u: { x: dx / L, y: dy / L } };
+  });
+  let k = 0;
+  for (const r of ops.rows) {
+    if (r.k === 'pt') {
+      const rx = outRows[k], ry = outRows[k + 1];
+      k += 2;
+      addGrad(rx, r.q, 1, 0); addGrad(ry, r.q, 0, 1);
+      if (circular) {
+        // q - C - M (p - C), M = rotation by th:  d/dp = -M,  d/dC = M - I
+        const co = Math.cos(r.th), si = Math.sin(r.th);
+        addGrad(rx, r.p, -co, si); addGrad(ry, r.p, -si, -co);
+        addGrad(rx, ops.centre, co - 1, -si); addGrad(ry, ops.centre, si, co - 1);
+      } else {
+        // q - p - t1 u1 - t2 u2
+        addGrad(rx, r.p, -1, 0); addGrad(ry, r.p, 0, -1);
+        dirs.forEach((d, n) => {
+          if (d.a === undefined || !r.t[n]) return;
+          const f = -r.t[n] / d.L, ux = d.u.x, uy = d.u.y;
+          addGrad(rx, d.b, f * (1 - ux * ux), f * (-ux * uy)); addGrad(rx, d.a, -f * (1 - ux * ux), -f * (-ux * uy));
+          addGrad(ry, d.b, f * (-ux * uy), f * (1 - uy * uy)); addGrad(ry, d.a, -f * (-ux * uy), -f * (1 - uy * uy));
+        });
+      }
+      continue;
+    }
+    const row = outRows[k++];
+    if (r.k === 'rad') {
+      addRadiusDerivative(row, positions, 1, r.off.at, r.off.rim, r.off.centre);
+      addRadiusDerivative(row, positions, -1, r.src.at, r.src.rim, r.src.centre);
+      continue;
+    }
+    // 'ray': |W| th, th = atan2(A x W, A . W), A = M (p - cs) (M = the rotation, or I), W = q - cq: offset's 'ta' derivative with
+    //   d/dW = th W / |W| + (-Wy, Wx) / |W|,  d/dA = |W| (Ay, -Ax) / |A|^2,  d/dp = M^T d/dA,  d/dcs = -M^T d/dA
+    const co = circular ? Math.cos(r.th) : 1, si = circular ? Math.sin(r.th) : 0;
+    const px = X(r.p) - X(r.cs), py = Y(r.p) - Y(r.cs), ax = co * px - si * py, ay = si * px + co * py;
+    const wx = X(r.q) - X(r.cq), wy = Y(r.q) - Y(r.cq);
+    const la2 = (ax * ax + ay * ay) || 1e-24, lw = Math.hypot(wx, wy) || 1e-12, th = Math.atan2(ax * wy - ay * wx, ax * wx + ay * wy);
+    const gax = lw * ay / la2, gay = -lw * ax / la2, gwx = (th * wx - wy) / lw, gwy = (th * wy + wx) / lw;
+    const gpx = co * gax + si * gay, gpy = -si * gax + co * gay;
+    addGrad(row, r.q, gwx, gwy); addGrad(row, r.cq, -gwx, -gwy); addGrad(row, r.p, gpx, gpy); addGrad(row, r.cs, -gpx, -gpy);
+  }
+}
 
 export const Definitions = {
   // Distance constraint:
@@ -755,6 +811,12 @@ export const Definitions = {
       }
     }
   },
+
+  // Circular / rectangular pattern (task 658, #core/pattern.js): params.patternOps = the stored pattern's rows (patternOperands) with dense
+  // indices (engine.js). The VALUES come from the one formula, #core/pattern.js patternRowValues (the verifier reads the same); the derivatives
+  // are here (patternJacobian), every operand taking part (a free source, the centre and a direction line move too).
+  circularPattern: { rows: (c, shapes) => patternRowCount(c, shapes), computeError: (p, x) => patternError(p, x), computeJacobian: (p, x, out) => patternJacobian(p, x, out) },
+  rectangularPattern: { rows: (c, shapes) => patternRowCount(c, shapes), computeError: (p, x) => patternError(p, x), computeJacobian: (p, x, out) => patternJacobian(p, x, out) },
 
   // Mouse-spring: soft target used by InteractionSolver to represent a drag 'weak constraint'
   mouse_spring: {

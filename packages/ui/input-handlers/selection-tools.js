@@ -10,6 +10,8 @@ import { findCoincidentCluster, hitJointAtScreen } from '#ui/snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { showEditInput } from '#ui/numeric-input-manager.js';
+import { isPatternConstraint } from '#core/pattern.js';
+import { editPatternFromLabel } from '#ui/input-handlers/pattern-tool.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
@@ -189,9 +191,11 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
             
             if (isDoubleClick) {
                 e.stopPropagation(); e.preventDefault();
-                showEditInput(svg, state, constraint);
+                if (isPatternConstraint(constraint)) editPatternFromLabel(svg, state, constraint); // TASK 658: the pattern dialog on its values
+                else showEditInput(svg, state, constraint);
                 return true;
             }
+            if (isPatternConstraint(constraint)) return true; // TASK 658: a pattern label has no position of its own to drag (it follows its pattern)
 
             // The value drags freely in X and Y (offset + slide/angle)
             svg.setPointerCapture(e.pointerId);

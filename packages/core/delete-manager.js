@@ -1,4 +1,5 @@
 import { removeOrphanJoints } from './joints.js';
+import { patternsAfterDelete } from './pattern.js';
 import { SolverConfig } from './solver-config.js';
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo, constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from './sketch-model.js'; // TASK 577/619
 
@@ -111,6 +112,7 @@ export function deleteShapes(state, shapeIds) {
 
   // Clean orphan joints
   try { removeOrphanJoints(state); } catch(_) {}
+  patternsAfterDelete(state); // TASK 658: a deleted copy suppresses its pattern instance; a deleted source / centre / direction line ends the pattern
 
   // Clear selected shapes if present
   try { if (state.selectedShapes && typeof state.selectedShapes.clear === 'function') state.selectedShapes.clear(); } catch(_) {}
@@ -156,6 +158,7 @@ export function deleteJoints(state, jointIds) {
 
   // Cleanup orphans
   try { removeOrphanJoints(state); } catch(_) {}
+  patternsAfterDelete(state); // TASK 658 (as deleteShapes)
 
   try { if (state.selectedJoints && typeof state.selectedJoints.clear === 'function') state.selectedJoints.clear(); } catch(_) {}
   try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.QUICK_SOLVE || 8); } catch(_) {}

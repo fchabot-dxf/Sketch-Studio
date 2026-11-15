@@ -22,7 +22,11 @@ export const CONSTRAINT_TYPES = {
   SYMMETRIC: 'symmetric',
   // task 650 (#core/offset.js): an offset chain at distance `value` from its source chain; also the driving DISTANCE dimension of the offset.
   // Stored { shapes: [src0, off0, src1, off1, ...], rev, sides, joins, closed, value, name, ... } (Fusion: an OffsetConstraint + its dimension).
-  OFFSET: 'offset'
+  OFFSET: 'offset',
+  // task 658 (#core/pattern.js): Fusion's CircularPatternConstraint / RectangularPatternConstraint. ONE constraint per pattern holds its sources,
+  // its copies (instances) and its values; the copies follow the sources through its solver rows. Stored by #core/pattern.js patternConstraintRecord.
+  CIRCULAR_PATTERN: 'circularPattern',
+  RECTANGULAR_PATTERN: 'rectangularPattern'
 };
 
 // Snap tolerances (in screen pixels)
@@ -95,6 +99,8 @@ export const CONSTRAINT_COLORS = {
   [CONSTRAINT_TYPES.MIDPOINT]:      { fill: '#60A5FA', stroke: '#2563eb' },
   [CONSTRAINT_TYPES.SYMMETRIC]:     { fill: '#60A5FA', stroke: '#2563eb' },
   [CONSTRAINT_TYPES.OFFSET]:        { fill: '#60A5FA', stroke: '#2563eb' },
+  [CONSTRAINT_TYPES.CIRCULAR_PATTERN]:    { fill: '#60A5FA', stroke: '#2563eb' },
+  [CONSTRAINT_TYPES.RECTANGULAR_PATTERN]: { fill: '#60A5FA', stroke: '#2563eb' },
 };
 
 // Drawing tool modes
@@ -121,6 +127,8 @@ export const TOOL_MODES = {
   MIDPOINT: 'midpoint',
   SYMMETRIC: 'symmetric', // task 563: entity, entity, then the symmetry line
   MIRROR: 'mirror', // task 585: like Fusion's Create > Mirror: the objects, then the mirror line, then Enter (#core/mirror.js)
+  CIRCULAR_PATTERN: 'circularPattern',       // task 658: like Fusion's Create > Circular Pattern (here in Modify): objects, centre point, values (#core/pattern.js)
+  RECTANGULAR_PATTERN: 'rectangularPattern', // task 658: like Fusion's Create > Rectangular Pattern (here in Modify): objects, directions, values
   OFFSET: 'offset' // task 650: like Fusion's Create > Offset (here in Modify): pick a curve (its chain), the side, the distance, Enter (#core/offset.js)
 };
 

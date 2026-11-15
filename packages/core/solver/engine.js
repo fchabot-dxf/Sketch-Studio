@@ -6,6 +6,7 @@ import { getCoincidentJoints } from '../joints.js';
 import { isPointLineDistance } from '../geometry.js';
 import { symmetricOperands } from '../symmetric.js';
 import { offsetOperands } from '../offset.js';
+import { patternOperands, isPatternConstraint } from '../pattern.js';
 
 // THE declaration of the solver's non-joint unknown (task 515, like Fusion and PlaneGCS): a CIRCLE is one centre joint plus a `radius`,
 // and that radius is a solver unknown. `shape.radius` stays the ONE store: _pack reads it as the start value, _unpack writes the solved
@@ -504,6 +505,36 @@ export class NewtonSolver {
         });
         if (used.some(i => typeof i !== 'number')) params.offsetRows = [];
         params.joints = params.offsetRows.length ? used : [];
+        params.radiiAt = ats;
+      }
+
+      // Circular / rectangular pattern (task 658): ONE operand reader (#core/pattern.js patternOperands) -> params.patternOps with dense joint
+      // indices (copy / source points, the centre, the direction lines' ends) and, for a circle copy's radius row, both radius operands (as offset).
+      // Unresolved -> no rows (the Definition counted none).
+      if (isPatternConstraint(c)) {
+        const ops = patternOperands(c, this.shapes);
+        const used = [], ats = [];
+        const J = (id) => { const i = jointIndexMap.get(id); used.push(i); return i; };
+        const R = (sid) => {
+          const sh = this.shapes.find(s => s && s.id === sid), op = this._radiusOperand(sh, jointIndexMap);
+          const centre = sh && sh.joints && sh.joints.length ? J(sh.joints[0]) : undefined;
+          if (typeof op.rim === 'number') used.push(op.rim);
+          if (typeof op.at === 'number') ats.push(op.at);
+          return { at: op.at, radius: op.radius, rim: op.rim, centre };
+        };
+        if (ops) {
+          const m = { kind: ops.kind, rows: [] };
+          if (ops.centre !== undefined) m.centre = J(ops.centre);
+          if (ops.dirs) m.dirs = ops.dirs.map(d => (d.a !== undefined ? { a: J(d.a), b: J(d.b) } : { x: d.x, y: d.y }));
+          m.rows = ops.rows.map(r => {
+            const o = { k: r.k, th: r.th, t: r.t };
+            for (const key of ['q', 'p', 'cq', 'cs']) if (r[key] !== undefined) o[key] = J(r[key]);
+            for (const key of ['off', 'src']) if (r[key] !== undefined) o[key] = R(r[key]);
+            return o;
+          });
+          params.patternOps = used.some(i => typeof i !== 'number') ? null : m;
+        } else params.patternOps = null;
+        params.joints = params.patternOps ? used : [];
         params.radiiAt = ats;
       }
 

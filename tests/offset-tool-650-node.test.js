@@ -22,7 +22,7 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) {
     const g = b && b.closest('.sk-ribbon-group');
     ok(b && g.querySelector('.sk-ribbon-group-label').textContent === 'Modify' && b.textContent.trim() === 'Offset', `${host}: an Offset button in the Modify group`);
     const tools = [...g.querySelectorAll('.sk-ribbon-btn')].map((x) => x.id);
-    ok(tools.indexOf('tool-offset') === tools.indexOf('tool-mirror') + 1, `${host}: Offset right after Mirror (${tools})`);
+    ok(tools.indexOf('tool-offset') === tools.indexOf('tool-mirror') + 3, `${host}: Offset after Mirror and the two pattern tools, task 658 (${tools})`);
     ok(b.querySelector('svg.sk-ribbon-ic'), `${host}: an inline icon in the ribbon's icon style`);
   } finally { await app.close(); }
 }

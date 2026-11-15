@@ -5,7 +5,7 @@
 import assert from 'node:assert';
 import { createSketch } from './harness/sketch.js';
 import { createEngine } from '../packages/core/constraint-solver.js';
-import { createSketchState } from '../packages/ui/sketch-state.js';
+import { createSketchState } from '../packages/core/sketch-state.js';
 import { POLYGON_SIDES, TOOL_MODES, CONSTRAINT_TYPES } from '../packages/core/constants.js';
 import { clampPolygonSides, makePolygon } from '../packages/core/shapes.js';
 import { handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, createPolygon, polygonSides } from '../packages/ui/input-handlers/polygon-tool.js';

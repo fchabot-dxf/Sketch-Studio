@@ -9,7 +9,7 @@
 
 import assert from 'assert';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { makeRectFromTwoJoints } from '#core/shapes.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';

@@ -11,7 +11,7 @@ globalThis.document = { addEventListener() {}, querySelector: () => null, getEle
 globalThis.location = { href: 'http://test/' };
 
 const { createEngine } = await import('#core/constraint-solver.js');
-const { createSketchState } = await import('#ui/sketch-state.js');
+const { createSketchState } = await import('#core/sketch-state.js');
 const { serializeDocument } = await import('#core/document.js');
 const { addConstraintObject } = await import('#core/constraints.js');
 const { diffSnapshots, applyPatch, buildJournal, replayJournal, snapshotToDoc, describePatch } = await import('#core/journal.js');

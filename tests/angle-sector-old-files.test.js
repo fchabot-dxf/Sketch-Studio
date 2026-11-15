@@ -19,7 +19,7 @@ global.document = { head: { appendChild() {} }, getElementById: () => null, crea
 
 const mods = {
   createEngine: (await import('../packages/core/constraint-solver.js')).createEngine,
-  createSketchState: (await import('../packages/ui/sketch-state.js')).createSketchState,
+  createSketchState: (await import('../packages/core/sketch-state.js')).createSketchState,
   deserializeDocument: (await import('../packages/core/document.js')).deserializeDocument,
   draw: (await import('../packages/ui/svg-renderer.js')).draw,
   commitDimensionEdit: (await import('../packages/ui/dimension-seams.js')).commitDimensionEdit,

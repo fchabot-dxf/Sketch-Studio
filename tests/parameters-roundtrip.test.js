@@ -3,7 +3,7 @@
 // DATA ONLY: no solver runs (the constraints name shapes that need not exist); the point is what the model carries. Their JOINTS exist (task 589:
 // a load drops a constraint naming a joint the document does not have).
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { serializeDocument, deserializeDocument, DOCUMENT_VERSION } from '#core/document.js';
 import { addConstraint } from '#core/constraints.js';
 import { evaluateAll } from '#core/parameters.js';

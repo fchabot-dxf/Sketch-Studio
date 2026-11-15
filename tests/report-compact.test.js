@@ -17,7 +17,7 @@ Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'node-test'
 
 const { roundNum, roundDeep, replayCompactJournal, buildCompactReport, constraintKey, PRESENTATION_KEYS, compactLog, compactTouchTrace } = await import('#ui/report-compact.js');
 const { createEngine } = await import('#core/constraint-solver.js');
-const { createSketchState } = await import('#ui/sketch-state.js');
+const { createSketchState } = await import('#core/sketch-state.js');
 const { addConstraintObject } = await import('#core/constraints.js');
 const { dbg } = await import('#core/debug.js');
 const diag = await import('#ui/diagnostic-log.js');

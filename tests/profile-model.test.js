@@ -5,7 +5,7 @@ import { draw } from '../packages/ui/svg-renderer.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea } from '#core/loop-geometry.js';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
 

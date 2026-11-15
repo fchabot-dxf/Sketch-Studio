@@ -175,7 +175,7 @@ const HOSTS = {
   // apps/sketchstudio/main.js: initStudioCanvas, setupUI's ribbon, the buffer, setupInput(svg, state), the loop = studioFrame
   async sketchstudio({ win, store, designBrowser }) {
     const [{ createEngine }, { DEFAULT_VIEW }, { createSketchState }, { setupInput }, { setupUI }, { createDocumentBuffer }, D] = await Promise.all([
-      import('#core/constraint-solver.js'), import('#core/constants.js'), import('#ui/sketch-state.js'), import('#ui/input-manager.js'),
+      import('#core/constraint-solver.js'), import('#core/constants.js'), import('#core/sketch-state.js'), import('#ui/input-manager.js'),
       import('../../apps/sketchstudio/ui/ui-manager.js'), import('#ui/document-buffer.js'), import('../../apps/sketchstudio/design-canvas.js')]);
     const doc = win.document;
     const svg = doc.getElementById(D.CANVAS_ID); giveLayout(svg, MEASURED_CANVAS_RECT.sketchstudio);

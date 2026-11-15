@@ -4,7 +4,7 @@ globalThis.document = globalThis.document || { getElementById: () => null };
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m); };
   const { createEngine } = await import('#core/constraint-solver.js');
-  const { createSketchState } = await import('#ui/sketch-state.js');
+  const { createSketchState } = await import('#core/sketch-state.js');
   const { ConstraintManager } = await import('#core/constraint-manager.js');
   const { makeRectFromTwoJoints } = await import('#core/shapes.js');
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');

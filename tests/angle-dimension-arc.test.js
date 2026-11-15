@@ -11,7 +11,7 @@ global.document = { head: { appendChild() {} }, getElementById: () => null, crea
 const { draw, angleDimensionSector } = await import('../packages/ui/svg-renderer.js');
 const { getLineIntersection } = await import('../packages/core/geometry.js');
 const { createEngine } = await import('../packages/core/constraint-solver.js');
-const { createSketchState } = await import('../packages/ui/sketch-state.js');
+const { createSketchState } = await import('../packages/core/sketch-state.js');
 const { serializeDocument, deserializeDocument } = await import('../packages/core/document.js');
 const { addConstraintObject } = await import('../packages/core/constraints.js');
 

@@ -11,7 +11,7 @@ import { completionsFor, previewDimensionInput, MAX_COMPLETIONS, planChange } fr
 import { functionTable } from '#core/expression.js';
 import { applyParameterChange, toggleDriving } from '#ui/dimension-seams.js';
 import { formatConstraintValue } from '#ui/svg-renderer.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { createEngine } from '#core/constraint-solver.js';
 
 let checks = 0;

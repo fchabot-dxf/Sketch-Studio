@@ -4,7 +4,7 @@
 // Also: a version-2 document without parameters, the version gate, and the project-file envelope.
 import { readFileSync } from 'node:fs';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { serializeDocument, deserializeDocument, validateDocument, DOCUMENT_VERSION } from '#core/document.js';
 import { serializeProjectFile, parseProjectFile } from '#ui/project-file.js';
 import { loadDrawings, buildDrawing } from './harness/coverage/prop-lib.js';

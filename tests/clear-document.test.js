@@ -2,7 +2,7 @@
 // shared sketch state, so a cleared state deep-equals a freshly constructed one (after the same initStore()).
 import assert from 'node:assert';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 
 const make = () => {
   const engine = createEngine(null);
@@ -11,11 +11,13 @@ const make = () => {
   return state;
 };
 // Plain-data projection: drop functions and the engine handle so deepStrictEqual compares state, not closures.
+// TASK 679: the store's joints and shapes are compared by CONTENT (entries / elements). Each state now owns its engine's store, and
+// createSketchState puts its own stamping wrappers on it (joints.set, shapes.push), so two states' containers differ by those closures.
 const project = (state) => {
   const out = {};
   for (const [k, v] of Object.entries(state)) {
     if (typeof v === 'function' || k === 'engine' || k === 'model' || k === '_historyListeners') continue;
-    out[k] = v;
+    out[k] = k === 'joints' ? [...v.entries()] : k === 'shapes' ? [...v] : v;
   }
   return out;
 };

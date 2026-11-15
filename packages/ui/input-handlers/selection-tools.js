@@ -21,7 +21,7 @@ import { BODY_POINTS } from '#core/solver/definitions.js';
 import { isWithinMagnet } from '#ui/snap-magnet.js';
 import { INFERENCE_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { releaseDragTargets } from '#ui/sketch-state.js'; // TASK 575: the one release of a drag's solver targets
+import { releaseDragTargets } from '#core/sketch-state.js'; // TASK 575: the one release of a drag's solver targets
 
 // Local state for selection tools
 let selectionState = {
@@ -905,7 +905,7 @@ export function handleSelectionPointerUp(e, svg, state) {
     }
     
     // Cleanup drag targets so joints stop trying to follow the mouse (a body drag: its shape's one target, task 538), BEFORE a
-    // snap-on-release below solves (TASK 575: the one release, #ui/sketch-state.js releaseDragTargets)
+    // snap-on-release below solves (TASK 575: the one release, #core/sketch-state.js releaseDragTargets)
     releaseDragTargets(state, state.drag);
 
     // TASK 588: a group drag adds nothing on release; released without a move it was a click on the pressed member: that entity alone is

@@ -2,7 +2,7 @@
 //
 // README: the diagnostic report's `journal` field
 // ------------------------------------------------
-// The shared sketch state keeps the last HISTORY_DEPTH undo snapshots (packages/ui/sketch-state.js); each one is stamped with `t`
+// The shared sketch state keeps the last HISTORY_DEPTH undo snapshots (packages/core/sketch-state.js); each one is stamped with `t`
 // (Date.now() when saved) and `label` (what the user did NEXT: 'line', 'rect', 'edit dimension 23.6 -> 17', 'delete shapes', ...).
 // buildJournal() turns that history into
 //

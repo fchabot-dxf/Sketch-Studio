@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { deserializeDocument } from '#core/document.js';
 import { commitDimensionEdit } from '#ui/dimension-seams.js';

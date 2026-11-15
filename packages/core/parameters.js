@@ -231,12 +231,15 @@ function numberText(base, unit) {
 }
 
 // ── planChange ──
-// planChange(state, change, { unit }) → { ok:true, paramsAfter, edits, affected, solve, created? } | { ok:false, code, message, ... }
+// planChange(state, change, { unit }) → { ok:true, paramsAfter, edits, affected, solve, created?, named? } | { ok:false, code, message, ... }
 //   Pure: nothing in `state` is touched. `edits` lists, per affected dimension (constraint order), what the batch commit must write:
 //   { c, name, value (base mm / degrees), expression (string | null) } — only dimensions whose value, expression or name changes.
 //   `affected` = every dimension that depends (directly or through other formulas) on what changed, plus the one edited.
 //   `solve` = some value changes (renames and comment edits skip the solve).
-//   change: { type:'setDimension', name, text }          text: a number, a formula, or  newName = expr  (creates / sets that user parameter)
+//   change: { type:'setDimension', name, text }          text: a number, a formula, or  name = expr: an existing USER parameter's name sets that
+//                                                        parameter (O4); any other free name NAMES THIS DIMENSION (owner ruling, task 677, Fusion
+//                                                        measured): the dimension is renamed (every formula reading it follows) and takes expr
+//                                                        (`named` = the new name); another dimension's name is NAME_TAKEN
 //           { type:'setParameter', name, text }          the Expression cell of a user parameter (no "=")
 //           { type:'createParameter', name, unit, text, comment? }
 //           { type:'renameParameter' | 'renameDimension', name, to }
@@ -249,6 +252,7 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
   const m1 = cloneModel(m0);
   const roots = new Set(); // keys of the nodes the change touches directly
   let created;
+  let named;
   const takenKeys = (exceptKey) => new Set([...m1.params.map((p) => foldName(p.name)), ...m1.dims.filter((d) => d.name).map((d) => foldName(d.name))].filter((k) => k !== exceptKey));
   const paramOf = (name) => m1.params.find((p) => foldName(p.name) === foldName(name));
   const dimOf = (name) => m1.dims.find((d) => d.name && foldName(d.name) === foldName(name));
@@ -262,6 +266,15 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
   const noSuch = (what, name) => ({ ok: false, code: 'UNKNOWN_NAME', message: `no ${what} named '${name}'`, names: [name] });
   const paramCtx = (p) => contextOf({ type: 'parameter', ref: p }, unit);
   const canon = (ast, ctx) => canonicalize(ast, lookupBefore, ctx);
+  // a rename follows into every formula that reads the old name: token by token through the AST, never a text replace
+  const renameReaders = (fromKey, to) => {
+    const rewrite = (text) => {
+      const p = parseInput(text, { allowAssign: false });
+      return p.ok && dependencies(p).includes(fromKey) ? print(renameInAst(p.ast, fromKey, to)) : text;
+    };
+    for (const p of m1.params) if (p.expression) p.expression = rewrite(p.expression);
+    for (const d of m1.dims) if (d.expression) d.expression = rewrite(d.expression);
+  };
 
   switch (change && change.type) {
     case 'setDimension': {
@@ -272,26 +285,13 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
       if (!parsed.ok) return parsed;
       const dctx = { target: d.kind, unit };
       let newExpression;
-      if (parsed.assign) {
-        const key = foldName(parsed.assign.name);
-        const existing = paramOf(parsed.assign.name);
-        if (existing) { // O4: set that parameter's expression
-          const r = canon(parsed.ast, paramCtx(existing));
-          if (!r.ok) return r;
-          existing.expression = r.text;
-        } else {
-          const nameCheck = validateName(parsed.assign.name, { kind: 'parameter', isTaken: (k) => takenKeys(null).has(k) });
-          if (!nameCheck.ok) return nameCheck;
-          const punit = d.kind === 'angle' ? 'deg' : (unitInfo(unit) && unitInfo(unit).kind === 'length' ? unitInfo(unit).name : 'mm');
-          const p = { name: parsed.assign.name, unit: punit, expression: '' };
-          const r = canon(parsed.ast, paramCtx(p));
-          if (!r.ok) return r;
-          p.expression = r.text;
-          m1.params.push(p);
-          created = p.name;
-        }
-        roots.add(key);
-        newExpression = parsed.assign.name; // the final evaluation checks that the parameter has the dimension's kind
+      const existing = parsed.assign ? paramOf(parsed.assign.name) : null;
+      if (existing) { // O4: `name = expr` where name is a USER parameter sets that parameter; this dimension then reads it
+        const r = canon(parsed.ast, paramCtx(existing));
+        if (!r.ok) return r;
+        existing.expression = r.text;
+        roots.add(foldName(existing.name));
+        newExpression = existing.name; // the final evaluation checks that the parameter has the dimension's kind
       } else if (isPlainNumber(parsed.ast)) {
         const r = evaluate(parsed.ast, lookupBefore, dctx);
         if (!r.ok) return r;
@@ -300,6 +300,15 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
         const r = canon(parsed.ast, dctx);
         if (!r.ok) return r;
         newExpression = r.text;
+      }
+      // OWNER RULING (task 677, Fusion measured): `name = expr` with a name that is no user parameter NAMES THIS DIMENSION (Fusion makes it a model
+      // parameter; no user parameter is created). Another dimension's name is refused (NAME_TAKEN); the dimension's own name just sets its value.
+      if (parsed.assign && !existing) {
+        const fromKey = foldName(d.name);
+        const check = validateName(parsed.assign.name, { kind: 'dimension', isTaken: (k) => takenKeys(fromKey).has(k) });
+        if (!check.ok) return { ...check, at: parsed.assign.at };
+        if (parsed.assign.name !== d.name) { renameReaders(fromKey, parsed.assign.name); d.name = parsed.assign.name; }
+        named = d.name;
       }
       d.expression = newExpression;
       roots.add(foldName(d.name));
@@ -341,14 +350,8 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
       const check = validateName(change.to, { kind: isParam ? 'parameter' : 'dimension', isTaken: (k) => takenKeys(fromKey).has(k) });
       if (!check.ok) return check;
       item.name = change.to;
-      const toKey = foldName(change.to);
-      const rewrite = (text) => {
-        const p = parseInput(text, { allowAssign: false });
-        return p.ok && dependencies(p).includes(fromKey) ? print(renameInAst(p.ast, fromKey, change.to)) : text;
-      };
-      for (const p of m1.params) if (p.expression) p.expression = rewrite(p.expression);
-      for (const d of m1.dims) if (d.expression) d.expression = rewrite(d.expression);
-      roots.add(toKey);
+      renameReaders(fromKey, change.to);
+      roots.add(foldName(change.to));
       break;
     }
     case 'deleteParameter': {
@@ -402,6 +405,7 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
   }
   const out = { ok: true, paramsAfter: m1.params, edits, affected, solve };
   if (created) out.created = created;
+  if (named) out.named = named;
   return out;
 }
 
@@ -446,8 +450,8 @@ const withUnit = (text, unit) => (unit ? `${text} ${unit}` : text);
 // previewDimensionInput(state, c, text, { unit }) → PURE (no solve, nothing touched).
 //   { ok:false, empty:true }                           nothing typed
 //   { ok:false, hint, code, at? }                      the refusal as data; `hint` is its message
-//   { ok:true, hint, plan, kind:'value'|'create'|'set', name?, others:[dimension names also changed] }
-//     hint: '= 60.0 mm'  |  'creates width = 120.0 mm'  |  'sets width 120.0 -> 150.0 mm, also changes d3, d7'
+//   { ok:true, hint, plan, kind:'value'|'name'|'set', name?, others:[dimension names also changed] }
+//     hint: '= 60.0 mm'  |  'names it width = 120.0 mm' (task 677: `width = 120` names THIS dimension)  |  'sets width 120.0 -> 150.0 mm, also changes d3, d7'
 // `plan` is the planChange result applyParameterChange commits (ONE path: the box commits THIS plan, it never builds a second one).
 export function previewDimensionInput(state, c, text, { unit = 'mm' } = {}) {
   if (!isDimension(c)) return { ok: false, code: 'SYNTAX', hint: 'not a dimension' };
@@ -457,14 +461,21 @@ export function previewDimensionInput(state, c, text, { unit = 'mm' } = {}) {
   if (!plan.ok) return { ok: false, code: plan.code, hint: plan.message, at: plan.at, plan };
   const mine = plan.edits.find((e) => e.c === c);
   const myValue = mine ? mine.value : c.value;
+  const shown = dimensionUnit(c, unit);
+  if (plan.named && plan.named !== c.name) { // the dimension is renamed (owner ruling, task 677): it keeps being a dimension, now called plan.named
+    const others = plan.affected.filter((n) => n !== plan.named);
+    return {
+      ok: true, kind: 'name', name: plan.named, others, plan, value: myValue,
+      hint: `names it ${plan.named} = ${withUnit(quantityText(myValue, shown), shown)}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
+    };
+  }
   const parsed = parseInput(String(text));
-  if (parsed.ok && parsed.assign) {
+  if (parsed.ok && parsed.assign && !plan.named) {
     const key = foldName(parsed.assign.name);
     const after = plan.paramsAfter.find((p) => foldName(p.name) === key);
     const evAfter = evaluateAll({ parameters: plan.paramsAfter, constraints: state.constraints }, { unit });
     const qAfter = evAfter.values && evAfter.values.get(after.name);
     const newText = withUnit(quantityText(qAfter ? qAfter.v : NaN, after.unit), after.unit);
-    if (plan.created === after.name) return { ok: true, kind: 'create', name: after.name, others: [], plan, value: myValue, hint: `creates ${after.name} = ${newText}` };
     const before = evaluateAll(state, { unit }).values.get(after.name);
     const others = plan.affected.filter((n) => n !== c.name);
     const oldText = quantityText(before ? before.v : NaN, after.unit);
@@ -473,7 +484,6 @@ export function previewDimensionInput(state, c, text, { unit = 'mm' } = {}) {
       hint: `sets ${after.name} ${oldText} -> ${newText}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
     };
   }
-  const shown = dimensionUnit(c, unit);
   return { ok: true, kind: 'value', others: [], plan, value: myValue, hint: `= ${withUnit(quantityText(myValue, shown), shown)}` };
 }
 

@@ -117,7 +117,8 @@ for (const unit of ['mm', 'in']) {
 {
   const r = buildParameterRows({ parameters: [], constraints: [], shapes: [] }, { unit: 'mm' });
   eq([r.user, r.dimensions, r.total], [[], [], { user: 0, dimensions: 0 }], 'empty document');
-  assert(/name = value/.test(USER_EMPTY_TEXT) && !/\b(20\d\d|soon|next|version|slice)\b/i.test(USER_EMPTY_TEXT), 'the user empty text explains `name = value` and promises no date');
+  // TASK 677: user parameters are made with + Add (`name = value` in a dimension box now names that dimension, owner ruling)
+  assert(/\+ Add/.test(USER_EMPTY_TEXT) && !/name = value/.test(USER_EMPTY_TEXT) && !/\b(20\d\d|soon|next|version|slice)\b/i.test(USER_EMPTY_TEXT), 'the user empty text points at + Add and promises no date');
   assert(/Dim tool/.test(DIMENSION_EMPTY_TEXT), 'the dimension empty text names the tool');
   // non-dimension constraints and a state with no parameters array are not rows / do not throw
   const r2 = buildParameterRows({ constraints: [{ type: 'horizontal', joints: ['a', 'b'] }, { type: 'coincident', joints: ['a', 'c'] }] }, { unit: 'mm' });

@@ -512,9 +512,9 @@ export function choicePicker(spec, value, onPick, values) {
   return wrap;
 }
 
-/** TASK 681: ask a question in this same modal (a dimmed backdrop, a centred small panel, role=dialog aria-modal): `label` is the question, `options` the answers
- *  [{ id, label }] (the first is the default: it is focused, so Enter picks it) and a Cancel button last. Resolves the chosen id; Cancel, Esc and a press outside resolve null. */
-export function openChoiceModal({ label, options }) {
+/** TASK 681: the shared modal shell (backdrop + small panel, role=dialog aria-modal): `fill(body, actions, finish)` adds the content and the buttons; it returns the element to focus.
+ *  Esc and a press outside finish(null). Focus goes back to where it was. */
+function openSmallModal(label, fill) {
   injectStyles();
   const returnTo = document.activeElement;
   return new Promise((resolve) => {
@@ -524,7 +524,7 @@ export function openChoiceModal({ label, options }) {
     const title = document.createElement('h2'); title.className = 'sk-tp-title'; title.textContent = label; head.appendChild(title);
     const body = document.createElement('div'); body.className = 'sk-tp-ask';
     const actions = document.createElement('div'); actions.className = 'sk-tp-actions';
-    body.appendChild(actions); panel.append(head, body); backdrop.appendChild(panel); document.body.appendChild(backdrop);
+    panel.append(head, body); backdrop.appendChild(panel); document.body.appendChild(backdrop);
     let stopOutside = null, done = false;
     const finish = (value) => {
       if (done) return; done = true;
@@ -537,9 +537,31 @@ export function openChoiceModal({ label, options }) {
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); } }
     document.addEventListener('keydown', onKey, true);
     stopOutside = listenOutsidePress((e) => { if (!e.composedPath().includes(panel)) finish(null); });
-    const mk = (cls, text, id) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-tp-btn ' + cls; b.textContent = text; b.dataset.choice = id; b.addEventListener('click', () => finish(id === '__cancel' ? null : id)); actions.appendChild(b); return b; };
-    const btns = options.map((o, i) => mk(i === 0 ? 'sk-tp-open' : '', o.label, o.id));
-    mk('sk-tp-cancel', 'Cancel', '__cancel');
-    btns[0].focus();
+    const mk = (cls, text, id, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-tp-btn ' + cls; b.textContent = text; b.dataset.choice = id; b.addEventListener('click', onClick); actions.appendChild(b); return b; };
+    const focusEl = fill(body, mk, finish);
+    body.appendChild(actions);
+    focusEl.focus(); if (focusEl.select) focusEl.select();
+  });
+}
+
+/** TASK 681: ask a question in this same modal (a dimmed backdrop, a centred small panel, role=dialog aria-modal): `label` is the question, `options` the answers
+ *  [{ id, label }] (the first is the default: it is focused, so Enter picks it) and a Cancel button last. Resolves the chosen id; Cancel, Esc and a press outside resolve null. */
+export function openChoiceModal({ label, options }) {
+  return openSmallModal(label, (body, mk, finish) => {
+    const btns = options.map((o, i) => mk(i === 0 ? 'sk-tp-open' : '', o.label, o.id, () => finish(o.id)));
+    mk('sk-tp-cancel', 'Cancel', '__cancel', () => finish(null));
+    return btns[0];
+  });
+}
+
+/** TASK 681: a name prompt in the same modal: a text field (focused, selected), Save (Enter) and Cancel (Esc). Resolves the trimmed name, or null. */
+export function openPromptModal({ label, value = '', okLabel = 'OK' }) {
+  return openSmallModal(label, (body, mk, finish) => {
+    const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'sk-tp-input sk-tp-name-input'; inp.value = value; inp.setAttribute('aria-label', label); inp.style.width = '100%';
+    body.appendChild(inp);
+    const ok = () => { const v = inp.value.trim(); if (v) finish(v); };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ok(); } });
+    mk('sk-tp-open', okLabel, 'ok', ok); mk('sk-tp-cancel', 'Cancel', '__cancel', () => finish(null));
+    return inp;
   });
 }

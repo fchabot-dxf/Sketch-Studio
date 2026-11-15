@@ -83,12 +83,11 @@ await (async () => {
       assert.strictEqual((await names()).length, 2, mode + ': Esc keeps the tab');
       // 4. Enter = Save...: the Save as name prompt (Esc there changes nothing)
       await closeFirst(); await sendRealKey(send, 'Enter', 'Enter', 13, 0, '\r');
-      await waitFor(`!!document.querySelector('.sk-sidebar-ask input')`, mode + ': the Save as name prompt after Enter');
-      assert(/Save as/.test(await evalJs(`document.querySelector('.sk-sidebar-ask').textContent`)), mode + ': it is the Save as prompt');
-      await press('.sk-sidebar-ask .cancel'); await sleep(300);
+      await waitFor(`!!document.querySelector('.sk-tp-backdrop [role="dialog"] input')`, mode + ': the Save as name prompt after Enter (in the modal)');
+      assert(/Save as/.test(await evalJs(`document.querySelector('.sk-tp-backdrop [role="dialog"]').textContent`)), mode + ': it is the Save as prompt');
+      await press('.sk-tp-backdrop .sk-tp-cancel'); await sleep(300);
       assert.strictEqual((await names()).length, 2, mode + ': cancelling the name prompt keeps the tab');
-      // 5. Don't save closes it (the drawer the name prompt opened is closed first)
-      await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(400);
+      // 5. Don't save closes it
       await closeFirst(); await press('.sk-tp-btn[data-choice="discard"]'); await modalGone();
       await waitFor(`document.querySelectorAll('.sk-doctab').length === 1`, mode + ": Don't save closes the tab");
       if (phone) { await send('Emulation.setTouchEmulationEnabled', { enabled: false }); await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false }); }

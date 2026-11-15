@@ -6,6 +6,7 @@
 
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
+import { listenOutsidePress } from '#ui/outside-press.js';
 import {
   STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, USER_PRESETS_KEY, activeStyleTemplateId, applyStyleTemplate, userPresetsOf, listUserPresets,
   isUserPresetId, presetNameProblem, findUserPresetByName, saveUserPreset, renameUserPreset, deleteUserPreset,
@@ -122,7 +123,7 @@ function injectStyles() {
 export function createStylePanel({ settings = SettingsManager, onNotify = null, title = 'Style', hostId = 'default' } = {}) {
   injectStyles();
   const controlEls = {}; // key -> { input, slider? }
-  let isOpen = false, escHandler = null, outsideHandler = null;
+  let isOpen = false, escHandler = null, stopOutside = null;
   const notify = (m, level) => { if (typeof onNotify === 'function') onNotify(m, level); };
 
   const el = document.createElement('div'); el.className = 'sk-style-panel sk-hidden';
@@ -330,15 +331,14 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     if (isOpen) return;
     isOpen = true; el.classList.remove('sk-hidden'); populate();
     escHandler = (e) => { if (e.key === 'Escape') close(); };
-    outsideHandler = (e) => { if (!e.composedPath().includes(el)) close(); }; // the path, not contains(): a clicked inline-question button is already removed by then
     document.addEventListener('keydown', escHandler);
-    setTimeout(() => { if (isOpen) document.addEventListener('click', outsideHandler); }, 0); // defer so the opening click doesn't close it
+    stopOutside = listenOutsidePress((e) => { if (!e.composedPath().includes(el)) close(); }); // the path, not contains(): a clicked inline-question button is already removed by then
   }
   function close() {
     if (!isOpen) return;
     isOpen = false; el.classList.add('sk-hidden');
     if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
-    if (outsideHandler) { document.removeEventListener('click', outsideHandler); outsideHandler = null; }
+    if (stopOutside) { stopOutside(); stopOutside = null; }
   }
   function toggle() { isOpen ? close() : open(); }
 

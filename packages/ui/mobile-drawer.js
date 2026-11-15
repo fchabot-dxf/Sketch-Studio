@@ -16,6 +16,8 @@
 //     doesn't need its own width-detection logic). Not self-mounted/floating: this codebase's convention is
 //     app actions live in the panel/header, not as overlays floating over the ribbon/canvas.
 
+import { listenOutsidePress } from '#ui/outside-press.js';
+
 // One stylesheet per breakpoint (task 586): the Design browser box is a drawer at <= 640 px (breakpoint 641), a host's own aside at
 // < 768 px; each drawer's elements carry `sk-bp-<breakpoint>` so a rule only applies to the drawers of its own breakpoint.
 const injectedBreakpoints = new Set();
@@ -73,7 +75,7 @@ export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel',
   if (icon) { toggleEl.classList.add('sk-drawer-toggle-icon'); toggleEl.innerHTML = icon; } // TASK 618 / 619: an icon-only button (the label stays the aria-label / title)
   else toggleEl.textContent = '☰ ' + label;
 
-  let isOpenState = false, escHandler = null, outsideHandler = null;
+  let isOpenState = false, escHandler = null, stopOutside = null;
 
   function open() {
     if (isOpenState) return;
@@ -81,16 +83,15 @@ export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel',
     panelEl.classList.remove('collapsed'); // clears a stale desktop collapse-state so the drawer never opens empty
     panelEl.classList.add('sk-drawer-open');
     escHandler = (e) => { if (e.key === 'Escape') close(); };
-    outsideHandler = (e) => { if (!panelEl.contains(e.target) && !toggleEl.contains(e.target)) close(); };
     document.addEventListener('keydown', escHandler);
-    setTimeout(() => { if (isOpenState) document.addEventListener('click', outsideHandler); }, 0);
+    stopOutside = listenOutsidePress((e) => { if (!panelEl.contains(e.target) && !toggleEl.contains(e.target)) close(); });
   }
   function close() {
     if (!isOpenState) return;
     isOpenState = false;
     panelEl.classList.remove('sk-drawer-open');
     if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
-    if (outsideHandler) { document.removeEventListener('click', outsideHandler); outsideHandler = null; }
+    if (stopOutside) { stopOutside(); stopOutside = null; }
   }
   function toggle() { isOpenState ? close() : open(); }
 

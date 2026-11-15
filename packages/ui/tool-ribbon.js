@@ -12,6 +12,7 @@ import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
+import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
 
 // The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label).
@@ -269,9 +270,11 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     // An outside press is caught at pointerdown because a DISABLED button (e.g. the footer's Clear sketch on an empty sketch) never fires click.
     const closeMenu = () => {
       menu.classList.remove('show');
-      document.removeEventListener('pointerdown', onOutside); document.removeEventListener('click', onOutside); document.removeEventListener('keydown', onKey);
+      if (stopOutside) { stopOutside(); stopOutside = null; }
+      document.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', closeMenu); el.removeEventListener('scroll', closeMenu);
     };
+    let stopOutside = null;
     const onOutside = (ev) => { if (!menu.contains(ev.target) && !b.contains(ev.target)) closeMenu(); };
     const onKey = (ev) => { if (ev.key === 'Escape') closeMenu(); };
     const openMenu = () => {
@@ -283,7 +286,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
       const left = beside ? r.right + pad : r.left, top = beside ? r.top : r.bottom + 2;
       menu.style.left = Math.round(Math.max(pad, Math.min(left, vw - w - pad))) + 'px';
       menu.style.top = Math.round(Math.max(pad, Math.min(top, vh - h - pad))) + 'px';
-      document.addEventListener('pointerdown', onOutside); document.addEventListener('click', onOutside); document.addEventListener('keydown', onKey);
+      stopOutside = listenOutsidePress(onOutside); document.addEventListener('keydown', onKey);
       window.addEventListener('resize', closeMenu); el.addEventListener('scroll', closeMenu);
     };
     b.addEventListener('click', (ev) => {

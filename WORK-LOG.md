@@ -14876,3 +14876,7 @@ Real-mouse measurement (Line end locked on origin, slip along 35 deg, fast relea
 Behaviour change for existing users: a locked snap (and the release-slip recovery) holds out to 32 px instead of 20 px, in every host sharing the input layer. Nothing else.
 
 Tests: tests/snap-release-distance-node.test.js (new, fail-first: release 32, lock 10); tests/snap-release-slip-live.test.js case 2 now covers the classic slip (reach+1 px, release ends on the origin) and the drag-out-and-back case, distances from the live lock/release/reach numbers.
+
+## TURN 640
+The phone drawer (packages/ui/mobile-drawer.js) and the Style panel (packages/ui/style-panel.js) now close on a pointerdown outside them as well as a click, so a DISABLED button (footer Clear sketch / Undo on an empty sketch) closes them. ONE shared helper, packages/ui/outside-press.js listenOutsidePress(onOutside) (pointerdown + click, started next tick so the opening press does not close it, returns a stop fn); tool-ribbon.js's Rect menu (TURN 619) uses it too. Each keeps its own inside test (drawer: panel + toggle; Style: composedPath). Escape untouched. Test: tests/outside-press-live.test.js (fail-first: drawer and Style each failed before, pass after). Note: at 390 px the open drawer covers Clear sketch, so the drawer test presses the uncovered disabled Undo.
+

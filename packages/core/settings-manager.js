@@ -66,6 +66,7 @@ const DEFAULT_SETTINGS = {
     DIM_LABEL_BOX: false,           // dimension value drawn on a filled label box; false = plain text on the dimension line
     LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', // font-family of dimension values/labels: '' = inherit from the host page | a CSS font stack
     PROFILE_FILL: 'on',             // 'on' = every closed loop gets a translucent tint behind the geometry (--sk-profile-tint)
+    INACTIVE_SKETCH_OPACITY: 33,    // task 661: percent (0-100); every sketch but the active one draws at this opacity (svg-renderer.js writes the token --sk-inactive-sketch-opacity). Not a template key: a saved style preset need not carry it
     LOCKED_LINE_COLOR: '#8DB84A',   // colour of fully LOCKED lines/joints (all joints fixed:true); '' = same as any fully constrained one
 
     // Task 586: the floating Design BROWSER (SKETCHES tree, #ui/design-browser.js) is shrunk to its header bar. A per-user display preference

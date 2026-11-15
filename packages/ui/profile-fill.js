@@ -6,7 +6,7 @@
 import { findLoops } from '#core/loop-finder.js';
 import { loopToPathD } from '#core/loop-geometry.js';
 
-let cache = { sig: null, ds: [] };
+let cache = { sig: null, fills: [] }; // fills: [{ d, shapeId }] (shapeId = the first boundary shape of the loop: its sketch is the fill's sketch)
 
 function mix(h, v) { return (Math.imul(h, 31) + v) | 0; }
 function mixStr(h, s) { s = String(s); for (let i = 0; i < s.length; i++) h = mix(h, s.charCodeAt(i)); return h; }
@@ -29,11 +29,16 @@ export function geometrySignature(joints, shapes, constraints) {
   return h;
 }
 
-export function profileFillPaths(joints, shapes, constraints) {
+// Every closed profile as { d, shapeId }: the path and one of its boundary shapes (the renderer takes the fill's sketch from it).
+export function profileFillLoops(joints, shapes, constraints) {
   const sig = geometrySignature(joints, shapes, constraints);
   if (cache.sig !== sig) {
     const state = { joints, shapes, constraints };
-    cache = { sig, ds: findLoops(state).map((l) => loopToPathD(l, state)).filter(Boolean) };
+    cache = { sig, fills: findLoops(state).map((l) => ({ d: loopToPathD(l, state), shapeId: l.edges[0] })).filter((f) => f.d) };
   }
-  return cache.ds;
+  return cache.fills;
+}
+
+export function profileFillPaths(joints, shapes, constraints) {
+  return profileFillLoops(joints, shapes, constraints).map((f) => f.d);
 }

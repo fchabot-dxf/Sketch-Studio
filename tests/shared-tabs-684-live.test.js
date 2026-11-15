@@ -170,6 +170,7 @@ await (async () => {
     // ---- a Trace photo-tracing document in the other apps (mouse): its traced drawing shows; the photo stays in Trace's memory only (TASK 567) --------------
     {
       const click = async (sel) => {
+        await evalJs(`(() => { const e = document.querySelector('${sel}'); if (e) e.scrollIntoView({ block: 'nearest', inline: 'nearest' }); })()`); await sleep(80); // Send to Editor sits below the fold of the Trace panel
         const c = await evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
         assert(c, sel + ' exists');
         await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c.x, y: c.y, button: 'none', clickCount: 0 }); await sleep(30);
@@ -201,6 +202,7 @@ await (async () => {
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab').length`), 1, 'the Trace document is the one tab');
       assert.strictEqual(await evalJs(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot')`), true, 'unsaved, with content: its dot');
       await goTo('shaper');
+      await click('.sk-header-tab[data-tab="design"]'); // Shaper's own stage (it kept Prepare from above)
       await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === ${traced}`, 'Shaper has the traced drawing in its Design canvas');
       await goTo('trace');
       await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === ${traced} && document.querySelector('.sk-header-tab.active').dataset.tab === 'edit'`, 'back in Trace: the drawing, in Edit');

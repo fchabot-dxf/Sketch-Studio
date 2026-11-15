@@ -33,6 +33,12 @@
   --sk-joint-ring-hover: #000000;   /* ring of a hovered point — 100% black */
   --sk-joint-selected: #76A4E4;
 
+  /* TASK 648: the drag-arrow handle (drag-arrow-handle.js): light grey fill, dark outline, darker on hover / drag */
+  --sk-arrow-fill: #e5e7eb;
+  --sk-arrow-fill-hover: #c3c7ce;
+  --sk-arrow-fill-drag: #9ca3af;
+  --sk-arrow-stroke: #374151;
+
   /* Constraint glyphs (mirror #core CONSTRAINT_COLORS) */
   --sk-constraint-fill: #2B9BD6;
   --sk-constraint-stroke: #1F2937;
@@ -56,6 +62,8 @@
 
   /* Feedback */
   --sk-error: #ef4444;
+  /* TASK 646: a warning on the canvas: the part of a line a fillet would EXTEND past its far end (fillet-tool.js preview) */
+  --sk-warning: #f59e0b;
 }
 
 /* TASK 619 -- Shared header tokens and height: 44 px desktop, 0 px on phones (no header bar; stage tabs + actions move into the drawer). */
@@ -76,3 +84,8 @@
 @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
   :root { --sk-header-h: 0px; }
 }
+
+/* TASK 648: the shared drag arrow (drag-arrow-handle.js) */
+.sk-drag-arrow { fill: var(--sk-arrow-fill); stroke: var(--sk-arrow-stroke); stroke-linejoin: round; }
+.sk-drag-arrow[data-state="hover"] { fill: var(--sk-arrow-fill-hover); }
+.sk-drag-arrow[data-state="drag"] { fill: var(--sk-arrow-fill-drag); }

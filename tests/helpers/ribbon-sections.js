@@ -1,4 +1,4 @@
-// tests/helpers/ribbon-sections.js — TASK 647 (one file per host runs it: tests/ribbon-sections-<host>-live.test.js): the tool ribbon never scrolls; each
+// tests/helpers/ribbon-sections.js — TASK 647 (one file per host and part runs it: tests/ribbon-sections-<host>-<wide|narrow|customise>-live.test.js): the tool ribbon never scrolls; each
 // section shows the tools that are in the bar and fit, then its NAME, the button that opens the section's dropdown (every tool of the section, a
 // checkbox "in the bar", a grip to reorder). Per host (SketchStudio, Shaper, Pen Plotter, Trace), real mouse on desktop, real touch on phones:
 //  A. at 1280 x 800 (mouse), 390 x 844 and 360 x 740 portrait and 844 x 390 landscape (the rail) (touch):
@@ -25,7 +25,12 @@ const SIZES = [
 ];
 const MESSAGES = { 'btn-combine': 'Select shapes forming at least 2 closed loops to combine', 'btn-uncombine': 'Select a combined profile to uncombine' };
 
-export async function runRibbonSections(hostName) {
+// part (TASK 650 split: one file per part keeps each run well under the gate's 90 s per-file limit):
+//   'wide'      = section A at desktop 1280 and portrait 390;  'narrow' = section A at portrait 360 and landscape 844x390;
+//   'customise' = section B (uncheck, hold-drag, reload, Reset, the per-app key, narrowing).
+const PARTS = { wide: [0, 1], narrow: [2, 3], customise: [] };
+export async function runRibbonSections(hostName, part) {
+  if (!PARTS[part]) throw new Error('ribbon-sections: unknown part ' + part);
   const h = LANDSCAPE_HOSTS.find((x) => x.name === hostName);
   if (!h) throw new Error('ribbon-sections: unknown host ' + hostName);
   const cdp = await launchBrowser({ tag: '647-' + hostName, width: 1280, height: 800 });
@@ -77,7 +82,7 @@ export async function runRibbonSections(hostName) {
     const ls = () => evalJs(`JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}').RIBBON_LAYOUT || null`);
 
     // ── A. every size: no scroll, the sections, every tool from its dropdown
-    for (const s of SIZES.filter((x) => !process.env.RIBBON_SIZE || x.n.startsWith(process.env.RIBBON_SIZE))) { // RIBBON_SIZE narrows a debugging run
+    for (const s of PARTS[part].map((i) => SIZES[i])) {
       await metrics(s);
       await load();
       const tag = `${h.name} ${s.n}`;
@@ -133,6 +138,7 @@ export async function runRibbonSections(hostName) {
       console.log('ok A ' + tag);
     }
 
+    if (part === 'customise') {
     // ── B1. desktop, mouse: uncheck, hold-drag, reload, Reset, the per-app key, narrowing
     await metrics(SIZES[0]); await load();
     let tag = h.name + ' desktop customise';
@@ -217,6 +223,7 @@ export async function runRibbonSections(hostName) {
     assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-sect-row')].map((r) => r.dataset.id).join(',')`), before, tag + ': Reset restores the declared order');
     await esc();
     console.log('ok B portrait ' + h.name);
-    console.log(`ribbon-sections ${h.name}: pass`);
+    }
+    console.log(`ribbon-sections ${h.name} ${part}: pass`);
   } finally { await cdp.close(); }
 }

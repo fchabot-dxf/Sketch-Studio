@@ -120,11 +120,11 @@ await (async () => {
           assert.strictEqual(m.ribbon[3], b.ribbon, tag + 'ribbon height unchanged');
           assert.strictEqual(m.footer[3], b.footer, tag + 'status bar height matches expected icon size');
           assert.strictEqual(m.strip[1], mouse ? m.header[4] : 0, tag + 'the tab strip sits at top on phone / right under header on desktop');
-          assert.strictEqual(m.strip[3], mouse ? 26 : 31, tag + 'the tab strip row height (26 mouse / 31 finger, TASK 608)');
+          assert.strictEqual(m.strip[3], mouse ? 33 : 31, tag + 'the tab strip row height (33 mouse TASK 681 / 31 finger TASK 608)');
           assert(m.ribbon[1] >= m.strip[4], tag + 'the ribbon is under the tab strip');
           if (mouse) { assert.strictEqual(m.canvas[2], b.canvasW, tag + 'canvas width unchanged'); assert.strictEqual(m.canvas[4], b.canvasBottom, tag + 'canvas bottom meets footer'); }
         } else {
-          const row = mouse ? 26 : 31;
+          const row = mouse ? 33 : 31;
           if (mouse) assert.deepStrictEqual([m.header[1], m.header[3]], b.header, tag + 'header is 44 px');
           else assert.strictEqual(m.header, null, tag + 'no header bar on phone');
           assert.deepStrictEqual([m.strip[1], m.strip[3]], [mouse ? m.header[4] : 0, row], tag + 'the tab strip is at top on phone / under header on desktop, ' + row + ' px tall');

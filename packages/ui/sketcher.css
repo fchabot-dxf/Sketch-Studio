@@ -66,6 +66,9 @@
   --sk-warning: #f59e0b;
 }
 
+/* TASK 661: an inactive sketch's drawing (svg-renderer.js groups each run of its markup) is dimmed as ONE group, so overlapping strokes do not double-darken. */
+.sketch-inactive { opacity: var(--sk-inactive-sketch-opacity); } /* the token is written on the render target by draw() from the INACTIVE_SKETCH_OPACITY setting (Style panel), its one source */
+
 /* TASK 619 -- Shared header tokens and height: 44 px desktop, 0 px on phones (no header bar; stage tabs + actions move into the drawer). */
 :root {
   --sk-header-h: 44px;

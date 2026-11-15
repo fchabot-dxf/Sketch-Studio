@@ -47,6 +47,7 @@ const CONTROLS = [
     options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On (tint every closed loop)' }] },
   { tab: 'lines', key: 'LOCKED_LINE_COLOR',       label: 'Locked Line Colour',   type: 'select',
     options: [{ value: '', label: 'Same as constrained' }, { value: '#8DB84A', label: 'Fusion green' }] },
+  { tab: 'lines', key: 'INACTIVE_SKETCH_OPACITY', label: 'Inactive sketch opacity (%)', min: 0, max: 100, step: 1 },
   { tab: 'glyphs', key: 'DIM_LABEL_BOX',          label: 'Dimension Label Box',  type: 'checkbox' },
   { tab: 'glyphs', key: 'LABEL_FONT_FAMILY',      label: 'Dimension Font',       type: 'select',
     options: [{ value: '', label: 'Inherited' }, { value: 'Segoe UI, Arial, Helvetica, sans-serif', label: 'Segoe UI / Arial (sans)' }] },

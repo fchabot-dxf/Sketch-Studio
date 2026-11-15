@@ -21,7 +21,8 @@ const read_ = new Set();
 for (const f of ['svg-renderer.js', 'canvas-grid.js']) for (const m of read('packages/ui/' + f).matchAll(/'(--sk-[a-z0-9-]+)'/g)) read_.add(m[1]);
 for (const t of ['--sk-canvas-bg-snapping', '--sk-dimension', '--sk-dimension-snap']) read_.add(t);
 assert(read_.size > 10, 'the renderer reads its tokens: ' + [...read_].join(' '));
-const missing = [...read_].filter((t) => !new RegExp(t + '\\s*:').test(block) && !['--sk-profile-fill', '--sk-profile-tint'].includes(t));
+// (--sk-inactive-sketch-opacity is WRITTEN by draw() from the INACTIVE_SKETCH_OPACITY setting, not a theme token a host defines)
+const missing = [...read_].filter((t) => !new RegExp(t + '\\s*:').test(block) && !['--sk-profile-fill', '--sk-profile-tint', '--sk-inactive-sketch-opacity'].includes(t));
 assert.deepStrictEqual(missing, [], 'Trace defines every --sk-* token the renderer reads');
 assert(/#design-canvas\.snapping\s*\{\s*background-color:\s*var\(--sk-canvas-bg-snapping\)/.test(css), 'Trace: the snapping surface is the --sk-canvas-bg-snapping token');
 console.log('PASS design host css');

@@ -3,7 +3,7 @@
 // the initial view, the autosave buffer's options, and one frame of the render loop. No DOM is reached here except through the svg passed in.
 
 import { SolverConfig } from '#core/solver-config.js';
-import { draw } from '#ui/svg-renderer.js';
+import { draw, defaultRenderCtx } from '#ui/svg-renderer.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { applyDefaultState } from '#core/state.js';
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
@@ -55,7 +55,7 @@ export function studioFrame({ engine, state, svg, worldGroup, ribbon, onSolved }
   const iters = SolverConfig.ITERATIONS || 500;
   engine.solve(iters);
   if (onSolved) onSolved();
-  draw(state.joints, state.shapes, svg, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup);
+  draw(state.joints, state.shapes, svg, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, { ...defaultRenderCtx, getActiveSketchId: () => state.activeSketchId }); // TASK 661: the default render context plus the active sketch (the others draw dimmed)
   // S7c-2d: sync the shared ribbon's active highlight to state.currentTool (covers KEYBOARD switchToTool, which
   // doesn't route through setTool). refresh() is a cheap class-toggle.
   if (ribbon) ribbon.refresh();

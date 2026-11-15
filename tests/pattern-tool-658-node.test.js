@@ -3,7 +3,7 @@
 // after Mirror, in exactly the hosts that have Mirror. The flows on an L of two lines drawn with the Line tool:
 //   Circular: the dialog opens (Esc: nothing, no undo step); a click picks the line, Enter -> the centre step, a click on the corner -> the live
 //   pattern (3); Quantity 5, Total angle 90 -> 0 / 22.5 / ... / 90; an impossible Quantity (1) is refused (the field is marked, Enter warns,
-//   nothing changes); Symmetric; Suppress: a click on a copy leaves it out, a click on its dashed ghost brings it back; OK -> ONE undo step.
+//   nothing changes); Symmetric (4 in total around the source); Suppress: a click on a copy leaves it out, a click on its dashed ghost brings it back; OK -> ONE undo step.
 //   Rectangular: the pre-selected line, the tool -> live at once; Direction 1 picked on the other line; Total keeps the copies where they are;
 //   Quantity 1 = 3; the green check applies (touch). A double click on the label: the dialog on the stored pattern, Quantity 2 = 2, Enter ->
 //   the copies regenerate (ONE undo step). Undo / Redo.
@@ -91,9 +91,9 @@ try {
   ok(dialog() && /quantity must be a whole number of 2 or more/.test(toasts()), `Enter on it: refused with a warning, the dialog stays (${toasts()})`);
   typeIn('Quantity', '4');
   ok(c.quantity === 4 && c.instances.length === 3, 'Quantity 4 accepted');
-  // Symmetric: the angle split both sides
+  // Symmetric (Fusion): the same 4 in total, the same step, around the source: -2, -1, (0), 1
   app.press(field('Symmetric'));
-  ok(c.symmetric === true && c.instances.length === 6, `Symmetric: 3 copies each side (${c.instances.length})`);
+  ok(c.symmetric === true && JSON.stringify(c.instances.map((i) => i.at[0])) === JSON.stringify([-2, -1, 1]), `Symmetric: 4 in total around the source (${c.instances.map((i) => i.at[0])})`);
   app.press(field('Symmetric'));
   ok(c.symmetric === false && c.instances.length === 3, 'Symmetric off again');
   // Suppress: a click on a copy leaves its instance out, a click on its dashed ghost brings it back

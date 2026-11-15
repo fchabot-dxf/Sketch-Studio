@@ -2257,7 +2257,7 @@ switch(c.type){
     const sc = { joints: opJoints, shapes: opShapes, constraints };
     const fmtN = (v) => String(Number(Number(v).toFixed(2)));
     const items = c.type === CONSTRAINT_TYPES.CIRCULAR_PATTERN
-      ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scale(34), y: h.point.y - scale(26), text: `${c.quantity} × ${c.symmetric ? '±' : ''}${fmtN(c.symmetric ? c.angle / 2 : c.angle)}°` }))
+      ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scale(34), y: h.point.y - scale(26), text: `${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
       : patternHandles(sc, c).map((h) => ({ x: h.point.x + h.dir.x * (h.extent + scale(70)), y: h.point.y + h.dir.y * (h.extent + scale(70)), // past the pattern tool's arrow
           text: `${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' total' : ''}` }));
     items.forEach((it, i) => {

@@ -102,15 +102,19 @@ const centresOf = (S, c, si = 0) => c.instances.map(i => P(S, shape(S, i.shapes[
   ok(S.state.constraints.length === 2, `the removed copies leave nothing behind (constraints: ${S.state.constraints.map(k => k.type)})`);
   // refusals: nothing changes
   const before = JSON.stringify(c), nShapes = S.state.shapes.length;
-  for (const [v, why] of [[{ quantity: 1 }, 'quantity'], [{ quantity: 2.5 }, 'quantity'], [{ angle: 0 }, 'angle'], [{ angle: 400 }, 'angle'], [{ symmetric: true, angle: 360 }, 'symmetric']]) {
+  for (const [v, why] of [[{ quantity: 1 }, 'quantity'], [{ quantity: 2.5 }, 'quantity'], [{ angle: 0 }, 'angle'], [{ angle: 400 }, 'angle']]) {
     const e = editPattern(S.state, c, v);
     ok(!e.ok && new RegExp(why).test(e.reason), `${JSON.stringify(v)} refused (${e.reason})`);
   }
   ok(JSON.stringify(c) === before && S.state.shapes.length === nShapes, 'a refused edit changes nothing');
-  // symmetric: the total angle split both sides, the quantity counted per side
-  ok(editPattern(S.state, c, { symmetric: true, angle: 90, quantity: 3 }).ok, 'symmetric 90 / 3 accepted');
-  const sym = centresOf(S, c).map(p => { const a = userAngle(p); return a > 180 ? a - 360 : a; }).sort((a, b) => a - b);
-  ok(JSON.stringify(sym.map(a => Number(a.toFixed(6)))) === JSON.stringify([-45, -22.5, 22.5, 45]), `symmetric 90 / 3: copies at -45, -22.5, 22.5, 45 (${sym})`);
+  // symmetric (advisor, Fusion API): the quantity is the TOTAL count, the step as without it (total / (N - 1)), the instances around the source,
+  // an even count's extra one on the negative side. Fusion: 4 at 90 deg -> -60, -30, 0, 30.
+  const symAngles = () => [0, ...centresOf(S, c).map(p => { const a = userAngle(p); return a > 180 ? a - 360 : a; })].map(a => Number(a.toFixed(6))).sort((a, b) => a - b);
+  for (const [n, want] of [[4, [-60, -30, 0, 30]], [3, [-45, 0, 45]], [5, [-45, -22.5, 0, 22.5, 45]]]) {
+    ok(editPattern(S.state, c, { symmetric: true, angle: 90, quantity: n }).ok, `symmetric 90 / ${n} accepted`);
+    ok(JSON.stringify(symAngles()) === JSON.stringify(want) && c.instances.length === n - 1, `symmetric 90 / ${n}: ${want} (${symAngles()})`);
+  }
+  ok(editPattern(S.state, c, { symmetric: true, angle: 90, quantity: 4 }).ok, 'back to Fusion\'s 4 at 90');
   solverHolds(S, c, 'circular symmetric');
 }
 
@@ -162,14 +166,29 @@ const centresOf = (S, c, si = 0) => c.instances.map(i => P(S, shape(S, i.shapes[
   ok(editPattern(S.state, c, { distance: [10, 4], distanceType: 'total' }).ok && editPattern(S.state, c, { quantity: [5, 1] }).ok, 'Total 10, quantity 3 -> 5');
   ok(JSON.stringify([0, ...xs()]) === JSON.stringify([0, 2.5, 5, 7.5, 10]), `Total 10 kept, 5 -> 0 / 2.5 / 5 / 7.5 / 10 (${xs()})`);
   solverHolds(S, c, 'rectangular Total 10 / 5');
-  // symmetric in direction 1 (Total 10 split: -5 .. 5, quantity per side)
+  // symmetric in direction 1: 3 in total, Total 10 -> spacing 5 as without it, around the source: -5 / 0 / 5
   ok(editPattern(S.state, c, { quantity: [3, 1], symmetric: [true, false] }).ok, 'symmetric 3, Total 10');
-  ok(JSON.stringify(xs()) === JSON.stringify([-5, -2.5, 2.5, 5]), `symmetric Total 10, 3 per side -> -5 / -2.5 / 2.5 / 5 (${xs()})`);
+  ok(JSON.stringify(xs()) === JSON.stringify([-5, 5]), `symmetric Total 10, 3 -> -5 / 0 / 5 (${xs()})`);
   // the arrow handle sits on the last instance of direction 1, pointing +X
   const h = patternHandles(S.state, c).find(x => x.k === 0);
-  ok(h && Math.abs(h.point.x - 5) < 1e-9 && h.dir.x === 1, `the direction-1 arrow at the last instance (${JSON.stringify(h)})`);
+  ok(h && Math.abs(h.point.x + 5) < 1e-9 && h.dir.x === -1 && h.steps === 1, `the direction-1 arrow at the far-end instance (symmetric: the negative side on a tie) (${JSON.stringify(h)})`);
+  ok(editPattern(S.state, c, { quantity: [4, 1], symmetric: [false, false] }).ok, 'not symmetric, 4');
+  const h4 = patternHandles(S.state, c).find(x => x.k === 0);
+  ok(h4 && Math.abs(h4.point.x - 10) < 1e-9 && h4.dir.x === 1 && h4.steps === 3, `not symmetric: the arrow at the last instance (${JSON.stringify(h4)})`);
   // refusals
   for (const v of [{ quantity: [1, 1] }, { quantity: [0, 2] }, { distance: [0, 4] }]) ok(!editPattern(S.state, c, v).ok, `${JSON.stringify(v)} refused`);
+}
+
+// ---------------------------------------------------------------- Fusion's rectangular symmetric case (advisor, Fusion API): a line at x = 200 mm, direction 1
+// quantity 3, spacing 20 mm, symmetric -> lines at x = 180, 200, 220 (Fusion's API reported cm: 18 / 20 / 22)
+{
+  const S = L.newSketch();
+  const a = L.point(S, 200, 0), b = L.point(S, 200, -50);
+  const ln = L.line(S, a, b);
+  const r = make(S, RECT, { shapes: [ln] }, { quantity: [3, 1], distance: [20, 10], distanceType: 'spacing', symmetric: [true, false] }, 'rectangular symmetric 3 at 20');
+  const xs = [200, ...r.constraint.instances.map(i => P(S, shape(S, i.shapes[0]).joints[0]).x)].map(x => Number(x.toFixed(6))).sort((p, q) => p - q);
+  ok(JSON.stringify(xs) === JSON.stringify([180, 200, 220]), `Fusion: 3 lines at x = 180, 200, 220 (${xs})`);
+  solverHolds(S, r.constraint, 'rectangular symmetric');
 }
 
 // ---------------------------------------------------------------- rectangular along a picked LINE: the copies follow the line's turn

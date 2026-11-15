@@ -303,9 +303,9 @@ function dragTo(svg, e) {
   const c = _s.c, k = _s.drag.k, h = patternHandles(_s.state, c).find((x) => x.k === k);
   if (!h) return;
   const along = Math.max(MIN_DISTANCE_MM, _s.drag.along + alongOf(svg, e, h) - _s.drag.from);
-  const n = c.quantity[k], spacing = along / (n - 1), sign = Math.sign(c.distance[k]) || 1;
-  const value = c.distanceType === 'total' ? spacing * (n - 1) * (c.symmetric[k] ? 2 : 1) : spacing;
-  const unit = docUnit(), text = formatUnit(value, unit, { decimals: unit === 'in' ? 3 : 2 }), v = parseUnit(text, unit);
+  const n = c.quantity[k], spacing = along / h.steps, sign = Math.sign(c.distance[k]) || 1;
+  const value = c.distanceType === 'total' ? spacing * (n - 1) : spacing;
+  const unit = docUnit(), text = fmtLen(value), v = parseUnit(text, unit);
   if (!(v > 0)) return;
   const dist = c.distance.slice(); dist[k] = sign * v;
   if (liveEdit({ distance: dist }) && _s.els.distance) _s.els.distance[k].value = text;
@@ -373,7 +373,9 @@ function injectStyles() {
 }
 
 const isPhone = () => typeof window !== 'undefined' && window.innerWidth <= PHONE_MAX_W;
-const fmtLen = (v) => { const u = docUnit(); return formatUnit(v, u, { decimals: u === 'in' ? 3 : 2 }); };
+// the fields show their unit: a length in the document unit (#core/units.js format, the one unit source: "10mm", "0.5in"), an angle in deg
+const fmtLen = (v) => { const u = docUnit(); return formatUnit(v, u, { unit: true, decimals: u === 'in' ? 3 : 2 }); };
+const fmtAngle = (v) => `${fmtNum(v)} deg`;
 const fmtNum = (v) => String(Number(Number(v).toFixed(4)));
 function parseAngle(text) { const m = /^\s*([+-]?(?:\d+\.?\d*|\.\d+))\s*(deg|°)?\s*$/i.exec(String(text)); return m ? parseFloat(m[1]) : null; }
 function parseCount(text) { const m = /^\s*(\d+)\s*$/.exec(String(text)); return m ? parseInt(m[1], 10) : null; }
@@ -452,7 +454,7 @@ function buildForm(body) {
     grid.classList.add('sk-pat-circular');
     els.centre = pick('Centre point', 'centre');
     const q = text('Quantity', fmtNum(_s.values.quantity), (v) => { const n = parseCount(v); return n != null && n >= 2 && liveEdit({ quantity: n }); });
-    const a = text('Total angle', fmtNum(_s.values.angle), (v) => { const n = parseAngle(v); return n != null && n > 0 && n <= 360 && liveEdit({ angle: n }); });
+    const a = text('Total angle', fmtAngle(_s.values.angle), (v) => { const n = parseAngle(v); return n != null && n > 0 && n <= 360 && liveEdit({ angle: n }); });
     els.quantity = [q]; els.angle = a; els.focusFirst = a;
     grid.append(label('Objects'), els.objects, label('Centre'), els.centre, label('Quantity', q), q, label('Total angle', a), a);
     els.symmetric = check('Symmetric', _s.values.symmetric, (on) => liveEdit({ symmetric: on }));

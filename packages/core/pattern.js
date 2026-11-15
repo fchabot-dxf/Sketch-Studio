@@ -14,12 +14,14 @@
 // (its first one leads), so a copied chain stays joined and a copied rectangle stays closed. Stored as
 //   sources: { shapes: [ids], points: [the leading joint ids], shapeJoints: [[the point index of each joint of each shape]] }.
 // THE INSTANCES (patternSlots): the source is instance 0; the others are numbered `at`:
-//   circular   at = [i], i = 1 .. N-1 (symmetric: also -1 .. -(N-1)); the user angle i * step, counter-clockwise (world y runs down: the world
-//              rotation is -angle). step = total / N for a full 360, else total / (N - 1); symmetric: (total / 2) / (N - 1), i.e. the total angle
-//              is split both sides of the source and the quantity counts EACH side (to verify in Fusion: whether Fusion's quantity counts per side).
-//   rectangular at = [i, j], i over direction 1, j over direction 2 (symmetric: both signs), [0, 0] = the source. The offset is i s1 u1 + j s2 u2,
-//              u = the direction's unit vector (a picked line's start -> end, live; default the X axis / the user's +Y axis), s = the spacing:
-//              distanceType 'spacing' -> the distance; 'total' (Fusion's Extent) -> distance / (N - 1) (symmetric: distance / 2 / (N - 1)).
+//   circular   at = [i], i = 1 .. N-1; the user angle i * step, counter-clockwise (world y runs down: the world rotation is -angle). step = total
+//              / N for a full 360, else total / (N - 1).
+//   rectangular at = [i, j], i over direction 1, j over direction 2, [0, 0] = the source. The offset is i s1 u1 + j s2 u2, u = the direction's
+//              unit vector (a picked line's start -> end, live; default the X axis / the user's +Y axis), s = the spacing: distanceType 'spacing'
+//              -> the distance; 'total' (Fusion's Extent) -> distance / (N - 1).
+//   SYMMETRIC (advisor, Fusion API, task 658 review): the quantity is still the TOTAL count (the source included) and the step is the same as
+//              without it; the instances are placed AROUND the source: i = -ceil((N-1)/2) .. floor((N-1)/2), an even count's extra one on the
+//              negative side (Fusion: circular 4 at 90 deg -> -60, -30, 0, 30; rectangular 3 at 20 mm -> -20, 0, +20).
 //   A suppressed instance (Fusion's suppression; deleting a copy suppresses its instance) has no copy. suppressed = ['i' | 'i,j' keys].
 // THE RECORD (patternConstraintRecord): ONE constraint per pattern
 //   { type: 'circularPattern', sources, centre, quantity, angle (degrees), symmetric, suppressed, instances }
@@ -137,14 +139,13 @@ export function patternValuesRefusal(c) {
     if (!(Number.isInteger(c.quantity) && c.quantity >= 2)) return 'the quantity must be a whole number of 2 or more';
     if (c.quantity > 1000) return 'the quantity must be at most 1000';
     if (!(c.angle > 0) || !(c.angle <= 360)) return 'the total angle must be more than 0 and at most 360 degrees';
-    if (c.symmetric && c.angle > FULL) return 'a symmetric pattern needs a total angle below 360 degrees';
     return null;
   }
   for (let k = 0; k < 2; k++) {
     if (!(Number.isInteger(c.quantity[k]) && c.quantity[k] >= 1)) return `quantity ${k + 1} must be a whole number of 1 or more`;
     if (!Number.isFinite(c.distance[k]) || c.distance[k] === 0) return `distance ${k + 1} must be a number other than 0`;
   }
-  if (c.quantity[0] * c.quantity[1] * (c.symmetric[0] ? 2 : 1) * (c.symmetric[1] ? 2 : 1) > 1000) return 'the pattern must have at most 1000 instances';
+  if (c.quantity[0] * c.quantity[1] > 1000) return 'the pattern must have at most 1000 instances';
   if (c.quantity[0] < 2 && c.quantity[1] < 2) return 'a quantity of 2 or more is needed in one direction';
   return null;
 }
@@ -153,24 +154,25 @@ export function patternValuesRefusal(c) {
 export function patternAngleStep(c) {
   const n = c.quantity;
   if (!(n >= 2)) return 0;
-  if (c.symmetric) return (c.angle / 2) / (n - 1);
   return c.angle > FULL ? c.angle / n : c.angle / (n - 1);
 }
 /** The spacing between neighbouring instances in direction k (0 or 1), world mm (signed: a negative distance runs the other way). */
 export function patternSpacing(c, k) {
   const n = c.quantity[k], d = c.distance[k];
   if (!(n >= 2)) return 0;
-  if (c.distanceType !== 'total') return d;
-  return c.symmetric[k] ? d / 2 / (n - 1) : d / (n - 1);
+  return c.distanceType !== 'total' ? d : d / (n - 1);
 }
 /** The distance value that keeps the spacing of direction k with the distance type `type` (the dialog's type switch keeps the copies where they are). */
 export function patternDistanceFor(c, k, type) {
   const n = c.quantity[k], s = patternSpacing(c, k);
   if (!(n >= 2)) return c.distance[k];
-  return type === 'total' ? s * (n - 1) * (c.symmetric[k] ? 2 : 1) : s;
+  return type === 'total' ? s * (n - 1) : s;
 }
 
-const range = (n, sym) => { const out = [0]; for (let i = 1; i < n; i++) { out.push(i); if (sym) out.push(-i); } return out; };
+// the instance numbers of one direction (the source is 0): 0 .. N-1, or symmetric -ceil((N-1)/2) .. floor((N-1)/2)
+const range = (n, sym) => { const lo = sym ? -Math.ceil((n - 1) / 2) : 0; return Array.from({ length: Math.max(1, n) }, (_, i) => lo + i); };
+// the instance number at the far end of one direction (the arrow's): the side with more instances (symmetric: the negative side on a tie)
+const farEnd = (n, sym) => (sym ? -Math.ceil((n - 1) / 2) : n - 1);
 export const slotKey = (at) => at.join(',');
 
 /** Every instance slot of the pattern except the source, in order: [{ at, key, suppressed }]. */
@@ -398,9 +400,9 @@ export function patternSourceMiddle(state, c) {
 
 /**
  * THE handles of a pattern (the drag arrows of a rectangular pattern, the labels): rectangular, one per direction with a quantity of 2 or more,
- * { k, point (the source middle moved to the direction's last instance), dir (the unit direction, the way the distance grows), along (the
- * point's distance along dir from the source middle), extent (how far the objects reach from their middle along dir: an arrow / a label sits
- * past it, off the copy) }; circular, one { point: the centre }.
+ * { k, point (the source middle moved to the direction's far-end instance), dir (the unit direction from the source to it, the way the
+ * distance grows), steps (how many spacings away it is), along (its distance along dir from the source middle), extent (how far the objects
+ * reach from their middle along dir: an arrow / a label sits past it, off the copy) }; circular, one { point: the centre }.
  */
 export function patternHandles(state, c) {
   if (c.type === T.CIRCULAR_PATTERN) { const C = state.joints.get(c.centre); return C ? [{ point: { x: C.x, y: C.y } }] : []; }
@@ -409,10 +411,10 @@ export function patternHandles(state, c) {
   const out = [];
   for (let k = 0; k < 2; k++) {
     if (c.quantity[k] < 2) continue;
-    const along = (c.quantity[k] - 1) * patternSpacing(c, k), u = frame.u[k], sg = Math.sign(c.distance[k]) || 1;
+    const end = farEnd(c.quantity[k], c.symmetric[k]), along = end * patternSpacing(c, k), u = frame.u[k], sg = Math.sign(along) || 1;
     const dir = { x: sg * u.x, y: sg * u.y };
     const extent = c.sources.points.reduce((e, id) => { const p = state.joints.get(id); return p ? Math.max(e, (p.x - m.x) * dir.x + (p.y - m.y) * dir.y) : e; }, 0);
-    out.push({ k, point: { x: m.x + along * u.x, y: m.y + along * u.y }, dir, along: Math.abs(along), extent });
+    out.push({ k, point: { x: m.x + along * u.x, y: m.y + along * u.y }, dir, steps: Math.abs(end), along: Math.abs(along), extent });
   }
   return out;
 }

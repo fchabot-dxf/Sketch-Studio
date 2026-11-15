@@ -131,7 +131,7 @@ console.log('Running tests for packages/core/fillet.js...');
   const other = [...stj.joints.keys()].find(k => k !== cj && k !== 'jx');
   stj.shapes.push({ id: 'extra', type: 'line', joints: [cj, 'jx'] });
   assert.strictEqual(findCornerAtPoint(stj, stj.joints.get(cj), 1), null, 'three lines at a joint is not a fillet corner');
-  assert(/T-junction/.test(diagnoseNoFillet(stj, stj.joints.get(cj), 1)));
+  assert(/Pick the two curves to fillet/.test(diagnoseNoFillet(stj, stj.joints.get(cj), 1)));
 
   // line + arc already running tangent (here the line leaves the arc's start along its tangent): nothing to round, and no corner
   const sla = { joints: new Map([['p', { x: 0, y: 0 }], ['q', { x: 10, y: 0 }], ['c', { x: 0, y: 10 }], ['r', { x: 10, y: 10 }]]), shapes: [

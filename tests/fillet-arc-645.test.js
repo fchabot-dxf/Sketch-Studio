@@ -206,10 +206,10 @@ assert(['internal/internal', 'external/external'].every(k => seen.has(k)) && (se
   const S3 = mk(); addArc(S3, 'A', { x: 0, y: 0 }, 20, 0, 1, true); addLine(S3, 'L', { x: 0, y: -1 }, 30);
   assert.strictEqual(findCornerAtJoint(S3, 'P'), null, 'a tangent join is not a corner');
   assert.strictEqual(diagnoseNoFillet(S3, P, 1), 'These curves already run tangent to each other: nothing to fillet');
-  // three curves at one corner: still the T-junction refusal
+  // three curves at one corner: a T-junction: no corner (the tap says to pick the two curves, task 655)
   const S4 = mk(); addArc(S4, 'A', { x: 0, y: 0 }, 20, 0, 1, true); addLine(S4, 'L', { x: 1, y: 0 }, 30); addLine(S4, 'M', { x: 1, y: 1 }, 30);
   assert.strictEqual(findCornerAtJoint(S4, 'P'), null);
-  assert.strictEqual(diagnoseNoFillet(S4, P, 1), 'Fillet needs a corner between exactly two lines or arcs (T-junction)');
+  assert.strictEqual(diagnoseNoFillet(S4, P, 1), 'Pick the two curves to fillet');
   // an arc + line geometry call is exposed on the corner
   const g = cornerFilletGeometry(findCornerAtPoint(mkLineArc(), P, 1), 3);
   assert(g.valid && [g.insideA, g.insideB].includes(false), 'a convex line-arc corner: the fillet lies outside the arc circle');

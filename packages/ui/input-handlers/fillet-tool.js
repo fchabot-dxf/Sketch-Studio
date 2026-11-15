@@ -17,7 +17,7 @@ import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
 import {
   findCornerAtPoint, findFilletShapeAtPoint, findCornerBetweenLines, cornerFilletGeometry, applyFillet,
-  diagnoseNoFillet, defaultFilletRadius, parseFilletRadius
+  diagnoseNoFillet, T_JUNCTION_MESSAGE, defaultFilletRadius, parseFilletRadius
 } from '#core/fillet.js';
 import { SNAP } from '#core/constants.js';
 import { dragArrowSvg, dragArrowHit, dragArrowDirection } from '#ui/drag-arrow-handle.js';
@@ -180,6 +180,10 @@ function pressAt(svg, state, viewState, clientX, clientY) {
   const hit = cornerOf(findCornerAtPoint(state, world, thresh), state);
   if (hit) { openInput(svg, state, viewState, hit); return true; }
 
+  // a tap on a T-junction joint (three or more curves) is no corner and must not silently pick one of them: say to pick the two curves, start nothing (task 655)
+  const why = diagnoseNoFillet(state, world, thresh, (s) => !!lineOf(s, state)); // a locked / hidden sketch's corner: nothing to say (task 649)
+  if (why === T_JUNCTION_MESSAGE) { showNotification(why, 'warning'); return true; }
+
   const line1 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
   if (line1) {
     _pick = { line1, at: world };
@@ -187,7 +191,6 @@ function pressAt(svg, state, viewState, clientX, clientY) {
     renderFilletOverlay(svg, null, viewState, { highlight: [line1] });
     return true;
   }
-  const why = diagnoseNoFillet(state, world, thresh, (s) => !!lineOf(s, state)); // a locked / hidden sketch's corner: nothing to say (task 649)
   if (why) showNotification(why, 'warning');
   return false;
 }

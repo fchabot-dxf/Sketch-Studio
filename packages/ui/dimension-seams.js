@@ -16,6 +16,8 @@ import { solveGivingWay } from '#core/creation-placement.js';
 import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
 import { projectDimLabel } from '#core/dim-label.js';
 import { replaceParameters, usersOf } from '#core/parameters.js';
+import { format as formatUnit } from '#core/units.js';
+import { docUnit } from '#core/settings-manager.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 const STEP_FRACTION = 0.1;
@@ -124,7 +126,7 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     }
     list.forEach(e => { e.c.value = e.value; });
     const collapsedFillet = fillets.findIndex(f => f && filletHasCollapsedLine(state, f));
-    if (collapsedFillet !== -1) return revert({ reverted: true, clash: '', reason: `R = ${Number(list[collapsedFillet].value).toFixed(2)} collapsed a line to zero length` });
+    if (collapsedFillet !== -1) return revert({ reverted: true, clash: '', reason: `R = ${formatUnit(list[collapsedFillet].value, docUnit(), { unit: true })} collapsed a line to zero length` });
     // Any constraint satisfied by collapsing a line / arc / circle to a point (or an arc's two ends together) is no solution (task 521,
     // task 550); the edited dimension's own size is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET
     // radius edit goes through the same rule for every shape (the fillet arc included: its two ends must not meet) EXCEPT the fillet's own

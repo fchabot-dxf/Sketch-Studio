@@ -36,7 +36,7 @@ import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
-import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
+import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletInputValid, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
 import { handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
 import { isDimension } from '#core/parameters.js';
 import { setupPatternTool, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS, PATTERN_INLINE_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658 + 662
@@ -264,7 +264,7 @@ export function setupInput(svg, state, opts = {}) {
     setupBezierTool(svg, state);
     try { setupBreakTool(svg, state); } catch(_) {}  // TRACE-1
     try { setupTrimTool(svg, state);  } catch(_) {}  // TRACE-1
-    try { setupFilletTool(svg, state); } catch(_) {}
+    setupFilletTool(svg, state);
     setupPanZoom(svg, state);
     setupDimensionTool(svg, state);
     setupNumericInput(svg, state);
@@ -703,7 +703,7 @@ function handlePointerDown(e, svg, state) {
             try { handled = handleTrimPointerDown(e, svg, state, state.view); } catch(_) {}
             break;
         case TOOL_MODES.FILLET:
-            try { handled = handleFilletPointerDown(e, svg, state, state.view); } catch(_) {}
+            handled = handleFilletPointerDown(e, svg, state, state.view);
             break;
         case TOOL_MODES.MIRROR: // TASK 585: the objects, then the mirror line (a click on nothing pans)
             handled = handleMirrorPointerDown(e, svg, state, hitJoint, hitShape, otherShape);
@@ -839,7 +839,7 @@ function handlePointerMove(e, svg, state) {
         case TOOL_MODES.TRIM:   // TRACE-1
             try { handleTrimPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
         case TOOL_MODES.FILLET:
-            try { handleFilletPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
+            handleFilletPointerMove(e, svg, state, state.view); handled = true; break;
         case TOOL_MODES.OFFSET: // TASK 650: the side follows the cursor; a pan started on empty canvas keeps panning
             handleOffsetPointerMove(e, svg); handled = handlePanZoomPointerMove(e, svg, state); break;
         default: handled = handlePanZoomPointerMove(e, svg, state);
@@ -926,7 +926,7 @@ function handlePointerUp(e, svg, state) {
         case TOOL_MODES.TRIM:   // TRACE-1
             try { handleTrimPointerUp(e, svg, state, state.view); } catch(_) {} break;
         case TOOL_MODES.FILLET:
-            try { handleFilletPointerUp(e, svg, state, state.view); } catch(_) {} break;
+            handleFilletPointerUp(e, svg, state, state.view); break;
         case TOOL_MODES.OFFSET: handleOffsetPointerUp(e, svg); break; // TASK 650: a click / tap on the canvas sets the side
     }
     if (!handled) handled = handlePanZoomPointerUp(e, svg, state);
@@ -974,7 +974,7 @@ function setupEventListeners(svg, state) {
                 end: () => lineChainAnchor(state) },
             [TOOL_MODES.MIRROR]: { open: () => mirrorStep(state) !== null, done: () => finishMirrorStep(state), label: 'Mirror: next step' },
             // TASK 646: the open radius input; the check applies the fillet exactly as Enter does (commitFilletInput), beside the corner
-            [TOOL_MODES.FILLET]: { open: filletInputOpen, done: commitFilletInput, label: 'Apply the fillet', end: filletCornerPoint },
+            [TOOL_MODES.FILLET]: { open: filletInputOpen, enabled: filletInputValid, done: commitFilletInput, label: 'Apply the fillet', end: filletCornerPoint },
             // TASK 650: the open distance box; the check applies the offset exactly as Enter does (commitOffsetInput), beside the preview's anchor
             [TOOL_MODES.OFFSET]: { open: offsetInputOpen, done: commitOffsetInput, label: 'Apply the offset', end: offsetAnchorPoint },
         };
@@ -987,6 +987,7 @@ function setupEventListeners(svg, state) {
                 doneButton = createDoneButton({
                     svg,
                     isChainOpen: () => !!doneAction() && doneAction().open(),
+                    enabled: () => { const a = doneAction(); return !!(a && (!a.enabled || a.enabled())); },
                     onDone: () => doneAction().done(),
                     label: () => doneAction().label,
                     anchor: () => { const a = doneAction(); const w = a && a.end && a.end(); return w ? worldToScreen(svg, w) : null; },
@@ -1247,7 +1248,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
             try{ if (handleBezierKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
         if (state.currentTool === TOOL_MODES.FILLET) {
-            try{ if (handleFilletKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
+            if (handleFilletKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; }
         }
         if (state.currentTool === TOOL_MODES.MIRROR && e.key === 'Enter') { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
         if (state.currentTool === TOOL_MODES.OFFSET && handleOffsetKeyDown(e)) { e.preventDefault(); return; } // TASK 650
@@ -1460,61 +1461,60 @@ export function switchToTool(state, toolName) {
     if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;
 
     // Fallback: set tool directly
-    try {
-        if (state.currentTool === TOOL_MODES.TRIM && toolName !== TOOL_MODES.TRIM) {
-            try { resetTrimState(); } catch(_) {}
-        }
-        if (state.currentTool === TOOL_MODES.BREAK && toolName !== TOOL_MODES.BREAK) {
-            try { resetBreakState(); } catch(_) {}
-        }
-        if (state.currentTool === TOOL_MODES.FILLET && toolName !== TOOL_MODES.FILLET) {
-            try { resetFilletState(); } catch(_) {}
-        }
-        if (state.currentTool === TOOL_MODES.OFFSET && toolName !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
-        resetPatternState(); // TASK 658: any tool switch cancels an open pattern dialog (a new pattern tool's `begin` opens its own)
+    if (state.currentTool === TOOL_MODES.TRIM && toolName !== TOOL_MODES.TRIM) {
+        try { resetTrimState(); } catch(_) {}
+    }
+    if (state.currentTool === TOOL_MODES.BREAK && toolName !== TOOL_MODES.BREAK) {
+        try { resetBreakState(); } catch(_) {}
+    }
+    if (state.currentTool === TOOL_MODES.FILLET && toolName !== TOOL_MODES.FILLET) {
+        resetFilletState();
+    }
+    if (state.currentTool === TOOL_MODES.OFFSET && toolName !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
+    resetPatternState(); // TASK 658: any tool switch cancels an open pattern dialog (a new pattern tool's `begin` opens its own)
 
-        state.currentTool = toolName;
-        if (toolName === TOOL_MODES.TRIM) {
-            try { setupTrimTool(); } catch(_) {}
-        } else if (toolName === TOOL_MODES.BREAK) {
-            try { setupBreakTool(); } catch(_) {}
-        } else if (toolName === TOOL_MODES.FILLET) {
-            try { setupFilletTool(canvasSvg || inputCtx.getCanvasSvg?.(), state); } catch(_) {}
+    state.currentTool = toolName;
+    const targetSvg = canvasSvg || inputCtx.getCanvasSvg?.();
+    if (toolName === TOOL_MODES.TRIM) {
+        try { setupTrimTool(targetSvg, state); } catch(_) {}
+    } else if (toolName === TOOL_MODES.BREAK) {
+        try { setupBreakTool(targetSvg, state); } catch(_) {}
+    } else if (toolName === TOOL_MODES.FILLET) {
+        setupFilletTool(targetSvg, state);
+    }
+    // Clear any preview state when switching tools
+    try { clearPreview(state); } catch(_) {}
+    if (toolName === TOOL_MODES.DIMENSION || toolName === 'dim') {
+        const svgEl = targetSvg || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.getElementById('design-canvas') || document.querySelector('svg:not([aria-hidden="true"])')) : null);
+        if (svgEl && !state.placingConstraint) {
+            try { startDimensionFromSelection(svgEl, state); } catch(_) {}
         }
-        // Clear any preview state when switching tools
-        try { clearPreview(state); } catch(_) {}
-        if (toolName === TOOL_MODES.DIMENSION || toolName === 'dim') {
-            const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
-            if (svgEl && !state.placingConstraint) {
-                try { startDimensionFromSelection(svgEl, state); } catch(_) {}
+    }
+    // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
+    inputCtx.highlightActiveTool?.(toolName);
+
+    // Fallback preselection for constraint tools (matches toolbar behavior)
+    if (CONSTRAINT_TOOLS.includes(toolName)) {
+        let firstEl = null;
+        if (state.selectedJoints && state.selectedJoints.size === 1 && (!state.selectedShapes || state.selectedShapes.size === 0)) {
+            firstEl = { type: 'joint', id: [...state.selectedJoints][0] };
+        } else if (state.selectedShapes && state.selectedShapes.size === 1 && (!state.selectedJoints || state.selectedJoints.size === 0)) {
+            firstEl = { type: 'shape', id: [...state.selectedShapes][0] };
+        }
+
+        if (toolName === TOOL_MODES.HORIZONTAL_VERTICAL && firstEl && firstEl.type === 'shape') {
+            const s = state.shapes.find(x => x.id === firstEl.id);
+            if (s && s.type === 'line') {
+                recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
+                // Keep the current tool active (do not switch to Select). User will exit the tool manually.
+                try { showNotification('Horizontal/Vertical constraint applied', 'success'); } catch(_) {}
+                return;
             }
         }
-        // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
-        inputCtx.highlightActiveTool?.(toolName);
 
-        // Fallback preselection for constraint tools (matches toolbar behavior)
-        if (CONSTRAINT_TOOLS.includes(toolName)) {
-            let firstEl = null;
-            if (state.selectedJoints && state.selectedJoints.size === 1 && (!state.selectedShapes || state.selectedShapes.size === 0)) {
-                firstEl = { type: 'joint', id: [...state.selectedJoints][0] };
-            } else if (state.selectedShapes && state.selectedShapes.size === 1 && (!state.selectedJoints || state.selectedJoints.size === 0)) {
-                firstEl = { type: 'shape', id: [...state.selectedShapes][0] };
-            }
-
-            if (toolName === TOOL_MODES.HORIZONTAL_VERTICAL && firstEl && firstEl.type === 'shape') {
-                const s = state.shapes.find(x => x.id === firstEl.id);
-                if (s && s.type === 'line') {
-                    recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
-                    // Keep the current tool active (do not switch to Select). User will exit the tool manually.
-                    try { showNotification('Horizontal/Vertical constraint applied', 'success'); } catch(_) {}
-                    return;
-                }
-            }
-
-            const effectiveType = (toolName === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : toolName;
-            state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
-        }
-    } catch(_) {}
+        const effectiveType = (toolName === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : toolName;
+        state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
+    }
 }
 
 // TASK 585: Enter / the touch Done button in the Mirror tool. The tool ends (back to Select) once the copy is made, like Fusion's command.
@@ -1549,7 +1549,7 @@ function handleEscape(state) {
     try{ resetBezierState(state); }catch(_){ } // end/clear any in-progress bezier pen path
     try{ resetBreakState(); }catch(_){ }  // TRACE-1
     try{ resetTrimState(); }catch(_){ }   // TRACE-1
-    try{ resetFilletState(); }catch(_){ }
+    resetFilletState();
     resetOffsetState(); // TASK 650
     resetPatternState(); // TASK 658
     try{ resetDrawingState(state); }catch(_){ }

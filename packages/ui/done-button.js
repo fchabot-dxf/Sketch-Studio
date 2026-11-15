@@ -22,7 +22,8 @@ const CSS = `
 .sk-done.sk-done-touch { width: 52px; height: 52px; }
 .sk-done svg { width: 72%; height: 72%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .sk-done[hidden] { display: none; }
-.sk-done:active { transform: scale(0.96); }
+.sk-done:disabled { opacity: 0.4; cursor: not-allowed; }
+.sk-done:not(:disabled):active { transform: scale(0.96); }
 `;
 const CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const MARGIN = 16;
@@ -57,7 +58,7 @@ export function placeDone({ anchor, size, bounds: r, obstacles = [] }) {
   return usable.reduce((a, b) => (covered(...b) < covered(...a) ? b : a));
 }
 
-export function createDoneButton({ svg, isChainOpen, onDone, label = () => 'Finish the line chain', anchor = () => null, avoid = () => [] }) {
+export function createDoneButton({ svg, isChainOpen, onDone, enabled = () => true, label = () => 'Finish the line chain', anchor = () => null, avoid = () => [] }) {
   if (!document.getElementById(STYLE_ID)) { const s = document.createElement('style'); s.id = STYLE_ID; s.textContent = CSS; document.head.appendChild(s); }
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'sk-done'; btn.hidden = true; btn.innerHTML = CHECK_SVG;
@@ -86,9 +87,10 @@ export function createDoneButton({ svg, isChainOpen, onDone, label = () => 'Fini
     const r = svg.getBoundingClientRect();
     const show = r.width > 0 && r.height > 0 && !!isChainOpen();
     btn.hidden = !show;
+    btn.disabled = show ? !enabled() : false;
     if (show) { btn.setAttribute('aria-label', label()); btn.classList.toggle('sk-done-touch', touchInput); place(); frame = requestAnimationFrame(refresh); }
   }
-  btn.addEventListener('click', (e) => { e.preventDefault(); onDone(); refresh(); });
+  btn.addEventListener('click', (e) => { e.preventDefault(); if (btn.disabled) return; onDone(); refresh(); });
   return {
     sync(isTouch) { touchInput = !!isTouch; if (frame == null) refresh(); },
     destroy() { if (frame != null) cancelAnimationFrame(frame); btn.remove(); },

@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { Window } from 'happy-dom';
 import { FUSION_ACTIONS, isFusionMode, createFusionBridge, mountFusionPrepareBar } from '../apps/shaper/src/fusion-bridge.js';
 import { SHAPER_STAGES, FUSION_HIDDEN_STAGES, shaperStagesFor, resolveInitialMode, createModeRouter } from '../apps/shaper/src/modes.js';
+import { mountAppChrome } from '#ui/app-chrome.js';
 
 let checks = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
@@ -164,6 +165,95 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     ok(notice.classList.contains('is-error'), 'error notice styled with is-error');
   } finally {
     globalThis.document = prevDoc;
+  }
+}
+
+// 6. Declared per-host `projects` option on mountAppChrome / mountProjectSidebar:
+//    projects: false hides file/project actions, Projects/Recent, doc header/status, Drive/account rows, and document tabs;
+//    projects: true (default / normal mode) keeps all of them unchanged.
+{
+  const stubStore = () => ({
+    cloud: { checkConnection: async () => [] },
+    subscribe: () => () => {},
+    current: async () => null,
+    get: async () => null,
+    status: () => ({ where: 'device', state: 'saved', at: null, reason: null }),
+  });
+  const stubAccount = () => ({
+    state: () => ({ signedIn: false, lapsed: false }),
+    subscribe: () => () => {},
+    signIn: async () => {},
+    signOut: async () => {},
+  });
+  const hostActions = [
+    { id: 'download', label: 'Download', onClick: () => {} },
+    { divider: true },
+    { id: 'settings', label: 'Settings', onClick: () => {} },
+    { id: 'log', label: 'Log', onClick: () => {} },
+  ];
+
+  const prev = {
+    window: globalThis.window,
+    document: globalThis.document,
+    MutationObserver: globalThis.MutationObserver,
+    localStorage: globalThis.localStorage,
+  };
+  const win = new Window({ url: 'http://localhost/apps/shaper/index.html?host=fusion' });
+  globalThis.window = win;
+  globalThis.document = win.document;
+  globalThis.MutationObserver = win.MutationObserver;
+  globalThis.localStorage = win.localStorage;
+  try {
+    // 6a. Fusion mode (projects: false)
+    const chromeHidden = mountAppChrome({
+      appId: 'shaper',
+      stages: shaperStagesFor({ fusion: true }),
+      activeStage: 'prepare',
+      getBuffer: () => null,
+      importFile: () => {},
+      documentTabs: true,
+      projects: false,
+      store: stubStore(),
+      account: stubAccount(),
+      hostActions,
+    });
+    chromeHidden.sidebar.open();
+    eq(win.document.querySelectorAll('.sk-doctabs').length, 0, 'projects: false omits document tab strip');
+    eq(win.document.querySelector('.sk-sidebar-doc'), null, 'projects: false omits document name header');
+    eq(win.document.querySelector('[data-section="status"]'), null, 'projects: false omits storage/Drive status');
+    eq(win.document.querySelector('[data-section="account"]'), null, 'projects: false omits Google account / Drive section');
+    const fusionActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
+    deepEq(fusionActs, ['download', 'settings', 'log'], 'projects: false keeps only hostActions');
+    chromeHidden.destroy();
+
+    // 6b. Normal mode (projects: true) unchanged
+    win.document.body.innerHTML = '';
+    const chromeNormal = mountAppChrome({
+      appId: 'shaper',
+      stages: shaperStagesFor({ fusion: false }),
+      activeStage: 'explore',
+      getBuffer: () => null,
+      importFile: () => {},
+      documentTabs: true,
+      projects: true,
+      store: stubStore(),
+      account: stubAccount(),
+      hostActions,
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    chromeNormal.sidebar.open();
+    eq(win.document.querySelectorAll('.sk-doctabs').length, 1, 'projects: true keeps document tab strip');
+    ok(win.document.querySelector('.sk-sidebar-doc') !== null, 'projects: true keeps document name header');
+    ok(win.document.querySelector('[data-section="status"]') !== null, 'projects: true keeps storage/Drive status');
+    ok(win.document.querySelector('[data-section="account"]') !== null, 'projects: true keeps Google account / Drive section');
+    const normalActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
+    deepEq(normalActs, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log'], 'projects: true keeps all project/file actions + hostActions');
+    chromeNormal.destroy();
+  } finally {
+    globalThis.window = prev.window;
+    globalThis.document = prev.document;
+    globalThis.MutationObserver = prev.MutationObserver;
+    globalThis.localStorage = prev.localStorage;
   }
 }
 

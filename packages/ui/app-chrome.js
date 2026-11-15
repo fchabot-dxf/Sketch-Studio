@@ -14,6 +14,7 @@ export function mountAppChrome({
   importFile = null,
   hostActions = [],
   documentTabs = true,
+  projects = true,
   store,
   account,
 } = {}) {
@@ -37,7 +38,8 @@ export function mountAppChrome({
     getBuffer,
     importFile,
     hostActions,
-    documentTabs,
+    documentTabs: projects ? documentTabs : false,
+    projects,
     store,
     account,
     stages,

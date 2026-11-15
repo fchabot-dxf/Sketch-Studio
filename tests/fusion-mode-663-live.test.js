@@ -35,7 +35,7 @@ try {
   await waitForApp('design-canvas');
   await waitFor(`!!document.getElementById('btn-fusion-add-selection')`, 'Fusion Prepare bar mounted');
 
-  // Opens on Prepare, Design hidden and absent from header + sidebar stage tabs
+  // Opens on Prepare, Design hidden and absent from header + sidebar stage tabs, and Projects/file/Drive sidebar + doc tabs hidden
   await evalJs(`document.querySelector('.sk-sidebar-btn').click()`);
   await waitFor(`document.querySelectorAll('.sk-sidebar-stage').length > 0`, 'sidebar stage buttons rendered');
   const bootState = await evalJs(`(() => ({
@@ -43,6 +43,11 @@ try {
     designHidden: document.getElementById('design-view').hidden,
     headerTabs: [...document.querySelectorAll('.sk-header-tab')].map((b) => ({ id: b.dataset.tab, text: b.textContent.trim(), active: b.classList.contains('active') })),
     sidebarStages: [...document.querySelectorAll('.sk-sidebar-stage')].map((b) => ({ id: b.dataset.tab, active: b.classList.contains('active') })),
+    sidebarActions: [...document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action),
+    sidebarDocCount: document.querySelectorAll('.sk-sidebar-doc').length,
+    sidebarStatusCount: document.querySelectorAll('.sk-sidebar [data-section="status"]').length,
+    sidebarAccountCount: document.querySelectorAll('.sk-sidebar [data-section="account"]').length,
+    docTabsCount: document.querySelectorAll('.sk-doctabs').length,
     addBtnText: document.getElementById('btn-fusion-add-selection').textContent,
     addBtnDisabled: document.getElementById('btn-fusion-add-selection').disabled,
     sent: window.adsk._sent.slice(),
@@ -55,6 +60,11 @@ try {
   assert.deepStrictEqual(bootState.headerTabs.map((t) => t.id), ['prepare', 'review'], 'Header tabs filtered to Prepare and Review only');
   assert.strictEqual(bootState.headerTabs.find((t) => t.id === 'prepare').active, true, 'Prepare tab is active');
   assert.deepStrictEqual(bootState.sidebarStages.map((t) => t.id), ['prepare', 'review'], 'Sidebar drawer stages filtered to Prepare and Review only');
+  assert.deepStrictEqual(bootState.sidebarActions, ['download', 'settings', 'log'], 'Fusion mode hides Open/New/Save/Projects file actions, keeps host actions');
+  assert.strictEqual(bootState.sidebarDocCount, 0, 'Fusion mode hides document title/rename header');
+  assert.strictEqual(bootState.sidebarStatusCount, 0, 'Fusion mode hides Drive/save status line');
+  assert.strictEqual(bootState.sidebarAccountCount, 0, 'Fusion mode hides Google account / Drive controls');
+  assert.strictEqual(bootState.docTabsCount, 0, 'Fusion mode hides document tab strip');
   assert.strictEqual(bootState.addBtnText, 'Add selection', 'Add selection button label present');
   assert.strictEqual(bootState.addBtnDisabled, false, 'Add selection enabled when window.adsk present');
   assert.strictEqual(bootState.hasHandler, true, 'window.fusionJavaScriptHandler.handle installed');
@@ -83,10 +93,16 @@ try {
   // Desktop screenshot (1280x800) showing Prepare + Review tabs, Add selection, Connected status, and selection_data notice
   await shot('fusion-desktop-1280x800.png');
 
-  // Palette size screenshot (480x731)
+  // Palette size screenshot (480x731) + open drawer screenshot at 480x731
   await send('Emulation.setDeviceMetricsOverride', { width: 480, height: 731, deviceScaleFactor: 1, mobile: false });
   await waitFor(`window.innerWidth === 480 && window.innerHeight === 731`, 'palette viewport 480x731');
   await shot('fusion-palette-480x731.png');
+  await evalJs(`document.querySelector('.sk-sidebar-handle').click()`);
+  await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'palette drawer opened');
+  await new Promise((r) => setTimeout(r, 250));
+  await shot('fusion-palette-sidebar-open-480x731.png');
+  await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`);
+  await waitFor(`!document.querySelector('.sk-sidebar').classList.contains('open')`, 'palette drawer closed');
 
   // Restore desktop metrics & test error message + Review tab switching
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -126,6 +142,23 @@ try {
   assert.strictEqual(normal.addBtn, null, 'Add selection absent outside Fusion mode');
   assert.strictEqual(normal.fusionBar, null, 'Fusion bar absent outside Fusion mode');
   assert.strictEqual(normal.hasHandler, false, 'window.fusionJavaScriptHandler not installed outside Fusion mode');
+  // Normal mode keeps Projects / file / Drive sidebar and document tabs unchanged
+  await evalJs(`document.querySelector('.sk-sidebar-btn').click()`);
+  await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'normal Shaper drawer open');
+  const normalSidebar = await evalJs(`(() => ({
+    actions: [...document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action),
+    hasDoc: !!document.querySelector('.sk-sidebar-doc'),
+    hasStatus: !!document.querySelector('.sk-sidebar [data-section="status"]'),
+    hasAccount: !!document.querySelector('.sk-sidebar [data-section="account"]'),
+    hasDocTabs: document.querySelectorAll('.sk-doctabs').length === 1,
+  }))()`);
+  await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`);
+  await waitFor(`!document.querySelector('.sk-sidebar').classList.contains('open')`, 'normal Shaper drawer close');
+  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'explore-open', 'explore-export', 'settings', 'log'], 'normal Shaper keeps full project/file sidebar actions');
+  assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
+  assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
+  assert.strictEqual(normalSidebar.hasAccount, true, 'normal Shaper keeps Google account / Drive section');
+  assert.strictEqual(normalSidebar.hasDocTabs, true, 'normal Shaper keeps document tab strip');
   // Switching to Prepare in normal mode also has no Add selection button
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);
   await waitFor(`!document.getElementById('view-prepare').hidden`, 'normal Prepare opened');

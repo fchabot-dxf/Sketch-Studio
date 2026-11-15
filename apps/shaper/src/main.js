@@ -31,7 +31,6 @@ import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-pla
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
-getGoogleAccount().init();
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
@@ -59,6 +58,7 @@ fileInput.addEventListener('change', () => {
 });
 
 const fusionMode = isFusionMode();
+if (!fusionMode) getGoogleAccount().init();
 const activeStages = shaperStagesFor({ fusion: fusionMode });
 let initMode = 'explore';
 try { initMode = localStorage.getItem(MODE_KEY) || 'explore'; } catch (err) { dbg.warn('shaper', 'MODE_KEY read failed', err && err.message); }
@@ -72,6 +72,7 @@ const chrome = mountAppChrome({
   onStageChange: (mode) => showMode(mode),
   getBuffer: () => docBuffer,
   importFile: (text, name) => shaperImporter.importFile(text, name),
+  projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
   hostActions: [
     { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
       const payload = generateShaperSvgPayload();

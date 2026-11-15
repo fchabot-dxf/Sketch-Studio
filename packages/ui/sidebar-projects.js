@@ -1,6 +1,6 @@
 // packages/ui/sidebar-projects.js — TASK 479: the project actions + views of the shared app sidebar, wired to the project store
 // (#ui/project-store.js, task 474) through each host's document buffer. ONE module, so every app gets the SAME entries:
-//   main view  document name (click to rename inline) + where it lives and its save state (TASK 506) · New design (the template modal, Blank design first) · Templates… (the same modal without Blank) · Save as… ·
+//   main view  document name (click to rename inline) + where it lives and its save state (TASK 506) · New design (the template modal, Blank design first) · Templates… (the same modal, Blank design first) · Save as… ·
 //              Duplicate · Open recent (opens the PROJECT MANAGER modal on its Recent pane) · Projects (opens the PROJECT MANAGER modal, project-manager.js) · Save to Google Drive (signed in only) · Open from file ·
 //              [the host's own Download actions] · GO TO (+ the account row: the Drive default toggle and connection check)
 // The project manager (modal, thumbnail grid: projects, designs, every per-design / per-project action) is #ui/project-manager.js; what
@@ -68,8 +68,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
 
   const actions = projects ? [
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); await refreshName(); }) },
-    // TASK 651: the same template modal the "+" tab button and New design open, here WITHOUT the Blank card (that is New design's)
-    { id: 'templates', label: 'Templates…', icon: SIDEBAR_ICONS.templates, tooltip: 'Start a new design from a template drawing', keepOpen: true, onClick: act(async () => { sidebar.close(); await projectActions.newDesign({ blank: false }); await refreshName(); }, { close: false }) },
+    // TASK 651 / 668: the same template modal the "+" tab button and New design open (Blank design first, one picker configuration)
+    { id: 'templates', label: 'Templates…', icon: SIDEBAR_ICONS.templates, tooltip: 'Start a new design from a template drawing', keepOpen: true, onClick: act(async () => { sidebar.close(); await projectActions.newDesign(); await refreshName(); }, { close: false }) },
     { id: 'save-as', label: 'Save as…', icon: SIDEBAR_ICONS.save, keepOpen: true, onClick: act(async () => { if (await projectActions.saveAsPrompt()) sidebar.close(); }, { close: false }) },
     { id: 'duplicate', label: 'Duplicate', icon: SIDEBAR_ICONS.copy, keepOpen: true, onClick: act(async () => { await projectActions.duplicateCurrent(); }, { close: false }) },
     { id: 'open-recent', label: 'Open recent', icon: SIDEBAR_ICONS.recent, keepOpen: true, onClick: () => openManager('recent') },

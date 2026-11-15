@@ -15200,3 +15200,26 @@ Polish items on Fusion Shaper mode: session `DOC_UNIT` follows `pong.lengthUnits
 - **Evidence (`.evidence/665/`, local)**:
   - Before (`341fc1f`): `before-palette-480x731.png` (`MD5 2B23BC252927D94055615231AAC1E518` — cut card displays `in` and covers right edge + diagonal open chain, `maxEdgeRight=440 > card.left=268`).
   - After: `after-palette-480x731.png` (`MD5 A7E33B3ED60A7846EFA94601EEBCC1D7` — cut card displays `mm`, entire drawing sits left of `.cut-card`, `maxEdgeRight=238 <= card.left=268`).
+
+## TURN 668
+Template picker polish (desktop and phone): legible preview labels, one-tap open, unified picker configuration. Antigravity worker, worktree `template-picker-polish`, branch `agents/template-picker-polish` (from `main 1016187`).
+- **Preview labels (`packages/ui/template-picker.js` `renderTemplatePreview`)**:
+  - **Rule (ONE rule applied uniformly to every template card, no per-template hacks)**: every dimension line and label is placed strictly **outside** the solid drawing's exact convex-hull extent (`maxProj(ux, uy)` over solid endpoints, circles, and arc sweeps) and ordered into non-overlapping lanes/angles checked against all already-placed label rects (`placed`) and dimension lines:
+    1. Axis-aligned dimensions (`horizontal`, `vertical`, and axis-aligned `c.shapes` gaps such as Hexagon's across-flats `20`) are grouped by side (`top`/`bottom`/`left`/`right`), sorted by span ascending (shorter inner dimensions closest to the part, longer overall dimensions on outer lanes), and placed on the first lane whose 1D span and 2D label rect are clear, advancing the next lane cursor past the previous lane's widest/tallest label.
+    2. `aligned` dimensions (such as Star's `25` and `10`) offset along their outward normal past `maxProj(nx, ny) + gap * 0.9` (plus text box clearance along the normal) and step outward until clear of `placed`.
+    3. `isRadius` leaders choose from outward candidate angles (arc midpoint / off-center outward direction + quadrants) extending past `maxProj(ux, uy) + gap * 0.85` (and at least `r + fs * 1.15`) until the label rect clears `placed` (fixing Bolt circle's `R20` / `R3` and Rounded rectangle's `R5`).
+- **One tap / click to open (`packages/ui/template-picker.js`)**:
+  - Removed the two-step detail view (`showDetail` / `.sk-tp-detail` / `.sk-tp-back` / `.sk-tp-primary` "Open as new design"); clicking or tapping any template card now immediately resolves `openTemplatePicker` and opens it as a new design.
+  - **Big preview note & proposal**: `showDetail` WAS the bigger preview and WAS the reason clicking a template took two taps (there was no separate preview trigger on a card). Since every card preview is now legible at card size (and opening a template puts it straight onto the interactive canvas in an unsaved tab), removing the intermediate detail step streamlines creation; if a zoomed preview before opening is still desired, we propose wrapping `.sk-tp-card` in a container with a small secondary expand/preview button in the card corner that opens `showDetail`.
+- **One picker configuration (`packages/ui/template-picker.js`, `packages/ui/project-actions.js`, `packages/ui/sidebar-projects.js`)**:
+  - Removed the `blank` option/branch from `openTemplatePicker` and `projectActions.newDesign`, and updated `sidebar-projects.js` `Templates…` to call `projectActions.newDesign()`. `"+"`, menu `"New design"`, and menu `"Templates…"` all open the exact same modal (`"New design"`, Blank design card first and focused).
+- **Behaviour changes for existing users**:
+  1. Clicking/tapping a template card opens it as a new design in 1 step instead of opening the intermediate detail view (`showDetail` + `"Open as new design"` button removed).
+  2. Sidebar `"Templates…"` now opens the same `"New design"` modal with `"Blank design"` first and focused (previously `{ blank: false }` omitted the Blank card and titled the modal `"Templates"`).
+  3. Template preview dimension labels sit strictly outside the solid shape convex hull with non-overlapping lanes/angles (most visible on Hexagon `20`, Star `25`/`10`, Bolt circle `R20`/`R3`, Rounded rectangle `R5`, and L-bracket's 9 dims). Template geometry (`packages/core/templates.js`) is unchanged.
+- **Tests**:
+  - Updated `tests/templates-ui-node.test.js` and `tests/templates-live.test.js` for 1-tap open and Blank-first `Templates…`, plus live `getBoundingClientRect()` assertions on all 9 template cards (desktop + phone) verifying zero label-vs-label overlap and verifying `hexagon`, `bolt-circle`, and `star` labels sit outside the shape geometry.
+- **Evidence (`.evidence/668/`, local)**:
+  - `before-desktop-all-9.png` (`MD5 CD713DD3DE8501432CCB52D9F3E6DCC7`) vs `after-desktop-all-9.png` (`MD5 D023398D68A609B6396C1D985BE6D2A3`)
+  - `before-phone-all-9.png` (`MD5 7438002396A6482DE8F156E325A539A3`) vs `after-phone-all-9.png` (`MD5 1F2B9451F28066FFEC4942D8392AD21A`)
+  - `desktop-modal.png` (`MD5 67F1429F7E15DD46F8D34C18DDC59B98`), `desktop-new-design-modal.png` (`MD5 D70CEF3184CE4FCAA1A14608FB731145`), `opened-slot.png` (`MD5 4185E04F993FA0931732F084F78C0D8A`), `phone-modal.png` (`MD5 044A072855B91ECCE5B065257F81ACFD`), `phone-opened.png` (`MD5 6B5AFA0EA0EA002AF7CEC64B577269BE`)

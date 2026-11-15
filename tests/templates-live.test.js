@@ -1,8 +1,8 @@
-// tests/templates-live.test.js -- TASK 651 (owner rulings): the bank of template drawings in the REAL pages, real mouse and real touch.
-// ONE modal opened from three places (the sidebar's Templates..., the "+" tab button, the menu's New design): every template as a card with a
-// non-empty SVG preview; a card opens a detail view whose "Open as new design" makes a new unsaved tab named after the template; the "Blank design"
-// card (first, focused) makes the empty Untitled; Esc / a press outside / the X make no new design; Undo does not remove the starting drawing.
-// Phone: full-screen, two cards per row. EVIDENCE_DIR: cropped screenshots.
+// tests/templates-live.test.js -- TASK 651 / 668 (owner rulings): the bank of template drawings in the REAL pages, real mouse and real touch.
+// ONE modal opened from three places (the sidebar's Templates..., the "+" tab button, the menu's New design): Blank design first and focused, then every
+// template as a card with a non-empty SVG preview whose dimension labels do not overlap each other or the shape; ONE click/tap on a card opens a new
+// unsaved tab named after the template; the "Blank design" card makes the empty Untitled; Esc / a press outside / the X make no new design; Undo leaves
+// the starting drawing. Phone: full-screen, two cards per row. EVIDENCE_DIR: cropped screenshots.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,7 +38,69 @@ await (async () => {
   const tabNames = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
   const modalOpen = () => evalJs(`!!document.querySelector('.sk-tp')`);
   const cards = () => evalJs(`[...document.querySelectorAll('.sk-tp-card')].map((c) => ({ id: c.dataset.template, name: c.querySelector('.sk-tp-name').textContent, desc: c.querySelector('.sk-tp-desc').textContent, kids: c.querySelectorAll('svg *').length, svgBox: (() => { const s = c.querySelector('svg'); if (!s) return null; const r = s.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })() }))`);
-  const openMenu = async () => { await press('.sk-sidebar-btn, .sk-sidebar-handle'); await sleep(300); };
+  const checkLabelsClear = async (where) => {
+    const report = await evalJs(`(() => {
+      const ov = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      return [...document.querySelectorAll('.sk-tp-card[data-template]')].filter((c) => c.dataset.template !== 'blank').map((c) => {
+        const texts = [...c.querySelectorAll('svg text')].map((t) => { const r = t.getBoundingClientRect(); return { text: t.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+        const labelOverlaps = [];
+        for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) if (ov(texts[i], texts[j])) labelOverlaps.push([texts[i].text, texts[j].text]);
+        const body = c.querySelector('svg g');
+        const br = body.getBoundingClientRect();
+        const bodyRect = { left: br.left, right: br.right, top: br.top, bottom: br.bottom };
+        const insideBodyBbox = texts.filter((t) => ov(t, bodyRect)).map((t) => t.text);
+        return { id: c.dataset.template, count: texts.length, labelOverlaps, insideBodyBbox };
+      });
+    })()`);
+    for (const r of report) {
+      assert.strictEqual(r.labelOverlaps.length, 0, `${where} ${r.id}: preview labels must not overlap each other (${JSON.stringify(r.labelOverlaps)})`);
+      if (r.id === 'hexagon') {
+        assert.strictEqual(r.insideBodyBbox.length, 0, `${where} ${r.id}: labels must sit outside the shape (${JSON.stringify(r.insideBodyBbox)})`);
+      }
+      if (r.id === 'bolt-circle') {
+        assert.strictEqual(r.count, 3, `${where} bolt-circle: has 3 labels`);
+        const insideCircle = await evalJs(`(() => {
+          const card = document.querySelector('.sk-tp-card[data-template="bolt-circle"]');
+          const c = card.querySelector('svg g:first-child circle:not([stroke-dasharray])');
+          const cr = c.getBoundingClientRect();
+          const cx = (cr.left + cr.right) / 2, cy = (cr.top + cr.bottom) / 2, rad = cr.width / 2;
+          return [...card.querySelectorAll('svg text')].filter((t) => {
+            const tr = t.getBoundingClientRect();
+            const nx = Math.max(tr.left, Math.min(cx, tr.right)), ny = Math.max(tr.top, Math.min(cy, tr.bottom));
+            return Math.hypot(nx - cx, ny - cy) <= rad;
+          }).map((t) => t.textContent);
+        })()`);
+        assert.strictEqual(insideCircle.length, 0, `${where} bolt-circle: labels must sit outside the outer circle (${JSON.stringify(insideCircle)})`);
+      }
+      if (r.id === 'star') {
+        assert.strictEqual(r.count, 2, `${where} star: has 2 labels`);
+        // star's concave shape bbox includes empty outer quadrants, so check each label rect against each solid star edge segment
+        const hitEdge = await evalJs(`(() => {
+          const card = document.querySelector('.sk-tp-card[data-template="star"]');
+          const svg = card.querySelector('svg');
+          const ctm = svg.getScreenCTM();
+          const pt = (x, y) => ({ x: ctm.a * x + ctm.c * y + ctm.e, y: ctm.b * x + ctm.d * y + ctm.f });
+          const segHitsRect = (p, q, r) => {
+            let t0 = 0, t1 = 1;
+            const dx = q.x - p.x, dy = q.y - p.y;
+            for (const [P, Q] of [[-dx, p.x - r.left], [dx, r.right - p.x], [-dy, p.y - r.top], [dy, r.bottom - p.y]]) {
+              if (P === 0) { if (Q < 0) return false; }
+              else { const t = Q / P; if (P < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; } }
+            }
+            return t0 <= t1;
+          };
+          const edges = [...card.querySelectorAll('svg g:first-child line:not([stroke-dasharray])')].map((l) => [pt(+l.getAttribute('x1'), +l.getAttribute('y1')), pt(+l.getAttribute('x2'), +l.getAttribute('y2'))]);
+          return [...card.querySelectorAll('svg text')].filter((t) => { const r = t.getBoundingClientRect(); return edges.some(([p, q]) => segHitsRect(p, q, r)); }).map((t) => t.textContent);
+        })()`);
+        assert.strictEqual(hitEdge.length, 0, `${where} star: labels must not overlap the star edges (${JSON.stringify(hitEdge)})`);
+      }
+    }
+  };
+  const openMenu = async () => {
+    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    assert(c, 'menu trigger not found'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
+  };
+  const expectedOrder = ['blank', ...TEMPLATES.map((t) => t.id)];
   try {
     // ---- desktop, mouse ----
     await navigate(url('sketchstudio'), 10000);
@@ -47,33 +109,25 @@ await (async () => {
     await waitFor(`!!document.querySelector('.sk-doctabs') && document.querySelectorAll('.sk-doctab-name').length === 1`, 'the strip');
     assert.deepStrictEqual(await tabNames(), ['Untitled']);
 
-    // 1. the sidebar's Templates...: every card, a non-empty preview, name and description, no Blank card
+    // 1. the sidebar's Templates...: Blank first and focused, then every template with non-overlapping preview labels
     await openMenu();
     await press('[data-action="templates"]');
     await waitFor(`!!document.querySelector('.sk-tp-card')`, 'the template modal');
     let cs = await cards();
-    assert.deepStrictEqual(cs.map((c) => c.id), TEMPLATES.map((t) => t.id), 'every template of the bank is a card, Templates... has no Blank card');
-    for (const c of cs) { assert(c.kids > 3 && c.svgBox[0] > 150 && c.svgBox[1] > 100, `${c.id}: a large preview drawn as SVG (${c.kids} elements, ${c.svgBox})`); assert(c.name && c.desc, c.id + ': name and one-line description'); }
-    assert.strictEqual(await evalJs(`document.activeElement.dataset.template`), TEMPLATES[0].id, 'Templates...: the first card has focus');
+    assert.deepStrictEqual(cs.map((c) => c.id), expectedOrder, 'Templates...: Blank first, then every template of the bank');
+    for (const c of cs.slice(1)) { assert(c.kids > 3 && c.svgBox[0] > 150 && c.svgBox[1] > 100, `${c.id}: a large preview drawn as SVG (${c.kids} elements, ${c.svgBox})`); assert(c.name && c.desc, c.id + ': name and one-line description'); }
+    assert.strictEqual(await evalJs(`document.activeElement.dataset.template`), 'blank', 'Templates...: the Blank card has focus');
+    await checkLabelsClear('desktop');
     await shot('desktop-modal.png', '.sk-tp');
     // 2. Esc closes: no new design
     await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
     assert.strictEqual(await modalOpen(), false, 'Esc closes the modal');
     assert.deepStrictEqual(await tabNames(), ['Untitled'], 'Esc: no new design');
-    // 3. a card -> the detail view (bigger preview) -> Open as new design: a new tab named after the template, with its drawing, unsaved
+    // 3. ONE click on a card opens it immediately as a new tab named after the template, with its drawing, unsaved
     await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'modal');
-    const small = (await cards())[0].svgBox;
     await press('.sk-tp-card[data-template="slot"]');
-    await waitFor(`!!document.querySelector('.sk-tp-detail')`, 'the detail view');
-    const big = await evalJs(`(() => { const r = document.querySelector('.sk-tp-detail svg').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })()`);
-    assert(big[0] > small[0] && big[1] > small[1], `the detail preview is bigger than the card's (${big} vs ${small})`);
-    assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-tp-detail [data-action="open-template"]').length`), 1, 'one primary button: Open as new design');
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-tp-detail [data-action="open-template"]').textContent`), 'Open as new design');
-    assert.strictEqual(await evalJs(`/insert/i.test(document.querySelector('.sk-tp').innerText)`), false, 'no Insert into sketch anywhere');
-    await shot('desktop-detail.png', '.sk-tp');
-    await press('[data-action="open-template"]');
-    await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, 'a new tab');
-    assert.strictEqual(await modalOpen(), false, 'the modal closed');
+    await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, 'a new tab on one click');
+    assert.strictEqual(await modalOpen(), false, 'the modal closed on one click');
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'Slot'], 'the new tab is named after the template');
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent`), 'Slot');
     await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 4`, 'the slot drawn');
@@ -85,11 +139,11 @@ await (async () => {
     await sendRealKey(send, 'z', 'KeyZ', 90, 2); await sleep(300);
     assert.strictEqual(await shapes(), slotShapes, 'Undo on a fresh template design leaves it');
 
-    // 4. "+": the modal with Blank first and focused; Enter = the empty Untitled tab
+    // 4. "+": the same modal with Blank first and focused; Enter = the empty Untitled tab
     await press('.sk-doctab-new');
     await waitFor(`!!document.querySelector('.sk-tp-card')`, 'modal from +');
     cs = await cards();
-    assert.deepStrictEqual(cs.map((c) => c.id), ['blank', ...TEMPLATES.map((t) => t.id)], '"+": Blank design first, then every template');
+    assert.deepStrictEqual(cs.map((c) => c.id), expectedOrder, '"+": Blank design first, then every template');
     assert.strictEqual(await evalJs(`document.activeElement.dataset.template`), 'blank', 'the Blank card has focus');
     await shot('desktop-new-design-modal.png', '.sk-tp');
     await sendRealKey(send, 'Enter', 'Enter', 13, 0, String.fromCharCode(13)); await sleep(500);
@@ -105,15 +159,15 @@ await (async () => {
     await press('.sk-tp-x'); await sleep(300);
     assert.strictEqual(await modalOpen(), false, 'the X closes it');
     assert.strictEqual((await tabNames()).length, 3, 'X: no new design');
-    // "+" -> a template -> a new tab holding it
+    // "+" -> ONE click on a template -> a new tab holding it
     await press('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'modal');
-    await press('.sk-tp-card[data-template="bolt-circle"]'); await waitFor(`!!document.querySelector('.sk-tp-detail')`, 'detail');
-    await press('[data-action="open-template"]'); await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 4`, 'the tab');
+    await press('.sk-tp-card[data-template="bolt-circle"]');
+    await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 4`, 'the tab on one click');
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'Slot', 'Untitled', 'Bolt circle']);
     await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 8`, 'the bolt circle drawn');
     // the menu's New design: the same modal, Blank first
     await openMenu(); await press('[data-action="new-design"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'modal from New design');
-    assert.strictEqual((await cards())[0].id, 'blank', 'New design: Blank first');
+    assert.deepStrictEqual((await cards()).map((c) => c.id), expectedOrder, 'New design: Blank first, then every template');
     await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
     assert.strictEqual((await tabNames()).length, 4, 'Esc: no new design');
 
@@ -125,8 +179,8 @@ await (async () => {
       await openMenu(); await press('[data-action="templates"]');
       await waitFor(`!!document.querySelector('.sk-tp-card')`, host + ': the modal');
       cs = await cards();
-      assert.strictEqual(cs.length, TEMPLATES.length, host + ': every template');
-      assert(cs.every((c) => c.kids > 3), host + ': every preview is drawn');
+      assert.deepStrictEqual(cs.map((c) => c.id), expectedOrder, host + ': Blank first, then every template');
+      assert(cs.slice(1).every((c) => c.kids > 3), host + ': every preview is drawn');
       await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
     }
 
@@ -141,14 +195,21 @@ await (async () => {
     const box = await evalJs(`(() => { const r = document.querySelector('.sk-tp').getBoundingClientRect(); const c = [...document.querySelectorAll('.sk-tp-card')].map((e) => Math.round(e.getBoundingClientRect().top)); return { w: r.width, h: r.height, perRow: c.filter((t) => t === c[0]).length }; })()`);
     assert(box.w === 390 && box.h === 844, 'phone: the modal is full-screen ' + JSON.stringify(box));
     assert.strictEqual(box.perRow, 2, 'phone: two cards per row');
+    await checkLabelsClear('phone');
     await shot('phone-modal.png', '.sk-tp');
-    await press('.sk-tp-card[data-template="l-bracket"]'); await waitFor(`!!document.querySelector('.sk-tp-detail')`, 'phone: detail');
-    await shot('phone-detail.png', '.sk-tp');
-    await press('[data-action="open-template"]');
-    await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, 'phone: a new tab');
+    // ONE tap opens a template as a new design
+    await press('.sk-tp-card[data-template="l-bracket"]');
+    await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, 'phone: a new tab on one tap');
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'L-bracket']);
     await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 8`, 'phone: the bracket drawn');
     await shot('phone-opened.png', 'body');
+    // Phone sidebar Templates...: Blank first, ONE tap opens Star
+    await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'phone: Templates...');
+    assert.strictEqual((await cards())[0].id, 'blank', 'phone Templates...: Blank first');
+    await press('.sk-tp-card[data-template="star"]');
+    await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 3`, 'phone: Star tab on one tap');
+    assert.deepStrictEqual(await tabNames(), ['Untitled', 'L-bracket', 'Star']);
+    await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 10`, 'phone: the star drawn');
     console.log('templates-live: ok');
   } finally { await cdp.close(); }
 })();

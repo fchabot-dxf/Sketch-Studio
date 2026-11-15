@@ -45,7 +45,7 @@ await (async () => {
       await navigate(url(app), 10000);
       await waitFor(`!!document.querySelector('.sk-doctab-name') && document.querySelector('.sk-doctab-name').textContent === 'Beta'`, app + ': the restored design is the first tab');
     };
-    const newTab = async () => { await clickEl('.sk-doctab-new'); await waitFor(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent === 'Untitled'`, 'the new tab is active'); await sleep(400); };
+    const newTab = async () => { await clickEl('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card[data-template="blank"]')`, 'the template modal'); await clickEl('.sk-tp-card[data-template="blank"]'); /* TASK 651 */ await waitFor(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent === 'Untitled'`, 'the new tab is active'); await sleep(400); };
     const backToFirst = async () => { await clickEl('.sk-doctab-main', 0); await waitFor(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent === 'Beta'`, 'Beta is active again'); await sleep(500); };
     const noStatusText = async (app) => assert.strictEqual(await evalJs(`!!document.getElementById('save-status') || !!document.getElementById('tr-status')`), false, app + ': no header status text');
 

@@ -27,7 +27,7 @@ await (async () => {
     const names = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
     const dots = () => evalJs(`document.querySelectorAll('.sk-doctab-dot').length`);
     // The strip re-renders whenever a tab's save dot changes and ignores clicks while its own action runs: let the autosave finish first, so the press and the release land on the same button.
-    const newTab = async (n) => { await flushAutosave(); await clickEl('.sk-doctab-new'); await waitFor(`document.querySelectorAll('.sk-doctab-name').length === ${n} && [...document.querySelectorAll('.sk-doctab')].findIndex((e) => e.classList.contains('active')) === ${n - 1}`, 'tab ' + n + ' (made and active)'); };
+    const newTab = async (n) => { await flushAutosave(); await clickEl('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card[data-template="blank"]')`, 'the template modal'); await clickEl('.sk-tp-card[data-template="blank"]'); /* TASK 651 */ await waitFor(`document.querySelectorAll('.sk-doctab-name').length === ${n} && [...document.querySelectorAll('.sk-doctab')].findIndex((e) => e.classList.contains('active')) === ${n - 1}`, 'tab ' + n + ' (made and active)'); };
 
     // ---- A. Shaper -----------------------------------------------------------------------------------------------------------------------
     {

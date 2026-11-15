@@ -68,7 +68,7 @@ await (async () => {
     const common = (m) => m.filter(([id]) => !EXTRAS.has(id));
     const base = common(menus['SketchStudio']);
     for (const name of Object.keys(menus)) assert.deepStrictEqual(common(menus[name]), base, name + ': the same File menu items, same order, same labels as SketchStudio');
-    assert.deepStrictEqual(base.map(([id]) => id), ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file'], 'the shared items (Save to Google Drive shows signed in only)');
+    assert.deepStrictEqual(base.map(([id]) => id), ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file'], 'the shared items (Save to Google Drive shows signed in only)');
     assert.deepStrictEqual(menus['Trace'].slice(base.length).map(([id]) => id), ['download-svg', 'download-dxf', 'log'], 'Trace keeps its Download SVG / DXF + Log, after the shared items');
     console.log('File menus equal across the four apps; Trace extras:', JSON.stringify(menus['Trace'].slice(base.length)));
 
@@ -103,7 +103,7 @@ await (async () => {
     assert.strictEqual(await evalJs(`document.getElementById('outline-only-cb').checked`), false, 'the restored outline-only');
 
     // New design: empty sketch, parameters back to the defaults
-    await openMenu(); await clickEl('[data-action="new-design"]'); await sleep(900);
+    await openMenu(); await clickEl('[data-action="new-design"]'); await sleep(300); await clickEl('.sk-tp-card[data-template="blank"]'); await sleep(900); // TASK 651: the template modal's Blank card
     assert.strictEqual(await canvasShapes('#design-canvas'), 0, 'New design empties the Edit canvas');
     assert.strictEqual(await val('threshold-slider'), '128', 'and resets the parameters to the defaults');
     // Open recent
@@ -112,7 +112,7 @@ await (async () => {
     assert.strictEqual(await canvasShapes('#design-canvas'), 10, 'Open recent > T1 restores the shapes');
     assert.strictEqual(await val('threshold-slider'), '90', 'and the parameters');
     // Projects
-    await openMenu(); await clickEl('[data-action="new-design"]'); await sleep(900);
+    await openMenu(); await clickEl('[data-action="new-design"]'); await sleep(300); await clickEl('.sk-tp-card[data-template="blank"]'); await sleep(900); // TASK 651: the template modal's Blank card
     assert.strictEqual(await canvasShapes('#design-canvas'), 0);
     await openMenu(); await clickEl('[data-action="projects"]'); await sleep(600);
     await evalJs(`[...document.querySelectorAll('.sk-pm-side .sk-pm-prow')].find((w) => w.textContent.includes('My Designs')).querySelector('.sk-pm-rowbtn').click()`); await sleep(600);

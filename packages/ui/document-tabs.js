@@ -6,8 +6,9 @@
 //
 // Declared, not hand-placed: mountProjectSidebar (sidebar-projects.js) opts in with `documentTabs: true` and inserts the strip immediately AFTER the host's
 // <header> (the element that holds the sidebar's button) once that button is in the page.
-// Size (TASK 602, owner "tabs can be minimal size"), declared once as the --sk-doctab* tokens below:
-//   a mouse (fine pointer): a 26 px row (25 px tabs + the 1 px line under them), 11 px text, an 18 px close x;
+// Size (TASK 602 / 608 / 681), declared once as the --sk-doctab* tokens below (TASK 681: clearly visible tabs, see the CSS comment; the sizes below are the 602 / 608 ones, now
+// 32 px tabs / 33 px row / 13 px text with a mouse and 30 px tabs / 31 px row / 13 px text under a finger):
+//   a mouse (fine pointer): was a 26 px row (25 px tabs + the 1 px line under them), 11 px text, an 18 px close x;
 //   a finger (coarse pointer, portrait or landscape): a 31 px row (30 px tabs + its line; owner ruling TASK 608, relaxing the 44 px rule of TASK 562 for this strip): every tab,
 //   close x and "+" fills the whole row height and is 44 px wide (close x and "+" >= 24 x 24 px: WCAG 2.2 target size); no enlarged hit areas reaching over the
 //   header or the ribbon; kept visually light (11 px text, a 6 px dot, a thin x on a transparent button).
@@ -28,32 +29,45 @@ function injectStyles() {
   if (document.getElementById('sk-doctabs-styles')) { stylesInjected = true; return; }
   const s = document.createElement('style'); s.id = 'sk-doctabs-styles';
   s.textContent = `
-:root { --sk-doctabs-row: 26px; } /* TASK 605: the strip's whole row height (the 25 px tabs + the 1 px line), for a host whose views are placed absolutely under the header (Shaper) */
+/* TASK 681 (owner turn 1749: "would be great if tabs were better visible"): ONE look for the four hosts, from their own tokens. The strip is a band a shade
+   toward the text colour (--sk-doctabs-bg overrides it); an inactive tab is outlined, its title the host text colour at 82 %; the ACTIVE tab takes the work
+   area's background below it (--sk-ribbon-bg, the ribbon the strip sits on), a 3 px accent line on its top edge (--sk-doctab-accent, else --sk-selection) and
+   a bold full-strength title; the "+" is an outlined button. Sizes: a mouse 32 px tabs (a 33 px row = tabs + the 1 px line under the strip), a finger keeps
+   TASK 608's thin 30 px tabs (31 px row; owner ruling: the phone canvas share), 13 px titles. */
+:root { --sk-doctabs-row: 33px; } /* TASK 605: the strip's whole row height (the 32 px tabs + the 1 px line), for a host whose views are placed absolutely under the header (Shaper) */
 @media (pointer: coarse) { :root { --sk-doctabs-row: 31px; } }
-.sk-doctabs { --sk-doctabs-h: 25px; --sk-doctab-inset: 3px; --sk-doctabs-gap: 2px; --sk-doctab-max: 240px; --sk-doctab-min: 72px; --sk-doctab-x: 18px;
-  --sk-doctabs-font: 11px; --sk-doctab-dot: 6px; }
-@media (pointer: coarse) { .sk-doctabs { --sk-doctabs-h: 30px; --sk-doctab-inset: 0px; --sk-doctabs-gap: 4px; --sk-doctab-min: 104px; --sk-doctab-x: 44px; } }
-.sk-doctabs { display: flex; align-items: flex-end; gap: var(--sk-doctabs-gap); padding: 0 8px; box-sizing: border-box; flex: 0 0 auto;
-  height: calc(var(--sk-doctabs-h) + 1px); background: var(--sk-doctabs-bg, var(--sk-header-sep, #e2e8f0)); border-bottom: 1px solid var(--sk-header-sep, #cbd5e1);
+.sk-doctabs { --sk-doctabs-h: 32px; --sk-doctab-inset: 0px; --sk-doctabs-gap: 3px; --sk-doctab-max: 240px; --sk-doctab-min: 72px; --sk-doctab-x: 24px; --sk-doctab-new-w: 30px;
+  --sk-doctabs-font: 13px; --sk-doctab-dot: 7px;
+  --sk-doctab-strip: var(--sk-doctabs-bg, color-mix(in srgb, var(--sk-header-fg, #334155) 13%, var(--sk-header-bg, #ffffff)));
+  --sk-doctab-line: color-mix(in srgb, var(--sk-header-fg, #334155) 34%, transparent);
+  --sk-doctab-acc: var(--sk-doctab-accent, var(--sk-selection, #3B82F6)); }
+@media (pointer: coarse) { .sk-doctabs { --sk-doctabs-h: 30px; --sk-doctabs-gap: 4px; --sk-doctab-min: 104px; --sk-doctab-x: 44px; --sk-doctab-new-w: 44px; } }
+.sk-doctabs { display: flex; align-items: flex-start; gap: var(--sk-doctabs-gap); padding: 0 8px; box-sizing: border-box; flex: 0 0 auto;
+  height: calc(var(--sk-doctabs-h) + 1px);
+  background: linear-gradient(to top, var(--sk-header-sep, #cbd5e1) 0 1px, transparent 1px), var(--sk-doctab-strip);
   color: var(--sk-header-fg, #334155); font: var(--sk-doctabs-font) system-ui, sans-serif; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .sk-doctabs::-webkit-scrollbar { display: none; }
 .sk-doctabs * { box-sizing: border-box; }
-.sk-doctab { display: flex; align-items: stretch; flex: 0 1 var(--sk-doctab-max); min-width: var(--sk-doctab-min); height: calc(var(--sk-doctabs-h) - var(--sk-doctab-inset));
-  border-radius: 5px 5px 0 0; opacity: 0.8; }
-.sk-doctab:hover { background: var(--sk-header-hover, rgba(0,0,0,0.05)); opacity: 1; }
-.sk-doctab.active { background: var(--sk-header-bg, #fff); box-shadow: inset 1px 1px 0 var(--sk-header-sep, #cbd5e1), inset -1px 0 0 var(--sk-header-sep, #cbd5e1); opacity: 1; font-weight: 600; }
-.sk-doctab-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; background: transparent; border: 0; color: inherit; font: inherit;
-  cursor: pointer; padding: 0 2px 0 8px; }
+.sk-doctab { display: flex; align-items: stretch; flex: 0 1 var(--sk-doctab-max); min-width: var(--sk-doctab-min); height: var(--sk-doctabs-h);
+  border: 1px solid var(--sk-doctab-line); border-top: 3px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0;
+  color: color-mix(in srgb, var(--sk-header-fg, #334155) 82%, var(--sk-doctab-strip)); }
+.sk-doctab:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 16%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); border-top-color: var(--sk-doctab-line); }
+.sk-doctab.active { position: relative; z-index: 1; background: var(--sk-ribbon-bg, #ffffff); border-top-color: var(--sk-doctab-acc); color: var(--sk-header-fg, #334155);
+  box-shadow: 0 1px 0 var(--sk-ribbon-bg, #ffffff); font-weight: 700; } /* the shadow paints over the strip's 1 px line: the tab runs into the work area */
+.sk-doctab-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; background: transparent; border: 0; color: inherit; font: inherit;
+  cursor: pointer; padding: 0 2px 0 9px; }
 .sk-doctab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.sk-doctab-dot { flex: 0 0 auto; width: var(--sk-doctab-dot); height: var(--sk-doctab-dot); border-radius: 50%; background: var(--sk-selection, #3B82F6); }
+.sk-doctab-dot { flex: 0 0 auto; width: var(--sk-doctab-dot); height: var(--sk-doctab-dot); border-radius: 50%; background: var(--sk-doctab-acc); }
 .sk-doctab-dot.failed { background: #dc2626; }
-.sk-doctab-dot.saving { background: transparent; border: 1.5px solid currentColor; opacity: 0.6; }
+.sk-doctab-dot.saving { background: transparent; border: 1.5px solid currentColor; opacity: 0.7; }
 .sk-doctab-x, .sk-doctab-new { flex: 0 0 var(--sk-doctab-x); width: var(--sk-doctab-x); padding: 0; background: transparent; border: 0; color: inherit; font: inherit;
-  cursor: pointer; border-radius: 4px; opacity: 0.6; line-height: 1; }
-.sk-doctab-x { font-size: 13px; }
-.sk-doctab-new { height: calc(var(--sk-doctabs-h) - var(--sk-doctab-inset)); font-size: 15px; }
-.sk-doctab-x:hover, .sk-doctab-new:hover { background: var(--sk-header-hover, rgba(0,0,0,0.08)); opacity: 1; }
-.sk-doctab-main:focus-visible, .sk-doctab-x:focus-visible, .sk-doctab-new:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; }
+  cursor: pointer; border-radius: 4px; opacity: 0.8; line-height: 1; }
+.sk-doctab-x { font-size: 16px; }
+.sk-doctab-new { flex-basis: var(--sk-doctab-new-w); width: var(--sk-doctab-new-w); height: calc(var(--sk-doctabs-h) - 6px); margin-top: 3px; font-size: 18px; opacity: 1;
+  border: 1px solid var(--sk-doctab-line); background: color-mix(in srgb, var(--sk-header-fg, #334155) 8%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); }
+.sk-doctab-x:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 18%, transparent); opacity: 1; }
+.sk-doctab-new:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 20%, var(--sk-doctab-strip)); border-color: var(--sk-doctab-acc); }
+.sk-doctab-main:focus-visible, .sk-doctab-x:focus-visible, .sk-doctab-new:focus-visible { outline: 2px solid var(--sk-doctab-acc); outline-offset: -2px; }
 .sk-doctabs-msg { flex: 0 0 auto; align-self: center; margin: 0 8px 0 auto; padding-left: 12px; font-size: 11px; color: #b45309; white-space: nowrap; }
 `;
   document.head.appendChild(s);

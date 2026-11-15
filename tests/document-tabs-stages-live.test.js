@@ -38,7 +38,7 @@ await (async () => {
     };
     const names = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
     const activeName = () => evalJs(`(document.querySelector('.sk-doctab.active .sk-doctab-name') || {}).textContent`);
-    const stripVisible = () => evalJs(`(() => { const s = document.querySelector('.sk-doctabs'); const r = s && s.getBoundingClientRect(); return !!r && r.width > 300 && r.height === 26 && s.contains(document.elementFromPoint(r.left + 40, r.top + 12)); })()`);
+    const stripVisible = () => evalJs(`(() => { const s = document.querySelector('.sk-doctabs'); const r = s && s.getBoundingClientRect(); return !!r && r.width > 300 && r.height === 33 && s.contains(document.elementFromPoint(r.left + 40, r.top + 12)); })()`);
     const twoDesigns = async (app) => { // two stored designs; the page restores the last (Beta)
       await navigate(url(app), 10000);
       await evalJs(CREATE_NAMED_DESIGN(app, 'Alpha')); await evalJs(CREATE_NAMED_DESIGN(app, 'Beta'));

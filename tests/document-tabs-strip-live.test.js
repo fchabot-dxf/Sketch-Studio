@@ -69,7 +69,7 @@ await (async () => {
     assert.deepStrictEqual(withStrip, without, 'every header control keeps its x, width and height');
 
     // the row's height is fixed: 1 tab or 10, the page below does not move (and not when the tabs first appear)
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 26, 'the strip row is 26 px tall with one tab (TASK 602)');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 33, 'the strip row is 33 px tall with one tab (TASK 681: 32 px tabs + the line)');
     // TASK 602: the strip sits between the header's bottom and the ribbon's top, and overlaps nothing (header, ribbon, SKETCHES box, Construction / Recenter)
     await waitFor(`!!document.querySelector('.sk-browser') && document.querySelector('.sk-browser').getClientRects().length > 0`, 'the floating SKETCHES box');
     await checkPlace('1400 px');
@@ -108,7 +108,7 @@ await (async () => {
     const w10 = await widths();
     assert(w10.every((w) => w === w10[0]) && w10[0] < 240 && w10[0] >= 72, '10 tabs shrink evenly, not below 72 px: ' + JSON.stringify(w10));
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').scrollWidth <= document.querySelector('.sk-doctabs').clientWidth`), true, '10 tabs fit at 1400 px without scrolling');
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 26, 'still 26 px with ten tabs');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 33, 'still 33 px with ten tabs');
     await checkPlace('1400 px, 10 tabs');
     await newTab();
     assert.strictEqual((await names()).length, 10, 'no 11th tab');
@@ -151,7 +151,7 @@ await (async () => {
       await waitFor(`!!document.querySelector('.sk-doctabs') && !!document.querySelector('.sk-doctab-name')`, h + ' strip');
       const g = await evalJs(`(() => { const s = document.querySelector('.sk-doctabs'), hd = document.querySelector('header'); const sr = s.getBoundingClientRect(), hr = hd.getBoundingClientRect();
         const below = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2); return { prev: s.previousElementSibling === hd, h: Math.round(sr.height), gap: Math.abs(sr.top - hr.bottom), onTop: s.contains(below), statusText: !!document.getElementById('save-status') || !!document.getElementById('tr-status') }; })()`);
-      assert(g.prev && g.h === 26 && g.gap < 0.5 && g.onTop, h + ': the strip is the 26 px row right under the header and nothing covers it: ' + JSON.stringify(g));
+      assert(g.prev && g.h === 33 && g.gap < 0.5 && g.onTop, h + ': the strip is the 33 px row right under the header and nothing covers it: ' + JSON.stringify(g));
       assert.strictEqual(g.statusText, false, h + ': no header status text any more (the tab dot shows the state)');
     }
     console.log('document-tabs-strip-live: ok');

@@ -12,7 +12,8 @@
 
 import { TEMPLATES, buildTemplate, paramKind, paramUnit, paramRefusal, defaultParams } from '#core/templates.js';
 import { GLYPHS } from './template-glyphs.js';
-import { calculateArcPath, arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
+import { calculateArcPath, arcSweepInfo, angleInArcSweep, getLineIntersection } from '#core/geometry.js';
+import { angleSectorOf, angleSectorArc } from '#core/angle-sector.js';
 import { listenOutsidePress } from './outside-press.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -23,6 +24,9 @@ const el = (tag, attrs = {}, text) => {
   return e;
 };
 const fmt = (n) => String(Math.round(n * 100) / 100);
+// TASK 672: the modal panel's class. Not `sk-tp`: Shaper's page styles its toolpaths `.sk-tp` (no fill, a dashed stroke), which drew every
+// template preview in this panel dashed there (since task 651). Every rule below and the panel itself use this one name.
+const PANEL = 'sk-tp-panel';
 const boxesOverlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
 
 // ── the preview: a version-3 document -> an <svg> (world coordinates, Y down as stored; non-scaling strokes keep it crisp at any size) ──
@@ -31,6 +35,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
   const J = new Map(g.joints.map(([id, j]) => [id, j]));
   const shapes = g.shapes;
   const dims = g.constraints.filter((c) => c.type === 'distance' && !c.isDriven && !c.driven);
+  const angleDims = g.constraints.filter((c) => c.type === 'angle' && !c.isDriven && !c.driven); // TASK 672
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const solidPts = [], solidCurves = [];
   const grow = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
@@ -90,13 +95,20 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
     };
     const seg = (ax, ay, bx, by) => { frame(ax, ay); frame(bx, by); return dg.appendChild(stroke(el('line', { x1: ax, y1: ay, x2: bx, y2: by }))); };
     const lineMid = (id) => { const s = shapes.find((x) => x.id === id), p = J.get(s.joints[0]), q = J.get(s.joints[1]); return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }; };
+    // TASK 672: a line-to-line distance is drawn SQUARE to the first line: from the middle of the second line to its foot on the first one (the
+    // middles of two lines of different lengths, the brace's diagonal faces, are not opposite each other; two opposite equal sides draw as before)
+    const gapEnds = ([id1, id2]) => {
+      const s1 = shapes.find((x) => x.id === id1), p = J.get(s1.joints[0]), q = J.get(s1.joints[1]), b = lineMid(id2);
+      const dx = q.x - p.x, dy = q.y - p.y, u = ((b.x - p.x) * dx + (b.y - p.y) * dy) / (dx * dx + dy * dy);
+      return [{ x: p.x + u * dx, y: p.y + u * dy }, b];
+    };
 
     // Classify dims: axis-aligned ('top'|'bottom'|'left'|'right'), 'aligned', or 'radius'
     const axisGroups = { top: [], bottom: [], left: [], right: [] };
     const alignedDims = [], radiusDims = [];
     for (const c of dims) {
       if (c.isRadius) { radiusDims.push(c); continue; }
-      const [a, b] = c.shapes ? [lineMid(c.shapes[0]), lineMid(c.shapes[1])] : [J.get(c.joints[0]), J.get(c.joints[1])];
+      const [a, b] = c.shapes ? gapEnds(c.shapes) : [J.get(c.joints[0]), J.get(c.joints[1])];
       const mode = c.shapes
         ? (Math.abs(a.x - b.x) < 1e-6 ? 'vertical' : Math.abs(a.y - b.y) < 1e-6 ? 'horizontal' : 'aligned')
         : (c.dimMode || 'aligned');
@@ -229,6 +241,25 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
       seg(cc.x, cc.y, px, py); seg(px, py, chosen.ox, chosen.oy);
       text(chosen.tx, chosen.ty, t, chosen.anchor);
     }
+    // 4. TASK 672: angle dimensions: the arc of the measured sector (#core/angle-sector.js, the one the dimension stores) about the two lines'
+    // crossing, its value in degrees at the middle of the arc; the arc grows by lanes until its label is clear of the placed ones
+    for (const c of angleDims) {
+      const [[a1, b1], [a2, b2]] = c.shapes.map((id) => shapes.find((x) => x.id === id).joints.map((j) => J.get(j)));
+      const at = getLineIntersection(a1, b1, a2, b2);
+      if (!at) continue; // two parallel lines (0 or 180 degrees): no crossing to draw an arc about
+      const arc = angleSectorArc(angleSectorOf(c), Math.atan2(b1.y - a1.y, b1.x - a1.x), Math.atan2(b2.y - a2.y, b2.x - a2.x));
+      const mid = (arc.start + arc.end) / 2, t = fmt(c.value) + '°';
+      let rr = size * 0.18, tx, ty;
+      for (let k = 0; k < 8; k++) {
+        tx = at.x + (rr + fs * 0.9) * Math.cos(mid); ty = at.y + (rr + fs * 0.9) * Math.sin(mid);
+        if (clearOfPlaced(labelBox(tx, ty, t, 'middle'))) break;
+        rr += laneStep;
+      }
+      const p0 = { x: at.x + rr * Math.cos(arc.start), y: at.y + rr * Math.sin(arc.start) }, p1 = { x: at.x + rr * Math.cos(arc.end), y: at.y + rr * Math.sin(arc.end) };
+      frame(p0.x, p0.y); frame(p1.x, p1.y);
+      dg.appendChild(stroke(el('path', { d: `M ${p0.x} ${p0.y} A ${rr} ${rr} 0 ${arc.end - arc.start > Math.PI ? 1 : 0} 1 ${p1.x} ${p1.y}` })));
+      text(tx, ty, t, 'middle');
+    }
     svg.appendChild(dg);
   }
   const pad = size * 0.06;
@@ -243,10 +274,10 @@ function injectStyles() {
   const s = document.createElement('style'); s.id = 'sk-tp-styles';
   s.textContent = `
 .sk-tp-backdrop { position: fixed; inset: 0; z-index: 9700; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
-.sk-tp { position: relative; width: min(1000px, 94vw); height: min(720px, 92vh); box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
+.${PANEL} { position: relative; width: min(1000px, 94vw); height: min(720px, 92vh); box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
   background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); color: var(--sk-sidebar-fg, var(--sk-header-fg, #1e293b));
   font: 14px system-ui, sans-serif; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-.sk-tp * { box-sizing: border-box; }
+.${PANEL} * { box-sizing: border-box; }
 .sk-tp-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 8px; }
 .sk-tp-title { font-size: 17px; font-weight: 600; margin: 0; flex: 1; }
 .sk-tp-x { background: transparent; color: inherit; border: 0; cursor: pointer; font: inherit; padding: 4px 10px; border-radius: 6px; font-size: 22px; line-height: 1; }
@@ -263,12 +294,12 @@ function injectStyles() {
 .sk-tp-name { font-weight: 600; }
 .sk-tp-desc { font-size: 12.5px; opacity: 0.75; line-height: 1.35; }
 @media (max-width: 640px) {
-  .sk-tp { width: 100vw; height: 100vh; border-radius: 0; }
+  .${PANEL} { width: 100vw; height: 100vh; border-radius: 0; }
   .sk-tp-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .sk-tp-desc { display: none; }
 }
 /* TASK 670: the START view of a template (the same panel, small) */
-.sk-tp.sk-tp-small { width: min(400px, calc(100vw - 24px)); height: auto; max-height: calc(100vh - 24px); border-radius: 10px; }
+.${PANEL}.sk-tp-small { width: min(400px, calc(100vw - 24px)); height: auto; max-height: calc(100vh - 24px); border-radius: 10px; }
 .sk-tp-start { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; min-height: 0; overflow: auto; }
 .sk-tp-start .sk-tp-prev { aspect-ratio: auto; height: 140px; flex: none; }
 .sk-tp-fields { display: flex; flex-direction: column; gap: 6px; }
@@ -294,7 +325,7 @@ function injectStyles() {
 .sk-tp-choice button[hidden] { display: none; }
 .sk-tp-glyph { width: 100%; height: 100%; overflow: visible; color: inherit; }
 .sk-tp-glyph-active { color: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); }
-.sk-tp-board { stroke: currentColor; fill: currentColor; stroke-dasharray: none; } /* none: Shaper's page styles its toolpath class .sk-tp with a dash that the panel would pass down */
+.sk-tp-board { stroke: currentColor; fill: currentColor; }
 .sk-tp-board-light { fill-opacity: 0.14; }
 .sk-tp-board-dark { fill-opacity: 0.32; }
 `;
@@ -307,7 +338,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
   const returnTo = document.activeElement;
   return new Promise((resolve) => {
     const backdrop = document.createElement('div'); backdrop.className = 'sk-tp-backdrop';
-    const panel = document.createElement('div'); panel.className = 'sk-tp'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'New design');
+    const panel = document.createElement('div'); panel.className = PANEL; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'New design');
     backdrop.appendChild(panel); document.body.appendChild(backdrop);
     let stopOutside = null, done = false;
     const finish = (value) => {
@@ -370,7 +401,14 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       const valid = () => Object.entries(t.params).every(([k, spec]) => !paramRefusal(spec, values[k]));
       const view = document.createElement('div'); view.className = 'sk-tp-start'; view.dataset.template = t.id;
       const prev = document.createElement('div'); prev.className = 'sk-tp-prev';
-      const redraw = () => { if (valid()) prev.replaceChildren(renderTemplatePreview(buildTemplate(t, values))); };
+      // TASK 672: a choice's glyphs draw with the current values (#ui/template-glyphs.js): each picker reads THIS values object, and is told
+      // to draw its glyphs again (REDRAW) when a value changes; only with valid values, like the preview
+      const pickers = [];
+      const redraw = () => {
+        if (!valid()) return;
+        prev.replaceChildren(renderTemplatePreview(buildTemplate(t, values)));
+        for (const el of pickers) el.dispatchEvent(new Event(REDRAW));
+      };
       const fields = document.createElement('div'); fields.className = 'sk-tp-fields';
       const err = document.createElement('div'); err.className = 'sk-tp-err'; err.setAttribute('role', 'alert');
       const inputs = new Map(); // param key -> its value box
@@ -379,7 +417,9 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
         const kind = paramKind(spec);
         if (kind === 'choice') {
           const name = document.createElement('span'); name.className = 'sk-tp-label'; name.textContent = spec.label;
-          row.append(name, choicePicker(spec, values[k], (v) => { values[k] = v; redraw(); }));
+          const el = choicePicker(spec, values[k], (v) => { values[k] = v; redraw(); }, values);
+          pickers.push(el);
+          row.append(name, el);
         } else {
           const id = `sk-tp-f-${t.id}-${k}`;
           const label = document.createElement('label'); label.htmlFor = id; label.textContent = spec.label;
@@ -434,8 +474,11 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
  * TASK 670: the GLYPH PICKER of a choice param (frame-calc's CornerJointPicker interaction, built with this app's own DOM): collapsed it shows only
  * the active option as its glyph; a tap expands it to every option; a pick selects that option and collapses it again. Each option is a 44 px
  * button named by its label (aria-label and title), aria-pressed on the active one. onPick(value) after every pick.
+ * TASK 672: `values` = the start view's current values (read at each draw), given to each glyph (GLYPHS[glyph](option, { active, values }));
+ * the event REDRAW on the picker draws its glyphs again (another value changed), keeping its state (expanded or not) and its buttons.
  */
-export function choicePicker(spec, value, onPick) {
+export const REDRAW = 'sk-tp-redraw';
+export function choicePicker(spec, value, onPick, values) {
   const wrap = document.createElement('div'); wrap.className = 'sk-tp-choice'; wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-label', spec.label);
   let current = value, expanded = false;
   const glyph = GLYPHS[spec.glyph];
@@ -456,10 +499,11 @@ export function choicePicker(spec, value, onPick) {
       b.hidden = !expanded && !active;
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
       b.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      b.replaceChildren(glyph(o.value, { active }));
+      b.replaceChildren(glyph(o.value, { active, values }));
     });
   }
   wrap.append(...buttons);
+  wrap.addEventListener(REDRAW, render);
   render();
   return wrap;
 }

@@ -49,7 +49,7 @@ try {
     assert.ok(q('.sk-tp-start .sk-tp-prev svg'), `${t.id}: a preview`);
     pressEl('.sk-tp-open'); await settle(400);
     await dontSave();
-    assert.strictEqual(q('.sk-tp'), null, `${t.id}: Open closed the modal`);
+    assert.strictEqual(q('.sk-tp-panel'), null, `${t.id}: Open closed the modal`);
     const want = buildTemplate(t).geometry;
     assert.strictEqual(st.shapes.length, want.shapes.length, `${t.id}: Open right away = the template at its defaults`);
     assert.deepStrictEqual(st.parameters.map((p) => p.name), want.parameters.map((p) => p.name), `${t.id}: its user parameters`);
@@ -67,7 +67,7 @@ try {
   pressEl(bs.find((b) => b.dataset.value === 'Miter')); await settle();
   bs = visibleChoices('joint');
   assert.deepStrictEqual(bs.map((b) => [b.dataset.value, b.getAttribute('aria-pressed')]), [['Miter', 'true']], 'a pick selects it and collapses');
-  assert.ok(q('.sk-tp'), 'picking a joint does not close the modal');
+  assert.ok(q('.sk-tp-panel'), 'picking a joint does not close the modal');
   pressEl('.sk-tp-open'); await settle(400); await dontSave();
   assert.strictEqual(st.shapes.filter((s) => s.type === 'line').length, 7, 'Mitered: 7 lines (the diagonal seam shared)');
   assert.ok(st.shapes.some((s) => { const [a, b] = s.joints.map((id) => st.joints.get(id)); return Math.abs(a.x - b.x) > 1 && Math.abs(a.y - b.y) > 1; }), 'Mitered: the diagonal seam');
@@ -91,7 +91,7 @@ try {
   typeInto(q('.sk-tp-field[data-param="width"] input'), '500');
   assert.strictEqual(q('.sk-tp-err').textContent, '', 'typing clears the reason');
   app.key('Enter'); await settle(400); await dontSave();
-  assert.strictEqual(q('.sk-tp'), null, 'Enter in a value box opens');
+  assert.strictEqual(q('.sk-tp-panel'), null, 'Enter in a value box opens');
   assert.deepStrictEqual(st.parameters.map((p) => [p.name, p.expression]), [['length', '1500 mm'], ['width', '500 mm'], ['thickness', '12 mm']], 'the typed lengths are the user parameters');
   const want = buildTemplate(templateById('box-frame'), { compartments: 3, thickness: 12, width: 500, layout: 'Horizontal' }).geometry;
   assert.deepStrictEqual([...st.joints].filter(([id]) => id !== 'j_origin').map(([id, j]) => [id, Math.round(j.x * 1e6) / 1e6, Math.round(j.y * 1e6) / 1e6]),

@@ -32,24 +32,24 @@ try {
   assert.deepStrictEqual(qa('.sk-tp-card').map((c) => c.dataset.template), expectedOrder, 'Templates...: Blank first, then every template');
   assert(qa('.sk-tp-card[data-template]:not([data-template="blank"])').every((c) => c.querySelectorAll('svg *').length > 3 && c.querySelector('.sk-tp-name').textContent && c.querySelector('.sk-tp-desc').textContent), 'every card: a drawn preview, a name, a description');
   app.key('Escape'); await settle();
-  assert.strictEqual(q('.sk-tp'), null, 'Esc closes the modal');
+  assert.strictEqual(q('.sk-tp-panel'), null, 'Esc closes the modal');
   assert.strictEqual(st.shapes.length, 0, 'Esc: nothing was created');
 
   // TASK 670: a press on a card opens its START view (its params, Open + Cancel); Cancel / Esc go back to the cards; Open opens the defaults
   await openSb(); pressEl('[data-action="templates"]'); await settle();
   pressEl('.sk-tp-card[data-template="hexagon"]'); await settle();
-  assert(q('.sk-tp.sk-tp-small .sk-tp-start[data-template="hexagon"]'), 'a card opens the small start view of its template');
+  assert(q('.sk-tp-panel.sk-tp-small .sk-tp-start[data-template="hexagon"]'), 'a card opens the small start view of its template');
   assert.strictEqual(q('.sk-tp-field[data-param="acrossFlats"] input').value, '20', 'the param prefilled with its default');
   assert.strictEqual(doc.activeElement, q('.sk-tp-open'), 'Open has the focus');
   pressEl('.sk-tp-cancel'); await settle();
-  assert(q('.sk-tp-card[data-template="hexagon"]') && !q('.sk-tp-start') && q('.sk-tp'), 'Cancel: back to the cards, the modal stays');
+  assert(q('.sk-tp-card[data-template="hexagon"]') && !q('.sk-tp-start') && q('.sk-tp-panel'), 'Cancel: back to the cards, the modal stays');
   assert.strictEqual(doc.activeElement, q('.sk-tp-card[data-template="hexagon"]'), 'Cancel: the focus is back on the card');
   pressEl('.sk-tp-card[data-template="hexagon"]'); await settle();
   app.key('Escape'); await settle();
   assert(q('.sk-tp-card[data-template="hexagon"]') && !q('.sk-tp-start'), 'Esc in the start view: back to the cards');
   pressEl('.sk-tp-card[data-template="hexagon"]'); await settle();
   pressEl('.sk-tp-open'); await settle(400);
-  assert.strictEqual(q('.sk-tp'), null, 'Open closed the modal');
+  assert.strictEqual(q('.sk-tp-panel'), null, 'Open closed the modal');
   assert.deepStrictEqual(st.parameters.map((p) => [p.name, p.expression, p.unit, p.comment]), [['across_flats', '20 mm', 'mm', 'Across flats']], 'the template opened with its user parameter');
   assert.strictEqual(st.shapes.length, buildTemplate(TEMPLATES.find((t) => t.id === 'hexagon')).geometry.shapes.length, 'the hexagon is the new design');
   await openSb();

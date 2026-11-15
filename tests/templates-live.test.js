@@ -36,7 +36,7 @@ await (async () => {
   const press = async (sel, i = 0) => { await evalJs(`document.querySelectorAll('${sel}')[${i}].scrollIntoView({ block: 'nearest', inline: 'nearest' })`); await sleep(80); const c = await center(sel, i); await pointer(c.x, c.y); };
   const shapes = () => evalJs(`document.querySelectorAll('svg .shape-elem').length`);
   const tabNames = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
-  const modalOpen = () => evalJs(`!!document.querySelector('.sk-tp')`);
+  const modalOpen = () => evalJs(`!!document.querySelector('.sk-tp-panel')`);
   const cards = () => evalJs(`[...document.querySelectorAll('.sk-tp-card')].map((c) => ({ id: c.dataset.template, name: c.querySelector('.sk-tp-name').textContent, desc: c.querySelector('.sk-tp-desc').textContent, kids: c.querySelectorAll('svg *').length, svgBox: (() => { const s = c.querySelector('svg'); if (!s) return null; const r = s.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })() }))`);
   const checkLabelsClear = async (where) => {
     const report = await evalJs(`(() => {
@@ -118,7 +118,7 @@ await (async () => {
     for (const c of cs.slice(1)) { assert(c.kids > 3 && c.svgBox[0] > 150 && c.svgBox[1] > 100, `${c.id}: a large preview drawn as SVG (${c.kids} elements, ${c.svgBox})`); assert(c.name && c.desc, c.id + ': name and one-line description'); }
     assert.strictEqual(await evalJs(`document.activeElement.dataset.template`), 'blank', 'Templates...: the Blank card has focus');
     await checkLabelsClear('desktop');
-    await shot('desktop-modal.png', '.sk-tp');
+    await shot('desktop-modal.png', '.sk-tp-panel');
     // 2. Esc closes: no new design
     await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
     assert.strictEqual(await modalOpen(), false, 'Esc closes the modal');
@@ -145,7 +145,7 @@ await (async () => {
     cs = await cards();
     assert.deepStrictEqual(cs.map((c) => c.id), expectedOrder, '"+": Blank design first, then every template');
     assert.strictEqual(await evalJs(`document.activeElement.dataset.template`), 'blank', 'the Blank card has focus');
-    await shot('desktop-new-design-modal.png', '.sk-tp');
+    await shot('desktop-new-design-modal.png', '.sk-tp-panel');
     await sendRealKey(send, 'Enter', 'Enter', 13, 0, String.fromCharCode(13)); await sleep(500);
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'Slot', 'Untitled'], 'Enter on Blank: the empty Untitled tab');
     assert.strictEqual(await shapes(), 0, 'it is empty');
@@ -192,11 +192,11 @@ await (async () => {
     await navigate(url('sketchstudio'), 10000);
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 1 && !!document.querySelector('.sk-doctab-new')`, 'phone: the strip');
     await press('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'phone: modal');
-    const box = await evalJs(`(() => { const r = document.querySelector('.sk-tp').getBoundingClientRect(); const c = [...document.querySelectorAll('.sk-tp-card')].map((e) => Math.round(e.getBoundingClientRect().top)); return { w: r.width, h: r.height, perRow: c.filter((t) => t === c[0]).length }; })()`);
+    const box = await evalJs(`(() => { const r = document.querySelector('.sk-tp-panel').getBoundingClientRect(); const c = [...document.querySelectorAll('.sk-tp-card')].map((e) => Math.round(e.getBoundingClientRect().top)); return { w: r.width, h: r.height, perRow: c.filter((t) => t === c[0]).length }; })()`);
     assert(box.w === 390 && box.h === 844, 'phone: the modal is full-screen ' + JSON.stringify(box));
     assert.strictEqual(box.perRow, 2, 'phone: two cards per row');
     await checkLabelsClear('phone');
-    await shot('phone-modal.png', '.sk-tp');
+    await shot('phone-modal.png', '.sk-tp-panel');
     // ONE tap opens a template as a new design
     await press('.sk-tp-card[data-template="l-bracket"]'); await waitFor(`!!document.querySelector('.sk-tp-start[data-template="l-bracket"]')`, 'the l-bracket start view (task 670)'); await press('.sk-tp-open');
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, 'phone: a new tab on one tap');

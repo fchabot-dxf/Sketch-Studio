@@ -13,7 +13,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import * as L from './harness/audit/lib.js';
-import { TEMPLATES, buildTemplate, templateById, paramName, paramKind, isLiveParam, paramRefusal, defaultParams } from '#core/templates.js';
+import { TEMPLATES, buildTemplate, templateById, paramName, paramKind, paramUnit, isLiveParam, paramRefusal, defaultParams } from '#core/templates.js';
 import { cornerJointPoints, cornerBoards, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
 import { deserializeDocument } from '#core/document.js';
 import { planChange, isDimension, isReferenceDimension } from '#core/parameters.js';
@@ -50,7 +50,14 @@ const setParameter = (S, name, text) => {
   assert.deepStrictEqual(muted(() => S.engine.solve(L.ITER)).conflicts || [], [], `${name} = ${text}: 0 conflicts`);
   return plan;
 };
-const variants = (t) => t.id === 'box-frame' ? [{}, { layout: 'Horizontal' }] : t.id === 'right-angle-corner' ? CORNER_JOINT_TYPES.map((o) => ({ joint: o.value })) : [{}];
+// TASK 672: every joint option of the new frame templates and of the box frame (both layouts) goes through the same checks
+const choices = (t, k) => t.params[k].options.map((o) => o.value);
+const variants = (t) => {
+  if (t.id === 'box-frame') return ['Vertical', 'Horizontal'].flatMap((layout) => choices(t, 'joint').map((joint) => (layout === 'Vertical' && joint === 'V-Through' ? {} : { layout, joint })));
+  if (t.id === 'right-angle-corner' || t.id === 'polygon-frame') return choices(t, 'joint').map((joint) => ({ joint }));
+  if (t.id === 'right-angle-brace') return choices(t, 'topJoint').flatMap((topJoint) => choices(t, 'blJoint').flatMap((blJoint) => choices(t, 'brJoint').map((brJoint) => ({ topJoint, blJoint, brJoint }))));
+  return [{}];
+};
 
 const golden = JSON.parse(fs.readFileSync(new URL('./fixtures/templates-default-geometry-670.json', import.meta.url), 'utf8'));
 let checks = 0;
@@ -78,7 +85,7 @@ for (const t of TEMPLATES) {
     assert.ok(ev.ok, `${m}: the parameters evaluate`);
     for (const [k] of live) {
       const p = S.state.parameters.find((x) => x.name === paramName(k));
-      assert.strictEqual(p.expression, `${defaultParams(t)[k]} mm`, `${m}: ${p.name} = its default`);
+      assert.strictEqual(p.expression, `${defaultParams(t)[k]} ${paramUnit(t.params[k])}`, `${m}: ${p.name} = its default`);
     }
     // ---- 2. every driving dimension is a formula of the user parameters, canonical and consistent
     const names = new Set(S.state.parameters.map((p) => p.name));
@@ -101,7 +108,7 @@ for (const t of TEMPLATES) {
     }
     for (const n of names) assert.ok(read.has(n), `${m}: the user parameter ${n} drives at least one dimension`);
     // ---- 3. the default geometry is the code before task 670 (the new template and the new layout have no "before")
-    if (golden[t.id] && !extra.layout) {
+    if (golden[t.id] && !extra.layout && !extra.joint) {
       assert.deepStrictEqual(coords(S), golden[t.id].joints, `${m}: the default joints are identical to main 788f7f4`);
       assert.deepStrictEqual(radii(S), golden[t.id].radii, `${m}: the default radii are identical to main 788f7f4`);
       checks++;
@@ -109,7 +116,7 @@ for (const t of TEMPLATES) {
     // ---- 4. every parameter x1.3 and x0.7 through the parameter path = the template built at that value, 0 DOF
     for (const [k] of live) for (const f of [1.3, 0.7]) {
       const E = open(t, extra), v = R(defaultParams(t)[k] * f);
-      const plan = setParameter(E, paramName(k), `${v} mm`);
+      const plan = setParameter(E, paramName(k), `${v} ${paramUnit(t.params[k])}`);
       assert.ok(plan.solve && plan.affected.length > 0, `${m}: ${paramName(k)} x${f} moves dimensions (${plan.affected})`);
       assert.strictEqual(L.nullity(E), 0, `${m}: ${paramName(k)} x${f}: 0 DOF`);
       sameGeometry(geo(E), geo(open(t, { ...extra, [k]: v })), `${m}: ${paramName(k)} x${f} = the template built at ${v} (no fold)`);

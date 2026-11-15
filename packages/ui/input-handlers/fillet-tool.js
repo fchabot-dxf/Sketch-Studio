@@ -22,10 +22,11 @@ import {
 import { SNAP } from '#core/constants.js';
 import { dragArrowSvg, dragArrowHit, dragArrowDirection } from '#ui/drag-arrow-handle.js';
 import { arcSweepInfo } from '#core/geometry.js';
-import { activeSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted; TASK 657: only the active sketch is
+import { activeSketchPick, otherSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted; TASK 657: only the active sketch is
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
 
 const OVERLAY_ID = 'fillet-tool-overlay';
@@ -110,6 +111,8 @@ export function getFilletRadius() {
 // (as empty canvas: no hover, no pick, no message). The search itself skips them, so one never shadows an active curve. A corner needs both of its curves.
 const lineOf = (line, state) => (line && activeSketchPick(state, line) ? line : null);
 const curveAt = (state, world, thresh) => findFilletShapeAtPoint(state, world, thresh, (s) => activeSketchPick(state, s));
+// the curve of ANOTHER visible, unlocked sketch under a press (task 660): only searched when no active curve is within reach
+const otherCurveAt = (state, world, thresh) => findFilletShapeAtPoint(state, world, thresh, (s) => otherSketchPick(state, s));
 function cornerOf(corner, state) { return corner && lineOf(corner.lineA.shape, state) && lineOf(corner.lineB.shape, state) ? corner : null; }
 
 export function handleFilletPointerMove(e, ctx, state, viewState) {
@@ -170,7 +173,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
 
   if (_pick) {
     const line2 = curveAt(state, world, thresh);
-    if (!line2) return true; // clicked empty space: keep waiting for line 2 (Esc cancels)
+    if (!line2) { warnOtherSketch(state, 'Fillet', otherCurveAt(state, world, thresh)); return true; } // empty space (or another sketch's curve, with the warning): keep waiting for line 2 (Esc cancels)
     if (line2.id === _pick.line1.id) { cancelAll(); return true; } // click line 1 again: un-pick
     const corner = cornerOf(findCornerBetweenLines(state, _pick.line1, line2, [_pick.at, world]), state); // two curves meeting twice: the corner nearest the picks
     if (!corner) { showNotification('Curves must meet at a corner to fillet', 'warning'); return true; }
@@ -193,6 +196,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
     renderFilletOverlay(svg, null, viewState, { highlight: [line1] });
     return true;
   }
+  if (warnOtherSketch(state, 'Fillet', otherCurveAt(state, world, thresh))) return true;
   if (why) showNotification(why, 'warning');
   return false;
 }

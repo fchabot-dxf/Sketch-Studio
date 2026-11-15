@@ -5,7 +5,7 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { pickableShapes } from '#core/reference-lines.js';
-import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
+import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
@@ -409,9 +409,11 @@ function nearestGridPoint(svg, e) {
 // pointer lands on its place (a position-only snap) and binds to nothing, so no point is shared and no constraint ties the new shape to
 // it. Every other tool (select, dimension, constraints, ...) searches only what is editable and visible.
 const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
-function toolSnap(state, svg, pt, excludeIds, boost) {
+const ACTIVE_SKETCH_SNAP_TOOLS = [TOOL_MODES.OFFSET, TOOL_MODES.MIRROR]; // task 660: these search the ACTIVE sketch only (Fillet / Trim / Break search for themselves)
+function toolSnap(state, svg, pt, excludeIds, boost, otherSketch = false) {
     const shapes = pickableShapes(state);
-    const scene = pickScene(state, shapes);
+    const picked = pickScene(state, shapes);
+    const scene = otherSketch ? otherSketchScene(state, picked) : (ACTIVE_SKETCH_SNAP_TOOLS.includes(state.currentTool) ? activeSketchScene(state, picked) : picked);
     if (!DRAW_SNAP_TOOLS.includes(state.currentTool)) return findSnap(scene.joints, scene.shapes, svg, pt, excludeIds, false, false, boost);
     const snap = findSnap(state.joints, shapes, svg, pt, excludeIds, false, false, boost);
     return snapIsInert(scene.inert, snap) ? asPositionSnap(snap) : snap;
@@ -654,6 +656,13 @@ function handlePointerDown(e, svg, state) {
         }
     }
 
+    // TASK 660: Offset and Mirror found nothing in the ACTIVE sketch: a curve of another visible, unlocked sketch within reach is what the tool warns about
+    let otherShape = null;
+    if (!hitJoint && !hitShape && ACTIVE_SKETCH_SNAP_TOOLS.includes(state.currentTool)) {
+        const other = toolSnap(state, svg, { x: screenX, y: screenY }, [], snapBoostFor(isTouch), true);
+        otherShape = other && (other.shape || (other.type === 'joint' ? state.shapes.find((s) => !s.reference && s.joints.includes(other.targetId) && !inActiveSketch(state, s)) : null)) || null; // an end point of that curve: the curve
+    }
+
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
     try { hitConstraint = constraintAt(svg, state, screenX, screenY, isTouch); } catch(_) { hitConstraint = null; }
@@ -697,10 +706,10 @@ function handlePointerDown(e, svg, state) {
             try { handled = handleFilletPointerDown(e, svg, state, state.view); } catch(_) {}
             break;
         case TOOL_MODES.MIRROR: // TASK 585: the objects, then the mirror line (a click on nothing pans)
-            handled = handleMirrorPointerDown(e, svg, state, hitJoint, hitShape);
+            handled = handleMirrorPointerDown(e, svg, state, hitJoint, hitShape, otherShape);
             break;
         case TOOL_MODES.OFFSET: // TASK 650: a curve picks its chain; a press elsewhere pans (a click there sets the side, on release)
-            handled = handleOffsetPointerDown(e, svg, state, hitShape);
+            handled = handleOffsetPointerDown(e, svg, state, hitShape, otherShape);
             break;
         case TOOL_MODES.COINCIDENT:
         case TOOL_MODES.HORIZONTAL_VERTICAL:

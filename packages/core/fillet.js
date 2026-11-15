@@ -628,13 +628,21 @@ export function findFilletShapeAtPoint(state, worldPt, tolerance = 10) {
 /**
  * The fillet corner formed by exactly these two shapes (lines or arcs; they must meet at a shared/coincident joint and
  * nothing else may touch that corner), or null. Same shape as findCornerAtJoint's result.
+ * Two curves can meet at BOTH ends (a line and an arc forming a "D", a lens of two arcs): `near` (optional, world points: where the user
+ * picked) chooses the corner nearest them (least summed distance); without it the first corner in lineA's joint order (task 649).
  */
-export function findCornerBetweenLines(state, lineA, lineB) {
+export function findCornerBetweenLines(state, lineA, lineB, near = null) {
   if (!state || !lineA || !lineB || lineA.id === lineB.id) return null;
+  const pts = Array.isArray(near) ? near.filter(Boolean) : [];
+  const away = (corner) => pts.reduce((s, p) => s + Math.hypot(p.x - corner.cornerPt.x, p.y - corner.cornerPt.y), 0);
+  let best = null;
   for (const jid of lineA.joints) {
     const corner = findCornerAtJoint(state, jid);
     if (corner && ((corner.lineA.shape.id === lineA.id && corner.lineB.shape.id === lineB.id) ||
-                   (corner.lineA.shape.id === lineB.id && corner.lineB.shape.id === lineA.id))) return corner;
+                   (corner.lineA.shape.id === lineB.id && corner.lineB.shape.id === lineA.id))) {
+      if (!pts.length) return corner;
+      if (!best || away(corner) < away(best)) best = corner;
+    }
   }
-  return null;
+  return best;
 }

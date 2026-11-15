@@ -36,7 +36,7 @@ let _state = null;
 let hoverCorner = null;
 let currentRadius = null; // WORLD mm (1 unit = 1 mm); null until first setup. Survives tool switches.
 let _radiusUnit = null;   // doc unit the default was seeded for; a unit change re-seeds it
-let _pick = null;         // { line1 } once the first line is picked
+let _pick = null;         // { line1, at } once the first line is picked (at = the world point it was picked at)
 let _input = null;        // { el, corner, radius, ... } while the radius input is open; radius = the ONE radius, typed or dragged
 let _hover = false;       // the pointer is over the handle (it draws darker)
 let _drag = null;         // { pointerId, grab } while the handle is dragged
@@ -133,7 +133,7 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
   if (_pick) {
     // line 1 is picked: preview the arc for the candidate line 2 under the cursor
     const line2 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
-    hoverCorner = line2 ? cornerOf(findCornerBetweenLines(state, _pick.line1, line2), state) : null;
+    hoverCorner = line2 ? cornerOf(findCornerBetweenLines(state, _pick.line1, line2, [_pick.at, world]), state) : null;
     renderFilletOverlay(svg, hoverCorner, viewState, { highlight: [_pick.line1] });
     return;
   }
@@ -170,7 +170,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
     const line2 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
     if (!line2) return true; // clicked empty space: keep waiting for line 2 (Esc cancels)
     if (line2.id === _pick.line1.id) { cancelAll(); return true; } // click line 1 again: un-pick
-    const corner = cornerOf(findCornerBetweenLines(state, _pick.line1, line2), state);
+    const corner = cornerOf(findCornerBetweenLines(state, _pick.line1, line2, [_pick.at, world]), state); // two curves meeting twice: the corner nearest the picks
     if (!corner) { showNotification('Curves must meet at a corner to fillet', 'warning'); return true; }
     openInput(svg, state, viewState, corner);
     return true;
@@ -182,7 +182,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
 
   const line1 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
   if (line1) {
-    _pick = { line1 };
+    _pick = { line1, at: world };
     ensureViewListener();
     renderFilletOverlay(svg, null, viewState, { highlight: [line1] });
     return true;

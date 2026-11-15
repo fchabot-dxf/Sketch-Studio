@@ -15404,3 +15404,21 @@ Parameters window EDITING (docs/PARAMETERS-DESIGN.md slice 5), plus two owner ad
 
 ## TURN 679 (fix after merge gate red)
 - tests/slot-tool-node.test.js (came with task 673 after the branch point) imported the removed #ui/sketch-state.js: now #core/sketch-state.js. `git grep -n "ui/sketch-state"` outside docs: nothing. gate:quick 400/400; slot-tool-node and slot-tool-live pass.
+
+## TURN 685
+Fix Shaper Fusion palette prematurely showing "Fusion host unavailable (window.adsk missing)" before Fusion injects `window.adsk` asynchronously (`apps/shaper/src/fusion-bridge.js`).
+- **Cause**: `mountFusionPrepareBar` ran `syncAvailability()` and `bootPing()` once at mount, before Fusion's palette finished injecting `window.adsk.fusionSendData`.
+- **Fix (one place: `apps/shaper/src/fusion-bridge.js`)**:
+  - Added `DEFAULT_ADSK_POLL_MS = 200` and `DEFAULT_ADSK_WAIT_TIMEOUT_MS = 15000`.
+  - In Fusion mode (`?host=fusion`), when `window.adsk.fusionSendData` is not present at mount, `mountFusionPrepareBar` now shows `'Waiting for Fusion…'` (`dataset.state = 'waiting'`, `Add selection` disabled), listens once for `window` `'load'`, and polls every ~200 ms for up to ~15 s.
+  - As soon as `window.adsk.fusionSendData` appears (at boot, on `'load'`, via polling, or via an incoming `fusionJavaScriptHandler.handle(...)` message via `createFusionBridge`'s `onMessage` hook), the timer & `'load'` listener stop, `Add selection` enables, status shows `'Connecting to Fusion…'` (unless already `'connected'`), and `bootPing()` sends `'ping'` ONCE (`bootPingSent` guard). Only after the 15 s timeout expires without `window.adsk` does status flip to `'Fusion host unavailable (window.adsk missing) — open inside Fusion 360 to use Add selection'` and stop polling. Outside Fusion mode (`!isFusionMode(...)`), zero timers and zero `'load'` listeners are started. No new globals added.
+- **Behaviour changes for existing users**:
+  1. Opening `/apps/shaper/?host=fusion` without `window.adsk` present at mount now initially displays `'Waiting for Fusion…'` (`dataset.state = 'waiting'`, `Add selection` disabled) for up to 15 s while checking `'load'` / polling every 200 ms instead of immediately displaying `'Fusion host unavailable (window.adsk missing) — open inside Fusion 360 to use Add selection'`; it switches to `'unavailable'` once the 15 s timeout expires, or auto-enables + sends 1 boot ping as soon as `window.adsk.fusionSendData` appears.
+  2. Calling `bootPing()` more than once on `mountFusionPrepareBar`'s returned API after a successful boot ping is now idempotent (`alreadySent: true`, no duplicate `'ping'`).
+  3. Receiving any message through `window.fusionJavaScriptHandler.handle(...)` re-checks `window.adsk.fusionSendData` immediately.
+  4. `mountFusionPrepareBar` exposes `destroy()` to clear any active wait timer / `'load'` listener and clean up `fusionJavaScriptHandler`.
+- **Tests & evidence**:
+  - Fail-first on untouched `main` (`df78fa2`): `node tests/fusion-adsk-wait-685-node.test.js` failed at status `'Waiting for Fusion…'` (actual: `'Fusion host unavailable (window.adsk missing) — open inside Fusion 360 to use Add selection'`).
+  - Added `tests/fusion-adsk-wait-685-node.test.js` (40 checks) & `tests/fusion-adsk-wait-685-live.test.js` (delayed 1 s `window.adsk`, 15 s timeout + post-timeout zero polling, non-Fusion mode zero 200 ms interval). Updated `tests/fusion-mode-663-live.test.js` section 2 to assert `'Waiting for Fusion…'` immediately after `?host=fusion` load without `window.adsk`.
+  - Direct runs passed: `fusion-adsk-wait-685-node`, `fusion-mode-663-node`, `fusion-polish-665-node`, `fusion-mode-663-live`, `fusion-import-664-live`, `fusion-polish-665-live`, `fusion-adsk-wait-685-live`.
+  - Evidence (`.evidence/685/`, local): `fusion-waiting.png`, `fusion-connected.png`, `fusion-timeout.png`.

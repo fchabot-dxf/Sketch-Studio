@@ -15,6 +15,8 @@ import { UNITS } from '#core/units.js';
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
+export const DEFAULT_ADSK_POLL_MS = 200;
+export const DEFAULT_ADSK_WAIT_TIMEOUT_MS = 15000;
 
 // Map Fusion 360 `unitsManager.defaultLengthUnits` values to supported app units (`UNITS = ['mm', 'cm', 'in']`).
 export const FUSION_UNIT_MAP = Object.freeze({
@@ -89,6 +91,7 @@ export function createFusionBridge({
   onNotice = () => {},
   onError = () => {},
   onSelectionData = () => {},
+  onMessage = () => {},
 } = {}) {
   let lastSelection = null;
 
@@ -133,6 +136,10 @@ export function createFusionBridge({
 
   function handle(rawAction, rawData) {
     const parsed = parsePayload(rawData);
+    const hintedAction = parsed.ok && parsed.data && typeof parsed.data.action === 'string' && parsed.data.action
+      ? parsed.data.action
+      : (rawAction || '');
+    onMessage(hintedAction);
     if (!parsed.ok) {
       reportError(parsed.error, { rawAction, rawData });
       return 'OK';
@@ -221,7 +228,14 @@ export function createFusionBridge({
  * Mount the Fusion-mode toolbar in Prepare ("Add selection" button + connection status)
  * and wire bridge messages to visible Prepare UI feedback. Only called in Fusion mode.
  */
-export function mountFusionPrepareBar({ viewPrepareEl, noticeEl, onSelectionData = () => {}, globalTarget = (typeof window !== 'undefined' ? window : null) }) {
+export function mountFusionPrepareBar({
+  viewPrepareEl,
+  noticeEl,
+  onSelectionData = () => {},
+  globalTarget = (typeof window !== 'undefined' ? window : null),
+  pollIntervalMs = DEFAULT_ADSK_POLL_MS,
+  waitTimeoutMs = DEFAULT_ADSK_WAIT_TIMEOUT_MS,
+}) {
   viewPrepareEl.classList.add('is-fusion');
 
   const bar = document.createElement('div');
@@ -250,6 +264,34 @@ export function mountFusionPrepareBar({ viewPrepareEl, noticeEl, onSelectionData
     noticeEl.classList.toggle('is-error', Boolean(isError));
   };
 
+  const fusionMode = isFusionMode(globalTarget && globalTarget.location);
+  const useTargetTimers = globalTarget
+    && typeof globalTarget.setInterval === 'function'
+    && typeof globalTarget.clearInterval === 'function';
+  const setInt = useTargetTimers ? globalTarget.setInterval.bind(globalTarget) : setInterval;
+  const clearInt = useTargetTimers ? globalTarget.clearInterval.bind(globalTarget) : clearInterval;
+
+  let waiting = false;
+  let timedOut = false;
+  let bootPingSent = false;
+  let pollTimer = null;
+  let deadlineAt = 0;
+  let loadHandler = null;
+
+  const stopWaiting = () => {
+    waiting = false;
+    if (pollTimer !== null) {
+      clearInt(pollTimer);
+      pollTimer = null;
+    }
+    if (loadHandler && globalTarget && typeof globalTarget.removeEventListener === 'function') {
+      globalTarget.removeEventListener('load', loadHandler);
+      loadHandler = null;
+    }
+  };
+
+  let onIncomingAction = () => {};
+
   const bridge = createFusionBridge({
     globalTarget,
     onStatus: (text) => {
@@ -260,28 +302,78 @@ export function mountFusionPrepareBar({ viewPrepareEl, noticeEl, onSelectionData
       showNotice(text, false);
     },
     onError: (text) => {
-      if (!bridge.canSend()) statusEl.dataset.state = 'unavailable';
-      else statusEl.dataset.state = 'error';
+      if (!bridge.canSend()) statusEl.dataset.state = (waiting && !timedOut) ? 'waiting' : 'unavailable';
+      else if (statusEl.dataset.state !== 'connected') statusEl.dataset.state = 'error';
       showNotice(text, true);
     },
     onSelectionData,
+    onMessage: (action) => { onIncomingAction(action); },
   });
 
   const syncAvailability = () => {
     const ready = bridge.canSend();
     addBtn.disabled = !ready;
-    if (!ready) {
-      addBtn.title = 'Unavailable: open inside Fusion 360 (window.adsk missing) to add selection';
-      statusEl.textContent = 'Fusion host unavailable (window.adsk missing) — open inside Fusion 360 to use Add selection';
-      statusEl.dataset.state = 'unavailable';
-    } else {
+    if (ready) {
+      stopWaiting();
+      timedOut = false;
       addBtn.title = 'Add the active Fusion 360 selection to Prepare';
       if (statusEl.dataset.state !== 'connected') {
         statusEl.textContent = 'Connecting to Fusion…';
         statusEl.dataset.state = 'connecting';
       }
+      return true;
     }
-    return ready;
+    if (waiting && !timedOut) {
+      addBtn.title = 'Waiting for Fusion 360 host bridge…';
+      if (statusEl.dataset.state !== 'connected') {
+        statusEl.textContent = 'Waiting for Fusion…';
+        statusEl.dataset.state = 'waiting';
+      }
+      return false;
+    }
+    addBtn.title = 'Unavailable: open inside Fusion 360 (window.adsk missing) to add selection';
+    if (statusEl.dataset.state !== 'connected') {
+      statusEl.textContent = 'Fusion host unavailable (window.adsk missing) — open inside Fusion 360 to use Add selection';
+      statusEl.dataset.state = 'unavailable';
+    }
+    return false;
+  };
+
+  const sendBootPingOnce = () => {
+    if (!syncAvailability()) return { ok: false, reason: 'window.adsk unavailable' };
+    if (bootPingSent) return { ok: true, alreadySent: true };
+    const res = bridge.bootPing();
+    if (res && res.ok) bootPingSent = true;
+    return res;
+  };
+
+  const recheckHost = (sendPingIfReady = true) => {
+    if (!syncAvailability()) return false;
+    if (sendPingIfReady) sendBootPingOnce();
+    return true;
+  };
+
+  onIncomingAction = (action) => {
+    // Any Fusion message arriving through fusionJavaScriptHandler proves the host is live; re-check for adsk immediately.
+    recheckHost(action !== FUSION_ACTIONS.PONG);
+  };
+
+  const startWaiting = () => {
+    waiting = true;
+    timedOut = false;
+    deadlineAt = Date.now() + waitTimeoutMs;
+    if (globalTarget && typeof globalTarget.addEventListener === 'function') {
+      loadHandler = () => { recheckHost(true); };
+      globalTarget.addEventListener('load', loadHandler, { once: true });
+    }
+    pollTimer = setInt(() => {
+      if (recheckHost(true)) return;
+      if (Date.now() >= deadlineAt) {
+        timedOut = true;
+        stopWaiting();
+        syncAvailability();
+      }
+    }, pollIntervalMs);
   };
 
   addBtn.addEventListener('click', () => {
@@ -289,6 +381,9 @@ export function mountFusionPrepareBar({ viewPrepareEl, noticeEl, onSelectionData
     bridge.send(FUSION_ACTIONS.ADD_SELECTION, {});
   });
 
+  if (fusionMode && !bridge.canSend()) {
+    startWaiting();
+  }
   syncAvailability();
 
   return {
@@ -297,6 +392,10 @@ export function mountFusionPrepareBar({ viewPrepareEl, noticeEl, onSelectionData
     statusEl,
     bridge,
     syncAvailability,
-    bootPing: () => (syncAvailability() ? bridge.bootPing() : { ok: false, reason: 'window.adsk unavailable' }),
+    bootPing: () => sendBootPingOnce(),
+    destroy: () => {
+      stopWaiting();
+      bridge.destroy();
+    },
   };
 }

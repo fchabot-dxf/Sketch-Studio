@@ -144,7 +144,6 @@ export function findCornerAtJoint(state, jointId) {
   const cornerPt = { x: cJoint.x, y: cJoint.y };
   const curveA = legAt(state, lineA.shape, lineA.cornerJoint, cornerPt);
   const curveB = legAt(state, lineB.shape, lineB.cornerJoint, cornerPt);
-  if (curveA.kind === 'arc' && curveB.kind === 'arc') return null; // arc + arc is not built: a line is needed on one side
   if ((curveA.kind === 'arc' || curveB.kind === 'arc') && Math.abs(curveA.u.x * curveB.u.x + curveA.u.y * curveB.u.y) > TANGENT_DOT) return null;
 
   return {
@@ -213,7 +212,6 @@ export function diagnoseNoFillet(state, worldPt, tolerance = 15) {
   if (lines.length > 2 && arcs.length === 0) return 'Fillet needs a corner between exactly two lines (T-junction)';
   const ends = touching.filter(sh => (isLineShape(sh) || isArcShape(sh)) && endJoints(sh).some(j => cluster.has(j)));
   if (ends.length > 2) return 'Fillet needs a corner between exactly two lines or arcs (T-junction)';
-  if (ends.length === 2 && ends.every(sh => sh.type === 'arc')) return 'Fillet needs a line on at least one side';
   if (ends.length === 2 && ends.some(sh => sh.type === 'arc')) return 'These curves already run tangent to each other: nothing to fillet';
   return arcs.length ? 'Fillet needs a corner between two lines or arcs that meet at an end' : 'Fillet needs a corner between two lines';
 }

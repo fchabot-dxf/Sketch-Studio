@@ -117,7 +117,8 @@ try {
   const done0 = await evalJs(`(() => { const b = document.querySelector('.sk-done'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; })()`);
   assert.ok(done0, 'Done appears once a touch chain is open');
   assert.ok(done0.w >= 52 && done0.h >= 52, `Done is thumb sized: ${done0.w}x${done0.h}`);
-  assert.ok(done0.l + done0.w > 390 - 40 && done0.t + done0.h > cr.t + cr.h - 40, 'Done sits in the canvas bottom-right corner (thumb reach), off the drawing centre');
+  const p0 = P(0.25, 0.35);
+  assert.ok(done0.l > p0.x && done0.t > p0.y && done0.l - p0.x < 40 && done0.t - p0.y < 40, 'Done sits just below-right of the chain end point, not covering it: ' + JSON.stringify({ done0, p0 }));
   // finger down on the second point: the lens shows by itself and the rubber band is drawn
   const second = P(0.7, 0.35);
   await T('touchStart', [second]); await sleep(120); await T('touchMove', [{ x: second.x + 10, y: second.y + 6 }]); await sleep(150);

@@ -945,7 +945,9 @@ function setupEventListeners(svg, state) {
         // (finishLineChain) and, TASK 585, ends a Mirror step (mirrorDone). DONE_ACTIONS declares, per tool, when it shows and what it does.
         // Built on the first press of any pointer, so a host / test that never sees a press never gets the element.
         const DONE_ACTIONS = {
-            [TOOL_MODES.LINE]: { open: () => !!state.active && state.active.mode === TOOL_MODES.LINE, done: () => finishLineChain(state), label: 'Finish the line chain' },
+            [TOOL_MODES.LINE]: { open: () => !!state.active && state.active.mode === TOOL_MODES.LINE, done: () => finishLineChain(state), label: 'Finish the line chain',
+                // the rubber band's live end (the chain's start joint until the cursor has moved); Mirror has none, so it keeps the corner
+                end: () => (state.active.preview && state.active.preview.pt) || state.active.startPt || state.joints.get(state.active.start) || null },
             [TOOL_MODES.MIRROR]: { open: () => mirrorStep(state) !== null, done: () => finishMirrorStep(state), label: 'Mirror: next step' },
         };
         const doneAction = () => (isActiveFn() ? DONE_ACTIONS[state.currentTool] || null : null);
@@ -957,6 +959,8 @@ function setupEventListeners(svg, state) {
                     isChainOpen: () => !!doneAction() && doneAction().open(),
                     onDone: () => doneAction().done(),
                     label: () => doneAction().label,
+                    anchor: () => { const a = doneAction(); const w = a && a.end && a.end(); return w ? worldToScreen(svg, w) : null; },
+                    avoid: () => [...document.querySelectorAll('.sk-dual-input, #liveDimSingleInput')].filter((el) => el.offsetParent !== null).map((el) => el.getBoundingClientRect()),
                 });
             }
             if (doneButton) doneButton.sync(e.pointerType === 'touch');

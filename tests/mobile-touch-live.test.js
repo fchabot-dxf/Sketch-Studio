@@ -112,11 +112,11 @@ try {
   await evalJs(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await sleep(150);
   assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-dual-input')].filter((b) => getComputedStyle(b).display !== 'none').length`), 0, 'Esc closes the polygon boxes');
   await tapSel('#tool-line');
-  assert.ok(await evalJs(`document.querySelector('.sk-touch-done') ? document.querySelector('.sk-touch-done').hidden : true`), 'Done is hidden before a chain starts');
+  assert.ok(await evalJs(`document.querySelector('.sk-done') ? document.querySelector('.sk-done').hidden : true`), 'Done is hidden before a chain starts');
   await tap(P(0.25, 0.35));
-  const done0 = await evalJs(`(() => { const b = document.querySelector('.sk-touch-done'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; })()`);
+  const done0 = await evalJs(`(() => { const b = document.querySelector('.sk-done'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; })()`);
   assert.ok(done0, 'Done appears once a touch chain is open');
-  assert.ok(done0.w >= 44 && done0.h >= 44, `Done is thumb sized: ${done0.w}x${done0.h}`);
+  assert.ok(done0.w >= 52 && done0.h >= 52, `Done is thumb sized: ${done0.w}x${done0.h}`);
   assert.ok(done0.l + done0.w > 390 - 40 && done0.t + done0.h > cr.t + cr.h - 40, 'Done sits in the canvas bottom-right corner (thumb reach), off the drawing centre');
   // finger down on the second point: the lens shows by itself and the rubber band is drawn
   const second = P(0.7, 0.35);
@@ -130,27 +130,31 @@ try {
   assert.strictEqual(await evalJs(`document.getElementById('magnifier').style.display`), 'none', 'the lens is gone when the finger lifts');
   console.log('lens r(world)=', lens.r, 'line / path elements while drawing=', band);
   assert.strictEqual(await shapes(), 1, 'one segment drawn');
-  assert.ok(await evalJs(`!document.querySelector('.sk-touch-done').hidden`), 'the chain is still open: Done still shown');
+  assert.ok(await evalJs(`!document.querySelector('.sk-done').hidden`), 'the chain is still open: Done still shown');
   await tap(P(0.7, 0.6)); // a second segment of the chain
   assert.strictEqual(await shapes(), 2, 'two segments');
   await shot('phone-done-visible');
-  await tap(await centre('.sk-touch-done'));
+  await tap(await centre('.sk-done'));
   await sleep(300);
-  assert.ok(await evalJs(`document.querySelector('.sk-touch-done').hidden`), 'Done disappears when the chain ends');
+  assert.ok(await evalJs(`document.querySelector('.sk-done').hidden`), 'Done disappears when the chain ends');
   assert.strictEqual(await shapes(), 2, 'Done keeps the committed segments (like Enter)');
   await tapSel('#btn-undo'); await sleep(200);
   assert.strictEqual(await shapes(), 1, 'undo then removes the LAST segment only (task 549)');
   await tapSel('#btn-redo'); await sleep(200);
   assert.strictEqual(await shapes(), 2, 'redo brings it back');
-  // a mouse never gets Done
-  const mp = P(0.3, 0.8);
+  // TASK 642: a mouse chain shows the same green check button (40 px, an svg, no text); clicking it ends the chain, segments kept
+  const mouse = async (p, type, buttons) => send('Input.dispatchMouseEvent', { type, x: p.x, y: p.y, button: type === 'mouseMoved' ? 'none' : 'left', buttons, clickCount: 1 });
+  const mclick = async (p) => { await mouse(p, 'mouseMoved', 0); await mouse(p, 'mousePressed', 1); await mouse(p, 'mouseReleased', 0); await sleep(200); };
+  const before = await shapes();
   await tapSel('#tool-line');
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: mp.x, y: mp.y, button: 'none' });
-  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: mp.x, y: mp.y, button: 'left', buttons: 1, clickCount: 1 });
-  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: mp.x, y: mp.y, button: 'left', buttons: 0, clickCount: 1 }); await sleep(200);
-  assert.ok(await evalJs(`document.querySelector('.sk-touch-done').hidden`), 'with a mouse Done stays hidden (Esc / right click end the chain)');
-  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await sleep(200);
-  await tapSel('#tool-select');
+  await mclick(P(0.3, 0.8)); await mclick(P(0.6, 0.8));
+  assert.strictEqual(await shapes(), before + 1, 'a mouse segment committed');
+  const md = await evalJs(`(() => { const b = document.querySelector('.sk-done'); const r = b.getBoundingClientRect(); return { hidden: b.hidden, w: Math.round(r.width), h: Math.round(r.height), svg: !!b.querySelector('svg path'), text: b.textContent.trim(), bg: getComputedStyle(b).backgroundColor, label: b.title }; })()`);
+  assert.deepStrictEqual(md, { hidden: false, w: 40, h: 40, svg: true, text: '', bg: 'rgb(16, 185, 129)', label: 'Finish the line chain' }, 'mouse: green 40 px check button: ' + JSON.stringify(md));
+  await shot('phone-done-mouse');
+  const mc = await centre('.sk-done'); await mclick(mc);
+  assert.ok(await evalJs(`document.querySelector('.sk-done').hidden`), 'mouse: the button hides when the chain ends');
+  assert.strictEqual(await shapes(), before + 1, 'mouse: Done keeps the committed segment');  await tapSel('#tool-select');
 
   // ── touch and hold ──
   const geo = () => evalJs(`(() => { const l = document.querySelector('.shape-elem'); return l ? [l.getAttribute('x1'), l.getAttribute('y1'), l.getAttribute('x2'), l.getAttribute('y2')].join(',') : null; })()`);
@@ -222,14 +226,14 @@ try {
   await evalJs(`document.querySelector('#tool-line').click()`); await sleep(200);
   const dc = await evalJs(`(() => { const r = document.getElementById('design-canvas').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; })()`);
   await tap({ x: dc.l + dc.w * 0.3, y: dc.t + dc.h * 0.75 });
-  assert.ok(await evalJs(`!document.querySelector('.sk-touch-done').hidden`), 'Shaper Design: Done is shown while a touch chain is open');
+  assert.ok(await evalJs(`!document.querySelector('.sk-done').hidden`), 'Shaper Design: Done is shown while a touch chain is open');
   await T('touchStart', [{ x: dc.l + dc.w * 0.7, y: dc.t + dc.h * 0.75 }]); await sleep(120); await T('touchMove', [{ x: dc.l + dc.w * 0.7 + 8, y: dc.t + dc.h * 0.75 + 4 }]); await sleep(150);
   assert.strictEqual(await evalJs(`document.getElementById('design-magnifier') && document.getElementById('design-magnifier').style.display`), 'block', 'Shaper Design: the lens is on under a drawing finger');
   await shot('shaper-design-lens');
   await T('touchEnd', []); await sleep(250);
   assert.strictEqual(await evalJs(`document.getElementById('design-magnifier').style.display`), 'none');
-  await tap(await centre('.sk-touch-done')); await sleep(300);
-  assert.ok(await evalJs(`document.querySelector('.sk-touch-done').hidden`), 'Shaper Design: Done ends the chain');
+  await tap(await centre('.sk-done')); await sleep(300);
+  assert.ok(await evalJs(`document.querySelector('.sk-done').hidden`), 'Shaper Design: Done ends the chain');
   console.log('mobile-touch-live: ALL PASS');
 } finally {
   await cdp.close();

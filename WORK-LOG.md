@@ -14896,3 +14896,10 @@ Pen Plotter: Construction toggle ON; construction is never plotted (like Fusion:
 - sketch-stage.js: `construction: true`; underlay (static/imported shapes) draws construction dashed at 50% opacity. Comments updated (sketch-stage.js, main.js).
 - Behaviour changes: Pen Plotter gains the Construction toggle + K; imported DXF construction entities (isConstruction) are no longer plotted nor drawn/selectable on the Toolpath/Export canvas; static underlay draws construction dashed.
 - Tests: construction-toggle-output-node (pen plotter section now asserts skip; failed first), new penplotter-construction-live (fails first on core-geometry/render-art), footer-delete-clear-live (no penplotter exception). Evidence: .evidence/641/design-stage.png, export-preview.png.
+
+
+## TURN 642
+- WHAT: the Line / Mirror "Done" button is now a round green check-mark button for every pointer. `packages/ui/touch-done-button.js` -> `packages/ui/done-button.js` (`createTouchDoneButton` -> `createDoneButton`, `.sk-touch-done` -> `.sk-done`, input-manager `TOUCH_DONE` -> `DONE_ACTIONS`). Inline SVG check path, no text; colour from the new `--sk-done: #10b981` token in sketcher.css. Built on the first press of any pointer type; shown whenever the tool's open() is true; 52 px after a finger, 40 px after a mouse / pen. Click still = finishLineChain / finishMirrorStep; Enter / Esc / right-click unchanged.
+- BEHAVIOUR CHANGES: (1) mouse / pen users now see the button (was touch only); (2) look: blue "Done" pill -> green round check icon; (3) title / aria-label unchanged; (4) size 40 px for mouse, 52 px for touch (the pill was 52 px tall).
+- PLACEMENT: bottom-right of the canvas as before; checked in all four hosts at 1280x800 and 390x844 (mouse chain): no overlap with .sk-canvas-corner (top-right), the footer or other buttons/inputs (script found 0 overlaps). No move needed.
+- TESTS: tests/mobile-touch-live.test.js (touch >= 52 px; mouse chain: green rgb(16, 185, 129), 40 px, svg, no text, click ends chain keeping the segment, hides) and tests/mirror-fusion-node.test.js (selector). Evidence: .evidence/642/.

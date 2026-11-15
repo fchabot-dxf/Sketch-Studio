@@ -165,7 +165,7 @@ try {
 
   // ---- TOUCH: the Done button (task 562's) ends each step as Enter does. Mirror the circle about the X axis with taps only.
   const tap = (p) => app.click(p.x, p.y, { pointerType: 'touch' });
-  const done = () => app.document.querySelector('.sk-touch-done');
+  const done = () => app.document.querySelector('.sk-done');
   const n0 = st().shapes.length, h0 = st().history.length;
   app.tool('mirror');
   tap(at(-15 + 8, 20));                                                // the circle's rim (r 8 now)

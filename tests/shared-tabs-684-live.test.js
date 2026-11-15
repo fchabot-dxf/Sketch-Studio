@@ -40,7 +40,7 @@ await (async () => {
       const press = async (sel, i = 0) => pressAt(await center(sel, i));
       const names = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
       const activeName = () => evalJs(`(() => { const a = document.querySelector('.sk-doctab.active .sk-doctab-name'); return a && a.textContent; })()`);
-      const dots = () => evalJs(`[...document.querySelectorAll('.sk-doctab')].map((t) => !!t.querySelector('.sk-doctab-dot'))`);
+      const dots = () => evalJs(`[...document.querySelectorAll('.sk-doctab')].map((t) => !!t.querySelector('.sk-doctab-dot:not(.saving)'))`); // the not-saved dot (a stored design's Drive write in flight shows a 'saving' one)
       const shapes = (app) => evalJs(`document.querySelectorAll('#${CANVAS[app]} .shape-elem').length`);
       const menuOpen = `(() => { const g = document.querySelector('.sk-sidebar-goto'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
       const openMenu = async () => { if (!(await evalJs(menuOpen))) await press(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn'); await waitFor(menuOpen, mode + ': the menu'); };

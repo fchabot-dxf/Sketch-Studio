@@ -35,7 +35,7 @@ export async function runPhoneLandscape(hostName) {
     const rectOf = (expr) => evalJs(`(() => { const e = ${expr}; if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height, x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     // the element at a point is `expr` or inside it
     const hits = (expr, p) => evalJs(`(() => { const e = ${expr}; const h = document.elementFromPoint(${p.x}, ${p.y}); return !!e && !!h && (e === h || e.contains(h)); })()`);
-    const btn = (i) => `document.querySelectorAll('.sk-ribbon .sk-ribbon-btn')[${i}]`;
+    const btn = (i) => `document.querySelectorAll('.sk-ribbon .sk-ribbon-btn:not([hidden])')[${i}]`; // TASK 647: the tools in the bar (the rest are in the section dropdowns)
 
     for (const size of SIZES) {
       // no storage clearing between sizes (TASK 608): a window position remembered at the wider size is clamped whole inside the narrower screen
@@ -57,22 +57,15 @@ export async function runPhoneLandscape(hostName) {
         assert(share >= 0.6, tag + `the canvas is ${Math.round(share * 100)} % of the height (>= 60 %): ${JSON.stringify(cv)}`);
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-ribbon')).flexDirection`), 'column', tag + 'the ribbon is a column (a rail)');
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), 'none', tag + 'no header bar in short landscape');
-        assert(rail.left <= 26 && rail.w <= 64 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
+        assert(rail.left <= 26 && rail.w <= 100 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
         assert(cv.left >= rail.right - 1, tag + `the canvas is right of the rail (canvas ${cv.left}, rail ${rail.right})`);
         assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1`), true, tag + 'the page does not scroll');
-        assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group-label')].every((g) => getComputedStyle(g).display === 'none')`), true, tag + 'no group labels in the rail');
-
-        // a real swipe scrolls the rail
-        await evalJs(`document.querySelector('.sk-ribbon').scrollTop = 0`);
-        const sx = Math.round(rail.left + rail.w / 2), y0 = Math.round(rail.bottom - 30), y1 = Math.round(rail.top + 30);
-        await T('touchStart', [{ x: sx, y: y0 }]);
-        for (let i = 1; i <= 10; i++) { await T('touchMove', [{ x: sx, y: Math.round(y0 + (y1 - y0) * i / 10) }]); await sleep(16); }
-        await T('touchEnd', []); await sleep(500);
-        const scrolled = await evalJs(`document.querySelector('.sk-ribbon').scrollTop`);
-        assert(scrolled > 20, tag + 'a finger swipe scrolls the rail: scrollTop ' + scrolled);
+        // TASK 647: the rail never scrolls; each section (but Select) has its name beside its icons: the 44 px dropdown button
+        assert.strictEqual(await evalJs(`(() => { const r = document.querySelector('.sk-ribbon'); return r.scrollHeight <= r.clientHeight; })()`), true, tag + 'the rail does not scroll');
+        assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group:not([data-fixed]) .sk-ribbon-group-label')].every((g) => { const r = g.getBoundingClientRect(); return g.tagName === 'BUTTON' && r.width >= 44 && r.height >= 44; }) && getComputedStyle(document.querySelector('.sk-ribbon-group[data-fixed] .sk-ribbon-group-label')).display === 'none'`), true, tag + 'every section name is a 44 px dropdown button in the rail; Select has none');
 
         // every rail button: reachable, 44 px, not covered; a tool button activates with a real tap
-        const n = await evalJs(`document.querySelectorAll('.sk-ribbon .sk-ribbon-btn').length`);
+        const n = await evalJs(`document.querySelectorAll('.sk-ribbon .sk-ribbon-btn:not([hidden])').length`);
         const tapped = [];
         for (let i = 0; i < n; i++) {
           await evalJs(`${btn(i)}.scrollIntoView({ block: 'nearest' })`); await sleep(120);
@@ -101,14 +94,22 @@ export async function runPhoneLandscape(hostName) {
               assert.strictEqual(await evalJs(`!document.querySelector('.sk-ribbon-menu.show') && document.querySelector('.sk-ribbon-menu [data-mode="${centre.mode}"]').classList.contains('active') && ${btn(i)}.classList.contains('active')`), true, t + ': the tapped variant is chosen, rect stays active');
             }
           } else if (info.id === 'btn-parameters') {
-            await tap(b);
+            await tap(b); await checkParams(t);
+          }
+        }
+        // TASK 647: Parameters is in the Inspect dropdown by default (Inspect shows Dim): tap the section's name, then its row
+        if (await evalJs(`!!document.getElementById('btn-parameters') && document.getElementById('btn-parameters').hidden`)) {
+          await tap(await rectOf(`document.querySelector('[data-section="inspect"] .sk-ribbon-group-label')`));
+          await tap(await rectOf(`document.querySelector('.sk-ribbon-sect-menu.show [data-id="btn-parameters"]')`));
+          await checkParams(tag + 'Parameters from the Inspect dropdown');
+        }
+        async function checkParams(t) { // the Parameters window opens inside the viewport; its close button closes it
             const win = await rectOf(`document.querySelector('.sk-pwin')`);
-            assert.strictEqual(await evalJs(`${btn(i)}.getAttribute('aria-pressed')`), 'true', t + ': a tap opens the Parameters window');
+            assert.strictEqual(await evalJs(`document.getElementById('btn-parameters').getAttribute('aria-pressed')`), 'true', t + ': a tap opens the Parameters window');
             assert(win && win.left >= 0 && win.top >= 0 && win.right <= size.w + 0.5 && win.bottom <= size.h + 0.5, t + ': the window is inside the viewport: ' + JSON.stringify(win));
             const x = await rectOf(`document.querySelector('.sk-pwin [aria-label="Close"]')`);
             await tap(x);
-            assert.strictEqual(await evalJs(`${btn(i)}.getAttribute('aria-pressed')`), 'false', t + ': its close button closes it');
-          }
+            assert.strictEqual(await evalJs(`document.getElementById('btn-parameters').getAttribute('aria-pressed')`), 'false', t + ': its close button closes it');
         }
         assert(tapped.includes('select') && tapped.includes('line') && tapped.includes('dim') && tapped.includes('coincident'), tag + 'tools tapped: ' + tapped.join(','));
         await evalJs(`document.getElementById('tool-select').scrollIntoView({ block: 'nearest' })`); await sleep(100);

@@ -70,7 +70,7 @@ try {
 
   // ---- the ribbon's Mirror, the objects by clicks, Enter, the mirror line, Enter
   ok(!!app.document.getElementById('tool-mirror'), 'the ribbon has #tool-mirror');
-  ok(app.document.getElementById('tool-mirror').closest('.sk-ribbon-group').querySelector('.sk-ribbon-group-label').textContent === 'Create', 'Mirror sits in the Create group');
+  ok(app.document.getElementById('tool-mirror').closest('.sk-ribbon-group').querySelector('.sk-ribbon-group-label').textContent === 'Modify', 'Mirror sits in the Modify group (TASK 647 owner ruling; Fusion keeps it under Create)');
   st().selectedShapes.clear(); st().selectedJoints.clear();
   app.tool('mirror');
   ok(st().currentTool === 'mirror' && st().mirror.step === 'objects', 'nothing selected: the tool starts at the OBJECTS step');

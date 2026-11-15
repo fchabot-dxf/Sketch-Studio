@@ -293,6 +293,7 @@ export function mountSketchStage(view, ctx = {}) {
   const freehandActive = (on) => { const b = view.querySelector('#freehand-btn'); if (b) b.classList.toggle('active', on); };
   ribbon = createToolRibbon({
     state: controller.state,
+    appId: 'penplotter', // TASK 647: the user's ribbon layout is kept per app
     extraGroups: [{ label: 'Draw', buttons: [{
       id: 'freehand-btn', label: 'Freehand', svg: FREEHAND_ICON, title: 'Freehand — draw a stroke, fitted to smooth beziers',
       onClick: () => { controller.state.currentTool = 'freehand'; ribbon.refresh(); freehandActive(true); },

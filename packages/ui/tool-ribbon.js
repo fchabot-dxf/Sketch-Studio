@@ -14,24 +14,38 @@ import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
+import { loadSection, saveSection, defaultSection } from '#ui/ribbon-layout.js';
+
+// TASK 647: the ribbon never scrolls. Each section shows the tools that are "in the bar" (the user's checkboxes) and fit, then its NAME, a button
+// that opens the section's dropdown (every tool of the section: run it, check it in / out of the bar, hold-drag its grip to reorder). The fit
+// aims for MIN_PER_SECTION_PREFERRED tools in every section; where that cannot fit for every section it is MIN_PER_SECTION; the space left is
+// shared out in section order (see fit()).
+export const MIN_PER_SECTION_PREFERRED = 2;
+export const MIN_PER_SECTION = 1;
+const HOLD_MS = 300;      // a press on a grip held this long (without moving HOLD_SLOP px) starts the reorder drag; a move before it is a scroll
+const HOLD_SLOP = 6;
 
 // The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label).
-const CREATE = [
+// TASK 647: Select is its own section, first, like Fusion's SELECT panel.
+const SELECT = [
   { tool: TOOL_MODES.SELECT, icon: 'icon-tool-select',  label: 'Select' },
-  { tool: TOOL_MODES.LINE,   icon: 'icon-tool-line',    label: 'Line' },
+];
+const CREATE = [
+  { tool: TOOL_MODES.LINE,  icon: 'icon-tool-line',    label: 'Line' },
   { tool: TOOL_MODES.RECT,   icon: 'icon-tool-rect-2pt', label: 'Rect', rectDropdown: true },
   { tool: TOOL_MODES.CIRCLE, icon: 'icon-tool-circle',  label: 'Circle' },
   { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon', label: 'Polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
   { tool: TOOL_MODES.ARC,    icon: 'icon-tool-arc-cse', label: 'Arc' }, // single-mode in the source (no dropdown)
   { tool: TOOL_MODES.BEZIER, icon: 'icon-tool-bezier',  label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
-  // TASK 585: like Fusion's Create > Mirror (owner: "always the create menu"). `begin` runs when the button starts the tool (the pre-selection).
-  { tool: TOOL_MODES.MIRROR, icon: 'icon-tool-mirror',  label: 'Mirror', title: 'Mirror: the objects, then the mirror line, then Enter', begin: beginMirror },
 ];
 // TRACE-1: Edit/modify tools — trim + break. No cursor-manager symbols yet; icons provided as SVG inline.
 const EDIT = [
   { tool: TOOL_MODES.TRIM,  iconSvg: '<path d="M4 12h6M14 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#ef4444"/>', label: 'Trim' },
   { tool: TOOL_MODES.BREAK, iconSvg: '<path d="M5 12h5M14 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="#fbbf24" stroke-width="2" fill="none"/>', label: 'Break' },
   { tool: TOOL_MODES.FILLET, iconSvg: '<path d="M5 19V12a7 7 0 0 1 7-7h7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M5 12V5h7" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none"/>', label: 'Fillet' },
+  // TASK 585: Mirror. `begin` runs when the button starts the tool (the pre-selection). TASK 647 (owner): in Modify after Fillet, not Create
+  // (Fusion keeps Mirror under CREATE: a declared divergence).
+  { tool: TOOL_MODES.MIRROR, icon: 'icon-tool-mirror',  label: 'Mirror', title: 'Mirror: the objects, then the mirror line, then Enter', begin: beginMirror },
 ];
 
 // Profile actions (COMBINE / UNCOMBINE): opt-in for hosts declaring profiles: true
@@ -67,7 +81,7 @@ const RECT_VARIANTS = [
 
 // Every #icon-* the ribbon references (for inject-if-missing).
 const ICON_IDS = [
-  ...CREATE.map(t => t.icon), ...INSPECT.map(t => t.icon), ...CONSTRAIN.map(t => t.icon), LOCK.icon,
+  ...SELECT.map(t => t.icon), ...CREATE.map(t => t.icon), ...EDIT.filter(t => t.icon).map(t => t.icon), ...INSPECT.map(t => t.icon), ...CONSTRAIN.map(t => t.icon), LOCK.icon,
   ...RECT_VARIANTS.map(v => v.icon),
 ];
 
@@ -79,24 +93,27 @@ function injectStyles() {
   s.id = 'sk-ribbon-styles';
   s.textContent = `
 .sk-ribbon { display: flex; align-items: stretch; gap: 4px; background: var(--sk-ribbon-bg, #fff);
-  padding: 4px 2px; font: 12px system-ui, sans-serif; box-sizing: border-box;
-  overflow-x: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x; scrollbar-width: thin; }
+  padding: 4px 2px; font: 12px system-ui, sans-serif; box-sizing: border-box; overflow: hidden; }
 .sk-ribbon * { box-sizing: border-box; }
-@media (hover: none) {
-  /* Touch devices: hide the scrollbar but keep native horizontal panning/swipe */
-  .sk-ribbon { scrollbar-width: none; }
-  .sk-ribbon::-webkit-scrollbar { display: none; }
-}
 .sk-ribbon-group { display: flex; flex-direction: column; align-items: center; padding: 0 8px;
   flex-shrink: 0; border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
 .sk-ribbon-group:last-child { border-right: 0; }
 .sk-ribbon-btns { display: flex; gap: 2px; }
 .sk-ribbon-group-label { font-size: 8px; font-weight: 900; text-transform: uppercase; margin-top: 4px;
   color: var(--sk-ribbon-grouplabel, #cbd5e1); letter-spacing: 0.02em; }
+/* TASK 647: a section's NAME is the button that opens its dropdown (the caret after the name); a fixed section (Select) has a plain name. */
+button.sk-ribbon-group-label { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 1px 5px; border: 0; border-radius: 4px;
+  background: transparent; font-family: inherit; line-height: 1.2; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.sk-ribbon-group-label::after { content: ''; flex-shrink: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 4px solid currentColor; }
+button.sk-ribbon-group-label:hover, button.sk-ribbon-group-label[aria-expanded="true"] { background: var(--sk-ribbon-hover, #f0f0f0); color: var(--sk-ribbon-fg, #334155); }
+button.sk-ribbon-group-label:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; }
+/* the active tool lives only in this section's dropdown: the section's name is lit */
+button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); color: #fff; }
 .sk-ribbon-btn { position: relative; display: flex; flex-direction: column; align-items: center;
   justify-content: center; width: 48px; height: 56px; border-radius: 6px; border: 1px solid transparent;
   background: transparent; color: var(--sk-ribbon-fg, inherit); cursor: pointer; transition: all 0.15s;
   user-select: none; -webkit-tap-highlight-color: transparent; }
+.sk-ribbon-btn[hidden] { display: none; } /* TASK 647: a tool that is not in the bar, or does not fit (it is in its section's dropdown) */
 .sk-ribbon-btn:hover { background: var(--sk-ribbon-hover, #f0f0f0); }
 .sk-ribbon-btn:active { transform: scale(0.95); }
 .sk-ribbon-btn[aria-haspopup]:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; } /* the pop-up opener only (TASK 535-4) */
@@ -109,36 +126,69 @@ function injectStyles() {
 .sk-ribbon-btn.active .sk-ribbon-ic { color: #fff; }
 .sk-ribbon-ic { width: 18px; height: 18px; display: block; }
 .sk-ribbon-lbl { font-size: 8px; font-weight: 900; text-transform: uppercase; margin-top: 4px; white-space: nowrap; }
-.sk-ribbon-dd { position: relative; }
 .sk-ribbon-dd-ind { position: absolute; bottom: 2px; right: 2px; width: 0; height: 0;
   border-left: 3px solid transparent; border-right: 3px solid transparent;
   border-top: 3px solid var(--sk-ribbon-grouplabel, #94a3b8); }
 .sk-ribbon-btn.active .sk-ribbon-dd-ind { border-top-color: #fff; }
-.sk-ribbon-menu { display: none; position: fixed; left: 0; top: 0; z-index: 9999; min-width: 160px; overflow-y: auto;
+/* the popovers (TASK 607 Rect variants, TASK 647 section dropdowns): on document.body, placed by placePopover() */
+.sk-ribbon-menu, .sk-ribbon-sect-menu { display: none; position: fixed; left: 0; top: 0; z-index: 9999; min-width: 160px; overflow-y: auto;
   padding: 4px 0; background: var(--sk-ribbon-menu-bg, #fff); border: 1px solid var(--sk-ribbon-sep, #cbd5e1);
-  border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
-.sk-ribbon-menu.show { display: block; }
+  border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); font: 12px system-ui, sans-serif; color: var(--sk-ribbon-fg, inherit); }
+.sk-ribbon-menu.show, .sk-ribbon-sect-menu.show { display: block; }
 .sk-ribbon-menu-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer;
   font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--sk-ribbon-fg, inherit); }
 .sk-ribbon-menu-item:hover { background: var(--sk-ribbon-hover, #f3f4f6); }
 .sk-ribbon-menu-item.active { background: var(--sk-selection, #3B82F6); color: #fff; }
 .sk-ribbon-menu-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+/* a section dropdown row: [in the bar checkbox] [the tool: runs it] [grip: hold-drag to reorder] */
+.sk-ribbon-sect-menu { touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.sk-ribbon-sect-row { display: flex; align-items: stretch; }
+.sk-ribbon-sect-row.dragging { background: var(--sk-ribbon-hover, #f3f4f6); box-shadow: 0 2px 10px rgba(0,0,0,0.2); position: relative; z-index: 1; }
+.sk-ribbon-sect-check { display: flex; align-items: center; justify-content: center; width: 32px; flex-shrink: 0; cursor: pointer; }
+.sk-ribbon-sect-check input { margin: 0; width: 14px; height: 14px; cursor: inherit; }
+.sk-ribbon-sect-item { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 0; background: transparent;
+  font: 600 11px system-ui, sans-serif; color: inherit; text-align: left; white-space: nowrap; cursor: pointer; border-radius: 4px; }
+.sk-ribbon-sect-item:hover { background: var(--sk-ribbon-hover, #f3f4f6); }
+.sk-ribbon-sect-item.active { background: var(--sk-selection, #3B82F6); color: #fff; }
+.sk-ribbon-sect-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.sk-ribbon-sect-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.sk-ribbon-grip { display: flex; align-items: center; justify-content: center; width: 28px; flex-shrink: 0; cursor: grab; color: var(--sk-ribbon-grouplabel, #94a3b8); }
+.sk-ribbon-sect-row.dragging .sk-ribbon-grip { cursor: grabbing; }
+.sk-ribbon-grip svg { width: 12px; height: 16px; }
+.sk-ribbon-sect-foot { display: flex; justify-content: flex-end; padding: 2px 6px 0; border-top: 1px solid var(--sk-ribbon-sep, #e2e8f0); margin-top: 4px; }
+.sk-ribbon-sect-reset { border: 0; background: transparent; padding: 6px; font: 600 11px system-ui, sans-serif; color: var(--sk-selection, #3B82F6);
+  text-decoration: underline; cursor: pointer; }
 /* TASK 562: a finger. Buttons >= 44 px (here 62 x 60), labels >= 12 px, menu rows 44 px. Desktop (a mouse) is untouched. */
 @media (pointer: coarse) {
   .sk-ribbon-btn { width: 62px; height: 60px; }
   .sk-ribbon-lbl, .sk-ribbon-group-label { font-size: 12px; font-weight: 700; }
   .sk-ribbon-menu-item { min-height: 44px; font-size: 14px; }
+  .sk-ribbon-sect-check, .sk-ribbon-grip { width: 44px; min-height: 44px; }
+  .sk-ribbon-sect-check input { width: 20px; height: 20px; }
+  .sk-ribbon-sect-item { min-height: 44px; font-size: 14px; }
+  .sk-ribbon-sect-item svg { width: 20px; height: 20px; }
+  .sk-ribbon-sect-reset { min-height: 44px; min-width: 44px; font-size: 14px; }
 }
-/* TASK 562: at phone width an edge fade says the ribbon scrolls: the JS sets data-fade (left / right / both) from the scroll position. */
-@media (max-width: 640px) {
-  .sk-ribbon[data-fade="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); }
-  .sk-ribbon[data-fade="left"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px); mask-image: linear-gradient(to right, transparent 0, #000 28px); }
-  .sk-ribbon[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
+/* TASK 647: a PHONE held upright: icon-only tool buttons (the label stays in the button, visually hidden: still the accessible name),
+   44 x 44 targets, tighter spacing; each section's name row is a 44 px tall dropdown button; the fixed Select section has no name row. */
+@media (pointer: coarse) and (max-width: 640px) {
+  .sk-ribbon { gap: 0; padding: 2px 0; }
+  .sk-ribbon-group { padding: 0 1px; }
+  .sk-ribbon-btns { gap: 0; }
+  .sk-ribbon-btn { width: 44px; height: 44px; }
+  .sk-ribbon-ic { width: 24px; height: 24px; }
+  .sk-ribbon-lbl { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .sk-ribbon-group-label { margin-top: 0; }
+  /* the caret sits UNDER the name (no width: the names are what decides how many tools fit on a phone) */
+  button.sk-ribbon-group-label { position: relative; min-height: 44px; min-width: 44px; padding: 0 3px 6px; }
+  button.sk-ribbon-group-label::after { position: absolute; left: 50%; bottom: 7px; margin-left: -3px; }
+  .sk-ribbon-group[data-fixed] .sk-ribbon-group-label { display: none; }
 }
 /* TASK 602: a SHORT viewport (a phone in landscape, #ui/short-viewport.js) has width to spare and no height: the ribbon is a vertical ICON RAIL on
    the LEFT of its design frame. render(container) marks the container sk-ribbon-host and the container's parent sk-ribbon-frame (every host's
-   Design view: [ribbon container, then the work area]). The frame becomes two columns: the rail, then the work area. Icons only, 48 x 48 buttons; the label stays in the button (visually hidden) so it is
-   still the accessible name, and the button's title. The rail scrolls vertically under a finger. Nothing changes outside this query.
+   Design view: [ribbon container, then the work area]). The frame becomes two columns: the rail, then the work area. Icons only, 44 x 44 buttons; the label stays in the button (visually hidden) so it is
+   still the accessible name, and the button's title. TASK 647: the rail never scrolls; each section is a row: its column of shown icons, then its
+   NAME written vertically (the 44 px wide dropdown button); the fixed Select section has no name. Nothing changes outside this query.
    display needs !important: each host styles its frame by id (#design-view { display: flex }), and an id beats any class; :not([hidden])
    keeps a host's own hidden frame hidden. */
 @media ${SHORT_VIEWPORT_QUERY} {
@@ -148,13 +198,15 @@ function injectStyles() {
   .sk-ribbon-frame > footer { grid-column: 2; grid-row: 2; } /* TASK 618: SketchStudio's status bar (the footer) under the work area, right of the rail */
   .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; width: auto; padding: 0 0 0 24px;
     overflow: hidden; border-bottom: 0; border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
-  .sk-ribbon { flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; height: 100%; gap: 0; padding: 2px;
-    overflow-x: hidden; overflow-y: auto; touch-action: pan-y; -webkit-mask-image: none; mask-image: none; }
-  .sk-ribbon-group { flex-direction: column; padding: 4px 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
+  .sk-ribbon { flex: 1 1 auto; flex-direction: column; align-items: stretch; min-height: 0; height: 100%; gap: 0; padding: 2px; }
+  .sk-ribbon-group { flex-direction: row; align-items: flex-start; padding: 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
   .sk-ribbon-group:last-child { border-bottom: 0; }
-  .sk-ribbon-btns { flex-direction: column; }
-  .sk-ribbon-group-label { display: none; }
-  .sk-ribbon-btn { width: 48px; height: 48px; }
+  .sk-ribbon-btns { flex-direction: column; gap: 0; }
+  .sk-ribbon-group-label { margin: 0; }
+  button.sk-ribbon-group-label { position: relative; writing-mode: vertical-rl; min-width: 44px; min-height: 44px; padding: 2px 6px 2px 0; }
+  button.sk-ribbon-group-label::after { position: absolute; right: 8px; top: 50%; margin-top: -2px; }
+  .sk-ribbon-group[data-fixed] .sk-ribbon-group-label { display: none; }
+  .sk-ribbon-btn { width: 44px; height: 44px; }
   .sk-ribbon-ic { width: 24px; height: 24px; }
   .sk-ribbon-lbl { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 }
@@ -169,18 +221,65 @@ function iconSvg(iconId, cls = 'sk-ribbon-ic') {
   return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><use href="#${iconId}" width="24" height="24"/></svg>`;
 }
 
+const GRIP_SVG = '<svg viewBox="0 0 12 16" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.5"/><circle cx="9" cy="3" r="1.5"/><circle cx="3" cy="8" r="1.5"/><circle cx="9" cy="8" r="1.5"/><circle cx="3" cy="13" r="1.5"/><circle cx="9" cy="13" r="1.5"/></g></svg>';
+
+// TASK 607 / 647: THE placement of a ribbon popover (the Rect variants menu, a section dropdown): from its anchor's rect, kept inside the
+// viewport: below the anchor in the bar, beside the RAIL (the ribbon `edge`, not just the anchor: the rail has a column of section names right of
+// the icons) in the short-viewport rail.
+function placePopover(menu, anchor, edge) {
+  const r = anchor.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, pad = 4;
+  menu.style.maxHeight = (vh - 2 * pad) + 'px';
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  const beside = isShortViewport();
+  const left = beside ? Math.max(r.right, edge.getBoundingClientRect().right) + pad : r.left, top = beside ? r.top : r.bottom + 2;
+  menu.style.left = Math.round(Math.max(pad, Math.min(left, vw - w - pad))) + 'px';
+  menu.style.top = Math.round(Math.max(pad, Math.min(top, vh - h - pad))) + 'px';
+}
+
+// A popover on document.body (a ribbon clips any child). It closes on Esc (focus back to its anchor when the focus was inside), an outside
+// press or click (#ui/outside-press.js: a DISABLED button never fires click, so the press counts) and the window resizing; the listeners
+// exist only while it is open. onClose runs after every close. "Outside" is read from the event's dispatch path, not its target: a press on a
+// control the popover then rebuilds (the dropdown's Reset) has a detached target by the time the click arrives, yet it was inside.
+function createPopover(menu, edge, onClose = null) {
+  let anchor = null, stopOutside = null;
+  const onOutside = (ev) => { const path = ev.composedPath(); if (!path.includes(menu) && !(anchor && path.includes(anchor))) close(); };
+  const onKey = (ev) => {
+    if (ev.key !== 'Escape') return;
+    const back = anchor && menu.contains(document.activeElement) ? anchor : null;
+    close(); if (back) back.focus();
+  };
+  function open(a) {
+    anchor = a; menu.classList.add('show'); placePopover(menu, a, edge);
+    stopOutside = listenOutsidePress(onOutside); document.addEventListener('keydown', onKey); window.addEventListener('resize', close);
+  }
+  function close() {
+    if (!menu.classList.contains('show')) return;
+    menu.classList.remove('show');
+    if (stopOutside) { stopOutside(); stopOutside = null; }
+    document.removeEventListener('keydown', onKey); window.removeEventListener('resize', close);
+    anchor = null;
+    if (onClose) onClose();
+  }
+  return { open, close, isOpen: () => menu.classList.contains('show'), anchor: () => anchor };
+}
+
+const px = (v) => parseFloat(v) || 0;
+
 /**
- * createToolRibbon({ state, extraGroups, on, onToolClick }) → { el, render(container), refresh, destroy }
- *   Renders Create + Inspect + Constrain (icon-over-label .sk-ribbon-btn); the rect button gets a 2pt/center/3pt
- *   variant dropdown (sets state.rectMode). refresh() syncs .active to state.currentTool.
- *   extraGroups: [{ label, buttons:[{ icon?|svg?, label?, title?, id?, event?, onClick? }] }] — host-appended.
+ * createToolRibbon({ state, appId, extraGroups, on, onToolClick }) → { el, render(container), refresh, destroy }
+ *   Renders the sections Select | Create | Modify | Inspect | Constrain (+ the host's extraGroups) as icon-over-label .sk-ribbon-btn buttons
+ *   (icon only on phones); the rect button gets a 2pt/center/3pt variant dropdown (sets state.rectMode). refresh() syncs .active to state.currentTool.
+ *   TASK 647: a section DECLARES { key, label, tools, fixed?, defaultInBar? }: fixed = always shown whole, no dropdown (Select); defaultInBar = how
+ *     many of its first tools are "in the bar" by default (all when absent). Every other tool is in the section's dropdown (its name button).
+ *   appId: the host's id (the one it gives app-chrome); the user's layout (checkboxes, order) is saved per appId (#ui/ribbon-layout.js).
+ *   extraGroups: [{ label, defaultInBar?, buttons:[{ icon?|svg?, label?, title?, id?, event?, onClick? }] }] — host-appended sections.
  *   on(name, detail): optional event hook ('tool' on a tool switch, 'rectMode', 'action' for extra buttons).
  *   parameters (default true): the "fx Parameters" button + its pop-up window in the Inspect group; false = a declared opt-out (Trace).
  *   onToolClick(tool): optional host override — when given, a tool-button click (and a rect-variant select, after
  *     state.rectMode is set) calls THIS instead of the internal switchToTool, so a host (e.g. SketchStudio) routes
  *     tool activation to its OWN rich handler. When absent, the ribbon uses switchToTool (Shaper/standalone path).
  */
-export function createToolRibbon({ state, extraGroups = [], on = null, onToolClick = null, profiles = false, parameters = true, notify = null } = {}) {
+export function createToolRibbon({ state, appId = 'default', extraGroups = [], on = null, onToolClick = null, profiles = false, parameters = true, notify = null } = {}) {
   injectStyles();
   ensureIconSymbols(ICON_IDS);
 
@@ -203,13 +302,8 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     refresh();
   }
 
-  function group(label, frag) {
-    const g = document.createElement('div'); g.className = 'sk-ribbon-group';
-    const row = document.createElement('div'); row.className = 'sk-ribbon-btns'; row.appendChild(frag);
-    const lab = document.createElement('div'); lab.className = 'sk-ribbon-group-label'; lab.textContent = label;
-    g.append(row, lab); return g;
-  }
-  function toolButton(t) {
+  // Each tool of a section is an ITEM: { id, label, btn (its bar button), tool?, run(anchor) }. The bar button and the dropdown row both call run.
+  function toolItem(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
     if (t.id) b.id = t.id;
     else if (t.tool) b.id = 'tool-' + t.tool;
@@ -224,7 +318,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
       ? `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true">${t.iconSvg}</svg>`
       : iconSvg(t.icon);
     b.innerHTML = icon + `<span class="sk-ribbon-lbl">${t.label}</span>`;
-    b.addEventListener('click', () => {
+    const run = () => {
       if (t.action) {
         if (typeof t.onClick === 'function') t.onClick();
         if (t.action === 'lock') { toggleFixedSelection(state); refresh(); }
@@ -235,13 +329,13 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
       } else {
         selectTool(t.tool, t.begin);
       }
-    });
+    };
+    b.addEventListener('click', run);
     if (t.tool) toolBtns.push({ btn: b, tool: t.tool });
-    return b;
+    return { id: b.id, label: t.label, btn: b, tool: t.tool || null, run };
   }
-  function rectButton(t) {
-    const wrap = document.createElement('div'); wrap.className = 'sk-ribbon-dd';
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
+  function rectItem(t) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn sk-ribbon-dd';
     b.dataset.tool = t.tool; b.title = t.label;
     if (t.tool) b.id = 'tool-' + t.tool;
     b.innerHTML = iconSvg(t.icon) + `<span class="sk-ribbon-lbl">${t.label}</span><span class="sk-ribbon-dd-ind"></span>`;
@@ -249,6 +343,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     toolBtns.push({ btn: b, tool: t.tool });
 
     const menu = document.createElement('div'); menu.className = 'sk-ribbon-menu';
+    const pop = createPopover(menu, el);
     RECT_VARIANTS.forEach((v) => {
       const item = document.createElement('div'); item.className = 'sk-ribbon-menu-item'; item.dataset.mode = v.mode;
       item.innerHTML = iconSvg(v.icon, '') + `<span>${v.label}</span>`;
@@ -258,79 +353,227 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
         if (state) state.rectMode = v.mode;
         if (useEl) useEl.setAttribute('href', '#' + v.icon);
         menu.querySelectorAll('.sk-ribbon-menu-item').forEach(i => i.classList.toggle('active', i.dataset.mode === v.mode));
-        closeMenu();
+        pop.close();
         selectTool(t.tool);     // switch to rect with the chosen variant
         fire('rectMode', v.mode);
       });
       menu.appendChild(item);
     });
-    // TASK 607: the variants menu is a POPOVER: it lives on document.body (a ribbon is a scroll box and clips any child, absolute or fixed under a
-    // mask) and is placed from the button's rect, kept inside the viewport: below the button in the bar, beside it in the short-viewport rail.
-    // It closes on Esc, an outside press or click, the ribbon scrolling and the window resizing; the listeners exist only while it is open.
-    // An outside press is caught at pointerdown because a DISABLED button (e.g. the footer's Clear sketch on an empty sketch) never fires click.
-    const closeMenu = () => {
-      menu.classList.remove('show');
-      if (stopOutside) { stopOutside(); stopOutside = null; }
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', closeMenu); el.removeEventListener('scroll', closeMenu);
+    // TASK 607: the variants menu is a POPOVER (createPopover), placed from the button's rect; TASK 647: from the section's dropdown it is
+    // placed from the section's name button (the rect button may not be in the bar).
+    const run = (anchor) => {
+      selectTool(t.tool);
+      if (pop.isOpen() && pop.anchor() === anchor) pop.close();
+      else { pop.close(); pop.open(anchor); }
     };
-    let stopOutside = null;
-    const onOutside = (ev) => { if (!menu.contains(ev.target) && !b.contains(ev.target)) closeMenu(); };
-    const onKey = (ev) => { if (ev.key === 'Escape') closeMenu(); };
-    const openMenu = () => {
-      menu.classList.add('show');
-      const r = b.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, pad = 4;
-      menu.style.maxHeight = (vh - 2 * pad) + 'px';
-      const w = menu.offsetWidth, h = menu.offsetHeight;
-      const beside = isShortViewport();
-      const left = beside ? r.right + pad : r.left, top = beside ? r.top : r.bottom + 2;
-      menu.style.left = Math.round(Math.max(pad, Math.min(left, vw - w - pad))) + 'px';
-      menu.style.top = Math.round(Math.max(pad, Math.min(top, vh - h - pad))) + 'px';
-      stopOutside = listenOutsidePress(onOutside); document.addEventListener('keydown', onKey);
-      window.addEventListener('resize', closeMenu); el.addEventListener('scroll', closeMenu);
-    };
-    b.addEventListener('click', (ev) => {
-      ev.stopPropagation(); selectTool(t.tool);
-      if (menu.classList.contains('show')) closeMenu(); else openMenu();
-    });
+    b.addEventListener('click', (ev) => { ev.stopPropagation(); run(b); });
     menus.push(menu);
     document.body.appendChild(menu);
-    wrap.append(b);
-    return wrap;
+    return { id: b.id, label: t.label, btn: b, tool: t.tool, run };
   }
-  function extraButton(bd) {
+  function extraItem(bd, sectionKey, i) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
-    if (bd.id) b.id = bd.id; b.title = bd.title || bd.label || '';
+    b.id = bd.id || ('extra-' + sectionKey + '-' + i); b.title = bd.title || bd.label || '';
     b.innerHTML = (bd.icon ? iconSvg(bd.icon) : (bd.svg || '')) + `<span class="sk-ribbon-lbl">${bd.label || ''}</span>`;
-    b.addEventListener('click', () => { try { bd.onClick && bd.onClick(); } catch (_) {} fire('action', { id: bd.id, event: bd.event }); });
-    return b;
+    const run = () => { try { bd.onClick && bd.onClick(); } catch (_) {} fire('action', { id: bd.id, event: bd.event }); };
+    b.addEventListener('click', run);
+    return { id: b.id, label: bd.label || '', btn: b, tool: null, run };
   }
 
-  function buildGroup(label, defs, makeBtn) {
-    const frag = document.createDocumentFragment();
-    defs.forEach(d => frag.appendChild(makeBtn(d)));
-    el.appendChild(group(label, frag));
-  }
-  // CREATE (rect gets the dropdown), EDIT (trim/break/fillet + opt-in profile actions), INSPECT, CONSTRAIN
-  buildGroup('Create', CREATE, (t) => (t.rectDropdown ? rectButton(t) : toolButton(t)));
-  const modifyTools = profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT;
-  buildGroup('Modify', modifyTools, toolButton);  // TRACE-1: trim + break
-  buildGroup('Inspect', parameters ? [...INSPECT, PARAMETERS] : INSPECT, toolButton);
-  buildGroup('Constrain', [...CONSTRAIN, LOCK], toolButton);
+  // TASK 647: the sections, DECLARED (fixed / defaultInBar are data on the section, read by the one layout engine below).
+  const SECTION_DECLS = [
+    { key: 'select', label: 'Select', fixed: true, tools: SELECT },
+    { key: 'create', label: 'Create', tools: CREATE },
+    { key: 'modify', label: 'Modify', defaultInBar: 1, tools: profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT }, // TRACE-1: trim + break (+ opt-in profile actions)
+    { key: 'inspect', label: 'Inspect', defaultInBar: 1, tools: parameters ? [...INSPECT, PARAMETERS] : INSPECT },
+    { key: 'constrain', label: 'Constrain', tools: [...CONSTRAIN, LOCK] },
+    // app-specific groups (Draw / …) appended by the host behave like the built-in ones
+    ...(extraGroups || []).map((g, i) => ({ key: String(g.label || 'group-' + i).toLowerCase(), label: g.label || '', defaultInBar: g.defaultInBar, buttons: g.buttons || [] })),
+  ];
+
+  const sections = SECTION_DECLS.map((d) => {
+    const items = d.buttons ? d.buttons.map((bd, i) => extraItem(bd, d.key, i)) : d.tools.map((t) => (t.rectDropdown ? rectItem(t) : toolItem(t)));
+    const g = document.createElement('div'); g.className = 'sk-ribbon-group'; g.dataset.section = d.key;
+    if (d.fixed) g.dataset.fixed = '';
+    const row = document.createElement('div'); row.className = 'sk-ribbon-btns';
+    items.forEach((it) => row.appendChild(it.btn));
+    const lab = document.createElement(d.fixed ? 'div' : 'button'); lab.className = 'sk-ribbon-group-label'; lab.textContent = d.label;
+    g.append(row, lab); el.appendChild(g);
+    const ids = items.map((it) => it.id);
+    const defaultInBar = d.defaultInBar == null ? ids.length : d.defaultInBar;
+    const sec = { key: d.key, label: d.label, fixed: !!d.fixed, el: g, row, nameEl: lab, items, ids, defaultInBar, limit: null,
+      layout: d.fixed ? defaultSection(ids) : loadSection(appId, d.key, ids, defaultInBar) };
+    if (!d.fixed) {
+      lab.type = 'button'; lab.setAttribute('aria-expanded', 'false');
+      lab.addEventListener('click', (ev) => { ev.stopPropagation(); toggleSection(sec, ev.detail === 0); });
+    }
+    return sec;
+  });
+  const itemOf = (sec, id) => sec.items.find((it) => it.id === id);
   const lockBtn = el.querySelector('#btn-lock');
+
+  // The bar follows the layout: the section's buttons in the user's order; a tool is shown when it is in the bar and among the first
+  // `limit` such (limit null = no fit yet: every tool in the bar shows). The DOM is reordered only when the order changed.
+  function applySection(sec) {
+    const order = sec.layout.order;
+    const now = [...sec.row.children].map((b) => b.id);
+    if (now.join('\n') !== order.join('\n')) order.forEach((id) => sec.row.appendChild(itemOf(sec, id).btn));
+    let shown = 0;
+    order.forEach((id) => {
+      const inBar = !sec.layout.off.has(id);
+      const show = inBar && (sec.limit == null || shown < sec.limit);
+      if (show) shown++;
+      itemOf(sec, id).btn.hidden = !show;
+    });
+  }
+
+  // THE fit: how many tools each section shows, from the available width (the height in the rail) on load and on every resize.
+  // Measured, not assumed: one tool slot (the Select button), each section's chrome (padding + border), its name's extent and the gaps.
+  // A section's extent is max(its shown icons, its name). Pass 1 raises every section, in section order, toward MIN_PER_SECTION_PREFERRED
+  // tools; if that cannot hold for every section, all sections start from MIN_PER_SECTION instead. Pass 2 shares what is left in section order.
+  function fit() {
+    const cs = getComputedStyle(el);
+    const rail = cs.flexDirection === 'column';
+    const avail = rail ? el.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom) : el.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight);
+    const unitRect = sections[0].items[0].btn.getBoundingClientRect();
+    const unit = rail ? unitRect.height : unitRect.width;
+    if (!(avail > 0) || !(unit > 0)) return; // not laid out (a hidden view): the ResizeObserver calls again once it is
+    const sectionGap = px(rail ? cs.rowGap : cs.columnGap);
+    const geo = sections.map((sec) => {
+      const gs = getComputedStyle(sec.el), rs = getComputedStyle(sec.row);
+      const chrome = rail ? px(gs.paddingTop) + px(gs.paddingBottom) + px(gs.borderTopWidth) + px(gs.borderBottomWidth)
+        : px(gs.paddingLeft) + px(gs.paddingRight) + px(gs.borderLeftWidth) + px(gs.borderRightWidth);
+      const ns = getComputedStyle(sec.nameEl), nr = sec.nameEl.getBoundingClientRect();
+      const name = rail ? nr.height + px(ns.marginTop) + px(ns.marginBottom) : nr.width + px(ns.marginLeft) + px(ns.marginRight);
+      const n = sec.layout.order.filter((id) => !sec.layout.off.has(id)).length;
+      return { chrome, gap: px(rail ? rs.rowGap : rs.columnGap), name, n, fixed: sec.fixed };
+    });
+    const size = (g, k) => g.chrome + Math.max(k > 0 ? k * unit + (k - 1) * g.gap : 0, g.name);
+    const room = avail - 1; // 1 px for sub-pixel rounding
+    const grow = (ks, cap) => {
+      let used = ks.reduce((t, k, i) => t + size(geo[i], k), 0) + sectionGap * (geo.length - 1);
+      geo.forEach((g, i) => {
+        while (ks[i] < Math.min(cap, g.n)) { const d = size(g, ks[i] + 1) - size(g, ks[i]); if (used + d > room) return; ks[i]++; used += d; }
+      });
+      return ks;
+    };
+    const start = (min) => geo.map((g) => (g.fixed ? g.n : Math.min(min, g.n)));
+    const fits = (ks) => ks.reduce((t, k, i) => t + size(geo[i], k), 0) + sectionGap * (geo.length - 1) <= room;
+    const ks = grow(grow(fits(start(MIN_PER_SECTION_PREFERRED)) ? start(MIN_PER_SECTION_PREFERRED) : start(MIN_PER_SECTION), MIN_PER_SECTION_PREFERRED), Infinity);
+    sections.forEach((sec, i) => { sec.limit = ks[i]; applySection(sec); });
+    refresh();
+  }
+  function relayout(sec) { applySection(sec); fit(); refresh(); }
+  function save(sec) { saveSection(appId, sec.key, sec.layout); }
+
+  // ── the section dropdown (one popover element, filled for the section it opens on)
+  const sectMenu = document.createElement('div'); sectMenu.className = 'sk-ribbon-sect-menu';
+  let openSec = null;
+  const sectPop = createPopover(sectMenu, el, () => { if (openSec) openSec.nameEl.setAttribute('aria-expanded', 'false'); openSec = null; });
+  menus.push(sectMenu);
+  document.body.appendChild(sectMenu);
+  sectMenu.addEventListener('contextmenu', (ev) => ev.preventDefault()); // a long press on a grip must not open the browser's menu
+
+  function toggleSection(sec, byKeyboard) {
+    if (openSec === sec) { sectPop.close(); return; }
+    sectPop.close();
+    openSec = sec; fillSection(sec);
+    sec.nameEl.setAttribute('aria-expanded', 'true');
+    sectPop.open(sec.nameEl);
+    if (byKeyboard) { const first = sectMenu.querySelector('.sk-ribbon-sect-item'); if (first) first.focus(); }
+  }
+  function fillSection(sec) {
+    sectMenu.innerHTML = '';
+    sectMenu.dataset.section = sec.key;
+    const list = document.createElement('div'); list.className = 'sk-ribbon-sect-list';
+    sec.layout.order.forEach((id) => list.appendChild(sectionRow(sec, itemOf(sec, id))));
+    const foot = document.createElement('div'); foot.className = 'sk-ribbon-sect-foot';
+    const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'sk-ribbon-sect-reset'; reset.textContent = 'Reset';
+    reset.addEventListener('click', () => {
+      sec.layout = defaultSection(sec.ids, sec.defaultInBar); saveSection(appId, sec.key, null);
+      fillSection(sec); relayout(sec);
+    });
+    foot.appendChild(reset);
+    sectMenu.append(list, foot);
+    syncRows();
+  }
+  function sectionRow(sec, it) {
+    const row = document.createElement('div'); row.className = 'sk-ribbon-sect-row'; row.dataset.id = it.id;
+    const chkWrap = document.createElement('label'); chkWrap.className = 'sk-ribbon-sect-check';
+    const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = !sec.layout.off.has(it.id);
+    chk.setAttribute('aria-label', it.label + ' in the bar');
+    chk.addEventListener('change', () => {
+      if (chk.checked) sec.layout.off.delete(it.id); else sec.layout.off.add(it.id);
+      save(sec); relayout(sec);
+    });
+    chkWrap.appendChild(chk);
+    const runBtn = document.createElement('button'); runBtn.type = 'button'; runBtn.className = 'sk-ribbon-sect-item'; runBtn.dataset.id = it.id;
+    const ic = it.btn.querySelector('svg');
+    if (ic) runBtn.appendChild(ic.cloneNode(true)); // the bar button's own icon (the rect button's shows its current variant)
+    const name = document.createElement('span'); name.textContent = it.label; runBtn.appendChild(name);
+    runBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const anchor = sec.nameEl;
+      sectPop.close();
+      it.run(anchor); // exactly the bar button's action (the Rect variants open from the section's name)
+    });
+    const grip = document.createElement('span'); grip.className = 'sk-ribbon-grip'; grip.setAttribute('aria-hidden', 'true'); grip.innerHTML = GRIP_SVG;
+    grip.addEventListener('pointerdown', (ev) => startHold(sec, row, ev));
+    row.append(chkWrap, runBtn, grip);
+    return row;
+  }
+  // Keeps an open dropdown's rows in step with the bar (the active tool lit, Lock disabled without a selection).
+  function syncRows() {
+    if (!openSec) return;
+    sectMenu.querySelectorAll('.sk-ribbon-sect-item').forEach((r) => {
+      const it = itemOf(openSec, r.dataset.id);
+      r.classList.toggle('active', it.btn.classList.contains('active'));
+      r.disabled = it.btn.disabled;
+    });
+  }
+
+  // Hold-then-drag on a grip (mouse and touch): a press held HOLD_MS without moving starts the drag; a move before that is a scroll of the list
+  // (touch-action pan-y), which the browser then owns. While dragging, the list does not scroll (touchmove is cancelled) and the row follows
+  // the pointer among its section's rows; the bar follows live; the order is saved on release.
+  function startHold(sec, row, ev) {
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+    if (ev.pointerType === 'mouse') ev.preventDefault(); // no text selection / focus move while holding
+    const pid = ev.pointerId, x0 = ev.clientX, y0 = ev.clientY;
+    let dragging = false;
+    const list = row.parentElement;
+    const noScroll = (e) => { if (dragging) e.preventDefault(); };
+    const timer = setTimeout(() => { dragging = true; row.classList.add('dragging'); }, HOLD_MS);
+    const onMove = (e) => {
+      if (e.pointerId !== pid) return;
+      if (!dragging) { if (Math.hypot(e.clientX - x0, e.clientY - y0) > HOLD_SLOP) end(); return; }
+      e.preventDefault();
+      const rows = [...list.children].filter((r) => r !== row);
+      const before = rows.find((r) => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+      if (before ? row.nextElementSibling !== before : list.lastElementChild !== row) {
+        list.insertBefore(row, before || null);
+        sec.layout.order = [...list.children].map((r) => r.dataset.id);
+        relayout(sec);
+      }
+    };
+    const end = () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', end);
+      sectMenu.removeEventListener('touchmove', noScroll);
+      if (dragging) { row.classList.remove('dragging'); save(sec); }
+      dragging = false;
+    };
+    const onUp = (e) => { if (e.pointerId === pid) end(); };
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', end);
+    sectMenu.addEventListener('touchmove', noScroll, { passive: false });
+  }
+
   // Selection changes arrive through pointer / key input (no selection event exists), so re-sync after them.
   const syncSoon = () => setTimeout(refresh, 0);
   document.addEventListener('pointerup', syncSoon);
   document.addEventListener('keyup', syncSoon);
 
   // TASK 618: Undo / Redo left the ribbon: one shared control in every host's header (history-control.js).
-
-  // app-specific groups (Actions / …) appended by the host
-  (extraGroups || []).forEach((grp) => {
-    const frag = document.createDocumentFragment();
-    (grp.buttons || []).forEach(bd => frag.appendChild(extraButton(bd)));
-    el.appendChild(group(grp.label || '', frag));
-  });
 
   const unlistenHistory = (state && typeof state.addHistoryListener === 'function')
     ? state.addHistoryListener(() => refresh())
@@ -344,19 +587,16 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     lockBtn.setAttribute('aria-pressed', String(lock.locked));
     const paramsBtn = el.querySelector('#btn-parameters');
     if (paramsBtn) paramsBtn.setAttribute('aria-pressed', String(!!(paramsWin && paramsWin.isOpen())));
+    // TASK 647: the active tool lives only in its section's dropdown -> the section's name is lit
+    sections.forEach((sec) => { if (!sec.fixed) sec.nameEl.classList.toggle('active', sec.items.some((it) => it.tool && it.tool === cur && it.btn.hidden)); });
+    syncRows();
   }
 
-  // TASK 562: the edge-fade cue. Each side fades only while there is more ribbon that way (CSS applies it at <= 640 px).
-  function syncFade() {
-    const max = el.scrollWidth - el.clientWidth;
-    const more = { left: max > 2 && el.scrollLeft > 2, right: max > 2 && el.scrollLeft < max - 2 };
-    el.dataset.fade = more.left && more.right ? 'both' : more.left ? 'left' : more.right ? 'right' : 'none';
-  }
-  el.addEventListener('scroll', syncFade, { passive: true });
-  window.addEventListener('resize', syncFade);
-  const fadeObserver = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(syncFade) : null;
-  if (fadeObserver) fadeObserver.observe(el);
+  // The fit runs once the ribbon is laid out and again whenever its box changes (a window resize, a rotation, a hidden view shown).
+  // Deferred a frame so it never resizes the observed box inside the observer's own callback.
+  const fitObserver = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(() => requestAnimationFrame(fit)) : null;
 
+  sections.forEach(applySection);
   refresh();
   return {
     el,
@@ -367,16 +607,17 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
         container.classList.add('sk-ribbon-host');
         if (container.parentElement) container.parentElement.classList.add('sk-ribbon-frame');
       }
-      refresh(); syncFade(); return el;
+      if (fitObserver) fitObserver.observe(el);
+      refresh(); return el;
     },
     refresh,
     destroy: () => {
       if (unlistenHistory) unlistenHistory();
       if (paramsWin) paramsWin.destroy();
+      sectPop.close();
       document.removeEventListener('pointerup', syncSoon);
       document.removeEventListener('keyup', syncSoon);
-      window.removeEventListener('resize', syncFade);
-      if (fadeObserver) fadeObserver.disconnect();
+      if (fitObserver) fitObserver.disconnect();
       menus.forEach(m => m.remove());
       try { el.remove(); } catch (_) {}
     },

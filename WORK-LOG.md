@@ -15200,3 +15200,15 @@ Polish items on Fusion Shaper mode: session `DOC_UNIT` follows `pong.lengthUnits
 - **Evidence (`.evidence/665/`, local)**:
   - Before (`341fc1f`): `before-palette-480x731.png` (`MD5 2B23BC252927D94055615231AAC1E518` — cut card displays `in` and covers right edge + diagonal open chain, `maxEdgeRight=440 > card.left=268`).
   - After: `after-palette-480x731.png` (`MD5 A7E33B3ED60A7846EFA94601EEBCC1D7` — cut card displays `mm`, entire drawing sits left of `.cut-card`, `maxEdgeRight=238 <= card.left=268`).
+
+## TURN 669
+Six new templates appended to THE bank (packages/core/templates.js, built with the existing sketcher helpers; nine existing untouched; picker untouched). Each fully dimensioned, 0 DOF, anchored at the origin, every value a param with label + default.
+- dog-bone-pocket: 60 x 40, bit 6.35. Classic DIAGONAL dog-bone: relief circle centre r inside each corner on the diagonal, so the circle passes through the corner; it crosses the walls at both diameter ends, so each relief is a HALF-circle arc joined to the two walls; one closed loop (8 joints, each on two pieces). A construction corner point + |CH|=|CV| gives the 45 degrees. Bit diameter shows as a radius dimension (R3.18).
+- t-slot: 19 wide x 9.5 deep over 25 wide, 16 deep total (3/4 in T-track), opening up, origin at the middle of the opening.
+- butterfly-key: 50 long, 25 ends, 10 waist, 6 straight lines, origin at the waist centre.
+- cup-hinge-bore: 35 cup at the origin, two 8 mm holes 45 apart on a horizontal line 9.5 below the cup centre, centred on it (common European layout; hinge makers vary).
+- shelf-pin-row: ONE source hole + ONE rectangularPattern constraint made by pattern.js applyPattern called on the builder's own joints/shapes/constraints. NO new code in pattern.js or any shape builder. Count / spacing are the pattern's values, so the template has 1 driving dimension (the hole radius).
+- box-frame (owner addition + correction): plywood cubby front view, long direction vertical, 1500 x 400, 18 mm (not 19.05), 5 compartments. Two sides full length, two ends and N-1 dividers BETWEEN the sides, boards share edges (each edge one line, no duplicates), equal openings by equal-length rules; compartments is a build param (N=1 no dividers).
+Tests: tests/templates-node.test.js covers them like the others, plus for ALL templates every param changes the geometry and stays 0 DOF, and per-template geometry (relief circle through the corner, closed loop, T-slot widths/depths, butterfly waist, cup/screw distances, pattern spacing and count, box-frame board count / lengths / equal openings / no duplicated edge).
+Gate: gate:quick 397/397; tests/templates-live.test.js ok. Evidence .evidence/669/picker-new-cards.png.
+Behaviour change for existing users: the template picker lists six more cards (automatic). Nothing else.

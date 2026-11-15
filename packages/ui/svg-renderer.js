@@ -2259,7 +2259,7 @@ switch(c.type){
     const items = c.type === CONSTRAINT_TYPES.CIRCULAR_PATTERN
       ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scale(34), y: h.point.y - scale(26), text: `${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
       : patternHandles(sc, c).map((h) => ({ x: h.point.x + h.dir.x * (h.extent + scale(70)), y: h.point.y + h.dir.y * (h.extent + scale(70)), // past the pattern tool's arrow
-          text: `${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' total' : ''}` }));
+          text: `${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' extent' : ''}` }));
     items.forEach((it, i) => {
       const w = scale(Math.max(50, 7 * it.text.length + 10));
       out.push(`<g class="dim-label pattern-label" data-constraint-idx="${cIdx}" data-part="${i}" style="cursor:${currentTool === 'select' ? 'pointer' : 'default'}">

@@ -1,24 +1,26 @@
-// packages/ui/input-handlers/pattern-tool.js - task 658: the CIRCULAR PATTERN and RECTANGULAR PATTERN tools (Modify group of the shared ribbon,
-// after Mirror; owner ruling: Fusion keeps them under Create). Geometry, rows and the regenerate are #core/pattern.js; this module is the picks,
-// the pattern DIALOG, the canvas overlay and the drag arrows. ONE flow for both tools, the differences declared in KINDS below.
+// packages/ui/input-handlers/pattern-tool.js - task 658 + 662: the CIRCULAR PATTERN and RECTANGULAR PATTERN tools (Modify group of the
+// shared ribbon, after Mirror; declared divergence: Fusion keeps them under Create). Geometry, rows and the regenerate are #core/pattern.js;
+// this module is the picks, the Fusion-style pattern DIALOG, the inline on-canvas Distance + Quantity boxes, the canvas overlay and the drag
+// arrows. ONE flow for both tools, the differences declared in KINDS below.
 //
-// FLOW (Fusion's): the OBJECTS (the selection; a pre-selection counts), then circular: the CENTRE point (any joint, the origin) / rectangular: the
-// directions are the X / Y axes until a line is picked. As soon as the objects and the centre are known the pattern EXISTS, live, in the
-// document (the preview is the real copies, made by #core/pattern.js's one copy path); every value change regenerates it (editPattern). The
-// dialog's OK, Enter or the green check applies it: ONE undo step (the step is taken at the first live change, with the snapshot from before
-// the tool started). Cancel, Esc, the dialog's close button, a tool switch: the step is undone and dropped (nothing changed, no redo entry).
-// THE DIALOG (owner, task 658: "Prob needs a small modal"): the shared tabbed dock panel (#ui/tabbed-dock-panel.js, the Parameters window's
-// component) as a small NON-BLOCKING floating window: the canvas stays live (picks, pan, zoom). Desktop: at the canvas's top-right; a phone
-// (<= 640 px wide): docked to the BOTTOM of the canvas, full width, as short as its rows. Rows: Objects (count, re-pick), Centre / Direction
-// 1 / 2 (re-pick), Quantity / Total angle, or Quantity 1 / Distance 1 / Quantity 2 / Distance 2 + the Distance type (Spacing / Total, Fusion's
-// Extent) + Symmetric, Suppress (on: a tap on a copy leaves that instance out, a tap on its dashed ghost brings it back), OK, Cancel.
-// RECTANGULAR: the shared drag ARROW (#ui/drag-arrow-handle.js) at the end of each direction drags the distance shown (Spacing or Total).
-// EDIT (afterwards): double-click / double-tap the pattern's label (svg-renderer draws it): the same dialog on the stored pattern, its value
-// field focused; type, Enter -> applied (one undo step). While the dialog is open the canvas picks of this tool come first (whatever the tool).
+// FLOW (Fusion's): the OBJECTS (the selection; a pre-selection counts), then circular: the CENTER POINT (any joint, the origin) / rectangular:
+// the directions are the X / Y axes until direction line(s) are picked via Direction/s. As soon as the objects and centre are known the pattern
+// EXISTS, live, in the document (the preview is the real copies, made by #core/pattern.js's one copy path); every value change regenerates it
+// (editPattern). OK, Enter or the green check applies it: ONE undo step (taken at the first live change, with the snapshot from before the tool
+// started). Cancel, Esc, the dialog's close button, a tool switch: the step is undone and dropped (nothing changed, no redo entry).
+// THE DIALOG (task 662, matched to Fusion's layout): built on the shared tabbed dock panel (#ui/tabbed-dock-panel.js; no second dialog system).
+//   Rectangular: Objects (button + clear x), Direction/s (one Select button + clear x), Distribution (Extent [default] | Spacing; stored as
+//     'total' | 'spacing' so saved files are unchanged), Suppression (checkbox), then per direction (1 and 2): Quantity (with +/- spinner),
+//     Distance, Direction (One Direction | Symmetric), then hint / OK / Cancel.
+//   Circular: Objects, Center Point, Distribution (Full | Angle | Symmetric; Full = 360, Angle row shown for Angle / Symmetric), Suppression,
+//     Quantity (with +/- spinner), Angle, then hint / OK / Cancel.
+// ON-CANVAS INLINE BOXES (task 662): beside the rectangular drag arrow (#ui/drag-arrow-handle.js) being dragged, focused, or last touched,
+// a compact floating Distance + Quantity (spinner) pair bound to the SAME value state as the dialog.
+// EDIT (afterwards): double-click / double-tap the pattern's label (svg-renderer draws it): the same dialog on the stored pattern.
 import { TOOL_MODES, CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from '#core/constants.js';
 import {
   applyPattern, editPattern, patternDefaults, patternObjectsOf, patternSlots, patternSlotGeometry, patternHandles,
-  patternDistanceFor, patternInstanceOf, patternDirectionName, patternDirectionPick, patternSourceMiddle, isPatternConstraint, PATTERN_UNDO_LABEL
+  patternDistanceFor, patternInstanceOf, patternDirectionPick, patternSourceMiddle, isPatternConstraint, PATTERN_UNDO_LABEL
 } from '#core/pattern.js';
 import { inertEntities, isJointInert, activeSketchPick, inActiveSketch } from '#core/sketch-model.js';
 import { docUnit } from '#core/settings-manager.js';
@@ -33,12 +35,13 @@ import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; /
 const T = CONSTRAINT_TYPES;
 const OVERLAY_ID = 'pattern-tool-overlay';
 export const PATTERN_DIALOG_CLASS = 'sk-pattern-dialog';
+export const PATTERN_INLINE_CLASS = 'sk-pat-inline';
 const HINT_MS = 6000;
 const GHOST_PICK_PX = 14;
 const MIN_DISTANCE_MM = 0.01;
 const PHONE_MAX_W = 640;
 
-// The two tools, declared: the constraint type, the dialog title, the step after the objects, the value fields.
+// The two tools, declared: the constraint type, the dialog title, the step after the objects.
 export const PATTERN_KINDS = Object.freeze({
   [TOOL_MODES.CIRCULAR_PATTERN]: { type: T.CIRCULAR_PATTERN, title: 'Circular Pattern', after: 'centre' },
   [TOOL_MODES.RECTANGULAR_PATTERN]: { type: T.RECTANGULAR_PATTERN, title: 'Rectangular Pattern', after: 'values' },
@@ -46,14 +49,19 @@ export const PATTERN_KINDS = Object.freeze({
 const kindOfType = (type) => Object.values(PATTERN_KINDS).find((k) => k.type === type);
 const HINTS = {
   objects: 'Select the objects, then press Enter or the check.',
-  centre: 'Pick the centre point (a point or the origin).',
-  dir0: 'Pick a line (or an axis) for direction 1.',
-  dir1: 'Pick a line (or an axis) for direction 2.',
+  centre: 'Pick the center point (a point or the origin).',
+  dir0: 'Pick a line (or an axis) for direction 1, or press Enter.',
+  dir1: 'Pick a line for direction 2, or press Enter when done.',
   values: 'Set the values, then OK (Enter).',
 };
 
+const CURSOR_SVG = '<svg class="sk-pat-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2v11l2.8-2.8 2 4.2 1.7-.8-2-4.2H13z" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+const INFO_SVG = '<svg class="sk-pat-info-ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="currentColor" fill-opacity="0.45"/><path d="M8 7.2v4.3M8 4.6v1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
+const SPIN_UP_SVG = '<svg viewBox="0 0 10 6" aria-hidden="true"><path d="M2 5L5 1.5L8 5z" fill="currentColor"/></svg>';
+const SPIN_DOWN_SVG = '<svg viewBox="0 0 10 6" aria-hidden="true"><path d="M2 1L5 4.5L8 1z" fill="currentColor"/></svg>';
+
 let _host = { exit: () => {}, canvas: () => null }; // injected by input-manager (setupPatternTool): leave the tool, the canvas svg
-let _s = null; // the open session: { kind, state, svg, mode: 'create' | 'edit', step, values, c, before, stepTaken, dock, els, unsubHistory, suppressOn, drag, hover }
+let _s = null; // open session: { kind, state, svg, mode, step, values, c, before, stepTaken, dock, els, inline, activeDir, unsubHistory, suppressOn, drag, hover }
 let _committing = false;
 let _viewListening = false;
 
@@ -93,9 +101,10 @@ export const beginRectangularPattern = (state) => beginPattern(state, TOOL_MODES
 function beginPattern(state, tool) {
   cancelSession();
   const kind = PATTERN_KINDS[tool];
-  const values = patternDefaults(kind.type, docUnit());
+  // Task 662: Rectangular Pattern's Distribution defaults to Fusion's Extent ('total' in the stored record so saved files stay identical).
+  const values = { ...patternDefaults(kind.type, docUnit()), ...(kind.type === T.RECTANGULAR_PATTERN ? { distanceType: 'total' } : {}) };
   _s = { kind, state, svg: _host.canvas(), mode: 'create', step: 'objects', values, c: null, before: state.captureUndoSnapshot(), stepTaken: false,
-    suppressOn: false, drag: null, hover: null };
+    suppressOn: false, drag: null, hover: null, activeDir: null, inline: null };
   state.pattern = { step: 'objects' };
   listenHistory();
   openDialog();
@@ -104,18 +113,18 @@ function beginPattern(state, tool) {
   refresh();
 }
 
-/** Edit a stored pattern (a double-click / double-tap on its label): the dialog on its values, `field` focused (default the first value). */
+/** Edit a stored pattern (a double-click / double-tap on its label): the dialog on its values, first relevant value field focused. */
 export function editPatternFromLabel(svg, state, c) {
   if (!isPatternConstraint(c)) return false;
   cancelSession();
   const kind = kindOfType(c.type);
   _s = { kind, state, svg, mode: 'edit', step: 'values', values: valuesOf(c), c, before: state.captureUndoSnapshot(), stepTaken: false,
-    suppressOn: c.suppressed.length > 0, drag: null, hover: null };
+    suppressOn: c.suppressed.length > 0, drag: null, hover: null, activeDir: null, inline: null };
   state.pattern = { step: 'values' };
   listenHistory();
   openDialog();
   refresh();
-  const first = _s.els.focusFirst;
+  const first = _s.els.focusFirst && !_s.els.focusFirst.closest('[hidden]') ? _s.els.focusFirst : _s.els.quantity[0];
   if (first) setTimeout(() => { if (_s && first.isConnected) { first.focus(); first.select(); } }, 0);
   return true;
 }
@@ -132,13 +141,14 @@ function listenHistory() {
   _s.unsubHistory = typeof st.addHistoryListener === 'function' ? st.addHistoryListener(() => { if (_committing) return; const create = _s && _s.mode === 'create'; endSession(); if (create) _host.exit(); }) : null;
 }
 
-// the session ends: the dialog and the overlay go (the document is as the caller left it)
+// the session ends: the dialog, inline boxes and overlay go (the document is as the caller left it)
 function endSession() {
   if (!_s) return;
   const s = _s;
   _s = null;
   if (s.unsubHistory) s.unsubHistory();
   if (s.dock) s.dock.destroy();
+  if (s.inline && s.inline.root && s.inline.root.parentNode) s.inline.root.remove();
   if (s.state.pattern) s.state.pattern = null;
   const g = document.getElementById(OVERLAY_ID);
   if (g) g.remove();
@@ -159,7 +169,7 @@ function cancelSession() {
 export function commitPattern() {
   if (!_s) return 'none';
   if (_s.step !== 'values') return stepDone();
-  if (!_s.c) { showNotification(`${_s.kind.title}: ${_s.kind.type === T.CIRCULAR_PATTERN ? 'pick the centre point' : 'select the objects'} first.`, 'warning', HINT_MS); return 'wait'; }
+  if (!_s.c) { showNotification(`${_s.kind.title}: ${_s.kind.type === T.CIRCULAR_PATTERN ? 'pick the center point' : 'select the objects'} first.`, 'warning', HINT_MS); return 'wait'; }
   const bad = _s.els && _s.els.invalid();
   if (bad) { showNotification(`${_s.kind.title}: ${bad}.`, 'warning', HINT_MS); return 'refused'; }
   const { state, mode } = _s;
@@ -178,12 +188,15 @@ function setStep(step) {
   _s.state.pattern = { step };
   refresh();
 }
-// Enter / the check before the values step: the objects are done -> the next step; a re-pick step -> back to the values
+// Enter / the check before the values step: the objects are done -> the next step; a re-pick step -> back to values (or objects if not yet live)
 function stepDone() {
   if (_s.step === 'objects') return objectsDone();
   if (_s.step === 'centre') { showNotification(`${_s.kind.title}: ${HINTS.centre}`, 'info', HINT_MS); return 'wait'; }
-  setStep('values');
+  setStep(_s.c ? 'values' : 'objects');
   return 'next';
+}
+function ensureValuesStep() {
+  if (_s && _s.c && _s.step !== 'values') setStep('values');
 }
 function objectsDone() {
   const objects = selectionObjects(_s.state);
@@ -222,6 +235,70 @@ function liveEdit(changes) {
   return true;
 }
 
+// ---- shared value setters (ONE value state for both dialog and inline boxes) ---------------------------------------------------
+
+function currentRec() { return _s.c || { ..._s.values, type: _s.kind.type }; }
+
+function setQuantityValue(k, n, sourceEl = null) {
+  const min = k == null ? 2 : 1;
+  if (n == null || !Number.isInteger(n) || n < min) return false;
+  let ok;
+  if (k == null) ok = liveEdit({ quantity: n });
+  else {
+    const quantity = currentRec().quantity.slice();
+    quantity[k] = n;
+    ok = liveEdit({ quantity });
+  }
+  if (ok) syncQuantityInputs(k, sourceEl);
+  return ok;
+}
+
+function stepQuantity(k, delta) {
+  if (!_s) return;
+  ensureValuesStep();
+  const min = k == null ? 2 : 1;
+  const rec = currentRec();
+  const cur = k == null ? rec.quantity : rec.quantity[k];
+  const next = Math.max(min, cur + delta);
+  if (next === cur) return;
+  const ok = setQuantityValue(k, next, null);
+  const invalidEl = k == null ? _s.els.quantity[0] : _s.els.quantity[k];
+  if (ok) {
+    if (invalidEl) invalidEl.setAttribute('aria-invalid', 'false');
+    if (_s.inline && _s.activeDir === k) _s.inline.qty.setAttribute('aria-invalid', 'false');
+  }
+}
+
+function setDistanceValue(k, textVal, sourceEl = null) {
+  const n = parseUnit(textVal, docUnit());
+  if (!(n > 0)) return false;
+  const cur = currentRec().distance;
+  const distance = cur.slice();
+  distance[k] = (Math.sign(cur[k]) || 1) * n;
+  const ok = liveEdit({ distance });
+  if (ok) syncDistanceInputs(k, sourceEl);
+  return ok;
+}
+
+function syncQuantityInputs(k, skipEl = null) {
+  if (!_s || !_s.els) return;
+  const rec = currentRec();
+  const val = fmtNum(k == null ? rec.quantity : rec.quantity[k]);
+  const dlgEl = k == null ? _s.els.quantity[0] : _s.els.quantity[k];
+  if (dlgEl && dlgEl !== skipEl) { dlgEl.value = val; dlgEl.setAttribute('aria-invalid', 'false'); }
+  if (_s.inline && _s.activeDir === k && _s.inline.qty !== skipEl) {
+    _s.inline.qty.value = val; _s.inline.qty.setAttribute('aria-invalid', 'false');
+  }
+}
+
+function syncDistanceInputs(k, skipEl = null) {
+  if (!_s || !_s.els || !_s.els.distance) return;
+  const val = fmtLen(Math.abs(currentRec().distance[k]));
+  const set = (el) => { if (el && el !== skipEl) { el.value = val; el.setAttribute('aria-invalid', 'false'); } };
+  set(_s.els.distance[k]);
+  if (_s.inline && _s.activeDir === k) set(_s.inline.dist);
+}
+
 // ---- canvas picks ------------------------------------------------------------------------------------------------------------
 
 /**
@@ -256,14 +333,19 @@ export function handlePatternPointerDown(e, svg, state, hitJoint, hitShape, othe
   }
   if (_s.step === 'dir0' || _s.step === 'dir1') {
     if (!shape || shape.type !== 'line' || (!shape.reference && !rule.shape(shape))) return warn(true); // another sketch's LINE warns (it is not a direction)
-    const k = _s.step === 'dir0' ? 0 : 1, dirs = _s.values.directions.slice();
+    const k = _s.step === 'dir0' ? 0 : 1, dirs = currentRec().directions.slice();
     dirs[k] = patternDirectionPick(k, shape.id);
-    if (liveEdit({ directions: dirs })) setStep('values');
+    if (liveEdit({ directions: dirs })) setStep(k === 0 ? 'dir1' : (_s.c ? 'values' : 'objects'));
     return true;
   }
-  // values: an arrow starts a distance drag; with Suppress on, a copy leaves its instance out and a ghost brings it back
+  // values: an arrow starts a distance drag (and activates that direction's inline boxes); with Suppress on, a copy leaves its instance out and a ghost brings it back
   const arrow = arrowAt(svg, e);
-  if (arrow) { _s.drag = { pointerId: e.pointerId, k: arrow.k, along: arrow.along, from: alongOf(svg, e, arrow) }; renderOverlay(); return true; }
+  if (arrow) {
+    _s.activeDir = arrow.k;
+    _s.drag = { pointerId: e.pointerId, k: arrow.k, along: arrow.along, from: alongOf(svg, e, arrow) };
+    renderOverlay();
+    return true;
+  }
   if (!_s.suppressOn || !_s.c) return false;
   const hit = (hitJoint && patternInstanceOf(state, hitJoint.id)) || (shape && patternInstanceOf(state, shape.id));
   if (hit && hit.c === _s.c) { liveEdit({ suppressed: [..._s.c.suppressed, hit.inst.at.join(',')] }); return true; }
@@ -305,7 +387,7 @@ function arrowAt(svg, e) {
 // the pointer's distance along a handle's direction (world, from the world origin: only differences are used)
 const alongOf = (svg, e, h) => { const w = screenToWorld(svg, e.clientX, e.clientY); return w.x * h.dir.x + w.y * h.dir.y; };
 // one drag step: the last instance moves with the pointer along the direction (the travel since the press), the distance follows it (Spacing:
-// / (N - 1); Total: the span)
+// / (N - 1); Extent: the span)
 function dragTo(svg, e) {
   const c = _s.c, k = _s.drag.k, h = patternHandles(_s.state, c).find((x) => x.k === k);
   if (!h) return;
@@ -315,7 +397,7 @@ function dragTo(svg, e) {
   const unit = docUnit(), text = fmtLen(value), v = parseUnit(text, unit);
   if (!(v > 0)) return;
   const dist = c.distance.slice(); dist[k] = sign * v;
-  if (liveEdit({ distance: dist }) && _s.els.distance) _s.els.distance[k].value = text;
+  if (liveEdit({ distance: dist })) syncDistanceInputs(k);
 }
 // the suppressed slot whose dashed ghost is under the pointer (its key), or null
 function ghostAt(svg, e) {
@@ -334,7 +416,7 @@ function distTo(g, p) {
   return Math.abs(Math.hypot(p.x - g.c.x, p.y - g.c.y) - g.r); // a circle / an arc's circle (a ghost pick does not need the sweep)
 }
 
-// ---- the dialog --------------------------------------------------------------------------------------------------------------
+// ---- the dialog & inline boxes -----------------------------------------------------------------------------------------------
 
 let stylesInjected = false;
 function injectStyles() {
@@ -346,34 +428,67 @@ function injectStyles() {
 .${PATTERN_DIALOG_CLASS} { --sk-dock-bg: var(--sk-ribbon-bg, #fff); --sk-dock-text: var(--sk-ribbon-fg, #1f2937); --sk-dock-border: var(--sk-ribbon-sep, #cbd5e1);
   --sk-dock-hover: var(--sk-ribbon-hover, #f0f0f0); box-shadow: 0 10px 30px rgba(0,0,0,0.22); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .${PATTERN_DIALOG_CLASS} .sk-dock-tab { opacity: 1; font-weight: 700; cursor: default; }
-.${PATTERN_DIALOG_CLASS} .sk-dock-body { padding: 6px 8px; }
-.sk-pat-grid { display: grid; gap: 4px 6px; align-items: center; }
-.sk-pat-grid.sk-pat-circular { grid-template-columns: auto 1fr auto 1fr; }
-.sk-pat-grid.sk-pat-rect { grid-template-columns: minmax(0, 1.3fr) 1fr 1fr auto; }
-.sk-pat-grid.sk-pat-rect .sk-pat-type { grid-column: 2 / 4; }
-.sk-pat-head { font-size: 10px; opacity: 0.7; text-align: left; }
-.sk-pat-grid label { font-size: 11px; white-space: nowrap; }
-.sk-pat-grid input[type=text], .sk-pat-grid select { width: 100%; min-width: 0; box-sizing: border-box; height: 26px; padding: 2px 6px; font: 12px system-ui, sans-serif;
-  border: 1px solid var(--sk-ribbon-sep, #cbd5e1); border-radius: 4px; background: var(--sk-ribbon-menu-bg, #fff); color: inherit; }
-.sk-pat-grid input[aria-invalid=true] { border-color: #ef4444; outline: 1px solid #ef4444; }
-.sk-pat-pick { height: 26px; min-width: 0; padding: 0 8px; border: 1px solid var(--sk-ribbon-sep, #cbd5e1); border-radius: 4px; background: transparent; color: inherit;
-  font: 600 11px system-ui, sans-serif; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sk-pat-pick[aria-pressed=true] { background: var(--sk-selection, #3B82F6); border-color: var(--sk-selection, #3B82F6); color: #fff; }
-.sk-pat-check { display: flex; align-items: center; gap: 4px; font-size: 11px; white-space: nowrap; }
-.sk-pat-hint { font-size: 11px; opacity: 0.75; min-height: 14px; margin-top: 4px; }
-.sk-pat-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 4px; }
-.sk-pat-foot-checks { display: flex; gap: 10px; margin-right: auto; }
-.sk-pat-foot button { height: 28px; min-width: 64px; padding: 0 12px; border-radius: 4px; font: 700 12px system-ui, sans-serif; cursor: pointer;
-  border: 1px solid var(--sk-ribbon-sep, #cbd5e1); background: transparent; color: inherit; }
+.${PATTERN_DIALOG_CLASS} .sk-dock-body { padding: 8px 10px 6px; }
+.sk-pat-rows { display: flex; flex-direction: column; gap: 5px; }
+.sk-pat-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; align-items: center; }
+.sk-pat-row[hidden] { display: none; }
+.sk-pat-row label { font-size: 12px; white-space: nowrap; }
+.sk-pat-ctrl { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.sk-pat-ctrl input[type=text], .sk-pat-ctrl select { width: 100%; min-width: 0; box-sizing: border-box; height: 26px; padding: 2px 6px; font: 12px system-ui, sans-serif;
+  border: 1px solid var(--sk-ribbon-sep, #cbd5e1); border-radius: 3px; background: var(--sk-ribbon-menu-bg, #fff); color: inherit; }
+.sk-pat-ctrl input[aria-invalid=true] { border-color: #ef4444; outline: 1px solid #ef4444; }
+.sk-pat-ctrl input[type=checkbox] { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--sk-selection, #3B82F6); }
+.sk-pat-pick { display: inline-flex; align-items: center; gap: 5px; height: 26px; min-width: 0; padding: 0 8px; border: 1px solid var(--sk-ribbon-sep, #cbd5e1);
+  border-radius: 3px; background: var(--sk-ribbon-menu-bg, #fff); color: inherit; font: 500 12px system-ui, sans-serif; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sk-pat-pick[aria-pressed=true] { border-color: var(--sk-selection, #3B82F6); background: rgba(59, 130, 246, 0.16); }
+.sk-pat-ic { width: 13px; height: 13px; flex: 0 0 auto; }
+.sk-pat-clear { width: 22px; height: 26px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: inherit; opacity: 0.65;
+  font: 14px/1 system-ui, sans-serif; cursor: pointer; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
+.sk-pat-clear:hover { opacity: 1; background: var(--sk-ribbon-hover, rgba(0,0,0,0.06)); }
+.sk-pat-clear[hidden] { display: none; }
+.sk-pat-spin { display: flex; align-items: stretch; width: 100%; min-width: 0; height: 26px; box-sizing: border-box;
+  border: 1px solid var(--sk-ribbon-sep, #cbd5e1); border-radius: 3px; background: var(--sk-ribbon-menu-bg, #fff); overflow: hidden; }
+.sk-pat-spin:has(input[aria-invalid=true]) { border-color: #ef4444; outline: 1px solid #ef4444; }
+.sk-pat-spin input[type=text] { border: 0; outline: 0; height: 100%; border-radius: 0; flex: 1 1 auto; min-width: 0; background: transparent; }
+.sk-pat-spin input[aria-invalid=true] { border: 0; outline: 0; }
+.sk-pat-spin-btns { display: flex; flex-direction: column; width: 18px; flex: 0 0 auto; border-left: 1px solid var(--sk-ribbon-sep, #cbd5e1); }
+.sk-pat-spin-up, .sk-pat-spin-down { flex: 1 1 0; padding: 0; margin: 0; border: 0; background: transparent; color: inherit; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; opacity: 0.72; }
+.sk-pat-spin-up { border-bottom: 1px solid var(--sk-ribbon-sep, #cbd5e1); }
+.sk-pat-spin-up:hover, .sk-pat-spin-down:hover { background: var(--sk-ribbon-hover, rgba(0,0,0,0.06)); opacity: 1; }
+.sk-pat-spin-up svg, .sk-pat-spin-down svg { width: 8px; height: 5px; display: block; }
+.sk-pat-hint { font-size: 11px; opacity: 0.75; min-height: 14px; margin-top: 6px; }
+.sk-pat-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.sk-pat-info { margin-right: auto; display: inline-flex; align-items: center; opacity: 0.75; }
+.sk-pat-info-ic { width: 15px; height: 15px; display: block; }
+.sk-pat-foot button { height: 26px; min-width: 64px; padding: 0 12px; border-radius: 3px; font: 600 12px system-ui, sans-serif; cursor: pointer;
+  border: 1px solid var(--sk-ribbon-sep, #cbd5e1); background: var(--sk-ribbon-menu-bg, #fff); color: inherit; }
 .sk-pat-foot .sk-pat-ok { background: var(--sk-selection, #3B82F6); border-color: var(--sk-selection, #3B82F6); color: #fff; }
+.${PATTERN_INLINE_CLASS} { position: fixed; z-index: 9000; display: flex; align-items: center; gap: 3px; padding: 3px;
+  background: var(--sk-ribbon-menu-bg, #fff); color: var(--sk-ribbon-fg, #1f2937); border: 1px solid var(--sk-ribbon-sep, #cbd5e1);
+  border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.18); font: 12px system-ui, sans-serif; }
+.${PATTERN_INLINE_CLASS}[hidden] { display: none; }
+.${PATTERN_INLINE_CLASS} .sk-pat-inline-dist { width: 78px; height: 24px; box-sizing: border-box; padding: 2px 5px; font: 12px system-ui, sans-serif;
+  border: 1px solid var(--sk-ribbon-sep, #cbd5e1); border-radius: 3px; background: transparent; color: inherit; text-align: center; }
+.${PATTERN_INLINE_CLASS} .sk-pat-inline-dist[aria-invalid=true] { border-color: #ef4444; outline: 1px solid #ef4444; }
+.${PATTERN_INLINE_CLASS} .sk-pat-inline-spin { width: 64px; height: 24px; }
+.${PATTERN_INLINE_CLASS} .sk-pat-inline-spin input { padding: 2px 4px; text-align: center; }
 @media (max-width: ${PHONE_MAX_W}px) { .sk-pat-hint { display: none; } }
 @media (pointer: coarse) {
-  .sk-pat-grid input[type=text], .sk-pat-grid select, .sk-pat-pick, .sk-pat-foot button { height: 44px; font-size: 14px; }
-  .sk-pat-check input { width: 22px; height: 22px; }
-  .sk-pat-grid label, .sk-pat-check { font-size: 13px; }
-  .sk-pat-head { font-size: 12px; }
+  .sk-pat-row { grid-template-columns: 96px minmax(0, 1fr); }
+  .sk-pat-row label { font-size: 13px; }
+  .sk-pat-ctrl input[type=text], .sk-pat-ctrl select, .sk-pat-pick, .sk-pat-spin, .sk-pat-foot button { height: 44px; font-size: 14px; }
+  .sk-pat-clear { width: 38px; height: 44px; font-size: 18px; }
+  .sk-pat-ctrl input[type=checkbox] { width: 24px; height: 24px; }
+  .sk-pat-spin-btns { flex-direction: row; width: auto; }
+  .sk-pat-spin-up, .sk-pat-spin-down { width: 34px; height: 100%; flex: 0 0 auto; }
+  .sk-pat-spin-up { border-bottom: 0; border-right: 1px solid var(--sk-ribbon-sep, #cbd5e1); }
+  .sk-pat-spin-up svg, .sk-pat-spin-down svg { width: 11px; height: 7px; }
   .${PATTERN_DIALOG_CLASS} .sk-dock-tab { min-height: 36px; }
   .${PATTERN_DIALOG_CLASS} .sk-dock-header .sk-dock-close { width: 44px; height: 36px; }
+  .${PATTERN_INLINE_CLASS} .sk-pat-inline-dist { width: 92px; height: 44px; font-size: 14px; }
+  .${PATTERN_INLINE_CLASS} .sk-pat-inline-spin { width: 114px; height: 44px; }
+  .${PATTERN_INLINE_CLASS} .sk-pat-inline-spin input { font-size: 14px; }
 }
 `;
   document.head.appendChild(s);
@@ -391,9 +506,9 @@ function openDialog() {
   injectStyles();
   const { kind } = _s;
   const phone = isPhone();
-  const box = (_s.svg && _s.svg.getBoundingClientRect) ? _s.svg.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight, width: window.innerWidth };
+  const box = (_s.svg && _s.svg.getBoundingClientRect) ? _s.svg.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight, width: window.innerWidth, height: window.innerHeight };
   const w = phone ? window.innerWidth : 300;
-  const h = kind.type === T.CIRCULAR_PATTERN ? (phone ? 210 : 150) : (phone ? 280 : 190); // a first guess: fitHeight measures the rows
+  const h = kind.type === T.CIRCULAR_PATTERN ? (phone ? 280 : 210) : (phone ? 400 : 340); // first guess: fitHeight measures the rows
   const initial = phone ? { left: 0, top: Math.max(0, Math.round(box.bottom - h)), w, h } : { left: Math.round(box.right - w - 12), top: Math.round(box.top + 12), w, h };
   const dock = createTabbedDockPanel({
     tabs: [{ label: kind.title, render: (body) => buildForm(body) }],
@@ -410,116 +525,350 @@ function openDialog() {
   });
   _s.dock = dock;
   dock.open();
+  buildInlineBox();
   fitHeight();
 }
-// the window as tall as its rows (the dock keeps a fixed height): measured once it is on screen
+// the window as tall as its rows (on desktop); on phones capped to 56% of canvas height (scrollable body) so the preview stays visible above it
 function fitHeight() {
+  if (!_s || !_s.dock) return;
   const el = _s.dock.el, head = el.querySelector('.sk-dock-header'), body = el.querySelector('.sk-dock-body');
   if (!head || !body) return;
-  const need = Math.ceil(head.offsetHeight + body.scrollHeight + 2);
+  const raw = Math.ceil(head.offsetHeight + body.scrollHeight + 6);
+  const phone = isPhone();
+  const box = (_s.svg && _s.svg.getBoundingClientRect) ? _s.svg.getBoundingClientRect() : null;
+  const maxH = phone && box && box.height > 0 ? Math.max(240, Math.min(424, Math.round(box.height * 0.56))) : raw;
+  const need = Math.min(raw, maxH);
   el.style.height = need + 'px';
-  if (isPhone() && _s.svg && _s.svg.getBoundingClientRect) el.style.top = Math.max(0, Math.round(_s.svg.getBoundingClientRect().bottom - need)) + 'px';
+  if (phone && box) el.style.top = Math.max(0, Math.round(box.bottom - need)) + 'px';
+}
+
+function wireFieldKeys(input, onEnterInvalid, onCommitFormat = null) {
+  if (onCommitFormat) input.addEventListener('blur', () => {
+    if (_s && input.getAttribute('aria-invalid') !== 'true') onCommitFormat();
+  });
+  input.addEventListener('keydown', (ev) => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (input.getAttribute('aria-invalid') !== 'true') {
+        if (onCommitFormat) onCommitFormat();
+        commitPattern();
+      } else showNotification(`${_s.kind.title}: ${onEnterInvalid()}.`, 'warning', HINT_MS);
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      userCancel();
+    }
+  });
+}
+
+function createSpinner(fieldName, value, k, onInput, onFocus) {
+  const wrap = document.createElement('div');
+  wrap.className = 'sk-pat-spin';
+  const i = document.createElement('input');
+  i.type = 'text'; i.inputMode = 'numeric'; i.value = value;
+  i.setAttribute('aria-label', fieldName); i.dataset.field = fieldName;
+  i.addEventListener('focus', () => { ensureValuesStep(); if (onFocus) onFocus(); });
+  i.addEventListener('input', () => { const ok = onInput(i.value, i); i.setAttribute('aria-invalid', ok ? 'false' : 'true'); });
+  i.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); stepQuantity(k, 1); }
+    else if (ev.key === 'ArrowDown') { ev.preventDefault(); stepQuantity(k, -1); }
+  });
+  wireFieldKeys(i, () => invalidText(i));
+  const btns = document.createElement('div'); btns.className = 'sk-pat-spin-btns';
+  const mkBtn = (dir, cls, svg, lbl) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = cls; b.dataset.spin = dir; b.dataset.spinFor = fieldName;
+    b.setAttribute('aria-label', lbl); b.innerHTML = svg;
+    b.addEventListener('click', (ev) => { ev.preventDefault(); stepQuantity(k, dir === 'up' ? 1 : -1); });
+    return b;
+  };
+  btns.append(mkBtn('up', 'sk-pat-spin-up', SPIN_UP_SVG, `Increase ${fieldName}`), mkBtn('down', 'sk-pat-spin-down', SPIN_DOWN_SVG, `Decrease ${fieldName}`));
+  wrap.append(i, btns);
+  return { wrap, input: i };
 }
 
 function buildForm(body) {
   const { kind } = _s;
-  const els = { distance: null, quantity: [], focusFirst: null };
-  const grid = document.createElement('div');
-  grid.className = 'sk-pat-grid';
-  const label = (text, forEl) => { const l = document.createElement('label'); l.textContent = text; if (forEl) { forEl.id = forEl.id || `sk-pat-${Math.random().toString(36).slice(2, 8)}`; l.htmlFor = forEl.id; } return l; };
-  const pick = (name, step) => {
+  const els = { distance: null, quantity: [], focusFirst: null, root: null };
+  const rows = document.createElement('div');
+  rows.className = 'sk-pat-rows';
+  els.root = rows;
+
+  const addRow = (labelText, ...controls) => {
+    const row = document.createElement('div');
+    row.className = 'sk-pat-row';
+    const lbl = document.createElement('label');
+    lbl.textContent = labelText;
+    const ctrl = document.createElement('div');
+    ctrl.className = 'sk-pat-ctrl';
+    ctrl.append(...controls);
+    const firstInput = ctrl.querySelector('input, select, button');
+    if (firstInput) {
+      firstInput.id = firstInput.id || `sk-pat-${Math.random().toString(36).slice(2, 8)}`;
+      lbl.htmlFor = firstInput.id;
+    }
+    row.append(lbl, ctrl);
+    rows.appendChild(row);
+    return row;
+  };
+  const makePick = (name, step, onToggle) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'sk-pat-pick'; b.dataset.pick = step; b.setAttribute('aria-label', name);
-    b.addEventListener('click', () => { if (!_s) return; if (_s.step === step) stepDone(); else setStep(step); });
+    b.innerHTML = `${CURSOR_SVG}<span class="sk-pat-pick-lbl"></span>`;
+    b.addEventListener('click', () => { if (_s) onToggle(); });
     return b;
   };
-  const text = (name, value, onValue) => {
+  const makeClear = (name, onClear) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sk-pat-clear'; b.dataset.clear = name;
+    b.setAttribute('aria-label', `Clear ${name}`); b.textContent = '×';
+    b.addEventListener('click', () => { if (_s) onClear(); });
+    return b;
+  };
+  const makeSelect = (name, options, value, onChange) => {
+    const sel = document.createElement('select');
+    sel.setAttribute('aria-label', name); sel.dataset.field = name;
+    for (const [v, t] of options) { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); }
+    sel.value = value;
+    sel.addEventListener('focus', () => ensureValuesStep());
+    sel.addEventListener('change', () => { ensureValuesStep(); onChange(sel.value); });
+    return sel;
+  };
+  const makeCheck = (name, on, onChange) => {
     const i = document.createElement('input');
-    i.type = 'text'; i.value = value; i.setAttribute('aria-label', name); i.dataset.field = name;
-    i.addEventListener('input', () => { const ok = onValue(i.value); i.setAttribute('aria-invalid', ok ? 'false' : 'true'); });
-    i.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); if (i.getAttribute('aria-invalid') !== 'true') commitPattern(); else showNotification(`${kind.title}: ${invalidText(i)}.`, 'warning', HINT_MS); }
-      else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); userCancel(); }
-    });
+    i.type = 'checkbox'; i.checked = on; i.dataset.field = name; i.setAttribute('aria-label', name);
+    i.addEventListener('change', () => onChange(i.checked));
     return i;
   };
-  const check = (name, on, onChange, visible = true) => {
-    const l = document.createElement('label'); l.className = 'sk-pat-check';
-    const i = document.createElement('input'); i.type = 'checkbox'; i.checked = on; i.dataset.field = name;
-    if (!visible) i.setAttribute('aria-label', name);
-    i.addEventListener('change', () => onChange(i.checked));
-    l.append(i);
-    if (visible) l.append(document.createTextNode(name));
-    return l;
+  const makeText = (name, value, onValue, onFocus, onCommitFormat = null) => {
+    const i = document.createElement('input');
+    i.type = 'text'; i.value = value; i.setAttribute('aria-label', name); i.dataset.field = name;
+    i.addEventListener('focus', () => { ensureValuesStep(); if (onFocus) onFocus(); });
+    i.addEventListener('input', () => { const ok = onValue(i.value, i); i.setAttribute('aria-invalid', ok ? 'false' : 'true'); });
+    wireFieldKeys(i, () => invalidText(i), onCommitFormat);
+    return i;
   };
-  const foot = document.createElement('div'); foot.className = 'sk-pat-foot';
-  const footChecks = document.createElement('div'); footChecks.className = 'sk-pat-foot-checks';
-  foot.append(footChecks);
-  els.objects = pick('Objects', 'objects');
+
+  // Objects row (shared by both dialogs)
+  els.objects = makePick('Objects', 'objects', () => { if (_s.step === 'objects') stepDone(); else setStep('objects'); });
+  els.clearObjects = makeClear('objects', () => {
+    _s.state.selectedShapes.clear();
+    _s.state.selectedJoints.clear();
+    setStep('objects');
+  });
+  addRow('Objects', els.objects, els.clearObjects);
+
   if (kind.type === T.CIRCULAR_PATTERN) {
-    // [Objects] [Centre] / Quantity, Total angle / footer: Symmetric, Suppress, OK, Cancel
-    grid.classList.add('sk-pat-circular');
-    els.centre = pick('Centre point', 'centre');
-    const q = text('Quantity', fmtNum(_s.values.quantity), (v) => { const n = parseCount(v); return n != null && n >= 2 && liveEdit({ quantity: n }); });
-    const a = text('Total angle', fmtAngle(_s.values.angle), (v) => { const n = parseAngle(v); return n != null && n > 0 && n <= 360 && liveEdit({ angle: n }); });
-    els.quantity = [q]; els.angle = a; els.focusFirst = a;
-    grid.append(label('Objects'), els.objects, label('Centre'), els.centre, label('Quantity', q), q, label('Total angle', a), a);
-    els.symmetric = check('Symmetric', _s.values.symmetric, (on) => liveEdit({ symmetric: on }));
-    footChecks.append(els.symmetric);
-  } else {
-    // a table: [Direction] Quantity | Distance | Sym. per direction; [Objects] [Spacing / Total]; footer: Suppress, OK, Cancel
-    grid.classList.add('sk-pat-rect');
-    const head = (t) => { const h = document.createElement('span'); h.className = 'sk-pat-head'; h.textContent = t; return h; };
-    grid.append(document.createElement('span'), head('Quantity'), head('Distance'), head('Sym.'));
-    els.dirs = []; els.distance = []; els.sym = [];
-    for (let k = 0; k < 2; k++) {
-      const dir = pick(`Direction ${k + 1}`, `dir${k}`);
-      els.dirs.push(dir);
-      const q = text(`Quantity ${k + 1}`, fmtNum(_s.values.quantity[k]), (v) => {
-        const n = parseCount(v); if (n == null || n < 1) return false;
-        const quantity = (_s.c ? _s.c.quantity : _s.values.quantity).slice(); quantity[k] = n; return liveEdit({ quantity });
-      });
-      const d = text(`Distance ${k + 1}`, fmtLen(Math.abs(_s.values.distance[k])), (v) => {
-        const n = parseUnit(v, docUnit()); if (!(n > 0)) return false;
-        const cur = _s.c ? _s.c.distance : _s.values.distance, distance = cur.slice(); distance[k] = (Math.sign(cur[k]) || 1) * n; return liveEdit({ distance });
-      });
-      els.quantity.push(q); els.distance.push(d);
-      const sym = check(`Symmetric ${k + 1}`, _s.values.symmetric[k], (on) => { const symmetric = (_s.c ? _s.c.symmetric : _s.values.symmetric).slice(); symmetric[k] = on; liveEdit({ symmetric }); }, false);
-      els.sym.push(sym);
-      grid.append(dir, q, d, sym);
-    }
-    const type = document.createElement('select');
-    type.setAttribute('aria-label', 'Distance type'); type.dataset.field = 'Distance type';
-    for (const [v, t] of [['spacing', 'Spacing'], ['total', 'Total']]) { const o = document.createElement('option'); o.value = v; o.textContent = t; type.appendChild(o); }
-    type.value = _s.values.distanceType;
-    type.addEventListener('change', () => {
-      const c = _s.c || { ..._s.values, type: kind.type };
-      const distance = [0, 1].map((k) => patternDistanceFor(c, k, type.value)); // switching keeps the copies where they are
-      if (liveEdit({ distanceType: type.value, distance })) distance.forEach((dd, k) => { els.distance[k].value = fmtLen(Math.abs(dd)); });
+    // Fusion Circular Pattern: Objects / Center Point / Distribution (Full | Angle | Symmetric) / Suppression / Quantity / Angle
+    els.centre = makePick('Center Point', 'centre', () => { if (_s.step === 'centre') stepDone(); else setStep('centre'); });
+    els.clearCentre = makeClear('centre', () => {
+      if (!_s.c) _s.values.centre = null;
+      setStep('centre');
     });
-    type.className = 'sk-pat-type';
-    els.type = type;
-    grid.append(els.objects, type);
+    addRow('Center Point', els.centre, els.clearCentre);
+
+    const initDist = _s.values.symmetric ? 'symmetric' : (_s.values.angle > 360 - 1e-9 ? 'full' : 'angle');
+    els.distribution = makeSelect('Distribution', [['full', 'Full'], ['angle', 'Angle'], ['symmetric', 'Symmetric']], initDist, (v) => {
+      if (v === 'full') liveEdit({ angle: 360, symmetric: false });
+      else if (v === 'angle') liveEdit({ symmetric: false });
+      else liveEdit({ symmetric: true });
+      if (els.angleRow) els.angleRow.hidden = v === 'full';
+      if (v !== 'full' && els.angle) { els.angle.value = fmtAngle(currentRec().angle); els.angle.setAttribute('aria-invalid', 'false'); }
+      fitHeight();
+    });
+    addRow('Distribution', els.distribution);
+
+    els.suppress = makeCheck('Suppression', _s.suppressOn, (on) => { _s.suppressOn = on; renderOverlay(); refreshForm(); });
+    addRow('Suppression', els.suppress);
+
+    const qSpin = createSpinner('Quantity', fmtNum(_s.values.quantity), null, (v, el) => {
+      const n = parseCount(v);
+      return setQuantityValue(null, n, el);
+    });
+    els.quantity = [qSpin.input];
+    addRow('Quantity', qSpin.wrap);
+
+    const a = makeText('Angle', fmtAngle(_s.values.angle), (v) => {
+      const n = parseAngle(v);
+      return n != null && n > 0 && n <= 360 && liveEdit({ angle: n });
+    }, null, () => { if (_s && els.angle) els.angle.value = fmtAngle(currentRec().angle); });
+    els.angle = a;
+    els.angleRow = addRow('Angle', a);
+    els.angleRow.hidden = initDist === 'full';
+    els.focusFirst = initDist === 'full' ? qSpin.input : a;
+  } else {
+    // Fusion Rectangular Pattern: Objects / Direction/s / Distribution (Extent | Spacing) / Suppression / Dir 1 (Quantity, Distance, Direction) / Dir 2 (Quantity, Distance, Direction)
+    els.dirs = makePick('Direction/s', 'dirs', () => {
+      if (_s.step === 'dir0' || _s.step === 'dir1') setStep(_s.c ? 'values' : 'objects');
+      else setStep('dir0');
+    });
+    els.clearDirs = makeClear('directions', () => { liveEdit({ directions: [null, null] }); });
+    addRow('Direction/s', els.dirs, els.clearDirs);
+
+    els.distribution = makeSelect('Distribution', [['total', 'Extent'], ['spacing', 'Spacing']], _s.values.distanceType, (v) => {
+      const rec = currentRec();
+      const distance = [0, 1].map((k) => patternDistanceFor(rec, k, v)); // switching keeps the copies where they are
+      if (liveEdit({ distanceType: v, distance })) {
+        syncDistanceInputs(0);
+        syncDistanceInputs(1);
+      }
+    });
+    addRow('Distribution', els.distribution);
+
+    els.suppress = makeCheck('Suppression', _s.suppressOn, (on) => { _s.suppressOn = on; renderOverlay(); refreshForm(); });
+    addRow('Suppression', els.suppress);
+
+    els.distance = [];
+    els.directionMode = [];
+    for (let k = 0; k < 2; k++) {
+      const activateDir = () => {
+        if (_s && _s.c && _s.c.quantity[k] >= 2) { _s.activeDir = k; renderOverlay(); }
+      };
+      const qSpin = createSpinner(`Quantity ${k + 1}`, fmtNum(_s.values.quantity[k]), k, (v, el) => {
+        const n = parseCount(v);
+        return setQuantityValue(k, n, el);
+      }, activateDir);
+      els.quantity.push(qSpin.input);
+      addRow('Quantity', qSpin.wrap);
+
+      const d = makeText(`Distance ${k + 1}`, fmtLen(Math.abs(_s.values.distance[k])), (v, el) => setDistanceValue(k, v, el), activateDir, () => syncDistanceInputs(k));
+      els.distance.push(d);
+      addRow('Distance', d);
+
+      const dirMode = makeSelect(`Direction ${k + 1}`, [['one', 'One Direction'], ['symmetric', 'Symmetric']], _s.values.symmetric[k] ? 'symmetric' : 'one', (v) => {
+        const symmetric = currentRec().symmetric.slice();
+        symmetric[k] = v === 'symmetric';
+        liveEdit({ symmetric });
+      });
+      els.directionMode.push(dirMode);
+      addRow('Direction', dirMode);
+    }
     els.focusFirst = els.distance[0];
   }
-  els.suppress = check('Suppress', _s.suppressOn, (on) => { _s.suppressOn = on; renderOverlay(); refreshForm(); });
-  footChecks.append(els.suppress);
+
   els.hint = document.createElement('div'); els.hint.className = 'sk-pat-hint'; els.hint.setAttribute('aria-live', 'polite');
+
+  const foot = document.createElement('div'); foot.className = 'sk-pat-foot';
+  const info = document.createElement('span'); info.className = 'sk-pat-info'; info.innerHTML = INFO_SVG;
   const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'sk-pat-ok'; ok.textContent = 'OK';
   ok.addEventListener('click', () => commitPattern());
   const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'sk-pat-cancel'; cancel.textContent = 'Cancel';
   cancel.addEventListener('click', () => userCancel());
-  foot.append(ok, cancel);
+  foot.append(info, ok, cancel);
   els.ok = ok;
-  els.invalid = () => { const bad = [...grid.querySelectorAll('input[aria-invalid=true]')][0]; return bad ? invalidText(bad) : null; };
-  body.append(grid, els.hint, foot);
+  els.info = info;
+  els.invalid = () => {
+    const bad = [...rows.querySelectorAll('input[aria-invalid=true]')].filter((el) => !el.closest('[hidden]'))[0];
+    return bad ? invalidText(bad) : null;
+  };
+  body.append(rows, els.hint, foot);
   _s.els = els;
 }
+
 function invalidText(i) {
   const f = i.dataset.field || 'the value';
   if (/^Quantity/.test(f)) return `${f.toLowerCase()} must be a whole number of ${f === 'Quantity' ? 2 : 1} or more`;
-  if (f === 'Total angle') return 'the total angle must be more than 0 and at most 360 degrees';
+  if (f === 'Angle' || f === 'Total angle') return 'the total angle must be more than 0 and at most 360 degrees';
   return `${f.toLowerCase()} must be a number greater than 0`;
+}
+
+// ---- on-canvas inline Distance + Quantity boxes --------------------------------------------------------------------------------
+
+function buildInlineBox() {
+  if (!_s || _s.kind.type !== T.RECTANGULAR_PATTERN || typeof document === 'undefined' || !document.body) return;
+  const root = document.createElement('div');
+  root.className = PATTERN_INLINE_CLASS;
+  root.hidden = true;
+
+  const dist = document.createElement('input');
+  dist.type = 'text'; dist.className = 'sk-pat-inline-dist';
+  dist.setAttribute('aria-label', 'Inline distance'); dist.dataset.inlineField = 'distance';
+  dist.addEventListener('input', () => {
+    if (!_s || _s.activeDir == null) return;
+    const k = _s.activeDir;
+    const ok = setDistanceValue(k, dist.value, dist);
+    dist.setAttribute('aria-invalid', ok ? 'false' : 'true');
+    if (_s.els.distance && _s.els.distance[k]) _s.els.distance[k].setAttribute('aria-invalid', ok ? 'false' : 'true');
+  });
+  wireFieldKeys(dist, () => 'distance must be a number greater than 0', () => { if (_s && _s.activeDir != null) syncDistanceInputs(_s.activeDir); });
+
+  const spinWrap = document.createElement('div');
+  spinWrap.className = 'sk-pat-spin sk-pat-inline-spin';
+  const qty = document.createElement('input');
+  qty.type = 'text'; qty.inputMode = 'numeric';
+  qty.setAttribute('aria-label', 'Inline quantity'); qty.dataset.inlineField = 'quantity';
+  qty.addEventListener('input', () => {
+    if (!_s || _s.activeDir == null) return;
+    const k = _s.activeDir;
+    const ok = setQuantityValue(k, parseCount(qty.value), qty);
+    qty.setAttribute('aria-invalid', ok ? 'false' : 'true');
+    if (_s.els.quantity && _s.els.quantity[k]) _s.els.quantity[k].setAttribute('aria-invalid', ok ? 'false' : 'true');
+  });
+  qty.addEventListener('keydown', (ev) => {
+    if (!_s || _s.activeDir == null) return;
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); stepQuantity(_s.activeDir, 1); }
+    else if (ev.key === 'ArrowDown') { ev.preventDefault(); stepQuantity(_s.activeDir, -1); }
+  });
+  wireFieldKeys(qty, () => `quantity ${_s.activeDir + 1} must be a whole number of 1 or more`);
+
+  const btns = document.createElement('div'); btns.className = 'sk-pat-spin-btns';
+  const mkSpin = (dir, cls, svg, lbl) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = cls; b.dataset.inlineSpin = dir; b.setAttribute('aria-label', lbl); b.innerHTML = svg;
+    b.addEventListener('click', (ev) => { ev.preventDefault(); if (_s && _s.activeDir != null) stepQuantity(_s.activeDir, dir === 'up' ? 1 : -1); });
+    return b;
+  };
+  btns.append(mkSpin('up', 'sk-pat-spin-up', SPIN_UP_SVG, 'Increase inline quantity'), mkSpin('down', 'sk-pat-spin-down', SPIN_DOWN_SVG, 'Decrease inline quantity'));
+  spinWrap.append(qty, btns);
+
+  root.append(dist, spinWrap);
+  document.body.appendChild(root);
+  _s.inline = { root, dist, qty };
+}
+
+function placeInline() {
+  if (!_s || !_s.inline) return;
+  const { root, dist, qty } = _s.inline;
+  if (!_s.c || _s.c.type !== T.RECTANGULAR_PATTERN || _s.step !== 'values' || _s.activeDir == null) {
+    root.hidden = true;
+    return;
+  }
+  const k = _s.activeDir;
+  const h = patternHandles(_s.state, _s.c).find((x) => x.k === k);
+  if (!h) { root.hidden = true; return; }
+
+  root.hidden = false;
+  root.dataset.dir = String(k);
+  syncDistanceInputs(k, document.activeElement);
+  syncQuantityInputs(k, document.activeElement);
+
+  const px = getZoomFactor(_s.svg);
+  const ap = worldToScreen(_s.svg, arrowPoint(h, px));
+  const r = _s.svg.getBoundingClientRect ? _s.svg.getBoundingClientRect() : null;
+  const bw = root.offsetWidth || 160, bh = root.offsetHeight || 32;
+  const gap = 18;
+  const candidates = [
+    [ap.x + gap, ap.y + gap],
+    [ap.x + gap, ap.y - gap - bh],
+    [ap.x - gap - bw, ap.y + gap],
+    [ap.x - gap - bw, ap.y - gap - bh],
+  ];
+  let best = candidates[0];
+  if (r && r.width > 0 && r.height > 0) {
+    const pad = 6;
+    const dr = _s.dock && _s.dock.el && !_s.dock.el.hidden && _s.dock.el.getBoundingClientRect ? _s.dock.el.getBoundingClientRect() : null;
+    const inside = (x, y) => x >= r.left + pad && y >= r.top + pad && x + bw <= r.right - pad && y + bh <= r.bottom - pad;
+    const ovArea = (x, y, o) => (!o || o.width <= 0 || o.height <= 0) ? 0 : Math.max(0, Math.min(x + bw, o.right) - Math.max(x, o.left)) * Math.max(0, Math.min(y + bh, o.bottom) - Math.max(y, o.top));
+    const clamp = (x, y) => [Math.max(r.left + pad, Math.min(x, r.right - pad - bw)), Math.max(r.top + pad, Math.min(y, r.bottom - pad - bh))];
+    const free = candidates.find(([x, y]) => inside(x, y) && ovArea(x, y, dr) === 0);
+    if (free) best = free;
+    else {
+      const clamped = candidates.map(([x, y]) => clamp(x, y));
+      best = clamped.reduce((a, b) => (ovArea(b[0], b[1], dr) < ovArea(a[0], a[1], dr) ? b : a));
+    }
+  }
+  root.style.left = `${Math.round(best[0])}px`;
+  root.style.top = `${Math.round(best[1])}px`;
 }
 
 // the dialog's live texts: the object count, the centre / directions, the pressed re-pick button, the hint
@@ -529,18 +878,28 @@ function refreshForm() {
   const c = _s.c, objs = c ? { shapes: c.sources.shapes, joints: [] } : selectionObjects(state);
   const n = c ? c.sources.shapes.length + c.sources.points.filter((p) => !c.sources.shapes.some((id) => { const s = state.shapes.find((x) => x.id === id); return s && s.joints.includes(p); })).length
     : objs.shapes.length + objs.joints.length;
-  els.objects.textContent = step === 'objects' ? `${n} selected - done` : `${n} selected`;
+  els.objects.querySelector('.sk-pat-pick-lbl').textContent = n > 0 ? `${n} selected` : 'Select';
   els.objects.setAttribute('aria-pressed', step === 'objects' ? 'true' : 'false');
+  els.clearObjects.hidden = n === 0;
+
   if (kind.type === T.CIRCULAR_PATTERN) {
     const cen = c ? c.centre : _s.values.centre;
-    els.centre.textContent = step === 'centre' ? 'Pick a point' : cen ? (cen === ORIGIN_JOINT_ID ? 'Origin' : 'Point') : 'Pick';
+    els.centre.querySelector('.sk-pat-pick-lbl').textContent = step === 'centre' ? 'Select' : cen ? (cen === ORIGIN_JOINT_ID ? 'Origin' : 'Point') : 'Select';
     els.centre.setAttribute('aria-pressed', step === 'centre' ? 'true' : 'false');
+    els.clearCentre.hidden = !cen;
+    if (els.angleRow && els.distribution) els.angleRow.hidden = els.distribution.value === 'full';
   } else {
-    const rec = c || { ..._s.values };
-    els.dirs.forEach((b, k) => { b.textContent = step === `dir${k}` ? 'Pick a line' : `${k + 1}: ${patternDirectionName(rec, k)}`; b.setAttribute('aria-pressed', step === `dir${k}` ? 'true' : 'false'); });
+    const rec = currentRec();
+    const customCount = rec.directions.filter((d) => d != null).length;
+    const pickingDir = step === 'dir0' || step === 'dir1';
+    els.dirs.querySelector('.sk-pat-pick-lbl').textContent = pickingDir ? (step === 'dir0' ? 'Pick dir 1' : 'Pick dir 2') : (customCount > 0 ? `${customCount} selected` : 'Select');
+    els.dirs.setAttribute('aria-pressed', pickingDir ? 'true' : 'false');
+    els.clearDirs.hidden = customCount === 0;
   }
   const off = c ? c.suppressed.length : 0;
-  els.hint.textContent = HINTS[step] + (step === 'values' && _s.suppressOn ? ` Tap a copy to leave it out${off ? `, its dashed outline to bring it back (${off} left out)` : ''}.` : '');
+  const hintText = HINTS[step] + (step === 'values' && _s.suppressOn ? ` Tap a copy to leave it out${off ? `, its dashed outline to bring it back (${off} left out)` : ''}.` : '');
+  els.hint.textContent = hintText;
+  if (els.info) els.info.title = hintText;
 }
 
 function refresh() { refreshForm(); renderOverlay(); }
@@ -553,7 +912,7 @@ function ensureViewListener() {
   document.addEventListener('panzoom:viewportChanged', () => { if (_s) renderOverlay(); });
 }
 
-// The ONE overlay renderer: the picked centre (a ring), the suppressed instances' dashed ghosts (Suppress on), the rectangular drag arrows.
+// The ONE overlay renderer: the picked centre (a ring), the suppressed instances' dashed ghosts (Suppress on), the rectangular drag arrows, inline boxes.
 function renderOverlay() {
   if (!_s || !_s.svg) return;
   ensureViewListener();
@@ -589,4 +948,5 @@ function renderOverlay() {
     }
   }
   g.innerHTML = html;
+  placeInline();
 }

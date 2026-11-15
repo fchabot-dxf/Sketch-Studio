@@ -34,9 +34,16 @@
 //   a circle                        1 row:  R' - R - sides * d
 //   every vertex Q (source point P) 2 rows, from the pieces meeting there:
 //     N(piece, Q)  Q is at the offset distance from that piece's source: a line, its signed distance - sides * d; an arc, |Q - C| - R - sides * d
-//     T(piece, Q)  Q is on the source normal through P: a line, (Q - P) . u / |u|; an arc, (P - C) x (Q - C) / |P - C| (Q on the ray C -> P)
-//     open start: N(first) + T(first)   open end: N(last) + T(last)   corner: N(before) + N(after)   tangent: N(before) + T(before)
+//     T(piece, Q)  Q is on the source normal through P: a line, (Q - P) . u / |u|; an arc, Q on the RAY from C through P (not the whole line
+//                  through C): |Q - C| * angle(P - C, Q - C), the angle in (-pi, pi], so Q past the centre is no solution
+//     open start: N(first) + T(first)   open end: N(last) + T(last)   corner: N(before) + N(after)
+//     tangent: N(before) + T(after) when the piece after Q is an ARC, else N(before) + T(before)
 //     where the piece before Q is an ARC, its N(before) row is the arc's structural equal (Q is its end joint, joints[2]), so it is not repeated.
+//   TASK 654 (fillet audit F24): an offset ARC's radius |Q - C| has no sign, so a row that only places Q (a line's N + T at a line -> arc tangent
+//   join, a cross product that only puts Q on the LINE through C) is still satisfied when Q has passed the centre: the source radius edited below
+//   d (an L's fillet R 8 -> 4 under a 5 mm inside offset) gave an offset arc of R |4 - 5| = 1 on the wrong side, accepted. Every offset arc now
+//   has a row of its OWN that holds an end on its side of the centre (N = |Q - C| - R - sides * d, or T on the ray), so an edit that needs a
+//   negative offset radius has no solution and is refused like any edit the solver cannot satisfy (Fusion: the offset radius is R -/+ d).
 // Undo is the caller's (the tool wraps applyOffset in recordConstraintStep: ONE undo step). Refusals are data: { ok: false, reason }.
 import { CONSTRAINT_TYPES } from './constants.js';
 import { arcSweepInfo } from './geometry.js';
@@ -363,7 +370,7 @@ function storedPieces(c, shapes) {
  *   { k: 'nl', q, a, b, sign }            (q - a) x (b - a) / |b - a| - sign * d
  *   { k: 'tl', q, p, a, b }               (q - p) . (b - a) / |b - a|
  *   { k: 'na', q, c, src, sign }          |q - c| - R(src) - sign * d
- *   { k: 'ta', q, p, c }                  (p - c) x (q - c) / |p - c|
+ *   { k: 'ta', q, p, c }                  |q - c| * atan2((p - c) x (q - c), (p - c) . (q - c))   (q on the ray c -> p)
  */
 export function offsetOperands(c, shapes) {
   const ps = storedPieces(c, shapes);
@@ -389,7 +396,9 @@ export function offsetOperands(c, shapes) {
     if (!closed && k === n) { const p = ps[n - 1], q = offEnd(p); rows.push(...Nend(p, q), T(p, q, srcPoint(p, 1))); continue; }
     const before = ps[(k - 1 + n) % n], after = ps[k], q = offStart(after);
     const tangent = (c.joins && c.joins[closed ? k : k - 1]) === 'tangent';
-    rows.push(...Nend(before, q), tangent ? T(before, q, srcPoint(before, 1)) : N(after, q));
+    // a tangent join: Q on the source normal through the joint, read from the ARC after it when there is one (its own side of its centre)
+    const t = tangent && (after.src.type === 'arc' ? T(after, q, srcPoint(after, 0)) : T(before, q, srcPoint(before, 1)));
+    rows.push(...Nend(before, q), tangent ? t : N(after, q));
   }
   return rows;
 }
@@ -418,7 +427,10 @@ export function offsetRowValues(rows, d, pt, radius) {
     }
     const c = pt(r.c);
     if (r.k === 'na') out.push(Math.hypot(q.x - c.x, q.y - c.y) - radius(r.src) - r.sign * d);
-    else { const p = pt(r.p), ax = p.x - c.x, ay = p.y - c.y; out.push((ax * (q.y - c.y) - ay * (q.x - c.x)) / (Math.hypot(ax, ay) || 1e-12)); }
+    else {
+      const p = pt(r.p), ax = p.x - c.x, ay = p.y - c.y, bx = q.x - c.x, by = q.y - c.y;
+      out.push(Math.hypot(bx, by) * Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+    }
   }
   return out;
 }

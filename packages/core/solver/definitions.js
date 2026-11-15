@@ -738,10 +738,11 @@ export const Definitions = {
           addGrad(row, r.q, dx / l, dy / l); addGrad(row, r.c, -dx / l, -dy / l);
           addRadiusDerivative(row, positions, -1, r.src.at, r.src.rim, r.src.centre);
         } else if (r.k === 'ta') {
-          // (A x B) / |A|, A = p - c, B = q - c:  d/dB = (-Ay, Ax) / |A|,  d/dA = (By, -Bx) / |A| - (A x B) A / |A|^3
-          const ax = X(r.p) - X(r.c), ay = Y(r.p) - Y(r.c), bx = X(r.q) - X(r.c), by = Y(r.q) - Y(r.c), la = Math.hypot(ax, ay) || 1e-12;
-          const cr = ax * by - ay * bx, la3 = la * la * la;
-          const gax = by / la - cr * ax / la3, gay = -bx / la - cr * ay / la3, gbx = -ay / la, gby = ax / la;
+          // |B| th, th = atan2(A x B, A . B) (q on the RAY c -> p, task 654), A = p - c, B = q - c:
+          //   d th/dB = (-By, Bx) / |B|^2,  d th/dA = (Ay, -Ax) / |A|^2  ->  d/dB = th B / |B| + (-By, Bx) / |B|,  d/dA = |B| (Ay, -Ax) / |A|^2
+          const ax = X(r.p) - X(r.c), ay = Y(r.p) - Y(r.c), bx = X(r.q) - X(r.c), by = Y(r.q) - Y(r.c);
+          const la2 = (ax * ax + ay * ay) || 1e-24, lb = Math.hypot(bx, by) || 1e-12, th = Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+          const gax = lb * ay / la2, gay = -lb * ax / la2, gbx = (th * bx - by) / lb, gby = (th * by + bx) / lb;
           addGrad(row, r.p, gax, gay); addGrad(row, r.q, gbx, gby); addGrad(row, r.c, -gax - gbx, -gay - gby);
         }
       }

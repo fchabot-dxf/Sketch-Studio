@@ -106,6 +106,8 @@ const RADIUS_CASES = [
   ['offset (circle of a circle)', { type: 'offset', shapes: ['C1', 'C2'], rev: [false], sides: [1], joins: [], closed: true, value: 1 }, ['C1', 'C2']],
   ['offset (arc of an arc, open)', { type: 'offset', shapes: ['A1', 'A2'], rev: [false], sides: [-1], joins: [], closed: false, value: 1 }, ['as']],
   ['offset (arc of an arc, walked reversed)', { type: 'offset', shapes: ['A1', 'A2'], rev: [true], sides: [1], joins: [], closed: false, value: 1 }, ['as']],
+  // task 654: a line then an arc at a TANGENT join: the join's T row is the arc's (Q on the ray from A1's centre through its start rim as)
+  ['offset (line then arc, tangent join: the arc\'s ray row)', { type: 'offset', shapes: ['L1', 'L2', 'A1', 'A2'], rev: [false, false], sides: [1, -1], joins: ['tangent'], closed: false, value: 1 }, ['as']],
 ];
 for (const [label, c, uses] of RADIUS_CASES) {
   const col = guard(label, c);

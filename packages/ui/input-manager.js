@@ -409,7 +409,7 @@ function nearestGridPoint(svg, e) {
 // pointer lands on its place (a position-only snap) and binds to nothing, so no point is shared and no constraint ties the new shape to
 // it. Every other tool (select, dimension, constraints, ...) searches only what is editable and visible.
 const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
-const ACTIVE_SKETCH_SNAP_TOOLS = [TOOL_MODES.OFFSET, TOOL_MODES.MIRROR]; // task 660: these search the ACTIVE sketch only (Fillet / Trim / Break search for themselves)
+const ACTIVE_SKETCH_SNAP_TOOLS = [TOOL_MODES.OFFSET, TOOL_MODES.MIRROR, TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.RECTANGULAR_PATTERN]; // task 660: these search the ACTIVE sketch only (Fillet / Trim / Break search for themselves); task 658: the pattern tools too
 function toolSnap(state, svg, pt, excludeIds, boost, otherSketch = false) {
     const shapes = pickableShapes(state);
     const picked = pickScene(state, shapes);
@@ -656,7 +656,7 @@ function handlePointerDown(e, svg, state) {
         }
     }
 
-    // TASK 660: Offset and Mirror found nothing in the ACTIVE sketch: a curve of another visible, unlocked sketch within reach is what the tool warns about
+    // TASK 660: Offset and Mirror (task 658: and the pattern tools) found nothing in the ACTIVE sketch: a curve of another visible, unlocked sketch within reach is what the tool warns about
     let otherShape = null;
     if (!hitJoint && !hitShape && ACTIVE_SKETCH_SNAP_TOOLS.includes(state.currentTool)) {
         const other = toolSnap(state, svg, { x: screenX, y: screenY }, [], snapBoostFor(isTouch), true);
@@ -668,7 +668,7 @@ function handlePointerDown(e, svg, state) {
     try { hitConstraint = constraintAt(svg, state, screenX, screenY, isTouch); } catch(_) { hitConstraint = null; }
 
     // TASK 658: while a pattern dialog is open (its tool, or an edit from a label under Select) its canvas picks come first
-    if (patternSessionOpen() && handlePatternPointerDown(e, svg, state, hitJoint, hitShape)) return true;
+    if (patternSessionOpen() && handlePatternPointerDown(e, svg, state, hitJoint, hitShape, otherShape)) return true;
 
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
     if (!hitJoint && !hitShape && !hitConstraint && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.PAN)){

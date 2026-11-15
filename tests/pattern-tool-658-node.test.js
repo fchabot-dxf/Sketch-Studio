@@ -154,7 +154,9 @@ try {
   ok(q2 && q2.quantity[1] === 1 && q2.instances.length === 2, 'Undo: back to 3 x 1');
 } finally { await app.close(); }
 
-// ---- the active sketch (task 659's rule): another sketch's curves / points are not picks at all (no pick, no message, no step)
+// ---- the active sketch (task 659's rule): another sketch's curves / points are not picks (no pick, no step); a PRESS on a curve of another
+// visible, unlocked sketch shows the shared warning (task 660's helper) ONCE per pick step (objects, centre, direction); a hover never warns;
+// a locked / hidden sketch says nothing
 {
   const prof = await createProfile();
   await createNamedDesign(prof, 'sketchstudio', 'Pattern 658 active sketch');
@@ -165,28 +167,46 @@ try {
     for (let i = 0; i < 20 && Math.abs(a2.toScreen(60, 0).x - a2.toScreen(0, 0).x) > 300; i++) a2.wheel(C.x, C.y, 300);
     const J = (x, y, sk) => { const id = st.genJ(); st.joints.set(id, { x, y, fixed: false, sketchId: sk }); return id; };
     st.clearDocument(); st.sketches.splice(1); st.sketches.push({ id: 'sketch-2', name: 'Sketch 2', visible: true }); st.activeSketchId = 'sketch-1';
+    st.sketches[0].locked = false; st.sketches[0].visible = true;
     const o1 = J(5, -10, 'sketch-2'), o2 = J(35, -10, 'sketch-2'), m1 = J(0, 40, 'sketch-1'), m2 = J(30, 40, 'sketch-1'), d1 = J(60, -20, 'sketch-2'), d2 = J(60, 60, 'sketch-2');
     st.shapes.push({ id: 'other', type: 'line', joints: [o1, o2], sketchId: 'sketch-2' }, { id: 'own', type: 'line', joints: [m1, m2], sketchId: 'sketch-1' }, { id: 'odir', type: 'line', joints: [d1, d2], sketchId: 'sketch-2' });
     a2.frames();
     const P = (x, y) => a2.toScreen(x, y);
     const toasts = () => [...doc.querySelectorAll('#notification-container [data-level]')].map((e) => e.textContent.trim());
+    const clear = () => doc.querySelectorAll('#notification-container [data-level]').forEach((e) => e.remove());
+    const WARN_C = 'Circular Pattern works in the active sketch: make Sketch 2 active first', WARN_R = 'Rectangular Pattern works in the active sketch: make Sketch 2 active first';
     const h = st.history.length;
-    a2.tool('circularPattern');
+    a2.tool('circularPattern'); clear();
+    a2.move(P(20, -10).x, P(20, -10).y);
+    ok(toasts().length === 0, `circular: a HOVER on another sketch's line warns nothing (${toasts()})`);
     a2.click(P(20, -10).x, P(20, -10).y);
     ok(st.selectedShapes.size === 0, "circular: another sketch's line is not an object");
+    ok((toasts().length === 1 && toasts()[0].endsWith(WARN_C)), `circular, objects step: ONE warning (${toasts()})`);
+    clear();
     a2.click(P(15, 40).x, P(15, 40).y);
-    ok(st.selectedShapes.has('own'), 'circular: the active line is an object');
+    ok(st.selectedShapes.has('own') && toasts().length === 0, 'circular: the active line is an object, no warning');
     a2.enter();
     a2.click(P(5, -10).x, P(5, -10).y);
     ok(!st.constraints.some((k) => k.type === 'circularPattern') && st.pattern.step === 'centre', "circular: another sketch's point is not the centre");
-    ok(st.history.length === h && toasts().length === 0, `no undo step, no message (${toasts()})`);
-    a2.esc();
+    ok((toasts().length === 1 && toasts()[0].endsWith(WARN_C)), `circular, centre step: ONE warning (${toasts()})`);
+    ok(st.history.length === h, 'no undo step');
+    // a LOCKED sketch 2 and a HIDDEN one: nothing said
+    for (const [what, set] of [['locked', (k) => { k.locked = true; }], ['hidden', (k) => { k.visible = false; }]]) {
+      clear(); set(st.sketches[1]); a2.frames();
+      a2.click(P(5, -10).x, P(5, -10).y);
+      ok(toasts().length === 0 && st.pattern.step === 'centre', `circular: a ${what} sketch's point says nothing (${toasts()})`);
+      st.sketches[1].locked = false; st.sketches[1].visible = true; a2.frames();
+    }
+    a2.esc(); clear();
     st.selectedShapes.clear(); st.selectedShapes.add('own');
-    a2.tool('rectangularPattern');
+    a2.tool('rectangularPattern'); clear();
     doc.querySelector('.sk-pattern-dialog [data-pick="dir0"]').click(); a2.frames();
+    a2.move(P(60, 20).x, P(60, 20).y);
+    ok(toasts().length === 0, 'rectangular: a hover on another sketch\'s line warns nothing');
     a2.click(P(60, 20).x, P(60, 20).y);
     const q = st.constraints.find((k) => k.type === 'rectangularPattern');
     ok(q && q.directions[0] === null && st.pattern.step === 'dir0', "rectangular: another sketch's line is not a direction");
+    ok((toasts().length === 1 && toasts()[0].endsWith(WARN_R)), `rectangular, direction step: ONE warning (${toasts()})`);
     ok(q.instances.every((i) => i.shapes.every((id) => (st.shapes.find((x) => x.id === id) || {}).sketchId === 'sketch-1')), 'the copies are in the active sketch');
     a2.esc();
   } finally { await a2.close(); }

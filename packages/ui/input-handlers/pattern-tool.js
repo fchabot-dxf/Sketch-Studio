@@ -28,6 +28,7 @@ import { snapBoostFor } from '#ui/snap-detection.js';
 import { dragArrowSvg, dragArrowHit } from '#ui/drag-arrow-handle.js';
 import { createTabbedDockPanel } from '#ui/tabbed-dock-panel.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
 
 const T = CONSTRAINT_TYPES;
 const OVERLAY_ID = 'pattern-tool-overlay';
@@ -225,30 +226,36 @@ function liveEdit(changes) {
 
 /**
  * A press on the canvas while a pattern dialog is open (input-manager asks this FIRST, whatever the tool). hitJoint / hitShape = the app's
- * pick under the pointer. Returns true when the press is the dialog's (else the tool / a pan takes it).
+ * pick under the pointer; otherShape = the curve of another visible, unlocked sketch the press reached when it found nothing in the active
+ * sketch (input-manager's task 660 search). Returns true when the press is the dialog's (else the tool / a pan takes it).
  */
-export function handlePatternPointerDown(e, svg, state, hitJoint, hitShape) {
+export function handlePatternPointerDown(e, svg, state, hitJoint, hitShape, otherShape = null) {
   if (!_s || (e.button !== undefined && e.button !== 0)) return false;
   _s.svg = svg;
   const rule = pickRule(state);
   const shape = !hitJoint && hitShape && hitShape.shape ? hitShape.shape : null;
+  // TASK 660: a pick step's press that found no active-sketch pick warns when it reached another sketch's curve (the shared helper; it says
+  // nothing for a locked / hidden sketch or an active curve). Under Select (a label edit) the app's pick itself may be that curve, or its point.
+  const jointCurve = hitJoint && hitJoint.id !== ORIGIN_JOINT_ID && !rule.joint(hitJoint) ? state.shapes.find((s) => !s.reference && s.joints.includes(hitJoint.id)) : null;
+  const other = otherShape || (shape && !shape.reference && !rule.shape(shape) ? shape : null) || jointCurve;
+  const warn = (lineOnly = false) => (!!other && (!lineOnly || other.type === 'line') && warnOtherSketch(state, _s.kind.title, other));
   if (_s.step === 'objects') {
     if (hitJoint && hitJoint.id !== ORIGIN_JOINT_ID && rule.joint(hitJoint) && !patternInstanceOf(state, hitJoint.id)) toggle(state.selectedJoints, hitJoint.id);
     else if (shape && !shape.reference && rule.shape(shape) && !patternInstanceOf(state, shape.id)) toggle(state.selectedShapes, shape.id);
-    else return false;
+    else return warn();
     if (_s.c) { const objects = selectionObjects(state); if (objects.shapes.length || objects.joints.length) liveEdit({ objects }); }
     refresh();
     return true;
   }
   if (_s.step === 'centre') {
-    if (!hitJoint || !rule.joint(hitJoint) || patternInstanceOf(state, hitJoint.id)) return false;
+    if (!hitJoint || !rule.joint(hitJoint) || patternInstanceOf(state, hitJoint.id)) return warn();
     _s.values.centre = hitJoint.id;
     if (_s.c) { if (liveEdit({ centre: hitJoint.id })) setStep('values'); }
     else create(selectionObjects(state));
     return true;
   }
   if (_s.step === 'dir0' || _s.step === 'dir1') {
-    if (!shape || shape.type !== 'line' || (!shape.reference && !rule.shape(shape))) return false;
+    if (!shape || shape.type !== 'line' || (!shape.reference && !rule.shape(shape))) return warn(true); // another sketch's LINE warns (it is not a direction)
     const k = _s.step === 'dir0' ? 0 : 1, dirs = _s.values.directions.slice();
     dirs[k] = patternDirectionPick(k, shape.id);
     if (liveEdit({ directions: dirs })) setStep('values');

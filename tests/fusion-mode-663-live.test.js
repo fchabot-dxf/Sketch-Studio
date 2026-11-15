@@ -47,6 +47,7 @@ try {
     sidebarDocCount: document.querySelectorAll('.sk-sidebar-doc').length,
     sidebarStatusCount: document.querySelectorAll('.sk-sidebar [data-section="status"]').length,
     sidebarAccountCount: document.querySelectorAll('.sk-sidebar [data-section="account"]').length,
+    sidebarGotoCount: document.querySelectorAll('.sk-sidebar [data-section="goto"]').length,
     docTabsCount: document.querySelectorAll('.sk-doctabs').length,
     addBtnText: document.getElementById('btn-fusion-add-selection').textContent,
     addBtnDisabled: document.getElementById('btn-fusion-add-selection').disabled,
@@ -64,6 +65,7 @@ try {
   assert.strictEqual(bootState.sidebarDocCount, 0, 'Fusion mode hides document title/rename header');
   assert.strictEqual(bootState.sidebarStatusCount, 0, 'Fusion mode hides Drive/save status line');
   assert.strictEqual(bootState.sidebarAccountCount, 0, 'Fusion mode hides Google account / Drive controls');
+  assert.strictEqual(bootState.sidebarGotoCount, 0, 'Fusion mode hides GO TO section');
   assert.strictEqual(bootState.docTabsCount, 0, 'Fusion mode hides document tab strip');
   assert.strictEqual(bootState.addBtnText, 'Add selection', 'Add selection button label present');
   assert.strictEqual(bootState.addBtnDisabled, false, 'Add selection enabled when window.adsk present');
@@ -83,11 +85,11 @@ try {
   assert.strictEqual(afterAdd[1].action, 'add_selection', 'sent add_selection action');
   assert.strictEqual(JSON.parse(afterAdd[1].data).action, 'add_selection', 'payload has action: add_selection');
 
-  // Simulate selection_data -> "Received N regions (import coming next)"
+  // Simulate selection_data -> "Added <source name>: N regions, M chains"
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', JSON.stringify({ action: 'selection_data', version: 1, regions: [{ id: 'reg_0' }, { id: 'reg_1' }] }))`);
   const selNotice = await evalJs(`({ hidden: document.getElementById('prepare-notice').hidden, text: document.getElementById('prepare-notice').textContent, isError: document.getElementById('prepare-notice').classList.contains('is-error') })`);
   assert.strictEqual(selNotice.hidden, false, 'selection_data notice is visible');
-  assert.strictEqual(selNotice.text, 'Received 2 regions (import coming next)', 'selection_data notice text matches');
+  assert.strictEqual(selNotice.text, 'Added selection: 2 regions, 0 chains', 'selection_data notice text matches');
   assert.strictEqual(selNotice.isError, false, 'selection_data notice is not an error');
 
   // Desktop screenshot (1280x800) showing Prepare + Review tabs, Add selection, Connected status, and selection_data notice
@@ -150,6 +152,7 @@ try {
     hasDoc: !!document.querySelector('.sk-sidebar-doc'),
     hasStatus: !!document.querySelector('.sk-sidebar [data-section="status"]'),
     hasAccount: !!document.querySelector('.sk-sidebar [data-section="account"]'),
+    hasGoto: !!document.querySelector('.sk-sidebar [data-section="goto"]'),
     hasDocTabs: document.querySelectorAll('.sk-doctabs').length === 1,
   }))()`);
   await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`);
@@ -158,6 +161,7 @@ try {
   assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
   assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
   assert.strictEqual(normalSidebar.hasAccount, true, 'normal Shaper keeps Google account / Drive section');
+  assert.strictEqual(normalSidebar.hasGoto, true, 'normal Shaper keeps GO TO section');
   assert.strictEqual(normalSidebar.hasDocTabs, true, 'normal Shaper keeps document tab strip');
   // Switching to Prepare in normal mode also has no Add selection button
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);

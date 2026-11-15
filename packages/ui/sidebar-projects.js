@@ -31,7 +31,7 @@ export { relativeTime };
 // immediately AFTER the host's <header> (the element holding this sidebar's button; TASK 602, owner: between the header and the tool ribbon), Open / Open recent / Open from file / New open a new tab, and the name,
 // status line and page title below follow the ACTIVE tab's design (the buffer's), not the device-wide "current" pointer. A host without it is unchanged.
 // TASK 663: `projects: false` opts the host out of the project/file layer (document name/status header, New/Templates/Save/Duplicate/Open recent/Projects/Open file/Import file actions, Drive/Google account controls, Projects modal, document tab strip, Ctrl+S save prompt, and unsaved-leave prompt) while keeping `hostActions`, stage switcher, and GO TO.
-export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, projects = true, store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
+export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, projects = true, goTo = true, store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
   let currentDesignId = null;
@@ -112,6 +112,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     driveControls,
     status: projects ? statusLine : null,
     stages, activeStage, onStageChange,
+    goTo,
     beforeGoTo: projects ? (() => projectActions.settleUnsaved()) : null,
     onRenameDoc: projects ? (name) => act(async () => {
       const b = getBuffer && getBuffer();

@@ -22,7 +22,7 @@ import {
 import { SNAP } from '#core/constants.js';
 import { dragArrowSvg, dragArrowHit, dragArrowDirection } from '#ui/drag-arrow-handle.js';
 import { arcSweepInfo } from '#core/geometry.js';
-import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted
+import { inertEntities, isShapeInert, sketchOf, DEFAULT_SKETCH_ID } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted; TASK 657: only the active sketch is
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -106,9 +106,17 @@ export function getFilletRadius() {
 
 // ---- pick / hover -------------------------------------------------------------------------------------------
 
-// TASK 577: a line / corner of a locked or hidden sketch is not a fillet pick (the picks above search every shape; this drops theirs).
-function lineOf(line, state) { return line && !isShapeInert(inertEntities(state), line.id) ? line : null; }
+// The ONE pick filter (task 577, 657): a curve is a fillet pick only when it is in the ACTIVE sketch (Fusion fillets only the sketch being edited)
+// and that sketch is not locked / hidden (the picks below search every shape; this drops the others). A corner needs both of its curves.
+const activeSketch = (state) => state.activeSketchId || DEFAULT_SKETCH_ID;
+function lineOf(line, state) { return line && sketchOf(line) === activeSketch(state) && !isShapeInert(inertEntities(state), line.id) ? line : null; }
 function cornerOf(corner, state) { return corner && lineOf(corner.lineA.shape, state) && lineOf(corner.lineB.shape, state) ? corner : null; }
+// A curve of ANOTHER visible, unlocked sketch the user picked: the one message (a locked / hidden sketch's curve stays silent, task 649). Our divergence: in Fusion those curves are not selectable.
+function otherSketchMessage(state, shape) {
+  if (!shape || sketchOf(shape) === activeSketch(state) || isShapeInert(inertEntities(state), shape.id)) return null;
+  const sk = (state.sketches || []).find((k) => k.id === sketchOf(shape));
+  return sk ? `Fillet works in the active sketch: make ${sk.name} active first` : null;
+}
 
 export function handleFilletPointerMove(e, ctx, state, viewState) {
   _ctx = ctx;
@@ -137,7 +145,7 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
     renderFilletOverlay(svg, hoverCorner, viewState, { highlight: [_pick.line1] });
     return;
   }
-  hoverCorner = cornerOf(findCornerAtPoint(state, world, thresh), state);
+  hoverCorner = cornerOf(findCornerAtPoint(state, world, thresh, (c) => !!lineOf(c, state)), state);
   renderFilletOverlay(svg, hoverCorner, viewState);
 }
 
@@ -168,7 +176,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
 
   if (_pick) {
     const line2 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
-    if (!line2) return true; // clicked empty space: keep waiting for line 2 (Esc cancels)
+    if (!line2) { const msg = otherSketchMessage(state, findFilletShapeAtPoint(state, world, thresh)); if (msg) showNotification(msg, 'warning'); return true; } // empty space (or another sketch's curve, with the message): keep waiting for line 2 (Esc cancels)
     if (line2.id === _pick.line1.id) { cancelAll(); return true; } // click line 1 again: un-pick
     const corner = cornerOf(findCornerBetweenLines(state, _pick.line1, line2, [_pick.at, world]), state); // two curves meeting twice: the corner nearest the picks
     if (!corner) { showNotification('Curves must meet at a corner to fillet', 'warning'); return true; }
@@ -177,7 +185,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
   }
 
   // shortcut: a click on a corner opens the same input-first flow directly
-  const hit = cornerOf(findCornerAtPoint(state, world, thresh), state);
+  const hit = cornerOf(findCornerAtPoint(state, world, thresh, (c) => !!lineOf(c, state)), state);
   if (hit) { openInput(svg, state, viewState, hit); return true; }
 
   // a tap on a T-junction joint (three or more curves) is no corner and must not silently pick one of them: say to pick the two curves, start nothing (task 655)
@@ -191,6 +199,8 @@ function pressAt(svg, state, viewState, clientX, clientY) {
     renderFilletOverlay(svg, null, viewState, { highlight: [line1] });
     return true;
   }
+  const msg = otherSketchMessage(state, findFilletShapeAtPoint(state, world, thresh));
+  if (msg) { showNotification(msg, 'warning'); return true; }
   if (why) showNotification(why, 'warning');
   return false;
 }

@@ -15112,3 +15112,5 @@ Task 661 (Claude Sonnet): inactive sketches draw at 75% opacity so the active sk
 - packages/ui/profile-fill.js: new `profileFillLoops` ({d, shapeId}); `profileFillPaths` is the same cache's `d` list.
 - Tests: tests/inactive-sketch-dim-661.test.js (node; fails on main e959ea1: "only sketch-2 is dimmed"), tests/inactive-sketch-dim-661-live.test.js (real mouse, Pen Plotter).
 - Evidence .evidence/661: one-sketch render md5 956ba98aa3ff30ec2e31ddd1d2ff2f8d before and after (identical); before-rest.png ded4a2e1ee3540062751665b585a5992 vs after-rest.png b69c82c6d3ada8c944741afce69ff10f; after-selected.png 7e1662e52c97bc032c8d50a7ed32234e (selected inactive line fully dark blue).
+
+OWNER CHANGE (task 661): the inactive opacity is 50%, not 75%: token --sk-inactive-sketch-opacity: 0.5 (and the rule fallback); tests expect 0.5. Fresh capture .evidence/661/after-1-sketch-1-active.png.

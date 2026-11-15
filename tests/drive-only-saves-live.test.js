@@ -94,6 +94,7 @@ await (async () => {
     // 4. Open second tab (Untitled with drawn line) -> refresh -> BOTH tabs return
     await clickSel('.sk-sidebar-backdrop');
     await clickSel('.sk-doctab-new');
+    await waitFor(`!!document.querySelector('.sk-tp-card[data-template="blank"]')`, 'the template modal'); await clickSel('.sk-tp-card[data-template="blank"]'); // TASK 651: the Blank card
     await waitFor(`document.querySelectorAll('.sk-doctab').length === 2`, 'second Untitled tab opened');
     await drawSegment(0.55);
     assert.strictEqual(await shapesCount(), 1, 'second Untitled has its own line');

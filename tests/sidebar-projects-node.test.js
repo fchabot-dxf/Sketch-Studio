@@ -46,7 +46,7 @@ try {
   assert.deepStrictEqual((await recent()).map((r) => r[0]), ['Door A'], 'and the recent list');
 
   // ── New design KEEPS the old one, and stores nothing until it is named ──
-  pressEl('[data-action="new-design"]'); await settle(300);
+  pressEl('[data-action="new-design"]'); await settle(100); pressEl('.sk-tp-card[data-template="blank"]'); await settle(300); // TASK 651: through the template modal's Blank card
   assert.strictEqual(shapes(), 0, 'New design starts empty');
   await openSb(); // the drawer closed after the action: reopen to read the refreshed name
   assert.strictEqual(q('.sk-sidebar-doc').textContent, 'Untitled');

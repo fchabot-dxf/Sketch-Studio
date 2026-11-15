@@ -78,7 +78,7 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
     } else if (p === 'open-file') {
       await openSidebar(); pressEl('[data-action="open-file"]', 'Open from file');
     } else if (p === 'new') {
-      await openSidebar(); pressEl('[data-action="new-design"]', 'New design');
+      await openSidebar(); pressEl('[data-action="new-design"]', 'New design'); await app.waitFor(() => !!q('.sk-tp-card[data-template="blank"]'), 'the template modal'); pressEl('.sk-tp-card[data-template="blank"]', 'the Blank design card'); // TASK 651: New design asks for a template first
     } else if (p === 'goto') {
       await openSidebar(); pressEl(`.sk-sidebar-goto [data-app="${H.goto}"]`, 'GO TO ' + H.goto);
     }

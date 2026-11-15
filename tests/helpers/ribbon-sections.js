@@ -126,9 +126,6 @@ export async function runRibbonSections(hostName, part) {
           } else if (tool) {
             assert.strictEqual(await evalJs(`(() => { const b = document.getElementById('${id}'); const act = [...document.querySelectorAll('.sk-ribbon .sk-ribbon-btn.active')].map((x) => x.id);
               const lit = document.querySelector(${JSON.stringify(nameSel(sec.key))}).classList.contains('active'); return act.length === 1 && act[0] === '${id}' && lit === b.hidden; })()`), true, t + ': the tool is the one active tool; the section name is lit exactly when it is not in the bar');
-          } else if (id === 'btn-parameters') {
-            assert.strictEqual(await evalJs(`document.getElementById('btn-parameters').getAttribute('aria-pressed')`), 'true', t + ': the Parameters window opens');
-            await evalJs(`document.getElementById('btn-parameters').click()`); await sleep(150); // close it again (its own toggle)
           } else if (MESSAGES[id]) {
             assert.strictEqual(await evalJs(`document.body.innerText.includes(${JSON.stringify(MESSAGES[id])})`), true, t + ': the action runs (its message with nothing selected)');
           } else if (id === 'freehand-btn') {

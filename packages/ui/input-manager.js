@@ -7,7 +7,7 @@
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
+import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 import { findSnap, snapBoostFor } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
@@ -410,7 +410,6 @@ function nearestGridPoint(svg, e) {
 // pointer lands on its place (a position-only snap) and binds to nothing, so no point is shared and no constraint ties the new shape to
 // it. Every other tool (select, dimension, constraints, ...) searches only what is editable and visible.
 const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
-const ACTIVE_SKETCH_SNAP_TOOLS = [TOOL_MODES.OFFSET, TOOL_MODES.MIRROR, TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.RECTANGULAR_PATTERN]; // task 660: these search the ACTIVE sketch only (Fillet / Trim / Break search for themselves); task 658: the pattern tools too
 function toolSnap(state, svg, pt, excludeIds, boost, otherSketch = false) {
     const shapes = pickableShapes(state);
     const picked = pickScene(state, shapes);

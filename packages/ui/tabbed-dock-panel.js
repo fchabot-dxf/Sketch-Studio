@@ -56,7 +56,7 @@ function injectStyles() {
   .sk-dock-close { width: 44px; height: 44px; font-size: 18px; }
 }
 @media (max-width: 640px) {
-  .sk-dock[data-sheet] { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important;
+  .sk-dock[data-sheet] { left: 0 !important; right: 0 !important; top: auto !important; bottom: var(--sk-footer-h, 0px) !important; /* TASK 677: on the footer, whose Parameters button opens / closes it */ width: 100% !important;
     height: min(60vh, 420px) !important; border-radius: 12px 12px 0 0; }
   .sk-dock[data-sheet] .sk-dock-header { cursor: default; }
   .sk-dock[data-sheet] .sk-dock-resize { display: none; }

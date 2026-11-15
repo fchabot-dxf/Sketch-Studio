@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey } from './helpers/cdp-browser.js';
 import { pressRibbonTool } from './helpers/ribbon-tool.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const EVID = path.join(process.cwd(), '.evidence', '678');
@@ -84,6 +85,7 @@ await (async () => {
         await mouse('mouseReleased', p.x, p.y, 0, 2); await sleep(220);
       };
 
+      await resetBufferLive(cdp);
       await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
       await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper design tab');
       await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);
@@ -194,6 +196,7 @@ await (async () => {
         await touch('touchEnd', []); await sleep(220);
       };
 
+      await resetBufferLive(cdp);
       await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
       await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'penplotter design tab');
       await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);

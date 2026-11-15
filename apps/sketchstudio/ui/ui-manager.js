@@ -27,7 +27,7 @@ export function setupUI(state){
   try{ if(state.currentTool === TOOL_MODES.LINE && t !== TOOL_MODES.LINE) deactivateLineTool(state); }catch(_){ }
   try{ if(state.currentTool === TOOL_MODES.TRIM && t !== TOOL_MODES.TRIM) resetTrimState(); }catch(_){ }
   try{ if(state.currentTool === TOOL_MODES.BREAK && t !== TOOL_MODES.BREAK) resetBreakState(); }catch(_){ }
-  try{ if(state.currentTool === TOOL_MODES.FILLET && t !== TOOL_MODES.FILLET) resetFilletState(); }catch(_){ }
+  if(state.currentTool === TOOL_MODES.FILLET && t !== TOOL_MODES.FILLET) resetFilletState();
   if(state.currentTool === TOOL_MODES.OFFSET && t !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
   resetPatternState(); // TASK 658: any tool switch cancels an open pattern dialog (a pattern tool's `begin` opens its own)
 
@@ -41,7 +41,7 @@ export function setupUI(state){
 
     if (t === TOOL_MODES.TRIM) { try { setupTrimTool(); } catch(_) {} }
     else if (t === TOOL_MODES.BREAK) { try { setupBreakTool(); } catch(_) {} }
-    else if (t === TOOL_MODES.FILLET) { try { setupFilletTool(document.getElementById('svgCanvas') || document.querySelector('svg'), state); } catch(_) {} }
+    else if (t === TOOL_MODES.FILLET) { setupFilletTool(document.getElementById('svgCanvas'), state); }
     
     // S7c-2d: the shared tool ribbon owns the active highlight now — sync it to state.currentTool. Load-bearing:
     // setTool is called from OUTSIDE the ribbon (the auto-SELECT after clear/escape), and the render loop also

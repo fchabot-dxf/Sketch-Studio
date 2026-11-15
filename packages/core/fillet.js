@@ -11,13 +11,20 @@ import { makeArc } from './shapes.js';
 import { arcSweepInfo } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
-import { parse as parseUnit } from './units.js';
+import { format as formatUnit, parse as parseUnit } from './units.js';
+import { docUnit } from './settings-manager.js';
 import { nextDimensionName } from './parameters.js';
 import { newJointId } from './shape-id.js';
 import { inActiveSketch } from './sketch-model.js';
 
 /** A trimmed line shorter than this (world mm) counts as collapsed. */
 export const COLLAPSE_TOL = 1e-3;
+
+const fmtMsg = (mm, decimals) => formatUnit(mm, docUnit(), decimals != null ? { unit: true, decimals } : { unit: true });
+const validateRadius = (requestedRadius) => {
+  const radius = Number(requestedRadius);
+  return Number.isFinite(radius) && radius > 0 ? radius : null;
+};
 
 /** Default fillet radius in WORLD mm (1 world unit = 1 mm): 5 mm, or 1/4" = 6.35 mm for an inch document. */
 export function defaultFilletRadius(docUnit = 'mm') {
@@ -241,7 +248,8 @@ export function filletGeometryForLegs(P, legA, legB, requestedRadius = 5) {
   if (Math.abs(legA.u.x * legB.u.x + legA.u.y * legB.u.y) > TANGENT_DOT) {
     return { valid: false, reason: 'Curves run tangent to each other (nothing to round)' };
   }
-  const radius = Math.max(0.1, requestedRadius);
+  const radius = validateRadius(requestedRadius);
+  if (radius === null) return { valid: false, reason: 'Radius must be greater than zero' };
   const dot = (a, b) => a.x * b.x + a.y * b.y;
   const loci = [[legA, legB], [legB, legA]].map(([leg, other]) => {
     let n = { x: -leg.u.y, y: leg.u.x };
@@ -251,7 +259,7 @@ export function filletGeometryForLegs(P, legA, legB, requestedRadius = 5) {
     return { kind: 'circle', c: leg.c, rho: inside ? leg.R - radius : leg.R + radius, inside };
   });
   const tooBig = loci.findIndex(l => l.kind === 'circle' && l.rho < COLLAPSE_TOL);
-  if (tooBig !== -1) return { valid: false, reason: `R = ${radius.toFixed(2)} is too large for the arc (its radius is ${[legA, legB][tooBig].R.toFixed(2)})` };
+  if (tooBig !== -1) return { valid: false, reason: `R = ${fmtMsg(radius)} is too large for the arc (its radius is ${fmtMsg([legA, legB][tooBig].R)})` };
 
   let candidates;
   const [LA, LB] = loci;
@@ -293,7 +301,7 @@ export function filletGeometryForLegs(P, legA, legB, requestedRadius = 5) {
     const d = Math.hypot(O.x - P.x, O.y - P.y);
     if (!best || d < best.d) best = { d, O, tA: a.t, tB: b.t };
   }
-  if (!best) return { valid: false, reason: `R = ${radius.toFixed(2)} ${why}` };
+  if (!best) return { valid: false, reason: `R = ${fmtMsg(radius)} ${why}` };
   return {
     valid: true, radius, tA: best.tA, tB: best.tB, centerPt: best.O,
     insideA: loci[0].kind === 'circle' ? loci[0].inside : undefined,
@@ -342,10 +350,11 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
   const sinHalf = Math.sin(halfAngle);
   const tanHalf = Math.tan(halfAngle);
 
-  let radius = Math.max(0.1, requestedRadius);
+  const radius = validateRadius(requestedRadius);
+  if (radius === null) return { valid: false, reason: 'Radius must be greater than zero' };
   let d = radius / tanHalf;
   if (2 * d < COLLAPSE_TOL) {
-    return { valid: false, reason: `R = ${radius.toFixed(2)} is too small for a corner this close to straight (the arc would be shorter than ${COLLAPSE_TOL} mm); use a larger radius` };
+    return { valid: false, reason: `R = ${fmtMsg(radius)} is too small for a corner this close to straight (the arc would be shorter than ${fmtMsg(COLLAPSE_TOL, 5)}); use a larger radius` };
   }
 
   // NO clamp (owner ruling): an oversized radius is applied as asked; a tangent point may land past a line's far
@@ -353,7 +362,7 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
   // line would collapse to exactly zero length -- there the constraints are degenerate and the solver would
   // report success with a wrong answer (verified in Node, turn 403).
   if (Math.abs(d - lenA) < COLLAPSE_TOL || Math.abs(d - lenB) < COLLAPSE_TOL) {
-    return { valid: false, reason: `R = ${radius.toFixed(2)} would collapse a line to zero length; use a slightly different radius` };
+    return { valid: false, reason: `R = ${fmtMsg(radius)} would collapse a line to zero length; use a slightly different radius` };
   }
 
   const tA = { x: cornerPt.x + d * uA.x, y: cornerPt.y + d * uA.y };
@@ -543,11 +552,9 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   constraints.push(radiusConstraint);
 
   // Solve to ensure mathematical consistency
-  try {
-    if (state.engine && typeof state.engine.solve === 'function') {
-      state.engine.solve(200);
-    }
-  } catch (_) {}
+  if (state.engine && typeof state.engine.solve === 'function') {
+    state.engine.solve(200);
+  }
 
   return {
     success: true,

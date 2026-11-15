@@ -48,7 +48,8 @@ function injectStyles() {
 .sk-browser .sk-tree-hdr { position: absolute; top: 3px; right: 8px; padding: 0; }
 .sk-browser .sk-tree-title { display: none; }
 /* TASK 618 / 623 / 619: the canvas's top-right corner (Construction on desktop+phone in SketchStudio; Sketches on phones < 641 px) */
-.sk-canvas-corner { position: absolute; top: 8px; right: 8px; z-index: 20; display: flex; gap: 8px; }
+:root { --sk-canvas-inset: 8px; } /* TASK 676: how far a button floating on the canvas sits from its edge: the corner buttons here and the phone-landscape footer (app-footer.js) */
+.sk-canvas-corner { position: absolute; top: var(--sk-canvas-inset); right: var(--sk-canvas-inset); z-index: 20; display: flex; gap: 8px; }
 .sk-corner-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
   border: 1px solid var(--sk-browser-line, #cbd5e1); border-radius: 6px; cursor: pointer; color: var(--sk-browser-fg, #1f2937);
   background: var(--sk-browser-solid, #f8fafc); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }

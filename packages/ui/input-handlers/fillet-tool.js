@@ -19,12 +19,13 @@ import {
   findCornerAtPoint, findFilletShapeAtPoint, findCornerBetweenLines, cornerFilletGeometry, applyFillet,
   diagnoseNoFillet, T_JUNCTION_MESSAGE, defaultFilletRadius, parseFilletRadius
 } from '#core/fillet.js';
-import { SNAP } from '#core/constants.js';
+import { SNAP, TOOL_MODES } from '#core/constants.js';
 import { dragArrowSvg, dragArrowHit, dragArrowDirection } from '#ui/drag-arrow-handle.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { activeSketchPick, otherSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted; TASK 657: only the active sketch is
 import { docUnit } from '#core/settings-manager.js';
-import { format as formatUnit } from '#core/units.js';
+import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
+import { formatConstraintValue, formatLenLabel } from '#ui/svg-renderer.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
@@ -46,15 +47,7 @@ let _viewListening = false;
 let _committing = false;  // commitFilletInput is saving its own history step
 const PRESS_SLOP_PX = 6;
 
-const decimalsFor = (unit) => (unit === 'in' ? 3 : 2);
-// Radius for display: 2 decimals in mm (2.79), 3 in inches (0.25in / 0.4in), trailing zeros trimmed, unit suffix.
-const fmtR = (mm, unit = docUnit()) => formatUnit(mm, unit, { unit: true, decimals: decimalsFor(unit) });
-
-function getSvgElement(ctx) {
-  if (ctx && typeof ctx.getCanvasSvg === 'function') return ctx.getCanvasSvg();
-  if (ctx && ctx.nodeName === 'svg') return ctx;
-  return document.getElementById('svgCanvas') || document.querySelector('svg');
-}
+const fmtRadiusLabel = (mm) => formatConstraintValue({ isRadius: true, value: mm });
 
 function getScale(svg, viewState) {
   if (viewState && typeof viewState.scale === 'number') return viewState.scale;
@@ -65,22 +58,15 @@ function getScale(svg, viewState) {
   return 1;
 }
 
-function setCursor(c) {
-  try {
-    const el = document.querySelector('svg, canvas, .canvas');
-    if (el) el.style.cursor = c;
-  } catch (_) {}
-}
-
 function ensureRadius() {
   if (currentRadius == null) { currentRadius = defaultFilletRadius(docUnit()); _radiusUnit = docUnit(); }
 }
 
 export function setupFilletTool(ctx, state) {
-  _ctx = ctx;
-  _state = state;
+  _ctx = ctx || _ctx;
+  _state = state || _state;
   hoverCorner = null;
-  setCursor('crosshair');
+  if (!_state || _state.currentTool === TOOL_MODES.FILLET) setCanvasCursor(_ctx, 'crosshair');
 
   // Runs on EVERY activation: only seed the default the first time / when the doc unit changes, so the
   // "last value used" survives tool switches for the session.
@@ -94,6 +80,7 @@ export function setupFilletTool(ctx, state) {
 export function resetFilletState() {
   hoverCorner = null;
   cancelAll();
+  setCanvasCursor(_ctx, '');
 }
 
 export function setFilletRadius(val) {
@@ -116,16 +103,16 @@ const otherCurveAt = (state, world, thresh) => findFilletShapeAtPoint(state, wor
 function cornerOf(corner, state) { return corner && lineOf(corner.lineA.shape, state) && lineOf(corner.lineB.shape, state) ? corner : null; }
 
 export function handleFilletPointerMove(e, ctx, state, viewState) {
-  _ctx = ctx;
-  _state = state;
-  const svg = getSvgElement(ctx);
+  _ctx = ctx || _ctx;
+  _state = state || _state;
+  const svg = resolveCanvasSvg(ctx);
   if (!svg) return;
   if (_input) { // the overlay follows the typed / dragged value while the input is open
     if (_drag && _drag.pointerId === e.pointerId) dragHandleTo(svg, e);
     else if (_press && _press.pointerId === e.pointerId && Math.hypot(e.clientX - _press.x, e.clientY - _press.y) > PRESS_SLOP_PX) _press.moved = true;
     else if (e.pointerType !== 'touch') {
       const over = overHandle(svg, e);
-      setCursor(over ? 'pointer' : 'crosshair');
+      setCanvasCursor(svg, over ? 'pointer' : 'crosshair');
       if (over !== _hover) { _hover = over; refreshPreview(); }
     }
     return;
@@ -148,10 +135,10 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
 
 export function handleFilletPointerDown(e, ctx, state, viewState) {
   if (e.button !== 0) return false;
-  const svg = getSvgElement(ctx);
+  const svg = resolveCanvasSvg(ctx);
   if (!svg) return false;
-  _ctx = ctx;
-  _state = state;
+  _ctx = ctx || _ctx;
+  _state = state || _state;
   ensureRadius();
   if (_input) {
     // the handle starts a drag; anything else is a press whose meaning (click = abandon, pan / pinch = keep) is known on release
@@ -205,7 +192,7 @@ export function handleFilletPointerUp(e) {
   if (_drag && e && _drag.pointerId === e.pointerId) { // releasing the handle keeps the input open; Enter (or the check) applies
     _drag = null;
     if (_input) refreshPreview();
-    if (_input) { try { _input.el.focus(); _input.el.select(); } catch (_) {} }
+    if (_input) { _input.el.focus(); _input.el.select(); }
     return;
   }
   if (_press && e && _press.pointerId === e.pointerId) {
@@ -218,14 +205,14 @@ export function handleFilletKeyDown(e, svg, state) {
   if (e.key === 'Escape' && (_pick || _input)) { cancelAll(); return true; }
   if (e.key === 'r' || e.key === 'R') {
     const unit = docUnit();
-    const input = prompt('Enter Fillet Radius (' + unit + '):', formatUnit(currentRadius, unit, { decimals: decimalsFor(unit) }));
+    const input = prompt('Enter Fillet Radius (' + unit + '):', formatLenLabel(currentRadius));
     if (input !== null) {
       const val = parseFilletRadius(input, unit); // world mm; a typed unit suffix overrides the doc unit
       if (val != null) {
         setFilletRadius(val);
-        showNotification(`Fillet radius set to ${fmtR(val, unit)}`, 'info');
+        showNotification(`Fillet radius set to ${fmtRadiusLabel(val)}`, 'info');
         if (hoverCorner) {
-          const sEl = getSvgElement(_ctx);
+          const sEl = resolveCanvasSvg(_ctx);
           renderFilletOverlay(sEl, hoverCorner, state.view);
         }
       }
@@ -242,24 +229,26 @@ function openInput(svg, state, viewState, corner) {
   cancelInput();
   _pick = null;
   hoverCorner = null;
-  const unit = docUnit();
   const el = document.createElement('input');
   el.id = INPUT_ID;
   el.type = 'text';
   el.className = 'dim-input';
   el.setAttribute('aria-label', 'Fillet radius');
-  el.value = formatUnit(currentRadius, unit, { decimals: decimalsFor(unit) });
+  el.setAttribute('aria-invalid', 'false');
+  el.value = formatLenLabel(currentRadius);
   el.style.position = 'fixed';
   el.style.width = '90px';
   document.body.appendChild(el);
   // a history change (Undo / Redo) ends the fillet in progress; the corner it was on may be gone
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
-  _input = { el, corner, radius: currentRadius, svg, state, viewState, unsubHistory };
+  _input = { el, corner, radius: currentRadius, invalid: false, svg, state, viewState, unsubHistory };
   ensureViewListener();
 
   el.addEventListener('input', () => {
     const v = parseFilletRadius(el.value, docUnit());
-    if (v != null) _input.radius = v;
+    if (v != null) { _input.radius = v; _input.invalid = false; }
+    else _input.invalid = true;
+    el.setAttribute('aria-invalid', _input.invalid ? 'true' : 'false');
     refreshPreview();
   });
   el.addEventListener('keydown', (ev) => {
@@ -271,7 +260,7 @@ function openInput(svg, state, viewState, corner) {
   placeInput(); // after the preview: the box keeps off the drag arrow it draws
   // The click that opened the input is still in flight: its pointerup/click would take focus back to the canvas.
   // Focus now AND again once that gesture has finished.
-  const focusIt = () => { if (_input && _input.el === el) { try { el.focus(); el.select(); } catch (_) {} } };
+  const focusIt = () => { if (_input && _input.el === el) { el.focus(); el.select(); } };
   focusIt();
   window.addEventListener('pointerup', () => setTimeout(focusIt, 0), { once: true, capture: true });
   setTimeout(focusIt, 60);
@@ -280,23 +269,22 @@ function openInput(svg, state, viewState, corner) {
 // the radius box sits beside the corner, wherever the view has moved it, and always fully inside the canvas (task 653): below-right first, then
 // below-left, above-right, above-left, then a box higher up; the first that stays inside the canvas and off the drag arrow (the green check keeps clear of the box)
 function placeInput() {
-  const { el, corner, svg } = _input;
-  try {
-    const q = worldToScreen(svg, corner.cornerPt);
-    const c = svg.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight, G = 14;
-    const hd = document.querySelector('#fillet-tool-overlay .fillet-handle');
-    const hr = hd && hd.getBoundingClientRect();
-    const ok = ([x, y]) => x >= c.left && y >= c.top && x + w <= c.right && y + h <= c.bottom && !(hr && x < hr.right && x + w > hr.left && y < hr.bottom && y + h > hr.top);
-    const spots = [[q.x + G, q.y + G], [q.x - G - w, q.y + G], [q.x + G, q.y - G - h], [q.x - G - w, q.y - G - h], [q.x + G, q.y - G - 2 * h - 12], [q.x - G - w, q.y - G - 2 * h - 12]];
-    if (q.x < c.left || q.x > c.right || q.y < c.top || q.y > c.bottom) { el.style.left = `${Math.round(q.x + G)}px`; el.style.top = `${Math.round(q.y + G)}px`; return; } // a corner panned off the canvas: the box goes with it, as before
-    const [x, y] = spots.find(ok) || spots.find(([sx, sy]) => sx >= c.left && sy >= c.top && sx + w <= c.right && sy + h <= c.bottom) || spots[0];
-    el.style.left = `${Math.round(Math.max(c.left, Math.min(x, c.right - w)))}px`;
-    el.style.top = `${Math.round(Math.max(c.top, Math.min(y, c.bottom - h)))}px`;
-  } catch (_) { el.style.left = '40%'; el.style.top = '40%'; }
+  const { el, corner, svg } = _input || {};
+  if (!el || !corner || !svg) return;
+  const q = worldToScreen(svg, corner.cornerPt);
+  const c = svg.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight, G = 14;
+  const hd = document.querySelector('#fillet-tool-overlay .fillet-handle');
+  const hr = hd && hd.getBoundingClientRect();
+  const ok = ([x, y]) => x >= c.left && y >= c.top && x + w <= c.right && y + h <= c.bottom && !(hr && x < hr.right && x + w > hr.left && y < hr.bottom && y + h > hr.top);
+  const spots = [[q.x + G, q.y + G], [q.x - G - w, q.y + G], [q.x + G, q.y - G - h], [q.x - G - w, q.y - G - h], [q.x + G, q.y - G - 2 * h - 12], [q.x - G - w, q.y - G - 2 * h - 12]];
+  if (q.x < c.left || q.x > c.right || q.y < c.top || q.y > c.bottom) { el.style.left = `${Math.round(q.x + G)}px`; el.style.top = `${Math.round(q.y + G)}px`; return; } // a corner panned off the canvas: the box goes with it, as before
+  const [x, y] = spots.find(ok) || spots.find(([sx, sy]) => sx >= c.left && sy >= c.top && sx + w <= c.right && sy + h <= c.bottom) || spots[0];
+  el.style.left = `${Math.round(Math.max(c.left, Math.min(x, c.right - w)))}px`;
+  el.style.top = `${Math.round(Math.max(c.top, Math.min(y, c.bottom - h)))}px`;
 }
 
 function refreshPreview() {
-  renderFilletOverlay(_input.svg, _input.corner, _input.viewState, { radius: _input.radius, handle: true });
+  renderFilletOverlay(_input.svg, _input.corner, _input.viewState, { radius: _input.invalid ? null : _input.radius, handle: !_input.invalid });
 }
 
 // ---- the radius handle ------------------------------------------------------------------------------------------
@@ -346,11 +334,13 @@ function dragHandleTo(svg, e) {
   const r = radiusNearest(_input.corner, { x: w.x + _drag.grab.x, y: w.y + _drag.grab.y });
   if (r == null) return;
   const unit = docUnit();
-  const text = formatUnit(r, unit, { decimals: decimalsFor(unit) });
+  const text = formatLenLabel(r);
   const v = parseFilletRadius(text, unit);
   if (v == null) return;
   _input.el.value = text;
   _input.radius = v;
+  _input.invalid = false;
+  _input.el.setAttribute('aria-invalid', 'false');
   refreshPreview();
 }
 
@@ -362,12 +352,15 @@ function ensureViewListener() {
   document.addEventListener('panzoom:viewportChanged', () => {
     if (_press) _press.moved = true; // a pan / pinch that began on empty canvas is not a click
     if (_input) { refreshPreview(); placeInput(); }
-    else if (_pick) renderFilletOverlay(_ctx && getSvgElement(_ctx), null, _state && _state.view, { highlight: [_pick.line1] });
+    else if (_pick) renderFilletOverlay(_ctx && resolveCanvasSvg(_ctx), null, _state && _state.view, { highlight: [_pick.line1] });
   });
 }
 
 /** The radius input is open (the check button of the Done layer shows). */
 export function filletInputOpen() { return !!_input; }
+
+/** The open radius box currently parses to a valid positive radius (gates the Done button). */
+export function filletInputValid() { return !!(_input && !_input.invalid); }
 
 /** The open corner's world point: where the check button sits beside; null when no input is open. */
 export function filletCornerPoint() { return _input ? _input.corner.cornerPt : null; }
@@ -386,15 +379,14 @@ export function commitFilletInput() {
   // The step is this fillet's own: it must not end the fillet through the history listener.
   _committing = true;
   let res;
-  try { try { state.saveState?.('fillet'); } catch (_) {} res = applyFillet(state, corner, val); } finally { _committing = false; }
+  try { state.saveState?.('fillet'); res = applyFillet(state, corner, val); } finally { _committing = false; }
   if (!res || !res.success) { showNotification(`Can't fillet: ${(res && res.reason) || 'unknown'}`, 'warning'); return; }
 
   currentRadius = val; // the value USED becomes the remembered default
   removeInput();
   clearFilletOverlay();
   if (typeof state.triggerDraw === 'function') state.triggerDraw();
-  else if (typeof window.__requestDraw === 'function') window.__requestDraw();
-  showNotification(`Fillet applied (R = ${fmtR(res.radius, unit)})`, 'info');
+  showNotification(`Fillet applied (${fmtRadiusLabel(res.radius)})`, 'info');
 }
 
 function removeInput() {
@@ -478,7 +470,7 @@ function renderFilletOverlay(svg, corner, viewState, opts = {}) {
     return `<path d="M ${t.x} ${t.y} L ${P.x} ${P.y}" ${GHOST} />`;
   };
 
-  if (corner) {
+  if (corner && opts.radius !== null) {
     const radiusReq = (typeof opts.radius === 'number') ? opts.radius : currentRadius;
     const geom = cornerFilletGeometry(corner, radiusReq);
     if (geom && geom.valid) {
@@ -495,7 +487,7 @@ function renderFilletOverlay(svg, corner, viewState, opts = {}) {
     <path d="${arcD}" fill="none" stroke="#38bdf8" stroke-width="${strokeW * 1.25}" stroke-dasharray="${4 / scale} ${3 / scale}" />
     ${trimSvg(corner.curveA, tA, corner.cornerPt)}
     ${trimSvg(corner.curveB, tB, corner.cornerPt)}
-    <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">R ${fmtR(radius)}</text>`;
+    <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">${fmtRadiusLabel(radius)}</text>`;
       const hp = opts.handle ? arcMidpoint(geom) : null;
       if (hp) {
         // the drag handle: the shared drag ARROW on the preview arc's midpoint, pointing the way the radius grows (away from the corner);

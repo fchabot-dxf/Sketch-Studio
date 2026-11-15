@@ -11,7 +11,7 @@ import { measureResidual } from '#core/constraint-verifier.js';
 assert.ok(TEMPLATES.length >= 6, 'a bank of templates');
 const ids = TEMPLATES.map((t) => t.id);
 assert.strictEqual(new Set(ids).size, ids.length, 'template ids are unique');
-for (const id of ['slot', 'rounded-rectangle', 'keyhole', 'hexagon', 'star', 'arrow', 'l-bracket', 'bolt-circle', 'finger-edge', 'dog-bone-pocket', 't-slot', 'butterfly-key', 'cup-hinge-bore', 'shelf-pin-row', 'box-frame']) assert.ok(templateById(id), `the bank declares ${id}`);
+for (const id of ['slot', 'rounded-rectangle', 'keyhole', 'hexagon', 'star', 'arrow', 'l-bracket', 'bolt-circle', 'finger-edge', 'dog-bone-pocket', 't-slot', 'butterfly-key', 'cup-hinge-bore', 'shelf-pin-row', 'box-frame', 'right-angle-corner']) assert.ok(templateById(id), `the bank declares ${id}`);
 
 const isDim = (c) => (c.type === 'distance' || c.type === 'angle') && !c.isDriven && !c.driven;
 const muted = (f) => { const l = console.log, w = console.warn, e = console.error, d = console.debug; console.log = console.warn = console.error = console.debug = () => {}; try { return f(); } finally { console.log = l; console.warn = w; console.error = e; console.debug = d; } };
@@ -58,7 +58,7 @@ const sig = (S) => JSON.stringify([...S.state.joints.values()].map((j) => [Math.
 for (const t of TEMPLATES) {
   const base = sig(solved(t));
   for (const [k, v] of Object.entries(t.params)) {
-    const val = k === 'count' || k === 'compartments' ? v.default - 1 : v.default * 1.3;
+    const val = v.kind === 'choice' ? v.options.find((o) => o.value !== v.default).value : v.kind === 'count' ? v.default - 1 : v.default * 1.3; // TASK 670: declared kinds
     const S = solved(t, { [k]: val });
     assert.notStrictEqual(sig(S), base, `${t.id}: param ${k} changes the geometry`);
     assert.strictEqual(L.nullity(S), 0, `${t.id}: param ${k} = ${val} still fully constrained`);

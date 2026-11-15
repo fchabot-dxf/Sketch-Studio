@@ -7,7 +7,7 @@
 //   A geometry only -> B apply the recipe step by step -> C final state -> D verify + perturbed re-solves ->
 //   E edit every dimension (0.8x / 1.25x / restore) -> F abuse (redundant, conflicting, delete, undo) -> G planegcs oracle.
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 import { deleteConstraints } from '#core/delete-manager.js';

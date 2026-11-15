@@ -5,7 +5,7 @@
 //  - a dimension WITHOUT the field renders exactly as before (angle 0, today's markup)
 import assert from 'node:assert';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { addConstraintObject } from '#core/constraints.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { placeRadiusLabel } from '#ui/input-handlers/dimension-tool.js';

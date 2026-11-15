@@ -197,8 +197,8 @@ function buildEditFeatures() {
   f('delete shapes', must('packages/core/delete-manager.js', /^export function deleteShapes/));
   f('delete joints', must('packages/core/delete-manager.js', /^export function deleteJoints/));
   f('delete selection', must('packages/core/delete-manager.js', /^export function deleteSelection/));
-  f('undo', must('packages/ui/sketch-state.js', /^    undo: function/));
-  f('redo', must('packages/ui/sketch-state.js', /^    redo: function/));
+  f('undo', must('packages/core/sketch-state.js', /^    undo: function/));
+  f('redo', must('packages/core/sketch-state.js', /^    redo: function/));
   f('driving / reference (context menu)', must('packages/ui/context-menu.js', /id: 'dim-driving'/));
   f('driving / reference (toggleDriving)', must('packages/ui/dimension-seams.js', /^export function toggleDriving/));
   f('delete dimension (context menu)', must('packages/ui/context-menu.js', /id: 'dim-delete'/));

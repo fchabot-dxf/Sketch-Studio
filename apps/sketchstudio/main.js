@@ -1,6 +1,6 @@
 import { dbg } from '#core/debug.js';
 import { DEFAULT_VIEW } from '#core/constants.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { setupInput, showDimInput, sketchHistory } from '#ui/input-manager.js';
 import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618/619: Undo / Redo / Delete / Clear sketch (left), Recenter (right) in the footer

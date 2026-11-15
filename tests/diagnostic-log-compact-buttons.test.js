@@ -13,7 +13,7 @@ let clip = null, clipFail = false;
 Object.defineProperty(win.navigator, 'clipboard', { value: { writeText: async (t) => { if (clipFail) throw new Error('NotAllowedError: denied'); clip = t; } }, configurable: true });
 
 const { createEngine } = await import('#core/constraint-solver.js');
-const { createSketchState } = await import('#ui/sketch-state.js');
+const { createSketchState } = await import('#core/sketch-state.js');
 const { dbg } = await import('#core/debug.js');
 const { browserFileSeam } = await import('#ui/project-file.js');
 const diag = await import('#ui/diagnostic-log.js');

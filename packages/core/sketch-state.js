@@ -1,15 +1,16 @@
-// Shared sketch app-state factory (#ui/sketch-state.js). Builds the ~41-field state object the renderer + input
+// Shared sketch app-state factory (#core/sketch-state.js). Builds the ~41-field state object the renderer + input
 // layer operate on (engine proxies, view, selection sets, hover/active/drag, undo-group history). Relocated
 // VERBATIM from apps/sketchstudio/main.js (P5 pre) so SketchStudio AND Shaper's Design canvas share ONE state
-// shape. Pure relocation — no field changed.
+// shape. Pure relocation — no field changed. TASK 679: moved from packages/ui to packages/core (it imports only core
+// modules) so core code can build a headless sketch; each state rides its own engine store (constraint-solver.js).
 // Params: `engine` (the constraint engine) + `view` (the viewBox state object, shared with the host's view loop).
-import { addConstraintObject } from '#core/constraints.js';
-import { removeOrphanJoints } from '#core/joints.js';
-import { dbg } from '#core/debug.js';
-import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
-import { cloneProfiles } from '#core/profile-model.js';
-import { cloneParameters, replaceParameters } from '#core/parameters.js'; // TASK 535: the document's user parameters ride every snapshot
-import { withoutDragTarget } from '#core/document.js'; // TASK 575: a drag target is not part of the drawing (never in a snapshot)
+import { addConstraintObject } from './constraints.js';
+import { removeOrphanJoints } from './joints.js';
+import { dbg } from './debug.js';
+import { createSketches, stampSketch } from './sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
+import { cloneProfiles } from './profile-model.js';
+import { cloneParameters, replaceParameters } from './parameters.js'; // TASK 535: the document's user parameters ride every snapshot
+import { withoutDragTarget } from './document.js'; // TASK 575: a drag target is not part of the drawing (never in a snapshot)
 
 // TASK 575: removes the solver targets a drag set (its member joints' dragTarget, a BODY drag's shape.dragTarget). The ONE release: the
 // select tool calls it at pointer-up (before a snap-on-release solves) and the state's `drag` setter calls it when a drag is replaced

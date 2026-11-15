@@ -2,7 +2,7 @@
 // Real sketch state + the real line / rect / circle handlers, no DOM. Undo and Redo restore the document EXACTLY (deep compare).
 import assert from 'node:assert';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { TOOL_MODES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { handleLinePointerDown, handleLinePointerUp } from '#ui/input-handlers/line-tool.js';

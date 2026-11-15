@@ -4,7 +4,7 @@
 // BEFORE createSketchState, as packages/ui/sketch-canvas.js mountSketch does for Shaper / Pen Plotter / Trace) must meet an unwrapped store.
 import assert from 'node:assert';
 import { createEngine } from '../packages/core/constraint-solver.js';
-import { createSketchState } from '../packages/ui/sketch-state.js';
+import { createSketchState } from '../packages/core/sketch-state.js';
 
 const engine = createEngine(null);
 engine.init();

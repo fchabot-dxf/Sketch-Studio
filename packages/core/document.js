@@ -1,7 +1,7 @@
 // packages/core/document.js — the shared PROJECT DOCUMENT format (PERSIST-1).
 //
 // A versioned, JSON-safe serialize/deserialize pair over the shared sketch geometry: the same fields
-// packages/ui/sketch-state.js's _captureSnapshot/_restoreSnapshot already treat as "the whole model" for
+// packages/core/sketch-state.js's _captureSnapshot/_restoreSnapshot already treat as "the whole model" for
 // undo/redo (joints, shapes, constraints, sketches, activeSketchId, groups, vcarves) — that's the
 // established, already-battle-tested answer in this codebase to "what does the geometry consist of."
 // This module wraps the SAME shape in a versioned envelope with a per-host sidecar, for STORAGE (a file,

@@ -36,9 +36,17 @@
 //     N(piece, Q)  Q is at the offset distance from that piece's source: a line, its signed distance - sides * d; an arc, |Q - C| - R - sides * d
 //     T(piece, Q)  Q is on the source normal through P: a line, (Q - P) . u / |u|; an arc, Q on the RAY from C through P (not the whole line
 //                  through C): |Q - C| * angle(P - C, Q - C), the angle in (-pi, pi], so Q past the centre is no solution
-//     open start: N(first) + T(first)   open end: N(last) + T(last)   corner: N(before) + N(after)
+//     open start: N(first) + T(first)   open end: N(last) + T(last)   corner: N(before) + N(after)   (N(before) / N(last): see below)
 //     tangent: N(before) + T(after) when the piece after Q is an ARC, else N(before) + T(before)
-//     where the piece before Q is an ARC, its N(before) row is the arc's structural equal (Q is its end joint, joints[2]), so it is not repeated.
+//     where the piece before Q is an ARC, its N(before) row is the arc's structural equal (Q is its end joint, joints[2]), so it is not repeated;
+//     where it is a LINE, its N(before) row at its END is the ray row R(before, Q): Q on the RAY from the piece's own START along its source
+//     direction (in the chain direction): |Q - S| * angle(u, Q - S), S = the offset piece's start joint, u = the source's start -> end.
+//   TASK 656: a line's N row at each end only puts that end on the offset LINE (a signed distance from the source line), so nothing said the offset
+//   piece keeps its direction: a 60 x 40 rectangle offset 15 inside, its height edited 40 -> 20, was accepted with the inner rectangle inside out
+//   (its offset top and bottom lines crossed: the "height" 20 - 30 = -10 drawn as +10, every row satisfied). The end row is now the ray row
+//   above: with the start on the offset line (its own N row, or the arc / line rows of a tangent join) it holds the end on the same offset line
+//   (the same unit gradient as the N row at a solution: same rank) AND ahead of the start, so an edit that needs a reversed offset line has no
+//   solution and is refused like any edit the solver cannot satisfy (Fusion: the offset is the source -/+ d).
 //   TASK 654 (fillet audit F24): an offset ARC's radius |Q - C| has no sign, so a row that only places Q (a line's N + T at a line -> arc tangent
 //   join, a cross product that only puts Q on the LINE through C) is still satisfied when Q has passed the centre: the source radius edited below
 //   d (an L's fillet R 8 -> 4 under a 5 mm inside offset) gave an offset arc of R |4 - 5| = 1 on the wrong side, accepted. Every offset arc now
@@ -371,6 +379,7 @@ function storedPieces(c, shapes) {
  *   { k: 'tl', q, p, a, b }               (q - p) . (b - a) / |b - a|
  *   { k: 'na', q, c, src, sign }          |q - c| - R(src) - sign * d
  *   { k: 'ta', q, p, c }                  |q - c| * atan2((p - c) x (q - c), (p - c) . (q - c))   (q on the ray c -> p)
+ *   { k: 'rl', q, p, a, b }               |q - p| * atan2((b - a) x (q - p), (b - a) . (q - p))   (q on the ray from p along a -> b, task 656)
  */
 export function offsetOperands(c, shapes) {
   const ps = storedPieces(c, shapes);
@@ -388,8 +397,9 @@ export function offsetOperands(c, shapes) {
   const offEnd = (p) => (p.off.type === 'arc' ? p.off.joints[2] : p.off.joints[1]);
   const N = (p, q) => (p.src.type === 'line' ? { k: 'nl', q, a: p.src.joints[0], b: p.src.joints[1], sign: p.side } : { k: 'na', q, c: p.src.joints[0], src: p.src.id, sign: p.side });
   const T = (p, q, P) => (p.src.type === 'line' ? { k: 'tl', q, p: P, a: p.src.joints[0], b: p.src.joints[1] } : { k: 'ta', q, p: P, c: p.src.joints[0] });
-  // the row N(before, Q) where Q is the END of piece `before`: an arc's is its structural equal (not repeated here)
-  const Nend = (p, q) => (p.off.type === 'arc' ? [] : [N(p, q)]);
+  // the row N(before, Q) where Q is the END of piece `before`: an arc's is its structural equal (not repeated here); a line's is the RAY row from
+  // its offset start along its source direction (task 656: the offset line keeps its direction, a reversed one is no solution)
+  const Nend = (p, q) => (p.off.type === 'arc' ? [] : [{ k: 'rl', q, p: offStart(p), a: srcPoint(p, 0), b: srcPoint(p, 1) }]);
   const nv = closed ? n : n + 1;
   for (let k = 0; k < nv; k++) {
     if (!closed && k === 0) { const p = ps[0], q = offStart(p); rows.push(N(p, q), T(p, q, srcPoint(p, 0))); continue; }
@@ -419,6 +429,11 @@ export function offsetRowValues(rows, d, pt, radius) {
     if (r.k === 'cen') { const a = pt(r.a), b = pt(r.b); out.push(a.x - b.x, a.y - b.y); continue; }
     if (r.k === 'rad') { out.push(radius(r.off) - radius(r.src) - r.sign * d); continue; }
     const q = pt(r.q);
+    if (r.k === 'rl') {
+      const p = pt(r.p), a = pt(r.a), b = pt(r.b), ux = b.x - a.x, uy = b.y - a.y, wx = q.x - p.x, wy = q.y - p.y;
+      out.push(Math.hypot(wx, wy) * Math.atan2(ux * wy - uy * wx, ux * wx + uy * wy));
+      continue;
+    }
     if (r.k === 'nl' || r.k === 'tl') {
       const a = pt(r.a), b = pt(r.b), ux = b.x - a.x, uy = b.y - a.y, lu = Math.hypot(ux, uy) || 1e-12;
       if (r.k === 'nl') out.push(((q.x - a.x) * uy - (q.y - a.y) * ux) / lu - r.sign * d);

@@ -114,6 +114,17 @@ for (const [label, c, uses] of RADIUS_CASES) {
   for (const id of uses) assert.ok(col[id] > 0.5, `${label}: the ${id} radius/rim column is ${col[id]} (expected it in the row)`);
   checked++;
 }
+// task 656: an offset LINE's end row is the RAY row from its offset start (c) along its source direction; L2 (c -> d, 29.7 degrees) is 13 degrees
+// off L1's direction a -> b (16.7 degrees), and walked reversed (b -> a) it points almost backwards (the angle near pi): both branches of the
+// atan2, every column.
+for (const [label, c] of [
+  ['offset (line, the end\'s ray row)', { type: 'offset', shapes: ['L1', 'L2'], rev: [false], sides: [1], joins: [], closed: false, value: 1 }],
+  ['offset (line walked reversed, the end\'s ray row near pi)', { type: 'offset', shapes: ['L1', 'L2'], rev: [true], sides: [-1], joins: [], closed: false, value: 1 }],
+]) {
+  const col = guard(label, c);
+  for (const id of ['c', 'd']) assert.ok(col[id] > 0.5, `${label}: the ${id} column is ${col[id]} (expected the ray row to read the offset's start and end)`);
+  checked++;
+}
 // The angle row's measured SECTOR (task 553, #core/angle-sector.js): every ray / turn combination, values past 180, and poses on both sides
 // of 90 degrees from the target (where the row is |u||v| sin(theta - alpha), and beyond, where it continues as 2 sgn |u||v| - S so it pulls
 // back to the target, not to its modulo-180 twin). L1 runs at 16.7 degrees, L2 at 29.7: theta = 13.0.

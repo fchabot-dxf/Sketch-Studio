@@ -12,6 +12,7 @@ import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
+import { beginCircularPattern, beginRectangularPattern } from '#ui/input-handlers/pattern-tool.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
 import { loadSection, saveSection, defaultSection } from '#ui/ribbon-layout.js';
@@ -46,6 +47,12 @@ const EDIT = [
   // TASK 585: Mirror. `begin` runs when the button starts the tool (the pre-selection). TASK 647 (owner): in Modify after Fillet, not Create
   // (Fusion keeps Mirror under CREATE: a declared divergence).
   { tool: TOOL_MODES.MIRROR, icon: 'icon-tool-mirror',  label: 'Mirror', title: 'Mirror: the objects, then the mirror line, then Enter', begin: beginMirror },
+  // TASK 658: Fusion's Circular / Rectangular Pattern (owner ruling: in Modify right after Mirror; Fusion keeps them under CREATE: a declared
+  // divergence). `begin` opens the pattern dialog (a pre-selection is the objects). Icons: the source solid, its copies dashed (the Fillet / Offset style).
+  { tool: TOOL_MODES.CIRCULAR_PATTERN, label: 'Circular', title: 'Circular Pattern', ariaLabel: 'Circular Pattern', begin: beginCircularPattern,
+    iconSvg: '<circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="4.5" r="2.6" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="18.5" cy="15.8" r="2.6" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/><circle cx="5.5" cy="15.8" r="2.6" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/>' },
+  { tool: TOOL_MODES.RECTANGULAR_PATTERN, label: 'Rect Pat', title: 'Rectangular Pattern', ariaLabel: 'Rectangular Pattern', begin: beginRectangularPattern,
+    iconSvg: '<rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/>' },
   // TASK 650: like Fusion's Create > Offset (owner ruling: in Modify). Icon: a curve and its dashed offset, in the Fillet icon's style.
   { tool: TOOL_MODES.OFFSET, iconSvg: '<path d="M4 20V11a7 7 0 0 1 7-7h9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M9 20v-8a3 3 0 0 1 3-3h8" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none" stroke-linecap="round"/>', label: 'Offset', title: 'Offset: click a curve (its chain), choose the side, type the distance, Enter' },
 ];

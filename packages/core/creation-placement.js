@@ -19,6 +19,7 @@ import { snapshotSolverState, restoreSolverState, hasRadiusUnknown } from './sol
 import { SolverConfig } from './solver-config.js';
 import { WHO_MOVES } from './creation-placement-table.js';
 import { symmetricOperands, mirrorPoint } from './symmetric.js';
+import { isPatternConstraint, patternCopyOperands } from './pattern.js';
 import { getCoincidentJoints } from './joints.js';
 import { findShapeById } from './reference-lines.js';
 import { isPointLineDistance } from './geometry.js';
@@ -539,7 +540,13 @@ export function constraintOperands(state, c) {
     for (const j of s.joints || []) joints.add(j);
     if (hasRadiusUnknown(s)) circles.add(s.id);
   };
-  if (c.type === T.SYMMETRIC) {
+  if (isPatternConstraint(c)) {
+    // task 658: what follows a pattern's edited source is its COPIES (their points and circle radii); the sources, the centre and the
+    // direction lines are never brought in by the pattern
+    const o = patternCopyOperands(c, state.shapes);
+    o.joints.forEach((j) => joints.add(j));
+    o.circles.forEach((s) => circles.add(s));
+  } else if (c.type === T.SYMMETRIC) {
     const o = symmetricOperands(c, state.shapes);
     if (o) {
       for (const p of o.pairs) for (const j of p) joints.add(j);

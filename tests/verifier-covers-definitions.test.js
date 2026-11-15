@@ -40,6 +40,11 @@ const VIOLATED = {
   angle: { type: 'angle', shapes: ['L1', 'L2'], value: 90 },
   symmetric: { type: 'symmetric', joints: ['a', 'm'], line: 'L2' },
   offset: { type: 'offset', shapes: ['L1', 'L2'], rev: [false], sides: [1], joins: [], closed: false, value: 5 }, // task 650: L2 is not 5 from L1
+  // task 658: L2 is not L1 turned 90 degrees about m / moved 5 along X
+  circularPattern: { type: 'circularPattern', sources: { shapes: ['L1'], points: ['a', 'b'], shapeJoints: [[0, 1]] }, centre: 'm', quantity: 2, angle: 180,
+    symmetric: false, suppressed: [], instances: [{ at: [1], shapes: ['L2'], joints: ['c', 'd'] }] },
+  rectangularPattern: { type: 'rectangularPattern', sources: { shapes: ['L1'], points: ['a', 'b'], shapeJoints: [[0, 1]] }, directions: [null, null],
+    quantity: [2, 1], distance: [5, 5], distanceType: 'spacing', symmetric: [false, false], suppressed: [], instances: [{ at: [1, 0], shapes: ['L2'], joints: ['c', 'd'] }] },
 };
 
 let checked = 0;

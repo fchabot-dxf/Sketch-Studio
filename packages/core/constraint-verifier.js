@@ -4,6 +4,7 @@ import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-
 import { angleSectorOf, angleSectorTarget } from './angle-sector.js';
 import { symmetricResidual } from './symmetric.js';
 import { offsetResidual } from './offset.js';
+import { patternResidual } from './pattern.js';
 
 export function measureResidual(c, joints, shapes) {
     if (!c) return 0;
@@ -316,6 +317,16 @@ export function measureResidual(c, joints, shapes) {
         // task 650: the largest offset row (#core/offset.js offsetRowValues: the solver rows' one formula)
         case CONSTRAINT_TYPES.OFFSET:
             return offsetResidual(c, joints, shapes, (s) => {
+                if (!s) return 0;
+                if (typeof s.radius === 'number') return s.radius;
+                const center = joints.get(s.joints[0]), rim = joints.get(s.joints[1]);
+                return center && rim ? getDist(center, rim) : 0;
+            });
+
+        // task 658: the largest pattern row (#core/pattern.js patternRowValues: the solver rows' one formula)
+        case CONSTRAINT_TYPES.CIRCULAR_PATTERN:
+        case CONSTRAINT_TYPES.RECTANGULAR_PATTERN:
+            return patternResidual(c, joints, shapes, (s) => {
                 if (!s) return 0;
                 if (typeof s.radius === 'number') return s.radius;
                 const center = joints.get(s.joints[0]), rim = joints.get(s.joints[1]);

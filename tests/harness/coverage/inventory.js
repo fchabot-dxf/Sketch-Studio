@@ -64,6 +64,8 @@ const TOOL_SOLVER_ROLE = {
   tangent: 'tangent', equal: 'equal', midpoint: 'midpoint', symmetric: 'symmetric (two points, two lines or two circles / arcs about a line)',
   mirror: 'creates mirrored copies (shapes + joints) linked to the originals by symmetric constraints only (task 585, #core/mirror.js)',
   offset: 'creates the offset of a chain (lines / arcs / a circle, shared joints, each arc its equal) + ONE offset constraint that is its distance dimension (task 650, #core/offset.js)',
+  circularPattern: 'creates rotated copies of the objects (shapes + points, each arc its equal) + ONE circularPattern constraint whose rows hold every copy on its source (task 658, #core/pattern.js)',
+  rectangularPattern: 'creates translated copies of the objects (shapes + points, each arc its equal) + ONE rectangularPattern constraint whose rows hold every copy on its source (task 658, #core/pattern.js)',
 };
 function buildTools() {
   const groups = ['SELECT', 'CREATE', 'EDIT', 'INSPECT', 'CONSTRAIN'].flatMap(ribbonGroup); // TASK 647: Select is its own section
@@ -99,6 +101,10 @@ function creationSites() {
       if (m) return add(valueOfKey(m[1]), file, i + 1);
       if (file.endsWith('/offset.js')) {   // task 650: the offset constraint's one record builder (offsetConstraintRecord)
         m = l.match(/^\s*type:\s*CONSTRAINT_TYPES\.(\w+),/);
+        if (m) return add(valueOfKey(m[1]), file, i + 1);
+      }
+      if (file.endsWith('/pattern.js')) {  // task 658: the pattern constraints' one record builder (patternConstraintRecord)
+        m = l.match(/^\s*type:\s*T\.(\w+),/);
         if (m) return add(valueOfKey(m[1]), file, i + 1);
       }
       if (file.endsWith('/shapes.js') || file.endsWith('/fillet.js')) {

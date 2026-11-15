@@ -39,6 +39,7 @@ import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrim
 import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
 import { handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
 import { isDimension } from '#core/parameters.js';
+import { setupPatternTool, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -408,7 +409,7 @@ function nearestGridPoint(svg, e) {
 // pointer lands on its place (a position-only snap) and binds to nothing, so no point is shared and no constraint ties the new shape to
 // it. Every other tool (select, dimension, constraints, ...) searches only what is editable and visible.
 const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
-const ACTIVE_SKETCH_SNAP_TOOLS = [TOOL_MODES.OFFSET, TOOL_MODES.MIRROR]; // task 660: these search the ACTIVE sketch only (Fillet / Trim / Break search for themselves)
+const ACTIVE_SKETCH_SNAP_TOOLS = [TOOL_MODES.OFFSET, TOOL_MODES.MIRROR, TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.RECTANGULAR_PATTERN]; // task 660: these search the ACTIVE sketch only (Fillet / Trim / Break search for themselves); task 658: the pattern tools too
 function toolSnap(state, svg, pt, excludeIds, boost, otherSketch = false) {
     const shapes = pickableShapes(state);
     const picked = pickScene(state, shapes);
@@ -655,7 +656,7 @@ function handlePointerDown(e, svg, state) {
         }
     }
 
-    // TASK 660: Offset and Mirror found nothing in the ACTIVE sketch: a curve of another visible, unlocked sketch within reach is what the tool warns about
+    // TASK 660: Offset and Mirror (task 658: and the pattern tools) found nothing in the ACTIVE sketch: a curve of another visible, unlocked sketch within reach is what the tool warns about
     let otherShape = null;
     if (!hitJoint && !hitShape && ACTIVE_SKETCH_SNAP_TOOLS.includes(state.currentTool)) {
         const other = toolSnap(state, svg, { x: screenX, y: screenY }, [], snapBoostFor(isTouch), true);
@@ -665,6 +666,9 @@ function handlePointerDown(e, svg, state) {
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
     try { hitConstraint = constraintAt(svg, state, screenX, screenY, isTouch); } catch(_) { hitConstraint = null; }
+
+    // TASK 658: while a pattern dialog is open (its tool, or an edit from a label under Select) its canvas picks come first
+    if (patternSessionOpen() && handlePatternPointerDown(e, svg, state, hitJoint, hitShape, otherShape)) return true;
 
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
     if (!hitJoint && !hitShape && !hitConstraint && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.PAN)){
@@ -731,6 +735,7 @@ function handlePointerDown(e, svg, state) {
 }
 
 function handlePointerMove(e, svg, state) {
+        if (patternSessionOpen() && handlePatternPointerMove(e, svg)) return true; // TASK 658: a pattern arrow drag
         // If a pan is active, let pan-zoom handle movement regardless of tool
         try{
             if(handlePanZoomPointerMove(e, svg, state)) return true;
@@ -851,6 +856,7 @@ function handlePointerUp(e, svg, state) {
     if (e.pointerType === 'touch') {
         try { if (handlePanZoomPointerUp(e, svg, state)) return true; } catch (_) { }
     }
+    if (patternSessionOpen() && handlePatternPointerUp(e)) return true; // TASK 658: a pattern arrow drag ends (the dialog stays; after the finger's pan-zoom bookkeeping)
 
     // Apply touch offset to pointerup coords so finalization uses virtual coords too
     let screenX = e.clientX, screenY = e.clientY;
@@ -937,6 +943,7 @@ function handlePointerUp(e, svg, state) {
 function setupEventListeners(svg, state) {
     dbg.log('input', '[input-manager] Attaching pointer listeners to svg', !!svg);
     if(!svg) return;
+    setupPatternTool({ exit: () => switchToTool(state, TOOL_MODES.SELECT), canvas: () => svg }); // TASK 658: the pattern dialog's tool exit and canvas
         // TASK 562: touch and hold = the right-click menu. ONE detector (#ui/long-press.js) owns the hold on every browser: iOS Safari fires no
         // `contextmenu` for it and Android Chrome does (that one is swallowed in the contextmenu listener below, so the menu opens once).
         // While a finger on a context target (shape / joint / dimension, Select or Dimension tool) is still a hold candidate its moves are
@@ -971,7 +978,9 @@ function setupEventListeners(svg, state) {
             // TASK 650: the open distance box; the check applies the offset exactly as Enter does (commitOffsetInput), beside the preview's anchor
             [TOOL_MODES.OFFSET]: { open: offsetInputOpen, done: commitOffsetInput, label: 'Apply the offset', end: offsetAnchorPoint },
         };
-        const doneAction = () => (isActiveFn() ? DONE_ACTIONS[state.currentTool] || null : null);
+        // TASK 658: an open pattern dialog (its tool, or an edit from a label under any tool): the check does what its OK / Enter does
+        const PATTERN_DONE = { open: patternDoneOpen, done: commitPattern, label: patternDoneLabel(), end: patternAnchorPoint };
+        const doneAction = () => (isActiveFn() ? (patternSessionOpen() ? { ...PATTERN_DONE, label: patternDoneLabel() } : DONE_ACTIONS[state.currentTool] || null) : null);
         let doneButton = null;
         const syncDone = (e) => {
             if (!doneButton) {
@@ -981,7 +990,7 @@ function setupEventListeners(svg, state) {
                     onDone: () => doneAction().done(),
                     label: () => doneAction().label,
                     anchor: () => { const a = doneAction(); const w = a && a.end && a.end(); return w ? worldToScreen(svg, w) : null; },
-                    avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #offset-tool-overlay .offset-handle, #${OFFSET_INPUT_ID}`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
+                    avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #offset-tool-overlay .offset-handle, #${OFFSET_INPUT_ID}, .${PATTERN_DIALOG_CLASS}, #pattern-tool-overlay .pattern-handle`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
                 });
             }
             if (doneButton) doneButton.sync(e.pointerType === 'touch');
@@ -1242,6 +1251,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
         }
         if (state.currentTool === TOOL_MODES.MIRROR && e.key === 'Enter') { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
         if (state.currentTool === TOOL_MODES.OFFSET && handleOffsetKeyDown(e)) { e.preventDefault(); return; } // TASK 650
+        if (patternSessionOpen() && handlePatternKeyDown(e)) { e.preventDefault(); return; } // TASK 658: Enter = OK, Esc = Cancel
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
@@ -1461,6 +1471,7 @@ export function switchToTool(state, toolName) {
             try { resetFilletState(); } catch(_) {}
         }
         if (state.currentTool === TOOL_MODES.OFFSET && toolName !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
+        resetPatternState(); // TASK 658: any tool switch cancels an open pattern dialog (a new pattern tool's `begin` opens its own)
 
         state.currentTool = toolName;
         if (toolName === TOOL_MODES.TRIM) {
@@ -1540,6 +1551,7 @@ function handleEscape(state) {
     try{ resetTrimState(); }catch(_){ }   // TRACE-1
     try{ resetFilletState(); }catch(_){ }
     resetOffsetState(); // TASK 650
+    resetPatternState(); // TASK 658
     try{ resetDrawingState(state); }catch(_){ }
     try{ resetSelectionState(); }catch(_){ }
     state.closeDrawStep(); // TASK 549: a draw cancelled by Esc leaves nothing and no undo step (a committed bezier / line chain is kept)

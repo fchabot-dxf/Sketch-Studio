@@ -24,6 +24,7 @@ import { evaluateAll, isDimension, isReferenceDimension, remapExpressionNames } 
 import { userToWorldY } from '#core/units.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { commitDimensionEdits } from '#ui/dimension-seams.js';
+import { isPatternConstraint, patternRefs, remapPattern } from '#core/pattern.js';
 
 // ── DECLARED: the clipboard format and the paste step ──
 export const CLIPBOARD_FORMAT = 'sketch-studio/geometry';
@@ -36,6 +37,9 @@ const SHAPE_REFS = ['shapes', 'shape', 'line', 'circle'];
 
 const asList = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
 const refsOf = (c, keys) => keys.flatMap((k) => asList(c[k]));
+// a pattern (task 658) names its sources, copies, centre / direction lines in its own record (#core/pattern.js patternRefs)
+const jointRefsOf = (c) => (isPatternConstraint(c) ? patternRefs(c).joints : refsOf(c, JOINT_REFS));
+const shapeRefsOf = (c) => (isPatternConstraint(c) ? patternRefs(c).shapes : refsOf(c, SHAPE_REFS));
 
 // ── the keys (declared here, bound in input-manager.js next to the other shortcuts) ──
 // Ctrl/Cmd+C copy, Ctrl/Cmd+X cut, Ctrl/Cmd+V paste (no Shift/Alt: Ctrl+Shift+C is Combine). Ctrl+D is NOT bound (the browser's bookmark key).
@@ -66,7 +70,7 @@ export function selectionToEnvelope(state) {
   for (const j of freeJoints) jointIds.add(j);
   if (!shapes.length && !freeJoints.length) return null;
   const inside = (c) => {
-    const js = refsOf(c, JOINT_REFS), ss = refsOf(c, SHAPE_REFS);
+    const js = jointRefsOf(c), ss = shapeRefsOf(c);
     return js.length + ss.length > 0 && js.every((j) => jointIds.has(j)) && ss.every((s) => shapeIds.has(s));
   };
   // ONE serializer: core's serializeDocument over a sub-document made of the copied part
@@ -136,7 +140,7 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
     const renamed = new Map(); // old dimension name -> the pasted dimension
     for (const src of g.constraints) {
       const { name, glyphPos, __pos, ...rest } = src; // glyphPos / __pos are render caches, re-stamped when drawn
-      const c = { ...rest };
+      const c = isPatternConstraint(rest) ? remapPattern(rest, (j) => jointMap.get(j), (id) => shapeMap.get(id)) : { ...rest }; // task 658: every id of a pattern
       if (src.joints) c.joints = src.joints.map((j) => jointMap.get(j));
       if (src.joint) c.joint = jointMap.get(src.joint);
       if (src.shapes) c.shapes = src.shapes.map((s) => shapeMap.get(s));

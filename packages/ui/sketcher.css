@@ -56,6 +56,8 @@
 
   /* Feedback */
   --sk-error: #ef4444;
+  /* TASK 646: a warning on the canvas: the part of a line a fillet would EXTEND past its far end (fillet-tool.js preview) */
+  --sk-warning: #f59e0b;
 }
 
 /* TASK 619 -- Shared header tokens and height: 44 px desktop, 0 px on phones (no header bar; stage tabs + actions move into the drawer). */

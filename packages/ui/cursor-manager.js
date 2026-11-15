@@ -229,6 +229,22 @@ export function updateCursor(svg, toolName) {
     }
 }
 
+/** Resolve the active Design canvas SVG (never matching a hidden icon sprite <svg aria-hidden="true">). */
+export function resolveCanvasSvg(svgOrCtx) {
+    if (svgOrCtx && typeof svgOrCtx.getCanvasSvg === 'function') return svgOrCtx.getCanvasSvg();
+    if (svgOrCtx && svgOrCtx.nodeName === 'svg') return svgOrCtx;
+    if (typeof document !== 'undefined') {
+        return document.getElementById('svgCanvas') || document.getElementById('design-canvas') || document.querySelector('svg:not([aria-hidden="true"])') || null;
+    }
+    return null;
+}
+
+/** Set the cursor on the active Design canvas SVG. */
+export function setCanvasCursor(svgOrCtx, cursor) {
+    const el = resolveCanvasSvg(svgOrCtx);
+    if (el && el.style) el.style.cursor = cursor;
+}
+
 /**
  * Inject ONLY the requested icon <symbol>s that are not already in the document (idempotent; no ID clash).
  * Lets a SHARED component (e.g. the tool ribbon) resolve its #icon-* glyphs in ANY host: a host that already has

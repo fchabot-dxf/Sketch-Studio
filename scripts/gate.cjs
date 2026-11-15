@@ -112,6 +112,7 @@ function reachesLauncher(file) {
   const seen = new Set();
   const walk = (f) => {
     if (f === LAUNCHER) return true;
+    if (f === 'scripts/gate.cjs') return false;
     if (seen.has(f)) return false;
     seen.add(f);
     const src = fs.readFileSync(path.join(REPO_ROOT, f), 'utf8');
@@ -397,6 +398,66 @@ function headlessCheck(smokePid) {
   return counts;
 }
 
+// ---------------------------------------------------------------- stale test profile sweep (TASK 671)
+const PROFILE_DIR_PREFIXES = ['sk-test-', 'sk-shell-smoke-'];
+const isProfileDirName = (name) => PROFILE_DIR_PREFIXES.some((p) => name.startsWith(p));
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function getRunningBrowserCommandLines() {
+  if (process.platform === 'win32') {
+    const psScript = "Get-CimInstance Win32_Process -Filter \"name = 'msedge.exe' or name = 'chrome.exe' or name = 'chromium.exe'\" | Where-Object { $_.CommandLine } | ForEach-Object { $_.CommandLine }";
+    const psRes = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 15000 });
+    if (psRes.error) throw psRes.error;
+    if (psRes.status !== 0) throw new Error(`gate: browser process scan failed: ${psRes.stderr}`);
+    return (psRes.stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  }
+  const res = spawnSync('ps', ['-eo', 'args='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000 });
+  if (res.error) throw res.error;
+  if (res.status !== 0) throw new Error(`gate: browser process scan failed: ${res.stderr}`);
+  return (res.stdout || '').split(/\r?\n/).map(l => l.trim()).filter(l => /(?:chrome|chromium|msedge)/i.test(l));
+}
+
+function isProfileInUse(name, cmdLines) {
+  const re = new RegExp(`${escapeRegExp(name)}(?=[\\\\/"'\\s]|$)`, process.platform === 'win32' ? 'i' : '');
+  return cmdLines.some((cmd) => re.test(cmd));
+}
+
+function shouldSweepProfileDir({ name, mtimeMs, runStartedMs, cmdLines }) {
+  return isProfileDirName(name) && mtimeMs < runStartedMs && !isProfileInUse(name, cmdLines);
+}
+
+function listProfileDirs(tmpDir) {
+  const out = [];
+  for (const entry of fs.readdirSync(tmpDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && isProfileDirName(entry.name)) out.push(entry.name);
+  }
+  return out;
+}
+
+function sweepProfiles({ tmpDir = os.tmpdir(), runStartedMs, cmdLines = getRunningBrowserCommandLines() }) {
+  const removed = [];
+  const failed = [];
+  for (const name of listProfileDirs(tmpDir)) {
+    const full = path.join(tmpDir, name);
+    let stat;
+    try { stat = fs.lstatSync(full); } catch (e) {
+      if (e.code === 'ENOENT') continue;
+      throw e;
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) continue;
+    if (!shouldSweepProfileDir({ name, mtimeMs: stat.mtimeMs, runStartedMs, cmdLines })) continue;
+    try {
+      fs.rmSync(full, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removed.push(name);
+    } catch (e) {
+      console.warn(`gate: could not remove stale profile dir ${full}: ${e.message}`);
+      failed.push({ name, error: e.message });
+    }
+  }
+  const left = listProfileDirs(tmpDir);
+  return { removed, failed, left };
+}
+
 // ---------------------------------------------------------------- main
 async function main() {
   const { tier, jobs, list, plan, base, head } = parseArgs(process.argv.slice(2));
@@ -425,6 +486,7 @@ async function main() {
   const results = [];
   let smoke = null;
   let counts = null;
+  let sweep = null;
   const timings = loadTimings();
   const deferred = []; // quick: exclusive tests not run because another gate held the lock
   const lockSeconds = []; // quick: how long the exclusive part held the lock
@@ -442,6 +504,11 @@ async function main() {
       counts = headlessCheck(smoke.pid);
     }
     saveTimings(timings, results);
+    try {
+      sweep = sweepProfiles({ runStartedMs: started });
+    } catch (e) {
+      console.warn(`gate: profile sweep failed: ${e.message}`);
+    }
   } finally {
     releaseLock();
   }
@@ -463,10 +530,15 @@ async function main() {
     console.log(`HEADLESS-LEFT ${counts.left}`);
     console.log(`HEADLESS-OTHER ${counts.other}`);
   }
+  if (sweep) console.log(`PROFILES-LEFT ${sweep.left.length}`);
 
   const unknownFailures = failed.filter(f => !KNOWN_FAILURES.includes(f.file));
   const passed = unknownFailures.length === 0 && (!smoke || (smokeGreen(smoke.score) && counts.left === 0));
   process.exit(passed ? 0 : 1);
 }
 
-main().catch((e) => { releaseLock(); console.error(e.stack || e.message); process.exit(2); });
+module.exports = { isProfileDirName, isProfileInUse, shouldSweepProfileDir, sweepProfiles, getRunningBrowserCommandLines };
+
+if (require.main === module) {
+  main().catch((e) => { releaseLock(); console.error(e.stack || e.message); process.exit(2); });
+}

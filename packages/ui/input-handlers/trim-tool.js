@@ -4,18 +4,15 @@
 
 import { screenToWorld } from '#ui/coords.js';
 import { trimShape } from '#core/trim.js';
-import { SNAP } from '#core/constants.js';
+import { SNAP, TOOL_MODES } from '#core/constants.js';
+import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's line warns
 import { inertEntities, activeSketchPick, otherSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not trimmed; TASK 659: only the active sketch is (the shared pick rule), its curves alone cut
 
 let hover = null; // { shapeId, t, segStart, segEnd } current hover interval
+let _ctx = null;
+let _state = null;
 const OVERLAY_ID = 'trim-tool-overlay';
-
-function getSvgElement(ctx) {
-  if (ctx && typeof ctx.getCanvasSvg === 'function') return ctx.getCanvasSvg();
-  if (ctx && ctx.nodeName === 'svg') return ctx;
-  return document.getElementById('svgCanvas') || document.querySelector('svg');
-}
 
 function getScale(svg, viewState) {
   if (viewState && typeof viewState.scale === 'number') return viewState.scale;
@@ -26,25 +23,23 @@ function getScale(svg, viewState) {
   return 1;
 }
 
-function setCursor(c) {
-  try {
-    const el = document.querySelector('svg, canvas, .canvas');
-    if (el) el.style.cursor = c;
-  } catch (_) {}
-}
-
-export function setupTrimTool() {
+export function setupTrimTool(ctx, state) {
+  _ctx = ctx || _ctx;
+  _state = state || _state;
   hover = null;
-  setCursor('crosshair');
+  if (!_state || _state.currentTool === TOOL_MODES.TRIM) setCanvasCursor(_ctx, 'crosshair');
 }
 
 export function resetTrimState() {
   clearTrimOverlay();
   hover = null;
+  setCanvasCursor(_ctx, '');
 }
 
 export function handleTrimPointerMove(e, ctx, state, viewState) {
-  const svg = getSvgElement(ctx);
+  _ctx = ctx || _ctx;
+  _state = state || _state;
+  const svg = resolveCanvasSvg(ctx);
   if (!svg) return;
   const world = screenToWorld(svg, e.clientX, e.clientY);
   hover = findTrimInterval(world, state, svg, viewState);
@@ -53,7 +48,9 @@ export function handleTrimPointerMove(e, ctx, state, viewState) {
 
 export function handleTrimPointerDown(e, ctx, state, viewState) {
   if (e.button !== 0) return false;
-  const svg = getSvgElement(ctx);
+  _ctx = ctx || _ctx;
+  _state = state || _state;
+  const svg = resolveCanvasSvg(ctx);
   if (!svg) return false;
   const world = screenToWorld(svg, e.clientX, e.clientY);
   const hit = findTrimInterval(world, state, svg, viewState);

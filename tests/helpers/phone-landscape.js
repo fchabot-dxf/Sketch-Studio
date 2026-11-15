@@ -55,14 +55,31 @@ export async function runPhoneLandscape(hostName) {
         const stripRect = await rectOf(`document.querySelector('.sk-doctabs')`);
         const share = cv.h / size.h;
         assert(share >= 0.6, tag + `the canvas is ${Math.round(share * 100)} % of the height (>= 60 %): ${JSON.stringify(cv)}`);
+        // TASK 676: the floating footer cluster lies FULLY INSIDE the canvas frame (bottom-left), inset at least as far as the canvas's top-right corner button
+        const cornerBtn = await rectOf(`document.querySelector('.sk-canvas-corner button')`);
+        const cornerInset = Math.min(cornerBtn.top - cv.top, cv.right - cornerBtn.right);
+        assert(cornerInset >= 8 - 1, tag + 'the corner button is inset from the canvas: ' + cornerInset);
+        const fbtns = await evalJs(`[...document.querySelectorAll('.sk-footer-btn, .sk-history-btn')].map((e) => { const r = e.getBoundingClientRect(); return { id: e.id, left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height }; }).filter((r) => r.w > 0)`);
+        assert(fbtns.length >= 4, tag + 'the footer buttons are shown: ' + fbtns.length);
+        for (const f of fbtns) {
+          assert(f.h >= 44, tag + `footer button ${f.id} keeps 44 px (${f.h})`);
+          assert(f.left - cv.left >= cornerInset - 0.5 && cv.bottom - f.bottom >= cornerInset - 0.5 && f.top >= cv.top && f.right <= cv.right,
+            tag + `footer button ${f.id} lies inside the canvas, inset >= ${cornerInset} px (the corner button's): button ${JSON.stringify(f)}, canvas ${JSON.stringify(cv)}`);
+        }
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-ribbon')).flexDirection`), 'column', tag + 'the ribbon is a column (a rail)');
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), 'none', tag + 'no header bar in short landscape');
-        assert(rail.left <= 26 && rail.w <= 100 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
+        assert(rail.left <= 26 && rail.w <= 165 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
         assert(cv.left >= rail.right - 1, tag + `the canvas is right of the rail (canvas ${cv.left}, rail ${rail.right})`);
         assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1`), true, tag + 'the page does not scroll');
         // TASK 647: the rail never scrolls; each section (but Select) has its name beside its icons: the 44 px dropdown button
         assert.strictEqual(await evalJs(`(() => { const r = document.querySelector('.sk-ribbon'); return r.scrollHeight <= r.clientHeight; })()`), true, tag + 'the rail does not scroll');
         assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group:not([data-fixed]) .sk-ribbon-group-label')].every((g) => { const r = g.getBoundingClientRect(); return g.tagName === 'BUTTON' && r.width >= 44 && r.height >= 44; }) && getComputedStyle(document.querySelector('.sk-ribbon-group[data-fixed] .sk-ribbon-group-label')).display === 'none'`), true, tag + 'every section name is a 44 px dropdown button in the rail; Select has none');
+        // TASK 676: no section name text on the rail; the tools are two per row; the open dropdown has the section's name as its header
+        assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group:not([data-fixed]) .sk-ribbon-group-label')].every((g) => getComputedStyle(g).fontSize === '0px')`), true, tag + 'no section label text is visible in the rail');
+        const cols = await evalJs(`[...document.querySelectorAll('.sk-ribbon-group')].map((g) => { const xs = [...g.querySelectorAll('.sk-ribbon-btn:not([hidden])')].map((b) => Math.round(b.getBoundingClientRect().left)); return { n: xs.length, cols: new Set(xs).size }; })`);
+        assert(cols.every((c) => c.cols <= 2) && cols.some((c) => c.n >= 2 && c.cols === 2), tag + 'the rail tools are in 2 columns: ' + JSON.stringify(cols));
+        const sect = await evalJs(`(() => { const b = document.querySelector('.sk-ribbon-group:not([data-fixed]) button.sk-ribbon-group-label'); b.click(); const h = document.querySelector('.sk-ribbon-sect-menu.show .sk-ribbon-sect-head'); const r = { name: b.textContent, head: h && h.textContent, shown: !!h && h.getBoundingClientRect().height > 0 }; b.click(); return r; })()`);
+        assert(sect.shown && sect.head === sect.name && sect.name, tag + 'the expanded section dropdown shows its name as the header: ' + JSON.stringify(sect));
 
         // every rail button: reachable, 44 px, not covered; a tool button activates with a real tap
         const n = await evalJs(`document.querySelectorAll('.sk-ribbon .sk-ribbon-btn:not([hidden])').length`);

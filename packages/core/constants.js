@@ -143,6 +143,15 @@ export const CONSTRAINT_TOOLS = Object.freeze([
   TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.EQUAL, TOOL_MODES.SYMMETRIC
 ]);
 
+// The tools whose snap picks in input-manager search ONLY the active sketch (and emit the task-660 warning when another sketch is aimed at).
+export const ACTIVE_SKETCH_SNAP_TOOLS = Object.freeze([
+  TOOL_MODES.OFFSET, TOOL_MODES.MIRROR, TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.RECTANGULAR_PATTERN,
+]);
+// Every active-sketch-only tool whose idle hover in hover-manager must also narrow to the active sketch so non-active curves never hover-highlight or shadow active ones.
+export const ACTIVE_SKETCH_HOVER_TOOLS = Object.freeze([
+  ...ACTIVE_SKETCH_SNAP_TOOLS, TOOL_MODES.FILLET, TOOL_MODES.TRIM, TOOL_MODES.BREAK,
+]);
+
 // TASK 483: the regular polygon's side count: declared ONCE (the tool, the ribbon field and the builder all clamp with it).
 export const POLYGON_SIDES = { min: 3, max: 64, default: 6 };
 

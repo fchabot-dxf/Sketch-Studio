@@ -58,7 +58,7 @@ function importDrawing(text, name) {
 
 // TASK 618: Undo / Redo belong to the Edit tab's sketch (the Trace and Export tabs have no history)
 const history = createHistoryRouter({ current: () => (getEditState() && !tabPanes.edit.hidden ? sketchHistory(getEditState()) : null) });
-mountAppFooter({ router: history, view: () => (getEditState() && !tabPanes.edit.hidden ? { svg: document.getElementById('design-canvas'), state: getEditState() } : null) });
+mountAppFooter({ router: history, view: () => (getEditState() && !tabPanes.edit.hidden ? { svg: document.getElementById('design-canvas'), state: getEditState() } : null), parameters: false }); // O14: Trace has no Parameters window (no project file); TASK 677: the opener is the footer's
 
 // ── Event bus ─────────────────────────────────────────────────────────────────
 const listeners = {};

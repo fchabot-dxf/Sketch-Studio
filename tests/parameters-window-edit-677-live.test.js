@@ -13,7 +13,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
-import { pressRibbonTool } from './helpers/ribbon-tool.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '677', width: 1400, height: 860 });
@@ -92,7 +91,7 @@ await (async () => {
     await press('#btn-recenter-view'); await sleep(500);
   };
   const openWindow = async () => {
-    await pressRibbonTool(evalJs, (p) => pointer(p.x, p.y), 'btn-parameters');
+    await press('#btn-parameters'); // TASK 677: the footer's always-visible button
     await waitFor(`document.querySelectorAll('${W} tr.pt-user').length === 3 && document.querySelectorAll('${W} tr.pt-dim').length === 14`, 'the Parameters window with the box frame');
   };
 
@@ -244,7 +243,8 @@ await (async () => {
     await openBoxFrame();
     await openWindow();
     const sheet = await rectOf(W);
-    assert.ok(sheet.x === 0 && sheet.width === 390 && Math.round(sheet.y + sheet.height) === 844, 'phone: a full-width bottom sheet ' + JSON.stringify(sheet));
+    const foot = await rectOf('footer.sk-footer');
+    assert.ok(sheet.x === 0 && sheet.width === 390 && Math.round(sheet.y + sheet.height) === Math.round(foot.y), 'phone: a full-width bottom sheet on the footer ' + JSON.stringify({ sheet, foot }));
     assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= 390`), true, 'phone: no sideways scroll');
     const fit = await evalJs(`(() => { const b = document.querySelector('${W} .sk-dock-body'); const t = document.querySelector('${W} table'); const h = [...document.querySelectorAll('${W} input.pt-in')].filter((i) => i.getClientRects().length).map((i) => Math.round(i.getBoundingClientRect().height)); return { fits: t.scrollWidth <= b.clientWidth, minH: Math.min(...h), unit: getComputedStyle(document.querySelector('${W} th.pt-unit')).display, comment: getComputedStyle(document.querySelector('${W} th.pt-comment')).display }; })()`);
     assert.deepStrictEqual(fit, { fits: true, minH: 36, unit: 'none', comment: 'none' }, 'phone: the table fits, the inputs are 36 px tall, Unit merges into Value and Comment hides');

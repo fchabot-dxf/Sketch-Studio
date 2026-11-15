@@ -419,6 +419,12 @@ Owner: "Writing a param name in an input box like `pa` should show results in a 
   Default ON for every host of the Design tab; a host opts OUT with `createToolRibbon({ parameters: false })` (the inverse of the
   `profiles` opt-in at :262, because the north star is ONE Design tab and only Trace is excluded, O14). Test: Trace's ribbon has
   no `#btn-parameters`; SketchStudio / Shaper / Pen Plotter have it.
+  **MOVED (task 677, owner turn 1730: "param table should be beside the clear all button, or somewhere always visible")**: the opener is now
+  ONE always-visible button DECLARED in the shared FOOTER (packages/ui/app-footer.js), right after Delete / Clear sketch: the fx icon,
+  `aria-label="Parameters"`, `aria-haspopup="dialog"`, `aria-expanded`; 32 px with a mouse, the footer's finger size with a finger; in phone landscape
+  it is in the footer's floating cluster. A host opts out with `mountAppFooter({ parameters: false })` (Trace, O14). It is no longer in the
+  ribbon's Inspect group. The window opens right-aligned at the top of the Design canvas (no longer "below the ribbon"), and the narrow-screen
+  bottom sheet sits on the footer (`bottom: var(--sk-footer-h)`) so the button that opened it stays visible to close it.
 - **Component** (O13): `createTabbedDockPanel` (tabbed-dock-panel.js:68) with one tab "Parameters" whose `render(body)` is the
   new `packages/ui/parameter-table.js`. The dock already floats, drags, resizes, docks to an edge and persists position/size
   (`persistKey: 'sk-parameters'`). Additions to the dock (it has no users today, so no host can regress): a close button in its
@@ -472,7 +478,7 @@ Owner: "Writing a param name in an input box like `pa` should show results in a 
   (`PARAMETER_UNITS`, starting at the document unit, Fusion's Add-dialog default); existing rows' units stay read only (planChange has no unit
   change). (b) The bin stays in the Tab order after Comment (a keyboard can delete); it is `aria-disabled` (not `disabled`, so its tooltip
   listing the users shows) and pressing it anyway writes the IN_USE message under the row. (c) Ctrl+Z / Ctrl+Y typed in a cell with no pending
-  text run the Design surface's own undo (`sketchHistory`, the header buttons' source); with pending text they are the input's own text undo.
+  text run the Design surface's own undo (the footer's history router: the same dispatch as its Undo / Redo buttons); with pending text they are the input's own text undo.
   (d) A dimension row is no longer a Tab stop of its own (its Name / Expression cells are); hovering or focusing any of its cells hovers it on
   the canvas, a click outside its cells selects it. (e) Narrow screens: the row's tap shows the Comment in the Value's place (one row at a time);
   focusing its Name / Expression, or leaving the Comment, shows the Value again. (f) An invalid text left by leaving the cell stays in the cell,

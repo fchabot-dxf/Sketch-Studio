@@ -12,7 +12,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
-import { pressRibbonTool } from './helpers/ribbon-tool.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '535-4', width: 1400, height: 800 });
@@ -33,21 +32,15 @@ await (async () => {
     const clickEl = async (sel) => { const c = await centerOf(sel); assert(c, sel + ' is on screen'); await click(c.x, c.y); };
     const rect = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e || e.hidden) return null; const r = e.getBoundingClientRect(); return r.width ? { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) } : null; })()`);
     const W = '.sk-pwin';
-    // TASK 647: Inspect shows only its first tool (Dim) by default; Parameters is in its dropdown. The user puts it in the bar: a real click on the
-    // section's name, on the Parameters checkbox, then Esc (the layout is kept per app, so once per app).
-    const putParamsInBar = async () => {
-      await clickEl('[data-section="inspect"] .sk-ribbon-group-label');
-      await clickEl('.sk-ribbon-sect-row[data-id="btn-parameters"] .sk-ribbon-sect-check input');
-      await key('Escape', 'Escape', 27); await sleep(150);
-      assert.strictEqual(await evalJs(`!document.getElementById('btn-parameters').hidden`), true, 'Parameters is in the bar');
-    };
+    // TASK 677 (owner, turn 1730): the Parameters button is in the shared FOOTER, always visible (it was in Inspect's dropdown, TASK 647)
+    const inFooter = () => evalJs(`(() => { const b = document.getElementById('btn-parameters'); const r = b && b.getBoundingClientRect(); return !!b && !!b.closest('.sk-footer, .sk-statusbar') && r.width > 0 && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b; })()`);
     const winOpen = () => evalJs(`(() => { const e = document.querySelector('${W}'); return !!e && !e.hidden && e.getBoundingClientRect().width > 0; })()`);
     const active = () => evalJs(`(() => { const a = document.activeElement; return a ? (a.id || a.className || a.tagName) : null; })()`);
     const focusInWindow = () => evalJs(`(() => { const e = document.querySelector('${W}'); return !!e && e.contains(document.activeElement); })()`);
     const rows = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} tr.sk-ptable-row')].map(r => ({ kind: r.dataset.kind, name: r.dataset.name, cells: [...r.children].map(c => { const i = c.querySelector('input'); return i ? i.value : c.textContent; }), cls: r.className, sel: r.getAttribute('aria-selected') })))`).then(JSON.parse);
     const emptyTexts = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} td.pt-empty')].map(e => e.textContent))`).then(JSON.parse);
     const groupHeads = () => evalJs(`JSON.stringify([...document.querySelectorAll('${W} th[scope="rowgroup"]')].map(e => e.querySelector('.pt-title').textContent + e.querySelector('.pt-count').textContent))`).then(JSON.parse);
-    const btnState = () => evalJs(`(() => { const b = document.getElementById('btn-parameters'); return b ? { label: b.getAttribute('aria-label'), pressed: b.getAttribute('aria-pressed'), popup: b.getAttribute('aria-haspopup'), title: b.title } : null; })()`);
+    const btnState = () => evalJs(`(() => { const b = document.getElementById('btn-parameters'); return b ? { label: b.getAttribute('aria-label'), expanded: b.getAttribute('aria-expanded'), popup: b.getAttribute('aria-haspopup'), title: b.title } : null; })()`);
     const shot = async (name, clip) => {
       const p = { format: 'png' };
       if (clip) p.clip = { x: clip.l, y: clip.t, width: clip.w, height: clip.h, scale: 2 };
@@ -61,14 +54,13 @@ await (async () => {
     await navigate(url('/apps/sketchstudio/index.html'), 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('btn-parameters'); })()`, 'SketchStudio to load with its Parameters button');
     await waitForApp('svgCanvas');
-    assert.deepStrictEqual(await btnState(), { label: 'Parameters', pressed: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'the button has a label, a title, a pressed state and announces a dialog');
-    assert.strictEqual(await evalJs(`document.querySelector('#btn-parameters .sk-ribbon-lbl').textContent`), 'Params');
+    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'the button has a label, a title, a pressed state and announces a dialog');
+    assert.strictEqual(await inFooter(), true, 'the button is in the footer, on screen, uncovered, without opening any menu');
     assert.strictEqual(await winOpen(), false, 'before the first click no window is shown');
-    await putParamsInBar();
     // open: real click
     await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'the button opens the window');
-    assert.strictEqual((await btnState()).pressed, 'true', 'pressed while open');
+    assert.strictEqual((await btnState()).expanded, 'true', 'aria-expanded while open');
     assert.deepStrictEqual(await evalJs(`(() => { const e = document.querySelector('${W}'); return { role: e.getAttribute('role'), label: e.getAttribute('aria-label'), table: !!e.querySelector('table[role="grid"] th[scope="col"]') }; })()`), { role: 'dialog', label: 'Parameters', table: true }, 'role=dialog, a title, a real table with column headers');
     assert.strictEqual(await focusInWindow(), true, 'focus moves into the window on open');
     assert.deepStrictEqual(await groupHeads(), ['User parameters(0)', 'Sketch dimensions(0)'], 'two groups');
@@ -132,7 +124,7 @@ await (async () => {
     await key('Escape', 'Escape', 27); await sleep(200);
     assert.strictEqual(await winOpen(), false, 'Esc with focus in the window closes it');
     assert.strictEqual(await active(), 'btn-parameters', 'focus returns to the button');
-    assert.strictEqual((await btnState()).pressed, 'false');
+    assert.strictEqual((await btnState()).expanded, 'false');
     // reopen with the button, close with the X; the button toggles too
     await clickEl('#btn-parameters'); assert.strictEqual(await winOpen(), true); assert.strictEqual(await focusInWindow(), true);
     await clickEl(`${W} .sk-dock-close`);
@@ -171,10 +163,13 @@ await (async () => {
     // ---- the 390 px layout: a full-width bottom sheet
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: false });
     await sleep(600);
-    await pressRibbonTool(evalJs, (p) => click(p.x, p.y), 'btn-parameters'); // TASK 647: in the bar if it fits at 390 px, else from the Inspect dropdown
+    assert.strictEqual(await inFooter(), true, '390 px: the footer button is on screen');
+    await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'the button opens the window at 390 px');
     const sheet = await rect(W);
-    assert(sheet.l === 0 && sheet.r === 390 && sheet.b === 800, `a full-width bottom sheet at 390 px: ${JSON.stringify(sheet)}`);
+    const foot390 = await rect('footer.sk-statusbar');
+    assert(sheet.l === 0 && sheet.r === 390 && sheet.b <= 800 && sheet.b >= foot390.t - 6, `a full-width bottom sheet at 390 px, on the footer: ${JSON.stringify({ sheet, foot390 })}`);
+    assert.strictEqual(await inFooter(), true, '390 px: the sheet leaves the footer button uncovered (it closes the sheet too)');
     const ribbon390 = await rect('#toolsRibbon .sk-ribbon');
     assert(sheet.t >= ribbon390.b, `the sheet does not cover the ribbon (${sheet.t} >= ${ribbon390.b})`);
     assert.deepStrictEqual(await evalJs(`(() => { const t = document.querySelector('${W} table'); const b = document.querySelector('${W} .sk-dock-body'); return { tableFits: t.scrollWidth <= b.clientWidth, pageOverflow: document.documentElement.scrollWidth - 390, unitHidden: getComputedStyle(document.querySelector('${W} th.pt-unit')).display, commentHidden: getComputedStyle(document.querySelector('${W} th.pt-comment')).display }; })()`),
@@ -195,7 +190,7 @@ await (async () => {
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab with its Parameters button');
     await waitForApp('design-canvas');
     await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design canvas to show');
-    assert.deepStrictEqual(await btnState(), { label: 'Parameters', pressed: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Shaper: the same declared button');
+    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Shaper: the same declared button');
     const seed = () => evalJs(`(() => {
       const st = window.__designController.state;
       for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
@@ -212,7 +207,6 @@ await (async () => {
       return st.constraints.length;
     })()`);
     await seed();
-    await putParamsInBar();
     await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'Shaper: the button opens the window');
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 4`, 'the four seeded dimension rows');
@@ -278,7 +272,9 @@ await (async () => {
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: false });
     await sleep(700);
     const sh = await rect(W);
-    assert(sh && sh.l === 0 && sh.r === 390 && sh.b === 800, `Shaper at 390 px: a full-width bottom sheet ${JSON.stringify(sh)}`);
+    const shFoot = await rect('footer.sk-footer');
+    assert(sh && sh.l === 0 && sh.r === 390 && sh.b === shFoot.t, `Shaper at 390 px: a full-width bottom sheet on the footer (TASK 677) ${JSON.stringify({ sh, shFoot })}`);
+    assert.strictEqual(await inFooter(), true, 'Shaper at 390 px: the footer Parameters button stays uncovered');
     assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= 390`), true, 'Shaper: no page overflow at 390 px');
     await shot('narrow-390-shaper-sheet.png', { l: 0, t: 0, w: 390, h: 800 });
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -290,7 +286,7 @@ await (async () => {
     await waitFor(`!!window.__sketch && !!document.getElementById('btn-parameters')`, 'Pen Plotter Design with its Parameters button');
     await sleep(1000);
     await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(500);
-    assert.deepStrictEqual(await btnState(), { label: 'Parameters', pressed: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Pen Plotter: the same declared button');
+    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Pen Plotter: the same declared button');
     await evalJs(`(() => {
       const st = window.__sketch.controller.state;
       st.clearDocument(); // the shared autosave buffer carried the Shaper drawing over
@@ -298,7 +294,6 @@ await (async () => {
       st.shapes.push({ id: 'PL1', type: 'line', joints: ['pa', 'pb'] });
       st.constraints.push({ type: 'distance', joints: ['pa', 'pb'], value: 30, name: 'd1' });
     })()`);
-    await putParamsInBar();
     await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'Pen Plotter: the button opens the window');
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 1`, 'the Pen Plotter dimension row');
@@ -308,7 +303,7 @@ await (async () => {
     await shot('desktop-penplotter-window.png', await winClip());
     await key('Escape', 'Escape', 27);
     await clickEl('.sk-header-tab[data-tab="toolpath"]'); await sleep(500);
-    assert.strictEqual(await evalJs(`!!document.getElementById('btn-parameters') && document.getElementById('btn-parameters').offsetParent === null`), true, 'the Design ribbon is hidden on the Toolpath stage');
+    assert.strictEqual(await evalJs(`!!document.getElementById('btn-parameters') && document.getElementById('btn-parameters').offsetParent === null`), true, 'the footer button is hidden on the Toolpath stage (no sketch shown)');
 
     // ================================================================== A. Trace has NO button
     await navigate(url('/apps/trace/index.html'), 8000);

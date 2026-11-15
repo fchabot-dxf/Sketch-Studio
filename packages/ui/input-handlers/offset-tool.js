@@ -64,8 +64,9 @@ export function handleOffsetPointerDown(e, svg, state, hitShape) {
   if (e.button !== undefined && e.button !== 0) return false;
   ensureDistance();
   const shape = hitShape && hitShape.shape && !hitShape.shape.reference && pickRule(state)(hitShape.shape) ? hitShape.shape : null;
-  if (shape && _open && _open.chain.pieces.some((p) => p.id === shape.id)) return true; // the picked chain itself: no side there, nothing changes
-  if (shape) return pick(svg, state, shape, screenToWorld(svg, e.clientX, e.clientY));
+  // a press on the picked chain itself is a side press like one on empty canvas (a finger beside a line reaches the line: its side is the press point's)
+  const inChain = shape && _open && _open.chain.pieces.some((p) => p.id === shape.id);
+  if (shape && !inChain) return pick(svg, state, shape, screenToWorld(svg, e.clientX, e.clientY));
   if (_open) _press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
   return false;
 }

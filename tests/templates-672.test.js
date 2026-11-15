@@ -12,10 +12,15 @@
 //   4. stair stringer and curved bench seat: their geometry from the solved drawing (steps, cuts, throat, board; arcs, identical slats, gaps)
 //   5. (owner ruling, turn 1729: no dimension is a "driver" box) EVERY template's every driving dimension reads only USER PARAMETERS and numbers,
 //      never another dimension's name (d1, d2, ...), in every joint / layout option
+//   6. (owner, turn 1732: "template dimension should be offset further away") EVERY template's every linear dimension label (where the canvas
+//      draws it: #core/dim-label.js frame, mid + normal * offset) is at least the rule's distance (dimensionGap: 15 % of the larger side, at
+//      least 10 mm) from every solid line, circle and arc of the outline, in every choice option; and no two labels of a side share a spot
 import assert from 'node:assert';
 import fs from 'node:fs';
 import * as L from './harness/audit/lib.js';
-import { TEMPLATES, buildTemplate, templateById, defaultParams } from '#core/templates.js';
+import { TEMPLATES, buildTemplate, templateById, defaultParams, dimensionGap, DIM_FRACTION, DIM_FLOOR } from '#core/templates.js';
+import { resolveDimEndpoints, linearDimFrame } from '#core/dim-label.js';
+import { arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 import { parseInput, dependencies } from '#core/expression.js';
 import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES } from '#core/frame-geometry.js';
 import { cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
@@ -232,6 +237,34 @@ for (const t of TEMPLATES) {
     for (const c of dims) {
       const deps = dependencies(parseInput(c.expression, { allowAssign: false }));
       assert.ok(deps.length > 0 && deps.every((d) => params.has(d) && !dimNames.has(d)), `${t.id} ${JSON.stringify(extra)}: ${c.name} = ${c.expression} reads only user parameters (${[...params]}), no dimension`);
+      checks++;
+    }
+  }
+}
+// ---- 6. the dimension placement rule
+assert.deepStrictEqual([DIM_FRACTION, DIM_FLOOR], [0.15, 10], 'the rule: 15 % of the larger side, at least 10 mm');
+const segDist = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, u = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy))); return Math.hypot(p.x - a.x - u * dx, p.y - a.y - u * dy); };
+for (const t of TEMPLATES) {
+  const opts = Object.entries(t.params).filter(([, spec]) => spec.kind === 'choice').flatMap(([k, spec]) => spec.options.map((o) => ({ [k]: o.value })));
+  for (const extra of [{}, ...opts]) {
+    const g = buildTemplate(t, extra).geometry, J = new Map(g.joints), solid = g.shapes.filter((x) => !x.isConstruction);
+    const gap = dimensionGap(J, g.shapes), m = `${t.id} ${JSON.stringify(extra)}`;
+    const outlineDist = (p) => Math.min(...solid.map((sh) => {
+      const P = sh.joints.map((id) => J.get(id));
+      if (sh.type === 'line') return segDist(p, P[0], P[1]);
+      const d = Math.hypot(p.x - P[0].x, p.y - P[0].y);
+      if (sh.type === 'circle') return Math.abs(d - sh.radius);
+      const r = Math.hypot(P[1].x - P[0].x, P[1].y - P[0].y);
+      return angleInArcSweep(arcSweepInfo(P[0], P[1], P[2], { sweep: sh.sweep }), Math.atan2(p.y - P[0].y, p.x - P[0].x)) ? Math.abs(d - r) : Math.min(Math.hypot(p.x - P[1].x, p.y - P[1].y), Math.hypot(p.x - P[2].x, p.y - P[2].y));
+    }));
+    const labels = [];
+    for (const c of g.constraints.filter((x) => x.type === 'distance' && !x.isRadius && !x.isDriven)) {
+      const { j1, j2 } = resolveDimEndpoints(c, J, g.shapes), f = linearDimFrame(c, j1, j2);
+      const at = { x: f.mid.x + f.nx * c.offset, y: f.mid.y + f.ny * c.offset };
+      const d = outlineDist(at);
+      assert.ok(d >= gap - 1e-6, `${m}: ${c.name}'s label is ${d.toFixed(2)} from the outline, the rule says at least ${gap.toFixed(2)}`);
+      assert.ok(!labels.some((q) => Math.hypot(q.x - at.x, q.y - at.y) < 1e-6), `${m}: ${c.name}'s label on another one`);
+      labels.push(at);
       checks++;
     }
   }

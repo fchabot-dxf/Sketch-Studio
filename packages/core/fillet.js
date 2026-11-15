@@ -16,6 +16,7 @@ import { docUnit } from './settings-manager.js';
 import { nextDimensionName } from './parameters.js';
 import { newJointId } from './shape-id.js';
 import { inActiveSketch } from './sketch-model.js';
+import { ConstraintManager } from './constraint-manager.js';
 
 /** A trimmed line shorter than this (world mm) counts as collapsed. */
 export const COLLAPSE_TOL = 1e-3;
@@ -394,10 +395,17 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
  * @param {object} state - Application sketch state
  * @param {object} cornerInfo - From findCornerAtJoint or findCornerAtPoint
  * @param {number} [radius=5] - Desired fillet radius
+ * @param {object} [options]
+ * @param {string} [options.equalTo] - TASK 672 (Fusion, measured by the owner, turn 1739: several corners filleted in ONE Fillet command get ONE
+ *   radius dimension, on the first fillet, and an EQUAL constraint on each later fillet arc): the arc id of the session's first fillet. This
+ *   fillet then gets an EQUAL constraint between its arc and that arc (ConstraintManager.createConstraint) INSTEAD of its own radius dimension.
+ *   Without it, unchanged: the fillet's own driving radius dimension.
  * @returns {object|null}
  */
-export function applyFillet(state, cornerInfo, radius = 5) {
+export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
   if (!state || !cornerInfo) return null;
+  const { equalTo = null } = options;
+  if (equalTo && !state.shapes.some((sh) => sh.id === equalTo && sh.type === 'arc')) return { success: false, reason: 'The fillet to match is not an arc of this sketch' };
   // Fusion edits only the active sketch: a corner with a curve of another sketch is refused, never written into the active one (task 657)
   if ([cornerInfo.lineA, cornerInfo.lineB].some((l) => l && l.shape && !inActiveSketch(state, l.shape))) return { success: false, reason: 'Fillet works in the active sketch only' };
 
@@ -536,6 +544,13 @@ export function applyFillet(state, cornerInfo, radius = 5) {
     if (leg.shape.type === 'arc') constraints.push({ type: 'tangent', shapes: [leg.shape.id, arcShape.id], branch: inside ? 'internal' : 'external' });
     else constraints.push({ type: 'tangent', line: leg.shape.id, circle: arcShape.id });
   });
+
+  // TASK 672: a later fillet of a session: EQUAL to the session's first fillet arc, no radius dimension of its own (Fusion)
+  if (equalTo) {
+    if (!ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [equalTo, arcShape.id] }, { source: 'fillet' })) throw new Error('fillet: the equal constraint to ' + equalTo + ' was refused');
+    const equalConstraint = state.constraints.find((c) => c.type === CONSTRAINT_TYPES.EQUAL && c.shapes && c.shapes.includes(equalTo) && c.shapes.includes(arcShape.id));
+    return { success: true, arc: arcShape, radiusConstraint: null, equalConstraint, radius: finalRadius, requestedRadius: radius, centerPt, tA, tB, joints: [jCenter, jTA, jTB], virtualSharp: jV };
+  }
 
   // Driving RADIUS dimension on the new arc -- same shape the Dimension tool makes for an arc
   // (distance + isRadius + shape), so the fillet is a live, editable radius.

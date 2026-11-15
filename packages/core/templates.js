@@ -20,9 +20,67 @@ import { userToWorldY, worldToUserY } from '#core/units.js';
 import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyPattern, patternDefaults } from '#core/pattern.js';
 import { planChange, nextDimensionName } from '#core/parameters.js';
-import { cornerBoards, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
+import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
+import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES } from '#core/frame-geometry.js';
+import { resolveDimEndpoints, linearDimFrame } from '#core/dim-label.js';
+import { arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 
 const R = (v) => Math.round(v * 1e6) / 1e6;
+
+// ── TASK 672 (owner, turn 1732: "template dimension should be offset further away"): THE placement rule of every linear template dimension ──
+// A template call gives a dimension only its SIDE (the sign of its `offset`: along the dimension frame's normal, #core/dim-label.js
+// linearDimFrame, the frame the canvas draws it in). Its dimension line (and its label, on it) then sits OUTSIDE the drawing: DIM_GAP past the
+// solid outline's extent in that direction, DIM_GAP = DIM_FRACTION of the larger side of the drawing's bounding box, never under DIM_FLOOR mm;
+// the dimensions on one side are stacked in lanes, DIM_GAP apart, shorter spans nearer the outline, two in one lane only when their spans
+// (each at least DIM_GAP long: the label's room) do not overlap. Radius / angle dimensions keep their offsets.
+export const DIM_FRACTION = 0.15, DIM_FLOOR = 10;
+/** The rule's distance for a drawing (world joints Map, shapes): DIM_FRACTION of its larger side, at least DIM_FLOOR. */
+export function dimensionGap(joints, shapes) {
+  const ext = solidExtent(joints, shapes);
+  return Math.max(DIM_FLOOR, DIM_FRACTION * Math.max(ext(1, 0) + ext(-1, 0), ext(0, 1) + ext(0, -1)));
+}
+// the solid (non-construction) drawing's extent along a unit direction: max of p . u over its line ends, circles and arc sweeps
+function solidExtent(joints, shapes) {
+  const solid = shapes.filter((x) => !x.isConstruction);
+  return (ux, uy) => {
+    let m = -Infinity;
+    const ang = Math.atan2(uy, ux);
+    for (const sh of solid) {
+      const P = sh.joints.map((id) => joints.get(id));
+      if (sh.type === 'line') for (const p of P) m = Math.max(m, p.x * ux + p.y * uy);
+      else if (sh.type === 'circle') m = Math.max(m, P[0].x * ux + P[0].y * uy + sh.radius);
+      else if (sh.type === 'arc') {
+        const [c, a, e] = P, r = Math.hypot(a.x - c.x, a.y - c.y);
+        m = Math.max(m, a.x * ux + a.y * uy, e.x * ux + e.y * uy);
+        if (angleInArcSweep(arcSweepInfo(c, a, e, { sweep: sh.sweep }), ang)) m = Math.max(m, c.x * ux + c.y * uy + r);
+      }
+    }
+    return m;
+  };
+}
+function placeDimensions(joints, shapes, constraints) {
+  const ext = solidExtent(joints, shapes), gap = dimensionGap(joints, shapes);
+  const groups = new Map(); // side (the outward direction, to a degree) -> its dimensions
+  for (const c of constraints) {
+    if (c.type !== 'distance' || c.isRadius) continue;
+    const { j1, j2 } = resolveDimEndpoints(c, joints, shapes), f = linearDimFrame(c, j1, j2), side = c.offset < 0 ? -1 : 1;
+    const ux = side * f.nx, uy = side * f.ny, along = (p) => p.x * f.ax + p.y * f.ay;
+    const a = Math.min(along(j1), along(j2)), b = Math.max(along(j1), along(j2)), mid = (a + b) / 2, half = Math.max(b - a, gap) / 2;
+    const key = `${Math.round(Math.atan2(uy, ux) * 180 / Math.PI)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ c, side, ux, uy, len: b - a, span: [mid - half, mid + half], at: f.mid.x * ux + f.mid.y * uy });
+  }
+  for (const items of groups.values()) {
+    items.sort((p, q) => p.len - q.len);
+    const lanes = [];
+    for (const it of items) {
+      let lane = 0;
+      while ((lanes[lane] || []).some(([s0, s1]) => it.span[0] < s1 && it.span[1] > s0)) lane++;
+      (lanes[lane] = lanes[lane] || []).push(it.span);
+      it.c.offset = R(it.side * (ext(it.ux, it.uy) + gap * (1 + lane) - it.at));
+    }
+  }
+}
 
 // One small sketch builder: joints in user coordinates, shapes and constraints as plain records.
 function sketcher(id) {
@@ -50,6 +108,10 @@ function sketcher(id) {
     equalLengths(chain) { for (let i = 0; i + 1 < chain.length; i++) constraints.push({ type: 'equal', joints: [...chain[i], ...chain[i + 1]] }); }, // chain of [a, b] pairs
     pointOn(j, shape) { constraints.push({ type: 'pointOnLine', joint: j, shape }); },
     midpoint(m, a, c) { constraints.push({ type: 'midpoint', joints: [a, c, m] }); },
+    parallel(s1, s2) { constraints.push({ type: 'parallel', shapes: [s1, s2] }); }, // TASK 672
+    // TASK 672: a driving ANGLE dimension (degrees) from line s1's direction to line s2's, counter-clockwise in the world (#core/angle-sector.js:
+    // the default sector, stored so a load measures this one)
+    angle(s1, s2, value, offset = 40, expr) { return named({ type: 'angle', shapes: [s1, s2], value: R(value), offset, sector: { ray1: 1, ray2: 1, turn: 1 }, isDriven: false, driven: false }, expr); },
     // driving dimensions: mode 'aligned' | 'horizontal' | 'vertical'; offset = where the label sits (mm from the geometry); expr = its formula
     // (TASK 670: every template dimension has one, of the user parameters or of an earlier dimension; `value` is what it gives at the built
     // values). Each is NAMED here (d1, d2, ... in order: the names a load would give) so a formula can read an earlier one; each returns its name.
@@ -62,6 +124,7 @@ function sketcher(id) {
       const dx = p.x, dy = p.y;
       for (const q of joints.values()) { q.x = R(q.x - dx); q.y = R(q.y - dy); }
       constraints.push({ type: 'coincident', joints: [j, ORIGIN_JOINT_ID] });
+      placeDimensions(joints, shapes, constraints); // TASK 672: the one placement rule of the linear dimensions
       return serializeDocument({ joints, shapes, constraints, parameters: [] });
     },
   };
@@ -69,6 +132,48 @@ function sketcher(id) {
 }
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+
+// ── TASK 672: BOARD sketches (the frame templates), one path from board outlines to a sketch and its rules ──────────────────────────────────
+const NEAR = 1e-6; // two corners closer than this (mm) are ONE point (a frame engine computes a shared corner twice, a float apart)
+// Board OUTLINES (world polygons: frame-calc's frame, Y down) -> the sketch: every polygon corner is ONE joint, every edge is split at the
+// corners lying on it and each piece is drawn ONCE (a seam two boards share is one line). (Task 670's right-angle corner, made reusable.)
+// -> { J(q): the joint at a world point, corners: [{ q, j }], pieces: [{ a, b, shape }] (a, b: corners; in drawing order) }
+function drawBoards(s, polys) {
+  const corners = [];
+  const find = (q) => corners.find((c) => Math.abs(c.q.x - q.x) < NEAR && Math.abs(c.q.y - q.y) < NEAR);
+  for (const poly of polys) for (const q of poly) if (!find(q)) corners.push({ q, j: s.pt(q.x, worldToUserY(q.y)) });
+  const pieces = [], drawn = new Set();
+  for (const poly of polys) poly.forEach((a, i) => {
+    const b = poly[(i + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+    const on = corners.map((c) => ({ c, u: ((c.q.x - a.x) * dx + (c.q.y - a.y) * dy) / (len * len), off: Math.abs((c.q.x - a.x) * dy - (c.q.y - a.y) * dx) / len }))
+      .filter((o) => o.off < NEAR && o.u > -NEAR / len && o.u < 1 + NEAR / len).sort((u, v) => u.u - v.u); // the joints ON this edge, from a to b
+    for (let k = 0; k + 1 < on.length; k++) {
+      const u = on[k].c, v = on[k + 1].c, id = [u.j, v.j].sort().join('|');
+      if (drawn.has(id)) continue; // the shared seam: drawn once
+      drawn.add(id);
+      pieces.push({ a: u, b: v, shape: s.line(u.j, v.j) });
+    }
+  });
+  return { J: (q) => find(q).j, corners, pieces };
+}
+// The RULES of a board sketch, from its CARRIER lines: every board edge lies on one (a frame's outer and inner faces), and every corner sits
+// where two carriers cross, so holding each corner on its carriers leaves only the carriers to place (the template's dimensions and parallels).
+// A carrier declared 'h' / 'v' chains its corners, in order along it, with horizontal / vertical rules (k - 1 rules for k corners: the carrier
+// keeps one freedom, its offset); a free (slanted) carrier keeps two (offset and angle): its first drawn piece is its REFERENCE line and every
+// other corner on it is a point-on-line of that piece (k - 2 rules). carriers: [{ a, b, axis: 'h' | 'v' | null }] (world points, a != b).
+// -> per carrier { corners (in order along it), ref (the reference piece's shape id) }
+function carrierRules(s, board, carriers) {
+  return carriers.map((cr) => {
+    const dx = cr.b.x - cr.a.x, dy = cr.b.y - cr.a.y, len = Math.hypot(dx, dy);
+    const onIt = (q) => Math.abs((q.x - cr.a.x) * dy - (q.y - cr.a.y) * dx) / len < NEAR;
+    const along = (q) => (q.x - cr.a.x) * dx + (q.y - cr.a.y) * dy;
+    const corners = board.corners.filter((c) => onIt(c.q)).sort((u, v) => along(u.q) - along(v.q));
+    const ref = board.pieces.find((p) => onIt(p.a.q) && onIt(p.b.q));
+    if (cr.axis) for (let i = 0; i + 1 < corners.length; i++) (cr.axis === 'h' ? s.h : s.v)(corners[i].j, corners[i + 1].j);
+    else for (const c of corners) if (c !== ref.a && c !== ref.b) s.pointOn(c.j, ref.shape);
+    return { corners, ref: ref && ref.shape };
+  });
+}
 
 // ── the bank ────────────────────────────────────────────────────────────────────────────────────────────────────
 function buildSlot(p) {
@@ -309,13 +414,20 @@ function buildShelfPins(p) {
 // their edges (one line and one pair of joints per shared edge: no gaps, no overlaps). Joint grid: four x levels (0, t, W - t, W) and 2 (N + 1)
 // y levels (the bottom and the top of the N + 1 cross boards); the inner columns carry a joint at every level. Every segment is horizontal / vertical.
 // TASK 670 (no FOLD): every board thickness and every opening but the top one is a SIGNED horizontal / vertical dimension (the solver locks which
-// side its second joint is on, engine.js dimSign), a formula: the left side's thickness dimension reads `thickness`, every other board reads THAT
-// dimension, an opening is (the length dimension - (N + 1) * the thickness dimension) / N, so a number typed into the length or the thickness
-// dimension moves every board as the parameter does (as the task 669 equal rules did). The top opening is what the overall length leaves (linear: it cannot flip either). The task 669 equal-LENGTH rules were unsigned, so
+// side its second joint is on, engine.js dimSign), a formula of the USER PARAMETERS: every board's thickness dimension reads `thickness`, an
+// opening is (length - (N + 1) * thickness) / N (TASK 672, owner ruling: every dimension reads the parameters directly, none reads another
+// dimension; the parameter is what moves every board). The top opening is what the overall length leaves (linear: it cannot flip either). The task 669 equal-LENGTH rules were unsigned, so
 // shrinking the length could land the solve on a folded branch (the top end board flipped above the top edge, the top opening absorbing it).
 // TASK 670 LAYOUT: 'Vertical' (above) or 'Horizontal' = the SAME construction with x and y swapped (a mirror in the diagonal through the
 // origin, which stays the bottom-left corner): the full-length boards become the bottom and the top, the ends and dividers stand between
 // them, the compartments sit side by side; every horizontal rule / dimension becomes vertical and the other way round.
+// TASK 672 CORNER JOINT (one choice for the 4 outer corners, #core/corner-joint.js cornerJointPoints, frame-calc's): 'V-Through' (default) =
+// the construction above (the sides run the full length: the owner's original rule); 'H-Through' = the ends run the full width, the sides stand
+// between them; 'Miter' = 45 degree seams. The boards are frame-calc's stud-layout buildFrameGeometry ones (the jambs = the sides, the plates =
+// the ends, the rails = the dividers), drawn through the one board path (drawBoards + carrierRules: every edge is on one of the 4 x levels or
+// the 2 (N + 1) y levels); the dimensions are the same 2 N + 4 in every joint (only which corner joint carries a board's thickness changes). The
+// joint is in the construction's frame: the Horizontal layout mirrors the whole drawing, joint included, so 'V-Through' is always "the
+// full-length boards run through" (#ui/template-glyphs.js draws its glyph mirrored there).
 export const BOX_FRAME_LAYOUTS = Object.freeze([
   Object.freeze({ value: 'Vertical', label: 'Vertical layout' }),
   Object.freeze({ value: 'Horizontal', label: 'Horizontal layout' }),
@@ -323,6 +435,7 @@ export const BOX_FRAME_LAYOUTS = Object.freeze([
 function buildBoxFrame(p) {
   const Lg = num(p.length, 1500), W = num(p.width, 400), t = num(p.thickness, 18), n = Math.max(1, Math.round(num(p.compartments, 5)));
   const swap = p.layout === 'Horizontal';
+  const joint = CORNER_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'V-Through';
   const g = (Lg - (n + 1) * t) / n;
   const b0 = sketcher('boxframe');
   // the swap seam: the construction below is written for the vertical layout; `s` puts each point, rule and dimension where the layout wants it
@@ -334,21 +447,34 @@ function buildBoxFrame(p) {
   };
   const levels = []; // the bottom and the top y of each cross board, from the bottom
   for (let k = 0; k <= n; k++) { const b = k * (g + t); levels.push(b, b + t); }
-  const last = levels.length - 1;
-  const L0 = s.pt(0, 0), R0 = s.pt(W, 0), L1 = s.pt(0, Lg), R1 = s.pt(W, Lg);
-  const colL = levels.map((y) => s.pt(t, y)), colR = levels.map((y) => s.pt(W - t, y));
-  const hz = (a, c) => { s.line(a, c); s.h(a, c); }, vt = (a, c) => { s.line(a, c); s.v(a, c); };
-  vt(L0, L1); vt(R0, R1); // the sides' outer long edges
-  hz(L0, colL[0]); hz(colR[0], R0); hz(L1, colL[last]); hz(colR[last], R1); // the sides' ends
-  for (let i = 0; i < last; i++) { vt(colL[i], colL[i + 1]); vt(colR[i], colR[i + 1]); }
-  for (let i = 0; i <= last; i++) { s.line(colL[i], colR[i]); s.h(colL[i], colR[i]); } // every board's two long edges
+  // the four outer corners (user coordinates of the construction): the horizontal board is an END, the vertical one a SIDE
+  const BL = cornerJointPoints(0, 0, 1, 1, t, joint), BR = cornerJointPoints(W, 0, -1, 1, t, joint);
+  const TL = cornerJointPoints(0, Lg, 1, -1, t, joint), TR = cornerJointPoints(W, Lg, -1, -1, t, joint);
+  const rect = (x, y, w, h) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+  const boards = [
+    [BL.vOuter, TL.vOuter, TL.vInner, BL.vInner], [BR.vOuter, TR.vOuter, TR.vInner, BR.vInner], // the sides
+    [BL.hOuter, BR.hOuter, BR.hInner, BL.hInner], [TL.hOuter, TR.hOuter, TR.hInner, TL.hInner], // the ends
+  ];
+  for (let k = 1; k < n; k++) boards.push(rect(t, levels[2 * k], W - 2 * t, t)); // the dividers, between the sides
+  const world = (q) => ({ x: q.x, y: userToWorldY(q.y) });
+  const board = drawBoards(s, boards.map((poly) => poly.map(world)));
+  carrierRules(s, board, [
+    ...[0, t, W - t, W].map((x) => ({ a: world({ x, y: 0 }), b: world({ x, y: Lg }), axis: 'v' })),
+    ...levels.map((y) => ({ a: world({ x: 0, y }), b: world({ x: W, y }), axis: 'h' })),
+  ]);
+  const J = (q) => board.J(world(q)), col = (i) => J({ x: t, y: levels[i] });
+  const L0 = J({ x: 0, y: 0 }), R0 = J({ x: W, y: 0 });
   s.dim(L0, R0, W, 'horizontal', -12, 'width');
-  const dL = s.dim(L0, L1, Lg, 'vertical', -12, 'length');
-  const dT = s.dim(L0, colL[0], t, 'horizontal', 12, 'thickness'); // the left side: THE thickness dimension, the other boards read it
-  s.dim(colR[0], R0, t, 'horizontal', 12, dT); // the right side
-  // the right column has the same levels (horizontal rows), so the left column carries the cross boards' rules
-  for (let k = 0; k <= n; k++) s.dim(colL[2 * k], colL[2 * k + 1], t, 'vertical', 10, dT); // each cross board
-  for (let k = 0; k + 1 < n; k++) s.dim(colL[2 * k + 1], colL[2 * k + 2], g, 'vertical', 10, `(${dL} - ${n + 1} * ${dT}) / ${n}`); // the openings but the top one
+  // TASK 672 (owner ruling, turn 1729): every dimension reads the USER PARAMETERS directly (`thickness`, `length`), never another dimension:
+  // no dimension is a special "driver" box
+  s.dim(L0, J({ x: 0, y: Lg }), Lg, 'vertical', -12, 'length');
+  s.dim(L0, J(BL.vInner), t, 'horizontal', 12, 'thickness'); // the left side
+  s.dim(J(BR.vInner), R0, t, 'horizontal', 12, 'thickness'); // the right side
+  // the right column has the same levels (horizontal rows), so the left column (and its corners) carries the cross boards' rules
+  s.dim(J(BL.hOuter), J(BL.hInner), t, 'vertical', 10, 'thickness'); // the bottom end
+  for (let k = 1; k < n; k++) s.dim(col(2 * k), col(2 * k + 1), t, 'vertical', 10, 'thickness'); // each divider
+  s.dim(J(TL.hInner), J(TL.hOuter), t, 'vertical', 10, 'thickness'); // the top end
+  for (let k = 0; k + 1 < n; k++) s.dim(col(2 * k + 1), col(2 * k + 2), g, 'vertical', 10, `(length - ${n + 1} * thickness) / ${n}`); // the openings but the top one
   return s.finish(L0);
 }
 
@@ -358,35 +484,158 @@ function buildBoxFrame(p) {
 // cornerBoards (frame-calc's cornerJointPoints) in WORLD coordinates (Y down, as frame-calc's), so the seam moves exactly as frame-calc's does.
 // The boards SHARE their seam: every polygon corner is one joint, every edge is split at the other board's corners lying on it and drawn once.
 // Rules: each straight edge horizontal / vertical (a miter seam is the only slanted one); the two lengths and the two boards' thicknesses are
-// SIGNED horizontal / vertical dimensions (no fold): the first thickness reads `thickness`, the second reads the first (with the miter: the
-// 45 degree seam). Outer corner
+// SIGNED horizontal / vertical dimensions (no fold): both thicknesses read `thickness` (TASK 672, owner: every dimension reads the parameter;
+// with the miter: the 45 degree seam). Outer corner
 // at the origin.
 function buildRightAngleCorner(p) {
   const lh = num(p.horizontalLength, 300), lv = num(p.verticalLength, 200), t = num(p.thickness, 18);
   const type = CORNER_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'H-Through';
   const boards = cornerBoards(0, 0, 1, 1, t, lh, lv, type);
   const s = sketcher('corner');
-  const key = (q) => `${R(q.x)},${R(q.y)}`;
-  const at = new Map(); // a board corner (world point) -> its ONE joint
-  for (const poly of [boards.h, boards.v]) for (const q of poly) if (!at.has(key(q))) at.set(key(q), { q, j: s.pt(q.x, worldToUserY(q.y)) });
-  const corners = [...at.values()], drawn = new Set();
-  for (const poly of [boards.h, boards.v]) poly.forEach((a, i) => {
-    const b = poly[(i + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-    const on = corners.map((c) => ({ c, u: ((c.q.x - a.x) * dx + (c.q.y - a.y) * dy) / (len * len), off: Math.abs((c.q.x - a.x) * dy - (c.q.y - a.y) * dx) / len }))
-      .filter((o) => o.off < 1e-9 && o.u > -1e-9 && o.u < 1 + 1e-9).sort((u, v) => u.u - v.u); // the joints ON this edge, from a to b
-    for (let k = 0; k + 1 < on.length; k++) {
-      const u = on[k].c, v = on[k + 1].c, id = [u.j, v.j].sort().join('|');
-      if (drawn.has(id)) continue; // the shared seam: drawn once
-      drawn.add(id);
-      s.line(u.j, v.j);
-      if (Math.abs(u.q.y - v.q.y) < 1e-9) s.h(u.j, v.j); else if (Math.abs(u.q.x - v.q.x) < 1e-9) s.v(u.j, v.j);
-    }
-  });
-  const J = (q) => at.get(key(q)).j;
+  const { J, pieces } = drawBoards(s, [boards.h, boards.v]); // TASK 672: the one board path (task 670's code, moved there)
+  for (const { a: u, b: v } of pieces) if (Math.abs(u.q.y - v.q.y) < 1e-9) s.h(u.j, v.j); else if (Math.abs(u.q.x - v.q.x) < 1e-9) s.v(u.j, v.j);
   const O = J({ x: 0, y: 0 }), A = J(boards.h[1]), B = J(boards.h[2]), C = J(boards.v[1]), D = J(boards.v[2]);
   s.dim(O, A, lh, 'horizontal', 12, 'horizontal_length'); s.dim(O, C, lv, 'vertical', -12, 'vertical_length');
-  const dT = s.dim(A, B, t, 'vertical', 10, 'thickness'); s.dim(C, D, t, 'horizontal', 10, dT);
+  s.dim(A, B, t, 'vertical', 10, 'thickness'); s.dim(C, D, t, 'horizontal', 10, 'thickness'); // TASK 672: both read the parameter (owner ruling)
   return s.finish(O);
+}
+
+// TASK 672: STAIR STRINGER, a cut stringer from one board (side view; the origin at the foot of the first riser, on the floor; Y up). `steps`
+// notches, each a riser `rise` high and a tread `run` deep; riser k + 1 stands on the back of tread k. At the top a PLUMB cut (vertical) drops
+// from the back of the last tread to the lower edge; at the bottom a LEVEL cut (on the floor) runs from the foot of the first riser to the
+// lower edge. The lower edge is parallel to the PITCH line (a construction line through the inner corners of the notches: the backs of the
+// treads, and the foot of the first riser), `throat` below it (the board left under every notch, square to the pitch). The board the stringer
+// is cut from is a construction line `board width` above the lower edge (the board's top edge: the notches' tips must stay under it).
+// Rules (no fold: once the pitch is set every one is linear): risers vertical, treads horizontal, the inner corners on the pitch line, the tips
+// (the nosings) on a construction line parallel to it, so every step is the first one; the first riser and tread are signed dimensions; the
+// throat and the board width are line-to-line dimensions of parallel lines; the board's top edge spans the stringer (front to plumb cut).
+function buildStringer(p) {
+  const n = Math.max(2, Math.round(num(p.steps, 4))), r = num(p.rise, 180), g = num(p.run, 250), w = num(p.boardWidth, 286), th = num(p.throat, 125);
+  const L = Math.hypot(r, g), drop = th * L / g, top = (w - th) * L / g; // the lower edge: y = (r / g) x - drop; the board's top edge: y = (r / g) x + top
+  const s = sketcher('stringer');
+  const F = s.pt(0, 0), T = [], C = [];
+  for (let k = 1; k <= n; k++) { T.push(s.pt((k - 1) * g, k * r)); C.push(s.pt(k * g, k * r)); } // the tip and the inner corner of each notch
+  const P = s.pt(n * g, n * r - drop), B = s.pt(th * L / r, 0); // the lower edge's two ends: on the plumb cut, on the floor
+  const S1 = s.pt(0, top), S2 = s.pt(n * g, n * r + top); // the board's top edge, over the front and over the plumb cut
+  s.line(F, T[0]); s.v(F, T[0]);
+  for (let k = 0; k < n; k++) {
+    s.line(T[k], C[k]); s.h(T[k], C[k]); // tread k + 1
+    if (k + 1 < n) { s.line(C[k], T[k + 1]); s.v(C[k], T[k + 1]); } // riser k + 2
+  }
+  s.line(C[n - 1], P); s.v(C[n - 1], P); // the plumb cut
+  const lower = s.line(P, B);
+  s.line(B, F); s.h(B, F); // the level cut
+  const pitch = s.line(F, C[n - 1], true), tips = s.line(T[0], T[n - 1], true), board = s.line(S1, S2, true);
+  for (let k = 0; k + 1 < n; k++) s.pointOn(C[k], pitch);
+  for (let k = 1; k + 1 < n; k++) s.pointOn(T[k], tips);
+  s.parallel(tips, pitch); s.parallel(lower, pitch); s.parallel(board, lower);
+  s.v(F, S1); s.v(P, S2);
+  s.dim(F, T[0], r, 'vertical', -10, 'rise');
+  s.dim(T[0], C[0], g, 'horizontal', 10, 'run');
+  s.gap(pitch, lower, th, 10, 'throat');
+  s.gap(lower, board, w, 10, 'board_width');
+  return s.finish(F);
+}
+
+// TASK 672: CURVED BENCH SEAT, a ring segment (the centre at the origin, the seat above it, symmetric about the Y axis) split into `slats`
+// IDENTICAL straight tapered slats with even gaps. n + 1 radial lines at equal angles (sweep / n apart) bound the slats; each slat's two straight
+// sides are parallel to its two radial lines, gap / 2 inside them, so every gap between two slats is a strip `gap` wide (its sides parallel)
+// and the seat's two ends sit gap / 2 inside the end radials (every slat the same: one cutting pattern). The outer and the inner edge of each
+// slat are real ARCS on the ring's two circles. Rules, every one LOCAL to the slats (a rule about a side's tiny distance from the far centre,
+// a tangent to a gap-sized circle there or equal side lengths, flips or crawls: a side 1000 away turns 0.6 degree to pass the centre):
+//   every corner on its circle: each arc's own rule, the arcs of a circle equal, the two radius dimensions;
+//   each GAP: its two sides parallel and a gap dimension (each reads `gap`, the user parameter: two distinct parallel lines
+//   `gap` apart cannot merge, so no gap can close);
+//   IDENTICAL slats: every slat's outer chord and inner chord equal to the first slat's (the same angle and the same width);
+//   the first and the last slat SYMMETRIC (their two diagonals equal): with the gaps, every slat is, so each side is gap / 2 from its radial;
+//   the ANGLE between the seat's two end sides = the sweep; the middle of the seat on the Y axis (the two outer corners either side of it level).
+function buildBenchSeat(p) {
+  const n = Math.max(2, Math.round(num(p.slats, 8))), Ro = num(p.outerRadius, 900), Ri = num(p.innerRadius, 450), sw = num(p.sweepAngle, 60), gap = num(p.gap, 10);
+  const h = gap / 2, step = (sw / n) * Math.PI / 180, a0 = Math.PI / 2 - (sw / 2) * Math.PI / 180;
+  const s = sketcher('bench');
+  const C = s.pt(0, 0);
+  // the corner on the circle of radius rho of the line parallel to the radial at angle phi, h to its counter-clockwise (+1) or clockwise (-1) side
+  const corner = (rho, phi, side) => { const t = Math.sqrt(rho * rho - h * h), ux = Math.cos(phi), uy = Math.sin(phi); return s.pt(t * ux - side * h * uy, t * uy + side * h * ux); };
+  const slats = [];
+  for (let k = 0; k < n; k++) { // counter-clockwise from the right end
+    const pa = a0 + k * step, pb = pa + step;
+    const IA = corner(Ri, pa, 1), OA = corner(Ro, pa, 1), IB = corner(Ri, pb, -1), OB = corner(Ro, pb, -1);
+    const A = s.line(IA, OA), outer = s.arc(C, OA, OB), B = s.line(IB, OB), inner = s.arc(C, IA, IB);
+    slats.push({ IA, OA, IB, OB, A, B, outer, inner });
+  }
+  s.equalLengths(slats.map((x) => [C, x.OA])); // the outer arcs on ONE circle (each arc's own rule holds its other end)
+  s.equalLengths(slats.map((x) => [C, x.IA])); // the inner arcs on one circle
+  s.equalLengths(slats.map((x) => [x.OA, x.OB])); // identical slats: the outer chords
+  s.equalLengths(slats.map((x) => [x.IA, x.IB])); // and the inner chords
+  for (const x of [slats[0], slats[n - 1]]) s.equalLengths([[x.OA, x.IB], [x.OB, x.IA]]); // the end slats symmetric
+  const rim = slats.flatMap((x) => [x.OA, x.OB]);
+  s.h(rim[n - 1], rim[n]); // the middle slat (n odd) or the middle gap (n even) level: the seat symmetric about the Y axis
+  for (let k = 0; k + 1 < n; k++) s.parallel(slats[k].B, slats[k + 1].A); // each gap: two parallel sides
+  s.radius(slats[0].outer, Ro, 10, 'outer_radius');
+  s.radius(slats[0].inner, Ri, 10, 'inner_radius');
+  s.angle(slats[n - 1].B, slats[0].A, sw, 40, 'sweep_angle');
+  for (let k = 0; k + 1 < n; k++) s.gap(slats[k].B, slats[k + 1].A, gap, 8, 'gap'); // each gap's width: every one reads the parameter
+  return s.finish(C);
+}
+
+// TASK 672: RIGHT-ANGLE BRACE, frame-calc's triangle frame (#core/frame-geometry.js calculateFramingGeometry, PORTED): a vertical board, a
+// horizontal board and the diagonal brace between their far ends, `width` x `height` outside, each board its own thickness (as frame-calc
+// measures them: the vertical one across x, the horizontal one across y, the diagonal square to its faces), and a joint per corner (top,
+// bottom-left, bottom-right: frame-calc's options for each) that cuts the boards exactly as frame-calc does. The boards go through the one board
+// path (drawBoards); every edge lies on one of six carriers (the outer and the inner face of each board: two vertical, two horizontal, two
+// slanted) and every corner where two of them cross (carrierRules), so the drawing is held by the width and the height (the outer corners), the
+// three thicknesses (signed horizontal / vertical dimensions for the vertical and the horizontal board, a line-to-line one for the diagonal) and
+// the diagonal's inner face parallel to its outer face. frame-calc's frame (the apex at its origin, Y down) is moved so the outer right-angle
+// corner (bottom-left) is the origin.
+function buildBrace(p) {
+  const pick = (v, opts) => (opts.some((o) => o.value === v) ? v : opts[0].value);
+  const g = calculateFramingGeometry({ width: num(p.width, 300), height: num(p.height, 600), thickV: num(p.thickV, 38), thickH: num(p.thickH, 38), thickD: num(p.thickD, 38),
+    topJoint: pick(p.topJoint, BRACE_JOINTS.top), blJoint: pick(p.blJoint, BRACE_JOINTS.bl), brJoint: pick(p.brJoint, BRACE_JOINTS.br) });
+  const { W, H, Tv, Th, Td, L } = g, P = g.points;
+  const s = sketcher('brace');
+  const board = drawBoards(s, [P.V, P.H, P.D].map((b) => Object.values(b)));
+  const [, iV, , iH, oD, iD] = carrierRules(s, board, [
+    { a: { x: 0, y: 0 }, b: { x: 0, y: H }, axis: 'v' }, { a: { x: Tv, y: 0 }, b: { x: Tv, y: H }, axis: 'v' }, // the vertical board's outer / inner face
+    { a: { x: 0, y: H }, b: { x: W, y: H }, axis: 'h' }, { a: { x: 0, y: H - Th }, b: { x: W, y: H - Th }, axis: 'h' }, // the horizontal board's
+    { a: { x: 0, y: 0 }, b: { x: W, y: H }, axis: null }, { a: { x: 0, y: Td * L / W }, b: { x: W - Td * L / H, y: H }, axis: null }, // the diagonal's
+  ]);
+  s.parallel(iD.ref, oD.ref);
+  const T = board.J({ x: 0, y: 0 }), BL = board.J({ x: 0, y: H }), BR = board.J({ x: W, y: H });
+  s.dim(BL, BR, W, 'horizontal', -12, 'width');
+  s.dim(BL, T, H, 'vertical', -12, 'height');
+  s.dim(BL, iV.corners[iV.corners.length - 1].j, Tv, 'horizontal', -24, 'thick_v'); // to the lowest corner of the vertical board's inner face
+  s.dim(BL, iH.corners[0].j, Th, 'vertical', -24, 'thick_h'); // to the leftmost corner of the horizontal board's inner face
+  s.gap(oD.ref, iD.ref, Td, 10, 'thick_d');
+  return s.finish(BL);
+}
+
+// TASK 672: POLYGON FRAME, frame-calc's polygon frame: a regular N-sided frame of boards. The outer polygon is frame-calc's (#core/frame-geometry.js
+// regularPolygonVertices: P_0 on top, centred on the origin), the boards come from THE per-vertex frame engine (calculatePolygonFrameGeometry,
+// frame-calc's calculateQuadFrameGeometry: the one engine every polygon frame uses) with ONE joint at every corner (Miter | CW-Through |
+// CCW-Through). Drawn through the one board path; every edge lies on the outer or the inner face of a board (2 N slanted carriers,
+// carrierRules). Rules: the INNER polygon is regular about the centre (construction radii to its corners, equal, its sides equal, the first
+// radius vertical), each outer corner on its corner's radius, the outer faces parallel to the inner ones (N - 1 of them: the last one follows),
+// the outer side length and the thickness (the first board's two faces).
+function buildPolygonFrame(p) {
+  const N = Math.round(num(p.sides, 6)), side = num(p.sideLength, 300), t = num(p.thickness, 38);
+  const joint = POLYGON_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'Miter';
+  const g = calculatePolygonFrameGeometry({ P: regularPolygonVertices(N, side), thick: t, joints: Array(N).fill(joint) });
+  const s = sketcher('polyframe');
+  const C = s.pt(0, 0); // the centre (the origin)
+  const board = drawBoards(s, g.boards.map((b) => [b.p1, b.p2, b.p3, b.p4]));
+  const n = g.P.length, carriers = [];
+  for (const ring of [g.P, g.Q]) ring.forEach((q, k) => carriers.push({ a: q, b: ring[(k + 1) % n], axis: null })); // outer faces, then inner faces
+  const cr = carrierRules(s, board, carriers), outer = cr.slice(0, n), inner = cr.slice(n);
+  const Pj = g.P.map((q) => board.J(q)), Qj = g.Q.map((q) => board.J(q));
+  const radii = Qj.map((j) => s.line(C, j, true));
+  s.equalShapes(radii);
+  s.equalLengths(Qj.map((j, k) => [j, Qj[(k + 1) % n]]));
+  s.v(C, Qj[0]);
+  Pj.forEach((j, k) => s.pointOn(j, radii[k]));
+  for (let k = 0; k + 1 < n; k++) s.parallel(outer[k].ref, inner[k].ref);
+  s.dim(Pj[0], Pj[1], side, 'aligned', 12, 'side_length');
+  s.gap(outer[0].ref, inner[0].ref, t, 10, 'thickness');
+  return s.finish(C);
 }
 
 /**
@@ -413,8 +662,13 @@ export const TEMPLATES = [
   { id: 'butterfly-key', name: 'Butterfly key', description: 'A bow-tie key: 50 mm long, 25 mm wide at the ends, 10 mm at the waist.', params: { length: { label: 'Length', default: 50 }, endWidth: { label: 'End width', default: 25 }, waistWidth: { label: 'Waist width', default: 10 } }, dimensions: 3, build: buildButterflyKey },
   { id: 'cup-hinge-bore', name: 'Cup hinge bore', description: 'A 35 mm hinge cup hole with two 8 mm screw holes 45 mm apart, 9.5 mm from the cup centre.', params: { cupDiameter: { label: 'Cup diameter', default: 35 }, screwSpacing: { label: 'Screw spacing', default: 45 }, screwOffset: { label: 'Screw line offset', default: 9.5 }, screwDiameter: { label: 'Screw diameter', default: 8 } }, dimensions: 4, build: buildCupHinge },
   { id: 'shelf-pin-row', name: 'Shelf-pin row', description: 'Five 5 mm holes on 32 mm centres (the 32 mm cabinet system): one hole and a rectangular pattern.', params: { count: { label: 'Holes', default: 5, kind: 'count', min: 2, max: 100 }, spacing: { label: 'Spacing', default: 32, atOpen: true }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 1, build: buildShelfPins },
-  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' } }, dimensions: 14, build: buildBoxFrame },
+  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' }, joint: { label: 'Corner joint', default: 'V-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'box-corner-joint' } }, dimensions: 14, build: buildBoxFrame },
   { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, build: buildRightAngleCorner },
+  // TASK 672
+  { id: 'stair-stringer', name: 'Stair stringer', description: 'A cut stringer from one 286 mm board: 4 steps of 180 rise and 250 run, a plumb cut at the top, a level cut on the floor, 125 mm throat.', params: { steps: { label: 'Steps', default: 4, kind: 'count', min: 2, max: 30 }, rise: { label: 'Rise', default: 180 }, run: { label: 'Run', default: 250 }, boardWidth: { label: 'Board width', default: 286 }, throat: { label: 'Throat', default: 125 } }, dimensions: 4, build: buildStringer },
+  { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10 } }, dimensions: 10, build: buildBenchSeat },
+  { id: 'right-angle-brace', name: 'Right-angle brace', description: 'A right-angle frame with its diagonal brace: 300 wide, 600 tall, 38 mm boards, a joint at each corner.', params: { width: { label: 'Width', default: 300 }, height: { label: 'Height', default: 600 }, thickV: { label: 'Vertical board thickness', default: 38 }, thickH: { label: 'Horizontal board thickness', default: 38 }, thickD: { label: 'Diagonal board thickness', default: 38 }, topJoint: { label: 'Top joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' }, blJoint: { label: 'Bottom-left joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, brJoint: { label: 'Bottom-right joint', default: 'H-Through', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' } }, dimensions: 5, build: buildBrace },
+  { id: 'polygon-frame', name: 'Polygon frame', description: 'A regular 6-sided frame of 38 mm boards, 300 mm sides, one joint at every corner.', params: { sides: { label: 'Sides', default: 6, kind: 'count', min: 3, max: 12 }, sideLength: { label: 'Side length', default: 300 }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 2, build: buildPolygonFrame },
 ];
 
 /** The default parameters of a template: { key: default }. */

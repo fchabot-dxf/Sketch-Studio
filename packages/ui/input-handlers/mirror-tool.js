@@ -9,6 +9,7 @@
 // Each step is announced in a toast (the shared notification-manager), and a refusal (#core/mirror.js: data, nothing changes) says why.
 import { TOOL_MODES, MIRROR_STEPS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import { mirrorObjects, mirrorObjectsOf, mirrorObjectsRefusal, mirrorLineRefusal, MIRROR_UNDO_LABEL } from '#core/mirror.js';
+import { activeSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TASK 659: only the active sketch's objects and mirror line (an axis belongs to no sketch)
 import { referenceShape } from '#core/reference-lines.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -39,13 +40,13 @@ export function handleMirrorPointerDown(e, svg, state, hitJoint, hitShape) {
   const step = mirrorStep(state);
   const shape = !hitJoint && hitShape && hitShape.shape ? hitShape.shape : null;
   if (step === MIRROR_STEPS.OBJECTS) {
-    if (hitJoint && hitJoint.id !== ORIGIN_JOINT_ID) toggle(state.selectedJoints, hitJoint.id);
-    else if (shape && !shape.reference) toggle(state.selectedShapes, shape.id);
+    if (hitJoint && hitJoint.id !== ORIGIN_JOINT_ID && inActiveSketch(state, hitJoint.j)) toggle(state.selectedJoints, hitJoint.id);
+    else if (shape && !shape.reference && activeSketchPick(state, shape)) toggle(state.selectedShapes, shape.id);
     else return false;
     return true;
   }
   if (step === MIRROR_STEPS.LINE) {
-    if (!shape || shape.type !== 'line') return false;
+    if (!shape || shape.type !== 'line' || (!shape.reference && !activeSketchPick(state, shape))) return false;
     const m = state.mirror;
     const why = mirrorLineRefusal(state, m.objects, shape.id);
     if (why) { refuse(why); return true; }

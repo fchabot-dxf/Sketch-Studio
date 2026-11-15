@@ -18,6 +18,7 @@
 
 import { getLineIntersection } from './geometry.js';
 import { removeOrphanJoints } from './joints.js';
+import { inActiveSketch } from './sketch-model.js';
 
 const EPS = 1e-6; // parameter epsilon (avoid exact endpoints)
 
@@ -39,6 +40,7 @@ export function trimShape(state, shapeId, clickPt) {
   const shapes = state.shapes || [];
   const target = shapes.find(s => s.id === shapeId);
   if (!target || target.type !== 'line') return null;
+  if (!inActiveSketch(state, target)) return null; // Fusion edits only the active sketch (task 659): nothing is written
 
   const [aId, bId] = target.joints;
   const jA = state.joints.get(aId);
@@ -49,7 +51,7 @@ export function trimShape(state, shapeId, clickPt) {
   const tVals = [0, 1]; // always include endpoints as interval boundaries
 
   for (const other of shapes) {
-    if (other.id === shapeId || other.type !== 'line') continue;
+    if (other.id === shapeId || other.type !== 'line' || !inActiveSketch(state, other)) continue; // cutting boundaries: the active sketch's curves only (task 659)
     const [cId, dId] = other.joints;
     const jC = state.joints.get(cId);
     const jD = state.joints.get(dId);

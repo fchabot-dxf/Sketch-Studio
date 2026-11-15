@@ -114,11 +114,10 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     notify('Moved to Google Drive.', 'info');
     return r;
   }
-  // TASK 651: a new design starts from the template modal (template-picker.js; the host passes `pickTemplate`, like `ask`): "Blank design" = the empty
-  // Untitled as before, a template = an unsaved Untitled holding it, under its name; closing the modal = no new design (null). A host that passes none
-  // (a headless caller) gets the blank one at once. `{ blank: false }` (the sidebar's "Templates...") leaves the Blank card out.
-  const newDesign = async ({ blank = true } = {}) => {
-    const choice = pickTemplate ? await pickTemplate({ blank }) : { blank: true };
+  // TASK 651 / 668: a new design starts from the ONE template modal (template-picker.js; the host passes `pickTemplate`, like `ask`): "Blank design" first,
+  // then the templates; closing the modal = no new design (null). A host that passes none (a headless caller) gets the blank one at once.
+  const newDesign = async () => {
+    const choice = pickTemplate ? await pickTemplate() : { blank: true };
     if (!choice) return null;
     const template = choice.template ? { name: choice.name, document: choice.document } : null;
     return tabs ? buf().newTab(template) : (await settleUnsaved()) ? buf().newDesign(template) : null;

@@ -43,6 +43,8 @@ const CASES = {
   equal: { type: 'equal', joints: ['a', 'b', 'c', 'd'] },
   angle: { type: 'angle', shapes: ['L1', 'L2'], value: 90 },
   symmetric: { type: 'symmetric', joints: ['m', 'n'], line: 'L1' },
+  // task 650: L2 as the offset of L1 (open: N + T rows at both ends)
+  offset: { type: 'offset', shapes: ['L1', 'L2'], rev: [false], sides: [1], joins: [], closed: false, value: 5 },
 };
 
 // One case: analytic J vs central finite differences on EVERY column of x (joint x/y and circle radius). Returns the largest |J| on
@@ -100,6 +102,10 @@ const RADIUS_CASES = [
   ['tangent (arc-circle, internal)', { type: 'tangent', shapes: ['A1', 'C1'], branch: 'internal' }, ['C1', 'as']],
   ['tangent (arc-arc, external)', { type: 'tangent', shapes: ['A1', 'A2'] }, ['as', 'bs']],
   ['tangent (arc-arc, internal)', { type: 'tangent', shapes: ['A1', 'A2'], branch: 'internal' }, ['as', 'bs']],
+  // task 650: the offset rows that read a radius: a circle's (its unknown, both circles), an arc's (A2 offset of A1: its live |as - ac|)
+  ['offset (circle of a circle)', { type: 'offset', shapes: ['C1', 'C2'], rev: [false], sides: [1], joins: [], closed: true, value: 1 }, ['C1', 'C2']],
+  ['offset (arc of an arc, open)', { type: 'offset', shapes: ['A1', 'A2'], rev: [false], sides: [-1], joins: [], closed: false, value: 1 }, ['as']],
+  ['offset (arc of an arc, walked reversed)', { type: 'offset', shapes: ['A1', 'A2'], rev: [true], sides: [1], joins: [], closed: false, value: 1 }, ['as']],
 ];
 for (const [label, c, uses] of RADIUS_CASES) {
   const col = guard(label, c);

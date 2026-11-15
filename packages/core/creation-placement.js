@@ -499,6 +499,11 @@ export function editGiver(state, c) {
     if (!sh || !Array.isArray(sh.joints) || !sh.joints.length) return null;
     return isCircleShape(sh) ? { joints: [], circles: [sh.id], anchor: [sh.joints[0]] } : { joints: sh.joints.slice(1), circles: [], anchor: [sh.joints[0]] };
   }
+  // an offset distance (task 650): the offset pieces give way, their sources stay (Fusion: the offset curves move with the dimension)
+  if (c.type === T.OFFSET && Array.isArray(c.shapes)) {
+    const own = (k) => c.shapes.filter((_, i) => i % 2 === k).map(id => shapeOf(state, id)).filter(Boolean);
+    return { joints: [...new Set(own(1).flatMap(s => s.joints))], circles: own(1).filter(isCircleShape).map(s => s.id), anchor: [...new Set(own(0).flatMap(s => s.joints))] };
+  }
   // a point-to-line distance: the point or the line, by the table's point-on-line ranking
   if (c.type === T.DISTANCE && isPointLineDistance(c)) {
     const line = lineOfPair(state, c.joints[1], c.joints[2]);

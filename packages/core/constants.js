@@ -19,7 +19,10 @@ export const CONSTRAINT_TYPES = {
   // task 563 (like Fusion's Symmetric): two points, two lines or two circles / arcs are mirror images across a line (a sketch line or an axis).
   // Stored { joints: [p, q], line } (points), { shapes: [l1, l2], line } (lines: the infinite lines mirror, lengths free, task 572) or
   // { shapes: [c1, c2], line } (circles / arcs: centres mirror, radii equal). #core/symmetric.js reads it.
-  SYMMETRIC: 'symmetric'
+  SYMMETRIC: 'symmetric',
+  // task 650 (#core/offset.js): an offset chain at distance `value` from its source chain; also the driving DISTANCE dimension of the offset.
+  // Stored { shapes: [src0, off0, src1, off1, ...], rev, sides, joins, closed, value, name, ... } (Fusion: an OffsetConstraint + its dimension).
+  OFFSET: 'offset'
 };
 
 // Snap tolerances (in screen pixels)
@@ -91,6 +94,7 @@ export const CONSTRAINT_COLORS = {
   // Midpoint uses the standard unified blue to match other glyphs
   [CONSTRAINT_TYPES.MIDPOINT]:      { fill: '#60A5FA', stroke: '#2563eb' },
   [CONSTRAINT_TYPES.SYMMETRIC]:     { fill: '#60A5FA', stroke: '#2563eb' },
+  [CONSTRAINT_TYPES.OFFSET]:        { fill: '#60A5FA', stroke: '#2563eb' },
 };
 
 // Drawing tool modes
@@ -116,7 +120,8 @@ export const TOOL_MODES = {
   DIMENSION: 'dim',
   MIDPOINT: 'midpoint',
   SYMMETRIC: 'symmetric', // task 563: entity, entity, then the symmetry line
-  MIRROR: 'mirror' // task 585: like Fusion's Create > Mirror: the objects, then the mirror line, then Enter (#core/mirror.js)
+  MIRROR: 'mirror', // task 585: like Fusion's Create > Mirror: the objects, then the mirror line, then Enter (#core/mirror.js)
+  OFFSET: 'offset' // task 650: like Fusion's Create > Offset (here in Modify): pick a curve (its chain), the side, the distance, Enter (#core/offset.js)
 };
 
 // TASK 585: the Mirror tool's two steps (state.mirror.step): pick the OBJECTS (the selection), then the mirror LINE (a sketch line, a construction

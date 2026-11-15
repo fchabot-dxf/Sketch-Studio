@@ -1,5 +1,6 @@
 import { angleSectorOf } from '../angle-sector.js';
 import { symmetricRowCount } from '../symmetric.js';
+import { offsetRowCount, offsetRowValues } from '../offset.js';
 
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
 // positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
@@ -694,6 +695,56 @@ export const Definitions = {
       for (let k = 2; k + 1 < pairEnd; k += 2, r += 2) mirrorPairGrad(positions, j[0], j[1], j[k], j[k + 1], outRows[r], outRows[r + 1]);
       for (let k = pairEnd; k + 2 < j.length; k += 3, r += 1) mirrorOnLineGrad(positions, j[0], j[1], j[k], j[k + 1], j[k + 2], outRows[r]);
       if (params.terms) { addSizeGrad(outRows[r], params.terms[0], 1, positions); addSizeGrad(outRows[r], params.terms[1], -1, positions); }
+    }
+  },
+
+  // Offset (task 650, #core/offset.js): params.offsetRows = the stored constraint's rows (offsetOperands) with dense joint indices and, for a
+  // radius, the radius operand { at, radius, rim, centre } (engine.js); params.value = the distance d. The VALUES come from the one formula,
+  // #core/offset.js offsetRowValues (the verifier reads the same); the derivatives are here, every operand taking part (a free source moves too).
+  offset: {
+    rows: (c, shapes) => offsetRowCount(c, shapes),
+    computeError: (params, positions) => offsetRowValues(params.offsetRows || [], Number(params.value) || 0,
+      (i) => ({ x: positions[i*2], y: positions[i*2+1] }), (o) => radiusValue(positions, o.at, o.radius, o.rim, o.centre)),
+    computeJacobian: (params, positions, outRows) => {
+      const X = (i) => positions[i*2], Y = (i) => positions[i*2+1];
+      let k = 0;
+      for (const r of (params.offsetRows || [])) {
+        if (r.k === 'cen') {
+          addGrad(outRows[k], r.a, 1, 0); addGrad(outRows[k], r.b, -1, 0);
+          addGrad(outRows[k + 1], r.a, 0, 1); addGrad(outRows[k + 1], r.b, 0, -1);
+          k += 2; continue;
+        }
+        const row = outRows[k++];
+        if (r.k === 'rad') {
+          addRadiusDerivative(row, positions, 1, r.off.at, r.off.rim, r.off.centre);
+          addRadiusDerivative(row, positions, -1, r.src.at, r.src.rim, r.src.centre);
+        } else if (r.k === 'nl') {
+          // (q - a) x u / |u|, u = b - a: point_on_line's full derivative
+          const ux = X(r.b) - X(r.a), uy = Y(r.b) - Y(r.a), wx = X(r.q) - X(r.a), wy = Y(r.q) - Y(r.a), lu = Math.hypot(ux, uy) || 1e-12;
+          const f = (wx * uy - wy * ux) / lu, dd = (dux, duy) => (dux * ux + duy * uy) / lu;
+          addGrad(row, r.q, uy / lu, -ux / lu);
+          addGrad(row, r.a, ((-uy + wy) - f * dd(-1, 0)) / lu, ((-wx + ux) - f * dd(0, -1)) / lu);
+          addGrad(row, r.b, ((-wy) - f * dd(1, 0)) / lu, ((wx) - f * dd(0, 1)) / lu);
+        } else if (r.k === 'tl') {
+          // w . u / |u|, w = q - p, u = b - a:  d/dw = u / |u|,  d/du = w / |u| - (w . u) u / |u|^3
+          const ux = X(r.b) - X(r.a), uy = Y(r.b) - Y(r.a), wx = X(r.q) - X(r.p), wy = Y(r.q) - Y(r.p), lu = Math.hypot(ux, uy) || 1e-12;
+          const wu = wx * ux + wy * uy, lu3 = lu * lu * lu;
+          const gux = wx / lu - wu * ux / lu3, guy = wy / lu - wu * uy / lu3;
+          addGrad(row, r.q, ux / lu, uy / lu); addGrad(row, r.p, -ux / lu, -uy / lu);
+          addGrad(row, r.a, -gux, -guy); addGrad(row, r.b, gux, guy);
+        } else if (r.k === 'na') {
+          // |q - c| - R(src) - sign d
+          const dx = X(r.q) - X(r.c), dy = Y(r.q) - Y(r.c), l = Math.hypot(dx, dy) || 1e-12;
+          addGrad(row, r.q, dx / l, dy / l); addGrad(row, r.c, -dx / l, -dy / l);
+          addRadiusDerivative(row, positions, -1, r.src.at, r.src.rim, r.src.centre);
+        } else if (r.k === 'ta') {
+          // (A x B) / |A|, A = p - c, B = q - c:  d/dB = (-Ay, Ax) / |A|,  d/dA = (By, -Bx) / |A| - (A x B) A / |A|^3
+          const ax = X(r.p) - X(r.c), ay = Y(r.p) - Y(r.c), bx = X(r.q) - X(r.c), by = Y(r.q) - Y(r.c), la = Math.hypot(ax, ay) || 1e-12;
+          const cr = ax * by - ay * bx, la3 = la * la * la;
+          const gax = by / la - cr * ax / la3, gay = -bx / la - cr * ay / la3, gbx = -ay / la, gby = ax / la;
+          addGrad(row, r.p, gax, gay); addGrad(row, r.q, gbx, gby); addGrad(row, r.c, -gax - gbx, -gay - gby);
+        }
+      }
     }
   },
 

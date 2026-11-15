@@ -425,7 +425,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const dimLabelBounds = [];
   {
     for (const c of constraints) {
-      if (c.type !== CONSTRAINT_TYPES.DISTANCE) continue;
+      if (c.type !== CONSTRAINT_TYPES.DISTANCE && c.type !== CONSTRAINT_TYPES.OFFSET) continue;
       const { j1, j2 } = resolveDimEnds(c);
       if (!j1) continue;
       const offset = Number.isFinite(c.offset) ? c.offset : (SolverConfig.DIMENSION_OFFSET || 30);
@@ -2301,8 +2301,8 @@ switch(c.type){
             if (!s2.reference) drawConstraintGlyph(svg, c2, { parent: c });
           }
         }
-    } else if(c.type === CONSTRAINT_TYPES.DISTANCE){
-      // Dimension annotation with leader lines
+    } else if(c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.OFFSET){
+      // Dimension annotation with leader lines (an OFFSET, task 650: the linear dimension from its first source piece to its offset)
       const { j1, j2 } = resolveDimEnds(c);
       if(j1){
         const offset = Number.isFinite(c.offset) ? c.offset : (SolverConfig.DIMENSION_OFFSET || 30);

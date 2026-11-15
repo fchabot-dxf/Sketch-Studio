@@ -5,6 +5,7 @@ import { SolverConfig } from '../solver-config.js';
 import { getCoincidentJoints } from '../joints.js';
 import { isPointLineDistance } from '../geometry.js';
 import { symmetricOperands } from '../symmetric.js';
+import { offsetOperands } from '../offset.js';
 
 // THE declaration of the solver's non-joint unknown (task 515, like Fusion and PlaneGCS): a CIRCLE is one centre joint plus a `radius`,
 // and that radius is a solver unknown. `shape.radius` stays the ONE store: _pack reads it as the start value, _unpack writes the solved
@@ -478,6 +479,32 @@ export class NewtonSolver {
         params.joints = o ? [...o.line, ...o.pairs.flat(), ...o.onLine.flat()].map(id => jointIndexMap.get(id)) : [];
         params.nPairs = o ? o.pairs.length : 0;
         if (o && o.sizes) params.terms = o.sizes.map(sh => this._sizeTerm(sh, jointIndexMap));
+      }
+
+      // Offset (task 650): ONE operand reader (#core/offset.js offsetOperands) -> params.offsetRows with dense joint indices and, for a radius, the
+      // shape's radius operand (a circle's unknown, an arc's live |rim - centre|); params.joints / radiiAt = every operand (operandsOf).
+      // Unresolved -> no rows (the Definition counted none).
+      if (c.type === 'offset') {
+        const rows = offsetOperands(c, this.shapes) || [];
+        const used = [], ats = [];
+        const J = (id) => { const i = jointIndexMap.get(id); used.push(i); return i; };
+        const R = (sid) => {
+          const sh = this.shapes.find(s => s && s.id === sid), op = this._radiusOperand(sh, jointIndexMap);
+          const centre = sh && sh.joints && sh.joints.length ? J(sh.joints[0]) : undefined;
+          if (typeof op.rim === 'number') used.push(op.rim);
+          if (typeof op.at === 'number') ats.push(op.at);
+          return { at: op.at, radius: op.radius, rim: op.rim, centre };
+        };
+        params.offsetRows = rows.map(r => {
+          const m = { k: r.k };
+          for (const key of ['a', 'b', 'q', 'p', 'c']) if (r[key] !== undefined) m[key] = J(r[key]);
+          for (const key of ['off', 'src']) if (r[key] !== undefined) m[key] = R(r[key]);
+          if (r.sign !== undefined) m.sign = r.sign;
+          return m;
+        });
+        if (used.some(i => typeof i !== 'number')) params.offsetRows = [];
+        params.joints = params.offsetRows.length ? used : [];
+        params.radiiAt = ats;
       }
 
       // Backwards compatibility: many constraints use `joint` + `shape` or `shapes` instead of `joints`.

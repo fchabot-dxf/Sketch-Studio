@@ -2672,6 +2672,8 @@ switch(c.type){
   // This avoids full DOM teardown/rebuild when the model is static (no drag, no hover change).
   const markup = out.join('');
   const target = (renderTarget && renderTarget instanceof Element) ? renderTarget : svg;
+  // TASK 661: the INACTIVE_SKETCH_OPACITY setting (percent) is the ONE source of the token the .sketch-inactive rule (sketcher.css) reads.
+  if (dimsSketches && target.style) target.style.setProperty('--sk-inactive-sketch-opacity', String(getNum('INACTIVE_SKETCH_OPACITY', 33) / 100));
   if (target._lastMarkup !== markup) {
     target.innerHTML = markup;
     target._lastMarkup = markup;

@@ -54,8 +54,9 @@ await (async () => {
     await sleep(300);
 
     // 1. Sketch 1 active: Sketch 2 dimmed to the token's 0.33, Sketch 1 at 1
-    const token = await evalJs(`getComputedStyle(document.documentElement).getPropertyValue('--sk-inactive-sketch-opacity').trim()`);
-    assert.strictEqual(token, '0.33', 'the token --sk-inactive-sketch-opacity is declared once, as 0.33: ' + token);
+    const token = await evalJs(`getComputedStyle(document.querySelector('#design-canvas .sketch-inactive')).getPropertyValue('--sk-inactive-sketch-opacity').trim()`);
+    assert.strictEqual(token, '0.33', 'the token --sk-inactive-sketch-opacity is written from the INACTIVE_SKETCH_OPACITY setting (default 33): ' + token);
+    assert.strictEqual(await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.getDefault('INACTIVE_SKETCH_OPACITY'))`), 33, 'declared default 33');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('#design-canvas .sketch-inactive[data-sketch-id="sketch-2"]')).opacity`), '0.33', 'the inactive group computes opacity 0.33');
     assert.strictEqual(await opacityOf(line(two)), 0.33, 'Sketch 2 line draws at 0.33');
     assert.strictEqual(await opacityOf(line(one)), 1, 'Sketch 1 (active) line draws at 1');
@@ -79,6 +80,35 @@ await (async () => {
     await tap({ x: C.x + arm, y: C.y - Math.round(arm / 2) }); // a click on empty canvas
     assert.deepStrictEqual(await world(`[...${STATE}.selectedShapes]`), [], 'nothing selected');
     assert.strictEqual(await opacityOf(line(two)), 0.33, 'deselected and not hovered, it dims again');
+
+    // 4. the Style panel row (Lines & Joints tab; Shaper and SketchStudio mount the panel): a real edit changes the computed opacity live; Reset restores 33
+    const loaded2 = once('Page.loadEventFired');
+    await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
+    await Promise.race([loaded2, sleep(8000)]);
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the Shaper');
+    await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);
+    await waitFor(`!!window.__designController && document.querySelector('#design-canvas').getBoundingClientRect().width > 0`, 'the Shaper design canvas');
+    const SH = 'window.__designController.state';
+    await evalJs(`import('/packages/core/sketch-model.js').then((m) => { const st = ${SH}; if (!st.sketches.some((x) => x.id === 'sketch-2')) m.addSketch(st, 'Sketch 2');
+      st.joints.set('q1', { x: -20, y: 0, sketchId: 'sketch-2' }); st.joints.set('q2', { x: 20, y: 0, sketchId: 'sketch-2' });
+      st.shapes.push({ id: 'q', type: 'line', joints: ['q1', 'q2'], sketchId: 'sketch-2' }); m.activateSketch(st, 'sketch-1'); st.triggerDraw && st.triggerDraw(); })`);
+    await sleep(500);
+    const P = '.sk-style-panel', ROW = `${P} [data-key="INACTIVE_SKETCH_OPACITY"]`;
+    const center = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return r.width && r.height ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null; })()`);
+    const click = async (sel, n = 1) => { await waitFor(`!!document.querySelector(${JSON.stringify(sel)}) && document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect().width > 0`, sel + ' visible'); const c = await center(sel); await mouse('mouseMoved', c.x, c.y, 0); await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c.x, y: c.y, button: 'left', buttons: 1, clickCount: n }); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c.x, y: c.y, button: 'left', buttons: 0, clickCount: n }); await sleep(150); };
+    const groupOpacity = () => evalJs(`getComputedStyle(document.querySelector('#design-canvas .sketch-inactive')).opacity`);
+    await click('.sk-sidebar-btn'); await sleep(150); await click('.sk-sidebar [data-action="settings"]');
+    await waitFor(`!document.querySelector('${P}').classList.contains('sk-hidden')`, 'the Style panel');
+    await click(`${P} .sk-style-tab`); // the first tab is Lines & Joints
+    await waitFor(`!!document.querySelector('${ROW}') && document.querySelector('${ROW}').getBoundingClientRect().width > 0`, 'the Inactive sketch opacity row');
+    assert.strictEqual(await groupOpacity(), '0.33', 'Shaper before: 0.33');
+    await click(ROW, 3); await send('Input.insertText', { text: '60' }); await sleep(300);
+    assert.strictEqual(await groupOpacity(), '0.6', 'the row set to 60 changes the inactive group live');
+    assert.strictEqual(await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.get('INACTIVE_SKETCH_OPACITY'))`), 60, 'stored as the percent');
+    const pr = await evalJs(`(() => { const r = document.querySelector('${P}').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()`);
+    await shot('after-4-style-panel-row.png', pr);
+    await click(`${P} .sk-style-foot .sk-style-btn`); await sleep(300); // Reset
+    assert.strictEqual(await groupOpacity(), '0.33', 'Reset restores 33');
     console.log('inactive-sketch-dim-661-live.test.js: ok');
   } finally { await cdp.close(); }
 })();

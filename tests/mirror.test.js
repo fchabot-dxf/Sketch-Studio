@@ -171,10 +171,14 @@ ok(Object.keys(MIRROR_KINDS).sort().join() === 'arc,bezier,circle,line', 'MIRROR
   const rl = mirrorObjects(S.state, { shapes: [l], joints: [] }, 'ref_axis_y');
   ok(!rl.ok && /locked sketch/.test(rl.reason) && docText(S) === t2, 'a selection in a locked sketch: refused');
   setSketchLocked(S.state, 'sketch-1', false);
+  // task 659: only objects of the ACTIVE sketch are mirrored (sketch 2 is active here, the original is in sketch 1): refused, nothing written
+  const t3 = docText(S);
+  const rn = mirrorObjects(S.state, { shapes: [l], joints: [] }, 'ref_axis_y');
+  ok(!rn.ok && /active sketch/.test(rn.reason) && docText(S) === t3, 'objects of another sketch than the active one: refused');
+  activateSketch(S.state, 'sketch-1');
   const ra = mirrorObjects(S.state, { shapes: [l], joints: [] }, 'ref_axis_y');
-  ok(ra.ok && ra.shapes.every(id => L.shape(S, id).sketchId === sk2.id) && ra.joints.every(j => S.state.joints.get(j).sketchId === sk2.id),
-    'the copy lands in the ACTIVE sketch (sketch 2), the original stays in sketch 1');
-  ok(L.shape(S, l).sketchId !== sk2.id, 'the original is not moved');
+  ok(ra.ok && ra.shapes.every(id => L.shape(S, id).sketchId === 'sketch-1') && ra.joints.every(j => S.state.joints.get(j).sketchId === 'sketch-1'),
+    'the copy lands in the ACTIVE sketch (sketch 1), with its original');
 }
 
 // ------------------------------------------------------------------ F. the TOOL: pre-selection, the two steps, the axis rule, one undo step

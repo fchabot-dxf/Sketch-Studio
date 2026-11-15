@@ -61,6 +61,7 @@ import { newJointId, newShapeId } from './shape-id.js';
 import { parse as parseUnit } from './units.js';
 import { nextDimensionName } from './parameters.js';
 import { SolverConfig } from './solver-config.js';
+import { inActiveSketch } from './sketch-model.js';
 // (No import of ./constraints.js: the solver reads this module, and constraints.js -> constraint-manager.js -> creation-placement.js imports the
 // solver. The stored record is built by offsetConstraintRecord below, the one form constraints.js createConstraint also returns.)
 
@@ -296,6 +297,7 @@ export function offsetArcSpan(p) {
  * distance dimension). -> { ok: true, shapes: [ids], joints: [ids], constraint } or { ok: false, reason } (nothing changes).
  */
 export function applyOffset(state, chain, d, side) {
+  if (chain.pieces.some((p) => { const s = state.shapes.find((x) => x.id === p.id); return !s || !inActiveSketch(state, s); })) return { ok: false, reason: 'Offset works in the active sketch only' };
   const g = offsetChainGeometry(state, chain, d, side);
   if (!g.ok) return g;
   const frames = chain.pieces.map((p) => pieceFrame(state, p));

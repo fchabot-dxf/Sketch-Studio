@@ -14,7 +14,7 @@ import { removeOrphanJoints } from './joints.js';
 import { parse as parseUnit } from './units.js';
 import { nextDimensionName } from './parameters.js';
 import { newJointId } from './shape-id.js';
-import { sketchOf, DEFAULT_SKETCH_ID } from './sketch-model.js';
+import { inActiveSketch } from './sketch-model.js';
 
 /** A trimmed line shorter than this (world mm) counts as collapsed. */
 export const COLLAPSE_TOL = 1e-3;
@@ -390,8 +390,7 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
 export function applyFillet(state, cornerInfo, radius = 5) {
   if (!state || !cornerInfo) return null;
   // Fusion edits only the active sketch: a corner with a curve of another sketch is refused, never written into the active one (task 657)
-  const active = state.activeSketchId || DEFAULT_SKETCH_ID;
-  if ([cornerInfo.lineA, cornerInfo.lineB].some((l) => l && l.shape && sketchOf(l.shape) !== active)) return { success: false, reason: 'Fillet works in the active sketch only' };
+  if ([cornerInfo.lineA, cornerInfo.lineB].some((l) => l && l.shape && !inActiveSketch(state, l.shape))) return { success: false, reason: 'Fillet works in the active sketch only' };
 
   const geom = cornerFilletGeometry(cornerInfo, radius);
   if (!geom.valid) return { success: false, reason: geom.reason };
@@ -663,8 +662,8 @@ export function findLineAtPoint(state, worldPt, tolerance = 10) {
 }
 
 /** Nearest LINE or ARC (its drawn sweep) within `tolerance` of `worldPt`, or null: what a Fillet pick can land on. */
-export function findFilletShapeAtPoint(state, worldPt, tolerance = 10) {
-  return nearestCurve(state, worldPt, tolerance, s => s.type === 'line' || s.type === 'arc');
+export function findFilletShapeAtPoint(state, worldPt, tolerance = 10, include = () => true) {
+  return nearestCurve(state, worldPt, tolerance, s => (s.type === 'line' || s.type === 'arc') && include(s)); // `include`: the tool's pick rule (task 659), so a curve it rejects never shadows one it accepts
 }
 
 /**

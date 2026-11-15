@@ -22,6 +22,11 @@ export function sketchOf(entity) {
   return (entity && entity.sketchId) || DEFAULT_SKETCH_ID;
 }
 
+// THE active-sketch rule (task 659; Fusion edits only the sketch being edited): an entity is in the ACTIVE sketch.
+export function inActiveSketch(state, entity) {
+  return sketchOf(entity) === ((state && state.activeSketchId) || DEFAULT_SKETCH_ID);
+}
+
 // Stamp an entity (joint / shape) with the state's ACTIVE sketch at creation. Returns the entity (chainable).
 export function stampSketch(entity, state) {
   if (entity) entity.sketchId = (state && state.activeSketchId) || DEFAULT_SKETCH_ID;
@@ -164,6 +169,11 @@ const operandsOf = (c) => {
   if (c && Array.isArray(c.shapes)) shapes.push(...c.shapes);
   return { joints: (c && c.joints) || [], shapes: shapes.map((s) => (s && typeof s === 'object' ? s.id : s)) };
 };
+/** THE pick rule of Fillet, Trim, Break, Offset and Mirror: a SHAPE is pickable only in the ACTIVE sketch and when that sketch is not locked / hidden.
+ *  A curve of another sketch is not a pick at all (as empty canvas): no hover, no preview, no message. `inert` = inertEntities(state) when the caller has it. */
+export function activeSketchPick(state, shape, inert = inertEntities(state)) {
+  return !!shape && inActiveSketch(state, shape) && !isShapeInert(inert, shape.id);
+}
 export const isJointInert = (inert, id) => !!inert && (inert.lockedJ.has(id) || inert.hiddenJ.has(id));
 export const isShapeInert = (inert, id) => !!inert && (inert.lockedS.has(id) || inert.hiddenS.has(id));
 /** A constraint / dimension is out of reach when ANY operand is locked, or ALL its operands are hidden (it is drawn while one shows). */

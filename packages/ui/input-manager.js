@@ -27,7 +27,7 @@ import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerM
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
-import { handleLineKeyDown, finishLineChain } from '#ui/input-handlers/line-tool.js';
+import { handleLineKeyDown, finishLineChain, lineChainAnchor } from '#ui/input-handlers/line-tool.js';
 import { createLongPress } from '#ui/long-press.js';
 import { createDoneButton } from '#ui/done-button.js';
 import { handleMirrorPointerDown, mirrorDone, mirrorStep } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
@@ -946,8 +946,8 @@ function setupEventListeners(svg, state) {
         // Built on the first press of any pointer, so a host / test that never sees a press never gets the element.
         const DONE_ACTIONS = {
             [TOOL_MODES.LINE]: { open: () => !!state.active && state.active.mode === TOOL_MODES.LINE, done: () => finishLineChain(state), label: 'Finish the line chain',
-                // the rubber band's live end (the chain's start joint until the cursor has moved); Mirror has none, so it keeps the corner
-                end: () => (state.active.preview && state.active.preview.pt) || state.active.startPt || state.joints.get(state.active.start) || null },
+                // a point the cursor does not move (see lineChainAnchor); Mirror has none, so it keeps the corner
+                end: () => lineChainAnchor(state) },
             [TOOL_MODES.MIRROR]: { open: () => mirrorStep(state) !== null, done: () => finishMirrorStep(state), label: 'Mirror: next step' },
         };
         const doneAction = () => (isActiveFn() ? DONE_ACTIONS[state.currentTool] || null : null);

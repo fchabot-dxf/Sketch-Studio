@@ -153,9 +153,33 @@ try {
   const md = await evalJs(`(() => { const b = document.querySelector('.sk-done'); const r = b.getBoundingClientRect(); return { hidden: b.hidden, w: Math.round(r.width), h: Math.round(r.height), svg: !!b.querySelector('svg path'), text: b.textContent.trim(), bg: getComputedStyle(b).backgroundColor, label: b.title }; })()`);
   assert.deepStrictEqual(md, { hidden: false, w: 40, h: 40, svg: true, text: '', bg: 'rgb(16, 185, 129)', label: 'Finish the line chain' }, 'mouse: green 40 px check button: ' + JSON.stringify(md));
   await shot('phone-done-mouse');
-  const mc = await centre('.sk-done'); await mclick(mc);
+  // the button must not flee the cursor: walk a real mouse from where it is to the button in 2 px steps, then press (task 642 review)
+  const chase = async (from) => {
+    let cur = from;
+    for (let i = 0; i < 600; i++) {
+      const b = await centre('.sk-done'); if (!b) return null;
+      const d = Math.hypot(b.x - cur.x, b.y - cur.y);
+      if (d <= 12) { await mouse(cur, 'mousePressed', 1); await mouse(cur, 'mouseReleased', 0); await sleep(200); return { steps: i, at: cur }; }
+      cur = { x: cur.x + (b.x - cur.x) / d * 2, y: cur.y + (b.y - cur.y) / d * 2 };
+      await mouse(cur, 'mouseMoved', 0); await sleep(8);
+    }
+    return null;
+  };
+  const hit = await chase(P(0.6, 0.8));
+  assert.ok(hit, 'mouse, free end: the walking cursor reaches the button (it stays beside the last committed joint)');
   assert.ok(await evalJs(`document.querySelector('.sk-done').hidden`), 'mouse: the button hides when the chain ends');
-  assert.strictEqual(await shapes(), before + 1, 'mouse: Done keeps the committed segment');  await tapSel('#tool-select');
+  assert.strictEqual(await shapes(), before + 1, 'mouse: Done keeps the committed segment');
+  // typed length + angle lock the end: the button sits beside the LOCKED end and is reachable from the cursor too
+  await tapSel('#tool-line');
+  const sp = P(0.3, 0.55);
+  await mclick(sp);
+  await send('Input.insertText', { text: '60' }); await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+  await send('Input.insertText', { text: '0' }); await sleep(300);
+  const lockedBtn = await centre('.sk-done');
+  assert.ok(lockedBtn && Math.hypot(lockedBtn.x - sp.x, lockedBtn.y - sp.y) > 40, 'typed length + angle: the button moved off the start to the locked end: ' + JSON.stringify({ lockedBtn, sp }));
+  const hit2 = await chase(P(0.45, 0.8));
+  assert.ok(hit2, 'mouse, locked end: the walking cursor reaches the button');
+  assert.ok(await evalJs(`document.querySelector('.sk-done').hidden`), 'locked: the button hides when the chain ends');  await tapSel('#tool-select');
 
   // ── touch and hold ──
   const geo = () => evalJs(`(() => { const l = document.querySelector('.shape-elem'); return l ? [l.getAttribute('x1'), l.getAttribute('y1'), l.getAttribute('x2'), l.getAttribute('y2')].join(',') : null; })()`);

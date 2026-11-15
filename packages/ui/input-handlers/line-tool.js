@@ -86,6 +86,13 @@ function abortLine(state){
 export function finishLineChain(state){
     abortLine(state);
 }
+// TASK 642: the point the Done button sits beside, one that does NOT follow the cursor (a button that flees the mouse cannot be clicked):
+// the rubber band's end only when typed length AND angle lock it, otherwise the chain's last committed joint (the rubber band's start).
+export function lineChainAnchor(state){
+    const spt = startOf(state);
+    if (!spt) return null;
+    return lineState.lockedLength !== null && lineState.lockedAngle !== null ? lockedEnd(spt, spt) : spt;
+}
 const LINE_POINTERUP_DEBOUNCE_MS = 500;
 
 function canPreviewLineInference(state, startId, endId, newShapeId, activeInf) {

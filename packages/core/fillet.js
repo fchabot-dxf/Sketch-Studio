@@ -544,6 +544,14 @@ export function filletLines(state, arc) {
 }
 
 /**
+ * Is this arc still a whole fillet: its virtual sharp V exists and both tangent legs are there (task 649)? A fillet arc that lost a leg
+ * or V (deleted, or the arc pasted alone) is a plain arc: its radius is edited like any arc's, not through seedFilletForRadius.
+ */
+export function isLiveFillet(state, arc) {
+  return !!(state && arc && arc.filletSharp && state.joints && state.joints.has(arc.filletSharp) && filletLines(state, arc).length === 2);
+}
+
+/**
  * Place the fillet's centre + two tangent joints at the ANALYTIC positions for `radius` (from V and the two
  * lines' far endpoints), so the solver starts at the answer and only polishes -- it never has to walk a line
  * through zero length. Returns {ok:true} or {ok:false, reason} (collinear / collapse / not a fillet).

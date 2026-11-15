@@ -8,7 +8,7 @@
 
 import { switchToTool, toggleFixedSelection, selectionLockState } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
-import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
+import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
@@ -32,12 +32,13 @@ const SELECT = [
   { tool: TOOL_MODES.SELECT, icon: 'icon-tool-select',  label: 'Select' },
 ];
 const CREATE = [
-  { tool: TOOL_MODES.LINE,  icon: 'icon-tool-line',    label: 'Line' },
-  { tool: TOOL_MODES.RECT,   icon: 'icon-tool-rect-2pt', label: 'Rect', rectDropdown: true },
-  { tool: TOOL_MODES.CIRCLE, icon: 'icon-tool-circle',  label: 'Circle' },
-  { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon', label: 'Polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
-  { tool: TOOL_MODES.ARC,    icon: 'icon-tool-arc-cse', label: 'Arc' }, // single-mode in the source (no dropdown)
-  { tool: TOOL_MODES.BEZIER, icon: 'icon-tool-bezier',  label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
+  { tool: TOOL_MODES.LINE,    icon: 'icon-tool-line',     label: 'Line' },
+  { tool: TOOL_MODES.RECT,    icon: 'icon-tool-rect-2pt', label: 'Rect', variants: RECT_VARIANTS, modeKey: 'rectMode', eventName: 'rectMode' },
+  { tool: TOOL_MODES.SLOT,    icon: 'icon-tool-slot-c2c', label: 'Slot', variants: SLOT_VARIANTS, modeKey: 'slotMode', eventName: 'slotMode' },
+  { tool: TOOL_MODES.CIRCLE,  icon: 'icon-tool-circle',   label: 'Circle' },
+  { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon',  label: 'Polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
+  { tool: TOOL_MODES.ARC,     icon: 'icon-tool-arc-cse',  label: 'Arc' }, // single-mode in the source (no dropdown)
+  { tool: TOOL_MODES.BEZIER,  icon: 'icon-tool-bezier',   label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
 ];
 // TRACE-1: Edit/modify tools — trim + break. No cursor-manager symbols yet; icons provided as SVG inline.
 const EDIT = [
@@ -87,11 +88,20 @@ const RECT_VARIANTS = [
   { mode: RECT_MODES.CENTER,      icon: 'icon-tool-rect-center', label: 'Center Point' },
   { mode: RECT_MODES.THREE_POINT, icon: 'icon-tool-rect-3pt',    label: '3-Point' },
 ];
+// Slot variants (Fusion 360 Create > Slot order & labels) — reuses the same dropdown mechanism as Rect.
+const SLOT_VARIANTS = [
+  { mode: SLOT_MODES.CENTER_TO_CENTER, icon: 'icon-tool-slot-c2c',       label: 'Center to Center Slot' },
+  { mode: SLOT_MODES.OVERALL,          icon: 'icon-tool-slot-overall',   label: 'Overall Slot' },
+  { mode: SLOT_MODES.CENTER_POINT,     icon: 'icon-tool-slot-center',    label: 'Center Point Slot' },
+  { mode: SLOT_MODES.THREE_POINT_ARC,  icon: 'icon-tool-slot-arc3',      label: 'Three Point Arc Slot' },
+  { mode: SLOT_MODES.CENTER_POINT_ARC, icon: 'icon-tool-slot-arccenter', label: 'Center Point Arc Slot' },
+];
 
 // Every #icon-* the ribbon references (for inject-if-missing).
 const ICON_IDS = [
   ...SELECT.map(t => t.icon), ...CREATE.map(t => t.icon), ...EDIT.filter(t => t.icon).map(t => t.icon), ...INSPECT.map(t => t.icon), ...CONSTRAIN.map(t => t.icon), LOCK.icon,
   ...RECT_VARIANTS.map(v => v.icon),
+  ...SLOT_VARIANTS.map(v => v.icon),
 ];
 
 let stylesInjected = false;
@@ -348,37 +358,42 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (t.tool) toolBtns.push({ btn: b, tool: t.tool });
     return { id: b.id, label: t.label, btn: b, tool: t.tool || null, run };
   }
-  function rectItem(t) {
+  const variantPops = [];
+  function variantItem(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn sk-ribbon-dd';
     b.dataset.tool = t.tool; b.title = t.label;
     if (t.tool) b.id = 'tool-' + t.tool;
-    b.innerHTML = iconSvg(t.icon) + `<span class="sk-ribbon-lbl">${t.label}</span><span class="sk-ribbon-dd-ind"></span>`;
+    const activeMode = (state && state[t.modeKey]) || t.variants[0].mode;
+    const initialVariant = t.variants.find(v => v.mode === activeMode) || t.variants[0];
+    b.innerHTML = iconSvg(initialVariant.icon) + `<span class="sk-ribbon-lbl">${t.label}</span><span class="sk-ribbon-dd-ind"></span>`;
     const useEl = b.querySelector('use');
     toolBtns.push({ btn: b, tool: t.tool });
 
     const menu = document.createElement('div'); menu.className = 'sk-ribbon-menu';
     const pop = createPopover(menu, el);
-    RECT_VARIANTS.forEach((v) => {
+    variantPops.push(pop);
+    t.variants.forEach((v) => {
       const item = document.createElement('div'); item.className = 'sk-ribbon-menu-item'; item.dataset.mode = v.mode;
       item.innerHTML = iconSvg(v.icon, '') + `<span>${v.label}</span>`;
-      if (state && state.rectMode === v.mode) item.classList.add('active');
+      if (activeMode === v.mode) item.classList.add('active');
       item.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        if (state) state.rectMode = v.mode;
+        if (state) state[t.modeKey] = v.mode;
         if (useEl) useEl.setAttribute('href', '#' + v.icon);
         menu.querySelectorAll('.sk-ribbon-menu-item').forEach(i => i.classList.toggle('active', i.dataset.mode === v.mode));
         pop.close();
-        selectTool(t.tool);     // switch to rect with the chosen variant
-        fire('rectMode', v.mode);
+        selectTool(t.tool);
+        fire(t.eventName, v.mode);
       });
       menu.appendChild(item);
     });
     // TASK 607: the variants menu is a POPOVER (createPopover), placed from the button's rect; TASK 647: from the section's dropdown it is
-    // placed from the section's name button (the rect button may not be in the bar).
+    // placed from the section's name button (the tool button may not be in the bar).
     const run = (anchor) => {
       selectTool(t.tool);
-      if (pop.isOpen() && pop.anchor() === anchor) pop.close();
-      else { pop.close(); pop.open(anchor); }
+      const wasOpen = pop.isOpen() && pop.anchor() === anchor;
+      variantPops.forEach(p => p.close());
+      if (!wasOpen) pop.open(anchor);
     };
     b.addEventListener('click', (ev) => { ev.stopPropagation(); run(b); });
     menus.push(menu);
@@ -406,7 +421,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   ];
 
   const sections = SECTION_DECLS.map((d) => {
-    const items = d.buttons ? d.buttons.map((bd, i) => extraItem(bd, d.key, i)) : d.tools.map((t) => (t.rectDropdown ? rectItem(t) : toolItem(t)));
+    const items = d.buttons ? d.buttons.map((bd, i) => extraItem(bd, d.key, i)) : d.tools.map((t) => (t.variants ? variantItem(t) : toolItem(t)));
     const g = document.createElement('div'); g.className = 'sk-ribbon-group'; g.dataset.section = d.key;
     if (d.fixed) g.dataset.fixed = '';
     const row = document.createElement('div'); row.className = 'sk-ribbon-btns';

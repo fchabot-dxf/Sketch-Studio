@@ -32,6 +32,7 @@ import { createLongPress } from '#ui/long-press.js';
 import { createDoneButton } from '#ui/done-button.js';
 import { handleMirrorPointerDown, mirrorDone, mirrorStep } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
+import { handleSlotKeyDown, isSlotActive, finishSlotStep, slotAnchorPoint } from '#ui/input-handlers/slot-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
@@ -150,7 +151,7 @@ function updateMagnifier(svg, state) {
     // Show while a finger is drawing / dragging (follows the finger's point, snapped when a snap is active)
     const snap = state && state.activeSnap;
     const hasSnap = snap && snap.pt && typeof snap.pt.x === 'number';
-    const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION, TOOL_MODES.BEZIER];
+    const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION, TOOL_MODES.BEZIER];
     const fingerWorking = touchPointerDown && !!state && !!(state.drag || state.active || drawingTools.includes(state.currentTool)) && !!state.lastMouse;
     const showLens = fingerWorking;
 
@@ -408,7 +409,7 @@ function nearestGridPoint(svg, e) {
 // TASK 577: the snap a tool gets. The tools that DRAW (a new shape's point) may snap to a locked or hidden sketch as a REFERENCE: the
 // pointer lands on its place (a position-only snap) and binds to nothing, so no point is shared and no constraint ties the new shape to
 // it. Every other tool (select, dimension, constraints, ...) searches only what is editable and visible.
-const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
+const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
 const ACTIVE_SKETCH_SNAP_TOOLS = [TOOL_MODES.OFFSET, TOOL_MODES.MIRROR, TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.RECTANGULAR_PATTERN]; // task 660: these search the ACTIVE sketch only (Fillet / Trim / Break search for themselves); task 658: the pattern tools too
 function toolSnap(state, svg, pt, excludeIds, boost, otherSketch = false) {
     const shapes = pickableShapes(state);
@@ -424,7 +425,7 @@ function updateSnapTarget(e, svg, state) {
     const snapBoost = snapBoostFor(isTouch);
 
     // Determine if we need snap (active operation) or just hover (idle)
-    const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION].includes(state.currentTool);
+    const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION].includes(state.currentTool);
     // BUG-1: a box-select MARQUEE must show ONLY the selection box — never a snap/coincident glyph. The marquee sets
     // state.active.type='marquee' (with NO state.drag), which would otherwise make needsSnap true → a leaked snapTarget
     // → the renderer's icon-coincident near a line. A marquee is NOT a drag-to-snap op, so exclude it.
@@ -687,6 +688,7 @@ function handlePointerDown(e, svg, state) {
             break;
         case TOOL_MODES.LINE:
         case TOOL_MODES.RECT:
+        case TOOL_MODES.SLOT:
         case TOOL_MODES.CIRCLE:
         case TOOL_MODES.ARC:
         case TOOL_MODES.POLYGON:
@@ -781,7 +783,7 @@ function handlePointerMove(e, svg, state) {
 
     // EDGE PANNING CHECK
     const isDragging = !!state.drag;
-    const isDrawing = state.active && (state.currentTool === TOOL_MODES.LINE || state.currentTool === TOOL_MODES.RECT || state.currentTool === TOOL_MODES.CIRCLE || state.currentTool === TOOL_MODES.ARC || state.currentTool === TOOL_MODES.POLYGON || state.currentTool === TOOL_MODES.DIMENSION);
+    const isDrawing = state.active && (state.currentTool === TOOL_MODES.LINE || state.currentTool === TOOL_MODES.RECT || state.currentTool === TOOL_MODES.SLOT || state.currentTool === TOOL_MODES.CIRCLE || state.currentTool === TOOL_MODES.ARC || state.currentTool === TOOL_MODES.POLYGON || state.currentTool === TOOL_MODES.DIMENSION);
     
     if (isDragging || isDrawing) {
         const rect = svg.getBoundingClientRect();
@@ -824,6 +826,7 @@ function handlePointerMove(e, svg, state) {
         case TOOL_MODES.DIMENSION: handled = handleDimensionPointerMove(e, svg, state, w); break;
         case TOOL_MODES.LINE:
         case TOOL_MODES.RECT:
+        case TOOL_MODES.SLOT:
         case TOOL_MODES.CIRCLE:
         case TOOL_MODES.ARC:
         case TOOL_MODES.POLYGON: 
@@ -904,6 +907,7 @@ function handlePointerUp(e, svg, state) {
         case TOOL_MODES.DIMENSION: handled = handleDimensionPointerUp(e, svg, state); break;
         case TOOL_MODES.LINE:
         case TOOL_MODES.RECT:
+        case TOOL_MODES.SLOT:
         case TOOL_MODES.CIRCLE:
         case TOOL_MODES.ARC:
         case TOOL_MODES.POLYGON:
@@ -977,6 +981,7 @@ function setupEventListeners(svg, state) {
             [TOOL_MODES.FILLET]: { open: filletInputOpen, done: commitFilletInput, label: 'Apply the fillet', end: filletCornerPoint },
             // TASK 650: the open distance box; the check applies the offset exactly as Enter does (commitOffsetInput), beside the preview's anchor
             [TOOL_MODES.OFFSET]: { open: offsetInputOpen, done: commitOffsetInput, label: 'Apply the offset', end: offsetAnchorPoint },
+            [TOOL_MODES.SLOT]: { open: () => isSlotActive(state), done: () => finishSlotStep(svg, state), label: 'Finish the slot', end: () => slotAnchorPoint(state) },
         };
         // TASK 658: an open pattern dialog (its tool, or an edit from a label under any tool): the check does what its OK / Enter does
         const PATTERN_DONE = { open: patternDoneOpen, done: commitPattern, label: patternDoneLabel(), end: patternAnchorPoint };
@@ -1082,7 +1087,7 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
                 try { updateSnapTarget({ clientX: sx, clientY: sy }, svg, state); } catch(_) { state.snapTarget = null; }
                 state.lastMouse = { x: sx, y: sy };
                 const w = screenToWorld(svg, sx, sy);
-                const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC];
+                const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC];
                 if (drawingTools.includes(state.currentTool)) {
                     try { handleDrawingPointerMove({ clientX: sx, clientY: sy, pointerType: 'mouse' }, svg, state, w); } catch(_) { }
                 } else {
@@ -1126,7 +1131,7 @@ function handleWheel(e, svg, state) {
             const sx = state.lastMouse.x, sy = state.lastMouse.y;
             try { updateSnapTarget({ clientX: sx, clientY: sy }, svg, state); } catch(_) { state.snapTarget = null; }
             const w = screenToWorld(svg, sx, sy);
-            const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC];
+            const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC];
             if (drawingTools.includes(state.currentTool)) {
                 try { handleDrawingPointerMove({ clientX: sx, clientY: sy, pointerType: 'mouse' }, svg, state, w); } catch(_) { }
             } else {
@@ -1150,7 +1155,7 @@ export function updateViewBox(svg, view) {
 // TASK 618: the history key mapping moved to #ui/history-control.js (one mapping for every host); re-exported here for its callers.
 export { undoRedoKeyAction };
 
-const DRAWING_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
+const DRAWING_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
 const sketchHistories = new WeakMap();
 /** TASK 618: the sketch state as a history source (history-control.js): THE Undo / Redo of the Design surface, called by the Ctrl+Z / Ctrl+Y keys
  *  below and by the header buttons. TASK 549 (Fusion, measured): undo while a drawing tool is mid-draw removes NOTHING, it ENDS the tool (the
@@ -1177,7 +1182,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
     // TASK 596: Esc inside an on-canvas value box of a drawing tool (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape
     window.addEventListener('liveDimensionCancelled', () => {
         if (!isActiveFn()) return;
-        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC, TOOL_MODES.LINE].includes(state.currentTool)) handleEscape(state);
+        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC, TOOL_MODES.LINE].includes(state.currentTool)) handleEscape(state);
     });
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
@@ -1239,6 +1244,9 @@ function setupKeyboardShortcuts(state, opts = {}) {
             // Use new live dimension handler instead of the old one
             dbg.log('input', '[DEBUG INPUT] Calling handleLiveRectKeyDown', e.key);
             if (handleLiveRectKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; }
+        }
+        if (state.currentTool === TOOL_MODES.SLOT) {
+            try { if (handleSlotKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } } catch(_) {}
         }
         if (state.currentTool === TOOL_MODES.CIRCLE) {
             try{ if (handleCircleKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }

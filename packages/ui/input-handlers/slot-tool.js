@@ -1,0 +1,567 @@
+// Slot tool (TASK 673) — supports Fusion 360's five slot types using real lines, makeArc, and a diameter width dim.
+import { TOOL_MODES, SLOT_MODES } from '#core/constants.js';
+import { addConstraint } from '#core/constraints.js';
+import {
+    circumcenter3Pt,
+    arcSweepFor3Pt,
+    arcAngleSpan,
+    perpDistToLine,
+    arcWidthFromPoint,
+    clampStraightSlotWidth,
+    clampArcSlotWidth,
+    computeStraightSlotPoints,
+    computeArcSlotPoints,
+    makeSlotCenterToCenter,
+    makeSlotOverall,
+    makeSlotCenterPoint,
+    makeSlotThreePointArc,
+    makeSlotCenterPointArc,
+} from '#core/slot.js';
+import { applySnapConstraint } from '#core/snap-constraints.js';
+import { clearPreview } from '#ui/preview-manager.js';
+import { hideInput, isInputActive, showSingleInput } from '#ui/numeric-input-manager.js';
+import { worldToScreen } from '#ui/coords.js';
+import {
+    checkDragThreshold,
+    resetToolState,
+    safeUpdatePreview,
+    setupDimensionListeners,
+    openCreationBoxes,
+    followCreationBoxes,
+} from '#ui/input-handlers/base-tool.js';
+
+const MIN_SPAN = 0.5;
+const ARC_LOCK_ANGLE = 0.15;
+const FIELD_SPAN = 'slot-span';
+const FIELD_ARC = 'slot-arc';
+const FIELD_WIDTH = 'slot-width';
+
+const localState = {
+    isDragging: false,
+    dragStartScreen: null,
+    boxOpen: false,
+    lockedSpan: null,
+    lockedWidth: null,
+    cursor: null,
+    arcSweep: null,
+    lastArcSpan: 0,
+};
+
+function isArcMode(mode) {
+    return mode === SLOT_MODES.THREE_POINT_ARC || mode === SLOT_MODES.CENTER_POINT_ARC;
+}
+
+function getSlotMode(state) {
+    return (state && state.slotMode) || SLOT_MODES.CENTER_TO_CENTER;
+}
+
+function snapPoint(snap, fallback) {
+    return (snap && snap.isLocked && snap.pt) ? { x: snap.pt.x, y: snap.pt.y } : { x: fallback.x, y: fallback.y };
+}
+
+function resolveSpanEnd(p1, pt) {
+    if (!p1 || !pt) return pt;
+    if (!(localState.lockedSpan > MIN_SPAN)) return pt;
+    const dx = pt.x - p1.x, dy = pt.y - p1.y;
+    const d = Math.hypot(dx, dy);
+    const ux = d > 1e-6 ? dx / d : 1;
+    const uy = d > 1e-6 ? dy / d : 0;
+    return { x: p1.x + ux * localState.lockedSpan, y: p1.y + uy * localState.lockedSpan };
+}
+
+function defaultWidthForSpan(span) {
+    return Math.max(8, Math.min(20, span * 0.28));
+}
+
+function currentStraightGeom(mode, p1, p2, cursorPt) {
+    const rawSpan = p1 && p2 ? Math.hypot(p2.x - p1.x, p2.y - p1.y) : 0;
+    if (!(rawSpan > MIN_SPAN)) return null;
+    const cursorW = cursorPt ? perpDistToLine(p1, p2, cursorPt) * 2 : 0;
+    const reqW = (localState.lockedWidth && localState.lockedWidth > 0)
+        ? localState.lockedWidth
+        : (cursorW > 1 ? cursorW : defaultWidthForSpan(rawSpan));
+    return computeStraightSlotPoints({ mode, p1, p2, width: clampStraightSlotWidth(mode, rawSpan, reqW) });
+}
+
+function updateCenterPointArcSweep(center, c1, cursorPt) {
+    const r = Math.hypot(c1.x - center.x, c1.y - center.y);
+    if (!(r > MIN_SPAN) || !cursorPt) return true;
+    const a1 = Math.atan2(c1.y - center.y, c1.x - center.x);
+    const a2 = Math.atan2(cursorPt.y - center.y, cursorPt.x - center.x);
+    let diff = Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1));
+    if (localState.arcSweep === null) {
+        localState.arcSweep = diff >= 0;
+    } else if (Math.abs(diff) < ARC_LOCK_ANGLE && Math.abs(localState.lastArcSpan) > ARC_LOCK_ANGLE * 2) {
+        // Flip only when pointer passes back through c1 after sweeping well away
+        localState.arcSweep = diff >= 0;
+    }
+    const span = arcAngleSpan(center, c1, cursorPt, localState.arcSweep);
+    localState.lastArcSpan = span;
+    return localState.arcSweep;
+}
+
+function currentArcParams(active, cursorPt) {
+    const mode = active.slotMode;
+    if (mode === SLOT_MODES.THREE_POINT_ARC) {
+        const c1 = active.picks[0] && active.picks[0].pt;
+        const c2 = active.picks[1] && active.picks[1].pt;
+        const p3 = active.picks[2] ? active.picks[2].pt : cursorPt;
+        if (!c1 || !c2 || !p3) return null;
+        const cc = circumcenter3Pt(c1, c2, p3);
+        if (!cc) return { collinear: true, c1, c2, p3 };
+        const sweep = arcSweepFor3Pt(cc.center, c1, c2, p3);
+        return { center: cc.center, c1, c2, sweep, radius: cc.radius, p3 };
+    }
+    const center = active.picks[0] && active.picks[0].pt;
+    const c1 = active.picks[1] && active.picks[1].pt;
+    if (!center || !c1) return null;
+    const r = Math.hypot(c1.x - center.x, c1.y - center.y);
+    if (!(r > MIN_SPAN)) return null;
+    if (active.picks[2] && active.arcData) return active.arcData;
+    const p3 = cursorPt || c1;
+    const sweep = updateCenterPointArcSweep(center, c1, p3);
+    const d3 = Math.hypot(p3.x - center.x, p3.y - center.y);
+    if (!(d3 > 1e-6)) return { incomplete: true, center, c1 };
+    const c2 = {
+        x: center.x + (p3.x - center.x) * (r / d3),
+        y: center.y + (p3.y - center.y) * (r / d3),
+    };
+    if (Math.hypot(c2.x - c1.x, c2.y - c1.y) <= MIN_SPAN) return { incomplete: true, center, c1 };
+    return { center, c1, c2, sweep, radius: r };
+}
+
+function currentArcGeom(active, cursorPt) {
+    const arc = active.arcData || currentArcParams(active, cursorPt);
+    if (!arc || arc.collinear || arc.incomplete) return null;
+    const cursorW = cursorPt ? arcWidthFromPoint(arc.center, arc.radius, cursorPt) : 0;
+    const reqW = (localState.lockedWidth && localState.lockedWidth > 0)
+        ? localState.lockedWidth
+        : (cursorW > 1 ? cursorW : defaultWidthForSpan(arc.radius));
+    return computeArcSlotPoints({
+        center: arc.center,
+        c1: arc.c1,
+        c2: arc.c2,
+        sweep: arc.sweep,
+        width: clampArcSlotWidth(arc.radius, reqW),
+    });
+}
+
+function closeSlotBoxes() {
+    if (localState.boxOpen) {
+        hideInput();
+    }
+    localState.boxOpen = false;
+    localState.lockedSpan = null;
+    localState.lockedWidth = null;
+}
+
+function openStepBox(eOrPt, svg, state, field, value, { initialKey = null } = {}) {
+    let screenPt;
+    if (eOrPt && Number.isFinite(eOrPt.clientX) && Number.isFinite(eOrPt.clientY)) {
+        screenPt = eOrPt;
+    } else {
+        const sc = svg && eOrPt ? worldToScreen(svg, eOrPt) : { x: 200, y: 200 };
+        screenPt = { clientX: sc.x, clientY: sc.y, pointerType: state.active && state.active.pointerType };
+    }
+    localState.boxOpen = true;
+    if (initialKey) {
+        showSingleInput(screenPt.clientX + 15, screenPt.clientY + 15, value, field, initialKey, true);
+    } else {
+        openCreationBoxes(screenPt, { single: { field } }, [Number.isFinite(value) ? value : 0]);
+    }
+}
+
+function redrawPreview(state, cursorPt) {
+    const active = state.active;
+    if (!active || active.mode !== TOOL_MODES.SLOT) return;
+    const mode = active.slotMode;
+    const p1 = active.picks[0] && active.picks[0].pt;
+    if (!p1) return;
+
+    if (active.phase === 'span' || active.phase === 'span2') {
+        const p2 = resolveSpanEnd(p1, cursorPt || p1);
+        let cl1 = p1, cl2 = p2;
+        if (mode === SLOT_MODES.CENTER_POINT) {
+            cl1 = { x: 2 * p1.x - p2.x, y: 2 * p1.y - p2.y };
+            cl2 = p2;
+        }
+        safeUpdatePreview(state, 'slot', [], p2, {
+            slotMode: mode,
+            phase: active.phase,
+            cl1, cl2,
+            centerPt: mode === SLOT_MODES.CENTER_POINT ? p1 : null,
+            span: Math.hypot(cl2.x - cl1.x, cl2.y - cl1.y),
+        });
+        return;
+    }
+
+    if (active.phase === 'arc3') {
+        const arc = currentArcParams(active, cursorPt || p1);
+        safeUpdatePreview(state, 'slot', [], cursorPt || p1, {
+            slotMode: mode,
+            phase: 'arc3',
+            arc,
+        });
+        return;
+    }
+
+    if (active.phase === 'width') {
+        if (isArcMode(mode)) {
+            const geom = currentArcGeom(active, cursorPt);
+            safeUpdatePreview(state, 'slot', [], cursorPt || p1, {
+                slotMode: mode,
+                phase: 'width',
+                arcGeom: geom,
+            });
+        } else {
+            const p2 = active.picks[1] && active.picks[1].pt;
+            const geom = currentStraightGeom(mode, p1, p2, cursorPt);
+            safeUpdatePreview(state, 'slot', [], cursorPt || p2 || p1, {
+                slotMode: mode,
+                phase: 'width',
+                straightGeom: geom,
+            });
+        }
+    }
+}
+
+function applyOptionalSnap(state, jointId, snap) {
+    try {
+        if (snap && snap.isLocked) applySnapConstraint(state, jointId, snap);
+    } catch (_) { /* snap constraint failure still leaves a valid slot */ }
+}
+
+function resolveOrAllocJoint(state, pt, snap) {
+    if (snap && snap.isLocked && snap.type === 'joint' && snap.jointId && !snap.otherSketch && state.joints.has(snap.jointId)) {
+        return { id: snap.jointId, reused: true };
+    }
+    const id = state.genJ();
+    state.joints.set(id, { x: pt.x, y: pt.y, fixed: false });
+    return { id, reused: false };
+}
+
+function commitSlot(svg, state, cursorPt) {
+    const active = state.active;
+    if (!active || active.mode !== TOOL_MODES.SLOT || active.phase !== 'width') return false;
+    const mode = active.slotMode;
+    const isConstruction = !!state.isConstructionMode;
+    const p1Pick = active.picks[0];
+    const p2Pick = active.picks[1];
+    if (!p1Pick || !p2Pick) return false;
+
+    let built = null;
+    let snapsToApply = [];
+    const cursor = cursorPt || localState.cursor || (active.picks[2] && active.picks[2].pt) || p2Pick.pt;
+
+    if (isArcMode(mode)) {
+        const geom = currentArcGeom(active, cursor);
+        if (!geom) {
+            resetSlotState(state);
+            return false;
+        }
+        state.saveState('Create Slot');
+        if (mode === SLOT_MODES.THREE_POINT_ARC) {
+            const p3Pick = active.picks[2];
+            const j1 = resolveOrAllocJoint(state, p1Pick.pt, p1Pick.snap);
+            const j2 = resolveOrAllocJoint(state, p2Pick.pt, p2Pick.snap);
+            let thirdArg = p3Pick.pt;
+            let bindThird = false;
+            if (p3Pick.snap && p3Pick.snap.isLocked && p3Pick.snap.type === 'joint' && p3Pick.snap.jointId && !p3Pick.snap.otherSketch && state.joints.has(p3Pick.snap.jointId)) {
+                thirdArg = p3Pick.snap.jointId;
+                bindThird = true;
+            }
+            built = makeSlotThreePointArc(state.joints, j1.id, j2.id, thirdArg, geom.width, state.genJ, isConstruction, { bindThirdJoint: bindThird });
+            if (!j1.reused) snapsToApply.push([j1.id, p1Pick.snap]);
+            if (!j2.reused) snapsToApply.push([j2.id, p2Pick.snap]);
+        } else {
+            const jcm = resolveOrAllocJoint(state, p1Pick.pt, p1Pick.snap);
+            const jc1 = resolveOrAllocJoint(state, p2Pick.pt, p2Pick.snap);
+            const p3Pick = active.picks[2];
+            const jc2 = resolveOrAllocJoint(state, geom.c2, p3Pick && p3Pick.snap);
+            built = makeSlotCenterPointArc(state.joints, jcm.id, jc1.id, jc2.id, geom.sweep, geom.width, state.genJ, isConstruction);
+            if (!jcm.reused) snapsToApply.push([jcm.id, p1Pick.snap]);
+            if (!jc1.reused) snapsToApply.push([jc1.id, p2Pick.snap]);
+            if (!jc2.reused && p3Pick) snapsToApply.push([jc2.id, p3Pick.snap]);
+        }
+    } else {
+        const geom = currentStraightGeom(mode, p1Pick.pt, p2Pick.pt, cursor);
+        if (!geom) {
+            resetSlotState(state);
+            return false;
+        }
+        state.saveState('Create Slot');
+        const j1 = resolveOrAllocJoint(state, p1Pick.pt, p1Pick.snap);
+        const j2 = resolveOrAllocJoint(state, p2Pick.pt, p2Pick.snap);
+        if (mode === SLOT_MODES.CENTER_TO_CENTER) {
+            built = makeSlotCenterToCenter(state.joints, j1.id, j2.id, geom.width, state.genJ, isConstruction);
+        } else if (mode === SLOT_MODES.OVERALL) {
+            built = makeSlotOverall(state.joints, j1.id, j2.id, geom.width, state.genJ, isConstruction);
+        } else {
+            built = makeSlotCenterPoint(state.joints, j1.id, j2.id, geom.width, state.genJ, isConstruction);
+        }
+        if (!j1.reused) snapsToApply.push([j1.id, p1Pick.snap]);
+        if (!j2.reused) snapsToApply.push([j2.id, p2Pick.snap]);
+    }
+
+    if (!built || !built.shapes || built.shapes.length === 0) {
+        state.endUndoGroup();
+        resetSlotState(state);
+        return false;
+    }
+
+    for (const s of built.shapes) state.shapes.push(s);
+    for (const c of built.constraints) addConstraint(state, c.type, c);
+    for (const [jid, snap] of snapsToApply) applyOptionalSnap(state, jid, snap);
+
+    closeSlotBoxes();
+    localState.isDragging = false;
+    localState.dragStartScreen = null;
+    localState.cursor = null;
+    localState.arcSweep = null;
+    localState.lastArcSpan = 0;
+    clearPreview(state);
+    state.active = null;
+    state.endUndoGroup();
+    if (state.engine && state.engine.solve) state.engine.solve();
+    return true;
+}
+
+function advanceFromSpan(e, svg, state, endPt, snap) {
+    const active = state.active;
+    active.picks[1] = { pt: { x: endPt.x, y: endPt.y }, snap: snap || null };
+    localState.lockedSpan = null;
+    localState.dragStartScreen = null;
+    localState.isDragging = false;
+
+    const cursor = localState.cursor || endPt;
+    if (isArcMode(active.slotMode)) {
+        active.phase = 'arc3';
+        localState.arcSweep = null;
+        localState.lastArcSpan = 0;
+        redrawPreview(state, cursor);
+        const r = Math.hypot(endPt.x - active.picks[0].pt.x, endPt.y - active.picks[0].pt.y);
+        openStepBox(e || cursor, svg, state, FIELD_ARC, r);
+    } else {
+        active.phase = 'width';
+        redrawPreview(state, cursor);
+        const span = Math.hypot(endPt.x - active.picks[0].pt.x, endPt.y - active.picks[0].pt.y);
+        const initW = defaultWidthForSpan(span);
+        openStepBox(e || cursor, svg, state, FIELD_WIDTH, initW);
+    }
+}
+
+function advanceFromArc3(e, svg, state, pt, snap) {
+    const active = state.active;
+    const arc = currentArcParams(active, pt);
+    if (!arc || arc.collinear || arc.incomplete) return false;
+    active.arcData = arc;
+    active.picks[2] = { pt: { x: arc.c2 ? arc.c2.x : pt.x, y: arc.c2 ? arc.c2.y : pt.y }, snap: snap || null };
+    active.phase = 'width';
+    localState.dragStartScreen = null;
+    localState.isDragging = false;
+    redrawPreview(state, localState.cursor || pt);
+    openStepBox(e || pt, svg, state, FIELD_WIDTH, defaultWidthForSpan(arc.radius));
+    return true;
+}
+
+export function setupSlotTool(svg, state) {
+    if (typeof state.onDrawCancelled === 'function') {
+        state.onDrawCancelled(() => {
+            if (localState.boxOpen || (state.active && state.active.mode === TOOL_MODES.SLOT)) {
+                resetSlotState(state);
+            }
+        });
+    }
+    setupDimensionListeners(state, TOOL_MODES.SLOT, {
+        guard: (detail) => detail.mode === 'single' && (detail.field === FIELD_SPAN || detail.field === FIELD_ARC || detail.field === FIELD_WIDTH),
+        onPreview: (detail) => {
+            const active = state.active;
+            if (!active) return;
+            const v = detail.value;
+            if (detail.field === FIELD_SPAN) {
+                localState.lockedSpan = (detail.typed[0] && v > MIN_SPAN) ? v : null;
+            } else if (detail.field === FIELD_WIDTH) {
+                localState.lockedWidth = (detail.typed[0] && v >= 1) ? v : null;
+            }
+            redrawPreview(state, localState.cursor || active.picks[0].pt);
+        },
+        onApply: (detail) => {
+            if (detail.confirmedBy !== 'enter') return;
+            const active = state.active;
+            if (!active) return;
+            const v = detail.value;
+            if (active.phase === 'span' || active.phase === 'span2') {
+                if (v > MIN_SPAN) localState.lockedSpan = v;
+                const p1 = active.picks[0].pt;
+                const endPt = resolveSpanEnd(p1, localState.cursor || { x: p1.x + (localState.lockedSpan || 0), y: p1.y });
+                if (!(Math.hypot(endPt.x - p1.x, endPt.y - p1.y) > MIN_SPAN)) {
+                    detail.keepOpen = true;
+                    return;
+                }
+                advanceFromSpan(null, svg, state, endPt, null);
+                detail.keepOpen = true;
+            } else if (active.phase === 'arc3') {
+                const cursor = localState.cursor || active.picks[1].pt;
+                if (!advanceFromArc3(null, svg, state, cursor, null)) {
+                    detail.keepOpen = true;
+                    return;
+                }
+                detail.keepOpen = true;
+            } else if (active.phase === 'width') {
+                if (v >= 1) localState.lockedWidth = v;
+                if (!commitSlot(svg, state, localState.cursor)) {
+                    detail.keepOpen = true;
+                }
+            }
+        },
+        onCancel: () => {
+            resetSlotState(state);
+        },
+    });
+}
+
+export function resetSlotState(state) {
+    closeSlotBoxes();
+    localState.cursor = null;
+    localState.arcSweep = null;
+    localState.lastArcSpan = 0;
+    resetToolState(state, TOOL_MODES.SLOT, localState);
+}
+
+export function isSlotActive(state) {
+    return !!(state && state.active && state.active.mode === TOOL_MODES.SLOT && state.active.phase === 'width');
+}
+
+export function finishSlotStep(svg, state) {
+    return commitSlot(svg, state, localState.cursor);
+}
+
+export function slotAnchorPoint(state) {
+    const active = state && state.active;
+    if (!active || active.mode !== TOOL_MODES.SLOT) return null;
+    const p1 = active.picks && active.picks[0] && active.picks[0].pt;
+    const p2 = active.picks && active.picks[1] && active.picks[1].pt;
+    if (p1 && p2) return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    return p1 || null;
+}
+
+export function handleSlotPointerDown(e, svg, state, hitSnap, w) {
+    localState.dragStartScreen = { x: e.clientX, y: e.clientY };
+    localState.isDragging = false;
+    localState.cursor = { x: w.x, y: w.y };
+
+    if (state.active && state.active.mode === TOOL_MODES.SLOT) {
+        // Subsequent click while drawing: pointerUp handles placement / advance cleanly
+        state.active.pointerType = e.pointerType;
+        return true;
+    }
+
+    const mode = getSlotMode(state);
+    const p1 = snapPoint(hitSnap, w);
+    localState.lockedSpan = null;
+    localState.lockedWidth = null;
+    localState.arcSweep = null;
+    localState.lastArcSpan = 0;
+
+    state.active = {
+        mode: TOOL_MODES.SLOT,
+        slotMode: mode,
+        phase: isArcMode(mode) ? 'span2' : 'span',
+        pointerType: e.pointerType,
+        picks: [{ pt: p1, snap: (hitSnap && hitSnap.isLocked) ? hitSnap : null }],
+        arcData: null,
+        preview: null,
+    };
+    redrawPreview(state, p1);
+    return true;
+}
+
+export function handleSlotPointerMove(e, svg, state, w) {
+    const active = state.active;
+    if (!active || active.mode !== TOOL_MODES.SLOT) return false;
+    if (checkDragThreshold(e, localState.dragStartScreen)) localState.isDragging = true;
+
+    const pt = (state.snapTarget && state.snapTarget.isLocked && state.snapTarget.pt)
+        ? { x: state.snapTarget.pt.x, y: state.snapTarget.pt.y }
+        : { x: w.x, y: w.y };
+    localState.cursor = pt;
+    redrawPreview(state, pt);
+
+    if (localState.boxOpen) {
+        const p1 = active.picks[0] && active.picks[0].pt;
+        const p2 = active.picks[1] && active.picks[1].pt;
+        if ((active.phase === 'span' || active.phase === 'span2') && p1) {
+            const effP2 = resolveSpanEnd(p1, pt);
+            followCreationBoxes(e, [Math.hypot(effP2.x - p1.x, effP2.y - p1.y)]);
+        } else if (active.phase === 'arc3') {
+            const arc = currentArcParams(active, pt);
+            if (arc && Number.isFinite(arc.radius)) followCreationBoxes(e, [arc.radius]);
+        } else if (active.phase === 'width') {
+            if (isArcMode(active.slotMode)) {
+                const geom = currentArcGeom(active, pt);
+                if (geom) followCreationBoxes(e, [geom.width]);
+            } else if (p1 && p2) {
+                const geom = currentStraightGeom(active.slotMode, p1, p2, pt);
+                if (geom) followCreationBoxes(e, [geom.width]);
+            }
+        }
+    }
+    return true;
+}
+
+export function handleSlotPointerUp(e, svg, state, hitSnap, w) {
+    const active = state.active;
+    if (!active || active.mode !== TOOL_MODES.SLOT) return false;
+
+    const snap = hitSnap || state.snapTarget || null;
+    const rawPt = snapPoint(snap, w);
+    localState.cursor = rawPt;
+
+    if (active.phase === 'span' || active.phase === 'span2') {
+        if (!localState.isDragging && !active.waitingNextClick) {
+            // Click 1 released without dragging: stay on current phase waiting for click 2 + open live box
+            active.waitingNextClick = true;
+            localState.dragStartScreen = null;
+            const p1 = active.picks[0].pt;
+            openStepBox(e, svg, state, FIELD_SPAN, Math.hypot(rawPt.x - p1.x, rawPt.y - p1.y));
+            return true;
+        }
+        const p1 = active.picks[0].pt;
+        const endPt = resolveSpanEnd(p1, rawPt);
+        if (!(Math.hypot(endPt.x - p1.x, endPt.y - p1.y) > MIN_SPAN)) {
+            return true;
+        }
+        advanceFromSpan(e, svg, state, endPt, snap);
+        return true;
+    }
+
+    if (active.phase === 'arc3') {
+        advanceFromArc3(e, svg, state, rawPt, snap);
+        return true;
+    }
+
+    if (active.phase === 'width') {
+        return commitSlot(svg, state, rawPt);
+    }
+
+    return false;
+}
+
+export function handleSlotKeyDown(e, svg, state) {
+    if (state.currentTool !== TOOL_MODES.SLOT || !state.active || state.active.mode !== TOOL_MODES.SLOT) return false;
+    if (/^[0-9.]$/.test(e.key) && !isInputActive()) {
+        const active = state.active;
+        const cursor = localState.cursor || active.picks[0].pt;
+        const p1 = active.picks[0].pt;
+        if (active.phase === 'span' || active.phase === 'span2') {
+            openStepBox(cursor, svg, state, FIELD_SPAN, Math.hypot(cursor.x - p1.x, cursor.y - p1.y), { initialKey: e.key });
+        } else if (active.phase === 'arc3') {
+            const arc = currentArcParams(active, cursor);
+            openStepBox(cursor, svg, state, FIELD_ARC, (arc && arc.radius) || 10, { initialKey: e.key });
+        } else if (active.phase === 'width') {
+            openStepBox(cursor, svg, state, FIELD_WIDTH, 10, { initialKey: e.key });
+        }
+        return true;
+    }
+    return false;
+}

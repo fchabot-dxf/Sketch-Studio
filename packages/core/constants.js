@@ -109,6 +109,7 @@ export const TOOL_MODES = {
   PAN: 'pan',
   LINE: 'line',
   RECT: 'rect',
+  SLOT: 'slot',
   CIRCLE: 'circle',
   POLYGON: 'polygon', // TASK 483: regular polygon (N plain lines + equal constraints); N = POLYGON_SIDES
   ARC: 'arc',
@@ -151,6 +152,15 @@ export const RECT_MODES = {
   TWO_POINT: 'rect-2pt',      // Two opposite corners
   CENTER: 'rect-center',      // Center point + corner
   THREE_POINT: 'rect-3pt'     // Three points (width + height)
+};
+
+// Slot drawing modes (matching Fusion 360's five slot types)
+export const SLOT_MODES = {
+  CENTER_TO_CENTER: 'slot-c2c',
+  OVERALL: 'slot-overall',
+  CENTER_POINT: 'slot-center',
+  THREE_POINT_ARC: 'slot-arc-3pt',
+  CENTER_POINT_ARC: 'slot-arc-center'
 };
 
 // Arc drawing modes

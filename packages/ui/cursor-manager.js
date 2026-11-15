@@ -136,6 +136,26 @@ const ICONS = {
         viewBox: '0 0 24 24',
         content: `<rect x="4" y="4" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="4" cy="4" r="2" fill="currentColor"/><circle cx="20" cy="4" r="2" fill="currentColor"/><circle cx="20" cy="20" r="2" fill="currentColor"/>`
     },
+    'icon-tool-slot-c2c': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M7.5 8 H16.5 A4 4 0 0 1 16.5 16 H7.5 A4 4 0 0 1 7.5 8 Z" stroke="currentColor" stroke-width="2" fill="none"/><line x1="7.5" y1="12" x2="16.5" y2="12" stroke="var(--icon-accent, #ef4444)" stroke-width="1.3" stroke-dasharray="2 1.5"/><circle cx="7.5" cy="12" r="2" fill="var(--icon-accent, #ef4444)"/><circle cx="16.5" cy="12" r="2" fill="var(--icon-accent, #ef4444)"/>`
+    },
+    'icon-tool-slot-overall': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M7.5 8 H16.5 A4 4 0 0 1 16.5 16 H7.5 A4 4 0 0 1 7.5 8 Z" stroke="currentColor" stroke-width="2" fill="none"/><line x1="3.5" y1="12" x2="20.5" y2="12" stroke="var(--icon-accent, #ef4444)" stroke-width="1.3" stroke-dasharray="2 1.5"/><circle cx="3.5" cy="12" r="2" fill="var(--icon-accent, #ef4444)"/><circle cx="20.5" cy="12" r="2" fill="var(--icon-accent, #ef4444)"/>`
+    },
+    'icon-tool-slot-center': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M7.5 8 H16.5 A4 4 0 0 1 16.5 16 H7.5 A4 4 0 0 1 7.5 8 Z" stroke="currentColor" stroke-width="2" fill="none"/><line x1="7.5" y1="12" x2="16.5" y2="12" stroke="var(--icon-accent, #ef4444)" stroke-width="1.3" stroke-dasharray="2 1.5"/><circle cx="12" cy="12" r="2" fill="var(--icon-accent, #ef4444)"/><circle cx="16.5" cy="12" r="2" fill="var(--icon-accent, #ef4444)"/>`
+    },
+    'icon-tool-slot-arc3': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M1.4 12.5 A13 13 0 0 1 22.6 12.5 A3 3 0 0 1 17.7 16 A7 7 0 0 0 6.3 16 A3 3 0 0 1 1.4 12.5 Z" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linejoin="round"/><path d="M3.8 14.3 A10 10 0 0 1 20.2 14.3" stroke="var(--icon-accent, #ef4444)" stroke-width="1.3" stroke-dasharray="2 1.5" fill="none"/><circle cx="3.8" cy="14.3" r="1.8" fill="var(--icon-accent, #ef4444)"/><circle cx="12" cy="10" r="1.8" fill="var(--icon-accent, #ef4444)"/><circle cx="20.2" cy="14.3" r="1.8" fill="var(--icon-accent, #ef4444)"/>`
+    },
+    'icon-tool-slot-arccenter': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M1.4 12.5 A13 13 0 0 1 22.6 12.5 A3 3 0 0 1 17.7 16 A7 7 0 0 0 6.3 16 A3 3 0 0 1 1.4 12.5 Z" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linejoin="round"/><path d="M3.8 14.3 A10 10 0 0 1 20.2 14.3" stroke="var(--icon-accent, #ef4444)" stroke-width="1.3" stroke-dasharray="2 1.5" fill="none"/><circle cx="12" cy="20" r="1.9" fill="var(--icon-accent, #ef4444)"/><circle cx="3.8" cy="14.3" r="1.8" fill="var(--icon-accent, #ef4444)"/><circle cx="20.2" cy="14.3" r="1.8" fill="var(--icon-accent, #ef4444)"/>`
+    },
     'icon-tool-arc-3pt': {
         viewBox: '0 0 24 24',
         content: `<path d="M4 12a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="4" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="4" r="1.5" fill="currentColor"/><circle cx="20" cy="12" r="1.5" fill="currentColor"/>`
@@ -184,6 +204,7 @@ const TOOL_CURSOR_MAP = {
     [TOOL_MODES.PAN]: 'icon-tool-pan',
     [TOOL_MODES.LINE]: 'icon-tool-line',
     [TOOL_MODES.RECT]: 'icon-tool-rect',
+    [TOOL_MODES.SLOT]: 'icon-tool-slot-c2c',
     [TOOL_MODES.CIRCLE]: 'icon-tool-circle',
     [TOOL_MODES.POLYGON]: 'icon-tool-polygon',
     [TOOL_MODES.ARC]: 'icon-tool-arc-cse',

@@ -133,10 +133,14 @@ console.log('Running tests for packages/core/fillet.js...');
   assert.strictEqual(findCornerAtPoint(stj, stj.joints.get(cj), 1), null, 'three lines at a joint is not a fillet corner');
   assert(/T-junction/.test(diagnoseNoFillet(stj, stj.joints.get(cj), 1)));
 
-  // line + arc: a corner where one member is an arc
+  // line + arc already running tangent (here the line leaves the arc's start along its tangent): nothing to round, and no corner
   const sla = { joints: new Map([['p', { x: 0, y: 0 }], ['q', { x: 10, y: 0 }], ['c', { x: 0, y: 10 }], ['r', { x: 10, y: 10 }]]), shapes: [
     { id: 'L', type: 'line', joints: ['p', 'q'] }, { id: 'A', type: 'arc', joints: ['c', 'p', 'r'] }], constraints: [] };
-  assert.strictEqual(diagnoseNoFillet(sla, { x: 0, y: 0 }, 1), 'Fillet needs a corner between two lines');
+  assert.strictEqual(findCornerAtPoint(sla, { x: 0, y: 0 }, 1), null, 'a smooth line-arc join is not a fillet corner');
+  assert.strictEqual(diagnoseNoFillet(sla, { x: 0, y: 0 }, 1), 'These curves already run tangent to each other: nothing to fillet');
+  // a lone line: the generic lines message is kept
+  const sone = { joints: new Map([['p', { x: 0, y: 0 }], ['q', { x: 10, y: 0 }]]), shapes: [{ id: 'L', type: 'line', joints: ['p', 'q'] }], constraints: [] };
+  assert.strictEqual(diagnoseNoFillet(sone, { x: 0, y: 0 }, 1), 'Fillet needs a corner between two lines');
 
   // collinear -> structured failure, not a silent null
   const sc = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 10, y: 0 }], ['c', { x: 20, y: 0 }]]), shapes: [], constraints: [] };

@@ -1,10 +1,14 @@
 // packages/core/fillet.js — 2D Fillet (Corner Rounding)
 // Pure geometry & topological constraint operations for corner rounding.
-// Replaces a sharp corner between two lines with a smooth, tangent circular arc.
+// Replaces a sharp corner between two curves (line + line, line + arc, arc + arc) with a smooth, tangent circular arc.
+// Each curve at the corner is a "leg" (legAt): a line, or an arc seen from the corner end. ONE path serves every pairing:
+// filletGeometryForLegs finds the fillet centre, tangent points and per-leg trim; applyFillet trims each leg by moving
+// its corner joint to its tangent point (a line keeps its direction, an arc keeps its centre and radius).
 //
 // No DOM. Pure function on state.joints / state.shapes / state.constraints.
 
 import { makeArc } from './shapes.js';
+import { arcSweepInfo } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { parse as parseUnit } from './units.js';
@@ -66,9 +70,44 @@ export function getCoincidentCluster(state, startJointId) {
   return cluster;
 }
 
+const TAU = Math.PI * 2;
+const mod2pi = (v) => ((v % TAU) + TAU) % TAU;
+const isArcShape = (s) => s && s.type === 'arc' && Array.isArray(s.joints) && s.joints.length >= 3 && (!s.subType || s.subType === 'CENTER');
+const isLineShape = (s) => s && s.type === 'line' && Array.isArray(s.joints) && s.joints.length >= 2;
+// The joints a curve ENDS on: a line's two, an arc's two rims (its centre, joints[0], is not an end).
+const endJoints = (s) => (s.type === 'arc' ? [s.joints[1], s.joints[2]] : [s.joints[0], s.joints[1]]);
+
+/**
+ * A curve at a corner, seen from the corner point P: its direction into the curve and what the fillet needs to trim it.
+ *   line: { kind:'line', u, far, len }          u = unit direction from P to the far end
+ *   arc:  { kind:'arc',  u, c, R, aP, bodyDir, span }   u = unit tangent into the arc; the arc runs `span` radians from P
+ *         (angle aP, direction bodyDir = +1 increasing angle) to its far end, keeping its centre c and radius R.
+ * `cornerJoint` is the shape's joint at the corner; `P` is where the corner is (the joint's position, or a virtual sharp).
+ */
+function legAt(state, shape, cornerJoint, P) {
+  const J = shape.joints, pt = (id) => state.joints.get(id);
+  if (shape.type === 'line') {
+    const far = pt(J[0] === cornerJoint ? J[1] : J[0]);
+    const len = Math.hypot(far.x - P.x, far.y - P.y);
+    return { kind: 'line', u: { x: (far.x - P.x) / (len || 1), y: (far.y - P.y) / (len || 1) }, far: { x: far.x, y: far.y }, len };
+  }
+  const c = pt(J[0]), start = pt(J[1]), end = pt(J[2]);
+  const atStart = J[1] === cornerJoint;
+  const far = atStart ? end : start;
+  const { dir } = arcSweepInfo(c, start, end, { sweep: shape.sweep });
+  const bodyDir = atStart ? dir : -dir;
+  const aP = Math.atan2(P.y - c.y, P.x - c.x);
+  const span = mod2pi((Math.atan2(far.y - c.y, far.x - c.x) - aP) * bodyDir);
+  return {
+    kind: 'arc', c: { x: c.x, y: c.y }, R: Math.hypot(far.x - c.x, far.y - c.y), aP, bodyDir, span,
+    u: { x: -bodyDir * Math.sin(aP), y: bodyDir * Math.cos(aP) }, far: { x: far.x, y: far.y }
+  };
+}
+
 /**
  * Find corner info at a specific joint.
- * A valid corner has exactly 2 lines meeting at the joint's coincident cluster.
+ * A valid corner has exactly 2 curves (lines, or arcs ending there) meeting at the joint's coincident cluster.
+ * Two arc-involving curves that already run tangent (a filleted corner, a smooth join) are not a corner: nothing to round.
  * @param {object} state
  * @param {string} jointId
  * @returns {object|null}
@@ -81,38 +120,46 @@ export function findCornerAtJoint(state, jointId) {
   // Construction lines (a Polygon's radials) hang off the corner but are not part of it: they do not count as a third
   // line. They stay attached through the fillet (applyFillet re-links them to the virtual sharp). A corner made ONLY
   // of construction lines still counts them (nothing else to fillet).
-  const lineShapes = (state.shapes || []).filter(s => s && s.type === 'line' && Array.isArray(s.joints) && s.joints.length >= 2);
-  const touches = (s) => cluster.has(s.joints[0]) !== cluster.has(s.joints[1]);
-  const solid = lineShapes.filter(s => !s.isConstruction);
-  const cornerLines = solid.filter(touches).length > 0 ? solid : lineShapes;
-  const incidentLines = [];
-  for (const s of cornerLines) {
-    const in0 = cluster.has(s.joints[0]);
-    const in1 = cluster.has(s.joints[1]);
-    if (in0 && !in1) {
-      incidentLines.push({ shape: s, cornerJoint: s.joints[0], otherJoint: s.joints[1], cornerIdx: 0 });
-    } else if (in1 && !in0) {
-      incidentLines.push({ shape: s, cornerJoint: s.joints[1], otherJoint: s.joints[0], cornerIdx: 1 });
-    }
+  const curves = (state.shapes || []).filter(s => isLineShape(s) || isArcShape(s));
+  // an arc touches a corner by ONE end in the cluster and its centre outside it; a line by one end
+  const touches = (s) => { const [e0, e1] = endJoints(s); return cluster.has(e0) !== cluster.has(e1) && !(s.type === 'arc' && cluster.has(s.joints[0])); };
+  const solid = curves.filter(s => !s.isConstruction);
+  const cornerCurves = solid.filter(touches).length > 0 ? solid : curves;
+  const incident = [];
+  for (const s of cornerCurves) {
+    if (!touches(s)) continue;
+    const ends = endJoints(s);
+    const idx = cluster.has(ends[0]) ? 0 : 1;
+    const base = s.type === 'arc' ? 1 : 0; // index of the first end in shape.joints
+    incident.push({ shape: s, cornerJoint: ends[idx], otherJoint: ends[1 - idx], cornerIdx: base + idx });
   }
 
-  if (incidentLines.length !== 2) return null;
+  if (incident.length !== 2) return null;
 
-  const [lineA, lineB] = incidentLines;
+  const [lineA, lineB] = incident;
   const pA = state.joints.get(lineA.otherJoint);
   const pB = state.joints.get(lineB.otherJoint);
   if (!pA || !pB) return null;
 
+  const cornerPt = { x: cJoint.x, y: cJoint.y };
+  const curveA = legAt(state, lineA.shape, lineA.cornerJoint, cornerPt);
+  const curveB = legAt(state, lineB.shape, lineB.cornerJoint, cornerPt);
+  if ((curveA.kind === 'arc' || curveB.kind === 'arc') && Math.abs(curveA.u.x * curveB.u.x + curveA.u.y * curveB.u.y) > TANGENT_DOT) return null;
+
   return {
     cornerJointId: jointId,
     cluster,
-    cornerPt: { x: cJoint.x, y: cJoint.y },
+    cornerPt,
     lineA,
     lineB,
+    curveA,
+    curveB,
     pA: { x: pA.x, y: pA.y },
     pB: { x: pB.x, y: pB.y }
   };
 }
+
+const TANGENT_DOT = 0.9999;
 
 /**
  * Find a corner near the given world point (within tolerance).
@@ -162,8 +209,89 @@ export function diagnoseNoFillet(state, worldPt, tolerance = 15) {
     return 'This corner is already filleted';
   }
   const lines = touching.filter(sh => sh.type === 'line');
-  if (lines.length > 2) return 'Fillet needs a corner between exactly two lines (T-junction)';
-  return 'Fillet needs a corner between two lines';
+  if (lines.length > 2 && arcs.length === 0) return 'Fillet needs a corner between exactly two lines (T-junction)';
+  const ends = touching.filter(sh => (isLineShape(sh) || isArcShape(sh)) && endJoints(sh).some(j => cluster.has(j)));
+  if (ends.length > 2) return 'Fillet needs a corner between exactly two lines or arcs (T-junction)';
+  if (ends.length === 2 && ends.some(sh => sh.type === 'arc')) return 'These curves already run tangent to each other: nothing to fillet';
+  return arcs.length ? 'Fillet needs a corner between two lines or arcs that meet at an end' : 'Fillet needs a corner between two lines';
+}
+
+/**
+ * Fillet geometry for two legs (legAt) meeting at P: the tangent points, the fillet centre and per-leg trim.
+ * line + line is the closed form (calculateFilletGeometry). Otherwise the centre is where each leg's offset curve
+ * (a line offset by r, or a circle of radius R - r / R + r about the arc's centre), taken on the side of the OTHER leg's
+ * direction (the inside of the corner), meet; the intersection nearest P whose tangent points fall on the legs is used.
+ * The result also carries insideA / insideB: true when the fillet lies inside that arc's circle.
+ */
+export function filletGeometryForLegs(P, legA, legB, requestedRadius = 5) {
+  if (legA.kind === 'line' && legB.kind === 'line') return calculateFilletGeometry(legA.far, P, legB.far, requestedRadius);
+  if (Math.abs(legA.u.x * legB.u.x + legA.u.y * legB.u.y) > TANGENT_DOT) {
+    return { valid: false, reason: 'Curves run tangent to each other (nothing to round)' };
+  }
+  const radius = Math.max(0.1, requestedRadius);
+  const dot = (a, b) => a.x * b.x + a.y * b.y;
+  const loci = [[legA, legB], [legB, legA]].map(([leg, other]) => {
+    let n = { x: -leg.u.y, y: leg.u.x };
+    if (dot(n, other.u) < 0) n = { x: -n.x, y: -n.y };
+    if (leg.kind === 'line') return { kind: 'line', p: { x: P.x + n.x * radius, y: P.y + n.y * radius }, u: leg.u };
+    const inside = dot(n, { x: leg.c.x - P.x, y: leg.c.y - P.y }) > 0;
+    return { kind: 'circle', c: leg.c, rho: inside ? leg.R - radius : leg.R + radius, inside };
+  });
+  const tooBig = loci.findIndex(l => l.kind === 'circle' && l.rho < COLLAPSE_TOL);
+  if (tooBig !== -1) return { valid: false, reason: `R = ${radius.toFixed(2)} is too large for the arc (its radius is ${[legA, legB][tooBig].R.toFixed(2)})` };
+
+  let candidates;
+  const [LA, LB] = loci;
+  if (LA.kind === 'line' || LB.kind === 'line') {
+    const ln = LA.kind === 'line' ? LA : LB, ci = LA.kind === 'line' ? LB : LA;
+    const w = { x: ln.p.x - ci.c.x, y: ln.p.y - ci.c.y };
+    const b = dot(w, ln.u), disc = b * b - (dot(w, w) - ci.rho * ci.rho);
+    candidates = disc < 0 ? [] : [-b - Math.sqrt(disc), -b + Math.sqrt(disc)].map(t => ({ x: ln.p.x + t * ln.u.x, y: ln.p.y + t * ln.u.y }));
+  } else {
+    const dx = LB.c.x - LA.c.x, dy = LB.c.y - LA.c.y, dist = Math.hypot(dx, dy);
+    const a = (LA.rho * LA.rho - LB.rho * LB.rho + dist * dist) / (2 * dist || 1), h2 = LA.rho * LA.rho - a * a;
+    if (!(dist > 1e-9) || h2 < 0) candidates = [];
+    else {
+      const h = Math.sqrt(h2), mx = LA.c.x + a * dx / dist, my = LA.c.y + a * dy / dist;
+      candidates = [{ x: mx + h * dy / dist, y: my - h * dx / dist }, { x: mx - h * dy / dist, y: my + h * dx / dist }];
+    }
+  }
+
+  // the tangent point of a leg for a candidate centre O, or the reason it does not trim that leg
+  const trim = (leg, O) => {
+    if (leg.kind === 'line') {
+      const d = dot({ x: O.x - P.x, y: O.y - P.y }, leg.u);
+      if (d <= COLLAPSE_TOL) return { reason: 'would start behind the corner' };
+      if (Math.abs(d - leg.len) < COLLAPSE_TOL) return { reason: 'would collapse a line to zero length; use a slightly different radius' };
+      return { t: { x: P.x + d * leg.u.x, y: P.y + d * leg.u.y } };
+    }
+    const dc = Math.hypot(O.x - leg.c.x, O.y - leg.c.y) || 1e-12;
+    const t = { x: leg.c.x + leg.R * (O.x - leg.c.x) / dc, y: leg.c.y + leg.R * (O.y - leg.c.y) / dc };
+    const delta = mod2pi((Math.atan2(t.y - leg.c.y, t.x - leg.c.x) - leg.aP) * leg.bodyDir);
+    if (delta * leg.R <= COLLAPSE_TOL) return { reason: 'would start behind the corner' };
+    if (Math.abs(leg.span - delta) * leg.R < COLLAPSE_TOL) return { reason: 'would collapse an arc to zero length; use a slightly different radius' };
+    if (delta > leg.span) return { reason: 'would run past the far end of the arc' };
+    return { t };
+  };
+  let best = null, why = 'does not fit this corner (no circle of that radius touches both curves)';
+  for (const O of candidates) {
+    const a = trim(legA, O), b = trim(legB, O);
+    if (a.reason || b.reason) { why = a.reason || b.reason; continue; }
+    const d = Math.hypot(O.x - P.x, O.y - P.y);
+    if (!best || d < best.d) best = { d, O, tA: a.t, tB: b.t };
+  }
+  if (!best) return { valid: false, reason: `R = ${radius.toFixed(2)} ${why}` };
+  return {
+    valid: true, radius, tA: best.tA, tB: best.tB, centerPt: best.O,
+    insideA: loci[0].kind === 'circle' ? loci[0].inside : undefined,
+    insideB: loci[1].kind === 'circle' ? loci[1].inside : undefined
+  };
+}
+
+/** The fillet geometry of a corner (findCornerAtJoint's result) for a radius. */
+export function cornerFilletGeometry(corner, radius) {
+  const a = corner.curveA || { kind: 'line', far: corner.pA }, b = corner.curveB || { kind: 'line', far: corner.pB };
+  return filletGeometryForLegs(corner.cornerPt, a, b, radius);
 }
 
 /**
@@ -242,7 +370,7 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
 export function applyFillet(state, cornerInfo, radius = 5) {
   if (!state || !cornerInfo) return null;
 
-  const geom = calculateFilletGeometry(cornerInfo.pA, cornerInfo.cornerPt, cornerInfo.pB, radius);
+  const geom = cornerFilletGeometry(cornerInfo, radius);
   if (!geom.valid) return { success: false, reason: geom.reason };
 
   // History is the caller's (tool layer) job, like every other tool -- do NOT saveState here, or one fillet takes two undo steps.
@@ -331,7 +459,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   shapes.push(arcShape);
   constraints.push(...arcConstraints);
 
-  // V is held on both trimmed lines. Pushed BEFORE removeOrphanJoints, which would otherwise delete V (it is
+  // V is held on both trimmed curves (a line: pointOnLine; an arc: the same constraint on its circle). Pushed BEFORE removeOrphanJoints, which would otherwise delete V (it is
   // referenced by constraints only, not by a shape).
   constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineA.shape.id });
   constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineB.shape.id });
@@ -342,9 +470,12 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   }
   removeOrphanJoints(state);
 
-  // Add geometric tangent constraints between the lines and the arc
-  constraints.push({ type: 'tangent', line: lineA.shape.id, circle: arcShape.id });
-  constraints.push({ type: 'tangent', line: lineB.shape.id, circle: arcShape.id });
+  // Add geometric tangent constraints between each trimmed curve and the fillet arc: line -> arc `tangent {line, circle}`;
+  // arc -> arc `tangent {shapes}` on the branch the fillet lies on (inside the arc's circle: internal, outside: external).
+  [[lineA, geom.insideA], [lineB, geom.insideB]].forEach(([leg, inside]) => {
+    if (leg.shape.type === 'arc') constraints.push({ type: 'tangent', shapes: [leg.shape.id, arcShape.id], branch: inside ? 'internal' : 'external' });
+    else constraints.push({ type: 'tangent', line: leg.shape.id, circle: arcShape.id });
+  });
 
   // Driving RADIUS dimension on the new arc -- same shape the Dimension tool makes for an arc
   // (distance + isRadius + shape), so the fillet is a live, editable radius.
@@ -384,18 +515,20 @@ export function applyFillet(state, cornerInfo, radius = 5) {
 
 // ---- radius edit support for an existing fillet (arc.filletSharp = its virtual-sharp joint V) ----
 
-/** The two trimmed lines of a fillet arc, with their far (non-arc) and rim (arc) joints. */
-// The fillet's two tangent LEGS ({ line, rim: the joint on the arc, far: the other end }). Exported for the dimension seam (task 550): a
-// fillet radius edit judges the legs by filletHasCollapsedLine and everything else by findCollapsedShape.
+/** The fillet's trimmed legs (a line or an arc each), with their far (non-fillet) and rim (on the fillet arc) joints. */
+// The fillet's two tangent LEGS ({ shape: the trimmed line or arc, rim: its joint on the fillet arc, far: its other end }). Exported for the
+// dimension seam (task 550): a fillet radius edit judges the legs by filletHasCollapsedLine and everything else by findCollapsedShape.
 export function filletLines(state, arc) {
   const out = [];
   for (const c of (state.constraints || [])) {
-    if (!c || c.type !== CONSTRAINT_TYPES.TANGENT || c.circle !== arc.id || !c.line) continue;
-    const line = (state.shapes || []).find(sh => sh && sh.id === c.line);
-    if (!line || !Array.isArray(line.joints)) continue;
-    const rim = line.joints.find(j => arc.joints.includes(j));
-    const far = line.joints.find(j => !arc.joints.includes(j));
-    if (rim && far) out.push({ line, rim, far });
+    if (!c || c.type !== CONSTRAINT_TYPES.TANGENT) continue;
+    const id = c.circle === arc.id && c.line ? c.line : (Array.isArray(c.shapes) && c.shapes.includes(arc.id) ? c.shapes.find(s => s !== arc.id) : null);
+    const shape = id && (state.shapes || []).find(sh => sh && sh.id === id);
+    if (!shape || !Array.isArray(shape.joints)) continue;
+    const ends = shape.type === 'arc' ? endJoints(shape) : shape.joints;
+    const rim = ends.find(j => arc.joints.slice(1).includes(j));
+    const far = ends.find(j => j !== rim);
+    if (rim && far) out.push({ shape, rim, far });
   }
   return out;
 }
@@ -411,7 +544,7 @@ export function seedFilletForRadius(state, arc, radius) {
   const ls = filletLines(state, arc);
   if (!V || ls.length !== 2) return { ok: false, reason: 'fillet geometry is incomplete' };
   const [A, B] = ls;
-  const geom = calculateFilletGeometry(state.joints.get(A.far), V, state.joints.get(B.far), radius);
+  const geom = filletGeometryForLegs(V, legAt(state, A.shape, A.rim, V), legAt(state, B.shape, B.rim, V), radius);
   if (!geom.valid) return { ok: false, reason: geom.reason };
   const put = (id, p) => { const j = state.joints.get(id); if (j) { j.x = p.x; j.y = p.y; } };
   put(arc.joints[0], geom.centerPt);
@@ -420,7 +553,7 @@ export function seedFilletForRadius(state, arc, radius) {
   return { ok: true };
 }
 
-/** True if either trimmed line of this fillet has collapsed to (near) zero length. */
+/** True if either trimmed leg (line or arc) of this fillet has collapsed to (near) zero length. */
 export function filletHasCollapsedLine(state, arc) {
   for (const { rim, far } of filletLines(state, arc)) {
     const a = state.joints.get(rim), b = state.joints.get(far);
@@ -431,25 +564,51 @@ export function filletHasCollapsedLine(state, arc) {
 
 // ---- two-line pick (Fusion-style): click line 1, click line 2 ----
 
-/** Nearest LINE shape whose segment passes within `tolerance` of `worldPt`, or null. */
-export function findLineAtPoint(state, worldPt, tolerance = 10) {
+/** Distance from `p` to a line segment, or to an arc's drawn sweep (not its whole circle); null for any other shape. */
+function curveDistance(state, s, p) {
+  if (isLineShape(s)) {
+    const a = state.joints.get(s.joints[0]), b = state.joints.get(s.joints[1]);
+    if (!a || !b) return null;
+    const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+    let t = L2 === 0 ? 0 : ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+  if (isArcShape(s)) {
+    const c = state.joints.get(s.joints[0]), a = state.joints.get(s.joints[1]), b = state.joints.get(s.joints[2]);
+    if (!c || !a || !b) return null;
+    const info = arcSweepInfo(c, a, b, { sweep: s.sweep });
+    const R = Math.hypot(a.x - c.x, a.y - c.y);
+    const rel = mod2pi((Math.atan2(p.y - c.y, p.x - c.x) - info.a0) * info.dir);
+    if (rel <= info.span) return Math.abs(Math.hypot(p.x - c.x, p.y - c.y) - R);
+    return Math.min(Math.hypot(p.x - a.x, p.y - a.y), Math.hypot(p.x - b.x, p.y - b.y));
+  }
+  return null;
+}
+
+function nearestCurve(state, worldPt, tolerance, accept) {
   if (!state || !state.joints || !worldPt) return null;
   let best = null, bestD = tolerance;
   for (const s of (state.shapes || [])) {
-    if (!s || s.type !== 'line' || !Array.isArray(s.joints) || s.joints.length < 2) continue;
-    const a = state.joints.get(s.joints[0]), b = state.joints.get(s.joints[1]);
-    if (!a || !b) continue;
-    const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
-    let t = L2 === 0 ? 0 : ((worldPt.x - a.x) * dx + (worldPt.y - a.y) * dy) / L2;
-    t = Math.max(0, Math.min(1, t));
-    const d = Math.hypot(worldPt.x - (a.x + t * dx), worldPt.y - (a.y + t * dy));
-    if (d < bestD) { bestD = d; best = s; }
+    if (!s || !accept(s)) continue;
+    const d = curveDistance(state, s, worldPt);
+    if (d != null && d < bestD) { bestD = d; best = s; }
   }
   return best;
 }
 
+/** Nearest LINE shape whose segment passes within `tolerance` of `worldPt`, or null. */
+export function findLineAtPoint(state, worldPt, tolerance = 10) {
+  return nearestCurve(state, worldPt, tolerance, s => s.type === 'line');
+}
+
+/** Nearest LINE or ARC (its drawn sweep) within `tolerance` of `worldPt`, or null: what a Fillet pick can land on. */
+export function findFilletShapeAtPoint(state, worldPt, tolerance = 10) {
+  return nearestCurve(state, worldPt, tolerance, s => s.type === 'line' || s.type === 'arc');
+}
+
 /**
- * The fillet corner formed by exactly these two line shapes (they must meet at a shared/coincident joint and
+ * The fillet corner formed by exactly these two shapes (lines or arcs; they must meet at a shared/coincident joint and
  * nothing else may touch that corner), or null. Same shape as findCornerAtJoint's result.
  */
 export function findCornerBetweenLines(state, lineA, lineB) {

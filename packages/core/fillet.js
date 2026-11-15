@@ -16,6 +16,7 @@ import { docUnit } from './settings-manager.js';
 import { nextDimensionName } from './parameters.js';
 import { newJointId } from './shape-id.js';
 import { inActiveSketch } from './sketch-model.js';
+import { ConstraintManager } from './constraint-manager.js';
 
 /** A trimmed line shorter than this (world mm) counts as collapsed. */
 export const COLLAPSE_TOL = 1e-3;
@@ -396,7 +397,7 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
  * @param {number} [radius=5] - Desired fillet radius
  * @returns {object|null}
  */
-export function applyFillet(state, cornerInfo, radius = 5) {
+export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
   if (!state || !cornerInfo) return null;
   // Fusion edits only the active sketch: a corner with a curve of another sketch is refused, never written into the active one (task 657)
   if ([cornerInfo.lineA, cornerInfo.lineB].some((l) => l && l.shape && !inActiveSketch(state, l.shape))) return { success: false, reason: 'Fillet works in the active sketch only' };
@@ -407,6 +408,11 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   // History is the caller's (tool layer) job, like every other tool -- do NOT saveState here, or one fillet takes two undo steps.
 
   const { joints, shapes, constraints } = state;
+  const equalTo = options && options.equalTo ? options.equalTo : null;
+  if (equalTo && !(shapes || []).some((s) => s && s.id === equalTo && (s.type === 'arc' || s.type === 'circle'))) {
+    return { success: false, reason: 'Target fillet arc not found' };
+  }
+  const snapBefore = equalTo && typeof state._captureSnapshot === 'function' ? state._captureSnapshot() : null;
   const { cluster, lineA, lineB } = cornerInfo;
   const { tA, tB, centerPt } = geom;
   const cornerPt0 = { x: cornerInfo.cornerPt.x, y: cornerInfo.cornerPt.y };
@@ -537,29 +543,46 @@ export function applyFillet(state, cornerInfo, radius = 5) {
     else constraints.push({ type: 'tangent', line: leg.shape.id, circle: arcShape.id });
   });
 
-  // Driving RADIUS dimension on the new arc -- same shape the Dimension tool makes for an arc
-  // (distance + isRadius + shape), so the fillet is a live, editable radius.
-  const radiusConstraint = {
-    type: CONSTRAINT_TYPES.DISTANCE,
-    shape: arcShape.id,
-    value: finalRadius,
-    isRadius: true,
-    isDriven: false,
-    driven: false,
-    name: nextDimensionName(constraints), // TASK 535: this dimension is pushed directly (not through addConstraint), so it takes its automatic name here
-    offset: Math.max(finalRadius * 0.6, 6)
-  };
-  constraints.push(radiusConstraint);
+  let radiusConstraint = null;
+  let equalConstraint = null;
+  if (equalTo) {
+    // Share the first corner's radius through an EQUAL constraint instead of adding a duplicate radius dimension (task 678).
+    equalConstraint = ConstraintManager.createConstraint(
+      state,
+      CONSTRAINT_TYPES.EQUAL,
+      { shapes: [arcShape.id, equalTo] },
+      { source: 'fillet', autoSolve: true }
+    );
+    if (!equalConstraint) {
+      if (snapBefore && typeof state._restoreSnapshot === 'function') state._restoreSnapshot(snapBefore);
+      return { success: false, reason: 'Could not constrain fillet equal' };
+    }
+  } else {
+    // Driving RADIUS dimension on the new arc -- same shape the Dimension tool makes for an arc
+    // (distance + isRadius + shape), so the fillet is a live, editable radius.
+    radiusConstraint = {
+      type: CONSTRAINT_TYPES.DISTANCE,
+      shape: arcShape.id,
+      value: finalRadius,
+      isRadius: true,
+      isDriven: false,
+      driven: false,
+      name: nextDimensionName(constraints), // TASK 535: this dimension is pushed directly (not through addConstraint), so it takes its automatic name here
+      offset: Math.max(finalRadius * 0.6, 6)
+    };
+    constraints.push(radiusConstraint);
 
-  // Solve to ensure mathematical consistency
-  if (state.engine && typeof state.engine.solve === 'function') {
-    state.engine.solve(200);
+    // Solve to ensure mathematical consistency
+    if (state.engine && typeof state.engine.solve === 'function') {
+      state.engine.solve(200);
+    }
   }
 
   return {
     success: true,
     arc: arcShape,
     radiusConstraint,
+    equalConstraint,
     radius: finalRadius,
     requestedRadius: radius,
     centerPt,
@@ -597,6 +620,30 @@ export function filletLines(state, arc) {
  */
 export function isLiveFillet(state, arc) {
   return !!(state && arc && arc.filletSharp && state.joints && state.joints.has(arc.filletSharp) && filletLines(state, arc).length === 2);
+}
+
+/** Other live fillet arcs connected to `arc` through shape-mode EQUAL constraints (task 678). */
+export function equalFilletArcs(state, arc) {
+  if (!state || !arc) return [];
+  const seen = new Set([arc.id]);
+  const queue = [arc.id];
+  const out = [];
+  const byId = new Map((state.shapes || []).filter(Boolean).map((s) => [s.id, s]));
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const c of (state.constraints || [])) {
+      if (!c || c.type !== CONSTRAINT_TYPES.EQUAL || !Array.isArray(c.shapes) || c.shapes.length !== 2) continue;
+      const otherId = c.shapes[0] === cur ? c.shapes[1] : (c.shapes[1] === cur ? c.shapes[0] : null);
+      if (!otherId || seen.has(otherId)) continue;
+      seen.add(otherId);
+      const other = byId.get(otherId);
+      if (other && other.type === 'arc' && isLiveFillet(state, other)) {
+        out.push(other);
+        queue.push(otherId);
+      }
+    }
+  }
+  return out;
 }
 
 /**

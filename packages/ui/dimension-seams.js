@@ -9,7 +9,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist, perpendicularDistance, isPointLineDistance, getLineIntersection } from '#core/geometry.js';
 import { measureShapeSizes, findCollapsedShape, withIndefiniteArticle } from '#core/constraint-verifier.js';
-import { seedFilletForRadius, filletHasCollapsedLine, filletLines, isLiveFillet } from '#core/fillet.js';
+import { seedFilletForRadius, filletHasCollapsedLine, filletLines, isLiveFillet, equalFilletArcs } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { solveGivingWay } from '#core/creation-placement.js';
@@ -95,9 +95,18 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     // refuse the one singular value where a line would collapse. Each is seeded first; a refusal restores the ones already seeded.
     // (a fillet arc that lost a leg or its virtual sharp is a plain arc here: isLiveFillet, task 649)
     const fillets = list.map(e => (e.c.isRadius && e.c.shape && state.shapes) ? state.shapes.find(s => s.id === e.c.shape && s.type === 'arc' && isLiveFillet(state, s)) || null : null);
+    const allFillets = [];
+    const seenFillets = new Set();
     for (let i = 0; i < list.length; i++) {
       if (!fillets[i]) continue;
-      const seeded = seedFilletForRadius(state, fillets[i], list[i].value);
+      for (const f of [fillets[i], ...equalFilletArcs(state, fillets[i])]) {
+        if (!f || seenFillets.has(f.id)) continue;
+        seenFillets.add(f.id);
+        allFillets.push({ arc: f, value: list[i].value });
+      }
+    }
+    for (const f of allFillets) {
+      const seeded = seedFilletForRadius(state, f.arc, f.value);
       if (!seeded.ok) { restoreAll(); return { reverted: true, clash: '', reason: seeded.reason }; }
     }
     // Walk the values in steps of at most STEP_FRACTION of each old value, solving at each: one big jump lets the solver land on
@@ -131,14 +140,14 @@ export function commitDimensionEdits(state, edits, opts = {}) {
       if (result && result.converged === false) break;
     }
     list.forEach(e => { e.c.value = e.value; });
-    const collapsedFillet = fillets.findIndex(f => f && filletHasCollapsedLine(state, f));
-    if (collapsedFillet !== -1) return revert({ reverted: true, clash: '', reason: `R = ${formatUnit(list[collapsedFillet].value, docUnit(), { unit: true })} collapsed a line to zero length` });
+    const collapsedFillet = allFillets.find(f => filletHasCollapsedLine(state, f.arc));
+    if (collapsedFillet) return revert({ reverted: true, clash: '', reason: `R = ${formatUnit(collapsedFillet.value, docUnit(), { unit: true })} collapsed a line to zero length` });
     // Any constraint satisfied by collapsing a line / arc / circle to a point (or an arc's two ends together) is no solution (task 521,
     // task 550); the edited dimension's own size is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET
     // radius edit goes through the same rule for every shape (the fillet arc included: its two ends must not meet) EXCEPT the fillet's own
     // tangent legs, judged above by filletHasCollapsedLine: they legitimately get very short as R approaches the singular value (a short leg,
     // under 1 % of its length, is no collapse; only a zero-length leg is).
-    const legs = new Set(fillets.filter(Boolean).flatMap(f => filletLines(state, f).map(l => l.shape.id)));
+    const legs = new Set(allFillets.flatMap(f => filletLines(state, f.arc).map(l => l.shape.id)));
     const collapsed = findCollapsedShape(state, sizesBefore, legs);
     if (collapsed) {
       const own = list.find((e, i) => !fillets[i]) || list[0];

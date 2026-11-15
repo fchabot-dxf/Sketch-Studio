@@ -38,7 +38,7 @@ import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, hand
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
 import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletInputValid, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
-import { handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
+import { setupOffsetTool, handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
 import { isDimension } from '#core/parameters.js';
 import { setupPatternTool, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS, PATTERN_INLINE_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658 + 662
 import { initCursors } from '#ui/cursor-manager.js';
@@ -946,6 +946,7 @@ function handlePointerUp(e, svg, state) {
 function setupEventListeners(svg, state) {
     dbg.log('input', '[input-manager] Attaching pointer listeners to svg', !!svg);
     if(!svg) return;
+    setupOffsetTool({ exit: () => switchToTool(state, TOOL_MODES.SELECT) }); // TASK 667: Offset ends after OK (Fusion parity)
     setupPatternTool({ exit: () => switchToTool(state, TOOL_MODES.SELECT), canvas: () => svg }); // TASK 658: the pattern dialog's tool exit and canvas
         // TASK 562: touch and hold = the right-click menu. ONE detector (#ui/long-press.js) owns the hold on every browser: iOS Safari fires no
         // `contextmenu` for it and Android Chrome does (that one is swallowed in the contextmenu listener below, so the menu opens once).

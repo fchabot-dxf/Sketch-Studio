@@ -1,3 +1,4 @@
+import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { patternsAfterDelete } from './pattern.js';
 import { SolverConfig } from './solver-config.js';
@@ -28,10 +29,26 @@ export function deleteConstraints(state, constraintsOrIds) {
   try { if (typeof state.saveState === 'function') state.saveState('delete constraints'); } catch (_) {}
 
   let removed = 0;
+  const seen = new Set();
   for (const c of toDelete) {
+    if (seen.has(c)) continue;
+    seen.add(c);
     // Remove by reference or by index/id
     const idx = state.constraints.indexOf(c);
-    if (idx !== -1) { state.constraints.splice(idx, 1); removed++; continue; }
+    if (idx !== -1) {
+      const target = state.constraints[idx];
+      if (target && target.type === CONSTRAINT_TYPES.OFFSET && target.dimensioned !== false) {
+        target.dimensioned = false;
+        delete target.name;
+        delete target.expression;
+        delete target.isDriven;
+        delete target.driven;
+        delete target.drivenReason;
+        removed++;
+        continue;
+      }
+      state.constraints.splice(idx, 1); removed++; continue;
+    }
     // Try matching by properties (heuristic)
     for (let i = state.constraints.length - 1; i >= 0; i--) {
       const cc = state.constraints[i];

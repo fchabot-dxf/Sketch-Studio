@@ -384,3 +384,9 @@ export function findCollapsedShape(state, before, skip = null) {
     }
     return null;
 }
+
+/** Task 667: shared indefinite article ("an arc", "a line", "a circle"). */
+export function withIndefiniteArticle(noun) {
+    const s = String(noun || '');
+    return `${/^[aeiou]/i.test(s) ? 'an' : 'a'} ${s}`;
+}

@@ -73,6 +73,7 @@ function guard(label, c, extraShapes = [], scene = false) {
   const radiusCol = {};
   const colMax = (k) => { let v = 0; for (let i = 0; i < asm.m; i++) v = Math.max(v, Math.abs(asm.J[i * n + k])); return v; };
   solver._radiusShapes.forEach((s, q) => { radiusCol[s.id] = colMax(solver._nJointVars + q); });
+  (solver._scalarConstraints || []).forEach((_, q) => { radiusCol[`scalar_${q}`] = colMax(solver._nJointVars + solver._radiusShapes.length + q); });
   solver._freeIds.forEach((id, v) => { radiusCol[id] = Math.max(colMax(v * 2), colMax(v * 2 + 1)); });
   console.log(`ok ${label} (rows ${asm.m}, columns ${n}, max diff ${worst.toExponential(1)})`);
   return radiusCol;
@@ -139,6 +140,16 @@ for (const [label, c] of [
 ]) {
   const col = guard(label, c);
   for (const id of ['c', 'd']) assert.ok(col[id] > 0.5, `${label}: the ${id} column is ${col[id]} (expected the ray row to read the offset's start and end)`);
+  checked++;
+}
+// task 667: an undimensioned offset declares `dimensioned: false` so d becomes a generic scalar unknown (column checked against FD).
+for (const [label, c] of [
+  ['offset (undimensioned line, free d)', { type: 'offset', shapes: ['L1', 'L2'], rev: [false], sides: [1], joins: [], closed: false, value: 1, dimensioned: false }],
+  ['offset (undimensioned circle, free d)', { type: 'offset', shapes: ['C1', 'C2'], rev: [false], sides: [1], joins: [], closed: true, value: 1, dimensioned: false }],
+  ['offset (undimensioned arc, free d)', { type: 'offset', shapes: ['A1', 'A2'], rev: [false], sides: [-1], joins: [], closed: false, value: 1, dimensioned: false }],
+]) {
+  const col = guard(label, c);
+  assert.ok(col.scalar_0 > 0.5, `${label}: the free scalar column scalar_0 is ${col.scalar_0} (expected non-zero d derivative)`);
   checked++;
 }
 // The angle row's measured SECTOR (task 553, #core/angle-sector.js): every ray / turn combination, values past 180, and poses on both sides

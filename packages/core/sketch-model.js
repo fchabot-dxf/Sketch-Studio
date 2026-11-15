@@ -174,6 +174,28 @@ const operandsOf = (c) => {
 export function activeSketchPick(state, shape, inert = inertEntities(state)) {
   return !!shape && inActiveSketch(state, shape) && !isShapeInert(inert, shape.id);
 }
+/** A pickScene narrowed to the ACTIVE sketch (Offset and Mirror search it, so another sketch's curve or point nearer the pointer never shadows an
+ *  active one, task 660): the origin and the axes belong to no sketch and stay. */
+export function activeSketchScene(state, scene) {
+  const joints = new Map();
+  for (const [id, j] of scene.joints) if (id === ORIGIN_ID || inActiveSketch(state, j)) joints.set(id, j);
+  return { ...scene, joints, shapes: scene.shapes.filter((s) => s.reference || inActiveSketch(state, s)) };
+}
+/** The scene of the curves of OTHER visible, unlocked sketches (their end points resolve them, and may be hit): where a press that found nothing in the active sketch looks to warn. */
+export function otherSketchScene(state, scene) {
+  return { ...scene, shapes: scene.shapes.filter((s) => otherSketchPick(state, s, scene.inert)) };
+}
+/** A SHAPE of another VISIBLE, UNLOCKED sketch (not an axis): not a pick of the five active-sketch tools, but the user aimed at it (task 660). */
+export function otherSketchPick(state, shape, inert = inertEntities(state)) {
+  return !!shape && !shape.reference && !inActiveSketch(state, shape) && !isShapeInert(inert, shape.id);
+}
+/** THE warning of Fillet, Trim, Break, Offset and Mirror (task 660), the ONE place its text is made: used on a curve of another visible, unlocked
+ *  sketch -> "<Tool> works in the active sketch: make <Sketch name> active first"; null for anything else (an active curve, a locked / hidden sketch, nothing). */
+export function otherSketchWarning(state, toolName, shape, inert = inertEntities(state)) {
+  if (!otherSketchPick(state, shape, inert)) return null;
+  const sk = (state.sketches || []).find((k) => k.id === sketchOf(shape));
+  return sk ? `${toolName} works in the active sketch: make ${sk.name} active first` : null;
+}
 export const isJointInert = (inert, id) => !!inert && (inert.lockedJ.has(id) || inert.hiddenJ.has(id));
 export const isShapeInert = (inert, id) => !!inert && (inert.lockedS.has(id) || inert.hiddenS.has(id));
 /** A constraint / dimension is out of reach when ANY operand is locked, or ALL its operands are hidden (it is drawn while one shows). */

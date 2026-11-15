@@ -5,7 +5,8 @@
 import { screenToWorld } from '#ui/coords.js';
 import { trimShape } from '#core/trim.js';
 import { SNAP } from '#core/constants.js';
-import { inertEntities, activeSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not trimmed; TASK 659: only the active sketch is (the shared pick rule), its curves alone cut
+import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's line warns
+import { inertEntities, activeSketchPick, otherSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not trimmed; TASK 659: only the active sketch is (the shared pick rule), its curves alone cut
 
 let hover = null; // { shapeId, t, segStart, segEnd } current hover interval
 const OVERLAY_ID = 'trim-tool-overlay';
@@ -56,7 +57,11 @@ export function handleTrimPointerDown(e, ctx, state, viewState) {
   if (!svg) return false;
   const world = screenToWorld(svg, e.clientX, e.clientY);
   const hit = findTrimInterval(world, state, svg, viewState);
-  if (!hit) return false;
+  if (!hit) {
+    const scale = getScale(svg, viewState);
+    const other = nearestLine(world, state, SNAP.LINE_PX / scale, (s, inert) => otherSketchPick(state, s, inert));
+    return other ? warnOtherSketch(state, 'Trim', other.shape) : false; // an active line wins; only with none in reach, another sketch's line warns (no undo step)
+  }
 
   try { state.saveState?.('trim'); } catch (_) {}
 
@@ -75,14 +80,12 @@ export function handleTrimPointerUp() {
   /* no drag op */
 }
 
-function findTrimInterval(worldPt, state, svg, viewState) {
-  const scale = getScale(svg, viewState);
-  const thresh = SNAP.LINE_PX / scale;
-  let bestShape = null, bestDist = thresh, bestT = 0;
-
+// the nearest line within `thresh` that `include(shape, inert)` accepts: { shape, t } or null (the pick rule is searched, never applied after)
+function nearestLine(worldPt, state, thresh, include) {
+  let best = null, bestDist = thresh;
   const inert = inertEntities(state);
   for (const shape of (state.shapes || [])) {
-    if (shape.type !== 'line' || !activeSketchPick(state, shape, inert)) continue;
+    if (shape.type !== 'line' || !include(shape, inert)) continue;
     const [aId, bId] = shape.joints;
     const jA = state.joints.get(aId);
     const jB = state.joints.get(bId);
@@ -92,8 +95,16 @@ function findTrimInterval(worldPt, state, svg, viewState) {
     const px = jA.x + t * (jB.x - jA.x);
     const py = jA.y + t * (jB.y - jA.y);
     const d = Math.hypot(worldPt.x - px, worldPt.y - py);
-    if (d < bestDist) { bestDist = d; bestShape = shape; bestT = t; }
+    if (d < bestDist) { bestDist = d; best = { shape, t }; }
   }
+  return best;
+}
+
+function findTrimInterval(worldPt, state, svg, viewState) {
+  const scale = getScale(svg, viewState);
+  const thresh = SNAP.LINE_PX / scale;
+  const near = nearestLine(worldPt, state, thresh, (s, inert) => activeSketchPick(state, s, inert));
+  const bestShape = near && near.shape, bestT = near ? near.t : 0;
 
   if (!bestShape) return null;
 

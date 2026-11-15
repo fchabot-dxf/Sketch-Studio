@@ -31,11 +31,11 @@ function injectStyles() {
   body .sk-footer-start { gap: 4px; }
   body .sk-footer-end { gap: 2px; }
 }
-/* The short viewport (a phone in landscape, short-viewport.js): a footer row would cost the canvas 45 px of 360, so the footer FLOATS over the canvas's bottom edge, right of the
+/* The short viewport (a phone in landscape, short-viewport.js): a footer row would cost the canvas 45 px of 360, so the footer FLOATS INSIDE the canvas's bottom-left corner (TASK 676: inset by --sk-canvas-inset, the same as the corner buttons; --sk-canvas-edge is a host's gap between the rail / viewport and its canvas frame, 0 when the canvas is flush), right of the
    tool rail (no background, only the buttons take the pointer) and reserves no height: the canvas keeps its share. */
 @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
   :root { --sk-footer-h: 0px; --sk-rail-w: 117px; } /* TASK 647: the tool-ribbon rail's width (24 px handle room + 2 + 44 icons + 44 section names + 2 + 1 border) */
-  body .sk-footer, body .sk-statusbar { position: fixed !important; left: var(--sk-rail-w); right: 0; bottom: 0; height: var(--sk-footer-btn-h); padding: 0 8px !important; gap: 6px; background: transparent !important; border: 0 !important; box-shadow: none !important; pointer-events: none; z-index: 30; }
+  body .sk-footer, body .sk-statusbar { position: fixed !important; left: calc(var(--sk-rail-w) + var(--sk-canvas-edge, 0px)); right: 0; bottom: calc(var(--sk-canvas-edge, 0px) + var(--sk-canvas-inset, 8px)); height: var(--sk-footer-btn-h); padding: 0 var(--sk-canvas-inset, 8px) !important; gap: 6px; background: transparent !important; border: 0 !important; box-shadow: none !important; pointer-events: none; z-index: 30; }
   body .sk-footer, body .sk-statusbar { justify-content: flex-start !important; } /* one cluster at the bottom-left, clear of a host's own right-hand panel (Pen Plotter's Design panel) */
   body .sk-footer-end { margin-left: 0; }
   body .sk-footer .sk-history-btn, body .sk-footer .sk-footer-btn, body .sk-statusbar .sk-history-btn, body .sk-statusbar .sk-footer-btn { pointer-events: auto; background: var(--sk-header-bg, #f1f5f9); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }

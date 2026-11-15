@@ -55,6 +55,17 @@ export async function runPhoneLandscape(hostName) {
         const stripRect = await rectOf(`document.querySelector('.sk-doctabs')`);
         const share = cv.h / size.h;
         assert(share >= 0.6, tag + `the canvas is ${Math.round(share * 100)} % of the height (>= 60 %): ${JSON.stringify(cv)}`);
+        // TASK 676: the floating footer cluster lies FULLY INSIDE the canvas frame (bottom-left), inset at least as far as the canvas's top-right corner button
+        const cornerBtn = await rectOf(`document.querySelector('.sk-canvas-corner button')`);
+        const cornerInset = Math.min(cornerBtn.top - cv.top, cv.right - cornerBtn.right);
+        assert(cornerInset >= 8 - 1, tag + 'the corner button is inset from the canvas: ' + cornerInset);
+        const fbtns = await evalJs(`[...document.querySelectorAll('.sk-footer-btn, .sk-history-btn')].map((e) => { const r = e.getBoundingClientRect(); return { id: e.id, left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height }; }).filter((r) => r.w > 0)`);
+        assert(fbtns.length >= 4, tag + 'the footer buttons are shown: ' + fbtns.length);
+        for (const f of fbtns) {
+          assert(f.h >= 44, tag + `footer button ${f.id} keeps 44 px (${f.h})`);
+          assert(f.left - cv.left >= cornerInset - 0.5 && cv.bottom - f.bottom >= cornerInset - 0.5 && f.top >= cv.top && f.right <= cv.right,
+            tag + `footer button ${f.id} lies inside the canvas, inset >= ${cornerInset} px (the corner button's): button ${JSON.stringify(f)}, canvas ${JSON.stringify(cv)}`);
+        }
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-ribbon')).flexDirection`), 'column', tag + 'the ribbon is a column (a rail)');
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), 'none', tag + 'no header bar in short landscape');
         assert(rail.left <= 26 && rail.w <= 100 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));

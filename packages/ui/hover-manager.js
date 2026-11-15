@@ -5,8 +5,9 @@ import { findSnap } from '#ui/snap-detection.js';
 import { screenToWorld, getZoomFactor } from '#ui/coords.js';
 import { glyphPickHit } from '#ui/fusion-glyphs.js';
 import SettingsManager from '#core/settings-manager.js';
+import { ACTIVE_SKETCH_HOVER_TOOLS } from '#core/constants.js';
 import { pickableShapes } from '#core/reference-lines.js';
-import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered
+import { pickScene, pickableConstraints, activeSketchScene } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered; TASK 675: active-sketch tools hover only active sketch
 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly
@@ -95,8 +96,9 @@ export function setHoverFromSnap(state) {
 }
 
 export function updateHover(svg, screenX, screenY, state) {
-    // Find potential targets via snap system
-    const scene = pickScene(state, pickableShapes(state));
+    // Find potential targets via snap system (task 675: active-sketch tools narrow to activeSketchScene so non-active curves neither highlight nor shadow)
+    const picked = pickScene(state, pickableShapes(state));
+    const scene = ACTIVE_SKETCH_HOVER_TOOLS.includes(state.currentTool) ? activeSketchScene(state, picked) : picked;
     const hoverSnapResult = findSnap(scene.joints, scene.shapes, svg, {x: screenX, y: screenY}, [], false, false, 1.0);
     
     // Extract hits

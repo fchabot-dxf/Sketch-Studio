@@ -6,9 +6,13 @@
 // or the green check (done-button.js, declared in input-manager DONE_ACTIONS) applies it: ONE undo step (recordConstraintStep). Esc cancels:
 // no change, no undo step. The tool stays on for the next chain (as Fillet, Trim and Break do; Fusion's Offset command ends after OK).
 // A press on another curve picks its chain instead; a press that pans / pinches (the view moved) keeps everything; an Undo / Redo cancels.
-// The preview goes through ONE renderer (renderOffsetOverlay). The drag handle of a later task anchors at #core/offset.js offsetHandleAnchor
-// (the box sits beside that anchor already).
+// The preview goes through ONE renderer (renderOffsetOverlay). TASK 652: while the box is open the shared drag ARROW (#ui/drag-arrow-handle.js,
+// as the fillet's) sits at #core/offset.js offsetHandleAnchor, pointing the way the distance grows; dragging it (mouse or finger, ONE path)
+// sets the distance live through the SAME state as typing (_open.d, written into the box). Dragging it across the source FLIPS the side (the
+// offset follows the pointer to the other side of the curve); a distance too small to show in the box (< 0.01 mm) is held at 0.01 mm.
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
+import { snapBoostFor } from '#ui/snap-detection.js';
+import { dragArrowSvg, dragArrowHit } from '#ui/drag-arrow-handle.js';
 import {
   offsetChainOf, offsetChainGeometry, offsetSideAt, offsetHandleAnchor, offsetArcSpan, applyOffset, defaultOffsetDistance, parseOffsetDistance,
   OFFSET_UNDO_LABEL
@@ -25,10 +29,13 @@ const OVERLAY_ID = 'offset-tool-overlay';
 export const OFFSET_INPUT_ID = 'offset-distance-input';
 const PRESS_SLOP_PX = 6;
 const HINT_MS = 6000;
+const MIN_DRAG_MM = 0.01;
 
 let currentDistance = null; // WORLD mm; the last distance used (survives tool switches for the session)
 let _distanceUnit = null;   // the document unit the default was seeded for; a unit change re-seeds it
 let _open = null;           // { chain, pickId, side, d, el, svg, state, unsubHistory } while the distance box is open
+let _hover = false;         // the pointer is over the arrow (it draws darker)
+let _drag = null;           // { pointerId, grab } while the arrow is dragged (grab = arrow point minus pointer, world)
 let _press = null;          // a press on the canvas while the box is open: a click / tap sets the side on release, a pan / pinch does not
 let _viewListening = false;
 let _committing = false;
@@ -59,6 +66,12 @@ export function resetOffsetState() { cancelAll(); }
 export function handleOffsetPointerDown(e, svg, state, hitShape) {
   if (e.button !== undefined && e.button !== 0) return false;
   ensureDistance();
+  if (_open && overArrow(svg, e)) { // the arrow starts a drag, before any pick under it
+    const a = anchor(), w = screenToWorld(svg, e.clientX, e.clientY);
+    _drag = { pointerId: e.pointerId, grab: { x: a.point.x - w.x, y: a.point.y - w.y } };
+    renderOffsetOverlay(); // the arrow draws darker while dragged
+    return true;
+  }
   const shape = hitShape && hitShape.shape && !hitShape.shape.reference && pickRule(state)(hitShape.shape) ? hitShape.shape : null;
   // a press on the picked chain itself is a side press like one on empty canvas (a finger beside a line reaches the line: its side is the press point's)
   const inChain = shape && _open && _open.chain.pieces.some((p) => p.id === shape.id);
@@ -69,13 +82,22 @@ export function handleOffsetPointerDown(e, svg, state, hitShape) {
 
 export function handleOffsetPointerMove(e, svg) {
   if (!_open) return false;
+  if (_drag) { if (_drag.pointerId === e.pointerId) dragArrowTo(svg, e); return false; }
   if (_press && _press.pointerId === e.pointerId && Math.hypot(e.clientX - _press.x, e.clientY - _press.y) > PRESS_SLOP_PX) _press.moved = true;
   if (e.pointerType === 'touch') return false; // a finger has no hover: the side follows its taps
+  const over = overArrow(svg, e);
+  if (over !== _hover) { _hover = over; renderOffsetOverlay(); }
+  if (over) return false; // on the arrow the side stays as it is
   setSide(screenToWorld(svg, e.clientX, e.clientY));
   return false;
 }
 
 export function handleOffsetPointerUp(e, svg) {
+  if (_drag && e && _drag.pointerId === e.pointerId) { // releasing the arrow keeps the box open; Enter (or the check) applies
+    _drag = null;
+    if (_open) { renderOffsetOverlay(); _open.el.focus(); _open.el.select(); }
+    return false;
+  }
   if (!_press || !e || _press.pointerId !== e.pointerId) return false;
   const p = _press; _press = null;
   if (!p.moved && _open) setSide(screenToWorld(svg, e.clientX, e.clientY));
@@ -92,6 +114,33 @@ function pick(svg, state, shape, world) {
   if (!res.ok) { showNotification('Offset: ' + res.reason + '.', 'warning', HINT_MS); return true; }
   openInput(svg, state, res.chain, shape.id, offsetSideAt(state, res.chain, world));
   return true;
+}
+
+// ---- the drag arrow ------------------------------------------------------------------------------------------------------------
+
+// the arrow is picked within its reach (a 44 px target, x the touch boost for a finger)
+function overArrow(svg, e) {
+  const a = anchor();
+  return !!a && dragArrowHit({ x: e.clientX, y: e.clientY }, worldToScreen(svg, a.point), e.pointerType === 'touch', snapBoostFor(e.pointerType === 'touch'));
+}
+
+// one drag step: the signed distance of the grabbed point along the arrow's normal becomes the distance (the arrow's own point is on the
+// offset at d, so the new distance is d + the pointer's travel along the normal). Negative = the pointer crossed the source: the side flips.
+// The ONE distance state takes it, written into the box in the box's own formatting; no offset at that distance (a collapse): nothing changes.
+function dragArrowTo(svg, e) {
+  const a = anchor();
+  if (!a) return;
+  const w = screenToWorld(svg, e.clientX, e.clientY);
+  const s = _open.d + (w.x + _drag.grab.x - a.point.x) * a.normal.x + (w.y + _drag.grab.y - a.point.y) * a.normal.y;
+  const side = s <= -MIN_DRAG_MM ? -_open.side : _open.side;
+  const unit = docUnit();
+  const text = formatUnit(Math.max(Math.abs(s), MIN_DRAG_MM), unit, { decimals: decimalsFor(unit) });
+  const v = parseOffsetDistance(text, unit);
+  if (v == null || !offsetChainGeometry(_open.state, _open.chain, v, side).ok) return;
+  _open.el.value = text;
+  _open.d = v;
+  _open.side = side;
+  refresh();
 }
 
 function setSide(world) {
@@ -183,6 +232,8 @@ function removeInput() {
   if (_open && _open.el && _open.el.parentNode) _open.el.parentNode.removeChild(_open.el);
   _open = null;
   _press = null;
+  _drag = null;
+  _hover = false;
 }
 function cancelAll() { removeInput(); const g = document.getElementById(OVERLAY_ID); if (g) g.remove(); }
 
@@ -225,5 +276,7 @@ function renderOffsetOverlay() {
     const s = state.shapes.find((x) => x.id === pickId), j = s && J(s.joints[s.type === 'arc' ? 1 : 0]);
     if (j) html += `<text class="offset-refusal" x="${j.x}" y="${j.y - 12 * px}" fill="#f43f5e" font-size="${11 * px}" font-family="system-ui, sans-serif" text-anchor="middle">${geom.reason.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`;
   }
+  const arrow = anchor();
+  if (geom.ok && arrow) html += dragArrowSvg({ point: arrow.point, dir: arrow.normal, scale: 1 / px, state: _drag ? 'drag' : (_hover ? 'hover' : 'idle'), className: 'offset-handle' });
   g.innerHTML = html;
 }

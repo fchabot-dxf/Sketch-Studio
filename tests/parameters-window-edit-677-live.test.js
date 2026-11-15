@@ -168,7 +168,7 @@ await (async () => {
     // rename in the Name cell; Tab leaves the cell = applies; every formula follows
     await press(cellIn('thickness', 'name'));
     await selectAll(); await type('ply');
-    assert.deepStrictEqual(await message('thickness'), { text: 'renames thickness to ply; d3 follows', err: false }, 'the rename preview');
+    assert.deepStrictEqual(await message('thickness'), { text: 'renames thickness to ply; d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14 follow', err: false }, 'the rename preview');
     await Tab(); await sleep(400);
     assert.deepStrictEqual(await params(), [['length', '1500 mm'], ['width', '400 mm'], ['ply', '18 mm']], 'Tab out of the Name cell applied the rename');
     assert.strictEqual(await cellValue('d3', 'expression'), 'ply', 'the dimension formula follows the rename');
@@ -181,9 +181,9 @@ await (async () => {
 
     // the bin: refused while in use (aria-disabled, the users in its tooltip); + Add: Name focused, Tab, Enter creates; delete it again
     const bin = await evalJs(`(() => { const b = document.querySelector(${JSON.stringify(row('thickness') + ' .pt-del')}); return { dis: b.getAttribute('aria-disabled'), title: b.title }; })()`);
-    assert.deepStrictEqual(bin, { dis: 'true', title: 'thickness is used by d3: it cannot be deleted' }, 'the bin is refused while thickness is in use, its tooltip says by whom');
+    assert.deepStrictEqual(bin, { dis: 'true', title: 'thickness is used by d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14: it cannot be deleted' }, 'the bin is refused while thickness is in use, its tooltip says by whom');
     await press(row('thickness') + ' .pt-del');
-    assert.deepStrictEqual(await message('thickness'), { text: 'thickness is used by d3', err: true }, 'pressing it anyway says why, and deletes nothing');
+    assert.deepStrictEqual(await message('thickness'), { text: 'thickness is used by d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14', err: true }, 'pressing it anyway says why, and deletes nothing');
     assert.strictEqual((await params()).length, 3);
     await press(`${W} .pt-add`);
     assert.deepStrictEqual(await active(), { tag: 'INPUT', col: 'name', row: 'new', cls: 'pt-in' }, '+ Add: an empty row, its Name focused');

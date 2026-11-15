@@ -42,7 +42,7 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   const S = openBoxFrame();
   const rows = buildParameterRows(S.state, U);
   eq(rows.user.map((r) => [r.name, r.expression, r.value, r.unit, r.users]), [
-    ['length', '1500 mm', '1500.0', 'mm', ['d2']], ['width', '400 mm', '400.0', 'mm', ['d1']], ['thickness', '18 mm', '18.0', 'mm', ['d3']],
+    ['length', '1500 mm', '1500.0', 'mm', ['d2', 'd11', 'd12', 'd13', 'd14']], ['width', '400 mm', '400.0', 'mm', ['d1']], ['thickness', '18 mm', '18.0', 'mm', ['d3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd12', 'd13', 'd14']],
   ], 'user rows: name, expression, value, unit and who reads them');
   eq(rows.dimensions.length, 14, 'the 14 box-frame dimensions');
   ok(rows.dimensions.every((r) => r.constraint && r.hasExpression && !r.reference), 'every dimension row carries its constraint and is a formula');
@@ -117,23 +117,24 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   ok(commit(S, { kind: 'new', name: 'edge', text: 'thickness2 + thickness', unit: 'mm' }).ok, 'a parameter edge = thickness2 + thickness');
   const h0 = S.state.history.length;
   const p = plan(S, { kind: 'parameter', column: 'name', name: 'thickness', text: 'ply' });
-  eq([p.ok, p.hint, p.label], [true, 'renames thickness to ply; thickness2, edge, d3 follow', 'rename parameter thickness -> ply'], 'the rename preview names who follows');
+  eq([p.ok, p.hint, p.label], [true, 'renames thickness to ply; thickness2, edge, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14 follow', 'rename parameter thickness -> ply'], 'the rename preview names who follows');
   ok(muted(() => commitTableEdit(S.state, p)).ok, 'renamed');
   eq(S.state.parameters.map((x) => [x.name, x.expression]), [['length', '1500 mm'], ['width', '400 mm'], ['ply', '18 mm'], ['thickness2', 'ply * 2'], ['edge', 'thickness2 + ply']],
     'the parameter is renamed; every formula reading it follows, thickness2 (a longer name) is untouched');
-  eq(D(S, 'd3').expression, 'ply', 'the dimension formula follows');
+  eq([D(S, 'd3').expression, D(S, 'd11').expression], ['ply', '(length - 6 * ply) / 5'], 'the dimension formulas follow (inside a formula too)');
   eq(S.state.history.length, h0 + 1, 'ONE undo step');
   eq(xLevels(S), [0, 18, 382, 400], 'a rename moves nothing');
-  // a dimension rename: d3 -> board; the formulas reading d3 (d4 .. d14) follow
+  // a dimension rename: d3 -> board; a formula reading d3 follows (d4 is made to read d3 first: the template's dimensions read the parameters)
+  ok(commit(S, { kind: 'dimension', column: 'expression', constraint: D(S, 'd4'), text: 'd3 * 1' }).ok, 'd4 reads d3');
   const pd = plan(S, { kind: 'dimension', column: 'name', constraint: D(S, 'd3'), text: 'board' });
-  eq([pd.ok, pd.label], [true, 'rename dimension d3 -> board'], 'a dimension rename plans');
+  eq([pd.ok, pd.label, pd.hint], [true, 'rename dimension d3 -> board', 'renames d3 to board; d4 follows'], 'a dimension rename plans');
   ok(muted(() => commitTableEdit(S.state, pd)).ok, 'the dimension renamed');
   ok(!!D(S, 'board') && !D(S, 'd3'), 'd3 is now board');
-  eq(D(S, 'd4').expression, 'board', 'd4 follows');
-  eq(D(S, 'd11').expression, '(d2 - 6 * board) / 5', 'd11 follows inside its formula');
-  eq(S.state.history.length, h0 + 2, 'ONE more undo step');
+  eq(D(S, 'd4').expression, 'board * 1', 'd4 follows inside its formula');
+  eq(S.state.history.length, h0 + 3, 'ONE more undo step');
   muted(() => S.state.undo());
-  eq(D(S, 'd4').expression, 'd3', 'undo: d4 reads d3 again');
+  eq(D(S, 'd4').expression, 'd3 * 1', 'undo: d4 reads d3 again');
+  muted(() => S.state.undo());
   muted(() => S.state.undo());
   eq(P(S, 'thickness') && P(S, 'thickness').expression, '18 mm', 'undo: thickness is back');
   eq(P(S, 'edge').expression, 'thickness2 + thickness', 'undo: edge reads thickness again');
@@ -171,7 +172,7 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   eq(plan(S, { kind: 'parameter', column: 'comment', name: 'width', text: 'Width' }), { ok: true, changed: false }, 'the same comment changes nothing');
   // delete: refused while in use, allowed once unused
   const used = plan(S, { kind: 'parameter', column: 'delete', name: 'thickness' });
-  eq([used.ok, used.code, used.message], [false, 'IN_USE', 'thickness is used by d3'], 'thickness is in use: refused, its users listed');
+  eq([used.ok, used.code, used.message], [false, 'IN_USE', 'thickness is used by d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14'], 'thickness is in use: refused, its users listed');
   ok(commit(S, { kind: 'new', name: 'half', text: 'gap / 2', unit: 'mm' }).ok, 'half reads gap');
   eq(plan(S, { kind: 'parameter', column: 'delete', name: 'gap' }).message, 'gap is used by half', 'gap is in use by half');
   const h2 = S.state.history.length;
@@ -199,7 +200,7 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   eq([unknown.ok, unknown.message], [false, "unknown parameter 'gap' (type gap = 30 to create it)"], 'an unknown name is refused (O5)');
   eq(plan(S, { kind: 'dimension', column: 'expression', constraint: D(S, 'deep'), text: '  ' }).message, 'type a value or a formula', 'an empty Expression is refused');
   eq(dependentDimensions(S.state, 'thickness').map((c) => c.name), ['d3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd12', 'd13', 'd14'],
-    'a user row selects every dimension that depends on it (directly or through d3)');
+    'a user row selects every dimension that depends on it');
 }
 
 console.log(`parameter-table-edit-677: ok (${checks} checks)`);

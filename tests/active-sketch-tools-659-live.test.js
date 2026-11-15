@@ -1,5 +1,5 @@
 // tests/active-sketch-tools-659-live.test.js -- TASK 659 (live headless, REAL mouse and REAL touch via CDP, Pen Plotter = the shared Design tab).
-// Curves of another sketch are no pick for Trim and Mirror (no message, no undo step, nothing changes); with that sketch active they work and every
+// Curves of another sketch are no pick for Trim and Mirror (one warning since task 660, no undo step, nothing changes); with that sketch active they work and every
 // new joint is in it; a Trim's crossing line of another sketch does not cut; a mirror line of another sketch is not picked. Screenshots: .evidence/659.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -23,7 +23,7 @@ await (async () => {
       mouse: { tap: async (p) => { await mouse('mouseMoved', p.x, p.y, 0); await sleep(60); await mouse('mousePressed', p.x, p.y, 1); await sleep(40); await mouse('mouseReleased', p.x, p.y, 0); await sleep(250); } },
       touch: { tap: async (p) => { await T('touchStart', [p]); await sleep(60); await T('touchEnd', []); await sleep(300); } },
     };
-    const toasts = () => evalJs(`JSON.stringify([...document.querySelectorAll('#notification-container > div')].map((e) => e.textContent.trim()))`).then(JSON.parse);
+    const toasts = () => evalJs(`JSON.stringify([...document.querySelectorAll('#notification-container > div')].map((e) => e.textContent.trim().replace(/^[^A-Za-z]+/, '')))`).then(JSON.parse);
     const clearToasts = () => evalJs(`document.querySelectorAll('#notification-container > div').forEach((e) => e.remove())`);
     const hist = () => evalJs(`${STATE}.history.length`);
     const world = (expr) => evalJs(`JSON.stringify(${expr})`).then(JSON.parse);
@@ -74,7 +74,7 @@ await (async () => {
       await P.tap(tap);
       assert.deepStrictEqual(await jointsOf(hid[0]), before, `[${kind}] trim in Sketch 1: the Sketch 2 line is untouched`);
       assert.strictEqual(await hist(), h0, `[${kind}] trim: no undo step`);
-      assert.deepStrictEqual(await toasts(), [], `[${kind}] trim: no message`);
+      assert.deepStrictEqual(await toasts(), ['Trim works in the active sketch: make Sketch 2 active first'], `[${kind}] trim: the one warning`);
       await shot(`${kind}-1-trim-nothing-happens.png`, clip);
       await activate('sketch-2'); await tool('tool-trim'); await P.tap(tap);
       assert.notDeepStrictEqual(await jointsOf(hid[0]), before, `[${kind}] trim in Sketch 2: the line is trimmed`);

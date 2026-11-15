@@ -4,7 +4,8 @@
 import { screenToWorld } from '#ui/coords.js';
 import { breakShape, lineParamAtPoint } from '#core/break.js';
 import { SNAP } from '#core/constants.js';
-import { inertEntities, activeSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not broken; TASK 659: only the active sketch is
+import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's line warns
+import { inertEntities, activeSketchPick, otherSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not broken; TASK 659: only the active sketch is
 
 let hover = null;
 const OVERLAY_ID = 'break-tool-overlay';
@@ -55,7 +56,10 @@ export function handleBreakPointerDown(e, ctx, state, viewState) {
   if (!svg) return false;
   const world = screenToWorld(svg, e.clientX, e.clientY);
   const hit = findClosestLine(world, state, svg, viewState);
-  if (!hit) return false;
+  if (!hit) {
+    const other = findClosestLine(world, state, svg, viewState, (s, inert) => otherSketchPick(state, s, inert));
+    return other ? warnOtherSketch(state, 'Break', state.shapes.find((s) => s.id === other.shapeId)) : false; // an active line wins; only with none in reach, another sketch's line warns (no undo step)
+  }
 
   try { state.saveState?.('break'); } catch (_) {}
 
@@ -74,14 +78,14 @@ export function handleBreakPointerUp() {
   /* no drag op */
 }
 
-function findClosestLine(worldPt, state, svg, viewState) {
+function findClosestLine(worldPt, state, svg, viewState, include = (s, inert) => activeSketchPick(state, s, inert)) {
   const scale = getScale(svg, viewState);
   const thresh = SNAP.LINE_PX / scale;
   let best = null, bestDist = thresh;
 
   const inert = inertEntities(state);
   for (const shape of (state.shapes || [])) {
-    if (shape.type !== 'line' || !activeSketchPick(state, shape, inert)) continue;
+    if (shape.type !== 'line' || !include(shape, inert)) continue;
     const [aId, bId] = shape.joints;
     const jA = state.joints.get(aId);
     const jB = state.joints.get(bId);

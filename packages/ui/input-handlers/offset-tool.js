@@ -22,6 +22,7 @@ import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 
@@ -59,11 +60,12 @@ export function resetOffsetState() { cancelAll(); }
 // ---- pick ----------------------------------------------------------------------------------------------------------------------
 
 /**
- * A press in the Offset tool. hitShape = the app's pick under the pointer ({ shape, pt } or null). A press on a curve picks its chain (or, with
+ * A press in the Offset tool. hitShape = the app's pick under the pointer in the ACTIVE sketch ({ shape, pt } or null); otherShape = with none, the
+ * curve of another visible, unlocked sketch within reach (task 660): the one warning, nothing starts. A press on a curve picks its chain (or, with
  * the box open, another chain); a press elsewhere with the box open is a click that sets the side on release unless the view moves (a pan /
  * pinch). Returns true when the press is the tool's (a pan may still start from a press on empty canvas: false).
  */
-export function handleOffsetPointerDown(e, svg, state, hitShape) {
+export function handleOffsetPointerDown(e, svg, state, hitShape, otherShape = null) {
   if (e.button !== undefined && e.button !== 0) return false;
   ensureDistance();
   if (_open && overArrow(svg, e)) { // the arrow starts a drag, before any pick under it
@@ -76,6 +78,7 @@ export function handleOffsetPointerDown(e, svg, state, hitShape) {
   // a press on the picked chain itself is a side press like one on empty canvas (a finger beside a line reaches the line: its side is the press point's)
   const inChain = shape && _open && _open.chain.pieces.some((p) => p.id === shape.id);
   if (shape && !inChain) return pick(svg, state, shape, screenToWorld(svg, e.clientX, e.clientY));
+  if (!shape && warnOtherSketch(state, 'Offset', otherShape)) { if (_open) _press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false }; return true; }
   if (_open) _press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
   return false;
 }

@@ -1,6 +1,6 @@
 // tests/fillet-active-sketch-657-live.test.js -- TASK 657 (live headless, REAL mouse and REAL touch via CDP, Pen Plotter = the shared Design tab).
 // Two lines in Sketch 2 (visible, unlocked), Sketch 1 active:
-//  - Fillet, tap the corner: NO message (task 659: another sketch's curve is not pickable, as empty canvas), no radius box, no arc, no undo step;
+//  - Fillet, tap the corner: ONE warning (task 660: another sketch's curve is not pickable, and it says so), no radius box, no arc, no undo step;
 //  - make Sketch 2 active: the same tap opens the box, Enter fillets; the arc, the V and every joint are in sketch-2;
 //  - a mixed corner (one line of each sketch, Sketch 1 active): not filleted.
 // Run twice: desktop with the mouse, phone (390x844) with a finger. Screenshots: .evidence/657.
@@ -75,12 +75,13 @@ await (async () => {
       // ---- Sketch 1 active: the Sketch 2 corner says so and starts nothing
       await tool('tool-fillet'); await clearToasts();
       await P.tap(C);
-      assert.deepStrictEqual(await toasts(), [], `[${kind}] no message at the corner tap`);
+      assert.deepStrictEqual(await toasts(), ['Fillet works in the active sketch: make Sketch 2 active first'], `[${kind}] one warning at the corner tap`);
+      await shot(`${kind}-1-warning.png`, clip);
       assert.strictEqual(await boxOpen(), false, `[${kind}] no radius box`);
       assert.strictEqual(await arcs(), 0, `[${kind}] no arc`);
       assert.strictEqual(await hist(), baseHist, `[${kind}] no undo step`);
       await clearToasts(); await P.tap(mid(A));
-      assert.deepStrictEqual(await toasts(), [], `[${kind}] a tap on the line: no message either`);
+      assert.deepStrictEqual(await toasts(), ['Fillet works in the active sketch: make Sketch 2 active first'], `[${kind}] a tap on the line: the same one warning`);
       await key('Escape', 'Escape', 27);
 
       // ---- Sketch 2 active: the same tap fillets, all in sketch-2

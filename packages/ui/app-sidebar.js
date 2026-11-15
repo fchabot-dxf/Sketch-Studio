@@ -79,8 +79,8 @@ function injectStyles() {
     cursor: pointer; font: 600 13px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; }
   .sk-sidebar-stage:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
   .sk-sidebar-stage.active { background: var(--sk-selection, var(--sk-sidebar-accent, #2c65ff)); border-color: transparent; color: #fff; }
-  .sk-sidebar-handle { display: flex; align-items: center; justify-content: center; position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
-    width: 16px; height: 72px; padding: 0; border-left: 0; border-top: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35));
+  .sk-sidebar-handle { display: flex; align-items: center; justify-content: center; position: absolute; left: 100%;   top: 33%; transform: translateY(-50%);
+      width: 24px; height: 72px; padding: 0; border-left: 0; border-top: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35));
     border-right: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); border-bottom: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35));
     border-radius: 0 10px 10px 0; background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); color: var(--sk-sidebar-fg, var(--sk-header-fg, #1e293b));
     box-shadow: 2px 0 8px rgba(0,0,0,0.22); visibility: visible; pointer-events: auto; cursor: grab; touch-action: none; }

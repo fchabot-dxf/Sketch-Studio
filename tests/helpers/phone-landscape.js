@@ -57,7 +57,7 @@ export async function runPhoneLandscape(hostName) {
         assert(share >= 0.6, tag + `the canvas is ${Math.round(share * 100)} % of the height (>= 60 %): ${JSON.stringify(cv)}`);
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-ribbon')).flexDirection`), 'column', tag + 'the ribbon is a column (a rail)');
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), 'none', tag + 'no header bar in short landscape');
-        assert(rail.left <= 18 && rail.w <= 64 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
+        assert(rail.left <= 26 && rail.w <= 64 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
         assert(cv.left >= rail.right - 1, tag + `the canvas is right of the rail (canvas ${cv.left}, rail ${rail.right})`);
         assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1`), true, tag + 'the page does not scroll');
         assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group-label')].every((g) => getComputedStyle(g).display === 'none')`), true, tag + 'no group labels in the rail');

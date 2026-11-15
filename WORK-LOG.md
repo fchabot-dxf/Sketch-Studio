@@ -14913,3 +14913,7 @@ Pen Plotter: Construction toggle ON; construction is never plotted (like Fusion:
 - TEST: tests/mobile-touch-live.test.js mouse check now asserts bg rgb(0, 209, 0) and ring 'rgb(31, 41, 55) 0px 0px 0px 3px'. gate:quick 373/373. Behaviour change: look only.
 - EVIDENCE: .evidence/643/{before,after}/{desktop-40,touch-52}.png (local).
 - OWNER ADDITION (TURN 643): the tick is larger: `.sk-done svg` 60% -> 72% (both sizes; button size unchanged, clear of the ring). Live test asserts the svg is >= 70% of the button width. Evidence: .evidence/643/after/ re-captured (desktop-40 7D707CD54CEAA11C8E4D92214379345C, touch-52 EAF02E46C19107943F93B308A8B3A454).
+
+## TURN 644
+
+Phone menu handle (.sk-sidebar-handle, packages/ui/app-sidebar.js, shared by all four apps): width 16 -> 24 px, top 50% -> 33% (same translateY(-50%), height 72 and drag/tap code unchanged). Coupled fix: the landscape rail host in packages/ui/tool-ribbon.js reserved 16 px of left padding for the handle; now 24 px so the wider handle does not cover the rail. Tests: tests/shared-header-live.test.js asserts width 24, height 72, centre ~1/3 in portrait, and no overlap with .sk-ribbon / .sk-doctabs / .sk-canvas-corner buttons across 4 apps x 4 phone viewports; tests/helpers/phone-landscape.js rail.left bound 18 -> 26. Behaviour changes: handle 8 px wider, sits higher (portrait ~y 278 of 844), landscape rail 8 px further right (canvas 8 px narrower). Evidence .evidence/644/ (before/after portrait390, landscape844).

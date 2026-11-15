@@ -102,8 +102,8 @@ function injectStyles() {
 .sk-ribbon-group-label { font-size: 8px; font-weight: 900; text-transform: uppercase; margin-top: 4px;
   color: var(--sk-ribbon-grouplabel, #cbd5e1); letter-spacing: 0.02em; }
 /* TASK 647: a section's NAME is the button that opens its dropdown (the caret after the name); a fixed section (Select) has a plain name. */
-button.sk-ribbon-group-label { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 1px 5px; border: 0; border-radius: 4px;
-  background: transparent; font-family: inherit; line-height: 1.2; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.sk-ribbon-group-label { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 5px; border: 0; border-radius: 4px;
+  background: transparent; font-family: inherit; line-height: normal; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 button.sk-ribbon-group-label::after { content: ''; flex-shrink: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 4px solid currentColor; }
 button.sk-ribbon-group-label:hover, button.sk-ribbon-group-label[aria-expanded="true"] { background: var(--sk-ribbon-hover, #f0f0f0); color: var(--sk-ribbon-fg, #334155); }
 button.sk-ribbon-group-label:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; }
@@ -172,7 +172,7 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
 /* TASK 647: a PHONE held upright: icon-only tool buttons (the label stays in the button, visually hidden: still the accessible name),
    44 x 44 targets, tighter spacing; each section's name row is a 44 px tall dropdown button; the fixed Select section has no name row. */
 @media (pointer: coarse) and (max-width: 640px) {
-  .sk-ribbon { gap: 0; padding: 2px 0; }
+  .sk-ribbon { gap: 0; padding: 0; }
   .sk-ribbon-group { padding: 0 1px; }
   .sk-ribbon-btns { gap: 0; }
   .sk-ribbon-btn { width: 44px; height: 44px; }
@@ -286,10 +286,15 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   const el = document.createElement('div'); el.className = 'sk-ribbon';
   const toolBtns = []; // { btn, tool } — for active-sync
   const menus = [];    // TASK 607: popovers on document.body, removed in destroy()
-  // TASK 535-4: the Parameters window is made on first use; closing it (button, X, Esc) returns focus to its button.
+  // TASK 535-4: the Parameters window is made on first use; closing it (button, X, Esc) returns focus to its button
+  // (TASK 647: to its section's name when the button is not in the bar: it was opened from the dropdown).
   let paramsWin = null;
   const parametersWindow = () => paramsWin || (paramsWin = createParametersWindow({
-    state, anchorEl: el, onClose: () => { refresh(); const b = el.querySelector('#btn-parameters'); if (b) b.focus(); },
+    state, anchorEl: el, onClose: () => {
+      refresh();
+      const b = el.querySelector('#btn-parameters');
+      if (b) (b.hidden ? sections.find((sec) => sec.items.some((it) => it.btn === b)).nameEl : b).focus();
+    },
   }));
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };

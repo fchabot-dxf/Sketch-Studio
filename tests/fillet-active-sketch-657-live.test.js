@@ -1,6 +1,6 @@
 // tests/fillet-active-sketch-657-live.test.js -- TASK 657 (live headless, REAL mouse and REAL touch via CDP, Pen Plotter = the shared Design tab).
 // Two lines in Sketch 2 (visible, unlocked), Sketch 1 active:
-//  - Fillet, tap the corner: ONE message naming Sketch 2, no radius box, no arc, no undo step;
+//  - Fillet, tap the corner: NO message (task 659: another sketch's curve is not pickable, as empty canvas), no radius box, no arc, no undo step;
 //  - make Sketch 2 active: the same tap opens the box, Enter fillets; the arc, the V and every joint are in sketch-2;
 //  - a mixed corner (one line of each sketch, Sketch 1 active): not filleted.
 // Run twice: desktop with the mouse, phone (390x844) with a finger. Screenshots: .evidence/657.
@@ -11,7 +11,6 @@ import { launchBrowser } from './helpers/cdp-browser.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const EVID = path.join(process.cwd(), '.evidence', '657');
 const STATE = 'window.__sketch.controller.state';
-const MESSAGE = 'Fillet works in the active sketch: make Sketch 2 active first';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '657', width: 1600, height: 900 });
@@ -76,15 +75,12 @@ await (async () => {
       // ---- Sketch 1 active: the Sketch 2 corner says so and starts nothing
       await tool('tool-fillet'); await clearToasts();
       await P.tap(C);
-      const t1 = await toasts();
-      assert.deepStrictEqual(t1, [MESSAGE], `[${kind}] one message at the corner tap: ${JSON.stringify(t1)}`);
+      assert.deepStrictEqual(await toasts(), [], `[${kind}] no message at the corner tap`);
       assert.strictEqual(await boxOpen(), false, `[${kind}] no radius box`);
       assert.strictEqual(await arcs(), 0, `[${kind}] no arc`);
       assert.strictEqual(await hist(), baseHist, `[${kind}] no undo step`);
-      const tr = await evalJs(`(() => { const r = document.querySelector('#notification-container > div').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()`);
-      await shot(`${kind}-1-message.png`, { x: Math.max(0, tr.x - 20), y: Math.max(0, tr.y - 20), width: Math.min(tr.w + 40, cr.w), height: tr.h + 40 }); // the message, legible
       await clearToasts(); await P.tap(mid(A));
-      assert.deepStrictEqual(await toasts(), [MESSAGE], `[${kind}] a tap on the line: the same message`);
+      assert.deepStrictEqual(await toasts(), [], `[${kind}] a tap on the line: no message either`);
       await key('Escape', 'Escape', 27);
 
       // ---- Sketch 2 active: the same tap fillets, all in sketch-2

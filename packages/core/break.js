@@ -10,6 +10,8 @@
 // All constraints referencing the original shape's endpoint joints are preserved
 // (they remain attached to A and B respectively).
 
+import { inActiveSketch } from './sketch-model.js';
+
 /**
  * Split the line shape `shapeId` at fractional parameter `t` (0..1).
  * Mutates state.joints and state.shapes in place.
@@ -20,8 +22,10 @@
  * @returns {{ midJointId:string, newShapeId:string } | null}
  */
 export function breakShape(state, shapeId, t) {
+
   const shape = (state.shapes || []).find(s => s.id === shapeId);
   if (!shape || shape.type !== 'line') return null;
+  if (!inActiveSketch(state, shape)) return null; // Fusion edits only the active sketch (task 659): nothing is written
 
   t = Math.max(0.001, Math.min(0.999, t));
 

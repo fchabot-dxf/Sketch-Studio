@@ -18,7 +18,7 @@ import {
   OFFSET_UNDO_LABEL
 } from '#core/offset.js';
 import { arcSweepInfo } from '#core/geometry.js';
-import { inertEntities, isShapeInert } from '#core/sketch-model.js';
+import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -45,7 +45,7 @@ function ensureDistance() {
   const unit = docUnit();
   if (currentDistance == null || _distanceUnit !== unit) { currentDistance = defaultOffsetDistance(unit); _distanceUnit = unit; }
 }
-const pickRule = (state) => { const inert = inertEntities(state); return (s) => !isShapeInert(inert, s.id); }; // task 577: a locked / hidden sketch is out
+const pickRule = (state) => { const inert = inertEntities(state); return (s) => activeSketchPick(state, s, inert); }; // task 577: a locked / hidden sketch is out; task 659: so is every sketch but the active one
 
 /** The distance box is open (the check of the Done layer shows). */
 export function offsetInputOpen() { return !!_open; }

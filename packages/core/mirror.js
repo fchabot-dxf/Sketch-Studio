@@ -17,7 +17,7 @@ import { findShapeById, isReferenceJointId, sceneJoints } from './reference-line
 import { mirrorPoint } from './symmetric.js';
 import { makeArc } from './shapes.js';
 import { newShapeId } from './shape-id.js';
-import { inertEntities } from './sketch-model.js';
+import { inertEntities, inActiveSketch } from './sketch-model.js';
 
 // How each shape kind is copied and linked. `centre`: joints[0] is linked by the CIRCLE form of the symmetric ({ shapes: [s, s'], line }:
 // centres mirror + radii equal) instead of a point pair; `copy(copy, src, M)`: the kind's own data mirrored (M = the mirror of a point);
@@ -63,6 +63,7 @@ export function mirrorObjectsRefusal(state, objects) {
   if (!shapes.length && !joints.length) return 'select the objects to mirror first';
   const inert = inertEntities(state);
   if (inert && (shapes.some((s) => inert.lockedS.has(s.id)) || joints.some((id) => inert.lockedJ.has(id)))) return 'an object is in a locked sketch';
+  if (shapes.some((s) => !inActiveSketch(state, s)) || joints.some((id) => !inActiveSketch(state, state.joints.get(id)))) return 'the objects must be in the active sketch'; // Fusion edits only the active sketch (task 659)
   const odd = shapes.find((s) => !Object.prototype.hasOwnProperty.call(MIRROR_KINDS, s.type));
   if (odd) return `a ${odd.type} cannot be mirrored`;
   return null;
@@ -73,6 +74,7 @@ export function mirrorObjectsRefusal(state, objects) {
 export function mirrorLineRefusal(state, objects, lineId) {
   const line = lineId == null ? null : findShapeById(state.shapes, lineId);
   if (!line || line.type !== 'line') return 'pick the mirror line: a line, a construction line or the X / Y axis';
+  if (!line.reference && !inActiveSketch(state, line)) return 'the mirror line must be in the active sketch (or an axis)'; // task 659: another sketch's curve is not used implicitly
   if (objects.shapes.includes(line.id)) return 'the mirror line cannot be one of the objects to mirror';
   const J = sceneJoints(state.joints), a = J.get(line.joints[0]), b = J.get(line.joints[1]);
   if (!a || !b || !(Math.hypot(b.x - a.x, b.y - a.y) > 0)) return 'the mirror line has no length';

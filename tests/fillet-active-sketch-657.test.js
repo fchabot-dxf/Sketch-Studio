@@ -2,7 +2,7 @@
 // Before: a corner of lines in Sketch 2 filleted with Sketch 1 active put the arc, V and new joints into Sketch 1 while the lines stayed in 2.
 //  1. core: applyFillet refuses a corner with a curve outside the active sketch and writes nothing; findCornerAtPoint's include rule ignores
 //     a curve it rejects as if absent (two active curves + a third of another sketch = a corner; one active + one other = none);
-//  2. the tool (SketchStudio through tests/helpers/node-app.js): Sketch 1 active, tap a Sketch 2 corner -> ONE message naming Sketch 2, no box,
+//  2. the tool (SketchStudio through tests/helpers/node-app.js): Sketch 1 active, tap a Sketch 2 corner -> NO message (task 659: not pickable, as empty canvas), no box,
 //     no arc, no undo step; Sketch 2 active -> the same tap opens the box, Enter fillets, arc + V + joints are in sketch-2; a mixed corner
 //     (one curve of each sketch) is not filleted; a locked / hidden Sketch 2 stays silent (task 649).
 import assert from 'node:assert';
@@ -68,7 +68,6 @@ try {
     st.sketches.push({ id: 'sketch-2', name: 'Sketch 2', visible: true });
     st.sketches[0].locked = false; st.sketches[0].visible = true; st.activeSketchId = 'sketch-1';
   };
-  const MESSAGE = 'Fillet works in the active sketch: make Sketch 2 active first';
   fresh();
   const jc = J(10, 10, 'sketch-2');
   line('s_l1', jc, J(40, 10, 'sketch-2'), 'sketch-2'); line('s_l2', jc, J(10, 40, 'sketch-2'), 'sketch-2');
@@ -79,10 +78,10 @@ try {
   // Sketch 1 active: the Sketch 2 corner, tapped
   clear(); const h0 = st.history.length;
   app.click(corner.x, corner.y);
-  assert.deepStrictEqual(toasts(), [MESSAGE], 'one message naming Sketch 2 at the corner tap: ' + JSON.stringify(toasts()));
+  assert.deepStrictEqual(toasts(), [], 'no message at the corner tap: ' + JSON.stringify(toasts()));
   assert.strictEqual(box(), null, 'no radius box'); assert.strictEqual(arcs(), 0, 'no arc'); assert.strictEqual(st.history.length, h0, 'no undo step');
   clear(); app.click(onL1.x, onL1.y);
-  assert.deepStrictEqual(toasts(), [MESSAGE], 'a line tap: the same one message');
+  assert.deepStrictEqual(toasts(), [], 'a line tap: no message either');
   const ov = doc.getElementById('fillet-tool-overlay');
   assert.ok(!ov || ov.children.length === 0, 'a line tap picks nothing');
   for (const how of ['locked', 'hidden']) { // a locked / hidden Sketch 2 stays silent (task 649)
@@ -114,7 +113,7 @@ try {
   app.click(corner.x, corner.y); // picks the active curve (line 1) at most
   app.click(onL2.x, onL2.y);     // line 2 is the other sketch's curve
   assert.strictEqual(box(), null, 'a mixed corner opens no box'); assert.strictEqual(arcs(), 0, 'a mixed corner is not filleted');
-  assert.ok(toasts().includes(MESSAGE), 'the other sketch\'s curve says so: ' + JSON.stringify(toasts()));
+  assert.deepStrictEqual(toasts(), [], 'the other sketch curve says nothing: ' + JSON.stringify(toasts()));
   app.esc();
 } finally { await app.close(); }
 console.log('fillet-active-sketch-657.test.js: ok');

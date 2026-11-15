@@ -4,7 +4,7 @@
 import { screenToWorld } from '#ui/coords.js';
 import { breakShape, lineParamAtPoint } from '#core/break.js';
 import { SNAP } from '#core/constants.js';
-import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not broken
+import { inertEntities, activeSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not broken; TASK 659: only the active sketch is
 
 let hover = null;
 const OVERLAY_ID = 'break-tool-overlay';
@@ -81,7 +81,7 @@ function findClosestLine(worldPt, state, svg, viewState) {
 
   const inert = inertEntities(state);
   for (const shape of (state.shapes || [])) {
-    if (shape.type !== 'line' || isShapeInert(inert, shape.id)) continue;
+    if (shape.type !== 'line' || !activeSketchPick(state, shape, inert)) continue;
     const [aId, bId] = shape.joints;
     const jA = state.joints.get(aId);
     const jB = state.joints.get(bId);

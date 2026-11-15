@@ -542,7 +542,9 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     async moveDesign(id, projectId) {
       if (!(await adapter.getProject(projectId))) throw gone('project');
       const at = now();
-      const d = await adapter.updateDesign(id, (rec) => (rec ? { ...rec, projectId, updatedAt: at } : null));
+      id = resolveMoved(id);
+      const run = () => adapter.updateDesign(id, (rec) => (rec ? { ...rec, projectId, updatedAt: at } : null));
+      const d = await (isRemote(id) ? withLock(id, run) : run()); // never overlaps an autosave write of the same Drive file
       if (!d) throw gone('design');
       await adoptRemote(d);
       await touchProject(projectId, at);

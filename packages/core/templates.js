@@ -8,12 +8,19 @@
 // values, so a template opens at the same physical size in an inch document; there is no conversion here.
 // ORIENTATION: authored with Y UP (as the user sees it) and stored through userToWorldY (the one Y seam).
 // ANCHOR: each template has one joint tied to the origin (a `coincident` with j_origin) so the drawing is fully constrained; it sits at (0, 0).
+// PARAMETERS (TASK 670): a template's LENGTH / ANGLE params open as the document's USER PARAMETERS (the Parameters table: name = paramName(key),
+// expression = the value in mm / deg, comment = the label), made by #core/parameters.js planChange (the ONE parameter model), and every driving
+// dimension is a FORMULA of them (its `expression`), so changing a parameter later goes through the existing parameter -> dimension -> solve path.
+// COUNT / CHOICE params (and a length declared `atOpen`) are chosen in the start modal only: they change the topology (how many boards, which joint)
+// or a value no dimension carries (a pattern's spacing), so a user parameter could not drive them and none is made.
 
 import { serializeDocument } from '#core/document.js';
 import { makeArc, makePolygon } from '#core/shapes.js';
-import { userToWorldY } from '#core/units.js';
+import { userToWorldY, worldToUserY } from '#core/units.js';
 import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyPattern, patternDefaults } from '#core/pattern.js';
+import { planChange, nextDimensionName } from '#core/parameters.js';
+import { cornerBoards, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
 
 const R = (v) => Math.round(v * 1e6) / 1e6;
 
@@ -21,6 +28,7 @@ const R = (v) => Math.round(v * 1e6) / 1e6;
 function sketcher(id) {
   const joints = new Map(), shapes = [], constraints = [];
   let jn = 0, sn = 0;
+  const named = (c, expr) => { const d = { ...c, name: nextDimensionName(constraints) }; if (expr) d.expression = expr; constraints.push(d); return d.name; };
   const genJ = () => `jt${++jn}`;
   const sid = (k) => `st_${id}_${++sn}_${k}`;
   const b = {
@@ -42,10 +50,12 @@ function sketcher(id) {
     equalLengths(chain) { for (let i = 0; i + 1 < chain.length; i++) constraints.push({ type: 'equal', joints: [...chain[i], ...chain[i + 1]] }); }, // chain of [a, b] pairs
     pointOn(j, shape) { constraints.push({ type: 'pointOnLine', joint: j, shape }); },
     midpoint(m, a, c) { constraints.push({ type: 'midpoint', joints: [a, c, m] }); },
-    // driving dimensions: mode 'aligned' | 'horizontal' | 'vertical'; offset = where the label sits (mm from the geometry)
-    dim(a, c, value, mode = 'aligned', offset = 8) { constraints.push({ type: 'distance', joints: [a, c], value: R(value), dimMode: mode, offset, isDriven: false, driven: false }); },
-    radius(shape, value, offset = 8) { constraints.push({ type: 'distance', shape, value: R(value), isRadius: true, offset, isDriven: false, driven: false }); },
-    gap(s1, s2, value, offset = 8) { constraints.push({ type: 'distance', shapes: [s1, s2], value: R(value), offset, isDriven: false, driven: false }); },
+    // driving dimensions: mode 'aligned' | 'horizontal' | 'vertical'; offset = where the label sits (mm from the geometry); expr = its formula
+    // (TASK 670: every template dimension has one, of the user parameters or of an earlier dimension; `value` is what it gives at the built
+    // values). Each is NAMED here (d1, d2, ... in order: the names a load would give) so a formula can read an earlier one; each returns its name.
+    dim(a, c, value, mode = 'aligned', offset = 8, expr) { return named({ type: 'distance', joints: [a, c], value: R(value), dimMode: mode, offset, isDriven: false, driven: false }, expr); },
+    radius(shape, value, offset = 8, expr) { return named({ type: 'distance', shape, value: R(value), isRadius: true, offset, isDriven: false, driven: false }, expr); },
+    gap(s1, s2, value, offset = 8, expr) { return named({ type: 'distance', shapes: [s1, s2], value: R(value), offset, isDriven: false, driven: false }, expr); },
     // the anchor: `j` goes to (0, 0) (everything moves with it) and is tied to the origin
     finish(j) {
       const p = joints.get(j);
@@ -69,8 +79,8 @@ function buildSlot(p) {
   s.line(TL, TR); s.line(BL, BR);
   s.arc(CL, TL, BL); s.arc(CR, BR, TR);
   s.h(TL, TR); s.h(BL, BR); s.v(CL, TL); s.v(CL, BL); s.v(CR, TR); s.v(CR, BR);
-  s.dim(TL, BL, W, 'vertical', -7);
-  s.dim(CL, CR, d, 'horizontal', -r - 4);
+  s.dim(TL, BL, W, 'vertical', -7, 'width');
+  s.dim(CL, CR, d, 'horizontal', -r - 4, 'length - width');
   return s.finish(CL);
 }
 
@@ -85,9 +95,9 @@ function buildRoundedRect(p) {
   s.h(tl.a, tr.a); s.h(br.a, bl.a); s.v(tr.b, br.b); s.v(bl.b, tl.b);
   for (const k of [tl, tr, bl, br]) { s.v(k.c, k.a); s.h(k.c, k.b); }
   s.equalLengths([[tl.c, tl.a], [tr.c, tr.a], [br.c, br.a], [bl.c, bl.a]]);
-  s.radius(arcs[0], r, 10);
-  s.dim(tl.b, tr.b, w, 'horizontal', -5);
-  s.dim(tl.a, bl.a, h, 'vertical', -6);
+  s.radius(arcs[0], r, 10, 'radius');
+  s.dim(tl.b, tr.b, w, 'horizontal', -5, 'width');
+  s.dim(tl.a, bl.a, h, 'vertical', -6, 'height');
   return s.finish(bl.c);
 }
 
@@ -101,7 +111,7 @@ function buildKeyhole(p) {
   s.line(P2, Q2); s.line(P1, Q1);
   s.arc(CS, Q2, Q1); // the rounded end of the neck, round the bottom
   s.h(P1, P2); s.v(P1, Q1); s.v(P2, Q2); s.h(CS, Q1); s.h(Q1, Q2);
-  s.radius(big, R0, 12); s.dim(P1, P2, neck, 'horizontal', 6); s.dim(CB, CS, depth, 'vertical', 14);
+  s.radius(big, R0, 12, 'radius'); s.dim(P1, P2, neck, 'horizontal', 6, 'neck'); s.dim(CB, CS, depth, 'vertical', 14, 'depth');
   return s.finish(CB);
 }
 
@@ -114,7 +124,7 @@ function buildHexagon(p) {
   const sides = built.shapes.filter((x) => !x.isConstruction);
   // the polygon's first corner is on the right, so side 1 (60 to 120 degrees) is the flat on top and side 4 the one at the bottom
   s.h(sides[1].joints[0], sides[1].joints[1]);
-  s.gap(sides[1].id, sides[4].id, af, 8);
+  s.gap(sides[1].id, sides[4].id, af, 8, 'across_flats');
   return s.finish(C);
 }
 
@@ -132,7 +142,7 @@ function buildStar(p) {
   for (let k = 0; k < 5; k++) { radO.push(s.line(C, o[k], true)); radI.push(s.line(C, ii[k], true)); }
   s.equalShapes(radO); s.equalShapes(radI); s.equalShapes(sides);
   s.v(C, o[0]);
-  s.dim(C, o[0], Ro, 'aligned', 8); s.dim(C, ii[0], Ri, 'aligned', -8);
+  s.dim(C, o[0], Ro, 'aligned', 8, 'outer'); s.dim(C, ii[0], Ri, 'aligned', -8, 'inner');
   return s.finish(C);
 }
 
@@ -146,7 +156,7 @@ function buildArrow(p) {
   ring.forEach((j, i) => s.line(j, ring[(i + 1) % ring.length]));
   s.h(P0, P1); s.h(P5, P6); s.v(P0, P6); s.v(P1, P2); s.v(P4, P5); s.v(P2, P4);
   s.midpoint(M, P2, P4); s.midpoint(S, P0, P6); s.h(S, M); s.h(M, P3);
-  s.dim(P0, P6, shaftW, 'vertical', -8); s.dim(P0, P1, shaftL, 'horizontal', 12); s.dim(P2, P4, headW, 'vertical', 12); s.dim(M, P3, headL, 'horizontal', -headW / 2 - 6);
+  s.dim(P0, P6, shaftW, 'vertical', -8, 'shaft_width'); s.dim(P0, P1, shaftL, 'horizontal', 12, 'shaft_length'); s.dim(P2, P4, headW, 'vertical', 12, 'head_width'); s.dim(M, P3, headL, 'horizontal', -headW / 2 - 6, 'head_length');
   return s.finish(M);
 }
 
@@ -157,12 +167,12 @@ function buildLBracket(p) {
   const ring = [P0, P1, P2, P3, P4, P5];
   ring.forEach((j, i) => s.line(j, ring[(i + 1) % ring.length]));
   s.h(P0, P1); s.v(P1, P2); s.h(P2, P3); s.v(P3, P4); s.h(P4, P5); s.v(P5, P0);
-  s.dim(P0, P1, w, 'horizontal', -8); s.dim(P0, P5, h, 'vertical', -8); s.dim(P1, P2, t, 'vertical', 8); s.dim(P5, P4, t, 'horizontal', 8);
+  s.dim(P0, P1, w, 'horizontal', -8, 'width'); s.dim(P0, P5, h, 'vertical', -8, 'height'); s.dim(P1, P2, t, 'vertical', 8, 'thickness'); s.dim(P5, P4, t, 'horizontal', 8, 'thickness');
   const c1 = s.pt(w - t, t / 2), c2 = s.pt(t / 2, h - t);
   const k1 = s.circle(c1, hd / 2), k2 = s.circle(c2, hd / 2);
-  s.dim(P0, c1, w - t, 'horizontal', 8 + t); s.dim(P0, c1, t / 2, 'vertical', -14);
-  s.dim(P0, c2, t / 2, 'horizontal', -14); s.dim(P0, c2, h - t, 'vertical', 8 + t);
-  s.radius(k1, hd / 2, 6); s.equalShapes([k1, k2]);
+  s.dim(P0, c1, w - t, 'horizontal', 8 + t, 'width - thickness'); s.dim(P0, c1, t / 2, 'vertical', -14, 'thickness / 2');
+  s.dim(P0, c2, t / 2, 'horizontal', -14, 'thickness / 2'); s.dim(P0, c2, h - t, 'vertical', 8 + t, 'height - thickness');
+  s.radius(k1, hd / 2, 6, 'hole_diameter / 2'); s.equalShapes([k1, k2]);
   return s.finish(P0);
 }
 
@@ -178,7 +188,7 @@ function buildBoltCircle(p) {
   }
   const chords = centres.map((c, k) => s.line(c, centres[(k + 1) % 6], true));
   s.equalShapes(chords); s.equalShapes(holes); s.v(C, centres[0]);
-  s.radius(outer, Ro, 6); s.radius(bolt, Rb, 6); s.radius(holes[0], hr, 4);
+  s.radius(outer, Ro, 6, 'outer_radius'); s.radius(bolt, Rb, 6, 'bolt_radius'); s.radius(holes[0], hr, 4, 'hole_radius');
   return s.finish(C);
 }
 
@@ -201,9 +211,9 @@ function buildFingerEdge(p) {
     }
   }
   s.equalShapes(tabs); s.equalShapes(gaps); s.equalShapes(verts);
-  s.dim(top[0][0], top[0][1], tab, 'horizontal', 8);
-  s.dim(low[0][0], low[0][1], gap, 'horizontal', -8);
-  s.dim(top[0][1], low[0][0], depth, 'vertical', 8);
+  s.dim(top[0][0], top[0][1], tab, 'horizontal', 8, 'tab_width');
+  s.dim(low[0][0], low[0][1], gap, 'horizontal', -8, 'gap_width');
+  s.dim(top[0][1], low[0][0], depth, 'vertical', 8, 'depth');
   return s.finish(first);
 }
 
@@ -232,9 +242,9 @@ function buildDogBone(p) {
   s.line(bl.H, br.H); s.line(br.V, tr.V); s.line(tr.H, tl.H); s.line(tl.V, bl.V);
   s.h(bl.H, br.H); s.v(br.V, tr.V); s.h(tr.H, tl.H); s.v(tl.V, bl.V);
   s.equalLengths([[bl.K, bl.H], [br.K, br.H], [tr.K, tr.H], [tl.K, tl.H]]);
-  s.radius(bl.arc, r, 10);
-  s.dim(bl.V, br.V, w, 'horizontal', -12);
-  s.dim(bl.H, tl.H, h, 'vertical', -12);
+  s.radius(bl.arc, r, 10, 'bit_diameter / 2');
+  s.dim(bl.V, br.V, w, 'horizontal', -12, 'width');
+  s.dim(bl.H, tl.H, h, 'vertical', -12, 'height');
   return s.finish(bl.C);
 }
 
@@ -249,7 +259,7 @@ function buildTSlot(p) {
   s.h(TL, TR); s.v(TR, NR); s.h(NR, OR); s.v(OR, BR); s.h(BR, BL); s.v(BL, OL); s.h(OL, NL); s.v(NL, TL); s.h(NR, NL);
   const M = s.pt(0, 0), Mb = s.pt(0, -D);
   s.midpoint(M, TL, TR); s.midpoint(Mb, BL, BR); s.v(M, Mb);
-  s.dim(TL, TR, tw, 'horizontal', 6); s.dim(TR, NR, td, 'vertical', 6); s.dim(OL, OR, bw, 'horizontal', -6); s.dim(TR, BR, D, 'vertical', 16);
+  s.dim(TL, TR, tw, 'horizontal', 6, 'top_width'); s.dim(TR, NR, td, 'vertical', 6, 'top_depth'); s.dim(OL, OR, bw, 'horizontal', -6, 'bottom_width'); s.dim(TR, BR, D, 'vertical', 16, 'total_depth');
   return s.finish(M);
 }
 
@@ -264,7 +274,7 @@ function buildButterflyKey(p) {
   s.v(P2, P3); s.v(P5, P0); s.v(P1, P4);
   s.midpoint(W, P1, P4); s.midpoint(ER, P2, P3); s.midpoint(EL, P5, P0); s.midpoint(W, EL, ER); s.h(EL, ER);
   s.equalLengths([[P2, P3], [P5, P0]]);
-  s.dim(EL, ER, L, 'horizontal', 6); s.dim(P2, P3, ew, 'vertical', 8); s.dim(P1, P4, ww, 'vertical', 6);
+  s.dim(EL, ER, L, 'horizontal', 6, 'length'); s.dim(P2, P3, ew, 'vertical', 8, 'end_width'); s.dim(P1, P4, ww, 'vertical', 6, 'waist_width');
   return s.finish(W);
 }
 
@@ -276,7 +286,7 @@ function buildCupHinge(p) {
   const C = s.pt(0, 0), S1 = s.pt(-sp / 2, -off), S2 = s.pt(sp / 2, -off), M = s.pt(0, -off);
   const cup = s.circle(C, cd / 2), k1 = s.circle(S1, sd / 2), k2 = s.circle(S2, sd / 2);
   s.midpoint(M, S1, S2); s.v(C, M); s.h(S1, S2); s.equalShapes([k1, k2]);
-  s.radius(cup, cd / 2, 8); s.radius(k1, sd / 2, 6); s.dim(S1, S2, sp, 'horizontal', -sd / 2 - 8); s.dim(C, M, off, 'vertical', -cd / 2 - 8);
+  s.radius(cup, cd / 2, 8, 'cup_diameter / 2'); s.radius(k1, sd / 2, 6, 'screw_diameter / 2'); s.dim(S1, S2, sp, 'horizontal', -sd / 2 - 8, 'screw_spacing'); s.dim(C, M, off, 'vertical', -cd / 2 - 8, 'screw_offset');
   return s.finish(C);
 }
 
@@ -287,7 +297,7 @@ function buildShelfPins(p) {
   const n = Math.max(2, Math.round(num(p.count, 5))), sp = num(p.spacing, 32), hd = num(p.holeDiameter, 5);
   const s = sketcher('shelfpins');
   const c = s.pt(0, 0), hole = s.circle(c, hd / 2);
-  s.radius(hole, hd / 2, 6);
+  s.radius(hole, hd / 2, 6, 'hole_diameter / 2');
   const made = applyPattern({ joints: s.joints, shapes: s.shapes, constraints: s.constraints }, CONSTRAINT_TYPES.RECTANGULAR_PATTERN, { shapes: [hole], joints: [] },
     { ...patternDefaults(CONSTRAINT_TYPES.RECTANGULAR_PATTERN), quantity: [n, 1], distance: [sp, sp] });
   if (!made.ok) throw new Error('shelf-pin pattern: ' + made.reason);
@@ -297,12 +307,31 @@ function buildShelfPins(p) {
 // TASK 669: BOX FRAME (front view) of a plywood cubby / bookcase carcass, the long direction VERTICAL: two SIDE boards the FULL length, two END
 // boards BETWEEN the sides, and N - 1 DIVIDERS between the sides, all t thick, splitting the inside into N equal compartments. The boards SHARE
 // their edges (one line and one pair of joints per shared edge: no gaps, no overlaps). Joint grid: four x levels (0, t, W - t, W) and 2 (N + 1)
-// y levels (the bottom and the top of the N + 1 cross boards); the inner columns carry a joint at every level. Constraints: every segment
-// horizontal / vertical, three dimensions (width, length, thickness), every other board thickness equal to t, the N openings equal.
+// y levels (the bottom and the top of the N + 1 cross boards); the inner columns carry a joint at every level. Every segment is horizontal / vertical.
+// TASK 670 (no FOLD): every board thickness and every opening but the top one is a SIGNED horizontal / vertical dimension (the solver locks which
+// side its second joint is on, engine.js dimSign), a formula: the left side's thickness dimension reads `thickness`, every other board reads THAT
+// dimension, an opening is (the length dimension - (N + 1) * the thickness dimension) / N, so a number typed into the length or the thickness
+// dimension moves every board as the parameter does (as the task 669 equal rules did). The top opening is what the overall length leaves (linear: it cannot flip either). The task 669 equal-LENGTH rules were unsigned, so
+// shrinking the length could land the solve on a folded branch (the top end board flipped above the top edge, the top opening absorbing it).
+// TASK 670 LAYOUT: 'Vertical' (above) or 'Horizontal' = the SAME construction with x and y swapped (a mirror in the diagonal through the
+// origin, which stays the bottom-left corner): the full-length boards become the bottom and the top, the ends and dividers stand between
+// them, the compartments sit side by side; every horizontal rule / dimension becomes vertical and the other way round.
+export const BOX_FRAME_LAYOUTS = Object.freeze([
+  Object.freeze({ value: 'Vertical', label: 'Vertical layout' }),
+  Object.freeze({ value: 'Horizontal', label: 'Horizontal layout' }),
+]);
 function buildBoxFrame(p) {
   const Lg = num(p.length, 1500), W = num(p.width, 400), t = num(p.thickness, 18), n = Math.max(1, Math.round(num(p.compartments, 5)));
+  const swap = p.layout === 'Horizontal';
   const g = (Lg - (n + 1) * t) / n;
-  const s = sketcher('boxframe');
+  const b0 = sketcher('boxframe');
+  // the swap seam: the construction below is written for the vertical layout; `s` puts each point, rule and dimension where the layout wants it
+  const across = { horizontal: 'vertical', vertical: 'horizontal' };
+  const s = !swap ? b0 : {
+    ...b0,
+    pt: (x, y) => b0.pt(y, x), h: b0.v, v: b0.h,
+    dim: (a, c, value, mode, offset, expr) => b0.dim(a, c, value, across[mode] || mode, -offset, expr),
+  };
   const levels = []; // the bottom and the top y of each cross board, from the bottom
   for (let k = 0; k <= n; k++) { const b = k * (g + t); levels.push(b, b + t); }
   const last = levels.length - 1;
@@ -311,23 +340,63 @@ function buildBoxFrame(p) {
   const hz = (a, c) => { s.line(a, c); s.h(a, c); }, vt = (a, c) => { s.line(a, c); s.v(a, c); };
   vt(L0, L1); vt(R0, R1); // the sides' outer long edges
   hz(L0, colL[0]); hz(colR[0], R0); hz(L1, colL[last]); hz(colR[last], R1); // the sides' ends
-  const thick = [], opening = [];
-  for (let i = 0; i < last; i++) {
-    vt(colL[i], colL[i + 1]); vt(colR[i], colR[i + 1]);
-    (i % 2 === 0 ? thick : opening).push([colL[i], colL[i + 1]]); // the right column has the same levels (horizontal rows), so one column carries the rules
-  }
+  for (let i = 0; i < last; i++) { vt(colL[i], colL[i + 1]); vt(colR[i], colR[i + 1]); }
   for (let i = 0; i <= last; i++) { s.line(colL[i], colR[i]); s.h(colL[i], colR[i]); } // every board's two long edges
-  s.dim(L0, R0, W, 'horizontal', -12); s.dim(L0, L1, Lg, 'vertical', -12); s.dim(L0, colL[0], t, 'horizontal', 12);
-  const tref = [L0, colL[0]];
-  for (const x of [[colR[0], R0], [colL[last], L1], [colR[last], R1], ...thick]) s.equalLengths([tref, x]);
-  // the first board's two vertical segments are also thick; the openings equal each other
-  for (let i = 0; i + 1 < opening.length; i++) s.equalLengths([opening[i], opening[i + 1]]);
+  s.dim(L0, R0, W, 'horizontal', -12, 'width');
+  const dL = s.dim(L0, L1, Lg, 'vertical', -12, 'length');
+  const dT = s.dim(L0, colL[0], t, 'horizontal', 12, 'thickness'); // the left side: THE thickness dimension, the other boards read it
+  s.dim(colR[0], R0, t, 'horizontal', 12, dT); // the right side
+  // the right column has the same levels (horizontal rows), so the left column carries the cross boards' rules
+  for (let k = 0; k <= n; k++) s.dim(colL[2 * k], colL[2 * k + 1], t, 'vertical', 10, dT); // each cross board
+  for (let k = 0; k + 1 < n; k++) s.dim(colL[2 * k + 1], colL[2 * k + 2], g, 'vertical', 10, `(${dL} - ${n + 1} * ${dT}) / ${n}`); // the openings but the top one
   return s.finish(L0);
 }
 
+// TASK 670: RIGHT-ANGLE FRAME CORNER: a horizontal and a vertical board meeting at 90 degrees (the top-left corner of a frame: the horizontal
+// board runs right from the outer corner, the vertical one runs down), both `thickness` thick, each its length long from the OUTER corner, joined
+// by the corner joint the start modal picks ('Miter' | 'H-Through' | 'V-Through'). The two board outlines are #core/corner-joint.js
+// cornerBoards (frame-calc's cornerJointPoints) in WORLD coordinates (Y down, as frame-calc's), so the seam moves exactly as frame-calc's does.
+// The boards SHARE their seam: every polygon corner is one joint, every edge is split at the other board's corners lying on it and drawn once.
+// Rules: each straight edge horizontal / vertical (a miter seam is the only slanted one); the two lengths and the two boards' thicknesses are
+// SIGNED horizontal / vertical dimensions (no fold): the first thickness reads `thickness`, the second reads the first (with the miter: the
+// 45 degree seam). Outer corner
+// at the origin.
+function buildRightAngleCorner(p) {
+  const lh = num(p.horizontalLength, 300), lv = num(p.verticalLength, 200), t = num(p.thickness, 18);
+  const type = CORNER_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'H-Through';
+  const boards = cornerBoards(0, 0, 1, 1, t, lh, lv, type);
+  const s = sketcher('corner');
+  const key = (q) => `${R(q.x)},${R(q.y)}`;
+  const at = new Map(); // a board corner (world point) -> its ONE joint
+  for (const poly of [boards.h, boards.v]) for (const q of poly) if (!at.has(key(q))) at.set(key(q), { q, j: s.pt(q.x, worldToUserY(q.y)) });
+  const corners = [...at.values()], drawn = new Set();
+  for (const poly of [boards.h, boards.v]) poly.forEach((a, i) => {
+    const b = poly[(i + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+    const on = corners.map((c) => ({ c, u: ((c.q.x - a.x) * dx + (c.q.y - a.y) * dy) / (len * len), off: Math.abs((c.q.x - a.x) * dy - (c.q.y - a.y) * dx) / len }))
+      .filter((o) => o.off < 1e-9 && o.u > -1e-9 && o.u < 1 + 1e-9).sort((u, v) => u.u - v.u); // the joints ON this edge, from a to b
+    for (let k = 0; k + 1 < on.length; k++) {
+      const u = on[k].c, v = on[k + 1].c, id = [u.j, v.j].sort().join('|');
+      if (drawn.has(id)) continue; // the shared seam: drawn once
+      drawn.add(id);
+      s.line(u.j, v.j);
+      if (Math.abs(u.q.y - v.q.y) < 1e-9) s.h(u.j, v.j); else if (Math.abs(u.q.x - v.q.x) < 1e-9) s.v(u.j, v.j);
+    }
+  });
+  const J = (q) => at.get(key(q)).j;
+  const O = J({ x: 0, y: 0 }), A = J(boards.h[1]), B = J(boards.h[2]), C = J(boards.v[1]), D = J(boards.v[2]);
+  s.dim(O, A, lh, 'horizontal', 12, 'horizontal_length'); s.dim(O, C, lv, 'vertical', -12, 'vertical_length');
+  const dT = s.dim(A, B, t, 'vertical', 10, 'thickness'); s.dim(C, D, t, 'horizontal', 10, dT);
+  return s.finish(O);
+}
+
 /**
- * THE bank. id: stable key; params: { key: { label, default } } (the defaults build() uses; mm); build(params) -> a v3 document.
- * `dimensions` is what the editor shows: the number of driving dimensions the drawing carries (a test asserts it).
+ * THE bank. id: stable key; params: { key: spec } (the defaults build() uses; mm); build(params) -> a v3 document.
+ * A param spec: { label, default, kind?, ... }. kind (default 'length'):
+ *   'length' | 'angle'  a user parameter of the opened document (mm | deg), unless `atOpen: true` (chosen in the start modal only: no dimension
+ *                       carries it, so a parameter could not drive it)
+ *   'count'             a whole number chosen in the start modal only (min, max): it changes how many parts the drawing has
+ *   'choice'            one of `options` ([{ value, label }]) chosen in the start modal only, shown by the `glyph` picker named there
+ * `dimensions` is what the editor shows: the number of driving dimensions the drawing carries at its defaults (a test asserts it).
  */
 export const TEMPLATES = [
   { id: 'slot', name: 'Slot', description: 'A straight slot with round ends: 10 mm wide, the two end centres 30 mm apart (40 mm overall).', params: { length: { label: 'Length', default: 40 }, width: { label: 'Width', default: 10 } }, dimensions: 2, build: buildSlot },
@@ -343,12 +412,65 @@ export const TEMPLATES = [
   { id: 't-slot', name: 'T-slot', description: 'A T-track slot profile: 19 mm wide and 9.5 mm deep over a 25 mm wide slot, 16 mm deep in all.', params: { topWidth: { label: 'Top width', default: 19 }, topDepth: { label: 'Top depth', default: 9.5 }, bottomWidth: { label: 'Bottom width', default: 25 }, totalDepth: { label: 'Total depth', default: 16 } }, dimensions: 4, build: buildTSlot },
   { id: 'butterfly-key', name: 'Butterfly key', description: 'A bow-tie key: 50 mm long, 25 mm wide at the ends, 10 mm at the waist.', params: { length: { label: 'Length', default: 50 }, endWidth: { label: 'End width', default: 25 }, waistWidth: { label: 'Waist width', default: 10 } }, dimensions: 3, build: buildButterflyKey },
   { id: 'cup-hinge-bore', name: 'Cup hinge bore', description: 'A 35 mm hinge cup hole with two 8 mm screw holes 45 mm apart, 9.5 mm from the cup centre.', params: { cupDiameter: { label: 'Cup diameter', default: 35 }, screwSpacing: { label: 'Screw spacing', default: 45 }, screwOffset: { label: 'Screw line offset', default: 9.5 }, screwDiameter: { label: 'Screw diameter', default: 8 } }, dimensions: 4, build: buildCupHinge },
-  { id: 'shelf-pin-row', name: 'Shelf-pin row', description: 'Five 5 mm holes on 32 mm centres (the 32 mm cabinet system): one hole and a rectangular pattern.', params: { count: { label: 'Holes', default: 5 }, spacing: { label: 'Spacing', default: 32 }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 1, build: buildShelfPins },
-  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5 } }, dimensions: 3, build: buildBoxFrame },
+  { id: 'shelf-pin-row', name: 'Shelf-pin row', description: 'Five 5 mm holes on 32 mm centres (the 32 mm cabinet system): one hole and a rectangular pattern.', params: { count: { label: 'Holes', default: 5, kind: 'count', min: 2, max: 100 }, spacing: { label: 'Spacing', default: 32, atOpen: true }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 1, build: buildShelfPins },
+  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' } }, dimensions: 14, build: buildBoxFrame },
+  { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, build: buildRightAngleCorner },
 ];
 
 /** The default parameters of a template: { key: default }. */
 export const defaultParams = (t) => Object.fromEntries(Object.entries(t.params).map(([k, v]) => [k, v.default]));
-/** Build a template's document with its default parameters (or `params` over them). */
-export const buildTemplate = (t, params = {}) => t.build({ ...defaultParams(t), ...params });
+
+// ── TASK 670: the params as data for the start modal and the document's user parameters ──
+export const paramKind = (spec) => spec.kind || 'length';
+/** A param that opens as a USER PARAMETER of the document (a length or an angle a dimension formula reads). */
+export const isLiveParam = (spec) => (paramKind(spec) === 'length' || paramKind(spec) === 'angle') && !spec.atOpen;
+/** The user parameter's name for a param key: camelCase -> snake_case (bitDiameter -> bit_diameter), a name the expression parser accepts. */
+export const paramName = (key) => key.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase());
+/** The unit a param is shown and stored in: mm for a length, deg for an angle, none for a count or a choice. */
+export const paramUnit = (spec) => ({ length: 'mm', angle: 'deg' })[paramKind(spec)] || '';
+
+/** Why `value` cannot be this param's value (the start modal shows it), or null. */
+export function paramRefusal(spec, value) {
+  const kind = paramKind(spec);
+  if (kind === 'choice') return spec.options.some((o) => o.value === value) ? null : `${spec.label}: pick one of the options`;
+  const v = Number(value);
+  if (kind === 'count') {
+    if (!Number.isInteger(v)) return `${spec.label} must be a whole number`;
+    if (v < spec.min || v > spec.max) return `${spec.label} must be from ${spec.min} to ${spec.max}`;
+    return null;
+  }
+  return Number.isFinite(v) && v > 0 ? null : `${spec.label} must be a number more than 0`;
+}
+
+/**
+ * The document's USER PARAMETERS for the param values (the live ones, in declaration order): { name, unit, expression: '<value> <unit>',
+ * comment: label }, made by #core/parameters.js planChange createParameter (the one model: its name rule and its canonical text).
+ */
+export function templateParameters(t, values) {
+  let parameters = [];
+  for (const [k, spec] of Object.entries(t.params)) {
+    if (!isLiveParam(spec)) continue;
+    const unit = paramUnit(spec);
+    const plan = planChange({ parameters, constraints: [] }, { type: 'createParameter', name: paramName(k), unit, text: `${values[k]} ${unit}`, comment: spec.label });
+    if (!plan.ok) throw new Error(`template ${t.id}: parameter ${k}: ${plan.message}`);
+    parameters = plan.paramsAfter;
+  }
+  return parameters;
+}
+
+/**
+ * Build a template's document with its default parameters (or `params` over them): the drawing, its dimensions as formulas, and its user
+ * parameters. A value the param refuses (paramRefusal) throws: the start modal checks every value before it opens a template.
+ */
+export function buildTemplate(t, params = {}) {
+  const values = { ...defaultParams(t), ...params };
+  for (const [k, spec] of Object.entries(t.params)) {
+    const why = paramRefusal(spec, values[k]);
+    if (why) throw new Error(`template ${t.id}: ${why}`);
+    if (paramKind(spec) !== 'choice') values[k] = R(Number(values[k])); // the drawing and its parameter read the SAME number
+  }
+  const doc = t.build(values);
+  doc.geometry.parameters = templateParameters(t, values);
+  return doc;
+}
 export const templateById = (id) => TEMPLATES.find((t) => t.id === id) || null;

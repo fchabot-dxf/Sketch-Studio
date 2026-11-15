@@ -1,5 +1,5 @@
 // tests/fillet-handle-646.test.js -- TASK 646 (live headless, REAL mouse and REAL touch via CDP, Pen Plotter = the shared Design tab).
-// Two lines meet at a corner. Fillet, tap the corner: the radius box opens and a round HANDLE sits on the preview arc's midpoint.
+// Two lines meet at a corner. Fillet, tap the corner: the radius box opens and a drag ARROW (shared drag-arrow-handle.js) sits on the preview arc's midpoint.
 //  - dragging the handle outwards makes the box value grow and the preview arc's radius equal it; releasing keeps the input open; Enter applies the box value;
 //  - Esc after a drag leaves no change and no undo step; a radius that extends a line draws the dashed --sk-warning extension in the preview;
 //  - the green check button (DONE_ACTIONS) applies the fillet like Enter, beside the corner, clear of the box and the handle;

@@ -15,13 +15,12 @@
 
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
-import { computeBaseJointRadiusFor, skv } from '#ui/svg-renderer.js';
 import {
   findCornerAtPoint, findFilletShapeAtPoint, findCornerBetweenLines, cornerFilletGeometry, applyFillet,
   diagnoseNoFillet, defaultFilletRadius, parseFilletRadius
 } from '#core/fillet.js';
 import { SNAP } from '#core/constants.js';
-import SettingsManager from '#core/settings-manager.js';
+import { dragArrowSvg, dragArrowHit, dragArrowDirection } from '#ui/drag-arrow-handle.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted
 import { docUnit } from '#core/settings-manager.js';
@@ -39,6 +38,7 @@ let currentRadius = null; // WORLD mm (1 unit = 1 mm); null until first setup. S
 let _radiusUnit = null;   // doc unit the default was seeded for; a unit change re-seeds it
 let _pick = null;         // { line1 } once the first line is picked
 let _input = null;        // { el, corner, radius, ... } while the radius input is open; radius = the ONE radius, typed or dragged
+let _hover = false;       // the pointer is over the handle (it draws darker)
 let _drag = null;         // { pointerId, grab } while the handle is dragged
 let _press = null;        // a press on empty canvas while the input is open: a click abandons it on release, a pan / pinch does not
 let _viewListening = false;
@@ -118,7 +118,11 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
   if (_input) { // the overlay follows the typed / dragged value while the input is open
     if (_drag && _drag.pointerId === e.pointerId) dragHandleTo(svg, e);
     else if (_press && _press.pointerId === e.pointerId && Math.hypot(e.clientX - _press.x, e.clientY - _press.y) > PRESS_SLOP_PX) _press.moved = true;
-    else if (e.pointerType !== 'touch') setCursor(overHandle(svg, e) ? 'pointer' : 'crosshair');
+    else if (e.pointerType !== 'touch') {
+      const over = overHandle(svg, e);
+      setCursor(over ? 'pointer' : 'crosshair');
+      if (over !== _hover) { _hover = over; refreshPreview(); }
+    }
     return;
   }
   ensureRadius();
@@ -149,6 +153,7 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
     if (overHandle(svg, e)) {
       const grab = handleWorld(); const w = screenToWorld(svg, e.clientX, e.clientY);
       _drag = { pointerId: e.pointerId, grab: grab ? { x: grab.x - w.x, y: grab.y - w.y } : { x: 0, y: 0 } };
+      refreshPreview(); // the arrow draws darker while dragged
     } else _press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false, svg, state, viewState };
     return true;
   }
@@ -190,6 +195,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
 export function handleFilletPointerUp(e) {
   if (_drag && e && _drag.pointerId === e.pointerId) { // releasing the handle keeps the input open; Enter (or the check) applies
     _drag = null;
+    if (_input) refreshPreview();
     if (_input) { try { _input.el.focus(); _input.el.select(); } catch (_) {} }
     return;
   }
@@ -292,12 +298,11 @@ function handleWorld() {
   return _input ? arcMidpoint(cornerFilletGeometry(_input.corner, _input.radius)) : null;
 }
 
-// the handle is a joint-like point: it is picked within the joint reach (SNAP.JOINT_PX, x the touch boost for a finger)
+// the handle is the shared drag arrow: it is picked within the arrow's reach (a 44 px target, x the touch boost for a finger)
 function overHandle(svg, e) {
   const h = handleWorld();
   if (!h) return false;
-  const s = worldToScreen(svg, h);
-  return Math.hypot(e.clientX - s.x, e.clientY - s.y) <= SNAP.JOINT_PX * snapBoostFor(e.pointerType === 'touch');
+  return dragArrowHit({ x: e.clientX, y: e.clientY }, worldToScreen(svg, h), e.pointerType === 'touch', snapBoostFor(e.pointerType === 'touch'));
 }
 
 // The radius whose preview arc midpoint lies nearest the world point q. The midpoints of the fillets of all radii form the corner's
@@ -380,6 +385,7 @@ function removeInput() {
   if (_input && _input.el && _input.el.parentNode) _input.el.parentNode.removeChild(_input.el);
   _input = null;
   _drag = null;
+  _hover = false;
   _press = null;
 }
 
@@ -475,12 +481,10 @@ function renderFilletOverlay(svg, corner, viewState, opts = {}) {
     <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">R ${fmtR(radius)}</text>`;
       const hp = opts.handle ? arcMidpoint(geom) : null;
       if (hp) {
-        // the drag handle: a joint-like point (the renderer's joint size, white fill, joint ring) with the arc-endpoint ring around it;
-        // it is picked within the joint reach (overHandle); .fillet-handle is what the Done button keeps clear of
-        const jr = computeBaseJointRadiusFor(SettingsManager.get('JOINT_RADIUS')) / scale;
-        html += `
-    <circle cx="${hp.x}" cy="${hp.y}" r="${jr * 1.6}" fill="none" style="stroke:${skv('#2563eb')}" stroke-width="${1.5 / scale}" stroke-opacity="0.18" />
-    <circle class="fillet-handle" cx="${hp.x}" cy="${hp.y}" r="${jr}" style="fill:${skv('white')}; stroke:var(--sk-joint-ring-hover, #000000)" stroke-width="${1 / scale}" />`;
+        // the drag handle: the shared drag ARROW on the preview arc's midpoint, pointing the way the radius grows (away from the corner);
+        // .fillet-handle is what the Done button keeps clear of
+        const dir = dragArrowDirection((r) => arcMidpoint(cornerFilletGeometry(corner, r)), radiusReq, radiusReq * 0.02);
+        html += dragArrowSvg({ point: hp, dir, scale, state: _drag ? 'drag' : (_hover ? 'hover' : 'idle'), className: 'fillet-handle' });
       }
     } else if (geom && geom.reason) {
       // singular radius (a line would collapse) / collinear: say so right at the corner instead of an arc

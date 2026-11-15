@@ -121,6 +121,7 @@ export function setupUI(state){
       trEl.innerHTML = '';
       toolRibbon = createToolRibbon({
         state,
+        appId: 'sketchstudio', // TASK 647: the user's ribbon layout is kept per app
         onToolClick: (t) => handleToolActivate(t), // S7c-2d-pre: the rich activation (pre-selection workflows)
       });
       toolRibbon.render(trEl);

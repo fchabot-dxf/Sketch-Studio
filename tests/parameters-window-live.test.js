@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { pressRibbonTool } from './helpers/ribbon-tool.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '535-4', width: 1400, height: 800 });
@@ -32,6 +33,14 @@ await (async () => {
     const clickEl = async (sel) => { const c = await centerOf(sel); assert(c, sel + ' is on screen'); await click(c.x, c.y); };
     const rect = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e || e.hidden) return null; const r = e.getBoundingClientRect(); return r.width ? { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) } : null; })()`);
     const W = '.sk-pwin';
+    // TASK 647: Inspect shows only its first tool (Dim) by default; Parameters is in its dropdown. The user puts it in the bar: a real click on the
+    // section's name, on the Parameters checkbox, then Esc (the layout is kept per app, so once per app).
+    const putParamsInBar = async () => {
+      await clickEl('[data-section="inspect"] .sk-ribbon-group-label');
+      await clickEl('.sk-ribbon-sect-row[data-id="btn-parameters"] .sk-ribbon-sect-check input');
+      await key('Escape', 'Escape', 27); await sleep(150);
+      assert.strictEqual(await evalJs(`!document.getElementById('btn-parameters').hidden`), true, 'Parameters is in the bar');
+    };
     const winOpen = () => evalJs(`(() => { const e = document.querySelector('${W}'); return !!e && !e.hidden && e.getBoundingClientRect().width > 0; })()`);
     const active = () => evalJs(`(() => { const a = document.activeElement; return a ? (a.id || a.className || a.tagName) : null; })()`);
     const focusInWindow = () => evalJs(`(() => { const e = document.querySelector('${W}'); return !!e && e.contains(document.activeElement); })()`);
@@ -55,6 +64,7 @@ await (async () => {
     assert.deepStrictEqual(await btnState(), { label: 'Parameters', pressed: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'the button has a label, a title, a pressed state and announces a dialog');
     assert.strictEqual(await evalJs(`document.querySelector('#btn-parameters .sk-ribbon-lbl').textContent`), 'Params');
     assert.strictEqual(await winOpen(), false, 'before the first click no window is shown');
+    await putParamsInBar();
     // open: real click
     await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'the button opens the window');
@@ -161,8 +171,7 @@ await (async () => {
     // ---- the 390 px layout: a full-width bottom sheet
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: false });
     await sleep(600);
-    await evalJs(`document.getElementById('btn-parameters').scrollIntoView({ inline: 'center' })`); await sleep(200);
-    await clickEl('#btn-parameters');
+    await pressRibbonTool(evalJs, (p) => click(p.x, p.y), 'btn-parameters'); // TASK 647: in the bar if it fits at 390 px, else from the Inspect dropdown
     assert.strictEqual(await winOpen(), true, 'the button opens the window at 390 px');
     const sheet = await rect(W);
     assert(sheet.l === 0 && sheet.r === 390 && sheet.b === 800, `a full-width bottom sheet at 390 px: ${JSON.stringify(sheet)}`);
@@ -203,6 +212,7 @@ await (async () => {
       return st.constraints.length;
     })()`);
     await seed();
+    await putParamsInBar();
     await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'Shaper: the button opens the window');
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 4`, 'the four seeded dimension rows');
@@ -288,6 +298,7 @@ await (async () => {
       st.shapes.push({ id: 'PL1', type: 'line', joints: ['pa', 'pb'] });
       st.constraints.push({ type: 'distance', joints: ['pa', 'pb'], value: 30, name: 'd1' });
     })()`);
+    await putParamsInBar();
     await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'Pen Plotter: the button opens the window');
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 1`, 'the Pen Plotter dimension row');

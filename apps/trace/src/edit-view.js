@@ -32,7 +32,7 @@ export function mountEdit({ isActive, getHostData, applyHost, session = null }) 
   if (!svgEl) return null;
 
   designController = mountSketch(svgEl, { isActive, seedDemo: false, grid: true, onRender: () => { if (sidePanel) sidePanel.tick(); } }); // the buffer below decides what geometry (if any) to show
-  const ribbon = createToolRibbon({ state: designController.state, extraGroups: [], parameters: false }); // O14: Trace has no Parameters window
+  const ribbon = createToolRibbon({ state: designController.state, appId: 'trace', extraGroups: [], parameters: false }); // TASK 647: appId (the ribbon layout per app); O14: Trace has no Parameters window
   ribbon.render(ribbonEl); // TASK 602: render() also marks #design-ribbon / #tab-edit as the ribbon's host / design frame (the phone-landscape rail)
   ribbonEl.hidden = false;
   bodyEl.hidden   = false;

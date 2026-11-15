@@ -5,6 +5,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { pressRibbonTool } from './helpers/ribbon-tool.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const EVID = path.join(process.cwd(), '.evidence', '645');
 
@@ -38,7 +39,7 @@ await (async () => {
     const clip = { x: c.x - 200, y: c.y - 120, width: 380, height: 260 };
     await shot('before.png', clip);
 
-    await click((await centerOf('#tool-fillet')).x, (await centerOf('#tool-fillet')).y);
+    await pressRibbonTool(evalJs, (p) => click(p.x, p.y), 'tool-fillet'); // TASK 647: Fillet is in the Modify dropdown by default
     await click(c.x, c.y);
     await waitFor(`!!document.getElementById('fillet-radius-input')`, 'the radius input');
     await evalJs(`(() => { const i = document.getElementById('fillet-radius-input'); i.focus(); i.select(); })()`);

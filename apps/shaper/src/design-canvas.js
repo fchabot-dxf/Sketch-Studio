@@ -19,7 +19,7 @@ export const DESIGN_CANVAS_OPTIONS = Object.freeze({
 });
 
 /** createToolRibbon options (the page adds notify). */
-export const RIBBON_OPTIONS = Object.freeze({ profiles: true });
+export const RIBBON_OPTIONS = Object.freeze({ profiles: true, appId: 'shaper' }); // TASK 647: appId = the user's ribbon layout is kept per app
 
 /**
  * The options createDocumentBuffer gets from Shaper. TASK 474: the SAME restore runs after the initial restore and after Open / New / Open

@@ -4,7 +4,7 @@
 //  - a real click / tap on the Rect button opens the menu; each of the 3 items is visible, inside the viewport, is the element at its own centre
 //    (elementFromPoint) and (touch) is >= 44 px tall;
 //  - a real click / tap on each item picks that rect mode (the item is .active, the menu closes, rect is the active tool);
-//  - Esc closes it; a click / tap outside closes it; scrolling the ribbon closes it; resizing the window closes it.
+//  - Esc closes it; a click / tap outside closes it; resizing the window closes it. (TASK 647: the ribbon no longer scrolls: that is asserted instead.)
 // RECT_MENU_EVIDENCE=<dir> saves a screenshot of the open menu per layout and host (before / after evidence).
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -43,7 +43,12 @@ export async function runRectMenu(layoutName) {
     };
     const centre = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     const isOpen = () => evalJs(`!!document.querySelector('.sk-ribbon-menu.show')`);
-    const open = async (tag) => { await press(await centre('#tool-rect')); assert.strictEqual(await isOpen(), true, tag + ': a click on the Rect button opens the menu'); };
+    // TASK 647: where Rect is not in the bar (Pen Plotter's landscape rail shows one Create tool) it runs from the Create dropdown: the section's name, then its row
+    const open = async (tag) => {
+      if (await evalJs(`document.getElementById('tool-rect').hidden`)) { await press(await centre('[data-section="create"] .sk-ribbon-group-label')); await press(await centre('.sk-ribbon-sect-menu.show [data-id="tool-rect"]')); }
+      else await press(await centre('#tool-rect'));
+      assert.strictEqual(await isOpen(), true, tag + ': a click on the Rect button opens the menu');
+    };
 
     for (const h of LANDSCAPE_HOSTS.filter((x) => !process.env.RECT_MENU_HOST || x.name === process.env.RECT_MENU_HOST)) { // RECT_MENU_HOST narrows a debugging run to one host
       const tag = `${layoutName} ${h.name} ${L.w}x${L.h}`;
@@ -88,11 +93,7 @@ export async function runRectMenu(layoutName) {
       await press(outside);
       assert.strictEqual(await isOpen(), false, tag + ': a click outside closes the menu');
       await open(tag);
-      const canScroll = await evalJs(`(() => { const r = document.querySelector('.sk-ribbon'); return r.scrollWidth > r.clientWidth + 1 || r.scrollHeight > r.clientHeight + 1; })()`);
-      await evalJs(`(() => { const r = document.querySelector('.sk-ribbon'); r.scrollBy(r.scrollWidth > r.clientWidth ? 40 : 0, r.scrollHeight > r.clientHeight ? 40 : 0); })()`); await sleep(250);
-      if (canScroll) assert.strictEqual(await isOpen(), false, tag + ': scrolling the ribbon closes the menu');
-      else console.log(tag + ': the ribbon does not scroll here (scroll-close not exercised)');
-      if (!(await isOpen())) await open(tag);
+      assert.strictEqual(await evalJs(`(() => { const r = document.querySelector('.sk-ribbon'); return r.scrollWidth <= r.clientWidth && r.scrollHeight <= r.clientHeight; })()`), true, tag + ': the ribbon does not scroll (TASK 647)');
       await metrics(L.w - 20); await sleep(300);
       assert.strictEqual(await isOpen(), false, tag + ': resizing the window closes the menu');
       await metrics(L.w);

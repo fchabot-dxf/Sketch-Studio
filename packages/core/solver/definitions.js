@@ -744,6 +744,13 @@ export const Definitions = {
           const la2 = (ax * ax + ay * ay) || 1e-24, lb = Math.hypot(bx, by) || 1e-12, th = Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
           const gax = lb * ay / la2, gay = -lb * ax / la2, gbx = (th * bx - by) / lb, gby = (th * by + bx) / lb;
           addGrad(row, r.p, gax, gay); addGrad(row, r.q, gbx, gby); addGrad(row, r.c, -gax - gbx, -gay - gby);
+        } else if (r.k === 'rl') {
+          // |W| th, th = atan2(U x W, U . W) (q on the RAY from p along a -> b, task 656), U = b - a, W = q - p: the 'ta' derivative with A = U,
+          // B = W:  d/dW = th W / |W| + (-Wy, Wx) / |W|,  d/dU = |W| (Uy, -Ux) / |U|^2
+          const ux = X(r.b) - X(r.a), uy = Y(r.b) - Y(r.a), wx = X(r.q) - X(r.p), wy = Y(r.q) - Y(r.p);
+          const lu2 = (ux * ux + uy * uy) || 1e-24, lw = Math.hypot(wx, wy) || 1e-12, th = Math.atan2(ux * wy - uy * wx, ux * wx + uy * wy);
+          const gux = lw * uy / lu2, guy = -lw * ux / lu2, gwx = (th * wx - wy) / lw, gwy = (th * wy + wx) / lw;
+          addGrad(row, r.q, gwx, gwy); addGrad(row, r.p, -gwx, -gwy); addGrad(row, r.b, gux, guy); addGrad(row, r.a, -gux, -guy);
         }
       }
     }

@@ -134,7 +134,7 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     const collapsed = findCollapsedShape(state, sizesBefore, legs);
     if (collapsed) {
       const own = list.find((e, i) => !fillets[i]) || list[0];
-      return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse a ${collapsed.type} to a point` });
+      return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse ${collapsed.type === 'arc' ? 'an' : 'a'} ${collapsed.type} to a point` });
     }
     if (result && result.converged === false) {
       const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');

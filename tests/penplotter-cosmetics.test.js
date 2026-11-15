@@ -33,7 +33,6 @@ await (async () => {
       await click(c.x, c.y);
     };
     const world = (x, y) => evalJs(`(() => { const s = document.getElementById('design-canvas'); const p = new DOMPoint(${x}, ${y}).matrixTransform(s.getScreenCTM()); return { x: Math.round(p.x), y: Math.round(p.y) }; })()`);
-    const frame = () => send('Page.captureScreenshot', { format: 'png' }); // headless draws frames on demand
     const st = (expr) => evalJs(`import('/apps/penplotter/src/state.js').then(m => { const state = m.state; return JSON.stringify(${expr}); })`).then(JSON.parse);
     const toast = () => evalJs(`document.getElementById('toast').textContent`);
 
@@ -72,9 +71,9 @@ await (async () => {
     await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     await clickEl('#tool-select');
     const m = await world(40, 30); await click(m.x, m.y);
-    await frame(); await sleep(300); await frame();
+    await waitFor(`!document.getElementById('strokeColor').disabled`, 'strokeColor enabled after selecting line');
     await evalJs(`(() => { const e = document.getElementById('strokeColor'); e.value = '#ff0000'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
-    await frame(); await sleep(300); await frame();
+    await waitFor(`document.getElementById('mixStatus').textContent.length > 0`, 'mixStatus explains why Pen-mix is off');
     const mix = await evalJs(`({ disabled: document.getElementById('shapeMix').disabled, status: document.getElementById('mixStatus').textContent })`);
     console.log('pen-mix, no pens:', JSON.stringify(mix));
     assert.strictEqual(await st('state.plotColors.length'), 0, 'precondition: no pens');
@@ -93,7 +92,7 @@ await (async () => {
     assert(before.includes('Outline'), 'the starter toolpath is still there before: ' + before);
     await clickEl('#tool-select');
     const c = await world(82, 25); await click(c.x, c.y);       // the circle's edge (stroke #0000ff, fill #00ff00)
-    await frame(); await sleep(300); await frame();
+    await waitFor(`import('/apps/penplotter/src/state.js').then(m => m.state.selectedShapeIds.size === 1)`, 'circle selected for + Outline');
     await clickEl('.sk-header-tab[data-tab="toolpath"]'); await stageOn('toolpath');
     await clickEl('#addOutlineTp');
     await waitFor(`import('/apps/penplotter/src/state.js').then(m => m.state.toolpaths.some(t => /^outline \\d+$/.test(t.name)))`, '+ Outline added a toolpath');

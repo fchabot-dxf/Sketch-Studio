@@ -87,6 +87,12 @@ await (async () => {
     await sleep(300); await shot('parameters-table-box-frame.png', '.sk-pwin', { pad: 4, scale: 2 });
     // thickness 18 -> 12 through the dimension box: a double click on the thickness dimension's label, `thickness = 12`, Enter
     const idx = await S(`s.constraints.findIndex((c) => c.expression === 'thickness')`);
+    // TASK 672: the template's dimensions sit outside the outline (one placement rule) and Recenter fits the geometry: zoom out (wheel, about the
+    // canvas centre) until the thickness label is inside the canvas
+    const inCanvas = () => evalJs(`(() => { const l = document.querySelector('#design-canvas .dim-label[data-constraint-idx="${idx}"]'), c = document.getElementById('design-canvas'); if (!l) return false; const a = l.getBoundingClientRect(), b = c.getBoundingClientRect(); return a.width > 0 && a.left >= b.left && a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom; })()`);
+    const mid = await center('#design-canvas');
+    for (let k = 0; k < 8 && !(await inCanvas()); k++) { await mouseEv('mouseMoved', mid.x, mid.y); await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 120 }); await sleep(300); }
+    assert.ok(await inCanvas(), 'the thickness label is on the canvas');
     const lp = await center(`#design-canvas .dim-label[data-constraint-idx="${idx}"]`);
     await press('#tool-select');
     await dblclick(lp.x, lp.y);

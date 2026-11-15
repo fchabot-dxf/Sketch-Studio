@@ -10,6 +10,7 @@
 //      each app's session slot survives the other page's write.
 //   E. keepTabs() (what GO TO runs) resolves false when the buffer cannot be written; a session's stored() part is what the buffer keeps.
 //   F. a design on (fake) Google Drive with a save not confirmed yet: the next app opens it with every app's sidecar, and its own save keeps the unconfirmed one.
+//   G. a current design the buffer does not hold (another page picked it) opens as one more tab, after the buffered ones (they are not dropped).
 import assert from 'node:assert';
 import { createProjectStore, createMemoryAdapter, emptyDocument } from '../packages/ui/project-store.js';
 import { createDocumentBuffer, mergeTabBuffers } from '../packages/ui/document-buffer.js';
@@ -229,6 +230,19 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   await live.buf.restore(); step(live.st, 'line', 'jt'); live.side.sel = 'kept';
   assert.strictEqual(await live.buf.keepTabs(), true, 'the stored part can be written');
   assert.deepStrictEqual((await store.readBuffer({})).tabs[0].hostSessions, { trace: { sel: 'kept' } }, 'only the stored part is in the buffer');
+}
+
+// ---- G. the current design set by a page that kept no tabs (it is not in the buffer): it opens as a tab of its own, after the buffered ones ----------------
+{
+  const store = mkStore(createMemoryAdapter());
+  const a = page('sketchstudio', store);
+  await a.buf.restore(); step(a.st, 'line', 'jg'); await a.buf.keepTabs();
+  const x = await store.newDesign('Elsewhere'); await store.save(docWith('jx'), { id: x.id }); // current now (as a design picked on another page)
+  const b = page('shaper', store, { hostName: 'shaper' });
+  await b.buf.restore();
+  assert.deepStrictEqual(b.names(), ['Untitled', 'Elsewhere'], 'the buffered tab is kept and the current design opens beside it');
+  assert.strictEqual(b.active(), 'Elsewhere', 'the current design shows');
+  assert.deepStrictEqual(ids(b.st), ['jx']);
 }
 
 // ---- F. a design on (fake) Google Drive whose last save is not confirmed yet (GO TO a moment after an edit): the next app keeps the other sidecars ----------

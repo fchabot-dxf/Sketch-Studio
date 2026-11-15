@@ -3,13 +3,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, RECT_MODES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
+import { TOOL_MODES, RECT_MODES, SLOT_MODES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
 import { findNearbyJoint } from '#core/joints.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
 import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLinePointerUp, resetLineState, finalizeLineFromActive } from '#ui/input-handlers/line-tool.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from '#ui/input-handlers/rect-tool.js';
+import { setupSlotTool, handleSlotPointerDown, handleSlotPointerMove, handleSlotPointerUp, resetSlotState } from '#ui/input-handlers/slot-tool.js';
 import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, handleCirclePointerUp, resetCircleState } from '#ui/input-handlers/circle-tool.js';
 import { setupPolygonTool, handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, resetPolygonState } from '#ui/input-handlers/polygon-tool.js'; // TASK 483
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
@@ -31,13 +32,17 @@ let justCreatedActive = false;
 export function setupDrawingTools(svg, state) {
     dbg.log('drawing', '[drawing-tools] Setting up drawing tools...');
     
-    // Initialize rectangle mode if not set
+    // Initialize rectangle and slot modes if not set
     if (!state.rectMode) {
         state.rectMode = RECT_MODES.TWO_POINT;
     }
-    // Initialize line, rect, circle, polygon and arc tools
+    if (!state.slotMode) {
+        state.slotMode = SLOT_MODES.CENTER_TO_CENTER;
+    }
+    // Initialize line, rect, slot, circle, polygon and arc tools
     setupLineTool(svg, state);
     setupRectTool(svg, state);
+    setupSlotTool(svg, state);
     setupCircleTool(svg, state);
     setupPolygonTool(svg, state);
     setupArcTool(svg, state);
@@ -53,7 +58,7 @@ export function setupDrawingTools(svg, state) {
  * @returns {boolean} True if event was handled
  */
 export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
-    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) {
+    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) {
         return false;
     }
     
@@ -75,6 +80,8 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
             return handleLinePointerDown(e, svg, state, hitSnap, w);
         case TOOL_MODES.RECT:
             return handleRectPointerDown(e, svg, state, hitSnap, w);
+        case TOOL_MODES.SLOT:
+            return handleSlotPointerDown(e, svg, state, hitSnap, w);
         case TOOL_MODES.CIRCLE:
             return handleCirclePointerDown(e, svg, state, hitSnap, w);
         case TOOL_MODES.POLYGON:
@@ -97,7 +104,7 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
  * @returns {boolean} True if event was handled
  */
 export function handleDrawingPointerMove(e, svg, state, w) {
-    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) return false;
+    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) return false;
 
     // Debug: show active snap while moving (guarded; enable with `window.ug.debug.verboseDrawingLogs = true`)
     try{
@@ -120,6 +127,8 @@ export function handleDrawingPointerMove(e, svg, state, w) {
             return handleLinePointerMove(e, svg, state, w);
         case TOOL_MODES.RECT:
             return handleRectPointerMove(e, svg, state, w);
+        case TOOL_MODES.SLOT:
+            return handleSlotPointerMove(e, svg, state, w);
         case TOOL_MODES.CIRCLE:
             return handleCirclePointerMove(e, svg, state, w);
         case TOOL_MODES.POLYGON:
@@ -142,7 +151,7 @@ export function handleDrawingPointerMove(e, svg, state, w) {
  * @returns {boolean} True if event was handled
  */
 export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
-    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) {
+    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) {
         return false;
     }
     try{ dbg.log('drawing', '[drawing-tools] pointerUp', { tool: state.currentTool, hitSnap, activeSnap: state.activeSnap, w, wasDragging }); }catch(_){ }
@@ -153,6 +162,8 @@ export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
             return handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging);
         case TOOL_MODES.RECT:
             return handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging);
+        case TOOL_MODES.SLOT:
+            return handleSlotPointerUp(e, svg, state, hitSnap, w, wasDragging);
         case TOOL_MODES.CIRCLE:
             return handleCirclePointerUp(e, svg, state, hitSnap, w, wasDragging);
         case TOOL_MODES.POLYGON:
@@ -178,6 +189,7 @@ export function resetDrawingState(state) {
     justCreatedActive = false;
     try { resetLineState(state); } catch(_) {}
     try { resetRectState(state); } catch(_) {}
+    try { resetSlotState(state); } catch(_) {}
     try { resetCircleState(state); } catch(_) {}
     try { resetPolygonState(state); } catch(_) {}
     try { resetArcState(state); } catch(_) {}

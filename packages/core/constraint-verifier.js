@@ -29,6 +29,7 @@ export function measureResidual(c, joints, shapes) {
                         const rim = joints.get(s.joints[1]);
                         if (center && rim) currentDist = getDist(center, rim);
                     }
+                    if (c.isDiameter) currentDist *= 2;
                 }
             } else if (isPointLineDistance(c)) {
                 // Point-to-line: the same convention as the solver row (distance.__lineLine) -- |perpendicular distance| from P to line AB.

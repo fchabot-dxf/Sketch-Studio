@@ -83,17 +83,17 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
       await openSidebar(); pressEl(`.sk-sidebar-goto [data-app="${H.goto}"]`, 'GO TO ' + H.goto);
     }
     // 2. THE question, where the action came from
-    const bar = (p === 'open-projects' || p === 'open-recent') ? '.sk-pm-ask' : '.sk-sidebar-ask';
-    await app.waitFor(() => { const a = q(bar); return !!a && !a.hidden && !!a.querySelector('[data-choice="save"]'); }, `${p}: the Save… / Don't save / Cancel question`, 5000);
+    const bar = '.sk-tp-backdrop [role="dialog"]'; // TASK 681: THE question is always the modal, whichever UI the action came from
+    await app.waitFor(() => { const a = q(bar); return !!a && !!a.querySelector('[data-choice="save"]'); }, `${p}: the Save… / Don't save / Cancel question`, 5000);
     const a = q(bar); const qq = { text: a.textContent, buttons: [...a.querySelectorAll('button')].map((b) => b.textContent) };
     assert.deepStrictEqual(qq.buttons, ['Save…', "Don't save", 'Cancel'], `${p}: the three answers, in order: ${JSON.stringify(qq)}`);
     assert.ok(/not saved/.test(qq.text), `${p}: the question says the design is not saved: ${qq.text}`);
     assert.strictEqual(shapesOnCanvas(H.canvas), 1, `${p}: nothing changed while it asks`);
-    if (choice === 'cancel') pressEl(`${bar} button.cancel`, 'Cancel');
+    if (choice === 'cancel') pressEl(`${bar} .sk-tp-cancel`, 'Cancel');
     else if (choice === 'discard') pressEl(`${bar} [data-choice="discard"]`, "Don't save");
     else {
       pressEl(`${bar} [data-choice="save"]`, 'Save…');
-      await app.waitFor(() => { const b = q(bar); return !!b && !b.hidden && !!b.querySelector('input'); }, `${p}: the Save as name prompt`, 5000);
+      await app.waitFor(() => { const b = q(bar); return !!b && !!b.querySelector('input'); }, `${p}: the Save as name prompt`, 5000);
       const input = q(`${bar} input`); app.press(input); input.focus();
       app.key('a', { ctrl: true }); app.type(keptName); app.key('Enter');
     }

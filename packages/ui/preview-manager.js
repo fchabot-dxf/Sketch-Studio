@@ -58,6 +58,9 @@ export function updatePreview(state, toolType, fixedPoints, cursorPoint, propert
                         const obj = { type: 'arc', center: properties && properties.center, radius: properties && properties.radius, startAngle: properties && properties.startAngle, endAngle: properties && properties.endAngle, pt: cursorPoint };
                         state.active.preview = obj;
                         break;
+                    case 'slot':
+                        state.active.preview = Object.assign({ type: 'slot', pt: cursorPoint }, properties);
+                        break;
                     default:
                         state.active.preview = { type: toolType, pt: cursorPoint };
                 }

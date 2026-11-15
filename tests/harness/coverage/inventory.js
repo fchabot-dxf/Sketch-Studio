@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONSTRAINT_TYPES, TOOL_MODES, RECT_MODES } from '#core/constants.js';
+import { CONSTRAINT_TYPES, TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { Definitions } from '#core/solver/definitions.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -55,6 +55,7 @@ function ribbonGroup(name) {
 const TOOL_SOLVER_ROLE = {
   select: 'drag (mouse_spring) and pick; the delete / lock / driving actions work on its selection',
   line: 'creates line shapes + joints + coincident joins', rect: 'creates 4 lines + H/V (+ construction diagonals for centre mode)',
+  slot: 'creates straight or arc slots (real lines + makeArc caps + construction center + tangent/parallel/midpoint/pointOnLine + diameter width dim, #core/slot.js)',
   circle: 'creates a circle shape (1 joint, radius is shape data)', polygon: 'creates N sides + N radii + equal constraints',
   arc: 'creates an arc (3 joints + equal radius)', bezier: 'creates bezier shapes (2 joints, control points are data)',
   trim: 'splits / removes segments: rewrites shapes, joints and constraints', break: 'splits a line: new joint, constraints migrate',
@@ -105,6 +106,10 @@ function creationSites() {
       }
       if (file.endsWith('/pattern.js')) {  // task 658: the pattern constraints' one record builder (patternConstraintRecord)
         m = l.match(/^\s*type:\s*T\.(\w+),/);
+        if (m) return add(valueOfKey(m[1]), file, i + 1);
+      }
+      if (file.endsWith('/slot.js')) {     // task 673: slot builders call createConstraint(CONSTRAINT_TYPES.<X>, ...)
+        m = l.match(/createConstraint\(\s*CONSTRAINT_TYPES\.(\w+)/);
         if (m) return add(valueOfKey(m[1]), file, i + 1);
       }
       if (file.endsWith('/shapes.js') || file.endsWith('/fillet.js')) {
@@ -191,6 +196,7 @@ function buildEditFeatures() {
   f('break', must('packages/core/break.js', /^export function breakShape/));
   f('polygon', must('packages/core/shapes.js', /^export function makePolygon/));
   for (const [k, v] of Object.entries(RECT_MODES)) f('rect ' + v, must('packages/core/constants.js', new RegExp(`^  ${k}:`)));
+  for (const [k, v] of Object.entries(SLOT_MODES)) f('slot ' + v, must('packages/core/constants.js', new RegExp(`^  ${k}:`)));
   f('construction toggle', must('packages/ui/design-browser.js', /s\.isConstruction = !s\.isConstruction/));
   f('lock / fix', must('packages/ui/input-manager.js', /^export function toggleFixedSelection/));
   f('delete constraints', must('packages/core/delete-manager.js', /^export function deleteConstraints/));
@@ -236,7 +242,7 @@ export function buildInventory() {
     shapeKinds: buildShapeKinds(),
     shapeTypeLiterals: shapeTypeLiterals(),
     dimensionModes: buildDimensionModes(),
-    diameter: { ...diameterBranch(), note: 'label branch only; no tool creates a diameter dimension (no createConstraint with isDiameter)' },
+    diameter: { ...diameterBranch(), note: 'label branch; created for Slot width (isRadius + isDiameter, #core/slot.js)' },
     editFeatures: buildEditFeatures(),
     absent: absentFeatures(),
     structuralTypes: [...structuralTypes()],

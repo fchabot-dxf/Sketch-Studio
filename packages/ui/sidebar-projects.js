@@ -23,7 +23,7 @@ import { createProjectActions } from './project-actions.js';
 import { createDocumentTabs } from './document-tabs.js';
 import { importSidebarAction } from './sketch-import.js';
 import { openProjectManager, relativeTime } from './project-manager.js';
-import { openTemplatePicker } from './template-picker.js';
+import { openTemplatePicker, openChoiceModal, openPromptModal } from './template-picker.js';
 
 export { relativeTime };
 
@@ -38,7 +38,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   let manager = null;   // the open project manager modal, if any
   const showDocumentTabs = Boolean(documentTabs && projects);
   // what can be done with a design / a project: declared once (project-actions.js), shared with the project manager
-  const projectActions = projects ? createProjectActions({ store, getBuffer, account, importFile, tabs: showDocumentTabs, pickTemplate: openTemplatePicker, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) }) : null;
+  const projectActions = projects ? createProjectActions({ store, getBuffer, account, importFile, tabs: showDocumentTabs, pickTemplate: openTemplatePicker, chooseModal: openChoiceModal, promptModal: openPromptModal, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) }) : null;
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };

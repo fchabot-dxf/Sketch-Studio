@@ -48,7 +48,7 @@ await (async () => {
     await press(`.sk-tp-card[data-template="${id}"]`);
     await waitFor(`!!document.querySelector('.sk-tp-panel.sk-tp-small .sk-tp-start[data-template="${id}"]')`, id + ': the start view');
   };
-  const dontSave = async () => { await sleep(300); const has = await evalJs(`[...document.querySelectorAll('.sk-sidebar-ask button')].some((b) => /Don.t save/.test(b.textContent))`); if (has) { await press('.sk-sidebar-ask button:nth-of-type(2)').catch(() => {}); } };
+  const dontSave = async () => { await sleep(300); const has = await evalJs(`[...document.querySelectorAll('.sk-tp-backdrop [role="dialog"] button')].some((b) => /Don.t save/.test(b.textContent))`); if (has) { await press('.sk-tp-backdrop [role="dialog"] button:nth-of-type(2)').catch(() => {}); } };
   const openIt = async (what) => { await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp-panel')`, what + ': Open closes the modal'); await dontSave(); };
   const openShaper = async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);

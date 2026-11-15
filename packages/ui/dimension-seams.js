@@ -251,7 +251,13 @@ export function toggleDriving(state, c) {
     // Now DRIVING — sync the value to the current geometry so it doesn't snap to a stale value.
     if (c.isRadius && c.shape) {
       const s = state.shapes.find(x => x.id === c.shape);
-      if (s && typeof s.radius === 'number') c.value = s.radius;
+      let r = null;
+      if (s && typeof s.radius === 'number') r = s.radius;
+      else if (s && s.joints && s.joints.length >= 2) {
+        const jc = state.joints.get(s.joints[0]), jr = state.joints.get(s.joints[1]);
+        if (jc && jr) r = getDist(jc, jr);
+      }
+      if (r !== null) c.value = c.isDiameter ? r * 2 : r;
     } else if (isPointLineDistance(c)) {
       const pt = state.joints.get(c.joints[0]), la = state.joints.get(c.joints[1]), lb = state.joints.get(c.joints[2]);
       if (pt && la && lb) c.value = Math.abs(perpendicularDistance(pt, la, lb));

@@ -45,11 +45,12 @@ await (async () => {
     };
     const dblClick = async (x, y) => {
       const rx = Math.round(x), ry = Math.round(y);
-      await click(rx, ry, 1);
-      await mouse('mousePressed', rx, ry, { buttons: 1, clickCount: 2 });
-      await sleep(30);
-      await mouse('mouseReleased', rx, ry, { buttons: 0, clickCount: 2 });
-      await sleep(180);
+      await move(rx, ry);
+      for (const clickCount of [1, 2]) {
+        await mouse('mousePressed', rx, ry, { buttons: 1, clickCount });
+        await mouse('mouseReleased', rx, ry, { buttons: 0, clickCount });
+      }
+      await sleep(200);
     };
     const touchTap = async (x, y) => {
       const rx = Math.round(x), ry = Math.round(y);
@@ -72,8 +73,7 @@ await (async () => {
       fs.writeFileSync(path.join(EVID_DIR, file), Buffer.from(r.data, 'base64'));
     };
     const rectOf = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, cx: Math.round(r.left + r.width / 2), cy: Math.round(r.top + r.height / 2) }; })()`);
-    const toScreen = (wx, wy) => evalJs(`(() => { const s = document.querySelector('#svgCanvas'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
-    const worldCenter = async (dx = 0, dy = 0) => toScreen(dx, dy);
+    const worldCenter = async (dxPx = 0, dyPx = 0) => evalJs(`(() => { const r = document.querySelector('#svgCanvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2 + ${dxPx}), y: Math.round(r.top + r.height / 2 + ${dyPx}) }; })()`);
     const shapeStats = () => evalJs(`(() => {
       const elems = [...document.querySelectorAll('#svgCanvas .shape-elem')];
       const dims = [...document.querySelectorAll('#svgCanvas .dim-label')].map((d) => d.textContent.trim());
@@ -215,17 +215,17 @@ await (async () => {
     // ── 3A. Center to Center Slot: live boxes + Enter + dim edit + 1 undo ───
     await pickSlotVariant('slot-c2c');
     {
-      const p1 = await worldCenter(-50, 0);
-      const p2 = await worldCenter(60, 0);
-      const p3 = await worldCenter(10, -25);
+      const p1 = await worldCenter(-110, 0);
+      const p2 = await worldCenter(110, 0);
+      const p3 = await worldCenter(0, -45);
       await click(p1.x, p1.y);
       await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, 'live span box opened');
       await move(p2.x, p2.y);
-      await typeText('120');
+      await typeText('4');
       await key('Enter', 'Enter', 13);
       await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, 'live width box opened');
       await move(p3.x, p3.y);
-      await typeText('30');
+      await typeText('1.2');
       await key('Enter', 'Enter', 13);
       await sleep(200);
 
@@ -234,25 +234,25 @@ await (async () => {
       assert.strictEqual(st.lines, 3, 'C2C: 3 line elements');
       assert.strictEqual(st.paths, 2, 'C2C: 2 true arc path elements');
       assert.strictEqual(st.construction, 1, 'C2C: 1 construction center line');
-      assert(st.dims.some((d) => /^Ø\s*30(\.0+)?$/.test(d)), `C2C: Ø 30 width label shown, got ${JSON.stringify(st.dims)}`);
+      assert(st.dims.some((d) => /^Ø\s*1\.2(0+)?$/.test(d)), `C2C: Ø 1.2 width label shown, got ${JSON.stringify(st.dims)}`);
 
-      // Edit the Ø 30 label -> 36 cleanly updates diameter
+      // Edit the Ø 1.2 label -> 1.6 cleanly updates diameter
       await key('Escape', 'Escape', 27); // Select mode
       const lbl = await rectOf('#svgCanvas .dim-label');
       await dblClick(lbl.cx, lbl.cy);
       await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, 'dim edit input open');
-      await typeText('36');
+      await typeText('1.6');
       await key('Enter', 'Enter', 13);
       await sleep(200);
       st = await shapeStats();
-      assert(st.dims.some((d) => /^Ø\s*36(\.0+)?$/.test(d)), `C2C: edited dim displays Ø 36, got ${JSON.stringify(st.dims)}`);
+      assert(st.dims.some((d) => /^Ø\s*1\.6(0+)?$/.test(d)), `C2C: edited dim displays Ø 1.6, got ${JSON.stringify(st.dims)}`);
 
       await shot('slot-c2c.png', await slotClip());
 
       // One Undo reverts dim edit, second Undo removes entire slot in 1 step!
       await evalJs(`document.getElementById('btn-undo').click()`);
       await sleep(150);
-      assert((await shapeStats()).dims.some((d) => /^Ø\s*30/.test(d)), 'Undo 1 restores Ø 30');
+      assert((await shapeStats()).dims.some((d) => /^Ø\s*1\.2/.test(d)), 'Undo 1 restores Ø 1.2');
       await evalJs(`document.getElementById('btn-undo').click()`);
       await sleep(150);
       assert.strictEqual((await shapeStats()).total, 0, 'ONE Undo removes entire C2C slot');
@@ -262,21 +262,21 @@ await (async () => {
     // ── 3B. Overall Slot + live boxes ───────────────────────────────────────
     await pickSlotVariant('slot-overall');
     {
-      const p1 = await worldCenter(-50, 0);
-      const p2 = await worldCenter(50, 0);
-      const p3 = await worldCenter(0, -25);
+      const p1 = await worldCenter(-120, 0);
+      const p2 = await worldCenter(120, 0);
+      const p3 = await worldCenter(0, -45);
       await click(p1.x, p1.y);
       await move(p2.x, p2.y);
-      await typeText('110');
+      await typeText('4.5');
       await key('Enter', 'Enter', 13);
       await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, 'Overall width box');
       await move(p3.x, p3.y);
-      await typeText('28');
+      await typeText('1.4');
       await key('Enter', 'Enter', 13);
       await sleep(200);
       const st = await shapeStats();
       assert.strictEqual(st.total, 5, 'Overall: 5 shapes');
-      assert(st.dims.some((d) => /^Ø\s*28(\.0+)?$/.test(d)), `Overall: Ø 28 width label shown, got ${JSON.stringify(st.dims)}`);
+      assert(st.dims.some((d) => /^Ø\s*1\.4(0+)?$/.test(d)), `Overall: Ø 1.4 width label shown, got ${JSON.stringify(st.dims)}`);
       await shot('slot-overall.png', await slotClip());
       await clearCanvas();
     }
@@ -286,8 +286,8 @@ await (async () => {
     await pickSlotVariant('slot-center');
     {
       const p1 = await worldCenter(0, 0);
-      const p2 = await worldCenter(45, 0);
-      const p3 = await worldCenter(0, -22);
+      const p2 = await worldCenter(90, 0);
+      const p3 = await worldCenter(0, -40);
       await click(p1.x, p1.y);
       await move(p2.x, p2.y);
       await click(p2.x, p2.y);
@@ -307,18 +307,18 @@ await (async () => {
     // ── 3D. Three Point Arc Slot ────────────────────────────────────────────
     await pickSlotVariant('slot-arc-3pt');
     {
-      const p1 = await worldCenter(-45, 10);
-      const p2 = await worldCenter(45, 10);
-      const p3 = await worldCenter(0, -22);
-      const p4 = await worldCenter(0, -38);
+      const p1 = await worldCenter(-110, 30);
+      const p2 = await worldCenter(110, 30);
+      const p3 = await worldCenter(0, -55);
+      const pw = await worldCenter(0, -90);
       await click(p1.x, p1.y);
       await move(p2.x, p2.y);
       await click(p2.x, p2.y);
       await move(p3.x, p3.y);
       await click(p3.x, p3.y);
       await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, '3-pt arc slot width box');
-      await move(p4.x, p4.y);
-      await typeText('24');
+      await move(pw.x, pw.y);
+      await typeText('1');
       await key('Enter', 'Enter', 13);
       await sleep(200);
       const st = await shapeStats();
@@ -326,7 +326,7 @@ await (async () => {
       assert.strictEqual(st.lines, 0, '3-Pt Arc Slot: 0 polyline line segments');
       assert.strictEqual(st.paths, 5, '3-Pt Arc Slot: all 5 shapes are true arcs');
       assert.strictEqual(st.construction, 1, '3-Pt Arc Slot: center arc is construction');
-      assert(st.dims.some((d) => /^Ø\s*24(\.0+)?$/.test(d)), `3-Pt Arc Slot: Ø 24 width shown, got ${JSON.stringify(st.dims)}`);
+      assert(st.dims.some((d) => /^Ø\s*1(\.0+)?$/.test(d)), `3-Pt Arc Slot: Ø 1 width shown, got ${JSON.stringify(st.dims)}`);
       await shot('slot-arc3.png', await slotClip());
       await clearCanvas();
     }
@@ -335,10 +335,10 @@ await (async () => {
     // ── 3E. Center Point Arc Slot + Esc cancel + Construction mode ──────────
     await pickSlotVariant('slot-arc-center');
     {
-      const pc = await worldCenter(0, 20);
-      const p1 = await worldCenter(-45, 5);
-      const p2 = await worldCenter(45, 5);
-      const pw = await worldCenter(0, -45);
+      const pc = await worldCenter(0, 50);
+      const p1 = await worldCenter(-105, -15);
+      const p2 = await worldCenter(105, -15);
+      const pw = await worldCenter(0, -100);
       await click(pc.x, pc.y);
       await move(p1.x, p1.y);
       await click(p1.x, p1.y);
@@ -346,14 +346,14 @@ await (async () => {
       await click(p2.x, p2.y);
       await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, 'Center Pt Arc slot width box');
       await move(pw.x, pw.y);
-      await typeText('22');
+      await typeText('0.9');
       await key('Enter', 'Enter', 13);
       await sleep(200);
       const st = await shapeStats();
       assert.strictEqual(st.total, 5, 'Center Pt Arc Slot: 5 true arc path shapes');
       assert.strictEqual(st.lines, 0, 'Center Pt Arc Slot: 0 polyline segments');
       assert.strictEqual(st.paths, 5, 'Center Pt Arc Slot: 5 arc paths');
-      assert(st.dims.some((d) => /^Ø\s*22(\.0+)?$/.test(d)), `Center Pt Arc Slot: Ø 22 width shown, got ${JSON.stringify(st.dims)}`);
+      assert(st.dims.some((d) => /^Ø\s*0\.9(0+)?$/.test(d)), `Center Pt Arc Slot: Ø 0.9 width shown, got ${JSON.stringify(st.dims)}`);
       await shot('slot-arccenter.png', await slotClip());
       await clearCanvas();
     }
@@ -361,7 +361,7 @@ await (async () => {
     // Esc mid-draw leaves 0 shapes and returns to Select
     await pickSlotVariant('slot-c2c');
     {
-      const p1 = await worldCenter(-30, 0);
+      const p1 = await worldCenter(-70, 0);
       await click(p1.x, p1.y);
       await key('Escape', 'Escape', 27);
       assert.strictEqual((await shapeStats()).total, 0, 'Esc mid-draw leaves 0 shapes');
@@ -372,9 +372,9 @@ await (async () => {
     await evalJs(`document.getElementById('btn-construct-toggle').click()`);
     await pickSlotVariant('slot-c2c');
     {
-      const p1 = await worldCenter(-40, 0);
-      const p2 = await worldCenter(40, 0);
-      const p3 = await worldCenter(0, -20);
+      const p1 = await worldCenter(-90, 0);
+      const p2 = await worldCenter(90, 0);
+      const p3 = await worldCenter(0, -40);
       await click(p1.x, p1.y);
       await click(p2.x, p2.y);
       await move(p3.x, p3.y);
@@ -411,9 +411,9 @@ await (async () => {
       const item = await rectOf(`.sk-ribbon-menu.show [data-mode="slot-c2c"]`);
       await touchTap(item.cx, item.cy);
 
-      const p1 = await worldCenter(-28, 0);
-      const p2 = await worldCenter(28, 0);
-      const p3 = await worldCenter(0, -18);
+      const p1 = await worldCenter(-70, 0);
+      const p2 = await worldCenter(70, 0);
+      const p3 = await worldCenter(0, -35);
       await touchTap(p1.x, p1.y);
       await touchTap(p2.x, p2.y);
       await touchTap(p3.x, p3.y);

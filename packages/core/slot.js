@@ -9,8 +9,8 @@ import { makeArc } from './shapes.js';
 import { newShapeId } from './shape-id.js';
 
 const TAU = Math.PI * 2;
-const MIN_HALF_WIDTH = 0.5;
-const MIN_SPAN = 0.25;
+const MIN_HALF_WIDTH = 0.05;
+const MIN_SPAN = 0.1;
 
 function mod2pi(a) {
   return ((a % TAU) + TAU) % TAU;
@@ -178,7 +178,7 @@ function makeWidthDimension(shapeId, width, r, labelAngle) {
     isRadius: true,
     isDiameter: true,
     value: width,
-    offset: Math.max(18, r + 14),
+    offset: r + Math.max(0.25, Math.min(18, r * 1.3)),
     labelAngle,
   });
 }

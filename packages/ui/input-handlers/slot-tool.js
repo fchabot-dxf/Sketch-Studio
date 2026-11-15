@@ -30,7 +30,7 @@ import {
     followCreationBoxes,
 } from '#ui/input-handlers/base-tool.js';
 
-const MIN_SPAN = 0.5;
+const MIN_SPAN = 0.1;
 const ARC_LOCK_ANGLE = 0.15;
 const FIELD_SPAN = 'slot-span';
 const FIELD_ARC = 'slot-arc';
@@ -70,7 +70,7 @@ function resolveSpanEnd(p1, pt) {
 }
 
 function defaultWidthForSpan(span) {
-    return Math.max(8, Math.min(20, span * 0.28));
+    return Math.max(0.4, Math.min(20, span * 0.28));
 }
 
 function currentStraightGeom(mode, p1, p2, cursorPt) {
@@ -79,7 +79,7 @@ function currentStraightGeom(mode, p1, p2, cursorPt) {
     const cursorW = cursorPt ? perpDistToLine(p1, p2, cursorPt) * 2 : 0;
     const reqW = (localState.lockedWidth && localState.lockedWidth > 0)
         ? localState.lockedWidth
-        : (cursorW > 1 ? cursorW : defaultWidthForSpan(rawSpan));
+        : (cursorW > 0.1 ? cursorW : defaultWidthForSpan(rawSpan));
     return computeStraightSlotPoints({ mode, p1, p2, width: clampStraightSlotWidth(mode, rawSpan, reqW) });
 }
 
@@ -136,7 +136,7 @@ function currentArcGeom(active, cursorPt) {
     const cursorW = cursorPt ? arcWidthFromPoint(arc.center, arc.radius, cursorPt) : 0;
     const reqW = (localState.lockedWidth && localState.lockedWidth > 0)
         ? localState.lockedWidth
-        : (cursorW > 1 ? cursorW : defaultWidthForSpan(arc.radius));
+        : (cursorW > 0.1 ? cursorW : defaultWidthForSpan(arc.radius));
     return computeArcSlotPoints({
         center: arc.center,
         c1: arc.c1,
@@ -355,7 +355,8 @@ function advanceFromArc3(e, svg, state, pt, snap) {
     const arc = currentArcParams(active, pt);
     if (!arc || arc.collinear || arc.incomplete) return false;
     active.arcData = arc;
-    active.picks[2] = { pt: { x: arc.c2 ? arc.c2.x : pt.x, y: arc.c2 ? arc.c2.y : pt.y }, snap: snap || null };
+    const thirdPt = (active.slotMode === SLOT_MODES.THREE_POINT_ARC) ? pt : (arc.c2 || pt);
+    active.picks[2] = { pt: { x: thirdPt.x, y: thirdPt.y }, snap: snap || null };
     active.phase = 'width';
     localState.dragStartScreen = null;
     localState.isDragging = false;
@@ -381,7 +382,7 @@ export function setupSlotTool(svg, state) {
             if (detail.field === FIELD_SPAN) {
                 localState.lockedSpan = (detail.typed[0] && v > MIN_SPAN) ? v : null;
             } else if (detail.field === FIELD_WIDTH) {
-                localState.lockedWidth = (detail.typed[0] && v >= 1) ? v : null;
+                localState.lockedWidth = (detail.typed[0] && v > 0) ? v : null;
             }
             redrawPreview(state, localState.cursor || active.picks[0].pt);
         },
@@ -408,14 +409,17 @@ export function setupSlotTool(svg, state) {
                 }
                 detail.keepOpen = true;
             } else if (active.phase === 'width') {
-                if (v >= 1) localState.lockedWidth = v;
+                if (v > 0) localState.lockedWidth = v;
                 if (!commitSlot(svg, state, localState.cursor)) {
                     detail.keepOpen = true;
                 }
             }
         },
         onCancel: () => {
-            resetSlotState(state);
+            // Esc in the box also runs input-manager handleEscape -> resetDrawingState -> resetSlotState;
+            // keep state.active intact until handleEscape sees it and switches cleanly to Select.
+            localState.lockedSpan = null;
+            localState.lockedWidth = null;
         },
     });
 }

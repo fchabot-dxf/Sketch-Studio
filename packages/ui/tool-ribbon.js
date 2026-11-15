@@ -26,6 +26,21 @@ export const MIN_PER_SECTION = 1;
 const HOLD_MS = 300;      // a press on a grip held this long (without moving HOLD_SLOP px) starts the reorder drag; a move before it is a scroll
 const HOLD_SLOP = 6;
 
+// Rect variants (the dropdown) — sets state.rectMode + swaps the rect button's icon/label, like ui-manager.
+const RECT_VARIANTS = [
+  { mode: RECT_MODES.TWO_POINT,   icon: 'icon-tool-rect-2pt',    label: '2-Point (Corner)' },
+  { mode: RECT_MODES.CENTER,      icon: 'icon-tool-rect-center', label: 'Center Point' },
+  { mode: RECT_MODES.THREE_POINT, icon: 'icon-tool-rect-3pt',    label: '3-Point' },
+];
+// Slot variants (Fusion 360 Create > Slot order & labels) — reuses the same dropdown mechanism as Rect.
+const SLOT_VARIANTS = [
+  { mode: SLOT_MODES.CENTER_TO_CENTER, icon: 'icon-tool-slot-c2c',       label: 'Center to Center Slot' },
+  { mode: SLOT_MODES.OVERALL,          icon: 'icon-tool-slot-overall',   label: 'Overall Slot' },
+  { mode: SLOT_MODES.CENTER_POINT,     icon: 'icon-tool-slot-center',    label: 'Center Point Slot' },
+  { mode: SLOT_MODES.THREE_POINT_ARC,  icon: 'icon-tool-slot-arc3',      label: 'Three Point Arc Slot' },
+  { mode: SLOT_MODES.CENTER_POINT_ARC, icon: 'icon-tool-slot-arccenter', label: 'Center Point Arc Slot' },
+];
+
 // The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label).
 // TASK 647: Select is its own section, first, like Fusion's SELECT panel.
 const SELECT = [
@@ -82,20 +97,6 @@ const CONSTRAIN = [
 ];
 // Lock is an ACTION (not a drawing mode): the same toggleFixedSelection as the F key and the context menu.
 const LOCK = { action: 'lock', id: 'btn-lock', icon: 'icon-lock', label: 'Lock', title: 'Lock / Unlock (F)' };
-// Rect variants (the dropdown) — sets state.rectMode + swaps the rect button's icon/label, like ui-manager.
-const RECT_VARIANTS = [
-  { mode: RECT_MODES.TWO_POINT,   icon: 'icon-tool-rect-2pt',    label: '2-Point (Corner)' },
-  { mode: RECT_MODES.CENTER,      icon: 'icon-tool-rect-center', label: 'Center Point' },
-  { mode: RECT_MODES.THREE_POINT, icon: 'icon-tool-rect-3pt',    label: '3-Point' },
-];
-// Slot variants (Fusion 360 Create > Slot order & labels) — reuses the same dropdown mechanism as Rect.
-const SLOT_VARIANTS = [
-  { mode: SLOT_MODES.CENTER_TO_CENTER, icon: 'icon-tool-slot-c2c',       label: 'Center to Center Slot' },
-  { mode: SLOT_MODES.OVERALL,          icon: 'icon-tool-slot-overall',   label: 'Overall Slot' },
-  { mode: SLOT_MODES.CENTER_POINT,     icon: 'icon-tool-slot-center',    label: 'Center Point Slot' },
-  { mode: SLOT_MODES.THREE_POINT_ARC,  icon: 'icon-tool-slot-arc3',      label: 'Three Point Arc Slot' },
-  { mode: SLOT_MODES.CENTER_POINT_ARC, icon: 'icon-tool-slot-arccenter', label: 'Center Point Arc Slot' },
-];
 
 // Every #icon-* the ribbon references (for inject-if-missing).
 const ICON_IDS = [

@@ -10,7 +10,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, stockKeyOf } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
-import { docUnit } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
+import SettingsManager, { docUnit } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
@@ -162,7 +162,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       lastPinchDistance: null,
     },
   };
-  fitViewToExtents(svgEl, view, state);
+  fitViewToExtents(svgEl, view, state, { avoidEl: opts.avoidEl, inset: opts.inset, avoidGap: opts.avoidGap });
   // SP1h4: a diagonal HATCH pattern (pocket preview colour) for the cleared region. userSpaceOnUse → world-unit
   // spacing (scales with the geometry). One <defs> per mount; referenced by the pocket cleared-region fill.
   const defs = document.createElementNS(SVG_NS, 'defs');
@@ -498,6 +498,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); };
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
+  const unsubDocUnit = SettingsManager && SettingsManager.subscribe
+    ? SettingsManager.subscribe((key) => { if (key === 'DOC_UNIT') refreshLook(); })
+    : null;
 
   return {
     loops, selection, resolveTarget, selectedTarget, selectedTargets, profileLoopsForTarget, setSelection, setView,
@@ -539,6 +542,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       return lastRec;
     },
     destroy() {
+      if (unsubDocUnit) unsubDocUnit();
       svgEl.removeEventListener('wheel', onWheel);
       svgEl.removeEventListener('pointermove', onMove);
       svgEl.removeEventListener('pointerleave', onLeave);

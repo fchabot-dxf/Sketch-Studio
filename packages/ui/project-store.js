@@ -351,7 +351,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     const mine = writer.unconfirmed(id) || (shadow && { app: shadow.app, document: shadow.document, updatedAt: shadow.updatedAt });
     if (writer.hasPending(id) && mine) { // the writer already owns this design (a queued / in-flight / just-confirmed write): it applies the version rule itself
       const h = headers.get(id) || {};
-      const sd = { id, projectId: (d && d.projectId) || h.projectId, name: (d && d.name) || h.name || 'Untitled', app: mine.app, updatedAt: mine.updatedAt, document: mine.document };
+      const sd = { id, projectId: (d && d.projectId) || h.projectId, name: (d && d.name) || h.name || 'Untitled', app: mine.app, updatedAt: mine.updatedAt, document: d ? mergeHosts(d.document, mine.document) : mine.document };
       rememberHeader(sd);
       return sd; // the NEWEST local content, not the (possibly older) kept copy
     }
@@ -373,7 +373,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     if (base != null && base === d.version) { // Drive still has the version the unsaved edit was based on: the edit carries on from the local copy
       await adoptRemote(d);
       await writer.queue(id, content);
-      return { ...d, app: shadow.app, updatedAt: shadow.updatedAt, document: shadow.document };
+      return { ...d, app: shadow.app, updatedAt: shadow.updatedAt, document: mergeHosts(d.document, shadow.document) }; // TASK 684: the other apps' sidecars on Drive come with it (458)
     }
     await keepConflictedCopy(d, content);  // Drive changed since (or the base is unknown): keep the local edit as a separate file, open Drive's version
     await adapter.setMeta(SHADOW + id, null);
@@ -640,7 +640,10 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
           }
         }
         const at = now();
-        await writer.queue(target, { app, document, updatedAt: at });
+        // TASK 684 (458 on this device): the write still waiting for Drive may be ANOTHER app's (a GO TO a moment ago): its sidecar is kept in this newer one,
+        // which replaces it in the queue and in the local copy (the writer keeps only the latest payload)
+        const prev = writer.unconfirmed(target) || (await adapter.getMeta(SHADOW + target));
+        await writer.queue(target, { app, document: prev && prev.document ? mergeHosts(prev.document, document) : document, updatedAt: at });
         const h = headers.get(target); if (h) headers.set(target, { ...h, app: app || h.app, updatedAt: at });
         return { id: target };
       }

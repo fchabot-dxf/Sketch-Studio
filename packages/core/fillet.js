@@ -438,10 +438,12 @@ export function applyFillet(state, cornerInfo, radius = 5) {
       }
 
       // DIRECTIONAL constraints (H/V, parallel, perpendicular, angle, ...) keep relinking to the tangent joints:
-      // the line survives (trimmed) and keeps its direction.
+      // the line survives (trimmed) and keeps its direction. When the two curves SHARE the corner joint (a line drawn from another
+      // curve's end), a constraint that names curve B's far end is about curve B: it follows B's tangent point (task 649).
       if (Array.isArray(c.joints)) {
+        const onB = lineA.cornerJoint === lineB.cornerJoint && c.joints.includes(lineB.otherJoint) && !c.joints.includes(lineA.otherJoint);
         for (let k = 0; k < c.joints.length; k++) {
-          if (c.joints[k] === lineA.cornerJoint) c.joints[k] = jTA;
+          if (c.joints[k] === lineA.cornerJoint) c.joints[k] = onB ? jTB : jTA;
           else if (c.joints[k] === lineB.cornerJoint) c.joints[k] = jTB;
         }
       }

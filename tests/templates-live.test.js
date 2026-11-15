@@ -1,7 +1,7 @@
 // tests/templates-live.test.js -- TASK 651 / 668 (owner rulings): the bank of template drawings in the REAL pages, real mouse and real touch.
 // ONE modal opened from three places (the sidebar's Templates..., the "+" tab button, the menu's New design): Blank design first and focused, then every
-// template as a card with a non-empty SVG preview whose dimension labels do not overlap each other or the shape; ONE click/tap on a card opens a new
-// unsaved tab named after the template; the "Blank design" card makes the empty Untitled; Esc / a press outside / the X make no new design; Undo leaves
+// template as a card with a non-empty SVG preview whose dimension labels do not overlap each other or the shape; a click/tap on a card shows its start
+// view (TASK 670, tests/template-start-670-live.test.js) whose Open opens a new unsaved tab named after the template; the "Blank design" card makes the empty Untitled; Esc / a press outside / the X make no new design; Undo leaves
 // the starting drawing. Phone: full-screen, two cards per row. EVIDENCE_DIR: cropped screenshots.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -125,7 +125,7 @@ await (async () => {
     assert.deepStrictEqual(await tabNames(), ['Untitled'], 'Esc: no new design');
     // 3. ONE click on a card opens it immediately as a new tab named after the template, with its drawing, unsaved
     await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'modal');
-    await press('.sk-tp-card[data-template="slot"]');
+    await press('.sk-tp-card[data-template="slot"]'); await waitFor(`!!document.querySelector('.sk-tp-start[data-template="slot"]')`, 'the slot start view (task 670)'); await press('.sk-tp-open');
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, 'a new tab on one click');
     assert.strictEqual(await modalOpen(), false, 'the modal closed on one click');
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'Slot'], 'the new tab is named after the template');
@@ -161,7 +161,7 @@ await (async () => {
     assert.strictEqual((await tabNames()).length, 3, 'X: no new design');
     // "+" -> ONE click on a template -> a new tab holding it
     await press('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'modal');
-    await press('.sk-tp-card[data-template="bolt-circle"]');
+    await press('.sk-tp-card[data-template="bolt-circle"]'); await waitFor(`!!document.querySelector('.sk-tp-start[data-template="bolt-circle"]')`, 'the bolt-circle start view (task 670)'); await press('.sk-tp-open');
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 4`, 'the tab on one click');
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'Slot', 'Untitled', 'Bolt circle']);
     await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 8`, 'the bolt circle drawn');
@@ -198,7 +198,7 @@ await (async () => {
     await checkLabelsClear('phone');
     await shot('phone-modal.png', '.sk-tp');
     // ONE tap opens a template as a new design
-    await press('.sk-tp-card[data-template="l-bracket"]');
+    await press('.sk-tp-card[data-template="l-bracket"]'); await waitFor(`!!document.querySelector('.sk-tp-start[data-template="l-bracket"]')`, 'the l-bracket start view (task 670)'); await press('.sk-tp-open');
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, 'phone: a new tab on one tap');
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'L-bracket']);
     await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 8`, 'phone: the bracket drawn');
@@ -206,7 +206,7 @@ await (async () => {
     // Phone sidebar Templates...: Blank first, ONE tap opens Star
     await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'phone: Templates...');
     assert.strictEqual((await cards())[0].id, 'blank', 'phone Templates...: Blank first');
-    await press('.sk-tp-card[data-template="star"]');
+    await press('.sk-tp-card[data-template="star"]'); await waitFor(`!!document.querySelector('.sk-tp-start[data-template="star"]')`, 'the star start view (task 670)'); await press('.sk-tp-open');
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 3`, 'phone: Star tab on one tap');
     assert.deepStrictEqual(await tabNames(), ['Untitled', 'L-bracket', 'Star']);
     await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 10`, 'phone: the star drawn');

@@ -73,7 +73,7 @@ await (async () => {
     assert.strictEqual(await focusInWindow(), true, 'focus moves into the window on open');
     assert.deepStrictEqual(await groupHeads(), ['User parameters(0)', 'Sketch dimensions(0)'], 'two groups');
     const empties = await emptyTexts();
-    assert(/name = value/.test(empties[0]) && /Dim tool/.test(empties[1]), 'empty states: ' + JSON.stringify(empties));
+    assert(/\+ Add/.test(empties[0]) && /Dim tool/.test(empties[1]), 'empty states: ' + JSON.stringify(empties));
     // not over the ribbon
     const ribbon = await rect('#toolsRibbon .sk-ribbon'); const w0 = await rect(W);
     assert(w0.t >= ribbon.b, `the window does not overlap the ribbon (window top ${w0.t} >= ribbon bottom ${ribbon.b})`);

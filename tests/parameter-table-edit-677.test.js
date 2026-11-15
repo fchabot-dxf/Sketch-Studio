@@ -189,15 +189,15 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   const num = plan(S, { kind: 'dimension', column: 'expression', constraint: d1, text: '420' });
   eq([num.ok, num.hint, num.label], [true, '= 420.0 mm', 'edit dimension 400 -> 420'], 'a number: the canvas box hint and label');
   const mk = plan(S, { kind: 'dimension', column: 'expression', constraint: d1, text: 'deep = 380' });
-  eq([mk.ok, mk.hint, mk.label], [true, 'creates deep = 380.0 mm', 'create parameter deep'], '`name = value` creates a parameter (as on the canvas)');
+  eq([mk.ok, mk.hint, mk.label], [true, 'names it deep = 380.0 mm', 'name dimension d1 -> deep'], '`name = value` NAMES the dimension (task 677 owner ruling, as on the canvas)');
   const h0 = S.state.history.length;
   ok(muted(() => commitTableEdit(S.state, mk)).ok, 'applied');
-  eq([D(S, 'd1').expression, Math.round(D(S, 'd1').value * 1e9) / 1e9, P(S, 'deep').expression], ['deep', 380, '380 mm'], 'd1 reads deep = 380');
+  eq([D(S, 'deep').expression, Math.round(D(S, 'deep').value * 1e9) / 1e9, P(S, 'deep'), !!D(S, 'd1')], [undefined, 380, undefined, false], 'd1 is now deep = 380 (a plain value), no user parameter');
   eq(xLevels(S), [0, 18, 362, 380], 'the box is 380 wide');
-  eq(S.state.history.length, h0 + 1, 'ONE undo step (parameter created + dimension rewired)');
-  const unknown = plan(S, { kind: 'dimension', column: 'expression', constraint: D(S, 'd1'), text: 'gap' });
+  eq(S.state.history.length, h0 + 1, 'ONE undo step (named + value)');
+  const unknown = plan(S, { kind: 'dimension', column: 'expression', constraint: D(S, 'deep'), text: 'gap' });
   eq([unknown.ok, unknown.message], [false, "unknown parameter 'gap' (type gap = 30 to create it)"], 'an unknown name is refused (O5)');
-  eq(plan(S, { kind: 'dimension', column: 'expression', constraint: D(S, 'd1'), text: '  ' }).message, 'type a value or a formula', 'an empty Expression is refused');
+  eq(plan(S, { kind: 'dimension', column: 'expression', constraint: D(S, 'deep'), text: '  ' }).message, 'type a value or a formula', 'an empty Expression is refused');
   eq(dependentDimensions(S.state, 'thickness').map((c) => c.name), ['d3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd12', 'd13', 'd14'],
     'a user row selects every dimension that depends on it (directly or through d3)');
 }

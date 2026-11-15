@@ -27,7 +27,7 @@ import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 
-export const USER_EMPTY_TEXT = 'No user parameters yet. Press + Add, or type name = value into a dimension.';
+export const USER_EMPTY_TEXT = 'No user parameters yet. Press + Add to make one.';
 export const DIMENSION_EMPTY_TEXT = 'No dimensions yet. Use the Dim tool to add one.';
 
 const isAngle = (c) => c.type === CONSTRAINT_TYPES.ANGLE;

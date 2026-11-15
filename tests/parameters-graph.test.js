@@ -120,12 +120,14 @@ for (const depth of [1, 2, 3, 5, 10, 40]) {
   assert(frac.ok && frac.edits[0].expression === null && near(frac.edits[0].value, 12.7), '1/2 in is a plain number');
   const formula = planChange(state, { type: 'setDimension', name: 'd2', text: 'width/2+5' });
   assert(formula.ok && formula.edits[0].expression === 'width / 2 + 5 mm' && near(formula.edits[0].value, 65), `canonical text: ${formula.edits[0].expression}`);
-  const create = planChange(state, { type: 'setDimension', name: 'd2', text: 'gap = width / 4 + 2 mm' });
-  assert(create.ok && create.created === 'gap' && create.paramsAfter.length === 2, 'name = expr creates a parameter');
-  eq(create.paramsAfter[1], { name: 'gap', unit: 'mm', expression: 'width / 4 + 2 mm' }, 'created parameter');
-  eq(create.edits.map((e) => [e.name, e.expression, e.value]), [['d2', 'gap', 32]], 'the dimension now reads it');
+  // TASK 677 owner ruling (Fusion measured): `name = expr` with a free name NAMES THE DIMENSION; no user parameter is created
+  const named = planChange(state, { type: 'setDimension', name: 'd2', text: 'gap = width / 4 + 2 mm' });
+  assert(named.ok && !named.created && named.named === 'gap' && named.paramsAfter.length === 1, 'name = expr names the dimension');
+  eq(named.edits.map((e) => [e.name, e.expression, e.value]), [['gap', 'width / 4 + 2 mm', 32]], 'd2 is now gap, holding the formula');
   const ang = planChange(state, { type: 'setDimension', name: 'd3', text: 'turn = 90' });
-  eq(ang.paramsAfter[1], { name: 'turn', unit: 'deg', expression: '90 deg' }, 'an angle dimension creates a deg parameter');
+  eq(ang.edits.map((e) => [e.name, e.expression, e.value]), [['turn', null, 90]], 'an angle dimension is named, its plain value set');
+  const taken = planChange(state, { type: 'setDimension', name: 'd2', text: 'd1 = 5' });
+  assert(!taken.ok, "another dimension's automatic name is refused");
   const wrongKind = planChange(state, { type: 'setDimension', name: 'd2', text: 'g = 30 deg' });
   assert(!wrongKind.ok && wrongKind.code === 'UNIT_MISMATCH', 'g = 30 deg in a length box creates nothing');
   const existing = planChange(state, { type: 'setDimension', name: 'd2', text: 'width = 140' });

@@ -29,6 +29,22 @@ export const SHAPER_STAGES = [
   { id: 'review',  label: 'Review' },
 ];
 
+// Stages hidden in Fusion 360 palette mode (?host=fusion): Design (no designing in add-in), Explore (standalone SVG
+// editor), and Vcarve (separate V-bit workflow); Prepare + Review + export/upload handle the Fusion workflow.
+export const FUSION_HIDDEN_STAGES = Object.freeze(['explore', 'design', 'vcarve']);
+const FUSION_HIDDEN_SET = new Set(FUSION_HIDDEN_STAGES);
+
+export function shaperStagesFor({ fusion = false } = {}) {
+  return fusion ? SHAPER_STAGES.filter((s) => !FUSION_HIDDEN_SET.has(s.id)) : SHAPER_STAGES;
+}
+
+export function resolveInitialMode(storedMode, { fusion = false } = {}) {
+  const stages = shaperStagesFor({ fusion });
+  const fallback = fusion ? 'prepare' : 'explore';
+  const normalized = storedMode === 'simexport' ? 'review' : storedMode;
+  return stages.some((s) => s.id === normalized) ? normalized : fallback;
+}
+
 /** The page's mode containers. Explore is in normal flow (display); the others are absolute overlays (hidden attr). */
 export const findViews = (doc) => ({
   explore:   doc.querySelector('main.layout'),   // the existing SVG editor (normal flow)
@@ -44,12 +60,14 @@ export const findViews = (doc) => ({
  *   enter: { vcarve(), prepare(enteringMode), review() } — the page's / the host's per-mode work, each optional.
  *   afterShow(mode): runs after the Design loop was started / stopped (the page's drawer toggle).
  */
-export function createModeRouter({ views, onActiveChange = null, getController, ensureSketch, enter = {}, afterShow = () => {} }) {
-  let currentMode = 'explore';
+export function createModeRouter({ views, stages = SHAPER_STAGES, defaultMode = (stages[0] && stages[0].id) || 'explore', onActiveChange = null, getController, ensureSketch, enter = {}, afterShow = () => {} }) {
+  const allowed = new Set(stages.map((s) => s.id));
+  const fallback = allowed.has(defaultMode) ? defaultMode : ((stages[0] && stages[0].id) || 'explore');
+  let currentMode = fallback;
   // The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the
   // other three are absolute overlays (hidden attr). Drives the Design RAF lifecycle + persists the active mode.
   function showMode(mode) {
-    if (!views[mode]) mode = 'explore';
+    if (!allowed.has(mode) || !views[mode]) mode = fallback;
     const enteringMode = (mode !== currentMode);
     currentMode = mode;
     views.explore.style.display = (mode === 'explore') ? '' : 'none';

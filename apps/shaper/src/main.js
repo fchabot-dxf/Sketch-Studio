@@ -16,7 +16,9 @@ import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mo
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
-import { MODE_KEY, SHAPER_STAGES, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583: the mode router, declared once (the node test kit calls it too)
+import { MODE_KEY, SHAPER_STAGES, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
+import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { dbg } from '#core/debug.js';
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
@@ -56,10 +58,17 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
+const fusionMode = isFusionMode();
+const activeStages = shaperStagesFor({ fusion: fusionMode });
+let initMode = 'explore';
+try { initMode = localStorage.getItem(MODE_KEY) || 'explore'; } catch (err) { dbg.warn('shaper', 'MODE_KEY read failed', err && err.message); }
+if (initMode === 'simexport') initMode = 'review'; // TASK 459: the tab was renamed Simulate/Export -> Review
+initMode = resolveInitialMode(initMode, { fusion: fusionMode });
+
 const chrome = mountAppChrome({
   appId: 'shaper',
-  stages: SHAPER_STAGES,
-  activeStage: 'explore',
+  stages: activeStages,
+  activeStage: initMode,
   onStageChange: (mode) => showMode(mode),
   getBuffer: () => docBuffer,
   importFile: (text, name) => shaperImporter.importFile(text, name),
@@ -390,7 +399,8 @@ function ensureSketch() {
 
 // The view router (modes.js): show the active mode's container, hide the rest, drive the Design RAF lifecycle, persist the active mode.
 modes = createModeRouter({
-  views: VIEWS, onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
+  views: VIEWS, stages: activeStages, defaultMode: activeStages[0] ? activeStages[0].id : 'explore',
+  onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
   afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design
   enter: {
     vcarve: () => {
@@ -442,9 +452,14 @@ async function enterReview(st) {
   document.getElementById('review-wood').addEventListener('change', (e) => reviewView && reviewView.setWood(e.target.checked)); // per session
 }
 
-// Restore the last active mode (default Explore).
-let initMode = 'explore';
-try { initMode = localStorage.getItem(MODE_KEY) || 'explore'; } catch (_) { /* storage blocked */ }
-if (initMode === 'simexport') initMode = 'review'; // TASK 459: the tab was renamed Simulate/Export -> Review
 ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
-showMode(initMode);
+if (fusionMode) {
+  const fusionUi = mountFusionPrepareBar({
+    viewPrepareEl: VIEWS.prepare,
+    noticeEl: document.getElementById('prepare-notice'),
+  });
+  showMode(initMode);
+  fusionUi.bootPing();
+} else {
+  showMode(initMode);
+}

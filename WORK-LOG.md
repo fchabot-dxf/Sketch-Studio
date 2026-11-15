@@ -14876,3 +14876,7 @@ Real-mouse measurement (Line end locked on origin, slip along 35 deg, fast relea
 Behaviour change for existing users: a locked snap (and the release-slip recovery) holds out to 32 px instead of 20 px, in every host sharing the input layer. Nothing else.
 
 Tests: tests/snap-release-distance-node.test.js (new, fail-first: release 32, lock 10); tests/snap-release-slip-live.test.js case 2 now covers the classic slip (reach+1 px, release ends on the origin) and the drag-out-and-back case, distances from the live lock/release/reach numbers.
+
+## TURN 638
+Measured only, no code change. Real mouse, Shaper Design tab, Line tool, Escape after each: (a) empty->empty: 1 Undo (removes line+2 joints), 1 Redo; (b) end on origin: 1 Undo removes line + coincident, 1 Redo restores both; (c) end on another line's endpoint: 1 Undo (line + coincident), 1 Redo; (d) 2-segment chain: 2 Undos (one per segment), 2 Redos. Design already intends one step per segment (sketch-state.js beginDrawStep/endUndoGroup; line-tool.js endSegmentStep). Why 637 needed a loop: the Line tool stays active after a segment (chain continues), and Undo mid-draw (closeDrawStep) first cancels the half-drawn next segment; 637's test never pressed Escape. With Escape then ONE Undo, the test passes (verified). No change made.
+

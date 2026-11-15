@@ -82,7 +82,7 @@ await (async () => {
       const lenMm = Math.min(...src.map((s) => Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y)));
       assert(lenMm > 20, `[${kind}] the L's arms (${lenMm.toFixed(1)} mm) are long against a 5 mm offset`);
       const h0 = await hist();
-      const onA = { x: K.x, y: K.y - arm * 0.5 }, inside = { x: K.x + arm * 0.3, y: K.y - arm * 0.5 }, outside = { x: K.x - arm * 0.3, y: K.y - arm * 0.5 };
+      const onA = { x: K.x, y: K.y - arm * 0.5 }, inside = { x: K.x + arm * 0.3, y: K.y - arm * 0.5 }, outside = { x: K.x - arm * 0.5, y: K.y - arm * 0.5 };
       const clip = { x: Math.max(0, K.x - 70), y: Math.max(0, A.y - 40), width: Math.min(arm + 140, cr.w), height: arm + 110 };
 
       // ---- 1. pick: chain lit, box, preview on the cursor side, flips; Esc: nothing, no undo step

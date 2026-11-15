@@ -972,7 +972,7 @@ function setupEventListeners(svg, state) {
                     onDone: () => doneAction().done(),
                     label: () => doneAction().label,
                     anchor: () => { const a = doneAction(); const w = a && a.end && a.end(); return w ? worldToScreen(svg, w) : null; },
-                    avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #${OFFSET_INPUT_ID}`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
+                    avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #offset-tool-overlay .offset-handle, #${OFFSET_INPUT_ID}`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
                 });
             }
             if (doneButton) doneButton.sync(e.pointerType === 'touch');

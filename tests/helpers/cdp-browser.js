@@ -7,7 +7,7 @@ import fsp from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
+import { spawn, spawnSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -76,6 +76,78 @@ export async function sendRealKey(send, key, code, vk, modifiers = 0, text = '')
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers });
 }
 
+const activeSessions = new Set();
+let handlersInstalled = false;
+let fatalInFlight = false;
+
+function killHoldersByDir(userDir) {
+  if (!userDir) return;
+  const token = path.basename(userDir);
+  if (!token) return;
+  if (process.platform === 'win32') {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = `${escaped}(?=[\\\\/"''\\s]|$)`;
+    const psScript = `Get-CimInstance Win32_Process -Filter "name = 'msedge.exe' or name = 'chrome.exe' or name = 'chromium.exe'" | Where-Object { $_.CommandLine -match '${pattern}' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+    const r = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', windowsHide: true, timeout: 10000 });
+    if (r.error) console.warn('cdp-browser: powershell process sweep failed: ' + r.error.message);
+    else if (r.status !== 0 && r.stderr) console.warn('cdp-browser: powershell process sweep warning: ' + r.stderr.trim());
+  } else {
+    const r = spawnSync('pkill', ['-9', '-f', token], { stdio: 'ignore', timeout: 5000 });
+    if (r.error && r.error.code !== 'ENOENT') console.warn('cdp-browser: pkill sweep failed: ' + r.error.message);
+  }
+}
+
+function killBrowserTreeSync(proc, userDir, forceDirSweep = false) {
+  if (proc && proc.pid && proc.exitCode === null) {
+    if (process.platform === 'win32') {
+      try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore', windowsHide: true }); } catch (e) { console.warn('cdp-browser: taskkill failed: ' + e.message); }
+    } else {
+      try { proc.kill('SIGKILL'); } catch (e) { console.warn('cdp-browser: proc.kill failed: ' + e.message); }
+    }
+  }
+  if (forceDirSweep) killHoldersByDir(userDir);
+}
+
+function removeProfileDir(userDir, proc) {
+  if (!userDir || !fs.existsSync(userDir)) return true;
+  try {
+    fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    return true;
+  } catch (e) {
+    console.warn(`cdp-browser: rmSync failed for ${userDir} (${e.message}); killing browser process tree and retrying`);
+    killBrowserTreeSync(proc, userDir, true);
+    try {
+      fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 25, retryDelay: 200 });
+      return true;
+    } catch (e2) {
+      console.warn(`cdp-browser: could not remove profile dir ${userDir}: ${e2.message}`);
+      return false;
+    }
+  }
+}
+
+function installProcessHandlers() {
+  if (handlersInstalled) return;
+  handlersInstalled = true;
+  process.on('exit', () => {
+    for (const s of [...activeSessions]) s.closeSync();
+  });
+  const onFatal = (kind, code) => async (err) => {
+    if (fatalInFlight) return;
+    fatalInFlight = true;
+    if (err !== undefined) console.error(`cdp-browser: ${kind}:`, err && err.stack ? err.stack : err);
+    try {
+      await Promise.allSettled([...activeSessions].map((s) => s.close()));
+    } finally {
+      process.exit(code);
+    }
+  };
+  process.on('uncaughtException', onFatal('uncaughtException', 1));
+  process.on('unhandledRejection', onFatal('unhandledRejection', 1));
+  process.on('SIGINT', onFatal('SIGINT', 130));
+  process.on('SIGTERM', onFatal('SIGTERM', 143));
+}
+
 // Returns null when no Edge/Chrome is installed (the caller prints its "skipped" line).
 // opts: tag (profile dir prefix), width/height (viewport), args (extra browser flags), server (false = don't start the static server), fixtures (extra served HTML pages, see startServer),
 //   leaveDialog: how the browser's leave-page warning (a beforeunload dialog) is answered: 'leave' (default: as a user who clicks through, so a
@@ -84,51 +156,84 @@ export async function sendRealKey(send, key, code, vk, modifiers = 0, text = '')
 export async function launchBrowser(opts = {}) {
   // scripts/gate.cjs runs the quick tier (no browser) with this set: a browser test misplaced there fails loudly instead of running unlocked.
   if (process.env.SKETCH_GATE_TIER === 'quick') throw new Error('launchBrowser refused: this test runs in the quick (no-browser) gate tier; it is a live test');
-  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {}, userDir: fixedUserDir = null, leaveDialog = 'leave' } = opts;
-  const browser = findBrowser();
+  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {}, userDir: fixedUserDir = null, leaveDialog = 'leave', browserPath = null, launchTimeoutMs = 30000 } = opts;
+  const browser = browserPath || findBrowser();
   if (!browser) return null;
+  installProcessHandlers();
   const srv = withServer ? await startServer(REPO_ROOT, fixtures) : { server: null, port: 0 };
   // fixedUserDir: a caller whose leak check looks for its own profile name (scripts/gate.cjs finds shell-smoke's browser by sk-shell-smoke-<pid>); it must be unique per run
   const userDir = fixedUserDir || fs.mkdtempSync(path.join(os.tmpdir(), `sk-test-${tag}-`));
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    '--remote-debugging-port=0', `--user-data-dir=${userDir}`, ...args, 'about:blank',
-  ], { stdio: 'ignore' });
-
+  let proc = null;
   let dbgPort = 0;
   let ws = null;
-  const close = async () => {
-    const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-    if (dbgPort) {
-      try {
-        const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-        const bws = new WebSocket(v.webSocketDebuggerUrl);
-        await new Promise((res, rej) => { bws.addEventListener('open', res); bws.addEventListener('error', rej); setTimeout(rej, 2000); });
-        bws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-        await Promise.race([exited, sleep(3000)]);
-        bws.close();
-      } catch (e) { console.warn('cdp-browser: Browser.close failed, falling back to the process kill: ' + (e && e.message)); }
-    }
-    if (ws) ws.close();
-    if (proc.pid && proc.exitCode === null) {
-      if (process.platform === 'win32') {
-        try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch (e) { console.warn('cdp-browser: taskkill failed: ' + e.message); }
-      } else proc.kill();
-    }
-    await Promise.race([exited, sleep(10000)]);
-    if (srv.server) srv.server.close();
-    // Warn-and-continue is right here: a leftover temp dir (Windows EPERM while the browser
-    // releases files) is not a test failure, and the test body has already passed.
-    try {
-      fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 25, retryDelay: 200 });
-    } catch (e) { console.warn(`cdp-browser: could not remove profile dir ${userDir}: ${e.message}`); }
+  let closing = null;
+  let closedSync = false;
+
+  const session = {
+    close: null,
+    closeSync: () => {
+      if (closedSync) return;
+      closedSync = true;
+      activeSessions.delete(session);
+      if (ws) { try { ws.close(); } catch (e) { console.warn('cdp-browser: ws.close on exit failed: ' + e.message); } }
+      if (srv.server) { try { srv.server.close(); } catch (e) { console.warn('cdp-browser: server.close on exit failed: ' + e.message); } }
+      killBrowserTreeSync(proc, userDir, false);
+      removeProfileDir(userDir, proc);
+    },
   };
+  activeSessions.add(session);
+
+  const close = () => {
+    if (closing) return closing;
+    closing = (async () => {
+      try {
+        if (proc) {
+          const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
+          if (dbgPort > 0) {
+            try {
+              const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
+              const bws = new WebSocket(v.webSocketDebuggerUrl);
+              await new Promise((res, rej) => { bws.addEventListener('open', res); bws.addEventListener('error', rej); setTimeout(rej, 2000); });
+              bws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
+              await Promise.race([exited, sleep(3000)]);
+              bws.close();
+            } catch (e) { console.warn('cdp-browser: Browser.close failed, falling back to the process kill: ' + (e && e.message)); }
+          }
+          if (ws) { try { ws.close(); } catch (e) { console.warn('cdp-browser: ws.close failed: ' + e.message); } }
+          killBrowserTreeSync(proc, userDir, false);
+          await Promise.race([exited, sleep(10000)]);
+        }
+        if (srv.server) srv.server.close();
+        removeProfileDir(userDir, proc);
+      } finally {
+        closedSync = true;
+        activeSessions.delete(session);
+      }
+    })();
+    return closing;
+  };
+  session.close = close;
 
   try {
+    proc = spawn(browser, [
+      '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
+      '--disable-component-update', '--disable-background-networking', '--disable-default-apps',
+      '--disable-sync', '--no-default-browser-check', '--disable-component-extensions-with-background-pages',
+      '--remote-debugging-port=0', `--user-data-dir=${userDir}`, ...args, 'about:blank',
+    ], { stdio: 'ignore' });
+    let earlyErr = null;
+    proc.once('error', (err) => { earlyErr = err; });
     dbgPort = await pollUntil(() => {
+      if (earlyErr) return -1;
+      if (proc.exitCode !== null) {
+        earlyErr = new Error(`browser process exited before opening DevToolsActivePort (code ${proc.exitCode})`);
+        return -1;
+      }
       const n = parseInt(fs.readFileSync(path.join(userDir, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0], 10);
       return n || false;
-    }, 'DevToolsActivePort in the profile dir', 30000, 100);
+    }, 'DevToolsActivePort in the profile dir', launchTimeoutMs, 100);
+    if (earlyErr) throw earlyErr;
+    if (!(dbgPort > 0)) throw new Error(`invalid DevToolsActivePort: ${dbgPort}`);
     await pollUntil(async () => (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).ok, 'the CDP endpoint', 30000, 100);
     const page = await pollUntil(async () => {
       const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();

@@ -259,4 +259,23 @@ const centresOf = (S, c, si = 0) => c.instances.map(i => P(S, shape(S, i.shapes[
   ok(!patterns(S).length && shape(S, copy), 'deleting the source ends the pattern; its copy stays');
 }
 
+// ---------------------------------------------------------------- the active sketch (task 659's rule): objects, centre, direction line
+{
+  const S = L.newSketch(), st = S.state;
+  const mk = (x1, y1, x2, y2, sk) => { const a = L.point(S, x1, y1), b = L.point(S, x2, y2); const s = shape(S, L.line(S, a, b)); for (const j of [a, b]) st.joints.get(j).sketchId = sk; s.sketchId = sk; return s; };
+  const other = mk(10, 0, 20, 0, 'sketch-2'), own = mk(10, 10, 20, 10, 'sketch-1'), otherDir = mk(0, 30, 10, 40, 'sketch-2');
+  st.activeSketchId = 'sketch-1';
+  const snap = () => JSON.stringify([[...st.joints], st.shapes, st.constraints]);
+  const before = snap();
+  const r1 = applyPattern(st, CIRC, { shapes: [other.id], joints: [] }, { ...patternDefaults(CIRC), centre: L.origin });
+  ok(!r1.ok && /active sketch/.test(r1.reason), `objects of another sketch are refused (${r1.reason})`);
+  const r2 = applyPattern(st, CIRC, { shapes: [own.id], joints: [] }, { ...patternDefaults(CIRC), centre: other.joints[0] });
+  ok(!r2.ok && /centre point must be in the active sketch/.test(r2.reason), `a centre of another sketch is refused (${r2.reason})`);
+  const r3 = applyPattern(st, RECT, { shapes: [own.id], joints: [] }, { ...patternDefaults(RECT), directions: [otherDir.id, null] });
+  ok(!r3.ok && /direction 1 line must be in the active sketch/.test(r3.reason), `a direction line of another sketch is refused (${r3.reason})`);
+  ok(snap() === before, 'the refusals wrote nothing');
+  const r4 = make(S, CIRC, { shapes: [own.id] }, { centre: L.origin, quantity: 3, angle: 360 }, 'the active sketch, about the origin');
+  ok(r4.constraint.instances.every((i) => i.shapes.every((id) => shape(S, id).sketchId === 'sketch-1') && i.joints.every((j) => st.joints.get(j).sketchId === 'sketch-1')), 'the copies land in the active sketch');
+}
+
 console.log(`pattern-658: ${checks} checks passed`);

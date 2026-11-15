@@ -154,4 +154,42 @@ try {
   ok(q2 && q2.quantity[1] === 1 && q2.instances.length === 2, 'Undo: back to 3 x 1');
 } finally { await app.close(); }
 
+// ---- the active sketch (task 659's rule): another sketch's curves / points are not picks at all (no pick, no message, no step)
+{
+  const prof = await createProfile();
+  await createNamedDesign(prof, 'sketchstudio', 'Pattern 658 active sketch');
+  const a2 = await open({ host: 'sketchstudio', profile: prof });
+  try {
+    const st = a2.state, doc = a2.document;
+    const r = a2.svg.getBoundingClientRect(), C = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    for (let i = 0; i < 20 && Math.abs(a2.toScreen(60, 0).x - a2.toScreen(0, 0).x) > 300; i++) a2.wheel(C.x, C.y, 300);
+    const J = (x, y, sk) => { const id = st.genJ(); st.joints.set(id, { x, y, fixed: false, sketchId: sk }); return id; };
+    st.clearDocument(); st.sketches.splice(1); st.sketches.push({ id: 'sketch-2', name: 'Sketch 2', visible: true }); st.activeSketchId = 'sketch-1';
+    const o1 = J(5, -10, 'sketch-2'), o2 = J(35, -10, 'sketch-2'), m1 = J(0, 40, 'sketch-1'), m2 = J(30, 40, 'sketch-1'), d1 = J(60, -20, 'sketch-2'), d2 = J(60, 60, 'sketch-2');
+    st.shapes.push({ id: 'other', type: 'line', joints: [o1, o2], sketchId: 'sketch-2' }, { id: 'own', type: 'line', joints: [m1, m2], sketchId: 'sketch-1' }, { id: 'odir', type: 'line', joints: [d1, d2], sketchId: 'sketch-2' });
+    a2.frames();
+    const P = (x, y) => a2.toScreen(x, y);
+    const toasts = () => [...doc.querySelectorAll('#notification-container [data-level]')].map((e) => e.textContent.trim());
+    const h = st.history.length;
+    a2.tool('circularPattern');
+    a2.click(P(20, -10).x, P(20, -10).y);
+    ok(st.selectedShapes.size === 0, "circular: another sketch's line is not an object");
+    a2.click(P(15, 40).x, P(15, 40).y);
+    ok(st.selectedShapes.has('own'), 'circular: the active line is an object');
+    a2.enter();
+    a2.click(P(5, -10).x, P(5, -10).y);
+    ok(!st.constraints.some((k) => k.type === 'circularPattern') && st.pattern.step === 'centre', "circular: another sketch's point is not the centre");
+    ok(st.history.length === h && toasts().length === 0, `no undo step, no message (${toasts()})`);
+    a2.esc();
+    st.selectedShapes.clear(); st.selectedShapes.add('own');
+    a2.tool('rectangularPattern');
+    doc.querySelector('.sk-pattern-dialog [data-pick="dir0"]').click(); a2.frames();
+    a2.click(P(60, 20).x, P(60, 20).y);
+    const q = st.constraints.find((k) => k.type === 'rectangularPattern');
+    ok(q && q.directions[0] === null && st.pattern.step === 'dir0', "rectangular: another sketch's line is not a direction");
+    ok(q.instances.every((i) => i.shapes.every((id) => (st.shapes.find((x) => x.id === id) || {}).sketchId === 'sketch-1')), 'the copies are in the active sketch');
+    a2.esc();
+  } finally { await a2.close(); }
+}
+
 console.log(`pattern-tool-658-node: ${checks} checks passed`);

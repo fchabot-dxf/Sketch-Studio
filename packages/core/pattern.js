@@ -46,7 +46,7 @@ import { CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from './constants.js';
 import { getCoincidentJoints } from './joints.js';
 import { makeArc } from './shapes.js';
 import { newJointId, newShapeId } from './shape-id.js';
-import { inertEntities } from './sketch-model.js';
+import { inertEntities, inActiveSketch } from './sketch-model.js';
 import { isReferenceJointId } from './reference-lines.js';
 import { SolverConfig } from './solver-config.js';
 
@@ -92,6 +92,8 @@ export function patternSources(state, objects) {
   if (!shapes.length && !loose.length) return { ok: false, reason: 'select the objects to pattern first' };
   const inert = inertEntities(state);
   if (inert && (shapes.some((s) => inert.lockedS.has(s.id)) || loose.some((id) => inert.lockedJ.has(id)))) return { ok: false, reason: 'an object is in a locked sketch' };
+  // Fusion edits only the active sketch (task 659's one rule, #core/sketch-model.js inActiveSketch)
+  if (shapes.some((s) => !inActiveSketch(state, s)) || loose.some((id) => !inActiveSketch(state, state.joints.get(id)))) return { ok: false, reason: 'the objects must be in the active sketch' };
   const odd = shapes.find((s) => s.reference || !isKind(s));
   if (odd) return { ok: false, reason: `a ${odd.reference ? 'reference line' : odd.type} cannot be patterned (lines, arcs, circles and points)` };
   const all = [];
@@ -503,6 +505,7 @@ export function applyPattern(state, type, objects, values) {
 function placementRefusal(state, c) {
   if (c.type === T.CIRCULAR_PATTERN) {
     if (!state.joints.has(c.centre) && c.centre !== ORIGIN_JOINT_ID) return 'pick the centre point';
+    if (c.centre !== ORIGIN_JOINT_ID && !inActiveSketch(state, state.joints.get(c.centre))) return 'the centre point must be in the active sketch (or the origin)'; // task 659's rule
     if (c.sources.points.includes(c.centre) && !c.sources.shapes.some((id) => { const s = findShape(state.shapes, id); return s && s.joints.includes(c.centre); })) return 'the centre point cannot be one of the objects';
     return null;
   }
@@ -511,6 +514,7 @@ function placementRefusal(state, c) {
     if (!id || AXIS_DIRECTIONS[id]) continue;
     const l = findShape(state.shapes, id);
     if (!l || l.type !== 'line') return `direction ${k + 1} must be a line`;
+    if (!inActiveSketch(state, l)) return `the direction ${k + 1} line must be in the active sketch (or an axis)`; // task 659's rule
     const a = state.joints.get(l.joints[0]), b = state.joints.get(l.joints[1]);
     if (!a || !b || !(Math.hypot(b.x - a.x, b.y - a.y) > 0)) return `the direction ${k + 1} line has no length`;
   }

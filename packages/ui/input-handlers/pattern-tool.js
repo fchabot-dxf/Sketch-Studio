@@ -20,7 +20,7 @@ import {
   applyPattern, editPattern, patternDefaults, patternObjectsOf, patternSlots, patternSlotGeometry, patternHandles,
   patternDistanceFor, patternInstanceOf, patternDirectionName, patternDirectionPick, patternSourceMiddle, isPatternConstraint, PATTERN_UNDO_LABEL
 } from '#core/pattern.js';
-import { inertEntities, isShapeInert, isJointInert } from '#core/sketch-model.js';
+import { inertEntities, isJointInert, activeSketchPick, inActiveSketch } from '#core/sketch-model.js';
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit, parse as parseUnit } from '#core/units.js';
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
@@ -76,7 +76,12 @@ export function patternDoneOpen() { return !!_s && (!!_s.c || patternAnchorPoint
 const jointPoint = (state, id) => { const j = state.joints.get(id); return j ? { x: j.x, y: j.y } : null; };
 const doneLabel = () => (_s && _s.step === 'values' ? 'Apply the pattern' : 'Pattern: next step');
 export const patternDoneLabel = doneLabel;
-const pickRule = (state) => { const inert = inertEntities(state); return { shape: (id) => !isShapeInert(inert, id), joint: (id) => !isJointInert(inert, id) }; };
+// THE pick rule (task 659's shared rule, #core/sketch-model.js): only the ACTIVE sketch's curves and points (and the origin / the axes), never a
+// locked / hidden one; anything else is not a pick at all (as empty canvas: no highlight, no message)
+const pickRule = (state) => {
+  const inert = inertEntities(state);
+  return { shape: (shape) => activeSketchPick(state, shape, inert), joint: (hit) => hit.id === ORIGIN_JOINT_ID || (inActiveSketch(state, hit.j) && !isJointInert(inert, hit.id)) };
+};
 
 // ---- start / end ---------------------------------------------------------------------------------------------------------------
 
@@ -228,22 +233,22 @@ export function handlePatternPointerDown(e, svg, state, hitJoint, hitShape) {
   const rule = pickRule(state);
   const shape = !hitJoint && hitShape && hitShape.shape ? hitShape.shape : null;
   if (_s.step === 'objects') {
-    if (hitJoint && hitJoint.id !== ORIGIN_JOINT_ID && rule.joint(hitJoint.id) && !patternInstanceOf(state, hitJoint.id)) toggle(state.selectedJoints, hitJoint.id);
-    else if (shape && !shape.reference && rule.shape(shape.id) && !patternInstanceOf(state, shape.id)) toggle(state.selectedShapes, shape.id);
+    if (hitJoint && hitJoint.id !== ORIGIN_JOINT_ID && rule.joint(hitJoint) && !patternInstanceOf(state, hitJoint.id)) toggle(state.selectedJoints, hitJoint.id);
+    else if (shape && !shape.reference && rule.shape(shape) && !patternInstanceOf(state, shape.id)) toggle(state.selectedShapes, shape.id);
     else return false;
     if (_s.c) { const objects = selectionObjects(state); if (objects.shapes.length || objects.joints.length) liveEdit({ objects }); }
     refresh();
     return true;
   }
   if (_s.step === 'centre') {
-    if (!hitJoint || !rule.joint(hitJoint.id) || patternInstanceOf(state, hitJoint.id)) return false;
+    if (!hitJoint || !rule.joint(hitJoint) || patternInstanceOf(state, hitJoint.id)) return false;
     _s.values.centre = hitJoint.id;
     if (_s.c) { if (liveEdit({ centre: hitJoint.id })) setStep('values'); }
     else create(selectionObjects(state));
     return true;
   }
   if (_s.step === 'dir0' || _s.step === 'dir1') {
-    if (!shape || shape.type !== 'line' || (!shape.reference && !rule.shape(shape.id))) return false;
+    if (!shape || shape.type !== 'line' || (!shape.reference && !rule.shape(shape))) return false;
     const k = _s.step === 'dir0' ? 0 : 1, dirs = _s.values.directions.slice();
     dirs[k] = patternDirectionPick(k, shape.id);
     if (liveEdit({ directions: dirs })) setStep('values');

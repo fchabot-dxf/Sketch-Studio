@@ -28,6 +28,10 @@ const NUMERIC_INPUT_CSS = `
     z-index: 100;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+.dim-input[aria-invalid="true"] {
+    border-color: var(--sk-error, #ef4444);
+    outline: 1px solid var(--sk-error, #ef4444);
+}
 @media (max-width: 640px) {
     .dim-input {
         padding: 4px 6px;

@@ -68,6 +68,7 @@ function buildCoreGeometry() {
     g.setAttribute("data-layer", "core-geometry");
     g.setAttribute("fill", "none");
     for (const sh of cs.shapes) {
+        if (sh.isConstruction) continue; // construction is a Design-stage aid, never drawn as ink
         const pts = coreShapeToPolyline(sh, cs.joints);
         if (!pts || pts.length < 2) continue;
         const ptsStr = pts.map(p => `${p[0]},${p[1]}`).join(" ");

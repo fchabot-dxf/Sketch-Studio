@@ -1,12 +1,12 @@
 // tests/construction-toggle-output-node.test.js — TASK 619:
 // 1. Construction toggle (.sk-canvas-corner #btn-construct-toggle + K shortcut) is shared via #ui/design-browser.js
-//    across SketchStudio, Shaper, and Trace (NOT in app-footer), and stays disabled in Pen Plotter per Safety Check.
+//    across SketchStudio, Shaper, and Trace (NOT in app-footer), and is mounted in Pen Plotter too (TASK 641: construction is never plotted).
 // 2. K key and button toggle isConstructionMode, mark drawn shapes as construction, and toggle selected shape
 //    isConstruction in one undo step (when Design view is active; ignored while input focused or tab hidden).
 // 3. Safety / exclusion checks:
 //    - Shaper: construction geometry is excluded from findLoops, findOpenChains, and exportShaperSVG cut output.
 //    - Trace: construction geometry drawn in Edit does not appear in Trace's SVG / DXF exports.
-//    - Pen Plotter: toggle & K stay disabled because collectToolpathShapes / buildGcodeEntries do not skip isConstruction.
+//    - Pen Plotter: collectToolpathShapes / buildGcodeEntries skip isConstruction, even for explicit targetShapeIds.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -140,30 +140,34 @@ for (const host of ['sketchstudio', 'shaper']) {
   }
 }
 
-// ---- 3. Pen Plotter safety gate: Construction stays disabled; confirm why (collectToolpathShapes / buildGcodeEntries do not skip isConstruction)
+// ---- 3. Pen Plotter (TASK 641): Construction toggle is mounted; construction is never plotted, even when a toolpath names it
 {
   const app = await open({ host: 'penplotter' });
   try {
-    assert.strictEqual(app.document.getElementById('btn-construct-toggle'), null, 'penplotter: Construction button is NOT mounted');
+    assert(app.document.getElementById('btn-construct-toggle'), 'penplotter: Construction button is mounted');
     app.key('k');
-    assert.strictEqual(app.state.isConstructionMode, false, 'penplotter: K does NOT enable construction mode');
+    assert.strictEqual(app.state.isConstructionMode, true, 'penplotter: K enables construction mode');
 
-    // Confirm the unfixed leak in Pen Plotter's toolpath/G-code pipeline that justifies keeping Construction disabled there:
-    const j1 = app.engine.genJ(), j2 = app.engine.genJ();
-    app.engine.addJoint(j1, 10, 10, false);
-    app.engine.addJoint(j2, 60, 10, false);
-    const leakedId = 'S_leak_con';
-    app.state.shapes.push({ id: leakedId, type: 'line', joints: [j1, j2], isConstruction: true, sketchId: app.state.activeSketchId });
-    app.plotter.toolpaths = [{ id: 'tp1', name: 'T1', type: 'outline', export: true, penId: app.plotter.pens?.[0]?.id || 'p1', targetShapeIds: [leakedId], fill: null }];
-    const tpShapes = collectToolpathShapes(app.plotter.toolpaths[0]);
-    const gcode = buildGcodeEntries();
-    assert(tpShapes.some((s) => s.id === leakedId), 'penplotter safety audit confirmed: collectToolpathShapes still includes isConstruction shapes');
-    assert(gcode.length > 0, 'penplotter safety audit confirmed: buildGcodeEntries emits G-code for unguarded isConstruction shapes');
+    const mk = (id, x, isConstruction) => {
+      const j1 = app.engine.genJ(), j2 = app.engine.genJ();
+      app.engine.addJoint(j1, x, 10, false);
+      app.engine.addJoint(j2, x + 50, 10, false);
+      app.state.shapes.push({ id, type: 'line', joints: [j1, j2], isConstruction, sketchId: app.state.activeSketchId });
+    };
+    mk('S_solid', 10, false);
+    mk('S_con', 10, true);
+    const pen = app.plotter.pens?.[0]?.id || 'p1';
+    const ids = (tp) => collectToolpathShapes(tp).map((s) => s.id);
+    assert.deepStrictEqual(ids({ id: 't0', type: 'outline', penId: pen, targetShapeIds: null }), ['S_solid'], 'penplotter: default collect skips construction');
+    assert.deepStrictEqual(ids({ id: 't1', type: 'outline', penId: pen, targetShapeIds: ['S_solid', 'S_con'] }), ['S_solid'], 'penplotter: explicit targets skip construction');
+    app.plotter.toolpaths = [{ id: 'tp1', name: 'T1', type: 'outline', export: true, penId: pen, targetShapeIds: ['S_con'], fill: null }];
+    assert.strictEqual(buildGcodeEntries().length, 0, 'penplotter: a toolpath targeting only construction emits no G-code');
+    app.plotter.toolpaths = [{ id: 'tp1', name: 'T1', type: 'outline', export: true, penId: pen, targetShapeIds: ['S_solid', 'S_con'], fill: null }];
+    assert(buildGcodeEntries().length > 0, 'penplotter: the solid line still plots');
   } finally {
     await app.close();
   }
 }
-
 // ---- 4. Trace: Construction toggle works on Edit canvas, and Edit construction geometry never leaks into Trace exports
 {
   const saved = {};

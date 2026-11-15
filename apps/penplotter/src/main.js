@@ -35,4 +35,4 @@ chrome = mountAppChrome({
     { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
   ],
 });
-mountAppFooter({ router: history, view: designView }); // TASK 618: no Construction toggle in this host (it has none today)
+mountAppFooter({ router: history, view: designView }); // TASK 618: the Construction toggle lives on the canvas corner (design-browser, TASK 641), not the footer

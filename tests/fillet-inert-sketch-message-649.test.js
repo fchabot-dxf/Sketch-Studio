@@ -14,7 +14,7 @@ import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
   const S = L.newSketch();
   const c = L.point(S, 10, 10), a = L.point(S, 60, 10), b = L.point(S, 10, 40);
   L.line(S, c, a); L.line(S, c, b); L.line(S, c, L.point(S, -20, -20)); // a T: three lines (a real "no fillet" reason)
-  assert.match(String(diagnoseNoFillet(S.state, { x: 10, y: 10 }, 2)), /T-junction/, 'all curves: the T-junction reason (unchanged)');
+  assert.match(String(diagnoseNoFillet(S.state, { x: 10, y: 10 }, 2)), /Pick the two curves/, 'all curves: the T-junction reason (task 655: pick the two curves)');
   assert.strictEqual(diagnoseNoFillet(S.state, { x: 10, y: 10 }, 2, () => false), null, 'no curve accepted: no message');
 }
 

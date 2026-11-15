@@ -108,11 +108,14 @@ function legAt(state, shape, cornerJoint, P) {
  * Find corner info at a specific joint.
  * A valid corner has exactly 2 curves (lines, or arcs ending there) meeting at the joint's coincident cluster.
  * Two arc-involving curves that already run tangent (a filleted corner, a smooth join) are not a corner: nothing to round.
+ * `only` (optional, two shape ids): the two curves a two-curve pick named. They form the corner whatever else meets there (a T-junction:
+ * the third curve is simply not part of it, Fusion does the same), and a construction curve may be one of them (task 655).
  * @param {object} state
  * @param {string} jointId
+ * @param {string[]} [only]
  * @returns {object|null}
  */
-export function findCornerAtJoint(state, jointId) {
+export function findCornerAtJoint(state, jointId, only = null) {
   if (!state || !state.joints || !state.joints.has(jointId)) return null;
   const cJoint = state.joints.get(jointId);
   const cluster = getCoincidentCluster(state, jointId);
@@ -124,7 +127,8 @@ export function findCornerAtJoint(state, jointId) {
   // an arc touches a corner by ONE end in the cluster and its centre outside it; a line by one end
   const touches = (s) => { const [e0, e1] = endJoints(s); return cluster.has(e0) !== cluster.has(e1) && !(s.type === 'arc' && cluster.has(s.joints[0])); };
   const solid = curves.filter(s => !s.isConstruction);
-  const cornerCurves = solid.filter(touches).length > 0 ? solid : curves;
+  // the solid curves are the corner when there are two of them; otherwise (one solid + one construction, or only construction) every curve counts (task 655)
+  const cornerCurves = only ? curves.filter(s => only.includes(s.id)) : (solid.filter(touches).length >= 2 ? solid : curves);
   const incident = [];
   for (const s of cornerCurves) {
     if (!touches(s)) continue;
@@ -135,6 +139,7 @@ export function findCornerAtJoint(state, jointId) {
   }
 
   if (incident.length !== 2) return null;
+  if (only && !only.every(id => incident.some(i => i.shape.id === id))) return null;
 
   const [lineA, lineB] = incident;
   const pA = state.joints.get(lineA.otherJoint);
@@ -160,6 +165,9 @@ export function findCornerAtJoint(state, jointId) {
 }
 
 const TANGENT_DOT = 0.9999;
+
+/** What a tap on a T-junction (three or more curves meeting) says: the corner is not one, so the two curves are picked one by one (task 655). */
+export const T_JUNCTION_MESSAGE = 'Pick the two curves to fillet';
 
 /**
  * Find a corner near the given world point (within tolerance).
@@ -212,9 +220,9 @@ export function diagnoseNoFillet(state, worldPt, tolerance = 15, include = () =>
     return 'This corner is already filleted';
   }
   const lines = touching.filter(sh => sh.type === 'line');
-  if (lines.length > 2 && arcs.length === 0) return 'Fillet needs a corner between exactly two lines (T-junction)';
+  if (lines.length > 2 && arcs.length === 0) return T_JUNCTION_MESSAGE;
   const ends = touching.filter(sh => (isLineShape(sh) || isArcShape(sh)) && endJoints(sh).some(j => cluster.has(j)));
-  if (ends.length > 2) return 'Fillet needs a corner between exactly two lines or arcs (T-junction)';
+  if (ends.length > 2) return T_JUNCTION_MESSAGE;
   if (ends.length === 2 && ends.some(sh => sh.type === 'arc')) return 'These curves already run tangent to each other: nothing to fillet';
   return arcs.length ? 'Fillet needs a corner between two lines or arcs that meet at an end' : 'Fillet needs a corner between two lines';
 }
@@ -318,18 +326,25 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
   const uA = { x: vA.x / lenA, y: vA.y / lenA };
   const uB = { x: vB.x / lenB, y: vB.y / lenB };
 
-  const dot = Math.max(-1, Math.min(1, uA.x * uB.x + uA.y * uB.y));
-  if (Math.abs(dot) > 0.9999) {
+  // The angle between the lines from atan2(|cross|, dot): exact at every angle (acos loses its digits near 0 and 180 degrees).
+  // Only an EXACTLY straight (or folded back) pair has no fillet: |sin| below 1e-9. Near 180 degrees the tangent points hug the corner
+  // (d = R / tan(theta/2) ~ R * (pi - theta) / 2), and the fillet is refused only when its arc would be shorter than COLLAPSE_TOL
+  // (the chord 2d): below that the arc is a collapsed shape, and its tangent points fall inside the 1e-4 joint-coincidence tolerance
+  // (task 655; was 0.81 degrees of 180 for any radius, so 179.5 degrees at R 1, which Fusion fillets, was refused).
+  const cross = uA.x * uB.y - uA.y * uB.x;
+  if (Math.abs(cross) < 1e-9) {
     return { valid: false, reason: 'Lines are collinear (angle ~ 0° or 180°)' };
   }
-
-  const theta = Math.acos(dot);
+  const theta = Math.atan2(Math.abs(cross), uA.x * uB.x + uA.y * uB.y);
   const halfAngle = theta / 2;
   const sinHalf = Math.sin(halfAngle);
   const tanHalf = Math.tan(halfAngle);
 
   let radius = Math.max(0.1, requestedRadius);
   let d = radius / tanHalf;
+  if (2 * d < COLLAPSE_TOL) {
+    return { valid: false, reason: `R = ${radius.toFixed(2)} is too small for a corner this close to straight (the arc would be shorter than ${COLLAPSE_TOL} mm); use a larger radius` };
+  }
 
   // NO clamp (owner ruling): an oversized radius is applied as asked; a tangent point may land past a line's far
   // end (that line then runs "backwards", like Fusion). The ONE refusal is the singular value where a trimmed
@@ -414,6 +429,18 @@ export function applyFillet(state, cornerInfo, radius = 5) {
       for (let k = 0; k < s.joints.length; k++) if (cluster.has(s.joints[k])) s.joints[k] = jV;
     }
   }
+  // A THIRD solid curve meeting at the corner (a T-junction, two-curve pick) is left as it was (Fusion): it keeps its end at the sharp point,
+  // on a joint of its own (jT, shared by all the third curves), detached from the fillet and from the two filleted curves. A constraint on
+  // that curve's end (its far end named, neither filleted curve's far end named) follows it to jT. (task 655)
+  const thirds = shapes.filter(s => s && s !== lineA.shape && s !== lineB.shape && !(s.type === 'line' && s.isConstruction) && (isLineShape(s) || isArcShape(s)) && endJoints(s).some(j => cluster.has(j)));
+  const jT = thirds.length ? genJ() : null;
+  const thirdFar = new Set();
+  for (const s of thirds) {
+    const ends = endJoints(s), base = s.type === 'arc' ? 1 : 0, idx = cluster.has(ends[0]) ? 0 : 1;
+    thirdFar.add(ends[1 - idx]);
+    s.joints[base + idx] = jT;
+  }
+  if (jT) joints.set(jT, { x: cornerPt0.x, y: cornerPt0.y, fixed: false });
 
   // Update constraints referencing the corner joints
   if (Array.isArray(constraints)) {
@@ -434,6 +461,12 @@ export function applyFillet(state, cornerInfo, radius = 5) {
       const ownArc = c.type === CONSTRAINT_TYPES.EQUAL && Array.isArray(c.joints) && c.joints.length === 4 ? [[lineA, jTA], [lineB, jTB]].find(([leg]) => leg.shape.type === 'arc' && c.joints[0] === leg.shape.joints[0] && c.joints[2] === leg.shape.joints[0]) : null;
       if (ownArc) {
         for (let k = 0; k < c.joints.length; k++) if (cluster.has(c.joints[k])) c.joints[k] = ownArc[1];
+        continue;
+      }
+
+      // a constraint on a THIRD curve's end (T-junction): its corner joints follow the third curve to jT
+      if (jT && Array.isArray(c.joints) && c.joints.some(j => thirdFar.has(j)) && !c.joints.includes(lineA.otherJoint) && !c.joints.includes(lineB.otherJoint)) {
+        for (let k = 0; k < c.joints.length; k++) if (cluster.has(c.joints[k])) c.joints[k] = jT;
         continue;
       }
 
@@ -467,6 +500,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   // Create the arc shape
   const { shapes: arcShapes, constraints: arcConstraints } = makeArc(joints, jCenter, jTA, jTB, 'CENTER');
   const arcShape = arcShapes[0];
+  if (lineA.shape.isConstruction && lineB.shape.isConstruction) arcShape.isConstruction = true; // construction + construction: a construction arc; with a solid curve: solid (Fusion, task 655)
   arcShape.filletSharp = jV; // data on the arc (survives undo/save): which joint is its virtual sharp corner
   // NOTE: no arcShape.radius -- the radius dimension below is the source of truth; a frozen scalar would go stale on edit.
   shapes.push(arcShape);
@@ -629,8 +663,8 @@ export function findFilletShapeAtPoint(state, worldPt, tolerance = 10) {
 }
 
 /**
- * The fillet corner formed by exactly these two shapes (lines or arcs; they must meet at a shared/coincident joint and
- * nothing else may touch that corner), or null. Same shape as findCornerAtJoint's result.
+ * The fillet corner formed by exactly these two shapes (lines or arcs; they must meet at a shared/coincident joint), or null.
+ * A third curve meeting there (a T-junction) is not part of the corner: applyFillet leaves it at the sharp point (task 655). Same shape as findCornerAtJoint's result.
  * Two curves can meet at BOTH ends (a line and an arc forming a "D", a lens of two arcs): `near` (optional, world points: where the user
  * picked) chooses the corner nearest them (least summed distance); without it the first corner in lineA's joint order (task 649).
  */
@@ -640,7 +674,7 @@ export function findCornerBetweenLines(state, lineA, lineB, near = null) {
   const away = (corner) => pts.reduce((s, p) => s + Math.hypot(p.x - corner.cornerPt.x, p.y - corner.cornerPt.y), 0);
   let best = null;
   for (const jid of lineA.joints) {
-    const corner = findCornerAtJoint(state, jid);
+    const corner = findCornerAtJoint(state, jid, [lineA.id, lineB.id]);
     if (corner && ((corner.lineA.shape.id === lineA.id && corner.lineB.shape.id === lineB.id) ||
                    (corner.lineA.shape.id === lineB.id && corner.lineB.shape.id === lineA.id))) {
       if (!pts.length) return corner;

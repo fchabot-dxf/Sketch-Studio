@@ -33,6 +33,12 @@ const HINT_MS = 6000;
 const MIN_DRAG_MM = 0.01;
 
 let currentDistance = null; // WORLD mm; the last distance used (survives tool switches for the session)
+let _exit = null;
+
+/** Host callback (task 667): ends the Offset tool (back to Select) after OK. */
+export function setupOffsetTool({ exit } = {}) {
+  _exit = typeof exit === 'function' ? exit : null;
+}
 let _distanceUnit = null;   // the document unit the default was seeded for; a unit change re-seeds it
 let _open = null;           // { chain, pickId, side, d, el, svg, state, unsubHistory } while the distance box is open
 let _hover = false;         // the pointer is over the arrow (it draws darker)
@@ -231,6 +237,7 @@ export function commitOffsetInput() {
   currentDistance = d; // the distance USED is the remembered one
   cancelAll();
   showNotification(`Offset applied (${formatUnit(d, docUnit(), { unit: true, decimals: decimalsFor(docUnit()) })})`, 'info');
+  if (_exit) _exit();
 }
 
 function removeInput() {

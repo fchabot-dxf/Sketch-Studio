@@ -346,7 +346,7 @@ export function applyOffset(state, chain, d, side) {
 export function offsetConstraintRecord(params) {
   if (!params || !Array.isArray(params.shapes) || params.shapes.length < 2 || params.shapes.length % 2) return null;
   const n = params.shapes.length / 2;
-  return {
+  const rec = {
     type: CONSTRAINT_TYPES.OFFSET,
     shapes: params.shapes.slice(),
     rev: Array.from({ length: n }, (_, k) => !!(params.rev && params.rev[k])),
@@ -356,6 +356,32 @@ export function offsetConstraintRecord(params) {
     value: params.value,
     offset: Number.isFinite(params.offset) ? params.offset : (SolverConfig.DIMENSION_OFFSET || 30),
   };
+  if (params.dimensioned === false) rec.dimensioned = false;
+  return rec;
+}
+
+/** Find an undimensioned OFFSET constraint matching a source/copy shape pair `(shapeA, shapeB)` in either order. */
+export function findUndimensionedOffsetPair(constraints, shapeA, shapeB) {
+  if (!Array.isArray(constraints) || shapeA == null || shapeB == null) return null;
+  for (const c of constraints) {
+    if (!c || c.type !== CONSTRAINT_TYPES.OFFSET || c.dimensioned !== false || !Array.isArray(c.shapes)) continue;
+    for (let k = 0; k + 1 < c.shapes.length; k += 2) {
+      const a = c.shapes[k], b = c.shapes[k + 1];
+      if ((a === shapeA && b === shapeB) || (a === shapeB && b === shapeA)) return c;
+    }
+  }
+  return null;
+}
+
+/** Re-enable the driving dimension on an undimensioned OFFSET constraint `c` (keeps its current solved distance `c.value`). */
+export function restoreOffsetDimension(state, c) {
+  if (!c || c.type !== CONSTRAINT_TYPES.OFFSET) return false;
+  delete c.dimensioned;
+  c.isDriven = false;
+  c.driven = false;
+  delete c.drivenReason;
+  if (!c.name && state && Array.isArray(state.constraints)) c.name = nextDimensionName(state.constraints);
+  return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------- the stored constraint

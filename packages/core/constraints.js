@@ -531,7 +531,7 @@ export function addConstraint(state, type, params) {
 
     // TASK 535: every dimension has a name; one without (a new dimension, or a version-1 file) gets the next automatic one HERE, the
     // only place. It goes in BEFORE createConstraint so withDimensionState writes name and expression in one fixed order (byte-stable saves).
-    if (isDimension({ type }) && !normalized.name) normalized.name = nextDimensionName(state.constraints);
+    if (isDimension({ ...normalized, type }) && !normalized.name) normalized.name = nextDimensionName(state.constraints);
 
     // Create validated constraint
     const constraint = createConstraint(type, normalized);

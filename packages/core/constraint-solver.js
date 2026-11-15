@@ -79,8 +79,8 @@ export function createEngine(options = {}){
     constraintErrors.sort((a, b) => b.residual - a.residual);
     conflicts.sort((a, b) => b.residual - a.residual);
 
-    // Geometry decides convergence: satisfied iff no constraint exceeds tolerance.
-    const converged = conflicts.length === 0;
+    // Geometry decides convergence: satisfied iff no constraint exceeds tolerance (unless the solver rejected an invalid scalar step).
+    const converged = !result.rejected && conflicts.length === 0;
 
     // Update metrics for tuning wizard
     lastSolveStats = {

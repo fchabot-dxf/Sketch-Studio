@@ -167,6 +167,10 @@ export function projectDimLabel(c, pos, joints, shapes) {
 // TASK 680: the Dimension tool's PLACEMENT, moved verbatim from packages/ui/input-handlers/dimension-tool.js so a headless tool operation
 // (#core/tool-ops.js) places a dimension with the SAME rule: the mode a label point picks, the radius label, and the offset / mode / value
 // a label point gives a dimension being placed.
+/**
+ * Detect dimension mode based on mouse position relative to segment.
+ * Returns 'aligned', 'horizontal', or 'vertical'.
+ */
 export function detectDimMode(j1, j2, w) {
     const dx = j2.x - j1.x, dy = j2.y - j1.y;
     const lenSq = dx*dx + dy*dy;
@@ -242,7 +246,7 @@ export function updateConstraintOffset(state, c, w) {
                 }
             }
         }
-    } else if (c.type === CONSTRAINT_TYPES.DISTANCE && c.shapes && c.shapes.length === 2) {
+    } else if ((c.type === CONSTRAINT_TYPES.DISTANCE && c.shapes && c.shapes.length === 2) || c.type === CONSTRAINT_TYPES.OFFSET) {
         if (!c.__placing) {
             projectDimLabel(c, w, state.joints, state.shapes);
             return;

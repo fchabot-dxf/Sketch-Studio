@@ -60,6 +60,7 @@ import { sceneJoints, sceneShapes } from './reference-lines.js';
 import { planChange, previewDimensionInput } from './parameters.js';
 import { applyParameterChange, dimensionInputLabel } from './dimension-seams.js';
 import { applyPattern } from './pattern.js';
+import { findUndimensionedOffsetPair, restoreOffsetDimension } from './offset.js';
 
 const VIEW = { x: 0, y: 0, w: 800, h: 800 };
 const shapeById = (state, id) => state.shapes.find((s) => s.id === id);
@@ -206,7 +207,13 @@ export function dimension(state, pick, label, text, { unit = 'mm' } = {}) {
     const [p, q, r, t] = [s1.joints[0], s1.joints[1], s2.joints[0], s2.joints[1]].map((id) => J.get(id));
     const a1 = Math.atan2(q.y - p.y, q.x - p.x), a2 = Math.atan2(t.y - r.y, t.x - r.x);
     const d = Math.abs((a1 + Math.PI * 2) % Math.PI - (a2 + Math.PI * 2) % Math.PI);
-    if (d < 0.01 || Math.abs(d - Math.PI) < 0.01) {
+    const parallel = d < 0.01 || Math.abs(d - Math.PI) < 0.01;
+    const undimOffset = parallel ? findUndimensionedOffsetPair(state.constraints, s1.id, s2.id) : null; // task 667: an offset pair gets its own dimension back
+    if (undimOffset) {
+      restoreOffsetDimension(state, undimOffset);
+      undimOffset.__restoredDimension = true;
+      c = undimOffset;
+    } else if (parallel) {
       c = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { shapes: [s1.id, s2.id], value: Math.abs(perpendicularDistance(p, r, t)) });
     } else {
       let v = Math.abs((a1 - a2) * 180 / Math.PI); if (v > 180) v = 360 - v;

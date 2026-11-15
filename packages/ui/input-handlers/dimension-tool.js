@@ -13,6 +13,7 @@ import { getDist, perpendicularDistance, projectPointOnLine, isPointLineDistance
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#core/dimension-seams.js';
 import { placeRadiusLabel, updateConstraintOffset } from '#core/dim-label.js'; // TASK 680: the placement rule lives in core (tool-ops places with it too)
+import { findUndimensionedOffsetPair, restoreOffsetDimension } from '#core/offset.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -103,13 +104,21 @@ export function setupDimensionTool(svg, appState) {
 export function resetDimensionState(state) {
     const pc = (state && state.placingConstraint) || dimensionState.placingConstraint;
     if (pc && pc.__placing) {
-        if (pc.__newlyPlaced === true && typeof pc.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pc.__birthHistoryLength);
-        if (state && Array.isArray(state.constraints)) {
-            const idx = state.constraints.indexOf(pc);
-            if (idx !== -1) state.constraints.splice(idx, 1);
+        if (pc.__restoredDimension) {
+            pc.dimensioned = false;
+            delete pc.name;
+            delete pc.__restoredDimension;
+            if (typeof pc.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pc.__birthHistoryLength);
+            pc.__placing = false;
+        } else {
+            if (pc.__newlyPlaced === true && typeof pc.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pc.__birthHistoryLength);
+            if (state && Array.isArray(state.constraints)) {
+                const idx = state.constraints.indexOf(pc);
+                if (idx !== -1) state.constraints.splice(idx, 1);
+            }
+            pc.__placing = false;
+            pc.__newlyPlaced = false;
         }
-        pc.__placing = false;
-        pc.__newlyPlaced = false;
     }
     dimensionState.pendingDimension = null;
     dimensionState.placingConstraint = null;
@@ -261,7 +270,7 @@ export function anchorPlacingDimension(svg, state) {
         const [j1, j2] = pending.joints;
         const status = analyzeConstraintStatus(state);
         if (status.fixedJoints.has(j1) && status.fixedJoints.has(j2)) {
-            const savedPositions = snapshotSolverState(state.joints, state.shapes);
+            const savedPositions = snapshotSolverState(state.joints, state.shapes, state.constraints);
             const testConstraint = { type: CONSTRAINT_TYPES.DISTANCE, joints: [j1, j2], value: pending.value, __temp: true, isDriven: false };
             state.constraints.push(testConstraint);
             try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
@@ -404,7 +413,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         if (pending.isDriven || pending.driven) {
             logDim('drop-driven', { id: pending.id || '(pending)' });
             announcePlacedReference(pending);
-            try { pending.__placing = false; } catch(_){ }
+            try { pending.__placing = false; delete pending.__restoredDimension; } catch(_){ }
             try { if (state && state.placingConstraint === pending) state.placingConstraint = null; } catch(_){ }
             dimensionState.placingConstraint = null;
             return true;
@@ -423,7 +432,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
             // Only set as driven if BOTH joints are fixed (not just one)
             if (status.fixedJoints.has(j1) && status.fixedJoints.has(j2)) {
                 // Sandbox test: temporarily add a distance constraint and run the solver
-                const savedPositions = snapshotSolverState(state.joints, state.shapes);
+                const savedPositions = snapshotSolverState(state.joints, state.shapes, state.constraints);
                 const testConstraint = { type: CONSTRAINT_TYPES.DISTANCE, joints: [j1, j2], value: pending.value, __temp: true, isDriven: false };
                 state.constraints.push(testConstraint);
                 try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
@@ -647,6 +656,19 @@ function lineLineDimension(svg, state, s1, s2, e, w) {
 
     // Clear the preview active state now that we are creating or recovering the real constraint
     state.active = null;
+
+    // Task 667: re-adding a dimension on an undimensioned offset pair restores its driving distance dimension instead of adding a duplicate DISTANCE
+    const undimOffset = isParallel ? findUndimensionedOffsetPair(state.constraints, s1.id, s2.id) : null;
+    if (undimOffset) {
+        beginDimUndo(state);
+        restoreOffsetDimension(state, undimOffset);
+        undimOffset.__restoredDimension = true;
+        undimOffset.__birthHistoryLength = state && state.history ? state.history.length : null;
+        startPlacing(svg, state, undimOffset, e, w);
+        updateConstraintOffset(state, undimOffset, w);
+        endDimUndo(state);
+        return true;
+    }
 
     // Check if an existing constraint already exists between these two lines
     let existing = state.constraints.find(c => c && c.type === type && c.shapes && 
@@ -924,10 +946,6 @@ export function handleDimensionPointerMove(e, svg, state, w) {
     return false;
 }
 
-/**
- * Detect dimension mode based on mouse position relative to segment.
- * Returns 'aligned', 'horizontal', or 'vertical'.
- */
 export function handleDimensionPointerUp(e, svg, state) {
     if (state.currentTool !== TOOL_MODES.DIMENSION) return false;
 

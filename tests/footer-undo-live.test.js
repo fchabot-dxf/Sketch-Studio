@@ -73,8 +73,8 @@ await (async () => {
       assert(fb.fr.bottom <= fb.vh + 0.5 && fb.fr.bottom >= fb.vh - 1, name + ': the footer sits at the bottom of the screen: ' + JSON.stringify([fb.fr.bottom, fb.vh]));
       assert.strictEqual(fb.view, false, name + ': no VIEW readout'); assert(!/VIEW/i.test(fb.text), name + ': no VIEW text in the footer');
       assert.strictEqual(fb.footerConstruct, false, name + ': Construction is NOT in the footer (TASK 619)');
-      if (name === 'penplotter') assert.strictEqual(fb.cornerConstruct, null, 'penplotter: Construction stays disabled (safety check)');
-      else assert(fb.cornerConstruct && fb.cornerConstruct.w === 32 && fb.cornerConstruct.h === 32, name + ': Construction is 32x32 in .sk-canvas-corner');
+      // TASK 641: Pen Plotter has Construction too (it never plots it)
+      assert(fb.cornerConstruct && fb.cornerConstruct.w === 32 && fb.cornerConstruct.h === 32, name + ': Construction is 32x32 in .sk-canvas-corner');
       await shot(`desktop-${name}.png`, { x: 0, y: fb.fr.top - 2, width: fb.vw, height: fb.vh - fb.fr.top + 2 });
       console.log('desktop', name, 'ok');
     }
@@ -100,8 +100,7 @@ await (async () => {
             sk: cb ? { w: cb.width, h: cb.height, l: cb.left, r: cb.right, t: cb.top, vis: getComputedStyle(corner).display !== 'none', aria: corner.getAttribute('aria-label') } : null }; })()`);
         for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= 55 && ft[k].h >= 43.5 && ft[k].w > ft[k].h, tag + k + ' is a wide 56x44 touch target in the footer: ' + JSON.stringify(ft[k]));
         assert.strictEqual(ft.footerConstruct, false, tag + 'Construction is NOT in the footer');
-        if (name === 'penplotter') assert.strictEqual(ft.cornerConstruct, null, tag + 'penplotter: Construction stays disabled');
-        else assert(ft.cornerConstruct && ft.cornerConstruct.w >= 43.5 && ft.cornerConstruct.h >= 43.5, tag + 'Construction in .sk-canvas-corner is 44x44: ' + JSON.stringify(ft.cornerConstruct));
+        assert(ft.cornerConstruct && ft.cornerConstruct.w >= 43.5 && ft.cornerConstruct.h >= 43.5, tag + 'Construction in .sk-canvas-corner is 44x44: ' + JSON.stringify(ft.cornerConstruct));
         assert(ft.fr.left >= -0.5 && ft.fr.right <= ft.vw + 0.5 && ft.fr.bottom <= ft.vh + 0.5, tag + 'the footer is inside the screen: ' + JSON.stringify(ft.fr));
         assert.strictEqual(Math.round(ft.fr.bottom - ft.fr.top), 44, tag + 'footer bar is 44 px tall (no extra vertical padding)');
         assert(ft.undo.r <= ft.redo.l + 0.5 && ft.redo.r <= ft.del.l + 0.5 && ft.del.r < ft.clr.l && ft.recenter.r <= ft.vw + 0.5, tag + 'Undo, Redo, Delete, gap, Clear sketch then Recenter fit the footer width: ' + JSON.stringify({ redo: ft.redo, del: ft.del, clr: ft.clr, recenter: ft.recenter }));

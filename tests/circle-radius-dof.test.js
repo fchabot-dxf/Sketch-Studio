@@ -5,7 +5,7 @@
 import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { commitDimensionEdit, isDimensionDetermined, toggleDriving } from '#ui/dimension-seams.js';
+import { commitDimensionEdit, isDimensionDetermined, toggleDriving } from '#core/dimension-seams.js';
 import { deleteConstraints } from '#core/delete-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';

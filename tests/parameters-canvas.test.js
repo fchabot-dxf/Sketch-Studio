@@ -9,7 +9,7 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { completionsFor, previewDimensionInput, MAX_COMPLETIONS, planChange } from '#core/parameters.js';
 import { functionTable } from '#core/expression.js';
-import { applyParameterChange, toggleDriving } from '#ui/dimension-seams.js';
+import { applyParameterChange, toggleDriving } from '#core/dimension-seams.js';
 import { formatConstraintValue } from '#ui/svg-renderer.js';
 import { createSketchState } from '#core/sketch-state.js';
 import { createEngine } from '#core/constraint-solver.js';

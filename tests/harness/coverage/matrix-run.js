@@ -9,7 +9,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { addConstraint } from '#core/constraints.js';
 import { deleteConstraints } from '#core/delete-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { handleConstraintPointerDown, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { handleDimensionPointerDown, anchorPlacingDimension, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { KINDS, VARIANTS, lineLike, circleLike, build, applyVariant, docOf } from './matrix-build.js';

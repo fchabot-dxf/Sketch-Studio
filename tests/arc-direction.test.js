@@ -16,7 +16,7 @@ import { toggleFixedSelection } from '#ui/input-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } from '#ui/input-handlers/selection-tools.js';
 import { buildSVG, buildDXF } from '../apps/sketchstudio/ui/export-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { svgStub } from './harness/coverage/matrix-run.js';

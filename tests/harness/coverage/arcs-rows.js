@@ -14,7 +14,7 @@ import { addConstraint } from '#core/constraints.js';
 import { deleteConstraints } from '#core/delete-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { toggleFixedSelection } from '#ui/input-manager.js';
 import { driveConstraintTool, driveDimensionTool, spy, spyOn, spyOff, selfSelection } from './matrix-run.js';
 import { applyVariant, docOf } from './matrix-build.js';

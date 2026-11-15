@@ -18,7 +18,7 @@ import { cornerJointPoints, cornerBoards, CORNER_JOINT_TYPES } from '#core/corne
 import { deserializeDocument } from '#core/document.js';
 import { planChange, isDimension, isReferenceDimension } from '#core/parameters.js';
 import { parseInput, dependencies, validateName } from '#core/expression.js';
-import { applyParameterChange } from '#ui/dimension-seams.js';
+import { applyParameterChange } from '#core/dimension-seams.js';
 
 const muted = (f) => { const l = console.log, w = console.warn, e = console.error, d = console.debug; console.log = console.warn = console.error = console.debug = () => {}; try { return f(); } finally { console.log = l; console.warn = w; console.error = e; console.debug = d; } };
 const R = (v) => Math.round(v * 1e6) / 1e6 || 0; // no -0 (deepStrictEqual tells it from 0)

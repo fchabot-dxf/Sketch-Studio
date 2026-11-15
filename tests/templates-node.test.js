@@ -5,7 +5,7 @@ import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { TEMPLATES, buildTemplate, templateById } from '#core/templates.js';
 import { DOCUMENT_VERSION, deserializeDocument, validateDocument } from '#core/document.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 
 assert.ok(TEMPLATES.length >= 6, 'a bank of templates');

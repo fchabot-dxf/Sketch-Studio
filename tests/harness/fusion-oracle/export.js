@@ -3,7 +3,7 @@
 // records the answers; the test replays the same recipe through OUR pipeline and compares. Pure data: nothing here knows Fusion's API.
 import * as L from '../audit/lib.js';
 import { arcSweepInfo } from '#core/geometry.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { deleteConstraints } from '#core/delete-manager.js';
 
 const RUNTIME = /^__/;

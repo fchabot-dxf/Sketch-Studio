@@ -19,7 +19,7 @@ import * as L from '../tests/harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import { applyParameterChange } from '#ui/dimension-seams.js';
+import { applyParameterChange } from '#core/dimension-seams.js';
 import { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } from '#ui/input-handlers/selection-tools.js';
 import fs from 'node:fs';
 

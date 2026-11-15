@@ -11,7 +11,7 @@ import { createSketchState } from '#core/sketch-state.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 import { deleteConstraints } from '#core/delete-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { makeRectFromTwoJoints, makeArc, makePolygon } from '#core/shapes.js';
 import { addConstraint } from '#core/constraints.js';

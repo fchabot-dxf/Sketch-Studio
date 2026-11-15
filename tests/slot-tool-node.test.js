@@ -16,7 +16,7 @@ import {
   makeSlotCenterPointArc,
 } from '#core/slot.js';
 import { createSketchState } from '#core/sketch-state.js';
-import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
+import { commitDimensionEdit, toggleDriving } from '#core/dimension-seams.js';
 import { formatConstraintValue } from '#ui/svg-renderer.js';
 import { handleSlotPointerDown, handleSlotPointerMove, handleSlotPointerUp, resetSlotState } from '#ui/input-handlers/slot-tool.js';
 import { handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, setupDrawingTools } from '#ui/input-handlers/drawing-tools.js';

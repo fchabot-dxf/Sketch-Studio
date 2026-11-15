@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { createEngine } from '#core/constraint-solver.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 
 console.log('Running tests for line-to-line distance (verifier must measure what the solver row measures)...');
 setConstraintNotifier(() => {});

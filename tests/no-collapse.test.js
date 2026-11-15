@@ -4,7 +4,7 @@
 import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 
 const quiet = (fn) => { const e = console.error, w = console.warn; console.error = () => {}; console.warn = () => {}; try { return fn(); } finally { console.error = e; console.warn = w; } };
 const make = (S, type, params) => quiet(() => ConstraintManager.createConstraint(S.state, type, params, { source: 'test' }));

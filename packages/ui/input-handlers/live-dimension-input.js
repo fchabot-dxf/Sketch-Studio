@@ -11,7 +11,7 @@ import { getDist, projectPointOnLine, perpendicularDistance, isPointLineDistance
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';
 import { showNotification } from '#ui/notification-manager.js';
-import { dimensionEditLabel } from '#ui/dimension-seams.js';
+import { dimensionEditLabel } from '#core/dimension-seams.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl } from '#ui/numeric-input-manager.js';
 

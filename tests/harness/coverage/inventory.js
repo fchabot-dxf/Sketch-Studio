@@ -172,10 +172,11 @@ function shapeTypeLiterals() {
 const DT = 'packages/ui/input-handlers/dimension-tool.js';
 function buildDimensionModes() {
   const modes = [];
-  const dm = findLine(DT, /^function detectDimMode/);
-  const L = source(DT);
+  const DL = 'packages/core/dim-label.js'; // TASK 680: the Dimension tool's mode rule lives in core (dim-label.js)
+  const dm = findLine(DL, /^export function detectDimMode/);
+  const L = source(DL);
   const found = new Set();
-  for (let i = dm; i < dm + 32; i++) { const m = L[i - 1].match(/return '(aligned|horizontal|vertical)'/); if (m && !found.has(m[1])) { found.add(m[1]); modes.push({ mode: m[1], kind: 'distance point-point', ...at(DT, i) }); } }
+  for (let i = dm; i < dm + 32; i++) { const m = L[i - 1].match(/return '(aligned|horizontal|vertical)'/); if (m && !found.has(m[1])) { found.add(m[1]); modes.push({ mode: m[1], kind: 'distance point-point', ...at(DL, i) }); } }
   modes.push({ mode: 'line length', kind: 'distance on one line (dimMode auto)', ...must(DT, /create-line-dim/) });
   modes.push({ mode: 'point-line', kind: 'distance point to line (one 3-joint distance: perpendicular distance)', ...must(DT, /create-point-to-line/) });
   modes.push({ mode: 'line-line', kind: 'distance between two parallel lines (shapes)', ...must(DT, /create-line-line-distance/) });
@@ -191,7 +192,7 @@ function buildEditFeatures() {
   const F = [];
   const f = (feature, where, note) => F.push({ feature, where, note: note || '' });
   f('fillet', must('packages/core/fillet.js', /^export function applyFillet/));
-  f('fillet radius edit', must('packages/ui/dimension-seams.js', /^export function commitDimensionEdit/));
+  f('fillet radius edit', must('packages/core/dimension-seams.js', /^export function commitDimensionEdit/));
   f('trim', must('packages/core/trim.js', /^export function trimShape/));
   f('break', must('packages/core/break.js', /^export function breakShape/));
   f('polygon', must('packages/core/shapes.js', /^export function makePolygon/));
@@ -206,7 +207,7 @@ function buildEditFeatures() {
   f('undo', must('packages/core/sketch-state.js', /^    undo: function/));
   f('redo', must('packages/core/sketch-state.js', /^    redo: function/));
   f('driving / reference (context menu)', must('packages/ui/context-menu.js', /id: 'dim-driving'/));
-  f('driving / reference (toggleDriving)', must('packages/ui/dimension-seams.js', /^export function toggleDriving/));
+  f('driving / reference (toggleDriving)', must('packages/core/dimension-seams.js', /^export function toggleDriving/));
   f('delete dimension (context menu)', must('packages/ui/context-menu.js', /id: 'dim-delete'/));
   f('lock / delete (geometry context menu)', must('packages/ui/context-menu.js', /id: 'geo-lock'/));
   f('drag (mouse_spring)', must('packages/core/solver/definitions.js', /^  mouse_spring:/));

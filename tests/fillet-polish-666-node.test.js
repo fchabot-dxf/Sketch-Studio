@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { COLLAPSE_TOL, calculateFilletGeometry, cornerFilletGeometry, applyFillet, findCornerBetweenLines, findCornerAtJoint } from '#core/fillet.js';
 import { previewDimensionInput } from '#core/parameters.js';
-import { applyParameterChange } from '#ui/dimension-seams.js';
+import { applyParameterChange } from '#core/dimension-seams.js';
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 

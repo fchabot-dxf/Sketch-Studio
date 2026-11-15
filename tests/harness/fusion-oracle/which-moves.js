@@ -5,7 +5,7 @@
 import * as L from '../audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { toggleFixedSelection } from '#ui/input-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 
 export const MOVE_TOL = 1e-6;      // Fusion: "stayed" = every point and the radius moved < 1e-6 mm
 export const OURS_TOL = 1e-4;      // ours: the Newton solve stops at ~1e-5..1e-4 of residual; below this is "stayed"

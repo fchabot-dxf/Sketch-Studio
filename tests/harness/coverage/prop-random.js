@@ -20,7 +20,7 @@ import inventory from './inventory.js';
 import { mulberry32, docOf, panelDof } from './prop-lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { deleteConstraints } from '#core/delete-manager.js';
 import { projectPointOnLine, getDist } from '#core/geometry.js';
 

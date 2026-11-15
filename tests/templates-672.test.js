@@ -26,7 +26,7 @@ import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygon
 import { cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
 import { deserializeDocument } from '#core/document.js';
 import { planChange } from '#core/parameters.js';
-import { applyParameterChange } from '#ui/dimension-seams.js';
+import { applyParameterChange } from '#core/dimension-seams.js';
 
 const FX = JSON.parse(fs.readFileSync(new URL('./fixtures/frame-calc-672.json', import.meta.url), 'utf8'));
 assert.strictEqual(FX.source, 'fchabot-dxf/triangular-frame-calc @ b59816f', 'the fixtures come from frame-calc b59816f');

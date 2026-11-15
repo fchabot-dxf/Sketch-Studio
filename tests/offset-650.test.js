@@ -13,7 +13,7 @@ import {
   parseOffsetDistance, defaultOffsetDistance
 } from '#core/offset.js';
 import { measureResidual } from '#core/constraint-verifier.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { isDimension } from '#core/parameters.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { arcSweepInfo } from '#core/geometry.js';

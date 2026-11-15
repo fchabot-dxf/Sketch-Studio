@@ -2,7 +2,7 @@
 // returns { ok, observed }: ok === true means the app behaves CORRECTLY, ok === false means the bug is present today.
 // tests/constraint-audit.test.js pins every ok === false as a KNOWN entry (and fails loudly when one starts passing).
 import * as L from './lib.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { makeArc } from '#core/shapes.js';
 import * as d4 from './d4-triangle.js';
 

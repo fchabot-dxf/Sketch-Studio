@@ -5,7 +5,7 @@ import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { deleteConstraints } from '#core/delete-manager.js';
-import { isDimensionDetermined, toggleDriving } from '#ui/dimension-seams.js';
+import { isDimensionDetermined, toggleDriving } from '#core/dimension-seams.js';
 
 // a 100 x 60 rectangle, bottom-left corner locked, width and height driven: fully constrained
 function square() {

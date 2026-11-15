@@ -150,11 +150,22 @@ export function createFusionBridge({
 
     if (action === FUSION_ACTIONS.SELECTION_DATA) {
       lastSelection = data;
-      const count = Array.isArray(data.regions) ? data.regions.length : 0;
-      const msg = `Received ${count} regions (import coming next)`;
-      dbg.log('fusion', msg, { count });
+      const regionCount = Array.isArray(data.regions) ? data.regions.length : 0;
+      const chainCount = Array.isArray(data.chains) ? data.chains.length : 0;
+      const srcName = (data.source && data.source.name && String(data.source.name).trim()) || 'selection';
+      const res = onSelectionData(data);
+      if (res && res.ok === false) {
+        const errMsg = res.message || 'Could not import selection';
+        dbg.warn('fusion', errMsg, { count: regionCount });
+        onError(errMsg);
+        return 'OK';
+      }
+      const warnings = (res && Array.isArray(res.warnings)) ? res.warnings
+        : (Array.isArray(data.warnings) ? data.warnings.filter(Boolean).map(String) : []);
+      const baseMsg = (res && res.message) || `Added ${srcName}: ${regionCount} regions, ${chainCount} chains`;
+      const msg = warnings.length ? `${baseMsg} (${warnings.join('; ')})` : baseMsg;
+      dbg.log('fusion', msg, { regions: regionCount, chains: chainCount, warnings });
       onNotice(msg, data);
-      onSelectionData(data);
       return 'OK';
     }
 

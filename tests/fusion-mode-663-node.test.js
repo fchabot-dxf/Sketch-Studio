@@ -117,10 +117,10 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
   eq(errors.length, errCountBefore + 1, 'error action routes to visible error callback');
   eq(errors.at(-1), 'Select a body or sketch first', 'error preserves message');
 
-  // selection_data routing -> "Received N regions (import coming next)" + importer hook + keeps payload
+  // selection_data routing -> "Added <source name>: N regions, M chains" + importer hook + keeps payload
   const sampleSel = { action: 'selection_data', version: 1, units: 'mm', regions: [{ id: 'reg_0' }, { id: 'reg_1' }] };
   fakeWin.fusionJavaScriptHandler.handle('selection_data', JSON.stringify(sampleSel));
-  eq(notices.at(-1).text, 'Received 2 regions (import coming next)', 'selection_data shows region count message');
+  eq(notices.at(-1).text, 'Added selection: 2 regions, 0 chains', 'selection_data shows Added message');
   eq(selections.length, 1, 'selection_data calls onSelectionData importer hook');
   deepEq(bridge.getLastSelection(), sampleSel, 'bridge keeps last selection payload for tests');
 
@@ -213,6 +213,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
       importFile: () => {},
       documentTabs: true,
       projects: false,
+      goTo: false,
       store: stubStore(),
       account: stubAccount(),
       hostActions,
@@ -222,6 +223,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     eq(win.document.querySelector('.sk-sidebar-doc'), null, 'projects: false omits document name header');
     eq(win.document.querySelector('[data-section="status"]'), null, 'projects: false omits storage/Drive status');
     eq(win.document.querySelector('[data-section="account"]'), null, 'projects: false omits Google account / Drive section');
+    eq(win.document.querySelector('[data-section="goto"]'), null, 'goTo: false omits GO TO section');
     const fusionActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
     deepEq(fusionActs, ['download', 'settings', 'log'], 'projects: false keeps only hostActions');
     chromeHidden.destroy();
@@ -246,6 +248,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     ok(win.document.querySelector('.sk-sidebar-doc') !== null, 'projects: true keeps document name header');
     ok(win.document.querySelector('[data-section="status"]') !== null, 'projects: true keeps storage/Drive status');
     ok(win.document.querySelector('[data-section="account"]') !== null, 'projects: true keeps Google account / Drive section');
+    ok(win.document.querySelector('[data-section="goto"]') !== null, 'goTo: true keeps GO TO section');
     const normalActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
     deepEq(normalActs, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log'], 'projects: true keeps all project/file actions + hostActions');
     chromeNormal.destroy();

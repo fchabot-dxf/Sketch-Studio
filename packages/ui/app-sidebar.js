@@ -146,7 +146,7 @@ function injectStyles() {
   document.head.appendChild(s); stylesInjected = true;
 }
 
-export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null, beforeGoTo = null, stages = [], activeStage = null, onStageChange = null } = {}) {
+export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null, beforeGoTo = null, goTo = true, stages = [], activeStage = null, onStageChange = null } = {}) {
   injectStyles();
   const list = Array.isArray(apps) && apps.length ? apps : APPS;
   const cur = list.find((a) => a.id === current) || list[0];
@@ -249,21 +249,25 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       box.appendChild(b);
     }
     content.appendChild(box);
-    const go = document.createElement('div'); go.className = 'sk-sidebar-goto'; go.dataset.section = 'goto';
-    go.innerHTML = '<div class="sk-sidebar-goto-title">GO TO</div>';
-    for (const app of list) {
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item' + (app.id === (cur && cur.id) ? ' current' : ''); b.dataset.app = app.id;
-      if (app.id === (cur && cur.id)) b.setAttribute('aria-current', 'true');
-      b.innerHTML = `<span class="sk-sidebar-ic sk-sidebar-appic" aria-hidden="true">${app.icon}</span><span>${app.name}</span>${app.id === (cur && cur.id) ? '<span class="sk-sidebar-check" aria-hidden="true">&#10003;</span>' : ''}`;
-      b.addEventListener('click', async () => {
-        if (app.id === (cur && cur.id)) { close(); return; }
-        if (beforeGoTo) { let go = false; try { go = await beforeGoTo(app); } catch (e) { notify(e.message || String(e), 'error'); return; } if (!go) return; }
-        close(); location.href = app.href;
-      });
-      go.appendChild(b);
+    if (goTo) {
+      const go = document.createElement('div'); go.className = 'sk-sidebar-goto'; go.dataset.section = 'goto';
+      go.innerHTML = '<div class="sk-sidebar-goto-title">GO TO</div>';
+      for (const app of list) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item' + (app.id === (cur && cur.id) ? ' current' : ''); b.dataset.app = app.id;
+        if (app.id === (cur && cur.id)) b.setAttribute('aria-current', 'true');
+        b.innerHTML = `<span class="sk-sidebar-ic sk-sidebar-appic" aria-hidden="true">${app.icon}</span><span>${app.name}</span>${app.id === (cur && cur.id) ? '<span class="sk-sidebar-check" aria-hidden="true">&#10003;</span>' : ''}`;
+        b.addEventListener('click', async () => {
+          if (app.id === (cur && cur.id)) { close(); return; }
+          if (beforeGoTo) { let go = false; try { go = await beforeGoTo(app); } catch (e) { notify(e.message || String(e), 'error'); return; } if (!go) return; }
+          close(); location.href = app.href;
+        });
+        go.appendChild(b);
+      }
+      if (account) go.appendChild(renderAccount());
+      content.appendChild(go);
+    } else if (account) {
+      content.appendChild(renderAccount());
     }
-    if (account) go.appendChild(renderAccount());
-    content.appendChild(go);
   }
 
   // The Google account row (the ONE sign-in door). signIn() runs synchronously inside the click so the popup is not blocked.

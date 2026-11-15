@@ -253,8 +253,65 @@ const ENTITY_EMITTERS = {
 };
 
 // ── primitives → joints + shapes ────────────────────────────────────────────────────────────────────────
+export function buildShapesFromPrimitives(prims, { genJ, idPrefix = 'dxf', scale = 1, yUp = true, bump = () => {} } = {}) {
+  const joints = [], shapes = [];
+  let construction = 0;
+
+  // Drawing diagonal → the joint-merge tolerance.
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const ext = (pt) => { minX = Math.min(minX, pt[0]); maxX = Math.max(maxX, pt[0]); minY = Math.min(minY, pt[1]); maxY = Math.max(maxY, pt[1]); };
+  for (const q of prims) {
+    if (q.k === 'line') { ext(q.a); ext(q.b); }
+    else if (q.k === 'circle') { ext([q.c[0] - q.r, q.c[1] - q.r]); ext([q.c[0] + q.r, q.c[1] + q.r]); }
+    else if (q.k === 'arc') { ext(q.s); ext(q.e); ext([q.c[0] - q.r, q.c[1] - q.r]); ext([q.c[0] + q.r, q.c[1] + q.r]); }
+    else if (q.k === 'bezier') { ext(q.p0); ext(q.p3); ext(q.c1); ext(q.c2); }
+    else q.pts.forEach(ext);
+  }
+  const diag = prims.length ? Math.hypot(maxX - minX, maxY - minY) : 0;
+  const tol = Math.max(diag * JOINT_TOL, Number.EPSILON);
+
+  const ySign = yUp ? -1 : 1;
+  const out = (pt) => ({ x: pt[0] * scale, y: ySign * pt[1] * scale }); // Y-up → world Y-down when yUp
+  const cells = new Map();                                      // endpoint merge: spatial hash on a `tol` grid
+  const cellKey = (i, j) => i + ',' + j;
+  const endpoint = (pt) => {
+    const ci = Math.floor(pt[0] / tol), cj = Math.floor(pt[1] / tol);
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+      for (const h of (cells.get(cellKey(ci + di, cj + dj)) || [])) if (Math.hypot(h.x - pt[0], h.y - pt[1]) <= tol) return h.id;
+    }
+    const id = genJ(), o = out(pt);
+    joints.push({ id, x: o.x, y: o.y });
+    const key = cellKey(ci, cj); if (!cells.has(key)) cells.set(key, []); cells.get(key).push({ x: pt[0], y: pt[1], id });
+    return id;
+  };
+  const centre = (pt) => { const id = genJ(), o = out(pt); joints.push({ id, x: o.x, y: o.y }); return id; };
+  let nShape = 0;
+  const SID = () => idPrefix + '_s' + (nShape++);
+  const line = (a, b) => { const ja = endpoint(a), jb = endpoint(b); if (ja === jb) return bump('LINE', 'zero-length segment'); shapes.push({ id: SID(), type: 'line', joints: [ja, jb] }); };
+
+  const primShapes = [];
+  for (const q of prims) {
+    const n0 = shapes.length;
+    if (q.k === 'line') line(q.a, q.b);
+    else if (q.k === 'circle') shapes.push({ id: SID(), type: 'circle', joints: [centre(q.c)], radius: q.r * scale });
+    else if (q.k === 'arc') {
+      const js = endpoint(q.s), je = endpoint(q.e);
+      shapes.push(arcShape(SID(), centre(q.c), js, je, { sweep: yUp ? !q.ccw : !!q.ccw }));
+    } else if (q.k === 'bezier') {
+      const o1 = out(q.c1), o2 = out(q.c2);
+      shapes.push({ id: SID(), type: 'bezier', joints: [endpoint(q.p0), endpoint(q.p3)], c1: [o1.x, o1.y], c2: [o2.x, o2.y] });
+    } else {
+      for (let i = 0; i + 1 < q.pts.length; i++) line(q.pts[i], q.pts[i + 1]);
+      if (q.closed && q.pts.length > 2) line(q.pts[q.pts.length - 1], q.pts[0]);
+    }
+    if (q.con) { for (let i = n0; i < shapes.length; i++) shapes[i].isConstruction = true; construction += shapes.length - n0; }
+    primShapes.push(shapes.slice(n0));
+  }
+  return { joints, shapes, construction, primShapes };
+}
+
 export function importDxfGeometry(parsed, { genJ, idPrefix = 'dxf' } = {}) {
-  const joints = [], shapes = [], skipped = [];
+  const skipped = [];
   const bump = (tag, reason, n = 1) => { const e = skipped.find((s) => s.tag === tag && s.reason === reason); if (e) e.count += n; else skipped.push({ tag, reason, count: n }); };
   const units = INSUNITS_MM[parsed.insunits] != null
     ? { scale: INSUNITS_MM[parsed.insunits], label: INSUNITS_LABEL[parsed.insunits], assumed: false }
@@ -275,54 +332,8 @@ export function importDxfGeometry(parsed, { genJ, idPrefix = 'dxf' } = {}) {
     else bump(e.type, SKIP_REASON[e.type] || 'entity type not supported');
   }
 
-  // Drawing diagonal → the joint-merge tolerance.
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  const ext = (pt) => { minX = Math.min(minX, pt[0]); maxX = Math.max(maxX, pt[0]); minY = Math.min(minY, pt[1]); maxY = Math.max(maxY, pt[1]); };
-  for (const q of prims) {
-    if (q.k === 'line') { ext(q.a); ext(q.b); }
-    else if (q.k === 'circle') { ext([q.c[0] - q.r, q.c[1] - q.r]); ext([q.c[0] + q.r, q.c[1] + q.r]); }
-    else if (q.k === 'arc') { ext(q.s); ext(q.e); ext([q.c[0] - q.r, q.c[1] - q.r]); ext([q.c[0] + q.r, q.c[1] + q.r]); }
-    else if (q.k === 'bezier') { ext(q.p0); ext(q.p3); ext(q.c1); ext(q.c2); }
-    else q.pts.forEach(ext);
-  }
-  const diag = prims.length ? Math.hypot(maxX - minX, maxY - minY) : 0;
-  const tol = Math.max(diag * JOINT_TOL, Number.EPSILON);
-
-  const sc = units.scale;
-  const out = (pt) => ({ x: pt[0] * sc, y: -pt[1] * sc });     // DXF Y-up → world Y-down
-  const cells = new Map();                                      // endpoint merge: spatial hash on a `tol` grid
-  const cellKey = (i, j) => i + ',' + j;
-  const endpoint = (pt) => {
-    const ci = Math.floor(pt[0] / tol), cj = Math.floor(pt[1] / tol);
-    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
-      for (const h of (cells.get(cellKey(ci + di, cj + dj)) || [])) if (Math.hypot(h.x - pt[0], h.y - pt[1]) <= tol) return h.id;
-    }
-    const id = genJ(), o = out(pt);
-    joints.push({ id, x: o.x, y: o.y });
-    const key = cellKey(ci, cj); if (!cells.has(key)) cells.set(key, []); cells.get(key).push({ x: pt[0], y: pt[1], id });
-    return id;
-  };
-  const centre = (pt) => { const id = genJ(), o = out(pt); joints.push({ id, x: o.x, y: o.y }); return id; };
-  let nShape = 0;
-  const SID = () => idPrefix + '_s' + (nShape++);
-  const line = (a, b) => { const ja = endpoint(a), jb = endpoint(b); if (ja === jb) return bump('LINE', 'zero-length segment'); shapes.push({ id: SID(), type: 'line', joints: [ja, jb] }); };
-
-  for (const q of prims) {
-    const n0 = shapes.length;
-    if (q.k === 'line') line(q.a, q.b);
-    else if (q.k === 'circle') shapes.push({ id: SID(), type: 'circle', joints: [centre(q.c)], radius: q.r * sc });
-    else if (q.k === 'arc') {
-      const js = endpoint(q.s), je = endpoint(q.e);
-      shapes.push(arcShape(SID(), centre(q.c), js, je, { sweep: !q.ccw }));
-    } else if (q.k === 'bezier') {
-      const o1 = out(q.c1), o2 = out(q.c2);
-      shapes.push({ id: SID(), type: 'bezier', joints: [endpoint(q.p0), endpoint(q.p3)], c1: [o1.x, o1.y], c2: [o2.x, o2.y] });
-    } else {
-      for (let i = 0; i + 1 < q.pts.length; i++) line(q.pts[i], q.pts[i + 1]);
-      if (q.closed && q.pts.length > 2) line(q.pts[q.pts.length - 1], q.pts[0]);
-    }
-    if (q.con) { for (let i = n0; i < shapes.length; i++) shapes[i].isConstruction = true; stats.construction += shapes.length - n0; }
-  }
+  const { joints, shapes, construction } = buildShapesFromPrimitives(prims, { genJ, idPrefix, scale: units.scale, yUp: true, bump });
+  stats.construction = construction;
   stats.shapeCount = shapes.length; stats.jointCount = joints.length;
   return { joints, shapes, stats };
 }

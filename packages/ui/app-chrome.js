@@ -15,6 +15,7 @@ export function mountAppChrome({
   hostActions = [],
   documentTabs = true,
   projects = true,
+  goTo = true,
   store,
   account,
 } = {}) {
@@ -40,6 +41,7 @@ export function mountAppChrome({
     hostActions,
     documentTabs: projects ? documentTabs : false,
     projects,
+    goTo,
     store,
     account,
     stages,

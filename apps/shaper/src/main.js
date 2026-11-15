@@ -18,6 +18,7 @@ import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's 
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, SHAPER_STAGES, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + CUT_PLAN + stock
 import { dbg } from '#core/debug.js';
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
@@ -73,6 +74,7 @@ const chrome = mountAppChrome({
   getBuffer: () => docBuffer,
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
+  goTo: !fusionMode, // TASK 664: single Fusion-mode switch hides GO TO section in sidebar drawer
   hostActions: [
     { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
       const payload = generateShaperSvgPayload();
@@ -458,6 +460,20 @@ if (fusionMode) {
   const fusionUi = mountFusionPrepareBar({
     viewPrepareEl: VIEWS.prepare,
     noticeEl: document.getElementById('prepare-notice'),
+    onSelectionData: (payload) => {
+      ensureSketch();
+      return importFusionSelection(payload, {
+        controller: designController,
+        prepare,
+        onImport: () => {
+          showStockThickness();
+          if (infoPanel) infoPanel.refresh();
+          history.refresh();
+          if (vcarveView) vcarveView.refresh();
+          if (modes.current() === 'review') enterReview(designController.state);
+        },
+      });
+    },
   });
   showMode(initMode);
   fusionUi.bootPing();

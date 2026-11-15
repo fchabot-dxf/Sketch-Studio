@@ -1,12 +1,13 @@
 // packages/ui/done-button.js — the green check-mark "Done" button of an open Line chain / Mirror step (tasks 562, 585, 642). A phone has no
 // Enter / Esc / right click, and a mouse user may not know them, so while the tool's chain is open a round green button with a white check
-// icon sits just below-right of the rubber band's live end point (flipped near a canvas edge; the canvas's bottom-right corner when the tool has no end point) and ends
+// icon sits beside the chain's anchor point (flipped near a canvas edge; the canvas's bottom-right corner when the tool has no end point) and ends
 // the chain exactly like Enter does (finishLineChain: the committed segments stay, the rubber band is dropped). It is shown for every pointer
 // type, thumb-sized (52 px) after a finger and 40 px after a mouse / pen, and disappears by itself the moment the chain ends, by whatever
 // route (a frame loop runs only while the button is shown, so no caller has to announce the end). Colour: the --sk-done token (sketcher.css).
 //   createDoneButton({ svg, isChainOpen: () => bool, onDone: () => void, label?: () => string, anchor?: () => {x, y} | null, avoid?: () => DOMRect[] }) → { sync(touchInput), destroy() }
 //   label: the button's aria-label (no tooltip) while it shows (the Mirror tool's steps use the same button); default the line chain's.
-//   anchor (task 642): the live end point of the open chain's rubber band in client px (Fusion puts its check beside it); null / omitted = the
+//   anchor (task 642): the line tool's lineChainAnchor in client px: the last committed joint, or the end once typed length AND angle lock it
+//   (Fusion puts its check beside the chain; the button never chases the cursor); null / omitted = the
 //   canvas corner (the Mirror tool has no rubber band). avoid: the numeric length / angle boxes' rects, which the button never covers.
 //   sync(touchInput): call after any pointer event; touchInput = the pointer that just acted was a finger (picks the size).
 
@@ -15,9 +16,9 @@ const CSS = `
 .sk-done { position: fixed; z-index: 9000; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   background: var(--sk-done); color: #fff; cursor: pointer;
-  box-shadow: 0 0 0 2px #1f2937, 0 4px 14px rgba(0,0,0,0.3); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  box-shadow: 0 0 0 3px #1f2937, 0 4px 14px rgba(0,0,0,0.3); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .sk-done.sk-done-touch { width: 52px; height: 52px; }
-.sk-done svg { width: 60%; height: 60%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.sk-done svg { width: 72%; height: 72%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .sk-done[hidden] { display: none; }
 .sk-done:active { transform: scale(0.96); }
 `;

@@ -150,8 +150,8 @@ try {
   await tapSel('#tool-line');
   await mclick(P(0.3, 0.8)); await mclick(P(0.6, 0.8));
   assert.strictEqual(await shapes(), before + 1, 'a mouse segment committed');
-  const md = await evalJs(`(() => { const b = document.querySelector('.sk-done'); const r = b.getBoundingClientRect(); return { hidden: b.hidden, w: Math.round(r.width), h: Math.round(r.height), svg: !!b.querySelector('svg path'), text: b.textContent.trim(), bg: getComputedStyle(b).backgroundColor, label: b.getAttribute('aria-label'), title: b.hasAttribute('title') }; })()`);
-  assert.deepStrictEqual(md, { hidden: false, w: 40, h: 40, svg: true, text: '', bg: 'rgb(16, 185, 129)', label: 'Finish the line chain', title: false }, 'mouse: green 40 px check button: ' + JSON.stringify(md));
+  const md = await evalJs(`(() => { const b = document.querySelector('.sk-done'); const r = b.getBoundingClientRect(); return { hidden: b.hidden, w: Math.round(r.width), h: Math.round(r.height), svg: !!b.querySelector('svg path'), svgFrac: Math.round(b.querySelector('svg').getBoundingClientRect().width / r.width * 100) >= 70, text: b.textContent.trim(), bg: getComputedStyle(b).backgroundColor, ring: getComputedStyle(b).boxShadow.split(', rgba')[0], label: b.getAttribute('aria-label'), title: b.hasAttribute('title') }; })()`);
+  assert.deepStrictEqual(md, { hidden: false, w: 40, h: 40, svg: true, svgFrac: true, text: '', bg: 'rgb(0, 209, 0)', ring: 'rgb(31, 41, 55) 0px 0px 0px 3px', label: 'Finish the line chain', title: false }, 'mouse: green 40 px check button: ' + JSON.stringify(md));
   await shot('phone-done-mouse');
   // the button must not flee the cursor: walk a real mouse from where it is to the button in 2 px steps, then press (task 642 review)
   const chase = async (from) => {

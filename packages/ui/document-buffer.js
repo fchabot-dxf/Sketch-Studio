@@ -308,11 +308,10 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
 
   /** A tab of the SHARED buffer as a record of this page (TASK 684). Its baselines (lastSig, and an Untitled's emptySig) are left undefined: they
    *  are taken when the tab is shown, by THIS app (bringIn); an Untitled the buffer says has content gets HAS_CONTENT instead (it asks when closed). */
-  const tabContent = (t) => (t.content !== undefined ? !!t.content : (!t.designId && t.emptySig != null && JSON.stringify(t.doc) !== t.emptySig)); // v1 (TASK 624) tabs: their own app's signature
-  const tabSessions = (t) => t.hostSessions || (t.hostSession !== undefined && t.app ? { [t.app]: t.hostSession } : {});
+  // (a TASK 624 per-app buffer was converted to this form by the store's first read: project-store.js mergeLegacyBuffers)
   function recordFromBuffer(t, key, { designId = null, name: n = t.name, doc = t.doc } = {}) {
-    const content = !designId && tabContent(t);
-    return { key, designId, name: n || UNTITLED, content, emptySig: designId ? null : (content ? HAS_CONTENT : undefined), saveOk: true, lastSig: undefined, doc, view: t.view || null, hostSessions: tabSessions(t) };
+    const content = !designId && !!t.content;
+    return { key, designId, name: n || UNTITLED, content, emptySig: designId ? null : (content ? HAS_CONTENT : undefined), saveOk: true, lastSig: undefined, doc, view: t.view || null, hostSessions: t.hostSessions || {} };
   }
 
   /** The initial restore (TASK 684): the tabs of the SHARED buffer (whichever app wrote them; a stored design from the store, an Untitled from the buffer),

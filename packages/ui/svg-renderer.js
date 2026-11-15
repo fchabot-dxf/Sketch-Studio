@@ -75,7 +75,25 @@ import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
 import { resolveProfileViews } from '#core/profile-model.js';
 import { constraintTargets } from '#ui/geometry-labels.js';
-import { profileFillPaths } from '#ui/profile-fill.js';
+import { profileFillLoops } from '#ui/profile-fill.js';
+import { sketchOf, inActiveSketch, constraintSketch, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
+import { ORIGIN_JOINT_ID } from '#core/constants.js';
+
+// TASK 661: the markup collector. Behaves as the plain array draw() always built (push / join); while `dim` names a sketch, the chunks pushed
+// are gathered into ONE run drawn inside a <g class="sketch-inactive"> (the group opacity is the CSS token --sk-inactive-sketch-opacity,
+// sketcher.css): the ONE place an inactive sketch is dimmed. Group opacity, so overlapping strokes of the sketch do not double-darken. A run
+// ends when `dim` changes, so the drawing order (z-order) is exactly what it was.
+class MarkupLayers {
+  constructor() { this.chunks = []; this.dim = null; this.run = null; }
+  push(...markup) {
+    if (this.dim == null) { this.run = null; return this.chunks.push(...markup); }
+    if (!this.run || this.run.sketchId !== this.dim) { this.run = { sketchId: this.dim, items: [] }; this.chunks.push(this.run); }
+    return this.run.items.push(...markup);
+  }
+  join(sep) {
+    return this.chunks.map((c) => (typeof c === 'string' ? c : `<g class="sketch-inactive" data-sketch-id="${c.sketchId}">${c.items.join(sep)}</g>`)).join(sep);
+  }
+}
 
 // P2 theming: route a canvas color through its --sk-* theme var. var() is INVALID in SVG presentation
 // attributes, so emissions use inline style — `style="fill:${skv(color)}"`. A known canvas color maps to
@@ -170,7 +188,21 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const { fixedJoints, constrainedJoints, fixedShapes, constrainedShapes, jointDOFs, lockedAxisX, lockedAxisY, radialLocked, dofSources } = analyzeConstraintStatus({ joints, shapes, constraints: activeConstraints });
 
   // Accumulate SVG markup and set once at the end to avoid partial-frame renders
-  const out = [];
+  const out = new MarkupLayers();
+  // TASK 661: an inactive sketch's drawing is dimmed (Fusion's way of showing which sketch is being edited). Only a host that names its active
+  // sketch (ctx.getActiveSketchId) dims; `dimUnless*` set which sketch the markup pushed next belongs to (null = full strength): its entity is
+  // not in the active sketch and is not lit (hovered / selected / bound by the hovered or selected constraint stays fully visible).
+  const dimsSketches = typeof ctx.getActiveSketchId === 'function';
+  const activeSketchState = { activeSketchId: (dimsSketches && ctx.getActiveSketchId()) || DEFAULT_SKETCH_ID };
+  const dimUnlessLit = (entity, lit) => { out.dim = (dimsSketches && !lit && entity && !inActiveSketch(activeSketchState, entity)) ? sketchOf(entity) : null; };
+  // A constraint / dimension belongs to its sketch (the origin belongs to none); one spanning sketches shows with each, so it dims only when the active sketch is none of them.
+  const dimConstraintUnlessLit = (c, lit) => {
+    out.dim = null;
+    if (!dimsSketches || lit || !c || c.__isPreview) return;
+    const own = constraintSketch({ ...c, joints: (c.joints || []).filter((id) => id !== ORIGIN_JOINT_ID) }, { joints, shapes });
+    const ids = own instanceof Set ? [...own] : (own ? [own] : []);
+    if (ids.length && !ids.includes(activeSketchState.activeSketchId)) out.dim = ids[0];
+  };
   // Constraint / dimension OPERANDS (the shapes and joints a constraint names) are resolved through the scene (task 539): the real containers
   // read live + the two built-in reference lines. Shape DRAWING loops stay on `shapes` / `joints`, so an axis is never drawn as geometry.
   const opJoints = sceneJoints(joints), opShapes = sceneShapes(shapes);
@@ -538,21 +570,26 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
       if (points.length >= 3) {
         const d = `M ${points[0]} L ${points.slice(1).join(' ')} Z`;
+        dimUnlessLit(lines[0], false);
         out.push(`<path d="${d}" style="fill:${skv('#60A5FA')}" fill-opacity="0.2" stroke="none"/>`);
       }
     }
   } catch (_){ }
+  out.dim = null;
 
   // PROFILE_FILL: every closed loop (rectangle, circle, polygon, closed line/arc chain) gets a translucent tint behind the
   // geometry; overlapping loops stack a little darker. Loops are cached against the geometry (profile-fill.js).
   if (PROFILE_FILL_ON) {
     try {
-      for (const d of profileFillPaths(joints, shapes, constraints)) {
+      const fillShapeById = new Map(shapes.map((sh) => [sh.id, sh]));
+      for (const { d, shapeId } of profileFillLoops(joints, shapes, constraints)) {
+        dimUnlessLit(fillShapeById.get(shapeId), false);
         out.push(`<path class="profile-fill" d="${d}" style="fill:var(--sk-profile-tint, #3AA0DC)" fill-opacity="0.12" stroke="none" pointer-events="none"/>`);
       }
     } catch (err) {
       dbg.error('renderer', '[svg-renderer] profile fill render error', err);
     }
+    out.dim = null;
   }
 
   // Combined profile background tints (evenodd, holes open; warning fill if invalid, dashed stroke drawn above shapes)
@@ -564,6 +601,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       for (const p of st.profiles) {
         const view = views.get(p.id);
         if (view && view.d) {
+          dimUnlessLit(shapes.find((sh) => sh.id === (p.outerShapes && p.outerShapes[0])), false);
           if (view.invalid) {
             out.push(`<path d="${view.d}" fill="rgba(239, 68, 68, 0.18)" stroke="none" fill-rule="evenodd" pointer-events="none"/>`);
             invalidProfileDs.push(view.d);
@@ -576,6 +614,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   } catch (err) {
     dbg.error('renderer', '[svg-renderer] profile tint render error', err);
   }
+  out.dim = null;
   
   // Draw origin axes with zoom-scaled stroke
   const originStroke = scale(1.5);
@@ -1036,6 +1075,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       strokeColor = GLYPH_SELECTED_COLOR;
     }
     
+    dimUnlessLit(s, hoverBoundShapes.has(s.id) || isHovered || isSelected || isConstraintPart);
     if(s.type==='line'){
       const a = s.joints && s.joints[0] ? joints.get(s.joints[0]) : null;
       const b = s.joints && s.joints[1] ? joints.get(s.joints[1]) : null;
@@ -1080,6 +1120,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       out.push(`<path class="shape-elem" data-shape-id="${s.id}" d="${pathData}" fill="none" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}" stroke-linecap="round"${constructionAttr}/>`);
     }
   }
+  out.dim = null;
   
   // Draw preview constraint glyph when setting up a constraint
   if(active && active.mode){
@@ -1273,6 +1314,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   let originDrawn = false;
   for(const [id,j] of joints.entries()){ 
     // Render the origin as part of the joint pass so it shares the same z-order and is interactable
+    out.dim = null; // the origin belongs to no sketch: never dimmed
     if(id === 'j_origin'){
       // If there are no other joints coincident to origin, origin is 'single' and should behave like an endpoint (visible + handle).
       // If there are coincident joints, hide the origin unless it is hovered/selected/part-of-constraint/activeSnap.
@@ -1324,6 +1366,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isConstraintPart = constraintJoints.has(id);
     const isActiveSnap = !!(activeSnap && activeSnap.type === 'joint' && getClusterLeader(activeSnap.targetId) === leader);
     const isHiddenFollower = (leader !== id) && (leader !== 'j_origin' || originDrawn);
+    dimUnlessLit(j, isSelected || isHovered || isActiveSnap || isConstraintPart || hoverBoundJoints.has(id) || (highlight.kind === 'joint' && highlight.id === leader));
 
     // Fillet virtual-sharp joint V (the corner as it was; overall dimensions attach here): a small CROSS, never
     // hidden, with the usual transparent hit target so it stays hoverable/snappable as a dimension target.
@@ -1366,7 +1409,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // Check if this joint is coincident to origin (used for other UX flows)
     const isOrigin = pointsCoincidentToOrigin.has(id);
   }
-  
+  out.dim = null;
 
   // draw preview (tool previews)
   if(active && active.preview){
@@ -2248,6 +2291,7 @@ switch(c.type){
   };
 
   for(const c of constraints){
+    dimConstraintUnlessLit(c, (selectedConstraints && selectedConstraints.has(c)) || hoveredConstraint === c);
     if(c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2){
       const a = getClusterLeader(c.joints[0]);
       const b = getClusterLeader(c.joints[1]);
@@ -2611,6 +2655,7 @@ switch(c.type){
     }
 
   }
+  out.dim = null;
 
   // Debug: constraint visibility summary (use: ug.debug.enable('renderer')). Logged only when {total, visible} CHANGES —
   // draw() runs every frame, and a per-frame line flooded the Diagnostic Log buffer (TASK 429).

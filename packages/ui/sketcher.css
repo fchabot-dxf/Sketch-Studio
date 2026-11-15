@@ -59,12 +59,17 @@
   --sk-glyph-hover: #eab308;
   --sk-glyph-selected: #ca8a04;
   --sk-origin: #3B82F6;
+  /* TASK 661: every sketch but the active one draws at this opacity (svg-renderer.js .sketch-inactive: curves, points, glyphs, dimensions, fills). */
+  --sk-inactive-sketch-opacity: 0.75;
 
   /* Feedback */
   --sk-error: #ef4444;
   /* TASK 646: a warning on the canvas: the part of a line a fillet would EXTEND past its far end (fillet-tool.js preview) */
   --sk-warning: #f59e0b;
 }
+
+/* TASK 661: an inactive sketch's drawing (svg-renderer.js groups each run of its markup) is dimmed as ONE group, so overlapping strokes do not double-darken. */
+.sketch-inactive { opacity: var(--sk-inactive-sketch-opacity, 0.75); }
 
 /* TASK 619 -- Shared header tokens and height: 44 px desktop, 0 px on phones (no header bar; stage tabs + actions move into the drawer). */
 :root {

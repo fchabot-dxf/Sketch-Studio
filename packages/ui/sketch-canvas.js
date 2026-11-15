@@ -133,6 +133,7 @@ export function mountSketch(svgEl, opts = {}) {
   // omitted (Pen Plotter, Trace) → no grid is drawn on this canvas, exactly as before.
   const renderCtx = {
     getState: () => state,
+    getActiveSketchId: () => state.activeSketchId, // TASK 661: draw() dims the other sketches
   };
   if (opts.grid && svgEl) {
     renderCtx.updateGrid = (a) => { try { updateGridFromSettings({ ...a, svgEl }); } catch (_) { /* grid is non-essential */ } };

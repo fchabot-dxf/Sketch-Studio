@@ -298,6 +298,10 @@ function injectStyles() {
   .sk-tp-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .sk-tp-desc { display: none; }
 }
+/* TASK 681: a question in the same modal (openChoiceModal): the small panel, its answers as full-height buttons */
+.sk-tp-ask { display: flex; flex-direction: column; gap: 14px; padding: 4px 14px 14px; }
+.sk-tp-ask .sk-tp-actions { flex-wrap: wrap; }
+@media (max-width: 640px) { .sk-tp-ask .sk-tp-actions { flex-direction: column; } .sk-tp-ask .sk-tp-btn { width: 100%; } }
 /* TASK 670: the START view of a template (the same panel, small) */
 .${PANEL}.sk-tp-small { width: min(400px, calc(100vw - 24px)); height: auto; max-height: calc(100vh - 24px); border-radius: 10px; }
 .sk-tp-start { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; min-height: 0; overflow: auto; }
@@ -506,4 +510,36 @@ export function choicePicker(spec, value, onPick, values) {
   wrap.addEventListener(REDRAW, render);
   render();
   return wrap;
+}
+
+/** TASK 681: ask a question in this same modal (a dimmed backdrop, a centred small panel, role=dialog aria-modal): `label` is the question, `options` the answers
+ *  [{ id, label }] (the first is the default: it is focused, so Enter picks it) and a Cancel button last. Resolves the chosen id; Cancel, Esc and a press outside resolve null. */
+export function openChoiceModal({ label, options }) {
+  injectStyles();
+  const returnTo = document.activeElement;
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div'); backdrop.className = 'sk-tp-backdrop';
+    const panel = document.createElement('div'); panel.className = PANEL + ' sk-tp-small'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', label);
+    const head = document.createElement('div'); head.className = 'sk-tp-head';
+    const title = document.createElement('h2'); title.className = 'sk-tp-title'; title.textContent = label; head.appendChild(title);
+    const body = document.createElement('div'); body.className = 'sk-tp-ask';
+    const actions = document.createElement('div'); actions.className = 'sk-tp-actions';
+    body.appendChild(actions); panel.append(head, body); backdrop.appendChild(panel); document.body.appendChild(backdrop);
+    let stopOutside = null, done = false;
+    const finish = (value) => {
+      if (done) return; done = true;
+      if (stopOutside) stopOutside();
+      document.removeEventListener('keydown', onKey, true);
+      backdrop.remove();
+      if (returnTo && returnTo.focus && returnTo.isConnected) returnTo.focus();
+      resolve(value);
+    };
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); } }
+    document.addEventListener('keydown', onKey, true);
+    stopOutside = listenOutsidePress((e) => { if (!e.composedPath().includes(panel)) finish(null); });
+    const mk = (cls, text, id) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-tp-btn ' + cls; b.textContent = text; b.dataset.choice = id; b.addEventListener('click', () => finish(id === '__cancel' ? null : id)); actions.appendChild(b); return b; };
+    const btns = options.map((o, i) => mk(i === 0 ? 'sk-tp-open' : '', o.label, o.id));
+    mk('sk-tp-cancel', 'Cancel', '__cancel');
+    btns[0].focus();
+  });
 }

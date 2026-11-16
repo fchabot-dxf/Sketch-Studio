@@ -70,10 +70,10 @@ await (async () => {
     await goto('/apps/sketchstudio/index.html', `!!document.querySelector('#svgCanvas') && !!document.querySelector('.sk-sidebar-btn')`);
     const styleOpen = () => evalJs(`!!document.querySelector('.sk-style-panel') && !document.querySelector('.sk-style-panel').classList.contains('sk-hidden')`);
     await press(false, '.sk-sidebar-btn', 'style');
-    const item = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-item')].find((x) => /^\\s*Style\\s*$/.test(x.textContent) || x.getAttribute('aria-label') === 'Style'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
-    assert(item, 'style: the sidebar Style item exists');
+    const item = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-item')].find((x) => /^\\s*Settings\\s*$/.test(x.textContent) || x.getAttribute('aria-label') === 'Settings'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    assert(item, 'style: the sidebar Settings item (TASK 726 rename) exists');
     await click(item.x, item.y); await sleep(300);
-    assert.strictEqual(await styleOpen(), true, 'style: the Style item opens the panel and it stays open');
+    assert.strictEqual(await styleOpen(), true, 'style: the Settings item opens the panel and it stays open');
     await press(false, '.sk-style-title', 'style');
     assert.strictEqual(await styleOpen(), true, 'style: a press inside it leaves it open');
     await disabledAndHit('style', '#btn-clear-sketch');

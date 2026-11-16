@@ -122,10 +122,10 @@ function injectStyles() {
  *   settings: the SettingsManager-like store (get/set/getAll/subscribe→unsub/resetToDefaults). Defaults to the
  *     shared #core singleton; injectable so a smoke can pass a fresh manager.
  *   onNotify(msg, level): optional toast hook (no Tailwind dependency here); level is 'success' | 'info' | 'warning' | 'error'. A throw from it propagates.
- *   title: header text (default 'Style').
+ *   title: header text (default 'Settings'; TASK 726: was 'Style').
  *   hostId: names the host so each remembers its own last-open tab (localStorage).
  */
-export function createStylePanel({ settings = SettingsManager, onNotify = null, title = 'Style', hostId = 'default' } = {}) {
+export function createStylePanel({ settings = SettingsManager, onNotify = null, title = 'Settings', hostId = 'default' } = {}) {
   injectStyles();
   const controlEls = {}; // key -> { input, slider? }
   let isOpen = false, escHandler = null, stopOutside = null;

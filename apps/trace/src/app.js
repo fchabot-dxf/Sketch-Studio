@@ -15,6 +15,7 @@ getGoogleAccount().init();
 import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('trace');
 import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618
+import { createStylePanel } from '#ui/style-panel.js';
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { sketchHistory } from '#ui/input-manager.js';
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
@@ -54,7 +55,10 @@ function importDrawing(text, name) {
 
 // TASK 618: Undo / Redo belong to the Edit tab's sketch (the Trace and Export tabs have no history)
 const history = createHistoryRouter({ current: () => (getEditState() && !tabPanes.edit.hidden ? sketchHistory(getEditState()) : null) });
-mountAppFooter({ router: history, view: () => (getEditState() && !tabPanes.edit.hidden ? { svg: document.getElementById('design-canvas'), state: getEditState() } : null), parameters: false }); // O14: Trace has no Parameters window (no project file); TASK 677: the opener is the footer's
+// TASK 726: the footer's Settings gear opens the shared Style panel; Trace's drawer has no Style item, the gear is its only opener
+const traceStylePanel = createStylePanel({ hostId: 'trace' });
+traceStylePanel.render(document.body);
+mountAppFooter({ router: history, view: () => (getEditState() && !tabPanes.edit.hidden ? { svg: document.getElementById('design-canvas'), state: getEditState() } : null), parameters: false, settings: traceStylePanel }); // O14: Trace has no Parameters window (no project file); TASK 677: the opener is the footer's
 
 // ── Event bus ─────────────────────────────────────────────────────────────────
 const listeners = {};

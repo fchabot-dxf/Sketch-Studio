@@ -142,6 +142,12 @@
     .rv2d-chip { flex: 0 0 14px; height: 14px; border: 1px solid #222; border-radius: 2px; margin-right: 2px; }
     .rv2d-row > span:nth-child(2):not(.rv2d-count) { flex: 1; }
     .rv2d-count { color: #9aa0a6; font-variant-numeric: tabular-nums; }
+    /* TASK 729: the Look card: the Material select and, for a look that takes a colour, its swatches (+ the native colour picker) */
+    .review-stock select { background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
+    .review-look-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+    .review-look-colors[hidden] { display: none; }
+    .review-look-colors button, .review-look-colors input[type="color"] { width: 32px; height: 32px; padding: 0; border: 2px solid #2f3646; border-radius: 6px; cursor: pointer; background: none; }
+    .review-look-colors [aria-pressed="true"] { border-color: var(--sk-selection, #4c9aff); box-shadow: 0 0 0 1px var(--sk-selection, #4c9aff); }
     .review-stock input { width: 90px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
     /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
        Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
@@ -398,7 +404,8 @@
       <label>Thickness <input id="review-stock-thickness" type="text" inputmode="decimal"></label>
       <div id="review-stock-note" class="review-stock-note"></div></div>
     <div class="review-stock" id="review-look"><h2 class="simexport-title">Look</h2>
-      <label style="justify-content:flex-start;gap:8px"><input id="review-wood" type="checkbox" checked> Wood</label></div>
+      <label>Material <select id="review-look-select" aria-label="Material"></select></label>
+      <div id="review-look-colors" class="review-look-colors" role="group" aria-label="Colour" hidden></div></div>
     <div id="simexport-panel">
       <h2 class="simexport-title">Export</h2>
       <p class="simexport-sub">Generate a machine-ready Shaper Origin SVG from the Prepare cut plan.</p>

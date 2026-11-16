@@ -40,7 +40,8 @@ await (async () => {
       assert.deepStrictEqual(f.lines.keys, ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'PROFILE_FILL', 'LOCKED_LINE_COLOR', 'INACTIVE_SKETCH_OPACITY'], host + ' lines tab');
       assert.deepStrictEqual(f.grid.keys, ['SHOW_GRID', 'GRID_MODE', 'SNAP_MAGNETISM', 'AXIS_SNAP', 'GRID_MAGNETISM', 'GRID_MAJOR_STEP', 'GRID_SIZE', 'INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS'], host + ' grid tab');
       assert.deepStrictEqual(f.glyphs.keys, ['GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY'], host + ' glyphs tab');
-      assert.deepStrictEqual(f.units.keys, ['DOC_UNIT'], host + ': every host has the Units tab with DOC_UNIT');
+      // TASK 724: the Units tab also holds the two display-precision selects, after the Document Unit row
+      assert.deepStrictEqual(f.units.keys, ['DOC_UNIT', 'LENGTH_PRECISION', 'ANGLE_PRECISION'], host + ': every host has the Units tab with DOC_UNIT, then Length and Angle precision');
       assert(!f.lines.hidden && f.grid.hidden && f.glyphs.hidden && f.units.hidden, host + ': only the active tab shows its fields');
       const footBtns = await evalJs(`[...document.querySelectorAll('.sk-style-panel button')].map((b) => b.textContent.trim())`);
       assert(!footBtns.some((t) => /save/i.test(t) && !/preset/i.test(t)), host + ': the Style panel has no Save button (only Save as preset): ' + footBtns);

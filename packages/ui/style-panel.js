@@ -18,7 +18,11 @@ import {
 // enum — generic, e.g. GRID_MODE; `numeric: true` stores the option as a number), and the default number+slider (needs
 // min/max/step). Any control may declare `showWhen: { key, in: [values] }`: shown only while that setting's value (DOC_UNIT
 // defaults to 'mm') is in the list; no showWhen = always shown.
+const precisionOptions = (max) => [{ value: '', label: 'Auto (as each view shows)' }, ...Array.from({ length: max + 1 }, (_, n) => ({ value: n, label: n + (n === 1 ? ' decimal' : ' decimals') }))];
 const CONTROLS = [
+  // Task 724: display precision (decimals shown), like Fusion's Preferences > General precision; shared by all four apps. '' = Auto = null (each view keeps its usual decimals).
+  { tab: 'units', key: 'LENGTH_PRECISION',        label: 'Length precision',     type: 'select', numeric: true, options: precisionOptions(6) },
+  { tab: 'units', key: 'ANGLE_PRECISION',         label: 'Angle precision',      type: 'select', numeric: true, options: precisionOptions(4) },
   { tab: 'grid', key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
   { tab: 'grid', key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
     options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] },
@@ -249,7 +253,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   const docUnitSelect = document.createElement('select'); docUnitSelect.className = 'sk-style-input'; docUnitSelect.dataset.key = 'DOC_UNIT';
   for (const u of UNITS) { const o = document.createElement('option'); o.value = u; o.textContent = UNIT_LABELS[u] || u; docUnitSelect.appendChild(o); }
   docUnitSelect.addEventListener('change', () => settings.set('DOC_UNIT', docUnitSelect.value, { persist: 'local' }));
-  unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); tabPanels.units.appendChild(unitRow);
+  unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); tabPanels.units.prepend(unitRow); // before the precision rows
 
   const tabStoreKey = 'sketch-studio-style-tab:' + hostId;
   function selectTab(id) {
@@ -290,7 +294,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     } else if (spec.type === 'select') {
       const input = document.createElement('select'); input.className = 'sk-style-input'; input.dataset.key = spec.key;
       for (const o of spec.options) { const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; input.appendChild(opt); }
-      input.addEventListener('change', () => settings.set(spec.key, spec.numeric ? Number(input.value) : input.value, { persist: 'local' }));
+      input.addEventListener('change', () => settings.set(spec.key, spec.numeric ? (input.value === '' ? null : Number(input.value)) : input.value, { persist: 'local' }));
       top.appendChild(input); row.appendChild(top);
       controlEls[spec.key] = { input, row };
     } else {
@@ -315,7 +319,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
       if (spec.showWhen) c.row.hidden = !spec.showWhen.in.includes(all[spec.showWhen.key] || 'mm');
       const v = all[spec.key];
       if (spec.type === 'checkbox') { c.input.checked = !!v; }
-      else if (spec.type === 'select') { c.input.value = spec.options.some((o) => String(o.value) === String(v)) ? v : spec.options[0].value; }
+      else if (spec.type === 'select') { c.input.value = spec.options.some((o) => String(o.value) === String(v ?? '')) ? (v ?? '') : spec.options[0].value; }
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
     docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';

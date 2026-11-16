@@ -5,8 +5,8 @@ import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#core/dimension-seams.js';
-import { docUnit } from '#core/settings-manager.js';
-import { format as formatUnit } from '#core/units.js';
+import { docUnit, lengthDecimals, angleDecimals } from '#core/settings-manager.js';
+import { format as formatUnit, basePer } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
@@ -291,6 +291,7 @@ function setupListeners() {
         }
         if (handleBoxUndoKey(e, uiState.singleInput, uiState.defaults[0], () => {
             if (uiState.mode === 'edit') {
+                uiState.typed[0] = false; // back at the prefill: not an edit (TASK 724)
                 updateAssist({ complete: false });
             } else {
                 uiState.typed[0] = false;
@@ -463,9 +464,12 @@ export function showEditInput(svg, state, constraint, initialKey) {
     const hasFormula = typeof constraint.expression === 'string' && constraint.expression !== '';
     const defaultValue = hasFormula ? constraint.expression
         : (typeof prefillValue === 'number'
-            ? (isAngleDim ? prefillValue.toFixed(1) : formatUnit(prefillValue, docUnit()))
+            ? (isAngleDim ? prefillValue.toFixed(angleDecimals(1)) : formatUnit(prefillValue, docUnit(), { decimals: lengthDecimals(1) }))
             : '');
     uiState.defaults = [defaultValue, ''];
+    // TASK 724: the prefill is DISPLAY text (rounded to the precision setting); `exactText` is the same number unrounded, what an untouched box commits
+    uiState.typed = [typeof initialKey === 'string', false]; // a key that opened the box is an edit
+    uiState.exactText = (!hasFormula && typeof prefillValue === 'number') ? String(isAngleDim ? prefillValue : prefillValue / basePer(docUnit())) : null;
     uiState.singleInput.inputMode = 'text';
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : defaultValue;
     updateAssist({ complete: typeof initialKey === 'string' });
@@ -598,7 +602,12 @@ function handleCommit() {
         // A text that is not valid keeps the box open: the hint under it says why (the old box closed silently and dropped what was typed).
         const target = uiState.target;
         const state = uiState.appState;
-        const pv = previewDimensionInput(state, target, uiState.singleInput.value, { unit: docUnit() });
+        // TASK 724: a box whose text is still exactly its (rounded) prefill is not an edit. A dimension that already drives keeps its exact value: close, no undo step.
+        // A just-placed / restored / reference dimension still becomes driving, with the exact (unrounded) measured number, never the displayed one.
+        const untouched = !uiState.typed[0] && uiState.singleInput.value === uiState.defaults[0] && uiState.exactText != null; // typed: any input event since the box opened
+        const needsValue = target.__newlyPlaced === true || target.__restoredDimension === true || target.isDriven || target.driven;
+        if (untouched && !needsValue) { target.__editing = false; hideInput(); return; }
+        const pv = previewDimensionInput(state, target, untouched ? uiState.exactText : uiState.singleInput.value, { unit: docUnit() });
         if (!pv.ok && !pv.empty) { updateAssist({ complete: false }); return; }
         if (pv.ok) {
             const isFirstValue = target.__newlyPlaced === true || target.__restoredDimension === true;
@@ -802,6 +811,7 @@ function resetState() {
     uiState.target = null;
     uiState.field = null;
     uiState.defaults = ['', ''];
+    uiState.exactText = null;
     uiState.undoneToDefault = false;
     
     if (uiState.singleInput) {

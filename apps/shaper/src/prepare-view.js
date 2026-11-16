@@ -10,7 +10,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
-import SettingsManager, { docUnit } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
+import SettingsManager, { docUnit, lengthDecimals, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
@@ -102,7 +102,7 @@ const depthChip = (x, y, cutDepth) => {
   const v = Number(cutDepth);
   const set = cutDepth != null && cutDepth !== 'unset' && Number.isFinite(v);
   let val = 'unset', unit = '';
-  if (set) { const f = formatShaperParam(v, docUnit()); const i = f.lastIndexOf(' '); val = f.slice(0, i); unit = f.slice(i); }
+  if (set) { const f = formatShaperParam(v, docUnit(), { decimals: lengthDecimals(3) }); const i = f.lastIndexOf(' '); val = f.slice(0, i); unit = f.slice(i); }
   const w = (2 + val.length + unit.length) * 2.9 + 6, h = 8.5;
   return `<g class="sk-chip"><rect class="sk-chip-bg" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="2.5"/>` +
     `<text class="sk-chip-text" x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
@@ -388,7 +388,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (poly && poly.length >= 3) {
         const x0 = Math.min(...poly.map((p) => p.x)), y0 = Math.min(...poly.map((p) => p.y));
         const t = Number(CUT_PLAN.get(sk).cutDepth), set = CUT_PLAN.get(sk).cutDepth !== 'unset' && Number.isFinite(t);
-        const txt = 'STOCK ' + (set ? formatShaperParam(t, docUnit()) : '(thickness unset)');
+        const txt = 'STOCK ' + (set ? formatShaperParam(t, docUnit(), { decimals: lengthDecimals(3) }) : '(thickness unset)');
         out += `<text class="sk-stock-label" x="${x0}" y="${y0 - 2.5}">${txt}</text>`;
       }
     }
@@ -507,7 +507,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
   const unsubDocUnit = SettingsManager && SettingsManager.subscribe
-    ? SettingsManager.subscribe((key) => { if (key === 'DOC_UNIT') refreshLook(); })
+    ? SettingsManager.subscribe((key) => { if (key === 'DOC_UNIT' || isPrecisionKey(key)) refreshLook(); })
     : null;
 
   return {

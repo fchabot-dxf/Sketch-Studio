@@ -11,7 +11,7 @@ import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '
 import { curveEnds } from '#core/loop-finder.js';
 import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
-import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthDecimals, angleDecimals } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup, glyphHitMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
@@ -27,7 +27,7 @@ import { isAutoDimName } from '#core/expression.js';
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
 // The Design canvas renders on a continuous solve→draw RAF, so labels re-label on the next frame after a unit toggle
 // (no explicit re-render wire needed).
-export const formatLenLabel = (v) => formatUnit(v, docUnit(), { decimals: 1 });
+export const formatLenLabel = (v) => formatUnit(v, docUnit(), { decimals: lengthDecimals(1) });
 
 /**
  * Shared formatter for constraint / dimension values (S5b / TASK 439).
@@ -66,7 +66,7 @@ function constraintValueText(c, options) {
   const wrapParens = isDrivenFlag || isPlacing;
 
   if (c.type === CONSTRAINT_TYPES.ANGLE || c.type === 'angle') {
-    const s = Number(val).toFixed(1) + '°';
+    const s = Number(val).toFixed(angleDecimals(1)) + '°';
     return wrapParens ? `(${s})` : s;
   }
   const lenStr = formatLenLabel(val);

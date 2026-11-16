@@ -17,6 +17,7 @@
 
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { unitInfo, format as formatUnit } from '#core/units.js';
+import { lengthDecimals, angleDecimals } from '#core/settings-manager.js';
 import { parseInput, evaluate, canonicalize, dependencies, print, validateName, foldName, functionTable } from '#core/expression.js';
 import { patternValueSlots, patternSlot, patternSlotValue } from '#core/pattern-values.js';
 
@@ -568,8 +569,8 @@ export function quantityText(v, unit) {
   if (!Number.isFinite(v)) return '';
   const u = unit ? unitInfo(unit) : null;
   if (!u) return String(Math.round(v * 1e4) / 1e4);
-  if (u.kind === 'length') return formatUnit(v, u.name, { decimals: 1 });
-  return (v / u.f).toFixed(1);
+  if (u.kind === 'length') return formatUnit(v, u.name, { decimals: lengthDecimals(1) });
+  return (v / u.f).toFixed(angleDecimals(1));
 }
 // the unit a dimension's value is shown in: degrees for an angle, the document unit for a length
 export const dimensionUnit = (c, docUnit) => (c.type === CONSTRAINT_TYPES.ANGLE ? 'deg' : docUnit);

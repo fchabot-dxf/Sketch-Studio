@@ -93,10 +93,10 @@ export function format(baseMM, docUnit = BASE, opts = {}) {
 // attribute values, matching Shaper Studio's exports: every non-zero value = 3 decimals + a SPACE + the unit ("0.100 in",
 // "-2.000 in", "0.125 in"); with zeroBare a ZERO is "0in" (Studio writes an unset offset that way). mm / cm mirror the
 // pattern ("6.350 mm", "0mm") — UNVERIFIED against a Studio mm export (the samples are all inches).
-export function formatShaperParam(baseMM, docUnit = BASE, { zeroBare = false } = {}) {
+export function formatShaperParam(baseMM, docUnit = BASE, { zeroBare = false, decimals = 3 } = {}) { // decimals: DISPLAY callers only (TASK 724); the export never passes it
   const v = Number(baseMM);
   if (!Number.isFinite(v)) return '';
   const unit = TO_MM[docUnit] ? docUnit : BASE;
   if (zeroBare && v === 0) return `0${unit}`;
-  return `${(v / TO_MM[unit]).toFixed(3)} ${unit}`;
+  return `${(v / TO_MM[unit]).toFixed(decimals)} ${unit}`;
 }

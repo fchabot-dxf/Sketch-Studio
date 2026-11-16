@@ -111,10 +111,14 @@ await (async () => {
       let o = await offset();
       assert(o && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 5) < 1e-6) && await screenSide(o.off[0].y, ySrc) === -1, `[${kind}] the offset is made ABOVE, 5 mm away: ${JSON.stringify(o)}`);
       assert.strictEqual(await hist(), h0 + 1, `[${kind}] ONE undo step`);
-      out(`tool -5: offset made above, dimension ${o.name} = ${o.value}, label ${await labelText(o.idx)}`);
+      // TASK 710: the typed value is the dimension's value as typed (Fusion): -5, its label -5.0, the Parameters table -5 mm
+      assert.strictEqual(o.value, -5, `[${kind}] the new dimension holds -5 as typed`);
+      const l5 = await labelText(o.idx);
+      assert(/^-5\.0/.test(l5), `[${kind}] the label reads -5: ${l5}`);
+      out(`tool -5: offset made above, dimension ${o.name} = ${o.value}, label ${l5}`);
       await shot(`${kind}-3-made-above.png`, clip);
 
-      // ---- 2. the dimension box: -3 = below at 3; Ctrl+Z in the box restores the opening value first
+      // ---- 2. the dimension box: -3 stays above at 3 (the sign -5 had); 5 flips back below; Ctrl+Z in the box restores the opening value first
       await tool('tool-select');
       await sleep(600);
       const lab = await centerOf(`#design-canvas .dim-label[data-constraint-idx="${o.idx}"]`);
@@ -129,13 +133,24 @@ await (async () => {
       await focusSelect('#dimInput'); await type('-3'); await Enter();
       await sleep(400);
       o = await offset();
-      assert(o.value === -3 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 3) < 1e-4) && await screenSide(o.off[0].y, ySrc) === 1, `[${kind}] -3: the offset is BELOW at 3: ${JSON.stringify(o)}`);
+      assert(o.value === -3 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 3) < 1e-4) && await screenSide(o.off[0].y, ySrc) === -1, `[${kind}] -3: the offset stays ABOVE at 3: ${JSON.stringify(o)}`);
       assert(o.src.every((p) => Math.abs(p.y - ySrc) < 1e-6), `[${kind}] the source stays`);
       assert.strictEqual(await hist(), h0 + 2, `[${kind}] ONE undo step`);
       const l3 = await labelText(o.idx);
       assert(/^-3\.0/.test(l3), `[${kind}] the label reads the signed value: ${l3}`);
-      out(`dimension -3: below at 3, label ${l3}`);
-      await shot(`${kind}-4-dimension-minus3-below.png`, clip);
+      out(`dimension -3: above at 3, label ${l3}`);
+      await shot(`${kind}-4-dimension-minus3-above.png`, clip);
+      await P.double(await centerOf(`#design-canvas .dim-label[data-constraint-idx="${o.idx}"]`));
+      await waitFor(`(() => { const i = document.getElementById('dimInput'); return !!i && !i.classList.contains('hidden'); })()`, `[${kind}] the dimension box again`);
+      await focusSelect('#dimInput'); await type('5'); await Enter(); await sleep(400);
+      o = await offset();
+      assert(o.value === 5 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 5) < 1e-4) && await screenSide(o.off[0].y, ySrc) === 1, `[${kind}] 5: the offset flips back BELOW at 5: ${JSON.stringify(o)}`);
+      assert.strictEqual(await hist(), h0 + 3, `[${kind}] ONE undo step`);
+      await evalJs(`document.activeElement && document.activeElement.blur()`);
+      if (kind === 'mouse') await ctrlZ(); else await P.tap(await centerOf('#btn-undo'));
+      await sleep(500);
+      o = await offset();
+      assert(o.value === -3 && await screenSide(o.off[0].y, ySrc) === -1, `[${kind}] undo: back to -3 ABOVE: ${JSON.stringify(o)}`);
 
       // ---- 3. the Parameters window: off = 4 mm read by the dimension, then off = -2 mm
       const W = '.sk-pwin';
@@ -144,30 +159,32 @@ await (async () => {
       const pressSel = async (sel) => { const c = await centerOf(sel); assert(c, `${sel} on screen`); await P.tap(c); };
       await pressSel('#btn-parameters');
       await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 1`, `[${kind}] the Parameters window lists the offset dimension`);
+      const exprShown = await evalJs(`document.querySelector(${JSON.stringify(cellIn(o.name, 'expression'))}).value`);
+      assert(/^-3(\.0+)?( ?mm)?$/.test(exprShown), `[${kind}] 710: the table shows the signed expression of the dimension (${exprShown})`);
       await pressSel(`${W} .pt-add`);
       await type('off'); await Tab(); await type('4 mm'); await Enter(); await sleep(400);
       assert.deepStrictEqual(await evalJs(`JSON.stringify(${STATE}.parameters.map((p) => [p.name, p.expression]))`).then(JSON.parse), [['off', '4 mm']], `[${kind}] + Add off = 4 mm`);
       await pressSel(cellIn(o.name, 'expression'));
       await focusSelect(cellIn(o.name, 'expression')); await type('off'); await Enter(); await sleep(500);
       o = await offset();
-      assert(o.value === 4 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 4) < 1e-4) && await screenSide(o.off[0].y, ySrc) === -1, `[${kind}] the dimension reads off = 4: ABOVE at 4: ${JSON.stringify(o)}`);
+      assert(o.value === 4 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 4) < 1e-4) && await screenSide(o.off[0].y, ySrc) === 1, `[${kind}] the dimension reads off = 4: BELOW at 4 (the pointer side): ${JSON.stringify(o)}`);
       const h4 = await hist();
       await pressSel(cellIn('off', 'expression'));
       await focusSelect(cellIn('off', 'expression')); await type('-2 mm'); await Enter(); await sleep(500);
       o = await offset();
-      assert(o.value === -2 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 2) < 1e-4) && await screenSide(o.off[0].y, ySrc) === 1, `[${kind}] off = -2 mm: the offset moves BELOW at 2: ${JSON.stringify(o)}`);
+      assert(o.value === -2 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 2) < 1e-4) && await screenSide(o.off[0].y, ySrc) === -1, `[${kind}] off = -2 mm: the offset moves ABOVE at 2: ${JSON.stringify(o)}`);
       assert.strictEqual(await hist(), h4 + 1, `[${kind}] ONE undo step`);
       await waitFor(`document.querySelector(${JSON.stringify(row(o.name) + ' td.pt-val')}).textContent === '-2.0'`, `[${kind}] the table shows the dimension's signed value -2.0`);
-      out(`parameter off = -2 mm: below at 2, label ${await labelText(o.idx)}`);
-      await shot(`${kind}-5-parameter-minus2-below.png`, clip);
+      out(`parameter off = -2 mm: above at 2, label ${await labelText(o.idx)}`);
+      await shot(`${kind}-5-parameter-minus2-above.png`, clip);
       await shot(`${kind}-6-parameters-window.png`, await evalJs(`(() => { const r = document.querySelector('${W}').getBoundingClientRect(); return { x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.width, innerWidth - Math.max(0, r.left)), height: Math.min(r.height, innerHeight - Math.max(0, r.top)) }; })()`));
       if (kind === 'mouse') { await evalJs(`document.activeElement && document.activeElement.blur()`); await ctrlZ(); }
       else await pressSel('#btn-undo');
       await sleep(500);
       o = await offset();
-      assert(o.value === 4 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 4) < 1e-4) && await screenSide(o.off[0].y, ySrc) === -1, `[${kind}] ${kind === 'mouse' ? 'Ctrl+Z' : 'the footer Undo'} steps back: ABOVE at 4: ${JSON.stringify(o)}`);
+      assert(o.value === 4 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 4) < 1e-4) && await screenSide(o.off[0].y, ySrc) === 1, `[${kind}] ${kind === 'mouse' ? 'Ctrl+Z' : 'the footer Undo'} steps back: BELOW at 4: ${JSON.stringify(o)}`);
       assert.strictEqual(await evalJs(`${STATE}.parameters[0].expression`), '4 mm', `[${kind}] and off is 4 mm again`);
-      out('undo: back to off = 4 (above at 4)');
+      out('undo: back to off = 4 (below at 4)');
       out('all checks passed');
     };
 

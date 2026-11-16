@@ -11,7 +11,10 @@
 //   cursor, and (task 653) never sits on its anchor or within a finger's reach (MIN_GAP, 44 px, centre to anchor) of it; null / omitted = the
 //   canvas corner (the Mirror tool has no rubber band). avoid: the tools' boxes' and handles' rects; visible toasts (#notification-container [data-level])
 //   are treated as obstacles too (task 689), which the button covers only when every slot is covered (then the least-covered one, see placeDone).
-//   sync(touchInput): call after any pointer event; touchInput = the pointer that just acted was a finger (picks the size).
+//   sync(touchInput, at?): call after any pointer event; touchInput = the pointer that just acted was a finger (picks the size); at = that
+//   event's { x, y, start } (client px; start = a pointerdown, a new press). Task 701: the button never covers the press in progress (the points
+//   of its down and its up): a press that opens a tool's session (the second tap on a pattern's label) makes the button APPEAR at its pointerup,
+//   and the finger's click, dispatched after the pointerup where the finger is, would land on it (it applied the pattern the tap had just opened).
 
 const STYLE_ID = 'sk-done-styles';
 const CSS = `
@@ -36,11 +39,14 @@ const MIN_GAP = 44;   // task 653: the button's centre is never nearer than this
 //    that stays inside the canvas and off every obstacle. 2. When none is free (a phone corner near the canvas edge with the box and the handle in the
 //    way), the LEAST-COVERED slot that is inside the canvas and at least MIN_GAP from the anchor: a slot that is partly covered stays reachable and
 //    never turns the button into a click on the anchor the finger just tapped. 3. A canvas too small for any slot 44 px out takes the slot farthest from the anchor.
-export function placeDone({ anchor, size, bounds: r, obstacles = [] }) {
+// press (task 701): the rect of the press in progress ({ left, top, right, bottom }, client px) or null: like the anchor's MIN_GAP, a slot that
+// covers it is never taken (rules 1 and 2).
+export function placeDone({ anchor, size, bounds: r, obstacles = [], press = null }) {
   const clamp = (x, y) => [Math.max(r.left + EDGE, Math.min(x, r.right - EDGE - size)), Math.max(r.top + EDGE, Math.min(y, r.bottom - EDGE - size))];
   const covered = (x, y) => obstacles.reduce((a, o) => a + Math.max(0, Math.min(x + size, o.right) - Math.max(x, o.left)) * Math.max(0, Math.min(y + size, o.bottom) - Math.max(y, o.top)), 0);
   const inside = (x, y) => x >= r.left + EDGE && y >= r.top + EDGE && x + size <= r.right - EDGE && y + size <= r.bottom - EDGE;
   const gap = (x, y) => Math.hypot(x + size / 2 - anchor.x, y + size / 2 - anchor.y);
+  const clear = (x, y) => gap(x, y) >= MIN_GAP && !(press && coversRect(x, y, size, press));
   const slots = [];
   for (const ring of [0, 1, 2]) {
     const d = OFFSET + ring * (size + OFFSET);
@@ -51,12 +57,15 @@ export function placeDone({ anchor, size, bounds: r, obstacles = [] }) {
       slots.push([near, my], [far, my], [mx, below], [mx, above]);
     }
   }
-  const free = slots.find(([x, y]) => inside(x, y) && covered(x, y) === 0 && gap(x, y) >= MIN_GAP);
+  const free = slots.find(([x, y]) => inside(x, y) && covered(x, y) === 0 && clear(x, y));
   if (free) return free;
-  const usable = slots.map(([x, y]) => clamp(x, y)).filter(([x, y]) => gap(x, y) >= MIN_GAP);
+  const usable = slots.map(([x, y]) => clamp(x, y)).filter(([x, y]) => clear(x, y));
   if (!usable.length) return slots.map(([x, y]) => clamp(x, y)).reduce((a, b) => (gap(...b) > gap(...a) ? b : a));
   return usable.reduce((a, b) => (covered(...b) < covered(...a) ? b : a));
 }
+
+// the button at (x, y) of this size touches the rect o (edges included: a press on the button's edge is a press on it)
+const coversRect = (x, y, size, o) => x <= o.right && o.left <= x + size && y <= o.bottom && o.top <= y + size;
 
 export function createDoneButton({ svg, isChainOpen, onDone, enabled = () => true, label = () => 'Finish the line chain', anchor = () => null, avoid = () => [] }) {
   if (!document.getElementById(STYLE_ID)) { const s = document.createElement('style'); s.id = STYLE_ID; s.textContent = CSS; document.head.appendChild(s); }
@@ -66,6 +75,7 @@ export function createDoneButton({ svg, isChainOpen, onDone, enabled = () => tru
   document.body.appendChild(btn);
 
   let touchInput = false;
+  let press = null; // task 701: the press in progress (its down and up points), the button never covers it
   let frame = null;
   const visibleToasts = () => {
     const box = document.getElementById('notification-container');
@@ -79,20 +89,20 @@ export function createDoneButton({ svg, isChainOpen, onDone, enabled = () => tru
     const size = btn.offsetWidth || (touchInput ? 52 : 40);
     if (!end) {
       const rx = r.right - MARGIN - size, ry = r.bottom - MARGIN - size;
-      const blocked = obstacles.some((o) => rx < o.right && rx + size > o.left && ry < o.bottom && ry + size > o.top);
+      const blocked = obstacles.some((o) => rx < o.right && rx + size > o.left && ry < o.bottom && ry + size > o.top) || (press && coversRect(rx, ry, size, press));
       if (!blocked) {
         btn.style.left = btn.style.top = '';
         btn.style.right = Math.max(MARGIN, window.innerWidth - r.right + MARGIN) + 'px';
         btn.style.bottom = Math.max(MARGIN, window.innerHeight - r.bottom + MARGIN) + 'px';
         return;
       }
-      const [x, y] = placeDone({ anchor: { x: r.right, y: r.bottom }, size, bounds: r, obstacles });
+      const [x, y] = placeDone({ anchor: { x: r.right, y: r.bottom }, size, bounds: r, obstacles, press });
       btn.style.right = btn.style.bottom = '';
       btn.style.left = x + 'px';
       btn.style.top = y + 'px';
       return;
     }
-    const [x, y] = placeDone({ anchor: end, size, bounds: r, obstacles });
+    const [x, y] = placeDone({ anchor: end, size, bounds: r, obstacles, press });
     btn.style.right = btn.style.bottom = '';
     btn.style.left = x + 'px';
     btn.style.top = y + 'px';
@@ -107,7 +117,14 @@ export function createDoneButton({ svg, isChainOpen, onDone, enabled = () => tru
   }
   btn.addEventListener('click', (e) => { e.preventDefault(); if (btn.disabled) return; onDone(); refresh(); });
   return {
-    sync(isTouch) { touchInput = !!isTouch; if (frame == null) refresh(); },
+    // placed at once (not at the next frame): the click of this press comes right after its pointerup
+    sync(isTouch, at = null) {
+      touchInput = !!isTouch;
+      if (at) press = at.start || !press ? { left: at.x, top: at.y, right: at.x, bottom: at.y }
+        : { left: Math.min(press.left, at.x), top: Math.min(press.top, at.y), right: Math.max(press.right, at.x), bottom: Math.max(press.bottom, at.y) };
+      if (frame != null) cancelAnimationFrame(frame);
+      refresh();
+    },
     destroy() { if (frame != null) cancelAnimationFrame(frame); btn.remove(); },
   };
 }

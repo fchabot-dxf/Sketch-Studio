@@ -6,7 +6,8 @@
 //   - a corner's pick sets only that corner (the per-corner list; Open = the template with that list); the "Corner joint" row then shows the
 //     corners differ (no option pressed); a pick on the row sets EVERY corner again
 //   - the polygon frame's sides change: the corner list follows (picked corners kept, new ones take the option last set for all)
-//   - the brace / triangle: a corner's picker and that corner's row are the same choice (either shows the other's pick)
+//   - (owner: "joint type on the preview directly like in frame calc") a choice the preview's corners carry has NO form row: the brace's, the
+//     triangle's and the right-angle corner's joints are picked on the preview only; the per-corner frames keep their one "Corner joint" row
 //   - the trapezoid's shape picker (frame-calc's four variants); the left setback row only for Scalene, and a user parameter then
 //   - a template without corners keeps the small start view (no corner pickers)
 import assert from 'node:assert';
@@ -53,6 +54,8 @@ try {
       assert.strictEqual(c.getAttribute('aria-label'), spec.perCorner ? `${spec.label}, corner ${list[i].index + 1}` : spec.label, `${id} corner ${i}: named`);
       assert.ok(c.querySelector('svg polygon'), `${id} corner ${i}: a glyph`);
     });
+    const rows = qa('.sk-tp-field').map((r) => r.dataset.param);
+    for (const k of new Set(params)) assert.strictEqual(rows.includes(k), !!t.params[k].perCorner, `${id}: ${k} ${t.params[k].perCorner ? 'keeps its one set-all row' : 'has no form row (picked on the preview only)'}`);
     pressEl('.sk-tp-cancel'); await settle(); pressEl('.sk-tp-x'); await settle();
   }
   await startOf('slot');
@@ -115,20 +118,21 @@ try {
   await openIt();
   sameAs(box, { joint: ['H-Through', 'V-Through', 'Miter', 'V-Through'] }, 'box: Open = bottom-left Horizontal through, top-right Mitered');
 
-  // ---- the brace and the triangle: a corner's picker and its row are one choice
+  // ---- the brace and the triangle: each corner's joint picked on the preview (no form row)
   const brace = templateById('right-angle-brace');
   await startOf('right-angle-brace');
+  assert.deepStrictEqual(qa('.sk-tp-field').map((r) => r.dataset.param), ['width', 'height', 'thickV', 'thickH', 'thickD'], 'brace: the form has the lengths only');
   await pickOn(cornerOf('topJoint'), 'Miter');
-  assert.deepStrictEqual(shownValues(row('topJoint')), ['Miter'], 'brace: the top corner pick shows in the Top joint row');
-  await pickOn(row('brJoint'), 'D-Through');
-  assert.deepStrictEqual(shownValues(cornerOf('brJoint')), ['D-Through'], 'brace: the Bottom-right row pick shows on its corner');
+  await pickOn(cornerOf('brJoint'), 'D-Through');
+  assert.deepStrictEqual([shownValues(cornerOf('topJoint')), shownValues(cornerOf('blJoint')), shownValues(cornerOf('brJoint'))], [['Miter'], ['V-Through'], ['D-Through']], 'brace: the two corners picked, the third unchanged');
   await openIt();
   sameAs(brace, { topJoint: 'Miter', brJoint: 'D-Through' }, 'brace: Open = the two picks');
   const tri = templateById('triangle-frame');
   await startOf('triangle-frame');
   await pickOn(cornerOf('jointA'), 'V-Through');
   await pickOn(cornerOf('jointC'), 'D-Through');
-  assert.deepStrictEqual([shownValues(row('jointA')), shownValues(row('jointC'))], [['V-Through'], ['D-Through']], 'triangle: the corner picks show in the rows');
+  assert.deepStrictEqual(qa('.sk-tp-field').map((r) => r.dataset.param), ['base', 'leftSide', 'rightSide', 'thickness'], 'triangle: no joint rows');
+  assert.deepStrictEqual(corners().map((c) => shownValues(c)[0]), ['V-Through', 'Miter', 'D-Through'], 'triangle: the two corner picks');
   await openIt();
   sameAs(tri, { jointA: 'V-Through', jointC: 'D-Through' }, 'triangle: Open = the two picks');
   assert.deepStrictEqual(st.parameters.map((p) => p.name), ['base', 'left_side', 'right_side', 'thickness'], 'triangle: its user parameters');

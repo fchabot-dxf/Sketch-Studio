@@ -461,8 +461,8 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     // TASK 674: a template with corners (the frames: #core/templates.js templateCorners) gets the WIDE start view: a big preview with a joint
     // glyph picker on each corner (frame-calc's per-vertex JointPicker: the corner's active joint, a tap expands it, a pick selects and folds
     // back, one corner open at a time), the form beside it (under it on a phone, scrolling, Open / Cancel kept in view). A corner's pick is its
-    // own entry of the template's per-corner choice (or the corner's own choice param, the brace / triangle / corner); the "Corner joint" row
-    // sets every corner. A pick is a settled value: the preview is rebuilt at once.
+    // own entry of the template's per-corner choice (or the corner's own choice param, the brace / triangle / corner: picked on the preview only,
+    // no form row); the "Corner joint" row of a per-corner choice sets every corner. A pick is a settled value: the preview is rebuilt at once.
     function startView(t, fromCard) {
       const values = defaultParams(t);
       const hasCorners = templateCorners(t).length > 0;
@@ -513,7 +513,11 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       const err = document.createElement('div'); err.className = 'sk-tp-err'; err.setAttribute('role', 'alert');
       const inputs = new Map(); // param key -> its value box
       const sameForAll = (v) => (Array.isArray(v) ? (v.every((x) => x === v[0]) ? v[0] : null) : v); // a per-corner choice's one value, or null (mixed)
+      // TASK 674 (owner: "joint type on the preview directly like in frame calc"): a choice the preview's corners carry is picked THERE only, not
+      // also in a form row; a per-corner choice keeps its one row, the "Corner joint" row that sets every corner
+      const onPreview = new Set(templateCorners(t).filter((c) => !t.params[c.param].perCorner).map((c) => c.param));
       for (const [k, spec] of Object.entries(t.params)) {
+        if (onPreview.has(k)) continue;
         const row = document.createElement('div'); row.className = 'sk-tp-field'; row.dataset.param = k;
         rows.set(k, row);
         const kind = paramKind(spec);

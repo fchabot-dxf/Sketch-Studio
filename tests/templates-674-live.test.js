@@ -163,7 +163,8 @@ await (async () => {
     await press('#btn-recenter-view'); await sleep(700); await shot('desktop-parallelogram-canvas.png', '#design-canvas');
     await startOf('triangle-frame');
     await press(`${cornerSel('jointC')} button:not([hidden])`); await press(`${cornerSel('jointC')} button[data-value="V-Through"]`);
-    assert.deepStrictEqual(await shownIn('.sk-tp-field[data-param="jointC"] .sk-tp-choice'), ['V-Through'], 'the top corner pick shows in the Top joint row');
+    assert.deepStrictEqual(await shownIn(cornerSel('jointC')), ['V-Through'], 'the top corner picked, folded back');
+    assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.sk-tp-field')].map((r) => r.dataset.param)`), ['base', 'leftSide', 'rightSide', 'thickness'], 'the triangle: no joint rows (picked on the preview only)');
     await openIt('triangle');
     await sameAsTemplate('triangle-frame', { jointC: 'V-Through' }, 'desktop: the triangle opened with its top corner picked');
     await press('#btn-recenter-view'); await sleep(700); await shot('desktop-triangle-canvas.png', '#design-canvas');
@@ -177,6 +178,9 @@ await (async () => {
     for (const [id, n] of FRAMES) {
       await startOf(id);
       const L = await checkLayout(id, n, 'phone');
+      // (owner: "joint type on the preview directly like in frame calc") a joint the corners carry has no form row; a per-corner one keeps "Corner joint"
+      const jointRows = await evalJs(`[...document.querySelectorAll('.sk-tp-field')].map((r) => r.dataset.param).filter((k) => /joint/i.test(k))`);
+      assert.deepStrictEqual(jointRows, ['right-angle-brace', 'right-angle-corner', 'triangle-frame'].includes(id) ? [] : ['joint'], `phone ${id}: joint rows ${JSON.stringify(jointRows)}`);
       assert.ok(L.stage[0] >= 330, `phone ${id}: the preview spans the panel (${L.stage})`);
       await shot(`phone-start-${id}.png`);
       await cancelAll();

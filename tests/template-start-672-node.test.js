@@ -35,25 +35,29 @@ try {
   const pts = (list) => list.map(([, j]) => [Math.round(j.x * 1e6) / 1e6 || 0, Math.round(j.y * 1e6) / 1e6 || 0]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const sameJoints = (want, m) => assert.deepStrictEqual(pts([...st.joints]), pts(want.joints), m);
 
-  // ---- the right-angle brace: a picker per corner, frame-calc's options and names
+  // ---- the right-angle brace: a picker per corner, frame-calc's options and names (TASK 674: the pickers on the preview's corners)
+  const cButtons = (param) => qa(`.sk-tp-corners .sk-tp-corner[data-param="${param}"] button`);
+  const cVisible = (param) => cButtons(param).filter((b) => !b.hidden);
+  const cNamed = (param) => cVisible(param).map((b) => [b.dataset.value, b.getAttribute('aria-label'), b.getAttribute('aria-pressed')]);
+  const cPick = async (param, value) => { pressEl(cVisible(param)[0]); await settle(); pressEl(cVisible(param).find((b) => b.dataset.value === value)); await settle(); };
   await startOf('right-angle-brace');
-  assert.deepStrictEqual(qa('.sk-tp-field').map((r) => r.dataset.param), ['width', 'height', 'thickV', 'thickH', 'thickD', 'topJoint', 'blJoint', 'brJoint'], 'brace: a row per param');
-  assert.deepStrictEqual([named('topJoint'), named('blJoint'), named('brJoint')], [[['V-Through', 'Vertical Through Joint', 'true']], [['V-Through', 'Vertical Through Joint', 'true']], [['H-Through', 'Horizontal Through Joint', 'true']]], "brace: collapsed, frame-calc's defaults");
+  assert.deepStrictEqual(qa('.sk-tp-field').map((r) => r.dataset.param), ['width', 'height', 'thickV', 'thickH', 'thickD'], 'brace: a row per length (TASK 674: the joints are picked on the preview, no row)');
+  assert.deepStrictEqual([cNamed('topJoint'), cNamed('blJoint'), cNamed('brJoint')], [[['V-Through', 'Vertical Through Joint', 'true']], [['V-Through', 'Vertical Through Joint', 'true']], [['H-Through', 'Horizontal Through Joint', 'true']]], "brace: collapsed, frame-calc's defaults");
   const want = { topJoint: ['Vertical Through Joint', 'Diagonal Through Joint', 'Mitered Joint'], blJoint: ['Vertical Through Joint', 'Horizontal Through Joint', 'Mitered Joint'], brJoint: ['Horizontal Through Joint', 'Diagonal Through Joint', 'Mitered Joint'] };
   const corner = { topJoint: 'top', blJoint: 'bl', brJoint: 'br' };
   for (const k of Object.keys(want)) {
-    pressEl(visible(k)[0]); await settle();
-    assert.deepStrictEqual(visible(k).map((b) => b.getAttribute('aria-label')), want[k], `brace ${k}: expanded, frame-calc's options for that corner`);
-    for (const b of visible(k)) { // each glyph = frame-calc's JointDiagram: the two boards meeting at that corner, the other corners at the glyph defaults
+    pressEl(cVisible(k)[0]); await settle();
+    assert.deepStrictEqual(cVisible(k).map((b) => b.getAttribute('aria-label')), want[k], `brace ${k}: expanded, frame-calc's options for that corner`);
+    for (const b of cVisible(k)) { // each glyph = frame-calc's JointDiagram: the two boards meeting at that corner, the other corners at the glyph defaults
       const c = corner[k], v = b.dataset.value;
       const { points } = calculateFramingGeometry({ width: 40, height: 40, thickV: 8, thickH: 8, thickD: 8, topJoint: c === 'top' ? v : 'V-Through', blJoint: c === 'bl' ? v : 'V-Through', brJoint: c === 'br' ? v : 'H-Through' });
       const pair = { top: [points.V, points.D], bl: [points.V, points.H], br: [points.H, points.D] }[c].map((x) => Object.values(x).map((p) => `${p.x},${p.y}`).join(' '));
       assert.deepStrictEqual(polys(b), pair, `brace ${k} ${v}: the glyph is frame-calc's two boards`);
     }
-    pressEl(visible(k)[0]); await settle(); // a pick of the first one folds it back
+    pressEl(cVisible(k)[0]); await settle(); // a pick of the first one folds it back
   }
-  await pick('topJoint', 'D-Through'); await pick('blJoint', 'Miter'); await pick('brJoint', 'D-Through');
-  assert.deepStrictEqual([named('topJoint'), named('blJoint'), named('brJoint')].map((x) => x.map((y) => y[0])), [['D-Through'], ['Miter'], ['D-Through']], 'brace: the three picks, collapsed');
+  await cPick('topJoint', 'D-Through'); await cPick('blJoint', 'Miter'); await cPick('brJoint', 'D-Through');
+  assert.deepStrictEqual([cNamed('topJoint'), cNamed('blJoint'), cNamed('brJoint')].map((x) => x.map((y) => y[0])), [['D-Through'], ['Miter'], ['D-Through']], 'brace: the three picks, collapsed');
   await openIt();
   sameJoints(buildTemplate(templateById('right-angle-brace'), { topJoint: 'D-Through', blJoint: 'Miter', brJoint: 'D-Through' }).geometry, 'brace: the drawing = the template with the picked joints');
   assert.deepStrictEqual(st.parameters.map((p) => [p.name, p.expression]), [['width', '300 mm'], ['height', '600 mm'], ['thick_v', '38 mm'], ['thick_h', '38 mm'], ['thick_d', '38 mm']], 'brace: its user parameters');

@@ -38,6 +38,9 @@ await (async () => {
   const params = () => S(`JSON.stringify(s.parameters.map((p) => [p.name, p.expression]))`).then(JSON.parse);
   const visibleChoices = (param) => evalJs(`[...document.querySelectorAll('.sk-tp-field[data-param="${param}"] .sk-tp-choice button')].filter((b) => !b.hidden).map((b) => [b.dataset.value, b.getAttribute('aria-label'), b.getAttribute('aria-pressed')])`);
   const choiceSel = (param, value) => `.sk-tp-field[data-param="${param}"] .sk-tp-choice button[data-value="${value}"]`;
+  // TASK 674: a joint the preview's corners carry is picked there only (no form row): the corner's own picker
+  const cornerChoices = (param) => evalJs(`[...document.querySelectorAll('.sk-tp-corners .sk-tp-corner[data-param="${param}"] button')].filter((b) => !b.hidden).map((b) => [b.dataset.value, b.getAttribute('aria-label'), b.getAttribute('aria-pressed')])`);
+  const cornerSel = (param, value) => `.sk-tp-corners .sk-tp-corner[data-param="${param}"] button[data-value="${value}"]`;
   const openMenu = async () => {
     const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
@@ -83,12 +86,12 @@ await (async () => {
 
     // ================================================================== B. desktop, mouse: the right-angle brace and its three corner pickers
     for (const [k, def, labels] of [['topJoint', 'V-Through', ['Vertical Through Joint', 'Diagonal Through Joint', 'Mitered Joint']], ['blJoint', 'V-Through', ['Vertical Through Joint', 'Horizontal Through Joint', 'Mitered Joint']], ['brJoint', 'H-Through', ['Horizontal Through Joint', 'Diagonal Through Joint', 'Mitered Joint']]]) {
-      assert.deepStrictEqual((await visibleChoices(k)).map((x) => x[0]), [def], `brace ${k}: collapsed, the default`);
-      await press(choiceSel(k, def));
-      assert.deepStrictEqual((await visibleChoices(k)).map((x) => x[1]), labels, `brace ${k}: expanded by a click, frame-calc's options`);
-      await sleep(200); await shot(`brace-${k}-expanded.png`, `.sk-tp-field[data-param="${k}"]`, { pad: 6, scale: 3 });
-      await press(choiceSel(k, 'Miter'));
-      assert.deepStrictEqual(await visibleChoices(k), [['Miter', 'Mitered Joint', 'true']], `brace ${k}: Mitered picked, collapsed`);
+      assert.deepStrictEqual((await cornerChoices(k)).map((x) => x[0]), [def], `brace ${k}: collapsed, the default`);
+      await press(cornerSel(k, def));
+      assert.deepStrictEqual((await cornerChoices(k)).map((x) => x[1]), labels, `brace ${k}: expanded by a click, frame-calc's options`);
+      await sleep(200); await shot(`brace-${k}-expanded.png`, `.sk-tp-corners .sk-tp-corner[data-param="${k}"]`, { pad: 6, scale: 3 });
+      await press(cornerSel(k, 'Miter'));
+      assert.deepStrictEqual(await cornerChoices(k), [['Miter', 'Mitered Joint', 'true']], `brace ${k}: Mitered picked, collapsed`);
     }
     await sleep(300); await shot('start-view-brace-mitered.png', '.sk-tp-panel', { pad: 4 });
     await openIt('brace');
@@ -153,7 +156,7 @@ await (async () => {
       assert.strictEqual(fits, true, `phone ${id}: every box and button inside the screen`);
       const tgt = await evalJs(`[...document.querySelectorAll('.sk-tp-open, .sk-tp-cancel, .sk-tp-choice button:not([hidden])')].map((e) => Math.round(e.getBoundingClientRect().height))`);
       assert.ok(tgt.every((h) => h >= 44), `phone ${id}: Open, Cancel and the glyphs are 44 px tall ` + JSON.stringify(tgt));
-      if (id === 'right-angle-brace') { await press(choiceSel('brJoint', 'H-Through')); assert.strictEqual((await visibleChoices('brJoint')).length, 3, 'phone: a tap expands the bottom-right picker'); await sleep(200); await shot('phone-brace-br-expanded.png', '.sk-tp-field[data-param="brJoint"]', { pad: 6, scale: 2 }); await press(choiceSel('brJoint', 'D-Through')); }
+      if (id === 'right-angle-brace') { await press(cornerSel('brJoint', 'H-Through')); assert.strictEqual((await cornerChoices('brJoint')).length, 3, 'phone: a tap expands the bottom-right picker'); await sleep(200); await shot('phone-brace-br-expanded.png', '.sk-tp-corners .sk-tp-corner[data-param="brJoint"]', { pad: 6, scale: 2 }); await press(cornerSel('brJoint', 'D-Through')); }
       await sleep(300); await shot(`phone-start-${id}.png`);
       await openIt('phone ' + id);
       await waitFor(`window.__designController.state.parameters.length === ${n}`, `phone ${id}: opened with its ${n} user parameters`);

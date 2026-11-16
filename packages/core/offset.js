@@ -75,11 +75,27 @@ const wrapPi = (v) => { let x = mod2pi(v); if (x > Math.PI) x -= TAU; return x; 
 
 /** Default offset distance in WORLD mm: 5 mm, or 1/4" = 6.35 mm for an inch document (the fillet's defaults). */
 export function defaultOffsetDistance(docUnit = 'mm') { return docUnit === 'in' ? 6.35 : 5; }
-/** A typed distance in the document unit (a suffix overrides) -> world mm, or null when it is not a number > 0. */
+// TASK 690 (owner turn 1822, Fusion measured by the advisor, turn 1823): an offset distance is SIGNED. A NEGATIVE distance puts the offset on the
+// OTHER side of its source, at |distance| (Fusion: '-0.5 in' on a 1 cm line offset moves it to y = -1.27 cm; on a circle offset outward the
+// radius shrinks). ONE rule, two readers: the Offset tool's box (offsetSideAndDistance: the side flips, the distance is |value|) and a stored
+// offset DIMENSION, whose value is kept signed as typed (its label and the Parameters table show -5) and read by the solver rows as
+// sides[k] * value (offsetRowValues: the same formula, the sign of the value flips the side). 0 is REFUSED (OFFSET_ZERO_REASON; Fusion accepts it
+// and leaves the offset on its source: owner ruling 1825, we refuse). An offset arc / circle whose radius would reach zero or less (inward by
+// |value| >= its source radius) is REFUSED (offsetValueRefusal; Fusion accepts it and the offset circle disappears: we refuse, the curve would
+// lose its constraints). The FREE distance of an undimensioned offset (task 667, the solver's scalar unknown) stays > 0: undimensionOffset turns
+// a negative value into |value| with every side flipped (the same geometry) when the dimension is deleted, so a drag can never flip it.
+export const OFFSET_ZERO_REASON = 'an offset distance cannot be 0 (a negative distance puts the offset on the other side)';
+/** A typed distance in the document unit (a suffix overrides) -> world mm, SIGNED (task 690), or null when it is not a number or it is 0. */
 export function parseOffsetDistance(str, docUnit = 'mm') {
   const v = parseUnit(str, docUnit);
-  return (v != null && v > 0) ? v : null;
+  return (v != null && Number.isFinite(v) && v !== 0) ? v : null;
 }
+/** THE negative rule of the Offset tool (task 690): a signed distance v on `side` -> { side, d }: a negative v is the other side at |v|. */
+export function offsetSideAndDistance(side, v) {
+  return { side: v < 0 ? -side : side, d: Math.abs(v) };
+}
+/** The radius an offset arc / circle row asks for: source radius R, the piece's stored side sign, the (signed) distance d. ONE formula: the rows and the refusal. */
+export const offsetRadius = (R, sign, d) => R + sign * d;
 
 const isLine = (s) => !!s && s.type === 'line' && Array.isArray(s.joints) && s.joints.length >= 2;
 const isArc = (s) => !!s && s.type === 'arc' && Array.isArray(s.joints) && s.joints.length >= 3 && (!s.subType || s.subType === 'CENTER');
@@ -373,6 +389,51 @@ export function findUndimensionedOffsetPair(constraints, shapeA, shapeB) {
   return null;
 }
 
+/**
+ * THE switch of a dimensioned OFFSET constraint `c` to the free distance (task 667: its dimension deleted, the relation kept). The free distance is
+ * the solver's scalar unknown held > 0 (solver/definitions.js offset.validScalar: a drag never flips it through zero), so a NEGATIVE value (task
+ * 690) becomes |value| with every side flipped: sides[k] * value is unchanged, the geometry does not move.
+ */
+export function undimensionOffset(c) {
+  if (!c || c.type !== CONSTRAINT_TYPES.OFFSET) return false;
+  if (Number(c.value) < 0) {
+    c.value = -c.value;
+    c.sides = (c.sides || []).map((s) => (s < 0 ? 1 : -1)); // a new array: an undo snapshot may hold the old one
+  }
+  c.dimensioned = false;
+  delete c.name;
+  delete c.expression;
+  delete c.isDriven;
+  delete c.driven;
+  delete c.drivenReason;
+  return true;
+}
+
+/**
+ * TASK 690: why the stored offset `c` cannot take the (signed) distance v, or null. 0 (OFFSET_ZERO_REASON), or an offset arc / circle whose radius
+ * (offsetRadius, the rows' formula) would reach zero or less at the source radii in `joints` / `shapes`. The dimension seam asks it (0 before
+ * anything moves; the radius to name the cause when the solve refused the edit). length(v) writes a length (world mm) in the message.
+ */
+export function offsetValueRefusal(c, v, joints, shapes, length = fmt) {
+  if (!(Number(v) !== 0)) return OFFSET_ZERO_REASON;
+  const ps = storedPieces(c, shapes);
+  if (!ps) return null;
+  for (const p of ps) {
+    if (p.src.type === 'line') continue;
+    let R = p.src.radius;
+    if (p.src.type === 'arc') {
+      const C = joints.get(p.src.joints[0]), A = joints.get(p.src.joints[1]);
+      if (!C || !A) continue;
+      R = Math.hypot(A.x - C.x, A.y - C.y);
+    }
+    if (!Number.isFinite(R)) continue;
+    if (!(offsetRadius(R, p.side, Number(v)) > OFFSET_COLLAPSE_TOL)) {
+      return `an offset of ${length(Number(v))} takes the ${p.src.type} of radius ${length(R)} inward by ${length(Math.abs(Number(v)))}: it must stay under ${length(R)}`;
+    }
+  }
+  return null;
+}
+
 /** Re-enable the driving dimension on an undimensioned OFFSET constraint `c` (keeps its current solved distance `c.value`). */
 export function restoreOffsetDimension(state, c) {
   if (!c || c.type !== CONSTRAINT_TYPES.OFFSET) return false;
@@ -455,7 +516,7 @@ export function offsetRowValues(rows, d, pt, radius) {
   const out = [];
   for (const r of rows) {
     if (r.k === 'cen') { const a = pt(r.a), b = pt(r.b); out.push(a.x - b.x, a.y - b.y); continue; }
-    if (r.k === 'rad') { out.push(radius(r.off) - radius(r.src) - r.sign * d); continue; }
+    if (r.k === 'rad') { out.push(radius(r.off) - offsetRadius(radius(r.src), r.sign, d)); continue; }
     const q = pt(r.q);
     if (r.k === 'rl') {
       const p = pt(r.p), a = pt(r.a), b = pt(r.b), ux = b.x - a.x, uy = b.y - a.y, wx = q.x - p.x, wy = q.y - p.y;
@@ -469,7 +530,7 @@ export function offsetRowValues(rows, d, pt, radius) {
       continue;
     }
     const c = pt(r.c);
-    if (r.k === 'na') out.push(Math.hypot(q.x - c.x, q.y - c.y) - radius(r.src) - r.sign * d);
+    if (r.k === 'na') out.push(Math.hypot(q.x - c.x, q.y - c.y) - offsetRadius(radius(r.src), r.sign, d));
     else {
       const p = pt(r.p), ax = p.x - c.x, ay = p.y - c.y, bx = q.x - c.x, by = q.y - c.y;
       out.push(Math.hypot(bx, by) * Math.atan2(ax * by - ay * bx, ax * bx + ay * by));

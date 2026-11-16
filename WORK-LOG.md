@@ -15650,3 +15650,47 @@ The engine and every shared package stay ONE copy in the repo; a site is BUILT f
 - Owner / advisor to do: set sketch-studio's dashboard build command `node scripts/build-site.cjs sketchstudio`, output `dist`; add the 3 sites'
   redirect URIs + JS origins to the OAuth client; set the 3 secrets on the 3 new projects. The repo-root `_redirects` still serves today's one-site
   deploy and becomes unused once the build command is set (delete it then).
+
+## TURN 690 - a NEGATIVE offset value puts the offset on the OTHER side of its source, at |value| (Claude Opus subagent, worktree offset-negative-690)
+- Owner turn 1822; Fusion measured by the advisor (turn 1823). ONE rule, in #core/offset.js (header block above parseOffsetDistance):
+  - parseOffsetDistance is SIGNED (null for 0 / not a number); offsetSideAndDistance(side, v) = the other side at |v| for a negative v.
+  - REPRESENTATION: a stored offset DIMENSION keeps its value SIGNED as typed, its per-piece `sides` unchanged. Why: the solver rows already read
+    `sides[k] * value` (offsetRowValues, unchanged formula; the arc / circle radius part is now the named helper offsetRadius(R, sign, d) = R + sign*d,
+    the same arithmetic), so the sign of the value IS the flip; a parameter expression that evaluates negative (off = -2, or d = -off) flips with no
+    record rewrite; the label and the Parameters table show the signed value like Fusion's parameter (-3.0, fx: -2.0).
+  - The Offset TOOL box: _open.d is the signed box value, _open.side the pointer's side; the preview, the arrow and Enter use
+    offsetSideAndDistance(side, d); applyOffset gets that side and |d|, so a NEW offset dimension holds |d| (5, not -5: its side is the geometry).
+    The arrow drag starts from the offset shown and writes a positive distance (unchanged rule: crossing the source flips the side).
+  - 0 REFUSED (owner ruling 1825): the tool box stays open with "Offset: enter a distance; an offset distance cannot be 0 (a negative distance puts
+    the offset on the other side)."; a dimension edit to 0 is refused before anything moves (dimension-seams.js commitDimensionEdits, beside the
+    angle check), toast "Can't set to 0 - an offset distance cannot be 0 (...). Reverted.", no undo step.
+  - An arc / circle offset inward by |value| >= its source radius is REFUSED: the solve already refused it (collapse rule / no convergence, never a
+    fold); offsetValueRefusal now names the cause on that refusal, read on the restored sketch: "an offset of -12mm takes the arc of radius 10mm
+    inward by 12mm: it must stay under 10mm" (was "-12.00 would collapse an arc to a point" or "conflicts with offset, equal"). It is not a pre-check,
+    so a batch that grows the source radius in the same step is judged by the solve, not by the old radius. The tool box already refused it
+    (offsetChainGeometry "would shrink to radius ...", red preview text).
+  - The UNDIMENSIONED offset (667's scalar unknown, validScalar v > 0) stays apart in ONE place: undimensionOffset (offset.js, now called by
+    delete-manager.js deleteConstraints) turns a negative value into |value| with every side flipped (sides*value unchanged, nothing moves). Only a
+    dimension (typed / parameter) value can be negative; a drag of a free offset still cannot cross zero.
+- Found on main (node, the box's own functions previewDimensionInput -> applyParameterChange): editing an existing offset dimension to -5 / -3 and a
+  parameter to a negative value ALREADY worked (signed sides*value); 0 was ACCEPTED (offset on its source). Only the Offset tool box refused negatives.
+  And deleting a negative offset dimension broke the sketch: value -5 failed validScalar, every solve was rejected (fail-first below).
+- Tests: NEW tests/offset-negative-690.test.js (quick; 88 checks: parse, line / circle in + out / arc / closed rectangle, 0, |v| >= R message and no
+  change, Undo, parameter off = -2 and -off, delete of a negative dimension + drag; and the real SketchStudio app via node-app: tool box -5 / 0 /
+  Enter, dimension box -3 + Ctrl+Z in the box, Parameters table off = -2 + Ctrl+Z). NEW tests/offset-negative-690-live.test.js (Pen Plotter, mouse
+  1600x900 + phone 390x844 touch, resetBufferLive per phase: box -5 -> above, 0 refused, Enter / green check; dimension -3 -> below, label -3.0,
+  Ctrl+Z in the box; Parameters window + Add off = 4 mm, d1 = off, off = -2 mm -> below at 2, table value -2.0; Ctrl+Z / footer Undo -> above at 4).
+- Fail-first on main 02a8f40 (.evidence/690/fail-first-node.txt, fail-first-live.txt): "'-5' parses to -5 (null)", "line: 0 is refused with its
+  message (undefined)", "circle: -12 refused with its message (-12.00 would collapse a circle to a point)", "free: the sketch still solves ...
+  {"converged":false,"rejected":true", "tool: -5 puts the preview on the OTHER side"; live "[mouse] -5: the preview is ABOVE, the other side".
+- Gate: gate:quick 417/417 (8 exclusive DEFERRED by the merge lock; parameters-batch, constraint-audit, coverage-matrix, coverage-properties run
+  directly: pass). Live, each directly: offset-650, offset-box-edge-688, offset-fusion-match-667, offset-line-reverse-656, offset-negative-radius-654,
+  offset-negative-690, fillet-ctrl-z-675c, dimension-naming-677, parameters-canvas, parameters-footer-677, parameters-window-clamp,
+  parameters-window-edit-677, parameters-window: all exit 0.
+- BEHAVIOUR CHANGES for existing users: (1) the Offset tool box takes a negative distance (other side at |v|), its refusal text for 0 / not a number
+  changed; (2) an offset dimension edited to 0 is now refused (was accepted, offset on its source); (3) an offset arc / circle edit that shrinks past
+  the centre is refused with the radius message instead of the collapse / conflict text; (4) deleting a negative offset dimension keeps a working
+  free offset (positive value, sides flipped) instead of a sketch whose every solve is rejected. Not changed: other constraints' sign rules, the
+  arrow drag, the undimensioned drag rule, 688's box placement.
+- Evidence (.evidence/690, local): mouse-/touch-1-box-5-below, -2-box-minus5-above, -3-made-above, -4-dimension-minus3-below (label -3.0),
+  -5-parameter-minus2-below, -6-parameters-window.

@@ -76,7 +76,8 @@ try {
   assert.strictEqual(st.shapes.length, 0, 'clicking star must NOT start a design');
   assert(q('.sk-tp-panel'), 'clicking star keeps the modal open');
   assert.strictEqual(q('.sk-tp-star[data-template="star"]').getAttribute('aria-pressed'), 'true');
-  assert(q('.sk-tp-fav-head') && q('.sk-tp-fav-head').textContent === 'Favourites', 'Favourites heading shown when >= 1 favourite');
+  assert.strictEqual(q('.sk-tp-fav-head'), null, 'task 721: no Favourites heading with favourites');
+  assert.strictEqual(q('.sk-tp-fav-sep'), null, 'task 721: no divider with favourites');
   assert.deepStrictEqual(
     qa('.sk-tp-card').map((c) => c.dataset.template),
     ['blank', 'star', ...bankIds.filter((id) => id !== 'star')],

@@ -386,8 +386,6 @@ function injectStyles() {
 .sk-tp-star:hover svg, .sk-tp-star:focus-visible svg { opacity: 0.9; }
 .sk-tp-star[aria-pressed="true"] { color: #f59e0b; }
 .sk-tp-star[aria-pressed="true"] svg { fill: currentColor; stroke: currentColor; opacity: 1; }
-.sk-tp-fav-head { grid-column: 1 / -1; margin: 2px 0 -4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
-.sk-tp-fav-sep { grid-column: 1 / -1; height: 1px; margin: 2px 0; background: var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
 .sk-tp-prev { aspect-ratio: 4 / 3; width: 100%; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(127,127,127,0.10); color: inherit; overflow: hidden; }
 .sk-tp-prev .sk-tp-svg { width: 100%; height: 100%; display: block; }
 .sk-tp-blank { font-size: 44px; opacity: 0.55; }
@@ -528,14 +526,8 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     const blankCard = card('blank', 'Blank design', 'An empty sketch.', plus);
     blankCard.addEventListener('click', () => finish({ blank: true }));
 
-    // TASK 692: each template card has an independent star toggle button; favourites sit under Blank in starred order.
+    // TASK 692: each template card has an independent star toggle button; favourites follow Blank in starred order.
     let favIds = loadFavouriteIds(templates);
-    const favHeading = document.createElement('div');
-    favHeading.className = 'sk-tp-fav-head';
-    favHeading.textContent = 'Favourites';
-    const favSep = document.createElement('div');
-    favSep.className = 'sk-tp-fav-sep';
-    favSep.setAttribute('aria-hidden', 'true');
 
     const entries = new Map();
     const unbuiltMap = new Map();
@@ -569,11 +561,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
         entry.star.setAttribute('aria-pressed', favSet.has(id) ? 'true' : 'false');
       }
       const nodes = [blankCard];
-      if (favs.length > 0) {
-        nodes.push(favHeading);
-        for (const t of favs) nodes.push(entries.get(t.id).wrap);
-        if (rest.length > 0) nodes.push(favSep);
-      }
+      for (const t of favs) nodes.push(entries.get(t.id).wrap); // TASK 721: one continuous grid, no heading or divider spanning it
       for (const t of rest) nodes.push(entries.get(t.id).wrap);
       grid.replaceChildren(...nodes);
       if (focusEl && focusEl.isConnected && document.activeElement !== focusEl) focusEl.focus();

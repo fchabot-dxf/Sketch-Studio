@@ -106,21 +106,34 @@ export function createMemoryAdapter() {
   };
 }
 
+/**
+ * THE way this module opens an IndexedDB database (`upgrade(db)` creates its stores). TASK 713: while the open is PENDING the page carries an
+ * `unload` listener, which keeps the page out of the browser's back/forward cache. A page left in that moment (a fresh profile: creating the
+ * database takes up to ~1 s) would otherwise be parked there frozen with its open half done; Chromium does not evict it, so every later open
+ * of the database on the origin (every app page, in every app) would wait forever. Now that page is discarded on leave, its open is dropped
+ * and the next page creates the database. The listener is removed as soon as the open settles: a page with an open database is cached as before.
+ */
+function openDatabase(name, version, upgrade) {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') { reject(new Error('indexedDB unavailable')); return; }
+    const keepOutOfBackForwardCache = () => {};
+    globalThis.addEventListener('unload', keepOutOfBackForwardCache);
+    const settled = () => globalThis.removeEventListener('unload', keepOutOfBackForwardCache);
+    const req = indexedDB.open(name, version);
+    req.onupgradeneeded = () => upgrade(req.result);
+    req.onsuccess = () => { settled(); resolve(req.result); };
+    req.onerror = () => { settled(); reject(req.error); };
+  });
+}
+
 const PROJECTS_DB = 'sketch-studio-projects';
 export function createIdbAdapter() {
   let dbp = null;
-  const open = () => dbp || (dbp = new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') { reject(new Error('indexedDB unavailable')); return; }
-    const req = indexedDB.open(PROJECTS_DB, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      db.createObjectStore('projects', { keyPath: 'id' });     // folders
-      db.createObjectStore('designs', { keyPath: 'id' });      // full documents
-      db.createObjectStore('designIndex', { keyPath: 'id' });  // {id,projectId,name,app,updatedAt} only: listing never loads a document
-      db.createObjectStore('meta');
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+  const open = () => dbp || (dbp = openDatabase(PROJECTS_DB, 1, (db) => {
+    db.createObjectStore('projects', { keyPath: 'id' });     // folders
+    db.createObjectStore('designs', { keyPath: 'id' });      // full documents
+    db.createObjectStore('designIndex', { keyPath: 'id' });  // {id,projectId,name,app,updatedAt} only: listing never loads a document
+    db.createObjectStore('meta');
   }));
   const req2p = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   const txDone = (tx) => new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
@@ -203,11 +216,7 @@ export function createIdbAdapter() {
 export async function readLegacySlot() {
   try {
     if (typeof indexedDB === 'undefined') return null;
-    const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open('sketch-studio-documents', 1);
-      req.onupgradeneeded = () => { try { req.result.createObjectStore('kv'); } catch (_) {} };
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
+    const db = await openDatabase('sketch-studio-documents', 1, (d) => { try { d.createObjectStore('kv'); } catch (_) {} });
     return await new Promise((resolve) => {
       const g = db.transaction('kv').objectStore('kv').get('current');
       g.onsuccess = () => resolve(g.result || null); g.onerror = () => resolve(null);

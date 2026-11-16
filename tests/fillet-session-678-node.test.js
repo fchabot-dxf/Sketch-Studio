@@ -5,7 +5,7 @@ import { applyFillet, findCornerAtPoint } from '#core/fillet.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { deleteConstraints } from '#core/delete-manager.js';
 import { previewDimensionInput } from '#core/parameters.js';
-import { applyParameterChange } from '#ui/dimension-seams.js';
+import { applyParameterChange } from '#core/dimension-seams.js';
 import { open } from './helpers/node-app.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 

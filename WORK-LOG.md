@@ -15796,7 +15796,7 @@ Template start view: a value that cannot be drawn now says, in plain words, WHIC
 - Found, not fixed: parallelogram angle within ~5 deg of 90 (and near 0 / 180) and some triangle shapes fail (the Dimension tool reads a side as upright, not aligned); bench seat sweep >= ~179.4 deg; tiny values (0.01 mm) in several templates: these show the generic line (logged). Stair stringer boardWidth < throat and bench seat gap near the slat width build inverted drawings without error (not refused: not asked).
 - Tests: NEW tests/template-errors-703-node.test.js, tests/template-errors-703-live.test.js (desktop + phone 390); updated expected texts in template-recipes-680, template-start-674-node, templates-674, template-polish-693-node/live.
 
-## TURN 706 - PHASE 1 only (inventory): Shaper's Explore stage, every capability and its home after removal; STOPPED before deleting anything: 4 capabilities have no home (Claude Opus subagent, worktree design-only-706)
+## TURN 706 - Shaper's Explore stage removed, everything in Design: phase 1 inventory (4 capabilities had no home, owner ruled), phase 2 removal + one shared show-Design rule + grouped Shaper SVG cuts kept (Claude Opus subagent, worktree design-only-706)
 - Explore = apps/shaper/src/{canvas,tree,inspector,store,svgio}.js + `main.layout` (index.html) + the drawer's "Open SVG" / "Export" (main.js:84-88) + the drop on `#canvas` (main.js:286-310) + the footer Fit (main.js:427) + the tab session's `explore` part (shaper-session.js). Group / ungroup is NOT an Explore capability: `grep -n "group" canvas.js tree.js inspector.js store.js svgio.js` finds nothing; Design's Ctrl+G / Ctrl+Shift+G group shapes (main.js:252-279).
 - HAS A HOME:
   * cut type (inspector.js:51-80, the CUT_TYPES buttons, written as fill / stroke + shaper:cutType) -> Prepare's cut card "Cut type" dropdown (cut-panel.js:42-47, MENU_ORDER cut-panel.js:11: on line, guide, inside, pocket, outside, stock), per target: loop / profile = all types, open chain = on line / guide (shaper.js:118-122 availableTypes).
@@ -15812,7 +15812,67 @@ Template start view: a value that cannot be drawn now says, in plain words, WHIC
 - OTHER APPS: no Explore-like file viewer (Trace's Trace tab is the photo tracer: it imports into Edit, its Design). Imports:
   * Trace: switches to Edit on success (apps/trace/src/app.js:53-57 `if (res.ok) switchTab('edit')`). SketchStudio: one Design stage, but the ☰ "Export…" view hides Design (apps/sketchstudio/main.js:149-157) and createStudioImporter (design-canvas.js:69-73) does not route back: an import from the Export view stays there (read from code, not measured).
   * Pen Plotter: an import does NOT switch to Design. `.evidence/706/probe-penplotter-import.txt`: "import started on toolpath: ok=true shapes 0 -> 4 | stage after: toolpath | #importStatus \"Imported 4 shapes → probe-toolpath @ 1 mm/unit · paper 100×100 mm\" inside #stage-design hidden=true" (and the same from Export). Not changed (DO-NOT: other hosts; ask first): (a) its importDrawing shows Design first (Shaper 705's showDocument rule); (b) keep it: Toolpath / Export draw the design too, but the result line is unseen.
-- Nothing deleted; no code changed. Phase 2 waits for the owner's choice per gap.
+- (Phase 1 stopped here: nothing deleted, no code changed, until the owner chose per gap.)
+- PHASE 2 (owner rulings turn 1886, via the advisor, which accepted both readings in my heads-up): GAP 1 (raw attribute / id editing), GAP 2 (element tree / view as drawn) and GAP 3 (lossless re-save) were DROPPED with Explore by owner ruling. GAP 4 is FIXED. The Pen Plotter and SketchStudio imports that did not land in Design are covered by the "everything in Design" ruling.
+  * Explore removed. Deleted apps/shaper/src/{canvas,tree,inspector,store,svgio}.js. Removed `main.layout`, `#file` and Explore's phone / short-landscape CSS from index.html (705's block keeps its Vcarve / Review rules), and from styles/main.css its layout / tree / inspector / canvas rules plus the --panel / --line / --muted / --accent tokens that nothing else used. Removed from main.js: the module inits, the drawer's Open SVG / Export, the #canvas drop, loadFile, and the footer's Explore fit. `download()` moved unchanged to apps/shaper/src/download.js, because the Shaper SVG export uses it (it was never Explore's).
+  * modes.js: SHAPER_STAGES = design, vcarve, prepare, review (Design is first and the default). resolveInitialMode opens Design when the stored stage is 'explore' or missing; a stored 'simexport' still opens Review, and the page's own duplicate of that mapping was removed. FUSION_HIDDEN_STAGES = design, vcarve: Fusion mode still opens on Prepare and shows Prepare / Review.
+  * shaper-session.js: no `explore` part and no stored() filter. A session stored before this task (with its explore part) still restores Prepare / Vcarve (test E).
+  * ONE shared rule: an optional host hook `showDesign`, declared in two places:
+    - packages/ui/document-buffer.js calls it BEFORE onRestored when the reason is in OPENING_REASONS = new / open / file. OPENING_REASONS moved here from Shaper's modes.js; a new tab counts as 'new'.
+    - packages/ui/sketch-import.js importIntoSketch calls it first, so the fit runs on a canvas that is showing and the status line is seen.
+    Shaper (modes.showDesign: showMode('design') when Design is a stage, so never in Fusion mode), Pen Plotter (sketch-stage.js: navigate('design') when not on Design) and SketchStudio (main.js: route('design') when not on the Design view) declare it. Trace declares nothing. 705's documentOpened / showDocument and its Explore-only rule were dead and are removed.
+  * GAP 4: apps/shaper/src/cut-import.js inheritedCutAttributes(el) reads each attribute (fill, stroke, shaper:*) from the element itself, else from the nearest ancestor <g> (never the root <svg>); extractCutRecord reads through it. The shared walk is untouched: its inheritPaint option only passes down a value that the host's own function computes (Pen Plotter's normalises paint to pen colours), and describeElement never receives that value.
+  * Drop: a file dropped anywhere on the Shaper page now imports into Design (getDropHost = document.body).
+  * Dead code removed: shaper.js SHAPER_FIELDS, applyCutType, setShaperAttr and hasAnyShaperAttr (Explore was their last caller); SHAPER_NS and getShaperAttr are no longer exported (used only inside shaper.js); packages/ui/app-footer.js loses the `{ fit }` view form (Explore's footer Fit was its only user). design-canvas.js shaperBufferOptions afterSidecar() loses its reason argument, which only documentOpened read. Kept: the CUT_TYPES `label` / `desc` fields (declared data; the inspector was their only reader).
+  * Last non-test caller removed (checked by grep after the change): store.js setDoc / select / subscribe / emit, canvas.js init / refit, tree.js init, inspector.js init, svgio.js parseSvg / serializeSvg (all in deleted files); modes.js documentOpened / showDocument (removed); shaper.js applyCutType / setShaperAttr / hasAnyShaperAttr / SHAPER_FIELDS (removed).
+  * NEW tests/design-only-706-node.test.js, 34 checks:
+    - A: the stages, a stored 'explore', Fusion mode.
+    - B: the buffer / importer rule, including that a host that declares nothing gets exactly the calls it got before.
+    - C: Shaper from Prepare / Vcarve / Review, and Pen Plotter from Toolpath / Export.
+    - D: a grouped Shaper export imported again gives every record back equal; an element's own attribute wins over its group's; the root <svg> is not inherited.
+    - E: an old stored session blob.
+    Fail-first: each section run alone on main e7aae72 fails (`.evidence/706/fail-first-node.txt`):
+    - A: "actual: [ 'explore', 'design', 'vcarve', 'prepare', 'review' ]".
+    - B: "the opening reasons ... + []".
+    - C: "Shaper: an import started on prepare lands in Design, shown ... actual: [ 'prepare', 4 ]".
+    - D: "export -> import: every record (type, depth, offset, bit) comes back" (the 6 mm pocket records are missing).
+    - E: "a new capture has no explore part ... actual: [ 'explore', 'prepare', 'vcarveView' ]".
+  * NEW tests/design-only-706-live.test.js:
+    - Desktop 1280 and phone 390 touch: a fresh Shaper and one with a stored 'explore' both open on Design.
+    - A grouped Shaper SVG dropped on Prepare lands in Design, and Prepare's card shows Pocket / Pocket / Outside.
+    - A Pen Plotter import started on Toolpath lands in Design, inside the canvas.
+    - In SketchStudio, an import and a New design started from the Export view both land in Design.
+    - Trace's import from its Trace tab still opens Edit.
+    A soft-check copy of this test run on main (`.evidence/706/before/live-soft-main.txt`) prints "SOFT CHECKS FAILED: 30" (A "actual \"explore\"", B "actual \"prepare\"", C "actual \"toolpath\"", D "actual false"), with no failure for Trace. On the branch (`after/live-soft-branch.txt`): "SOFT CHECKS FAILED: 0".
+  * Tests rewritten or updated, and why:
+    - shaper-stage-open-705-node: rewritten to call showDesign from every stage. 705's "stays in vcarve / prepare / review / design" checks became "shows Design" (owner ruling); Fusion mode still stays.
+    - document-tabs-ui-node G: the Explore SVG checks went with the session part. "+" from Prepare now shows Design; switching back still keeps Prepare.
+    - document-tabs-stages-live: "+" from Prepare / Review / Toolpath now shows Design; each stage's own state checks are unchanged.
+    - shaper-phone-705-live and shaper-phone-import-705-live: start on Design; the template / import is started from Prepare or Review instead of Explore.
+    - fusion-mode-663-node and fusion-mode-663-live: 4 stages, opens on Design, no explore-open / explore-export.
+    - shared-header-live: section b2 loses Explore's Open SVG / Export / Fit; Shaper's phone stage switch now goes to Prepare.
+    - phone-header-live: the shaper-explore host and its menu check are gone.
+    - footer-delete-clear-live: the non-Design stage is now Prepare.
+    - app-sidebar and trace-projects: no explore actions.
+    - review-wiring: the simexport mapping now lives in modes.js resolveInitialMode.
+    - short-viewport-node: Shaper's page has no short-landscape rule now.
+    - shaper-import: imports parseSvgText from #ui/sketch-import.js.
+    - scripts/mobile-audit.mjs: the stage list.
+    - sidecar-on-show-687-live: after "+" in Toolpath the new Untitled now shows Design, so the test goes back to Toolpath before + Pen.
+    No test file tested only Explore, so none was deleted.
+  * Runs: `npm run gate:quick` green, and shell-smoke 13/13. 47 live tests were run one at a time with node (every Shaper / Fusion / 705 / 706 live test, plus each live test that touches import, new / "+" tabs, templates, Toolpath / Export or SketchStudio's Export view): `.evidence/706/live-results.txt` has 44 "exit=0" on the first pass (47 files). fusion-mode-663-live failed once on the 5-tab wait; it was fixed (4 tabs) and then passed. sidecar-on-show-687-live failed once on the new-tab rule; it was updated and then passed. fusion-polish-665-live is FLAKY ON MAIN TOO: origin/main sources passed 2 of 7 runs and the branch 1 of 9 (`.evidence/706/flake-665.txt`). The cause is in the test: when it leaves the Fusion page before that page's open-tabs buffer write lands, the normal page restores an empty Untitled ({"shapes":0}). It passes when the Fusion page gets 2.5 s before navigation. Not fixed (not this task).
+  * Behaviour changes for existing users:
+    1. Shaper has no Explore stage: no SVG file viewer, element tree, attribute / id inspector, Open SVG or edited.svg Export (owner ruling). It opens on Design, also when 'explore' was the stored stage.
+    2. Shaper: a file dropped anywhere on the page imports into Design. Before, a drop worked only on the Design view, and a drop on Explore's canvas opened the file in Explore.
+    3. Shaper: an import, a new design or new tab, Open or Open from file started on Vcarve / Prepare / Review now shows Design. Under 705 the stage stayed.
+    4. Pen Plotter: the same from Toolpath / Export. Before, the stage stayed and the import's result line was hidden in the Design panel.
+    5. SketchStudio: the same from its Export view. Before, it stayed in the Export form.
+    6. Shaper import: an element with no fill / stroke / shaper:* of its own takes its nearest <g>'s. A grouped Shaper SVG therefore keeps its cuts, and any SVG whose cut colour (black / grey / white+black / blue) is set on a group now gets that cut record, as the Origin reads the drawn colour.
+    7. A tab switch, the page's restore and a Drive conflict reload keep the stage in every app. Trace is unchanged: its import still opens Edit, and the before / after E screenshots are md5-identical (f209c1daa568c6cf86619d85c0a02a05).
+  * FOUND, not fixed:
+    - Probe B on the Fusion fixture (`.evidence/706/probe-reimport-after.txt`) now gets "new cut-plan records 8" back (was 3). Every original type and depth comes back. The extra records are the two inside cuts that the EXPORTER adds for the holes of the outside loop, and some records change kind (loop -> profile) because the export writes overlapping compound paths. So "identical: false" there comes from the exporter's semantics, not from the import.
+    - apps/shaper/README.md still describes the old "SVG Editor" intent.
+    - Nothing references apps/shaper/samples/ (Explore's sample SVGs) any more.
 ## TURN 708
 The repo-root `_redirects` is deleted: since the owner set sketch-studio's build command to `node scripts/build-site.cjs sketchstudio` (output `dist`, turn 1893), every site serves the `_redirects` that build-site.cjs writes into its own dist (TASK 696/704). Advisor-verified on the live site after the change: /shaper -> 302 https://shaper-svg.pages.dev/apps/shaper/, /shaper?host=fusion -> 302 ...?host=fusion, /penplotter -> 302 https://penplotter.pages.dev/apps/penplotter/, /trace -> 302 https://sketch-trace.pages.dev/apps/trace/, / -> 302 /apps/sketchstudio/. No code reads the root file (git grep: only build-site.cjs writes its own per-site copy).
 

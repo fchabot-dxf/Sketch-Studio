@@ -17,12 +17,22 @@
 // ON-CANVAS INLINE BOXES (task 662): beside the rectangular drag arrow (#ui/drag-arrow-handle.js) being dragged, focused, or last touched,
 // a compact floating Distance + Quantity (spinner) pair bound to the SAME value state as the dialog.
 // EDIT (afterwards): double-click / double-tap the pattern's label (svg-renderer draws it): the same dialog on the stored pattern.
+// TASK 694 (Fusion: the values are model parameters d<n>): the value boxes (Quantity, Angle, Distance 1 / 2, the inline pair) take what a
+// dimension box takes: a number, a formula, a parameter name, `name = value` (it names the value), through the dimension box's own path
+// (#core/parameters.js previewDimensionInput on the pattern value, committed by #core/dimension-seams.js applyParameterChange); a box shows its
+// formula when one drives it; the refusal (the parser's, the pattern rule's) is the box's message. Spinners, the drag arrows and the
+// distribution switches set plain numbers (editPatternValues: the formula is replaced, readers of the name follow). Ctrl/Cmd+Z in a value box
+// restores its opening text (task 675 C).
 import { TOOL_MODES, CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from '#core/constants.js';
 import {
-  applyPattern, editPattern, patternDefaults, patternObjectsOf, patternSlots, patternSlotGeometry, patternHandles,
+  applyPattern, patternDefaults, patternObjectsOf, patternSlots, patternSlotGeometry, patternHandles,
   patternDistanceFor, patternInstanceOf, patternDirectionPick, patternSourceMiddle, isPatternConstraint,
-  PATTERN_UNDO_LABEL, CIRCULAR_ANGLE_REFUSAL, circularAngleRefusal,
+  PATTERN_UNDO_LABEL,
 } from '#core/pattern.js';
+import { patternSlot, patternSlotValue, patternSlotChanges, patternValuesIn } from '#core/pattern-values.js';
+import { previewDimensionInput, entryExpression, namePatternValues } from '#core/parameters.js';
+import { applyParameterChange, dimensionInputLabel, editPatternValues, patternPlanRefusal, refusalReason } from '#core/dimension-seams.js';
+import { handleBoxUndoKey } from '#ui/numeric-input-manager.js';
 import { inertEntities, isJointInert, activeSketchPick, inActiveSketch } from '#core/sketch-model.js';
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit, parse as parseUnit } from '#core/units.js';
@@ -105,7 +115,7 @@ function beginPattern(state, tool) {
   // Task 662: Rectangular Pattern's Distribution defaults to Fusion's Extent ('total' in the stored record so saved files stay identical).
   const values = { ...patternDefaults(kind.type, docUnit()), ...(kind.type === T.RECTANGULAR_PATTERN ? { distanceType: 'total' } : {}) };
   _s = { kind, state, svg: _host.canvas(), mode: 'create', step: 'objects', values, c: null, before: state.captureUndoSnapshot(), stepTaken: false,
-    suppressOn: false, drag: null, hover: null, activeDir: null, inline: null };
+    suppressOn: false, drag: null, hover: null, activeDir: null, inline: null, pending: {} };
   state.pattern = { step: 'objects' };
   listenHistory();
   openDialog();
@@ -120,7 +130,7 @@ export function editPatternFromLabel(svg, state, c) {
   cancelSession();
   const kind = kindOfType(c.type);
   _s = { kind, state, svg, mode: 'edit', step: 'values', values: valuesOf(c), c, before: state.captureUndoSnapshot(), stepTaken: false,
-    suppressOn: c.suppressed.length > 0, drag: null, hover: null, activeDir: null, inline: null };
+    suppressOn: c.suppressed.length > 0, drag: null, hover: null, activeDir: null, inline: null, pending: {} };
   state.pattern = { step: 'values' };
   listenHistory();
   openDialog();
@@ -213,6 +223,13 @@ function create(objects) {
   if (!res.ok) { showNotification(`${kind.title}: ${res.reason}.`, 'warning', HINT_MS); return false; }
   _s.c = res.constraint;
   takeStep();
+  // TASK 694: a formula / name typed into a value box before the pattern existed is given to its value now (its number is already in)
+  for (const [slot, text] of Object.entries(_s.pending)) {
+    const pv = previewDimensionInput(state, _s.c, text, { unit: docUnit(), slot });
+    const r = pv.ok ? applyParameterChange(state, pv.plan, dimensionInputLabel(_s.c, pv), { snapshot: false }) : pv;
+    if (!r.ok) showNotification(`${kind.title}: ${pv.ok ? refusalReason(r) : pv.hint}.`, 'warning', HINT_MS);
+  }
+  _s.pending = {};
   state.selectedShapes.clear(); state.selectedJoints.clear();
   for (const id of res.constraint.sources.shapes) state.selectedShapes.add(id);
   for (const id of objects.joints) state.selectedJoints.add(id);
@@ -225,10 +242,14 @@ function takeStep() {
   try { _s.state.saveStateForce(PATTERN_UNDO_LABEL[_s.kind.type], _s.before); } finally { _committing = false; }
   _s.stepTaken = true;
 }
-// a live change of the pattern (a value, a re-pick, a suppression): through #core/pattern.js editPattern (its ONE regenerate path)
+// a live change of the pattern (a value, a re-pick, a suppression): through #core/dimension-seams.js editPatternValues (a changed value is set
+// through the parameter model; #core/pattern.js editPattern is its ONE regenerate path)
 function liveEdit(changes) {
-  if (!_s.c) { Object.assign(_s.values, changes); refresh(); return true; }
-  const res = editPattern(_s.state, _s.c, changes);
+  if (!_s.c) {
+    for (const slot of Object.keys(patternValuesIn(currentRec(), changes).values)) delete _s.pending[slot]; // a number replaces a typed formula
+    Object.assign(_s.values, changes); refresh(); return true;
+  }
+  const res = editPatternValues(_s.state, _s.c, changes, { unit: docUnit(), label: PATTERN_UNDO_LABEL[_s.kind.type] });
   if (!res.ok) { showNotification(`${_s.kind.title}: ${res.reason}.`, 'warning', HINT_MS); refresh(); return false; }
   Object.assign(_s.values, valuesOf(_s.c));
   takeStep();
@@ -240,7 +261,8 @@ function liveEdit(changes) {
 
 function currentRec() { return _s.c || { ..._s.values, type: _s.kind.type }; }
 
-function setQuantityValue(k, n, sourceEl = null) {
+// a spinner step / an arrow key: a whole number (the box's formula, if any, is replaced)
+function setQuantityValue(k, n) {
   const min = k == null ? 2 : 1;
   if (n == null || !Number.isInteger(n) || n < min) return false;
   let ok;
@@ -250,7 +272,7 @@ function setQuantityValue(k, n, sourceEl = null) {
     quantity[k] = n;
     ok = liveEdit({ quantity });
   }
-  if (ok) syncQuantityInputs(k, sourceEl);
+  if (ok) syncInputs(null, [k == null ? 'quantity' : `quantity${k + 1}`]);
   return ok;
 }
 
@@ -262,7 +284,7 @@ function stepQuantity(k, delta) {
   const cur = k == null ? rec.quantity : rec.quantity[k];
   const next = Math.max(min, cur + delta);
   if (next === cur) return;
-  const ok = setQuantityValue(k, next, null);
+  const ok = setQuantityValue(k, next);
   const invalidEl = k == null ? _s.els.quantity[0] : _s.els.quantity[k];
   if (ok) {
     if (invalidEl) invalidEl.setAttribute('aria-invalid', 'false');
@@ -270,34 +292,56 @@ function stepQuantity(k, delta) {
   }
 }
 
-function setDistanceValue(k, textVal, sourceEl = null) {
-  const n = parseUnit(textVal, docUnit());
-  if (!(n > 0)) return false;
-  const cur = currentRec().distance;
-  const distance = cur.slice();
-  distance[k] = (Math.sign(cur[k]) || 1) * n;
-  const ok = liveEdit({ distance });
-  if (ok) syncDistanceInputs(k, sourceEl);
-  return ok;
-}
-
-function syncQuantityInputs(k, skipEl = null) {
-  if (!_s || !_s.els) return;
-  const rec = currentRec();
-  const val = fmtNum(k == null ? rec.quantity : rec.quantity[k]);
-  const dlgEl = k == null ? _s.els.quantity[0] : _s.els.quantity[k];
-  if (dlgEl && dlgEl !== skipEl) { dlgEl.value = val; dlgEl.setAttribute('aria-invalid', 'false'); }
-  if (_s.inline && _s.activeDir === k && _s.inline.qty !== skipEl) {
-    _s.inline.qty.value = val; _s.inline.qty.setAttribute('aria-invalid', 'false');
+// THE text of a value box (task 694): the dimension box's path, previewDimensionInput on the pattern value `slot`, committed by applyParameterChange
+// (the session holds the one undo step). Before the pattern exists (a circular pattern's centre not picked yet) the text is planned on the
+// pattern as it will be made (its values named as applyPattern will name them): its number goes into the values, a formula / name waits in
+// `pending` for create(). The box gets aria-invalid and `_why` (its message) when refused. -> true when applied.
+function setSlotText(slot, text, el) {
+  const { state } = _s, unit = docUnit();
+  let why = null;
+  if (!_s.c) {
+    const draft = { ...currentRec() };
+    namePatternValues(state.constraints, draft);
+    const pv = previewDimensionInput({ parameters: state.parameters, constraints: [...state.constraints, draft] }, draft, text, { unit, slot });
+    const bad = pv.ok ? patternPlanRefusal(pv.plan) : null;
+    why = !pv.ok ? (pv.hint || 'type a value') : bad ? bad.message : null;
+    if (!why) {
+      Object.assign(_s.values, patternSlotChanges(draft, { [slot]: pv.value }));
+      const mine = pv.plan.edits.find((e) => e.c === draft && e.slot === slot);
+      if (pv.kind !== 'value' || (mine && mine.expression)) _s.pending[slot] = text; else delete _s.pending[slot];
+    }
+  } else {
+    const pv = previewDimensionInput(state, _s.c, text, { unit, slot });
+    const res = pv.ok ? applyParameterChange(state, pv.plan, dimensionInputLabel(_s.c, pv), { snapshot: false }) : null;
+    why = !pv.ok ? (pv.hint || 'type a value') : !res.ok ? refusalReason(res) : null;
+    if (!why) { Object.assign(_s.values, valuesOf(_s.c)); takeStep(); }
   }
+  if (el) { el._why = why; el.setAttribute('aria-invalid', why ? 'true' : 'false'); }
+  if (why) return false;
+  syncInputs(el, [slot]);
+  refresh();
+  return true;
 }
-
-function syncDistanceInputs(k, skipEl = null) {
-  if (!_s || !_s.els || !_s.els.distance) return;
-  const val = fmtLen(Math.abs(currentRec().distance[k]));
-  const set = (el) => { if (el && el !== skipEl) { el.value = val; el.setAttribute('aria-invalid', 'false'); } };
-  set(_s.els.distance[k]);
-  if (_s.inline && _s.activeDir === k) set(_s.inline.dist);
+// what a value box shows: the formula that drives the value (or the one typed before the pattern existed), else its number with its unit
+function slotText(slot) {
+  const rec = currentRec();
+  const ex = _s.c ? entryExpression({ c: _s.c, slot }) : (_s.pending[slot] || null);
+  if (ex) return ex;
+  const kind = patternSlot(rec, slot).kind, v = patternSlotValue(rec, slot);
+  return kind === 'count' ? fmtNum(v) : kind === 'angle' ? fmtAngle(v) : fmtLen(v);
+}
+// the inline pair's values are those of the active direction
+const inlineSlot = (field) => (_s && _s.activeDir != null ? `${field}${_s.activeDir + 1}` : null);
+// every value box (the dialog's and the inline pair) shows its value again, but `skipEl` (the box being typed in) and a refused box (its text and
+// message stay until it is fixed) unless its value is one of `changed` (a spinner / an arrow drag set it)
+function syncInputs(skipEl = null, changed = []) {
+  if (!_s || !_s.els) return;
+  const boxes = [...(_s.els.quantity || []), ...(_s.els.distance || []), _s.els.angle].filter(Boolean).map((el) => [el, el.dataset.slot]);
+  if (_s.inline && _s.activeDir != null) boxes.push([_s.inline.dist, inlineSlot('distance')], [_s.inline.qty, inlineSlot('quantity')]);
+  for (const [el, slot] of boxes) {
+    if (!el || el === skipEl || !slot || (el.getAttribute('aria-invalid') === 'true' && !changed.includes(slot))) continue;
+    el.value = slotText(slot); el._why = null; el.setAttribute('aria-invalid', 'false');
+  }
 }
 
 // ---- canvas picks ------------------------------------------------------------------------------------------------------------
@@ -398,7 +442,7 @@ function dragTo(svg, e) {
   const unit = docUnit(), text = fmtLen(value), v = parseUnit(text, unit);
   if (!(v > 0)) return;
   const dist = c.distance.slice(); dist[k] = sign * v;
-  if (liveEdit({ distance: dist })) syncDistanceInputs(k);
+  if (liveEdit({ distance: dist })) syncInputs(null, [`distance${k + 1}`]);
 }
 // the suppressed slot whose dashed ghost is under the pointer (its key), or null
 function ghostAt(svg, e) {
@@ -500,8 +544,6 @@ const isPhone = () => typeof window !== 'undefined' && window.innerWidth <= PHON
 const fmtLen = (v) => { const u = docUnit(); return formatUnit(v, u, { unit: true, decimals: u === 'in' ? 3 : 2 }); };
 const fmtAngle = (v) => `${fmtNum(v)} deg`;
 const fmtNum = (v) => String(Number(Number(v).toFixed(4)));
-function parseAngle(text) { const m = /^\s*([+-]?(?:\d+\.?\d*|\.\d+))\s*(deg|°)?\s*$/i.exec(String(text)); return m ? parseFloat(m[1]) : null; }
-function parseCount(text) { const m = /^\s*(\d+)\s*$/.exec(String(text)); return m ? parseInt(m[1], 10) : null; }
 
 function openDialog() {
   injectStyles();
@@ -543,12 +585,14 @@ function fitHeight() {
   if (phone && box) el.style.top = Math.max(0, Math.round(box.bottom - need)) + 'px';
 }
 
-function wireFieldKeys(input, onEnterInvalid, onCommitFormat = null) {
+// `reapply` (a value box, task 694): Ctrl/Cmd+Z restores the box's opening text (`_open`) in one step and applies it (task 675 C)
+function wireFieldKeys(input, onEnterInvalid, onCommitFormat = null, reapply = null) {
   if (onCommitFormat) input.addEventListener('blur', () => {
     if (_s && input.getAttribute('aria-invalid') !== 'true') onCommitFormat();
   });
   input.addEventListener('keydown', (ev) => {
     ev.stopPropagation();
+    if (reapply && handleBoxUndoKey(ev, input, input._open, () => reapply(input.value))) return;
     if (ev.key === 'Enter') {
       ev.preventDefault();
       if (input.getAttribute('aria-invalid') !== 'true') {
@@ -562,19 +606,19 @@ function wireFieldKeys(input, onEnterInvalid, onCommitFormat = null) {
   });
 }
 
-function createSpinner(fieldName, value, k, onInput, onFocus) {
+function createSpinner(fieldName, slot, k, onFocus) {
   const wrap = document.createElement('div');
   wrap.className = 'sk-pat-spin';
   const i = document.createElement('input');
-  i.type = 'text'; i.inputMode = 'numeric'; i.value = value;
-  i.setAttribute('aria-label', fieldName); i.dataset.field = fieldName;
+  i.type = 'text'; i.value = slotText(slot); i._open = i.value;
+  i.setAttribute('aria-label', fieldName); i.dataset.field = fieldName; i.dataset.slot = slot;
   i.addEventListener('focus', () => { ensureValuesStep(); if (onFocus) onFocus(); });
-  i.addEventListener('input', () => { const ok = onInput(i.value, i); i.setAttribute('aria-invalid', ok ? 'false' : 'true'); });
+  i.addEventListener('input', () => setSlotText(slot, i.value, i));
   i.addEventListener('keydown', (ev) => {
     if (ev.key === 'ArrowUp') { ev.preventDefault(); stepQuantity(k, 1); }
     else if (ev.key === 'ArrowDown') { ev.preventDefault(); stepQuantity(k, -1); }
   });
-  wireFieldKeys(i, () => invalidText(i));
+  wireFieldKeys(i, () => invalidText(i), null, (text) => setSlotText(slot, text, i));
   const btns = document.createElement('div'); btns.className = 'sk-pat-spin-btns';
   const mkBtn = (dir, cls, svg, lbl) => {
     const b = document.createElement('button');
@@ -641,12 +685,13 @@ function buildForm(body) {
     i.addEventListener('change', () => onChange(i.checked));
     return i;
   };
-  const makeText = (name, value, onValue, onFocus, onCommitFormat = null) => {
+  // a value box (task 694): its text goes through setSlotText; leaving it (or Enter) shows its stored text again (the canonical formula / number)
+  const makeValueText = (name, slot, onFocus) => {
     const i = document.createElement('input');
-    i.type = 'text'; i.value = value; i.setAttribute('aria-label', name); i.dataset.field = name;
+    i.type = 'text'; i.value = slotText(slot); i._open = i.value; i.setAttribute('aria-label', name); i.dataset.field = name; i.dataset.slot = slot;
     i.addEventListener('focus', () => { ensureValuesStep(); if (onFocus) onFocus(); });
-    i.addEventListener('input', () => { const ok = onValue(i.value, i); i.setAttribute('aria-invalid', ok ? 'false' : 'true'); });
-    wireFieldKeys(i, () => invalidText(i), onCommitFormat);
+    i.addEventListener('input', () => setSlotText(slot, i.value, i));
+    wireFieldKeys(i, () => invalidText(i), () => { if (_s) i.value = slotText(slot); }, (text) => setSlotText(slot, text, i));
     return i;
   };
 
@@ -674,7 +719,7 @@ function buildForm(body) {
       else if (v === 'angle') liveEdit({ symmetric: false });
       else liveEdit({ symmetric: true });
       if (els.angleRow) els.angleRow.hidden = v === 'full';
-      if (v !== 'full' && els.angle) { els.angle.value = fmtAngle(currentRec().angle); els.angle.setAttribute('aria-invalid', 'false'); }
+      if (v !== 'full' && els.angle) { els.angle.value = slotText('angle'); els.angle._why = null; els.angle.setAttribute('aria-invalid', 'false'); }
       fitHeight();
     });
     addRow('Distribution', els.distribution);
@@ -682,17 +727,11 @@ function buildForm(body) {
     els.suppress = makeCheck('Suppression', _s.suppressOn, (on) => { _s.suppressOn = on; renderOverlay(); refreshForm(); });
     addRow('Suppression', els.suppress);
 
-    const qSpin = createSpinner('Quantity', fmtNum(_s.values.quantity), null, (v, el) => {
-      const n = parseCount(v);
-      return setQuantityValue(null, n, el);
-    });
+    const qSpin = createSpinner('Quantity', 'quantity', null);
     els.quantity = [qSpin.input];
     addRow('Quantity', qSpin.wrap);
 
-    const a = makeText('Angle', fmtAngle(_s.values.angle), (v) => {
-      const n = parseAngle(v);
-      return n != null && !circularAngleRefusal(n) && liveEdit({ angle: n });
-    }, null, () => { if (_s && els.angle) els.angle.value = fmtAngle(currentRec().angle); });
+    const a = makeValueText('Angle', 'angle', null);
     els.angle = a;
     els.angleRow = addRow('Angle', a);
     els.angleRow.hidden = initDist === 'full';
@@ -708,11 +747,9 @@ function buildForm(body) {
 
     els.distribution = makeSelect('Distribution', [['total', 'Extent'], ['spacing', 'Spacing']], _s.values.distanceType, (v) => {
       const rec = currentRec();
-      const distance = [0, 1].map((k) => patternDistanceFor(rec, k, v)); // switching keeps the copies where they are
-      if (liveEdit({ distanceType: v, distance })) {
-        syncDistanceInputs(0);
-        syncDistanceInputs(1);
-      }
+      // switching keeps the copies where they are; a distance a formula drives keeps its formula (task 694), so its copies move
+      const distance = [0, 1].map((k) => (_s.c && entryExpression({ c: _s.c, slot: `distance${k + 1}` }) ? rec.distance[k] : patternDistanceFor(rec, k, v)));
+      if (liveEdit({ distanceType: v, distance })) syncInputs(null, ['distance1', 'distance2']);
     });
     addRow('Distribution', els.distribution);
 
@@ -725,14 +762,11 @@ function buildForm(body) {
       const activateDir = () => {
         if (_s && _s.c && _s.c.quantity[k] >= 2) { _s.activeDir = k; renderOverlay(); }
       };
-      const qSpin = createSpinner(`Quantity ${k + 1}`, fmtNum(_s.values.quantity[k]), k, (v, el) => {
-        const n = parseCount(v);
-        return setQuantityValue(k, n, el);
-      }, activateDir);
+      const qSpin = createSpinner(`Quantity ${k + 1}`, `quantity${k + 1}`, k, activateDir);
       els.quantity.push(qSpin.input);
       addRow('Quantity', qSpin.wrap);
 
-      const d = makeText(`Distance ${k + 1}`, fmtLen(Math.abs(_s.values.distance[k])), (v, el) => setDistanceValue(k, v, el), activateDir, () => syncDistanceInputs(k));
+      const d = makeValueText(`Distance ${k + 1}`, `distance${k + 1}`, activateDir);
       els.distance.push(d);
       addRow('Distance', d);
 
@@ -766,11 +800,9 @@ function buildForm(body) {
   _s.els = els;
 }
 
+// why a value box is refused (task 694: the message of its last refusal: the parser's or the pattern rule's)
 function invalidText(i) {
-  const f = i.dataset.field || 'the value';
-  if (/^Quantity/.test(f)) return `${f.toLowerCase()} must be a whole number of ${f === 'Quantity' ? 2 : 1} or more`;
-  if (f === 'Angle' || f === 'Total angle') return CIRCULAR_ANGLE_REFUSAL;
-  return `${f.toLowerCase()} must be a number greater than 0`;
+  return i._why || `${(i.dataset.field || 'the value').toLowerCase()} cannot be used`;
 }
 
 // ---- on-canvas inline Distance + Quantity boxes --------------------------------------------------------------------------------
@@ -784,33 +816,29 @@ function buildInlineBox() {
   const dist = document.createElement('input');
   dist.type = 'text'; dist.className = 'sk-pat-inline-dist';
   dist.setAttribute('aria-label', 'Inline distance'); dist.dataset.inlineField = 'distance';
-  dist.addEventListener('input', () => {
+  // the inline pair: the active direction's value boxes (the same setSlotText); a refusal marks the dialog's box of that value too
+  const inlineInput = (el, field) => {
     if (!_s || _s.activeDir == null) return;
-    const k = _s.activeDir;
-    const ok = setDistanceValue(k, dist.value, dist);
-    dist.setAttribute('aria-invalid', ok ? 'false' : 'true');
-    if (_s.els.distance && _s.els.distance[k]) _s.els.distance[k].setAttribute('aria-invalid', ok ? 'false' : 'true');
-  });
-  wireFieldKeys(dist, () => 'distance must be a number greater than 0', () => { if (_s && _s.activeDir != null) syncDistanceInputs(_s.activeDir); });
+    const ok = setSlotText(inlineSlot(field), el.value, el);
+    const twin = (_s.els[field] || [])[_s.activeDir];
+    if (twin) { twin._why = el._why; twin.setAttribute('aria-invalid', ok ? 'false' : 'true'); }
+  };
+  dist.addEventListener('input', () => inlineInput(dist, 'distance'));
+  wireFieldKeys(dist, () => invalidText(dist), () => { if (_s && _s.activeDir != null) dist.value = slotText(inlineSlot('distance')); },
+    () => inlineInput(dist, 'distance'));
 
   const spinWrap = document.createElement('div');
   spinWrap.className = 'sk-pat-spin sk-pat-inline-spin';
   const qty = document.createElement('input');
-  qty.type = 'text'; qty.inputMode = 'numeric';
+  qty.type = 'text'; // no numeric keypad: the box takes a formula / a parameter name too (task 694)
   qty.setAttribute('aria-label', 'Inline quantity'); qty.dataset.inlineField = 'quantity';
-  qty.addEventListener('input', () => {
-    if (!_s || _s.activeDir == null) return;
-    const k = _s.activeDir;
-    const ok = setQuantityValue(k, parseCount(qty.value), qty);
-    qty.setAttribute('aria-invalid', ok ? 'false' : 'true');
-    if (_s.els.quantity && _s.els.quantity[k]) _s.els.quantity[k].setAttribute('aria-invalid', ok ? 'false' : 'true');
-  });
+  qty.addEventListener('input', () => inlineInput(qty, 'quantity'));
   qty.addEventListener('keydown', (ev) => {
     if (!_s || _s.activeDir == null) return;
     if (ev.key === 'ArrowUp') { ev.preventDefault(); stepQuantity(_s.activeDir, 1); }
     else if (ev.key === 'ArrowDown') { ev.preventDefault(); stepQuantity(_s.activeDir, -1); }
   });
-  wireFieldKeys(qty, () => `quantity ${_s.activeDir + 1} must be a whole number of 1 or more`);
+  wireFieldKeys(qty, () => invalidText(qty), null, () => inlineInput(qty, 'quantity'));
 
   const btns = document.createElement('div'); btns.className = 'sk-pat-spin-btns';
   const mkSpin = (dir, cls, svg, lbl) => {
@@ -839,9 +867,11 @@ function placeInline() {
   if (!h) { root.hidden = true; return; }
 
   root.hidden = false;
-  root.dataset.dir = String(k);
-  syncDistanceInputs(k, document.activeElement);
-  syncQuantityInputs(k, document.activeElement);
+  if (root.dataset.dir !== String(k)) { // another direction: the pair's opening texts (Ctrl/Cmd+Z) are this direction's
+    root.dataset.dir = String(k);
+    dist._open = slotText(inlineSlot('distance')); qty._open = slotText(inlineSlot('quantity'));
+  }
+  syncInputs(document.activeElement);
 
   const px = getZoomFactor(_s.svg);
   const ap = worldToScreen(_s.svg, arrowPoint(h, px));

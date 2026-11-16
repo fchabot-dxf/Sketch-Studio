@@ -15,7 +15,9 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { solveGivingWay } from '#core/creation-placement.js';
 import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
 import { projectDimLabel } from '#core/dim-label.js';
-import { replaceParameters, usersOf } from '#core/parameters.js';
+import { replaceParameters, usersOf, planChange, entryName, entryValue, writeEntry } from '#core/parameters.js';
+import { editPatterns, patternValuesRefusal } from '#core/pattern.js';
+import { patternSlotChanges, patternValuesIn, patternValueSlots } from '#core/pattern-values.js';
 import { format as formatUnit } from '#core/units.js';
 import { docUnit } from '#core/settings-manager.js';
 
@@ -31,8 +33,13 @@ export function dimensionEditLabel(c, val) {
 }
 // TASK 677: the history label of a text typed into a dimension (`pv` = previewDimensionInput's result). ONE definition shared by the canvas box
 // and the Parameters window's Expression cell.
+// (TASK 694: pv.own = the edited entry's name, a pattern value's included; its old value is the plan's edit's own.)
 export function dimensionInputLabel(c, pv) {
-  return pv.kind === 'name' ? `name dimension ${c.name} -> ${pv.name}` : pv.kind === 'set' ? `change parameter ${pv.name}` : dimensionEditLabel(c, pv.value);
+  const own = pv.own || c.name;
+  if (pv.kind === 'name') return `name dimension ${own} -> ${pv.name}`;
+  if (pv.kind === 'set') return `change parameter ${pv.name}`;
+  const mine = pv.plan && pv.plan.edits.find((e) => e.name === own);
+  return dimensionEditLabel(mine ? { value: entryValue(mine) } : c, pv.value);
 }
 
 // Commit a numeric edit to a DRIVING dimension's value: the ONE-ELEMENT case of commitDimensionEdits (TASK 535 slice 2), no second path.
@@ -182,16 +189,31 @@ export function commitDimensionEdits(state, edits, opts = {}) {
 // opts.snapshot === false: take NO undo snapshot here (the caller already holds the one that covers this edit: the FIRST value of a just-placed
 // dimension is covered by its birth snapshot, so placing + typing stays ONE undo step); a refusal then has nothing to drop.
 // Returns { ok:true } | { ok:false, reverted:true, clash, reason, culprit } | the refused plan itself ({ ok:false, code, message }; nothing was touched).
+// TASK 694: an edit of a PATTERN value (edit.slot) regenerates its pattern through #core/pattern.js editPatterns (the ONE regenerate, its ONE
+// validity rule patternValuesRefusal: checked first, patternPlanRefusal), all patterns at once, BEFORE the dimension batch; a refusal of either
+// puts both back. opts.patternChanges: Map(pattern -> other record changes made in the same step (a pattern dialog's distribution switch)).
 export function applyParameterChange(state, plan, label = 'change parameter', opts = {}) {
   if (!plan || !plan.ok) return plan || { ok: false, code: 'SYNTAX', message: 'no plan' };
+  const bad = patternPlanRefusal(plan, opts.patternChanges);
+  if (bad) return { ok: false, reverted: true, clash: '', reason: bad.message, culprit: { index: -1, name: bad.node, reason: bad.message } };
   const saved = opts.snapshot !== false && typeof state.saveState === 'function';
   // saveState drops the OLDEST entry when the history is at its cap and clears the redo branch: a refused change must lose neither
   const evicted = saved && state.history && state.history.length >= state.maxHistory ? state.history[0] : null;
   const redo = saved && state.redoStack ? [...state.redoStack] : null;
   if (saved) state.saveState(label);
   const length = saved && state.history ? state.history.length : -1; // discardSnapshotAt pops the newest entry only if the history is still this long
-  const moves = plan.edits.filter(e => e.value !== e.c.value).map(e => ({ c: e.c, value: e.value, name: e.name }));
-  const res = commitDimensionEdits(state, moves, { refuseReference: true });
+  const moved = plan.edits.filter(e => e.value !== entryValue(e));
+  const moves = moved.filter(e => !e.slot).map(e => ({ c: e.c, value: e.value, name: e.name }));
+  const patterns = patternEditsOf(moved, opts.patternChanges);
+  const pat = patterns.length ? editPatterns(state, patterns.map(({ c, changes }) => ({ c, changes }))) : { ok: true, restore: () => {} };
+  let res;
+  if (!pat.ok) {
+    const p = patterns.find((x) => x.c === pat.c) || patterns[0];
+    res = { reverted: true, clash: '', reason: pat.reason, culprit: { index: -1, name: p.name, reason: pat.reason } };
+  } else {
+    res = commitDimensionEdits(state, moves, { refuseReference: true });
+    if (res.reverted) pat.restore();
+  }
   if (res.reverted) {
     if (length >= 0 && typeof state.discardSnapshotAt === 'function') state.discardSnapshotAt(length);
     if (evicted) state.history.unshift(evicted);
@@ -200,11 +222,52 @@ export function applyParameterChange(state, plan, label = 'change parameter', op
     return { ok: false, ...res };
   }
   replaceParameters(state.parameters, plan.paramsAfter);
-  for (const e of plan.edits) {
-    e.c.name = e.name;
-    if (e.expression) e.c.expression = e.expression; else delete e.c.expression;
-  }
+  for (const e of plan.edits) writeEntry(e, { name: e.name, expression: e.expression });
   return { ok: true };
+}
+
+// TASK 694: a plan's pattern-value edits per pattern -> [{ c, changes (editPattern's: the new values + opts' other changes), name (its first
+// edited value's: a refusal's culprit) }], in the plan's order; a pattern only in `extra` (Map pattern -> changes) is edited too.
+function patternEditsOf(edits, extra) {
+  const by = new Map();
+  for (const e of edits) {
+    if (!e.slot) continue;
+    if (!by.has(e.c)) by.set(e.c, { c: e.c, values: {}, name: e.name });
+    by.get(e.c).values[e.slot] = e.value;
+  }
+  for (const [c] of extra || []) if (!by.has(c)) by.set(c, { c, values: {}, name: (patternValueSlots(c).map((s) => entryName({ c, slot: s.slot })).find(Boolean)) || '' });
+  return [...by.values()].map((x) => ({ c: x.c, name: x.name, changes: { ...((extra && extra.get(x.c)) || {}), ...patternSlotChanges(x.c, x.values) } }));
+}
+/**
+ * TASK 694: the pattern values a plan would write, checked by THE rule (#core/pattern.js patternValuesRefusal) before anything changes: null, or
+ * { ok:false, code:'PATTERN_VALUE', message (the rule's), node (the name of the pattern's first edited value) }. The Parameters table's live
+ * preview and applyParameterChange both ask this, so a refused value is refused with the same message wherever it is typed.
+ */
+export function patternPlanRefusal(plan, extra) {
+  if (!plan || !plan.ok) return null;
+  for (const p of patternEditsOf(plan.edits.filter((e) => e.value !== entryValue(e)), extra)) {
+    const why = patternValuesRefusal({ ...p.c, ...p.changes });
+    if (why) return { ok: false, code: 'PATTERN_VALUE', message: why, node: p.name };
+  }
+  return null;
+}
+/**
+ * TASK 694: THE edit of a pattern that respects its named values (the pattern tool's every live change): `changes` = editPattern's. A value it
+ * changes is set as a plain number through the parameter model (planChange setValues: its formula is replaced, every formula reading its name
+ * follows), the other fields ride along in the same commit. opts: { unit, label, snapshot } (applyParameterChange's; the tool's session holds
+ * its one undo step, so snapshot defaults to false). -> { ok:true } | { ok:false, reason }.
+ */
+export function editPatternValues(state, c, changes, { unit = docUnit(), label = 'edit pattern', snapshot = false } = {}) {
+  const { values, rest } = patternValuesIn(c, changes);
+  const slots = Object.keys(values);
+  const plan = planChange(state, { type: 'setValues', values: slots.map((slot) => ({ name: entryName({ c, slot }), value: values[slot] })) }, { unit });
+  if (!plan.ok) return { ok: false, reason: plan.message };
+  const res = applyParameterChange(state, plan, label, { snapshot, patternChanges: new Map([[c, rest]]) });
+  return res.ok ? { ok: true } : { ok: false, reason: refusalReason(res) };
+}
+/** The one sentence of a refused applyParameterChange (its culprit's reason, a clash, or the refused plan's message). */
+export function refusalReason(res) {
+  return (res.culprit && res.culprit.reason) || res.reason || (res.clash ? `conflicts with ${res.clash}` : res.message || 'the drawing cannot take it');
 }
 
 // Dragging a dimension label freely in X & Y projects onto its dimension line / arc / leader (`projectDimLabel`),

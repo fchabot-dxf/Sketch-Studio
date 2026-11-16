@@ -152,7 +152,7 @@ try {
     await clickEl('#vcarve-maxdepth ~ .cut-step[data-d="1"]'); await clickEl('#vcarve-maxdepth ~ .cut-step[data-d="1"]');
     assert.strictEqual(await val('#vcarve-maxdepth'), '7.5 mm');
     await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="-1"]'); await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="-1"]');
-    assert.strictEqual(await val('#vcarve-dstep'), '0.1 mm', label + ' depth step clamps at 0.1 mm');
+    assert.strictEqual(await val('#vcarve-dstep'), '0.5 mm', label + ' depth step: no minimum, - stops at the smallest positive multiple 0.5 mm (task 734)');
     await evalJs(`(() => { const i = document.getElementById('vcarve-dstep'); i.value = '0.7 mm'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="1"]');
     assert.strictEqual(await val('#vcarve-dstep'), '1 mm', label + ' typed 0.7 then + -> the next multiple 1');

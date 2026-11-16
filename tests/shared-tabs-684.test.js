@@ -135,7 +135,7 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   assert.strictEqual(await studio.buf.keepTabs(), true);
   const bufTabs = (await store.readBuffer({})).tabs;
   assert.deepStrictEqual(bufTabs[0].doc.hosts.shaper, { cut: 2 }, "the unsaved tab still carries Shaper's cut plan (Studio passed it through)");
-  assert.ok(bufTabs[0].doc.hosts.penplotter, "and Pen Plotter's sidecar (its defaults, written when it was put aside there)");
+  assert.strictEqual(bufTabs[0].doc.hosts.penplotter, undefined, 'and Pen Plotter added no default sidecar on mere visit (task 687)');
   assert.deepStrictEqual((await store.get(s.id)).document.hosts.shaper, { cut: 1 }, "the saved design still holds Shaper's cut plan");
   // Shaper again: both cut plans are there
   shaper = page('shaper', store, { hostName: 'shaper' });

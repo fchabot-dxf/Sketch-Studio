@@ -9,6 +9,7 @@
 
 import { createHistoryRouter } from '#ui/history-control.js';
 import { sketchHistory } from '#ui/input-manager.js';
+import { commonStage } from '#ui/stage-names.js';
 
 /** TASK 618: Shaper's Undo / Redo router, declared once (the page and the node test kit both call it): Design and Prepare own the shared sketch
  *  history (every cut-plan edit is a step of it, TASK 463); Vcarve and Review have none. */
@@ -22,10 +23,10 @@ export function createShaperHistory({ getController, getMode }) {
 export const MODE_KEY = 'shaper-mode';
 
 export const SHAPER_STAGES = [
-  { id: 'design',  label: 'Design' },
-  { id: 'vcarve',  label: 'Vcarve' },
-  { id: 'prepare', label: 'Prepare' },
-  { id: 'review',  label: 'Review' },
+  commonStage('design'),
+  { id: 'vcarve',  label: 'Vcarve' },  // Shaper-only: before Prepare, because it makes the V-carve regions that Prepare's cut plan and Export's 3D board then read
+  commonStage('prepare'),
+  commonStage('export', 'review'),   // TASK 707: the 3D board + export card, shown as "Export"; its stage id stays 'review' (a stored one still opens it)
 ];
 
 // Stages hidden in Fusion 360 palette mode (?host=fusion): Design (no designing in add-in) and Vcarve (separate V-bit workflow); Prepare + Review +

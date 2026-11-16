@@ -114,7 +114,7 @@ await (async () => {
       assert.strictEqual(await activeStage(), 'design', tag + 'Shaper opens on Design');
       assert(c.w >= 0.9 * 390 && c.h >= 0.4 * 844, tag + 'the Design canvas fills the phone: ' + JSON.stringify(c));
       await openMenu(tag);
-      assert.deepStrictEqual(await stageIds(), ['design', 'vcarve', 'prepare', 'review'], tag + 'the drawer lists Design, Vcarve, Prepare, Review');
+      assert.deepStrictEqual(await stageIds(), ['design', 'vcarve', 'prepare', 'review'], tag + 'the drawer lists Design, Vcarve, Prepare, Export (ids; TASK 707)');
       await shot(`A-shaper-phone390-drawer-${stored || 'fresh'}.png`, { x: 0, y: 0, width: 390, height: 520 });
       await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`); await sleep(300);
     }

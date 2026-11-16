@@ -108,6 +108,7 @@ export function driveDimensionTool(S, row, hits) {
     const A = posOf(S, hits[0].joint), B = posOf(S, hits[1].joint);
     click(A.x, A.y, ...mk(hits[0]));
     const w = wForMode(S, row.mode, A, B);
+    S.dimPair = { A: { ...A }, B: { ...B } }; // TASK 680: the pair as it was when the label was placed (its orientation picks the mode)
     click(w.x, w.y, ...mk(hits[1]));
   } else {
     hits.forEach((h, i) => { const p = pos(h); click(p.x, p.y, ...mk(h)); });
@@ -265,7 +266,14 @@ export async function runCell(row, cols, variant) {
   }
   if (row.dim && prod[0] && row.mode !== 'linesline' && row.mode !== 'angle' && row.mode !== 'radius' && row.mode !== 'length' && row.mode !== 'pointline') {
     const dm = prod[0].dimMode;
-    if (dm !== row.mode) { if (dm === 'aligned' && (row.mode === 'horizontal' || row.mode === 'vertical')) { rec.na = 'near-axis pair: the tool keeps these aligned (H/V would be redundant)'; return rec; } rec.issues.push('dimmode:' + dm); }
+    // TASK 680 (Fusion): a LEVEL / PLUMB pair is always a horizontal / vertical dimension (never aligned, never the zero one across it), and a
+    // pair within ~5 degrees of an axis is horizontal / vertical with the label beside it (detectDimMode); the pair as it was when placed decides
+    const { A: pa, B: pb } = S.dimPair || {}, ang = pa && pb ? Math.abs(Math.atan2(pb.y - pa.y, pb.x - pa.x)) : NaN;
+    const level = pa && pb && Math.abs(pb.y - pa.y) <= 1e-9 * Math.hypot(pb.x - pa.x, pb.y - pa.y), plumb = pa && pb && Math.abs(pb.x - pa.x) <= 1e-9 * Math.hypot(pb.x - pa.x, pb.y - pa.y);
+    const nearAxis = ang < 0.087 || ang > Math.PI - 0.087 || Math.abs(ang - Math.PI / 2) < 0.087;
+    if (dm !== row.mode && ((level && dm === 'horizontal') || (plumb && dm === 'vertical'))) { rec.na = `level / plumb pair: the tool makes it ${dm} (Fusion, task 680)`; return rec; }
+    if (dm !== row.mode && row.mode === 'aligned' && nearAxis && (dm === 'horizontal' || dm === 'vertical')) { rec.na = `near-axis pair, label beside it: the tool makes it ${dm} (Fusion, task 680)`; return rec; }
+    if (dm !== row.mode) { if (dm === 'aligned' && (row.mode === 'horizontal' || row.mode === 'vertical')) { rec.na = 'the label landed in the perpendicular band of a diagonal pair: aligned'; return rec; } rec.issues.push('dimmode:' + dm); }
   }
   // ---- bite: a jittered re-solve keeps every driving constraint satisfied
   const ref = L.snapshot(S);

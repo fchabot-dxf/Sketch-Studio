@@ -27,6 +27,12 @@ const fmt = (n) => String(Math.round(n * 100) / 100);
 // TASK 672: the modal panel's class. Not `sk-tp`: Shaper's page styles its toolpaths `.sk-tp` (no fill, a dashed stroke), which drew every
 // template preview in this panel dashed there (since task 651). Every rule below and the panel itself use this one name.
 const PANEL = 'sk-tp-panel';
+// TASK 680: a template is built by its RECIPE (the app's tools, #core/templates.js), so a build costs real time (milliseconds to seconds for a
+// large count). THE place the picker builds: each template's default document once per page (the cards, the start view at its defaults), and
+// in the start view one build per settled value (PREVIEW_DELAY after the last change), never one per keystroke.
+const PREVIEW_DELAY = 200;
+const defaultDocs = new WeakMap(); // template -> its document at its defaults
+const defaultDocument = (t) => { if (!defaultDocs.has(t)) defaultDocs.set(t, buildTemplate(t)); return defaultDocs.get(t); };
 const boxesOverlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
 
 // ── the preview: a version-3 document -> an <svg> (world coordinates, Y down as stored; non-scaling strokes keep it crisp at any size) ──
@@ -319,6 +325,7 @@ function injectStyles() {
   border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.45)); }
 .sk-tp-btn:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
 .sk-tp-btn.sk-tp-open { background: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); border-color: transparent; color: #fff; font-weight: 600; }
+.sk-tp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .sk-tp-btn:focus-visible, .sk-tp-choice button:focus-visible { outline: 2px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); outline-offset: 1px; }
 /* the glyph picker (frame-calc's CornerJointPicker interaction): the active option only; a tap shows all; a pick selects and folds back */
 .sk-tp-choice { display: flex; gap: 6px; padding: 4px; border-radius: 12px; border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); }
@@ -391,11 +398,23 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     const blankCard = card('blank', 'Blank design', 'An empty sketch.', plus);
     blankCard.addEventListener('click', () => finish({ blank: true }));
     grid.appendChild(blankCard);
+    // TASK 680: a card shows its preview at once when its document is built already, else as soon as it is (one card per task after the
+    // modal shows: opening never waits for every recipe)
+    const unbuilt = [];
     for (const t of templates) {
-      const c = card(t.id, t.name, t.description, renderTemplatePreview(buildTemplate(t)));
+      const preview = defaultDocs.has(t) ? renderTemplatePreview(defaultDocs.get(t)) : document.createElement('div');
+      const c = card(t.id, t.name, t.description, preview);
+      if (!defaultDocs.has(t)) unbuilt.push([t, c.querySelector('.sk-tp-prev')]);
       c.addEventListener('click', () => startView(t, c));
       grid.appendChild(c);
     }
+    const buildNextCard = () => {
+      if (done || !unbuilt.length) return;
+      const [t, slot] = unbuilt.shift();
+      slot.replaceChildren(renderTemplatePreview(defaultDocument(t)));
+      setTimeout(buildNextCard, 0);
+    };
+    setTimeout(buildNextCard, 0);
     body.appendChild(grid); panel.appendChild(body);
     blankCard.focus();
 
@@ -408,10 +427,29 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       // TASK 672: a choice's glyphs draw with the current values (#ui/template-glyphs.js): each picker reads THIS values object, and is told
       // to draw its glyphs again (REDRAW) when a value changes; only with valid values, like the preview
       const pickers = [];
+      // TASK 680: the preview is built once the values settle (PREVIEW_DELAY after the last change). A value set the recipe cannot draw shows
+      // why in the error line, keeps the last good preview and disables Open until a value set draws.
+      const defaultsKey = JSON.stringify(defaultParams(t));
+      let timer = null, built = null; // built = { key, doc }: the values the preview shows and their document
+      const draw = () => {
+        clearTimeout(timer); timer = null;
+        if (!valid()) return;
+        const key = JSON.stringify(values);
+        if (built && built.key === key) return;
+        let doc;
+        try {
+          doc = key === defaultsKey ? defaultDocument(t) : buildTemplate(t, values);
+        } catch (e) {
+          built = null; openBtn.disabled = true; err.textContent = e.message;
+          return;
+        }
+        built = { key, doc }; openBtn.disabled = false;
+        prev.replaceChildren(renderTemplatePreview(doc));
+      };
       const redraw = () => {
         if (!valid()) return;
-        prev.replaceChildren(renderTemplatePreview(buildTemplate(t, values)));
         for (const el of pickers) el.dispatchEvent(new Event(REDRAW));
+        clearTimeout(timer); timer = setTimeout(draw, PREVIEW_DELAY);
       };
       const fields = document.createElement('div'); fields.className = 'sk-tp-fields';
       const err = document.createElement('div'); err.className = 'sk-tp-err'; err.setAttribute('role', 'alert');
@@ -450,14 +488,16 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
           if (input) { input.setAttribute('aria-invalid', 'true'); input.focus(); }
           return;
         }
-        finish({ template: t, document: buildTemplate(t, values), name: t.name });
+        draw(); // the values typed last (a pending preview is built now)
+        if (!built || built.key !== JSON.stringify(values)) return; // they cannot be drawn: the error line says why
+        finish({ template: t, document: structuredClone(built.doc), name: t.name }); // a copy: the document the picker keeps stays its own
       };
       openBtn.addEventListener('click', open);
       cancel.addEventListener('click', () => backToCards());
       // Enter in a value box opens (on a button, Enter is that button's own click)
       view.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') { e.preventDefault(); open(); } });
       view.append(prev, fields, err, actions);
-      redraw();
+      draw();
       const cards = [...panel.children];
       const startHead = head(t.name);
       startHead.querySelector('.sk-tp-x').remove(); // the start view closes with Cancel / Esc (back to the cards) or Open

@@ -125,23 +125,17 @@ function drawing() {
     anchor(j) { ops.snap(state, j, ORIGIN_JOINT_ID); }, // a point on the origin
     /**
      * A point-to-point dimension. `mode` and `side` say where the user drops the label (as the old offset did): 'aligned' beside the middle,
-     * 'horizontal' / 'vertical' beyond the end that is outermost on that side (the Dimension tool picks the mode from the label point, its
-     * detectDimMode: on a pair that is itself horizontal or vertical it makes an ALIGNED dimension, the same distance). `text` is typed in its box.
+     * 'horizontal' / 'vertical' beyond the end that is outermost on that side. The Dimension tool picks the mode from the label point (its
+     * detectDimMode; TASK 680: a level / plumb pair is always a horizontal / vertical dimension, like Fusion). `text` is typed in its box.
      */
     dim(a, b, mode, side, text) {
       if (swap) { mode = across[mode] || mode; side = -side; }
       const label = labelPoint(state, { type: T.DISTANCE, joints: [a, b], dimMode: mode }, side);
       const c = ops.dimension(state, { joints: [a, b] }, label, text);
-      const A = state.joints.get(a), B = state.joints.get(b), axisPair = Math.abs(A.x - B.x) < 1e-9 || Math.abs(A.y - B.y) < 1e-9;
-      if (c.dimMode !== mode && !(c.dimMode === 'aligned' && axisPair)) throw new Error(`dimension ${c.name}: the label point made a ${c.dimMode} dimension, not ${mode}`);
+      const A = state.joints.get(a), B = state.joints.get(b);
+      const want = Math.abs(A.y - B.y) < 1e-9 ? 'horizontal' : Math.abs(A.x - B.x) < 1e-9 ? 'vertical' : mode; // a level / plumb pair: its own axis
+      if (c.dimMode !== want) throw new Error(`dimension ${c.name}: the label point made a ${c.dimMode} dimension, not ${want}`);
       return c;
-    },
-    /** A point-to-line distance (the perpendicular one), its label dropped `toward` the authored direction [x, y] from the dimension line. */
-    dimToLine(j, line, toward, text) {
-      const ln = state.shapes.find((s) => s.id === line), cLike = { type: T.DISTANCE, joints: [j, ...ln.joints] };
-      const [tx, ty] = swap ? [toward[1], toward[0]] : toward;
-      const { j1, j2 } = resolveDimEndpoints(cLike, state.joints, state.shapes), f = linearDimFrame(cLike, j1, j2);
-      return ops.dimension(state, { point: j, line }, labelPoint(state, cLike, f.nx * tx + f.ny * userToWorldY(ty) < 0 ? -1 : 1), text);
     },
     /** A line-to-line distance (two parallel lines), the label on `side` of the dimension line. */
     gap(l1, l2, side, text) {
@@ -267,8 +261,8 @@ function buildRoundedRect(d, p) {
   const rc = ops.rect(d.state, x0, y0, x1, y1); // world: y0 is the bottom edge (the larger y), y1 the top
   const line = (id) => d.state.shapes.find((s) => s.id === id);
   const bottom = rc.top, right = rc.right, top = rc.bottom, left = rc.left; // makeRectFromTwoJoints names its edges for a first click top-left
-  d.dim(line(top).joints[0], line(top).joints[1], 'aligned', -1, 'width');
-  d.dim(line(left).joints[0], line(left).joints[1], 'aligned', -1, 'height');
+  d.dim(line(top).joints[0], line(top).joints[1], 'horizontal', -1, 'width');
+  d.dim(line(left).joints[0], line(left).joints[1], 'vertical', -1, 'height');
   let bl = null;
   for (const [a, b] of [[top, right], [right, bottom], [bottom, left], [left, top]]) {
     const f = ops.fillet(d.state, a, b, r);
@@ -334,10 +328,9 @@ function buildLBracket(d, p) {
   d.anchor(P0);
   ring.forEach((s, i) => (i % 2 ? d.vl(s) : d.hl(s)));
   d.dim(P0, P1, 'horizontal', -1, 'width'); d.dim(P0, P5, 'vertical', -1, 'height'); d.dim(P1, P2, 'vertical', 1, 'thickness'); d.dim(P5, P4, 'horizontal', 1, 'thickness');
-  // the holes: each centre's distance from the left edge and from the bottom edge (point to line: any proportions of the bracket)
-  const k1 = d.circle(w - t, t / 2, hd / 2), k2 = d.circle(t / 2, h - t, hd / 2), leftEdge = ring[5].id, bottomEdge = ring[0].id;
-  d.dimToLine(k1.c, leftEdge, [0, -1], 'width - thickness'); d.dimToLine(k1.c, bottomEdge, [-1, 0], 'thickness / 2');
-  d.dimToLine(k2.c, leftEdge, [0, 1], 'thickness / 2'); d.dimToLine(k2.c, bottomEdge, [1, 0], 'height - thickness');
+  const k1 = d.circle(w - t, t / 2, hd / 2), k2 = d.circle(t / 2, h - t, hd / 2);
+  d.dim(P0, k1.c, 'horizontal', 1, 'width - thickness'); d.dim(P0, k1.c, 'vertical', -1, 'thickness / 2');
+  d.dim(P0, k2.c, 'horizontal', -1, 'thickness / 2'); d.dim(P0, k2.c, 'vertical', 1, 'height - thickness');
   d.radius(k1.id, 'hole_diameter / 2', 6); d.equal(k1.id, k2.id);
 }
 
@@ -415,12 +408,11 @@ function buildDogBone(d, p) {
 function buildTSlot(d, p) {
   const tw = num(p.topWidth, 19), td = num(p.topDepth, 9.5), bw = num(p.bottomWidth, 25), D = num(p.totalDepth, 16);
   const ring = d.poly([[-tw / 2, 0], [tw / 2, 0], [tw / 2, -td], [bw / 2, -td], [bw / 2, -D], [-bw / 2, -D], [-bw / 2, -td], [-tw / 2, -td]], true);
-  const [TL, TR, NR, OR, , , OL, NL] = corners(ring);
+  const [TL, TR, NR, OR, BR, , OL, NL] = corners(ring);
   ring.forEach((s, i) => (i % 2 ? d.vl(s) : d.hl(s))); d.h(NR, NL);
   const axis = d.line(ORIGIN_JOINT_ID, [0, -D], true); // the centre line, construction, from the origin down to the bottom
   d.midpoint(TL, TR, ORIGIN_JOINT_ID); d.midpoint(ring[4].a, ring[4].b, axis.b); d.vl(axis);
-  d.dim(TL, TR, 'horizontal', 1, 'top_width'); d.dim(TR, NR, 'vertical', 1, 'top_depth'); d.dim(OL, OR, 'horizontal', -1, 'bottom_width');
-  d.dimToLine(TR, ring[4].id, [1, 0], 'total_depth'); // the opening's edge to the bottom (point to line: any widths)
+  d.dim(TL, TR, 'horizontal', 1, 'top_width'); d.dim(TR, NR, 'vertical', 1, 'top_depth'); d.dim(OL, OR, 'horizontal', -1, 'bottom_width'); d.dim(TR, BR, 'vertical', 1, 'total_depth');
 }
 
 // TASK 669: BUTTERFLY KEY (bow-tie / dovetail key), centred on its waist: 50 mm long, 25 mm wide at the two ends, 10 mm at the waist, straight sides.
@@ -464,8 +456,8 @@ function buildShelfPins(d, p) {
 // their edges (one line per shared edge: no gaps, no overlaps). Every segment is horizontal / vertical.
 // TASK 670 (no FOLD): every board's thickness and every opening but the top one is dimensioned, a formula of the USER PARAMETERS: every
 // thickness reads `thickness`, an opening is (length - (N + 1) * thickness) / N (TASK 672, owner ruling: every dimension reads the parameters
-// directly). The top opening is what the overall length leaves. TASK 680: the dimensions are the Dimension tool's: on these horizontal /
-// vertical pairs it makes ALIGNED dimensions (the same distance; task 670 had signed horizontal / vertical ones the tool cannot make here).
+// directly). The top opening is what the overall length leaves. TASK 680: the dimensions are the Dimension tool's: on these level / plumb
+// pairs it makes SIGNED horizontal / vertical dimensions (like Fusion: the solver locks which side the second point is on, so no board folds).
 // TASK 670 LAYOUT: 'Vertical' (above) or 'Horizontal' = the SAME construction with x and y swapped (a mirror in the diagonal through the
 // origin, which stays the bottom-left corner): the full-length boards become the bottom and the top, the ends and dividers stand between
 // them, the compartments sit side by side; every horizontal rule becomes vertical and the other way round.
@@ -730,7 +722,8 @@ export function paramRefusal(spec, value) {
  * Build a template's document with its default parameters (or `params` over them): TASK 680, its RECIPE on a fresh sketch of its own: the user
  * parameters first (the Parameters window's + Add row, in declaration order: { name, unit, expression: '<value> <unit>', comment: label }), then
  * the drawing with the app's tools, its dimensions' texts reading those parameters, and the document through serializeDocument. A value the
- * param refuses (paramRefusal) throws: the start modal checks every value before it opens a template.
+ * param refuses (paramRefusal) throws: the start modal checks every value before it opens a template. Values the tools cannot draw (a step
+ * refused, e.g. boards thicker than the length leaves) throw "<name> cannot be drawn with these values (<the tool's reason>)".
  */
 export function buildTemplate(t, params = {}) {
   const values = { ...defaultParams(t), ...params };
@@ -745,7 +738,11 @@ export function buildTemplate(t, params = {}) {
     const unit = paramUnit(spec);
     ops.parameter(d.state, paramName(k), unit, `${values[k]} ${unit}`, spec.label);
   }
-  t.build(d, values);
+  try {
+    t.build(d, values);
+  } catch (e) { // a tool refused a step (e.g. a dimension that would collapse a board): these values make no drawing
+    throw new Error(`${t.name} cannot be drawn with these values (${e.message})`, { cause: e });
+  }
   return d.finish();
 }
 export const templateById = (id) => TEMPLATES.find((t) => t.id === id) || null;

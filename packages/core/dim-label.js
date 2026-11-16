@@ -170,23 +170,28 @@ export function projectDimLabel(c, pos, joints, shapes) {
 /**
  * Detect dimension mode based on mouse position relative to segment.
  * Returns 'aligned', 'horizontal', or 'vertical'.
+ * TASK 680 (advisor ruling, Fusion): the orientation follows the label. A LEVEL or PLUMB pair (exactly horizontal / vertical) is always a
+ * horizontal / vertical dimension (never aligned, never the zero one across it); a pair within ~5 degrees of an axis is horizontal / vertical
+ * by where the label is (above / below it: horizontal for a near-level pair, vertical for a near-plumb one; past its ends: as below); only a
+ * clearly diagonal pair is ALIGNED, with the label beside it (its perpendicular band).
  */
 export function detectDimMode(j1, j2, w) {
     const dx = j2.x - j1.x, dy = j2.y - j1.y;
     const lenSq = dx*dx + dy*dy;
     if (lenSq < 0.0001) return 'aligned';
-    
-    // If line is nearly horizontal or vertical (~5°), stay aligned — H/V would be redundant
+    const len = Math.sqrt(lenSq);
+    if (Math.abs(dy) <= 1e-9 * len) return 'horizontal'; // level
+    if (Math.abs(dx) <= 1e-9 * len) return 'vertical';   // plumb
+
     const lineAngle = Math.abs(Math.atan2(dy, dx));
     const isNearlyH = lineAngle < 0.087 || lineAngle > Math.PI - 0.087;
     const isNearlyV = Math.abs(lineAngle - Math.PI / 2) < 0.087;
-    if (isNearlyH || isNearlyV) return 'aligned';
-    
+
     // Project w onto line segment
     const t = ((w.x - j1.x) * dx + (w.y - j1.y) * dy) / lenSq;
-    
-    // 1. Inside perpendicular band
-    if (t >= 0 && t <= 1) return 'aligned';
+
+    // 1. Inside perpendicular band: a near-level / near-plumb pair measures along its axis, a diagonal one along itself
+    if (t >= 0 && t <= 1) return isNearlyH ? 'horizontal' : isNearlyV ? 'vertical' : 'aligned';
     
     // 2. Past endpoints
     const ex = (t < 0) ? j1.x : j2.x;

@@ -44,7 +44,7 @@ try {
         continue;
       }
       const input = row.querySelector('input');
-      assert.ok(input && input.type === 'number' && input.value === String(spec.default), `${t.id}: ${k} prefilled with ${spec.default}`);
+      assert.ok(input && input.type === (paramKind(spec) === 'count' ? 'number' : 'text') && input.value === String(spec.default), `${t.id}: ${k} prefilled with ${spec.default}`);
       assert.strictEqual(row.querySelector('label').htmlFor, input.id, `${t.id}: ${k}'s label names its box`);
       assert.strictEqual(row.querySelector('.sk-tp-unit').textContent, paramUnit(spec), `${t.id}: ${k} unit`);
       if (paramKind(spec) === 'count') assert.ok(input.step === '1' && input.min === String(spec.min) && input.max === String(spec.max), `${t.id}: ${k} a whole-number spinner ${spec.min}..${spec.max}`);

@@ -9,7 +9,9 @@
 // dimensions, fixed by the origin anchor) and editable after it opens.
 //
 // UNITS: templates are authored in mm = world units (units.js BASE). A document's unit (mm | cm | in) is a display lens over the same world
-// values, so a template opens at the same physical size in an inch document; there is no conversion here.
+// values. TASK 722: a template is still AUTHORED in mm (its defaults, its recipe, its limits), but the start view and the user parameters speak the
+// DOCUMENT's unit: the ONE conversion is at this boundary (defaultParams / toMm / buildTemplate / paramUnit / parseParam take the unit; a recipe
+// and its limits only ever see mm). In an inch document the defaults are the mm ones rounded to 1/16 in (a cm one to 0.1 cm).
 // ORIENTATION: authored with Y UP (as the user sees it) and stored through userToWorldY (the one Y seam).
 // ANCHOR: each template has one point on the origin (a tool's click on the origin: its snap's coincident, or a line drawn from the origin);
 // d.origin(x, y) says which authored point that is, so the drawing is placed with that point at (0, 0) before it is drawn.
@@ -21,7 +23,8 @@
 // or a value no dimension carries (a pattern's spacing), so a user parameter could not drive them and none is made.
 
 import { serializeDocument } from '#core/document.js';
-import { userToWorldY, worldToUserY } from '#core/units.js';
+import { userToWorldY, worldToUserY, basePer, BASE } from '#core/units.js';
+import { evaluateText } from '#core/expression.js';
 import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES } from '#core/constants.js';
 import { patternDefaults } from '#core/pattern.js';
 import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES, cornerJointLabel } from '#core/corner-joint.js';
@@ -183,8 +186,9 @@ export class TemplateRefusal extends Error {
 // a limit as shown to the user (2 decimals, 4 under 1 mm): "less than" rounds down and "more than" rounds up, so the number said is never
 // one that works (the limit itself is excluded) and every number closer to the range works
 const decimals = (x) => (x >= 1 ? 100 : 10000);
-const below = (x) => `${Math.floor(x * decimals(x) + 1e-7) / decimals(x)} mm`;
-const above = (x) => `${Math.ceil(x * decimals(x) - 1e-7) / decimals(x)} mm`;
+// TASK 722: said in the document's unit `u` (x is mm, like every value a limit reads)
+const below = (x, u = BASE) => `${Math.floor(x / basePer(u) * decimals(x / basePer(u)) + 1e-7) / decimals(x / basePer(u))} ${u}`;
+const above = (x, u = BASE) => `${Math.ceil(x / basePer(u) * decimals(x / basePer(u)) - 1e-7) / decimals(x / basePer(u))} ${u}`;
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 
@@ -846,54 +850,54 @@ const triangleCorners = (p) => {
  * TASK 674: `corners(values)` (the frame templates) = the corners the start modal draws a joint glyph on, over its preview: [{ x, y (WORLD, the
  * document's), out (the unit direction off the drawing), interior (deg), param, index? }] (templateCorners).
  */
-// ── TASK 703: each template's LIMITS, declared with the template (`limits(values)` -> a TemplateRefusal's { param, message } or null): the values
+// ── TASK 703: each template's LIMITS, declared with the template (`limits(values, unit)` (values in mm, the message in `unit`) -> a TemplateRefusal's { param, message } or null): the values
 // that make no drawing, checked before the recipe runs, each saying in plain words which value is too big (or too small) and what works. The
 // values are the checked, positive ones (paramRefusal ran first).
 const refusal = (param, message) => ({ param, message });
-const slotLimits = (v) => (v.width >= v.length ? refusal('width', `Width is too big for this length: use less than ${below(v.length)}.`) : null);
-const roundedRectLimits = (v) => {
+const slotLimits = (v, u) => (v.width >= v.length ? refusal('width', `Width is too big for this length: use less than ${below(v.length, u)}.`) : null);
+const roundedRectLimits = (v, u) => {
   const side = Math.min(v.width, v.height); // two corner radii share each side
-  return 2 * v.radius >= side ? refusal('radius', `Corner radius is too big for this width and height: use less than ${below(side / 2)}.`) : null;
+  return 2 * v.radius >= side ? refusal('radius', `Corner radius is too big for this width and height: use less than ${below(side / 2, u)}.`) : null;
 };
-const keyholeLimits = (v) => (v.neck >= 2 * v.radius ? refusal('neck', `Neck width is too big for this head radius: use less than ${below(2 * v.radius)}.`) : null);
-const lBracketLimits = (v) => {
+const keyholeLimits = (v, u) => (v.neck >= 2 * v.radius ? refusal('neck', `Neck width is too big for this head radius: use less than ${below(2 * v.radius, u)}.`) : null);
+const lBracketLimits = (v, u) => {
   const side = Math.min(v.width, v.height);
-  return v.thickness >= side ? refusal('thickness', `Thickness is too big for this width and height: use less than ${below(side)}.`) : null;
+  return v.thickness >= side ? refusal('thickness', `Thickness is too big for this width and height: use less than ${below(side, u)}.`) : null;
 };
-const boxFrameLimits = (v) => {
+const boxFrameLimits = (v, u) => {
   const n = Math.max(1, Math.round(v.compartments)), byLength = v.length / (n + 1), byWidth = v.width / 2; // the boards in a column / the two sides across
   if (v.thickness < Math.min(byLength, byWidth)) return null;
   return refusal('thickness', byLength <= byWidth
-    ? `Plywood thickness is too big for this length and ${n} compartment${n === 1 ? '' : 's'}: use less than ${below(byLength)}.`
-    : `Plywood thickness is too big for this width: use less than ${below(byWidth)}.`);
+    ? `Plywood thickness is too big for this length and ${n} compartment${n === 1 ? '' : 's'}: use less than ${below(byLength, u)}.`
+    : `Plywood thickness is too big for this width: use less than ${below(byWidth, u)}.`);
 };
-const rightAngleCornerLimits = (v) => {
+const rightAngleCornerLimits = (v, u) => {
   const side = Math.min(v.horizontalLength, v.verticalLength);
-  return v.thickness >= side ? refusal('thickness', `Board thickness is too big for these lengths: use less than ${below(side)}.`) : null;
+  return v.thickness >= side ? refusal('thickness', `Board thickness is too big for these lengths: use less than ${below(side, u)}.`) : null;
 };
 // the brace's three boards must leave an inner opening: height * thickV + width * thickH + diagonal * thickD < width * height (the largest term
 // is the board to blame; the most it can be, the others as they are)
-const braceLimits = (v) => {
+const braceLimits = (v, u) => {
   const L = Math.hypot(v.width, v.height), area = v.width * v.height;
   const terms = [['thickV', v.height * v.thickV, v.height], ['thickH', v.width * v.thickH, v.width], ['thickD', L * v.thickD, L]];
   if (terms.reduce((sum, t) => sum + t[1], 0) < area) return null;
   const [param, term, coef] = terms.sort((a, b) => b[1] - a[1])[0];
   const most = (area - (terms.reduce((sum, t) => sum + t[1], 0) - term)) / coef;
   const name = { thickV: 'Vertical board thickness', thickH: 'Horizontal board thickness', thickD: 'Diagonal board thickness' }[param];
-  return refusal(param, most > 0 ? `${name} is too big for this width and height: use less than ${below(most)}.`
+  return refusal(param, most > 0 ? `${name} is too big for this width and height: use less than ${below(most, u)}.`
     : `${name} is too big: the boards leave no opening, so make the frame bigger or the boards thinner.`);
 };
-const benchSeatLimits = (v) => {
-  if (v.outerRadius <= v.innerRadius) return refusal('outerRadius', `Outer radius is too small for this inner radius: use more than ${above(v.innerRadius)}.`);
-  if (v.innerRadius <= v.gap / 2) return refusal('innerRadius', `Inner radius is too small for this gap: use more than ${above(v.gap / 2)}.`);
+const benchSeatLimits = (v, u) => {
+  if (v.outerRadius <= v.innerRadius) return refusal('outerRadius', `Outer radius is too small for this inner radius: use more than ${above(v.innerRadius, u)}.`);
+  if (v.innerRadius <= v.gap / 2) return refusal('innerRadius', `Inner radius is too small for this gap: use more than ${above(v.gap / 2, u)}.`);
   return null;
 };
 const parallelogramLimits = (v) => (v.angle >= 180 ? refusal('angle', 'Angle is too big: use less than 180 deg.') : null);
-const triangleLimits = (v) => {
+const triangleLimits = (v, u) => {
   const sides = [['base', 'Base', v.base], ['leftSide', 'Left side', v.leftSide], ['rightSide', 'Right side', v.rightSide]];
   const [param, label, len] = sides.slice().sort((a, b) => b[2] - a[2])[0]; // only the longest side can be too long
   const rest = sides.reduce((sum, x) => sum + x[2], 0) - len;
-  return len >= rest ? refusal(param, `${label} is too long for the other two sides: use less than ${below(rest)}.`) : null;
+  return len >= rest ? refusal(param, `${label} is too long for the other two sides: use less than ${below(rest, u)}.`) : null;
 };
 
 export const TEMPLATES = [
@@ -924,8 +928,14 @@ export const TEMPLATES = [
   { id: 'triangle-frame', name: 'Triangle frame', description: 'A frame of 38 mm boards on any triangle: a 600 mm base, 500 and 400 mm sides, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, leftSide: { label: 'Left side', default: 500 }, rightSide: { label: 'Right side', default: 400 }, thickness: { label: 'Board thickness', default: 38 }, jointA: { label: 'Bottom-left joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, jointB: { label: 'Bottom-right joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' }, jointC: { label: 'Top joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' } }, dimensions: 6, limits: triangleLimits, build: buildTriangleFrame, corners: triangleCorners },
 ];
 
-/** The default parameters of a template: { key: default }. */
-export const defaultParams = (t) => Object.fromEntries(Object.entries(t.params).map(([k, v]) => [k, v.default]));
+// TASK 722: a length default (authored in mm) as the document's unit says it: an inch document rounds to the nearest 1/16 in (38 mm -> 1.5 in,
+// 600 mm -> 23.625 in), a cm one to 0.1 cm; mm is as authored. A length that would round to nothing keeps one step (1/16 in, 0.1 cm).
+const STEP = { in: 1 / 16, cm: 0.1 };
+const toDocUnit = (mm, unit) => (STEP[unit] ? Math.max(STEP[unit], R(Math.round(mm / basePer(unit) / STEP[unit]) * STEP[unit])) : mm);
+/** The default parameters of a template: { key: default } (a length in the document's `unit`, rounded as above; counts, angles and choices as authored). */
+export const defaultParams = (t, unit = BASE) => Object.fromEntries(Object.entries(t.params).map(([k, v]) => [k, paramKind(v) === 'length' ? toDocUnit(v.default, unit) : v.default]));
+/** `values` (a length in the document's `unit`) with every length in mm, the unit a recipe, its limits and its corners are authored in. */
+export const toMm = (t, values, unit = BASE) => Object.fromEntries(Object.entries(values).map(([k, v]) => [k, t.params[k] && paramKind(t.params[k]) === 'length' ? R(Number(v) * basePer(unit)) : v]));
 
 // ── TASK 670: the params as data for the start modal and the document's user parameters ──
 export const paramKind = (spec) => spec.kind || 'length';
@@ -935,8 +945,19 @@ export const paramActive = (spec, values) => !spec.when || Object.entries(spec.w
 export const isLiveParam = (spec, values) => (paramKind(spec) === 'length' || paramKind(spec) === 'angle') && !spec.atOpen && paramActive(spec, values);
 /** The user parameter's name for a param key: camelCase -> snake_case (bitDiameter -> bit_diameter), a name the expression parser accepts. */
 export const paramName = (key) => key.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase());
-/** The unit a param is shown and stored in: mm for a length, deg for an angle, none for a count or a choice. */
-export const paramUnit = (spec) => ({ length: 'mm', angle: 'deg' })[paramKind(spec)] || '';
+/** The unit a param is shown and stored in: the document's `unit` for a length, deg for an angle, none for a count or a choice. */
+export const paramUnit = (spec, unit = BASE) => ({ length: unit, angle: 'deg' })[paramKind(spec)] || '';
+/**
+ * TASK 722: what a start-view field's text says, as the number the field holds: a length in the document's `unit`, an angle in deg, a count as typed.
+ * A length / angle goes through the shared expression parser (a bare number is in the field's own unit; "1/8 in", `3"`, "38mm", "2 * 1.5 in"
+ * convert); NaN when it is empty, wrong or the wrong kind (paramRefusal then says so).
+ */
+export function parseParam(spec, text, unit = BASE) {
+  const kind = paramKind(spec);
+  if (kind !== 'length' && kind !== 'angle') return String(text).trim() === '' ? NaN : Number(text);
+  const r = evaluateText(String(text), () => null, { target: kind, unit, angleUnit: 'deg' });
+  return r.ok ? R(kind === 'length' ? r.v / basePer(unit) : r.v) : NaN;
+}
 
 /** Why `value` cannot be this param's value (the start modal shows it), or null. */
 export function paramRefusal(spec, value) {
@@ -962,24 +983,25 @@ export function paramRefusal(spec, value) {
  * modal checks every value before it opens a template. A step a tool refuses that no limit foresaw throws "<name> cannot be drawn with these
  * values (<the tool's reason>)" (an Error, not a TemplateRefusal: the modal logs it and shows one generic line).
  */
-export function buildTemplate(t, params = {}) {
-  const values = { ...defaultParams(t), ...params };
+export function buildTemplate(t, params = {}, unit = BASE) {
+  const values = { ...defaultParams(t, unit), ...params }; // the lengths in the document's `unit`
   for (const [k, spec] of Object.entries(t.params)) {
     if (!paramActive(spec, values)) continue; // TASK 674: a param that does not apply is neither checked nor read
     const why = paramRefusal(spec, values[k]);
     if (why) throw new TemplateRefusal(k, why);
     if (paramKind(spec) !== 'choice') values[k] = R(Number(values[k])); // the drawing and its parameter read the SAME number
   }
-  const limit = t.limits && t.limits(values); // TASK 703: the template's own limits, before anything is drawn
+  const mm = toMm(t, values, unit); // TASK 722: the recipe and the limits read mm, the user parameters the document's unit
+  const limit = t.limits && t.limits(mm, unit); // TASK 703: the template's own limits, before anything is drawn
   if (limit) throw new TemplateRefusal(limit.param, limit.message);
   const d = drawing();
   for (const [k, spec] of Object.entries(t.params)) {
     if (!isLiveParam(spec, values)) continue;
-    const unit = paramUnit(spec);
-    ops.parameter(d.state, paramName(k), unit, `${values[k]} ${unit}`, spec.label);
+    const u = paramUnit(spec, unit);
+    ops.parameter(d.state, paramName(k), u, `${values[k]} ${u}`, spec.label);
   }
   try {
-    t.build(d, values);
+    t.build(d, mm);
   } catch (e) { // a tool refused a step the limits did not foresee: a bug, not a refusal; the cause keeps the technical text
     throw new Error(`${t.name} cannot be drawn with these values (${e.message})`, { cause: e });
   }
@@ -989,16 +1011,16 @@ export const templateById = (id) => TEMPLATES.find((t) => t.id === id) || null;
 
 /** TASK 674: the corners the start modal draws a joint glyph on (the template's corners(), its defaults under `values`); none for a template
  *  without corners. */
-export const templateCorners = (t, values = {}) => (t.corners ? t.corners({ ...defaultParams(t), ...values }) : []);
+export const templateCorners = (t, values = {}, unit = BASE) => (t.corners ? t.corners(toMm(t, { ...defaultParams(t, unit), ...values }, unit)) : []);
 /**
  * TASK 674: the per-corner choices of `values` fitted to the corners these values make ("counts change -> the corner list follows"): a list
  * keeps its first entries and the new corners take `fill[key]` (the option last set for all corners, else the default). -> the new values.
  */
-export function fitCorners(t, values, fill = {}) {
+export function fitCorners(t, values, fill = {}, unit = BASE) {
   const out = { ...values };
   for (const [k, spec] of Object.entries(t.params)) {
     if (!spec.perCorner || !Array.isArray(out[k])) continue;
-    const n = templateCorners(t, out).filter((c) => c.param === k).length, v = fill[k] ?? spec.default;
+    const n = templateCorners(t, out, unit).filter((c) => c.param === k).length, v = fill[k] ?? spec.default;
     out[k] = Array.from({ length: n }, (_, i) => (i < out[k].length ? out[k][i] : v));
   }
   return out;

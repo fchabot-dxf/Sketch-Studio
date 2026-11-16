@@ -37,7 +37,8 @@ await (async () => {
   const shapes = () => evalJs(`document.querySelectorAll('svg .shape-elem').length`);
   const tabNames = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
   const modalOpen = () => evalJs(`!!document.querySelector('.sk-tp-panel')`);
-  const cards = () => evalJs(`[...document.querySelectorAll('.sk-tp-card')].map((c) => ({ id: c.dataset.template, name: c.querySelector('.sk-tp-name').textContent, desc: c.querySelector('.sk-tp-desc').textContent, kids: c.querySelectorAll('svg *').length, svgBox: (() => { const s = c.querySelector('svg'); if (!s) return null; const r = s.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })() }))`);
+  // TASK 674: the cards' previews are built after the modal shows (task 680): read them once the grid says every one is drawn
+  const cards = async () => { await waitFor(`!!document.querySelector('.sk-tp-grid[data-previews="ready"]')`, 'every card preview drawn'); return evalJs(`[...document.querySelectorAll('.sk-tp-card')].map((c) => ({ id: c.dataset.template, name: c.querySelector('.sk-tp-name').textContent, desc: c.querySelector('.sk-tp-desc').textContent, kids: c.querySelectorAll('svg *').length, svgBox: (() => { const s = c.querySelector('svg'); if (!s) return null; const r = s.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })() }))`); };
   const checkLabelsClear = async (where) => {
     const report = await evalJs(`(() => {
       const ov = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;

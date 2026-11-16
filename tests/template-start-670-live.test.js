@@ -41,6 +41,9 @@ await (async () => {
   const params = () => S(`JSON.stringify(s.parameters.map((p) => [p.name, p.expression]))`).then(JSON.parse);
   const visibleChoices = (param) => evalJs(`[...document.querySelectorAll('.sk-tp-field[data-param="${param}"] .sk-tp-choice button')].filter((b) => !b.hidden).map((b) => [b.dataset.value, b.getAttribute('aria-label'), b.getAttribute('aria-pressed')])`);
   const choiceSel = (param, value) => `.sk-tp-field[data-param="${param}"] .sk-tp-choice button[data-value="${value}"]`;
+  // TASK 674: a joint the preview's corners carry is picked there only (no form row): the corner's own picker
+  const cornerChoices = (param) => evalJs(`[...document.querySelectorAll('.sk-tp-corners .sk-tp-corner[data-param="${param}"] button')].filter((b) => !b.hidden).map((b) => [b.dataset.value, b.getAttribute('aria-label'), b.getAttribute('aria-pressed')])`);
+  const cornerSel = (param, value) => `.sk-tp-corners .sk-tp-corner[data-param="${param}"] button[data-value="${value}"]`;
   // the inner column's levels (the cross boards' edges) along the long direction, user coordinates, sorted
   const boxLevels = (horizontal) => S(`JSON.stringify((() => { const p = [...s.joints.values()].map((j) => ({ x: j.x, y: -j.y })); const side = (q) => ${horizontal ? 'q.y' : 'q.x'}, along = (q) => ${horizontal ? 'q.x' : 'q.y'};
     const t0 = Math.min(...p.filter((q) => side(q) > 1e-6).map(side)); return [...new Set(p.filter((q) => Math.abs(side(q) - t0) < 1e-6).map((q) => Math.round(along(q) * 1e4) / 1e4))].sort((a, b) => a - b); })())`).then(JSON.parse);
@@ -127,15 +130,15 @@ await (async () => {
     await press('#btn-recenter-view'); await sleep(700);
     await shot('box-frame-horizontal-canvas.png', '#design-canvas');
 
-    // ================================================================== C. right-angle frame corner: the corner-joint glyph picker
+    // ================================================================== C. right-angle frame corner: the corner-joint glyph picker (TASK 674: on the preview's corner)
     await startOf('right-angle-corner');
-    assert.deepStrictEqual(await visibleChoices('joint'), [['H-Through', 'Horizontal through', 'true']], 'collapsed: the active joint only');
-    await sleep(200); await shot('corner-picker-collapsed.png', '.sk-tp-field[data-param="joint"]', { pad: 6, scale: 3 });
-    await press(choiceSel('joint', 'H-Through'));
-    assert.deepStrictEqual(await visibleChoices('joint'), [['V-Through', 'Vertical through', 'false'], ['H-Through', 'Horizontal through', 'true'], ['Miter', 'Mitered', 'false']], 'a press expands it to the 3 joints');
-    await sleep(200); await shot('corner-picker-expanded.png', '.sk-tp-field[data-param="joint"]', { pad: 6, scale: 3 });
-    await press(choiceSel('joint', 'Miter'));
-    assert.deepStrictEqual(await visibleChoices('joint'), [['Miter', 'Mitered', 'true']], 'Mitered picked, collapsed');
+    assert.deepStrictEqual(await cornerChoices('joint'), [['H-Through', 'Horizontal through', 'true']], 'collapsed: the active joint only');
+    await sleep(200); await shot('corner-picker-collapsed.png', '.sk-tp-corners .sk-tp-corner[data-param="joint"]', { pad: 6, scale: 3 });
+    await press(cornerSel('joint', 'H-Through'));
+    assert.deepStrictEqual(await cornerChoices('joint'), [['V-Through', 'Vertical through', 'false'], ['H-Through', 'Horizontal through', 'true'], ['Miter', 'Mitered', 'false']], 'a press expands it to the 3 joints');
+    await sleep(200); await shot('corner-picker-expanded.png', '.sk-tp-corners .sk-tp-corner[data-param="joint"]', { pad: 6, scale: 3 });
+    await press(cornerSel('joint', 'Miter'));
+    assert.deepStrictEqual(await cornerChoices('joint'), [['Miter', 'Mitered', 'true']], 'Mitered picked, collapsed');
     await sleep(300); await shot('start-view-corner-mitered.png', '.sk-tp-panel', { pad: 4 });
     await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp-panel')`, 'opened'); await dontSave();
     await waitFor(`window.__designController.state.shapes.length === 7`, 'the mitered corner: 7 lines');
@@ -147,9 +150,9 @@ await (async () => {
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 10000);
     await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-handle')`, 'SketchStudio to load'); await sleep(600);
     await startOf('right-angle-corner');
-    await press(choiceSel('joint', 'H-Through'));
-    assert.strictEqual((await visibleChoices('joint')).length, 3, 'SketchStudio: the picker expands');
-    await sleep(200); await shot('corner-picker-expanded-light.png', '.sk-tp-field[data-param="joint"]', { pad: 6, scale: 3 });
+    await press(cornerSel('joint', 'H-Through'));
+    assert.strictEqual((await cornerChoices('joint')).length, 3, 'SketchStudio: the picker expands');
+    await sleep(200); await shot('corner-picker-expanded-light.png', '.sk-tp-corners .sk-tp-corner[data-param="joint"]', { pad: 6, scale: 3 });
     await key('Escape', 'Escape', 27); await sleep(200);
     assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-card') && !document.querySelector('.sk-tp-start')`), true, 'Esc: back to the cards');
     await key('Escape', 'Escape', 27); await sleep(200);

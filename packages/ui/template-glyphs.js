@@ -23,15 +23,22 @@
 // square centred viewBox (pad 3), stroke and colouring as 'corner-joint'.
 // 'polygon-joint': PORTED from frame-calc shared/components/QuadJointGlyph.js (React there): 5 points on a constant-turn arc (turn = 180 - the
 // corner's interior angle, side 40), THE per-vertex frame engine (calculatePolygonFrameGeometry) with every joint = the option and thickness 8,
-// boards 1 and 2 (the two meeting at the middle vertex) cropped to 55 % of their length, a 46 x 46 viewBox centred on the crops. The interior
-// angle is the regular polygon's for the start modal's `sides` (frame-calc: its N), unrotated (frame-calc rotates the glyph of vertex k by
-// k * 360 / N; ONE joint for all corners shows vertex 0, on top).
+// boards 1 and 2 (the two meeting at the middle vertex) cropped to 55 % of their length, a 46 x 46 viewBox centred on the crops. TASK 674: the
+// interior angle is the corner's (templateCorners: for the polygon frame's row, its first corner's = the regular N-gon's, unrotated as before).
 // 'box-corner-joint': the box frame's corner joint: the 'corner-joint' glyph, as the drawing will be: the Horizontal layout is the vertical one
 // mirrored in its diagonal (#core/templates.js), which turns "the vertical board runs through" into "the horizontal board runs through", so
 // the glyph of the other through option is shown there (the mirror of the top-left corner glyph is the other one).
+// TASK 674: a glyph is GLYPHS[glyph](value, { active, values, corner }): `corner` = the corner it stands for (#core/templates.js
+// templateCorners: { interior, out }) when it is drawn for one corner (on the start modal's preview: `out` = the direction off the drawing),
+// or { interior } for a whole row (the first corner's angle, unturned). 'polygon-joint' draws the corner's interior angle turned the way frame-calc
+// turns QuadJointGlyph (TrapezoidCanvasView.js: rotation = the corner's outward direction + 90 degrees, so the glyph's vertex points out of the
+// drawing); 'corner-joint' / 'box-corner-joint' draw the corner's own orientation (cornerBoards' hx / vy = the inward directions, from `out`);
+// the brace glyphs are frame-calc's JointDiagram as they are (frame-calc's oblique triangle shows them unturned too).
+// 'trapezoid-variant': the trapezoid frame's shape (#core/frame-geometry.js TRAPEZOID_VARIANTS): a small frame of four mitered boards from THE
+// per-vertex engine on that variant's trapezoid (mapTrapezoidVertices, computeEffectiveOffset), the same viewBox rule, stroke and colouring.
 
 import { cornerBoards } from '#core/corner-joint.js';
-import { calculateFramingGeometry, calculatePolygonFrameGeometry } from '#core/frame-geometry.js';
+import { calculateFramingGeometry, calculatePolygonFrameGeometry, mapTrapezoidVertices, computeEffectiveOffset, TRAPEZOID_VARIANTS } from '#core/frame-geometry.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const STROKE_W = 1.4, PAD = 3;
@@ -72,9 +79,10 @@ const braceGlyph = (corner) => (type, { active = false } = {}) => {
   return boardsSvg([{ points: Object.values(pair[0]), tone: 'light' }, { points: Object.values(pair[1]), tone: 'dark' }], active);
 };
 
-// frame-calc QuadJointGlyph: the two boards at a vertex of the given interior angle, cropped
+// frame-calc QuadJointGlyph: the two boards at a vertex of the given interior angle, cropped, turned by `rotation` degrees about the crop's centre
+// (frame-calc turns the whole <svg> with a CSS rotate about its centre, the viewBox centre: the same picture)
 const SIDE_LEN = 40, THICK = 8;
-function polygonJointGlyph(type, interiorAngleDeg, active) {
+function polygonJointGlyph(type, interiorAngleDeg, active, rotation = 0) {
   const turnRad = (180 - interiorAngleDeg) * Math.PI / 180;
   const Rc = SIDE_LEN / (2 * Math.sin(turnRad / 2));
   const pointAt = (k) => { const a = k * turnRad - Math.PI / 2; return { x: Rc * Math.cos(a), y: Rc * Math.sin(a) }; };
@@ -87,14 +95,27 @@ function polygonJointGlyph(type, interiorAngleDeg, active) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of [...leftCrop, ...rightCrop]) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }
   const side = 46, cx = (minX + maxX) / 2, cy = (minY + maxY) / 2; // frame-calc: exactly 46, so the board thickness (8) matches the other glyphs
-  return boardsSvg([{ points: leftCrop, tone: 'light' }, { points: rightCrop, tone: 'dark' }], active, `${cx - side / 2} ${cy - side / 2} ${side} ${side}`);
+  const r = rotation * Math.PI / 180, cos = Math.cos(r), sin = Math.sin(r);
+  const turn = (p) => (rotation ? { x: cx + (p.x - cx) * cos - (p.y - cy) * sin, y: cy + (p.x - cx) * sin + (p.y - cy) * cos } : p);
+  return boardsSvg([{ points: leftCrop.map(turn), tone: 'light' }, { points: rightCrop.map(turn), tone: 'dark' }], active, `${cx - side / 2} ${cy - side / 2} ${side} ${side}`);
+}
+// TASK 674: frame-calc's glyph rotation for a corner: its outward direction + 90 degrees (unturned for a row: no `out`)
+const rotationOf = (corner) => (corner && corner.out ? Math.atan2(corner.out.y, corner.out.x) * 180 / Math.PI + 90 : 0);
+// TASK 674: cornerBoards' inward directions of a corner (the top-left corner, hx = vy = 1, without one)
+const inward = (corner) => (corner && corner.out ? [corner.out.x > 0 ? -1 : 1, corner.out.y > 0 ? -1 : 1] : [1, 1]);
+function trapezoidVariantGlyph(variant, active) {
+  const v = TRAPEZOID_VARIANTS.find((o) => o.value === variant), bottomWidth = 40, topWidth = 22, height = 26;
+  const offset = computeEffectiveOffset({ trapVariant: v.trapVariant, rightSide: v.rightSide, bottomWidth, topWidth, freeOffset: -4 });
+  const { boards } = calculatePolygonFrameGeometry({ P: mapTrapezoidVertices({ bottomWidth, topWidth, height, offset }), thick: 4, joints: Array(4).fill('Miter') });
+  return boardsSvg(boards.map((b, k) => ({ points: [b.p1, b.p2, b.p3, b.p4], tone: k % 2 ? 'light' : 'dark' })), active);
 }
 const OTHER_THROUGH = { 'V-Through': 'H-Through', 'H-Through': 'V-Through', Miter: 'Miter' };
 
 export const GLYPHS = Object.freeze({
-  'corner-joint': (type, { active = false } = {}) => {
+  'corner-joint': (type, { active = false, corner } = {}) => {
     const T = 8, A = 32; // frame-calc's normalized proportions (its JointDiagram's 40 x 40 / 8 mini triangle)
-    const b = cornerBoards(0, 0, 1, 1, T, A, A, type);
+    const [hx, vy] = inward(corner);
+    const b = cornerBoards(0, 0, hx, vy, T, A, A, type);
     return boardsSvg([{ points: b.h, tone: 'light' }, { points: b.v, tone: 'dark' }], active);
   },
   'box-layout': (layout, { active = false } = {}) => {
@@ -107,9 +128,10 @@ export const GLYPHS = Object.freeze({
     if (layout === 'Horizontal') for (const b of boards) b.points = b.points.map((p) => ({ x: p.y, y: p.x })); // the same frame, x and y swapped
     return boardsSvg(boards, active);
   },
-  'box-corner-joint': (type, { active = false, values = {} } = {}) => GLYPHS['corner-joint'](values.layout === 'Horizontal' ? OTHER_THROUGH[type] : type, { active }),
+  'box-corner-joint': (type, { active = false, values = {}, corner } = {}) => GLYPHS['corner-joint'](values.layout === 'Horizontal' ? OTHER_THROUGH[type] : type, { active, corner }),
   'brace-top': braceGlyph('top'),
   'brace-bl': braceGlyph('bl'),
   'brace-br': braceGlyph('br'),
-  'polygon-joint': (type, { active = false, values }) => polygonJointGlyph(type, ((values.sides - 2) * 180) / values.sides, active),
+  'polygon-joint': (type, { active = false, corner }) => polygonJointGlyph(type, corner.interior, active, rotationOf(corner)),
+  'trapezoid-variant': (variant, { active = false } = {}) => trapezoidVariantGlyph(variant, active),
 });

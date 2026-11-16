@@ -75,13 +75,36 @@ function segsCross(p1, p2, p3, p4) {
   return ((d1 > EPS && d2 < -EPS) || (d1 < -EPS && d2 > EPS)) && ((d3 > EPS && d4 < -EPS) || (d3 < -EPS && d4 > EPS));
 }
 
-// SKETCH-4a: does `outer` STRICTLY contain `inner` (non-touching nesting)? A representative inner point inside outer
+// TASK 732: a point STRICTLY INSIDE a simple polygon (never on its boundary): at its lexicographically lowest vertex v (a convex corner)
+// with neighbours a and b, the centroid of the triangle a v b, unless other vertices fall inside that triangle: then the midpoint of v and
+// the one of them farthest from the line a b (the classic interior-point construction; O'Rourke, Computational Geometry in C, 1.6).
+function interiorPoint(poly) {
+  const n = poly.length;
+  let i = 0;
+  for (let k = 1; k < n; k++) if (poly[k].x < poly[i].x || (poly[k].x === poly[i].x && poly[k].y < poly[i].y)) i = k;
+  const v = poly[i], a = poly[(i - 1 + n) % n], b = poly[(i + 1) % n];
+  const turn = Math.sign(cross3(a, v, b)); // the triangle's winding: a point is inside it when on the same side of its three edges
+  let far = null, farDist = 0;
+  for (let k = 0; k < n; k++) {
+    const q = poly[k];
+    if (k === i || q === a || q === b) continue;
+    if (turn * cross3(a, v, q) > EPS && turn * cross3(v, b, q) > EPS && turn * cross3(b, a, q) > EPS) {
+      const d = Math.abs(cross3(a, b, q));
+      if (d > farDist) { farDist = d; far = q; }
+    }
+  }
+  return far ? { x: (v.x + far.x) / 2, y: (v.y + far.y) / 2 } : { x: (a.x + v.x + b.x) / 3, y: (a.y + v.y + b.y) / 3 };
+}
+
+// SKETCH-4a: does `outer` contain `inner` (nesting: a hole or an island)? A point strictly inside inner is inside outer
 // AND polyArea(inner) < polyArea(outer) AND no edge of inner crosses any edge of outer. Used by profile hole
-// resolution (a profile with holes → an evenodd compound path).
+// resolution (a profile with holes → an evenodd compound path). TASK 732: that point is one strictly INSIDE inner (interiorPoint), not its
+// first vertex: a neighbouring face sharing an edge (a box divider standing on a board: its first vertex ON the board's edge, where the
+// ray test is ambiguous) lies beside outer, never inside it.
 export function polygonContains(outer, inner) {
   if (!Array.isArray(outer) || !Array.isArray(inner) || outer.length < 3 || inner.length < 3) return false;
   if (polyArea(inner) >= polyArea(outer)) return false;     // equal or larger → not strictly contained
-  if (!pointInPolygon(outer, inner[0])) return false;        // a representative inner point inside outer
+  if (!pointInPolygon(outer, interiorPoint(inner))) return false; // a point strictly inside inner is inside outer
   const n = inner.length, m = outer.length;
   for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {  // no crossing → strict, non-touching
     if (segsCross(inner[i], inner[(i + 1) % n], outer[j], outer[(j + 1) % m])) return false;

@@ -206,7 +206,7 @@ try {
   await setPlan('stepped-inside');
   const inn = await zoomShot('desktop-2d-06-stepped-inside-zoomed.png', 4, null);
   checkDownload(await dl(), '06 stepped inside');
-  assert.ok(inn.look.every((f) => f === 'inside #FFFFFF/#000000'), 'stepped inside keeps the file\'s colours: ' + inn.look);
+  assert.ok(inn.look.every((f) => f.endsWith('/#000000')) && inn.look[inn.look.length - 1] === 'inside #FFFFFF/#000000', 'stepped inside keeps the file black stroke and its through step stays white (task 720 greys the other steps): ' + inn.look);
   console.log('export-preview-719-live.test.js: ok');
 } finally {
   await close();

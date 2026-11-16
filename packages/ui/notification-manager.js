@@ -5,6 +5,79 @@
 // TODO(shaper): parameterize the DOM reaches (document.body / createElement / the #notification* ids)
 // before Shaper adopts this — it currently writes straight into the document.
 
+const DEFAULT_BOTTOM_PX = 20;
+const CLEARANCE_GAP_PX = 8;
+
+const horizOverlaps = (a, b) => a.left < b.right && b.left < a.right;
+
+function visibleRect(el) {
+    if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+    if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+        const cs = window.getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return null;
+    }
+    const r = el.getBoundingClientRect();
+    return r && r.width > 0 && r.height > 0 ? r : null;
+}
+
+function footerTopEdge() {
+    if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return null;
+    let top = null;
+    for (const el of document.querySelectorAll('.sk-footer, .sk-statusbar')) {
+        const r = visibleRect(el);
+        if (!r) continue;
+        top = top === null ? r.top : Math.min(top, r.top);
+        for (const btn of el.querySelectorAll('button')) {
+            const br = visibleRect(btn);
+            if (br) top = Math.min(top, br.top);
+        }
+    }
+    return top;
+}
+
+function ceilingBottomEdge(cLeft, cRight, vh) {
+    let ceiling = CLEARANCE_GAP_PX;
+    if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return ceiling;
+    for (const el of document.querySelectorAll('.sk-header, .sk-doctabs, .sk-ribbon')) {
+        const r = visibleRect(el);
+        if (!r || r.height > vh * 0.55 || r.bottom > vh * 0.6) continue;
+        if (horizOverlaps(r, { left: cLeft, right: cRight })) ceiling = Math.max(ceiling, r.bottom + CLEARANCE_GAP_PX);
+    }
+    for (const el of document.querySelectorAll('.sk-ribbon-menu.show, .sk-ribbon-sect-menu.show')) {
+        const r = visibleRect(el);
+        if (!r) continue;
+        if (horizOverlaps(r, { left: cLeft, right: cRight })) ceiling = Math.max(ceiling, r.bottom + CLEARANCE_GAP_PX);
+    }
+    return ceiling;
+}
+
+/** Position the toast stack above the host's live footer and drop oldest overflow on short screens. */
+export function layoutNotifications() {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    const fTop = footerTopEdge();
+    const bottomPx = fTop !== null ? Math.max(DEFAULT_BOTTOM_PX, Math.ceil(vh - fTop + CLEARANCE_GAP_PX)) : DEFAULT_BOTTOM_PX;
+    container.style.bottom = `${bottomPx}px`;
+    if (!(vh > 0) || !(container.offsetHeight > 0)) return;
+
+    const cW = Math.max(200, container.offsetWidth || 0);
+    const cLeft = Math.max(0, (vw - cW) / 2);
+    const cRight = cLeft + cW;
+    const floorY = fTop !== null ? fTop - CLEARANCE_GAP_PX : vh - DEFAULT_BOTTOM_PX;
+    const ceilingY = ceilingBottomEdge(cLeft, cRight, vh);
+    const maxH = Math.max(0, floorY - ceilingY);
+
+    // Under flex-direction: column-reverse, firstElementChild is the oldest toast (sits at bottom; trimming pulls newer down).
+    while (container.children.length > 1 && container.offsetHeight > maxH) {
+        container.firstElementChild.remove();
+    }
+}
+
+let resizeWired = false;
+
 export function setupNotifications() {
     if (typeof document === 'undefined') return;
     
@@ -14,7 +87,7 @@ export function setupNotifications() {
         container.id = 'notification-container';
         container.style.cssText = `
             position: fixed;
-            bottom: 20px;
+            bottom: ${DEFAULT_BOTTOM_PX}px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -26,6 +99,11 @@ export function setupNotifications() {
         `;
         document.body.appendChild(container);
     }
+    if (!resizeWired && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        resizeWired = true;
+        window.addEventListener('resize', layoutNotifications);
+    }
+    layoutNotifications();
     
     // Expose global helper for debugging/console use
     if (typeof window !== 'undefined') {
@@ -88,7 +166,7 @@ export function showNotification(message, type = 'info', duration = 3000) {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         pointer-events: auto;
         min-width: 200px;
-        max-width: 420px;
+        max-width: min(420px, calc(100vw - 24px));
         user-select: text;
         cursor: text;
     `;
@@ -153,6 +231,7 @@ export function showNotification(message, type = 'info', duration = 3000) {
     toast.appendChild(iconSpan);
     toast.appendChild(pre);
     document.getElementById('notification-container').appendChild(toast);
+    layoutNotifications();
 
     // Animate in
     requestAnimationFrame(() => {
@@ -165,7 +244,10 @@ export function showNotification(message, type = 'info', duration = 3000) {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(30px)'; /* slide down on dismiss */
         toast.addEventListener('transitionend', () => {
-            if (toast.parentNode) toast.parentNode.removeChild(toast);
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+                layoutNotifications();
+            }
         });
     };
 

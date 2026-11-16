@@ -17,7 +17,7 @@ import { findLoops, findOpenChains } from './loop-finder.js';
 import { formatShaperParam } from './units.js';
 import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
 import { loopPolygon, loopToPathD, compoundPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
-import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey, deriveProfileCuts } from './profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey, deriveProfileCuts, ownedLoopIds } from './profile-model.js';
 export { loopToPathD, polyToPathD };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -191,11 +191,12 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     }
   }
 
+  const owned = ownedLoopIds(ents, state, loops, ensurePolys()); // TASK 711: a hole with its own entry is cut by that entry only
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
     if (e.target.kind === 'loop' && vcarveExcludedLoops.has(e.target.id)) continue;
     if (e.target.kind === 'profile' && vcarveExcludedProfiles.has(e.target.id)) continue;
-    const cuts = deriveProfileCuts(e.target, e.rec, state, loops, ensurePolys());
+    const cuts = deriveProfileCuts(e.target, e.rec, state, loops, ensurePolys(), owned);
     for (const cut of cuts) {
       const c = encOf(cut.rec.cutType);
       if (!c) continue;

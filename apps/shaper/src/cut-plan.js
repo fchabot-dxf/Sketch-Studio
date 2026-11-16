@@ -7,7 +7,7 @@
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID } from './shaper.js';
-import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey, makeProfile } from '#core/profile-model.js';
+import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey, makeProfile, ownedLoopIds } from '#core/profile-model.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
@@ -22,9 +22,9 @@ export function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) |
 
 // All ASSIGNED entries (a cutType is set) → [{ target:{kind,id}, rec }] for the exporter. Loop targets are resolved
 // against the live design at export time (findLoops), so a stale id simply yields nothing.
-export function cutPlanEntries() {
+export function cutPlanEntries(plan = CUT_PLAN) {
   const out = [];
-  for (const [key, rec] of CUT_PLAN) {
+  for (const [key, rec] of plan) {
     if (rec && rec.cutType) { const { kind, id } = parseKey(key); out.push({ target: { kind, id }, rec }); }
   }
   return out;
@@ -100,17 +100,24 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = nul
 }
 
 /**
- * deriveKeyFootprints(key, storedRec, state, loops, loopPolys) — THE ONE composition of the cut derivations for one plan
+ * deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) — THE ONE composition of the cut derivations for one plan
  * target: effectiveCutRecord -> deriveProfileCuts -> deriveCutFootprint. Returns { rec, cuts, footprints } (rec = the effective
  * record the footprints were derived with), or null when the target derives to nothing (stale key). Both Prepare's preview
  * (computeLook) and the 3D Review (planReliefItems) call this; no cut geometry is computed here.
- * `loops` must carry the host-side `polygon` (see loopsWithPolygons); `loopPolys` = { [loop id]: polygon }.
+ * `loops` must carry the host-side `polygon` (see loopsWithPolygons); `loopPolys` = { [loop id]: polygon }; `owned` = the loops with
+ * their own record in the plan (planOwnedLoops), never cut again as a hole of this target (TASK 711, as the exporter does).
  */
-export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys) {
+export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) {
   const rec = effectiveCutRecord(storedRec); // TASK 450: On line / Guide take no offset: a stored one is ignored
-  const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys);
+  const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys, owned);
   if (!cuts || !cuts.length) return null;
   return { rec, cuts, footprints: deriveCutFootprint(cuts, rec, state) };
+}
+
+/** TASK 711: the loops that have their own record in `plan` (#core ownedLoopIds over the plan's assigned entries, the set the exporter
+ *  derives from the same entries). */
+export function planOwnedLoops(state, loops, loopPolys, plan = CUT_PLAN) {
+  return ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys);
 }
 
 /** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. */
@@ -142,6 +149,7 @@ const VCARVE_SLICES = 3, VCARVE_BIG_STACK = 40;
  */
 export function planReliefItems(state, plan = CUT_PLAN) {
   const { loops, loopPolys } = loopsWithPolygons(state);
+  const owned = planOwnedLoops(state, loops, loopPolys, plan);
   const items = [];
 
   // V-carve: every contour ring = a V-bit On Line pass at the ring's own depth (deriveVcarveContours is the ONE derivation).
@@ -167,7 +175,7 @@ export function planReliefItems(state, plan = CUT_PLAN) {
 
   for (const [key, stored] of plan) {
     if (!stored || !stored.cutType || carved.has(key) || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
-    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys);
+    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned);
     if (!d) continue;
     const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)

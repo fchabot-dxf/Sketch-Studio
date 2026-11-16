@@ -7,6 +7,8 @@
  * DXF  → coordinates in chosen unit, $INSUNITS set accordingly — Fusion 360 / CAM.
  */
 
+import { track } from '#ui/analytics.js'; // TASK 738
+
 const MM_PER_INCH = 25.4;
 
 // ── SVG export ────────────────────────────────────────────────────────────────
@@ -15,12 +17,13 @@ export function downloadSVG(svgString, filename, scaleMmPx, imageH, unit = 'mm')
   if (!svgString) return;
   const scaled = applyScaleToSVG(svgString, scaleMmPx, unit);
   downloadText(scaled, `${filename}.svg`, 'image/svg+xml');
+  track('export:svg'); // TASK 738
 }
 
 export function copySVG(svgString, scaleMmPx, imageH, unit = 'mm') {
   if (!svgString) return Promise.reject('No SVG');
   const scaled = applyScaleToSVG(svgString, scaleMmPx, unit);
-  return navigator.clipboard.writeText(scaled);
+  return navigator.clipboard.writeText(scaled).then(() => { track('export:copy-svg'); }); // TASK 738
 }
 
 /**
@@ -69,6 +72,7 @@ export function downloadDXF(svgString, filename, scaleMmPx, imageH, unit = 'mm')
   if (!svgString) return;
   const dxf = svgToDXF(svgString, scaleMmPx ?? 1, unit);
   downloadText(dxf, `${filename}.dxf`, 'application/dxf');
+  track('export:dxf'); // TASK 738
 }
 
 function svgToDXF(svgString, scaleMmPx, unit) {

@@ -3,6 +3,7 @@
 
 import { createAppHeader } from './app-header.js';
 import { mountProjectSidebar } from './sidebar-projects.js';
+import { startAnalytics, track } from './analytics.js'; // TASK 738: the app's visit, and the stage it picks
 
 export function mountAppChrome({
   appId,
@@ -17,7 +18,10 @@ export function mountAppChrome({
   projects = true,
   store,
   account,
+  host = 'web', // TASK 738: where the app runs, for the analytics: 'web', or 'fusion' (Shaper's Fusion 360 palette)
 } = {}) {
+  startAnalytics({ app: appId, host }); // TASK 738: the visit (once per page load; analytics.js sends only from a public page)
+
   let header = null;
   let sidebar = null;
 
@@ -27,6 +31,7 @@ export function mountAppChrome({
   };
 
   const selectStage = (id) => {
+    track('stage:' + id); // TASK 738: a stage tab picked (the header or the menu)
     setActiveStage(id);
     if (onStageChange) onStageChange(id);
   };

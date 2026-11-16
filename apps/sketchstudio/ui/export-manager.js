@@ -2,6 +2,7 @@
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { arcSweepInfo } from '#core/geometry.js';
+import { track } from '#ui/analytics.js'; // TASK 738
 
 // Task 614: the stroke width of an export when the caller passes none. A DECLARED export constant (was the LINE_STROKE display knob, whose
 // factory value was 1): a display look never changes what is exported.
@@ -259,11 +260,13 @@ export function exportToFile(state, filename, filetype, opts = {}) {
     const svg = buildSVG(state, opts);
     if (!svg) return { ok: false, reason: 'No line/arc shapes to export' };
     downloadFile(svg, filename + '.svg', 'image/svg+xml');
+    track('export:svg'); // TASK 738
     return { ok: true };
   } else if (filetype === 'dxf') {
     const dxf = buildDXF(state, opts);
     if (!dxf) return { ok: false, reason: 'No line/arc shapes to export' };
     downloadFile(dxf, filename + '.dxf', 'application/dxf');
+    track('export:dxf'); // TASK 738
     return { ok: true };
   }
   return { ok: false, reason: 'Unknown filetype' };

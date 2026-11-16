@@ -4,6 +4,8 @@
  * Dispatches 'imageLoaded' on the eventBus with { blob, canvas, width, height, name }.
  */
 
+import { track } from '#ui/analytics.js'; // TASK 738
+
 export function initUpload(eventBus) {
   const dropZone  = document.getElementById('drop-zone');
   const fileInput = document.getElementById('file-input');
@@ -45,6 +47,7 @@ export async function decodeImageBlob(blob) {
 
 async function processFile(file, eventBus) {
   const { canvas, width, height } = await decodeImageBlob(file);
+  track('import:image'); // TASK 738: that a photo was loaded, never its name
 
   // Update drop zone label
   const label = document.querySelector('#drop-zone .drop-label');

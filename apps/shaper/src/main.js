@@ -26,6 +26,7 @@ import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes } from './c
 import { shaperSvgOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
+import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
@@ -51,6 +52,7 @@ initMode = resolveInitialMode(initMode, { fusion: fusionMode }); // modes.js: a 
 
 const chrome = mountAppChrome({
   appId: 'shaper',
+  host: fusionMode ? 'fusion' : 'web', // TASK 738: the analytics tell the Fusion 360 palette from the website
   stages: activeStages,
   activeStage: initMode,
   onStageChange: (mode) => showMode(mode),
@@ -195,6 +197,7 @@ if (syncForm) {
         throw new Error(data.error || `Upload failed with status ${res.status}`);
       }
 
+      track('export:shaperhub'); // TASK 738
       if (syncRemember && syncRemember.checked) {
         try { localStorage.setItem(CRED_STORAGE_KEY, JSON.stringify({ email, password })); } catch (_) {}
       } else {
@@ -437,7 +440,7 @@ if (fusionMode) {
     noticeEl: document.getElementById('prepare-notice'),
     onSelectionData: (payload) => {
       ensureSketch();
-      return importFusionSelection(payload, {
+      const res = importFusionSelection(payload, {
         controller: designController,
         prepare,
         onImport: () => {
@@ -448,6 +451,8 @@ if (fusionMode) {
           if (modes.current() === 'review') enterReview(designController.state);
         },
       });
+      if (res.ok && res.imported) track('import:fusion'); // TASK 738
+      return res;
     },
   });
   showMode(initMode);

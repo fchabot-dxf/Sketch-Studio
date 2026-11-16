@@ -55,3 +55,6 @@ scripts/live-evidence-*.cjs
 
 # --- TASK 696: the built website of one app (node scripts/build-site.cjs <app>) ---
 dist/
+
+# --- TASK 738: the analytics Worker's local deploy log (analytics/deploy.mjs) ---
+analytics/.deploy-log.jsonl

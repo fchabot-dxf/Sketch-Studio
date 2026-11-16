@@ -7,6 +7,7 @@
 //   packages/        the shared packages, ONE copy in git, copied here at build time (their tests/ folders left out)
 //   <root files>     the files outside apps/ and packages/ the app reaches (site-closure.cjs: e.g. assets/constraint-glyphs.svg, the glyph sheet)
 //   privacy.html     the privacy page (the Google OAuth consent screen links it)
+//   TASK 738: the site's copy of packages/ui/analytics.js carries the build time as BUILD (stampBuild: the analytics `version`); every other file is a plain copy
 //   _redirects       this site's Cloudflare Pages rules (siteRedirects below)
 // The build fails (exit 1, nothing half-written is reported as done) when the app reaches a file that does not exist or a file of another app.
 // Plain Node, no bundler, no dependency. The Pages Functions (functions/: the Google sign-in routes, /api/shaper-upload) are NOT copied: wrangler
@@ -42,6 +43,16 @@ function siteRedirects(app) {
   return lines.join('\n') + '\n';
 }
 
+// TASK 738: the analytics `version` of a site = when it was built. The repo's analytics.js says 'source'; the site's copy says the build time (UTC, to the minute).
+const ANALYTICS_FILE = 'packages/ui/analytics.js';
+const BUILD_LINE = "export const BUILD = 'source';";
+function stampBuild(out, stamp) {
+  const file = path.join(out, ANALYTICS_FILE);
+  const src = fs.readFileSync(file, 'utf8');
+  if (!src.includes(BUILD_LINE)) throw new Error(`build-site: ${ANALYTICS_FILE} has no line ${BUILD_LINE} to stamp the build into`);
+  fs.writeFileSync(file, src.replace(BUILD_LINE, `export const BUILD = '${stamp}';`));
+}
+
 const SKIP_DIRS = new Set(['tests', 'node_modules']);
 function copyTree(src, dst, list) {
   fs.mkdirSync(dst, { recursive: true });
@@ -71,13 +82,15 @@ function buildSite(app, outDir = path.join(REPO_ROOT, 'dist')) {
   const copied = [];
   copyTree(path.join(REPO_ROOT, 'apps', app), path.join(out, 'apps', app), copied);
   copyTree(path.join(REPO_ROOT, 'packages'), path.join(out, 'packages'), copied);
+  const build = new Date().toISOString().slice(0, 16) + 'Z';
+  stampBuild(out, build);
   for (const f of [...closure.files].filter((f) => !f.startsWith(`apps/${app}/`) && !f.startsWith('packages/')).concat('privacy.html')) {
     fs.mkdirSync(path.dirname(path.join(out, f)), { recursive: true });
     fs.copyFileSync(path.join(REPO_ROOT, f), path.join(out, f));
     copied.push(f);
   }
   fs.writeFileSync(path.join(out, '_redirects'), siteRedirects(app));
-  return { app, out, files: copied.length + 1, reached: closure.files.size, functions: closure.functions };
+  return { app, out, files: copied.length + 1, reached: closure.files.size, functions: closure.functions, build };
 }
 
 module.exports = { buildSite, siteRedirects, SITE_HOST };
@@ -89,7 +102,7 @@ if (require.main === module) {
   try {
     const r = buildSite(app, oi >= 0 ? args[oi + 1] : undefined);
     const top = fs.readdirSync(r.out, { withFileTypes: true }).map((e) => e.name + (e.isDirectory() ? '/' : '')).sort();
-    console.log(`build-site ${r.app}: ${r.files} files in ${r.out} (the app reaches ${r.reached}); top level: ${top.join(' ')}`);
+    console.log(`build-site ${r.app}: ${r.files} files in ${r.out} (the app reaches ${r.reached}); top level: ${top.join(' ')}; build ${r.build}`);
     console.log(`  Pages Functions it calls (deployed from ./functions of the directory wrangler runs in): ${[...new Set(r.functions.map((f) => f.file))].join(', ') || 'none'}`);
   } catch (e) {
     console.error(e.message);

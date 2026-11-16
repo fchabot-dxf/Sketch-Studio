@@ -28,7 +28,7 @@ import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
 import { formatConstraintValue, formatLenLabel } from '#ui/svg-renderer.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
-import { ensureNumericInputStyles, handleBoxUndoKey } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
 
 const OVERLAY_ID = 'fillet-tool-overlay';
 const INPUT_ID = 'fillet-radius-input';
@@ -340,7 +340,7 @@ function openInput(svg, state, viewState, corner) {
     else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
   });
   refreshPreview();
-  placeInput(); // after the preview: the box keeps off the drag arrow it draws
+  syncRadiusBox(); // after the preview: the box keeps off the drag arrow it draws
   // The click that opened the input is still in flight: its pointerup/click would take focus back to the canvas.
   // Focus now AND again once that gesture has finished.
   const focusIt = () => { if (_input && _input.el === el) { el.focus(); el.select(); } };
@@ -349,23 +349,11 @@ function openInput(svg, state, viewState, corner) {
   setTimeout(focusIt, 60);
 }
 
-// the radius box sits beside the corner, wherever the view has moved it, and always fully inside the canvas (task 653): below-right first, then
-// below-left, above-right, above-left, then a box higher up; the first that stays inside the canvas and off the drag arrow (the green check keeps clear of the box)
-function placeInput() {
+const syncRadiusBox = () => {
   const { el, corners, svg } = _input || {};
   const corner = corners && corners[0];
-  if (!el || !corner || !svg) return;
-  const q = worldToScreen(svg, corner.cornerPt);
-  const c = svg.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight, G = 14;
-  const hd = document.querySelector('#fillet-tool-overlay .fillet-handle');
-  const hr = hd && hd.getBoundingClientRect();
-  const ok = ([x, y]) => x >= c.left && y >= c.top && x + w <= c.right && y + h <= c.bottom && !(hr && x < hr.right && x + w > hr.left && y < hr.bottom && y + h > hr.top);
-  const spots = [[q.x + G, q.y + G], [q.x - G - w, q.y + G], [q.x + G, q.y - G - h], [q.x - G - w, q.y - G - h], [q.x + G, q.y - G - 2 * h - 12], [q.x - G - w, q.y - G - 2 * h - 12]];
-  if (q.x < c.left || q.x > c.right || q.y < c.top || q.y > c.bottom) { el.style.left = `${Math.round(q.x + G)}px`; el.style.top = `${Math.round(q.y + G)}px`; return; } // a corner panned off the canvas: the box goes with it, as before
-  const [x, y] = spots.find(ok) || spots.find(([sx, sy]) => sx >= c.left && sy >= c.top && sx + w <= c.right && sy + h <= c.bottom) || spots[0];
-  el.style.left = `${Math.round(Math.max(c.left, Math.min(x, c.right - w)))}px`;
-  el.style.top = `${Math.round(Math.max(c.top, Math.min(y, c.bottom - h)))}px`;
-}
+  if (el && corner && svg) placeAnchoredBox({ el, svg, world: corner.cornerPt, obstacles: document.querySelector('#fillet-tool-overlay .fillet-handle') });
+};
 
 function refreshPreview() {
   if (!_input) return;
@@ -444,7 +432,7 @@ function ensureViewListener() {
   _viewListening = true;
   document.addEventListener('panzoom:viewportChanged', () => {
     if (_press) _press.moved = true; // a pan / pinch that began on empty canvas is not a click
-    if (_input) { refreshPreview(); placeInput(); }
+    if (_input) { refreshPreview(); syncRadiusBox(); }
     else if (_pick) renderFilletOverlay(_ctx && resolveCanvasSvg(_ctx), null, _state && _state.view, { highlight: [_pick.line1] });
   });
 }

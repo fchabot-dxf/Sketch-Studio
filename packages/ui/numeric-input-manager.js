@@ -441,20 +441,9 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // Mark constraint as editing to hide the SVG label
     constraint.__editing = true;
 
-    // Calculate screen position from world glyphPos
-    let pos = { x: 0, y: 0 };
-    if (constraint.glyphPos) {
-        const gp = Array.isArray(constraint.glyphPos) ? constraint.glyphPos[0] : constraint.glyphPos;
-        pos = worldToScreen(svg, gp);
-    } else {
-        const rect = svg.getBoundingClientRect();
-        pos = { x: rect.width / 2, y: rect.height / 2 };
-    }
-
-    uiState.singleInput.style.left = `${pos.x}px`;
-    uiState.singleInput.style.top = `${pos.y}px`;
     uiState.singleInput.style.transform = 'translate(-50%, -50%)';
     showNumericInputEl(uiState.singleInput);
+    placeEditBox(); // shown first: a hidden box has no size and no containing block to place it in
 
     let prefillValue = constraint.value;
     if (constraint.dimMode === 'horizontal' && constraint.joints && constraint.joints.length >= 2) {
@@ -534,12 +523,32 @@ function placeLiveBox(el, x, y) {
         x = Math.max(c.left, Math.min(x, c.right - w));
         y = Math.max(c.top, Math.min(y, c.bottom - h));
     }
+    setViewportPosition(el, x, y);
+}
+
+/** TASK 697 / 723: write a VIEWPORT point (x, y) as the box's left / top in ITS OWN containing block (a position:fixed box: the viewport;
+ *  the shared single box lives in a positioned container: that container's padding box). The ONE conversion for every on-canvas box. */
+function setViewportPosition(el, x, y) {
     const op = el.offsetParent;
     const base = op && typeof op.getBoundingClientRect === 'function'
         ? { left: op.getBoundingClientRect().left + (op.clientLeft || 0) - (op.scrollLeft || 0), top: op.getBoundingClientRect().top + (op.clientTop || 0) - (op.scrollTop || 0) }
         : { left: 0, top: 0 };
     el.style.left = `${x - base.left}px`;
     el.style.top = `${y - base.top}px`;
+}
+
+/** TASK 723: the dimension EDIT box sits centred ON its label (the label's world point, glyphPos; the box is translate(-50%, -50%)), kept inside the
+ *  canvas svg's rect (a label panned near or past an edge holds the box at that edge). Was: the viewport point written straight into left / top, so in
+ *  a host whose box lives in a positioned container (SketchStudio) the box sat the container's offset away from its label (~180 px below it). */
+function placeEditBox() {
+    const el = uiState.singleInput, svg = uiState.svg, c = uiState.target;
+    const r = svg.getBoundingClientRect();
+    const gp = Array.isArray(c.glyphPos) ? c.glyphPos[0] : c.glyphPos;
+    let { x, y } = gp ? worldToScreen(svg, gp) : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const hw = (el.offsetWidth || 0) / 2, hh = (el.offsetHeight || 0) / 2;
+    x = Math.max(r.left + hw, Math.min(x, r.left + r.width - hw));
+    y = Math.max(r.top + hh, Math.min(y, r.top + r.height - hh));
+    setViewportPosition(el, x, y);
 }
 
 /**
@@ -639,6 +648,7 @@ function endPlacing(target, state) {
 // just-placed one stays placed with its measured value (as Enter on the unchanged text leaves it). The press is not stopped.
 function handleOutsidePress(e) {
     if (!uiState.active || uiState.mode !== 'edit' || !uiState.target) return;
+    if (e.button === 1) return; // the middle button pans the view (as the wheel zooms it): navigating is not working elsewhere, the box stays
     const path = e.composedPath();
     if ([uiState.singleInput, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el))) return;
     const text = uiState.singleInput.value;
@@ -809,13 +819,7 @@ function startTrackingLoop() {
     const loop = () => {
         if (uiState.active && uiState.mode === 'edit' && uiState.target && uiState.svg) {
             // Update position based on constraint
-            let gp = uiState.target.glyphPos;
-            if (Array.isArray(gp)) gp = gp[0];
-            if (gp) {
-                const s = worldToScreen(uiState.svg, gp);
-                uiState.singleInput.style.left = `${s.x}px`;
-                uiState.singleInput.style.top = `${s.y}px`;
-            }
+            if (uiState.target.glyphPos) placeEditBox();
             placeAssist();
             uiState.rafId = requestAnimationFrame(loop);
         }

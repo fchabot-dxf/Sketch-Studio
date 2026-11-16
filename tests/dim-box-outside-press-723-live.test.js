@@ -88,7 +88,7 @@ try {
     const cr = await evalJs(`(() => { const r = document.querySelector('#svgCanvas').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; })()`);
     const F = (fx, fy) => ({ x: Math.round(cr.l + cr.w * fx), y: Math.round(cr.t + cr.h * fy) });
     const tool = (id) => pressRibbonTool(evalJs, P.tap, id);
-    // a point on a line: 0.85 along it keeps the presses off the open box (SketchStudio draws the box ~the canvas's offset below its label: reported, not this task)
+    // a point on a line: 0.85 along it keeps the presses clear of any open box (the box placement itself: tests/dim-box-place-723-live.test.js)
     const along = (l, t) => ({ x: Math.round(l.a.x + (l.b.x - l.a.x) * t), y: Math.round(l.a.y + (l.b.y - l.a.y) * t) });
     const mid = (l) => ({ x: Math.round((l.a.x + l.b.x) / 2), y: Math.round((l.a.y + l.b.y) / 2) });
     const openBox = async (idx) => {

@@ -49,7 +49,26 @@ import { browserFileSeam, serializeProjectFile, projectFileName } from '#ui/proj
 export const MAX_TABS = 10;
 /** The name an unsaved design shows. */
 export const UNTITLED = 'Untitled';
-const TAB_BUFFER_FIELDS = ['doc', 'history', 'redoStack', 'view', 'hostSessions', 'lastSig', 'emptySig', 'content', 'saveOk', 'designId', 'name'];
+const TAB_BUFFER_FIELDS = ['doc', 'history', 'redoStack', 'view', 'hostSessions', 'lastSig', 'emptySig', 'hasOwnSidecar', 'content', 'saveOk', 'designId', 'name'];
+/** Render caches stamped by svg-renderer on live constraints; stripped from change signatures so viewing / zooming / panning never triggers a save (task 687). */
+const RENDER_CONSTRAINT_KEYS = ['glyphPos', '__visible', '__showGlyph'];
+function docChangeSig(doc) {
+  if (!doc || !doc.geometry || !Array.isArray(doc.geometry.constraints) || !doc.geometry.constraints.length) return JSON.stringify(doc);
+  return JSON.stringify({
+    ...doc,
+    geometry: {
+      ...doc.geometry,
+      constraints: doc.geometry.constraints.map((c) => {
+        if (!c || typeof c !== 'object') return c;
+        let copy = null;
+        for (const k of RENDER_CONSTRAINT_KEYS) {
+          if (k in c) { if (!copy) copy = { ...c }; delete copy[k]; }
+        }
+        return copy || c;
+      }),
+    },
+  });
+}
 /** The empty baseline of an unsaved Untitled the shared buffer says HAS content (TASK 684): no signature equals it, so the tab asks THE question when closed
  *  (its own empty baseline was taken by another app or an earlier page, whose signature is not this app's). */
 const HAS_CONTENT = '';
@@ -137,6 +156,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let emptySig = null;    // an unsaved Untitled: the FULL signature it started from (content = anything else); null for a stored design
   let foreign = {};       // TASK 684: the OTHER apps' sidecars of the shown document: kept in the shared buffer and in an Untitled's first named save, never autosaved (458)
   let otherSessions = {}; // TASK 684: the OTHER apps' sessions of the shown tab (hostSessions minus this app's): passed through the shared buffer untouched
+  let hasOwnSidecar = false; // TASK 687: true once the shown document carried hosts[hostName] or the user changed something in this host
+  let defaultHostSig = null; // TASK 687: getHostData() snapshot of an un-sidecar'd host right after onRestored; matching it writes no default sidecar
   let saveOk = true;      // the last autosave of the bound design succeeded
   let bufferOk = true;    // the last local working-buffer write succeeded (beforeunload arms on failure)
   let lastBufSig = null;  // JSON string of last successfully persisted open-tabs buffer
@@ -178,16 +199,29 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const notify = (s) => { if (canvas) canvas.dataset.saveState = s; try { onStatusChange && onStatusChange(s); } catch (_) {} };
   const restored = (out) => { try { onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); } return out; };
 
-  /** The document as THIS app writes it to the store: its own sidecar only (458: every other host's passes through in the store). */
-  function currentDoc() {
-    const hosts = (hostName && typeof getHostData === 'function') ? { [hostName]: getHostData() } : {};
-    return serializeDocument(state, { hosts });
+  const hostDataSig = (data) => (data === undefined ? '' : JSON.stringify(data));
+  const docHasOwnHost = (hosts) => !!(hostName && hosts && Object.prototype.hasOwnProperty.call(hosts, hostName) && hosts[hostName] !== undefined);
+  function resetHostBaseline(hadSidecar) {
+    hasOwnSidecar = !!hadSidecar;
+    defaultHostSig = (!hasOwnSidecar && hostName && typeof getHostData === 'function') ? hostDataSig(getHostData()) : null;
   }
-  const sigNow = () => JSON.stringify(currentDoc());
+  function ownHostEntry() {
+    if (!hostName || typeof getHostData !== 'function') return {};
+    const data = getHostData();
+    if (!hasOwnSidecar && defaultHostSig !== null && hostDataSig(data) === defaultHostSig) return {};
+    hasOwnSidecar = true;
+    return { [hostName]: data };
+  }
+
+  /** The document as THIS app writes it to the store: its own sidecar only (458: every other host's passes through in the store), omitted when unchanged from defaults (TASK 687). */
+  function currentDoc() {
+    return serializeDocument(state, { hosts: ownHostEntry() });
+  }
+  const sigNow = () => docChangeSig(currentDoc());
   /** TASK 684: the WHOLE document, the other apps' sidecars included: what the shared buffer keeps (an Untitled lives only there) and what an
    *  Untitled's first named save stores, so no app's sidecar is lost on the way Studio -> Shaper -> Pen Plotter -> Trace. */
   function fullDoc() { const d = currentDoc(); d.hosts = { ...foreign, ...d.hosts }; return d; }
-  const fullSigNow = () => JSON.stringify(fullDoc());
+  const fullSigNow = () => docChangeSig(fullDoc());
   const splitHosts = (hosts) => { const o = { ...(hosts || {}) }; if (hostName) delete o[hostName]; return o; };
   /** A tab's sessions with THIS app's slot set to `mine` (undefined = none). */
   const withOwn = (sessions, mine) => { const o = { ...(sessions || {}) }; if (mine === undefined) delete o[app]; else o[app] = mine; return o; };
@@ -234,12 +268,12 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const bufPromise = saveWorkingBuffer();
     if (!boundId) { await bufPromise; return; } // THE SAVE RULE: an unsaved Untitled lives only in the working buffer above
     const target = boundId; // the design this signature belongs to (the buffer may be rebound while the write is in flight)
-    let sig;
-    try { sig = sigNow(); } catch (_) { await bufPromise; return; } // a transient bad state -- skip this tick
+    let doc, sig;
+    try { doc = currentDoc(); sig = docChangeSig(doc); } catch (_) { await bufPromise; return; } // a transient bad state -- skip this tick
     if (sig === lastSig) { await bufPromise; return; }
     notify('saving');
     let ok = false, r = null;
-    try { r = await store.save(JSON.parse(sig), { app, id: target }); ok = true; } catch (_) { ok = false; }
+    try { r = await store.save(doc, { app, id: target }); ok = true; } catch (_) { ok = false; }
     await bufPromise;
     if (boundId !== target) { // rebound (open / new / tab switch) while this write was in flight: the result belongs to the design we left
       const left = ok && r.id !== target ? tabList.find((x) => x !== active && x.designId === target) : null;
@@ -255,8 +289,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
 
   // ---- the binding: a stored design, or an unsaved Untitled ----------------------------------------------------------------------
-  function bindStored(design) { boundId = design.id; name = design.name; emptySig = null; saveOk = true; lastSig = sigNow(); }
-  function bindUntitled() { boundId = null; name = UNTITLED; saveOk = true; foreign = {}; otherSessions = {}; lastSig = sigNow(); emptySig = fullSigNow(); }
+  function bindStored(design) { boundId = design.id; name = design.name; emptySig = null; saveOk = true; resetHostBaseline(docHasOwnHost(design.document && design.document.hosts)); lastSig = sigNow(); }
+  function bindUntitled() { boundId = null; name = UNTITLED; saveOk = true; foreign = {}; otherSessions = {}; resetHostBaseline(false); lastSig = sigNow(); emptySig = fullSigNow(); }
 
   /** Replace the app state with a stored design and tell the host. */
   function load(design, reason) {
@@ -266,6 +300,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (reason !== 'conflict') otherSessions = {}; // a Drive conflict reloads the SAME tab: the other apps' sessions stay with it
     bindStored(design);
     const out = restored({ restored: true, hosts: result.hosts, name: design.name, reason });
+    resetHostBaseline(docHasOwnHost(result.hosts));
     lastSig = sigNow(); // TASK 684: the baseline is taken AFTER the host applied its sidecar (or its defaults when the design has none): showing a design never writes it
     return out;
   }
@@ -274,7 +309,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const result = deserializeDocument(emptyDocument(), state);
     bindUntitled();
     let out = restored({ restored: true, hosts: result.hosts, name: UNTITLED, reason });
-    lastSig = sigNow(); emptySig = fullSigNow(); // the empty baseline is taken AFTER the host reset its own data (its sidecar is part of the signature)
+    resetHostBaseline(false);
+    lastSig = sigNow(); emptySig = fullSigNow(); // the empty baseline is taken AFTER the host reset its own data
     if (template) {
       // TASK 651: a design started from a TEMPLATE ({ name, document }) is the same unsaved Untitled, shown under the template's name and holding its
       // drawing as its STARTING document (not an edit: the undo history stays empty). emptySig stays the EMPTY baseline, so it has content: closing it asks
@@ -284,6 +320,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       name = template.name;
       foreign = splitHosts(r.hosts);
       out = restored({ restored: true, hosts: r.hosts, name, reason });
+      resetHostBaseline(docHasOwnHost(r.hosts));
       lastSig = sigNow();
     }
     return out;
@@ -409,9 +446,10 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
    *  a copy under `newName` that becomes the bound one (unchanged). */
   async function saveAs(newName) {
     if (!boundId) {
-      const sig = sigNow();
-      const d = await store.newDesign(newName, { app, document: fullDoc() }); // stored, named, current in one write; every app's sidecar goes with it (TASK 684)
-      boundId = d.id; name = d.name; emptySig = null; saveOk = true; lastSig = sig;
+      const doc = fullDoc();
+      const sig = docChangeSig(doc);
+      const d = await store.newDesign(newName, { app, document: doc }); // stored, named, current in one write; every app's sidecar goes with it (TASK 684)
+      boundId = d.id; name = d.name; emptySig = null; saveOk = true; resetHostBaseline(docHasOwnHost(doc.hosts)); lastSig = sig;
       notify('saved');
       await saveWorkingBuffer();
       return d;
@@ -461,7 +499,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     endInteraction();
     await poll();
     Object.assign(active, {
-      designId: boundId, name, emptySig, saveOk, lastSig,
+      designId: boundId, name, emptySig, saveOk, lastSig, hasOwnSidecar,
       content: activeContent(),
       doc: fullDoc(),
       history: state.history, redoStack: state.redoStack,
@@ -479,11 +517,13 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const sessions = rec.hostSessions || {};
     otherSessions = withOwn(sessions, undefined);
     boundId = rec.designId || null; name = rec.name; emptySig = boundId ? null : rec.emptySig; saveOk = rec.saveOk !== false; lastSig = rec.lastSig;
+    const knownOwn = rec.hasOwnSidecar;
     if (Array.isArray(rec.history)) { state.history = rec.history; state.redoStack = rec.redoStack; }
     if (rec.view && state.view) Object.assign(state.view, rec.view);
     for (const k of TAB_BUFFER_FIELDS) delete rec[k];
     const out = restored({ restored: true, hosts: result.hosts || {}, name, reason });
     if (session && (reason !== 'restore' || sessions[app] !== undefined)) session.restore(sessions[app]);
+    resetHostBaseline(knownOwn !== undefined ? knownOwn : docHasOwnHost(result.hosts));
     // a tab from the shared buffer (another app, an earlier page): its baselines are THIS app's signatures, taken now that it shows (TASK 684). An empty
     // Untitled's baseline is the document as shown, so it has no dot; the autosave baseline is the shown design, so showing it never writes it.
     if (lastSig === undefined) lastSig = sigNow();
@@ -497,7 +537,12 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     active = newRecord();
     if (Array.isArray(state.history)) { state.history = []; state.redoStack = []; }
     const out = loadUntitled('new', template);
-    if (session) session.restore(undefined);
+    if (session) {
+      session.restore(undefined);
+      resetHostBaseline(hasOwnSidecar);
+      lastSig = sigNow();
+      if (!template) emptySig = fullSigNow();
+    }
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
     notify('idle');
     return out;
@@ -535,7 +580,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       active = newRecord(); tabList.push(active);
     }
     const out = load(design, reason);
-    if (!reuse && session) session.restore(undefined);
+    if (!reuse && session) { session.restore(undefined); resetHostBaseline(hasOwnSidecar); lastSig = sigNow(); }
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
     notify('saved');
     await saveWorkingBuffer();

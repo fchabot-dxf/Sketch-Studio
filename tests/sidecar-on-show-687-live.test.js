@@ -15,7 +15,7 @@ const CANVAS = { sketchstudio: 'svgCanvas', shaper: 'design-canvas', penplotter:
 await (async () => {
   const cdp = await launchBrowser({ tag: '687', width: 1280, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp, flushAutosave } = cdp;
   const session = await installFakeDriveSession(cdp);
   try {
     await resetBufferLive(cdp);
@@ -40,14 +40,17 @@ await (async () => {
       await tapMouse(c);
     };
     const openMenu = async () => {
-      const open = `(() => { const g = document.querySelector('.sk-sidebar-goto'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
+      const open = `(() => { const g = document.querySelector('.sk-sidebar-actions'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
       if (!(await evalJs(open))) await clickSel('.sk-sidebar-btn');
       await waitFor(open, 'sidebar menu opens');
     };
-    const goTo = async (app) => {
-      await openMenu();
-      await clickSel(`.sk-sidebar-goto [data-app="${app}"]`);
-      await waitFor(`location.pathname.startsWith('/apps/${app}/')`, `GO TO ${app}`);
+    // TASK 696: the sidebar's GO TO is gone (each app is its own website). The local dev server still serves the four apps on ONE origin (one shared
+    // buffer): the page writes its tabs (its own pagehide flush), the buffer is read until two reads 400 ms apart agree, then the next app's page opens by its address.
+    const visit = async (app) => {
+      await flushAutosave();
+      let last = null;
+      for (let k = 0; k < 40; k++) { const now = await evalJs(`${STORE}.then(async (s) => JSON.stringify(await s.readBuffer({})))`); if (now === last) break; last = now; await sleep(400); }
+      await navigate(`http://127.0.0.1:${port}/apps/${app}/index.html`, 10000);
       await waitForApp(CANVAS[app]);
       await sleep(2200); // > 1500ms autosave poll interval to expose any post-show mutation or poll write
     };
@@ -112,16 +115,16 @@ await (async () => {
     assert.deepStrictEqual(beforeVisits.driveHostKeys, [], 'before visits: Drive has empty hosts');
     assert.strictEqual(beforeVisits.unsavedDot, false, 'before visits: no unsaved dot');
 
-    // 2. GO TO Pen Plotter, change nothing
-    await goTo('penplotter');
+    // 2. Pen Plotter (by its address), change nothing
+    await visit('penplotter');
     const afterPenPlotter = await inspect('afterPenPlotter');
 
-    // 3. GO TO Trace, change nothing
-    await goTo('trace');
+    // 3. Trace, change nothing
+    await visit('trace');
     const afterTrace = await inspect('afterTrace');
 
-    // 4. GO TO SketchStudio, verify state after visits, then draw another line and save
-    await goTo('sketchstudio');
+    // 4. SketchStudio, verify state after visits, then draw another line and save
+    await visit('sketchstudio');
     const afterStudioReturn = await inspect('afterStudioReturn');
 
     // Assert a & b on the round trip
@@ -150,7 +153,7 @@ await (async () => {
     assert.deepStrictEqual(afterLaterSave.driveHostKeys, [], 'c) after later SketchStudio save: Drive has no penplotter/trace sidecars');
 
     // 5. Real edit in Pen Plotter (+ Pen on Toolpath tab) DOES persist hosts.penplotter
-    await goTo('penplotter');
+    await visit('penplotter');
     await clickSel('.sk-header-tab[data-tab="toolpath"]');
     await waitFor(`!!document.getElementById('addPlotColor')`, 'Toolpath stage + Pen button visible');
     await clickSel('#addPlotColor');
@@ -180,7 +183,7 @@ await (async () => {
     await waitFor(`document.querySelector('.sk-doctab.active .sk-doctab-name')?.textContent === 'Probe687'`, 'Probe687 active again');
 
     // 6. Real edit in Trace (switch color mode via real click) DOES persist hosts.trace
-    await goTo('trace');
+    await visit('trace');
     await clickSel('.sk-header-tab[data-tab="trace"]');
     await waitFor(`!!document.querySelector('.color-mode-btn:not(.active)')`, 'Trace tab color mode button visible');
     await clickSel('.color-mode-btn:not(.active)');

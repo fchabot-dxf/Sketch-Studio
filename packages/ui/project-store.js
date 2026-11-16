@@ -528,8 +528,8 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       return d;
     },
     currentId: () => adapter.getMeta(CURRENT),
-    /** THE open-tabs working buffer (TASK 624; ONE for all apps since TASK 684): what was open (Untitled tabs included), so a refresh or a GO TO
-     *  to another app reopens the same tabs. `app` (the reading app) only orders a first-read migration of TASK 624's per-app buffers: its own tabs
+    /** THE open-tabs working buffer (TASK 624; ONE per origin since TASK 684): what was open (Untitled tabs included), so a refresh
+     *  or another app page of the same origin reopens the same tabs. `app` (the reading app) only orders a first-read migration of TASK 624's per-app buffers: its own tabs
      *  come first and its active tab stays active (mergeLegacyBuffers). */
     async readBuffer({ app } = {}) {
       const legacyKeys = adapter.listMetaKeys ? await adapter.listMetaKeys(LEGACY_BUFFER_PREFIX) : [];
@@ -638,7 +638,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
           }
         }
         const at = now();
-        // TASK 684 (458 on this device): the write still waiting for Drive may be ANOTHER app's (a GO TO a moment ago): its sidecar is kept in this newer one,
+        // TASK 684 (458 on this device): the write still waiting for Drive may be ANOTHER app's (another app page of this origin a moment ago): its sidecar is kept in this newer one,
         // which replaces it in the queue and in the local copy (the writer keeps only the latest payload)
         const prev = writer.unconfirmed(target) || (await adapter.getMeta(SHADOW + target));
         await writer.queue(target, { app, document: prev && prev.document ? mergeHosts(prev.document, document) : document, updatedAt: at });

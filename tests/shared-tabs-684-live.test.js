@@ -1,9 +1,11 @@
 // tests/shared-tabs-684-live.test.js — TASK 684 (owner turns 1768-1775: "why don't all tabs carry over ... yes why not?"): ONE list of open document tabs
 // for all four apps, in the REAL pages with real pointer events (a mouse at 1400 x 800, then a phone at 390 x 844 with touch taps).
 //   SketchStudio: a SAVED design (opened from Open recent) and an UNSAVED one with content (+ -> the Hexagon template), the saved one active.
-//   GO TO Shaper (no question): the same two tabs, the same active one, Shaper's Design canvas shows the design; a cut plan (Pocket) on the saved design in
-//   Prepare, and one on the unsaved design; GO TO Pen Plotter: the same tabs; GO TO SketchStudio: the geometry of both is unchanged and Shaper's cut plan is
-//   still in both documents (the saved one in the store, the unsaved one in the shared buffer); GO TO Trace: the same tabs; GO TO Shaper again: both cut plans.
+//   Shaper (opened by its address on the same origin): the same two tabs, the same active one, Shaper's Design canvas shows the design; a cut plan (Pocket) on
+//   the saved design in Prepare, and one on the unsaved design; Pen Plotter: the same tabs; SketchStudio: the geometry of both is unchanged and Shaper's cut
+//   plan is still in both documents (the saved one in the store, the unsaved one in the shared buffer); Trace: the same tabs; Shaper again: both cut plans.
+//   TASK 696: the sidebar's GO TO is gone (each app is its own website, so on the published sites the tabs are one list per app); the local dev server
+//   still serves the four apps on ONE origin, where the buffer is shared: each next app is opened by its address after the page wrote its tabs.
 //   A Trace photo-tracing document (mouse): its traced drawing (Send to Editor) shows in SketchStudio and Shaper; back in Trace it opens in Edit with the drawing,
 //   the photo is gone (it is never stored, TASK 567: only Trace's page memory holds it).
 // EVIDENCE_DIR (optional): cropped screenshots of the tab row in each app.
@@ -16,11 +18,20 @@ import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const STORE = `import('/packages/ui/project-store.js').then((m) => m.getProjectStore())`;
 const CANVAS = { sketchstudio: 'svgCanvas', shaper: 'design-canvas', penplotter: 'design-canvas', trace: 'design-canvas' };
+// The page writes its open tabs (its own pagehide flush), the shared buffer is read until two reads 400 ms apart agree (the write landed), then the next
+// app's page is opened by its address on the same origin (TASK 696: the sidebar's GO TO is gone).
+const openNext = async ({ evalJs, flushAutosave, navigate, waitForApp, port }, app) => {
+  await flushAutosave();
+  let last = null;
+  for (let k = 0; k < 40; k++) { const now = await evalJs(`${STORE}.then(async (s) => JSON.stringify(await s.readBuffer({})))`); if (now === last) break; last = now; await sleep(400); }
+  await navigate(`http://127.0.0.1:${port}/apps/${app}/index.html`, 10000);
+  await waitForApp(CANVAS[app]);
+};
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '684', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp, flushAutosave } = cdp;
   await installFakeDriveSession(cdp);
   try {
     for (const mode of ['desktop', 'phone']) {
@@ -42,7 +53,7 @@ await (async () => {
       const activeName = () => evalJs(`(() => { const a = document.querySelector('.sk-doctab.active .sk-doctab-name'); return a && a.textContent; })()`);
       const dots = () => evalJs(`[...document.querySelectorAll('.sk-doctab')].map((t) => !!t.querySelector('.sk-doctab-dot:not(.saving)'))`); // the not-saved dot (a stored design's Drive write in flight shows a 'saving' one)
       const shapes = (app) => evalJs(`document.querySelectorAll('#${CANVAS[app]} .shape-elem').length`);
-      const menuOpen = `(() => { const g = document.querySelector('.sk-sidebar-goto'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
+      const menuOpen = `(() => { const g = document.querySelector('.sk-sidebar-actions'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
       const openMenu = async () => { if (!(await evalJs(menuOpen))) await press(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn'); await waitFor(menuOpen, mode + ': the menu'); };
       const shot = async (name) => {
         if (!process.env.EVIDENCE_DIR) return;
@@ -55,12 +66,9 @@ await (async () => {
         else await press(`.sk-header-tab[data-tab="${id}"]`);
         await sleep(400);
       };
-      const goTo = async (app) => {
-        await openMenu(); await press(`.sk-sidebar-goto [data-app="${app}"]`);
-        await waitFor(`location.pathname.startsWith('/apps/${app}/')`, `${mode}: GO TO ${app} leaves at once`);
-        await waitForApp(CANVAS[app]);
+      const visit = async (app) => {
+        await openNext(cdp, app);
         await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, `${mode}: ${app} shows the two tabs`);
-        assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-backdrop')`), false, `${mode}: GO TO ${app} asked nothing`);
         assert.deepStrictEqual(await names(), ['Saved plate', 'Hexagon'], `${mode}: ${app}: the same tabs, same order`);
         assert.strictEqual(await activeName(), 'Saved plate', `${mode}: ${app}: the same active tab`);
         assert.deepStrictEqual(await dots(), [false, true], `${mode}: ${app}: the unsaved Hexagon keeps its not-saved dot, the saved one has none`);
@@ -119,7 +127,7 @@ await (async () => {
       const plateBefore = await evalJs(`${STORE}.then(async (s) => JSON.parse(JSON.stringify((await s.get(${JSON.stringify(savedId)})).document)))`);
 
       // ---- Shaper: the same tabs; a Pocket on each design ------------------------------------------------------------------------------------------------
-      await goTo('shaper');
+      await visit('shaper');
       await stage('design');
       await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === ${plateShapes}`, `${mode}: Shaper's Design canvas shows the Saved plate (${plateShapes} shapes)`);
       await shot('2-shaper');
@@ -134,11 +142,11 @@ await (async () => {
       assert.deepStrictEqual(await cutPlan(), ['pocket'], mode + ': the Saved plate keeps its own Pocket');
 
       // ---- Pen Plotter: the same tabs --------------------------------------------------------------------------------------------------------------------
-      await goTo('penplotter');
+      await visit('penplotter');
       await shot('3-penplotter');
 
       // ---- SketchStudio: the geometry unchanged, Shaper's cut plans in both documents ------------------------------------------------------------------
-      await goTo('sketchstudio');
+      await visit('sketchstudio');
       await waitFor(`document.querySelectorAll('#svgCanvas .shape-elem').length === ${plateShapes}`, `${mode}: Studio shows the Saved plate again`);
       await shot('4-sketchstudio-back');
       const plateAfter = await evalJs(`${STORE}.then(async (s) => JSON.parse(JSON.stringify((await s.get(${JSON.stringify(savedId)})).document)))`);
@@ -153,11 +161,11 @@ await (async () => {
       await activate(0, 'Saved plate');
 
       // ---- Trace: the same tabs ----------------------------------------------------------------------------------------------------------------------
-      await goTo('trace');
+      await visit('trace');
       await shot('5-trace');
 
       // ---- Shaper again: both cut plans are there --------------------------------------------------------------------------------------------------------
-      await goTo('shaper');
+      await visit('shaper');
       await stage('prepare');
       await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.size === 1)`, mode + ': reopened Shaper: the Saved plate cut plan');
       assert.deepStrictEqual(await cutPlan(), ['pocket'], mode + ': reopened Shaper: the Saved plate has its Pocket');
@@ -177,14 +185,7 @@ await (async () => {
         await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c.x, y: c.y, button: 'left', buttons: 1, clickCount: 1 }); await sleep(30);
         await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c.x, y: c.y, button: 'left', buttons: 0, clickCount: 1 }); await sleep(300);
       };
-      const menuOpen = `(() => { const g = document.querySelector('.sk-sidebar-goto'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
-      const goTo = async (app) => {
-        if (!(await evalJs(menuOpen))) await click('.sk-sidebar-btn');
-        await waitFor(menuOpen, 'the menu');
-        await click(`.sk-sidebar-goto [data-app="${app}"]`);
-        await waitFor(`location.pathname.startsWith('/apps/${app}/')`, `GO TO ${app}`);
-        await waitForApp(CANVAS[app]);
-      };
+      const visit = (app) => openNext(cdp, app);
       await resetBufferLive(cdp);
       await navigate(`http://127.0.0.1:${port}/apps/trace/index.html`, 10000);
       await waitForApp('design-canvas');
@@ -197,14 +198,14 @@ await (async () => {
       await click('#btn-send-to-edit');
       await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length > 0`, 'Send to Editor: the traced drawing in Edit');
       const traced = await evalJs(`document.querySelectorAll('#design-canvas .shape-elem').length`);
-      await goTo('sketchstudio');
+      await visit('sketchstudio');
       await waitFor(`document.querySelectorAll('#svgCanvas .shape-elem').length === ${traced}`, `SketchStudio shows the traced drawing (${traced} shapes)`);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab').length`), 1, 'the Trace document is the one tab');
       assert.strictEqual(await evalJs(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot')`), true, 'unsaved, with content: its dot');
-      await goTo('shaper');
+      await visit('shaper');
       await click('.sk-header-tab[data-tab="design"]'); // Shaper's own stage (it kept Prepare from above)
       await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === ${traced}`, 'Shaper has the traced drawing in its Design canvas');
-      await goTo('trace');
+      await visit('trace');
       await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === ${traced} && document.querySelector('.sk-header-tab.active').dataset.tab === 'edit'`, 'back in Trace: the drawing, in Edit');
       assert.strictEqual(await evalJs(`document.getElementById('original-canvas').width`), 0, 'back in Trace: the photo was not kept (never stored, TASK 567)');
       console.log(`trace document: ${traced} traced shapes shown in SketchStudio and Shaper; back in Trace: Edit with the drawing, no photo`);

@@ -1,5 +1,6 @@
-// tests/app-sidebar.test.js — TASK 473: the shared app sidebar in every host. Each host mounts it with ITS OWN actions; GO TO lists the 4
-// apps and marks the current one; Esc / outside click close it; focus stays trapped while open; the old app-switcher dropdown is gone.
+// tests/app-sidebar.test.js — TASK 473: the shared app sidebar in every host. Each host mounts it with ITS OWN actions; Esc / outside click close it;
+// focus stays trapped while open; the old app-switcher dropdown is gone. TASK 696 (each app is its own website): the drawer has NO GO TO section and
+// no entry or link to another app.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -66,15 +67,15 @@ await (async () => {
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, `${host.id}: closed at start`);
       // open with a real click on the header button
       await clickEl('.sk-sidebar-btn');
-      await waitFor(`${SIDEBAR_OPEN} && !!document.querySelector('.sk-sidebar [data-section="goto"] [data-app]')`, `${host.id}: the drawer to open`);
+      await waitFor(`${SIDEBAR_OPEN} && !!document.querySelector('.sk-sidebar [data-section="actions"] [data-action]')`, `${host.id}: the drawer to open`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), true, `${host.id}: the button opens the drawer`);
       const acts = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action)`);
       assert.deepStrictEqual(acts, host.actions, `${host.id}: its own actions, no other host's`);
-      const goto = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-section="goto"] [data-app]')].map((b) => [b.dataset.app, b.getAttribute('aria-current') === 'true'])`);
-      assert.deepStrictEqual(goto.map((g) => g[0]), ['sketchstudio', 'shaper', 'penplotter', 'trace'], `${host.id}: GO TO lists the 4 apps`);
-      assert.deepStrictEqual(goto.filter((g) => g[1]).map((g) => g[0]), [host.id], `${host.id}: GO TO marks the current app`);
+      // TASK 696: no GO TO section, no app entry, no link to another app's page anywhere in the drawer or the header
+      assert.deepStrictEqual(await evalJs(`[document.querySelectorAll('.sk-sidebar [data-section="goto"], .sk-sidebar-goto').length, document.querySelectorAll('.sk-sidebar [data-app]').length]`), [0, 0], `${host.id}: no GO TO section, no app entry`);
+      const otherAppLinks = await evalJs(`[...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => !/^https?:/.test(h) && ['sketchstudio', 'shaper', 'penplotter', 'trace'].some((a) => h.split('/').includes(a)))`);
+      assert.deepStrictEqual(otherAppLinks, [], `${host.id}: no link to another app`);
       assert.ok(['Untitled', 'Image Trace'].includes(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`)), `${host.id}: the document name is shown`);
-      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-sidebar [data-section="goto"] svg').length`), 4, `${host.id}: GO TO shows the four app icons`);
       if (host.id === 'trace') assert.strictEqual(await evalJs(`document.querySelector('[data-action="download-svg"]').disabled`), true, 'trace: Download is disabled until there is a trace');
       if (process.env.EVIDENCE_DIR) { const s = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 700, height: 800, scale: 1.4 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, `${host.id}-sidebar-open.png`), Buffer.from(s.data, 'base64')); }
       // focus is trapped: Tab many times, the focus never leaves the drawer
@@ -119,14 +120,14 @@ await (async () => {
       await evalJs(`window.__sb2.showView('projects')`);
       await waitFor(`!!document.querySelector('.sk-sidebar-view')`, 'the projects view to render');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view').dataset.view`), 'projects', 'the extra view replaced the main body');
-      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-section="goto"]')`), false, 'the main list is not shown while the view is');
+      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-section="actions"]')`), false, 'the main list is not shown while the view is');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view .lvl').dataset.lvl`), 'projects');
       await clickEl('.sk-sidebar-view .row');
       await waitFor(`document.querySelector('.sk-sidebar-view .lvl').dataset.lvl === 'designs of Kitchen'`, 'the view to drill into a project');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view .lvl').dataset.lvl`), 'designs of Kitchen', 'drills down a level inside the view');
       await clickEl('.sk-sidebar-back');
-      await waitFor(`!!document.querySelector('.sk-sidebar [data-section="goto"]')`, 'the back arrow to return to the main view');
-      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-section="goto"]')`), true, 'the back arrow returns to the main view');
+      await waitFor(`!!document.querySelector('.sk-sidebar [data-section="actions"] [data-action="danger"]')`, 'the back arrow to return to the main view');
+      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-section="actions"] [data-action="danger"]')`), true, 'the back arrow returns to the main view');
     }
     console.log('app-sidebar: ok');
   } finally {

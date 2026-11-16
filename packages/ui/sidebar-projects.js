@@ -2,7 +2,7 @@
 // (#ui/project-store.js, task 474) through each host's document buffer. ONE module, so every app gets the SAME entries:
 //   main view  document name (click to rename inline) + where it lives and its save state (TASK 506) · New design (the template modal, Blank design first) · Templates… (the same modal, Blank design first) · Save as… ·
 //              Duplicate · Open recent (opens the PROJECT MANAGER modal on its Recent pane) · Projects (opens the PROJECT MANAGER modal, project-manager.js) · Save to Google Drive (signed in only) · Open from file ·
-//              [the host's own Download actions] · GO TO (+ the account row: the Drive default toggle and connection check)
+//              [the host's own Download actions] · the account row (the Drive default toggle and connection check)
 // The project manager (modal, thumbnail grid: projects, designs, every per-design / per-project action) is #ui/project-manager.js; what
 // can be done with a design or a project is declared once in #ui/project-actions.js and used by both.
 // A host with a Design canvas also passes `importFile(text, fileName)`: that adds "Import SVG / DXF…" next to Open from file (TASK 566).
@@ -11,7 +11,7 @@
 // The tab title follows the current design through the registry (appTitle).
 // TASK 558 (owner rulings 2026-11-12): an unsaved Untitled with content is never replaced or left without THE question (project-actions.js
 // settleUnsaved: Save… / Don't save / Cancel), asked in the UI the action came from (this drawer, or the Projects modal while it is open).
-// TASK 684: a GO TO entry no longer asks it: the open tabs go across to the other app (one shared buffer), nothing is left behind. Naming an unsaved Untitled (the name heading) is its first named save. Ctrl+S: on an unsaved
+// Naming an unsaved Untitled (the name heading) is its first named save. Ctrl+S: on an unsaved
 // design, the Save as name prompt; on a stored one, the pending autosave is written now (nothing visible when there is nothing pending).
 
 import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
@@ -30,8 +30,8 @@ export { relativeTime };
 // TASK 587: `documentTabs: true` opts the host into DOCUMENT TABS (document-tabs.js; docs/DOCUMENT-TABS-DESIGN.md): the strip is inserted as its own row
 // immediately AFTER the host's <header> (the element holding this sidebar's button; TASK 602, owner: between the header and the tool ribbon), Open / Open recent / Open from file / New open a new tab, and the name,
 // status line and page title below follow the ACTIVE tab's design (the buffer's), not the device-wide "current" pointer. A host without it is unchanged.
-// TASK 663: `projects: false` opts the host out of the project/file layer (document name/status header, New/Templates/Save/Duplicate/Open recent/Projects/Open file/Import file actions, Drive/Google account controls, Projects modal, document tab strip, Ctrl+S save prompt, and unsaved-leave prompt) while keeping `hostActions`, stage switcher, and GO TO.
-export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, projects = true, goTo = true, store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
+// TASK 663: `projects: false` opts the host out of the project/file layer (document name/status header, New/Templates/Save/Duplicate/Open recent/Projects/Open file/Import file actions, Drive/Google account controls, Projects modal, document tab strip, Ctrl+S save prompt, and unsaved-leave prompt) while keeping `hostActions` and the stage switcher.
+export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, projects = true, store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
   let currentDesignId = null;
@@ -42,13 +42,6 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
-  async function keepTabsBeforeGoTo() {
-    const b = getBuffer && getBuffer();
-    if (!b) return true;
-    await b.ready;
-    if (!(await b.keepTabs())) throw new Error('Your open tabs could not be kept on this device, so this app stays open. Try again, or save the design first.');
-    return true;
-  }
   const currentId = async () => { const b = getBuffer && getBuffer(); return (b && b.designId && b.designId()) || ((await store.current()) || {}).id || null; };
 
   async function refreshName() {
@@ -119,10 +112,6 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     driveControls,
     status: projects ? statusLine : null,
     stages, activeStage, onStageChange,
-    goTo,
-    // TASK 684: GO TO asks nothing: the open tabs (unsaved Untitled tabs included) go across in the shared buffer. They are written NOW, before the page
-    // is left; if they cannot be written the page stays and says why (leaving would lose them).
-    beforeGoTo: projects ? keepTabsBeforeGoTo : null,
     onRenameDoc: projects ? (name) => act(async () => {
       const b = getBuffer && getBuffer();
       if (b && !b.isStored()) {

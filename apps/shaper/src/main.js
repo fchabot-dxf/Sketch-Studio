@@ -74,7 +74,6 @@ const chrome = mountAppChrome({
   getBuffer: () => docBuffer,
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
-  goTo: !fusionMode, // TASK 664: single Fusion-mode switch hides GO TO section in sidebar drawer
   hostActions: [
     { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
       const payload = generateShaperSvgPayload();

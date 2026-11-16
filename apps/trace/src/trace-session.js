@@ -35,7 +35,7 @@ export function createTraceSession({ state, preview, scale, ui, codec }) {
       }
       return rec;
     },
-    // TASK 684: what the shared open-tabs working buffer (IndexedDB) keeps of a tab across a reload or a GO TO to another app: its image name and scale, NOT the photo,
+    // TASK 684: what the shared open-tabs working buffer (IndexedDB) keeps of a tab across a reload: its image name and scale, NOT the photo,
     // its mask or the trace made from it (TASK 567: the photo is never stored). Back in Trace such a tab has no photo (the Trace tab says so and shows its drawing in Edit).
     stored: (rec) => ({ blob: null, w: 0, h: 0, name: rec.name, svg: null, mask: null, maskBlob: null, scale: rec.scale }),
     restore: (s) => {

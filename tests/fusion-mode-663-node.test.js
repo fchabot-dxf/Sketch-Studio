@@ -213,7 +213,6 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
       importFile: () => {},
       documentTabs: true,
       projects: false,
-      goTo: false,
       store: stubStore(),
       account: stubAccount(),
       hostActions,
@@ -223,7 +222,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     eq(win.document.querySelector('.sk-sidebar-doc'), null, 'projects: false omits document name header');
     eq(win.document.querySelector('[data-section="status"]'), null, 'projects: false omits storage/Drive status');
     eq(win.document.querySelector('[data-section="account"]'), null, 'projects: false omits Google account / Drive section');
-    eq(win.document.querySelector('[data-section="goto"]'), null, 'goTo: false omits GO TO section');
+    eq(win.document.querySelector('[data-section="goto"]'), null, 'no GO TO section (TASK 696: none in any app)');
     const fusionActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
     deepEq(fusionActs, ['download', 'settings', 'log'], 'projects: false keeps only hostActions');
     chromeHidden.destroy();
@@ -248,7 +247,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     ok(win.document.querySelector('.sk-sidebar-doc') !== null, 'projects: true keeps document name header');
     ok(win.document.querySelector('[data-section="status"]') !== null, 'projects: true keeps storage/Drive status');
     ok(win.document.querySelector('[data-section="account"]') !== null, 'projects: true keeps Google account / Drive section');
-    ok(win.document.querySelector('[data-section="goto"]') !== null, 'goTo: true keeps GO TO section');
+    eq(win.document.querySelector('[data-section="goto"]'), null, 'no GO TO section in normal mode either (TASK 696: each app is its own website)');
     const normalActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
     deepEq(normalActs, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log'], 'projects: true keeps all project/file actions + hostActions');
     chromeNormal.destroy();

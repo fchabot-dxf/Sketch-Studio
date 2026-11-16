@@ -162,7 +162,7 @@ try {
   assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
   assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
   assert.strictEqual(normalSidebar.hasAccount, true, 'normal Shaper keeps Google account / Drive section');
-  assert.strictEqual(normalSidebar.hasGoto, true, 'normal Shaper keeps GO TO section');
+  assert.strictEqual(normalSidebar.hasGoto, false, 'normal Shaper has no GO TO section either (TASK 696: each app is its own website)');
   assert.strictEqual(normalSidebar.hasDocTabs, true, 'normal Shaper keeps document tab strip');
   // Switching to Prepare in normal mode also has no Add selection button
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);

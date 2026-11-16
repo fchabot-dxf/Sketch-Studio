@@ -24,7 +24,7 @@ import { serializeDocument } from '#core/document.js';
 import { userToWorldY, worldToUserY } from '#core/units.js';
 import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES } from '#core/constants.js';
 import { patternDefaults } from '#core/pattern.js';
-import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
+import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES, cornerJointLabel } from '#core/corner-joint.js';
 import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES,
   mapTrapezoidVertices, computeEffectiveOffset, TRAPEZOID_VARIANTS, mapParallelogramVertices, solveArbitraryTriangle, obliqueTriangleVertices,
   obliqueVertexJoints } from '#core/frame-geometry.js';
@@ -669,7 +669,11 @@ function buildBenchSeat(d, p) {
 // origin.
 function buildBrace(d, p) {
   const pick = (v, opts) => (opts.some((o) => o.value === v) ? v : opts[0].value);
-  const g = calculateFramingGeometry({ width: num(p.width, 300), height: num(p.height, 600), thickV: num(p.thickV, 38), thickH: num(p.thickH, 38), thickD: num(p.thickD, 38),
+  const wIn = num(p.width, 300), hIn = num(p.height, 600), tvIn = num(p.thickV, 38), thIn = num(p.thickH, 38), tdIn = num(p.thickD, 38);
+  if (hIn * tvIn + wIn * thIn + Math.hypot(wIn, hIn) * tdIn >= wIn * hIn) {
+    throw new Error('the boards leave no inner opening (reduce thicknesses or enlarge the frame)');
+  }
+  const g = calculateFramingGeometry({ width: wIn, height: hIn, thickV: tvIn, thickH: thIn, thickD: tdIn,
     topJoint: pick(p.topJoint, BRACE_JOINTS.top), blJoint: pick(p.blJoint, BRACE_JOINTS.bl), brJoint: pick(p.brJoint, BRACE_JOINTS.br) });
   const { W, H, Tv, Th, Td, L } = g, P = g.points;
   d.origin(0, worldToUserY(H)); // the bottom-left corner (frame-calc's (0, H)) on the origin
@@ -824,7 +828,9 @@ const triangleCorners = (p) => {
  *                       carries it, so a parameter could not drive it)
  *   'count'             a whole number chosen in the start modal only (min, max): it changes how many parts the drawing has
  *   'choice'            one of `options` ([{ value, label }]) chosen in the start modal only, shown by the `glyph` picker named there;
- *                       TASK 674: `perCorner: true` = a joint per corner: one option (every corner) or a list, one per corner of corners()
+ *                       TASK 674: `perCorner: true` = a joint per corner: one option (every corner) or a list, one per corner of corners();
+ *                       TASK 693: `optionLabel(option, values)` optionally derives the picker's displayed/accessible label from `values`
+ *                       while keeping stored `option.value` unchanged (used by box-frame Horizontal layout).
  * TASK 674: `when: { key: value }` = the param applies only while those choices hold (the scalene trapezoid's setback): otherwise it makes no
  * user parameter, is not asked in the start modal and the recipe does not read it.
  * `dimensions` is what the editor shows: the number of driving dimensions the drawing carries at its defaults (a test asserts it).
@@ -846,7 +852,7 @@ export const TEMPLATES = [
   { id: 'butterfly-key', name: 'Butterfly key', description: 'A bow-tie key: 50 mm long, 25 mm wide at the ends, 10 mm at the waist.', params: { length: { label: 'Length', default: 50 }, endWidth: { label: 'End width', default: 25 }, waistWidth: { label: 'Waist width', default: 10 } }, dimensions: 3, build: buildButterflyKey },
   { id: 'cup-hinge-bore', name: 'Cup hinge bore', description: 'A 35 mm hinge cup hole with two 8 mm screw holes 45 mm apart, 9.5 mm from the cup centre.', params: { cupDiameter: { label: 'Cup diameter', default: 35 }, screwSpacing: { label: 'Screw spacing', default: 45 }, screwOffset: { label: 'Screw line offset', default: 9.5 }, screwDiameter: { label: 'Screw diameter', default: 8 } }, dimensions: 4, build: buildCupHinge },
   { id: 'shelf-pin-row', name: 'Shelf-pin row', description: 'Five 5 mm holes on 32 mm centres (the 32 mm cabinet system): one hole and a rectangular pattern.', params: { count: { label: 'Holes', default: 5, kind: 'count', min: 2, max: 100 }, spacing: { label: 'Spacing', default: 32, atOpen: true }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 1, build: buildShelfPins },
-  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' }, joint: { label: 'Corner joint', default: 'V-Through', kind: 'choice', perCorner: true, options: CORNER_JOINT_TYPES, glyph: 'box-corner-joint' } }, dimensions: 14, build: buildBoxFrame, corners: boxFrameCorners },
+  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' }, joint: { label: 'Corner joint', default: 'V-Through', kind: 'choice', perCorner: true, options: CORNER_JOINT_TYPES, glyph: 'box-corner-joint', optionLabel: (o, v) => cornerJointLabel(o.value, v?.layout) } }, dimensions: 14, build: buildBoxFrame, corners: boxFrameCorners },
   { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, build: buildRightAngleCorner, corners: rightAngleCorners },
   // TASK 672
   { id: 'stair-stringer', name: 'Stair stringer', description: 'A cut stringer from one 286 mm board: 4 steps of 180 rise and 250 run, a plumb cut at the top, a level cut on the floor, 125 mm throat.', params: { steps: { label: 'Steps', default: 4, kind: 'count', min: 2, max: 30 }, rise: { label: 'Rise', default: 180 }, run: { label: 'Run', default: 250 }, boardWidth: { label: 'Board width', default: 286 }, throat: { label: 'Throat', default: 125 } }, dimensions: 4, build: buildStringer },

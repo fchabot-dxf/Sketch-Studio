@@ -287,6 +287,11 @@
     .cut-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
     .cut-presets .cut-preset { all: unset; box-sizing: border-box; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; }
     .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    /* TASK 717: the Adaptive stepping checkbox of a stepped cut, and its Resolution presets (three named levels: three columns, smaller text) */
+    .cut-check { display: flex; align-items: center; gap: 8px; padding-left: 12px; font-size: 13px; color: var(--sk-prep-chip-text); cursor: pointer; }
+    .cut-check input { margin: 0; width: 15px; height: 15px; accent-color: var(--sk-prep-focus); cursor: pointer; }
+    .cut-row[data-row="stepDeviation"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cut-row[data-row="stepDeviation"] .cut-presets .cut-preset { font-size: 12px; }
     /* popovers: LEFT of the card, blue 2px border, 14px radius (cut type / offset presets / cutter shape) */
     .cut-pop { position: absolute; right: calc(100% + 10px); box-sizing: border-box; background: var(--sk-prep-card-bg); border: 2px solid var(--sk-prep-focus); border-radius: 14px; z-index: 12; box-shadow: 0 10px 28px rgba(0,0,0,0.6); }
     .cut-pop[hidden] { display: none; }

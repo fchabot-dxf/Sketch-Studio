@@ -604,7 +604,7 @@ function handleCommit() {
         const state = uiState.appState;
         // TASK 724: a box whose text is still exactly its (rounded) prefill is not an edit. A dimension that already drives keeps its exact value: close, no undo step.
         // A just-placed / restored / reference dimension still becomes driving, with the exact (unrounded) measured number, never the displayed one.
-        const untouched = !uiState.typed[0] && uiState.singleInput.value === uiState.defaults[0] && uiState.exactText != null; // typed: any input event since the box opened
+        const untouched = boxUntouched();
         const needsValue = target.__newlyPlaced === true || target.__restoredDimension === true || target.isDriven || target.driven;
         if (untouched && !needsValue) { target.__editing = false; hideInput(); return; }
         const pv = previewDimensionInput(state, target, untouched ? uiState.exactText : uiState.singleInput.value, { unit: docUnit() });
@@ -643,6 +643,12 @@ function handleCommit() {
     }
 }
 
+// TASK 724: the box still shows exactly its (rounded) prefill and nothing was typed (any input event since it opened counts): not an edit.
+// TASK 723: the ONE rule for both ways a box ends: Enter (handleCommit) and a press outside it (handleOutsidePress).
+function boxUntouched() {
+    return !uiState.typed[0] && uiState.singleInput.value === uiState.defaults[0] && uiState.exactText != null;
+}
+
 // A just-placed (or 667-restored) dimension stops being "new": it keeps its value, its birth snapshot stays its ONE undo step.
 function endPlacing(target, state) {
     target.__newlyPlaced = false;
@@ -661,8 +667,9 @@ function handleOutsidePress(e) {
     const path = e.composedPath();
     if ([uiState.singleInput, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el))) return;
     const text = uiState.singleInput.value;
-    const pv = previewDimensionInput(uiState.appState, uiState.target, text, { unit: docUnit() });
-    if (pv.ok && text.trim() !== String(uiState.defaults[0]).trim()) { handleCommit(); return; }
+    // an untouched box (724) or a text equal to the opening one is no edit: never commit its rounded display text (a just-placed dimension keeps its exact measured value)
+    const changed = !boxUntouched() && text.trim() !== String(uiState.defaults[0]).trim();
+    if (changed && previewDimensionInput(uiState.appState, uiState.target, text, { unit: docUnit() }).ok) { handleCommit(); return; }
     endPlacing(uiState.target, uiState.appState);
     hideInput();
 }

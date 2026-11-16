@@ -23,16 +23,14 @@ import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vca
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
-import { CUT_TYPES, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
-import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
+import { shaperSvgOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy)
+import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
-import { findLoops } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
-import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
@@ -62,7 +60,7 @@ const chrome = mountAppChrome({
   hostActions: [
     { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
       const payload = generateShaperSvgPayload();
-      if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
+      if (!payload) { groupStatus(NO_CUTS); return; }
       download('shaper-export.svg', payload.svg);
     } },
     { divider: true },
@@ -70,6 +68,8 @@ const chrome = mountAppChrome({
     { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
   ],
 });
+
+const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // the Export step's message with an empty plan (Generate, Download, the 2D view)
 
 // SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
 // download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
@@ -81,17 +81,15 @@ function activeVcarves() {
   return Array.isArray(vs) ? vs.filter((v) => v && v.region) : [];
 }
 
-function generateShaperSvgPayload() {
+// TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes)
+function generateShaperSvgPayload({ preview = false } = {}) {
   const entries = cutPlanEntries();
   const vcarves = activeVcarves();
   if (!entries.length && !vcarves.length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  const sById = new Map((st.shapes || []).map((s) => [s.id, s]));
-  const loopPolys = {};
-  for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
-  const svg = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: docUnit(), options: { groupByCut: true }, loopPolys });
+  const svg = shaperSvgOf(st, entries, { preview });
   return { svg, entries, vcarves, state: st };
 }
 
@@ -100,7 +98,7 @@ if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
     const payload = generateShaperSvgPayload();
-    if (!payload) { if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.'; return; }
+    if (!payload) { if (status) status.textContent = NO_CUTS; return; }
     download('shaper-export.svg', payload.svg);
     const n = payload.entries.length + payload.vcarves.length;
     if (status) status.innerHTML = `Exported ${n} cut${n === 1 ? '' : 's'} → <strong>shaper-export.svg</strong>. Drop it into <a href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" style="color:var(--sk-selection,#4c9aff); text-decoration:underline;">ShaperHub (My Files)</a> to sync with Origin.`;
@@ -133,7 +131,7 @@ if (btnSyncShaper) {
     const status = document.getElementById('simexport-status');
     const entries = cutPlanEntries();
     if (!entries.length && !activeVcarves().length) {
-      if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.';
+      if (status) status.textContent = NO_CUTS;
       return;
     }
     try {
@@ -386,7 +384,32 @@ const reviewInputs = (st) => {
   return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: planSteppedNotes(CUT_PLAN) }; // TASK 714: notes = the stepped cuts' steps / undercuts
 };
 const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit()]); // TASK 714: the notes are in the doc unit
+// TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
+const REVIEW_VIEW_KEY = 'shaper-review-view';
+let reviewViewMode = '3d';
+try { if (localStorage.getItem(REVIEW_VIEW_KEY) === '2d') reviewViewMode = '2d'; } catch (err) { dbg.warn('shaper', 'REVIEW_VIEW_KEY read failed', err && err.message); }
+const exportPreview = mountExportPreview({
+  canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
+  getSvg: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? p.svg : null; },
+});
+function showReviewViewMode() {
+  const is2d = reviewViewMode === '2d';
+  for (const id of ['review-canvas-host', 'review-info', 'review-reset', 'review-top', 'review-look']) document.getElementById(id).hidden = is2d; // the 3D view's own parts
+  for (const id of ['review-2d', 'review-cuts']) document.getElementById(id).hidden = !is2d;
+  for (const b of document.querySelectorAll('#review-view-switch button')) b.setAttribute('aria-pressed', b.dataset.view === reviewViewMode ? 'true' : 'false');
+}
+showReviewViewMode();
+for (const b of document.querySelectorAll('#review-view-switch button')) {
+  b.addEventListener('click', () => {
+    if (b.dataset.view === reviewViewMode) return;
+    reviewViewMode = b.dataset.view;
+    try { localStorage.setItem(REVIEW_VIEW_KEY, reviewViewMode); } catch (err) { dbg.warn('shaper', 'REVIEW_VIEW_KEY write failed', err && err.message); }
+    showReviewViewMode();
+    enterReview(designController.state);
+  });
+}
 async function enterReview(st) {
+  if (reviewViewMode === '2d') { showStockThickness(); exportPreview.refresh(reviewSig(st)); return; } // TASK 718: the same trigger rebuilds the 2D view
   const info = document.getElementById('review-info');
   try {
     if (!reviewView) {
@@ -399,11 +422,11 @@ async function enterReview(st) {
 }
 {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,
-    onChange: () => { if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card
+    onChange: () => { if (reviewViewMode === '2d') exportPreview.refresh(reviewSig(designController.state)); else if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card
   showStockThickness = stockCard.show;
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
-  document.getElementById('review-fit').addEventListener('click', () => reviewView && reviewView.fit());
+  document.getElementById('review-fit').addEventListener('click', () => (reviewViewMode === '2d' ? exportPreview.fit() : reviewView && reviewView.fit())); // TASK 718: Fit frames the view shown
   document.getElementById('review-wood').addEventListener('change', (e) => reviewView && reviewView.setWood(e.target.checked)); // per session
 }
 

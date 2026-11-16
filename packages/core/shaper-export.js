@@ -131,6 +131,11 @@ function datumPolygon(datum) {
 //                datum: true | {legX,legY}  → emit the red registration triangle FIRST.
 //                groupByCut: true           → wrap elements sharing IDENTICAL cut attrs in one <g> (attrs hoisted off
 //                                             the children, which inherit); unique-attr elements stay ungrouped.
+//                previewData: true          → TASK 718: the PREVIEW copy (Shaper's Export step, 2D view) — each element of a stepped cut
+//                                             carries data-step="k/N" (its terrace, from deriveCuts: what the file alone cannot say, since
+//                                             two cuts' steps at the same depth are written alike). Never in the downloaded file: with it
+//                                             off (the default) the string is byte-identical; the attribute is on the element only, so the
+//                                             <g> grouping is the same either way.
 export function exportShaperSVG({ state, entries, encoding, docUnit, options = {}, loopPolys } = {}) {
   const ents = Array.isArray(entries) ? entries : [];
   const enc = Array.isArray(encoding) ? encoding : [];
@@ -222,7 +227,8 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       } else if (cut.loop) {
         geom = loopGeom(cut.loop, state, shapeById);
       }
-      if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a });
+      const data = options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : '';
+      if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
     }
   }
 

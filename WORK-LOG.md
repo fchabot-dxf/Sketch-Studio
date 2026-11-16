@@ -15694,3 +15694,7 @@ The engine and every shared package stay ONE copy in the repo; a site is BUILT f
   arrow drag, the undimensioned drag rule, 688's box placement.
 - Evidence (.evidence/690, local): mouse-/touch-1-box-5-below, -2-box-minus5-above, -3-made-above, -4-dimension-minus3-below (label -3.0),
   -5-parameter-minus2-below, -6-parameters-window.
+
+## TURN 704
+Site names (owner turns 1857-1862): Shaper moves to https://shaper-svg.pages.dev (new direct-upload project `shaper-svg`); Pen Plotter takes over the owner's older `penplotter` project (https://penplotter.pages.dev, its old Git-built app replaced by an upload, owner choice "Replace the old app"); Trace keeps https://sketch-trace.pages.dev. Changed: scripts/build-site.cjs SITE_HOST (sketch-studio's /shaper and /apps/<app>/* redirects follow), tests/site-closure.test.js expected hosts, README "Websites" table, providers.js origins comment.
+Evidence: `node tests/site-closure.test.js` -> "site-closure: 4 sites, every reference inside its own site, no other app; the broken copy is caught". Deployed by the advisor: https://020676c6.penplotter.pages.dev, https://443f8239.shaper-svg.pages.dev; `curl https://shaper-svg.pages.dev/?host=fusion` -> 302 https://shaper-svg.pages.dev/apps/shaper/?host=fusion; penplotter.pages.dev/ -> 302 /apps/penplotter/, /apps/penplotter/ -> 200.

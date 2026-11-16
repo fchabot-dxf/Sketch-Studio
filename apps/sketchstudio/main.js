@@ -88,7 +88,7 @@ function initApp(){
       svg.style.outline = 'none';
   }
   dbg.log('main', '[main] initApp starting, svg found:', !!svg);
-  const importer = createStudioImporter({ state, svg }); // TASK 610: design-canvas.js (the node test kit calls it too): the file menu's entry + the drop
+  const importer = createStudioImporter({ state, svg, showDesign }); // TASK 610: design-canvas.js (the node test kit calls it too): the file menu's entry + the drop; TASK 706: an import shows Design
   // design-canvas.js: the state defaults, the empty store (only j_origin), the initial view and its viewBox
   initStudioCanvas(state, engine, document.getElementById(CANVAS_ID));
   
@@ -146,7 +146,9 @@ function initApp(){
   const mainEl = document.querySelector('main');
   const footerEl = document.querySelector('footer');
   const exportPanelEl = document.getElementById('export-panel');
+  let viewMode = 'design'; // the view that shows: 'design' | 'export'
   function showView(mode) {
+    viewMode = mode;
     const design = mode !== 'export';
     if (ribbonEl) ribbonEl.style.display = design ? '' : 'none';
     if (mainEl) mainEl.style.display = design ? '' : 'none';
@@ -160,6 +162,9 @@ function initApp(){
 
   // THE mode router (TASK 602/619): Design is the one stage tab; Export, Style, Log, Debug and Tune solver live in the ☰ menu.
   const route = (mode) => { chrome.setActiveStage(mode); showView(mode); };
+  // TASK 706 ("everything in Design"): how this page shows its Design view, declared to the shared importer and buffer: an import, or a design the user
+  // opens (new / Open / Open from file), started from the Export view lands in Design, shown. On Design nothing changes (the Sketches browser stays open).
+  function showDesign() { if (viewMode !== 'design') route('design'); }
   const chrome = mountAppChrome({
     appId: 'sketchstudio',
     container: document.getElementById('app-header-host'),
@@ -185,7 +190,7 @@ function initApp(){
   showView('design');
 
   // TASK 602 (owner): no "Saved" text in the header: the document tab's dot shows unsaved / saving / failed (document-tabs.js)
-  docBuffer = createDocumentBuffer(studioBufferOptions({ state, engine, svg })); // design-canvas.js
+  docBuffer = createDocumentBuffer(studioBufferOptions({ state, engine, svg, showDesign })); // design-canvas.js
   docBuffer.restore();
   docBuffer.start();
 

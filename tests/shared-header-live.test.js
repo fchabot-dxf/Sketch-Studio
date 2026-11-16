@@ -1,22 +1,17 @@
 // tests/shared-header-live.test.js — TASK 619: unified shared app header & peeking mobile sidebar drawer across all 4 hosts.
 // Verifies in headless Edge (real mouse clicks + real touch taps/drags, zero skipped/mocked paths):
 //   a. Desktop 1440x900 (all 4 apps): header = ☰ + stage buttons only, height 44 px, identical layout/order/spacing, own colors, sideways scroll when tight;
-//   b. ☰ menu entries work by real click in all 4 apps (Style closes menu first, Settings, Log, Debug, Tune solver, Export…, Shaper Explore Open SVG/Export on Explore only, Explore Recenter = fit, Pen Plotter Panel in .sk-canvas-corner < 768 px Design);
+//   b. ☰ menu entries work by real click in all 4 apps (Style closes menu first, Settings, Log, Debug, Tune solver, Export…, Shaper Settings / Log (TASK 706: no Explore entries), Pen Plotter Panel in .sk-canvas-corner < 768 px Design);
 //   c & d. Phone portrait (390x844, 360x780) & short landscape (844x390, 780x360): NO header bar, .sk-doctabs at top === 0, peeking left .sk-sidebar-handle (tap to open, backdrop tap to close, drag right to open, drag left to close), stage buttons at top of sidebar switch stages.
 import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const FIX_SVG = path.join(ROOT, 'tests', 'fixtures', 'svg', 'import-basic.svg');
 
 const APPS = [
   { id: 'sketchstudio', name: 'SketchStudio', url: '/apps/sketchstudio/index.html', stages: ['Design'], dark: false, nextStage: 'Design', ready: `!!document.getElementById('svgCanvas') && !!document.querySelector('.sk-header')` },
-  { id: 'shaper',       name: 'Shaper',       url: '/apps/shaper/index.html',       stages: ['Explore', 'Design', 'Vcarve', 'Prepare', 'Review'], dark: true, nextStage: 'design', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')` },
-  { id: 'penplotter',   name: 'Pen Plotter',  url: '/apps/penplotter/index.html',   stages: ['Design', 'Toolpath', 'Export'], dark: false, nextStage: 'toolpath', ready: `!!window.__sketch && !!document.querySelector('.sk-header-tab[data-tab="design"]')` },
-  { id: 'trace',        name: 'Trace',        url: '/apps/trace/index.html',        stages: ['Trace', 'Edit', 'Export'], dark: true, nextStage: 'edit', ready: `!!document.querySelector('.sk-header-tab[data-tab="edit"]')` },
+  { id: 'shaper',       name: 'Shaper',       url: '/apps/shaper/index.html',       stages: ['Design', 'Vcarve', 'Prepare', 'Export'], dark: true, nextStage: 'prepare', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')` },
+  { id: 'penplotter',   name: 'Pen Plotter',  url: '/apps/penplotter/index.html',   stages: ['Design', 'Prepare', 'Export'], dark: false, nextStage: 'toolpath', ready: `!!window.__sketch && !!document.querySelector('.sk-header-tab[data-tab="design"]')` },
+  { id: 'trace',        name: 'Trace',        url: '/apps/trace/index.html',        stages: ['Trace', 'Design', 'Export'], dark: true, nextStage: 'edit', ready: `!!document.querySelector('.sk-header-tab[data-tab="edit"]')` },
 ];
 
 const cdp = await launchBrowser({ tag: '619', width: 1440, height: 900 });
@@ -179,22 +174,13 @@ try {
   await clickSel('.sk-sidebar-item[data-action="export"]');
   await waitFor(`!document.getElementById('export-panel').classList.contains('hidden')`, 'SketchStudio Export view opened from ☰ menu');
 
-  // b2. Shaper: Explore has Open SVG / Export in menu (all sizes); off Explore they hide; Settings & Log work; Explore Recenter = fit
+  // b2. Shaper (TASK 706: no Explore stage, so no Open SVG / Export entries): opens on Design; Settings & Log work
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000);
   await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'Shaper ready');
-  const exploreSvg = fs.readFileSync(FIX_SVG, 'utf8');
-  await evalJs(`(() => { const dt = new DataTransfer(); dt.items.add(new File([${JSON.stringify(exploreSvg)}], 'test.svg', { type: 'image/svg+xml' })); const f = document.getElementById('file'); f.files = dt.files; f.dispatchEvent(new Event('change')); })()`);
-  await waitFor(`!!document.querySelector('#canvas .stage svg')`, 'Explore loaded SVG');
-  const fitT = await evalJs(`document.querySelector('#canvas .stage').style.transform`);
-  await evalJs(`document.querySelector('#canvas .stage').style.transform = 'translate(220px, 140px) scale(2.5)'`);
-  await clickSel('#btn-recenter-view');
-  await sleep(100);
-  assert.strictEqual(await evalJs(`document.querySelector('#canvas .stage').style.transform`), fitT, 'Shaper Explore footer Recenter runs fit()');
-
   await clickSel('.sk-sidebar-btn');
   await waitFor(`document.querySelector('.sk-sidebar')?.classList.contains('open')`, 'Shaper sidebar opened');
   const expItems = await evalJs(`({ open: !!document.querySelector('[data-action="explore-open"]'), exp: !!document.querySelector('[data-action="explore-export"]'), settings: !!document.querySelector('[data-action="settings"]'), log: !!document.querySelector('[data-action="log"]') })`);
-  assert.deepStrictEqual(expItems, { open: true, exp: true, settings: true, log: true }, 'Shaper Explore shows Open SVG, Export, Settings, Log in ☰ menu on desktop');
+  assert.deepStrictEqual(expItems, { open: false, exp: false, settings: true, log: true }, 'Shaper shows Settings, Log in ☰ menu on desktop, and no Explore Open SVG / Export (TASK 706)');
   await clickSel('.sk-sidebar-item[data-action="settings"]');
   await waitFor(`!document.querySelector('.sk-style-panel')?.classList.contains('sk-hidden')`, 'Shaper Settings (.sk-style-panel) opened from ☰ menu');
   assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, 'opening Settings closes ☰ menu first so panel is never hidden');
@@ -205,12 +191,8 @@ try {
   await waitFor(`!document.querySelector('.sk-diag-panel').classList.contains('sk-hidden')`, 'Shaper Log opened from ☰ menu');
   await clickSel('.sk-diag-close');
 
-  await clickSel('.sk-header-tab[data-tab="design"]');
-  await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'Shaper Design opened');
-  await clickSel('.sk-sidebar-btn');
-  const desItems = await evalJs(`({ open: !!document.querySelector('[data-action="explore-open"]'), exp: !!document.querySelector('[data-action="explore-export"]') })`);
-  assert.deepStrictEqual(desItems, { open: false, exp: false }, 'Shaper Design hides Explore-only menu entries');
-  await clickPt(900, 450);
+  assert.strictEqual(await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`), 'design', 'Shaper opens on Design (TASK 706)');
+  assert(await evalJs(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`), 'Shaper Design shows its canvas');
 
   // b3. Pen Plotter: Download + Log in menu; narrow (< 768px) Design Panel icon in .sk-canvas-corner beside Sketches
   await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 15000);

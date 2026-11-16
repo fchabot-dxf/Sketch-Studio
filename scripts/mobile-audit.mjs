@@ -269,10 +269,10 @@ const shots = [];
     // ===== Shaper =====
     const shaper = async (d) => {
       await setDevice(d); await fresh(`${base}/apps/shaper/index.html`);
-      for (const mode of ['explore', 'design', 'vcarve', 'prepare', 'review']) {
+      for (const mode of ['design', 'vcarve', 'prepare', 'review']) { // TASK 706: no Explore stage
         await tapSel('.sk-sidebar-handle'); await sleep(250);
         await tapSel(`.sk-sidebar-stage[data-tab="${mode}"]`); await sleep(900);
-        const canvasSel = { explore: '#canvas', design: '#design-canvas', vcarve: '#vcarve-canvas', prepare: '#prepare-canvas', review: '#review-canvas-host' }[mode];
+        const canvasSel = { design: '#design-canvas', vcarve: '#vcarve-canvas', prepare: '#prepare-canvas', review: '#review-canvas-host' }[mode];
         await shot(`shaper-${mode}`); await measure(`shaper-${mode}`, canvasSel);
         if (d.full && mode === 'design') {
           await tapSel('.sk-sidebar-handle'); await sleep(400); await shot('shaper-sidebar-open'); await esc(); await c.ev(`document.querySelectorAll('.sk-sidebar-backdrop').forEach(b => b.click())`); await sleep(300);

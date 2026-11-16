@@ -1,10 +1,6 @@
-// SVG Editor — boot + wiring.
+// Shaper — boot + wiring.
 
-import { store, setDoc } from './store.js';
-import { parseSvg, serializeSvg, download } from './svgio.js';
-import * as canvas from './canvas.js';
-import * as tree from './tree.js';
-import * as inspector from './inspector.js';
+import { download } from './download.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
@@ -16,7 +12,7 @@ import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mo
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
-import { MODE_KEY, SHAPER_STAGES, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
+import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
 import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + CUT_PLAN + stock
 import { dbg } from '#core/debug.js';
@@ -41,30 +37,19 @@ import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shape
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 
-canvas.init(document.getElementById('canvas'));
-tree.init(document.getElementById('tree'));
-inspector.init(document.getElementById('inspector'));
-
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
 
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
-// Explore/Vcarve/Prepare — designController may not exist yet, so its state is read lazily.
+// Vcarve/Prepare/Review — designController may not exist yet, so its state is read lazily.
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
-
-const fileInput = document.getElementById('file');
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) loadFile(fileInput.files[0]);
-  fileInput.value = '';
-});
 
 const fusionMode = isFusionMode();
 if (!fusionMode) getGoogleAccount().init();
 const activeStages = shaperStagesFor({ fusion: fusionMode });
-let initMode = 'explore';
-try { initMode = localStorage.getItem(MODE_KEY) || 'explore'; } catch (err) { dbg.warn('shaper', 'MODE_KEY read failed', err && err.message); }
-if (initMode === 'simexport') initMode = 'review'; // TASK 459: the tab was renamed Simulate/Export -> Review
-initMode = resolveInitialMode(initMode, { fusion: fusionMode });
+let initMode = null;
+try { initMode = localStorage.getItem(MODE_KEY); } catch (err) { dbg.warn('shaper', 'MODE_KEY read failed', err && err.message); }
+initMode = resolveInitialMode(initMode, { fusion: fusionMode }); // modes.js: a stored 'simexport' (TASK 459) is Review; a stored 'explore' (TASK 706) or none: Design
 
 const chrome = mountAppChrome({
   appId: 'shaper',
@@ -79,12 +64,6 @@ const chrome = mountAppChrome({
       const payload = generateShaperSvgPayload();
       if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
       download('shaper-export.svg', payload.svg);
-    } },
-    { divider: true, visible: () => modes.current() === 'explore' },
-    { id: 'explore-open', label: 'Open SVG', icon: SIDEBAR_ICONS.openFile, visible: () => modes.current() === 'explore', onClick: () => fileInput.click() },
-    { id: 'explore-export', label: 'Export', icon: SIDEBAR_ICONS.download, visible: () => modes.current() === 'explore', onClick: () => {
-      if (!store.doc) return;
-      download('edited.svg', serializeSvg(store.doc));
     } },
     { divider: true },
     { id: 'settings', label: 'Settings', icon: SIDEBAR_ICONS.gear, onClick: () => stylePanel.toggle() },
@@ -279,38 +258,11 @@ document.addEventListener('keydown', (e) => {
 
 // SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js), with Shaper's own options
 // declared in cut-import.js (TASK 583: each element's cut record, kept descIds, the cuts kept in CUT_PLAN; the node test kit calls it too).
-// The entry is the sidebar's "Import SVG / DXF…" (project-actions.js, passed to mountProjectSidebar above); a drop on the Design view is the second way in.
-const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => VIEWS.design, showDocument: () => modes.showDocument() }); // TASK 610: cut-import.js; TASK 705: an import from Explore shows Design
+// The entry is the sidebar's "Import SVG / DXF…" (project-actions.js, passed to mountProjectSidebar above); a drop anywhere on the page is the second way in
+// (TASK 706). Either one shows Design first (modes.js showDesign, declared to the shared importer).
+const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => document.body, showDesign: () => modes.showDesign() }); // TASK 610: cut-import.js
 
-// Drag-and-drop onto the canvas.
-const dropZone = document.getElementById('canvas');
-['dragenter', 'dragover'].forEach((ev) =>
-  dropZone.addEventListener(ev, (e) => {
-    e.preventDefault();
-    dropZone.classList.add('drag-over');
-  }),
-);
-['dragleave', 'drop'].forEach((ev) =>
-  dropZone.addEventListener(ev, (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-  }),
-);
-dropZone.addEventListener('drop', (e) => {
-  const file = e.dataTransfer?.files?.[0];
-  if (file) loadFile(file);
-});
-
-async function loadFile(file) {
-  try {
-    const text = await file.text();
-    setDoc(parseSvg(text));
-  } catch (err) {
-    alert(`Could not load SVG:\n${err.message}`);
-  }
-}
-
-// ── S6a: 5-mode app shell — a view router over Explore / Design / Vcarve / Prepare / Review. (modes.js: declared once, the node test kit calls it too) ──
+// ── S6a: 4-mode app shell — a view router over Design / Vcarve / Prepare / Review. (modes.js: declared once, the node test kit calls it too) ──
 const VIEWS = findViews(document);
 let modes = null; // the mode router (created below, once the views it enters exist)
 
@@ -363,7 +315,7 @@ function buildDesignUI() {
   });
   ribbon.render(document.getElementById('design-ribbon'));
 
-  shaperImporter.mountDrop(); // a drop on the Design view (the menu entry is mounted with the sidebar)
+  shaperImporter.mountDrop(); // a drop anywhere on the page (the menu entry is mounted with the sidebar)
 }
 
 // Mount the shared sketcher ONCE. isActive is tied to the ACTIVE MODE (R-COEXIST), not just design-view
@@ -385,14 +337,14 @@ function ensureSketch() {
   // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the tab's stage state
   docBuffer = createDocumentBuffer(shaperBufferOptions({
     controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
-    session: createShaperSession({ prepare, getVcarveView: () => vcarveView }), // shaper-session.js: Explore SVG, Prepare selection + view, Vcarve view
+    session: createShaperSession({ prepare, getVcarveView: () => vcarveView }), // shaper-session.js: Prepare selection + view, Vcarve view
+    showDesign: () => modes.showDesign(), // TASK 706: a design the user opens (new / Open / Open from file) is shown in Design
     refreshViews: () => { if (infoPanel) infoPanel.refresh(); if (vcarveView) vcarveView.refresh(); },
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
-    afterSidecar: (reason) => {
+    afterSidecar: () => {
       prepare.afterRestore();
       showStockThickness();
       if (modes.current() === 'review') enterReview(designController.state);
-      modes.documentOpened(reason); // TASK 705 (modes.js): a design opened while Explore shows is shown in Design
     },
   }));
   docBuffer.restore();
@@ -402,7 +354,7 @@ function ensureSketch() {
 
 // The view router (modes.js): show the active mode's container, hide the rest, drive the Design RAF lifecycle, persist the active mode.
 modes = createModeRouter({
-  views: VIEWS, stages: activeStages, defaultMode: activeStages[0] ? activeStages[0].id : 'explore',
+  views: VIEWS, stages: activeStages, defaultMode: activeStages[0].id,
   onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
   afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design
   enter: {
@@ -424,8 +376,8 @@ modes = createModeRouter({
 const showMode = modes.showMode;
 mountAppFooter({
   router: history,
-  view: () => (modes.current() === 'explore' ? { fit: () => canvas.refit() } : (designController && modes.current() === 'design' ? { svg: designController.svg, state: designController.state } : null)),
-}); // TASK 618/619: Recenter on Design and Fit on Explore
+  view: () => (designController && modes.current() === 'design' ? { svg: designController.svg, state: designController.state } : null),
+}); // TASK 618/619: Recenter on Design
 
 // TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.
 const reviewInputs = (st) => {
@@ -443,7 +395,7 @@ async function enterReview(st) {
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));
-  } catch (e) { info.textContent = 'Review failed: ' + e.message; throw e; }
+  } catch (e) { info.textContent = 'Export failed: ' + e.message; throw e; }
 }
 {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,

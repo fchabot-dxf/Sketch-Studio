@@ -1,7 +1,7 @@
 // tests/phone-header-live.test.js — TASK 581: at phone widths (390 and 360 px, touch) EVERY app's header fits the screen: the header's right edge
 // is inside the viewport, the page has no horizontal scroll, every header control's rect is inside the viewport and at least 44 px high, and the
-// drawer button (the SKETCHES / panel drawer) is on screen and a REAL touch tap opens the drawer. Shaper is measured in Explore (its Open SVG /
-// Fit / Export live in the menu at phone width) and in Design; Pen Plotter in its Design stage; Trace in its Edit tab; SketchStudio in Design.
+// drawer button (the SKETCHES / panel drawer) is on screen and a REAL touch tap opens the drawer. Shaper is measured in Design (TASK 706: its
+// Explore stage, measured here before, is gone); Pen Plotter in its Design stage; Trace in its Edit tab; SketchStudio in Design.
 // At 1440 px the headers keep their desktop height (44 px or less) and show every control in the header.
 import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
@@ -16,7 +16,6 @@ await (async () => {
     const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
     const tap = async (r) => { await T('touchStart', [{ x: Math.round((r.left + r.right) / 2), y: Math.round((r.top + r.bottom) / 2) }]); await sleep(40); await T('touchEnd', []); await sleep(500); };
     const hosts = [
-      { name: 'shaper-explore', url: '/apps/shaper/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="explore"]').click()`, ready: `!!document.querySelector('.sk-header-tab[data-tab="explore"].active')`, drawer: false },
       { name: 'shaper-design', url: '/apps/shaper/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')`, drawer: true },
       { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')`, drawer: true, panelToggle: true },
       { name: 'trace', url: '/apps/trace/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="edit"]').click()`, ready: `!!document.querySelector('.sk-browser .sk-sketch-node')`, drawer: true },
@@ -59,11 +58,6 @@ await (async () => {
           if (h.panelToggle) {
             const pbtn = await evalJs(`(() => { const e = document.querySelector('.sk-canvas-corner .sk-drawer-toggle[aria-label="Panel"]'); const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, w: r.width, h: r.height }; })()`);
             assert(pbtn.w >= 43.5 && pbtn.h >= 43.5 && pbtn.right <= m.vw + 0.5 && pbtn.left >= 0, tag + 'Pen Plotter Panel toggle sits in .sk-canvas-corner at 44 px: ' + JSON.stringify(pbtn));
-          }
-          if (h.name === 'shaper-explore') {
-            await tap(m.handle);
-            const items = await evalJs(`[...document.querySelectorAll('.sk-sidebar button, .sk-sidebar [role=button], .sk-sidebar-item')].map((e) => (e.textContent || '').trim()).filter(Boolean)`);
-            for (const label of ['Open SVG', 'Export', 'Settings', 'Log']) assert(items.some((t) => t === label || t.endsWith(label)), tag + `the menu offers ${label}: ` + JSON.stringify(items));
           }
         }
       }

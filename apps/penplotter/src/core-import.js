@@ -49,9 +49,10 @@ function paperFrame() {
   return { joints, shapes: ids.map((id, i) => ({ id: 'paper-' + i, type: 'line', joints: [id, ids[(i + 1) % 4]] })) };
 }
 
-/** Import `text` (an SVG or a DXF) into controller's #core sketch. Returns the shared result plus `docSet` (the paper size was changed). */
-export function importFileToCore(text, fileName, controller) {
+/** Import `text` (an SVG or a DXF) into controller's #core sketch. Returns the shared result plus `docSet` (the paper size was changed).
+ *  showDesign(): TASK 706, how the page shows its Design stage (sketch-stage.js): the shared importer calls it first, so the import lands in Design, shown. */
+export function importFileToCore(text, fileName, controller, { showDesign = null } = {}) {
   let docSet = false;
-  const res = importIntoSketch(text, fileName, controller, { idPrefix: 'imp', frame: paperFrame, silentTags: SILENT_TAGS, inheritPaint, afterImport: (ctx) => afterImport(ctx, () => { docSet = true; }) });
+  const res = importIntoSketch(text, fileName, controller, { showDesign, idPrefix: 'imp', frame: paperFrame, silentTags: SILENT_TAGS, inheritPaint, afterImport: (ctx) => afterImport(ctx, () => { docSet = true; }) });
   return { ...res, docSet };
 }

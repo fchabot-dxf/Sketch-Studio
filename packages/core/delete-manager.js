@@ -3,6 +3,8 @@ import { removeOrphanJoints } from './joints.js';
 import { patternsAfterDelete } from './pattern.js';
 import { undimensionOffset } from './offset.js';
 import { SolverConfig } from './solver-config.js';
+import { dimensionValuesOf, reconcileKeptDimensions } from './parameters.js';
+import { docUnit } from './settings-manager.js';
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo, constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from './sketch-model.js'; // TASK 577/619
 
 // A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
@@ -29,6 +31,7 @@ export function deleteConstraints(state, constraintsOrIds) {
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete constraints'); } catch (_) {}
   try { if (typeof state.saveState === 'function') state.saveState('delete constraints'); } catch (_) {}
 
+  const dimsBefore = dimensionValuesOf(state.constraints); // TASK 709: a deleted dimension a formula reads keeps its name as a value (O10)
   let removed = 0;
   const seen = new Set();
   for (const c of toDelete) {
@@ -63,6 +66,7 @@ export function deleteConstraints(state, constraintsOrIds) {
     }
   }
 
+  reconcileKeptDimensions(state, dimsBefore, { unit: docUnit() }); // TASK 709 (O10): kept values made / dropped
   // Clear selection references
   try { if (state.selectedConstraints && typeof state.selectedConstraints.clear === 'function') state.selectedConstraints.clear(); } catch(_) {}
 
@@ -73,6 +77,54 @@ export function deleteConstraints(state, constraintsOrIds) {
   return removed;
 }
 
+// TASK 709: the constraint fields that name a SHAPE / a POINT (a sketch pattern's sources, copies, centre and direction lines are followed by
+// #core/pattern.js patternsAfterDelete).
+const SHAPE_FIELDS = ['shapes', 'shape', 'line', 'circle'], JOINT_FIELDS = ['joints', 'joint'];
+const asList = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
+const namesAny = (c, fields, ids) => fields.some((f) => asList(c[f]).some((x) => ids.has(x)));
+
+/**
+ * TASK 709 - THE rule (Fusion: deleting a sketch curve or point deletes every dimension and constraint that names it, and the dimension's
+ * parameter with it). The shapes `shapeIds` and the points `jointIds` go, with every shape that uses one of those points, and every constraint
+ * or dimension that names a shape that goes or a point that goes (a point goes when it is one of `jointIds`, or when only the shapes that go
+ * used it; a fillet's virtual sharp that a dimension holds stays, virtualSharpProtectedJoints). A dimension's row in the Parameters table goes
+ * with it (the table lists the constraints). A constraint naming only surviving geometry stays. Unused points are then cleaned and sketch
+ * patterns follow (patternsAfterDelete). A dimension that goes while a formula reads its name keeps that name as a value (#core/parameters.js
+ * reconcileKeptDimensions, decision O10: Fusion's). The ONE place geometry is removed: deleteShapes / deleteJoints (Delete, Cut, Clear sketch, Delete
+ * sketch) and the Trim tool (#core/trim.js) call it. No history, no solve: the callers own those.
+ * -> { shapes: the shapes removed, joints: the points of `jointIds` removed }
+ */
+export function removeGeometry(state, shapeIds = [], jointIds = []) {
+  const dimsBefore = dimensionValuesOf(state.constraints);
+  const deleteJ = new Set(jointIds);
+  const goneS = new Set(shapeIds);
+  for (const s of state.shapes) if (s && asList(s.joints).some((j) => deleteJ.has(j))) goneS.add(s.id);
+  const shapeJoints = new Set();
+  let shapes = 0;
+  for (let i = state.shapes.length - 1; i >= 0; i--) {
+    const s = state.shapes[i];
+    if (!s || !goneS.has(s.id)) continue;
+    asList(s.joints).forEach((j) => shapeJoints.add(j));
+    state.shapes.splice(i, 1);
+    shapes++;
+  }
+  // A point goes only when NO surviving shape uses it: shapes that merely SHARE a point with a deleted shape (a fillet's rim points, chained
+  // lines) survive with it.
+  const usedBySurvivors = new Set(state.shapes.flatMap((s) => asList(s && s.joints)));
+  const kept = virtualSharpProtectedJoints(state);
+  const goneJ = new Set([...deleteJ, ...[...shapeJoints].filter((j) => !usedBySurvivors.has(j) && !kept.has(j))]);
+  for (let i = state.constraints.length - 1; i >= 0; i--) {
+    const c = state.constraints[i];
+    if (c && (namesAny(c, SHAPE_FIELDS, goneS) || namesAny(c, JOINT_FIELDS, goneJ))) state.constraints.splice(i, 1);
+  }
+  let joints = 0;
+  for (const j of deleteJ) if (state.joints.delete(j)) joints++;
+  removeOrphanJoints(state);
+  patternsAfterDelete(state); // TASK 658: a deleted copy suppresses its pattern instance; a deleted source / centre / direction line ends the pattern
+  reconcileKeptDimensions(state, dimsBefore, { unit: docUnit() }); // a deleted dimension (or pattern value) a formula reads keeps its name as a value (O10)
+  return { shapes, joints };
+}
+
 export function deleteShapes(state, shapeIds) {
   if (!state) return 0;
   const ids = Array.isArray(shapeIds) ? shapeIds.slice() : [shapeIds];
@@ -80,52 +132,7 @@ export function deleteShapes(state, shapeIds) {
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete shapes'); } catch (_) {}
   try { if (typeof state.saveState === 'function') state.saveState('delete shapes'); } catch (_) {}
 
-  let removed = 0;
-  const removedJoints = new Set();
-
-  for (const id of ids) {
-    const idx = state.shapes.findIndex(s => s && s.id === id);
-    if (idx !== -1) {
-      const s = state.shapes[idx];
-      // Collect joints to consider for orphan cleanup
-      if (s && s.joints && Array.isArray(s.joints)) s.joints.forEach(j => removedJoints.add(j));
-      state.shapes.splice(idx, 1);
-      removed++;
-    }
-  }
-
-  // Remove constraints that reference removed shapes (including tangent line/circle fields)
-  for (let i = state.constraints.length - 1; i >= 0; i--) {
-    const c = state.constraints[i];
-    if (!c) continue;
-    if ((c.shape && ids.includes(c.shape))
-        || (c.shapes && c.shapes.some(sid => ids.includes(sid)))
-        || (c.line && ids.includes(c.line))
-        || (c.circle && ids.includes(c.circle))) {
-      state.constraints.splice(i, 1);
-    }
-  }
-
-  // A joint goes only when NO surviving shape uses it. Shapes that merely SHARE a joint with a deleted
-  // shape (a fillet's rim joints, chained lines) survive; their shared joints stay. Constraints that reference
-  // a joint that is going away are dropped so nothing dangles (e.g. the arc's `equal` on its centre joint).
-  const usedBySurvivors = new Set();
-  for (const s of state.shapes) if (s && Array.isArray(s.joints)) s.joints.forEach(j => usedBySurvivors.add(j));
-  const protectedJoints = virtualSharpProtectedJoints(state);
-  const goneJoints = new Set([...removedJoints].filter(j => !usedBySurvivors.has(j) && !protectedJoints.has(j)));
-  if (goneJoints.size) {
-    for (let i = state.constraints.length - 1; i >= 0; i--) {
-      const c = state.constraints[i];
-      if (!c) continue;
-      if ((Array.isArray(c.joints) && c.joints.some(j => goneJoints.has(j))) || (c.joint && goneJoints.has(c.joint))) {
-        state.constraints.splice(i, 1);
-      }
-    }
-  }
-
-  // Clean orphan joints
-  try { removeOrphanJoints(state); } catch(_) {}
-  patternsAfterDelete(state); // TASK 658: a deleted copy suppresses its pattern instance; a deleted source / centre / direction line ends the pattern
+  const removed = removeGeometry(state, ids, []).shapes; // TASK 709: THE rule
 
   // Clear selected shapes if present
   try { if (state.selectedShapes && typeof state.selectedShapes.clear === 'function') state.selectedShapes.clear(); } catch(_) {}
@@ -143,35 +150,9 @@ export function deleteJoints(state, jointIds) {
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete joints'); } catch (_) {}
   try { if (typeof state.saveState === 'function') state.saveState('delete joints'); } catch (_) {}
 
-  let removed = 0;
-  // Remove joints from shapes; if any shape loses joints, remove it
-  for (let i = state.shapes.length - 1; i >= 0; i--) {
-    const s = state.shapes[i];
-    if (!s || !s.joints) continue;
-    // If the shape references any of the joints-to-delete, remove the shape entirely
-    if (s.joints.some(j => ids.includes(j))) {
-      state.shapes.splice(i, 1);
-      removed++;
-    }
-  }
-
-  // Remove constraints that reference the joints
-  for (let i = state.constraints.length - 1; i >= 0; i--) {
-    const c = state.constraints[i];
-    if (!c) continue;
-    if ((c.joints && c.joints.some(j => ids.includes(j))) || (c.joint && ids.includes(c.joint))) {
-      state.constraints.splice(i, 1);
-    }
-  }
-
-  // Finally remove the joints from the joints map
-  for (const jid of ids) {
-    if (state.joints && state.joints.has(jid)) { state.joints.delete(jid); removed++; }
-  }
-
-  // Cleanup orphans
-  try { removeOrphanJoints(state); } catch(_) {}
-  patternsAfterDelete(state); // TASK 658 (as deleteShapes)
+  // TASK 709: THE rule: every shape using one of the points goes, and every constraint / dimension on those shapes or points
+  const r = removeGeometry(state, [], ids);
+  const removed = r.shapes + r.joints;
 
   try { if (state.selectedJoints && typeof state.selectedJoints.clear === 'function') state.selectedJoints.clear(); } catch(_) {}
   try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.QUICK_SOLVE || 8); } catch(_) {}

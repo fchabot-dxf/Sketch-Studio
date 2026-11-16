@@ -20,7 +20,7 @@ const SCAFFOLD = `
     <div class="tp-body">
       <aside id="exportPanel">
         <div class="dp-head">Export</div>
-        <div class="tp-note">Machine settings (doc size, feeds, pen heights, tolerance) are in the <b>Toolpath</b> tab.</div>
+        <div class="tp-note">Machine settings (doc size, feeds, pen heights, tolerance) are in the <b>Prepare</b> tab.</div>
         <label class="tp-note">${EXPORT_FILES_FIELD.label}
           <select id="exportFiles">${EXPORT_FILES_FIELD.options.map(o => `<option value="${o.value}">${o.label}</option>`).join("")}</select>
         </label>

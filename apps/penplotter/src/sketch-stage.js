@@ -241,7 +241,7 @@ export function mountSketchStage(view, ctx = {}) {
       const msig = (one || '') + '|' + mixed + '|' + state.toolpaths.length + '|' + noPens;
       if (msig !== lastMixSig) {
         lastMixSig = msig;
-        mixStatus.textContent = mixed ? mixSummary(one) : (noPens ? 'Pen-mix needs pens: add one with + Pen on the Toolpath tab.' : '');
+        mixStatus.textContent = mixed ? mixSummary(one) : (noPens ? 'Pen-mix needs pens: add one with + Pen on the Prepare tab.' : '');
       }
     }
     // DOC-SIZE-IN-DESIGN: keep the Document button's label in sync with state.doc (updates after a modal size edit).
@@ -275,8 +275,11 @@ export function mountSketchStage(view, ctx = {}) {
   // PERSIST-2: restore the shared cross-app document (if any), then keep autosaving.
   // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored); a design with no
   // plotter sidecar resets the plotter state to defaults (it must not inherit the previous design's pens and toolpaths).
+  // TASK 706 ("everything in Design"): how this page shows its Design stage, declared to the shared buffer (a design the user opens: new / Open / Open from
+  // file) and to the shared importer (an import): either one lands in Design, shown, from Toolpath / Export too. A tab switch keeps the stage.
+  const showDesign = () => { if (!ctx.isActive()) ctx.navigate('design'); };
   docBuffer = createDocumentBuffer({ ...plotterBufferOptions({ // design-canvas.js: the restore, the plotter sidecar, the status
-    controller, canvas: designCanvas,
+    controller, canvas: designCanvas, showDesign,
     afterSession: () => renderArt(), // TASK 605: the Toolpath panels + canvas show the tab's own selection
     refreshPanels: () => { if (infoPanel) infoPanel.refresh(); },
     afterSidecar: refreshAfterPlotterRestore,
@@ -377,7 +380,7 @@ export function mountSketchStage(view, ctx = {}) {
   // Design canvas is the second way in. The status line of the Design panel shows the result. Returns the result (dev/test seam).
   const importStatus = view.querySelector('#importStatus');
   const doImport = (text, name) => {
-    const res = importFileToCore(text, name || 'Imported.svg', controller);
+    const res = importFileToCore(text, name || 'Imported.svg', controller, { showDesign });
     if (res.ok) underlayDirty = true; // new static geometry -> redraw the underlay
     // TASK 570: the shared importer framed the imported shapes; the pen tabs keep that shared view. The paper rect itself and the
     // Document button label refresh on the next panelTick (its doc-size signature changed).

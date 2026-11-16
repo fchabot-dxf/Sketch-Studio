@@ -9,7 +9,7 @@
 
 import { parse as parseUnit } from '#core/units.js';
 
-export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
+const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 
 // Hex is UPPERCASE to round-trip byte-for-byte with Shaper's own exporter.
 // Match is case-insensitive (see classify), so lowercase input still works.
@@ -24,7 +24,7 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 //                 allowing you finish up the edge with an Inside cut", "equal to 1/4th of the specified cutter diameter" since the
 //                 Napa software). The user's own cutOffset ADDS to it. Declared ONCE here; effectiveCutRecord() turns it into
 //                 rec.autoOffset (mm) for the preview. The Origin's own offset is never written to the export.
-//   params      — TASK 450/450b/456: WHICH cut params the type has, ONE declaration (subset of SHAPER_FIELDS). Today every type has
+//   params      — TASK 450/450b/456: WHICH cut params the type has, ONE declaration (of cutDepth, cutOffset, toolDia: the shaper:* attributes). Today every type has
 //                 all three (cutDepth, cutOffset, toolDia): Shaper Studio shows and writes an offset on On Line too (owner's
 //                 screenshot + a real Studio export with shaper:cutOffset="0in" on an On Line path), and a Guide keeps them (its
 //                 type can be changed ON THE TOOL later and the params travel with the path). The declaration stays so a type
@@ -61,10 +61,6 @@ export const exportEncoding = () => CUT_TYPES.map((t) => (t.exportParams ? { ...
 export const VBIT_PRESETS = [{ angle: 90 }, { angle: 60 }, { angle: 45 }, { angle: 30 }, { angle: 20 }];
 // VCARVE-4: the ONE implementation lives in #core/vcarve.js (shared by the preview + the export); re-exported here.
 export { vbitHalfAngleTan } from '#core/vcarve.js';
-
-// shaper:* attributes Shaper writes per element (besides cutType, which we
-// derive from color). Order = inspector display order.
-export const SHAPER_FIELDS = ['cutDepth', 'cutOffset', 'toolDia'];
 
 // --- Prepare cut-plan helpers (SP1f) -------------------------------------
 // The Prepare tab assigns a cut to a topological TARGET (a loop or an edge), not to an SVG element. These helpers
@@ -177,19 +173,9 @@ export function classify(el) {
   return null;
 }
 
-// Apply a cut type: set the encoding color(s) + the explicit shaper:cutType.
-export function applyCutType(el, id) {
-  const t = CUT_TYPES.find((x) => x.id === id);
-  if (!t) return;
-  el.setAttribute('fill', t.fill); // 'none' is a valid, explicit fill
-  if (t.stroke === 'none') el.removeAttribute('stroke');
-  else el.setAttribute('stroke', t.stroke);
-  setShaperAttr(el, 'cutType', t.cutType);
-}
+// --- the shaper:* namespaced attribute reader (import) ---------------------
 
-// --- shaper:* namespaced attribute helpers -------------------------------
-
-export function getShaperAttr(el, name) {
+function getShaperAttr(el, name) {
   if (!el) return null;
   if (el.getAttributeNS) {
     const nsVal = el.getAttributeNS(SHAPER_NS, name);
@@ -199,23 +185,6 @@ export function getShaperAttr(el, name) {
     return el.getAttribute(`shaper:${name}`) || el.getAttribute(name);
   }
   return null;
-}
-
-export function setShaperAttr(el, name, value) {
-  if (value == null || String(value).trim() === '') {
-    el.removeAttributeNS(SHAPER_NS, name);
-  } else {
-    el.setAttributeNS(SHAPER_NS, `shaper:${name}`, String(value).trim());
-  }
-}
-
-export function hasAnyShaperAttr(root) {
-  for (const el of [root, ...root.querySelectorAll('*')]) {
-    for (const a of el.attributes) {
-      if (a.name === 'shaper' || a.name.startsWith('shaper:')) return true;
-    }
-  }
-  return false;
 }
 
 const CUT_TYPE_ALIASES = {

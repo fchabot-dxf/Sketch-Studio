@@ -175,6 +175,10 @@ await (async () => {
     await clickSel('.sk-tp-card', 0);
     await waitFor(`document.querySelectorAll('.sk-doctab').length === 2`, 'new Untitled tab created');
     assert.strictEqual(await evalJs(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot:not(.saving)')`), false, 'fresh Untitled in Pen Plotter has NO unsaved dot');
+    // TASK 706: a new design is shown in Design (from any stage): back to Toolpath for its + Pen button
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`), 'design', 'the new Untitled is shown in Design');
+    await clickSel('.sk-header-tab[data-tab="toolpath"]');
+    await waitFor(`!!document.getElementById('addPlotColor') && document.getElementById('addPlotColor').getBoundingClientRect().width > 0`, 'Toolpath stage + Pen button visible again');
     await clickSel('#addPlotColor');
     await waitFor(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot:not(.saving)')`, 'adding a pen on Untitled shows the unsaved dot');
     await waitFor(`${STORE}.then(async (s) => { const b = await s.readBuffer({}); const t = b && b.tabs && b.tabs.find((x) => !x.designId); return !!(t && t.doc && t.doc.hosts && t.doc.hosts.penplotter); })`, 'edited Untitled writes hosts.penplotter to shared buffer');

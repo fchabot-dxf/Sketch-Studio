@@ -567,7 +567,7 @@ export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
       isRadius: true,
       isDriven: false,
       driven: false,
-      name: nextDimensionName(constraints), // TASK 535: this dimension is pushed directly (not through addConstraint), so it takes its automatic name here
+      name: nextDimensionName(constraints, state.parameters), // TASK 535: this dimension is pushed directly (not through addConstraint), so it takes its automatic name here
       offset: Math.max(finalRadius * 0.6, 6)
     };
     constraints.push(radiusConstraint);

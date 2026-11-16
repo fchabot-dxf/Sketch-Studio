@@ -33,10 +33,11 @@ for (const rel of ['apps/shaper/src', 'packages/core', 'apps/penplotter/src', 'a
 }
 
 // the tab: Simulate/Export is renamed Review; its export panel stays; a stored 'simexport' maps to 'review'
-assert.match(modes, /id:\s*'review',\s*label:\s*'Review'/);
+assert.match(modes, /commonStage\('export', 'review'\)/); // TASK 707: the stage id stays 'review', its label is the common "Export"
 assert.doesNotMatch(modes, /id:\s*'simexport'/);
 assert.doesNotMatch(html, /Simulate\/Export/);
 assert.match(html, /id="view-review"[\s\S]*id="btn-generate-svg"/, 'the export panel lives inside the Review view');
-assert.match(main, /initMode === 'simexport'\) initMode = 'review'/);
+assert.strictEqual((await import('../apps/shaper/src/modes.js')).resolveInitialMode('simexport'), 'review', 'a stored simexport opens Review'); // TASK 706: the page's own copy of this mapping went; modes.js resolveInitialMode is the one
+assert.match(main, /resolveInitialMode\(initMode/, 'the page resolves its stored stage through modes.js');
 assert.match(modes, /review:\s+doc\.getElementById\('view-review'\)/);
 console.log('review-wiring: ok');

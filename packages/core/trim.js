@@ -19,6 +19,7 @@
 import { getLineIntersection } from './geometry.js';
 import { removeOrphanJoints } from './joints.js';
 import { inActiveSketch } from './sketch-model.js';
+import { removeGeometry } from './delete-manager.js';
 
 const EPS = 1e-6; // parameter epsilon (avoid exact endpoints)
 
@@ -83,8 +84,8 @@ export function trimShape(state, shapeId, clickPt) {
 
   // ── 3. Remove the clicked interval ────────────────────────────────────────
   if (t0 <= EPS && t1 >= 1 - EPS) {
-    // Entire line is the interval → delete the whole shape
-    removeShape(state, shapeId);
+    // Entire line is the interval → delete the whole shape, through THE delete rule (task 709: its points, constraints and dimensions go with it)
+    removeGeometry(state, [shapeId]);
     removed.push(shapeId);
 
   } else if (t0 <= EPS) {
@@ -165,7 +166,3 @@ function lineParamAtPoint(jA, jB, p) {
   return Math.max(0, Math.min(1, ((p.x - jA.x) * dx + (p.y - jA.y) * dy) / L2));
 }
 
-function removeShape(state, id) {
-  const idx = (state.shapes || []).findIndex(s => s.id === id);
-  if (idx >= 0) state.shapes.splice(idx, 1);
-}

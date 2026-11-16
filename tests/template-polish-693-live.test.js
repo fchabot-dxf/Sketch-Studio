@@ -77,6 +77,8 @@ await (async () => {
       await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
       await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-handle')`, `[${kind}] Shaper loaded`);
       await waitForApp('design-canvas');
+      // TASK 722: Shaper's document is inches; this test is about joints in mm values (the inch start view is template-units-722-live)
+      await evalJs(`(async () => { (await import('/packages/core/settings-manager.js')).default.set('DOC_UNIT', 'mm', { persist: false }); })()`);
 
       // ---- 1. Box frame: Vertical -> Horizontal -> labels, glyphs, built sketch ----
       await openStart('box-frame');

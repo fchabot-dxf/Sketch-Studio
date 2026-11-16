@@ -10,8 +10,9 @@
 //   openTemplatePicker() -> Promise of { blank: true } | { template, document, name } | null (Esc, a press outside, the X: no new design)
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
-import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
-import SettingsManager from '#core/settings-manager.js';
+import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, parseParam, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import { basePer } from '#core/units.js';
 import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
 import { calculateArcPath, arcSweepInfo, angleInArcSweep, getLineIntersection } from '#core/geometry.js';
@@ -92,8 +93,13 @@ const PANEL = 'sk-tp-panel';
 // large count). THE place the picker builds: each template's default document once per page (the cards, the start view at its defaults), and
 // in the start view one build per settled value (PREVIEW_DELAY after the last change), never one per keystroke.
 const PREVIEW_DELAY = 200;
-const defaultDocs = new WeakMap(); // template -> its document at its defaults
-const defaultDocument = (t) => { if (!defaultDocs.has(t)) defaultDocs.set(t, buildTemplate(t)); return defaultDocs.get(t); };
+const defaultDocs = new WeakMap(); // template -> { unit -> its document at its defaults in that document unit } (TASK 722: the defaults are the unit's)
+const defaultDocument = (t, unit) => {
+  if (!defaultDocs.has(t)) defaultDocs.set(t, new Map());
+  const byUnit = defaultDocs.get(t);
+  if (!byUnit.has(unit)) byUnit.set(unit, buildTemplate(t, {}, unit));
+  return byUnit.get(unit);
+};
 const boxesOverlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
 // TASK 674: the room (px) a corner's glyph picker keeps from the drawing's lines and from the other corners' pickers
 const GLYPH_GAP = 4;
@@ -111,7 +117,9 @@ function segmentHitsBox(p, q, b) {
 }
 
 // ── the preview: a version-3 document -> an <svg> (world coordinates, Y down as stored; non-scaling strokes keep it crisp at any size) ──
-export function renderTemplatePreview(document_, { labels = true } = {}) {
+export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } = {}) {
+  // TASK 722: a length label says the value in the document's unit (mm: as before, 2 decimals; cm / in: up to 4, trailing zeros dropped)
+  const lengthText = (mm) => (unit === 'mm' ? fmt(mm) : String(Math.round((mm / basePer(unit)) * 1e4) / 1e4));
   const g = document_.geometry;
   const J = new Map(g.joints.map(([id, j]) => [id, j]));
   const shapes = g.shapes;
@@ -214,7 +222,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
       const sideBase = horiz ? (dir > 0 ? y1 : y0) : (dir > 0 ? x1 : x0);
       for (const { c, a, b, u0, u1 } of items) {
         const spanPad = fs * 0.4;
-        const t = fmt(c.value);
+        const t = lengthText(c.value);
         let lane = 0;
         let pos, tx, ty, anchor;
         for (; ; lane++) {
@@ -259,7 +267,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       let nx = -dy / l, ny = dx / l;
       if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }
-      const t = fmt(c.value);
+      const t = lengthText(c.value);
       const minA = Math.min(a.x * nx + a.y * ny, b.x * nx + b.y * ny);
       let d = Math.max(gap, maxProj(nx, ny) - minA + gap * 0.9);
       const w = String(t).length * fs * 0.64, h = fs * 1.15;
@@ -279,7 +287,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
     for (const c of radiusDims) {
       const sh = shapes.find((s) => s.id === c.shape), cc = J.get(sh.joints[0]);
       const r = sh.type === 'circle' ? sh.radius : Math.hypot(J.get(sh.joints[1]).x - cc.x, J.get(sh.joints[1]).y - cc.y);
-      const t = 'R' + fmt(c.value);
+      const t = 'R' + lengthText(c.value);
       const candidates = [];
       if (sh.type === 'arc') {
         const info = arcSweepInfo(cc, J.get(sh.joints[1]), J.get(sh.joints[2]), { sweep: sh.sweep });
@@ -454,6 +462,7 @@ function injectStyles() {
 export function openTemplatePicker({ templates = TEMPLATES } = {}) {
   injectStyles();
   const returnTo = document.activeElement;
+  const unit = docUnit(); // TASK 722: the document's unit when the picker opens: the previews, the fields and the parameters the template creates speak it
   return new Promise((resolve) => {
     const backdrop = document.createElement('div'); backdrop.className = 'sk-tp-backdrop';
     const panel = document.createElement('div'); panel.className = PANEL; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'New design');
@@ -523,7 +532,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     const entries = new Map();
     const unbuiltMap = new Map();
     for (const t of templates) {
-      const preview = defaultDocs.has(t) ? renderTemplatePreview(defaultDocs.get(t)) : document.createElement('div');
+      const preview = defaultDocs.get(t)?.has(unit) ? renderTemplatePreview(defaultDocs.get(t).get(unit), { unit }) : document.createElement('div');
       const wrap = document.createElement('div'); wrap.className = 'sk-tp-item'; wrap.dataset.template = t.id;
       const c = card(t.id, t.name, t.description, preview);
       c.addEventListener('click', () => startView(t, c));
@@ -571,7 +580,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       if (done) return;
       if (!unbuilt.length) { grid.dataset.previews = 'ready'; return; }
       const [t, slot] = unbuilt.shift();
-      slot.replaceChildren(renderTemplatePreview(defaultDocument(t)));
+      slot.replaceChildren(renderTemplatePreview(defaultDocument(t, unit), { unit }));
       setTimeout(buildNextCard, 0);
     };
     grid.dataset.previews = 'building';
@@ -586,8 +595,8 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     // own entry of the template's per-corner choice (or the corner's own choice param, the brace / triangle / corner: picked on the preview only,
     // no form row); the "Corner joint" row of a per-corner choice sets every corner. A pick is a settled value: the preview is rebuilt at once.
     function startView(t, fromCard) {
-      const values = defaultParams(t);
-      const hasCorners = templateCorners(t).length > 0;
+      const values = defaultParams(t, unit);
+      const hasCorners = templateCorners(t, {}, unit).length > 0;
       const lastAll = {}; // a per-corner param -> the option last set for every corner (corners a larger count adds take it)
       const valid = () => Object.entries(t.params).every(([k, spec]) => !paramActive(spec, values) || !paramRefusal(spec, values[k]));
       const view = document.createElement('div'); view.className = 'sk-tp-start'; view.dataset.template = t.id;
@@ -600,7 +609,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       const pickers = [], cornerPickers = [];
       // TASK 680: the preview is built once the values settle (PREVIEW_DELAY after the last change). A value set the recipe cannot draw shows
       // why in the error line, keeps the last good preview and disables Open until a value set draws.
-      const defaultsKey = JSON.stringify(defaultParams(t));
+      const defaultsKey = JSON.stringify(defaultParams(t, unit));
       let timer = null, built = null; // built = { key, doc, values }: the values the preview shows and their document (null: they cannot be drawn)
       let shown = null; // TASK 674: the last good build, the one the preview (and its corner pickers) shows
       let refocus = null; // TASK 674: the corner whose picker had the pick (its new picker takes the focus back)
@@ -620,19 +629,19 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       const draw = () => {
         clearTimeout(timer); timer = null;
         if (!valid()) return;
-        Object.assign(values, fitCorners(t, values, lastAll)); // TASK 674: a count changed: the corner list follows
+        Object.assign(values, fitCorners(t, values, lastAll, unit)); // TASK 674: a count changed: the corner list follows
         const key = JSON.stringify(values);
         if (built && built.key === key) return;
         let doc;
         try {
-          doc = key === defaultsKey ? defaultDocument(t) : buildTemplate(t, values);
+          doc = key === defaultsKey ? defaultDocument(t, unit) : buildTemplate(t, values, unit);
         } catch (e) {
           built = null; refocus = null; openBtn.disabled = true;
           showRefusal(e);
           return;
         }
         built = shown = { key, doc, values: structuredClone(values) }; openBtn.disabled = false;
-        prev.replaceChildren(renderTemplatePreview(doc));
+        prev.replaceChildren(renderTemplatePreview(doc, { unit }));
         if (hasCorners) placeCorners();
       };
       const fields = document.createElement('div'); fields.className = 'sk-tp-fields';
@@ -651,7 +660,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       const sameForAll = (v) => (Array.isArray(v) ? (v.every((x) => x === v[0]) ? v[0] : null) : v); // a per-corner choice's one value, or null (mixed)
       // TASK 674 (owner: "joint type on the preview directly like in frame calc"): a choice the preview's corners carry is picked THERE only, not
       // also in a form row; a per-corner choice keeps its one row, the "Corner joint" row that sets every corner
-      const onPreview = new Set(templateCorners(t).filter((c) => !t.params[c.param].perCorner).map((c) => c.param));
+      const onPreview = new Set(templateCorners(t, {}, unit).filter((c) => !t.params[c.param].perCorner).map((c) => c.param));
       for (const [k, spec] of Object.entries(t.params)) {
         if (onPreview.has(k)) continue;
         const row = document.createElement('div'); row.className = 'sk-tp-field'; row.dataset.param = k;
@@ -660,7 +669,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
         if (kind === 'choice') {
           const name = document.createElement('span'); name.className = 'sk-tp-label'; name.textContent = spec.label;
           // a per-corner choice's row sets EVERY corner; its glyph draws the first corner's angle (TASK 674)
-          const firstCorner = () => { const c = templateCorners(t, values).find((x) => x.param === k); return c && { interior: c.interior }; };
+          const firstCorner = () => { const c = templateCorners(t, values, unit).find((x) => x.param === k); return c && { interior: c.interior }; };
           const el = choicePicker(spec, {
             read: () => (spec.perCorner ? sameForAll(values[k]) : values[k]),
             onPick: (v) => { values[k] = v; if (spec.perCorner) lastAll[k] = v; clearError(); changed(true); },
@@ -671,12 +680,13 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
         } else {
           const id = `sk-tp-f-${t.id}-${k}`;
           const label = document.createElement('label'); label.htmlFor = id; label.textContent = spec.label;
-          const input = document.createElement('input'); input.id = id; input.className = 'sk-tp-input'; input.type = 'number';
+          const input = document.createElement('input'); input.id = id; input.className = 'sk-tp-input'; 
           input.value = String(values[k]);
-          if (kind === 'count') { input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.step = 'any'; input.min = '0'; input.inputMode = 'decimal'; }
-          input.addEventListener('input', () => { values[k] = input.value.trim() === '' ? NaN : Number(input.value); clearError(); changed(); });
-          const unit = document.createElement('span'); unit.className = 'sk-tp-unit'; unit.textContent = paramUnit(spec);
-          row.append(label, input, unit);
+          // TASK 722: a count is a whole-number spinner; a length / angle is TEXT (it accepts "1/8 in", 3", 38mm: parseParam, the shared expression parser)
+          if (kind === 'count') { input.type = 'number'; input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.type = 'text'; input.inputMode = 'decimal'; input.autocomplete = 'off'; }
+          input.addEventListener('input', () => { values[k] = parseParam(spec, input.value, unit); clearError(); changed(); });
+          const unitLabel = document.createElement('span'); unitLabel.className = 'sk-tp-unit'; unitLabel.textContent = paramUnit(spec, unit);
+          row.append(label, input, unitLabel);
           inputs.set(k, input);
         }
         fields.appendChild(row);
@@ -684,7 +694,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       showRows();
       // ── TASK 674: the corner glyph pickers over the preview, one per corner of the drawing the preview shows ──
       function placeCorners() {
-        const list = templateCorners(t, shown.values);
+        const list = templateCorners(t, shown.values, unit);
         layer.replaceChildren(); cornerPickers.length = 0;
         list.forEach((c) => {
           const k = c.param, spec = t.params[k], count = list.filter((x) => x.param === k).length;

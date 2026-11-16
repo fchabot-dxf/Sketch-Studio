@@ -105,11 +105,28 @@ const DEFAULT_SETTINGS = {
     // Document unit (U1, INERT): the display/input unit for dimension + cut-param fields. Base = 1 world unit = 1 mm
     // (see #core/units.js); switching RE-LABELS (no resize). Default 'mm' = the base, so a bare number is unchanged.
     // Nothing reads it yet (the toggle UI is U3) → additive, both apps byte-identical.
-    DOC_UNIT: 'mm'
+    DOC_UNIT: 'mm',
+
+    // Task 724: DISPLAY precision (decimals shown), like Fusion's Preferences "General precision". null = Auto: every view keeps its own usual
+    // decimals (today's), so nothing changes until the user picks a number. LENGTH_PRECISION 0-6 applies to every displayed length, ANGLE_PRECISION
+    // 0-4 to every displayed angle. Display only: stored values, expressions, exported files and the solver never read these. Local, shared by all four apps.
+    LENGTH_PRECISION: null,
+    ANGLE_PRECISION: null
 };
 
 /** The active document unit ('mm' | 'cm' | 'in'), defaulting to 'mm'. */
 export const docUnit = () => mgr.get('DOC_UNIT') || 'mm';
+
+// Task 724: THE one place that decides how many decimals a displayed number gets. `auto` = the caller's usual decimals, used while the setting is Auto.
+export const LENGTH_PRECISION_MAX = 6;
+export const ANGLE_PRECISION_MAX = 4;
+const precisionOr = (key, max, auto) => { const p = mgr.get(key); return Number.isInteger(p) && p >= 0 && p <= max ? p : auto; };
+/** Whether a changed setting key is a display-precision one (views that cache formatted text re-render on it). */
+export const isPrecisionKey = (key) => key === 'LENGTH_PRECISION' || key === 'ANGLE_PRECISION';
+/** Decimals for a displayed length (any unit): the Length precision setting, else `auto`. */
+export const lengthDecimals = (auto) => precisionOr('LENGTH_PRECISION', LENGTH_PRECISION_MAX, auto);
+/** Decimals for a displayed angle (degrees): the Angle precision setting, else `auto`. */
+export const angleDecimals = (auto) => precisionOr('ANGLE_PRECISION', ANGLE_PRECISION_MAX, auto);
 
 class SettingsManager {
     constructor() {

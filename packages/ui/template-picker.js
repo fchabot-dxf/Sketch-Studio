@@ -11,7 +11,7 @@
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
 import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, parseParam, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
-import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthDecimals, angleDecimals } from '#core/settings-manager.js';
 import { basePer } from '#core/units.js';
 import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
@@ -119,7 +119,9 @@ function segmentHitsBox(p, q, b) {
 // ── the preview: a version-3 document -> an <svg> (world coordinates, Y down as stored; non-scaling strokes keep it crisp at any size) ──
 export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } = {}) {
   // TASK 722: a length label says the value in the document's unit (mm: as before, 2 decimals; cm / in: up to 4, trailing zeros dropped)
-  const lengthText = (mm) => (unit === 'mm' ? fmt(mm) : String(Math.round((mm / basePer(unit)) * 1e4) / 1e4));
+  // TASK 724: the Length / Angle precision settings (Auto = the above) set the exact decimals of every label
+  const lengthText = (mm) => { const p = lengthDecimals(null); return p !== null ? (mm / basePer(unit)).toFixed(p) : unit === 'mm' ? fmt(mm) : String(Math.round((mm / basePer(unit)) * 1e4) / 1e4); };
+  const angleText = (deg) => { const p = angleDecimals(null); return p !== null ? deg.toFixed(p) : fmt(deg); };
   const g = document_.geometry;
   const J = new Map(g.joints.map(([id, j]) => [id, j]));
   const shapes = g.shapes;
@@ -337,7 +339,7 @@ export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } 
       const at = getLineIntersection(a1, b1, a2, b2);
       if (!at) continue; // two parallel lines (0 or 180 degrees): no crossing to draw an arc about
       const arc = angleSectorArc(angleSectorOf(c), Math.atan2(b1.y - a1.y, b1.x - a1.x), Math.atan2(b2.y - a2.y, b2.x - a2.x));
-      const mid = (arc.start + arc.end) / 2, t = fmt(c.value) + '°';
+      const mid = (arc.start + arc.end) / 2, t = angleText(c.value) + '°';
       let rr = size * 0.18, tx, ty;
       for (let k = 0; k < 8; k++) {
         tx = at.x + (rr + fs * 0.9) * Math.cos(mid); ty = at.y + (rr + fs * 0.9) * Math.sin(mid);

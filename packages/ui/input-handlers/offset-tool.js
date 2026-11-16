@@ -23,7 +23,7 @@ import {
 } from '#core/offset.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
-import { docUnit } from '#core/settings-manager.js';
+import { docUnit, lengthDecimals } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
@@ -51,7 +51,7 @@ let _press = null;          // a press on the canvas while the box is open: a cl
 let _viewListening = false;
 let _committing = false;
 
-const decimalsFor = (unit) => (unit === 'in' ? 3 : 2);
+const decimalsFor = (unit) => lengthDecimals(unit === 'in' ? 3 : 2);
 function ensureDistance() {
   const unit = docUnit();
   if (currentDistance == null || _distanceUnit !== unit) { currentDistance = defaultOffsetDistance(unit); _distanceUnit = unit; }
@@ -154,6 +154,7 @@ function dragArrowTo(svg, e) {
   const v = parseOffsetDistance(text, unit);
   if (v == null || !offsetChainGeometry(_open.state, _open.chain, v, side).ok) return;
   _open.el.value = text;
+  _open.text = text;
   _open.d = v;
   _open.side = side;
   refresh();
@@ -184,9 +185,10 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
   document.body.appendChild(el);
   // an Undo / Redo ends the offset in progress: the chain it was on may be gone
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
-  _open = { chain, pickId, side, d: currentDistance, el, svg, state, pickPt, unsubHistory };
+  _open = { chain, pickId, side, d: currentDistance, text: defaultValue, el, svg, state, pickPt, unsubHistory }; // text: what the box shows as WE wrote it (rounded to the precision); while it is unchanged the box holds _open.d exactly (TASK 724)
   ensureViewListener();
   const applyInputValue = () => {
+    if (el.value === _open.text) return refresh(); // not an edit: the exact _open.d stays
     const v = parseOffsetDistance(el.value, docUnit());
     if (v != null) _open.d = v;
     refresh();
@@ -236,7 +238,7 @@ function ensureViewListener() {
 export function commitOffsetInput() {
   if (!_open) return;
   const { el, chain, state } = _open;
-  const v = parseOffsetDistance(el.value, docUnit());
+  const v = el.value === _open.text ? _open.d : parseOffsetDistance(el.value, docUnit()); // an unedited box applies its exact distance, not the rounded text
   if (v == null) { showNotification(`Offset: enter a distance; ${OFFSET_ZERO_REASON}.`, 'warning'); return; }
   const { side, d } = offsetSideAndDistance(_open.side, v);
   const pre = offsetChainGeometry(state, chain, d, side);

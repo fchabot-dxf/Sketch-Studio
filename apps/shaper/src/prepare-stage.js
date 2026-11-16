@@ -6,6 +6,7 @@
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { captureCutPlan, applyCutPlan } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
+import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { CUT_PLAN, migrateEdgeRecords } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 
@@ -26,6 +27,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
     cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut
   };
+  // TASK 724: the card's stepped note is text built from the display precision when the card is updated: a precision change rebuilds it (the stage lives as long as the page)
+  SettingsManager.subscribe((key) => { if (isPrecisionKey(key)) refreshCutPanel(); });
   // TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second
   // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset).

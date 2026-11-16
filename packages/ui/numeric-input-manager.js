@@ -526,6 +526,43 @@ function placeLiveBox(el, x, y) {
     el.style.top = `${Math.max(0, Math.min(y, vh - h - 8))}px`;
 }
 
+/**
+ * TASK 653 / 688: place a floating tool value box beside its world anchor (`q = worldToScreen(svg, world)`),
+ * trying 6 slots (below-right, below-left, above-right, above-left, and two higher slots) inside `svg`
+ * and clear of `obstacles` (e.g. a drag-arrow handle). Clamps inside the canvas (clear of the footer),
+ * except when `panAnchor` itself is panned off the canvas (keeps below-right so the box moves with it).
+ */
+export function placeAnchoredBox({ el, svg, world, panAnchor = world, obstacles = [] } = {}) {
+    if (!el || !svg || !world) return;
+    const q = worldToScreen(svg, world);
+    const c = svg.getBoundingClientRect();
+    const w = el.offsetWidth, h = el.offsetHeight, G = 14;
+    const ref = panAnchor ? worldToScreen(svg, panAnchor) : q;
+    if (ref.x < c.left || ref.x > c.right || ref.y < c.top || ref.y > c.bottom) {
+        el.style.left = `${Math.round(q.x + G)}px`;
+        el.style.top = `${Math.round(q.y + G)}px`;
+        return;
+    }
+    const obs = (Array.isArray(obstacles) ? obstacles : [obstacles])
+        .map((o) => (o && typeof o.getBoundingClientRect === 'function' ? o.getBoundingClientRect() : o))
+        .filter((r) => r && r.width > 0 && r.height > 0);
+    const inside = ([x, y]) => x >= c.left && y >= c.top && x + w <= c.right && y + h <= c.bottom;
+    const clear = ([x, y]) => !obs.some((o) => x < o.right && x + w > o.left && y < o.bottom && y + h > o.top);
+    const clamp = ([x, y]) => [Math.max(c.left, Math.min(x, c.right - w)), Math.max(c.top, Math.min(y, c.bottom - h))];
+    const spots = [
+        [q.x + G, q.y + G], [q.x - G - w, q.y + G],
+        [q.x + G, q.y - G - h], [q.x - G - w, q.y - G - h],
+        [q.x + G, q.y - G - 2 * h - 12], [q.x - G - w, q.y - G - 2 * h - 12],
+    ];
+    const clamped = spots.map(clamp);
+    const [x, y] = spots.find((s) => inside(s) && clear(s))
+        || spots.find(inside)
+        || clamped.find(clear)
+        || clamped[0];
+    el.style.left = `${Math.round(x)}px`;
+    el.style.top = `${Math.round(y)}px`;
+}
+
 // --- Internals ---
 
 function handleCommit() {

@@ -87,6 +87,9 @@ try {
     const touchMin = phone ? 44 : 0;
     await openMode('prepare');
     await waitFor(`!!document.getElementById('prepare-canvas').getScreenCTM() && document.getElementById('prepare-canvas').children.length > 0`, 'prepare canvas ready');
+    // nothing selected: no card (the card's display rule must not beat [hidden])
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-card')).display`), 'none', label + ': no selection -> no cut card');
+    await shot(`prepare-nothing-selected-${label}.png`);
     await clickWorld(0, -20); // the rectangle's top edge
     await waitFor(`!document.querySelector('.cut-card').hidden`, 'the cut card shows for the selected loop');
     await clickEl('#prepare-panel .cut-type-trigger');
@@ -94,6 +97,8 @@ try {
     await clickEl('.cut-type-opt[data-id="pocket"]');
     await waitFor(`document.querySelector('.cut-type-cur').textContent.toLowerCase().includes('pocket')`, 'Pocket picked');
 
+    // a plain Pocket: none of the stepped rows (Adaptive stepping, Step depth, Resolution) shows
+    assert.deepStrictEqual(await evalJs(`['adaptiveSteps', 'stepDepth', 'stepDeviation'].map((r) => getComputedStyle(document.querySelector('.cut-row[data-row="' + r + '"]')).display)`), ['none', 'none', 'none'], label + ': a plain Pocket has no stepped rows');
     // every stepper target on the card: size, and the card fits
     const sizes = await evalJs(`[...document.querySelectorAll('.cut-card .cut-step, .cut-card .cut-flip')].map((b) => { const r = b.getBoundingClientRect(); return [b.className + ':' + (b.dataset.d || ''), Math.round(r.width), Math.round(r.height)]; }).filter((x) => x[1] > 0)`); // the hidden Step depth / Resolution rows have no box
     assert.strictEqual(sizes.length, 7, 'depth, offset, bit: six steppers + the flip'); console.log(label + ' card targets: ' + JSON.stringify(sizes));

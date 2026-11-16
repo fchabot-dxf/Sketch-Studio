@@ -282,6 +282,8 @@
     .cut-card-title { display: none; }
     .cut-field-label { display: block; font-size: 11px; color: var(--sk-prep-unit); margin: 0 0 6px; padding-left: 12px; text-transform: lowercase; }
     .cut-field, .cut-row { display: flex; flex-direction: column; }
+    /* the display rules above and on .cut-card beat the [hidden] attribute: an empty / unselected card and any row cut-panel.js hides must really hide */
+    .cut-field[hidden], .cut-row[hidden], #prepare-panel .cut-card[hidden] { display: none; }
     .cut-rows { display: flex; flex-direction: column; gap: 12px; margin: 0; }
     .cut-type-trigger, .cut-shape-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
     .cut-type-trigger.is-open, .cut-shape-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }

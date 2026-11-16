@@ -8,7 +8,7 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
-import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, steppedNoteLines } from './cut-plan.js'; // SP1j-4: shared cut-plan store
+import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastStepSpacing, rememberStepSpacing, steppedNoteLines } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
 import SettingsManager, { docUnit } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
@@ -294,7 +294,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${docUnit()}|${ownedNow().keys}`; // TASK 714: a stepped cut's look follows its step depth
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.stepSpacing}|${docUnit()}|${ownedNow().keys}`; // TASK 714: a stepped cut's look follows its step depth
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [] };
@@ -539,6 +539,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         if (ct && ct.slopeKind) { // TASK 714: a stepped type only where the record carries its slope; a record with no step depth yet takes the last one used
           if (!hasSlopeOf(CUT_PLAN.get(k), ct.slopeKind)) continue;
           if (!(Number(CUT_PLAN.get(k).stepDepth) > 0)) setFieldFor(k, 'stepDepth', lastStepDepth());
+          if (!(Number(CUT_PLAN.get(k).stepSpacing) >= 0)) setFieldFor(k, 'stepSpacing', lastStepSpacing()); // TASK 715
         }
         lastRec = setFieldFor(k, 'cutType', cutType);
       }
@@ -548,6 +549,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) onto every selected target + refresh LIVE.
     setFieldOnSelected(field, value) {
       if (selection.size === 0) return null;
+      if (field === 'stepSpacing') value = rememberStepSpacing(value); // TASK 715: 0 allowed; the next stepped cut starts from it
       if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: never below the minimum; the next cut switched to a stepped type starts from it
       let lastRec = null;
       for (const t of selection.values()) {

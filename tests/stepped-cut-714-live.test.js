@@ -112,6 +112,7 @@ try {
   assert.ok(wide.menu >= 134 && wide.oneLine, 'the menu grows to keep "stepped pocket" on one line');
   await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-pocket'))`, 'Stepped pocket set');
+  await clickEl('.cut-row[data-row="stepSpacing"] .cut-preset[data-value="0"]'); // TASK 715: a stepped type starts at 1/16 in minimum spacing; these task 714 checks keep every step (preset 0)
   const card = await evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, step: document.querySelector('.cut-step-depth').value,
     stepShown: getComputedStyle(document.querySelector('.cut-row[data-row="stepDepth"]')).display !== 'none', note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
   console.log('card: ' + JSON.stringify(card));

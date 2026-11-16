@@ -33,7 +33,7 @@ try {
   app.tool('select');
   const lab = findLabel(app, () => true);
   assert(lab, 'the dimension label is on screen');
-  app.click(lab.x, lab.y, { target: () => labelEl(app, lab.idx) }); app.dblclick(lab.x, lab.y, { target: () => labelEl(app, lab.idx) });
+  app.dblclick(lab.x, lab.y, { target: () => labelEl(app, lab.idx) }); // a double click (task 723: a third press, made after the box opened, is a press outside the box and closes it)
   await typeInBox('17');
   // undo / redo through the ribbon buttons
   app.document.getElementById('btn-undo').click(); app.frames();

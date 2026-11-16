@@ -186,7 +186,8 @@ let uiState = {
     // TASK 535: the hint line and the autocomplete list under the dimension box (null where the host has no real DOM)
     hintEl: null,
     listEl: null,
-    completion: null // the shared parameter-name completion (#ui/parameter-completion.js) over listEl
+    completion: null, // the shared parameter-name completion (#ui/parameter-completion.js) over listEl
+    outsideListening: false // TASK 723: the document's capture pointerdown listener is on while an edit box is open
 };
 
 export function setupNumericInput(svg, state) {
@@ -441,20 +442,9 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // Mark constraint as editing to hide the SVG label
     constraint.__editing = true;
 
-    // Calculate screen position from world glyphPos
-    let pos = { x: 0, y: 0 };
-    if (constraint.glyphPos) {
-        const gp = Array.isArray(constraint.glyphPos) ? constraint.glyphPos[0] : constraint.glyphPos;
-        pos = worldToScreen(svg, gp);
-    } else {
-        const rect = svg.getBoundingClientRect();
-        pos = { x: rect.width / 2, y: rect.height / 2 };
-    }
-
-    uiState.singleInput.style.left = `${pos.x}px`;
-    uiState.singleInput.style.top = `${pos.y}px`;
     uiState.singleInput.style.transform = 'translate(-50%, -50%)';
     showNumericInputEl(uiState.singleInput);
+    placeEditBox(); // shown first: a hidden box has no size and no containing block to place it in
 
     let prefillValue = constraint.value;
     if (constraint.dimMode === 'horizontal' && constraint.joints && constraint.joints.length >= 2) {
@@ -489,6 +479,11 @@ export function showEditInput(svg, state, constraint, initialKey) {
         if (!initialKey) uiState.singleInput.select();
     });
     startTrackingLoop();
+    // TASK 723: a press anywhere outside the box ends it (Fusion). Capture phase on the document: it runs BEFORE the canvas / ribbon / footer
+    // handlers of that same press, which then do their own job on the settled document (one press, not two). Added while the opening press
+    // is already past the document's capture phase, so that press never closes the box it opens. resetState removes it.
+    document.addEventListener('pointerdown', handleOutsidePress, true);
+    uiState.outsideListening = true;
 }
 
 export function hideInput() {
@@ -532,12 +527,32 @@ function placeLiveBox(el, x, y) {
         x = Math.max(c.left, Math.min(x, c.right - w));
         y = Math.max(c.top, Math.min(y, c.bottom - h));
     }
+    setViewportPosition(el, x, y);
+}
+
+/** TASK 697 / 723: write a VIEWPORT point (x, y) as the box's left / top in ITS OWN containing block (a position:fixed box: the viewport;
+ *  the shared single box lives in a positioned container: that container's padding box). The ONE conversion for every on-canvas box. */
+function setViewportPosition(el, x, y) {
     const op = el.offsetParent;
     const base = op && typeof op.getBoundingClientRect === 'function'
         ? { left: op.getBoundingClientRect().left + (op.clientLeft || 0) - (op.scrollLeft || 0), top: op.getBoundingClientRect().top + (op.clientTop || 0) - (op.scrollTop || 0) }
         : { left: 0, top: 0 };
     el.style.left = `${x - base.left}px`;
     el.style.top = `${y - base.top}px`;
+}
+
+/** TASK 723: the dimension EDIT box sits centred ON its label (the label's world point, glyphPos; the box is translate(-50%, -50%)), kept inside the
+ *  canvas svg's rect (a label panned near or past an edge holds the box at that edge). Was: the viewport point written straight into left / top, so in
+ *  a host whose box lives in a positioned container (SketchStudio) the box sat the container's offset away from its label (~180 px below it). */
+function placeEditBox() {
+    const el = uiState.singleInput, svg = uiState.svg, c = uiState.target;
+    const r = svg.getBoundingClientRect();
+    const gp = Array.isArray(c.glyphPos) ? c.glyphPos[0] : c.glyphPos;
+    let { x, y } = gp ? worldToScreen(svg, gp) : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const hw = (el.offsetWidth || 0) / 2, hh = (el.offsetHeight || 0) / 2;
+    x = Math.max(r.left + hw, Math.min(x, r.left + r.width - hw));
+    y = Math.max(r.top + hh, Math.min(y, r.top + r.height - hh));
+    setViewportPosition(el, x, y);
 }
 
 /**
@@ -589,7 +604,7 @@ function handleCommit() {
         const state = uiState.appState;
         // TASK 724: a box whose text is still exactly its (rounded) prefill is not an edit. A dimension that already drives keeps its exact value: close, no undo step.
         // A just-placed / restored / reference dimension still becomes driving, with the exact (unrounded) measured number, never the displayed one.
-        const untouched = !uiState.typed[0] && uiState.singleInput.value === uiState.defaults[0] && uiState.exactText != null; // typed: any input event since the box opened
+        const untouched = boxUntouched();
         const needsValue = target.__newlyPlaced === true || target.__restoredDimension === true || target.isDriven || target.driven;
         if (untouched && !needsValue) { target.__editing = false; hideInput(); return; }
         const pv = previewDimensionInput(state, target, untouched ? uiState.exactText : uiState.singleInput.value, { unit: docUnit() });
@@ -598,10 +613,7 @@ function handleCommit() {
             const isFirstValue = target.__newlyPlaced === true || target.__restoredDimension === true;
             target.isDriven = false;
             target.driven = false;
-            target.__newlyPlaced = false;
-            delete target.__restoredDimension;
-            target.__placing = false;
-            if (state.placingConstraint === target) state.placingConstraint = null;
+            endPlacing(target, state);
             const label = dimensionInputLabel(target, pv);
             // the FIRST value of a just-placed dimension rides the snapshot taken at its birth (no second undo step)
             const res = applyParameterChange(state, pv.plan, label, { snapshot: !isFirstValue });
@@ -629,6 +641,37 @@ function handleCommit() {
         if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
         hideInput();
     }
+}
+
+// TASK 724: the box still shows exactly its (rounded) prefill and nothing was typed (any input event since it opened counts): not an edit.
+// TASK 723: the ONE rule for both ways a box ends: Enter (handleCommit) and a press outside it (handleOutsidePress).
+function boxUntouched() {
+    return !uiState.typed[0] && uiState.singleInput.value === uiState.defaults[0] && uiState.exactText != null;
+}
+
+// A just-placed (or 667-restored) dimension stops being "new": it keeps its value, its birth snapshot stays its ONE undo step.
+function endPlacing(target, state) {
+    target.__newlyPlaced = false;
+    delete target.__restoredDimension;
+    target.__placing = false;
+    if (state && state.placingConstraint === target) state.placingConstraint = null;
+}
+
+// TASK 723: a press outside the open dimension box (the canvas, a glyph, another label, the ribbon, the footer, the Parameters window, ...).
+// A VALID text that differs from what the box opened with is applied exactly as Enter applies it (handleCommit: one undo step, the same
+// solve / fx / naming path). Anything else (unchanged, empty, refused) is dropped with no notice: the dimension keeps what it has, and a
+// just-placed one stays placed with its measured value (as Enter on the unchanged text leaves it). The press is not stopped.
+function handleOutsidePress(e) {
+    if (!uiState.active || uiState.mode !== 'edit' || !uiState.target) return;
+    if (e.button === 1) return; // the middle button pans the view (as the wheel zooms it): navigating is not working elsewhere, the box stays
+    const path = e.composedPath();
+    if ([uiState.singleInput, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el))) return;
+    const text = uiState.singleInput.value;
+    // an untouched box (724) or a text equal to the opening one is no edit: never commit its rounded display text (a just-placed dimension keeps its exact measured value)
+    const changed = !boxUntouched() && text.trim() !== String(uiState.defaults[0]).trim();
+    if (changed && previewDimensionInput(uiState.appState, uiState.target, text, { unit: docUnit() }).ok) { handleCommit(); return; }
+    endPlacing(uiState.target, uiState.appState);
+    hideInput();
 }
 
 function handlePreview(resetIdx = -1) {
@@ -767,6 +810,7 @@ function placeAssist() {
 }
 
 function resetState() {
+    if (uiState.outsideListening) { document.removeEventListener('pointerdown', handleOutsidePress, true); uiState.outsideListening = false; }
     hideAssist();
     if (uiState.target) uiState.target.__editing = false;
     uiState.active = false;
@@ -792,13 +836,7 @@ function startTrackingLoop() {
     const loop = () => {
         if (uiState.active && uiState.mode === 'edit' && uiState.target && uiState.svg) {
             // Update position based on constraint
-            let gp = uiState.target.glyphPos;
-            if (Array.isArray(gp)) gp = gp[0];
-            if (gp) {
-                const s = worldToScreen(uiState.svg, gp);
-                uiState.singleInput.style.left = `${s.x}px`;
-                uiState.singleInput.style.top = `${s.y}px`;
-            }
+            if (uiState.target.glyphPos) placeEditBox();
             placeAssist();
             uiState.rafId = requestAnimationFrame(loop);
         }

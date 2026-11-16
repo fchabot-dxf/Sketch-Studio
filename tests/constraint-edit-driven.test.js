@@ -12,7 +12,7 @@
     addEventListener: () => {},
     removeEventListener: () => {}
   };
-  global.document = { getElementById: (id) => id === 'dimInput' ? dimInput : null };
+  global.document = { getElementById: (id) => id === 'dimInput' ? dimInput : null, addEventListener() {}, removeEventListener() {} }; // the open box listens for a press outside it (task 723)
 
   // Minimal window + raf polyfills for Node test environment
   global.window = global.window || {};

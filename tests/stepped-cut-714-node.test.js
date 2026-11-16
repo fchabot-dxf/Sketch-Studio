@@ -18,7 +18,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { buildRelief } from '#core/relief-model.js';
 import { steppedTerraces, sameOutline, STEP_DEPTH, SAME_OUTLINE_TOL_MM } from '#core/stepped-cut.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, lastStepDepth, rememberStepSpacing } from '../apps/shaper/src/cut-plan.js';
+import { CUT_PLAN, cutPlanEntries, planReliefItems, lastStepDepth } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding, availableTypes } from '../apps/shaper/src/shaper.js';
 
@@ -113,7 +113,6 @@ const TAN10 = Math.tan((10 * Math.PI) / 180); // 0.17633 mm per mm of depth
 eq(SAME_OUTLINE_TOL_MM, 0.01, 'the stated tolerance for identical steps: 0.01 mm');
 
 // ── 2. the app ──
-rememberStepSpacing(0); // TASK 715: a cut switched to a stepped type starts at 1/16 in minimum spacing; these task 714 checks keep EVERY step (spacing 0, the last value used)
 SettingsManager.set('DOC_UNIT', 'mm');
 const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true } });
 const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) => ({ tag: m[1], type: /shaper:cutType="([^"]+)"/.exec(m[2])[1], depth: (/shaper:cutDepth="([^"]+)"/.exec(m[2]) || [])[1], geom: m[2].replace(/ fill=.*$/, '') }));
@@ -166,7 +165,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     ok(h.stepRowShown() && h.q('.cut-step-depth').value === '1.000', 'the card shows the Step depth row: 1.000');
     eq(h.q('.cut-type-cur').textContent, 'Stepped pocket', 'the card names the type');
     ok(h.q('.cut-ic-slot svg') && h.q('.cut-ic-slot svg').innerHTML.includes('M4.5 13.5V10.5h3v-3h3v-3h3'), 'with its own icon (a stair)');
-    eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm'], 'the card note: the steps');
+    eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.18 mm apart'], 'the card note: the steps');
     const stepped = elems(exportOf(app));
     eq(stepped.map((e) => e.tag + ':' + e.type + '@' + e.depth), ['path:outside@19.000 mm', ...[1, 2, 3, 4, 5, 6, 7, 8].map((k) => `path:pocket@${k}.000 mm`)], 'export: the outline + 8 PLAIN pockets (shaper:cutType="pocket") at 1..8 mm');
     ok(stepped[1].geom.includes('M 89.8237 -20.1763 L 30.1763 -20.1763 L 30.1763 -59.8237 L 89.8237 -59.8237 Z'), 'the 1 mm pocket is the ring at 1 mm (30.176..89.824): ' + stepped[1].geom);
@@ -181,7 +180,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     eq(app.state.history.length, hist + 1, 'the step change is ONE undo step');
     eq(elems(exportOf(app)).filter((e) => e.type === 'pocket').map((e) => e.depth), ['2.000 mm', '4.000 mm', '6.000 mm', '8.000 mm'], 'export follows: 4 pockets');
     eq(planReliefItems(app.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth), [2, 4, 6, 8], 'Review follows');
-    eq(h.note(), ['Pocket 1 (8mm): 4 steps, 2 to 8 mm'], 'the note follows');
+    eq(h.note(), ['Pocket 1 (8mm): 4 steps, 2 to 8 mm \u00b7 outlines 0.35 mm apart'], 'the note follows');
     h.setStep('0.01');
     eq(CUT_PLAN.get(pk).stepDepth, STEP_DEPTH.minMm, 'a step under the minimum is stored as the minimum (0.1 mm)');
     app.key('z', { ctrl: true });
@@ -211,7 +210,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     h.clickAt(60, -40);
     eq(h.menu().filter((id) => id.startsWith('stepped')), ['stepped-outside'], 'the chamfered outline: Stepped outside only');
     h.pick('stepped-outside');
-    eq(h.note(), ['Outline: 2 steps, 1 to 19 mm', 'Outline: undercut below 17 mm cut straight'], 'the card note: the steps and the undercut warning');
+    eq(h.note(), ['Outline: 2 steps, 1 to 19 mm \u00b7 outlines 1 mm apart', 'Outline: undercut below 17 mm cut straight'], 'the card note: the steps and the undercut warning');
     const out = elems(exportOf(app));
     eq(out.map((e) => e.type + '@' + e.depth), ['outside@1.000 mm', 'outside@19.000 mm'], 'export: 2 PLAIN outside cuts');
     ok(/^d="M (1|119) (-1|-79) /.test(out[0].geom), 'the 1 mm cut is the ring 1..119: ' + out[0].geom);

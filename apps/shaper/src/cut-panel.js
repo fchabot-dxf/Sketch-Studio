@@ -4,7 +4,7 @@
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
-import { STEP_DEPTH, STEP_SPACING } from '#core/stepped-cut.js';
+import { STEP_DEPTH } from '#core/stepped-cut.js';
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
@@ -21,15 +21,11 @@ const BIT_PRESETS = [
   { label: '¼', value: 6.35 },    // 1/4 in
   { label: '½', value: 12.7 },    // 1/2 in
 ];
-// TASK 715: the Step depth / Min spacing presets FOLLOW the document unit. VALUES are BASE mm; inches = imperial fractions, any metric unit = round mm.
+// TASK 715: the Step presets FOLLOW the document unit. VALUES are BASE mm; inches = imperial fractions, any metric unit = round mm.
 const IN = 25.4;
 const STEP_PRESETS = {
   in: [{ label: '1/32', value: IN / 32 }, { label: '1/16', value: IN / 16 }, { label: '1/8', value: IN / 8 }, { label: '1/4', value: IN / 4 }],
   mm: [{ label: '0.5', value: 0.5 }, { label: '1', value: 1 }, { label: '2', value: 2 }, { label: '3', value: 3 }],
-};
-const SPACING_PRESETS = {
-  in: [{ label: '0', value: 0 }, { label: '1/32', value: IN / 32 }, { label: '1/16', value: IN / 16 }, { label: '1/8', value: IN / 8 }],
-  mm: [{ label: '0', value: 0 }, { label: '0.5', value: 0.5 }, { label: '1', value: 1 }, { label: '2', value: 2 }],
 };
 const presetsFor = (table) => table[docUnit()] || table.mm;
 const DEPTH_START = 0.1;   // first value (in the DOC unit) when stepping up/down from 'unset'
@@ -77,14 +73,6 @@ export function createCutPanel(hostEl, opts = {}) {
         </div>
         <div class="cut-presets"></div>
       </div>
-      <div class="cut-row" data-row="stepSpacing">
-        <label class="cut-field-label">Min spacing</label>
-        <div class="cut-inline cut-box">
-          <input type="text" class="cut-num cut-step-spacing" inputmode="decimal">
-          <span class="cut-unit">mm</span>
-        </div>
-        <div class="cut-presets"></div>
-      </div>
       <div class="cut-note" hidden></div>
       <div class="cut-row" data-param="cutOffset">
         <label class="cut-field-label">Offset</label>
@@ -117,10 +105,10 @@ export function createCutPanel(hostEl, opts = {}) {
 
   const $ = (sel) => card.querySelector(sel);
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
-  const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), spacingInput = $('.cut-step-spacing'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets'), spacingPresetsWrap = $('.cut-row[data-row="stepSpacing"] .cut-presets');
+  const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets');
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, stepSpacing: null, record: null, note: [] };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, record: null, note: [] };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop];
@@ -154,7 +142,7 @@ export function createCutPanel(hostEl, opts = {}) {
   document.addEventListener('click', onDocClick);
 
   // ── param rows (SP1g + U3a units) — values stored/emitted in BASE mm ──
-  // ONE preset widget for the bit, the step depth and the min spacing rows: a button per preset (value in BASE mm), the one equal to the field's value is_active
+  // ONE preset widget for the bit and the step rows: a button per preset (value in BASE mm), the one equal to the field's value is_active
   const renderPresets = (wrap, presets, field, value) => {
     wrap.innerHTML = '';
     for (const p of presets) {
@@ -174,8 +162,6 @@ export function createCutPanel(hostEl, opts = {}) {
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
   // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored; never below STEP_DEPTH.minMm)
   stepInput.addEventListener('change', () => { const n = parseUnit(stepInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDepth', Math.max(STEP_DEPTH.minMm, n)); else renderFields(); });
-  // TASK 715: the MIN SPACING between kept step outlines (doc unit in, base mm stored; 0 keeps every step)
-  spacingInput.addEventListener('change', () => { const n = parseUnit(spacingInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= STEP_SPACING.minMm) onSetField('stepSpacing', n); else renderFields(); });
   // offset presets popover (3x2): opens on focus (the value is selected so typing replaces it), closes on blur / pick
   const buildOffsetPop = () => {
     offsetPop.innerHTML = '<div class="cut-pop-title">presets</div><div class="cut-pop-grid"></div>';
@@ -230,9 +216,15 @@ export function createCutPanel(hostEl, opts = {}) {
     const curDecl = current.cutType ? cutTypeById(current.cutType) : null;
     card.querySelector('.cut-row[data-row="stepDepth"]').style.display = curDecl && (curDecl.params || []).includes('stepDepth') ? '' : 'none';
     stepInput.value = fmt(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
-    card.querySelector('.cut-row[data-row="stepSpacing"]').style.display = curDecl && (curDecl.params || []).includes('stepSpacing') ? '' : 'none';
-    spacingInput.value = String(Number(formatUnit(Number(current.stepSpacing) > 0 ? Number(current.stepSpacing) : 0, docUnit(), { decimals: 4 }))); // 4 dp so 1/16 in reads 0.0625
-    noteEl.innerHTML = ''; for (const line of current.note) { const d = document.createElement('div'); d.textContent = line; noteEl.appendChild(d); }
+    noteEl.innerHTML = '';
+    for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
+      const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');
+      if (item.warn && item.text.endsWith(item.warn)) {
+        d.append(item.text.slice(0, item.text.length - item.warn.length));
+        const w = document.createElement('span'); w.className = 'cut-note-warn'; w.textContent = item.warn; w.title = item.title || ''; d.appendChild(w);
+      } else d.textContent = item.text;
+      noteEl.appendChild(d);
+    }
     noteEl.hidden = !current.note.length;
     const curType = current.cutType ? cutTypeById(current.cutType) : null;
     card.querySelector('.cut-row[data-param="cutDepth"] .cut-field-label').textContent = (curType && curType.depthLabel) || 'Depth';
@@ -245,7 +237,6 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets(presetsWrap, BIT_PRESETS, 'toolDia', dia);
     const stepped = Boolean(curDecl && (curDecl.params || []).includes('stepDepth')); // hidden rows keep no preset buttons
     renderPresets(stepPresetsWrap, stepped ? presetsFor(STEP_PRESETS) : [], 'stepDepth', Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
-    renderPresets(spacingPresetsWrap, stepped ? presetsFor(SPACING_PRESETS) : [], 'stepSpacing', Number(current.stepSpacing) > 0 ? Number(current.stepSpacing) : 0);
     const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
     shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shape.label} ${Number(current.cutterAngle) || 90}\u00b0` : shape.label;
     const u = docUnit();
@@ -254,9 +245,9 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, stepSpacing: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, record: null, note: [] }; return; }
     const rec = model.record || {};
-    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, stepSpacing: rec.stepSpacing, record: rec, note: Array.isArray(model.note) ? model.note : [] };
+    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;
     curLabel.textContent = t ? t.menuLabel : 'Select type';

@@ -294,6 +294,8 @@
     .cut-card-title { display: none; }
     .cut-field-label { display: block; font-size: 11px; color: var(--sk-prep-unit); margin: 0 0 6px; padding-left: 12px; text-transform: lowercase; }
     .cut-field, .cut-row { display: flex; flex-direction: column; }
+    /* the display rules above and on .cut-card beat the [hidden] attribute: an empty / unselected card and any row cut-panel.js hides must really hide */
+    .cut-field[hidden], .cut-row[hidden], #prepare-panel .cut-card[hidden] { display: none; }
     .cut-rows { display: flex; flex-direction: column; gap: 12px; margin: 0; }
     .cut-type-trigger, .cut-shape-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
     .cut-type-trigger.is-open, .cut-shape-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
@@ -306,8 +308,18 @@
     .cut-box:focus-within { box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-stepper, .cut-inline { gap: 0; }
     .cut-step, .cut-flip { all: unset; box-sizing: border-box; width: 30px; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--sk-prep-chip-text); font-size: 18px; cursor: pointer; flex: 0 0 auto; }
-    .cut-step:first-child, .cut-flip { border-right: 1px solid var(--sk-prep-card-bg); }
-    .cut-step:last-child { border-left: 1px solid var(--sk-prep-card-bg); }
+    .cut-step { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+    .cut-step[data-d="-1"], .cut-flip { border-right: 1px solid var(--sk-prep-card-bg); }
+    .cut-step[data-d="1"] { border-left: 1px solid var(--sk-prep-card-bg); }
+    .cut-step:active { background: var(--sk-prep-selected-fill); }
+    .cut-step:disabled { opacity: 0.4; cursor: default; }
+    /* TASK 730: the Vcarve panel's and the Review card's steppers: the same .cut-step buttons around the field, on the panel's own dark field style */
+    .vcarve-stepbox, .review-stepbox { display: inline-flex; align-items: stretch; }
+    .vcarve-stepbox .cut-step, .review-stepbox .cut-step { width: 28px; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; font-size: 16px; }
+    .vcarve-stepbox .cut-step[data-d="-1"], .review-stepbox .cut-step[data-d="-1"] { border-radius: 6px 0 0 6px; border-right: 0; }
+    .vcarve-stepbox .cut-step[data-d="1"], .review-stepbox .cut-step[data-d="1"] { border-radius: 0 6px 6px 0; border-left: 0; }
+    .vcarve-stepbox input, .review-stepbox input { border-radius: 0; width: 64px; text-align: center; }
+    .vcarve-row .vcarve-stepbox input { width: 64px; }
     .cut-flip.is-on { background: var(--sk-prep-selected-fill); }
     .cut-mid { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
     .cut-num { all: unset; box-sizing: border-box; background: transparent; border: 0; color: var(--sk-prep-chip-text); font: inherit; font-size: 15px; font-weight: 600; width: 5.2ch; min-width: 0; }
@@ -318,6 +330,15 @@
     .cut-inline .cut-unit { padding-right: 10px; }
     .cut-dia-prefix { color: var(--sk-prep-unit); font-size: 11px; padding-left: 10px; }
     .cut-inline .cut-dia-prefix + .cut-num { padding-left: 8px; }
+    /* TASK 730: a phone (narrow screen or a coarse pointer): 44 px touch targets for the steppers and the flip; the card widens to hold three of them in the offset row */
+    @media (max-width: 640px), (pointer: coarse) {
+      .cut-box { height: 44px; }
+      .cut-step, .cut-flip { width: 44px; font-size: 22px; }
+      #prepare-panel { width: 236px; }
+      #prepare-panel .cut-card { width: 236px; }
+      .vcarve-stepbox .cut-step, .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
+      .vcarve-stepbox input, .review-stepbox input { height: 44px; box-sizing: border-box; }
+    }
     .cut-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
     .cut-presets .cut-preset { all: unset; box-sizing: border-box; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; }
     .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
@@ -378,8 +399,8 @@
       <div class="vcarve-section">
         <div class="vcarve-h">2 · Carve</div>
         <label class="vcarve-row">V-bit <select id="vcarve-vbit" disabled><option>90°</option></select></label>
-        <label class="vcarve-row">Depth step <input id="vcarve-dstep" type="text" value="0.5 mm" disabled></label>
-        <label class="vcarve-row">Max depth <input id="vcarve-maxdepth" type="text" value="6 mm" disabled></label>
+        <label class="vcarve-row">Depth step <span class="vcarve-stepbox"><input id="vcarve-dstep" type="text" value="0.5 mm" disabled></span></label>
+        <label class="vcarve-row">Max depth <span class="vcarve-stepbox"><input id="vcarve-maxdepth" type="text" value="6 mm" disabled></span></label>
         <button id="vcarve-recompute" class="vcarve-btn" disabled>Recompute</button>
         <p id="vcarve-readout" class="vcarve-hint">— contours</p>
       </div>
@@ -407,7 +428,7 @@
     <div class="review-stock" id="review-cuts" hidden><h2 class="simexport-title">Cuts</h2>
       <div id="review-cuts-list" class="review-cuts-list"></div></div>
     <div class="review-stock" id="review-stock"><h2 class="simexport-title">Stock</h2>
-      <label>Thickness <input id="review-stock-thickness" type="text" inputmode="decimal"></label>
+      <label>Thickness <span class="review-stepbox"><input id="review-stock-thickness" type="text" inputmode="decimal"></span></label>
       <div id="review-stock-note" class="review-stock-note"></div></div>
     <div class="review-stock" id="review-look"><h2 class="simexport-title">Look</h2>
       <label style="justify-content:flex-start;gap:8px"><input id="review-wood" type="checkbox" checked> Wood</label></div>

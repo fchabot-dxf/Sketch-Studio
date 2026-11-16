@@ -332,8 +332,8 @@ function setupMockDom() {
   dom.register('vcarve-canvas', vcarveSvg);
   dom.register('vcarve-region', dom.makeElement('select'));
   dom.register('vcarve-vbit', dom.makeElement('select'));
-  dom.register('vcarve-dstep', dom.makeElement('input'));
-  dom.register('vcarve-maxdepth', dom.makeElement('input'));
+  // TASK 730: the two numeric fields sit in a step box (the page's .vcarve-stepbox span): the steppers' buttons are added around them
+  for (const id of ['vcarve-dstep', 'vcarve-maxdepth']) { const box = dom.makeElement('span'), input = dom.makeElement('input'); box.appendChild(input); dom.register(id, input); }
   dom.register('vcarve-recompute', dom.makeElement('button'));
   dom.register('vcarve-readout', dom.makeElement('p'));
 

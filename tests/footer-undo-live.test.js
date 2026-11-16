@@ -71,7 +71,7 @@ await (async () => {
         return { vw: innerWidth, vh: innerHeight, fr: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), footerConstruct: !!fc, cornerConstruct: cc ? { w: cc.getBoundingClientRect().width, h: cc.getBoundingClientRect().height } : null, view: !!document.getElementById('viewport-size'), text: f.textContent }; })()`);
       assert(fb.undo.w === 32 && fb.undo.h === 32 && fb.redo.w === 32 && fb.del && fb.del.w === 32 && fb.clr && fb.clr.w === 32, name + ': a mouse footer button is 32 px: ' + JSON.stringify(fb));
       assert(fb.undo.l < fb.redo.l && fb.redo.r <= fb.del.l && fb.del.r < fb.clr.l && fb.clr.l < fb.vw / 2, name + ': Undo, Redo, Delete, gap, Clear sketch at the left of the footer: ' + JSON.stringify([fb.redo, fb.del, fb.clr]));
-      assert(fb.recenter && fb.recenter.r > fb.vw - 40 && fb.recenter.w === 32, name + ': Recenter at the right of the footer: ' + JSON.stringify(fb.recenter));
+      assert(fb.recenter && fb.recenter.r > fb.vw - 80 && fb.recenter.w === 32, name + ': Recenter at the right of the footer, left of the Settings gear (TASK 726): ' + JSON.stringify(fb.recenter));
       assert(fb.fr.bottom <= fb.vh + 0.5 && fb.fr.bottom >= fb.vh - 1, name + ': the footer sits at the bottom of the screen: ' + JSON.stringify([fb.fr.bottom, fb.vh]));
       assert.strictEqual(fb.view, false, name + ': no VIEW readout'); assert(!/VIEW/i.test(fb.text), name + ': no VIEW text in the footer');
       assert.strictEqual(fb.footerConstruct, false, name + ': Construction is NOT in the footer (TASK 619)');
@@ -100,7 +100,7 @@ await (async () => {
           return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), footerConstruct: !!f.querySelector('#btn-construct-toggle'),
             cornerConstruct: cbr ? { w: cbr.width, h: cbr.height, l: cbr.left, r: cbr.right, t: cbr.top } : null, canvasH: cv.height,
             sk: cb ? { w: cb.width, h: cb.height, l: cb.left, r: cb.right, t: cb.top, vis: getComputedStyle(corner).display !== 'none', aria: corner.getAttribute('aria-label') } : null }; })()`);
-        for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= 55 && ft[k].h >= 43.5 && ft[k].w > ft[k].h, tag + k + ' is a wide 56x44 touch target in the footer: ' + JSON.stringify(ft[k]));
+        for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= 43.5 && ft[k].h >= 43.5, tag + k + ' is a 44x44 (TASK 726: 56 wide before, narrowed so the Settings gear fits) touch target in the footer: ' + JSON.stringify(ft[k]));
         assert.strictEqual(ft.footerConstruct, false, tag + 'Construction is NOT in the footer');
         assert(ft.cornerConstruct && ft.cornerConstruct.w >= 43.5 && ft.cornerConstruct.h >= 43.5, tag + 'Construction in .sk-canvas-corner is 44x44: ' + JSON.stringify(ft.cornerConstruct));
         assert(ft.fr.left >= -0.5 && ft.fr.right <= ft.vw + 0.5 && ft.fr.bottom <= ft.vh + 0.5, tag + 'the footer is inside the screen: ' + JSON.stringify(ft.fr));

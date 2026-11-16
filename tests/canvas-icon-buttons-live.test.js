@@ -42,7 +42,7 @@ try {
   const clear = await evalJs(`(() => { const box = document.querySelector('.sk-browser'); if (!box) return true; const b = box.getBoundingClientRect(); return ['btn-construct-toggle', 'btn-recenter-view'].every((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom; }); })()`);
   assert.ok(clear, 'no overlap with the SKETCHES box');
 
-  // phone, a finger: Construction is 44x44 beside Sketches in .sk-canvas-corner, Recenter is 56x44 in footer
+  // phone, a finger: Construction is 44x44 beside Sketches in .sk-canvas-corner, Recenter is 44x44 in footer (TASK 726: footer buttons 56 -> 44 wide so the Settings gear fits)
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 15000);
@@ -53,7 +53,7 @@ try {
   assert.deepStrictEqual([c.w, c.h], [44, 44], 'a finger: Construction in canvas corner matches Sketches (44x44)');
   assert.deepStrictEqual([sk.w, sk.h], [44, 44], 'a finger: Sketches corner button is 44x44');
   assert.ok(c.r <= sk.l && Math.abs(c.t - sk.t) <= 1, 'Construction sits beside Sketches in .sk-canvas-corner: ' + JSON.stringify({ c, sk }));
-  assert.deepStrictEqual([r.w, r.h], [56, 44], 'a finger: Recenter in footer is 56 x 44');
+  assert.deepStrictEqual([r.w, r.h], [44, 44], 'a finger: Recenter in footer is 44 x 44 (TASK 726)');
   assert.ok(c.glyph >= 26 && r.glyph >= 26, `TASK 616: a finger: the glyph is >= 26 px of 44: ${c.glyph} / ${r.glyph}`);
   const clearP = await evalJs(`(() => { const box = document.querySelector('.sk-browser'); if (!box) return true; const b = box.getBoundingClientRect(); if (!b.width) return true; return ['btn-construct-toggle', 'btn-recenter-view'].every((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom; }); })()`);
   assert.ok(clearP, 'phone: no overlap with the SKETCHES box');

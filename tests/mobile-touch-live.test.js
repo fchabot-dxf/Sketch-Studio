@@ -93,7 +93,7 @@ try {
   for (const a of ['style', 'log', 'debug', 'tune']) assert.ok(menuActions.includes(a), `the menu has ${a}: ${menuActions}`);
   await shot('phone-menu');
   await tapSel('.sk-sidebar [data-action="style"]'); await sleep(500);
-  assert.ok(await evalJs(`!!document.querySelector('.sk-style-panel') && !document.querySelector('.sk-style-panel').classList.contains('sk-hidden')`), 'menu > Style opens the style panel');
+  assert.ok(await evalJs(`!!document.querySelector('.sk-style-panel') && !document.querySelector('.sk-style-panel').classList.contains('sk-hidden')`), 'menu > Settings (TASK 726) opens the style panel');
   await tapSel('.sk-style-close'); await sleep(200);
   await shot('phone-first-screen');
 

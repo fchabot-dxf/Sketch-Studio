@@ -11,6 +11,7 @@ applyAppIdentity('penplotter');
 import { onExportClick } from './export.js';
 import { getDocBuffer, importDrawing } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
 import { STAGES, mountStages } from './stages.js'; // TASK 583: the stage pipeline (list, nav, router, Design + Draw mounts), declared once (the node test kit calls it too)
+import { createStylePanel } from '#ui/style-panel.js';
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 
@@ -35,4 +36,7 @@ chrome = mountAppChrome({
     { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
   ],
 });
-mountAppFooter({ router: history, view: designView }); // TASK 618: the Construction toggle lives on the canvas corner (design-browser, TASK 641), not the footer
+// TASK 726: the footer's Settings gear opens the shared Style panel (units, display precision, line style); Pen Plotter's drawer has no Style item, the gear is its only opener
+const stylePanel = createStylePanel({ hostId: 'penplotter' });
+stylePanel.render(document.body);
+mountAppFooter({ router: history, view: designView, settings: stylePanel }); // TASK 618: the Construction toggle lives on the canvas corner (design-browser, TASK 641), not the footer

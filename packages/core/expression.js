@@ -30,7 +30,7 @@ export const ACCEPTED_ARG_SEPARATORS = [';', ','];   // O8  both accepted in a c
 export const STORED_ARG_SEPARATOR = ';';             // O8  ...and ';' is what the printer writes
 export const ALWAYS_STORE_UNITS = true;              // O19 canonicalize() writes the promoted units into the text ("width + 1 mm")
 export const FRACTION_UNIT_IS_ONE_NUMBER = true;     // O20 "1/2 in" = 0.5 in (false: 1 / (2 in), a unit error)
-// O18 (the units accepted: mm cm in " deg rad) is the UNIT_TABLE in units.js.
+// O18 (the units accepted: mm cm in " deg ° rad) is the UNIT_TABLE in units.js.
 export const MAX_NAME_LENGTH = 64;
 export const MAX_INPUT_LENGTH = 2000;                // keeps AST depth (and so recursion) bounded for any typed input
 const MAX_NEST = 200;                                // nesting of "(" and prefix signs
@@ -121,7 +121,7 @@ function tokenize(text) {
       toks.push({ type: unitInfo(word) ? 'unit' : 'ident', text: word, start, end: i });
       continue;
     }
-    if (ch === '"') { toks.push({ type: 'unit', text: '"', start: i, end: i + 1 }); i++; continue; }
+    if (!isLetter(ch) && unitInfo(ch)) { toks.push({ type: 'unit', text: ch, start: i, end: i + 1 }); i++; continue; } // a one-sign unit of the table: " and ° (task 694)
     if (OPS.includes(ch)) { toks.push({ type: 'op', text: ch, start: i, end: i + 1 }); i++; continue; }
     throw new Bail(fail('SYNTAX', `unexpected '${ch}' at ${i}`, { start: i, end: i + 1 }));
   }

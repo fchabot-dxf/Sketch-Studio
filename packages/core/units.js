@@ -15,13 +15,14 @@ export const BASE = 'mm'; // 1 world unit = 1 mm
 // TASK 535 (slice 1a) — THE one unit table. Every conversion factor in the app lives here (the expression parser reads it too).
 // kind 'length' → f = mm per 1 of the unit (base mm); kind 'angle' → f = degrees per 1 of the unit (base deg).
 // { alias: 'in' } is an alternative spelling of another entry. Names are matched case-insensitively (see unitInfo).
-// Decision O18 (units accepted: mm cm in " deg rad) is THIS table: add or remove an entry to flip it.
+// Decision O18 (units accepted: mm cm in " deg ° rad) is THIS table: add or remove an entry to flip it.
 export const UNIT_TABLE = {
   mm: { kind: 'length', f: 1 },
   cm: { kind: 'length', f: 10 },
   in: { kind: 'length', f: 25.4 },
   '"': { alias: 'in' },
   deg: { kind: 'angle', f: 1 },
+  '°': { alias: 'deg' }, // TASK 694: the degree sign, like " for inches ("90°", "-90 °", "45° * 2")
   rad: { kind: 'angle', f: 180 / Math.PI },
 };
 

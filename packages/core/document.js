@@ -17,7 +17,7 @@
 import { addConstraintObject } from '#core/constraints.js';
 import { DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 import { cloneProfiles } from '#core/profile-model.js';
-import { cloneParameters, replaceParameters } from '#core/parameters.js';
+import { cloneParameters, replaceParameters, namePatternValues } from '#core/parameters.js';
 import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from '#core/constants.js';
 import { legacyAngleSector } from '#core/angle-sector.js';
 import { projectDimLabel } from '#core/dim-label.js';
@@ -139,6 +139,9 @@ export function deserializeDocument(doc, state) {
     const proto = legacyAngleSector(raw, state.joints, state.shapes);
     addConstraintObject(state, proto);
   }
+  // TASK 694 (migration): a pattern saved before its values were named gets their names now, in constraint order, after the whole file is
+  // loaded (a name is never one a later constraint of the file carries). Names only: no value, no geometry changes.
+  for (const c of state.constraints) namePatternValues(state.constraints, c);
 
   if (Array.isArray(state.sketches)) {
     state.sketches.length = 0;

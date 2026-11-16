@@ -17,12 +17,14 @@
 // Lengths are formatted by the shared units formatter in the document unit; angles in degrees. All text is set with textContent.
 
 import { format as formatUnit } from '#core/units.js';
-import { evaluateAll, isDimension, isReferenceDimension, quantityText, planChange, previewDimensionInput, usersOf, cloneParameters, PARAMETER_UNITS } from '#core/parameters.js';
+import { evaluateAll, isReferenceDimension, quantityText, planChange, previewDimensionInput, usersOf, cloneParameters, PARAMETER_UNITS,
+  dimensionEntries, entryName, entryValue, entryExpression, entryKind, entryUnit } from '#core/parameters.js';
+import { patternSlot } from '#core/pattern-values.js';
 import { parseInput } from '#core/expression.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { labelGeometry, constraintGeometryText } from '#ui/geometry-labels.js';
 import { toggleConstraintSelection } from '#ui/design-info-panel.js';
-import { applyParameterChange, dimensionInputLabel } from '#core/dimension-seams.js';
+import { applyParameterChange, dimensionInputLabel, patternPlanRefusal, refusalReason } from '#core/dimension-seams.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
@@ -32,20 +34,28 @@ export const DIMENSION_EMPTY_TEXT = 'No dimensions yet. Use the Dim tool to add 
 
 const isAngle = (c) => c.type === CONSTRAINT_TYPES.ANGLE;
 const kindLabelOf = (c) => (isAngle(c) ? 'Angle' : (c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter') ? 'Diameter' : (c.isRadius || c.type === 'radius') ? 'Radius' : 'Distance');
+// TASK 694: a pattern value's row: its kind (Count / Length / Angle) and what it is ('Circular pattern: quantity')
+const PATTERN_KIND_LABEL = Object.freeze({ count: 'Count', length: 'Length', angle: 'Angle' });
+const PATTERN_TITLE = Object.freeze({ [CONSTRAINT_TYPES.CIRCULAR_PATTERN]: 'Circular pattern', [CONSTRAINT_TYPES.RECTANGULAR_PATTERN]: 'Rectangular pattern' });
 
-const dimensionValueText = (c, unit) => (isAngle(c) ? Number(c.value).toFixed(1) : formatUnit(c.value, unit, { decimals: 1 }));
+// the value text of an entry: a count as a whole number, an angle in degrees, a length in the document unit
+const entryValueText = (e, unit) => {
+  const k = entryKind(e), v = entryValue(e);
+  return k === 'count' ? String(v) : k === 'angle' ? Number(v).toFixed(1) : formatUnit(v, unit, { decimals: 1 });
+};
 
 /**
  * buildParameterRows(state, { unit = 'mm', filter = '' }) -> {
  *   unit, filter, total: { user, dimensions },
  *   user:       [{ id, kind:'parameter', name, expression, value, unit, comment, error, users }]      users: who reads it (the bin is refused then)
- *   dimensions: [{ id, kind:'dimension', constraint, name, expression, hasExpression, reference, value, unit, kindLabel, measures, error }]
+ *   dimensions: [{ id, kind:'dimension', constraint, slot, name, expression, hasExpression, reference, value, unit, kindLabel, measures, error }]
  * }  Dimensions keep constraint order, user parameters table order. `filter`: rows whose name or expression contains the text (case-insensitive).
+ *    TASK 694: a sketch pattern's values are dimension rows too, one per value (slot: #core/pattern-values.js; constraint: the pattern).
  */
 export function buildParameterRows(state, { unit = 'mm', filter = '' } = {}) {
   const params = (state && Array.isArray(state.parameters)) ? state.parameters : [];
   const cons = (state && Array.isArray(state.constraints)) ? state.constraints : [];
-  const dims = cons.filter(isDimension);
+  const dims = dimensionEntries(cons);
   const ev = evaluateAll(state || { parameters: [], constraints: [] }, { unit });
   const values = ev.values || new Map();
   const errors = ev.errors || new Map();
@@ -62,16 +72,19 @@ export function buildParameterRows(state, { unit = 'mm', filter = '' } = {}) {
     };
   });
 
-  const dimensions = dims.map((c, i) => {
-    const reference = isReferenceDimension(c);
-    const text = dimensionValueText(c, unit);
-    const hasExpression = !reference && typeof c.expression === 'string' && c.expression !== '';
-    const err = !reference && c.name ? errors.get(c.name) : null;
+  const dimensions = dims.map((e, i) => {
+    const c = e.c, name = entryName(e) || '';
+    const reference = !e.slot && isReferenceDimension(c);
+    const text = entryValueText(e, unit);
+    const expression = entryExpression(e);
+    const hasExpression = !reference && typeof expression === 'string' && expression !== '';
+    const err = !reference && name ? errors.get(name) : null;
     return {
-      id: 'd:' + (c.name || i), kind: 'dimension', constraint: c, name: c.name || '', hasExpression, reference,
-      expression: reference ? '(reference)' : hasExpression ? c.expression : text,
-      value: reference ? `(${text})` : text, unit: isAngle(c) ? 'deg' : unit,
-      kindLabel: kindLabelOf(c), measures: constraintGeometryText(c, (state && state.shapes) || [], geo),
+      id: 'd:' + (name || i), kind: 'dimension', constraint: c, slot: e.slot, name, hasExpression, reference,
+      expression: reference ? '(reference)' : hasExpression ? expression : text,
+      value: reference ? `(${text})` : text, unit: entryUnit(e, unit),
+      kindLabel: e.slot ? PATTERN_KIND_LABEL[entryKind(e)] : kindLabelOf(c),
+      measures: e.slot ? `${PATTERN_TITLE[c.type]}: ${patternSlot(c, e.slot).label}` : constraintGeometryText(c, (state && state.shapes) || [], geo),
       error: err ? err.message : null,
     };
   });
@@ -93,7 +106,7 @@ const refusal = (r, extra = {}) => ({ ok: false, code: r.code, message: r.messag
 /**
  * planTableEdit(state, edit, { unit }) -> PURE (nothing in `state` is touched, no solve).
  *   edit: { kind:'parameter', column:'name'|'expression'|'comment'|'delete', name, text }
- *       | { kind:'dimension', column:'name'|'expression', constraint, text }
+ *       | { kind:'dimension', column:'name'|'expression', constraint, slot?, text }   slot: a pattern value of `constraint` (TASK 694)
  *       | { kind:'new', name, text, unit, comment }   the + Add row: `text` is its Expression cell; `name = expr` there fills both
  *   -> UNCHANGED { ok:true, changed:false }            applying it would change nothing (no undo step is taken)
  *    | { ok:true, changed:true, plan, label, hint, fill? }   plan: planChange's result; label: the undo step's; hint: the live preview;
@@ -106,6 +119,8 @@ export function planTableEdit(state, edit, { unit = 'mm' } = {}) {
   const plan = (change) => planChange(state, change, { unit });
   const done = (p, label, hint, extra = {}) => {
     if (!p.ok) return refusal(p, extra);
+    const bad = patternPlanRefusal(p); // TASK 694: a pattern value the plan would write is checked by THE pattern rule, the commit's own check
+    if (bad) return refusal({ ...bad, message: bad.node && !bad.message.startsWith(bad.node) ? `${bad.node}: ${bad.message}` : bad.message }, extra);
     const changed = p.edits.length > 0 || !sameParameters(p.paramsAfter, state.parameters);
     return changed ? { ok: true, changed: true, plan: p, label, hint, ...extra } : UNCHANGED;
   };
@@ -134,13 +149,13 @@ export function planTableEdit(state, edit, { unit = 'mm' } = {}) {
     if (edit.column === 'delete') return done(plan({ type: 'deleteParameter', name }), `delete parameter ${name}`, '');
   }
   if (edit && edit.kind === 'dimension') {
-    const c = edit.constraint;
+    const c = edit.constraint, slot = edit.slot || null, own = entryName({ c, slot });
     if (edit.column === 'name') {
-      if (t === c.name) return UNCHANGED;
-      return done(plan({ type: 'renameDimension', name: c.name, to: t }), `rename dimension ${c.name} -> ${t}`, `renames ${c.name} to ${t}${follow(c.name)}`);
+      if (t === own) return UNCHANGED;
+      return done(plan({ type: 'renameDimension', name: own, to: t }), `rename dimension ${own} -> ${t}`, `renames ${own} to ${t}${follow(own)}`);
     }
     if (edit.column === 'expression') {
-      const pv = previewDimensionInput(state, c, text, { unit });
+      const pv = previewDimensionInput(state, c, text, { unit, slot });
       if (pv.empty) return { ok: false, code: 'SYNTAX', message: 'type a value or a formula' };
       if (!pv.ok) return refusal({ code: pv.code, message: pv.hint, at: pv.at });
       return done(pv.plan, dimensionInputLabel(c, pv), pv.hint);
@@ -176,17 +191,23 @@ export function commitTableEdit(state, planned) {
   if (!planned.changed) return { ok: true, changed: false };
   const res = applyParameterChange(state, planned.plan, planned.label);
   if (res.ok) return { ok: true, changed: true };
-  const why = (res.culprit && res.culprit.reason) || res.reason || (res.clash ? `conflicts with ${res.clash}` : res.message || 'the drawing cannot take it');
+  const why = refusalReason(res);
   const who = res.culprit && res.culprit.name && !String(why).startsWith(res.culprit.name) ? `${res.culprit.name}: ` : '';
   return { ok: false, code: res.code || 'REFUSED', message: `Can't apply: ${who}${why}. Nothing changed.` };
 }
 
-// every DIMENSION that depends on `name`, directly or through other user parameters (a user row's click selects them: section F canvas link)
+// every DIMENSION that depends on `name`, directly or through other user parameters (a user row's click selects them: section F canvas link);
+// TASK 694: a pattern whose value depends on it is listed once
 export function dependentDimensions(state, name) {
   const seen = new Set([name]);
   const queue = [name];
   while (queue.length) for (const u of usersOf(state, queue.shift())) if (!seen.has(u)) { seen.add(u); queue.push(u); }
-  return ((state && state.constraints) || []).filter((c) => isDimension(c) && c.name && c.name !== name && seen.has(c.name));
+  const out = [];
+  for (const e of dimensionEntries(state && state.constraints)) {
+    const n = entryName(e);
+    if (n && n !== name && seen.has(n) && !out.includes(e.c)) out.push(e.c);
+  }
+  return out;
 }
 
 let stylesInjected = false;
@@ -289,7 +310,6 @@ export function createParameterTable({ state, getUnit = () => 'mm', history = nu
   let lastSig = null;
   let lastShape = null;
   let rowRefs = [];              // every shown row's refs, in DOM order (user rows, the + Add row, dimension rows)
-  let rowByConstraint = new Map();
   let hoveredByTable = null;
   let newRow = null;             // the + Add row's typed fields { name, expression, unit, comment } while it is open
   const meta = new WeakMap();    // input -> { refs, column }
@@ -331,7 +351,7 @@ export function createParameterTable({ state, getUnit = () => 'mm', history = nu
     const { refs, column } = meta.get(inp);
     if (refs.isNew) return { kind: 'new', name: refs.inputs.name.value, text: refs.inputs.expression.value, unit: refs.unitSelect.value, comment: refs.inputs.comment.value };
     const r = refs.data;
-    return r.kind === 'dimension' ? { kind: 'dimension', column, constraint: r.constraint, text: inp.value } : { kind: 'parameter', column, name: r.name, text: inp.value };
+    return r.kind === 'dimension' ? { kind: 'dimension', column, constraint: r.constraint, slot: r.slot, text: inp.value } : { kind: 'parameter', column, name: r.name, text: inp.value };
   };
 
   // the line under the row: the live preview (what Enter will do) or why it will not (the input gets aria-invalid and the red border)
@@ -678,10 +698,12 @@ export function createParameterTable({ state, getUnit = () => 'mm', history = nu
 
   function syncHighlight() {
     const sel = state && state.selectedConstraints instanceof Set ? state.selectedConstraints : null;
-    rowByConstraint = new Map(rowRefs.filter((r) => r.kind === 'dimension').map((r) => [r.data.constraint, r.tr]));
-    for (const [c, tr] of rowByConstraint) {
-      tr.setAttribute('aria-selected', sel && sel.has(c) ? 'true' : 'false');
-      tr.classList.toggle('pt-hover', state.hoveredConstraint === c);
+    // every row of a constraint (TASK 694: a pattern has one row per value)
+    for (const r of rowRefs) {
+      if (r.kind !== 'dimension') continue;
+      const c = r.data.constraint;
+      r.tr.setAttribute('aria-selected', sel && sel.has(c) ? 'true' : 'false');
+      r.tr.classList.toggle('pt-hover', state.hoveredConstraint === c);
     }
   }
   function refresh() {

@@ -28,6 +28,9 @@
 //   { type: 'rectangularPattern', sources, directions: [lineId | null, lineId | null], quantity: [n1, n2], distance: [d1, d2],
 //     distanceType: 'spacing' | 'total', symmetric: [b1, b2], suppressed, instances }
 //   instances: [{ at, shapes: [copy shape ids, aligned with sources.shapes], joints: [copy joint ids, aligned with sources.points] }].
+//   TASK 694 (Fusion: the values are model parameters d<n>): names: { slot: name } (every value of #core/pattern-values.js PATTERN_VALUES, given by
+//   #core/parameters.js namePatternValues) and expressions: { slot: formula } (only the values a formula drives), last, after instances.
+//   The values are changed by the parameter model (#core/dimension-seams.js applyParameterChange / editPatternValues), which calls editPattern(s).
 //   The record names no joint / shape in the generic `joints` / `shapes` fields: a delete of one copy SUPPRESSES that instance (patternsAfterDelete)
 //   instead of dropping the whole pattern, and a partial copy / paste leaves it behind (patternRefs: the paste carries it only when every operand
 //   is copied). NESTED ARRAYS ARE NEVER MUTATED IN PLACE (the undo snapshot copies a constraint shallowly): every change assigns new arrays.
@@ -51,6 +54,8 @@ import { newJointId, newShapeId } from './shape-id.js';
 import { inertEntities, inActiveSketch } from './sketch-model.js';
 import { isReferenceJointId } from './reference-lines.js';
 import { SolverConfig } from './solver-config.js';
+import { patternSlotTexts } from './pattern-values.js';
+import { namePatternValues } from './parameters.js';
 
 const T = CONSTRAINT_TYPES;
 export const PATTERN_TYPES = Object.freeze([T.CIRCULAR_PATTERN, T.RECTANGULAR_PATTERN]);
@@ -249,14 +254,21 @@ export function patternConstraintRecord(params) {
   const sources = { shapes: s.shapes.slice(), points: s.points.slice(), shapeJoints: s.shapeJoints.map((l) => asList(l).slice()) };
   const instances = asList(params.instances).map((i) => ({ at: asList(i.at).map(Number), shapes: asList(i.shapes).slice(), joints: asList(i.joints).slice() }));
   const suppressed = [...new Set(asList(params.suppressed).map(String))];
+  // TASK 694: the values' names and formulas (copied; only declared values; `expressions` only when a formula drives one)
+  const named = (rec) => {
+    const names = patternSlotTexts(rec.type, params.names), expressions = patternSlotTexts(rec.type, params.expressions);
+    if (Object.keys(names).length) rec.names = names;
+    if (Object.keys(expressions).length) rec.expressions = expressions;
+    return rec;
+  };
   if (params.type === T.CIRCULAR_PATTERN) {
     if (params.centre == null) return null;
-    return {
+    return named({
       type: T.CIRCULAR_PATTERN,
       sources, centre: params.centre, quantity: intOr(params.quantity, 3), angle: Number(params.angle), symmetric: !!params.symmetric, suppressed, instances,
-    };
+    });
   }
-  return {
+  return named({
     type: T.RECTANGULAR_PATTERN,
     sources,
     directions: pair(params.directions, (v) => (v == null ? null : v)),
@@ -265,7 +277,7 @@ export function patternConstraintRecord(params) {
     distanceType: params.distanceType === 'total' ? 'total' : 'spacing',
     symmetric: pair(params.symmetric, (v) => !!v),
     suppressed, instances,
-  };
+  });
 }
 
 /** Every joint / shape a pattern names (the clipboard's "inside the copy" test, the sketch of the constraint). */
@@ -276,10 +288,12 @@ export function patternRefs(c) {
   else for (const d of c.directions) if (d && !AXIS_DIRECTIONS[d]) shapes.add(d);
   return { joints: [...joints], shapes: [...shapes] };
 }
-/** A copy of the record with every id mapped (jointOf(id), shapeOf(id): the paste's id maps). */
+/** A copy of the record with every id mapped (jointOf(id), shapeOf(id): the paste's id maps); without the values' names and formulas (task 694:
+ *  the paste names the copy's values afresh, #ui/clipboard.js). */
 export function remapPattern(c, jointOf, shapeOf) {
+  const { names, expressions, ...rest } = c;
   return patternConstraintRecord({
-    ...c,
+    ...rest,
     sources: { shapes: c.sources.shapes.map(shapeOf), points: c.sources.points.map(jointOf), shapeJoints: c.sources.shapeJoints },
     centre: c.centre != null ? jointOf(c.centre) : c.centre,
     directions: c.directions ? c.directions.map((d) => (d ? shapeOf(d) : null)) : c.directions,
@@ -499,11 +513,13 @@ export function syncPattern(state, c) {
 export function applyPattern(state, type, objects, values) {
   const src = patternSources(state, objects);
   if (!src.ok) return src;
-  const rec = patternConstraintRecord({ ...values, type, sources: src.sources, instances: [] });
+  const { names, expressions, ...plain } = values || {}; // task 694: a new pattern's values get the next automatic names, never given ones
+  const rec = patternConstraintRecord({ ...plain, type, sources: src.sources, instances: [] });
   if (!rec) return { ok: false, reason: type === T.CIRCULAR_PATTERN ? 'pick the centre point' : 'the pattern values are incomplete' };
   const why = patternValuesRefusal(rec) || placementRefusal(state, rec);
   if (why) return { ok: false, reason: why };
   state.constraints.push(rec);
+  namePatternValues(state.constraints, rec);
   syncPattern(state, rec);
   return { ok: true, constraint: rec, shapes: rec.instances.flatMap((i) => i.shapes), joints: rec.instances.flatMap((i) => i.joints) };
 }
@@ -542,27 +558,41 @@ export function editPattern(state, c, changes, solve = (s) => (s.engine && typeo
   if (!next) return { ok: false, reason: 'the pattern values are incomplete' };
   const why = patternValuesRefusal(next) || placementRefusal(state, next);
   if (why) return { ok: false, reason: why };
-  const backup = backupState(state, c);
+  const backup = backupState(state, [c]);
   const rebuild = objects || next.centre !== c.centre || JSON.stringify(next.directions) !== JSON.stringify(c.directions);
   if (rebuild) { for (const inst of c.instances) removeInstance(state, inst); next.instances = []; }
   Object.assign(c, next);
   syncPattern(state, c);
   const res = solve(state);
-  if (res && res.converged === false) { restoreState(state, c, backup); solve(state); return { ok: false, reason: 'the sketch cannot hold these values (it conflicts with another constraint)' }; }
+  if (res && res.converged === false) { restoreState(state, backup); solve(state); return { ok: false, reason: 'the sketch cannot hold these values (it conflicts with another constraint)' }; }
   return { ok: true };
 }
 
+/**
+ * TASK 694: edit several patterns as ONE change (a parameter that drives more than one pattern): list = [{ c, changes }], each through
+ * editPattern. All or nothing: the first refusal puts every pattern back -> { ok: false, reason, c }. On success -> { ok: true, restore() }:
+ * restore() puts them all back too (the caller's later step refused: #core/dimension-seams.js applyParameterChange).
+ */
+export function editPatterns(state, list, solve = (s) => (s.engine && typeof s.engine.solve === 'function' ? s.engine.solve(SolverConfig.ITERATIONS || 500) : null)) {
+  const backup = backupState(state, list.map((x) => x.c));
+  const restore = () => { restoreState(state, backup); solve(state); };
+  for (const { c, changes } of list) {
+    const res = editPattern(state, c, changes, solve);
+    if (!res.ok) { restore(); return { ok: false, reason: res.reason, c }; }
+  }
+  return { ok: true, restore };
+}
+
 // what an edit may change, to put it back when the solve refuses it (in place: the engine holds these containers)
-function backupState(state, c) {
+function backupState(state, records) {
   return {
-    record: { ...c }, shapes: state.shapes.slice(), constraints: state.constraints.slice(),
+    records: records.map((c) => [c, { ...c }]), shapes: state.shapes.slice(), constraints: state.constraints.slice(),
     joints: new Map([...state.joints].map(([id, j]) => [id, { ...j }])),
     radii: state.shapes.filter((s) => typeof s.radius === 'number').map((s) => [s, s.radius]),
   };
 }
-function restoreState(state, c, b) {
-  for (const k of Object.keys(c)) delete c[k];
-  Object.assign(c, b.record);
+function restoreState(state, b) {
+  for (const [c, record] of b.records) { for (const k of Object.keys(c)) delete c[k]; Object.assign(c, record); }
   state.shapes.length = 0; state.shapes.push(...b.shapes);
   state.constraints.length = 0; state.constraints.push(...b.constraints);
   for (const id of [...state.joints.keys()]) if (!b.joints.has(id)) state.joints.delete(id);

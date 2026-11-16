@@ -292,12 +292,15 @@ function angleDimGeomFor(c, opJoints, opShapes) {
 
 function patternDimItemsFor(sc, c, scaleFn) {
   const fmtN = (v) => String(Number(Number(v).toFixed(2)));
+  // TASK 694: Fusion draws no dimension for a pattern's values (advisor's API run): the label stays, and shows Fusion's formula mark when a value it
+  // shows is driven by a formula (the same 'fx: ' as a dimension label, formatConstraintValue)
+  const fx = (...slots) => (slots.some((s) => c.expressions && c.expressions[s]) ? 'fx: ' : '');
   const items = c.type === CONSTRAINT_TYPES.CIRCULAR_PATTERN
-    ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scaleFn(34), y: h.point.y - scaleFn(26), text: `${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
+    ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scaleFn(34), y: h.point.y - scaleFn(26), text: `${fx('quantity', 'angle')}${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
     : patternHandles(sc, c).map((h) => ({
         x: h.point.x + h.dir.x * (h.extent + scaleFn(70)),
         y: h.point.y + h.dir.y * (h.extent + scaleFn(70)),
-        text: `${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' extent' : ''}`,
+        text: `${fx(`quantity${h.k + 1}`, `distance${h.k + 1}`)}${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' extent' : ''}`,
       }));
   return items.map((it) => ({ ...it, w: scaleFn(Math.max(50, 7 * it.text.length + 10)) }));
 }

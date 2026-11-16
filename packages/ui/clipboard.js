@@ -9,6 +9,8 @@
 //  NAMES  a pasted dimension gets a NEW dN (addConstraint names it). Its formula: a name of a copied dimension is renamed to that dimension's new
 //         name; a USER PARAMETER the target document has keeps being read (same document: always); a name the target cannot resolve (a parameter
 //         it lacks, a dimension that was not copied) freezes the formula to the dimension's number. (to verify in Fusion UI)
+//         A pasted PATTERN's values (task 694) get new dNs the same way (pasted formulas reading them follow); a formula of the pattern's own values
+//         is frozen to its number.
 //  WHERE  the copy lands at an OFFSET from the original (PASTE_STEP_MM right and down on screen, i.e. down in the user's Y-up sense) and stays
 //         selected so it can be dragged at once; pasting the SAME clipboard again offsets each paste one more step. Follow-the-cursor placement
 //         (Fusion) needs a modal placing tool: left as a follow-up. (to verify in Fusion UI: where Fusion lands a plain Ctrl+V)
@@ -20,7 +22,8 @@ import { addConstraintObject } from '#core/constraints.js';
 import { projectDimLabel } from '#core/dim-label.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { newShapeId } from '#core/shape-id.js';
-import { evaluateAll, isDimension, isReferenceDimension, remapExpressionNames } from '#core/parameters.js';
+import { evaluateAll, isDimension, isReferenceDimension, remapExpressionNames, namePatternValues, entryName } from '#core/parameters.js';
+import { patternValueSlots } from '#core/pattern-values.js';
 import { userToWorldY } from '#core/units.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { commitDimensionEdits } from '#core/dimension-seams.js';
@@ -137,7 +140,7 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
     }
     // constraints: ids remapped, the name dropped (addConstraint gives a dimension the next free dN), positions that are data moved
     const before = state.constraints.length;
-    const renamed = new Map(); // old dimension name -> the pasted dimension
+    const renamed = new Map(); // old dimension name -> the pasted dimension's name (task 694: a pasted pattern's values too)
     for (const src of g.constraints) {
       const { name, glyphPos, __pos, ...rest } = src; // glyphPos / __pos are render caches, re-stamped when drawn
       const c = isPatternConstraint(rest) ? remapPattern(rest, (j) => jointMap.get(j), (id) => shapeMap.get(id)) : { ...rest }; // task 658: every id of a pattern
@@ -150,7 +153,18 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
       if (src.labelPos) projectDimLabel(c, { x: src.labelPos.x + dx, y: src.labelPos.y + dy }, state.joints, state.shapes);
       const count = state.constraints.length;
       addConstraintObject(state, c);
-      if (state.constraints.length > count && isDimension(state.constraints[count]) && name) renamed.set(name, state.constraints[count]);
+      const added = state.constraints.length > count ? state.constraints[count] : null;
+      if (added && isDimension(added) && name) renamed.set(name, added.name);
+      // task 694: a pasted pattern's values take the next free names (remapPattern dropped the copied ones); a formula one of them had is
+      // frozen at its value (its pattern is regenerated only through the parameter model, not here), the pasted dimensions read the new names
+      if (added && isPatternConstraint(added)) {
+        namePatternValues(state.constraints, added);
+        for (const s of patternValueSlots(added)) {
+          const was = src.names && src.names[s.slot];
+          if (was) renamed.set(was, entryName({ c: added, slot: s.slot }));
+          if (src.expressions && src.expressions[s.slot]) frozen.push(entryName({ c: added, slot: s.slot }));
+        }
+      }
     }
     out.constraints = state.constraints.slice(before);
     // formulas: see the header (NAMES)
@@ -158,7 +172,7 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
     const pending = [];
     for (const c of out.constraints) {
       if (!isDimension(c) || !c.expression) continue;
-      const r = remapExpressionNames(c.expression, (n) => (renamed.has(n) ? renamed.get(n).name : known.has(n) ? n : null));
+      const r = remapExpressionNames(c.expression, (n) => (renamed.has(n) ? renamed.get(n) : known.has(n) ? n : null));
       if (r.ok && !isReferenceDimension(c)) { c.expression = r.text; pending.push(c); } else { delete c.expression; frozen.push(c.name); }
     }
     // a kept formula is read in THIS document: when its value differs from the copied number (another document's parameter), the dimension

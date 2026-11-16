@@ -6,6 +6,7 @@
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
 import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
 import SettingsManager, { docUnit, lengthDecimals } from '#core/settings-manager.js';
+import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
@@ -30,8 +31,15 @@ const STEP_PRESETS = {
 const presetsFor = (table) => table[docUnit()] || table.mm;
 // TASK 717: the Resolution presets of adaptive stepping (the named maximum deviations, #core STEP_RESOLUTION; values base mm). A typed value = Custom.
 const RESOLUTION_PRESETS = STEP_RESOLUTION.levels.map((l) => ({ label: l.label, value: l.mm }));
-const DEPTH_START = 0.1;   // first value (in the DOC unit) when stepping up/down from 'unset'
-const DEPTH_STEP = 0.05;   // step increment, in the DOC unit
+// TASK 730: each stepped field DECLARES its − / + step (in the DOCUMENT unit, per family; number-stepper.js holds the one press / hold / snap code) and min (BASE mm).
+// min: the depth may reach 0 (as typing allows); a bit / step / resolution stays above 0; the offset has no min (negative = the other side, as today).
+const STEPPERS = {
+  cutDepth:      { step: { mm: 0.5, in: 1 / 32 }, min: 0 },
+  cutOffset:     { step: { mm: 0.25, in: 1 / 64 } },
+  toolDia:       { step: { mm: 0.5, in: 1 / 32 }, min: 0.1 },
+  stepDepth:     { step: { mm: 0.5, in: 1 / 32 }, min: STEP_DEPTH.minMm },
+  stepDeviation: { step: { mm: 0.05, in: 0.002 }, min: STEP_RESOLUTION.minMm },
+};
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
 const fmt = (baseMM) => formatUnit(baseMM, docUnit(), { decimals: lengthDecimals(3) });   // BASE mm → doc-unit string (3 dp unless the Length precision setting says otherwise)
@@ -62,9 +70,7 @@ export function createCutPanel(hostEl, opts = {}) {
       <div class="cut-row" data-param="cutDepth">
         <label class="cut-field-label">Depth</label>
         <div class="cut-stepper cut-box">
-          <button type="button" class="cut-step" data-d="-1" aria-label="Decrease depth">&#8722;</button>
           <div class="cut-mid"><input type="text" class="cut-num cut-depth" inputmode="decimal" placeholder="unset"><span class="cut-unit">mm</span></div>
-          <button type="button" class="cut-step" data-d="1" aria-label="Increase depth">+</button>
         </div>
       </div>
       <div class="cut-row" data-row="adaptiveSteps">
@@ -166,13 +172,16 @@ export function createCutPanel(hostEl, opts = {}) {
       wrap.appendChild(b);
     }
   };
-  card.querySelectorAll('.cut-step').forEach((btn) => btn.addEventListener('click', () => {
-    const d = Number(btn.dataset.d);
-    // step in the DOC unit, then store BASE mm (step from 'unset' → the start value)
-    const curDoc = isUnset(current.cutDepth) ? null : toDocNum(Number(current.cutDepth));
-    const nextDoc = curDoc == null ? DEPTH_START : Math.max(0, +(curDoc + d * DEPTH_STEP).toFixed(6));
-    onSetField('cutDepth', parseUnit(String(nextDoc), docUnit())); // → base mm
-  }));
+  // ONE stepper widget (number-stepper.js) for every stepped field: it reads the record's exact value (never the rounded text) and commits a doc-unit number -> base mm
+  const stepperFor = (field, input, opts) => attachStepper(input, STEPPERS[field], {
+    unit: docUnit, toDoc: toDocNum,
+    read: () => (field === 'cutDepth' ? (isUnset(current.cutDepth) ? null : toDocNum(Number(current.cutDepth))) : toDocNum(fieldBase(field))),
+    commit: (docNum) => onSetField(field, parseUnit(String(docNum), docUnit())), // -> base mm
+  }, opts);
+  const fieldBase = (field) => field === 'cutOffset' ? Number(current.cutOffset) || 0
+    : field === 'toolDia' ? Number(current.toolDia) || 0
+    : field === 'stepDepth' ? (Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm)
+    : (Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm);
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
   // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored; never below STEP_DEPTH.minMm)
   stepInput.addEventListener('change', () => { const n = parseUnit(stepInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDepth', Math.max(STEP_DEPTH.minMm, n)); else renderFields(); });
@@ -198,6 +207,12 @@ export function createCutPanel(hostEl, opts = {}) {
   offsetInput.addEventListener('change', () => onSetField('cutOffset', parseUnit(offsetInput.value, docUnit()) ?? 0));
   flipBtn.addEventListener('click', () => onSetField('cutOffset', -(Number(current.cutOffset) || 0))); // sign flip (base mm)
   bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, docUnit()); if (n != null) onSetField('toolDia', n); });
+
+  stepperFor('cutDepth', depthInput, { box: depthInput.closest('.cut-box'), before: depthInput.closest('.cut-mid') });
+  stepperFor('stepDepth', stepInput, { box: stepInput.closest('.cut-box') });
+  stepperFor('stepDeviation', deviationInput, { box: deviationInput.closest('.cut-box') });
+  stepperFor('cutOffset', offsetInput, { box: offsetInput.closest('.cut-box') });
+  stepperFor('toolDia', bitInput, { box: bitInput.closest('.cut-box'), before: bitInput.closest('.cut-box').querySelector('.cut-dia-prefix') });
 
   // cutter shape popover: flat / ball nose / V-bit rows; the V-bit row carries its angle presets (the EXISTING VBIT_PRESETS)
   const buildShapePop = () => {

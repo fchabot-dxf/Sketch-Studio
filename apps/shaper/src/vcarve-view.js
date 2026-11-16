@@ -8,8 +8,13 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { resolveProfileAtPoint, resolveTargetKey, listSketchProfiles } from '#core/profile-model.js';
 import { deriveVcarveContours, deriveVcarveFootprint } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
+import { attachStepper } from './number-stepper.js';
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
+
+// TASK 730: the two numeric fields' − / + steps (mm: this panel shows its values in mm, as before); min in mm; one declared spec per field.
+const DSTEP_STEPPER = { step: { mm: 0.5, in: 0.5 }, min: 0.1 };
+const MAXDEPTH_STEPPER = { step: { mm: 0.5, in: 0.5 }, min: 0.5 };
 
 export function mountVcarveView(state) {
   const els = {
@@ -152,8 +157,16 @@ export function mountVcarveView(state) {
 
   els.region.addEventListener('change', () => { try { state.saveState && state.saveState('vcarve region'); } catch (_) {} rec().region = els.region.value || null; recompute(); });
   els.vbit.addEventListener('change', () => { rec().vbit = { angle: Number(els.vbit.value) || 90 }; recompute(); });
-  els.dstep.addEventListener('change', () => { rec().dStep = numFrom(els.dstep.value, 0.5); els.dstep.value = rec().dStep + ' mm'; recompute(); });
-  els.maxdepth.addEventListener('change', () => { rec().maxDepth = numFrom(els.maxdepth.value, 6); els.maxdepth.value = rec().maxDepth + ' mm'; recompute(); });
+  // typed and stepped values take the same path: one record write, the field text, the recompute
+  const setDStep = (n) => { rec().dStep = n; els.dstep.value = rec().dStep + ' mm'; recompute(); };
+  const setMaxDepth = (n) => { rec().maxDepth = n; els.maxdepth.value = rec().maxDepth + ' mm'; recompute(); };
+  els.dstep.addEventListener('change', () => setDStep(numFrom(els.dstep.value, 0.5)));
+  els.maxdepth.addEventListener('change', () => setMaxDepth(numFrom(els.maxdepth.value, 6)));
+  const mmUnits = { unit: () => 'mm', toDoc: (mm) => mm };
+  const steppers = [
+    attachStepper(els.dstep, DSTEP_STEPPER, { ...mmUnits, read: () => peek().dStep, commit: setDStep }),
+    attachStepper(els.maxdepth, MAXDEPTH_STEPPER, { ...mmUnits, read: () => peek().maxDepth, commit: setMaxDepth }),
+  ];
   els.recompute.addEventListener('click', recompute);
 
   function refresh() { populateRegions(); syncControls(); recompute(); }
@@ -169,6 +182,7 @@ export function mountVcarveView(state) {
       else { vcarveViewState.view = null; recompute(); }
     },
     destroy() {
+      for (const st of steppers) st.destroy();
       els.canvas.removeEventListener('pointerdown', onCanvasDown);
       els.canvas.removeEventListener('pointerup', onCanvasUp);
       if (panZoomCleanup && typeof panZoomCleanup.destroy === 'function') panZoomCleanup.destroy();

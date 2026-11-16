@@ -317,6 +317,13 @@ export class NewtonSolver {
   _assemble(x, opts = {}) {
     const withJ = opts.jacobian !== false;
     const n = x.length;
+    // TASK 702: a row's shapes by id from ONE index per assembly (each was a scan of every shape, per row: an assembly grew with rows x shapes).
+    // The first shape with that id in the scene's order (the real shapes, then the axes), the one find() returned.
+    let shapeIndex = null;
+    const shapeOf = (id) => {
+      if (!shapeIndex) { shapeIndex = new Map(); for (const s of this.shapes) if (s && !shapeIndex.has(s.id)) shapeIndex.set(s.id, s); }
+      return shapeIndex.get(id);
+    };
 
     // First pass: compute number of scalar constraint rows (use def.rows when available)
     let m = 0;
@@ -341,7 +348,7 @@ export class NewtonSolver {
         else if (c.shapes && c.shapes.length > 0) {
           let cnt = 0;
           for (const sid of c.shapes) {
-            const s = this.shapes.find(ss => ss.id === sid);
+            const s = shapeOf(sid);
             if (s && s.joints) cnt += s.joints.length;
           }
           rowsPerConstraint[i] = Math.max(1, cnt - 2);
@@ -358,7 +365,7 @@ export class NewtonSolver {
     // The sparse rows of J: row i's entries are cols/vals[rowPtr[i] .. rowPtr[i + 1]). A row past m is dropped, a row never written is empty
     // (a zero row), as the dense m x n matrix did.
     const rowPtr = new Int32Array(m + 1);
-    let cap = Math.max(16, m * 8), nnz = 0;
+    let cap = withJ ? Math.max(16, m * 8) : 0, nnz = 0; // TASK 702: a residuals-only assembly writes no entry (no buffers)
     let cols = new Int32Array(cap), vals = new Float64Array(cap);
     const push = (c, v) => {
       if (nnz === cap) { cap *= 2; const c2 = new Int32Array(cap); c2.set(cols); cols = c2; const v2 = new Float64Array(cap); v2.set(vals); vals = v2; }
@@ -526,7 +533,7 @@ export class NewtonSolver {
         const used = [], ats = [];
         const J = (id) => { const i = jointIndexMap.get(id); used.push(i); return i; };
         const R = (sid) => {
-          const sh = this.shapes.find(s => s && s.id === sid), op = this._radiusOperand(sh, jointIndexMap);
+          const sh = shapeOf(sid), op = this._radiusOperand(sh, jointIndexMap);
           const centre = sh && sh.joints && sh.joints.length ? J(sh.joints[0]) : undefined;
           if (typeof op.rim === 'number') used.push(op.rim);
           if (typeof op.at === 'number') ats.push(op.at);
@@ -552,7 +559,7 @@ export class NewtonSolver {
         const used = [], ats = [];
         const J = (id) => { const i = jointIndexMap.get(id); used.push(i); return i; };
         const R = (sid) => {
-          const sh = this.shapes.find(s => s && s.id === sid), op = this._radiusOperand(sh, jointIndexMap);
+          const sh = shapeOf(sid), op = this._radiusOperand(sh, jointIndexMap);
           const centre = sh && sh.joints && sh.joints.length ? J(sh.joints[0]) : undefined;
           if (typeof op.rim === 'number') used.push(op.rim);
           if (typeof op.at === 'number') ats.push(op.at);
@@ -578,7 +585,7 @@ export class NewtonSolver {
       // Synthesize `params.joints` for common shape-backed constraints (pointOnLine, collinear, parallel, perpendicular).
       if ((!params.joints || params.joints.length === 0)) {
         if (c.type === 'pointOnLine' && c.joint && c.shape) {
-          const shape = this.shapes.find(s => s.id === c.shape);
+          const shape = shapeOf(c.shape);
           if (shape && shape.type === 'line' && shape.joints && shape.joints.length >= 2) {
             params.joints = [ jointIndexMap.get(c.joint), jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1]) ];
           }
@@ -597,8 +604,8 @@ export class NewtonSolver {
           let lineId = c.line;
           let circleId = c.circle;
           if ((!lineId || !circleId) && c.shapes && c.shapes.length === 2) {
-            const sA = this.shapes.find(s => s && s.id === c.shapes[0]);
-            const sB = this.shapes.find(s => s && s.id === c.shapes[1]);
+            const sA = shapeOf(c.shapes[0]);
+            const sB = shapeOf(c.shapes[1]);
             if (sA && sB) {
               if ((sA.type === 'circle' || sA.type === 'arc') && (sB.type === 'circle' || sB.type === 'arc')) {
                 const cA = sA.joints && sA.joints.length > 0 ? sA.joints[0] : null;
@@ -626,8 +633,8 @@ export class NewtonSolver {
           // Tangent line+circle (created by the UI tool with {line, circle} fields or mapped from shapes).
           // Synthesize joints = [center, A, B] and pass radius via params.radius.
           if (lineId && circleId) {
-            const lineShape = this.shapes.find(s => s && s.id === lineId);
-            const circShape = this.shapes.find(s => s && s.id === circleId);
+            const lineShape = shapeOf(lineId);
+            const circShape = shapeOf(circleId);
             if (lineShape && lineShape.type === 'line' && lineShape.joints && lineShape.joints.length >= 2 &&
                 circShape && (circShape.type === 'circle' || circShape.type === 'arc') && circShape.joints && circShape.joints.length >= 1) {
               const cIdx = jointIndexMap.get(circShape.joints[0]);
@@ -649,7 +656,7 @@ export class NewtonSolver {
         }
         // Distance "radius" — {shape, isRadius, value}: a circle's radius unknown (radiusAt), an arc's center→rim distance.
         else if (c.type === 'distance' && c.isRadius && c.shape) {
-          const shape = this.shapes.find(s => s.id === c.shape);
+          const shape = shapeOf(c.shape);
           if (this._radiusAt(shape) !== undefined) params.radiusAt = this._radiusAt(shape);
           else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
             params.joints = [jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1])];
@@ -663,8 +670,8 @@ export class NewtonSolver {
         // from P to line AB is computed by point_on_line; the distance residual
         // is that minus the target. Handled below in computeError dispatch.
         else if (c.type === 'distance' && c.shapes && c.shapes.length === 2) {
-          const s1 = this.shapes.find(s => s.id === c.shapes[0]);
-          const s2 = this.shapes.find(s => s.id === c.shapes[1]);
+          const s1 = shapeOf(c.shapes[0]);
+          const s2 = shapeOf(c.shapes[1]);
           if (s1 && s2 && s1.type === 'line' && s2.type === 'line' &&
               s1.joints && s1.joints.length >= 2 && s2.joints && s2.joints.length >= 1) {
             const aIdx = jointIndexMap.get(s1.joints[0]);
@@ -678,14 +685,14 @@ export class NewtonSolver {
         }
         // Equal with a CIRCLE operand: one size term per shape, a circle's radius unknown or the length of a line / an arc's
         // centre-rim pair (its first two joints), so equal(circle, circle) is r1 - r2 and equal(circle, arc) r - |rim - centre|.
-        else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => this._radiusAt(this.shapes.find(x => x && x.id === sid)) !== undefined)) {
-          const terms = c.shapes.map(sid => this._sizeTerm(this.shapes.find(x => x && x.id === sid), jointIndexMap));
+        else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => this._radiusAt(shapeOf(sid)) !== undefined)) {
+          const terms = c.shapes.map(sid => this._sizeTerm(shapeOf(sid), jointIndexMap));
           if (terms.every(Boolean)) params.terms = terms;
         }
         else if ((c.type === 'collinear' || c.type === 'parallel' || c.type === 'perpendicular' || c.type === 'equal' || c.type === 'angle') && c.shapes && c.shapes.length > 0) {
           const jointList = [];
           for (const sid of c.shapes) {
-            const s = this.shapes.find(x => x.id === sid);
+            const s = shapeOf(sid);
             if (!s || !s.joints) continue;
             if (s.joints.length >= 2) { jointList.push(s.joints[0], s.joints[1]); }
             else if (s.joints.length === 1) { jointList.push(s.joints[0]); }
@@ -743,57 +750,90 @@ export class NewtonSolver {
     return rows;
   }
 
-  // True if ANY candidate row has a component OUTSIDE the span of the basis rows — i.e. adding it
-  // RAISES the constraint rank. Modified Gram-Schmidt with a scale-robust relative tolerance.
+  // The rank basis of the NON-DRIVEN rows, modified Gram-Schmidt with a scale-robust relative tolerance, and the test of a candidate
+  // against it (rankRowRedundant).
   // Sparse (task 541), the same arithmetic as the dense sweep: a basis vector keeps its support (its non-zero columns, ascending) and a dot
   // or an update runs over that support only (the skipped terms are products with a zero); a basis vector whose support does not meet
   // the row's current support is skipped (its dot is exactly 0: no change), the candidates found per column (colTo).
-  _rowsRaiseRank(basisRows, candRows, n) {
-    const ABS = 1e-9, REL = 1e-6;
-    const basis = [];                                  // { v, idx }: the unit vector and its support, ascending
-    const colTo = Array.from({ length: n }, () => []); // column -> the basis vectors whose support holds it
-    const inSup = new Uint8Array(n);
+  // TASK 702: the basis is KEPT on the solver between probes (_rankMemo). Gram-Schmidt builds it one row at a time and a basis vector, once
+  // made, never changes, so the basis after the first k rows is a function of those k rows alone: a probe whose leading rows are, value for
+  // value, the rows the kept basis was built from resumes after them (the basis cut back to what those rows made) instead of building it
+  // again. The same arithmetic on the same numbers, so the same basis and the same answer; a probe whose rows differ from the first one on
+  // rebuilds from there. A row is the same when its entries are (column and value): unknowns added since (a new joint) are zero columns in
+  // it and in the basis vectors it made, which the sweep never reads. (A template's build probes a sketch hundreds of rows deep that its
+  // last step grew by one row: the full sweep per probe made the build cubic in its size.)
+  // the row with every basis vector's component removed, in basis order; returns { v, sup (ascending), n0 }; skip: n0 below which it stops
+  _rankReduce(M, row, skip, inSup) {
+    const { basis, colTo } = M, n = row.length;
     const normOf = (v, sup) => { let s = 0; for (let p = 0; p < sup.length; ++p) s += v[sup[p]] * v[sup[p]]; return Math.sqrt(s); };
-    // the row with every basis vector's component removed, in basis order; returns { v, sup (ascending), n0 }; skip: n0 below which it stops
-    const reduce = (row, skip) => {
-      const v = Float64Array.from(row);
-      const sup = [];
-      for (let i = 0; i < n; ++i) if (v[i] !== 0) { sup.push(i); inSup[i] = 1; }
-      const n0 = normOf(v, sup);
-      if (n0 >= skip) {
-        const cand = new Uint8Array(basis.length);
-        for (const i of sup) for (const b of colTo[i]) cand[b] = 1;
-        for (let bi = 0; bi < basis.length; ++bi) {
-          if (!cand[bi]) continue;
-          const { v: bv, idx } = basis[bi];
-          let d = 0; for (let p = 0; p < idx.length; ++p) d += v[idx[p]] * bv[idx[p]];
-          for (let p = 0; p < idx.length; ++p) {
-            const i = idx[p];
-            v[i] -= d * bv[i];
-            if (!inSup[i] && v[i] !== 0) { inSup[i] = 1; sup.push(i); for (const b of colTo[i]) if (b > bi) cand[b] = 1; }
-          }
+    const v = Float64Array.from(row);
+    const sup = [];
+    for (let i = 0; i < n; ++i) if (v[i] !== 0) { sup.push(i); inSup[i] = 1; }
+    const n0 = normOf(v, sup);
+    if (n0 >= skip) {
+      const cand = new Uint8Array(basis.length);
+      for (const i of sup) for (const b of colTo[i]) cand[b] = 1;
+      for (let bi = 0; bi < basis.length; ++bi) {
+        if (!cand[bi]) continue;
+        const { v: bv, idx } = basis[bi];
+        let d = 0; for (let p = 0; p < idx.length; ++p) d += v[idx[p]] * bv[idx[p]];
+        for (let p = 0; p < idx.length; ++p) {
+          const i = idx[p];
+          v[i] -= d * bv[i];
+          if (!inSup[i] && v[i] !== 0) { inSup[i] = 1; sup.push(i); for (const b of colTo[i]) if (b > bi) cand[b] = 1; }
         }
-        sup.sort((a, b) => a - b);
       }
-      for (const i of sup) inSup[i] = 0;
-      return { v, sup, n0 };
+      sup.sort((a, b) => a - b);
+    }
+    for (const i of sup) inSup[i] = 0;
+    return { v, sup, n0, nrm: normOf(v, sup) };
+  }
+
+  // THE basis of the sparse rows S (m rows, n unknowns), resumed from the kept one where its leading rows are the same (see above).
+  _rankBasis(S, m, n) {
+    const ABS = 1e-9, REL = 1e-6;
+    const M = this._rankMemo || (this._rankMemo = { rows: [], after: [], basis: [], colTo: [] });
+    while (M.colTo.length < n) M.colTo.push([]);
+    const same = (k) => {
+      const kept = M.rows[k], a = S.rowPtr[k], len = S.rowPtr[k + 1] - a;
+      if (kept.cols.length !== len) return false;
+      for (let p = 0; p < len; ++p) if (kept.cols[p] !== S.cols[a + p] || !Object.is(kept.vals[p], S.vals[a + p])) return false;
+      return true;
     };
-    for (const row of basisRows) {
-      const { v, sup, n0 } = reduce(row, -Infinity);
-      const nrm = normOf(v, sup);
+    let k = 0;
+    while (k < m && k < M.rows.length && same(k)) ++k;
+    if (k < M.rows.length) { // cut the basis back to what the first k rows made
+      const keep = k ? M.after[k - 1] : 0;
+      M.rows.length = k; M.after.length = k; M.basis.length = keep;
+      for (const list of M.colTo) while (list.length && list[list.length - 1] >= keep) list.pop();
+    }
+    const inSup = new Uint8Array(n);
+    for (let i = k; i < m; ++i) {
+      const a = S.rowPtr[i], b = S.rowPtr[i + 1];
+      const row = new Float64Array(n); for (let p = a; p < b; ++p) row[S.cols[p]] = S.vals[p]; // _rowsOf's row
+      const { v, sup, n0, nrm } = this._rankReduce(M, row, -Infinity, inSup);
       // Relative like the candidate test below: a row that is dependent up to solve-tolerance noise must NOT count as a
       // new basis direction, or the basis spans all of R^n and every candidate looks redundant.
       if (nrm > ABS && nrm > REL * n0) {
-        for (const i of sup) v[i] /= nrm;
-        const id = basis.length;
-        basis.push({ v, idx: Int32Array.from(sup) });
-        for (const i of sup) colTo[i].push(id);
+        for (const q of sup) v[q] /= nrm;
+        const id = M.basis.length;
+        M.basis.push({ v, idx: Int32Array.from(sup) });
+        for (const q of sup) M.colTo[q].push(id);
       }
+      M.rows.push({ cols: S.cols.slice(a, b), vals: S.vals.slice(a, b) });
+      M.after.push(M.basis.length);
     }
+    return M;
+  }
+
+  // True if ANY candidate row has a component OUTSIDE the span of the basis M — i.e. adding it RAISES the constraint rank.
+  _rowsRaiseRank(M, candRows, n) {
+    const ABS = 1e-9, REL = 1e-6;
+    const inSup = new Uint8Array(n);
     for (const row of candRows) {
-      const { v, sup, n0 } = reduce(row, ABS);
+      const { n0, nrm } = this._rankReduce(M, row, ABS, inSup);
       if (n0 < ABS) continue; // a zero row carries no information
-      if (normOf(v, sup) > REL * n0) return true; // an independent component remains
+      if (nrm > REL * n0) return true; // an independent component remains
     }
     return false;
   }
@@ -812,12 +852,12 @@ export class NewtonSolver {
     let redundant;
     try {
       this.constraints = basisCons;
-      const basisRows = this._rowsOf(this._assemble(x0));
+      const { S, m } = this._assemble(x0);
       // the candidate's own rows: a row depends on its constraint alone (no spring here, so wStruct = 1), so they are the rows it would
       // add at the end of the basis assembly, without assembling the basis twice
       this.constraints = [candidate];
       const candRows = this._rowsOf(this._assemble(x0));
-      redundant = candRows.length > 0 && !this._rowsRaiseRank(basisRows, candRows, n);
+      redundant = candRows.length > 0 && !this._rowsRaiseRank(this._rankBasis(S, m, n), candRows, n);
     } finally {
       this.constraints = allC;
     }
@@ -839,7 +879,8 @@ export class NewtonSolver {
   //
   // Returns { x, converged, residual }. converged=true means we already hit
   // tolerance; the caller can skip LM in that case.
-  _preRelax(x0) {
+  // first: the full assembly at x0 when the caller has it (its first step reads it instead of assembling x0 again).
+  _preRelax(x0, first = null) {
     const maxIters = this.config.prepassIters | 0;
     if (maxIters <= 0) return { x: x0, converged: false, residual: Infinity };
 
@@ -850,7 +891,7 @@ export class NewtonSolver {
     let residual = Infinity;
 
     for (let k = 0; k < maxIters; ++k) {
-      const { S, r, m } = this._assemble(x);
+      const { S, r, m } = k === 0 && first ? first : this._assemble(x);
       if (m === 0) return { x, converged: true, residual: 0 };
 
       cost = 0; for (let i = 0; i < m; ++i) cost += r[i] * r[i]; cost *= 0.5;
@@ -950,14 +991,21 @@ export class NewtonSolver {
     if (dragOpt) cleanup = this.interaction.attachMouseSpring(dragOpt);
     const hasSpring = this._hasMouseSpring();
 
+    // TASK 702: ONE full assembly per point. An assembly is a function of the point alone (nothing else changes inside a solve), and the solve
+    // assembled the same point again: the residual check and the first LM step at the start point, the LM step after a rejected trial, the
+    // polish at the point the LM loop converged on. `full` = the last full assembly and the point it was made at (a point is never written
+    // in place: every new point is a new array, so the same array is the same point).
+    let full = null;
+    const assembled = (at) => (full && full.x === at ? full.asm : (full = { x: at, asm: this._assemble(at) }).asm);
+
     // Relaxation pre-pass: only worthwhile when starting far from the solution.
-    // Cheap cost-of-entry: one assemble to measure initial residual.
+    // Cost of entry: the start point's assembly, which the pre-pass or the first LM step then reads.
     if (this.config.prepassEnabled) {
-      const { r: rInit } = this._assemble(x, { jacobian: false });
+      const { r: rInit } = assembled(x);
       let r0 = 0; for (let i = 0; i < rInit.length; ++i) r0 += rInit[i] * rInit[i];
       const residual0 = Math.sqrt(r0);
       if (residual0 > this.config.prepassResidualSkip) {
-        const pre = this._preRelax(x);
+        const pre = this._preRelax(x, full.asm);
         x = pre.x;
         if (pre.converged) {
           if (!this._scalarsValid(x)) {
@@ -978,7 +1026,7 @@ export class NewtonSolver {
     }
 
     for (let k = 0; k < iter; ++k) {
-      const { S, r, m, n } = this._assemble(x);
+      const { S, r, m, n } = assembled(x);
       // cost = 0.5 * r^T r
       let cost = 0.0; for (let i = 0; i < m; ++i) cost += r[i] * r[i]; cost *= 0.5;
 
@@ -1035,7 +1083,7 @@ export class NewtonSolver {
     // accuracy. The undamped Cholesky here doubles as a rank-deficiency probe:
     // success ⟺ JᵀJ is positive-definite ⟺ rank(J) = n ⟺ well-constrained.
     try {
-      const { S, r, m, n } = this._assemble(x);
+      const { S, r, m, n } = assembled(x);
       const A = Algebra.gram(S, m, n);
       const g = new Float64Array(n); Algebra.atx(S, m, n, r, g);
       for (let i = 0; i < n; ++i) g[i] = -g[i];
@@ -1178,6 +1226,10 @@ export class NewtonSolver {
       const TOL = 1e-7;
       const pivotCol = [];
       const isPivot = new Uint8Array(n);
+      // TASK 702: a row is updated on the pivot row's NON-ZERO columns only (from c on): on a zero column the update subtracts a zero product,
+      // which leaves every value as it was (a zero can only change sign, and a zero's sign reaches no result: N's zeros add nothing in
+      // reachableDirections). A non-finite factor keeps the full sweep (there f * 0 is NaN, as before).
+      const sup = new Int32Array(n);
       let r = 0;
       for (let c = 0; c < n && r < R.length; ++c) {
         let best = r, bv = Math.abs(R[r][c]);
@@ -1186,11 +1238,13 @@ export class NewtonSolver {
         const tmp = R[r]; R[r] = R[best]; R[best] = tmp;
         const pr = R[r], pv = pr[c];
         for (let j = c; j < n; ++j) pr[j] /= pv;
+        let ns = 0; for (let j = c; j < n; ++j) if (pr[j] !== 0) sup[ns++] = j;
         for (let i = 0; i < R.length; ++i) {
           if (i === r) continue;
           const row = R[i], f = row[c];
           if (f === 0) continue;
-          for (let j = c; j < n; ++j) row[j] -= f * pr[j];
+          if (Number.isFinite(f)) for (let p = 0; p < ns; ++p) { const j = sup[p]; row[j] -= f * pr[j]; }
+          else for (let j = c; j < n; ++j) row[j] -= f * pr[j];
           row[c] = 0;
         }
         pivotCol.push(c); isPivot[c] = 1; ++r;

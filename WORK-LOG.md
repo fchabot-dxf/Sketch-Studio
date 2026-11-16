@@ -15695,6 +15695,37 @@ The engine and every shared package stay ONE copy in the repo; a site is BUILT f
 - Evidence (.evidence/690, local): mouse-/touch-1-box-5-below, -2-box-minus5-above, -3-made-above, -4-dimension-minus3-below (label -3.0),
   -5-parameter-minus2-below, -6-parameters-window.
 
+## TURN 702
+The Curved bench seat template at 40 slats built in ~2.5 s. Claude Opus subagent, worktree bench-perf-702, branch agents/bench-perf-702, from main face604.
+- PROFILE (node, main face604, .evidence/702/instrument-main.txt, entry-totals.txt): one 40-slat build = 838 engine solves (961 ms), 159 rank
+  probes (1101 ms), 38 nullspaces (226 ms); the rest is the tool layer around them. The probes were the cubic term: each rebuilt the
+  Gram-Schmidt basis of all ~800 non-driven rows (320 unknowns) from scratch, although the previous probe's rows were the same plus one.
+  Every assembly found each row's shapes by a scan of all shapes (rows x shapes); a converged solve assembled its start point three times.
+  Growth (median of 3, ms): main 10 / 20 / 40 slats = 102 / 362 / 2520; the cost is in the solver core (packages/core/solver/engine.js).
+- FIX, all in packages/core/solver/engine.js, each the SAME arithmetic on the same numbers (no solve or probe skipped: the counts 838 / 159 / 38
+  are unchanged, entry-totals.txt):
+  (1) the rank probe keeps its basis on the solver (_rankMemo) and resumes after the leading rows that are, column and value, the rows it was
+  built from (a basis vector never changes once made, so the basis after k rows depends on those k rows only); a differing row cuts it back
+  there; more unknowns are zero columns the sweep never reads. (2) _assemble: a row's shapes from one id index per assembly (the first shape
+  with the id, as find returned); a residuals-only assembly allocates no Jacobian buffers. (3) solve: one full assembly per point (the residual
+  check, the first LM step or the pre-pass's first step, an LM step after a rejected trial, the polish read it). (4) _nullspace: a row update
+  runs over the pivot row's non-zero columns (a zero column only changes a zero's sign, which reaches no result; a non-finite factor keeps
+  the full sweep).
+- RESULT: 40 slats 2520 -> 800 ms in node (median of 3; perf-branch.txt: 10 / 20 / 40 = 67 / 178 / 800 ms, min 767 at 40); in the live start view (SketchStudio,
+  headless Edge, live-startview-*.txt) the in-page build 2117 -> 552 ms and "40" typed -> new preview 2292 -> 712 ms past the 200 ms settle.
+  NOT the wanted < 0.5 s: what is left is the 838 solves + probes themselves, each O(sketch) per tool operation (0.36 s of solves, the tool
+  layer's per-op checks); see the report.
+- IDENTICAL: every template at its defaults and the bench seat at every count 2..40 (62 documents), built with Date.now pinned, deep-equal to
+  main's and the files byte-identical (deep-equal.txt: "documents: 62, deep-equal: 62, different: 0", md5 db46517e020c2da351a155f21de6a70b both).
+- Tests: NEW tests/bench-perf-702.test.js (`// gate: exclusive`, 225 checks: 40 slats under 1500 ms; the kept basis answers every dimension of a
+  20-slat seat exactly as a fresh solver, again with the whole basis reused, a determined chord, after a joint moved, after a free line added
+  (more columns), after a gap made a reference). Fail-first on main: "40 slats builds in 2676 ms, under 1500 ms" (failfirst-main.txt).
+- Gate: gate:quick 419/419 (9 exclusive DEFERRED by the merge lock; run directly, all exit 0: bench-perf-702, constraint-audit, coverage-matrix,
+  coverage-properties, extreme-arcs, parameters-batch, profile-fill, relief-model, solver-perf-guard). Live, directly: templates-live,
+  templates-674-live, fav-templates-692-live, templates-672-live, template-start-670-live, drag-follow-live, arc-rim-drag-live,
+  live-dimension-race: all exit 0.
+- BEHAVIOUR CHANGES for existing users: none in results (every number the same); every solve / rank probe / DOF query is cheaper on a large
+  sketch; the engine keeps the rank basis between probes (memory up to 8 x unknowns^2 bytes, ~0.8 MB at 320 unknowns).
 ## TURN 697
 Live value boxes (Line / Rectangle / Circle / Arc / Polygon ...) now stay INSIDE the canvas svg's rect. `placeLiveBox` (packages/ui/numeric-input-manager.js) clamped to the WINDOW (innerWidth/innerHeight - 8): near the bottom edge a box sat over the footer bar. Now ONE rule: clamp to the canvas svg rect (the bounds placeAnchoredBox uses); the window clamp is replaced. A canvas smaller than the box pins it to the canvas's left/top edge. 602's touch dock and 597's no-horizontal-overflow hold.
 Second cause found while measuring: the shared single box (circle / arc / slot radius, SketchStudio's existing #dimInput) lives in a positioned container, but placeLiveBox wrote viewport coordinates into left/top, so in SketchStudio it sat offset by the container origin (circle box at y=932 in an 800 px window; touch dock 137 px too low). left/top are now written relative to the box's offsetParent (position:fixed boxes: viewport).
@@ -15728,3 +15759,15 @@ Toasts never cover an open floating window (the Parameters window first). Claude
 ## TURN 704
 Site names (owner turns 1857-1862): Shaper moves to https://shaper-svg.pages.dev (new direct-upload project `shaper-svg`); Pen Plotter takes over the owner's older `penplotter` project (https://penplotter.pages.dev, its old Git-built app replaced by an upload, owner choice "Replace the old app"); Trace keeps https://sketch-trace.pages.dev. Changed: scripts/build-site.cjs SITE_HOST (sketch-studio's /shaper and /apps/<app>/* redirects follow), tests/site-closure.test.js expected hosts, README "Websites" table, providers.js origins comment.
 Evidence: `node tests/site-closure.test.js` -> "site-closure: 4 sites, every reference inside its own site, no other app; the broken copy is caught". Deployed by the advisor: https://020676c6.penplotter.pages.dev, https://443f8239.shaper-svg.pages.dev; `curl https://shaper-svg.pages.dev/?host=fusion` -> 302 https://shaper-svg.pages.dev/apps/shaper/?host=fusion; penplotter.pages.dev/ -> 302 /apps/penplotter/, /apps/penplotter/ -> 200.
+
+## TURN 702 (send-back: the merge gate went red on the test's 1500 ms wall ceiling under load)
+- tests/bench-perf-702.test.js counts the WORK of one 40-slat build instead of timing it (test only, engine unchanged): the rows the rank probes'
+  Gram-Schmidt reduces (_rankReduce calls) and the assemblies (_assemble calls), through the test's own wrappers of NewtonSolver.prototype,
+  restored after the build. main face604 (.evidence/702/count-main.txt, the same counter with main's _rowsRaiseRank row lists):
+  {"gsRows":78207,"full":2032,"ronly":843} = 78207 rows, 2875 assemblies; this branch (count-branch.txt): 1943 rows, 1194 + 5 = 1199
+  assemblies. Bounds: at most 4000 rows, 1600 assemblies. The wall time is printed only; `// gate: exclusive` removed (no timing assertion).
+  On main the test fails at once: "the rank probe reduces one row at a time (_rankReduce)" (failfirst-main-counts.txt).
+- Load proxy: 5 runs in a row while `npm run gate:quick` ran in the same worktree: all exit 0, "1943 Gram-Schmidt rows, 1199 assemblies" each,
+  wall 1469 / 1651 / 1592 / 1824 / 2144 ms (load-run-1..5.txt; the old 1500 ms ceiling would have failed 4 of 5); that gate: "GATE tier=quick
+  jobs=quick=22 files=421 pass=421 fail=0 deferred=8".
+- Gate after merging origin/main a696a38: gate:quick 421/421 (8 exclusive DEFERRED by the lock, bench-perf-702 no longer among them).

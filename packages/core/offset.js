@@ -309,12 +309,15 @@ export function offsetArcSpan(p) {
 
 // ---------------------------------------------------------------------------------------------------------- apply
 /**
- * Offset `chain` by d on `side`: the new shapes, their joints and constraints in `state` (the active sketch), ONE offset constraint (the driving
- * distance dimension). -> { ok: true, shapes: [ids], joints: [ids], constraint } or { ok: false, reason } (nothing changes).
+ * Offset `chain` by the SIGNED distance d on `side` (task 710): the new shapes, their joints and constraints in `state` (the active sketch), ONE
+ * offset constraint (the driving distance dimension) holding d AS TYPED. A negative d puts the curves on the other side (offsetSideAndDistance), and
+ * the stored per-piece sides stay the ones of `side` (sides[k] * value = the geometry: exactly what editing the dimension to d gives later).
+ * -> { ok: true, shapes: [ids], joints: [ids], constraint } or { ok: false, reason } (nothing changes).
  */
 export function applyOffset(state, chain, d, side) {
   if (chain.pieces.some((p) => { const s = state.shapes.find((x) => x.id === p.id); return !s || !inActiveSketch(state, s); })) return { ok: false, reason: 'Offset works in the active sketch only' };
-  const g = offsetChainGeometry(state, chain, d, side);
+  const o = offsetSideAndDistance(side, d), flip = d < 0 ? -1 : 1;
+  const g = offsetChainGeometry(state, chain, o.d, o.side);
   if (!g.ok) return g;
   const frames = chain.pieces.map((p) => pieceFrame(state, p));
   const out = { ok: true, shapes: [], joints: [], constraint: null };
@@ -327,17 +330,17 @@ export function applyOffset(state, chain, d, side) {
     if (p.kind === 'line') {
       shape = { id: newShapeId('s'), type: 'line', joints: [vj[k], vj[(k + 1) % vj.length]] };
       const A = state.joints.get(f.src.joints[0]), B = state.joints.get(f.src.joints[1]), m = { x: (p.a.x + p.b.x) / 2, y: (p.a.y + p.b.y) / 2 };
-      sides.push(((m.x - A.x) * (B.y - A.y) - (m.y - A.y) * (B.x - A.x)) < 0 ? -1 : 1);
+      sides.push(flip * (((m.x - A.x) * (B.y - A.y) - (m.y - A.y) * (B.x - A.x)) < 0 ? -1 : 1));
     } else if (p.kind === 'circle') {
       shape = { id: newShapeId('s'), type: 'circle', joints: [joint(p.c)], radius: p.r };
-      sides.push(p.r < f.R ? -1 : 1);
+      sides.push(flip * (p.r < f.R ? -1 : 1));
     } else {
       const made = makeArc(null, joint(p.c), vj[k], vj[(k + 1) % vj.length], 'CENTER', construction);
       shape = made.shapes[0];
       shape.sweep = p.dir > 0; // the chain direction (start -> end)
       state.shapes.push(shape); // the shapes.push wrap stamps the ACTIVE sketch
       state.constraints.push(...made.constraints); // makeArc's structural equal, in its stored form
-      sides.push(p.r < f.R ? -1 : 1);
+      sides.push(flip * (p.r < f.R ? -1 : 1));
     }
     if (construction) shape.isConstruction = true;
     if (p.kind !== 'arc') state.shapes.push(shape);

@@ -183,9 +183,21 @@ try {
   await waitFor(`/Replaced with Body1: 1 regions/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
   await setPlan('stepped-outside');
+  // the card remembers the last Adaptive / Resolution from the R3 steps above (the 17 terraces of the first run): set the record to Step depth 1 mm, Adaptive off
+  console.log('x2 card as inherited: ' + JSON.stringify(await evalJs(`({ adaptive: document.querySelector('.cut-adaptive').checked, step: document.querySelector('.cut-step-depth').value })`)));
+  if (await evalJs(`document.querySelector('.cut-adaptive').checked`)) await clickEl('.cut-adaptive');
+  await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '1'; i.dispatchEvent(new Event('change')); })()`);
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-outside' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'x2: Step depth 1 mm, Adaptive off');
   const out = await zoomShot('desktop-2d-x2-stepped-outside-corner.png', 5, { x: 0, y: -80 });
   checkDownload(await dl(), 'x2 stepped outside');
-  assert.ok(out.look.every((f) => f === 'outside #000000/-'), 'stepped outside keeps the file\'s colours: ' + out.look);
+  assert.strictEqual(out.n, 2, 'x2: 2 terraces at step 1 mm');
+  if (!BEFORE) {
+    const ol = (await pocketLooks()).filter((i) => i.type === 'outside');
+    console.log('x2 outside terraces: ' + JSON.stringify(ol));
+    assert.ok(ol.every((i) => i.stroke === '#9a9a9a' && /hsl/.test(i.fill)), 'stepped outside: a light outline and a dark grey fill');
+    const Ls = ol.sort((a, b) => a.depth - b.depth).map((i) => lightness(i.fill));
+    assert.deepStrictEqual(Ls, [25, 0], 'shallowest 25% .. deepest black: ' + Ls);
+  }
 
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);

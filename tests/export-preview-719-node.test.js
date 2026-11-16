@@ -14,7 +14,7 @@ import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { parseShaperSvg, previewItems, pocketShades } from '../apps/shaper/src/export-preview.js';
+import { parseShaperSvg, previewItems, pocketShades, outsideStepShades } from '../apps/shaper/src/export-preview.js';
 
 
 let checks = 0;
@@ -66,6 +66,20 @@ try {
     // one depth only = the middle
     const one = pocketShades(items.filter((i) => i.step && i.step.k === 2));
     eq(L(one.shades.get('7.333 mm')), 50, 'a single pocket depth = the middle of the scale');
+  }
+  // a stepped OUTSIDE (x2 outline, Step depth 1 mm): download byte-identical; the terraces' shades run 25% (shallowest) .. 0% (deepest); a plain outside gets none
+  CUT_PLAN.clear();
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/x2-outline-chamfer-top-bottom.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  {
+    const [pk, rec] = [...CUT_PLAN.entries()][0];
+    CUT_PLAN.set(pk, { ...rec, cutType: 'stepped-outside', stepDepth: 1 });
+    const download = shaperSvgOf(app.state, cutPlanEntries());
+    eq(download, plainExport(app.state), 'x2 stepped outside: the downloaded file is byte-identical to the pre-719 exporter call');
+    ok(!/hsl\(|stroke="#9a9a9a"|data-/.test(download), 'x2: no preview styling in the file');
+    const items = previewItems(parseShaperSvg(shaperSvgOf(app.state, cutPlanEntries(), { preview: true }), app.document));
+    const o = outsideStepShades(items);
+    eq([...o.shades.entries()].map(([d, c]) => [d, L(c)]).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0])), [['1.000 mm', 25], ['19.000 mm', 0]], 'x2: terrace shades 25% .. 0%');
+    eq(outsideStepShades(items.map((i) => ({ ...i, step: null }))).shades.size, 0, 'a plain (non-stepped) outside gets no shade');
   }
 } finally {
   CUT_PLAN.clear();

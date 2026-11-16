@@ -15781,3 +15781,9 @@ Evidence: `node tests/site-closure.test.js` -> "site-closure: 4 sites, every ref
   wall 1469 / 1651 / 1592 / 1824 / 2144 ms (load-run-1..5.txt; the old 1500 ms ceiling would have failed 4 of 5); that gate: "GATE tier=quick
   jobs=quick=22 files=421 pass=421 fail=0 deferred=8".
 - Gate after merging origin/main a696a38: gate:quick 421/421 (8 exclusive DEFERRED by the lock, bench-perf-702 no longer among them).
+## TURN 699
+- Parameters table: the "fx" badge showed on EVERY dimension row (found by 694). Cause: `.sk-ptable .pt-fx { display: inline-block }` (a flex item, computed `block`) beats the `hidden` attribute set in `updateDimensionRow` (`refs.fx.hidden = !r.hasExpression`). Fix, ONE place (packages/ui/parameter-table.js): `.sk-ptable .pt-fx[hidden] { display: none; }`. fx marks a dimension row whose Expression is a formula (`hasExpression`); user-parameter rows and reference rows never had a badge.
+- Test: NEW tests/parameters-fx-badge-699-live.test.js (Shaper Design tab, the shared table; SketchStudio has no state handle to seed from): plain d1 + rectangular-pattern d2..d5 (694), then `d1 * 2` typed in d4; per row the badge's hidden / computed display / rect, mouse 1400 and touch 390. Fail-first on main: `mouse: d1 is a plain value: no fx badge shown ({"hidden":true,"display":"block","visible":true})`.
+- Behaviour change for existing users: the fx badge now disappears from rows whose value is not a formula. Nothing else.
+- Same pattern found, NOT fixed: apps/shaper/index.html `#prepare-panel .cut-card { display: flex }` has no `[hidden]` rule while apps/shaper/src/cut-panel.js (lines 39, 207, 210) toggles `card.hidden`. Other `.hidden =` toggles checked have a `[hidden]` guard (footer, sidebar backdrop, done button, pattern tool, project-manager, style-panel, template-picker, tool-ribbon, trace panes); `.sk-check-steps` (app-sidebar.js, `list.hidden`) sets no display on the ul itself.
+- Evidence (local): .evidence/699/.

@@ -241,6 +241,7 @@ function injectStyles() {
 .sk-ptable .pt-cellwrap { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .sk-ptable .pt-fx { flex: 0 0 auto; display: inline-block; font: italic 700 0.85em Georgia, serif; padding: 0 4px; margin-right: 2px; border-radius: 4px;
   background: var(--sk-info-head, rgba(127,127,127,0.2)); }
+.sk-ptable .pt-fx[hidden] { display: none; } /* TASK 699: the rule above sets display, which beats the [hidden] attribute */
 .sk-ptable .pt-ref { display: inline-block; font-size: 0.75em; padding: 0 4px; margin-left: 4px; border-radius: 4px; border: 1px solid currentColor; font-style: normal; }
 .sk-ptable .pt-empty { opacity: 0.6; font-style: italic; padding: 6px; }
 /* TASK 677: the editable cells: a quiet box until hovered / focused; a pending text is marked, an invalid one is red (aria-invalid) */

@@ -76,17 +76,17 @@ async function cdpRun(cdp, url) {
       ['console errors = 0', errors.length === 0, errors.slice(0, 5).join(' | ')],
       ['header tabs = design (Export is in the menu, TASK 602)', c.headerTabs === 'design', c.headerTabs],
       ['header has no extra Style/Debug buttons (TASK 619)', c.headerActions === 0, c.headerActions],
-      ['menu Style, Debug & Log items', c.hasStyle === true && c.hasDebug === true && c.hasLog === true, [c.hasStyle, c.hasDebug, c.hasLog]],
-      ['menu closes when Style opens', c.menuClosedOnStyle === true, c.menuClosedOnStyle],
+      ['menu Settings (TASK 726: was Style), Debug & Log items', c.hasStyle === true && c.hasDebug === true && c.hasLog === true, [c.hasStyle, c.hasDebug, c.hasLog]],
+      ['menu closes when Settings opens (TASK 726 rename)', c.menuClosedOnStyle === true, c.menuClosedOnStyle],
       ['ribbon groups = Select,Create,Modify,Inspect,Constrain', c.ribbonGroups === 'Select,Create,Modify,Inspect,Constrain', c.ribbonGroups], // TASK 647: Select is its own first section
       ['canvas visible (Design default)', c.canvasVisible === true, c.canvasVisible],
       ['Export tab shows the export view', c.exportShows === true, c.exportShows],
       ['Design hides under Export', c.designHidesOnExport === true, c.designHidesOnExport],
       ['Design tab returns', c.designBack === true, c.designBack],
-      ['Style opens the shared panel', c.styleOpens === true, c.styleOpens],
+      ['Settings opens the shared panel', c.styleOpens === true, c.styleOpens],
       // TASK 724: 25 + the Units tab's two display-precision selects (Length, Angle)
-      ['Style panel has 27 controls', c.styleControls === 27, c.styleControls],
-      ['Style panel closes (Esc)', c.styleCloses === true, c.styleCloses],
+      ['Settings panel has 27 controls', c.styleControls === 27, c.styleControls],
+      ['Settings panel closes (Esc)', c.styleCloses === true, c.styleCloses],
     ];
     let failed = 0;
     for (const [name, ok, detail] of checks) {

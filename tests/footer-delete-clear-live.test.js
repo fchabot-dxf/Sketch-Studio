@@ -1,7 +1,7 @@
 // tests/footer-delete-clear-live.test.js: TASK 619 (live headless, REAL mouse / touch):
 // Shared footer Delete (#btn-delete-selection) & Clear sketch (#btn-clear-sketch) across SketchStudio, Shaper, Pen Plotter, and Trace:
 // - Icons in shared sprite (#icon-circle-x red filled w/ white X; #icon-trash near-black outlined on light chrome / light on dark chrome), greyed when disabled
-// - Gap between Delete and Clear sketch; hidden on non-Design stages; 32x32 desktop, 56x44 phone coarse pointer
+// - Gap between Delete and Clear sketch; hidden on non-Design stages; 32x32 desktop, 44x44 phone coarse pointer (TASK 726: was 56x44, so seven footer buttons fit a 360 phone)
 // - Delete button matches Delete key exact code path and 1-undo behavior; Clear sketch shows "Clear sketch '<name>'? This can be undone." confirm, Cancel preserves, Confirm clears in 1 undo step
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -256,7 +256,7 @@ await (async () => {
       await tap(mid.mx, mid.my);
       await waitFor(`!document.getElementById('btn-delete-selection').disabled`, name + ' phone: select line');
       const s = await inspect();
-      assert(s.del.w >= 55 && s.del.h >= 43.5 && s.clr.w >= 55 && s.clr.h >= 43.5, name + ' phone: 56x44 buttons: ' + JSON.stringify([s.del, s.clr]));
+      assert(s.del.w >= 43.5 && s.del.h >= 43.5 && s.clr.w >= 43.5 && s.clr.h >= 43.5, name + ' phone: 44x44 buttons: ' + JSON.stringify([s.del, s.clr]));
       assert(s.clr.l - s.del.r >= 4, name + ' phone: gap preserved');
       assert.strictEqual(s.footerHasConstruct, false, name + ' phone: Construction is NOT in footer');
       {

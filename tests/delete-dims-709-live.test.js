@@ -139,6 +139,45 @@ await (async () => {
       await checkGone('C (line + Delete)');
       out('C: line + Delete -> L, d1, d2 gone; d3 stays');
       await undoAndCheck('C', h0);
+
+      // ---- D. O10 (owner ruling 1905, like Fusion): d3 reads d1 (`d1 - 10` typed in d3's Expression cell of the Parameters window); L deleted:
+      // d1 stays as a VALUE, a user parameter row "dimension deleted" (60.0), d3 still 50 with no error; one undo gives the real d1 back
+      const prow = (name) => `${W} tr.sk-ptable-row[data-name="${name}"]`;
+      const cellIn = (name, col) => `${prow(name)} input[data-col="${col}"]`;
+      await press('#btn-parameters');
+      await waitFor(`!!document.querySelector(${JSON.stringify(cellIn('d3', 'expression'))})`, `[${kind}] D: d3's Expression cell`);
+      await press(cellIn('d3', 'expression'));
+      await evalJs(`(() => { const i = document.querySelector(${JSON.stringify(cellIn('d3', 'expression'))}); i.focus(); i.select(); })()`);
+      for (const ch of 'd1 - 10') {
+        const [code, vk] = /[a-z]/i.test(ch) ? ['Key' + ch.toUpperCase(), ch.toUpperCase().charCodeAt(0)] : /\d/.test(ch) ? ['Digit' + ch, ch.charCodeAt(0)] : ch === '-' ? ['Minus', 189] : ['Space', 32];
+        await sendRealKey(send, ch, code, vk, 0, ch); await sleep(20);
+      }
+      await key('Enter', 'Enter', 13, 0, '\r'); await sleep(400);
+      assert.strictEqual(await evalJs(`${STATE}.constraints.find((c) => c.name === 'd3').expression`), 'd1 - 10 mm', `[${kind}] D: d3 = d1 - 10 mm (the stored form carries its unit)`);
+      await evalJs(`document.activeElement && document.activeElement.blur()`);
+      await press('#btn-parameters'); await sleep(200);
+      const hD = await hist();
+      await tap(await toScreen(45, 0));
+      if (kind === 'mouse') await del(); else await press('#btn-delete-selection');
+      await sleep(400);
+      assert.strictEqual(await hasL(), false, `[${kind}] D: L is deleted`);
+      assert.deepStrictEqual(await evalJs(`JSON.stringify(${STATE}.parameters)`).then(JSON.parse), [{ name: 'd1', unit: 'mm', expression: '60 mm', comment: 'dimension deleted', deletedDimension: true }], `[${kind}] D: d1 is kept as a value`);
+      const l3 = (await labels()).d3;
+      assert.ok(l3 && l3.includes('50.0'), `[${kind}] D: d3 still reads 50.0 on the canvas: ${l3}`);
+      await press('#btn-parameters');
+      await waitFor(`!!document.querySelector(${JSON.stringify(prow('d1'))})`, `[${kind}] D: the kept d1 row`);
+      await sleep(200);
+      const keptRow = await evalJs(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(prow('d1'))}); const msg = r.nextElementSibling; return { user: r.classList.contains('pt-user'), value: r.querySelector('td.pt-val').textContent, expression: r.querySelector('input[data-col="expression"]').value, comment: r.querySelector('input[data-col="comment"]').value, error: !!(msg && msg.classList.contains('pt-msg-err')) }; })())`).then(JSON.parse);
+      assert.deepStrictEqual(keptRow, { user: true, value: '60.0', expression: '60 mm', comment: 'dimension deleted', error: false }, `[${kind}] D: the Parameters window lists d1 = 60 mm · dimension deleted`);
+      assert.deepStrictEqual(await tableRows(), ['d3'], `[${kind}] D: the sketch dimensions are only d3`);
+      await shot(`${kind}-5-table-kept-d1.png`, await evalJs(`(() => { const r = document.querySelector('${W}').getBoundingClientRect(); return { x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.width, innerWidth - Math.max(0, r.left)), height: Math.min(r.height, innerHeight - Math.max(0, r.top)) }; })()`));
+      await press('#btn-parameters'); await sleep(200);
+      if (kind === 'mouse') await ctrlZ(); else await press('#btn-undo');
+      await sleep(400);
+      assert.strictEqual(await hist(), hD, `[${kind}] D: the delete was ONE undo step`);
+      assert.deepStrictEqual(await evalJs(`JSON.stringify(${STATE}.parameters)`).then(JSON.parse), [], `[${kind}] D: undone, no kept value`);
+      assert.deepStrictEqual(await rowsNow(), ['d1', 'd2', 'd3'], `[${kind}] D: undone, the real dimension d1 is back`);
+      out('D: d3 = d1 - 10, L deleted -> d1 kept as 60 mm (dimension deleted), d3 still 50; undo -> the real d1');
       out('all checks passed');
     };
 

@@ -350,7 +350,7 @@ export function applyOffset(state, chain, d, side) {
   // (the dimensions' fixed default, 30 mm, puts it past the end of a short piece).
   const f0 = frames[0], size = f0.kind === 'line' ? f0.len : f0.kind === 'arc' ? f0.R * f0.span : f0.R;
   out.constraint = { ...offsetConstraintRecord({ shapes, rev: chain.pieces.map((p) => !!p.rev), sides, joins: chain.joins, closed: chain.closed, value: d, offset: size / 4 }),
-    isDriven: false, driven: false, name: nextDimensionName(state.constraints) };
+    isDriven: false, driven: false, name: nextDimensionName(state.constraints, state.parameters) };
   state.constraints.push(out.constraint);
   return out;
 }
@@ -441,7 +441,7 @@ export function restoreOffsetDimension(state, c) {
   c.isDriven = false;
   c.driven = false;
   delete c.drivenReason;
-  if (!c.name && state && Array.isArray(state.constraints)) c.name = nextDimensionName(state.constraints);
+  if (!c.name && state && Array.isArray(state.constraints)) c.name = nextDimensionName(state.constraints, state.parameters);
   return true;
 }
 

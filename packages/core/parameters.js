@@ -70,11 +70,13 @@ export function writeEntry(e, { name, expression }) {
   if (Object.keys(ex).length) e.c.expressions = ex; else delete e.c.expressions;
 }
 
-// nextDimensionName(constraints) → 'd' + (highest dN among the constraints' names and their pattern values' names + 1)  (O22)
-export function nextDimensionName(constraints) {
+// nextDimensionName(constraints, parameters) → 'd' + (highest dN among the constraints' names, their pattern values' names and the parameters'
+// names + 1)  (O22). TASK 709: `parameters` (the document's list) holds the KEPT values of deleted dimensions (O10): a new dimension never takes one.
+export function nextDimensionName(constraints, parameters = []) {
   let highest = 0;
   const re = new RegExp(`^${AUTO_NAME_PREFIX}(\\d+)$`);
   const see = (name) => { const m = typeof name === 'string' ? re.exec(name) : null; if (m) highest = Math.max(highest, parseInt(m[1], 10)); };
+  for (const p of parameters || []) if (p) see(p.name);
   for (const c of constraints || []) {
     if (!c) continue;
     see(c.name);
@@ -86,14 +88,15 @@ export function nextDimensionName(constraints) {
  * TASK 694: give every value of the pattern `c` that has no name the next automatic one (O22), in declared order (Fusion's: quantity one / two,
  * distance one / two; quantity, total angle). `constraints` = the document's (with or without `c`). The ONE naming of pattern values: a new
  * pattern (#core/pattern.js applyPattern), a loaded document's patterns saved before task 694 (#core/document.js, after every constraint is
- * loaded, so a name is never one a later constraint of the file carries) and a pasted pattern (#ui/clipboard.js). → the names given.
+ * loaded, so a name is never one a later constraint of the file carries) and a pasted pattern (#ui/clipboard.js). `parameters` = the document's
+ * list (task 709: a kept value's name is taken). → the names given.
  */
-export function namePatternValues(constraints, c) {
+export function namePatternValues(constraints, c, parameters = []) {
   const given = [];
   const all = (constraints || []).includes(c) ? constraints : [...(constraints || []), c];
   for (const s of patternValueSlots(c)) {
     if (c.names && c.names[s.slot]) continue;
-    const name = nextDimensionName(all);
+    const name = nextDimensionName(all, parameters);
     c.names = { ...(c.names || {}), [s.slot]: name };
     given.push(name);
   }
@@ -105,6 +108,7 @@ export function cloneParameters(list) {
   return (list || []).map((p) => {
     const out = { name: p.name, unit: p.unit, expression: p.expression };
     if (p.comment) out.comment = p.comment;
+    if (p.deletedDimension) out.deletedDimension = true; // TASK 709: the kept value of a deleted dimension (O10)
     return out;
   });
 }
@@ -484,6 +488,54 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
   if (created) out.created = created;
   if (named) out.named = named;
   return out;
+}
+
+// ── the KEPT value of a deleted dimension (decision O10; TASK 709, owner ruling 1905 "like Fusion", Fusion measured by the advisor) ──
+// A dimension goes (its geometry deleted or trimmed, or the dimension itself deleted) while a formula reads its name: Fusion keeps the name as a
+// value (d2 = d1 / 2 still 15 mm). Here that value is a USER PARAMETER of the document's list carrying `deletedDimension: true`, its expression the
+// dimension's value at deletion as a plain number, its comment KEPT_DIMENSION_COMMENT: the formulas keep working through the ONE parameter model
+// (graph, evaluation, rename, the table, save / load, undo all read state.parameters); it can be edited (its readers follow) and renamed. It is
+// removed automatically once nothing reads it. Undo of the delete restores the real dimension (the undo snapshot holds the parameter list).
+export const KEPT_DIMENSION_COMMENT = 'dimension deleted';
+/** The named driving dimensions' { name, value, kind } now: what a delete takes BEFORE it removes anything (reconcileKeptDimensions' `before`). */
+export function dimensionValuesOf(constraints) {
+  return dimensionEntries(constraints).filter((e) => entryName(e) && !isReferenceEntry(e)).map((e) => ({ name: entryName(e), value: entryValue(e), kind: entryKind(e) }));
+}
+// the folded names the document's expressions read (user parameters and driving dimensions; a name nothing defines counts too)
+function namesRead(state) {
+  const read = new Set();
+  const see = (text) => { if (text == null) return; const p = parseInput(text, { allowAssign: false }); if (p.ok) dependencies(p).forEach((k) => read.add(k)); };
+  for (const p of state.parameters || []) see(p.expression);
+  for (const e of dimensionEntries(state.constraints)) if (!isReferenceEntry(e)) see(entryExpression(e));
+  return read;
+}
+/**
+ * THE rule (O10, TASK 709). `before` = dimensionValuesOf(the constraints before a removal); [] after an edit. (1) every name of `before` that no
+ * dimension and no parameter carries any more and that an expression still reads becomes a kept value { name, unit, expression: its value as a
+ * plain number, comment: KEPT_DIMENSION_COMMENT, deletedDimension: true } (a length in the document unit `unit`, an angle in deg, a count
+ * unitless); (2) every kept value nothing reads any more is removed. Called by the delete path (#core/delete-manager.js removeGeometry and
+ * deleteConstraints) and by every parameter commit (#core/dimension-seams.js applyParameterChange). Mutates state.parameters.
+ * -> { kept: [names], dropped: [names] }
+ */
+export function reconcileKeptDimensions(state, before = [], { unit = 'mm' } = {}) {
+  if (!state || !Array.isArray(state.parameters)) return { kept: [], dropped: [] };
+  const read = namesRead(state);
+  const present = new Set([...state.parameters.map((p) => foldName(p.name)), ...dimensionEntries(state.constraints).map(entryName).filter(Boolean).map(foldName)]);
+  const kept = [];
+  for (const d of before) {
+    const key = foldName(d.name);
+    if (present.has(key) || !read.has(key)) continue;
+    const punit = d.kind === 'count' ? '' : d.kind === 'angle' ? 'deg' : unit;
+    state.parameters.push({ name: d.name, unit: punit, expression: numberText(d.value, punit), comment: KEPT_DIMENSION_COMMENT, deletedDimension: true });
+    present.add(key);
+    kept.push(d.name);
+  }
+  const dropped = [];
+  for (let i = state.parameters.length - 1; i >= 0; i--) {
+    const p = state.parameters[i];
+    if (p.deletedDimension && !read.has(foldName(p.name))) { dropped.unshift(p.name); state.parameters.splice(i, 1); }
+  }
+  return { kept, dropped };
 }
 
 // ── freezeReferencesTo (decision O10) ──

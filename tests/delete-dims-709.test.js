@@ -11,7 +11,8 @@
 // After each, what is LEFT is listed: constraints naming geometry that is gone (a missing shape / point, or a point only deleted geometry used),
 // their labels on the canvas, their rows in the Parameters table (#ui/parameter-table.js buildParameterRows, what the window shows); a
 // dimension on SURVIVING geometry must stay; ONE Ctrl+Z brings everything back (document compared). Every case's line is printed (the table).
-// A formula in ANOTHER parameter reading a deleted d-name is listed separately (its outcome is the owner's decision, design doc O10).
+// O10 (owner ruling 1905, like Fusion): a deleted dimension that a formula reads keeps its name as a value (a user parameter flagged
+// deletedDimension, comment 'dimension deleted'), editable, gone by itself once nothing reads it; Undo restores the real dimension.
 import assert from 'node:assert';
 import * as ops from '#core/tool-ops.js';
 import { open } from './helpers/node-app.js';
@@ -19,9 +20,9 @@ import { CONSTRAINT_TYPES as T } from '#core/constants.js';
 import { patternDefaults, isPatternConstraint } from '#core/pattern.js';
 import { offsetChainOf, applyOffset } from '#core/offset.js';
 import { buildTemplate, templateById } from '#core/templates.js';
-import { deserializeDocument } from '#core/document.js';
+import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { evaluateAll } from '#core/parameters.js';
-import { buildParameterRows } from '#ui/parameter-table.js';
+import { buildParameterRows, planTableEdit, commitTableEdit } from '#ui/parameter-table.js';
 
 const app = await open({ host: 'sketchstudio' });
 const st = app.state;
@@ -180,23 +181,86 @@ function run(c, mode) {
 try {
   for (const c of CASES) for (const mode of ['shape', 'joint', 'all', 'trim']) run(c, mode);
 
-  // ---- a formula in ANOTHER dimension reads the deleted d-name (the owner's decision: design doc O10) ----
-  reset();
-  const A = line(0, 0, 40, 0), B = line(0, 30, 40, 30);
-  const d1 = ops.dimension(st, { joints: [A.a, A.b] }, { x: 20, y: -8 }, '40');
-  const d2 = ops.dimension(st, { joints: [B.a, B.b] }, { x: 20, y: 38 }, `${d1.name} / 2`);
-  ops.parameter(st, 'half', 'mm', `${d1.name} / 4`);
-  app.frames(2);
-  st.selectedShapes.add(A.id); app.key('Delete'); app.frames(2);
-  const ev = evaluateAll(st, { unit: 'mm' });
-  const formula = { d1: d1.name, d1Left: st.constraints.includes(d1), d2: d2.name, d2Expression: d2.expression || null, d2Value: d2.value,
-    half: (st.parameters.find((p) => p.name === 'half') || {}).expression, errors: [...(ev.errors || new Map())].map(([k, e]) => `${k}: ${e.message}`) };
-  app.undo();
+  // ---- O10 (owner ruling 1905, "like Fusion"; Fusion measured by the advisor): a deleted dimension that a formula reads KEEPS its name as a
+  // value (d2 = d1 / 2 stays 15, half = d1 / 4 stays 7.5); the kept d1 is a row of the Parameters table ("dimension deleted"), editable; it goes
+  // by itself once nothing reads it; Undo of the delete gives the real dimension back; a new dimension never takes its name. ----
+  const formulaLog = [];
+  const check = (cond, msg) => { formulaLog.push(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if (!cond) failures++; };
+  const param = (n) => st.parameters.find((p) => p.name === n) || null;
+  const userRow = (n) => buildParameterRows(st, { unit: 'mm' }).user.find((r) => r.name === n) || null;
+  const valueOf = (n) => { const v = evaluateAll(st, { unit: 'mm' }).values.get(n); return v ? Math.round(v.v * 1e6) / 1e6 : null; };
+  const errorsNow = () => [...(evaluateAll(st, { unit: 'mm' }).errors || new Map())].map(([k, e]) => `${k}: ${e.message}`);
+  const dim = (n) => st.constraints.find((c) => c.name === n) || null;
+  const build = () => {
+    reset();
+    const A = line(0, 0, 30, 0), B = line(0, 30, 40, 30), C = line(0, 60, 20, 60);
+    const d1 = ops.dimension(st, { joints: [A.a, A.b] }, { x: 15, y: -8 }, '30');
+    const d2 = ops.dimension(st, { joints: [B.a, B.b] }, { x: 20, y: 38 }, `${d1.name} / 2`);
+    ops.parameter(st, 'half', 'mm', `${d1.name} / 4`);
+    const d3 = ops.dimension(st, { joints: [C.a, C.b] }, { x: 10, y: 68 }, '20'); // nothing reads it
+    st.engine.solve(200); app.frames(2);
+    return { A, B, C, d1, d2, d3 };
+  };
+  const keptLooks = (what) => {
+    const p = param('d1');
+    check(!dim('d1'), `${what}: the dimension d1 is gone from the sketch`);
+    check(p && p.deletedDimension === true && p.expression === '30 mm' && p.unit === 'mm', `${what}: d1 is kept as a value 30 mm (${JSON.stringify(p)})`);
+    check(valueOf('d2') === 15 && dim('d2') && dim('d2').expression === 'd1 / 2' && Math.abs(dim('d2').value - 15) < 1e-6, `${what}: d2 is still d1 / 2 = 15 (${valueOf('d2')})`);
+    check(valueOf('half') === 7.5 && param('half').expression === 'd1 / 4', `${what}: half is still d1 / 4 = 7.5 (${valueOf('half')})`);
+    check(errorsNow().length === 0, `${what}: no formula error (${errorsNow().join('; ')})`);
+    const r = userRow('d1');
+    check(r && r.value === '30.0' && r.comment === 'dimension deleted' && [...r.users].sort().join(',') === 'd2,half', `${what}: the Parameters table shows d1 = 30.0 · dimension deleted, read by d2 and half (${JSON.stringify(r && { value: r.value, comment: r.comment, users: r.users })})`);
+    check(!param('d3'), `${what}: d3, which nothing reads, is never a kept value`);
+  };
+  {
+    // 1. its LINE deleted (shape + Delete), with an unread dimension's line deleted in the same step
+    const { A, C } = build();
+    const h0 = st.history.length;
+    st.selectedShapes.add(A.id); st.selectedShapes.add(C.id); app.key('Delete'); app.frames(2);
+    keptLooks('line + Delete');
+    check(!dim('d3') && !param('d3'), 'line + Delete: d3 (nothing reads it) went completely with its line');
+    check(st.history.length === h0 + 1, 'line + Delete: one undo step');
+    app.undo(); app.frames(2);
+    check(dim('d1') && Math.abs(dim('d1').value - 30) < 1e-6 && !param('d1') && dim('d3'), 'Undo: the real dimension d1 (and d3) is back, no kept value: ' + JSON.stringify({ d1: dim('d1') && dim('d1').value, kept: param('d1'), d3: !!dim('d3') }));
+    check(errorsNow().length === 0 && valueOf('d2') === 15, 'Undo: d2 reads the real d1');
+  }
+  {
+    // 2. a point of the line deleted; 3. the Trim tool; 4. the dimension itself deleted
+    let b = build(); st.selectedJoints.add(b.A.a); app.key('Delete'); app.frames(2); keptLooks('point + Delete');
+    b = build(); app.tool('trim'); const p = app.toScreen(15, 0); app.click(p.x, p.y); app.tool('select'); app.frames(2);
+    check(!st.shapes.some((s) => s.id === b.A.id), 'Trim: the line is gone'); keptLooks('Trim');
+    b = build(); st.selectedConstraints.add(b.d1); st.selectedConstraints.add(b.d3); app.key('Delete'); app.frames(2);
+    check(st.shapes.some((s) => s.id === b.A.id), 'dimension + Delete: the line stays'); keptLooks('dimension + Delete');
+  }
+  {
+    // 5. the kept value: a new dimension does not take its name; editing it moves its readers; save / load keeps it; it goes once nothing reads it
+    const { A } = build();
+    st.selectedShapes.add(A.id); app.key('Delete'); app.frames(2);
+    const N = line(0, 90, 25, 90);
+    const dn = ops.dimension(st, { joints: [N.a, N.b] }, { x: 12, y: 98 }, '25');
+    check(dn.name !== 'd1' && !param(dn.name) && st.constraints.filter((c) => c.name === dn.name).length === 1, `a new dimension takes a free name (${dn.name}), never the kept d1`);
+    const ed = planTableEdit(st, { kind: 'parameter', column: 'expression', name: 'd1', text: '40 mm' }, { unit: 'mm' });
+    check(ed.ok && commitTableEdit(st, ed).ok, 'the kept d1 is edited in the table: 40 mm');
+    st.engine.solve(200);
+    check(valueOf('d2') === 20 && Math.abs(dim('d2').value - 20) < 1e-6 && valueOf('half') === 10, `editing it moves its readers: d2 = 20, half = 10 (${valueOf('d2')}, ${valueOf('half')})`);
+    check(param('d1') && param('d1').deletedDimension === true, 'edited, it is still a kept value');
+    const S2 = ops.newSketchState(); deserializeDocument(serializeDocument(st), S2);
+    check(JSON.stringify(S2.parameters.find((p) => p.name === 'd1')) === JSON.stringify({ name: 'd1', unit: 'mm', expression: '40 mm', comment: 'dimension deleted', deletedDimension: true }), 'save / load keeps the kept value: ' + JSON.stringify(S2.parameters));
+    // its readers go: d2 (the dimension) first: half still reads d1; then half (the bin in the table): d1 goes by itself
+    st.selectedConstraints.add(dim('d2')); app.key('Delete'); app.frames(2);
+    check(!dim('d2') && param('d1'), 'd2 deleted: d1 is kept (half still reads it)');
+    check(!param('d2'), 'd2 itself is not kept: nothing reads it');
+    const del = planTableEdit(st, { kind: 'parameter', column: 'delete', name: 'half' }, { unit: 'mm' });
+    check(del.ok && commitTableEdit(st, del).ok, 'half deleted in the table');
+    check(!param('d1') && !userRow('d1'), 'nothing reads d1 any more: the kept value is gone by itself, and its row');
+    app.undo(); app.frames(2);
+    check(param('half') && param('d1') && param('d1').deletedDimension === true, 'Undo of that delete: half and the kept d1 are back');
+  }
 
   // ---- the table ----
   console.log('kind | delete | left-over constraints | labels | table rows | survivor kept | parameter kept | undo steps | one Ctrl+Z restores');
   for (const r of rows) console.log(`${r.kind} | ${r.mode} | ${r.left.join(', ') || '-'} | ${r.labels} | ${r.table.join(', ') || '-'} | ${r.survivorKept ?? 'n/a'} | ${r.parameterKept ?? 'n/a'} | ${r.steps} | ${r.undone}`);
-  console.log('formula reading the deleted name: ' + JSON.stringify(formula));
+  console.log('O10, a formula reads the deleted dimension:'); for (const l of formulaLog) console.log(l);
 
   for (const r of rows) {
     const where = `${r.kind} / ${r.mode}`;

@@ -3,6 +3,8 @@ import { removeOrphanJoints } from './joints.js';
 import { patternsAfterDelete } from './pattern.js';
 import { undimensionOffset } from './offset.js';
 import { SolverConfig } from './solver-config.js';
+import { dimensionValuesOf, reconcileKeptDimensions } from './parameters.js';
+import { docUnit } from './settings-manager.js';
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo, constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from './sketch-model.js'; // TASK 577/619
 
 // A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
@@ -29,6 +31,7 @@ export function deleteConstraints(state, constraintsOrIds) {
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete constraints'); } catch (_) {}
   try { if (typeof state.saveState === 'function') state.saveState('delete constraints'); } catch (_) {}
 
+  const dimsBefore = dimensionValuesOf(state.constraints); // TASK 709: a deleted dimension a formula reads keeps its name as a value (O10)
   let removed = 0;
   const seen = new Set();
   for (const c of toDelete) {
@@ -63,6 +66,7 @@ export function deleteConstraints(state, constraintsOrIds) {
     }
   }
 
+  reconcileKeptDimensions(state, dimsBefore, { unit: docUnit() }); // TASK 709 (O10): kept values made / dropped
   // Clear selection references
   try { if (state.selectedConstraints && typeof state.selectedConstraints.clear === 'function') state.selectedConstraints.clear(); } catch(_) {}
 
@@ -85,11 +89,13 @@ const namesAny = (c, fields, ids) => fields.some((f) => asList(c[f]).some((x) =>
  * or dimension that names a shape that goes or a point that goes (a point goes when it is one of `jointIds`, or when only the shapes that go
  * used it; a fillet's virtual sharp that a dimension holds stays, virtualSharpProtectedJoints). A dimension's row in the Parameters table goes
  * with it (the table lists the constraints). A constraint naming only surviving geometry stays. Unused points are then cleaned and sketch
- * patterns follow (patternsAfterDelete). The ONE place geometry is removed: deleteShapes / deleteJoints (Delete, Cut, Clear sketch, Delete
+ * patterns follow (patternsAfterDelete). A dimension that goes while a formula reads its name keeps that name as a value (#core/parameters.js
+ * reconcileKeptDimensions, decision O10: Fusion's). The ONE place geometry is removed: deleteShapes / deleteJoints (Delete, Cut, Clear sketch, Delete
  * sketch) and the Trim tool (#core/trim.js) call it. No history, no solve: the callers own those.
  * -> { shapes: the shapes removed, joints: the points of `jointIds` removed }
  */
 export function removeGeometry(state, shapeIds = [], jointIds = []) {
+  const dimsBefore = dimensionValuesOf(state.constraints);
   const deleteJ = new Set(jointIds);
   const goneS = new Set(shapeIds);
   for (const s of state.shapes) if (s && asList(s.joints).some((j) => deleteJ.has(j))) goneS.add(s.id);
@@ -115,6 +121,7 @@ export function removeGeometry(state, shapeIds = [], jointIds = []) {
   for (const j of deleteJ) if (state.joints.delete(j)) joints++;
   removeOrphanJoints(state);
   patternsAfterDelete(state); // TASK 658: a deleted copy suppresses its pattern instance; a deleted source / centre / direction line ends the pattern
+  reconcileKeptDimensions(state, dimsBefore, { unit: docUnit() }); // a deleted dimension (or pattern value) a formula reads keeps its name as a value (O10)
   return { shapes, joints };
 }
 

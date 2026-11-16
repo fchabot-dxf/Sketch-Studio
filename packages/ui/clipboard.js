@@ -158,7 +158,7 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
       // task 694: a pasted pattern's values take the next free names (remapPattern dropped the copied ones); a formula one of them had is
       // frozen at its value (its pattern is regenerated only through the parameter model, not here), the pasted dimensions read the new names
       if (added && isPatternConstraint(added)) {
-        namePatternValues(state.constraints, added);
+        namePatternValues(state.constraints, added, state.parameters);
         for (const s of patternValueSlots(added)) {
           const was = src.names && src.names[s.slot];
           if (was) renamed.set(was, entryName({ c: added, slot: s.slot }));

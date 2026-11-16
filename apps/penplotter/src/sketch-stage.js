@@ -241,7 +241,7 @@ export function mountSketchStage(view, ctx = {}) {
       const msig = (one || '') + '|' + mixed + '|' + state.toolpaths.length + '|' + noPens;
       if (msig !== lastMixSig) {
         lastMixSig = msig;
-        mixStatus.textContent = mixed ? mixSummary(one) : (noPens ? 'Pen-mix needs pens: add one with + Pen on the Toolpath tab.' : '');
+        mixStatus.textContent = mixed ? mixSummary(one) : (noPens ? 'Pen-mix needs pens: add one with + Pen on the Prepare tab.' : '');
       }
     }
     // DOC-SIZE-IN-DESIGN: keep the Document button's label in sync with state.doc (updates after a modal size edit).

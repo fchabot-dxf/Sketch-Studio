@@ -395,7 +395,7 @@ async function enterReview(st) {
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));
-  } catch (e) { info.textContent = 'Review failed: ' + e.message; throw e; }
+  } catch (e) { info.textContent = 'Export failed: ' + e.message; throw e; }
 }
 {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,

@@ -8,6 +8,7 @@
  */
 
 import { mountAppChrome }                  from '#ui/app-chrome.js';
+import { TRACE_STAGES }                    from './stages.js'; // TASK 707: Trace's stage list (the common step names + Trace's own), declared once
 import { SIDEBAR_ICONS }                   from '#ui/app-sidebar.js';
 import { getGoogleAccount }                from '#ui/cloud/google-account.js'; // TASK 488: the shared account row
 getGoogleAccount().init();
@@ -28,11 +29,6 @@ import { mountEdit, getEditBuffer, getEditState, startEdit, stopEdit, importToEd
 import { mountImportDrop }                from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer's drop on the Edit tab
 
 // ── App chrome (TASK 473, 567, 619) ───────────────────────────────────────────
-const TRACE_STAGES = [
-  { id: 'trace',  label: 'Trace' },
-  { id: 'edit',   label: 'Edit' },
-  { id: 'export', label: 'Export' },
-];
 const _diagLog = createDiagnosticLog({ appId: 'trace', state: () => getEditState() });
 const chrome = mountAppChrome({
   appId: 'trace',
@@ -134,7 +130,7 @@ const traceSession = createTraceSession({
     },
     fallbackName: () => sidecarName || 'trace',
     // the Trace tab shows no photo for this design: if the design is a drawing, show it (the same rule as opening a stored design: a design is its sketch)
-    onNoPhoto: () => { if (!tabPanes.trace.hidden && getEditState().shapes.length) { switchTab('edit'); toast('This design has no photo: showing its drawing in Edit', 'info'); } },
+    onNoPhoto: () => { if (!tabPanes.trace.hidden && getEditState().shapes.length) { switchTab('edit'); toast('This design has no photo: showing its drawing in Design', 'info'); } },
   },
 });
 mountEdit({

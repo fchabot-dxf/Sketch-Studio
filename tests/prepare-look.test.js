@@ -188,7 +188,7 @@ await (async () => {
     assert.strictEqual(await evalJs(`document.querySelector('.cut-presets .cut-preset.is-active').textContent`), '¼', '0.250 in -> the 1/4 preset');
 
     // cutter shape: the row sits below bit diameter; popover to the left with flat / ball / V-bit (+ the V-bit angle presets)
-    const order = await evalJs(`[...document.querySelectorAll('.cut-rows .cut-row')].map((r) => r.dataset.param || r.dataset.row)`);
+    const order = await evalJs(`[...document.querySelectorAll('.cut-rows .cut-row')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.param || r.dataset.row)`); // the rows shown (TASK 714: a stepped type's Step depth row is hidden here)
     assert.deepStrictEqual(order, ['cutDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'cutter shape is directly below bit diameter');
     await clickEl('.cut-shape-trigger'); await popOpen('.cut-shape-pop');
     const sp = await rectOf('.cut-shape-pop');

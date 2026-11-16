@@ -55,7 +55,7 @@ await (async () => {
     await press('.sk-doctab-new');
     await waitFor(`!!document.querySelector('.sk-tp-card')`, 'desktop modal open');
     await waitFor(`!!document.querySelector('.sk-tp-grid[data-previews="ready"]')`, 'desktop modal ready', 12000);
-    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-fav-head')`), false, 'desktop: no heading before starring');
+    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-fav-head')`), false, 'desktop: no heading ever');
     assert.strictEqual(await evalJs(`document.activeElement.dataset.template`), 'blank', 'Blank has initial focus');
 
     // Mark an SVG node on `hexagon` to verify re-ordering does not rebuild previews
@@ -65,7 +65,7 @@ await (async () => {
     await press('.sk-tp-star[data-template="star"]');
     assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-start')`), false, 'desktop mouse star does not open start view');
     assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab').length`), 1, 'desktop mouse star does not add tab');
-    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-fav-head') && document.querySelector('.sk-tp-fav-head').textContent === 'Favourites'`), true, 'Favourites heading appears');
+    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-fav-head, .sk-tp-fav-sep')`), false, 'task 721: no Favourites heading or divider when starred');
     assert.deepStrictEqual(
       await cardOrder(),
       ['blank', 'star', ...bankIds.filter((id) => id !== 'star')],
@@ -130,7 +130,7 @@ await (async () => {
       'Space un-stars hexagon and keeps focus on the hexagon star button',
     );
     assert.deepStrictEqual(await cardOrder(), ['blank', ...bankIds], '0 favourites restores exact bank order');
-    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-fav-head')`), false, 'heading gone at 0 favourites');
+    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-fav-head')`), false, 'no heading at 0 favourites');
 
     // Press Enter on the focused star -> re-stars hexagon cleanly, keeps focus, does NOT open the card
     await sendRealKey(send, 'Enter', 'Enter', 13, 0, '\r'); await sleep(200);
@@ -178,7 +178,7 @@ await (async () => {
     await press('.sk-tp-star[data-template="slot"]');
     assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-start')`), false, 'phone touch star does not open start view');
     assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab').length`), 1, 'phone touch star does not open a tab');
-    // Un-star `keyhole` so phone screenshot clearly shows 2 favourites (`hexagon`, `slot`) in row under "Favourites"
+    // Un-star `keyhole` so phone screenshot clearly shows 2 favourites (`hexagon`, `slot`) right after Blank
     await press('.sk-tp-star[data-template="keyhole"]');
     assert.deepStrictEqual(
       await cardOrder(),

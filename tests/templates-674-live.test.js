@@ -58,6 +58,8 @@ await (async () => {
     for (let i = 0; i < 5; i++) { const on = await evalJs(`(() => { const t = document.querySelector('.sk-header-tab.active'); return !t || t.dataset.tab === 'design'; })()`); if (on) break; await press('.sk-header-tab[data-tab="design"]'); }
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab');
     await waitForApp('design-canvas');
+    // TASK 722: Shaper's document is inches; this test is about joints in mm values (the inch start view is template-units-722-live)
+    await evalJs(`(async () => { (await import('/packages/core/settings-manager.js')).default.set('DOC_UNIT', 'mm', { persist: false }); })()`);
   };
   // the corner pickers' layout, measured on screen: their buttons, their boxes against each other, against the drawing's solid lines (the preview's
   // own <line> elements through getScreenCTM) and against the preview and the screen; the modal, Open and Cancel on screen; no sideways scroll

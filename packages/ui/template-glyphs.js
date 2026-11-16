@@ -37,7 +37,7 @@
 // 'trapezoid-variant': the trapezoid frame's shape (#core/frame-geometry.js TRAPEZOID_VARIANTS): a small frame of four mitered boards from THE
 // per-vertex engine on that variant's trapezoid (mapTrapezoidVertices, computeEffectiveOffset), the same viewBox rule, stroke and colouring.
 
-import { cornerBoards } from '#core/corner-joint.js';
+import { cornerBoards, boxJointInLayout } from '#core/corner-joint.js';
 import { calculateFramingGeometry, calculatePolygonFrameGeometry, mapTrapezoidVertices, computeEffectiveOffset, TRAPEZOID_VARIANTS } from '#core/frame-geometry.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -109,7 +109,6 @@ function trapezoidVariantGlyph(variant, active) {
   const { boards } = calculatePolygonFrameGeometry({ P: mapTrapezoidVertices({ bottomWidth, topWidth, height, offset }), thick: 4, joints: Array(4).fill('Miter') });
   return boardsSvg(boards.map((b, k) => ({ points: [b.p1, b.p2, b.p3, b.p4], tone: k % 2 ? 'light' : 'dark' })), active);
 }
-const OTHER_THROUGH = { 'V-Through': 'H-Through', 'H-Through': 'V-Through', Miter: 'Miter' };
 
 export const GLYPHS = Object.freeze({
   'corner-joint': (type, { active = false, corner } = {}) => {
@@ -128,7 +127,7 @@ export const GLYPHS = Object.freeze({
     if (layout === 'Horizontal') for (const b of boards) b.points = b.points.map((p) => ({ x: p.y, y: p.x })); // the same frame, x and y swapped
     return boardsSvg(boards, active);
   },
-  'box-corner-joint': (type, { active = false, values = {}, corner } = {}) => GLYPHS['corner-joint'](values.layout === 'Horizontal' ? OTHER_THROUGH[type] : type, { active, corner }),
+  'box-corner-joint': (type, { active = false, values = {}, corner } = {}) => GLYPHS['corner-joint'](boxJointInLayout(type, values.layout), { active, corner }),
   'brace-top': braceGlyph('top'),
   'brace-bl': braceGlyph('bl'),
   'brace-br': braceGlyph('br'),

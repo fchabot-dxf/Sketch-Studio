@@ -13,6 +13,17 @@ export const CORNER_JOINT_TYPES = Object.freeze([
   Object.freeze({ value: 'Miter', label: 'Mitered' }),
 ]);
 
+const OTHER_THROUGH = Object.freeze({ 'V-Through': 'H-Through', 'H-Through': 'V-Through', Miter: 'Miter' });
+
+/** Effective world orientation of a box-frame corner joint option (`Horizontal` mirrors x/y, swapping through directions; stored value stays unchanged). */
+export const boxJointInLayout = (type, layout) => (layout === 'Horizontal' ? (OTHER_THROUGH[type] ?? type) : type);
+
+/** Display / accessible label for a box-frame corner joint option in `layout` (keeps stored value meaning unchanged). */
+export const cornerJointLabel = (type, layout = 'Vertical') => {
+  const shown = boxJointInLayout(type, layout);
+  return CORNER_JOINT_TYPES.find((o) => o.value === shown)?.label ?? '';
+};
+
 /**
  * Computes the two boards' outer/inner meeting points at a right-angle
  * corner — the shared math behind every 90° joint picker in this repo

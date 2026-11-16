@@ -999,7 +999,8 @@ function setupEventListeners(svg, state) {
                     avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #offset-tool-overlay .offset-handle, #${OFFSET_INPUT_ID}, .${PATTERN_DIALOG_CLASS}, .${PATTERN_INLINE_CLASS}, #pattern-tool-overlay .pattern-handle`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
                 });
             }
-            if (doneButton) doneButton.sync(e.pointerType === 'touch');
+            // TASK 701: the press's points (down starts a new press): the check never appears under the finger whose click is still to come
+            if (doneButton) doneButton.sync(e.pointerType === 'touch', { x: e.clientX, y: e.clientY, start: e.type === 'pointerdown' });
         };
         const holdTools = () => state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION;
         svg.addEventListener('pointerdown', (e) => {

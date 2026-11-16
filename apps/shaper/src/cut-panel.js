@@ -4,7 +4,7 @@
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
-import { STEP_DEPTH } from '#core/stepped-cut.js';
+import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
@@ -28,6 +28,8 @@ const STEP_PRESETS = {
   mm: [{ label: '0.5', value: 0.5 }, { label: '1', value: 1 }, { label: '2', value: 2 }, { label: '3', value: 3 }],
 };
 const presetsFor = (table) => table[docUnit()] || table.mm;
+// TASK 717: the Resolution presets of adaptive stepping (the named maximum deviations, #core STEP_RESOLUTION; values base mm). A typed value = Custom.
+const RESOLUTION_PRESETS = STEP_RESOLUTION.levels.map((l) => ({ label: l.label, value: l.mm }));
 const DEPTH_START = 0.1;   // first value (in the DOC unit) when stepping up/down from 'unset'
 const DEPTH_STEP = 0.05;   // step increment, in the DOC unit
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
@@ -65,10 +67,21 @@ export function createCutPanel(hostEl, opts = {}) {
           <button type="button" class="cut-step" data-d="1" aria-label="Increase depth">+</button>
         </div>
       </div>
+      <div class="cut-row" data-row="adaptiveSteps">
+        <label class="cut-check"><input type="checkbox" class="cut-adaptive"><span>Adaptive stepping</span></label>
+      </div>
       <div class="cut-row" data-row="stepDepth">
         <label class="cut-field-label">Step depth</label>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-step-depth" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+        <div class="cut-presets"></div>
+      </div>
+      <div class="cut-row" data-row="stepDeviation">
+        <label class="cut-field-label">Resolution</label>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-step-deviation" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
         <div class="cut-presets"></div>
@@ -106,9 +119,10 @@ export function createCutPanel(hostEl, opts = {}) {
   const $ = (sel) => card.querySelector(sel);
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
   const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets');
+  const adaptiveInput = $('.cut-adaptive'), deviationInput = $('.cut-step-deviation'), deviationPresetsWrap = $('.cut-row[data-row="stepDeviation"] .cut-presets'); // TASK 717
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, record: null, note: [] };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, record: null, note: [] };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop];
@@ -162,6 +176,9 @@ export function createCutPanel(hostEl, opts = {}) {
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
   // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored; never below STEP_DEPTH.minMm)
   stepInput.addEventListener('change', () => { const n = parseUnit(stepInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDepth', Math.max(STEP_DEPTH.minMm, n)); else renderFields(); });
+  // TASK 717: ADAPTIVE stepping (per record) and its RESOLUTION (the maximum deviation: doc unit in, base mm stored, never below STEP_RESOLUTION.minMm)
+  adaptiveInput.addEventListener('change', () => onSetField('adaptiveSteps', adaptiveInput.checked));
+  deviationInput.addEventListener('change', () => { const n = parseUnit(deviationInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDeviation', Math.max(STEP_RESOLUTION.minMm, n)); else renderFields(); });
   // offset presets popover (3x2): opens on focus (the value is selected so typing replaces it), closes on blur / pick
   const buildOffsetPop = () => {
     offsetPop.innerHTML = '<div class="cut-pop-title">presets</div><div class="cut-pop-grid"></div>';
@@ -214,8 +231,15 @@ export function createCutPanel(hostEl, opts = {}) {
     card.querySelector('.cut-row[data-row="cutterShape"]').style.display = cutTypeHasParam(current.cutType, 'toolDia') ? '' : 'none';
     // TASK 714: the step row only for a type that DECLARES it (a stepped type), and the stepped cut's note (its steps, an undercut)
     const curDecl = current.cutType ? cutTypeById(current.cutType) : null;
-    card.querySelector('.cut-row[data-row="stepDepth"]').style.display = curDecl && (curDecl.params || []).includes('stepDepth') ? '' : 'none';
+    const declares = (p) => Boolean(curDecl && (curDecl.params || []).includes(p));
+    const adaptive = declares('adaptiveSteps') && current.adaptiveSteps === true; // TASK 717: the Resolution row replaces the Step depth row
+    card.querySelector('.cut-row[data-row="adaptiveSteps"]').style.display = declares('adaptiveSteps') ? '' : 'none';
+    card.querySelector('.cut-row[data-row="stepDepth"]').style.display = declares('stepDepth') && !adaptive ? '' : 'none';
+    card.querySelector('.cut-row[data-row="stepDeviation"]').style.display = declares('stepDeviation') && adaptive ? '' : 'none';
+    adaptiveInput.checked = adaptive;
     stepInput.value = fmt(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
+    const deviation = Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm;
+    deviationInput.value = formatUnit(deviation, docUnit(), { decimals: docUnit() === 'in' ? 4 : 3 }); // 0.1 mm = 0.0039 in
     noteEl.innerHTML = '';
     for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
       const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');
@@ -235,8 +259,9 @@ export function createCutPanel(hostEl, opts = {}) {
     const dia = Number(current.toolDia) || 0;
     bitInput.value = fmt(dia);
     renderPresets(presetsWrap, BIT_PRESETS, 'toolDia', dia);
-    const stepped = Boolean(curDecl && (curDecl.params || []).includes('stepDepth')); // hidden rows keep no preset buttons
-    renderPresets(stepPresetsWrap, stepped ? presetsFor(STEP_PRESETS) : [], 'stepDepth', Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
+    // hidden rows keep no preset buttons
+    renderPresets(stepPresetsWrap, declares('stepDepth') && !adaptive ? presetsFor(STEP_PRESETS) : [], 'stepDepth', Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
+    renderPresets(deviationPresetsWrap, adaptive ? RESOLUTION_PRESETS : [], 'stepDeviation', deviation);
     const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
     shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shape.label} ${Number(current.cutterAngle) || 90}\u00b0` : shape.label;
     const u = docUnit();
@@ -245,9 +270,9 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, record: null, note: [] }; return; }
     const rec = model.record || {};
-    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, record: rec, note: Array.isArray(model.note) ? model.note : [] };
+    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;
     curLabel.textContent = t ? t.menuLabel : 'Select type';

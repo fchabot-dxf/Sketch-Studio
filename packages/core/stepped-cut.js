@@ -31,6 +31,15 @@ import { deriveProfileCuts } from './profile-model.js';
 
 /** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet, never less than `minMm`. */
 export const STEP_DEPTH = Object.freeze({ defaultMm: 1, minMm: 0.1 });
+/** TASK 717: ADAPTIVE stepping's RESOLUTION = the maximum DEVIATION of the stair from the true slope (base mm; the CAM scallop / cusp height,
+ *  see stepDeviation): the named levels, the default (Medium) and the smallest typed (Custom) value. */
+export const STEP_RESOLUTION = Object.freeze({
+  levels: Object.freeze([Object.freeze({ id: 'coarse', label: 'Coarse', mm: 0.5 }), Object.freeze({ id: 'medium', label: 'Medium', mm: 0.25 }), Object.freeze({ id: 'fine', label: 'Fine', mm: 0.1 })]),
+  defaultMm: 0.25,
+  minMm: 0.01,
+});
+/** The named level of a deviation (base mm), or null for a typed (Custom) value. */
+export const resolutionLevel = (mm) => STEP_RESOLUTION.levels.find((l) => Math.abs(l.mm - Number(mm)) < 1e-9) || null;
 /** Two outlines are the SAME step when every boundary point of each lies within this distance (mm) of the other's boundary. */
 export const SAME_OUTLINE_TOL_MM = 0.01;
 /** Arcs and circles are sampled for the booleans and the preview with this chord sagitta (mm). */
@@ -253,6 +262,90 @@ function outlinesAt(pr, d) {
   return E.map((r) => ({ polygon: outerPoly(r), walk: null }));
 }
 
+// ── TASK 717: ADAPTIVE stepping (the step placement by a RESOLUTION, the CAM scallop / cusp height) ──
+// THE DEVIATION of one step, from depth a (the previous step's floor, or the part's top) to depth b (this step's floor), the step cut at the
+// conservative bottom-of-step outline O(b) as every step is: in the PROFILE PLANE at a point q of O(b)'s boundary, with u = the distance from q
+// to the boundary of the cuttable outline O(t) at the depth t, the TRUE WALL is the curve (u_q(t), t) for t from a to b (u_q(b) = 0), and the
+// STAIR is the TREAD at depth a (from the wall to q) and the RISER through q (from a down to b). The wall never moves away from the riser as t
+// grows (the outlines are nested: O(b) inside O(t) for a pocket / an inside cut, around it for an outside cut, so u_q does not increase), and
+// for such a wall the farthest point of either curve from the other is the stair's INNER CORNER (q at depth a): the deviation (the HAUSDORFF
+// distance of the two profile curves) = the distance from that corner to the wall (WORK-LOG TURN 717 gives the proof). A straight wall at the
+// angle A from vertical: h * sin(A) for a step of height h.
+// Evaluated on the slope rings: the wall is the polyline through t = a, every read ring depth between, and b (u is linear between read rings:
+// the rings are interpolated linearly), plus the deeper read ring just below a read ring whose next ring does not interpolate (the
+// conservative jump of outlinesAt); the corner distance = the min over that polyline's segments of the point-to-segment distance; the step's
+// deviation = the MAX over every vertex q of O(b)'s outlines (the ring walks' polygons: arcs sampled at RING_CHORD_TOL_MM).
+const JUMP_DZ_MM = 1e-6;  // the deeper ring is sampled this far below a read ring that does not interpolate to the next one
+const ORIGIN = P(0, 0);
+function boundaryDist(p, polys) {
+  let m = Infinity;
+  for (const Q of polys) for (let i = 0, j = Q.length - 1; i < Q.length; j = i++) { const d = distToSeg(p, Q[j], Q[i]); if (d < m) m = d; }
+  return m;
+}
+// The deviation of the step a -> b (mm); `at(t)` = the outlines at depth t (memoised by the caller). Stops early once it exceeds `limit`.
+function deviationOf(pr, a, b, at, limit = Infinity) {
+  const { rings } = pr;
+  if (!pr.jumps) pr.jumps = rings.map((r, j) => j < rings.length - 1 && !interpolateWalk(r.walk, rings[j + 1].walk, 0.5));
+  const ts = [a];
+  rings.forEach((r, j) => {
+    if (r.z > a + Z_EPS && r.z < b - Z_EPS) ts.push(r.z);
+    if (pr.jumps[j] && r.z >= a - Z_EPS && r.z + JUMP_DZ_MM < b - Z_EPS) ts.push(r.z + JUMP_DZ_MM);
+  });
+  ts.push(b);
+  ts.sort((p, q) => p - q);
+  const polys = ts.map((t) => at(t).map((o) => o.polygon));
+  let worst = 0;
+  for (const o of at(b)) {
+    for (const q of o.polygon) {
+      let r = Infinity, prev = null;
+      for (let i = 0; i < ts.length && r > 0; i++) {
+        const pt = P(boundaryDist(q, polys[i]), ts[i] - a);
+        if (prev) { const d = distToSeg(ORIGIN, prev, pt); if (d < r) r = d; }
+        prev = pt;
+      }
+      if (r > worst) { worst = r; if (worst > limit) return worst; }
+    }
+  }
+  return worst;
+}
+const memoAt = (pr) => {
+  const zMax = pr.rings[pr.rings.length - 1].z, memo = new Map();
+  return (t) => { const k = Math.min(t, zMax); let o = memo.get(k); if (!o) { o = outlinesAt(pr, k); memo.set(k, o); } return o; };
+};
+// THE PLACEMENT: walking down from the slope's top, each next step at the DEEPEST depth (to 0.001 mm) whose step stays within `tol`: the
+// cut's full depth when that step is within it, else the bisection between the previous floor (a step of 0: within) and the full depth (not).
+// The deviation grows with b (a deeper floor only widens the leftover), so the bisection finds that depth. A wall that jumps right below a
+// (a flat shelf: no step can stay within) gets a 0.001 mm step, so the walk always ends. Memoised per (parsed slope, tol, depth).
+const UM = 1000;
+const ADAPTIVE = new WeakMap(); // parsed slope -> Map(`${tol}|${D}` -> depths)
+function adaptiveDepths(pr, tol, D) {
+  let byKey = ADAPTIVE.get(pr);
+  if (!byKey) { byKey = new Map(); ADAPTIVE.set(pr, byKey); }
+  const key = `${tol}|${D}`;
+  if (byKey.has(key)) return byKey.get(key);
+  const at = memoAt(pr), within = (a, b) => deviationOf(pr, a, b, at, tol) <= tol;
+  const um = (a, n) => Math.round(a * UM + n) / UM;
+  const depths = [];
+  let a = pr.rings[0].z;
+  while (a < D - Z_EPS) {
+    if (within(a, D)) { depths.push(D); break; }
+    let lo = 0, hi = Math.ceil((D - a) * UM - 1e-6); // in 0.001 mm below a: lo is within, hi is not (it reaches D)
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (within(a, um(a, mid))) lo = mid; else hi = mid; }
+    a = um(a, Math.max(1, lo));
+    depths.push(a);
+  }
+  if (!depths.length) depths.push(D);
+  byKey.set(key, depths);
+  return depths;
+}
+/** TASK 717: the deviation (mm) of the step from depth `from` to depth `to` of a slope (the ONE measure adaptive stepping places steps by). */
+export function stepDeviation(slope, { kind = 'pocket', from, to } = {}) {
+  const k = kind === 'outside' ? 'outside' : kind === 'inside' ? 'inside' : 'pocket';
+  const pr = slope && typeof slope === 'object' ? parse(slope, k) : { error: 'no slope' };
+  if (pr.error) return null;
+  return deviationOf(pr, Number(from), Number(to), memoAt(pr));
+}
+
 /** The slope rule a plain cut type follows: 'pocket' | 'inside' | 'outside' (the CUT_TYPES ids and the Shaper names both read). */
 export function terraceKind(cutType) {
   if (cutType === 'exterior' || cutType === 'outside') return 'outside';
@@ -262,27 +355,42 @@ export function terraceKind(cutType) {
 
 const sameOutlines = (A, B) => A.length === B.length && A.every((o, i) => sameOutline(o.polygon, B[i].polygon));
 
+/** TASK 717: a stepped cut record -> its steppedTerraces options (the ONE mapping, for the derivation and the card note): the step depth, the
+ *  cut depth, and when the record has `adaptiveSteps` ON its `stepDeviation` (base mm; STEP_RESOLUTION.defaultMm when it has none). */
+export function terraceOptions(rec) {
+  const o = { kind: terraceKind(rec.terraceAs), step: rec.stepDepth, depth: rec.cutDepth };
+  if (rec.adaptiveSteps === true) o.deviation = Number(rec.stepDeviation) > 0 ? Number(rec.stepDeviation) : STEP_RESOLUTION.defaultMm;
+  return o;
+}
+
 /**
- * steppedTerraces(slope, { kind, step, depth }) -> { steps, undercutBelow, zTop, zMax, error }
+ * steppedTerraces(slope, { kind, step, depth, deviation }) -> { steps, undercutBelow, zTop, zMax, error } (+ `deviation` when adaptive)
  *   kind   'pocket' | 'inside' | 'outside' (pocket and inside clear the INTERSECTION of the rings above a depth, outside keeps their UNION)
  *   step   the step depth (base mm; STEP_DEPTH.defaultMm when missing, never below STEP_DEPTH.minMm)
+ *   deviation  TASK 717: ADAPTIVE stepping when > 0: the steps are placed by this maximum deviation (base mm, never below
+ *          STEP_RESOLUTION.minMm; adaptiveDepths) instead of every `step`; everything else (outlines, merge, undercut) is the same
  *   depth  the cut's full depth (base mm); missing / unset = the slope's deepest ring. Below the deepest ring the wall is vertical.
  *   steps  [{ depth, outlines: [{ polygon:[{x,y}], walk|null }] }], shallow to deep, identical consecutive steps merged into the deeper one
  *   undercutBelow  the depth (mm) below which the wall comes back under material left above (cut straight there), or null
  *   error  why there are no steps (a ring that does not close, fewer than 2 rings), else null
  */
-export function steppedTerraces(slope, { kind = 'pocket', step, depth } = {}) {
+export function steppedTerraces(slope, { kind = 'pocket', step, depth, deviation } = {}) {
   const none = (error) => ({ steps: [], undercutBelow: null, zTop: null, zMax: null, error });
   if (!slope || typeof slope !== 'object') return none('no slope');
   const k = kind === 'outside' ? 'outside' : kind === 'inside' ? 'inside' : 'pocket';
   const pr = parse(slope, k);
   if (pr.error) return none(pr.error);
-  const s = Math.max(STEP_DEPTH.minMm, Number(step) > 0 ? Number(step) : STEP_DEPTH.defaultMm);
   const zMax = pr.rings[pr.rings.length - 1].z;
   const D = Number(depth) > 0 && depth !== true ? Number(depth) : zMax;
-  const depths = [];
-  for (let i = 1; i * s < D - Z_EPS; i++) depths.push(Math.round(i * s * 1e9) / 1e9);
-  depths.push(D);
+  const tol = Number(deviation) > 0 ? Math.max(STEP_RESOLUTION.minMm, Number(deviation)) : null;
+  let depths;
+  if (tol !== null) depths = adaptiveDepths(pr, tol, D);
+  else {
+    const s = Math.max(STEP_DEPTH.minMm, Number(step) > 0 ? Number(step) : STEP_DEPTH.defaultMm);
+    depths = [];
+    for (let i = 1; i * s < D - Z_EPS; i++) depths.push(Math.round(i * s * 1e9) / 1e9);
+    depths.push(D);
+  }
   const steps = [];
   for (const d of depths) {
     const outlines = outlinesAt(pr, Math.min(d, zMax));
@@ -290,7 +398,9 @@ export function steppedTerraces(slope, { kind = 'pocket', step, depth } = {}) {
     else steps.push({ depth: d, outlines });
   }
   const undercut = pr.undercutBelow !== null && pr.undercutBelow < D - Z_EPS ? pr.undercutBelow : null;
-  return { steps, undercutBelow: undercut, zTop: pr.rings[0].z, zMax, error: null };
+  const out = { steps, undercutBelow: undercut, zTop: pr.rings[0].z, zMax, error: null };
+  if (tol !== null) out.deviation = tol;
+  return out;
 }
 
 /**
@@ -311,7 +421,7 @@ export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
   const plain = deriveProfileCuts(target, { ...rest, cutType: terraceAs }, state, loops, loopPolys, ownedLoops);
   const outer = plain.find((c) => !c.isHole && c.kind !== 'chain');
   if (!outer) return [];
-  const T = steppedTerraces(slope, { kind: terraceKind(terraceAs), step: rec.stepDepth, depth: rec.cutDepth });
+  const T = steppedTerraces(slope, terraceOptions(rec)); // TASK 717: the step depth, or the adaptive deviation
   if (!T.steps.length) return [];
   const ref = outer.isCompound ? outer.outerPoly : outer.polygon;
   const flip = ref && ref.length >= 3 && signedArea(ref) < 0; // wind each outline like the target's own outer loop (a pocket's holes go the other way)

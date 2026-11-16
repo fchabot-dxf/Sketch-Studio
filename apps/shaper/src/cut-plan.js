@@ -8,7 +8,7 @@
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey, makeProfile, ownedLoopIds } from '#core/profile-model.js';
-import { steppedTerraces, stepGaps, terraceKind, deriveCuts, STEP_DEPTH } from '#core/stepped-cut.js';
+import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel } from '#core/stepped-cut.js';
 import { format as formatUnit } from '#core/units.js';
 import { docUnit } from '#core/settings-manager.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
@@ -28,22 +28,32 @@ export function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) |
 let lastStep = STEP_DEPTH.defaultMm;
 export const lastStepDepth = () => lastStep;
 export function rememberStepDepth(mm) { const n = Number(mm); if (n > 0) lastStep = Math.max(STEP_DEPTH.minMm, n); return lastStep; }
+// TASK 717: ADAPTIVE stepping, per record (`adaptiveSteps`, default OFF) with its RESOLUTION (`stepDeviation`, base mm, #core STEP_RESOLUTION): the last
+// values set on any stepped cut are the next record's (switched to a stepped type) defaults, as for the step depth.
+let lastAdaptive = false;
+let lastDeviation = STEP_RESOLUTION.defaultMm;
+export const lastAdaptiveSteps = () => lastAdaptive;
+export function rememberAdaptiveSteps(on) { lastAdaptive = on === true; return lastAdaptive; }
+export const lastStepDeviation = () => lastDeviation;
+export function rememberStepDeviation(mm) { const n = Number(mm); if (n > 0) lastDeviation = Math.max(STEP_RESOLUTION.minMm, n); return lastDeviation; }
 /**
  * steppedSummary(storedRec) — TASK 714: what a STEPPED record's terraces are (the same steppedTerraces call #core/stepped-cut deriveCuts makes, through
- * the effective record): { count, depths (base mm, shallow to deep), undercutBelow (mm | null), label, error }, or null for any other record.
+ * the effective record): { count, depths (base mm, shallow to deep), undercutBelow (mm | null), label, error, deviation (TASK 717: the adaptive
+ * resolution, base mm, or null when the steps are every Step depth) }, or null for any other record.
  */
 export function steppedSummary(storedRec) {
   const rec = effectiveCutRecord(storedRec);
   if (!rec || !rec.terraceAs || !rec.slope) return null;
-  const T = steppedTerraces(rec.slope, { kind: terraceKind(rec.terraceAs), step: rec.stepDepth, depth: rec.cutDepth });
-  return { count: T.steps.length, gaps: stepGaps(T.steps), depths: T.steps.map((st) => st.depth), undercutBelow: T.undercutBelow, label: rec.slope.label || null, error: T.error };
+  const T = steppedTerraces(rec.slope, terraceOptions(rec));
+  return { count: T.steps.length, gaps: stepGaps(T.steps), depths: T.steps.map((st) => st.depth), undercutBelow: T.undercutBelow, label: rec.slope.label || null, error: T.error, deviation: T.deviation ?? null };
 }
 /** Outlines closer than this (base mm, 1/16 in) are flagged on the card: hard to pick one by one on the Origin (advisor hint, owner may remove). */
 export const CLOSE_OUTLINES_MM = 25.4 / 16;
 /**
  * The note of a stepped record as items { text, warn?, title? } (the card shows `warn` in the warning colour with `title`; `text` is the whole line,
  * what the 3D Review's info shows). Doc unit. "Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart" (one value when
- * evenly spaced, "min–max" otherwise), then "undercut below ..." when there is one.
+ * evenly spaced, "min–max" otherwise), then "undercut below ..." when there is one. TASK 717, adaptive stepping: "Pocket 1 (8mm): adaptive,
+ * Medium (0.25 mm): 7 steps at 6.19 · 6.69 · 7.07 · 7.39 · 7.67 · 7.93 · 8 mm · outlines 0.21–0.5 mm apart" (the level's name, or Custom).
  */
 export function steppedNoteItems(storedRec) {
   const s = steppedSummary(storedRec);
@@ -52,12 +62,15 @@ export function steppedNoteItems(storedRec) {
   const name = s.label || (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Stepped cut';
   if (s.error) return [{ text: `${name}: the slope could not be read (${s.error}): nothing is cut` }];
   const n = `${s.count} step${s.count === 1 ? '' : 's'}`;
-  const item = { text: `${name}: ${n}, ${s.count > 1 ? `${f(s.depths[0])} to ` : ''}${f(s.depths[s.depths.length - 1])} ${u}` };
+  const g = (mm) => String(Number(formatUnit(mm, u, { decimals: u === 'in' ? 4 : 2 })));
+  const item = { text: s.deviation === null
+    ? `${name}: ${n}, ${s.count > 1 ? `${f(s.depths[0])} to ` : ''}${f(s.depths[s.depths.length - 1])} ${u}`
+    : `${name}: adaptive, ${(resolutionLevel(s.deviation) || { label: 'Custom' }).label} (${g(s.deviation)} ${u}): ${n} at ${s.depths.map(g).join(' \u00b7 ')} ${u}` };
   if (s.gaps.length) {
-    const lo = Math.min(...s.gaps), hi = Math.max(...s.gaps), g = (mm) => String(Number(formatUnit(mm, u, { decimals: u === 'in' ? 4 : 2 })));
+    const lo = Math.min(...s.gaps), hi = Math.max(...s.gaps);
     const spacing = ` \u00b7 outlines ${g(lo) === g(hi) ? g(lo) : `${g(lo)}\u2013${g(hi)}`} ${u} apart`;
     item.text += spacing;
-    if (lo < CLOSE_OUTLINES_MM - 1e-9) { item.warn = spacing; item.title = 'outlines this close may be hard to pick on the Origin: try a bigger step'; }
+    if (lo < CLOSE_OUTLINES_MM - 1e-9) { item.warn = spacing; item.title = `outlines this close may be hard to pick on the Origin: try a ${s.deviation === null ? 'bigger step' : 'coarser resolution'}`; } // TASK 717: adaptive has no step
   }
   const items = [item];
   if (s.undercutBelow !== null) items.push({ text: `${name}: undercut below ${f(s.undercutBelow)} ${u} cut straight` });

@@ -15694,3 +15694,35 @@ The engine and every shared package stay ONE copy in the repo; a site is BUILT f
   arrow drag, the undimensioned drag rule, 688's box placement.
 - Evidence (.evidence/690, local): mouse-/touch-1-box-5-below, -2-box-minus5-above, -3-made-above, -4-dimension-minus3-below (label -3.0),
   -5-parameter-minus2-below, -6-parameters-window.
+
+## TURN 702
+The Curved bench seat template at 40 slats built in ~2.5 s. Claude Opus subagent, worktree bench-perf-702, branch agents/bench-perf-702, from main face604.
+- PROFILE (node, main face604, .evidence/702/instrument-main.txt, entry-totals.txt): one 40-slat build = 838 engine solves (961 ms), 159 rank
+  probes (1101 ms), 38 nullspaces (226 ms); the rest is the tool layer around them. The probes were the cubic term: each rebuilt the
+  Gram-Schmidt basis of all ~800 non-driven rows (320 unknowns) from scratch, although the previous probe's rows were the same plus one.
+  Every assembly found each row's shapes by a scan of all shapes (rows x shapes); a converged solve assembled its start point three times.
+  Growth (median of 3, ms): main 10 / 20 / 40 slats = 102 / 362 / 2520; the cost is in the solver core (packages/core/solver/engine.js).
+- FIX, all in packages/core/solver/engine.js, each the SAME arithmetic on the same numbers (no solve or probe skipped: the counts 838 / 159 / 38
+  are unchanged, entry-totals.txt):
+  (1) the rank probe keeps its basis on the solver (_rankMemo) and resumes after the leading rows that are, column and value, the rows it was
+  built from (a basis vector never changes once made, so the basis after k rows depends on those k rows only); a differing row cuts it back
+  there; more unknowns are zero columns the sweep never reads. (2) _assemble: a row's shapes from one id index per assembly (the first shape
+  with the id, as find returned); a residuals-only assembly allocates no Jacobian buffers. (3) solve: one full assembly per point (the residual
+  check, the first LM step or the pre-pass's first step, an LM step after a rejected trial, the polish read it). (4) _nullspace: a row update
+  runs over the pivot row's non-zero columns (a zero column only changes a zero's sign, which reaches no result; a non-finite factor keeps
+  the full sweep).
+- RESULT: 40 slats 2520 -> 800 ms in node (median of 3; perf-branch.txt: 10 / 20 / 40 = 67 / 178 / 800 ms, min 767 at 40); in the live start view (SketchStudio,
+  headless Edge, live-startview-*.txt) the in-page build 2117 -> 552 ms and "40" typed -> new preview 2292 -> 712 ms past the 200 ms settle.
+  NOT the wanted < 0.5 s: what is left is the 838 solves + probes themselves, each O(sketch) per tool operation (0.36 s of solves, the tool
+  layer's per-op checks); see the report.
+- IDENTICAL: every template at its defaults and the bench seat at every count 2..40 (62 documents), built with Date.now pinned, deep-equal to
+  main's and the files byte-identical (deep-equal.txt: "documents: 62, deep-equal: 62, different: 0", md5 db46517e020c2da351a155f21de6a70b both).
+- Tests: NEW tests/bench-perf-702.test.js (`// gate: exclusive`, 225 checks: 40 slats under 1500 ms; the kept basis answers every dimension of a
+  20-slat seat exactly as a fresh solver, again with the whole basis reused, a determined chord, after a joint moved, after a free line added
+  (more columns), after a gap made a reference). Fail-first on main: "40 slats builds in 2676 ms, under 1500 ms" (failfirst-main.txt).
+- Gate: gate:quick 419/419 (9 exclusive DEFERRED by the merge lock; run directly, all exit 0: bench-perf-702, constraint-audit, coverage-matrix,
+  coverage-properties, extreme-arcs, parameters-batch, profile-fill, relief-model, solver-perf-guard). Live, directly: templates-live,
+  templates-674-live, fav-templates-692-live, templates-672-live, template-start-670-live, drag-follow-live, arc-rim-drag-live,
+  live-dimension-race: all exit 0.
+- BEHAVIOUR CHANGES for existing users: none in results (every number the same); every solve / rank probe / DOF query is cheaper on a large
+  sketch; the engine keeps the rank basis between probes (memory up to 8 x unknowns^2 bytes, ~0.8 MB at 320 unknowns).

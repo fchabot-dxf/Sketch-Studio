@@ -15694,3 +15694,10 @@ The engine and every shared package stay ONE copy in the repo; a site is BUILT f
   arrow drag, the undimensioned drag rule, 688's box placement.
 - Evidence (.evidence/690, local): mouse-/touch-1-box-5-below, -2-box-minus5-above, -3-made-above, -4-dimension-minus3-below (label -3.0),
   -5-parameter-minus2-below, -6-parameters-window.
+
+## TURN 700 (Claude Sonnet worker): the favourite star no longer covers a preview label
+- Cause: the star (44 px) sat in the top-right of the card, over the preview; labels sit round the drawing, so some (R5 of Rounded rectangle, and 8 cards on a phone) were under it.
+- Fix (ONE rule, shared card CSS in packages/ui/template-picker.js): the star sits OUTSIDE the preview, at the card's bottom-right beside the name / description; the name row is 36 px min (+ 8 card padding = 44) and name / description keep 40 px clear of the star. No per-template offsets, labels untouched.
+- Test: tests/fav-star-overlap-700-live.test.js (every card, desktop 1280x800 + phone 390x844 touch: zero star/text overlaps, star >= 44 px, still toggles). Before: desktop 5 overlaps on 4 cards (rounded-rectangle, right-angle-corner, stair-stringer x2, parallelogram-frame); phone 8 on 7 cards. After: 0 / 0.
+- Behaviour change for existing users: the star moved from the preview's top-right to the card's bottom-right; a long template name may wrap to a second line on a narrow card (cards a little taller).
+- Evidence: .evidence/700/before|after (rounded-rectangle, desktop + phone).

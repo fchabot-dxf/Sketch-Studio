@@ -56,6 +56,7 @@ const variants = (t) => {
   if (t.id === 'box-frame') return ['Vertical', 'Horizontal'].flatMap((layout) => choices(t, 'joint').map((joint) => (layout === 'Vertical' && joint === 'V-Through' ? {} : { layout, joint })));
   if (t.id === 'right-angle-corner' || t.id === 'polygon-frame') return choices(t, 'joint').map((joint) => ({ joint }));
   if (t.id === 'right-angle-brace') return choices(t, 'topJoint').flatMap((topJoint) => choices(t, 'blJoint').flatMap((blJoint) => choices(t, 'brJoint').map((brJoint) => ({ topJoint, blJoint, brJoint }))));
+  if (t.id === 'trapezoid-frame') return choices(t, 'variant').map((variant) => ({ variant })); // TASK 674: each shape (the scalene one has its setback)
   return [{}];
 };
 
@@ -67,7 +68,7 @@ let checks = 0;
 for (const t of TEMPLATES) {
   // ---- 1. the user parameters
   const doc = buildTemplate(t);
-  const live = Object.entries(t.params).filter(([, spec]) => isLiveParam(spec));
+  const live = Object.entries(t.params).filter(([, spec]) => isLiveParam(spec, defaultParams(t))); // TASK 674: the params that apply at the defaults
   assert.deepStrictEqual(doc.geometry.parameters.map((p) => p.name), live.map(([k]) => paramName(k)), `${t.id}: one user parameter per length / angle param, in order`);
   for (const [k, spec] of live) {
     const p = doc.geometry.parameters.find((x) => x.name === paramName(k));
@@ -77,10 +78,11 @@ for (const t of TEMPLATES) {
     assert.strictEqual(p.comment, spec.label, `${t.id}: ${p.name} comment = its label`);
     checks++;
   }
-  for (const [k, spec] of Object.entries(t.params)) if (!isLiveParam(spec)) assert.ok(!doc.geometry.parameters.some((p) => p.name === paramName(k)), `${t.id}: ${k} (${paramKind(spec)}${spec.atOpen ? ', atOpen' : ''}) is NOT in the table: nothing could follow it`);
+  for (const [k, spec] of Object.entries(t.params)) if (!isLiveParam(spec, defaultParams(t))) assert.ok(!doc.geometry.parameters.some((p) => p.name === paramName(k)), `${t.id}: ${k} (${paramKind(spec)}${spec.atOpen ? ', atOpen' : ''}) is NOT in the table: nothing could follow it`);
 
   for (const extra of variants(t)) {
     const m = `${t.id} ${JSON.stringify(extra)}`;
+    const live = Object.entries(t.params).filter(([, spec]) => isLiveParam(spec, { ...defaultParams(t), ...extra })); // TASK 674: with this variant's choices
     const S = open(t, extra);
     assert.strictEqual(L.nullity(S), 0, `${m}: 0 DOF`);
     // the table's values: evaluate the loaded parameters (the same evaluation the Parameters table shows)
@@ -97,7 +99,8 @@ for (const t of TEMPLATES) {
     const dimNames = new Map(dims.map((c) => [c.name, c]));
     const reads = (c) => dependencies(parseInput(c.expression, { allowAssign: false }));
     const params = (c, seen = new Set()) => reads(c).flatMap((d) => (names.has(d) ? [d] : seen.has(d) ? [] : (seen.add(d), params(dimNames.get(d), seen)))); // through earlier dimensions
-    assert.strictEqual(dims.length, t.dimensions, `${m}: ${t.dimensions} driving dimensions`);
+    const nDims = t.dimensions + live.length - Object.values(t.params).filter((spec) => isLiveParam(spec, defaultParams(t))).length; // TASK 674: a param a variant adds (the scalene setback) adds its dimension
+    assert.strictEqual(dims.length, nDims, `${m}: ${nDims} driving dimensions`);
     for (const c of dims) {
       assert.ok(typeof c.expression === 'string' && c.expression, `${m}: dimension ${c.name} has a formula`);
       const deps = reads(c);

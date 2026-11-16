@@ -8,7 +8,7 @@
 //     open with the reason and the box marked; Enter in a value box opens
 import assert from 'node:assert';
 import { open, createProfile } from './helpers/node-app.js';
-import { TEMPLATES, buildTemplate, paramKind, paramUnit, templateById } from '#core/templates.js';
+import { TEMPLATES, buildTemplate, paramKind, paramUnit, templateById, templateCorners } from '#core/templates.js';
 import { buildParameterRows } from '#ui/parameter-table.js';
 
 const profile = await createProfile();
@@ -29,8 +29,11 @@ try {
   for (const t of TEMPLATES) {
     await startOf(t.id);
     const rows = qa('.sk-tp-field');
-    assert.deepStrictEqual(rows.map((r) => r.dataset.param), Object.keys(t.params), `${t.id}: a row per param, in order`);
+    // TASK 674: a choice the preview's corners carry (not a per-corner one) is picked on the preview only: no row
+    const onPreview = new Set(templateCorners(t).filter((c) => !t.params[c.param].perCorner).map((c) => c.param));
+    assert.deepStrictEqual(rows.map((r) => r.dataset.param), Object.keys(t.params).filter((k) => !onPreview.has(k)), `${t.id}: a row per param, in order (none for a joint on the preview)`);
     for (const [k, spec] of Object.entries(t.params)) {
+      if (onPreview.has(k)) { assert.ok(q(`.sk-tp-corners .sk-tp-corner[data-param="${k}"]`), `${t.id}: ${k} picked on the preview`); continue; }
       const row = q(`.sk-tp-field[data-param="${k}"]`);
       assert.ok(row.textContent.includes(spec.label), `${t.id}: ${k} shows its label`);
       if (paramKind(spec) === 'choice') {
@@ -55,17 +58,18 @@ try {
     assert.deepStrictEqual(st.parameters.map((p) => p.name), want.parameters.map((p) => p.name), `${t.id}: its user parameters`);
   }
 
-  // ---- the corner joint glyph picker
+  // ---- the corner joint glyph picker (TASK 674: on the preview, the corner's own picker)
+  const cornerChoices = (param) => qa(`.sk-tp-corners .sk-tp-corner[data-param="${param}"] button`).filter((b) => !b.hidden);
   await startOf('right-angle-corner');
-  let bs = visibleChoices('joint');
+  let bs = cornerChoices('joint');
   assert.deepStrictEqual(bs.map((b) => [b.dataset.value, b.getAttribute('aria-label'), b.getAttribute('aria-pressed')]), [['H-Through', 'Horizontal through', 'true']], 'collapsed: the active joint only');
   pressEl(bs[0]); await settle();
-  bs = visibleChoices('joint');
+  bs = cornerChoices('joint');
   assert.deepStrictEqual(bs.map((b) => b.getAttribute('aria-label')), ['Vertical through', 'Horizontal through', 'Mitered'], 'a press expands it to the 3 joints, each named');
   assert.ok(bs.every((b) => b.querySelectorAll('svg polygon').length === 2), 'each joint glyph: two board polygons');
   assert.ok(bs.find((b) => b.dataset.value === 'H-Through').querySelector('svg.sk-tp-glyph-active'), 'the active one is coloured active');
   pressEl(bs.find((b) => b.dataset.value === 'Miter')); await settle();
-  bs = visibleChoices('joint');
+  bs = cornerChoices('joint');
   assert.deepStrictEqual(bs.map((b) => [b.dataset.value, b.getAttribute('aria-pressed')]), [['Miter', 'true']], 'a pick selects it and collapses');
   assert.ok(q('.sk-tp-panel'), 'picking a joint does not close the modal');
   pressEl('.sk-tp-open'); await settle(400); await dontSave();

@@ -49,8 +49,9 @@ try {
     assert.deepStrictEqual(redirects[0], ['/', `/apps/${app}/`, '302'], `${app}: / opens the app`);
     if (app === 'sketchstudio') {
       const old = redirects.slice(1).map((x) => x.join(' '));
+      const HOST = { shaper: 'shaper-svg', penplotter: 'penplotter', trace: 'sketch-trace' }; // owner turn 1862
       for (const o of ['shaper', 'penplotter', 'trace']) {
-        const site = `https://sketch-${o}.pages.dev/apps/${o}/`;
+        const site = `https://${HOST[o]}.pages.dev/apps/${o}/`;
         for (const line of [`/${o} ${site} 302`, `/apps/${o} ${site} 302`, `/apps/${o}/* ${site}:splat 302`]) assert.ok(old.includes(line), `sketchstudio keeps the old link: ${line}`);
       }
       assert.strictEqual(old.length, 9, 'sketchstudio: the old links of the three other apps, nothing else');

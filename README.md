@@ -53,11 +53,11 @@ No other app's folder is in a site (`tests/site-closure.test.js` checks it).
 | Site | Pages project | Build command | Output dir |
 |---|---|---|---|
 | https://sketch-studio.pages.dev (SketchStudio) | `sketch-studio` (Git-connected) | `node scripts/build-site.cjs sketchstudio` | `dist` |
-| https://sketch-shaper.pages.dev | `sketch-shaper` (direct upload) | `node scripts/build-site.cjs shaper` | `dist` |
-| https://sketch-penplotter.pages.dev | `sketch-penplotter` (direct upload) | `node scripts/build-site.cjs penplotter` | `dist` |
+| https://shaper-svg.pages.dev | `shaper-svg` (direct upload) | `node scripts/build-site.cjs shaper` | `dist` |
+| https://penplotter.pages.dev | `penplotter` (the older Pen Plotter project, deployed by upload) | `node scripts/build-site.cjs penplotter` | `dist` |
 | https://sketch-trace.pages.dev | `sketch-trace` (direct upload) | `node scripts/build-site.cjs trace` | `dist` |
 
-`npm run site:<app>` runs the same build. A direct-upload site is deployed from the REPO ROOT (`wrangler pages deploy dist --project-name sketch-<app>`):
+`npm run site:<app>` runs the same build. A direct-upload site is deployed from the REPO ROOT (`wrangler pages deploy dist --project-name <project>`):
 wrangler uploads the `functions/` folder of the directory it runs in (the Google sign-in routes), not one inside `dist/`.
 sketch-studio's site keeps the old links: `/shaper`, `/penplotter`, `/trace` and `/apps/<app>/*` redirect (302, query string kept) to the app's own site.
 

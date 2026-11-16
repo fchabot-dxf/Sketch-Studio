@@ -14,8 +14,8 @@
 // (its first one leads), so a copied chain stays joined and a copied rectangle stays closed. Stored as
 //   sources: { shapes: [ids], points: [the leading joint ids], shapeJoints: [[the point index of each joint of each shape]] }.
 // THE INSTANCES (patternSlots): the source is instance 0; the others are numbered `at`:
-//   circular   at = [i], i = 1 .. N-1; the user angle i * step, counter-clockwise (world y runs down: the world rotation is -angle). step = total
-//              / N for a full 360, else total / (N - 1).
+//   circular   at = [i], i = 1 .. N-1; the user angle i * step, counter-clockwise when positive, clockwise when negative (world y runs down: the
+//              world rotation is -angle). step = total / N when |total| == 360, else total / (N - 1).
 //   rectangular at = [i, j], i over direction 1, j over direction 2, [0, 0] = the source. The offset is i s1 u1 + j s2 u2, u = the direction's
 //              unit vector (a picked line's start -> end, live; default the X axis / the user's +Y axis), s = the spacing: distanceType 'spacing'
 //              -> the distance; 'total' (Fusion's Extent) -> distance / (N - 1).
@@ -133,13 +133,18 @@ function reducedRims(sources, shapes) {
 const intOr = (v, d) => (v != null && Number.isFinite(Number(v)) ? Number(v) : d); // not rounded: a typed 2.5 is refused (patternValuesRefusal), not silently made 3
 const pair = (v, f) => [f(asList(v)[0]), f(asList(v)[1])];
 
+export const CIRCULAR_ANGLE_REFUSAL = 'the total angle must be between -360 and 360 degrees, not 0';
+/** Why a circular pattern total angle (user degrees) cannot be used, or null: [-360, 0) and (0, 360] are valid. */
+export function circularAngleRefusal(angle) {
+  return Number.isFinite(angle) && angle !== 0 && Math.abs(angle) <= 360 ? null : CIRCULAR_ANGLE_REFUSAL;
+}
+
 /** Why these pattern values cannot be used, or null. `c` is a record (or the values of one). */
 export function patternValuesRefusal(c) {
   if (c.type === T.CIRCULAR_PATTERN) {
     if (!(Number.isInteger(c.quantity) && c.quantity >= 2)) return 'the quantity must be a whole number of 2 or more';
     if (c.quantity > 1000) return 'the quantity must be at most 1000';
-    if (!(c.angle > 0) || !(c.angle <= 360)) return 'the total angle must be more than 0 and at most 360 degrees';
-    return null;
+    return circularAngleRefusal(c.angle);
   }
   for (let k = 0; k < 2; k++) {
     if (!(Number.isInteger(c.quantity[k]) && c.quantity[k] >= 1)) return `quantity ${k + 1} must be a whole number of 1 or more`;
@@ -150,11 +155,11 @@ export function patternValuesRefusal(c) {
   return null;
 }
 
-/** The angle between neighbouring instances, user degrees (counter-clockwise). */
+/** The angle between neighbouring instances, user degrees (counter-clockwise when positive, clockwise when negative). */
 export function patternAngleStep(c) {
   const n = c.quantity;
   if (!(n >= 2)) return 0;
-  return c.angle > FULL ? c.angle / n : c.angle / (n - 1);
+  return Math.abs(c.angle) > FULL ? c.angle / n : c.angle / (n - 1);
 }
 /** The spacing between neighbouring instances in direction k (0 or 1), world mm (signed: a negative distance runs the other way). */
 export function patternSpacing(c, k) {

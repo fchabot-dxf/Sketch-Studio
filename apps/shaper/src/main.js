@@ -280,7 +280,7 @@ document.addEventListener('keydown', (e) => {
 // SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js), with Shaper's own options
 // declared in cut-import.js (TASK 583: each element's cut record, kept descIds, the cuts kept in CUT_PLAN; the node test kit calls it too).
 // The entry is the sidebar's "Import SVG / DXF…" (project-actions.js, passed to mountProjectSidebar above); a drop on the Design view is the second way in.
-const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => VIEWS.design }); // TASK 610: cut-import.js
+const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => VIEWS.design, showDocument: () => modes.showDocument() }); // TASK 610: cut-import.js; TASK 705: an import from Explore shows Design
 
 // Drag-and-drop onto the canvas.
 const dropZone = document.getElementById('canvas');
@@ -388,10 +388,11 @@ function ensureSketch() {
     session: createShaperSession({ prepare, getVcarveView: () => vcarveView }), // shaper-session.js: Explore SVG, Prepare selection + view, Vcarve view
     refreshViews: () => { if (infoPanel) infoPanel.refresh(); if (vcarveView) vcarveView.refresh(); },
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
-    afterSidecar: () => {
+    afterSidecar: (reason) => {
       prepare.afterRestore();
       showStockThickness();
       if (modes.current() === 'review') enterReview(designController.state);
+      modes.documentOpened(reason); // TASK 705 (modes.js): a design opened while Explore shows is shown in Design
     },
   }));
   docBuffer.restore();

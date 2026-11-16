@@ -28,10 +28,13 @@ export function importShaperFile(designController, text, fileName, getDocUnit) {
  * TASK 610: what the page script did around importShaperFile, moved here unchanged: the sidebar's "Import SVG / DXF…" entry (importFile) and the drop on the
  * Design view (mountDrop). The page and the node test kit both call it. ensureSketch(): mounts the sketcher if it is not yet; getController(): the sketcher;
  * getInfoPanel(): the SKETCHES panel to refresh (or null); notify(msg): the status line; getDropHost(): the element a dropped file lands on.
+ * showDocument(): TASK 705, the mode router's (modes.js): Explore cannot show the design, so an import started there shows Design FIRST (the canvas then
+ * has its size for the import's fit, and the status line, which lives over the Design view, is seen).
  */
-export function createShaperImporter({ ensureSketch, getController, getInfoPanel, notify, getDropHost }) {
+export function createShaperImporter({ ensureSketch, getController, getInfoPanel, notify, getDropHost, showDocument }) {
   const importFile = (text, fileName) => {
     ensureSketch();
+    showDocument();
     const res = importShaperFile(getController(), text, fileName, docUnit);
     const panel = getInfoPanel();
     if (res.ok && panel) panel.refresh();

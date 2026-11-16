@@ -17,6 +17,10 @@ assert.strictEqual(SHORT_VIEWPORT_QUERY, '(max-height: 500px) and (orientation: 
 const css = read('packages/ui/sketcher.css');
 const shortQueries = [...css.matchAll(/@media\s+([^{]*max-height[^{]*)\{/g)].map((m) => m[1].trim());
 assert.deepStrictEqual(shortQueries, [SHORT_VIEWPORT_QUERY], 'sketcher.css spells the declared short-viewport query: ' + JSON.stringify(shortQueries));
+// TASK 705: Shaper's page stylesheet (its stages' phone landscape layout) spells it too
+const shaperPage = read('apps/shaper/index.html');
+const shaperShort = [...shaperPage.matchAll(/@media\s+([^{]*max-height[^{]*)\{/g)].map((m) => m[1].trim());
+assert.deepStrictEqual(shaperShort, [SHORT_VIEWPORT_QUERY], 'apps/shaper/index.html spells the declared short-viewport query: ' + JSON.stringify(shaperShort));
 
 // the injected stylesheets use the constant, never a copy
 for (const f of ['packages/ui/tool-ribbon.js', 'packages/ui/design-browser.js']) {

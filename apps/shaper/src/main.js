@@ -22,7 +22,7 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
-import { cutPlanEntries, CUT_PLAN, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { mountAppChrome } from '#ui/app-chrome.js';
@@ -383,9 +383,9 @@ mountAppFooter({
 const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
-  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null };
+  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: planSteppedNotes(CUT_PLAN) }; // TASK 714: notes = the stepped cuts' steps / undercuts
 };
-const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y])]);
+const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit()]); // TASK 714: the notes are in the doc unit
 async function enterReview(st) {
   const info = document.getElementById('review-info');
   try {

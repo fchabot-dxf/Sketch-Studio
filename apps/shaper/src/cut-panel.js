@@ -4,11 +4,13 @@
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
+import { STEP_DEPTH } from '#core/stepped-cut.js';
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
-const MENU_ORDER = ['online', 'guide', 'interior', 'pocket', 'exterior', 'stock']; // TASK 472: Stock last (it is the board, not a cut)
+// TASK 714: each STEPPED type right after its plain type; a stepped type is listed only when the target can take it (its record carries that slope).
+const MENU_ORDER = ['online', 'guide', 'interior', 'stepped-inside', 'pocket', 'stepped-pocket', 'exterior', 'stepped-outside', 'stock']; // TASK 472: Stock last (it is the board, not a cut)
 // TASK 455: each cut type carries its own icon (CUT_TYPES.icon, 18x18 inner markup in currentColor); colours are CSS tokens.
 const iconSvg = (t) => `<svg class="cut-ic" viewBox="0 0 18 18" aria-hidden="true">${(t && t.icon) || ''}</svg>`;
 
@@ -56,6 +58,14 @@ export function createCutPanel(hostEl, opts = {}) {
           <button type="button" class="cut-step" data-d="1" aria-label="Increase depth">+</button>
         </div>
       </div>
+      <div class="cut-row" data-row="stepDepth">
+        <label class="cut-field-label">Step depth</label>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-step-depth" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+      </div>
+      <div class="cut-note" hidden></div>
       <div class="cut-row" data-param="cutOffset">
         <label class="cut-field-label">Offset</label>
         <div class="cut-inline cut-box cut-offset-box">
@@ -87,10 +97,10 @@ export function createCutPanel(hostEl, opts = {}) {
 
   const $ = (sel) => card.querySelector(sel);
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
-  const depthInput = $('.cut-depth'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-presets');
+  const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-presets');
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90 };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, record: null, note: [] };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop];
@@ -104,11 +114,12 @@ export function createCutPanel(hostEl, opts = {}) {
   // ── cut-type dropdown (SP1f) ──
   const closeMenu = () => { menu.hidden = true; syncOpenState(); };
   function buildMenu() {
-    const avail = new Set(availableTypes(current.kind).map((t) => t.id));
+    const avail = new Set(availableTypes(current.kind, current.record).map((t) => t.id));
     menu.innerHTML = '';
     for (const id of MENU_ORDER) {
       const t = cutTypeById(id); if (!t) continue;
       const enabled = avail.has(id);
+      if (t.slopeKind && !enabled) continue; // TASK 714: a stepped type is offered only on a target with that slope (not shown greyed elsewhere)
       const opt = document.createElement('button');
       opt.type = 'button';
       opt.className = 'cut-type-opt' + (id === current.cutType ? ' is-current' : '') + (enabled ? '' : ' is-disabled');
@@ -137,6 +148,8 @@ export function createCutPanel(hostEl, opts = {}) {
     onSetField('cutDepth', parseUnit(String(nextDoc), docUnit())); // → base mm
   }));
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
+  // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored; never below STEP_DEPTH.minMm)
+  stepInput.addEventListener('change', () => { const n = parseUnit(stepInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDepth', Math.max(STEP_DEPTH.minMm, n)); else renderFields(); });
   // offset presets popover (3x2): opens on focus (the value is selected so typing replaces it), closes on blur / pick
   const buildOffsetPop = () => {
     offsetPop.innerHTML = '<div class="cut-pop-title">presets</div><div class="cut-pop-grid"></div>';
@@ -187,6 +200,12 @@ export function createCutPanel(hostEl, opts = {}) {
     card.querySelectorAll('.cut-row[data-param]').forEach((row) => { row.style.display = cutTypeHasParam(current.cutType, row.dataset.param) ? '' : 'none'; });
     // TASK 472: the cutter shape belongs with the bit: a type without a bit diameter (Stock) has no shape row; its depth row reads Thickness
     card.querySelector('.cut-row[data-row="cutterShape"]').style.display = cutTypeHasParam(current.cutType, 'toolDia') ? '' : 'none';
+    // TASK 714: the step row only for a type that DECLARES it (a stepped type), and the stepped cut's note (its steps, an undercut)
+    const curDecl = current.cutType ? cutTypeById(current.cutType) : null;
+    card.querySelector('.cut-row[data-row="stepDepth"]').style.display = curDecl && (curDecl.params || []).includes('stepDepth') ? '' : 'none';
+    stepInput.value = fmt(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
+    noteEl.innerHTML = ''; for (const line of current.note) { const d = document.createElement('div'); d.textContent = line; noteEl.appendChild(d); }
+    noteEl.hidden = !current.note.length;
     const curType = current.cutType ? cutTypeById(current.cutType) : null;
     card.querySelector('.cut-row[data-param="cutDepth"] .cut-field-label').textContent = (curType && curType.depthLabel) || 'Depth';
     const off = Number(current.cutOffset) || 0;
@@ -204,9 +223,9 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90 }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, record: null, note: [] }; return; }
     const rec = model.record || {};
-    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90 };
+    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;
     curLabel.textContent = t ? t.menuLabel : 'Select type';

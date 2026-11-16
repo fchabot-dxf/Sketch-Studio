@@ -783,6 +783,7 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoo
  *   on line         closed loop: the loop swept by r; open chain: the polyline swept by r with round end caps.
  *   guide           not a cut -> no footprint (rings [], centre kept so the view stays dashed).
  * Uncut material (corners the bit cannot reach) is simply the area the footprint does not cover.
+ * TASK 714: a terrace of a stepped cut (#core/stepped-cut.js deriveCuts) carries its `terrace` (its own depth) onto its footprint.
  */
 export function deriveCutFootprint(cuts, rec, state) {
   const out = [];
@@ -815,7 +816,7 @@ export function deriveCutFootprint(cuts, rec, state) {
       if (wall.length >= 3) finishRings.push(...sweptPath(wall, r, { closed: true }));
       for (const ic of islandCenters) finishRings.push(...sweptPath(ic, r, { closed: true }));
       const toolPaths = [...(wall.length >= 3 ? [{ points: wall, closed: true }] : []), ...islandCenters.map((points) => ({ points, closed: true }))];
-      out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, finishRings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters, toolPaths });
+      out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, finishRings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters, toolPaths, ...(cut.terrace ? { terrace: cut.terrace } : {}) });
     } else if (cut.kind === 'chain') {
       const rings = [];
       let anchor = null; // TASK 455: where the depth chip sits (the middle vertex of the first member)
@@ -835,7 +836,7 @@ export function deriveCutFootprint(cuts, rec, state) {
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
       // TASK 455: the depth chip anchor = the top-most vertex of the bit-centre path
       const anchor = center.length >= 3 ? { ...center.reduce((best, p) => (p.y < best.y ? p : best), center[0]) } : null;
-      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }] : [] });
+      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }] : [], ...(cut.terrace ? { terrace: cut.terrace } : {}) });
     }
   }
   return out;

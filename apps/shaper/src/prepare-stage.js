@@ -24,7 +24,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it.
   const refreshCutPanel = () => {
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t) } : null);
+    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut
   };
   // TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second

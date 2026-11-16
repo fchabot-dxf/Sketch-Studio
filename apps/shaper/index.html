@@ -292,6 +292,11 @@
     .cut-pop[hidden] { display: none; }
     .cut-type-menu, .cut-shape-pop { width: 134px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .cut-shape-pop { width: 164px; }
+    /* TASK 714: a stepped type's longer label ("stepped outside") stays on one line: the menu grows past its 134px only then */
+    .cut-type-menu { width: auto; min-width: 134px; }
+    .cut-type-menu .cut-type-opt { white-space: nowrap; }
+    .cut-note { font-size: 11px; line-height: 1.4; color: var(--sk-prep-unit); padding: 0 12px; }
+    .cut-note[hidden] { display: none; }
     .cut-type-opt { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border-radius: 6px; background: var(--sk-prep-field-bg); color: var(--sk-prep-chip-text); font-size: 14px; cursor: pointer; }
     .cut-type-opt .cut-ic { width: 16px; height: 16px; }
     .cut-type-opt span { text-transform: lowercase; }

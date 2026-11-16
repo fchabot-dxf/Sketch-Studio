@@ -14,6 +14,7 @@ import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
 import { CUT_PLAN, keyOf } from './cut-plan.js';
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
+import { ringWalk } from '#core/stepped-cut.js';
 
 const UNIT_SCALE_MM = { mm: 1, cm: 10, in: 25.4, inch: 25.4, inches: 25.4 };
 const edgesKey = (ids) => [...new Set((ids || []).filter(Boolean))].sort().join('|');
@@ -83,12 +84,50 @@ function dedupTolerance(rawLists) {
   return Math.max(diag * 1e-6, 1e-5);
 }
 
-function buildCutRecord(item, warnings) {
+function buildCutRecord(item, warnings, slope = null) {
   const rec = defaultCutRecord();
   rec.cutType = mapFusionCutType(item && item.cutType, warnings);
   const depth = item && item.depthMm != null ? Number(item.depthMm) : null;
   rec.cutDepth = depth != null && Number.isFinite(depth) && depth > 0 ? depth : 'unset';
+  if (slope) rec.slope = slope; // TASK 714: the wall's rings ride with the record (saved, undone, restored with it); the type stays the plain one
   return rec;
+}
+
+const SLOPE_KINDS = { pocket: 'pocket', inside: 'inside', outside: 'outside' };
+/**
+ * slopeFromRegion(reg, { scale, yUp }, warnings) — TASK 714: a region's `slope` (SA-7, SELECTION-BRIDGE.md rule 3a: rings top-down,
+ * { zFromTopMm, segments }) -> the cut record's `slope` = { kind, label, rings: [{ z, segments }] } in WORLD coordinates, the SAME transform
+ * the region's geometry gets (#core/dxf-import buildShapesFromPrimitives: x * scale, y * scale negated for a Y-up payload, an arc's direction
+ * flipped with it; `ccw` then means the angle increases in world coordinates, the #core/stepped-cut.js convention). z stays mm (the field is
+ * named in mm, like depthMm). kind = the region's cutType (pocket | inside | outside): the stepped type that may use it. null when the region
+ * has no slope (or under 2 rings), or a ring does not close into one walk (a warning says so; the region imports without it).
+ */
+export function slopeFromRegion(reg, { scale = 1, yUp = true } = {}, warnings = null) {
+  const raw = reg && Array.isArray(reg.slope) ? reg.slope : null;
+  if (!raw || raw.length < 2) return null;
+  const kind = SLOPE_KINDS[String(reg.cutType || '').trim().toLowerCase()];
+  const label = (reg.label && String(reg.label)) || null;
+  const name = label || 'A region';
+  if (!kind) { if (warnings) warnings.push(`${name}: a slope on a region that is not a pocket, inside or outside cut is ignored`); return null; }
+  const ys = yUp ? -1 : 1;
+  const seg = (q) => {
+    const t = String((q && q.type) || '').toLowerCase(), n = (k) => Number(q[k]) * scale, y = (k) => ys * Number(q[k]) * scale;
+    if (t === 'line') return { type: 'line', x1: n('x1'), y1: y('y1'), x2: n('x2'), y2: y('y2') };
+    if (t === 'arc') return { type: 'arc', cx: n('cx'), cy: y('cy'), r: n('r'), x1: n('x1'), y1: y('y1'), x2: n('x2'), y2: y('y2'), ccw: yUp ? !q.ccw : Boolean(q.ccw) };
+    if (t === 'circle') return { type: 'circle', cx: n('cx'), cy: y('cy'), r: n('r') };
+    return { type: t };
+  };
+  const rings = [];
+  for (const r of raw) {
+    const z = Number(r && r.zFromTopMm);
+    const segments = (Array.isArray(r && r.segments) ? r.segments : []).map(seg);
+    if (!Number.isFinite(z) || !ringWalk(segments)) {
+      if (warnings) warnings.push(`${name}: slope could not be read (no closed ring at ${Number.isFinite(z) ? z : '?'} mm); imported without its slope`);
+      return null;
+    }
+    rings.push({ z, segments });
+  }
+  return { kind, label, rings };
 }
 
 function matchLoopByGeometry(primIndices, primShapes, loops, candidateLoopIds) {
@@ -264,7 +303,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     } else {
       key = keyOf('loop', m.outerLoop.id);
     }
-    plan.set(key, buildCutRecord(m.reg, warnings));
+    plan.set(key, buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings)));
     cutKeys.push(key);
   }
 

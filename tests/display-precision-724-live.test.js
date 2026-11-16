@@ -162,6 +162,55 @@ try {
   assert.deepStrictEqual([await setting('LENGTH_PRECISION'), await setting('ANGLE_PRECISION')], [2, 3], 'SketchStudio sees the same settings');
   assert.deepStrictEqual(await evalJs(`import('/packages/ui/svg-renderer.js').then((m) => [m.formatLenLabel(12.3456), m.formatConstraintValue({ type: 'angle', value: 12.3456 })])`), ['12.35', '12.346°'], 'SketchStudio labels format at 2 and 3');
 
+  // 4b. precision 0 never changes geometry: an UNTOUCHED box commits nothing (exact 4.6 kept, no undo step); an edited box applies; an untouched cut card field writes nothing back
+  await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
+  await waitForApp('design-canvas');
+  await evalJs(`import('/packages/core/settings-manager.js').then((m) => { m.default.set('DOC_UNIT', 'mm'); m.default.set('LENGTH_PRECISION', 0); m.default.set('ANGLE_PRECISION', null); })`);
+  await clickEl('.sk-header-tab[data-tab="design"]');
+  await waitFor(`!!window.__designController`, 'the design controller');
+  await evalJs(`(() => {
+    const st = window.__designController.state;
+    for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
+    st.shapes.length = 0; st.constraints.length = 0;
+    st.joints.set('a', { x: -45, y: -20 }); st.joints.set('b', { x: -40.4, y: -20 });
+    st.shapes.push({ id: 'L1', type: 'line', joints: ['a', 'b'] });
+    st.constraints.push({ type: 'distance', joints: ['a', 'b'], value: 4.6, name: 'd1', glyphPos: { x: -43, y: -30 } });
+    if (st.triggerDraw) st.triggerDraw();
+  })()`);
+  const boxOpen = () => evalJs(`import('/packages/ui/numeric-input-manager.js').then((m) => { const st = window.__designController.state; m.showEditInput(document.getElementById('design-canvas'), st, st.constraints[0]); return 1; })`);
+  const dimState = () => evalJs(`(() => { const st = window.__designController.state; return { v: st.constraints[0].value, undo: st.history.length, box: document.getElementById('dimInput') ? document.getElementById('dimInput').value : null }; })()`);
+  const enterKey = () => send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 }).then(() => send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })).then(() => sleep(400));
+  await boxOpen(); await sleep(300);
+  const before = await dimState();
+  assert.deepStrictEqual([before.v, before.box], [4.6, '5'], 'precision 0: the box shows 5 for a stored 4.6: ' + JSON.stringify(before));
+  await enterKey();
+  const afterEnter = await dimState();
+  assert.deepStrictEqual([afterEnter.v, afterEnter.undo], [4.6, before.undo], 'Enter on the untouched box: still exactly 4.6, no undo step: ' + JSON.stringify(afterEnter));
+  await boxOpen(); await sleep(300);
+  await evalJs(`(() => { const i = document.getElementById('dimInput'); i.focus(); i.select(); })()`);
+  await send('Input.insertText', { text: '5' }); await enterKey();
+  const edited = await dimState();
+  assert.strictEqual(edited.v, 5, 'an edited box applies what was typed: ' + JSON.stringify(edited));
+  // the cut card: depth 7.333 shows 7 at precision 0; focus + blur untouched writes nothing back
+  await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`);
+  await waitForApp('design-canvas');
+  await waitFor(`!!window.fusionJavaScriptHandler`, 'the Fusion bar');
+  await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
+  await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'imported');
+  await clickEl('.sk-header-tab[data-tab="prepare"]');
+  await clickWorld(60, -40);
+  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card');
+  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const [k, r] = [...m.CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket'); m.CUT_PLAN.set(k, { ...r, cutDepth: 7.333 }); })`);
+  await clickWorld(60, -40); await sleep(300);
+  assert.strictEqual(await evalJs(`document.querySelector('.cut-depth').value`), '7', 'precision 0: depth 7.333 shows 7');
+  const depthStored = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((r) => r.cutType === 'pocket').cutDepth)`);
+  await evalJs(`document.querySelector('.cut-depth').focus()`); await sleep(100);
+  await evalJs(`document.querySelector('.cut-depth').blur()`); await sleep(300);
+  assert.strictEqual(await depthStored(), 7.333, 'focus + blur untouched: the stored depth stays 7.333');
+  await clickEl('.cut-depth'); await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }); await sleep(300);
+  assert.strictEqual(await depthStored(), 7.333, 'click in + Tab out untouched: still 7.333');
+  await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('LENGTH_PRECISION', null))`);
+
   // 5. 390 px
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);

@@ -177,12 +177,15 @@ const fixAll = (S, ids) => ids.forEach((j) => { J(S, j).fixed = true; });
     ok(box() && st.history.length === h0, 'tool: 0 is refused, the box stays open, no undo step');
     box().select(); app.type('-5'); app.enter();
     ok(!box() && st.history.length === h0 + 1, 'tool: Enter applies -5 as ONE undo step');
-    const c = st.constraints.find((x) => x.type === CONSTRAINT_TYPES.OFFSET);
+    let c = st.constraints.find((x) => x.type === CONSTRAINT_TYPES.OFFSET);
     const off = st.shapes.find((s) => s.id === c.shapes[1]);
     const yOff = () => st.joints.get(off.joints[0]).y;
     ok(Math.sign(yOff() - ySrc) === Math.sign(yNeg - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 5) < 1e-6, `tool: the offset is made on the other side, 5 away (${yOff()})`);
-    ok(c.value === 5, `tool: the new offset dimension holds |-5| = 5 (its side is the geometry) (${c.value})`);
-    // the dimension box: -3 -> the other side of the source, at 3; its label shows -3.0
+    // TASK 710: the typed value IS the dimension's value (Fusion): -5 stays -5, the side is the pointer's, the sign carries the flip
+    ok(c.value === -5, `tool (710): the new offset dimension holds -5 as typed (${c.value})`);
+    const labNew = labelEl(app, st.constraints.indexOf(c));
+    ok(labNew && /^-5\.0/.test(labNew.textContent.trim()), `tool (710): the label reads -5 (${labNew && labNew.textContent.trim()})`);
+    // the dimension box: -3 keeps the side of -5 (the offset stays on the other side), at 3; its label shows -3.0
     app.tool('select');
     const idx = st.constraints.indexOf(c);
     await app.pause(550);
@@ -194,20 +197,27 @@ const fixAll = (S, ids) => ids.forEach((j) => { J(S, j).fixed = true; });
     app.undo(); // Ctrl+Z in the box (task 675 C): the opening value again, the box open, no document step
     ok(dimInput.value === opening && !dimInput.classList.contains('hidden') && st.history.length === h0 + 1, `dimension: Ctrl+Z in the box restores the opening value (${dimInput.value} vs ${opening})`);
     dimInput.select(); app.type('-3'); app.enter();
-    ok(c.value === -3 && Math.sign(yOff() - ySrc) === -Math.sign(yNeg - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 3) < 1e-4, `dimension: -3 moves the offset to the other side at 3 (${c.value}, ${yOff()})`);
+    ok(c.value === -3 && Math.sign(yOff() - ySrc) === Math.sign(yNeg - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 3) < 1e-4, `dimension: -3 stays on the -5 side at 3 (${c.value}, ${yOff()})`);
     ok(st.history.length === h0 + 2, 'dimension: ONE undo step');
     const lab = labelEl(app, st.constraints.indexOf(c));
     ok(lab && /-3\.0/.test(lab.textContent), `dimension: the label shows the signed value (${lab && lab.textContent.trim()})`);
+    // TASK 710: editing the dimension -3 -> 5 puts the offset back on the pointer side, at 5; Ctrl+Z restores -3 on the other
+    const hF = st.history.length;
+    ok(typeInto({ state: st }, c, '5').ok && c.value === 5 && Math.sign(yOff() - ySrc) === Math.sign(yBelow - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 5) < 1e-4, `dimension (710): 5 flips back to the pointer side at 5 (${c.value}, ${yOff()})`);
+    app.undo();
+    c = st.constraints.find((x) => x.type === CONSTRAINT_TYPES.OFFSET);
+    const cU = c;
+    ok(cU.value === -3 && st.history.length === hF, `dimension (710): Ctrl+Z restores -3 (${cU.value})`);
     // the Parameters table: off = 4 mm read by the dimension, then off = -2 mm
     const add = planTableEdit(st, { kind: 'new', name: 'off', text: '4 mm', unit: 'mm' }, { unit: 'mm' });
     ok(commitTableEdit(st, add).ok, 'table: + Add off = 4 mm');
     ok(commitTableEdit(st, planTableEdit(st, { kind: 'dimension', column: 'expression', constraint: c, text: 'off' }, { unit: 'mm' })).ok, 'table: the dimension reads off');
     const yFour = yOff();
-    ok(Math.abs(Math.abs(yFour - ySrc) - 4) < 1e-4 && Math.sign(yFour - ySrc) === Math.sign(yNeg - ySrc), `table: off = 4 -> 4 on the first side (${yFour})`);
+    ok(Math.abs(Math.abs(yFour - ySrc) - 4) < 1e-4 && Math.sign(yFour - ySrc) === Math.sign(yBelow - ySrc), `table: off = 4 -> 4 on the pointer side, the sign flips the -5 side (${yFour})`);
     const hT = st.history.length;
     const res = commitTableEdit(st, planTableEdit(st, { kind: 'parameter', column: 'expression', name: 'off', text: '-2 mm' }, { unit: 'mm' }));
     app.frames();
-    ok(res.ok && c.value === -2 && Math.sign(yOff() - ySrc) === -Math.sign(yNeg - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 2) < 1e-4, `table: off = -2 moves the offset to the other side at 2 (${JSON.stringify(res)}, ${yOff()})`);
+    ok(res.ok && c.value === -2 && Math.sign(yOff() - ySrc) === Math.sign(yNeg - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 2) < 1e-4, `table: off = -2 moves the offset to the other side at 2 (${JSON.stringify(res)}, ${yOff()}, src ${ySrc}, yNeg ${yNeg}, v ${c.value})`);
     ok(st.history.length === hT + 1, 'table: ONE undo step');
     app.undo();
     const c3 = st.constraints.find((x) => x.type === CONSTRAINT_TYPES.OFFSET), off3 = st.shapes.find((s) => s.id === c3.shapes[1]);

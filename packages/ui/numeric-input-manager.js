@@ -509,21 +509,31 @@ export function updateInputPosition(x, y) {
  *  canvas's corner controls: the SKETCHES bar at 8 px, Construction / Recenter at 16 px, both 44 px tall under a finger). */
 export const TOUCH_BOX_DOCK_TOP = 64;
 
-/** TASK 597: a live box beside the cursor stays INSIDE the window: one sticking out past the right edge widened the page on a phone (the layout grew, the view shrank, taps missed).
+/** TASK 597: a live box beside the cursor never sits outside the page (one sticking out past the right edge widened the page on a phone: the layout grew, the view shrank, taps missed).
+ *  TASK 697: the bound is the CANVAS svg's rect (the same bounds placeAnchoredBox uses), not the window: a window-sized bound let a box near the bottom edge sit over the
+ *  footer bar, near the top over the ribbon, near a side over the rail. A canvas smaller than the box pins the box to the canvas's left / top edge (it sticks out right / below).
+ *  The box's left / top are written in ITS OWN containing block (a position:fixed box: the viewport; the shared single box lives in a positioned container: that container's padding box).
  *  TASK 602: ONE rule for where a box may sit: a box that lets the pointer through (a mouse: .sk-live-box is pointer-events none) follows the cursor; a box
  *  that takes the pointer (a finger: it is tapped to focus it) never sits beside the finger, where the NEXT tap of the drawing lands (the second point of a
  *  line tapped onto the box was swallowed): it docks at the canvas's top centre and stays there while the tool runs. */
 function placeLiveBox(el, x, y) {
     const w = el.offsetWidth || 0, h = el.offsetHeight || 0;
-    const vw = (typeof window !== 'undefined' && window.innerWidth) || Infinity, vh = (typeof window !== 'undefined' && window.innerHeight) || Infinity;
+    const c = uiState.svg && typeof uiState.svg.getBoundingClientRect === 'function' ? uiState.svg.getBoundingClientRect() : null;
     const takesPointer = typeof getComputedStyle === 'function' && getComputedStyle(el).pointerEvents !== 'none';
-    if (takesPointer && uiState.svg && typeof uiState.svg.getBoundingClientRect === 'function') {
-        const r = uiState.svg.getBoundingClientRect();
-        x = r.left + (r.width - w) / 2;
-        y = r.top + TOUCH_BOX_DOCK_TOP;
+    if (c && takesPointer) {
+        x = c.left + (c.width - w) / 2;
+        y = c.top + TOUCH_BOX_DOCK_TOP;
     }
-    el.style.left = `${Math.max(0, Math.min(x, vw - w - 8))}px`;
-    el.style.top = `${Math.max(0, Math.min(y, vh - h - 8))}px`;
+    if (c) {
+        x = Math.max(c.left, Math.min(x, c.right - w));
+        y = Math.max(c.top, Math.min(y, c.bottom - h));
+    }
+    const op = el.offsetParent;
+    const base = op && typeof op.getBoundingClientRect === 'function'
+        ? { left: op.getBoundingClientRect().left + (op.clientLeft || 0) - (op.scrollLeft || 0), top: op.getBoundingClientRect().top + (op.clientTop || 0) - (op.scrollTop || 0) }
+        : { left: 0, top: 0 };
+    el.style.left = `${x - base.left}px`;
+    el.style.top = `${y - base.top}px`;
 }
 
 /**

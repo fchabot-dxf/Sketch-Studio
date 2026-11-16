@@ -1,6 +1,6 @@
 // tests/document-tabs-unsaved-callers-live.test.js — TASK 681 (owner 1765 / 1767): every place the app ASKS "This design is not saved." (or the failed-save question) uses the ONE modal
 // (template-picker.js openChoiceModal / openPromptModal); and the places that open a NEW TAB ask nothing. SketchStudio, mouse and phone tap:
-//   - closing an unsaved Untitled: the modal, Save... asks the name in the same modal; GO TO another app (TASK 684): NO question, the other app opens on the same tabs
+//   - closing an unsaved Untitled: the modal, Save... asks the name in the same modal (TASK 696: the GO TO step is gone with GO TO)
 //   - a stored design whose last save failed, tab closed: "The last save of this design failed." in the modal (Try saving again / Close anyway / Cancel); Cancel keeps the tab, Close anyway closes it
 //   - Save... then asks the name in the same modal (a name field + Save / Cancel), not inline in the drawer
 //   - Open recent (a stored design) and New design with an unsaved active tab: NO question of any kind, a NEW tab opens, the unsaved tab stays
@@ -42,7 +42,7 @@ await (async () => {
       const modal = () => evalJs(`(() => { const d = document.querySelector('.sk-tp-backdrop [role="dialog"]'); return d ? { text: d.textContent, buttons: [...d.querySelectorAll('button')].map((b) => b.textContent), input: !!d.querySelector('input'), inline: !!document.querySelector('.sk-sidebar-ask') } : null; })()`);
       const modalUp = (what) => waitFor(`!!document.querySelector('.sk-tp-backdrop [role="dialog"]')`, `${mode}: ${what}`);
       const noModal = async (what) => { await sleep(500); assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-backdrop [role="dialog"]') || !!document.querySelector('.sk-sidebar-ask')`), false, `${mode}: ${what}: no question`); };
-      const openMenu = async () => { if (!(await evalJs(`(() => { const g = document.querySelector('.sk-sidebar-goto'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`))) await press(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn'); await waitFor(`(() => { const g = document.querySelector('.sk-sidebar-goto'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`, mode + ': the menu'); };
+      const openMenu = async () => { if (!(await evalJs(`(() => { const g = document.querySelector('.sk-sidebar-actions'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`))) await press(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn'); await waitFor(`(() => { const g = document.querySelector('.sk-sidebar-actions'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`, mode + ': the menu'); };
       await resetBufferLive(cdp);
       if (phone) {
         await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
@@ -107,15 +107,6 @@ await (async () => {
       await shot(`save-as-${mode}.png`, w, phone ? 844 : 800);
       await press('.sk-tp-backdrop .sk-tp-cancel'); await sleep(400);
       assert.strictEqual((await names()).length, 2, mode + ': Cancel keeps the tab');
-      // ---- GO TO with the unsaved Untitled active (TASK 684): NO question; Shaper opens on the SAME tabs, the unsaved one active ----
-      await openMenu(); await press('.sk-sidebar-goto [data-app="shaper"]');
-      await waitFor(`/\\/apps\\/shaper\\//.test(location.pathname)`, mode + ': GO TO leaves for Shaper at once');
-      await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, mode + ': Shaper shows the two tabs');
-      assert.deepStrictEqual(await names(), ['Untitled', 'Untitled'], mode + ': the same tabs in Shaper (the unsaved one, the empty new one)');
-      assert.strictEqual(await evalJs(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent`), 'Untitled', mode + ': the same active tab');
-      await waitFor(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot')`, mode + ': still unsaved (its dot)');
-      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab')[1].querySelector('.sk-doctab-dot')`), null, mode + ': the EMPTY Untitled has no dot in Shaper');
-      await noModal('GO TO');
       if (phone) { await send('Emulation.setTouchEmulationEnabled', { enabled: false }); await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false }); }
     }
     console.log('document-tabs-unsaved-callers-live: ok');

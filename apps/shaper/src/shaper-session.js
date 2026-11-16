@@ -15,7 +15,7 @@ export function createShaperSession({ prepare, getVcarveView = () => null }) {
       const v = getVcarveView();
       return { explore: { doc: store.doc, selected: store.selected }, prepare: prepare.captureSession(), vcarveView: v ? v.getView() : null };
     },
-    // TASK 684: what the shared open-tabs working buffer (IndexedDB) keeps across a reload or a GO TO: Prepare's selection + view and Vcarve's view. Not the
+    // TASK 684: what the shared open-tabs working buffer (IndexedDB) keeps across a reload: Prepare's selection + view and Vcarve's view. Not the
     // Explore file (a live <svg> element: it cannot be stored, and it is a view of a file, not of the design).
     stored: (s) => ({ explore: { doc: null, selected: null }, prepare: s.prepare, vcarveView: s.vcarveView }),
     restore: (s) => {

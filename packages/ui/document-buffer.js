@@ -2,8 +2,8 @@
 // Polls the app state, and when it changed writes the document (packages/core/document.js serializeDocument + this host's
 // sidecar) into the app's CURRENT DESIGN through the project store (project-store.js: projects and designs on IndexedDB). It
 // also loads a design into the app (the initial restore, Open, New, Open from file) and offers the design actions a
-// sidebar needs. Every Sketch-Studio app is same-origin: the store's "current" pointer and the open-tabs buffer (below) are shared, so switching
-// apps via the shared app-switcher carries the open tabs and the shown design.
+// sidebar needs. The store's "current" pointer and the open-tabs buffer (below) are shared by every page of ONE
+// origin (TASK 696: each app is its own website, so on the published sites that is the pages of one app; the local dev server serves all four on one).
 //
 // THE SAVE RULE (owner, 2026-11-12: "Auto save only once I actually saved and named"; docs/DOCUMENT-TABS-DESIGN.md, Saving): a NEW
 // design (a fresh page, New design, a new tab) is an in-memory "Untitled" that is NOT stored anywhere until the user saves it the first
@@ -15,13 +15,13 @@
 // design, puts its document, undo/redo arrays, view and the host's session aside in a tab record, and loads the other tab's record
 // into the same state (a SWAP; measured ~30 ms at 300 constraints, about one frame's solve).
 //
-// ONE LIST OF OPEN TABS FOR ALL APPS (TASK 684, owner turns 1768-1775): the open tabs live in ONE shared working buffer (project-store.js readBuffer /
-// updateBuffer), so SketchStudio, Shaper, Pen Plotter and Trace show the same tabs, in the same order, with the same active tab; a GO TO lands on
-// the design you were on, unsaved Untitled tabs included. Each app shows ITS view of a document (its own sidecar, or its defaults when the document
+// ONE LIST OF OPEN TABS PER ORIGIN (TASK 684, owner turns 1768-1775; TASK 696: one origin per app on the published sites): the open tabs live in ONE
+// shared working buffer (project-store.js readBuffer / updateBuffer), so every app page of the origin shows the same tabs, in the same order, with the same
+// active tab, unsaved Untitled tabs included. Each app shows ITS view of a document (its own sidecar, or its defaults when the document
 // has none) and passes every other app's through: the buffer keeps the WHOLE document (fullDoc: every app's sidecar) while an autosave still writes only
 // this app's sidecar (458). What stays per APP: the stage (each host's own MODE_KEY / STAGE_KEY), and each app's SESSION of a tab (hostSessions[app]:
 // Pen Plotter's toolpath undo + selection, Shaper's Explore / Prepare state, Trace's photo): written into the buffer under the app's own slot, the other
-// apps' slots passed through. The document's undo / redo history stays with the PAGE (in memory, not in the buffer: a reload or a GO TO starts with an
+// apps' slots passed through. The document's undo / redo history stays with the PAGE (in memory, not in the buffer: a reload starts with an
 // empty history, as a reload always did; an undo step is a whole-state snapshot of this app's state, which another app could not apply).
 //
 // DDCS Studio lessons this steals (already paid for there, not rediscovered — see web/data/fsHandles.js,
@@ -129,7 +129,7 @@ export function mergeTabBuffers(stored, mine, base, app) {
  *   session: OPTIONAL { capture() -> data, restore(data | undefined), stored?(data) -> data } — the host's IN-MEMORY per-design data that is not in
  *     the document (e.g. Pen Plotter's toolpath undo stacks): captured when a tab is put aside, restored when it comes back; restore(undefined)
  *     = a design that has none yet (reset). Omit for a host with nothing of that kind. stored(data) (TASK 684): the part of it the open-tabs working
- *     buffer keeps across a reload / a GO TO (the buffer is IndexedDB: plain, storable data only; no DOM element, canvas, nor a photo, TASK 567);
+ *     buffer keeps across a reload (the buffer is IndexedDB: plain, storable data only; no DOM element, canvas, nor a photo, TASK 567);
  *     omitted = all of it is storable. It is applied to data that is already its own result too (a tab the buffer gave this page), so it must keep that.
  *   onRestored({ restored, hosts, name, reason }): OPTIONAL — called after the state was replaced (initial restore, openDesign, newDesign,
  *     openFile, a Drive conflict reload, a tab switch / new tab / close). `reason`: 'restore' | 'open' | 'new' | 'file' | 'conflict' |
@@ -145,7 +145,7 @@ export function mergeTabBuffers(stored, mine, base, app) {
  *   doc / win: the page's document and window (injectable for tests): when the tab goes hidden or is closing, the buffer saves pending
  *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
- * Returns { restore, ready, start, stop, flush, keepTabs, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
+ * Returns { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
  *   isStored, needsSavePrompt, discardUnsaved, tabs, openTab, openFileTab, newTab, activate, closeTab, store }.
  */
 export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
@@ -230,7 +230,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   /** The active design is an unsaved Untitled with content. */
   const activeContent = () => !boundId && hasContent(fullSigNow(), emptySig);
 
-  /** Snapshot of the open tabs + active working state so page refresh / crash / a GO TO reopens what was open (the shared working buffer, NOT a saved
+  /** Snapshot of the open tabs + active working state so page refresh / crash reopens what was open (the shared working buffer, NOT a saved
    *  file). null = only an empty Untitled is open (nothing to keep). */
   function captureBufferSnapshot() {
     if (tabList.length === 1 && !boundId && !activeContent()) return null;
@@ -431,9 +431,6 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
   /** Save pending changes NOW (before an action that copies / exports the stored design, and when the tab hides), written through to Drive. */
   async function flush() { await poll(); await store.flushDrive(boundId || undefined); }
-  /** TASK 684: before a GO TO leaves the page: the pending autosave and the open tabs are written NOW (the next app reads the same tabs from the shared
-   *  buffer). Resolves false when the working buffer could not be written (the caller then stays: leaving would lose the tabs). */
-  async function keepTabs() { endInteraction(); await poll(); return saveWorkingBuffer(); }
 
   // ---- explicit design actions (they throw readable errors: the user asked for them) -------------------------------
   // They act on the ACTIVE tab. One that would replace an unsaved Untitled WITH content refuses: nothing is ever thrown away silently.
@@ -631,7 +628,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
 
   return {
-    restore, ready, start, stop, flush, keepTabs, openDesign, newDesign, saveAs, saveFile, openFile, followMoves,
+    restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves,
     designId: () => boundId, designName: () => name, isStored: () => !!boundId, needsSavePrompt, discardUnsaved,
     tabs, openTab, openFileTab, newTab, activate, closeTab, store,
   };

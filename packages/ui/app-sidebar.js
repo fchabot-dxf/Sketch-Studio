@@ -1,17 +1,17 @@
 // packages/ui/app-sidebar.js — the shared APP SIDEBAR (TASK 473), modelled on Shaper Studio's: a hamburger button in the header
-// opens a dark left drawer with the DOCUMENT name, the host's ACTIONS, and a darker "GO TO" section listing the apps.
-// It replaces the old #ui/app-switcher.js dropdown (the app roster lives here now, one source).
+// opens a dark left drawer with the DOCUMENT name, the host's ACTIONS and the Google account row.
+// TASK 696: each app is its own website, so the drawer links to no other app (the GO TO section is gone).
 //
 // DECLARED per host — the sidebar never knows host specifics:
-//   createAppSidebar({ current, docName, actions, apps? }) → { el, open, close, toggle, isOpen, setDocName, setActions, destroy }
-//     current  the host's app id (marks it in GO TO and names the header button)
+//   createAppSidebar({ current, docName, actions }) → { el, open, close, toggle, isOpen, setDocName, setActions, destroy }
+//     current  the host's app id (names the header button)
 //     docName  the document name shown at the top (a string)
 //     actions  a plain DECLARED array a project store can extend later:
 //              { id, label, icon, onClick, enabled?, tooltip?, confirm?: 'message', prompt?: { label, value(): string, okLabel? }, keepOpen? }
 //              or { divider: true }.  `confirm` asks inline (Cancel / OK) before onClick; `prompt` asks for a text inline and calls
 //              onClick(text); `keepOpen` leaves the drawer open after the click (an action that opens a view).
 //     onRenameDoc(name)  OPTIONAL: when given, clicking the document name edits it inline (Enter commits, Esc cancels).
-//     account  OPTIONAL Google account controller (#ui/cloud/google-account.js getGoogleAccount()): adds the account row under GO TO.
+//     account  OPTIONAL Google account controller (#ui/cloud/google-account.js getGoogleAccount()): adds the account row under the actions.
 //     driveControls  OPTIONAL (with `account`; TASK 506): { getDefault(): bool, setDefault(bool), check(onSteps): Promise } adds, while signed
 //              in, the "Save to Google Drive by default" toggle and the "Check Google Drive connection" action (its steps listed inline).
 //     status   OPTIONAL () => { text, kind } the one-line state of the current design under its name ('error' | 'info'); read at every
@@ -21,20 +21,18 @@
 //              in a new tab — e.g. the reason a store refused something, or "Saved to Google Drive" + "Open in Drive".
 //   views    OPTIONAL extra VIEWS the drawer can show instead of the main list (e.g. a Projects browser that drills down from
 //            projects to designs and back): { [id]: { title, render(container, { go, back, close }) } }. The main view (document
-//            name, actions, GO TO) is the built-in view 'main'; `showView(id)` swaps the drawer body, a back arrow returns to
+//            name, actions, account) is the built-in view 'main'; `showView(id)` swaps the drawer body, a back arrow returns to
 //            'main' (or `back()` / `go('other')` from inside a view, so a view can drill down by re-rendering itself).
-//   beforeGoTo(app) OPTIONAL async () => boolean: asked before a GO TO entry leaves the page (TASK 558: the unsaved-design question); false
-//            stays. ask(spec) shows a question inline in the drawer (opening it): { kind: 'choose', label, options: [{ id, label }] } resolves the
+//   ask(spec) shows a question inline in the drawer (opening it): { kind: 'choose', label, options: [{ id, label }] } resolves the
 //            chosen id, { kind: 'prompt', label, value, okLabel } the typed text; Cancel / Esc / closing the drawer resolves null.
 //   `el` is the header button; the drawer + backdrop live on document.body.
 // Esc closes, an outside click (the backdrop) closes, Tab is trapped inside while open, focus returns to the button on close.
 // Themed through --sk-sidebar-* tokens that fall back to each host's own --sk-header-* palette (Shaper sets the dark Studio
 // tokens in its index.html). Below 768px the drawer is 85vw wide — the same slide-over pattern as #ui/mobile-drawer.js.
 
-// The app roster, names and icons come from THE registry (#ui/app-registry.js): one source for GO TO, the tab title and the favicon.
-import { APPS } from './app-registry.js';
+// The app's name comes from THE registry (#ui/app-registry.js): one source for the header button, the tab title and the favicon.
+import { appById } from './app-registry.js';
 import { SHORT_VIEWPORT_QUERY } from './short-viewport.js';
-export { APPS };
 
 // Icons for the common actions (inline SVG, currentColor) so hosts reference them by key instead of drawing their own.
 export const SIDEBAR_ICONS = {
@@ -94,9 +92,6 @@ function injectStyles() {
   padding: 9px 10px; cursor: pointer; font: inherit; }
 .sk-sidebar-item:hover:not(:disabled) { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
 .sk-sidebar-item:disabled { opacity: 0.4; cursor: not-allowed; }
-.sk-sidebar-appic svg { width: 24px; height: 24px; display: block; }
-.sk-sidebar-appic { width: 24px !important; height: 24px !important; }
-.sk-sidebar-check { margin-left: auto; opacity: 0.8; }
 .sk-sidebar-ic { width: 18px; height: 18px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
 .sk-sidebar-sep { height: 1px; margin: 6px 10px; background: var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
 .sk-sidebar-confirm { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); font-size: 13px; }
@@ -133,23 +128,20 @@ function injectStyles() {
 .sk-note { opacity: 0.6; font-size: 13px; padding: 8px 10px; }
 .sk-sidebar-viewhead { padding: 12px 8px 4px; }
 .sk-sidebar-view { flex: 1; overflow: auto; padding: 4px 8px 12px; }
-.sk-sidebar-goto { margin-top: auto; padding: 14px 8px 18px; background: var(--sk-sidebar-goto-bg, rgba(127,127,127,0.12)); }
-.sk-sidebar-goto-title { font-size: 11px; letter-spacing: 0.08em; opacity: 0.6; padding: 0 10px 8px; }
-.sk-sidebar-account { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
+/* TASK 696: the account row sits at the foot of the drawer (where the GO TO band held it), aligned with the actions */
+.sk-sidebar-account { margin: auto 8px 0; padding: 8px 0 18px; border-top: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
 .sk-account-line { display: flex; align-items: center; gap: 10px; padding: 4px 10px; }
 .sk-account-out { width: auto; padding: 5px 10px; font-size: 13px; }
 .sk-avatar { width: 32px; height: 32px; flex: 0 0 auto; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; background: var(--sk-sidebar-accent, #2c65ff); color: #fff; font-size: 13px; font-weight: 700; }
 .sk-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sk-cloud-mark { margin-left: 6px; opacity: 0.8; }
-.sk-sidebar-item.current { font-weight: 700; background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
 `;
   document.head.appendChild(s); stylesInjected = true;
 }
 
-export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null, beforeGoTo = null, goTo = true, stages = [], activeStage = null, onStageChange = null } = {}) {
+export function createAppSidebar({ current, docName = 'Untitled', actions = [], views = {}, onRenameDoc = null, account = null, driveControls = null, status = null, stages = [], activeStage = null, onStageChange = null } = {}) {
   injectStyles();
-  const list = Array.isArray(apps) && apps.length ? apps : APPS;
-  const cur = list.find((a) => a.id === current) || list[0];
+  const cur = appById(current);
   let acts = Array.isArray(actions) ? actions : [];
   let stageList = Array.isArray(stages) ? stages : [];
   let curStage = activeStage ?? (stageList[0] && stageList[0].id) ?? null;
@@ -249,25 +241,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       box.appendChild(b);
     }
     content.appendChild(box);
-    if (goTo) {
-      const go = document.createElement('div'); go.className = 'sk-sidebar-goto'; go.dataset.section = 'goto';
-      go.innerHTML = '<div class="sk-sidebar-goto-title">GO TO</div>';
-      for (const app of list) {
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item' + (app.id === (cur && cur.id) ? ' current' : ''); b.dataset.app = app.id;
-        if (app.id === (cur && cur.id)) b.setAttribute('aria-current', 'true');
-        b.innerHTML = `<span class="sk-sidebar-ic sk-sidebar-appic" aria-hidden="true">${app.icon}</span><span>${app.name}</span>${app.id === (cur && cur.id) ? '<span class="sk-sidebar-check" aria-hidden="true">&#10003;</span>' : ''}`;
-        b.addEventListener('click', async () => {
-          if (app.id === (cur && cur.id)) { close(); return; }
-          if (beforeGoTo) { let go = false; try { go = await beforeGoTo(app); } catch (e) { notify(e.message || String(e), 'error'); return; } if (!go) return; }
-          close(); location.href = app.href;
-        });
-        go.appendChild(b);
-      }
-      if (account) go.appendChild(renderAccount());
-      content.appendChild(go);
-    } else if (account) {
-      content.appendChild(renderAccount());
-    }
+    if (account) content.appendChild(renderAccount());
   }
 
   // The Google account row (the ONE sign-in door). signIn() runs synchronously inside the click so the popup is not blocked.

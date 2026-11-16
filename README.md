@@ -42,6 +42,34 @@ npm run build:inline
 ```
 
 Output: `output/sketch-studio-unified-v1.0.html`.
+
+## Websites: one per app
+
+Each app is its own website (its own Cloudflare Pages project). The engine and every shared package stay ONE copy in this repo:
+`node scripts/build-site.cjs <app>` copies `apps/<app>/`, `packages/`, the root files the app reaches (the glyph sheet),
+`privacy.html` and that site's `_redirects` (`/` opens the app; the query string, e.g. `?host=fusion`, is kept) into `dist/`.
+No other app's folder is in a site (`tests/site-closure.test.js` checks it).
+
+| Site | Pages project | Build command | Output dir |
+|---|---|---|---|
+| https://sketch-studio.pages.dev (SketchStudio) | `sketch-studio` (Git-connected) | `node scripts/build-site.cjs sketchstudio` | `dist` |
+| https://sketch-shaper.pages.dev | `sketch-shaper` (direct upload) | `node scripts/build-site.cjs shaper` | `dist` |
+| https://sketch-penplotter.pages.dev | `sketch-penplotter` (direct upload) | `node scripts/build-site.cjs penplotter` | `dist` |
+| https://sketch-trace.pages.dev | `sketch-trace` (direct upload) | `node scripts/build-site.cjs trace` | `dist` |
+
+`npm run site:<app>` runs the same build. A direct-upload site is deployed from the REPO ROOT (`wrangler pages deploy dist --project-name sketch-<app>`):
+wrangler uploads the `functions/` folder of the directory it runs in (the Google sign-in routes), not one inside `dist/`.
+sketch-studio's site keeps the old links: `/shaper`, `/penplotter`, `/trace` and `/apps/<app>/*` redirect (302, query string kept) to the app's own site.
+
+Each Pages project needs the same three secrets (names only): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_KEY`.
+All four sites use the SAME Google OAuth client (Drive files made by one app stay visible to the others: the drive.file scope is per client).
+In the Google Cloud console that client needs, for EACH site:
+- Authorized redirect URI: `https://<site>/auth/google/callback`
+- Authorized JavaScript origin: `https://<site>`
+
+Each site has its own browser storage: open tabs, settings and sign-in are per site; designs on Google Drive show on every site.
+Local development is unchanged: `node server.js` serves the repo root with all four apps.
+
 ## File Structure
 
 ```

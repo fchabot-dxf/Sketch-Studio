@@ -6,8 +6,7 @@
 //   open-recent    the sidebar's Open recent (the Projects modal on its Recent pane; a design tile there)
 //   open-file      the sidebar's Open from file (the page's file chooser, answered with a design file)
 //   new            the sidebar's New design
-//   goto           the sidebar's GO TO another app (leaves the page): TASK 684, NO question any more (the open tabs go across): the other app shows the
-//                  same unsaved Untitled, whatever the choice
+// (TASK 696: the GO TO path went with the sidebar's GO TO section: each app is its own website.)
 // and checks what each choice must do:
 //   save     the Save as name prompt (typing) stores the Untitled under that name, THEN the action goes on
 //   discard  the Untitled is thrown away (nothing stored), THEN the action goes on
@@ -20,10 +19,10 @@ import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { resetBuffer } from './helpers/reset-buffer.js';
 
 export const HOSTS = {
-  sketchstudio: { url: '/apps/sketchstudio/index.html', canvas: 'svgCanvas', name: 'Sketch', goto: 'penplotter', gotoUrl: '/apps/penplotter/' },
-  penplotter: { url: '/apps/penplotter/index.html', canvas: 'design-canvas', name: 'Pen Plotter', goto: 'sketchstudio', gotoUrl: '/apps/sketchstudio/' },
+  sketchstudio: { url: '/apps/sketchstudio/index.html', canvas: 'svgCanvas', name: 'Sketch' },
+  penplotter: { url: '/apps/penplotter/index.html', canvas: 'design-canvas', name: 'Pen Plotter' },
 };
-export const PATHS = ['open-projects', 'open-recent', 'open-file', 'new', 'goto'];
+export const PATHS = ['open-projects', 'open-recent', 'open-file', 'new'];
 
 // is the page's leave-page warning armed? (the buffer prevents the cancelable `beforeunload` while leaving would lose work)
 export const leaveWarns = (app) => { const e = new app.window.Event('beforeunload', { cancelable: true }); app.window.dispatchEvent(e); return e.defaultPrevented; };
@@ -80,23 +79,6 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
       await openSidebar(); pressEl('[data-action="open-file"]', 'Open from file');
     } else if (p === 'new') {
       await openSidebar(); pressEl('[data-action="new-design"]', 'New design'); await app.waitFor(() => !!q('.sk-tp-card[data-template="blank"]'), 'the template modal'); pressEl('.sk-tp-card[data-template="blank"]', 'the Blank design card'); // TASK 651: New design asks for a template first
-    } else if (p === 'goto') {
-      await openSidebar(); pressEl(`.sk-sidebar-goto [data-app="${H.goto}"]`, 'GO TO ' + H.goto);
-    }
-    if (p === 'goto') { // TASK 684: GO TO asks nothing (one shared open-tabs buffer): the page leaves, and the other app shows the SAME unsaved Untitled
-      await app.waitFor(() => pathname().startsWith(H.gotoUrl), `${p}: GO TO leaves the page without a question`, 5000);
-      assert.strictEqual(q('.sk-tp-backdrop'), null, `${p}: no Save… / Don't save / Cancel question`);
-      const names = await recent();
-      assert.ok(!names.includes('Untitled') && !names.includes(keptName), `${p}: nothing was stored: ${JSON.stringify(names)}`);
-      await app.close(); await openApp(H.goto);
-      const otherApp = HOSTS[H.goto];
-      await app.waitFor(() => shapesOnCanvas(otherApp.canvas) === 1, `${p}: ${H.goto} shows the same unsaved Untitled (its line)`, 5000);
-      await app.waitFor(() => title() === appTitle(otherApp.name), `${p}: ${H.goto}'s title is the unsaved Untitled's`, 5000);
-      assert.strictEqual(app.buffer.needsSavePrompt(), 'unsaved', `${p}: there it is still an unsaved Untitled with content (closing it asks)`);
-      const r = { names, title: title(), path: pathname() };
-      results[p] = r;
-      console.log(`${host} ${choice} ${p.padEnd(13)} ${JSON.stringify(r)}`);
-      continue;
     }
     // 2. THE question, where the action came from
     const bar = '.sk-tp-backdrop [role="dialog"]'; // TASK 681: THE question is always the modal, whichever UI the action came from
@@ -119,26 +101,16 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
       else { await app.waitFor(() => app.hasFileChooser(), `${p}: the file chooser opens after the answer`, 5000); app.chooseFile(file); }
     }
     // 4. what the choice did
-    const otherApp = HOSTS[H.goto];
     if (choice !== 'cancel') await app.waitFor(async () => {
       const names = await recent();
       if (p === 'open-projects' || p === 'open-recent') return title() === `Other — ${H.name}`;
       if (p === 'open-file') return names.includes('FromFile') && title() === `FromFile — ${H.name}`;
-      if (p === 'new') return choice === 'save' ? names.includes(keptName) && title() === appTitle(H.name) : title() === appTitle(H.name) && shapesOnCanvas(H.canvas) === 0;
-      return pathname().startsWith(H.gotoUrl);
+      return choice === 'save' ? names.includes(keptName) && title() === appTitle(H.name) : title() === appTitle(H.name) && shapesOnCanvas(H.canvas) === 0; // new
     }, `${p}: the action goes on after ${choice}`, 5000);
     else await settle(300);
     if (choice !== 'cancel') assert.strictEqual(leaveWarns(app), false, `${p}: no leave-page warning once the Untitled was saved or discarded`);
     const names = await recent();
     const r = { names, title: title(), path: pathname() };
-    if (p === 'goto' && choice !== 'cancel') { // the page left: the other app opens on the same profile
-      await app.close(); await openApp(H.goto);
-      assert.strictEqual(shapesOnCanvas(otherApp.canvas), choice === 'save' ? 1 : 0, `${p}: ${H.goto} shows ${choice === 'save' ? 'the saved design' : 'an empty Untitled'}`);
-      const want = choice === 'save' ? `${keptName} — ${otherApp.name}` : appTitle(otherApp.name);
-      await app.waitFor(() => title() === want, `${p}: ${H.goto}'s title follows its current design`, 5000); // the sidebar sets it once the store answers
-      r.title = title();
-      assert.strictEqual(r.title, choice === 'save' ? `${keptName} — ${otherApp.name}` : appTitle(otherApp.name), `${p}: ${H.goto}'s title`);
-    }
     if (choice === 'save') {
       assert.ok(names.includes(keptName), `${p}: Save… stored the Untitled under its name: ${JSON.stringify(names)}`);
       assert.strictEqual(await storedShapes(keptName), 1, `${p}: the stored design holds the drawn line`);

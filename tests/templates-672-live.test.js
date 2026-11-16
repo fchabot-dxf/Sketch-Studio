@@ -42,7 +42,7 @@ await (async () => {
     const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
   };
-  const openCards = async () => { await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'the template modal'); };
+  const openCards = async () => { await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'the template modal'); await waitFor(`!!document.querySelector('.sk-tp-grid[data-previews="ready"]')`, 'every card preview drawn (TASK 674)'); };
   const startOf = async (id) => {
     await openCards();
     await press(`.sk-tp-card[data-template="${id}"]`);

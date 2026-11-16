@@ -150,7 +150,8 @@ try {
   assert.ok(q('.sk-tp-panel'), 'the template modal is open');
   const drawn = () => [...doc.querySelectorAll('.sk-tp-card[data-template]:not([data-template="blank"])')].filter((c) => c.querySelector('.sk-tp-prev svg')).length;
   assert.ok(drawn() < TEMPLATES.length, `the modal shows before every card's preview is built (${drawn()} of ${TEMPLATES.length} at once)`);
-  for (let i = 0; i < 200 && drawn() < TEMPLATES.length; i++) await settle(50);
+  assert.strictEqual(q('.sk-tp-grid').dataset.previews, 'building', 'the grid says its previews are being built'); // TASK 674
+  for (let i = 0; i < 200 && !q('.sk-tp-grid[data-previews="ready"]'); i++) await settle(50);
   assert.strictEqual(drawn(), TEMPLATES.length, 'then every card gets its preview');
   console.log(`template-recipes-680: the picker opened in ${openMs.toFixed(1)} ms (happy-dom)`);
   checks += 3;

@@ -444,12 +444,15 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       c.addEventListener('click', () => startView(t, c));
       grid.appendChild(c);
     }
+    // TASK 674: the grid says when every card's preview is drawn (data-previews "building" -> "ready"): what a test waits for before it reads them
     const buildNextCard = () => {
-      if (done || !unbuilt.length) return;
+      if (done) return;
+      if (!unbuilt.length) { grid.dataset.previews = 'ready'; return; }
       const [t, slot] = unbuilt.shift();
       slot.replaceChildren(renderTemplatePreview(defaultDocument(t)));
       setTimeout(buildNextCard, 0);
     };
+    grid.dataset.previews = 'building';
     setTimeout(buildNextCard, 0);
     body.appendChild(grid); panel.appendChild(body);
     blankCard.focus();

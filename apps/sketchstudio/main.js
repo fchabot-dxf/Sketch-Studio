@@ -178,13 +178,14 @@ function initApp(){
       { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
       { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
       { divider: true },
-      { id: 'style', label: 'Style', icon: SIDEBAR_ICONS.style, onClick: () => stylePanel.toggle() },
+      { id: 'style', label: 'Settings', icon: SIDEBAR_ICONS.style, onClick: () => stylePanel.toggle() },
       { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => diagLog.toggle() },
       { id: 'debug', label: 'Debug', icon: SIDEBAR_ICONS.debug, onClick: () => toggleDebug && toggleDebug() },
       { id: 'tune', label: 'Tune solver', icon: SIDEBAR_ICONS.gear, visible: () => shouldLoadTuning, onClick: () => toggleTune && toggleTune() },
     ],
   });
-  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), footer: document.querySelector('footer.sk-statusbar') }); // TASK 618/619: Undo / Redo / Delete / Clear (left), Recenter (right); Construction lives in .sk-canvas-corner (design-browser.js)
+  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), footer: document.querySelector('footer.sk-statusbar'), settings: stylePanel }); // TASK 726: the gear at the footer's right end = the drawer's Style panel
+  // TASK 618/619: Undo / Redo / Delete / Clear (left), Recenter (right); Construction lives in .sk-canvas-corner (design-browser.js)
   // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer
   sidePanel = mountStudioBrowser({ svg, state, engine }); // design-canvas.js
   showView('design');

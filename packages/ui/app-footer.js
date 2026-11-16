@@ -3,13 +3,15 @@
 //          Delete (red filled circle + white X: the exact Delete key path handleDelete), Clear sketch (outlined trash can, near-black ink, after a small gap: one-step undoable clear of active sketch after confirm),
 //          Parameters (TASK 677, owner turn 1730: the "fx" opener of the Parameters window, always visible; it was hidden in the ribbon's Inspect dropdown)
 //   right: Recenter (every host whose Design surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
-// mountAppFooter({ router, view, footer, parameters }) -> { el, refresh, destroy }
+//          then Settings (TASK 726, the gear: the host's Style panel, the same one the drawer's Style item toggles; the far right end)
+// mountAppFooter({ router, view, footer, parameters, settings }) -> { el, refresh, destroy }
 //   router: the host's history router (createHistoryRouter).
 //   view(): { svg, state } of the Design surface that shows now, or null while the stage has none (Pen Plotter's Toolpath, ...):
 //     Delete / Clear sketch show only while a sketch (`v.state`) is shown; Recenter shows whenever `v` is truthy. Recenter is pan-zoom.js fitViewToExtents.
 //     (TASK 706: the `{ fit }` form was Shaper's Explore viewer's, gone with it.)
 //   parameters (default true): the Parameters button + its window (#ui/parameters-window.js, opened over `view().svg`, undo / redo through `router`);
 //     false = a declared opt-out (Trace: no project file, decision O14). ONE declaration here for every host.
+//   settings (default null): the host's style panel (createStylePanel(), already rendered); given, the footer shows the gear that toggles it (aria-pressed follows the panel).
 //   footer: an element the host already has (SketchStudio's status bar): the groups go into it. Without one a footer is created at the page's bottom
 //     (position fixed; body gets class sk-has-footer and the height is --sk-footer-h, which a host with absolutely placed views subtracts).
 import { mountHistoryButtons } from '#ui/history-control.js';
@@ -29,7 +31,7 @@ function injectStyles() {
 :root { --sk-footer-h: 40px; --sk-footer-btn-w: 32px; --sk-footer-btn-h: 32px; --sk-footer-btn-icon: 22px; --sk-footer-danger: var(--sk-error, #ef4444); --sk-footer-danger-gap: 6px; }
 :where(:root) { --sk-footer-ink: #111827; }
 @media (pointer: coarse) {
-  :root { --sk-footer-btn-w: 56px; --sk-footer-btn-h: 44px; --sk-footer-btn-icon: 28px; --sk-footer-h: var(--sk-footer-btn-h); }
+  :root { --sk-footer-btn-w: 44px; --sk-footer-btn-h: 44px; --sk-footer-btn-icon: 28px; --sk-footer-h: var(--sk-footer-btn-h); }
   body .sk-footer { padding: 0 2px; gap: 2px; border-top: 0; box-shadow: inset 0 1px 0 var(--sk-header-sep, #cbd5e1); }
   body .sk-statusbar { height: var(--sk-footer-h); min-height: 0; padding: 0 2px !important; gap: 2px; border-top-width: 0 !important; box-shadow: inset 0 1px 0 var(--sk-header-sep, #cbd5e1); }
   body .sk-history { gap: 1px; }
@@ -53,7 +55,7 @@ function injectStyles() {
 .sk-footer-btn.danger { color: var(--sk-footer-danger); }
 .sk-footer-btn.danger:disabled { color: var(--sk-muted, #9ca3af); opacity: 0.5; }
 .sk-footer-btn.ink { color: var(--sk-footer-ink); }
-.sk-footer-btn[aria-expanded="true"] { background: var(--sk-header-hover, rgba(0,0,0,0.08)); box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); } /* TASK 677: the Parameters window is open */
+.sk-footer-btn[aria-pressed="true"], .sk-footer-btn[aria-expanded="true"] { background: var(--sk-header-hover, rgba(0,0,0,0.08)); box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); } /* TASK 677: the Parameters window is open */
 .sk-footer-end { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex: 0 0 auto; }
 body.sk-has-footer { padding-bottom: var(--sk-footer-h); box-sizing: border-box; }
 .sk-footer-confirm-backdrop { position: fixed; inset: 0; z-index: 9600; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -69,6 +71,8 @@ body.sk-has-footer { padding-bottom: var(--sk-footer-h); box-sizing: border-box;
   stylesInjected = true;
 }
 
+// the gear (same artwork as SIDEBAR_ICONS.gear / .style in app-sidebar.js, drawn here at the footer's 24 viewBox)
+const GEAR_ICON = '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="2.5"/><path d="M14.2 11a1.2 1.2 0 0 0 .2 1.3l.05.05a1.4 1.4 0 1 1-2 2l-.05-.05a1.2 1.2 0 0 0-1.3-.2 1.2 1.2 0 0 0-.7 1.1V15.5a1.4 1.4 0 1 1-2.8 0v-.1a1.2 1.2 0 0 0-.8-1.1 1.2 1.2 0 0 0-1.3.2l-.05.05a1.4 1.4 0 1 1-2-2l.05-.05a1.2 1.2 0 0 0 .2-1.3 1.2 1.2 0 0 0-1.1-.7H2.5a1.4 1.4 0 0 1 0-2.8h.1a1.2 1.2 0 0 0 1.1-.8 1.2 1.2 0 0 0-.2-1.3l-.05-.05a1.4 1.4 0 1 1 2-2l.05.05a1.2 1.2 0 0 0 1.3.2H7a1.2 1.2 0 0 0 .7-1.1V2.5a1.4 1.4 0 1 1 2.8 0v.1a1.2 1.2 0 0 0 .7 1.1 1.2 1.2 0 0 0 1.3-.2l.05-.05a1.4 1.4 0 1 1 2 2l-.05.05a1.2 1.2 0 0 0-.2 1.3v.1a1.2 1.2 0 0 0 1.1.7h.1a1.4 1.4 0 0 1 0 2.8h-.1a1.2 1.2 0 0 0-1.1.7z"/></svg>';
 const ICON = (id) => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#${id}"/></svg>`;
 // Fusion's "fx" mark (the Parameters command), drawn as text so it needs no symbol sheet
 const FX_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="16.5" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="13" fill="currentColor" stroke="none">fx</text></svg>';
@@ -125,7 +129,7 @@ function askConfirm(message, { okLabel = 'OK', returnFocusTo = null } = {}) {
   });
 }
 
-export function mountAppFooter({ router, view = () => null, footer = null, parameters = true }) {
+export function mountAppFooter({ router, view = () => null, footer = null, parameters = true, settings = null }) {
   injectStyles();
   ensureIconSymbols(['icon-recenter', 'icon-circle-x', 'icon-trash']);
   let el = footer;
@@ -202,6 +206,24 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
     if (v.state && v.state.view) fitViewToExtents(v.svg, v.state.view, v.state);
   });
 
+  // TASK 726: Settings (gear) at the far right: toggles the host's style panel. The panel closes itself on any press outside it (outside-press.js),
+  // which includes this button's own pointerdown, so a press on the gear while it is open only closes: the state is read at pointerdown, before that.
+  let settingsBtn = null, stopSettingsWatch = null, openAtPress = null;
+  if (settings) {
+    const panelOpen = () => !settings.el.classList.contains('sk-hidden');
+    settingsBtn = mk(end, 'btn-settings', 'Settings', 'icon-recenter', 'ink');
+    settingsBtn.innerHTML = GEAR_ICON;
+    settingsBtn.setAttribute('aria-pressed', String(panelOpen()));
+    settingsBtn.addEventListener('pointerdown', () => { openAtPress = panelOpen(); });
+    settingsBtn.addEventListener('click', () => {
+      const wasOpen = openAtPress ?? panelOpen(); openAtPress = null;
+      if (wasOpen) settings.close(); else settings.open();
+    });
+    const watch = new MutationObserver(() => settingsBtn.setAttribute('aria-pressed', String(panelOpen())));
+    watch.observe(settings.el, { attributes: true, attributeFilter: ['class'] });
+    stopSettingsWatch = () => watch.disconnect();
+  }
+
   const sigOf = () => {
     const v = view();
     if (!v) return 'none';
@@ -268,6 +290,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
       if (typeof document !== 'undefined' && document.removeEventListener) {
         for (const ev of docEvs) document.removeEventListener(ev, scheduleRefresh, false);
       }
+      if (stopSettingsWatch) stopSettingsWatch();
       history.destroy();
       if (paramsWin) paramsWin.destroy();
       if (start.remove) start.remove();

@@ -375,6 +375,7 @@ const showMode = modes.showMode;
 mountAppFooter({
   router: history,
   view: () => (designController && modes.current() === 'design' ? { svg: designController.svg, state: designController.state } : null),
+  settings: stylePanel, // TASK 726: the gear at the footer's right end (also in Fusion mode)
 }); // TASK 618/619: Recenter on Design
 
 // TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.

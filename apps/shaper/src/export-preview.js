@@ -17,6 +17,7 @@ const SHAPE_TAGS = new Set(['path', 'circle', 'polygon', 'polyline', 'rect', 'el
 const TAP_PX = 4;          // a press that moves less than this is a tap (a pick), more is a pan (the Vcarve view's rule)
 const SHADE_SHALLOW = 70, SHADE_DEEP = 30; // TASK 719: the pockets' grey lightness (%) at the shallowest / deepest depth of THIS export
 const SHADE_OUTSIDE_SHALLOW = 25;           // TASK 719: a stepped outside's terraces: dark grey (25%) at the shallowest step down to the file's black at the deepest
+const SHADE_INSIDE_SHALLOW = 90, SHADE_INSIDE_DEEP = 60; // TASK 720: a stepped inside's terraces (the through step stays the file's white)
 const OUTSIDE_STEP_OUTLINE = '#9a9a9a';     // their thin light outline (the file's black outside has none, so the ledges would not show)
 const POCKET_OUTLINE = '#222';             // the thin outline every pocket gets (the file's pockets have none)
 const FIT_MARGIN = 0.06;   // empty space round the drawing on each side after fit(), a fraction of its size
@@ -57,6 +58,14 @@ export function pocketShades(items) {
 /** The same for a stepped OUTSIDE (its terraces only: a plain outside keeps the file's black): dark greys, SHADE_OUTSIDE_SHALLOW % down to the file's black. */
 export function outsideStepShades(items) {
   return shadesOf(items.filter((it) => it.cutType === 'outside' && it.step), SHADE_OUTSIDE_SHALLOW, 0);
+}
+/** TASK 720: a stepped INSIDE's terraces: light greys (90% shallowest .. 60%) for every step but the deepest, which is the through hole and keeps the file's white. */
+export function insideStepShades(items) {
+  const list = items.filter((it) => it.cutType === 'inside' && it.step);
+  const deepest = Math.max(...list.map((it) => parseFloat(it.depth)).filter(Number.isFinite));
+  const { shades, lo, hi } = shadesOf(list.filter((it) => parseFloat(it.depth) < deepest), SHADE_INSIDE_SHALLOW, SHADE_INSIDE_DEEP);
+  for (const it of list) if (parseFloat(it.depth) === deepest) shades.set(it.depth, '#FFFFFF');
+  return { shades, lo, hi };
 }
 function shadesOf(list, shallow, deep) {
   const num = (it) => parseFloat(it.depth);
@@ -101,7 +110,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
   const doc = canvas.ownerDocument;
   const viewState = { view: null, allowEmptyPan: true, _panZoom: { isPanning: false, lastPanPoint: null, lastTouchDistance: null, touchPoints: new Map(), isPinching: false, lastPinchCenter: null, lastPinchDistance: null } };
   setupPanZoom(canvas, viewState, { attachListeners: true });
-  let shading = { shades: new Map(), lo: NaN, hi: NaN }, outsideShading = { shades: new Map() };
+  let shading = { shades: new Map(), lo: NaN, hi: NaN }, outsideShading = { shades: new Map() }, insideShading = { shades: new Map() };
   let layer = null, items = [], rows = [], byEl = new Map(), picked = [], pickedLabel = null, lastSig, fitPending = false;
   const rowButtons = [], rowOf = []; // the list's row buttons and the row each one picks
 
@@ -150,6 +159,11 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
   function renderList() {
     rowButtons.length = 0; rowOf.length = 0;
     const out = [];
+    if (insideShading.shades.size) {
+      const lg = doc.createElement('div'); lg.className = 'rv2d-legend';
+      lg.textContent = 'inside steps: lighter = shallower, white = through';
+      out.push(lg);
+    }
     if (outsideShading.shades.size) {
       const lg = doc.createElement('div'); lg.className = 'rv2d-legend';
       lg.textContent = 'outside steps: lighter = shallower, black = deepest';
@@ -173,7 +187,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
         const t = doc.createElement('span'); t.textContent = [row.depth || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null].filter(Boolean).join(' · ');
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
-        const shade = g.cutType === 'pocket' ? shading.shades.get(row.depth) : (g.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : null);
+        const shade = g.cutType === 'pocket' ? shading.shades.get(row.depth) : (g.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (g.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
         b.append(t, c);
         const i = rowButtons.length;
@@ -190,7 +204,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
     if (sig !== undefined && sig === lastSig) { if (fitPending) fit(); return inspect(); }
     lastSig = sig;
     if (layer) layer.remove();
-    layer = null; items = []; rows = []; shading = { shades: new Map(), lo: NaN, hi: NaN }; outsideShading = { shades: new Map() }; byEl = new Map(); picked = []; pickedLabel = null;
+    layer = null; items = []; rows = []; shading = { shades: new Map(), lo: NaN, hi: NaN }; outsideShading = { shades: new Map() }; insideShading = { shades: new Map() }; byEl = new Map(); picked = []; pickedLabel = null;
     const text = getSvg();
     if (text) {
       const root = parseShaperSvg(text, doc);
@@ -203,6 +217,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
       // TASK 719: the display's own styling, on the mounted copy only: pockets shaded by depth + outlined (attributes, so the picked class still wins)
       shading = pocketShades(items);
       outsideShading = outsideStepShades(items);
+      insideShading = insideStepShades(items);
       // a stepped outside's terraces are nested outlines (a shallow step is INSIDE a deeper one) and the file writes the shallow one first, so the deeper
       // would paint over it: stack them deepest first, in place (the first terrace's position), so every ledge shows. The picks / list read items, not the DOM order.
       const terraces = items.filter((it) => it.cutType === 'outside' && it.step);
@@ -218,6 +233,8 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
         if (shade) { it.el.setAttribute('fill', shade); it.el.setAttribute('stroke', POCKET_OUTLINE); }
         const oShade = it.cutType === 'outside' && it.step ? outsideShading.shades.get(it.depth) : null;
         if (oShade) { it.el.setAttribute('fill', oShade); it.el.setAttribute('stroke', OUTSIDE_STEP_OUTLINE); }
+        const iShade = it.cutType === 'inside' && it.step ? insideShading.shades.get(it.depth) : null; // the file's black stroke stays; the file writes the shallow (larger) ring first, so every ring shows
+        if (iShade) it.el.setAttribute('fill', iShade);
       }
     }
     renderList();

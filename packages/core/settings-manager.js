@@ -75,6 +75,8 @@ const DEFAULT_SETTINGS = {
     // Task 647: the user's tool-ribbon layout per app and section (which tools are in the bar, their order); null = the declared defaults.
     // The shape and the merge rules are #ui/ribbon-layout.js. A per-user display preference (local), never saved in a document.
     RIBBON_LAYOUT: null,
+    // Task 692: favourite template ids in the order they were starred ({ v: 1, ids: [id...] }); local-only, shared across all four apps.
+    TEMPLATE_FAVOURITES: { v: 1, ids: [] },
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,

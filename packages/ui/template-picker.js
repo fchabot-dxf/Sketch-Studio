@@ -11,10 +11,70 @@
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
 import { TEMPLATES, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
+import SettingsManager from '#core/settings-manager.js';
+import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
 import { calculateArcPath, arcSweepInfo, angleInArcSweep, getLineIntersection } from '#core/geometry.js';
 import { angleSectorOf, angleSectorArc } from '#core/angle-sector.js';
 import { listenOutsidePress } from './outside-press.js';
+
+export const TEMPLATE_FAVOURITES_KEY = 'TEMPLATE_FAVOURITES';
+export const TEMPLATE_FAVOURITES_VERSION = 1;
+
+let warnedFavsRaw;
+/** Reads stored TEMPLATE_FAVOURITES against known template ids: deduplicates and drops unknown/removed ids. */
+export function normalizeFavouriteIds(raw, knownIds = TEMPLATES.map((t) => t.id)) {
+  if (raw == null) return [];
+  if (typeof raw !== 'object' || raw.v !== TEMPLATE_FAVOURITES_VERSION || !Array.isArray(raw.ids)) {
+    if (warnedFavsRaw !== raw) {
+      warnedFavsRaw = raw;
+      dbg.warn('template-picker', '[template-picker] TEMPLATE_FAVOURITES has an unknown shape; no favourites loaded', raw);
+    }
+    return [];
+  }
+  const known = new Set(knownIds);
+  const out = [];
+  const seen = new Set();
+  for (const id of raw.ids) {
+    if (typeof id !== 'string' || !known.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** Loads favourite template ids from SettingsManager, dropping any id not in `templates`. */
+export function loadFavouriteIds(templates = TEMPLATES, settings = SettingsManager) {
+  return normalizeFavouriteIds(settings.get(TEMPLATE_FAVOURITES_KEY), templates.map((t) => t.id));
+}
+
+/** Saves favourite template ids locally via SettingsManager (shared across all four apps). */
+export function saveFavouriteIds(ids, templates = TEMPLATES, settings = SettingsManager) {
+  const clean = normalizeFavouriteIds({ v: TEMPLATE_FAVOURITES_VERSION, ids }, templates.map((t) => t.id));
+  settings.set(TEMPLATE_FAVOURITES_KEY, { v: TEMPLATE_FAVOURITES_VERSION, ids: clean }, { persist: 'local' });
+  return clean;
+}
+
+/** Toggles `id` in `favIds`, preserving starred order, and persists the updated list. */
+export function toggleFavouriteId(favIds, id, templates = TEMPLATES, settings = SettingsManager) {
+  const current = normalizeFavouriteIds({ v: TEMPLATE_FAVOURITES_VERSION, ids: favIds }, templates.map((t) => t.id));
+  const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+  return saveFavouriteIds(next, templates, settings);
+}
+
+/** Splits `templates` into `{ favs, rest }`: favourites in starred order, then every other template in bank order. */
+export function orderTemplatesByFavourites(templates, favIds) {
+  const byId = new Map(templates.map((t) => [t.id, t]));
+  const favSet = new Set();
+  const favs = [];
+  for (const id of favIds) {
+    const t = byId.get(id);
+    if (!t || favSet.has(id)) continue;
+    favSet.add(id);
+    favs.push(t);
+  }
+  return { favs, rest: templates.filter((t) => !favSet.has(t.id)) };
+}
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs = {}, text) => {
@@ -304,10 +364,21 @@ function injectStyles() {
 .sk-tp-x:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.18)); }
 .sk-tp-body { flex: 1; min-height: 0; overflow: auto; padding: 4px 14px 16px; }
 .sk-tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.sk-tp-item { position: relative; display: flex; }
+.sk-tp-item .sk-tp-card { width: 100%; flex: 1; }
 .sk-tp-card { display: flex; flex-direction: column; gap: 6px; padding: 8px; text-align: left; cursor: pointer; font: inherit; color: inherit; background: transparent;
   border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); border-radius: 8px; }
 .sk-tp-card:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
-.sk-tp-card:focus-visible { outline: 2px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); outline-offset: 1px; }
+.sk-tp-card:focus-visible, .sk-tp-star:focus-visible { outline: 2px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); outline-offset: 1px; }
+.sk-tp-star { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; padding: 8px; border: 0; border-radius: 8px; background: transparent;
+  color: inherit; cursor: pointer; display: flex; align-items: flex-start; justify-content: flex-end; touch-action: manipulation; }
+.sk-tp-star svg { display: block; fill: none; stroke: currentColor; opacity: 0.45; transition: opacity 0.12s, color 0.12s; }
+.sk-tp-star:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
+.sk-tp-star:hover svg, .sk-tp-star:focus-visible svg { opacity: 0.9; }
+.sk-tp-star[aria-pressed="true"] { color: #f59e0b; }
+.sk-tp-star[aria-pressed="true"] svg { fill: currentColor; stroke: currentColor; opacity: 1; }
+.sk-tp-fav-head { grid-column: 1 / -1; margin: 2px 0 -4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
+.sk-tp-fav-sep { grid-column: 1 / -1; height: 1px; margin: 2px 0; background: var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
 .sk-tp-prev { aspect-ratio: 4 / 3; width: 100%; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(127,127,127,0.10); color: inherit; overflow: hidden; }
 .sk-tp-prev .sk-tp-svg { width: 100%; height: 100%; display: block; }
 .sk-tp-blank { font-size: 44px; opacity: 0.55; }
@@ -427,22 +498,81 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       b.append(p, n, d); return b;
     };
 
+    const starSvg = () => {
+      const svg = el('svg', { viewBox: '0 0 24 24', width: '18', height: '18', 'aria-hidden': 'true' });
+      svg.appendChild(el('path', {
+        d: 'M12 2.5l2.93 5.94 6.56.95-4.74 4.62 1.12 6.53L12 17.46l-5.87 3.08 1.12-6.53L2.51 9.39l6.56-.95L12 2.5z',
+        'stroke-width': '1.8',
+        'stroke-linejoin': 'round',
+      }));
+      return svg;
+    };
+
     panel.replaceChildren(head('New design'));
     const body = document.createElement('div'); body.className = 'sk-tp-body';
     const grid = document.createElement('div'); grid.className = 'sk-tp-grid'; grid.dataset.section = 'templates';
     const plus = document.createElement('div'); plus.className = 'sk-tp-blank'; plus.textContent = '+';
     const blankCard = card('blank', 'Blank design', 'An empty sketch.', plus);
     blankCard.addEventListener('click', () => finish({ blank: true }));
-    grid.appendChild(blankCard);
-    // TASK 680: a card shows its preview at once when its document is built already, else as soon as it is (one card per task after the
-    // modal shows: opening never waits for every recipe)
-    const unbuilt = [];
+
+    // TASK 692: each template card has an independent star toggle button; favourites sit under Blank in starred order.
+    let favIds = loadFavouriteIds(templates);
+    const favHeading = document.createElement('div');
+    favHeading.className = 'sk-tp-fav-head';
+    favHeading.textContent = 'Favourites';
+    const favSep = document.createElement('div');
+    favSep.className = 'sk-tp-fav-sep';
+    favSep.setAttribute('aria-hidden', 'true');
+
+    const entries = new Map();
+    const unbuiltMap = new Map();
     for (const t of templates) {
       const preview = defaultDocs.has(t) ? renderTemplatePreview(defaultDocs.get(t)) : document.createElement('div');
+      const wrap = document.createElement('div'); wrap.className = 'sk-tp-item'; wrap.dataset.template = t.id;
       const c = card(t.id, t.name, t.description, preview);
-      if (!defaultDocs.has(t)) unbuilt.push([t, c.querySelector('.sk-tp-prev')]);
       c.addEventListener('click', () => startView(t, c));
-      grid.appendChild(c);
+      const star = document.createElement('button');
+      star.type = 'button'; star.className = 'sk-tp-star'; star.dataset.template = t.id;
+      star.setAttribute('aria-label', `Favourite ${t.name}`);
+      star.title = `Favourite ${t.name}`;
+      star.setAttribute('aria-pressed', 'false');
+      star.appendChild(starSvg());
+      star.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const keepFocus = document.activeElement === star;
+        favIds = toggleFavouriteId(favIds, t.id, templates);
+        applyOrder(keepFocus ? star : null);
+      });
+      wrap.append(c, star);
+      const slot = c.querySelector('.sk-tp-prev');
+      entries.set(t.id, { t, wrap, card: c, star, slot });
+      if (!defaultDocs.has(t)) unbuiltMap.set(t.id, [t, slot]);
+    }
+
+    const applyOrder = (focusEl = null) => {
+      const { favs, rest } = orderTemplatesByFavourites(templates, favIds);
+      const favSet = new Set(favs.map((t) => t.id));
+      for (const [id, entry] of entries) {
+        entry.star.setAttribute('aria-pressed', favSet.has(id) ? 'true' : 'false');
+      }
+      const nodes = [blankCard];
+      if (favs.length > 0) {
+        nodes.push(favHeading);
+        for (const t of favs) nodes.push(entries.get(t.id).wrap);
+        if (rest.length > 0) nodes.push(favSep);
+      }
+      for (const t of rest) nodes.push(entries.get(t.id).wrap);
+      grid.replaceChildren(...nodes);
+      if (focusEl && focusEl.isConnected && document.activeElement !== focusEl) focusEl.focus();
+      return { favs, rest };
+    };
+
+    const { favs: initFavs, rest: initRest } = applyOrder();
+    // TASK 680: build unbuilt card previews in visible order (favourites first, one per task), without rebuilding moved cards on toggle.
+    const unbuilt = [];
+    for (const t of [...initFavs, ...initRest]) {
+      const pair = unbuiltMap.get(t.id);
+      if (pair) unbuilt.push(pair);
     }
     // TASK 674: the grid says when every card's preview is drawn (data-previews "building" -> "ready"): what a test waits for before it reads them
     const buildNextCard = () => {

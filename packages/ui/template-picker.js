@@ -11,7 +11,7 @@
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
 import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
-import SettingsManager from '#core/settings-manager.js';
+import SettingsManager, { lengthDecimals, angleDecimals } from '#core/settings-manager.js';
 import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
 import { calculateArcPath, arcSweepInfo, angleInArcSweep, getLineIntersection } from '#core/geometry.js';
@@ -85,6 +85,8 @@ const el = (tag, attrs = {}, text) => {
   return e;
 };
 const fmt = (n) => String(Math.round(n * 100) / 100);
+// TASK 724: a dimension's value as a LABEL on a card preview: 2 decimals (trailing zeros trimmed) while the precision setting is Auto, else exactly the set decimals. fmt stays for geometry.
+const labelNum = (n, kind) => { const p = kind === 'angle' ? angleDecimals(null) : lengthDecimals(null); return p === null ? fmt(n) : n.toFixed(p); };
 // TASK 672: the modal panel's class. Not `sk-tp`: Shaper's page styles its toolpaths `.sk-tp` (no fill, a dashed stroke), which drew every
 // template preview in this panel dashed there (since task 651). Every rule below and the panel itself use this one name.
 const PANEL = 'sk-tp-panel';
@@ -214,7 +216,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
       const sideBase = horiz ? (dir > 0 ? y1 : y0) : (dir > 0 ? x1 : x0);
       for (const { c, a, b, u0, u1 } of items) {
         const spanPad = fs * 0.4;
-        const t = fmt(c.value);
+        const t = labelNum(c.value, 'length');
         let lane = 0;
         let pos, tx, ty, anchor;
         for (; ; lane++) {
@@ -259,7 +261,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       let nx = -dy / l, ny = dx / l;
       if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }
-      const t = fmt(c.value);
+      const t = labelNum(c.value, 'length');
       const minA = Math.min(a.x * nx + a.y * ny, b.x * nx + b.y * ny);
       let d = Math.max(gap, maxProj(nx, ny) - minA + gap * 0.9);
       const w = String(t).length * fs * 0.64, h = fs * 1.15;
@@ -279,7 +281,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
     for (const c of radiusDims) {
       const sh = shapes.find((s) => s.id === c.shape), cc = J.get(sh.joints[0]);
       const r = sh.type === 'circle' ? sh.radius : Math.hypot(J.get(sh.joints[1]).x - cc.x, J.get(sh.joints[1]).y - cc.y);
-      const t = 'R' + fmt(c.value);
+      const t = 'R' + labelNum(c.value, 'length');
       const candidates = [];
       if (sh.type === 'arc') {
         const info = arcSweepInfo(cc, J.get(sh.joints[1]), J.get(sh.joints[2]), { sweep: sh.sweep });
@@ -329,7 +331,7 @@ export function renderTemplatePreview(document_, { labels = true } = {}) {
       const at = getLineIntersection(a1, b1, a2, b2);
       if (!at) continue; // two parallel lines (0 or 180 degrees): no crossing to draw an arc about
       const arc = angleSectorArc(angleSectorOf(c), Math.atan2(b1.y - a1.y, b1.x - a1.x), Math.atan2(b2.y - a2.y, b2.x - a2.x));
-      const mid = (arc.start + arc.end) / 2, t = fmt(c.value) + '°';
+      const mid = (arc.start + arc.end) / 2, t = labelNum(c.value, 'angle') + '°';
       let rr = size * 0.18, tx, ty;
       for (let k = 0; k < 8; k++) {
         tx = at.x + (rr + fs * 0.9) * Math.cos(mid); ty = at.y + (rr + fs * 0.9) * Math.sin(mid);

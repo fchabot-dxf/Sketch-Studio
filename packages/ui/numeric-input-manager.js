@@ -5,7 +5,7 @@ import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#core/dimension-seams.js';
-import { docUnit } from '#core/settings-manager.js';
+import { docUnit, lengthDecimals, angleDecimals } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
@@ -473,7 +473,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     const hasFormula = typeof constraint.expression === 'string' && constraint.expression !== '';
     const defaultValue = hasFormula ? constraint.expression
         : (typeof prefillValue === 'number'
-            ? (isAngleDim ? prefillValue.toFixed(1) : formatUnit(prefillValue, docUnit()))
+            ? (isAngleDim ? prefillValue.toFixed(angleDecimals(1)) : formatUnit(prefillValue, docUnit(), { decimals: lengthDecimals(1) }))
             : '');
     uiState.defaults = [defaultValue, ''];
     uiState.singleInput.inputMode = 'text';

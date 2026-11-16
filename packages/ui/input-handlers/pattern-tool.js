@@ -34,7 +34,7 @@ import { previewDimensionInput, entryExpression, namePatternValues } from '#core
 import { applyParameterChange, dimensionInputLabel, editPatternValues, patternPlanRefusal, refusalReason } from '#core/dimension-seams.js';
 import { handleBoxUndoKey } from '#ui/numeric-input-manager.js';
 import { inertEntities, isJointInert, activeSketchPick, inActiveSketch } from '#core/sketch-model.js';
-import { docUnit } from '#core/settings-manager.js';
+import { docUnit, lengthDecimals } from '#core/settings-manager.js';
 import { format as formatUnit, parse as parseUnit } from '#core/units.js';
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
@@ -541,7 +541,7 @@ function injectStyles() {
 
 const isPhone = () => typeof window !== 'undefined' && window.innerWidth <= PHONE_MAX_W;
 // the fields show their unit: a length in the document unit (#core/units.js format, the one unit source: "10mm", "0.5in"), an angle in deg
-const fmtLen = (v) => { const u = docUnit(); return formatUnit(v, u, { unit: true, decimals: u === 'in' ? 3 : 2 }); };
+const fmtLen = (v) => { const u = docUnit(); return formatUnit(v, u, { unit: true, decimals: lengthDecimals(u === 'in' ? 3 : 2) }); };
 const fmtAngle = (v) => `${fmtNum(v)} deg`;
 const fmtNum = (v) => String(Number(Number(v).toFixed(4)));
 

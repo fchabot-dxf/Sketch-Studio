@@ -23,7 +23,7 @@ import {
 } from '#core/offset.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
-import { docUnit } from '#core/settings-manager.js';
+import { docUnit, lengthDecimals } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
@@ -51,7 +51,7 @@ let _press = null;          // a press on the canvas while the box is open: a cl
 let _viewListening = false;
 let _committing = false;
 
-const decimalsFor = (unit) => (unit === 'in' ? 3 : 2);
+const decimalsFor = (unit) => lengthDecimals(unit === 'in' ? 3 : 2);
 function ensureDistance() {
   const unit = docUnit();
   if (currentDistance == null || _distanceUnit !== unit) { currentDistance = defaultOffsetDistance(unit); _distanceUnit = unit; }

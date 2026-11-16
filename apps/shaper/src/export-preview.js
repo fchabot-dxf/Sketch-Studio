@@ -11,6 +11,7 @@
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare and Vcarve). The first build
 //    fits; a rebuild (the plan changed) keeps the view, as the 3D view keeps its camera; fit() frames the drawing again.
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
+import { lengthDecimals } from '#core/settings-manager.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPE_TAGS = new Set(['path', 'circle', 'polygon', 'polyline', 'rect', 'ellipse', 'line']);
@@ -81,8 +82,13 @@ function shadesOf(list, shallow, deep) {
   return { shades, lo, hi };
 }
 
+/** TASK 724: a depth as the file writes it ("0.100 in") shown at the Length precision setting ("0.1 in" at 1); the file's own text while the setting is Auto. Display only. */
+export const depthText = (depth) => {
+  const p = lengthDecimals(null), m = p === null ? null : /^(-?\d+(?:\.\d+)?)\s*(\S*)$/.exec(depth || '');
+  return m ? `${Number(m[1]).toFixed(p)}${m[2] ? ' ' + m[2] : ''}` : depth;
+};
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
-export const itemLabel = (it) => [it.cutType || 'no cut type', it.depth || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null].filter(Boolean).join(' · ');
+export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null].filter(Boolean).join(' · ');
 
 /** The list: one group per cut type (file order) with its element count, one row per depth + step in it (file order) with its elements. */
 export function previewRows(items) {
@@ -185,7 +191,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
       out.push(head);
       for (const row of g.rows) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
-        const t = doc.createElement('span'); t.textContent = [row.depth || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null].filter(Boolean).join(' · ');
+        const t = doc.createElement('span'); t.textContent = [depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null].filter(Boolean).join(' · ');
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
         const shade = g.cutType === 'pocket' ? shading.shades.get(row.depth) : (g.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (g.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }

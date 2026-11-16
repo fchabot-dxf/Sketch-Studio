@@ -5,7 +5,7 @@
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
 import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
-import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthDecimals } from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
@@ -34,7 +34,7 @@ const DEPTH_START = 0.1;   // first value (in the DOC unit) when stepping up/dow
 const DEPTH_STEP = 0.05;   // step increment, in the DOC unit
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
-const fmt = (baseMM) => formatUnit(baseMM, docUnit(), { decimals: 3 });               // BASE mm → doc-unit string (3 dp)
+const fmt = (baseMM) => formatUnit(baseMM, docUnit(), { decimals: lengthDecimals(3) });   // BASE mm → doc-unit string (3 dp unless the Length precision setting says otherwise)
 const toDocNum = (baseMM) => Number(formatUnit(baseMM, docUnit(), { decimals: 6 }));  // BASE mm → doc-unit number
 const isUnset = (v) => v === 'unset' || v == null;
 
@@ -239,7 +239,7 @@ export function createCutPanel(hostEl, opts = {}) {
     adaptiveInput.checked = adaptive;
     stepInput.value = fmt(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
     const deviation = Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm;
-    deviationInput.value = formatUnit(deviation, docUnit(), { decimals: docUnit() === 'in' ? 4 : 3 }); // 0.1 mm = 0.0039 in
+    deviationInput.value = formatUnit(deviation, docUnit(), { decimals: lengthDecimals(docUnit() === 'in' ? 4 : 3) }); // 0.1 mm = 0.0039 in
     noteEl.innerHTML = '';
     for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
       const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');

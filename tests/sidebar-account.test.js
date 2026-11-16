@@ -153,9 +153,9 @@ await (async () => {
     assert.strictEqual(lap.state, 'lapsed'); assert.strictEqual(lap.text, 'Reconnect'); assert.strictEqual(lap.called, 1); assert(!/sync/i.test(lap.rowText));
     await shot('3-lapsed-reconnect');
 
-    // 5. the account row sits BELOW the GO TO apps, and a host without `account` shows no row (Pen Plotter etc. all pass it; no stray rows)
+    // 5. the account row is the LAST row of the drawer (TASK 696: no GO TO block above it any more), and a host without `account` shows no row (Pen Plotter etc. all pass it; no stray rows)
     await ev(`T.mountRow({ signedIn: false, lapsed: false }, null)`);
-    assert.strictEqual(await ev(`(() => { const g = document.querySelector('[data-section=goto]'); const last = g.lastElementChild; return last.dataset.section; })()`), 'account', 'account is the last row of the GO TO block');
+    assert.deepStrictEqual(await ev(`(() => { const r = document.querySelector('[data-section=account]'); return [r.parentElement.className, r.parentElement.lastElementChild === r, document.querySelectorAll('[data-section=goto]').length]; })()`), ['sk-sidebar-content', true, 0], 'account is the last row of the drawer, no GO TO block');
 
     // 6. the REAL controller with the server routes answering 404 (unconfigured / localhost): the row works through the GIS popup
     assert.strictEqual(await ev(`T.mountReal('absent')`), true);

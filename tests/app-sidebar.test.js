@@ -73,7 +73,7 @@ await (async () => {
       assert.deepStrictEqual(acts, host.actions, `${host.id}: its own actions, no other host's`);
       // TASK 696: no GO TO section, no app entry, no link to another app's page anywhere in the drawer or the header
       assert.deepStrictEqual(await evalJs(`[document.querySelectorAll('.sk-sidebar [data-section="goto"], .sk-sidebar-goto').length, document.querySelectorAll('.sk-sidebar [data-app]').length]`), [0, 0], `${host.id}: no GO TO section, no app entry`);
-      const otherAppLinks = await evalJs(`[...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => /(^|\/)(sketchstudio|shaper|penplotter|trace)(\/|$)/.test(h) && !/^https?:/.test(h))`);
+      const otherAppLinks = await evalJs(`[...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => !/^https?:/.test(h) && ['sketchstudio', 'shaper', 'penplotter', 'trace'].some((a) => h.split('/').includes(a)))`);
       assert.deepStrictEqual(otherAppLinks, [], `${host.id}: no link to another app`);
       assert.ok(['Untitled', 'Image Trace'].includes(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`)), `${host.id}: the document name is shown`);
       if (host.id === 'trace') assert.strictEqual(await evalJs(`document.querySelector('[data-action="download-svg"]').disabled`), true, 'trace: Download is disabled until there is a trace');

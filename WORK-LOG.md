@@ -15549,3 +15549,51 @@ Notification toasts never cover the footer bar or top ribbon / open ribbon dropd
   - Evidence (`.evidence/695/`, local):
     - Before: `before-sketchstudio-phone-390x844.png` (`7D0080A257FB6C24AFF2978F2C549734`), `before-sketchstudio-landscape-844x390.png` (`591BA32B6429D1AC3B12183150CE864E`), `before-sketchstudio-desktop-1280x800.png` (`A041D93716F002D4AC5B2826E47690A0`), `before-penplotter-phone-390x844.png` (`A640737087C5874FEB6983BF723E8E44`), `before-penplotter-landscape-844x390.png` (`8441D03537D3896DAC75B46F8BF8F1D9`), `before-penplotter-desktop-1280x800.png` (`D0406D25DC4E5AB7524AAD1D6AF8F222`).
     - After: `after-sketchstudio-phone-390x844.png` (`E9FF09E20A36A59B125A24FAFEA2F2FE`), `after-sketchstudio-landscape-844x390.png` (`E31A524A677AD08DAC36C75027882873`), `after-sketchstudio-desktop-1280x800.png` (`952ECD10D95A1AC451736994C99717D6`), `after-penplotter-phone-390x844.png` (`96E53C6495619C92E431D191E7E56A9D`), `after-penplotter-landscape-844x390.png` (`8EB1AA55932E54B1AF15BCE70E67B853`), `after-penplotter-desktop-1280x800.png` (`460848B5B107878DF31BDA0BE79F1670`).
+
+## TURN 696
+Each app is its own website (owner turns 1835-1838): sketch-studio.pages.dev (SketchStudio), sketch-shaper / sketch-penplotter / sketch-trace .pages.dev.
+The engine and every shared package stay ONE copy in the repo; a site is BUILT from it.
+- **`scripts/build-site.cjs <app>`** (`npm run site:<app>`): writes `dist/` with `apps/<app>/` (whole folder), `packages/` (no `tests/`), the root files the
+  app reaches (`assets/constraint-glyphs.svg`, the glyph sheet `packages/ui/glyph-sheet.js` fetches), `privacy.html`, and that site's `_redirects`:
+  `/ -> /apps/<app>/ 302`; on sketch-studio also `/shaper`, `/apps/shaper`, `/apps/shaper/*` -> `https://sketch-shaper.pages.dev/apps/shaper/:splat` (302;
+  same for penplotter and trace). Same tree shape as the repo, so no import path changed. It refuses to build when the app reaches a missing file or another
+  app's file, and only empties `dist/` inside the repo (or a dir outside it). `dist/` is gitignored.
+- **`scripts/site-closure.cjs`**: ONE resolver used by the build and the tests (import / export from, import(), require('./x'), the page's import map,
+  new URL(x, import.meta.url), importScripts, CSS @import / url(), every src= / href=, string literals naming a site file, Pages Function routes /api/ /auth/
+  -> a file under ./functions). Comments, strings (`'import ' + name`) and regex literals are skipped by a small tokenizer.
+- **Cross-app references found: NONE.** No packages/ file and no app reaches into another app's folder (`crossApp: []` for all four); the only file outside
+  `apps/<app>/` and `packages/` any app reaches is `assets/constraint-glyphs.svg` (copied). Pages Functions reached: `/auth/google/` (all four),
+  `/api/shaper-upload` (Shaper).
+- **Query string + Functions, how verified**: the Cloudflare docs do not state query handling, so I read wrangler 4.151.1's bundled
+  `pages-shared/asset-server/handler.ts` (the Pages asset server): `location = ... ${destination.search ? destination.search : search} ...` (cross-origin
+  destination keeps the request's query when the rule has none), then ran the global wrangler `pages dev dist` locally (no account, metrics off):
+  `/shaper?host=fusion -> 302 https://sketch-shaper.pages.dev/apps/shaper/?host=fusion`, `/apps/shaper/index.html?host=fusion&x=1 -> 302
+  https://sketch-shaper.pages.dev/apps/shaper/index.html?host=fusion&x=1`, `/?host=fusion -> 302 /apps/sketchstudio/?host=fusion`; Shaper's dist:
+  `/?host=fusion -> 302 /apps/shaper/?host=fusion`, `/apps/sketchstudio/ -> 404`. Run from the repo root it printed `Compiled Worker successfully`
+  (functions/ compiled from the cwd); docs: "if a functions folder exists where the command is run, that functions folder will be uploaded with the
+  project" (pages/get-started/direct-upload) and "Make sure that the /functions directory is at the root of your Pages project (and not in the static
+  root, such as /dist)". 302 not 301: a 301 is cached by the browser (and the Fusion add-in's) with no way back if a site moves. `/shaper/` (trailing
+  slash) was not redirected before and is not now.
+- **GO TO removed** (all four apps): `app-sidebar.js` (the GO TO section, `goTo` / `beforeGoTo` / `apps` options, its CSS), `app-registry.js` (`href`),
+  `sidebar-projects.js` (`goTo`, `keepTabsBeforeGoTo`), `app-chrome.js` (`goTo`), Shaper `main.js` (`goTo: !fusionMode`), Shaper's `--sk-sidebar-goto-bg`.
+  Last non-test caller removed: `document-buffer.js keepTabs()` (only `keepTabsBeforeGoTo` called it) -> deleted. The account row now sits at the foot of
+  the drawer aligned with the actions (it lived inside the GO TO band). Nothing replaces GO TO (no new UI).
+- **Tests changed** (they drove or asserted GO TO): `app-sidebar.test.js` (asserts NO GO TO, no app entry, no link to another app), `sidebar-account.test.js`
+  (account row is the drawer's last row), `fusion-mode-663-live` + `-node` (no GO TO in normal mode either; `goTo:` option gone),
+  `document-tabs-unsaved-callers-live` (GO TO step removed; menu-open probe reads `.sk-sidebar-actions`), `unsaved-prompt-node-runner.js` (the `goto` path
+  removed from the 6 unsaved-prompt tests), `shared-tabs-684.test.js` (`keepTabs()` -> `flush()`; the "GO TO stays when the buffer cannot be written" check
+  removed), `shared-tabs-684-live` + `sidecar-on-show-687-live` (the next app opens by its address on the same origin after the page wrote its tabs; every
+  other assertion unchanged), `helpers/node-app.js` (comment). `fusion-import-664-live` unchanged (still asserts no GO TO in Fusion mode).
+- **New tests**: `tests/site-closure.test.js` (quick; builds the 4 sites to a temp dir, every reference resolves inside its own dist, no other app; a broken
+  copy (glyph sheet + `packages/ui/app-registry.js` deleted, `<a href="../shaper/">` added) must be reported), `tests/site-dist-live.test.js` (each app
+  from ITS dist on its own port: ready, 0 failed / 404 same-origin requests).
+- **What changes for users**: designs saved only LOCALLY in the browser stay on sketch-studio.pages.dev (that origin's storage; no cross-origin migration);
+  Drive designs show on every site (same OAuth client); each site has its own open tabs, settings (ribbon layout, favourites) and sign-in. Existing
+  one-time paths: Projects modal -> a design -> "Save to file" then "Open from file" on the other site; a local project -> "Use Google Drive".
+- Evidence (`.evidence/696/`, local): `wrangler-redirects-sketchstudio.txt`, `wrangler-redirects-shaper.txt`, `wrangler-pages-dev.log`,
+  `fail-first-red.txt` (closure test red on a renamed glyph-sheet URL), `fail-first-live-red.txt` (live test red on a deleted glyph sheet: 404),
+  `drawer-before.png` (`39DE5F4009655E688AE8CE08B3F61BFA`, GO TO band), `drawer-after.png` (`50A01A960DB67D640C689B2F813267B9`, no GO TO),
+  `dist-<app>.png`.
+- Owner / advisor to do: set sketch-studio's dashboard build command `node scripts/build-site.cjs sketchstudio`, output `dist`; add the 3 sites'
+  redirect URIs + JS origins to the OAuth client; set the 3 secrets on the 3 new projects. The repo-root `_redirects` still serves today's one-site
+  deploy and becomes unused once the build command is set (delete it then).

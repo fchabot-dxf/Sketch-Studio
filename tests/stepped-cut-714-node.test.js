@@ -18,7 +18,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { buildRelief } from '#core/relief-model.js';
 import { steppedTerraces, sameOutline, STEP_DEPTH, SAME_OUTLINE_TOL_MM } from '#core/stepped-cut.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, lastStepDepth } from '../apps/shaper/src/cut-plan.js';
+import { CUT_PLAN, cutPlanEntries, planReliefItems, lastStepDepth, rememberStepSpacing } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding, availableTypes } from '../apps/shaper/src/shaper.js';
 
@@ -113,6 +113,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180); // 0.17633 mm per mm of depth
 eq(SAME_OUTLINE_TOL_MM, 0.01, 'the stated tolerance for identical steps: 0.01 mm');
 
 // ── 2. the app ──
+rememberStepSpacing(0); // TASK 715: a cut switched to a stepped type starts at 1/16 in minimum spacing; these task 714 checks keep EVERY step (spacing 0, the last value used)
 SettingsManager.set('DOC_UNIT', 'mm');
 const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true } });
 const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) => ({ tag: m[1], type: /shaper:cutType="([^"]+)"/.exec(m[2])[1], depth: (/shaper:cutDepth="([^"]+)"/.exec(m[2]) || [])[1], geom: m[2].replace(/ fill=.*$/, '') }));

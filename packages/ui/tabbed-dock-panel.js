@@ -6,6 +6,7 @@
 // (DEBT-1: localStorage is fine for v1; swap to an injected persistence adapter later.)
 // POP-UP use (TASK 535-4): opt-in `open:false` (starts hidden), `closable` (close button + Esc), `title` (role=dialog + aria-label),
 // `initial` (first-run position/size), `narrowSheet` (<=640px: a full-width bottom sheet, no drag) and open()/close()/isOpen().
+// A pop-up (closable) window declares itself a TOAST OBSTACLE: `data-toast-obstacle` on its root, which the notification manager reads so a toast never covers it.
 // Themed via --sk-dock-* (falling back to --sk-* / neutral) so each shell's :root retints it. Self-contained:
 // injects its own <style> once; imports nothing.
 
@@ -106,6 +107,7 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
   if (title) { root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', title); }
   root.tabIndex = -1; // programmatic focus target on open (a pop-up moves focus into itself)
   if (narrowSheet) root.dataset.sheet = '';
+  if (closable) root.dataset.toastObstacle = ''; // TASK 698: a pop-up window with rows to edit: toasts (#ui/notification-manager.js) stay clear of it
   const isSheet = () => narrowSheet && typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
   let activeTab = Math.min(Math.max(0, st.tab | 0), Math.max(0, tabs.length - 1));
 

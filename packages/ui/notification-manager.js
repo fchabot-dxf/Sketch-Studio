@@ -51,7 +51,61 @@ function ceilingBottomEdge(cLeft, cRight, vh) {
     return ceiling;
 }
 
-/** Position the toast stack above the host's live footer and drop oldest overflow on short screens. */
+/** The rects of the open floating windows that declare themselves toast obstacles (`data-toast-obstacle`, set by the shared window code). */
+function obstacleRects() {
+    if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return [];
+    return [...document.querySelectorAll('[data-toast-obstacle]')].map(visibleRect).filter(Boolean);
+}
+
+const rectsOverlap = (a, b) => horizOverlaps(a, b) && a.top < b.bottom && b.top < a.bottom;
+
+const MIN_COLUMN_PX = 240; // the narrowest column a stack is reflowed into
+
+/** The free x ranges between the obstacles (each kept CLEARANCE_GAP_PX away), inside the screen. */
+function freeColumns(obstacles, vw) {
+    const cols = [];
+    let cursor = CLEARANCE_GAP_PX;
+    for (const o of [...obstacles].sort((p, q) => p.left - q.left)) {
+        if (o.left - CLEARANCE_GAP_PX > cursor) cols.push({ left: cursor, right: o.left - CLEARANCE_GAP_PX });
+        cursor = Math.max(cursor, o.right + CLEARANCE_GAP_PX);
+    }
+    if (vw - CLEARANCE_GAP_PX > cursor) cols.push({ left: cursor, right: vw - CLEARANCE_GAP_PX });
+    return cols;
+}
+
+/**
+ * Where the stack goes. Default: bottom centre, above the footer. A visible window that declares `data-toast-obstacle` is never covered; in order:
+ *  1. nothing under the default spot: stay there;
+ *  2. BESIDE the window(s): the free column nearest the centre that holds the stack's full width;
+ *  3. ABOVE the window (its top edge is the floor) when the whole stack fits between there and the top bars;
+ *  4. BESIDE, reflowed: a free column of at least 240px, the toasts wrapping to its width (oldest overflow dropped by the trim);
+ *  5. ABOVE with the oldest toasts dropped, when at least the newest toast fits;
+ *  6. no clear spot (a window nearly the whole screen): the stack is hidden until one exists (the toasts still expire; a refused value also
+ *     shows its own message in the window).
+ */
+function chooseSpot(container, cW, cH, vw, vh, floorY) {
+    const home = { centerX: vw / 2, floorY, width: null, hidden: false };
+    const obstacles = obstacleRects();
+    const at = (cx, w, floor, h) => ({ left: cx - w / 2, right: cx + w / 2, top: floor - h, bottom: floor });
+    if (!obstacles.some((o) => rectsOverlap(at(vw / 2, cW, floorY, cH), o))) return home;
+    const columns = freeColumns(obstacles, vw);
+    const centreIn = (col, w) => Math.min(Math.max(vw / 2, col.left + w / 2), col.right - w / 2);
+    const byCentre = (list) => list.sort((p, q) => Math.abs(p.centerX - vw / 2) - Math.abs(q.centerX - vw / 2));
+    const wide = byCentre(columns.filter((c) => c.right - c.left >= cW).map((c) => ({ centerX: centreIn(c, cW), floorY, width: null, hidden: false })))[0];
+    if (wide) return wide;
+    let aboveFloor = floorY;
+    for (const o of obstacles) if (horizOverlaps(at(vw / 2, cW, floorY, cH), o)) aboveFloor = Math.min(aboveFloor, o.top - CLEARANCE_GAP_PX);
+    const room = aboveFloor - ceilingBottomEdge(vw / 2 - cW / 2, vw / 2 + cW / 2, vh);
+    const above = { centerX: vw / 2, floorY: aboveFloor, width: null, hidden: false };
+    if (room >= cH) return above;
+    const narrow = byCentre(columns.filter((c) => c.right - c.left >= MIN_COLUMN_PX).map((c) => ({ centerX: centreIn(c, c.right - c.left), floorY, width: c.right - c.left, hidden: false })))[0];
+    if (narrow) return narrow;
+    const newest = container.lastElementChild;
+    if (newest && room >= newest.offsetHeight) return above;
+    return { ...home, hidden: true };
+}
+
+/** Position the toast stack above the host's live footer, clear of open floating windows, and drop oldest overflow on short screens. */
 export function layoutNotifications() {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
     const container = document.getElementById('notification-container');
@@ -59,21 +113,39 @@ export function layoutNotifications() {
     const vw = window.innerWidth || 0;
     const vh = window.innerHeight || 0;
     const fTop = footerTopEdge();
-    const bottomPx = fTop !== null ? Math.max(DEFAULT_BOTTOM_PX, Math.ceil(vh - fTop + CLEARANCE_GAP_PX)) : DEFAULT_BOTTOM_PX;
-    container.style.bottom = `${bottomPx}px`;
+    let floorY = fTop !== null ? fTop - CLEARANCE_GAP_PX : vh - DEFAULT_BOTTOM_PX;
+    container.style.left = '50%';
+    container.style.maxWidth = '';
+    container.style.visibility = '';
+    container.style.bottom = `${Math.max(DEFAULT_BOTTOM_PX, Math.ceil(vh - floorY))}px`;
     if (!(vh > 0) || !(container.offsetHeight > 0)) return;
 
     const cW = Math.max(200, container.offsetWidth || 0);
-    const cLeft = Math.max(0, (vw - cW) / 2);
-    const cRight = cLeft + cW;
-    const floorY = fTop !== null ? fTop - CLEARANCE_GAP_PX : vh - DEFAULT_BOTTOM_PX;
-    const ceilingY = ceilingBottomEdge(cLeft, cRight, vh);
+    const spot = chooseSpot(container, cW, container.offsetHeight, vw, vh, floorY);
+    floorY = spot.floorY;
+    if (spot.width !== null) container.style.maxWidth = `${spot.width}px`;
+    if (spot.hidden) container.style.visibility = 'hidden';
+    container.style.left = spot.centerX === vw / 2 ? '50%' : `${spot.centerX}px`;
+    container.style.bottom = `${Math.max(DEFAULT_BOTTOM_PX, Math.ceil(vh - floorY))}px`;
+    const w = spot.width !== null ? spot.width : cW;
+    const cLeft = Math.max(0, spot.centerX - w / 2);
+    const ceilingY = ceilingBottomEdge(cLeft, cLeft + w, vh);
     const maxH = Math.max(0, floorY - ceilingY);
 
     // Under flex-direction: column-reverse, firstElementChild is the oldest toast (sits at bottom; trimming pulls newer down).
     while (container.children.length > 1 && container.offsetHeight > maxH) {
         container.firstElementChild.remove();
     }
+}
+
+// While toasts show, a window dragged / opened under them moves them: follow it every frame (stops when none show).
+let followRaf = null;
+function followWindows() {
+    followRaf = null;
+    const c = typeof document !== 'undefined' ? document.getElementById('notification-container') : null;
+    if (!c || !c.children.length || typeof requestAnimationFrame !== 'function') return;
+    layoutNotifications();
+    followRaf = requestAnimationFrame(followWindows);
 }
 
 let resizeWired = false;
@@ -89,6 +161,8 @@ export function setupNotifications() {
             position: fixed;
             bottom: ${DEFAULT_BOTTOM_PX}px;
             left: 50%;
+            width: max-content; /* TASK 698: its width never shrinks when the stack sits beside a window (left > 50%) */
+            max-width: calc(100vw - 16px);
             transform: translateX(-50%);
             display: flex;
             flex-direction: column-reverse; /* stack upward from bottom */
@@ -166,7 +240,7 @@ export function showNotification(message, type = 'info', duration = 3000) {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         pointer-events: auto;
         min-width: 200px;
-        max-width: min(420px, calc(100vw - 24px));
+        max-width: min(420px, calc(100vw - 24px), 100%); /* 100%: the stack's own width when it is reflowed beside a window (TASK 698) */
         user-select: text;
         cursor: text;
     `;
@@ -232,6 +306,7 @@ export function showNotification(message, type = 'info', duration = 3000) {
     toast.appendChild(pre);
     document.getElementById('notification-container').appendChild(toast);
     layoutNotifications();
+    if (followRaf === null && typeof requestAnimationFrame === 'function') followRaf = requestAnimationFrame(followWindows);
 
     // Animate in
     requestAnimationFrame(() => {

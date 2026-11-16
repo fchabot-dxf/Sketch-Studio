@@ -732,7 +732,10 @@ import { format, formatShaperParam } from '#core/units.js';
       eq(svg, want, 'TASK 433b test 5: guide on profile with hole');
     }
 
-    // 28. Test 6 (Q4 decision): Outer profile Outside + hole\'s own loop record On line → 3 paths emitted
+    // 28. Test 6: Outer profile Outside + the hole's own loop record On line → 2 paths. TASK 711, advisor ruling (a): a hole's own record
+    //     OVERRIDES the automatic hole cut of its enclosing target, for every cut type ("what you assign is what you get"); this replaces
+    //     the 433 "additional path" rule, which cut a Fusion solid's pocket walls through the plate. An UNASSIGNED hole keeps its automatic
+    //     cut (test 1).
     {
       const svg = exportShaperSVG({
         state: frameState,
@@ -746,12 +749,11 @@ import { format, formatShaperParam } from '#core/units.js';
       });
       const want = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
-        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside" shaper:cutOffset="0mm"/>',
         '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"/>',
         '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutOffset="0mm"/>',
         '</svg>',
       ].join('\n');
-      eq(svg, want, 'TASK 433b test 6: Q4 outer outside + hole own online = 3 paths');
+      eq(svg, want, 'TASK 433b test 6 (TASK 711 ruling): outer outside + hole own online = 2 paths, the own record overrides');
     }
   }
 

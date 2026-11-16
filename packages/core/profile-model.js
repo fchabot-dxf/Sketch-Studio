@@ -630,6 +630,22 @@ export function listSketchProfiles(state, loops, loopPolys) {
 }
 
 /**
+ * ownedLoopIds(entries, state, loops, loopPolys) — TASK 711: the loops that have their OWN record in a cut plan: the outer loop
+ * each assigned entry ({ target, rec } with a rec.cutType) resolves to (resolveTargetKey). deriveProfileCuts takes this set and
+ * never cuts one of these loops as an automatic hole of an enclosing profile. Chains and stale targets own no loop.
+ */
+export function ownedLoopIds(entries, state, loops, loopPolys) {
+  const owned = new Set();
+  const allLoops = loops || (state ? findLoops(state) : []);
+  for (const e of (entries || [])) {
+    if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
+    const spec = resolveTargetKey(e.target, state, allLoops, loopPolys);
+    if (spec && !spec.invalid && spec.outer) owned.add(spec.outer);
+  }
+  return owned;
+}
+
+/**
  * ONE Unified Cut Derivation for Profiles and Targets.
  * Given a target (or key) and a cut record, resolves the cut operations to perform:
  * - POCKET: compound cut with outer loop and all directly-contained holes
@@ -641,14 +657,20 @@ export function listSketchProfiles(state, loops, loopPolys) {
  *
  * Sketches without holes emit only the outer cut (byte-identical to simple loops).
  *
+ * TASK 711: a hole that has its OWN record in the cut plan (it is in `ownedLoops`, see ownedLoopIds) is cut by that record
+ * only: it is never also emitted here as an automatic hole cut of the enclosing (non-pocket) profile, so a pocket wall inside
+ * an Outside plate is not cut through the plate, and a hole with its own Inside record is written once. A pocket keeps every
+ * hole: a pocket's hole is an island it leaves uncut, not a cut.
+ *
  * @param {string|object} target - Target key string or { kind, id } or resolved spec
  * @param {object} rec - Cut record ({ cutType, cutDepth, cutOffset, toolDia })
  * @param {object} state - Sketch state
  * @param {Array} [loops] - Optional precomputed loops
  * @param {object|Map} [loopPolys] - Optional precomputed loop polygons
+ * @param {Set<string>} [ownedLoops] - Loop ids that have their own record in the cut plan (ownedLoopIds)
  * @returns {Array<object>} Array of cut descriptors
  */
-export function deriveProfileCuts(target, rec, state, loops, loopPolys) {
+export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoops) {
   if (!target || !rec || !rec.cutType) return [];
   const allLoops = loops || (state ? findLoops(state) : []);
   const spec = (typeof target === 'object' && target !== null && 'outer' in target && 'inners' in target)
@@ -715,8 +737,9 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys) {
   const holeOffsetSide = isOutside ? -1 : isInside ? 1 : 0;
   const outerOffsetSide = isOutside ? 1 : isInside ? -1 : 0;
 
-  // Holes FIRST
+  // Holes FIRST (a hole with its own record is cut by that record, not here)
   for (let i = 0; i < holeLoops.length; i++) {
+    if (ownedLoops && ownedLoops.has(holeLoops[i].id)) continue;
     cuts.push({
       kind: 'loop',
       loop: holeLoops[i],

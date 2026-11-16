@@ -8,7 +8,7 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
-import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, stockKeyOf } from './cut-plan.js'; // SP1j-4: shared cut-plan store
+import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
 import SettingsManager, { docUnit } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
@@ -286,9 +286,17 @@ export function mountPrepareView(state, svgEl, opts = {}) {
 
   // SP1h5: per-target cut LOOK = the CUTTER PATH, cached by (cutType,toolDia,cutOffset,cutDepth,docUnit).
   const lookCache = new Map(); // targetKey → { sig, region, path }
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${docUnit()}`;
+  // TASK 711: which loops have their own record (a hole with one is not cut again by its enclosing target) follows the ASSIGNED keys:
+  // derived once per change of that key list, and part of every look's signature (assigning a hole's cut changes its plate's look).
+  let owned = { keys: null, set: null };
+  const ownedNow = () => {
+    const keys = [...CUT_PLAN].filter(([, r]) => r && r.cutType).map(([k]) => k).sort().join(' ');
+    if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
+    return owned;
+  };
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${docUnit()}|${ownedNow().keys}`;
   const computeLook = (key, storedRec) => {
-    const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys); // the ONE composition (cut-plan.js), shared with the 3D Review
+    const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [] };
     const { rec, footprints } = derived;
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;

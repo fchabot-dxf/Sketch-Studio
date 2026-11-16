@@ -15747,3 +15747,15 @@ Toasts never cover an open floating window (the Parameters window first). Claude
 ## TURN 704
 Site names (owner turns 1857-1862): Shaper moves to https://shaper-svg.pages.dev (new direct-upload project `shaper-svg`); Pen Plotter takes over the owner's older `penplotter` project (https://penplotter.pages.dev, its old Git-built app replaced by an upload, owner choice "Replace the old app"); Trace keeps https://sketch-trace.pages.dev. Changed: scripts/build-site.cjs SITE_HOST (sketch-studio's /shaper and /apps/<app>/* redirects follow), tests/site-closure.test.js expected hosts, README "Websites" table, providers.js origins comment.
 Evidence: `node tests/site-closure.test.js` -> "site-closure: 4 sites, every reference inside its own site, no other app; the broken copy is caught". Deployed by the advisor: https://020676c6.penplotter.pages.dev, https://443f8239.shaper-svg.pages.dev; `curl https://shaper-svg.pages.dev/?host=fusion` -> 302 https://shaper-svg.pages.dev/apps/shaper/?host=fusion; penplotter.pages.dev/ -> 302 /apps/penplotter/, /apps/penplotter/ -> 200.
+
+## TURN 702 (send-back: the merge gate went red on the test's 1500 ms wall ceiling under load)
+- tests/bench-perf-702.test.js counts the WORK of one 40-slat build instead of timing it (test only, engine unchanged): the rows the rank probes'
+  Gram-Schmidt reduces (_rankReduce calls) and the assemblies (_assemble calls), through the test's own wrappers of NewtonSolver.prototype,
+  restored after the build. main face604 (.evidence/702/count-main.txt, the same counter with main's _rowsRaiseRank row lists):
+  {"gsRows":78207,"full":2032,"ronly":843} = 78207 rows, 2875 assemblies; this branch (count-branch.txt): 1943 rows, 1194 + 5 = 1199
+  assemblies. Bounds: at most 4000 rows, 1600 assemblies. The wall time is printed only; `// gate: exclusive` removed (no timing assertion).
+  On main the test fails at once: "the rank probe reduces one row at a time (_rankReduce)" (failfirst-main-counts.txt).
+- Load proxy: 5 runs in a row while `npm run gate:quick` ran in the same worktree: all exit 0, "1943 Gram-Schmidt rows, 1199 assemblies" each,
+  wall 1469 / 1651 / 1592 / 1824 / 2144 ms (load-run-1..5.txt; the old 1500 ms ceiling would have failed 4 of 5); that gate: "GATE tier=quick
+  jobs=quick=22 files=421 pass=421 fail=0 deferred=8".
+- Gate after merging origin/main a696a38: gate:quick 421/421 (8 exclusive DEFERRED by the lock, bench-perf-702 no longer among them).

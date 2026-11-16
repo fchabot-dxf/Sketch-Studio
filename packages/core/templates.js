@@ -25,7 +25,9 @@ import { userToWorldY, worldToUserY } from '#core/units.js';
 import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES } from '#core/constants.js';
 import { patternDefaults } from '#core/pattern.js';
 import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
-import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES } from '#core/frame-geometry.js';
+import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES,
+  mapTrapezoidVertices, computeEffectiveOffset, TRAPEZOID_VARIANTS, mapParallelogramVertices, solveArbitraryTriangle, obliqueTriangleVertices,
+  obliqueVertexJoints } from '#core/frame-geometry.js';
 import { resolveDimEndpoints, linearDimFrame, linearParamsToPoint, projectDimLabel } from '#core/dim-label.js';
 import { arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 import * as ops from '#core/tool-ops.js';
@@ -172,6 +174,27 @@ const corners = (segs) => segs.map((s) => s.a);
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 
+// ── TASK 674: PER-CORNER joints (owner turns 1786-1787: each corner of a frame its own joint, picked on the start modal's preview) ──────────
+// A choice param declared `perCorner: true` holds ONE option (every corner takes it: the start modal's "Corner joint" row sets all of them)
+// or a LIST, one option per corner (a corner picked on the preview), as many as the template's corners() lists for that param.
+/** The joint of each of the `n` corners: the one option for all, or the list (which must have n entries). */
+function cornerList(value, n) {
+  if (!Array.isArray(value)) return Array(n).fill(value);
+  if (value.length !== n) throw new Error(`${value.length} corner joints for ${n} corners`);
+  return [...value];
+}
+// The corners a frame template's start modal puts a glyph on: each outer corner in WORLD coordinates (the document's), `out` = the unit
+// direction its glyph sits off the drawing (frame-calc's rule, TrapezoidCanvasView.js: away from the corners' centroid), `interior` = its
+// interior angle in degrees (the per-vertex joint glyph draws it), and what it picks: `param` (and `index`, the corner's place in a per-corner
+// choice). bind(k) -> { param, index? }.
+function polygonCorners(P, interior, bind) {
+  const cx = P.reduce((s, q) => s + q.x, 0) / P.length, cy = P.reduce((s, q) => s + q.y, 0) / P.length;
+  return P.map((q, k) => {
+    const dx = q.x - cx, dy = q.y - cy, l = Math.hypot(dx, dy);
+    return { x: q.x, y: q.y, out: { x: dx / l, y: dy / l }, interior: interior[k], ...bind(k) };
+  });
+}
+
 // ── TASK 672: BOARD sketches (the frame templates), one path from board outlines to a sketch and its rules ──────────────────────────────────
 const NEAR = 1e-6; // two corners closer than this (mm) are ONE point (a frame engine computes a shared corner twice, a float apart)
 // Board OUTLINES (world polygons: frame-calc's frame, Y down) -> the sketch, drawn with the LINE TOOL: every edge is split at the corners lying
@@ -224,7 +247,8 @@ function drawBoards(d, polys, homes = []) {
 // A carrier declared 'h' / 'v' chains its corners, in order along it, with horizontal / vertical rules (k - 1 rules for k corners: the carrier
 // keeps one freedom, its offset); a free (slanted) carrier keeps two (offset and angle): its first drawn piece is its REFERENCE line and every
 // other corner on it is held on that piece (k - 2 rules: the point dragged onto the line). carriers: [{ a, b, axis: 'h' | 'v' | null }] (world
-// points, a != b). -> per carrier { corners (in order along it), ref (the reference piece's shape id) }
+// points, a != b). -> per carrier { corners (in order along it), ref (the reference piece's shape id), longest (TASK 674: its longest piece,
+// the one a user picks to dimension or constrain that face: a rule on a short end piece makes a large parameter change fail to converge) }
 function carrierRules(d, board, carriers) {
   return carriers.map((cr) => {
     const dx = cr.b.x - cr.a.x, dy = cr.b.y - cr.a.y, len = Math.hypot(dx, dy);
@@ -234,8 +258,34 @@ function carrierRules(d, board, carriers) {
     const ref = board.pieces.find((p) => onIt(p.a.q) && onIt(p.b.q));
     if (cr.axis) for (let i = 0; i + 1 < cs.length; i++) (cr.axis === 'h' ? d.h : d.v)(cs[i].j, cs[i + 1].j);
     else for (const c of cs) if (c !== ref.a && c !== ref.b) d.on(c.j, ref.shape);
-    return { corners: cs, ref: ref && ref.shape };
+    const size = (pc) => Math.hypot(pc.a.q.x - pc.b.q.x, pc.a.q.y - pc.b.q.y);
+    const longest = board.pieces.filter((pc) => onIt(pc.a.q) && onIt(pc.b.q)).sort((u, v) => size(v) - size(u))[0];
+    return { corners: cs, ref: ref && ref.shape, longest: longest && longest.shape };
   });
+}
+
+// TASK 674: a CONVEX FRAME of boards on the outer polygon P (world points, wound as frame-calc's mappers wind them: positive signed area, so
+// the engine keeps P's order), ONE thickness and a joint per vertex: THE per-vertex engine's boards (#core/frame-geometry.js
+// calculatePolygonFrameGeometry) through the one board path (drawBoards); every edge lies on a board's outer or inner face (2 N carriers,
+// carrierRules; axes[k] = 'h' | 'v' when board k's faces stay level / plumb by the template's rule, null when they are free); each board
+// `thickness` thick (the user parameter): a level / plumb board by a SIGNED vertical / horizontal dimension from its outer corner P_k to its
+// inner corner Q_k (the Dimension tool's on that pair: the inner face cannot cross the outer one, no fold), a free board by its inner face
+// parallel to its outer face and a line-to-line dimension between their longest pieces. Board k runs from P[k] to P[k + 1]. -> { g (the engine's result), Pj (the outer corners' joints, in P's order), outer, inner
+// (the faces' carriers: { corners, ref })}. The template places the outer polygon (its anchor and its own dimensions).
+function convexFrame(d, P, thick, joints, axes) {
+  const g = calculatePolygonFrameGeometry({ P, thick, joints });
+  if (g.P !== P) throw new Error('the outer polygon is wound the other way'); // the engine reversed it: the joint list would be read backwards
+  const n = P.length;
+  const board = drawBoards(d, g.boards.map((b) => [b.p1, b.p2, b.p3, b.p4]));
+  const carriers = [];
+  for (const ring of [g.P, g.Q]) ring.forEach((q, k) => carriers.push({ a: q, b: ring[(k + 1) % n], axis: axes[k] }));
+  const cr = carrierRules(d, board, carriers), outer = cr.slice(0, n), inner = cr.slice(n);
+  const Pj = g.P.map((q) => board.J(q)), Qj = g.Q.map((q) => board.J(q));
+  for (let k = 0; k < n; k++) {
+    if (axes[k]) d.dim(Pj[k], Qj[k], axes[k] === 'h' ? 'vertical' : 'horizontal', 1, 'thickness'); // signed: the inner face cannot cross the outer one
+    else { d.parallel(inner[k].longest, outer[k].longest); d.gap(outer[k].longest, inner[k].longest, 1, 'thickness'); }
+  }
+  return { g, Pj, outer, inner };
 }
 
 // ── the bank: one RECIPE per template (what a user does with the tools to draw it) ────────────────────────────────────────────────────────
@@ -471,16 +521,27 @@ export const BOX_FRAME_LAYOUTS = Object.freeze([
   Object.freeze({ value: 'Vertical', label: 'Vertical layout' }),
   Object.freeze({ value: 'Horizontal', label: 'Horizontal layout' }),
 ]);
+// TASK 674: the box frame's corners for the start modal's per-corner joints, in the construction's order (user coordinates of the vertical
+// layout, Y up): bottom-left, bottom-right, top-right, top-left; `out` = the corner's outward diagonal. The Horizontal layout is the same
+// construction mirrored in its diagonal, so its corners are the mirrored points (each keeps its index: corner k is the same board corner).
+const BOX_FRAME_CORNERS = [[0, 0, -1, -1], [1, 0, 1, -1], [1, 1, 1, 1], [0, 1, -1, 1]]; // [x / width, y / length, out x, out y]
+function boxFrameCorners(p) {
+  const W = p.width, Lg = p.length, H = p.layout === 'Horizontal';
+  return BOX_FRAME_CORNERS.map(([fx, fy, ox, oy], index) => {
+    const [x, y, u, v] = H ? [fy * Lg, fx * W, oy, ox] : [fx * W, fy * Lg, ox, oy];
+    return { x, y: userToWorldY(y) || 0, out: { x: u * Math.SQRT1_2, y: userToWorldY(v) * Math.SQRT1_2 }, interior: 90, param: 'joint', index };
+  });
+}
 function buildBoxFrame(d, p) {
   const Lg = num(p.length, 1500), W = num(p.width, 400), t = num(p.thickness, 18), n = Math.max(1, Math.round(num(p.compartments, 5)));
-  const joint = CORNER_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'V-Through';
+  const [jBL, jBR, jTR, jTL] = cornerList(p.joint, 4); // TASK 674: each corner its own joint (BOX_FRAME_CORNERS' order)
   const g = (Lg - (n + 1) * t) / n;
   if (p.layout === 'Horizontal') d.mirrorDiagonal(); // the construction below is written for the vertical layout
   const levels = []; // the bottom and the top y of each cross board, from the bottom
   for (let k = 0; k <= n; k++) { const b = k * (g + t); levels.push(b, b + t); }
   // the four outer corners (user coordinates of the construction): the horizontal board is an END, the vertical one a SIDE
-  const BL = cornerJointPoints(0, 0, 1, 1, t, joint), BR = cornerJointPoints(W, 0, -1, 1, t, joint);
-  const TL = cornerJointPoints(0, Lg, 1, -1, t, joint), TR = cornerJointPoints(W, Lg, -1, -1, t, joint);
+  const BL = cornerJointPoints(0, 0, 1, 1, t, jBL), BR = cornerJointPoints(W, 0, -1, 1, t, jBR);
+  const TL = cornerJointPoints(0, Lg, 1, -1, t, jTL), TR = cornerJointPoints(W, Lg, -1, -1, t, jTR);
   const rect = (x, y, w, h) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
   const boards = [
     [BL.vOuter, TL.vOuter, TL.vInner, BL.vInner], [BR.vOuter, TR.vOuter, TR.vInner, BR.vInner], // the sides
@@ -637,8 +698,7 @@ function buildBrace(d, p) {
 // inner ones (N - 1 of them: the last one follows), the outer side length and the thickness (the first board's two faces).
 function buildPolygonFrame(d, p) {
   const N = Math.round(num(p.sides, 6)), side = num(p.sideLength, 300), t = num(p.thickness, 38);
-  const joint = POLYGON_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'Miter';
-  const g = calculatePolygonFrameGeometry({ P: regularPolygonVertices(N, side), thick: t, joints: Array(N).fill(joint) });
+  const g = calculatePolygonFrameGeometry({ P: regularPolygonVertices(N, side), thick: t, joints: cornerList(p.joint, N) }); // TASK 674: a joint per corner
   const n = g.P.length, user = (q) => [q.x, worldToUserY(q.y)];
   const C = d.pt(0, 0), V = d.pt(...user(g.Q[0]));
   const poly = ops.polygon(d.state, C, V, n, true); // the inner polygon (construction), its first corner Q_0
@@ -659,6 +719,103 @@ function buildPolygonFrame(d, p) {
   d.gap(outer[0].ref, inner[0].ref, 1, 'thickness');
 }
 
+// ── TASK 674: the start modal's corner glyphs of the frame templates (the corners' WORLD points: the drawing's, as each recipe anchors it) ──
+const polygonFrameCorners = (p) => {
+  const g = calculatePolygonFrameGeometry({ P: regularPolygonVertices(Math.round(p.sides), p.sideLength), thick: p.thickness, joints: [] });
+  return polygonCorners(g.P, g.interiorAnglesDeg, (index) => ({ param: 'joint', index })); // centred on the origin, as frame-calc's
+};
+const braceCorners = (p) => { // frame-calc's frame (apex at (0, 0), Y down) moved so its right-angle corner (0, H) is the origin
+  const { W, H, degTop, degBot } = calculateFramingGeometry({ width: p.width, height: p.height, thickV: p.thickV, thickH: p.thickH, thickD: p.thickD });
+  return polygonCorners([{ x: 0, y: -H }, { x: 0, y: 0 }, { x: W, y: 0 }], [degTop, 90, degBot], (k) => ({ param: ['topJoint', 'blJoint', 'brJoint'][k] }));
+};
+// the right-angle corner: its one corner on the origin, the boards running right and down (world), the glyph off the outer corner's diagonal
+const rightAngleCorners = () => [{ x: 0, y: 0, out: { x: -Math.SQRT1_2, y: -Math.SQRT1_2 }, interior: 90, param: 'joint' }];
+
+// TASK 674: TRAPEZOID FRAME, frame-calc's trapezoid frame (#core/frame-geometry.js mapTrapezoidVertices: the bottom edge centred on the origin,
+// the top edge `height` above it, its centre `offset` off the middle; computeEffectiveOffset: the variant's offset) through THE per-vertex engine
+// (convexFrame), one thickness, a joint per corner (Miter | CW-Through | CCW-Through; corners bottom-left, top-left, top-right, bottom-right).
+// The variant is the start modal's (frame-calc's Shape + Square corner): ISOSCELES = the top's middle on the vertical through the origin (a
+// construction line from the origin, the Midpoint tool); RIGHT = one leg plumb (its faces vertical carriers); SCALENE = the top free, its left
+// setback (frame-calc's trapezoidSetbacks: how far the left leg starts in from its base corner) a dimension. Every variant: the bottom's middle
+// on the origin, the bottom and top widths, the height, each board `thickness` thick (a board per side).
+const trapezoidVariant = (p) => TRAPEZOID_VARIANTS.find((o) => o.value === p.variant) || TRAPEZOID_VARIANTS[0];
+const trapezoidOuter = (p) => {
+  const v = trapezoidVariant(p);
+  const freeOffset = p.setbackLeft - (p.bottomWidth - p.topWidth) / 2; // trapezoidSetbacks inverted: left = (bottomWidth - topWidth) / 2 + offset
+  const offset = computeEffectiveOffset({ trapVariant: v.trapVariant, rightSide: v.rightSide, bottomWidth: p.bottomWidth, topWidth: p.topWidth, freeOffset });
+  return mapTrapezoidVertices({ bottomWidth: p.bottomWidth, topWidth: p.topWidth, height: p.height, offset });
+};
+function buildTrapezoidFrame(d, p) {
+  const q = { bottomWidth: num(p.bottomWidth, 600), topWidth: num(p.topWidth, 300), height: num(p.height, 250), setbackLeft: num(p.setbackLeft, 100), variant: p.variant };
+  const v = trapezoidVariant(p);
+  const plumb = (side) => (v.trapVariant === 'right' && v.rightSide === side ? 'v' : null);
+  const { Pj } = convexFrame(d, trapezoidOuter(q), num(p.thickness, 38), cornerList(p.joint, 4), [plumb('left'), 'h', plumb('right'), 'h']);
+  const [BL, TL, TR, BR] = Pj;
+  d.midpoint(BL, BR, ORIGIN_JOINT_ID); // the bottom edge centred on the origin (frame-calc's frame)
+  d.dim(BL, BR, 'horizontal', 1, 'bottom_width');
+  d.dim(TL, TR, 'horizontal', -1, 'top_width');
+  if (v.trapVariant === 'isosceles') {
+    const axis = d.line(ORIGIN_JOINT_ID, [0, q.height], true); // the symmetry axis, construction, from the origin up to the top's middle
+    d.midpoint(TL, TR, axis.b); d.vl(axis);
+    d.dim(ORIGIN_JOINT_ID, axis.b, 'vertical', 1, 'height');
+  } else {
+    d.dim(BL, TL, 'vertical', -1, 'height');
+    if (v.trapVariant === 'scalene') d.dim(BL, TL, 'horizontal', 1, 'setback_left');
+  }
+}
+const trapezoidCorners = (p) => {
+  const g = calculatePolygonFrameGeometry({ P: trapezoidOuter(p), thick: p.thickness, joints: [] });
+  return polygonCorners(g.P, g.interiorAnglesDeg, (index) => ({ param: 'joint', index }));
+};
+
+// TASK 674: PARALLELOGRAM FRAME, frame-calc's parallelogram frame (#core/frame-geometry.js mapParallelogramVertices: the base from the origin to
+// the right, the left side leaving the origin at `angle` above it, the top a copy of the base) through THE per-vertex engine (convexFrame), one
+// thickness, a joint per corner (bottom-left, top-left, top-right, bottom-right). Rules: the bottom-left corner on the origin, the base, the
+// side (aligned), the angle between the base and the left side (an angle dimension, the label inside the corner), the right side parallel
+// to the left one (the top is level: a copy of the base); each board `thickness` thick.
+function buildParallelogramFrame(d, p) {
+  const base = num(p.base, 600), side = num(p.side, 300), A = num(p.angle, 60), t = num(p.thickness, 38);
+  if (A >= 180) throw new Error('the angle must be less than 180 degrees');
+  const P = mapParallelogramVertices({ base, side, angleA: A });
+  const { Pj, outer } = convexFrame(d, P, t, cornerList(p.joint, 4), [null, 'h', null, 'h']);
+  const [BL, TL, , BR] = Pj;
+  d.anchor(BL);
+  d.parallel(outer[2].ref, outer[0].ref);
+  d.dim(BL, BR, 'horizontal', 1, 'base');
+  d.dim(BL, TL, 'aligned', -1, 'side');
+  const half = (A / 2) * Math.PI / 180, r = Math.min(base, side) / 3; // the label on the corner's bisector, inside the frame's opening
+  d.angle(outer[3].longest, outer[0].longest, [r * Math.cos(half), r * Math.sin(half)], 'angle');
+}
+const parallelogramCorners = (p) => {
+  const g = calculatePolygonFrameGeometry({ P: mapParallelogramVertices({ base: p.base, side: p.side, angleA: p.angle }), thick: p.thickness, joints: [] });
+  return polygonCorners(g.P, g.interiorAnglesDeg, (index) => ({ param: 'joint', index }));
+};
+
+// TASK 674: TRIANGLE FRAME (any triangle), frame-calc's oblique triangle frame: its three sides (frame-calc's SSS triplet a, b, c: the left side
+// P1 P3, the base P1 P2, the right side P2 P3) solved by solveArbitraryTriangle, placed as calculateObliqueFramingGeometry places them
+// (obliqueTriangleVertices: P1 on the origin, the base to the right, the apex above), and its boards from THE per-vertex engine on [P1, P3, P2]
+// (convexFrame; frame-calc's per-corner joints mapped by obliqueVertexJoints: the same boards as frame-calc's oblique calculator for one
+// thickness). The corners' joints are frame-calc's (the brace's options: bottom-left A, bottom-right B, top C). Rules: P1 on the origin, the
+// base level and dimensioned, the two other sides dimensioned (aligned); each board `thickness` thick.
+const triangleOf = (p) => solveArbitraryTriangle([{ key: 'a', val: p.leftSide }, { key: 'b', val: p.base }, { key: 'c', val: p.rightSide }]);
+function buildTriangleFrame(d, p) {
+  const s = triangleOf({ leftSide: num(p.leftSide, 500), base: num(p.base, 600), rightSide: num(p.rightSide, 400) });
+  if (!s) throw new Error('these three sides make no triangle (each side must be shorter than the other two together)');
+  const { P1, P2, P3 } = obliqueTriangleVertices(s);
+  const joints = obliqueVertexJoints({ jointA: p.jointA, jointB: p.jointB, jointC: p.jointC });
+  const { Pj } = convexFrame(d, [P1, P3, P2], num(p.thickness, 38), joints, [null, null, 'h']);
+  const [A, C, B] = Pj;
+  d.anchor(A);
+  d.dim(A, B, 'horizontal', 1, 'base');
+  d.dim(A, C, 'aligned', -1, 'left_side');
+  d.dim(B, C, 'aligned', 1, 'right_side');
+}
+const triangleCorners = (p) => {
+  const s = triangleOf(p);
+  const { P1, P2, P3 } = obliqueTriangleVertices(s);
+  return polygonCorners([P1, P2, P3], [s.A, s.B, s.C], (k) => ({ param: ['jointA', 'jointB', 'jointC'][k] }));
+};
+
 /**
  * THE bank. id: stable key; params: { key: spec } (the defaults build() uses; mm); build(d, params) draws the template's RECIPE on the drawing `d`
  * with the app's tool operations (TASK 680); buildTemplate() makes the document.
@@ -666,8 +823,13 @@ function buildPolygonFrame(d, p) {
  *   'length' | 'angle'  a user parameter of the opened document (mm | deg), unless `atOpen: true` (chosen in the start modal only: no dimension
  *                       carries it, so a parameter could not drive it)
  *   'count'             a whole number chosen in the start modal only (min, max): it changes how many parts the drawing has
- *   'choice'            one of `options` ([{ value, label }]) chosen in the start modal only, shown by the `glyph` picker named there
+ *   'choice'            one of `options` ([{ value, label }]) chosen in the start modal only, shown by the `glyph` picker named there;
+ *                       TASK 674: `perCorner: true` = a joint per corner: one option (every corner) or a list, one per corner of corners()
+ * TASK 674: `when: { key: value }` = the param applies only while those choices hold (the scalene trapezoid's setback): otherwise it makes no
+ * user parameter, is not asked in the start modal and the recipe does not read it.
  * `dimensions` is what the editor shows: the number of driving dimensions the drawing carries at its defaults (a test asserts it).
+ * TASK 674: `corners(values)` (the frame templates) = the corners the start modal draws a joint glyph on, over its preview: [{ x, y (WORLD, the
+ * document's), out (the unit direction off the drawing), interior (deg), param, index? }] (templateCorners).
  */
 export const TEMPLATES = [
   { id: 'slot', name: 'Slot', description: 'A straight slot with round ends: 10 mm wide, the two end centres 30 mm apart (40 mm overall).', params: { length: { label: 'Length', default: 40 }, width: { label: 'Width', default: 10 } }, dimensions: 2, build: buildSlot },
@@ -684,13 +846,17 @@ export const TEMPLATES = [
   { id: 'butterfly-key', name: 'Butterfly key', description: 'A bow-tie key: 50 mm long, 25 mm wide at the ends, 10 mm at the waist.', params: { length: { label: 'Length', default: 50 }, endWidth: { label: 'End width', default: 25 }, waistWidth: { label: 'Waist width', default: 10 } }, dimensions: 3, build: buildButterflyKey },
   { id: 'cup-hinge-bore', name: 'Cup hinge bore', description: 'A 35 mm hinge cup hole with two 8 mm screw holes 45 mm apart, 9.5 mm from the cup centre.', params: { cupDiameter: { label: 'Cup diameter', default: 35 }, screwSpacing: { label: 'Screw spacing', default: 45 }, screwOffset: { label: 'Screw line offset', default: 9.5 }, screwDiameter: { label: 'Screw diameter', default: 8 } }, dimensions: 4, build: buildCupHinge },
   { id: 'shelf-pin-row', name: 'Shelf-pin row', description: 'Five 5 mm holes on 32 mm centres (the 32 mm cabinet system): one hole and a rectangular pattern.', params: { count: { label: 'Holes', default: 5, kind: 'count', min: 2, max: 100 }, spacing: { label: 'Spacing', default: 32, atOpen: true }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 1, build: buildShelfPins },
-  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' }, joint: { label: 'Corner joint', default: 'V-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'box-corner-joint' } }, dimensions: 14, build: buildBoxFrame },
-  { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, build: buildRightAngleCorner },
+  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' }, joint: { label: 'Corner joint', default: 'V-Through', kind: 'choice', perCorner: true, options: CORNER_JOINT_TYPES, glyph: 'box-corner-joint' } }, dimensions: 14, build: buildBoxFrame, corners: boxFrameCorners },
+  { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, build: buildRightAngleCorner, corners: rightAngleCorners },
   // TASK 672
   { id: 'stair-stringer', name: 'Stair stringer', description: 'A cut stringer from one 286 mm board: 4 steps of 180 rise and 250 run, a plumb cut at the top, a level cut on the floor, 125 mm throat.', params: { steps: { label: 'Steps', default: 4, kind: 'count', min: 2, max: 30 }, rise: { label: 'Rise', default: 180 }, run: { label: 'Run', default: 250 }, boardWidth: { label: 'Board width', default: 286 }, throat: { label: 'Throat', default: 125 } }, dimensions: 4, build: buildStringer },
   { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10 } }, dimensions: 10, build: buildBenchSeat },
-  { id: 'right-angle-brace', name: 'Right-angle brace', description: 'A right-angle frame with its diagonal brace: 300 wide, 600 tall, 38 mm boards, a joint at each corner.', params: { width: { label: 'Width', default: 300 }, height: { label: 'Height', default: 600 }, thickV: { label: 'Vertical board thickness', default: 38 }, thickH: { label: 'Horizontal board thickness', default: 38 }, thickD: { label: 'Diagonal board thickness', default: 38 }, topJoint: { label: 'Top joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' }, blJoint: { label: 'Bottom-left joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, brJoint: { label: 'Bottom-right joint', default: 'H-Through', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' } }, dimensions: 5, build: buildBrace },
-  { id: 'polygon-frame', name: 'Polygon frame', description: 'A regular 6-sided frame of 38 mm boards, 300 mm sides, one joint at every corner.', params: { sides: { label: 'Sides', default: 6, kind: 'count', min: 3, max: 12 }, sideLength: { label: 'Side length', default: 300 }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 2, build: buildPolygonFrame },
+  { id: 'right-angle-brace', name: 'Right-angle brace', description: 'A right-angle frame with its diagonal brace: 300 wide, 600 tall, 38 mm boards, a joint at each corner.', params: { width: { label: 'Width', default: 300 }, height: { label: 'Height', default: 600 }, thickV: { label: 'Vertical board thickness', default: 38 }, thickH: { label: 'Horizontal board thickness', default: 38 }, thickD: { label: 'Diagonal board thickness', default: 38 }, topJoint: { label: 'Top joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' }, blJoint: { label: 'Bottom-left joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, brJoint: { label: 'Bottom-right joint', default: 'H-Through', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' } }, dimensions: 5, build: buildBrace, corners: braceCorners },
+  { id: 'polygon-frame', name: 'Polygon frame', description: 'A regular 6-sided frame of 38 mm boards, 300 mm sides, one joint at every corner.', params: { sides: { label: 'Sides', default: 6, kind: 'count', min: 3, max: 12 }, sideLength: { label: 'Side length', default: 300 }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 2, build: buildPolygonFrame, corners: polygonFrameCorners },
+  // TASK 674
+  { id: 'trapezoid-frame', name: 'Trapezoid frame', description: 'A trapezoid frame of 38 mm boards: 600 mm at the bottom, 300 at the top, 250 tall, a joint at each corner.', params: { variant: { label: 'Shape', default: 'isosceles', kind: 'choice', options: TRAPEZOID_VARIANTS, glyph: 'trapezoid-variant' }, bottomWidth: { label: 'Bottom width', default: 600 }, topWidth: { label: 'Top width', default: 300 }, height: { label: 'Height', default: 250 }, setbackLeft: { label: 'Left setback', default: 100, when: { variant: 'scalene' } }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 7, build: buildTrapezoidFrame, corners: trapezoidCorners },
+  { id: 'parallelogram-frame', name: 'Parallelogram frame', description: 'A parallelogram frame of 38 mm boards: a 600 mm base, 300 mm sides at 60 degrees, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, side: { label: 'Side', default: 300 }, angle: { label: 'Angle', default: 60, kind: 'angle' }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 7, build: buildParallelogramFrame, corners: parallelogramCorners },
+  { id: 'triangle-frame', name: 'Triangle frame', description: 'A frame of 38 mm boards on any triangle: a 600 mm base, 500 and 400 mm sides, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, leftSide: { label: 'Left side', default: 500 }, rightSide: { label: 'Right side', default: 400 }, thickness: { label: 'Board thickness', default: 38 }, jointA: { label: 'Bottom-left joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, jointB: { label: 'Bottom-right joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' }, jointC: { label: 'Top joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' } }, dimensions: 6, build: buildTriangleFrame, corners: triangleCorners },
 ];
 
 /** The default parameters of a template: { key: default }. */
@@ -698,8 +864,10 @@ export const defaultParams = (t) => Object.fromEntries(Object.entries(t.params).
 
 // ── TASK 670: the params as data for the start modal and the document's user parameters ──
 export const paramKind = (spec) => spec.kind || 'length';
-/** A param that opens as a USER PARAMETER of the document (a length or an angle a dimension formula reads). */
-export const isLiveParam = (spec) => (paramKind(spec) === 'length' || paramKind(spec) === 'angle') && !spec.atOpen;
+/** TASK 674: whether a param applies with these values (its `when` choices hold; a param without `when` always does). */
+export const paramActive = (spec, values) => !spec.when || Object.entries(spec.when).every(([k, v]) => values[k] === v);
+/** A param that opens as a USER PARAMETER of the document (a length or an angle a dimension formula reads), with these values (TASK 674). */
+export const isLiveParam = (spec, values) => (paramKind(spec) === 'length' || paramKind(spec) === 'angle') && !spec.atOpen && paramActive(spec, values);
 /** The user parameter's name for a param key: camelCase -> snake_case (bitDiameter -> bit_diameter), a name the expression parser accepts. */
 export const paramName = (key) => key.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase());
 /** The unit a param is shown and stored in: mm for a length, deg for an angle, none for a count or a choice. */
@@ -708,7 +876,10 @@ export const paramUnit = (spec) => ({ length: 'mm', angle: 'deg' })[paramKind(sp
 /** Why `value` cannot be this param's value (the start modal shows it), or null. */
 export function paramRefusal(spec, value) {
   const kind = paramKind(spec);
-  if (kind === 'choice') return spec.options.some((o) => o.value === value) ? null : `${spec.label}: pick one of the options`;
+  if (kind === 'choice') {
+    const ok = (v) => spec.options.some((o) => o.value === v);
+    return (spec.perCorner && Array.isArray(value) ? value.length > 0 && value.every(ok) : ok(value)) ? null : `${spec.label}: pick one of the options`;
+  }
   const v = Number(value);
   if (kind === 'count') {
     if (!Number.isInteger(v)) return `${spec.label} must be a whole number`;
@@ -728,13 +899,14 @@ export function paramRefusal(spec, value) {
 export function buildTemplate(t, params = {}) {
   const values = { ...defaultParams(t), ...params };
   for (const [k, spec] of Object.entries(t.params)) {
+    if (!paramActive(spec, values)) continue; // TASK 674: a param that does not apply is neither checked nor read
     const why = paramRefusal(spec, values[k]);
     if (why) throw new Error(`template ${t.id}: ${why}`);
     if (paramKind(spec) !== 'choice') values[k] = R(Number(values[k])); // the drawing and its parameter read the SAME number
   }
   const d = drawing();
   for (const [k, spec] of Object.entries(t.params)) {
-    if (!isLiveParam(spec)) continue;
+    if (!isLiveParam(spec, values)) continue;
     const unit = paramUnit(spec);
     ops.parameter(d.state, paramName(k), unit, `${values[k]} ${unit}`, spec.label);
   }
@@ -746,3 +918,20 @@ export function buildTemplate(t, params = {}) {
   return d.finish();
 }
 export const templateById = (id) => TEMPLATES.find((t) => t.id === id) || null;
+
+/** TASK 674: the corners the start modal draws a joint glyph on (the template's corners(), its defaults under `values`); none for a template
+ *  without corners. */
+export const templateCorners = (t, values = {}) => (t.corners ? t.corners({ ...defaultParams(t), ...values }) : []);
+/**
+ * TASK 674: the per-corner choices of `values` fitted to the corners these values make ("counts change -> the corner list follows"): a list
+ * keeps its first entries and the new corners take `fill[key]` (the option last set for all corners, else the default). -> the new values.
+ */
+export function fitCorners(t, values, fill = {}) {
+  const out = { ...values };
+  for (const [k, spec] of Object.entries(t.params)) {
+    if (!spec.perCorner || !Array.isArray(out[k])) continue;
+    const n = templateCorners(t, out).filter((c) => c.param === k).length, v = fill[k] ?? spec.default;
+    out[k] = Array.from({ length: n }, (_, i) => (i < out[k].length ? out[k][i] : v));
+  }
+  return out;
+}

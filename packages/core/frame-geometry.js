@@ -7,9 +7,19 @@
 //                                     parallelogram / triangle frames, all go through THIS one function)
 //   regularPolygonVertices         <- polygon-frame-calculator/src/utils/polygonCalculator.js (the outer vertices of its regular N-gon, P_0 on top)
 //   distance                       <- shared/utils/geometry.js
+// TASK 674 (the VERTEX MAPPERS of frame-calc's other frames, each a pure function feeding THE per-vertex engine above, no second board math):
+//   mapTrapezoidVertices, trapezoidSetbacks <- trapezoid-frame-calculator/src/utils/trapezoidMapper.js
+//   computeEffectiveOffset                  <- trapezoid-frame-calculator/src/utils/trapezoidVariant.js (the variants: isosceles / right / scalene)
+//   mapParallelogramVertices                <- parallelogram-frame-calculator/src/utils/parallelogramMapper.js
+//   solveArbitraryTriangle                  <- triangle-frame-calculator/src/utils/obliqueCalculator.js (any triangle from 3 locked quantities)
+//   obliqueTriangleVertices                 <- the same file's calculateObliqueFramingGeometry: its outer vertices P1, P2, P3. Its BOARDS are
+//                                              not ported: with one thickness they are calculatePolygonFrameGeometry's on [P1, P3, P2] with the
+//                                              joints mapped by obliqueVertexJoints (tests/templates-674.test.js: equal to frame-calc's
+//                                              calculateObliqueFramingGeometry boards for every joint combination, from its fixture)
+// (trapezoidQuantities.js, frame-calc's driver-set evaluator, is not ported: in a sketch the dimensions and the solver do that job.)
 // Coordinates are frame-calc's: Y DOWN (SVG), which is also Sketch-Studio's WORLD frame (units.js userToWorldY), so the points are world
-// points as they are. The "Right-angle brace" and "Polygon frame" templates (#core/templates.js) and their start-modal glyphs
-// (#ui/template-glyphs.js) call these functions: one frame geometry.
+// points as they are. The frame templates (#core/templates.js) and their start-modal glyphs (#ui/template-glyphs.js) call these
+// functions: one frame geometry.
 
 /** frame-calc shared/utils/geometry.js distance: Euclidean distance between two 2D points. */
 export function distance(p1, p2) {
@@ -421,6 +431,278 @@ export function calculatePolygonFrameGeometry({ P: inputP, thick = 1.5, joints: 
     width: maxX - minX,
     height: maxY - minY,
   };
+}
+
+// ── TASK 674: ported from frame-calc trapezoid-frame-calculator/src/utils/trapezoidMapper.js @ b59816f (unchanged) ──
+/**
+ * Maps trapezoid dimensions to the 4 ordered outer vertices
+ * calculateQuadFrameGeometry expects. Bottom edge on y=0 centered on x=0,
+ * top edge at y=-height, its own center shifted by `offset` (task 27: the
+ * ONE generalization — isosceles is just offset=0, not a separate shape).
+ * The shared quad engine already handles arbitrary convex quads (verified
+ * before adding this — `calculateQuadFrameGeometry` computes each vertex's
+ * own interior angle from its neighbors, no symmetry assumed anywhere), so
+ * this mapper is the entire change; no engine edit needed.
+ *
+ * Vertex order: 0=bottom-left, 1=top-left, 2=top-right, 3=bottom-right —
+ * this winding has positive signed area (this repo's canonical convention
+ * for calculateQuadFrameGeometry), so the engine never needs to reverse it.
+ * geom.interiorAnglesDeg[0]/[1] are the LEFT leg's base/top angle (always
+ * supplementary, since the top/bottom edges stay parallel regardless of
+ * offset); [3]/[2] are the RIGHT leg's — equal to [0]/[1] only when
+ * offset=0 (isosceles); otherwise genuinely independent.
+ *
+ * Per-side horizontal setback (task 27 Part B — how far the slope starts
+ * in from its own base corner, the human's circled "2.00"):
+ *   setbackLeft  = bottomWidth/2 - topWidth/2 + offset
+ *   setbackRight = bottomWidth/2 - topWidth/2 - offset
+ * (their SUM is always bottomWidth-topWidth, fixed by the two widths alone
+ * — offset only redistributes it between the two sides.) A "right"
+ * variant pins whichever side's setback to exactly 0, so the OTHER side
+ * necessarily carries the full bottomWidth-topWidth difference — this is
+ * what the worked example (8/10, height 6, setback 2.00 on one side, 0 on
+ * the other) checks: setbackNonzero = bottomWidth-topWidth = 10-8 = 2 ✓,
+ * slant = hypot(2,6) = 6.3246 ✓, corner = atan(6/2) = 71.57° ✓.
+ */
+export function mapTrapezoidVertices({ bottomWidth, topWidth, height, offset = 0 }) {
+  const bw2 = bottomWidth / 2;
+  const tw2 = topWidth / 2;
+  return [
+    { x: -bw2, y: 0 },
+    { x: offset - tw2, y: -height },
+    { x: offset + tw2, y: -height },
+    { x: bw2, y: 0 },
+  ];
+}
+
+/** Left/right horizontal setback (task 27 Part B) — see the mapper's own
+ * doc comment above for the formula and its worked-example check. */
+export function trapezoidSetbacks({ bottomWidth, topWidth, offset = 0 }) {
+  const half = bottomWidth / 2 - topWidth / 2;
+  return { left: half + offset, right: half - offset };
+}
+
+// ── TASK 674: ported from frame-calc trapezoid-frame-calculator/src/utils/trapezoidVariant.js @ b59816f (unchanged) ──
+/**
+ * Task 27 — isosceles/right/scalene are the SAME trapezoid model at
+ * different top-edge offsets, not three separate shapes (see
+ * trapezoidMapper.js's own doc comment for the offset/setback formulas).
+ * Declared once here so the calculator (which owns the state) and the
+ * panel (which needs to know the current effective offset to compute
+ * setbacks for its own readouts) never diverge on how a variant maps to
+ * an offset.
+ *
+ *   isosceles — offset pinned to 0.
+ *   right     — offset pinned to ±(bottomWidth-topWidth)/2: 'left' makes
+ *               the LEFT leg vertical (setbackLeft 0), 'right' makes the
+ *               RIGHT leg vertical (setbackRight 0).
+ *   scalene   — offset is a free, independently stored value (`freeOffset`),
+ *               unpinned from bottomWidth/topWidth changes.
+ */
+export function computeEffectiveOffset({ trapVariant, rightSide, bottomWidth, topWidth, freeOffset }) {
+  if (trapVariant === 'right') {
+    const half = (bottomWidth - topWidth) / 2;
+    return rightSide === 'left' ? -half : half;
+  }
+  if (trapVariant === 'scalene') return freeOffset;
+  return 0; // isosceles
+}
+
+/**
+ * TASK 674: the trapezoid's variants as ONE choice of the start modal: frame-calc's three shapes (TrapezoidControlsPanel.js "Shape": Isosceles,
+ * Right, Scalene) with Right's "Square corner" (Left / Right) folded in, each carrying the trapVariant / rightSide computeEffectiveOffset reads.
+ */
+export const TRAPEZOID_VARIANTS = Object.freeze([
+  Object.freeze({ value: 'isosceles', label: 'Isosceles', trapVariant: 'isosceles', rightSide: 'left' }),
+  Object.freeze({ value: 'right-left', label: 'Right, left corner square', trapVariant: 'right', rightSide: 'left' }),
+  Object.freeze({ value: 'right-right', label: 'Right, right corner square', trapVariant: 'right', rightSide: 'right' }),
+  Object.freeze({ value: 'scalene', label: 'Scalene', trapVariant: 'scalene', rightSide: 'left' }),
+]);
+
+// ── TASK 674: ported from frame-calc parallelogram-frame-calculator/src/utils/parallelogramMapper.js @ b59816f (unchanged) ──
+/**
+ * Maps parallelogram dimensions to the 4 ordered outer vertices
+ * calculateQuadFrameGeometry expects. Base along y=0 from (0,0) to
+ * (base,0); the slant side leaves bottom-left at angleA above the base
+ * (SVG y-down, so "above" is more negative y) — top-left =
+ * (side*cos(A), -side*sin(A)); top-right = top-left + (base, 0), which is
+ * what makes this a true parallelogram (opposite sides parallel and equal
+ * — the top edge is a pure horizontal translate of the bottom edge).
+ *
+ * Vertex order: 0=bottom-left, 1=top-left, 2=top-right, 3=bottom-right —
+ * same convention as trapezoidMapper.js, positive signed area, so the
+ * engine never needs to reverse it. geom.interiorAnglesDeg[0] and [2] are
+ * angleA (bottom-left / top-right); [1] and [3] are 180-angleA
+ * (top-left / bottom-right).
+ */
+export function mapParallelogramVertices({ base, side, angleA }) {
+  const rad = angleA * Math.PI / 180;
+  const tlX = side * Math.cos(rad);
+  const tlY = -side * Math.sin(rad);
+  return [
+    { x: 0, y: 0 },
+    { x: tlX, y: tlY },
+    { x: tlX + base, y: tlY },
+    { x: base, y: 0 },
+  ];
+}
+
+// ── TASK 674: ported from frame-calc triangle-frame-calculator/src/utils/obliqueCalculator.js @ b59816f (solveArbitraryTriangle unchanged) ──
+/**
+ * Solves an arbitrary (any angle) triangle given 3 locked quantities.
+ * Quantities:
+ *   a: Left side length (connecting P1 to P3)
+ *   b: Base side length (connecting P1 to P2)
+ *   c: Right side length (connecting P2 to P3)
+ *   A: Corner angle at P1 (in degrees)
+ *   B: Corner angle at P2 (in degrees)
+ *   C: Corner angle at P3 (in degrees)
+ *
+ * Side/angle opposite pairing (NOT the textbook a<->A convention — a and b
+ * are the two sides meeting AT P1, so they're adjacent to A, not opposite
+ * it): side a is opposite B, side b is opposite C, side c is opposite A.
+ * Every case below must use THIS pairing in its law-of-sines step, verified
+ * against a plain 3-4-5 right triangle (a=3,b=4,c=5,A=90,B=36.87,C=53.13).
+ */
+export function solveArbitraryTriangle(lockedTriplet) {
+  const get = k => lockedTriplet.find(e => e.key === k)?.val;
+
+  let a = get('a');
+  let b = get('b');
+  let c = get('c');
+  let A = get('A');
+  let B = get('B');
+  let C = get('C');
+
+  const deg2rad = d => (d * Math.PI) / 180;
+  const rad2deg = r => (r * 180) / Math.PI;
+
+  // Case 1: SSS (a, b, c)
+  if (a != null && b != null && c != null) {
+    if (a + b <= c || a + c <= b || b + c <= a) return null;
+    const cosA = Math.min(1, Math.max(-1, (a * a + b * b - c * c) / (2 * a * b)));
+    const cosB = Math.min(1, Math.max(-1, (b * b + c * c - a * a) / (2 * b * c)));
+    A = rad2deg(Math.acos(cosA));
+    B = rad2deg(Math.acos(cosB));
+    C = 180 - A - B;
+  }
+  // Case 2: SAS (a, b, A) — A is the included angle at P1, unambiguous.
+  // Once c is known via law of cosines, get B via law of cosines too (not
+  // law of sines): asin() can't tell an obtuse angle from its acute
+  // supplement, and SAS can legitimately produce an obtuse B or C.
+  else if (a != null && b != null && A != null) {
+    const radA = deg2rad(A);
+    c = Math.sqrt(Math.max(0.01, a * a + b * b - 2 * a * b * Math.cos(radA)));
+    // B is opposite a
+    const cosB = Math.min(1, Math.max(-1, (b * b + c * c - a * a) / (2 * b * c)));
+    B = rad2deg(Math.acos(cosB));
+    C = 180 - A - B;
+  }
+  // Case 3: SAS (b, c, B) — B is the included angle at P2, unambiguous.
+  else if (b != null && c != null && B != null) {
+    const radB = deg2rad(B);
+    a = Math.sqrt(Math.max(0.01, b * b + c * c - 2 * b * c * Math.cos(radB)));
+    // A is opposite c
+    const cosA = Math.min(1, Math.max(-1, (a * a + b * b - c * c) / (2 * a * b)));
+    A = rad2deg(Math.acos(cosA));
+    C = 180 - A - B;
+  }
+  // Case 4: SAS (a, c, C) — C is the included angle at P3, unambiguous.
+  else if (a != null && c != null && C != null) {
+    const radC = deg2rad(C);
+    b = Math.sqrt(Math.max(0.01, a * a + c * c - 2 * a * c * Math.cos(radC)));
+    // A is opposite c
+    const cosA = Math.min(1, Math.max(-1, (a * a + b * b - c * c) / (2 * a * b)));
+    A = rad2deg(Math.acos(cosA));
+    B = 180 - A - C;
+  }
+  // Case 5: ASA or AAS (a, A, B)
+  else if (a != null && A != null && B != null) {
+    C = 180 - A - B;
+    if (C <= 0) return null;
+    // a is opposite B, not A: pivot the law of sines off sin(B)
+    const sinB = Math.sin(deg2rad(B));
+    b = (a * Math.sin(deg2rad(C))) / sinB;
+    c = (a * Math.sin(deg2rad(A))) / sinB;
+  }
+  // Case 6: ASA or AAS (b, A, B)
+  else if (b != null && A != null && B != null) {
+    C = 180 - A - B;
+    if (C <= 0) return null;
+    // b is opposite C, not B: pivot the law of sines off sin(C)
+    const sinC = Math.sin(deg2rad(C));
+    a = (b * Math.sin(deg2rad(B))) / sinC;
+    c = (b * Math.sin(deg2rad(A))) / sinC;
+  }
+  // Case 7: ASA or AAS (c, A, B)
+  else if (c != null && A != null && B != null) {
+    C = 180 - A - B;
+    if (C <= 0) return null;
+    // c is opposite A: pivot the law of sines off sin(A)
+    const sinA = Math.sin(deg2rad(A));
+    a = (c * Math.sin(deg2rad(B))) / sinA;
+    b = (c * Math.sin(deg2rad(C))) / sinA;
+  }
+  // Case 8: ASA or AAS (a, A, C)
+  else if (a != null && A != null && C != null) {
+    B = 180 - A - C;
+    if (B <= 0) return null;
+    // a is opposite B, not A: pivot the law of sines off sin(B)
+    const sinB = Math.sin(deg2rad(B));
+    b = (a * Math.sin(deg2rad(C))) / sinB;
+    c = (a * Math.sin(deg2rad(A))) / sinB;
+  }
+  // Case 9: ASA or AAS (b, B, C)
+  else if (b != null && B != null && C != null) {
+    A = 180 - B - C;
+    if (A <= 0) return null;
+    // b is opposite C, not B: pivot the law of sines off sin(C)
+    const sinC = Math.sin(deg2rad(C));
+    a = (b * Math.sin(deg2rad(B))) / sinC;
+    c = (b * Math.sin(deg2rad(A))) / sinC;
+  }
+  // Fallback default — a self-consistent solve of the app's actual default
+  // locked triplet (a=24, b=12, A=63.4349), not an arbitrary placeholder:
+  // the previous hardcoded B/C here (26.5651/90) didn't satisfy the law of
+  // sines for these sides at all (a=24 can't be opposite a smaller angle
+  // than b=12's opposite angle while also being the longer side).
+  else {
+    a = 24; b = 12;
+    A = 63.4349;
+    const radA = deg2rad(A);
+    c = Math.sqrt(Math.max(0.01, a * a + b * b - 2 * a * b * Math.cos(radA)));
+    const cosB = Math.min(1, Math.max(-1, (b * b + c * c - a * a) / (2 * b * c)));
+    B = rad2deg(Math.acos(cosB));
+    C = 180 - A - B;
+  }
+
+  return { a, b, c, A, B, C };
+}
+
+/**
+ * TASK 674: the outer vertices of frame-calc's oblique triangle frame, exactly as calculateObliqueFramingGeometry (obliqueCalculator.js @ b59816f)
+ * places them from solveArbitraryTriangle's result: "2D Outer vertices with base along X-axis / P1: Bottom-Left (0, 0) / P2: Bottom-Right (b, 0)
+ * / P3: Top Apex (a * cos(A), -a * sin(A))" (Y down).
+ */
+export function obliqueTriangleVertices({ a, b, A }) {
+  const radA = (A * Math.PI) / 180;
+  return { P1: { x: 0, y: 0 }, P2: { x: b, y: 0 }, P3: { x: a * Math.cos(radA), y: -a * Math.sin(radA) } };
+}
+
+/**
+ * TASK 674: frame-calc's oblique corner joints (calculateObliqueFramingGeometry's jointA at P1: 'V-Through' board A (left) runs through,
+ * 'H-Through' board B (base) runs through; jointB at P2: 'D-Through' board C (right) through, 'H-Through' board B through; jointC at P3:
+ * 'V-Through' board A through, 'D-Through' board C through; 'Miter' everywhere) as THE engine's per-vertex joints on P = [P1, P3, P2] (the
+ * positive winding, so the engine never reverses it): joints[k] is between the incoming board k - 1 and the outgoing board k, 'CW-Through' =
+ * the incoming one runs through, 'CCW-Through' = the outgoing one. Boards on that P: 0 = P1 -> P3 (A), 1 = P3 -> P2 (C), 2 = P2 -> P1 (B).
+ */
+const OBLIQUE_VERTEX = Object.freeze({
+  A: Object.freeze({ 'V-Through': 'CCW-Through', 'H-Through': 'CW-Through', Miter: 'Miter' }), // at P1: in = B, out = A
+  C: Object.freeze({ 'V-Through': 'CW-Through', 'D-Through': 'CCW-Through', Miter: 'Miter' }), // at P3: in = A, out = C
+  B: Object.freeze({ 'D-Through': 'CW-Through', 'H-Through': 'CCW-Through', Miter: 'Miter' }), // at P2: in = C, out = B
+});
+export function obliqueVertexJoints({ jointA, jointB, jointC }) {
+  return [OBLIQUE_VERTEX.A[jointA], OBLIQUE_VERTEX.C[jointC], OBLIQUE_VERTEX.B[jointB]];
 }
 
 function sub(a, b) {

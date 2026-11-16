@@ -59,8 +59,8 @@ for (const t of TEMPLATES) {
   const base = sig(solved(t));
   for (const [k, v] of Object.entries(t.params)) {
     const val = v.kind === 'choice' ? v.options.find((o) => o.value !== v.default).value : v.kind === 'count' ? v.default - 1 : v.default * 1.3; // TASK 670: declared kinds
-    const S = solved(t, { [k]: val });
-    assert.notStrictEqual(sig(S), base, `${t.id}: param ${k} changes the geometry`);
+    const S = solved(t, { ...v.when, [k]: val }); // TASK 674: a param that applies only with some choices (`when`) is changed with them
+    assert.notStrictEqual(sig(S), v.when ? sig(solved(t, v.when)) : base, `${t.id}: param ${k} changes the geometry`);
     assert.strictEqual(L.nullity(S), 0, `${t.id}: param ${k} = ${val} still fully constrained`);
   }
 }

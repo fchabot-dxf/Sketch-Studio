@@ -10,7 +10,7 @@
 //   openTemplatePicker() -> Promise of { blank: true } | { template, document, name } | null (Esc, a press outside, the X: no new design)
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
-import { TEMPLATES, buildTemplate, paramKind, paramUnit, paramRefusal, defaultParams } from '#core/templates.js';
+import { TEMPLATES, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
 import { GLYPHS } from './template-glyphs.js';
 import { calculateArcPath, arcSweepInfo, angleInArcSweep, getLineIntersection } from '#core/geometry.js';
 import { angleSectorOf, angleSectorArc } from '#core/angle-sector.js';
@@ -34,6 +34,20 @@ const PREVIEW_DELAY = 200;
 const defaultDocs = new WeakMap(); // template -> its document at its defaults
 const defaultDocument = (t) => { if (!defaultDocs.has(t)) defaultDocs.set(t, buildTemplate(t)); return defaultDocs.get(t); };
 const boxesOverlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+// TASK 674: the room (px) a corner's glyph picker keeps from the drawing's lines and from the other corners' pickers
+const GLYPH_GAP = 4;
+// whether the segment p q crosses (or lies in) the box (Liang-Barsky clipping of the segment against the box)
+function segmentHitsBox(p, q, b) {
+  let t0 = 0, t1 = 1;
+  const dx = q.x - p.x, dy = q.y - p.y;
+  for (const [num, den] of [[p.x - b.x0, -dx], [b.x1 - p.x, dx], [p.y - b.y0, -dy], [b.y1 - p.y, dy]]) {
+    if (den === 0) { if (num < 0) return false; continue; }
+    const t = num / den;
+    if (den < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
 
 // ── the preview: a version-3 document -> an <svg> (world coordinates, Y down as stored; non-scaling strokes keep it crisp at any size) ──
 export function renderTemplatePreview(document_, { labels = true } = {}) {
@@ -315,6 +329,7 @@ function injectStyles() {
 .sk-tp-fields { display: flex; flex-direction: column; gap: 6px; }
 .sk-tp-field { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .sk-tp-field > label, .sk-tp-field > .sk-tp-label { flex: 1; min-width: 0; }
+.sk-tp-field[hidden] { display: none; }
 .sk-tp-input { width: 104px; font: inherit; padding: 8px; border-radius: 6px; color: inherit; background: transparent; min-height: 40px;
   border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.45)); }
 .sk-tp-input[aria-invalid="true"] { border-color: var(--sk-error, #e5484d); }
@@ -339,6 +354,25 @@ function injectStyles() {
 .sk-tp-board { stroke: currentColor; fill: currentColor; }
 .sk-tp-board-light { fill-opacity: 0.14; }
 .sk-tp-board-dark { fill-opacity: 0.32; }
+/* TASK 674: the WIDE start view of a frame template: a big preview (the stage) with a joint glyph picker on every corner, the form beside it
+   (desktop) or under it (phone: the stage spans the panel, the form scrolls, Open / Cancel stay in view). The preview keeps a margin round
+   the drawing so the corner pickers (44 px buttons) sit off it. */
+.${PANEL}.sk-tp-wide { width: min(880px, calc(100vw - 24px)); }
+.sk-tp-wide .sk-tp-start { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 300px); grid-template-rows: auto auto 1fr; column-gap: 16px; }
+.sk-tp-stage { position: relative; grid-row: 1 / span 3; height: min(470px, calc(100vh - 110px)); }
+.sk-tp-start .sk-tp-stage .sk-tp-prev { height: 100%; padding: 44px; }
+.sk-tp-wide .sk-tp-fields, .sk-tp-wide .sk-tp-err { grid-column: 2; }
+.sk-tp-wide .sk-tp-actions { grid-column: 2; align-self: end; }
+.sk-tp-corners { position: absolute; inset: 0; pointer-events: none; }
+.sk-tp-choice.sk-tp-corner { position: absolute; left: 0; top: 0; padding: 2px; gap: 4px; pointer-events: auto;
+  background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+.sk-tp-choice.sk-tp-corner[data-expanded="true"] { z-index: 2; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+@media (max-width: 640px) {
+  .sk-tp-wide .sk-tp-start { display: flex; }
+  .sk-tp-stage { height: auto; aspect-ratio: 1 / 1; flex: none; }
+  .sk-tp-wide .sk-tp-start { padding-bottom: 0; scroll-padding-bottom: 76px; } /* a field scrolled into view (focus, a tap) stays above the bar */
+  .sk-tp-wide .sk-tp-actions { align-self: stretch; position: sticky; bottom: 0; z-index: 3; padding: 8px 0 14px; background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); }
+}
 `;
   document.head.appendChild(s); stylesInjected = true;
 }
@@ -355,6 +389,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     const finish = (value) => {
       if (done) return; done = true;
       if (stopOutside) stopOutside();
+      if (stopStart) stopStart();
       document.removeEventListener('keydown', onKey, true);
       backdrop.remove();
       if (returnTo && returnTo.focus && returnTo.isConnected) returnTo.focus();
@@ -362,6 +397,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     };
     // Esc closes from anywhere in the modal; it does not reach a modal underneath (the Projects window) or the canvas
     let backToCards = null; // set while the START view of a template shows: Esc / Cancel go back to the cards
+    let stopStart = null; // TASK 674: undoes what a start view listens to (the window's resize: its corner pickers follow the preview)
     function onKey(e) {
       if (e.key !== 'Escape') return;
       e.preventDefault(); e.stopImmediatePropagation();
@@ -419,47 +455,74 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     blankCard.focus();
 
     // TASK 670: the START view of a template, in THIS panel: its declared params; Open (Enter) builds it with these values
+    // TASK 674: a template with corners (the frames: #core/templates.js templateCorners) gets the WIDE start view: a big preview with a joint
+    // glyph picker on each corner (frame-calc's per-vertex JointPicker: the corner's active joint, a tap expands it, a pick selects and folds
+    // back, one corner open at a time), the form beside it (under it on a phone, scrolling, Open / Cancel kept in view). A corner's pick is its
+    // own entry of the template's per-corner choice (or the corner's own choice param, the brace / triangle / corner); the "Corner joint" row
+    // sets every corner. A pick is a settled value: the preview is rebuilt at once.
     function startView(t, fromCard) {
       const values = defaultParams(t);
-      const valid = () => Object.entries(t.params).every(([k, spec]) => !paramRefusal(spec, values[k]));
+      const hasCorners = templateCorners(t).length > 0;
+      const lastAll = {}; // a per-corner param -> the option last set for every corner (corners a larger count adds take it)
+      const valid = () => Object.entries(t.params).every(([k, spec]) => !paramActive(spec, values) || !paramRefusal(spec, values[k]));
       const view = document.createElement('div'); view.className = 'sk-tp-start'; view.dataset.template = t.id;
       const prev = document.createElement('div'); prev.className = 'sk-tp-prev';
+      const stage = document.createElement('div'); stage.className = 'sk-tp-stage';
+      const layer = document.createElement('div'); layer.className = 'sk-tp-corners';
+      stage.append(prev, layer);
       // TASK 672: a choice's glyphs draw with the current values (#ui/template-glyphs.js): each picker reads THIS values object, and is told
       // to draw its glyphs again (REDRAW) when a value changes; only with valid values, like the preview
-      const pickers = [];
+      const pickers = [], cornerPickers = [];
       // TASK 680: the preview is built once the values settle (PREVIEW_DELAY after the last change). A value set the recipe cannot draw shows
       // why in the error line, keeps the last good preview and disables Open until a value set draws.
       const defaultsKey = JSON.stringify(defaultParams(t));
-      let timer = null, built = null; // built = { key, doc }: the values the preview shows and their document
+      let timer = null, built = null; // built = { key, doc, values }: the values the preview shows and their document (null: they cannot be drawn)
+      let shown = null; // TASK 674: the last good build, the one the preview (and its corner pickers) shows
+      let refocus = null; // TASK 674: the corner whose picker had the pick (its new picker takes the focus back)
       const draw = () => {
         clearTimeout(timer); timer = null;
         if (!valid()) return;
+        Object.assign(values, fitCorners(t, values, lastAll)); // TASK 674: a count changed: the corner list follows
         const key = JSON.stringify(values);
         if (built && built.key === key) return;
         let doc;
         try {
           doc = key === defaultsKey ? defaultDocument(t) : buildTemplate(t, values);
         } catch (e) {
-          built = null; openBtn.disabled = true; err.textContent = e.message;
+          built = null; refocus = null; openBtn.disabled = true; err.textContent = e.message;
           return;
         }
-        built = { key, doc }; openBtn.disabled = false;
+        built = shown = { key, doc, values: structuredClone(values) }; openBtn.disabled = false;
         prev.replaceChildren(renderTemplatePreview(doc));
-      };
-      const redraw = () => {
-        if (!valid()) return;
-        for (const el of pickers) el.dispatchEvent(new Event(REDRAW));
-        clearTimeout(timer); timer = setTimeout(draw, PREVIEW_DELAY);
+        if (hasCorners) placeCorners();
       };
       const fields = document.createElement('div'); fields.className = 'sk-tp-fields';
+      const rows = new Map(); // param key -> its row (TASK 674: a row whose param does not apply with these values is hidden)
+      const showRows = () => { for (const [k, row] of rows) row.hidden = !paramActive(t.params[k], values); };
+      // a value changed: the rows that apply, the glyphs (with valid values) and the preview (once settled; at once for a pick)
+      const changed = (now = false) => {
+        showRows();
+        if (!valid()) return;
+        for (const el of [...pickers, ...cornerPickers]) el.dispatchEvent(new Event(REDRAW));
+        clearTimeout(timer); timer = null;
+        if (now) draw(); else timer = setTimeout(draw, PREVIEW_DELAY);
+      };
       const err = document.createElement('div'); err.className = 'sk-tp-err'; err.setAttribute('role', 'alert');
       const inputs = new Map(); // param key -> its value box
+      const sameForAll = (v) => (Array.isArray(v) ? (v.every((x) => x === v[0]) ? v[0] : null) : v); // a per-corner choice's one value, or null (mixed)
       for (const [k, spec] of Object.entries(t.params)) {
         const row = document.createElement('div'); row.className = 'sk-tp-field'; row.dataset.param = k;
+        rows.set(k, row);
         const kind = paramKind(spec);
         if (kind === 'choice') {
           const name = document.createElement('span'); name.className = 'sk-tp-label'; name.textContent = spec.label;
-          const el = choicePicker(spec, values[k], (v) => { values[k] = v; redraw(); }, values);
+          // a per-corner choice's row sets EVERY corner; its glyph draws the first corner's angle (TASK 674)
+          const firstCorner = () => { const c = templateCorners(t, values).find((x) => x.param === k); return c && { interior: c.interior }; };
+          const el = choicePicker(spec, {
+            read: () => (spec.perCorner ? sameForAll(values[k]) : values[k]),
+            onPick: (v) => { values[k] = v; if (spec.perCorner) lastAll[k] = v; err.textContent = ''; changed(true); },
+            values, corner: spec.perCorner ? firstCorner : () => undefined,
+          });
           pickers.push(el);
           row.append(name, el);
         } else {
@@ -468,20 +531,87 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
           const input = document.createElement('input'); input.id = id; input.className = 'sk-tp-input'; input.type = 'number';
           input.value = String(values[k]);
           if (kind === 'count') { input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.step = 'any'; input.min = '0'; input.inputMode = 'decimal'; }
-          input.addEventListener('input', () => { values[k] = input.value.trim() === '' ? NaN : Number(input.value); input.removeAttribute('aria-invalid'); err.textContent = ''; redraw(); });
+          input.addEventListener('input', () => { values[k] = input.value.trim() === '' ? NaN : Number(input.value); input.removeAttribute('aria-invalid'); err.textContent = ''; changed(); });
           const unit = document.createElement('span'); unit.className = 'sk-tp-unit'; unit.textContent = paramUnit(spec);
           row.append(label, input, unit);
           inputs.set(k, input);
         }
         fields.appendChild(row);
       }
+      showRows();
+      // ── TASK 674: the corner glyph pickers over the preview, one per corner of the drawing the preview shows ──
+      function placeCorners() {
+        const list = templateCorners(t, shown.values);
+        layer.replaceChildren(); cornerPickers.length = 0;
+        list.forEach((c) => {
+          const k = c.param, spec = t.params[k], count = list.filter((x) => x.param === k).length;
+          const el = choicePicker(spec, {
+            read: () => (spec.perCorner ? (Array.isArray(values[k]) ? values[k][c.index] : values[k]) : values[k]),
+            onPick: (v) => {
+              if (spec.perCorner) { const each = Array.isArray(values[k]) ? [...values[k]] : Array(count).fill(values[k]); each[c.index] = v; values[k] = each; } else values[k] = v;
+              refocus = { k, index: c.index }; err.textContent = ''; changed(true);
+            },
+            values, corner: () => c,
+            onToggle: (open) => {
+              if (open) for (const o of cornerPickers) if (o !== el) o.dispatchEvent(new Event(COLLAPSE)); // one corner open at a time
+              fitInStage(el);
+            },
+          });
+          el.classList.add('sk-tp-corner'); el.dataset.param = k;
+          if (c.index != null) el.dataset.corner = String(c.index);
+          el.setAttribute('aria-label', spec.perCorner ? `${spec.label}, corner ${c.index + 1}` : spec.label);
+          layer.appendChild(el); cornerPickers.push(el);
+        });
+        layoutCorners(list);
+        if (refocus) {
+          const el = cornerPickers.find((x) => x.dataset.param === refocus.k && (refocus.index == null || x.dataset.corner === String(refocus.index)));
+          refocus = null;
+          if (el) el.querySelector('button:not([hidden])').focus();
+        }
+      }
+      // each corner's picker (collapsed) sits off its corner along the corner's `out` direction: the nearest spot where it crosses no line of
+      // the drawing, covers no dimension value and no other corner's picker (GLYPH_GAP apart), inside the stage. Pixel positions from the
+      // preview's own viewBox fit.
+      let laid = null;
+      function layoutCorners(list = laid) {
+        laid = list;
+        const svg = prev.querySelector('svg'), sb = stage.getBoundingClientRect(), r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+        const s = Math.min(r.width / vb.width, r.height / vb.height);
+        const ox = r.left - sb.left + (r.width - vb.width * s) / 2 - vb.x * s, oy = r.top - sb.top + (r.height - vb.height * s) / 2 - vb.y * s;
+        const px = (p) => ({ x: ox + p.x * s, y: oy + p.y * s });
+        const J = new Map(shown.doc.geometry.joints);
+        const lines = shown.doc.geometry.shapes.filter((x) => x.type === 'line' && !x.isConstruction).map((x) => x.joints.map((id) => px(J.get(id))));
+        const placed = [...prev.querySelectorAll('svg text')].map((e) => { const b = e.getBoundingClientRect(); return { x0: b.left - sb.left, y0: b.top - sb.top, x1: b.right - sb.left, y1: b.bottom - sb.top }; });
+        cornerPickers.forEach((el, i) => {
+          const c = list[i], at = px(c), w = el.offsetWidth, h = el.offsetHeight;
+          const boxAt = (D) => {
+            const x0 = Math.max(0, Math.min(sb.width - w, at.x + c.out.x * D - w / 2)), y0 = Math.max(0, Math.min(sb.height - h, at.y + c.out.y * D - h / 2));
+            return { x0, y0, x1: x0 + w, y1: y0 + h };
+          };
+          let box = null;
+          for (let D = 0; D <= sb.width + sb.height && !box; D += 2) {
+            const b = boxAt(D), g = { x0: b.x0 - GLYPH_GAP, y0: b.y0 - GLYPH_GAP, x1: b.x1 + GLYPH_GAP, y1: b.y1 + GLYPH_GAP };
+            if (!lines.some(([p, q]) => segmentHitsBox(p, q, g)) && !placed.some((o) => boxesOverlap(o, g))) box = b;
+          }
+          box = box || boxAt(0);
+          placed.push(box);
+          el.dataset.left = String(box.x0);
+          el.style.left = `${box.x0}px`; el.style.top = `${box.y0}px`;
+        });
+      }
+      // an expanded corner picker (wider) is moved left as far as it must to stay in the stage; folded, it goes back to its spot
+      function fitInStage(el) {
+        const left = Number(el.dataset.left), w = el.offsetWidth, room = stage.clientWidth;
+        el.style.left = `${Math.max(0, Math.min(left, room - w))}px`;
+      }
+      const onResize = () => layoutCorners();
       const actions = document.createElement('div'); actions.className = 'sk-tp-actions';
       const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'sk-tp-btn sk-tp-cancel'; cancel.textContent = 'Cancel';
       const openBtn = document.createElement('button'); openBtn.type = 'button'; openBtn.className = 'sk-tp-btn sk-tp-open'; openBtn.textContent = 'Open';
       actions.append(cancel, openBtn);
       const open = () => {
         for (const [k, spec] of Object.entries(t.params)) { // the ONE value rule (#core/templates.js paramRefusal): the first refused value is named
-          const why = paramRefusal(spec, values[k]);
+          const why = paramActive(spec, values) && paramRefusal(spec, values[k]);
           if (!why) continue;
           err.textContent = why;
           const input = inputs.get(k);
@@ -496,20 +626,22 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       cancel.addEventListener('click', () => backToCards());
       // Enter in a value box opens (on a button, Enter is that button's own click)
       view.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') { e.preventDefault(); open(); } });
-      view.append(prev, fields, err, actions);
+      view.append(hasCorners ? stage : prev, fields, err, actions);
       draw();
       const cards = [...panel.children];
       const startHead = head(t.name);
       startHead.querySelector('.sk-tp-x').remove(); // the start view closes with Cancel / Esc (back to the cards) or Open
-      panel.classList.add('sk-tp-small'); panel.setAttribute('aria-label', t.name);
+      panel.classList.add('sk-tp-small'); panel.classList.toggle('sk-tp-wide', hasCorners); panel.setAttribute('aria-label', t.name);
       panel.replaceChildren(startHead, view);
+      if (hasCorners) { layoutCorners(); window.addEventListener('resize', onResize); stopStart = () => window.removeEventListener('resize', onResize); }
       backToCards = () => {
         backToCards = null;
-        panel.classList.remove('sk-tp-small'); panel.setAttribute('aria-label', 'New design');
+        if (stopStart) { stopStart(); stopStart = null; }
+        panel.classList.remove('sk-tp-small', 'sk-tp-wide'); panel.setAttribute('aria-label', 'New design');
         panel.replaceChildren(...cards);
         if (fromCard.isConnected) fromCard.focus();
       };
-      openBtn.focus();
+      openBtn.focus(hasCorners ? { preventScroll: true } : undefined); // TASK 674: the wide view's Open is always in view (kept at the bottom): the view opens at its top
     }
   });
 }
@@ -520,34 +652,43 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
  * button named by its label (aria-label and title), aria-pressed on the active one. onPick(value) after every pick.
  * TASK 672: `values` = the start view's current values (read at each draw), given to each glyph (GLYPHS[glyph](option, { active, values }));
  * the event REDRAW on the picker draws its glyphs again (another value changed), keeping its state (expanded or not) and its buttons.
+ * TASK 674: the picker READS its value (read(): the option, or null when it stands for several corners that differ: then no option is pressed
+ * and, collapsed, it shows the option it showed last); corner() = the corner its glyphs are drawn for (#core/templates.js templateCorners), if
+ * any; onToggle(expanded) after it expands or folds; the event COLLAPSE folds it (another corner's picker opened).
  */
 export const REDRAW = 'sk-tp-redraw';
-export function choicePicker(spec, value, onPick, values) {
+export const COLLAPSE = 'sk-tp-collapse';
+export function choicePicker(spec, { read, onPick, values, corner = () => undefined, onToggle = () => {} }) {
   const wrap = document.createElement('div'); wrap.className = 'sk-tp-choice'; wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-label', spec.label);
-  let current = value, expanded = false;
+  let shown = read() ?? spec.default, expanded = false;
   const glyph = GLYPHS[spec.glyph];
   const buttons = spec.options.map((o) => {
     const b = document.createElement('button'); b.type = 'button'; b.dataset.value = o.value;
     b.setAttribute('aria-label', o.label); b.title = o.label;
     b.addEventListener('click', () => {
-      if (!expanded) { expanded = true; render(); return; }
-      current = o.value; expanded = false; render(); onPick(current);
-      b.focus();
+      if (!expanded) { expanded = true; render(); onToggle(true); return; }
+      expanded = false; shown = o.value; onPick(o.value); render(); onToggle(false);
+      if (b.isConnected) b.focus(); // (a corner's picker is rebuilt with the preview: its new one takes the focus)
     });
     return b;
   });
   function render() {
+    const current = read();
+    if (current != null) shown = current;
     wrap.dataset.expanded = expanded ? 'true' : 'false';
+    wrap.dataset.mixed = current == null ? 'true' : 'false';
+    const at = corner();
     spec.options.forEach((o, i) => {
       const b = buttons[i], active = o.value === current;
-      b.hidden = !expanded && !active;
+      b.hidden = !expanded && o.value !== shown;
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
       b.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      b.replaceChildren(glyph(o.value, { active, values }));
+      b.replaceChildren(glyph(o.value, { active, values, corner: at }));
     });
   }
   wrap.append(...buttons);
   wrap.addEventListener(REDRAW, render);
+  wrap.addEventListener(COLLAPSE, () => { if (expanded) { expanded = false; render(); onToggle(false); } });
   render();
   return wrap;
 }

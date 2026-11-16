@@ -671,7 +671,6 @@ export function choicePicker(spec, { read, onPick, values, corner = () => undefi
   const glyph = GLYPHS[spec.glyph];
   const buttons = spec.options.map((o) => {
     const b = document.createElement('button'); b.type = 'button'; b.dataset.value = o.value;
-    b.setAttribute('aria-label', o.label); b.title = o.label;
     b.addEventListener('click', () => {
       if (!expanded) { expanded = true; render(); onToggle(true); return; }
       expanded = false; shown = o.value; onPick(o.value); render(); onToggle(false);
@@ -687,7 +686,9 @@ export function choicePicker(spec, { read, onPick, values, corner = () => undefi
     const at = corner();
     spec.options.forEach((o, i) => {
       const b = buttons[i], active = o.value === current;
+      const text = spec.optionLabel ? spec.optionLabel(o, values) : o.label;
       b.hidden = !expanded && o.value !== shown;
+      b.setAttribute('aria-label', text); b.title = text;
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
       b.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       b.replaceChildren(glyph(o.value, { active, values, corner: at }));

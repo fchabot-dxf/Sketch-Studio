@@ -112,15 +112,14 @@ try {
   assert.ok(wide.menu >= 134 && wide.oneLine, 'the menu grows to keep "stepped pocket" on one line');
   await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-pocket'))`, 'Stepped pocket set');
-  await clickEl('.cut-row[data-row="stepSpacing"] .cut-preset[data-value="0"]'); // TASK 715: a stepped type starts at 1/16 in minimum spacing; these task 714 checks keep every step (preset 0)
   const card = await evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, step: document.querySelector('.cut-step-depth').value,
     stepShown: getComputedStyle(document.querySelector('.cut-row[data-row="stepDepth"]')).display !== 'none', note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
   console.log('card: ' + JSON.stringify(card));
-  assert.deepStrictEqual(card, { type: 'Stepped pocket', step: '1.000', stepShown: true, note: ['Pocket 1 (8mm): 8 steps, 1 to 8 mm'] }, 'the card: Stepped pocket, Step depth 1, the note');
+  assert.deepStrictEqual(card, { type: 'Stepped pocket', step: '1.000', stepShown: true, note: ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.18 mm apart'] }, 'the card: Stepped pocket, Step depth 1, the note');
   await shot('prepare-stepped-card.png');
   const steppedInfo = await review(9);
   console.log('Review (stepped): ' + JSON.stringify(steppedInfo));
-  assert.ok(steppedInfo.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm'), 'the Review info says the steps');
+  assert.ok(steppedInfo.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.18 mm apart'), 'the Review info says the steps');
   const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutType + '@' + i.cutDepth))`);
   assert.deepStrictEqual(levels, ['exterior@19', 'pocket@1', 'pocket@2', 'pocket@3', 'pocket@4', 'pocket@5', 'pocket@6', 'pocket@7', 'pocket@8'], 'the Review input: 8 terrace pockets');
   await zoomReview();
@@ -148,7 +147,7 @@ try {
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-outside'))`, 'Stepped outside set');
   const x2Info = await review(2);
   console.log('Review (x2 stepped outside): ' + JSON.stringify(x2Info));
-  assert.ok(x2Info.includes('Outline: 2 steps, 1 to 19 mm') && x2Info.includes('Outline: undercut below 17 mm cut straight'), 'the Review says the steps and the undercut');
+  assert.ok(x2Info.includes('Outline: 2 steps, 1 to 19 mm \u00b7 outlines 1 mm apart') && x2Info.includes('Outline: undercut below 17 mm cut straight'), 'the Review says the steps and the undercut');
   await zoomReview();
   await shot('review-x2-stepped-outside.png', '#review-canvas-host');
   console.log('stepped-cut-714-live.test.js: ok');

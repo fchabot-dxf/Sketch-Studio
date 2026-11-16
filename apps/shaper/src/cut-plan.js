@@ -8,7 +8,7 @@
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey, makeProfile, ownedLoopIds } from '#core/profile-model.js';
-import { steppedTerraces, terraceKind, deriveCuts, STEP_DEPTH, STEP_SPACING } from '#core/stepped-cut.js';
+import { steppedTerraces, stepGaps, terraceKind, deriveCuts, STEP_DEPTH } from '#core/stepped-cut.js';
 import { format as formatUnit } from '#core/units.js';
 import { docUnit } from '#core/settings-manager.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
@@ -28,11 +28,6 @@ export function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) |
 let lastStep = STEP_DEPTH.defaultMm;
 export const lastStepDepth = () => lastStep;
 export function rememberStepDepth(mm) { const n = Number(mm); if (n > 0) lastStep = Math.max(STEP_DEPTH.minMm, n); return lastStep; }
-// TASK 715: the same for the MIN SPACING (base mm, 0 allowed); STEP_SPACING.defaultMm (1/16 in) until one is set.
-let lastSpacing = STEP_SPACING.defaultMm;
-export const lastStepSpacing = () => lastSpacing;
-export function rememberStepSpacing(mm) { const n = Number(mm); if (n >= 0) lastSpacing = n; return lastSpacing; }
-
 /**
  * steppedSummary(storedRec) — TASK 714: what a STEPPED record's terraces are (the same steppedTerraces call #core/stepped-cut deriveCuts makes, through
  * the effective record): { count, depths (base mm, shallow to deep), undercutBelow (mm | null), label, error }, or null for any other record.
@@ -40,21 +35,36 @@ export function rememberStepSpacing(mm) { const n = Number(mm); if (n >= 0) last
 export function steppedSummary(storedRec) {
   const rec = effectiveCutRecord(storedRec);
   if (!rec || !rec.terraceAs || !rec.slope) return null;
-  const T = steppedTerraces(rec.slope, { kind: terraceKind(rec.terraceAs), step: rec.stepDepth, depth: rec.cutDepth, spacing: rec.stepSpacing });
-  return { count: T.steps.length, skipped: T.skipped, spacing: T.spacing, depths: T.steps.map((st) => st.depth), undercutBelow: T.undercutBelow, label: rec.slope.label || null, error: T.error };
+  const T = steppedTerraces(rec.slope, { kind: terraceKind(rec.terraceAs), step: rec.stepDepth, depth: rec.cutDepth });
+  return { count: T.steps.length, gaps: stepGaps(T.steps), depths: T.steps.map((st) => st.depth), undercutBelow: T.undercutBelow, label: rec.slope.label || null, error: T.error };
 }
-/** The note lines of a stepped record, in the document unit ("Pocket 1 (8mm): 8 steps, 1 to 8 mm"; "Outline: undercut below 17 mm cut straight"). */
-export function steppedNoteLines(storedRec) {
+/** Outlines closer than this (base mm, 1/16 in) are flagged on the card: hard to pick one by one on the Origin (advisor hint, owner may remove). */
+export const CLOSE_OUTLINES_MM = 25.4 / 16;
+/**
+ * The note of a stepped record as items { text, warn?, title? } (the card shows `warn` in the warning colour with `title`; `text` is the whole line,
+ * what the 3D Review's info shows). Doc unit. "Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart" (one value when
+ * evenly spaced, "min–max" otherwise), then "undercut below ..." when there is one.
+ */
+export function steppedNoteItems(storedRec) {
   const s = steppedSummary(storedRec);
   if (!s) return [];
   const u = docUnit(), f = (mm) => String(Number(formatUnit(mm, u, { decimals: 3 })));
   const name = s.label || (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Stepped cut';
-  if (s.error) return [`${name}: the slope could not be read (${s.error}): nothing is cut`];
-  const why = s.skipped > 0 ? ` (spacing ${String(Number(formatUnit(s.spacing, u, { decimals: 4 })))} ${u} skips ${s.skipped})` : ''; // TASK 715
-  const lines = [`${name}: ${s.count} step${s.count === 1 ? '' : 's'}${why}, ${s.count > 1 ? `${f(s.depths[0])} to ` : ''}${f(s.depths[s.depths.length - 1])} ${u}`];
-  if (s.undercutBelow !== null) lines.push(`${name}: undercut below ${f(s.undercutBelow)} ${u} cut straight`);
-  return lines;
+  if (s.error) return [{ text: `${name}: the slope could not be read (${s.error}): nothing is cut` }];
+  const n = `${s.count} step${s.count === 1 ? '' : 's'}`;
+  const item = { text: `${name}: ${n}, ${s.count > 1 ? `${f(s.depths[0])} to ` : ''}${f(s.depths[s.depths.length - 1])} ${u}` };
+  if (s.gaps.length) {
+    const lo = Math.min(...s.gaps), hi = Math.max(...s.gaps), g = (mm) => String(Number(formatUnit(mm, u, { decimals: u === 'in' ? 4 : 2 })));
+    const spacing = ` \u00b7 outlines ${g(lo) === g(hi) ? g(lo) : `${g(lo)}\u2013${g(hi)}`} ${u} apart`;
+    item.text += spacing;
+    if (lo < CLOSE_OUTLINES_MM - 1e-9) { item.warn = spacing; item.title = 'outlines this close may be hard to pick on the Origin: try a bigger step'; }
+  }
+  const items = [item];
+  if (s.undercutBelow !== null) items.push({ text: `${name}: undercut below ${f(s.undercutBelow)} ${u} cut straight` });
+  return items;
 }
+/** The note lines (text) of a stepped record. */
+export const steppedNoteLines = (storedRec) => steppedNoteItems(storedRec).map((i) => i.text);
 /** The note lines of every stepped record of the plan (the 3D Review's info). */
 export function planSteppedNotes(plan = CUT_PLAN) {
   const out = [];

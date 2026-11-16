@@ -20,12 +20,9 @@
 //    for the depths between them (conservative: never past the surface).
 //  * Consecutive steps whose outlines are the same (every boundary point of each within SAME_OUTLINE_TOL_MM of the other's boundary) are ONE
 //    cut at the deeper depth: a vertical stretch of wall is one cut, a new step exists only where the outline changes.
-//  * TASK 715, MIN SPACING: walking the (merged) steps shallow to deep, a step is KEPT only when its outline is at least `spacing` (mm) from the
-//    previous KEPT step's outline (the first one from the opening, the outline at the top ring); a skipped step is not cut (the deeper kept step
-//    is a full cut from the top anyway, so nothing is cut past the design). The last step (the full depth) is always kept, and so is a first step
-//    that IS the opening (a vertical stretch). The distance of two outlines = their closest approach, the minimum over the vertices of each of
-//    the distance to the other's boundary (outlineGap): on the Origin's screen two outlines are hard to pick one by one where they come close.
-//    spacing 0 (or none) keeps every step: the task 714 output.
+//  * TASK 716: no spacing setting. Every distinct step is kept (the task 714 output); `stepGaps` gives the spacing that results (the closest
+//    approach, outlineGap, of each step's outline to the next), which the card note shows. A record saved by task 715 has a stepSpacing: nothing
+//    here reads it, so it is ignored (it cuts the same as before 715).
 //  * An outline that equals one ring (read or interpolated) keeps that ring's exact walk (lines / arcs / circles) for the export; an outline
 //    the boolean actually made (an undercut, rings that cross) is the Clipper polygon (#core/plot/clip.js, 1e-3 mm grid).
 import { regionsFromRings, intersectRegions, unionRegions } from './plot/clip.js';
@@ -34,9 +31,6 @@ import { deriveProfileCuts } from './profile-model.js';
 
 /** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet, never less than `minMm`. */
 export const STEP_DEPTH = Object.freeze({ defaultMm: 1, minMm: 0.1 });
-/** TASK 715: the MIN SPACING between kept step outlines (base mm): `defaultMm` = 1/16 in is what a cut switched to a stepped type starts with (owner
- *  turn 1956), `minMm` 0 = keep every distinct step (the task 714 output). A record with no spacing at all is cut with 0 (as before 715). */
-export const STEP_SPACING = Object.freeze({ defaultMm: 25.4 / 16, minMm: 0 });
 /** Two outlines are the SAME step when every boundary point of each lies within this distance (mm) of the other's boundary. */
 export const SAME_OUTLINE_TOL_MM = 0.01;
 /** Arcs and circles are sampled for the booleans and the preview with this chord sagitta (mm). */
@@ -183,6 +177,8 @@ export function outlineGap(A, B) {
   return m;
 }
 const gapOutlines = (A, B) => Math.min(...A.flatMap((a) => B.map((b) => outlineGap(a.polygon, b.polygon))));
+/** TASK 716: the closest approach (mm) between each step's outlines and the next step's: [gap(step 0, step 1), ...] (one fewer than the steps). */
+export const stepGaps = (steps) => steps.slice(1).map((st, i) => gapOutlines(steps[i].outlines, st.outlines));
 const BOX = new WeakMap();
 function boxOf(poly) {
   let b = BOX.get(poly);
@@ -270,15 +266,13 @@ const sameOutlines = (A, B) => A.length === B.length && A.every((o, i) => sameOu
  * steppedTerraces(slope, { kind, step, depth }) -> { steps, undercutBelow, zTop, zMax, error }
  *   kind   'pocket' | 'inside' | 'outside' (pocket and inside clear the INTERSECTION of the rings above a depth, outside keeps their UNION)
  *   step   the step depth (base mm; STEP_DEPTH.defaultMm when missing, never below STEP_DEPTH.minMm)
- *   spacing  TASK 715: the minimum distance (mm) between kept step outlines (see THE RULES); missing / 0 = keep every step
  *   depth  the cut's full depth (base mm); missing / unset = the slope's deepest ring. Below the deepest ring the wall is vertical.
- *   steps  [{ depth, outlines: [{ polygon:[{x,y}], walk|null }] }], shallow to deep, identical consecutive steps merged into the deeper one,
- *          then the steps closer than `spacing` to the previous kept one dropped; `skipped` = how many were dropped, `spacing` = the one used
+ *   steps  [{ depth, outlines: [{ polygon:[{x,y}], walk|null }] }], shallow to deep, identical consecutive steps merged into the deeper one
  *   undercutBelow  the depth (mm) below which the wall comes back under material left above (cut straight there), or null
  *   error  why there are no steps (a ring that does not close, fewer than 2 rings), else null
  */
-export function steppedTerraces(slope, { kind = 'pocket', step, depth, spacing } = {}) {
-  const none = (error) => ({ steps: [], undercutBelow: null, zTop: null, zMax: null, skipped: 0, spacing: 0, error });
+export function steppedTerraces(slope, { kind = 'pocket', step, depth } = {}) {
+  const none = (error) => ({ steps: [], undercutBelow: null, zTop: null, zMax: null, error });
   if (!slope || typeof slope !== 'object') return none('no slope');
   const k = kind === 'outside' ? 'outside' : kind === 'inside' ? 'inside' : 'pocket';
   const pr = parse(slope, k);
@@ -295,18 +289,8 @@ export function steppedTerraces(slope, { kind = 'pocket', step, depth, spacing }
     if (steps.length && sameOutlines(steps[steps.length - 1].outlines, outlines)) steps[steps.length - 1] = { depth: d, outlines };
     else steps.push({ depth: d, outlines });
   }
-  const sp = Number(spacing) > STEP_SPACING.minMm ? Number(spacing) : 0;
-  let kept = steps;
-  if (sp > 0 && steps.length > 1) {
-    kept = [];
-    let prev = outlinesAt(pr, pr.rings[0].z); // the opening
-    steps.forEach((st, i) => {
-      const last = i === steps.length - 1;
-      if (last || sameOutlines(prev, st.outlines) || gapOutlines(prev, st.outlines) >= sp - 1e-9) { kept.push(st); prev = st.outlines; }
-    });
-  }
   const undercut = pr.undercutBelow !== null && pr.undercutBelow < D - Z_EPS ? pr.undercutBelow : null;
-  return { steps: kept, undercutBelow: undercut, zTop: pr.rings[0].z, zMax, skipped: steps.length - kept.length, spacing: sp, error: null };
+  return { steps, undercutBelow: undercut, zTop: pr.rings[0].z, zMax, error: null };
 }
 
 /**
@@ -327,7 +311,7 @@ export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
   const plain = deriveProfileCuts(target, { ...rest, cutType: terraceAs }, state, loops, loopPolys, ownedLoops);
   const outer = plain.find((c) => !c.isHole && c.kind !== 'chain');
   if (!outer) return [];
-  const T = steppedTerraces(slope, { kind: terraceKind(terraceAs), step: rec.stepDepth, depth: rec.cutDepth, spacing: rec.stepSpacing });
+  const T = steppedTerraces(slope, { kind: terraceKind(terraceAs), step: rec.stepDepth, depth: rec.cutDepth });
   if (!T.steps.length) return [];
   const ref = outer.isCompound ? outer.outerPoly : outer.polygon;
   const flip = ref && ref.length >= 3 && signedArea(ref) < 0; // wind each outline like the target's own outer loop (a pocket's holes go the other way)

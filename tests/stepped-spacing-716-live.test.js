@@ -1,18 +1,18 @@
-// tests/stepped-spacing-715-live.test.js — TASK 715: Min spacing + the Step depth / Min spacing preset rows in the real page (Fusion mode, adsk stubbed,
-// the SA-7 drafted pocket): tap each preset -> the field, its highlight, the Review depths and the downloaded export follow; inches show fractions.
-// Screenshots to .evidence/715/.
+// tests/stepped-spacing-716-live.test.js — TASK 716: in the real page (Fusion mode, adsk stubbed, the SA-7 drafted pocket) the stepped card has NO Min spacing
+// row; its note shows the outline spacing, in the warning colour (with a title) under 1/16 in; changing the Step depth updates note, colour, Review, export.
+// Screenshots to .evidence/716/.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
-const EVIDENCE_DIR = path.resolve('.evidence/715');
+const EVIDENCE_DIR = path.resolve('.evidence/716');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
-const cdp = await launchBrowser({ tag: '715-stepped', width: 1280, height: 800 });
+const cdp = await launchBrowser({ tag: '716-stepped', width: 1280, height: 800 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
 const { port, send, evalJs, waitFor, waitForApp, navigate, close } = cdp;
-const dlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-715-dl-'));
+const dlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-716-dl-'));
 // a screenshot of the whole page, or of the box around the elements `sels` (one selector or several: the union of their boxes, 8 px margin)
 const shot = async (name, sels = null) => {
   let clip = null;
@@ -64,10 +64,9 @@ const zoomReview = async () => {
   for (let i = 0; i < 6; i++) { await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: c.x, y: c.y, deltaX: 0, deltaY: -300 }); await sleep(150); }
   await sleep(300);
 };
-const cardState = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, spacing: document.querySelector('.cut-step-spacing').value,
-  stepLabels: [...document.querySelectorAll('.cut-row[data-row="stepDepth"] .cut-preset')].map((b) => b.textContent), stepActive: [...document.querySelectorAll('.cut-row[data-row="stepDepth"] .cut-preset.is-active')].map((b) => b.textContent),
-  spacingLabels: [...document.querySelectorAll('.cut-row[data-row="stepSpacing"] .cut-preset')].map((b) => b.textContent), spacingActive: [...document.querySelectorAll('.cut-row[data-row="stepSpacing"] .cut-preset.is-active')].map((b) => b.textContent),
-  bitActive: [...document.querySelectorAll('.cut-row[data-param="toolDia"] .cut-preset.is-active')].map((b) => b.textContent), note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
+const cardState = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, minSpacingRow: !!document.querySelector('[data-row="stepSpacing"], .cut-step-spacing'),
+  stepActive: [...document.querySelectorAll('.cut-row[data-row="stepDepth"] .cut-preset.is-active')].map((b) => b.textContent), note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent),
+  warn: [...document.querySelectorAll('.cut-note-warn')].map((w) => ({ text: w.textContent, title: w.title, color: getComputedStyle(w).color })), noteColor: getComputedStyle(document.querySelector('.cut-note')).color })`);
 const exportDepths = async () => {
   for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
   await openStage('review');
@@ -95,66 +94,46 @@ try {
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-pocket'))`, 'Stepped pocket set');
-  // the card with the default 1/16 in spacing (mm document): both rows with their preset rows
+  // step 1: 8 steps, 0.18 mm apart, flagged
   let c = await cardState();
   console.log('card: ' + JSON.stringify(c));
-  assert.deepStrictEqual([c.step, c.spacing, c.stepLabels, c.spacingLabels], ['1.000', '1.5875', ['0.5', '1', '2', '3'], ['0', '0.5', '1', '2']], 'mm presets; spacing 1/16 in = 1.5875');
-  assert.deepStrictEqual([c.stepActive, c.spacingActive, c.bitActive], [['1'], [], ['⅛']], 'Step 1 highlighted, 1.5875 matches no preset, the bit row still highlights 1/8');
-  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): 1 step (spacing 1.5875 mm skips 7), 8 mm'], 'the note');
-  await shot('card-presets-mm.png', '#prepare-panel .cut-card');
-  assert.deepStrictEqual(await exportDepths(), ['8.000 mm'], 'export: ONE pocket');
-  assert.deepStrictEqual(await reviewDepths(), ['8.000 mm'], 'Review: the same');
-  const rev0 = await review(2);
-  console.log('Review (1/16 in): ' + JSON.stringify(rev0));
+  assert.strictEqual(c.minSpacingRow, false, 'the card has no Min spacing row');
+  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart'], 'the note shows the spacing');
+  assert.strictEqual(c.warn.length, 1, 'the spacing part is flagged');
+  assert.strictEqual(c.warn[0].title, 'outlines this close may be hard to pick on the Origin: try a bigger step', 'with its title');
+  assert.notStrictEqual(c.warn[0].color, c.noteColor, `the warning colour differs from the note colour (${c.warn[0].color} vs ${c.noteColor})`);
+  await shot('card-warn-step1.png', '#prepare-panel .cut-card');
+  assert.deepStrictEqual(await exportDepths(), ['1.000 mm', '2.000 mm', '3.000 mm', '4.000 mm', '5.000 mm', '6.000 mm', '7.000 mm', '8.000 mm'], 'export: 8 pockets');
+  assert.deepStrictEqual(await reviewDepths(), await exportDepths(), 'export == Review');
+  const rev = await review(9);
+  console.log('Review info: ' + JSON.stringify(rev));
+  assert.ok(rev.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart'), 'the Review info has the same text');
   await zoomReview();
-  await shot('review-spacing-default.png', '#review-canvas-host');
+  await shot('review-step1.png', '#review-canvas-host');
   await openStage('prepare');
   await clickWorld(60, -40);
-  // tap each Min spacing preset: the field, the highlight, the Review, the export
-  const seen = {};
-  for (const v of ['0', '0.5', '1', '2']) {
-    await preset('stepSpacing', v);
-    c = await cardState();
-    assert.deepStrictEqual([Number(c.spacing), c.spacingActive], [Number(v), [v]], `spacing preset ${v}: the field and the highlight`);
-    const ex = await exportDepths();
-    assert.deepStrictEqual(ex, await reviewDepths(), `spacing ${v}: export == Review`);
-    seen[v] = ex;
-    console.log(`spacing ${v}: ${JSON.stringify(ex)}  note ${JSON.stringify(c.note)}`);
-  }
-  assert.strictEqual(seen['0'].length, 8, 'spacing 0: all 8 steps');
-  assert.ok(seen['0.5'].length < 8 && seen['1'].length < seen['0.5'].length && seen['2'].length <= seen['1'].length && seen['2'].at(-1) === '8.000 mm', 'a larger spacing keeps fewer steps, the floor always');
-  // tap each Step depth preset (spacing 0: every step)
-  await preset('stepSpacing', '0');
-  for (const v of ['0.5', '1', '2', '3']) {
-    await preset('stepDepth', v);
-    c = await cardState();
-    assert.deepStrictEqual([Number(c.step), c.stepActive], [Number(v), [v]], `step preset ${v}: the field and the highlight`);
-    const ex = await exportDepths();
-    assert.deepStrictEqual(ex, await reviewDepths(), `step ${v}: export == Review`);
-    console.log(`step ${v}: ${ex.length} pockets ${JSON.stringify(ex)}`);
-    assert.strictEqual(ex.length, Math.ceil(8 / Number(v)), `step ${v}: ${Math.ceil(8 / Number(v))} pockets`);
-  }
-  // typing still works
-  await evalJs(`(() => { const i = document.querySelector('.cut-step-spacing'); i.value = '0.3'; i.dispatchEvent(new Event('change')); })()`);
+  // step 3: a range, still flagged; step 8: one step, no spacing, no flag
+  await preset('stepDepth', '3');
   c = await cardState();
-  assert.deepStrictEqual([c.spacing, c.spacingActive], ['0.3', []], 'a typed 0.3 matches no preset');
-  await shot('card-presets-typed.png', '#prepare-panel .cut-card');
+  console.log('step 3: ' + JSON.stringify(c.note) + ' ' + JSON.stringify(c.warn));
+  assert.ok(/steps, 3 to 8 mm · outlines 0\.\d+–0\.\d+ mm apart/.test(c.note[0]) && c.warn.length === 1, 'step 3: a range, flagged');
+  await shot('card-warn-step3.png', '#prepare-panel .cut-card');
   const ex3 = await exportDepths();
-  assert.deepStrictEqual(ex3, await reviewDepths(), 'step 3, spacing 0.3: export == Review');
-  console.log('step 3 spacing 0.3: ' + JSON.stringify(ex3));
-  const rev = await review(ex3.length + 1);
-  console.log('Review (step 3, spacing 0.3): ' + JSON.stringify(rev));
-  await zoomReview();
-  await shot('review-spacing-typed.png', '#review-canvas-host');
-  await openStage('prepare');
-  await clickWorld(60, -40);
-  // inches: the presets follow the document unit
-  await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'in'))`);
-  await preset('stepSpacing', String(25.4 / 16));
+  assert.deepStrictEqual(ex3, await reviewDepths(), 'step 3: export == Review');
+  await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '8'; i.dispatchEvent(new Event('change')); })()`);
   c = await cardState();
-  assert.deepStrictEqual([c.stepLabels, c.spacingLabels, c.spacingActive, c.spacing], [['1/32', '1/16', '1/8', '1/4'], ['0', '1/32', '1/16', '1/8'], ['1/16'], '0.0625'], 'inch presets; 1/16 active, field 0.0625');
-  await shot('card-presets-in.png', '#prepare-panel .cut-card');
-  console.log('stepped-spacing-715-live.test.js: ok');
+  console.log('step 8: ' + JSON.stringify(c.note) + ' ' + JSON.stringify(c.warn));
+  assert.deepStrictEqual([c.note, c.warn], [['Pocket 1 (8mm): 1 step, 8 mm'], []], 'step 8: one step, no spacing, no warning');
+  await shot('card-nowarn-step8.png', '#prepare-panel .cut-card');
+  assert.deepStrictEqual(await exportDepths(), ['8.000 mm'], 'step 8: export one pocket');
+  // inches
+  await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'in'))`);
+  await preset('stepDepth', String(25.4 / 32));
+  c = await cardState();
+  console.log('inches: ' + JSON.stringify(c.note));
+  assert.ok(/ in · outlines 0\.\d+–0\.\d+ in apart/.test(c.note[0]), 'the note in inches');
+  await shot('card-in.png', '#prepare-panel .cut-card');
+  console.log('stepped-spacing-716-live.test.js: ok');
 } finally {
   await close();
   fs.rmSync(dlDir, { recursive: true, force: true });

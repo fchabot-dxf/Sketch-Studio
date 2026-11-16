@@ -13,7 +13,7 @@
 // TASK 690: the box takes a SIGNED distance (#core/offset.js parseOffsetDistance): a negative one puts the offset on the OTHER side of the source
 // at |value| (offsetSideAndDistance, the core's one negative rule), the same flip the arrow drag makes; 0 is refused. _open.side is the side the
 // pointer / the last press picked, _open.d the signed distance in the box: the offset shown and applied is offsetSideAndDistance(side, d), and
-// applyOffset gets that side and |d| (the new offset dimension holds |d|; a dimension edited later keeps its sign, #core/offset.js header).
+// applyOffset gets the pointer's side and the SIGNED value (task 710): the new offset dimension holds the value as typed (-5 shows -5), exactly what editing a dimension to -5 gives.
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
 import { dragArrowSvg, dragArrowHit } from '#ui/drag-arrow-handle.js';
@@ -243,9 +243,9 @@ export function commitOffsetInput() {
   if (!pre.ok) { showNotification('Offset: ' + pre.reason + '.', 'warning', HINT_MS); return; }
   _committing = true;
   let res;
-  try { res = recordConstraintStep(state, OFFSET_UNDO_LABEL, () => applyOffset(state, chain, d, side)); } finally { _committing = false; }
+  try { res = recordConstraintStep(state, OFFSET_UNDO_LABEL, () => applyOffset(state, chain, v, _open.side)); } finally { _committing = false; }
   if (!res.ok) { showNotification('Offset: ' + res.reason + '.', 'warning', HINT_MS); return; }
-  currentDistance = d; // the distance USED is the remembered one
+  currentDistance = d; // |v|: the distance USED is the remembered one
   cancelAll();
   showNotification(`Offset applied (${formatUnit(d, docUnit(), { unit: true, decimals: decimalsFor(docUnit()) })})`, 'info');
   if (_exit) _exit();

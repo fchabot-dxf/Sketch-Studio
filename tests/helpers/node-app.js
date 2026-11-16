@@ -221,7 +221,7 @@ const HOSTS = {
       ribbon = createToolRibbon({ state: controller.state, ...D.RIBBON_OPTIONS });
       ribbon.render(doc.getElementById('design-ribbon'));
       // afterSidecar: what the page does with Prepare and the Review card once the cut plan is back (it also re-enters Review, which needs three.js: not here)
-      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: () => { prepare.afterRestore(); stockCard.show(); } }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here)
+      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: (reason) => { prepare.afterRestore(); stockCard.show(); modes.documentOpened(reason); } }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here)
       buffer.restore(); buffer.start();
     };
     const { createAppHeader } = await import('#ui/app-header.js');
@@ -233,7 +233,7 @@ const HOSTS = {
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
     const views = M.findViews(doc);
-    const importer = createShaperImporter({ ensureSketch, getController: () => controller, getInfoPanel: () => browser && browser.panel, notify: createGroupStatus(() => views.design), getDropHost: () => views.design });
+    const importer = createShaperImporter({ ensureSketch, getController: () => controller, getInfoPanel: () => browser && browser.panel, notify: createGroupStatus(() => views.design), getDropHost: () => views.design, showDocument: () => modes.showDocument() }); // TASK 705: as main.js
     importer.mountDrop(); // main.js: the drop on the Design view (the menu entry is the sidebar's)
     return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, modes, prepare, frame: () => { if (browser) browser.tick(); runFrames(1); }, importFile: importer.importFile, browser };
   },

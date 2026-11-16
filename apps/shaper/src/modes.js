@@ -89,5 +89,19 @@ export function createModeRouter({ views, stages = SHAPER_STAGES, defaultMode = 
     if (mode === 'review' && enter.review) enter.review();
     try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
   }
-  return { showMode, current: () => currentMode };
+  // TASK 705: Explore is a separate SVG file viewer; it cannot show a design. A design the user OPENS, or a drawing the user IMPORTS into it, while
+  // Explore shows is therefore shown in Design; every other stage shows the design where the user is.
+  function showDocument() {
+    if (currentMode === 'explore' && allowed.has('design')) showMode('design');
+  }
+  /** reason = the document buffer's onRestored reason (document-buffer.js). */
+  function documentOpened(reason) {
+    if (OPENING_REASONS.has(reason)) showDocument();
+  }
+  return { showMode, current: () => currentMode, documentOpened, showDocument };
 }
+
+/** TASK 705: the document buffer's onRestored reasons that are a design the user opened: a new design (blank or a template, from the picker), Open
+ *  (a stored design), Open from file. Not: 'switch' (a tab switch: each tab keeps its own Explore file, TASK 605), 'restore' (the page's own restore,
+ *  which keeps the stored stage), 'conflict' (a Drive reload of the same tab). */
+export const OPENING_REASONS = Object.freeze(new Set(['new', 'open', 'file']));

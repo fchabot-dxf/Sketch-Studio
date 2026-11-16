@@ -24,7 +24,7 @@ export const RIBBON_OPTIONS = Object.freeze({ profiles: true, appId: 'shaper' })
 /**
  * The options createDocumentBuffer gets from Shaper. TASK 474: the SAME restore runs after the initial restore and after Open / New / Open
  * from file (onRestored), and a design without a Shaper sidecar resets the cut plan and stock to their defaults instead of inheriting the
- * previous design's. refreshViews(): the page's views that follow the sketch (inside the same try as the solve); afterSidecar(): what the
+ * previous design's. refreshViews(): the page's views that follow the sketch (inside the same try as the solve); afterSidecar(reason): what the
  * page re-mounts once the cut plan is back. session: createShaperSession() (TASK 605). No header status text (TASK 605: the tab dot shows it).
  */
 export function shaperBufferOptions({ controller, canvas, session = null, refreshViews = () => {}, afterSidecar = () => {} }) {
@@ -39,7 +39,7 @@ export function shaperBufferOptions({ controller, canvas, session = null, refres
       } catch (_) {}
       // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable). No sidecar (an old buffer): defaults.
       applyShaperDoc(hosts && hosts.shaper);
-      afterSidecar();
+      afterSidecar(reason); // TASK 705: the page shows an opened design (modes.js documentOpened)
     },
     hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
     session, // TASK 605: the tab's in-memory stage state (shaper-session.js); the save state is the tab dot (document-tabs.js) + the canvas's data-save-state

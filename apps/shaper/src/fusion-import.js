@@ -3,6 +3,8 @@
 // `buildShapesFromPrimitives` for joint merging, Y-up -> Y-down negation, real arcs (`arcShape`), and construction tagging.
 
 import { addSketch, activateSketch, stampSketch } from '#core/sketch-model.js';
+import { deserializeDocument } from '#core/document.js';
+import { emptyDocument } from '#ui/project-store.js';
 import { buildShapesFromPrimitives } from '#core/dxf-import.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
@@ -109,8 +111,13 @@ function sameLoopIdSet(a, b) {
 
 /**
  * Import one Fusion `selection_data` payload into the Shaper document in ONE undo step.
- * Adds a new named active sketch (does not replace existing sketches), deduplicates shared curves across
- * outer regions and hole loops, populates `CUT_PLAN` and `stock.thickness`, fits the view, and refreshes Prepare.
+ * TASK 712 (owner ruling "Replace"): the selection REPLACES the palette's design: the whole previous document (every sketch, shape,
+ * joint, constraint, profile, and every cut-plan record, so the cut settings set on it) goes, as when an empty document is opened
+ * (`deserializeDocument(emptyDocument())`), and the selection lands alone in a new named active sketch. Undo gives the previous design
+ * back with its cut plan (the snapshot is taken before the reset); redo the new one. To combine things the user selects them together
+ * in the add-in's dialog: one payload. A payload with nothing importable changes nothing.
+ * Deduplicates shared curves across outer regions and hole loops, populates `CUT_PLAN` and `stock.thickness`, fits the view, and
+ * refreshes Prepare. Called only by the Fusion palette (main.js, Fusion mode); the normal Import SVG / DXF is #ui/sketch-import.js.
  */
 export function importFusionSelection(payload, { controller, prepare = null, plan = CUT_PLAN, onImport = null } = {}) {
   let data = payload;
@@ -178,7 +185,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     indices: intern(c.segs),
   }));
 
-  const noticeBase = `Added ${sourceName}: ${regions.length} regions, ${chains.length} chains`;
+  const counts = `${regions.length} regions, ${chains.length} chains`;
   if (uniquePrims.length === 0) {
     return {
       ok: true,
@@ -190,12 +197,17 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
       chainCount: chains.length,
       cutKeys: [],
       warnings,
-      message: noticeBase,
+      message: `Added ${sourceName}: ${counts}`, // nothing importable: the design is unchanged (wording as before TASK 712)
     };
   }
 
   // ONE undo step capturing pre-import sketch geometry + host cut plan snapshot.
   if (typeof st.saveState === 'function') st.saveState('import ' + sourceName, { host: true });
+
+  // TASK 712: the selection replaces the design (see the doc comment): the empty document, and no cut-plan record.
+  const replaced = st.shapes.length > 0 || plan.size > 0;
+  deserializeDocument(emptyDocument(), st);
+  plan.clear();
 
   const sketch = addSketch(st, sourceName);
   activateSketch(st, sketch.id);
@@ -301,6 +313,6 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     chainCount: chains.length,
     cutKeys,
     warnings,
-    message: noticeBase,
+    message: `${replaced ? 'Replaced with' : 'Added'} ${sourceName}: ${counts}`,
   };
 }

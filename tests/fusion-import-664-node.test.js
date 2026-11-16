@@ -261,7 +261,7 @@ const realSketchMessage = {
   }
 }
 
-// ── 4. Two Add selections -> both kept; ONE undo removes ONE import (sketch + geometry + cut plan) ──
+// ── 4. Two Add selections -> TASK 712 (owner ruling "Replace"): the second REPLACES the first; ONE undo gives the first back (sketch + geometry + cut plan) ──
 {
   CUT_PLAN.clear();
   setStock({ ...DEFAULT_STOCK });
@@ -292,21 +292,22 @@ const realSketchMessage = {
     const planAfterFirst = CUT_PLAN.size;
 
     const r2 = importFusionSelection(msg2, { controller: app.controller, prepare: app.prepare });
-    eq(r1.sketch.name, 'FirstPart', 'first import kept FirstPart');
-    eq(r2.sketch.name, 'SecondPart', 'second import added SecondPart');
-    eq(app.state.sketches.length, sketchesAfterFirst + 1, 'both sketches coexist after 2nd Add selection');
-    eq(app.state.shapes.length, shapesAfterFirst + 4, 'both selections shapes kept');
-    eq(CUT_PLAN.size, planAfterFirst + 1, 'both cut plan entries kept');
-    ok(CUT_PLAN.has(r1.cutKeys[0]) && CUT_PLAN.has(r2.cutKeys[0]), 'first and second cutKeys both in CUT_PLAN');
+    eq(r1.sketch.name, 'FirstPart', 'first import made FirstPart');
+    eq(r2.sketch.name, 'SecondPart', 'second import made SecondPart');
+    eq(r2.message, 'Replaced with SecondPart: 1 regions, 0 chains', 'the second notice says Replaced');
+    eq(app.state.sketches.map((s) => s.name).join('|'), 'Sketch 1|SecondPart', 'only SecondPart after the 2nd Add selection (FirstPart replaced)');
+    eq(app.state.shapes.length, 4, 'only the second selection shapes');
+    eq(CUT_PLAN.size, 1, 'only the second selection cut plan entry');
+    ok(!CUT_PLAN.has(r1.cutKeys[0]) && CUT_PLAN.has(r2.cutKeys[0]), 'FirstPart cut entry gone, SecondPart in CUT_PLAN');
 
-    // ONE undo removes ONLY SecondPart (sketch, geometry, and cut plan entry)
+    // ONE undo gives FirstPart back (sketch, geometry, and cut plan entry)
     const histBeforeUndo = app.state.history.length;
     app.state.undo();
     eq(app.state.history.length, histBeforeUndo - 1, 'undo pops exactly one snapshot');
-    eq(app.state.sketches.length, sketchesAfterFirst, 'one undo removed SecondPart sketch');
-    eq(app.state.shapes.length, shapesAfterFirst, 'one undo removed SecondPart shapes');
+    eq(app.state.sketches.length, sketchesAfterFirst, 'one undo brought the FirstPart sketch back');
+    eq(app.state.shapes.length, shapesAfterFirst, 'one undo brought the FirstPart shapes back');
     eq(CUT_PLAN.size, planAfterFirst, 'one undo restored CUT_PLAN to FirstPart only');
-    ok(CUT_PLAN.has(r1.cutKeys[0]) && !CUT_PLAN.has(r2.cutKeys[0]), 'FirstPart cut entry preserved, SecondPart removed');
+    ok(CUT_PLAN.has(r1.cutKeys[0]) && !CUT_PLAN.has(r2.cutKeys[0]), 'FirstPart cut entry back, SecondPart removed');
   } finally {
     await app.close();
   }

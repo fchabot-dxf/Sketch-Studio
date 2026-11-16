@@ -20,7 +20,8 @@
 import { TOOL_MODES, CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from '#core/constants.js';
 import {
   applyPattern, editPattern, patternDefaults, patternObjectsOf, patternSlots, patternSlotGeometry, patternHandles,
-  patternDistanceFor, patternInstanceOf, patternDirectionPick, patternSourceMiddle, isPatternConstraint, PATTERN_UNDO_LABEL
+  patternDistanceFor, patternInstanceOf, patternDirectionPick, patternSourceMiddle, isPatternConstraint,
+  PATTERN_UNDO_LABEL, CIRCULAR_ANGLE_REFUSAL, circularAngleRefusal,
 } from '#core/pattern.js';
 import { inertEntities, isJointInert, activeSketchPick, inActiveSketch } from '#core/sketch-model.js';
 import { docUnit } from '#core/settings-manager.js';
@@ -690,7 +691,7 @@ function buildForm(body) {
 
     const a = makeText('Angle', fmtAngle(_s.values.angle), (v) => {
       const n = parseAngle(v);
-      return n != null && n > 0 && n <= 360 && liveEdit({ angle: n });
+      return n != null && !circularAngleRefusal(n) && liveEdit({ angle: n });
     }, null, () => { if (_s && els.angle) els.angle.value = fmtAngle(currentRec().angle); });
     els.angle = a;
     els.angleRow = addRow('Angle', a);
@@ -768,7 +769,7 @@ function buildForm(body) {
 function invalidText(i) {
   const f = i.dataset.field || 'the value';
   if (/^Quantity/.test(f)) return `${f.toLowerCase()} must be a whole number of ${f === 'Quantity' ? 2 : 1} or more`;
-  if (f === 'Angle' || f === 'Total angle') return 'the total angle must be more than 0 and at most 360 degrees';
+  if (f === 'Angle' || f === 'Total angle') return CIRCULAR_ANGLE_REFUSAL;
   return `${f.toLowerCase()} must be a number greater than 0`;
 }
 

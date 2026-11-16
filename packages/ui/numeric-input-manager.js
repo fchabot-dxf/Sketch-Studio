@@ -186,7 +186,8 @@ let uiState = {
     // TASK 535: the hint line and the autocomplete list under the dimension box (null where the host has no real DOM)
     hintEl: null,
     listEl: null,
-    completion: null // the shared parameter-name completion (#ui/parameter-completion.js) over listEl
+    completion: null, // the shared parameter-name completion (#ui/parameter-completion.js) over listEl
+    outsideListening: false // TASK 723: the document's capture pointerdown listener is on while an edit box is open
 };
 
 export function setupNumericInput(svg, state) {
@@ -485,6 +486,11 @@ export function showEditInput(svg, state, constraint, initialKey) {
         if (!initialKey) uiState.singleInput.select();
     });
     startTrackingLoop();
+    // TASK 723: a press anywhere outside the box ends it (Fusion). Capture phase on the document: it runs BEFORE the canvas / ribbon / footer
+    // handlers of that same press, which then do their own job on the settled document (one press, not two). Added while the opening press
+    // is already past the document's capture phase, so that press never closes the box it opens. resetState removes it.
+    document.addEventListener('pointerdown', handleOutsidePress, true);
+    uiState.outsideListening = true;
 }
 
 export function hideInput() {
@@ -589,10 +595,7 @@ function handleCommit() {
             const isFirstValue = target.__newlyPlaced === true || target.__restoredDimension === true;
             target.isDriven = false;
             target.driven = false;
-            target.__newlyPlaced = false;
-            delete target.__restoredDimension;
-            target.__placing = false;
-            if (state.placingConstraint === target) state.placingConstraint = null;
+            endPlacing(target, state);
             const label = dimensionInputLabel(target, pv);
             // the FIRST value of a just-placed dimension rides the snapshot taken at its birth (no second undo step)
             const res = applyParameterChange(state, pv.plan, label, { snapshot: !isFirstValue });
@@ -620,6 +623,29 @@ function handleCommit() {
         if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
         hideInput();
     }
+}
+
+// A just-placed (or 667-restored) dimension stops being "new": it keeps its value, its birth snapshot stays its ONE undo step.
+function endPlacing(target, state) {
+    target.__newlyPlaced = false;
+    delete target.__restoredDimension;
+    target.__placing = false;
+    if (state && state.placingConstraint === target) state.placingConstraint = null;
+}
+
+// TASK 723: a press outside the open dimension box (the canvas, a glyph, another label, the ribbon, the footer, the Parameters window, ...).
+// A VALID text that differs from what the box opened with is applied exactly as Enter applies it (handleCommit: one undo step, the same
+// solve / fx / naming path). Anything else (unchanged, empty, refused) is dropped with no notice: the dimension keeps what it has, and a
+// just-placed one stays placed with its measured value (as Enter on the unchanged text leaves it). The press is not stopped.
+function handleOutsidePress(e) {
+    if (!uiState.active || uiState.mode !== 'edit' || !uiState.target) return;
+    const path = e.composedPath();
+    if ([uiState.singleInput, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el))) return;
+    const text = uiState.singleInput.value;
+    const pv = previewDimensionInput(uiState.appState, uiState.target, text, { unit: docUnit() });
+    if (pv.ok && text.trim() !== String(uiState.defaults[0]).trim()) { handleCommit(); return; }
+    endPlacing(uiState.target, uiState.appState);
+    hideInput();
 }
 
 function handlePreview(resetIdx = -1) {
@@ -758,6 +784,7 @@ function placeAssist() {
 }
 
 function resetState() {
+    if (uiState.outsideListening) { document.removeEventListener('pointerdown', handleOutsidePress, true); uiState.outsideListening = false; }
     hideAssist();
     if (uiState.target) uiState.target.__editing = false;
     uiState.active = false;

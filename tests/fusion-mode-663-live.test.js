@@ -133,7 +133,7 @@ try {
   await evalJs(`(() => { try { localStorage.removeItem('shaper-mode'); } catch (e) {} })()`);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
   await waitForApp('design-canvas');
-  await waitFor(`document.querySelectorAll('.sk-header-tab').length === 5`, 'normal Shaper header tabs');
+  await waitFor(`document.querySelectorAll('.sk-header-tab').length === 4`, 'normal Shaper header tabs'); // TASK 706: Explore removed
   const normal = await evalJs(`(() => ({
     tabs: [...document.querySelectorAll('.sk-header-tab')].map((b) => ({ id: b.dataset.tab, active: b.classList.contains('active') })),
     addBtn: document.getElementById('btn-fusion-add-selection'),

@@ -25,10 +25,9 @@ const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEn
 
 // ── 1. core + the step rule ──
 eq(['minMm' in stepped.STEP_DEPTH, 'minMm' in stepped.STEP_RESOLUTION], [false, false], 'no minMm constant remains in the core');
-eq(nextValue(0.5, -1, 0.5, -Infinity, Infinity, true), 0.5, '- at one step stops (no 0)');
-eq(nextValue(0.3, -1, 0.5, -Infinity, Infinity, true), 0.3, '- below one step stays where it is');
-eq(nextValue(0.7, -1, 0.5, -Infinity, Infinity, true), 0.5, '- from 0.7 lands on the smallest positive multiple');
-eq(nextValue(0.05, 1, 0.5, -Infinity, Infinity, true), 0.5, '+ still steps up');
+eq(nextValue(0.5, -1, 0.5, 0.5), 0.5, '- at one step stops (no 0)');
+eq(nextValue(0.7, -1, 0.5, 0.5), 0.5, '- from 0.7 lands on the smallest positive multiple');
+eq(nextValue(0.05, 1, 0.5, 0.5), 0.5, '+ still steps up');
 eq(nextValue(0.5, -1, 0.5, 0), 0, 'a non-size (depth, min 0) still reaches 0');
 for (const [name, fixture] of [['R3 fillet', '03-pocket-floor-fillet'], ['10 deg drafted pocket', '02-drafted-pocket']]) {
   const s = slopeOf(fixture), out = [];

@@ -276,8 +276,8 @@ for (const t of TEMPLATES) if (!['right-angle-corner', 'right-angle-brace', 'pol
   assert.deepStrictEqual(names({ variant: 'scalene' }), ['bottom_width', 'top_width', 'height', 'setback_left', 'thickness'], 'scalene: its left setback is a user parameter');
   assert.doesNotThrow(() => buildTemplate(trapezoid, { setbackLeft: -5 }), 'a param that does not apply is not checked');
   assert.throws(() => buildTemplate(trapezoid, { variant: 'scalene', setbackLeft: -5 }), /Left setback must be a number more than 0/);
-  assert.throws(() => buildTemplate(triangle, { leftSide: 100, rightSide: 100 }), /Triangle frame cannot be drawn with these values \(these three sides make no triangle/);
-  assert.throws(() => buildTemplate(parallelogram, { angle: 190 }), /Parallelogram frame cannot be drawn with these values \(the angle must be less than 180 degrees\)/);
+  assert.throws(() => buildTemplate(triangle, { leftSide: 100, rightSide: 100 }), /Base is too long for the other two sides: use less than 200 mm\./);
+  assert.throws(() => buildTemplate(parallelogram, { angle: 190 }), /Angle is too big: use less than 180 deg\./);
   checks++;
 }
 console.log(`templates-674: ${checks} checks ok`);

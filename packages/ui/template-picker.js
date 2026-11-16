@@ -10,7 +10,7 @@
 //   openTemplatePicker() -> Promise of { blank: true } | { template, document, name } | null (Esc, a press outside, the X: no new design)
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
-import { TEMPLATES, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
+import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
 import SettingsManager from '#core/settings-manager.js';
 import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
@@ -18,6 +18,7 @@ import { calculateArcPath, arcSweepInfo, angleInArcSweep, getLineIntersection } 
 import { angleSectorOf, angleSectorArc } from '#core/angle-sector.js';
 import { listenOutsidePress } from './outside-press.js';
 
+export const GENERIC_REFUSAL = "These values can't be drawn. Try other values.";
 export const TEMPLATE_FAVOURITES_KEY = 'TEMPLATE_FAVOURITES';
 export const TEMPLATE_FAVOURITES_VERSION = 1;
 
@@ -615,6 +616,19 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       let timer = null, built = null; // built = { key, doc, values }: the values the preview shows and their document (null: they cannot be drawn)
       let shown = null; // TASK 674: the last good build, the one the preview (and its corner pickers) shows
       let refocus = null; // TASK 674: the corner whose picker had the pick (its new picker takes the focus back)
+      // TASK 703: a refusal (#core/templates.js TemplateRefusal) carries its plain message and the param it concerns: the line says it and that
+      // field is marked. Any other error is a bug: one generic line, the technical text logged.
+      const showRefusal = (e) => {
+        if (e instanceof TemplateRefusal) {
+          err.textContent = e.message;
+          const input = inputs.get(e.param);
+          if (input) input.setAttribute('aria-invalid', 'true');
+          return;
+        }
+        err.textContent = GENERIC_REFUSAL;
+        dbg.error('template-picker', `${t.id}: ${e.message}`, e);
+      };
+      const clearError = () => { err.textContent = ''; for (const input of inputs.values()) input.removeAttribute('aria-invalid'); }; // a change: the old refusal no longer stands
       const draw = () => {
         clearTimeout(timer); timer = null;
         if (!valid()) return;
@@ -625,7 +639,8 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
         try {
           doc = key === defaultsKey ? defaultDocument(t) : buildTemplate(t, values);
         } catch (e) {
-          built = null; refocus = null; openBtn.disabled = true; err.textContent = e.message;
+          built = null; refocus = null; openBtn.disabled = true;
+          showRefusal(e);
           return;
         }
         built = shown = { key, doc, values: structuredClone(values) }; openBtn.disabled = false;
@@ -660,7 +675,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
           const firstCorner = () => { const c = templateCorners(t, values).find((x) => x.param === k); return c && { interior: c.interior }; };
           const el = choicePicker(spec, {
             read: () => (spec.perCorner ? sameForAll(values[k]) : values[k]),
-            onPick: (v) => { values[k] = v; if (spec.perCorner) lastAll[k] = v; err.textContent = ''; changed(true); },
+            onPick: (v) => { values[k] = v; if (spec.perCorner) lastAll[k] = v; clearError(); changed(true); },
             values, corner: spec.perCorner ? firstCorner : () => undefined,
           });
           pickers.push(el);
@@ -671,7 +686,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
           const input = document.createElement('input'); input.id = id; input.className = 'sk-tp-input'; input.type = 'number';
           input.value = String(values[k]);
           if (kind === 'count') { input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.step = 'any'; input.min = '0'; input.inputMode = 'decimal'; }
-          input.addEventListener('input', () => { values[k] = input.value.trim() === '' ? NaN : Number(input.value); input.removeAttribute('aria-invalid'); err.textContent = ''; changed(); });
+          input.addEventListener('input', () => { values[k] = input.value.trim() === '' ? NaN : Number(input.value); clearError(); changed(); });
           const unit = document.createElement('span'); unit.className = 'sk-tp-unit'; unit.textContent = paramUnit(spec);
           row.append(label, input, unit);
           inputs.set(k, input);
@@ -689,7 +704,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
             read: () => (spec.perCorner ? (Array.isArray(values[k]) ? values[k][c.index] : values[k]) : values[k]),
             onPick: (v) => {
               if (spec.perCorner) { const each = Array.isArray(values[k]) ? [...values[k]] : Array(count).fill(values[k]); each[c.index] = v; values[k] = each; } else values[k] = v;
-              refocus = { k, index: c.index }; err.textContent = ''; changed(true);
+              refocus = { k, index: c.index }; clearError(); changed(true);
             },
             values, corner: () => c,
             onToggle: (open) => {

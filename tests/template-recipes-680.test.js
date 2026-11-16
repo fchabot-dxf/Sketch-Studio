@@ -162,7 +162,7 @@ try {
   assert.ok(before, 'box frame: its preview at the defaults');
   const count = q('.sk-tp-field[data-param="compartments"] input');
   count.focus(); count.value = ''; app.type('100'); await settle(400);
-  assert.match(q('.sk-tp-err').textContent, /cannot be drawn with these values/, 'box frame, 100 compartments (boards thicker than the length): the reason is shown');
+  assert.match(q('.sk-tp-err').textContent, /Plywood thickness is too big for this length and 100 compartments: use less than 14\.85 mm\./, 'box frame, 100 compartments (boards thicker than the length): the reason is shown');
   assert.strictEqual(q('.sk-tp-start .sk-tp-prev svg'), before, 'the last good preview stays');
   assert.ok(q('.sk-tp-open').disabled, 'Open is disabled');
   app.key('Enter'); await settle(200);

@@ -1,6 +1,6 @@
 // packages/core/templates.js -- TASK 651: the BANK of template drawings, DECLARED as data. PURE, no DOM.
 //
-// A template is { id, name, description, params, dimensions, build(d, params) }. TASK 680 (owner turn 1734: "templates should be built using the
+// A template is { id, name, description, params, dimensions, build(d, params), limits?(values) }. TASK 680 (owner turn 1734: "templates should be built using the
 // app's tools"): build() is a RECIPE. It draws on a fresh headless sketch of its own (#core/tool-ops.js newSketchState: its own engine store and
 // sketch state, task 679, so a preview never touches the open design) with the app's TOOL OPERATIONS only (#core/tool-ops.js: the Line, Rect,
 // Arc, Circle, Polygon, Slot and Fillet tools, the constraint tools, the Dimension tool and its value box, the Parameters window's + Add row, the
@@ -171,6 +171,20 @@ function labelPoint(state, cLike, side) {
 }
 // a closed polyline's corner k (the start joint of its segment k)
 const corners = (segs) => segs.map((s) => s.a);
+
+/**
+ * TASK 703: a refusal of a template's values, raised where the rule lives: `message` is a plain sentence saying WHICH value is the problem and
+ * what works (the start modal shows it as it is), `param` is the key of the param it concerns (the modal marks that field). Any other error a
+ * build throws is a bug, not a refusal: the modal shows one generic line and logs the technical text.
+ */
+export class TemplateRefusal extends Error {
+  constructor(param, message, options) { super(message, options); this.name = 'TemplateRefusal'; this.param = param; }
+}
+// a limit as shown to the user (2 decimals, 4 under 1 mm): "less than" rounds down and "more than" rounds up, so the number said is never
+// one that works (the limit itself is excluded) and every number closer to the range works
+const decimals = (x) => (x >= 1 ? 100 : 10000);
+const below = (x) => `${Math.floor(x * decimals(x) + 1e-7) / decimals(x)} mm`;
+const above = (x) => `${Math.ceil(x * decimals(x) - 1e-7) / decimals(x)} mm`;
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 
@@ -670,9 +684,6 @@ function buildBenchSeat(d, p) {
 function buildBrace(d, p) {
   const pick = (v, opts) => (opts.some((o) => o.value === v) ? v : opts[0].value);
   const wIn = num(p.width, 300), hIn = num(p.height, 600), tvIn = num(p.thickV, 38), thIn = num(p.thickH, 38), tdIn = num(p.thickD, 38);
-  if (hIn * tvIn + wIn * thIn + Math.hypot(wIn, hIn) * tdIn >= wIn * hIn) {
-    throw new Error('the boards leave no inner opening (reduce thicknesses or enlarge the frame)');
-  }
   const g = calculateFramingGeometry({ width: wIn, height: hIn, thickV: tvIn, thickH: thIn, thickD: tdIn,
     topJoint: pick(p.topJoint, BRACE_JOINTS.top), blJoint: pick(p.blJoint, BRACE_JOINTS.bl), brJoint: pick(p.brJoint, BRACE_JOINTS.br) });
   const { W, H, Tv, Th, Td, L } = g, P = g.points;
@@ -779,7 +790,6 @@ const trapezoidCorners = (p) => {
 // to the left one (the top is level: a copy of the base); each board `thickness` thick.
 function buildParallelogramFrame(d, p) {
   const base = num(p.base, 600), side = num(p.side, 300), A = num(p.angle, 60), t = num(p.thickness, 38);
-  if (A >= 180) throw new Error('the angle must be less than 180 degrees');
   const P = mapParallelogramVertices({ base, side, angleA: A });
   const { Pj, outer } = convexFrame(d, P, t, cornerList(p.joint, 4), [null, 'h', null, 'h']);
   const [BL, TL, , BR] = Pj;
@@ -804,7 +814,6 @@ const parallelogramCorners = (p) => {
 const triangleOf = (p) => solveArbitraryTriangle([{ key: 'a', val: p.leftSide }, { key: 'b', val: p.base }, { key: 'c', val: p.rightSide }]);
 function buildTriangleFrame(d, p) {
   const s = triangleOf({ leftSide: num(p.leftSide, 500), base: num(p.base, 600), rightSide: num(p.rightSide, 400) });
-  if (!s) throw new Error('these three sides make no triangle (each side must be shorter than the other two together)');
   const { P1, P2, P3 } = obliqueTriangleVertices(s);
   const joints = obliqueVertexJoints({ jointA: p.jointA, jointB: p.jointB, jointC: p.jointC });
   const { Pj } = convexFrame(d, [P1, P3, P2], num(p.thickness, 38), joints, [null, null, 'h']);
@@ -837,14 +846,64 @@ const triangleCorners = (p) => {
  * TASK 674: `corners(values)` (the frame templates) = the corners the start modal draws a joint glyph on, over its preview: [{ x, y (WORLD, the
  * document's), out (the unit direction off the drawing), interior (deg), param, index? }] (templateCorners).
  */
+// ── TASK 703: each template's LIMITS, declared with the template (`limits(values)` -> a TemplateRefusal's { param, message } or null): the values
+// that make no drawing, checked before the recipe runs, each saying in plain words which value is too big (or too small) and what works. The
+// values are the checked, positive ones (paramRefusal ran first).
+const refusal = (param, message) => ({ param, message });
+const slotLimits = (v) => (v.width >= v.length ? refusal('width', `Width is too big for this length: use less than ${below(v.length)}.`) : null);
+const roundedRectLimits = (v) => {
+  const side = Math.min(v.width, v.height); // two corner radii share each side
+  return 2 * v.radius >= side ? refusal('radius', `Corner radius is too big for this width and height: use less than ${below(side / 2)}.`) : null;
+};
+const keyholeLimits = (v) => (v.neck >= 2 * v.radius ? refusal('neck', `Neck width is too big for this head radius: use less than ${below(2 * v.radius)}.`) : null);
+const lBracketLimits = (v) => {
+  const side = Math.min(v.width, v.height);
+  return v.thickness >= side ? refusal('thickness', `Thickness is too big for this width and height: use less than ${below(side)}.`) : null;
+};
+const boxFrameLimits = (v) => {
+  const n = Math.max(1, Math.round(v.compartments)), byLength = v.length / (n + 1), byWidth = v.width / 2; // the boards in a column / the two sides across
+  if (v.thickness < Math.min(byLength, byWidth)) return null;
+  return refusal('thickness', byLength <= byWidth
+    ? `Plywood thickness is too big for this length and ${n} compartment${n === 1 ? '' : 's'}: use less than ${below(byLength)}.`
+    : `Plywood thickness is too big for this width: use less than ${below(byWidth)}.`);
+};
+const rightAngleCornerLimits = (v) => {
+  const side = Math.min(v.horizontalLength, v.verticalLength);
+  return v.thickness >= side ? refusal('thickness', `Board thickness is too big for these lengths: use less than ${below(side)}.`) : null;
+};
+// the brace's three boards must leave an inner opening: height * thickV + width * thickH + diagonal * thickD < width * height (the largest term
+// is the board to blame; the most it can be, the others as they are)
+const braceLimits = (v) => {
+  const L = Math.hypot(v.width, v.height), area = v.width * v.height;
+  const terms = [['thickV', v.height * v.thickV, v.height], ['thickH', v.width * v.thickH, v.width], ['thickD', L * v.thickD, L]];
+  if (terms.reduce((sum, t) => sum + t[1], 0) < area) return null;
+  const [param, term, coef] = terms.sort((a, b) => b[1] - a[1])[0];
+  const most = (area - (terms.reduce((sum, t) => sum + t[1], 0) - term)) / coef;
+  const name = { thickV: 'Vertical board thickness', thickH: 'Horizontal board thickness', thickD: 'Diagonal board thickness' }[param];
+  return refusal(param, most > 0 ? `${name} is too big for this width and height: use less than ${below(most)}.`
+    : `${name} is too big: the boards leave no opening, so make the frame bigger or the boards thinner.`);
+};
+const benchSeatLimits = (v) => {
+  if (v.outerRadius <= v.innerRadius) return refusal('outerRadius', `Outer radius is too small for this inner radius: use more than ${above(v.innerRadius)}.`);
+  if (v.innerRadius <= v.gap / 2) return refusal('innerRadius', `Inner radius is too small for this gap: use more than ${above(v.gap / 2)}.`);
+  return null;
+};
+const parallelogramLimits = (v) => (v.angle >= 180 ? refusal('angle', 'Angle is too big: use less than 180 deg.') : null);
+const triangleLimits = (v) => {
+  const sides = [['base', 'Base', v.base], ['leftSide', 'Left side', v.leftSide], ['rightSide', 'Right side', v.rightSide]];
+  const [param, label, len] = sides.slice().sort((a, b) => b[2] - a[2])[0]; // only the longest side can be too long
+  const rest = sides.reduce((sum, x) => sum + x[2], 0) - len;
+  return len >= rest ? refusal(param, `${label} is too long for the other two sides: use less than ${below(rest)}.`) : null;
+};
+
 export const TEMPLATES = [
-  { id: 'slot', name: 'Slot', description: 'A straight slot with round ends: 10 mm wide, the two end centres 30 mm apart (40 mm overall).', params: { length: { label: 'Length', default: 40 }, width: { label: 'Width', default: 10 } }, dimensions: 2, build: buildSlot },
-  { id: 'rounded-rectangle', name: 'Rounded rectangle', description: '60 by 40 mm with four 5 mm corner radii, all equal.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, radius: { label: 'Corner radius', default: 5 } }, dimensions: 6, build: buildRoundedRect },
-  { id: 'keyhole', name: 'Keyhole', description: 'A 20 mm round head on a 8 mm neck with a round end, 35 mm deep.', params: { radius: { label: 'Head radius', default: 10 }, neck: { label: 'Neck width', default: 8 }, depth: { label: 'Depth', default: 35 } }, dimensions: 3, build: buildKeyhole },
+  { id: 'slot', name: 'Slot', description: 'A straight slot with round ends: 10 mm wide, the two end centres 30 mm apart (40 mm overall).', params: { length: { label: 'Length', default: 40 }, width: { label: 'Width', default: 10 } }, dimensions: 2, limits: slotLimits, build: buildSlot },
+  { id: 'rounded-rectangle', name: 'Rounded rectangle', description: '60 by 40 mm with four 5 mm corner radii, all equal.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, radius: { label: 'Corner radius', default: 5 } }, dimensions: 6, limits: roundedRectLimits, build: buildRoundedRect },
+  { id: 'keyhole', name: 'Keyhole', description: 'A 20 mm round head on a 8 mm neck with a round end, 35 mm deep.', params: { radius: { label: 'Head radius', default: 10 }, neck: { label: 'Neck width', default: 8 }, depth: { label: 'Depth', default: 35 } }, dimensions: 3, limits: keyholeLimits, build: buildKeyhole },
   { id: 'hexagon', name: 'Hexagon', description: 'A regular hexagon, 20 mm across the flats (a nut or a bolt head).', params: { acrossFlats: { label: 'Across flats', default: 20 } }, dimensions: 1, build: buildHexagon },
   { id: 'star', name: 'Star', description: 'A five-point star, 25 mm outer and 10 mm inner radius.', params: { outer: { label: 'Outer radius', default: 25 }, inner: { label: 'Inner radius', default: 10 } }, dimensions: 2, build: buildStar },
   { id: 'arrow', name: 'Arrow', description: 'A straight arrow: 40 mm by 10 mm shaft and a 20 mm long, 30 mm wide head.', params: { shaftLength: { label: 'Shaft length', default: 40 }, shaftWidth: { label: 'Shaft width', default: 10 }, headLength: { label: 'Head length', default: 20 }, headWidth: { label: 'Head width', default: 30 } }, dimensions: 4, build: buildArrow },
-  { id: 'l-bracket', name: 'L-bracket', description: 'A 60 by 50 mm L-bracket, 10 mm thick, with two 5 mm holes.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 50 }, thickness: { label: 'Thickness', default: 10 }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 9, build: buildLBracket },
+  { id: 'l-bracket', name: 'L-bracket', description: 'A 60 by 50 mm L-bracket, 10 mm thick, with two 5 mm holes.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 50 }, thickness: { label: 'Thickness', default: 10 }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 9, limits: lBracketLimits, build: buildLBracket },
   { id: 'bolt-circle', name: 'Bolt circle', description: 'A 60 mm disc with six 6 mm holes on a 40 mm bolt circle.', params: { outerRadius: { label: 'Disc radius', default: 30 }, boltRadius: { label: 'Bolt circle radius', default: 20 }, holeRadius: { label: 'Hole radius', default: 3 } }, dimensions: 3, build: buildBoltCircle },
   { id: 'finger-edge', name: 'Finger-joint edge', description: 'The tabbed edge of a box panel: five 10 mm tabs, 5 mm deep.', params: { tabWidth: { label: 'Tab width', default: 10 }, gapWidth: { label: 'Gap width', default: 10 }, depth: { label: 'Depth', default: 5 } }, dimensions: 3, build: buildFingerEdge },
   { id: 'dog-bone-pocket', name: 'Dog-bone pocket', description: 'A 60 by 40 mm pocket with a diagonal dog-bone relief in each corner for a 1/4 inch (6.35 mm) bit.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, bitDiameter: { label: 'Bit diameter', default: 6.35 } }, dimensions: 6, build: buildDogBone },
@@ -852,17 +911,17 @@ export const TEMPLATES = [
   { id: 'butterfly-key', name: 'Butterfly key', description: 'A bow-tie key: 50 mm long, 25 mm wide at the ends, 10 mm at the waist.', params: { length: { label: 'Length', default: 50 }, endWidth: { label: 'End width', default: 25 }, waistWidth: { label: 'Waist width', default: 10 } }, dimensions: 3, build: buildButterflyKey },
   { id: 'cup-hinge-bore', name: 'Cup hinge bore', description: 'A 35 mm hinge cup hole with two 8 mm screw holes 45 mm apart, 9.5 mm from the cup centre.', params: { cupDiameter: { label: 'Cup diameter', default: 35 }, screwSpacing: { label: 'Screw spacing', default: 45 }, screwOffset: { label: 'Screw line offset', default: 9.5 }, screwDiameter: { label: 'Screw diameter', default: 8 } }, dimensions: 4, build: buildCupHinge },
   { id: 'shelf-pin-row', name: 'Shelf-pin row', description: 'Five 5 mm holes on 32 mm centres (the 32 mm cabinet system): one hole and a rectangular pattern.', params: { count: { label: 'Holes', default: 5, kind: 'count', min: 2, max: 100 }, spacing: { label: 'Spacing', default: 32, atOpen: true }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 1, build: buildShelfPins },
-  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' }, joint: { label: 'Corner joint', default: 'V-Through', kind: 'choice', perCorner: true, options: CORNER_JOINT_TYPES, glyph: 'box-corner-joint', optionLabel: (o, v) => cornerJointLabel(o.value, v?.layout) } }, dimensions: 14, build: buildBoxFrame, corners: boxFrameCorners },
-  { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, build: buildRightAngleCorner, corners: rightAngleCorners },
+  { id: 'box-frame', name: 'Box frame (front view)', description: 'A plywood cubby carcass from the front: two full-length sides, two ends and dividers between them, 5 equal compartments.', params: { length: { label: 'Overall length', default: 1500 }, width: { label: 'Width', default: 400 }, thickness: { label: 'Plywood thickness', default: 18 }, compartments: { label: 'Compartments', default: 5, kind: 'count', min: 1, max: 100 }, layout: { label: 'Layout', default: 'Vertical', kind: 'choice', options: BOX_FRAME_LAYOUTS, glyph: 'box-layout' }, joint: { label: 'Corner joint', default: 'V-Through', kind: 'choice', perCorner: true, options: CORNER_JOINT_TYPES, glyph: 'box-corner-joint', optionLabel: (o, v) => cornerJointLabel(o.value, v?.layout) } }, dimensions: 14, limits: boxFrameLimits, build: buildBoxFrame, corners: boxFrameCorners },
+  { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, limits: rightAngleCornerLimits, build: buildRightAngleCorner, corners: rightAngleCorners },
   // TASK 672
   { id: 'stair-stringer', name: 'Stair stringer', description: 'A cut stringer from one 286 mm board: 4 steps of 180 rise and 250 run, a plumb cut at the top, a level cut on the floor, 125 mm throat.', params: { steps: { label: 'Steps', default: 4, kind: 'count', min: 2, max: 30 }, rise: { label: 'Rise', default: 180 }, run: { label: 'Run', default: 250 }, boardWidth: { label: 'Board width', default: 286 }, throat: { label: 'Throat', default: 125 } }, dimensions: 4, build: buildStringer },
-  { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10 } }, dimensions: 10, build: buildBenchSeat },
-  { id: 'right-angle-brace', name: 'Right-angle brace', description: 'A right-angle frame with its diagonal brace: 300 wide, 600 tall, 38 mm boards, a joint at each corner.', params: { width: { label: 'Width', default: 300 }, height: { label: 'Height', default: 600 }, thickV: { label: 'Vertical board thickness', default: 38 }, thickH: { label: 'Horizontal board thickness', default: 38 }, thickD: { label: 'Diagonal board thickness', default: 38 }, topJoint: { label: 'Top joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' }, blJoint: { label: 'Bottom-left joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, brJoint: { label: 'Bottom-right joint', default: 'H-Through', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' } }, dimensions: 5, build: buildBrace, corners: braceCorners },
+  { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10 } }, dimensions: 10, limits: benchSeatLimits, build: buildBenchSeat },
+  { id: 'right-angle-brace', name: 'Right-angle brace', description: 'A right-angle frame with its diagonal brace: 300 wide, 600 tall, 38 mm boards, a joint at each corner.', params: { width: { label: 'Width', default: 300 }, height: { label: 'Height', default: 600 }, thickV: { label: 'Vertical board thickness', default: 38 }, thickH: { label: 'Horizontal board thickness', default: 38 }, thickD: { label: 'Diagonal board thickness', default: 38 }, topJoint: { label: 'Top joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' }, blJoint: { label: 'Bottom-left joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, brJoint: { label: 'Bottom-right joint', default: 'H-Through', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' } }, dimensions: 5, limits: braceLimits, build: buildBrace, corners: braceCorners },
   { id: 'polygon-frame', name: 'Polygon frame', description: 'A regular 6-sided frame of 38 mm boards, 300 mm sides, one joint at every corner.', params: { sides: { label: 'Sides', default: 6, kind: 'count', min: 3, max: 12 }, sideLength: { label: 'Side length', default: 300 }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 2, build: buildPolygonFrame, corners: polygonFrameCorners },
   // TASK 674
   { id: 'trapezoid-frame', name: 'Trapezoid frame', description: 'A trapezoid frame of 38 mm boards: 600 mm at the bottom, 300 at the top, 250 tall, a joint at each corner.', params: { variant: { label: 'Shape', default: 'isosceles', kind: 'choice', options: TRAPEZOID_VARIANTS, glyph: 'trapezoid-variant' }, bottomWidth: { label: 'Bottom width', default: 600 }, topWidth: { label: 'Top width', default: 300 }, height: { label: 'Height', default: 250 }, setbackLeft: { label: 'Left setback', default: 100, when: { variant: 'scalene' } }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 7, build: buildTrapezoidFrame, corners: trapezoidCorners },
-  { id: 'parallelogram-frame', name: 'Parallelogram frame', description: 'A parallelogram frame of 38 mm boards: a 600 mm base, 300 mm sides at 60 degrees, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, side: { label: 'Side', default: 300 }, angle: { label: 'Angle', default: 60, kind: 'angle' }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 7, build: buildParallelogramFrame, corners: parallelogramCorners },
-  { id: 'triangle-frame', name: 'Triangle frame', description: 'A frame of 38 mm boards on any triangle: a 600 mm base, 500 and 400 mm sides, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, leftSide: { label: 'Left side', default: 500 }, rightSide: { label: 'Right side', default: 400 }, thickness: { label: 'Board thickness', default: 38 }, jointA: { label: 'Bottom-left joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, jointB: { label: 'Bottom-right joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' }, jointC: { label: 'Top joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' } }, dimensions: 6, build: buildTriangleFrame, corners: triangleCorners },
+  { id: 'parallelogram-frame', name: 'Parallelogram frame', description: 'A parallelogram frame of 38 mm boards: a 600 mm base, 300 mm sides at 60 degrees, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, side: { label: 'Side', default: 300 }, angle: { label: 'Angle', default: 60, kind: 'angle' }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 7, limits: parallelogramLimits, build: buildParallelogramFrame, corners: parallelogramCorners },
+  { id: 'triangle-frame', name: 'Triangle frame', description: 'A frame of 38 mm boards on any triangle: a 600 mm base, 500 and 400 mm sides, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, leftSide: { label: 'Left side', default: 500 }, rightSide: { label: 'Right side', default: 400 }, thickness: { label: 'Board thickness', default: 38 }, jointA: { label: 'Bottom-left joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, jointB: { label: 'Bottom-right joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' }, jointC: { label: 'Top joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' } }, dimensions: 6, limits: triangleLimits, build: buildTriangleFrame, corners: triangleCorners },
 ];
 
 /** The default parameters of a template: { key: default }. */
@@ -899,17 +958,20 @@ export function paramRefusal(spec, value) {
  * Build a template's document with its default parameters (or `params` over them): TASK 680, its RECIPE on a fresh sketch of its own: the user
  * parameters first (the Parameters window's + Add row, in declaration order: { name, unit, expression: '<value> <unit>', comment: label }), then
  * the drawing with the app's tools, its dimensions' texts reading those parameters, and the document through serializeDocument. A value the
- * param refuses (paramRefusal) throws: the start modal checks every value before it opens a template. Values the tools cannot draw (a step
- * refused, e.g. boards thicker than the length leaves) throw "<name> cannot be drawn with these values (<the tool's reason>)".
+ * param refuses (paramRefusal) or the template's `limits` refuse throws a TemplateRefusal (a plain message and the param it concerns): the start
+ * modal checks every value before it opens a template. A step a tool refuses that no limit foresaw throws "<name> cannot be drawn with these
+ * values (<the tool's reason>)" (an Error, not a TemplateRefusal: the modal logs it and shows one generic line).
  */
 export function buildTemplate(t, params = {}) {
   const values = { ...defaultParams(t), ...params };
   for (const [k, spec] of Object.entries(t.params)) {
     if (!paramActive(spec, values)) continue; // TASK 674: a param that does not apply is neither checked nor read
     const why = paramRefusal(spec, values[k]);
-    if (why) throw new Error(`template ${t.id}: ${why}`);
+    if (why) throw new TemplateRefusal(k, why);
     if (paramKind(spec) !== 'choice') values[k] = R(Number(values[k])); // the drawing and its parameter read the SAME number
   }
+  const limit = t.limits && t.limits(values); // TASK 703: the template's own limits, before anything is drawn
+  if (limit) throw new TemplateRefusal(limit.param, limit.message);
   const d = drawing();
   for (const [k, spec] of Object.entries(t.params)) {
     if (!isLiveParam(spec, values)) continue;
@@ -918,7 +980,7 @@ export function buildTemplate(t, params = {}) {
   }
   try {
     t.build(d, values);
-  } catch (e) { // a tool refused a step (e.g. a dimension that would collapse a board): these values make no drawing
+  } catch (e) { // a tool refused a step the limits did not foresee: a bug, not a refusal; the cause keeps the technical text
     throw new Error(`${t.name} cannot be drawn with these values (${e.message})`, { cause: e });
   }
   return d.finish();

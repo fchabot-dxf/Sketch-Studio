@@ -140,7 +140,7 @@ try {
   await startOf('triangle-frame');
   const before = q('.sk-tp-start .sk-tp-prev svg');
   typeInto(q('.sk-tp-field[data-param="base"] input'), '1000'); await settle(400);
-  assert.match(q('.sk-tp-err').textContent, /Triangle frame cannot be drawn with these values \(these three sides make no triangle/, 'no triangle: the reason');
+  assert.match(q('.sk-tp-err').textContent, /^Base is too long for the other two sides: use less than 900 mm\.$/, 'no triangle: the reason');
   assert.ok(q('.sk-tp-open').disabled && q('.sk-tp-start .sk-tp-prev svg') === before && corners().length === 3, 'Open disabled, the last good preview and its corners kept');
   pressEl('.sk-tp-cancel'); await settle(); pressEl('.sk-tp-x'); await settle();
   console.log('template-start-674-node: ok');

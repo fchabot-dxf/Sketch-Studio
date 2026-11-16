@@ -3,15 +3,15 @@
 // Design RAF lifecycle, persist the active mode. Moved out of main.js unchanged; what only the page has (the drawer toggle, the Vcarve and Review views)
 // comes in as hooks.
 //
-// S6a: 4-mode app shell — a view router over Explore / Design / Prepare / Simulate-Export. The SVG editor (Explore) is inited ONCE and never re-inited; the
-// router only shows/hides containers. The shared sketcher (Design) mounts once on first entry; its RAF runs only while Design is the active mode, and the
-// input layer's isActive gate is tied to the ACTIVE MODE (not mere visibility) so Explore/Prepare/Sim keystrokes never reach the sketcher (R-COEXIST).
+// S6a: the app shell — a view router over Design / Vcarve / Prepare / Review (TASK 706: the Explore SVG viewer is gone; a file comes in through Import SVG / DXF…
+// into Design). The router only shows/hides containers. The shared sketcher (Design) mounts once; its RAF runs only while Design is the active mode, and the
+// input layer's isActive gate is tied to the ACTIVE MODE (not mere visibility) so Vcarve / Prepare / Review keystrokes never reach the sketcher (R-COEXIST).
 
 import { createHistoryRouter } from '#ui/history-control.js';
 import { sketchHistory } from '#ui/input-manager.js';
 
 /** TASK 618: Shaper's Undo / Redo router, declared once (the page and the node test kit both call it): Design and Prepare own the shared sketch
- *  history (every cut-plan edit is a step of it, TASK 463); Explore, Vcarve and Review have none. */
+ *  history (every cut-plan edit is a step of it, TASK 463); Vcarve and Review have none. */
 export function createShaperHistory({ getController, getMode }) {
   return createHistoryRouter({ current: () => {
     const c = getController();
@@ -22,32 +22,32 @@ export function createShaperHistory({ getController, getMode }) {
 export const MODE_KEY = 'shaper-mode';
 
 export const SHAPER_STAGES = [
-  { id: 'explore', label: 'Explore' },
   { id: 'design',  label: 'Design' },
   { id: 'vcarve',  label: 'Vcarve' },
   { id: 'prepare', label: 'Prepare' },
   { id: 'review',  label: 'Review' },
 ];
 
-// Stages hidden in Fusion 360 palette mode (?host=fusion): Design (no designing in add-in), Explore (standalone SVG
-// editor), and Vcarve (separate V-bit workflow); Prepare + Review + export/upload handle the Fusion workflow.
-export const FUSION_HIDDEN_STAGES = Object.freeze(['explore', 'design', 'vcarve']);
+// Stages hidden in Fusion 360 palette mode (?host=fusion): Design (no designing in add-in) and Vcarve (separate V-bit workflow); Prepare + Review +
+// export/upload handle the Fusion workflow.
+export const FUSION_HIDDEN_STAGES = Object.freeze(['design', 'vcarve']);
 const FUSION_HIDDEN_SET = new Set(FUSION_HIDDEN_STAGES);
 
 export function shaperStagesFor({ fusion = false } = {}) {
   return fusion ? SHAPER_STAGES.filter((s) => !FUSION_HIDDEN_SET.has(s.id)) : SHAPER_STAGES;
 }
 
+/** The stage the page opens on: the stored one if it is still a stage here, else Design (Prepare in Fusion mode). TASK 706: a stored 'explore' (the removed
+ *  Explore viewer) is not a stage any more, so it opens Design. */
 export function resolveInitialMode(storedMode, { fusion = false } = {}) {
   const stages = shaperStagesFor({ fusion });
-  const fallback = fusion ? 'prepare' : 'explore';
+  const fallback = fusion ? 'prepare' : 'design';
   const normalized = storedMode === 'simexport' ? 'review' : storedMode;
   return stages.some((s) => s.id === normalized) ? normalized : fallback;
 }
 
-/** The page's mode containers. Explore is in normal flow (display); the others are absolute overlays (hidden attr). */
+/** The page's mode containers (absolute overlays, hidden attr). */
 export const findViews = (doc) => ({
-  explore:   doc.querySelector('main.layout'),   // the existing SVG editor (normal flow)
   design:    doc.getElementById('design-view'),  // the shared sketcher (absolute overlay)
   vcarve:    doc.getElementById('view-vcarve'),   // VCARVE-3a: the Vcarve space (skeleton)
   prepare:   doc.getElementById('view-prepare'),
@@ -55,22 +55,21 @@ export const findViews = (doc) => ({
 });
 
 /**
- * createModeRouter({ views, onActiveChange, getController, ensureSketch, enter, afterShow }) -> { showMode, current }
+ * createModeRouter({ views, onActiveChange, getController, ensureSketch, enter, afterShow }) -> { showMode, current, showDesign }
  *   getController(): the mounted Design sketch controller (null before it exists). ensureSketch(): mounts it (the page does so lazily).
  *   enter: { vcarve(), prepare(enteringMode), review() } — the page's / the host's per-mode work, each optional.
  *   afterShow(mode): runs after the Design loop was started / stopped (the page's drawer toggle).
  */
-export function createModeRouter({ views, stages = SHAPER_STAGES, defaultMode = (stages[0] && stages[0].id) || 'explore', onActiveChange = null, getController, ensureSketch, enter = {}, afterShow = () => {} }) {
+export function createModeRouter({ views, stages = SHAPER_STAGES, defaultMode = stages[0].id, onActiveChange = null, getController, ensureSketch, enter = {}, afterShow = () => {} }) {
   const allowed = new Set(stages.map((s) => s.id));
-  const fallback = allowed.has(defaultMode) ? defaultMode : ((stages[0] && stages[0].id) || 'explore');
+  const fallback = allowed.has(defaultMode) ? defaultMode : stages[0].id;
   let currentMode = fallback;
-  // The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the
-  // other three are absolute overlays (hidden attr). Drives the Design RAF lifecycle + persists the active mode.
+  // The view router: show the active mode's container, hide the rest (absolute overlays, hidden attr). Drives the Design RAF lifecycle + persists the
+  // active mode.
   function showMode(mode) {
     if (!allowed.has(mode) || !views[mode]) mode = fallback;
     const enteringMode = (mode !== currentMode);
     currentMode = mode;
-    views.explore.style.display = (mode === 'explore') ? '' : 'none';
     views.design.hidden    = (mode !== 'design');   // make the canvas visible BEFORE start() so frame 1 sees a laid-out svg
     views.vcarve.hidden    = (mode !== 'vcarve');   // VCARVE-3a: static skeleton — no mount needed yet (live view = 3b)
     views.prepare.hidden   = (mode !== 'prepare');
@@ -89,19 +88,10 @@ export function createModeRouter({ views, stages = SHAPER_STAGES, defaultMode = 
     if (mode === 'review' && enter.review) enter.review();
     try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
   }
-  // TASK 705: Explore is a separate SVG file viewer; it cannot show a design. A design the user OPENS, or a drawing the user IMPORTS into it, while
-  // Explore shows is therefore shown in Design; every other stage shows the design where the user is.
-  function showDocument() {
-    if (currentMode === 'explore' && allowed.has('design')) showMode('design');
+  // TASK 706 ("everything in Design"): the host's declared showDesign (document-buffer.js / sketch-import.js): a design the user opens (new / Open / Open from
+  // file) or a drawing the user imports is shown in Design, from any stage. Fusion mode has no Design stage: nothing changes there.
+  function showDesign() {
+    if (allowed.has('design')) showMode('design');
   }
-  /** reason = the document buffer's onRestored reason (document-buffer.js). */
-  function documentOpened(reason) {
-    if (OPENING_REASONS.has(reason)) showDocument();
-  }
-  return { showMode, current: () => currentMode, documentOpened, showDocument };
+  return { showMode, current: () => currentMode, showDesign };
 }
-
-/** TASK 705: the document buffer's onRestored reasons that are a design the user opened: a new design (blank or a template, from the picker), Open
- *  (a stored design), Open from file. Not: 'switch' (a tab switch: each tab keeps its own Explore file, TASK 605), 'restore' (the page's own restore,
- *  which keeps the stored stage), 'conflict' (a Drive reload of the same tab). */
-export const OPENING_REASONS = Object.freeze(new Set(['new', 'open', 'file']));

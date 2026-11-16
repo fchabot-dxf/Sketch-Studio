@@ -197,7 +197,7 @@ const HOSTS = {
     return { svg, state, engine, ribbon, buffer, frame, importFile: importer.importFile, browser };
   },
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer; the mode router
-  // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Explore, Vcarve and Review views are not mounted.
+  // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Vcarve and Review views are not mounted.
   async shaper({ win, store, designBrowser }) {
     const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }, { createShaperImporter }, { createGroupStatus }] = await Promise.all([
       import('#ui/sketch-canvas.js'), import('#ui/tool-ribbon.js'), import('#ui/document-buffer.js'), import('../../apps/shaper/src/design-canvas.js'),
@@ -221,7 +221,7 @@ const HOSTS = {
       ribbon = createToolRibbon({ state: controller.state, ...D.RIBBON_OPTIONS });
       ribbon.render(doc.getElementById('design-ribbon'));
       // afterSidecar: what the page does with Prepare and the Review card once the cut plan is back (it also re-enters Review, which needs three.js: not here)
-      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: (reason) => { prepare.afterRestore(); stockCard.show(); modes.documentOpened(reason); } }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here)
+      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: () => { prepare.afterRestore(); stockCard.show(); }, showDesign: () => modes.showDesign() }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here); TASK 706: an opened design shows Design
       buffer.restore(); buffer.start();
     };
     const { createAppHeader } = await import('#ui/app-header.js');
@@ -233,8 +233,8 @@ const HOSTS = {
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
     const views = M.findViews(doc);
-    const importer = createShaperImporter({ ensureSketch, getController: () => controller, getInfoPanel: () => browser && browser.panel, notify: createGroupStatus(() => views.design), getDropHost: () => views.design, showDocument: () => modes.showDocument() }); // TASK 705: as main.js
-    importer.mountDrop(); // main.js: the drop on the Design view (the menu entry is the sidebar's)
+    const importer = createShaperImporter({ ensureSketch, getController: () => controller, getInfoPanel: () => browser && browser.panel, notify: createGroupStatus(() => views.design), getDropHost: () => doc.body, showDesign: () => modes.showDesign() }); // as main.js (TASK 706: Design first; a drop anywhere on the page)
+    importer.mountDrop(); // main.js: the drop on the page (the menu entry is the sidebar's)
     return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, modes, prepare, frame: () => { if (browser) browser.tick(); runFrames(1); }, importFile: importer.importFile, browser };
   },
   // apps/penplotter/src/main.js: the stage pipeline = mountStages() (apps/penplotter/src/stages.js, which the page calls too): the nav, the stage

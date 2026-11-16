@@ -20,7 +20,7 @@
 // active tab, unsaved Untitled tabs included. Each app shows ITS view of a document (its own sidecar, or its defaults when the document
 // has none) and passes every other app's through: the buffer keeps the WHOLE document (fullDoc: every app's sidecar) while an autosave still writes only
 // this app's sidecar (458). What stays per APP: the stage (each host's own MODE_KEY / STAGE_KEY), and each app's SESSION of a tab (hostSessions[app]:
-// Pen Plotter's toolpath undo + selection, Shaper's Explore / Prepare state, Trace's photo): written into the buffer under the app's own slot, the other
+// Pen Plotter's toolpath undo + selection, Shaper's Prepare / Vcarve state, Trace's photo): written into the buffer under the app's own slot, the other
 // apps' slots passed through. The document's undo / redo history stays with the PAGE (in memory, not in the buffer: a reload starts with an
 // empty history, as a reload always did; an undo step is a whole-state snapshot of this app's state, which another app could not apply).
 //
@@ -49,6 +49,10 @@ import { browserFileSeam, serializeProjectFile, projectFileName } from '#ui/proj
 export const MAX_TABS = 10;
 /** The name an unsaved design shows. */
 export const UNTITLED = 'Untitled';
+/** TASK 706 ("everything in Design"): the restore reasons that are a design the user OPENED: a new design (blank or a template, a new tab), Open, Open from
+ *  file. A host that declares `showDesign` shows its Design view for these, before onRestored. Not: 'switch' (a tab switch keeps the stage), 'restore' (the
+ *  page's own restore keeps the stored stage), 'conflict' (a Drive reload of the same tab). (Moved here from Shaper's modes.js, TASK 705.) */
+export const OPENING_REASONS = Object.freeze(new Set(['new', 'open', 'file']));
 const TAB_BUFFER_FIELDS = ['doc', 'history', 'redoStack', 'view', 'hostSessions', 'lastSig', 'emptySig', 'hasOwnSidecar', 'content', 'saveOk', 'designId', 'name'];
 /** Render caches stamped by svg-renderer on live constraints; stripped from change signatures so viewing / zooming / panning never triggers a save (task 687). */
 const RENDER_CONSTRAINT_KEYS = ['glyphPos', '__visible', '__showGlyph'];
@@ -121,7 +125,7 @@ export function mergeTabBuffers(stored, mine, base, app) {
 }
 
 /**
- * createDocumentBuffer({ state, app, hostName, getHostData, session, onRestored, store, pollMs, onStatusChange, canvas, doc, win })
+ * createDocumentBuffer({ state, app, hostName, getHostData, session, onRestored, showDesign, store, pollMs, onStatusChange, canvas, doc, win })
  *   state: the live sketch state to persist/restore (same shape #core/document.js expects).
  *   app: the app id ('sketchstudio' | 'shaper' | 'penplotter'), stored on the design (who saved it last).
  *   hostName / getHostData: OPTIONAL — if given, getHostData() is called at save time and embedded
@@ -136,6 +140,8 @@ export function mergeTabBuffers(stored, mine, base, app) {
  *     'switch'. The host re-solves / repaints and applies ITS sidecar from `hosts` (or resets its own state to defaults when
  *     `hosts[hostName]` is absent: a design without a sidecar must not inherit the previous one). On 'switch' the tab's own view has
  *     already been put back on state.view.
+ *   showDesign(): OPTIONAL (TASK 706) — how this host shows its Design view; called before onRestored when the reason is one of OPENING_REASONS (a design the
+ *     user opened is shown in Design, from any stage). Omit it and the stage is never changed by a restore (Trace: its own applyHost decides).
  *   store: a project store (default: the shared IndexedDB one). pollMs: change-check interval (default 1500ms).
  *   onStatusChange(status): optional — 'saving' | 'saved' | 'error', for a passive indicator.
  *   canvas: the host's Design canvas <svg>. Until the INITIAL restore has settled the buffer ignores the user's pointer / keyboard input on it (a late restore replaces the
@@ -148,7 +154,7 @@ export function mergeTabBuffers(stored, mine, base, app) {
  * Returns { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
  *   isStored, needsSavePrompt, discardUnsaved, tabs, openTab, openFileTab, newTab, activate, closeTab, store }.
  */
-export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
+export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, showDesign = null, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
   // ---- the ACTIVE tab's live binding (an inactive tab keeps the same fields in its record) ----
   let lastSig = null;     // the document signature last written (or loaded): a different one = something to save
   let boundId = null;     // the stored design this buffer reads from / writes to; null = an unsaved Untitled (never written)
@@ -197,7 +203,10 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   // TASK 602: the save state is also written on the canvas (data-save-state): a host without a status text (SketchStudio: its tab dot shows it) and the
   // live tests read it there
   const notify = (s) => { if (canvas) canvas.dataset.saveState = s; try { onStatusChange && onStatusChange(s); } catch (_) {} };
-  const restored = (out) => { try { onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); } return out; };
+  const restored = (out) => {
+    try { if (showDesign && OPENING_REASONS.has(out.reason)) showDesign(); onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); } // TASK 706: Design first (its canvas has its size for the fit)
+    return out;
+  };
 
   const hostDataSig = (data) => (data === undefined ? '' : JSON.stringify(data));
   const docHasOwnHost = (hosts) => !!(hostName && hosts && Object.prototype.hasOwnProperty.call(hosts, hostName) && hosts[hostName] !== undefined);

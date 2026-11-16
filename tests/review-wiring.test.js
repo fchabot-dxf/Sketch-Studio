@@ -37,6 +37,7 @@ assert.match(modes, /id:\s*'review',\s*label:\s*'Review'/);
 assert.doesNotMatch(modes, /id:\s*'simexport'/);
 assert.doesNotMatch(html, /Simulate\/Export/);
 assert.match(html, /id="view-review"[\s\S]*id="btn-generate-svg"/, 'the export panel lives inside the Review view');
-assert.match(main, /initMode === 'simexport'\) initMode = 'review'/);
+assert.strictEqual((await import('../apps/shaper/src/modes.js')).resolveInitialMode('simexport'), 'review', 'a stored simexport opens Review'); // TASK 706: the page's own copy of this mapping went; modes.js resolveInitialMode is the one
+assert.match(main, /resolveInitialMode\(initMode/, 'the page resolves its stored stage through modes.js');
 assert.match(modes, /review:\s+doc\.getElementById\('view-review'\)/);
 console.log('review-wiring: ok');

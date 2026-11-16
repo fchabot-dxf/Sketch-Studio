@@ -2,9 +2,9 @@
 // "Import SVG / DXF…" through the <input type=file> path an Android browser takes (it has no window.showOpenFilePicker: the test deletes it from the
 // page, the app keeps its one code path, packages/ui/project-file.js browserFileSeam.open), the file handed to the real chooser by CDP
 // (Page.setInterceptFileChooserDialog + Page.fileChooserOpened + DOM.setFileInputFiles):
-//  A. from Explore (where the owner was: his trace has taps on the tree / inspector before and after the import): an SVG lands in a NEW sketch, Shaper
-//     shows it in Design (Explore is a separate SVG file viewer and cannot show a design), every imported shape lies inside the visible Design canvas
-//     (the view fits them), the import's message shows over the Design view;
+//  A. from Prepare (TASK 706: 705 started on Explore, the owner's stage then; Explore is gone, and an import from ANY stage is shown in Design): an SVG
+//     lands in a NEW sketch, Shaper shows it in Design, every imported shape lies inside the visible Design canvas (the view fits them), the import's
+//     message shows over the Design view;
 //  B. from Design: a DXF lands the same way, the stage stays Design;
 //  C. a drawing the size of the owner's (a grid of ~2070 small squares, ~8300 line segments, generated here) lands, fits, and its time to land and to
 //     paint the next frame is printed.
@@ -94,15 +94,17 @@ await (async () => {
     await send('DOM.getDocument', { depth: 0 });
     await send('Page.setInterceptFileChooserDialog', { enabled: true });
 
-    // A. from Explore, an SVG
-    assert.strictEqual(await activeStage(), 'explore', 'A: a fresh Shaper opens on Explore');
+    // A. from Prepare, an SVG
+    assert.strictEqual(await activeStage(), 'design', 'A: a fresh Shaper opens on Design (TASK 706: was Explore)');
+    await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`); await sleep(500);
+    assert.strictEqual(await activeStage(), 'prepare', 'A: on Prepare');
     const before = await evalJs(`window.__designController.state.sketches.length`);
     await importVia(SVG, 'A: ');
     await waitFor(`window.__designController.state.sketches.length === ${before + 1}`, 'A: the import made a new sketch');
     await sleep(800);
     const a = { stage: await activeStage(), ...(await landed()) };
-    console.log('A (SVG from Explore) ' + JSON.stringify(a));
-    await shot('import-a-svg-from-explore.png');
+    console.log('A (SVG from Prepare) ' + JSON.stringify(a));
+    await shot('import-a-svg-from-prepare.png');
     assert.strictEqual(a.stage, 'design', 'A: the imported drawing is shown in Design');
     assert(a.shapes >= 3 && a.inside === a.shapes, 'A: every imported shape lies inside the visible Design canvas: ' + JSON.stringify(a));
     assert(a.toast && a.toast.shown && a.toast.opacity === '1' && /import/i.test(a.toast.text), 'A: the import message shows over the Design view: ' + JSON.stringify(a.toast));

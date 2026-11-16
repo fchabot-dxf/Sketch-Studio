@@ -8,10 +8,33 @@ import { docUnit } from '#core/settings-manager.js';
 import { extractCutRecord } from './shaper.js';
 import { CUT_PLAN, assignImportedCuts } from './cut-plan.js';
 
-/** Import `text` (an SVG or a DXF) into `designController`'s sketch as a NEW sketch; returns the shared importer's result. getDocUnit(): the document unit. */
-export function importShaperFile(designController, text, fileName, getDocUnit) {
+/**
+ * TASK 706: an element's cut attributes as Shaper reads them: per attribute, the element's OWN value, else the nearest ancestor <g>'s (not the root <svg>).
+ * Shaper's own export groups the elements that share a cut under one <g> carrying the fill / stroke / shaper:* (shaper-export.js groupByCut), as SVG
+ * paint inherits; reading only the element lost those cuts on import. The reader has the two methods extractCutRecord reads (getAttribute, getAttributeNS).
+ */
+export function inheritedCutAttributes(el) {
+  const nearest = (read) => {
+    const own = read(el);
+    if (own != null) return own;
+    for (let g = el.parentNode; g && g.nodeType === 1 && g.tagName.toLowerCase() === 'g'; g = g.parentNode) {
+      const v = read(g);
+      if (v != null) return v;
+    }
+    return null;
+  };
+  return {
+    getAttribute: (name) => nearest((n) => n.getAttribute(name)),
+    getAttributeNS: (ns, name) => nearest((n) => n.getAttributeNS(ns, name)),
+  };
+}
+
+/** Import `text` (an SVG or a DXF) into `designController`'s sketch as a NEW sketch; returns the shared importer's result. getDocUnit(): the document unit.
+ *  showDesign(): TASK 706, the mode router's: the import lands in Design, shown (sketch-import.js calls it first); omitted by a caller with no stages. */
+export function importShaperFile(designController, text, fileName, getDocUnit, { showDesign = null } = {}) {
   return importIntoSketch(text, fileName, designController, {
-    describeElement: (el) => ({ cutRecord: extractCutRecord(el, getDocUnit()) }),
+    showDesign,
+    describeElement: (el) => ({ cutRecord: extractCutRecord(inheritedCutAttributes(el), getDocUnit()) }),
     keepDescIds: true,
     afterImport: ({ state, descs }) => {
       const cutRecordByDesc = new Map();
@@ -26,16 +49,15 @@ export function importShaperFile(designController, text, fileName, getDocUnit) {
 
 /**
  * TASK 610: what the page script did around importShaperFile, moved here unchanged: the sidebar's "Import SVG / DXF…" entry (importFile) and the drop on the
- * Design view (mountDrop). The page and the node test kit both call it. ensureSketch(): mounts the sketcher if it is not yet; getController(): the sketcher;
- * getInfoPanel(): the SKETCHES panel to refresh (or null); notify(msg): the status line; getDropHost(): the element a dropped file lands on.
- * showDocument(): TASK 705, the mode router's (modes.js): Explore cannot show the design, so an import started there shows Design FIRST (the canvas then
+ * page (mountDrop). The page and the node test kit both call it. ensureSketch(): mounts the sketcher if it is not yet; getController(): the sketcher;
+ * getInfoPanel(): the SKETCHES panel to refresh (or null); notify(msg): the status line; getDropHost(): the element a dropped file lands on (TASK 706: the
+ * whole page). showDesign(): the mode router's (modes.js), declared to the shared importer: the import is shown in Design, from any stage (the canvas then
  * has its size for the import's fit, and the status line, which lives over the Design view, is seen).
  */
-export function createShaperImporter({ ensureSketch, getController, getInfoPanel, notify, getDropHost, showDocument }) {
+export function createShaperImporter({ ensureSketch, getController, getInfoPanel, notify, getDropHost, showDesign }) {
   const importFile = (text, fileName) => {
     ensureSketch();
-    showDocument();
-    const res = importShaperFile(getController(), text, fileName, docUnit);
+    const res = importShaperFile(getController(), text, fileName, docUnit, { showDesign });
     const panel = getInfoPanel();
     if (res.ok && panel) panel.refresh();
     notify(res.message);

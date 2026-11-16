@@ -4,9 +4,10 @@
 //    first row) is on screen; a real tap opens the drawer and every stage button is inside the screen and 44 px; a tap on one shows that stage;
 //  - EVERY stage fits: its main canvas is at least 60 % of the viewport width (and 40 % of its height), the page and the body do not scroll sideways,
 //    and every side panel of the stage is inside the screen and at least 160 px wide (no squeezed or cut-off column);
-//  - a template opened from the picker ("+" on the tab strip, a tap on its card, Open) while Explore shows is SHOWN: Shaper goes to Design (Explore is
-//    a separate SVG file viewer and cannot show a design) and the drawing lies inside the Design canvas.
-// Desktop 1280 x 800, real mouse: the same rule (a template opened from Explore shows in Design); a tab switch back stays in Design.
+//  - a template opened from the picker ("+" on the tab strip, a tap on its card, Open) while Prepare shows is SHOWN: Shaper goes to Design and the
+//    drawing lies inside the Design canvas. (TASK 706: Explore, a separate SVG viewer and 705's starting stage, is gone; a fresh Shaper opens on Design,
+//    and an opened design is shown in Design from ANY stage: 705's checks "opened from Explore" became "opened from Prepare" / "from Review".)
+// Desktop 1280 x 800, real mouse: the same rule (a template opened from Review shows in Design); a tab switch from Prepare stays in Prepare.
 // EVIDENCE_DIR set: a screenshot of every stage at every size.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -21,7 +22,6 @@ const SIZES = [
 ];
 // each stage's main canvas and the side panels it shows beside / under it
 const STAGES = [
-  { id: 'explore', canvas: '#canvas', panels: ['#tree', '#inspector'] },
   { id: 'design', canvas: '#design-canvas', panels: [] },
   { id: 'vcarve', canvas: '#vcarve-canvas', panels: ['#vcarve-panel'] },
   { id: 'prepare', canvas: '#prepare-canvas', panels: [] },
@@ -90,9 +90,10 @@ await (async () => {
       await fresh();
       // the first screen, as the owner sees it
       const first = { stage: await activeStage(), header: await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), handle: await rectOf('.sk-sidebar-handle'),
-        tree: await rectOf('#tree'), canvas: await rectOf('#canvas'), inspector: await rectOf('#inspector'), scroll: await scroll() };
+        canvas: await rectOf('#design-canvas'), scroll: await scroll() };
       console.log(tag + 'first screen ' + JSON.stringify(first));
-      assert.strictEqual(first.stage, 'explore', tag + 'a fresh Shaper opens on Explore');
+      assert.strictEqual(first.stage, 'design', tag + 'a fresh Shaper opens on Design (TASK 706: was Explore)');
+      assert(first.canvas && first.canvas.shown, tag + 'the Design canvas is on the first screen');
       assert(first.handle && first.handle.shown && first.handle.left <= 1 && first.handle.h >= 44 && first.handle.top >= 0 && first.handle.bottom <= size.h, tag + 'the drawer handle (the way to the stages) is on the first screen: ' + JSON.stringify(first.handle));
 
       for (const st of STAGES) {
@@ -125,16 +126,16 @@ await (async () => {
         }
       }
 
-      // a template opened from Explore shows (in Design)
+      // a template opened from Prepare shows (in Design)
       await press('.sk-sidebar-handle', tag + 'the drawer handle'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, tag + 'the drawer opens'); await sleep(300);
-      await press('.sk-sidebar-stage[data-tab="explore"]', tag + 'Explore'); await sleep(400);
-      assert.strictEqual(await activeStage(), 'explore', tag + 'back on Explore');
+      await press('.sk-sidebar-stage[data-tab="prepare"]', tag + 'Prepare'); await sleep(400);
+      assert.strictEqual(await activeStage(), 'prepare', tag + 'on Prepare');
       await openTemplate('rounded-rectangle', tag);
       const stageAfter = await activeStage();
       const nIn = await shapesInCanvas();
-      console.log(tag + 'template opened from Explore ' + JSON.stringify({ stage: stageAfter, designHidden: await evalJs(`document.getElementById('design-view').hidden`), shapesInCanvas: nIn }));
+      console.log(tag + 'template opened from Prepare ' + JSON.stringify({ stage: stageAfter, designHidden: await evalJs(`document.getElementById('design-view').hidden`), shapesInCanvas: nIn }));
       await shot(`after-${size.w}x${size.h}-template.png`);
-      assert.strictEqual(stageAfter, 'design', tag + 'a template opened from Explore shows in Design');
+      assert.strictEqual(stageAfter, 'design', tag + 'a template opened from Prepare shows in Design (TASK 706)');
       assert.strictEqual(await evalJs(`document.getElementById('design-view').hidden`), false, tag + 'the Design view shows');
       assert(nIn >= 8, tag + 'the rounded rectangle (4 lines + 4 arcs) lies inside the Design canvas: ' + nIn);
     }
@@ -145,16 +146,17 @@ await (async () => {
     pointer = mouse;
     await fresh();
     const dt = '@1280x800: ';
-    assert.strictEqual(await activeStage(), 'explore', dt + 'a fresh Shaper opens on Explore');
-    assert.strictEqual((await rectOf('.sk-header-tab[data-tab="explore"]')).shown, true, dt + 'the header stage tabs show');
+    assert.strictEqual(await activeStage(), 'design', dt + 'a fresh Shaper opens on Design (TASK 706: was Explore)');
+    assert.strictEqual((await rectOf('.sk-header-tab[data-tab="design"]')).shown, true, dt + 'the header stage tabs show');
+    await press('.sk-header-tab[data-tab="review"]', dt + 'the Review tab'); await sleep(800);
     await openTemplate('rounded-rectangle', dt);
-    assert.strictEqual(await activeStage(), 'design', dt + 'a template opened from Explore shows in Design');
+    assert.strictEqual(await activeStage(), 'design', dt + 'a template opened from Review shows in Design (TASK 706)');
     assert((await shapesInCanvas()) >= 8, dt + 'the rounded rectangle lies inside the Design canvas');
-    // a tab switch is not an open: back on Explore, switching tabs stays in Explore (each tab keeps its own Explore file, TASK 605)
-    await press('.sk-header-tab[data-tab="explore"]', dt + 'the Explore tab');
+    // a tab switch is not an open: on Prepare, switching tabs stays in Prepare
+    await press('.sk-header-tab[data-tab="prepare"]', dt + 'the Prepare tab');
     await press('.sk-doctab:not(.active) .sk-doctab-name', dt + 'the Untitled tab');
     await sleep(400);
-    assert.strictEqual(await activeStage(), 'explore', dt + 'a tab switch keeps the stage');
+    assert.strictEqual(await activeStage(), 'prepare', dt + 'a tab switch keeps the stage');
     console.log('shaper-phone-705: all checks pass');
   } finally {
     await cdp.close();

@@ -2,7 +2,7 @@
 //   A. SketchStudio: two designs as tabs, each keeps its drawing, undo history and VIEW (a switch refits nothing); Ctrl+Z acts on the active tab only.
 //   B. Pen Plotter: its Toolpath / Export undo stacks (history.js) ride the tab (the `session` hook), a new tab starts empty.
 //   C. Shaper: the cut plan of each tab stays apart through a switch (it rides the sidecar, no session needed).
-//   F-I (TASK 605). F. Pen Plotter: the Toolpath selection is the tab's. G. Shaper: Explore's SVG and Prepare's selection + view, the stage stays. H. the 11th tab and the close question per host. I. Trace: the photo session.
+//   F-I (TASK 605). F. Pen Plotter: the Toolpath selection is the tab's. G. Shaper: Prepare's selection + view (TASK 706: Explore's SVG went with Explore; a new tab shows Design), a tab switch keeps the stage. H. the 11th tab and the close question per host. I. Trace: the photo session.
 //   D. The strip (document-tabs.js) over the declared project actions: click, +, close x with THE unsaved question, keyboard, the 11th tab (T7),
 //      the same design twice, a renamed / deleted design, the sidebar placing it below the header (TASK 602), the name following the active tab.
 import assert from 'node:assert';
@@ -234,15 +234,12 @@ const names = (b) => b.tabs().map((t) => t.name);
   } finally { await pp.close(); }
 }
 
-// ---- G. TASK 605, Shaper: Explore's SVG, Prepare's selection + view come back with their tab ---------------------------------------------------------------
+// ---- G. TASK 605, Shaper: Prepare's selection + view come back with their tab (TASK 706: no Explore SVG any more) ---------------------------------------------------------------
 {
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Sign');
   const sh = await open({ host: 'shaper', profile });
   try {
-    const { store: exploreStore } = await import('../apps/shaper/src/store.js');
-    const explored = sh.document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    exploreStore.doc = explored; exploreStore.selected = null;
     // a closed rectangle: Prepare has one loop to select
     lineAt(sh, 0.3, 0.3, 0.6, 0.3); lineAt(sh, 0.6, 0.3, 0.6, 0.6); lineAt(sh, 0.6, 0.6, 0.3, 0.6); lineAt(sh, 0.3, 0.6, 0.3, 0.3);
     sh.modes.showMode('prepare'); sh.frames(2);
@@ -252,12 +249,11 @@ const names = (b) => b.tabs().map((t) => t.name);
     view.setView({ x: 12, y: 34, w: 56, h: 78 });
     const picked = view.selectedTargets().map((t) => t.id);
     await sh.buffer.newTab();
-    assert.strictEqual(exploreStore.doc, null, 'a new tab has no Explore SVG');
-    assert.strictEqual(sh.modes.current(), 'prepare', 'a tab switch from Prepare stays in Prepare');
+    assert.strictEqual(sh.modes.current(), 'design', 'a new tab (a new design) started on Prepare shows Design (TASK 706: everything in Design; was: stayed in Prepare)');
+    sh.modes.showMode('prepare'); sh.frames(2);
     assert.deepStrictEqual(sh.prepare.view().selectedTargets(), [], 'a new tab selects nothing in Prepare');
     await sh.buffer.activate(sh.buffer.tabs()[0].key); sh.frames(2);
-    assert.strictEqual(sh.modes.current(), 'prepare', 'and back: still Prepare');
-    assert.strictEqual(exploreStore.doc, explored, "Explore's SVG is back");
+    assert.strictEqual(sh.modes.current(), 'prepare', 'and back (a tab switch): still Prepare');
     assert.deepStrictEqual(sh.prepare.view().selectedTargets().map((t) => t.id), picked, "the tab's Prepare selection is back");
     const back = sh.prepare.view().view; // (the view's height follows the canvas's aspect: updateViewBox)
     assert.deepStrictEqual([back.x, back.y, back.w], [12, 34, 56], 'and its Prepare view');

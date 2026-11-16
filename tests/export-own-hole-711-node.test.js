@@ -107,4 +107,52 @@ const exportNow = (st) => {
   CUT_PLAN.clear();
 }
 
+// ── (3) advisor ruling (a), every cut type: a Stock loop (exported as a guide) writes no extra guide line for a child loop that has its
+//     own record (an unassigned child keeps it), and a Guide-assigned hole is not cut by its Outside plate ──
+{
+  CUT_PLAN.clear();
+  const st = { joints: new Map(), shapes: [], constraints: [], groups: [], profiles: [] };
+  let n = 0;
+  const rect = (x, y, w, h) => {
+    const ids = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(([px, py]) => { const id = 'j' + (++n); st.joints.set(id, { x: px, y: py }); return id; });
+    const first = 's' + (n + 1);
+    for (let i = 0; i < 4; i++) st.shapes.push({ id: 's' + (++n), type: 'line', joints: [ids[i], ids[(i + 1) % 4]] });
+    return first;
+  };
+  const sBoard = rect(0, 0, 200, 100), sPartA = rect(10, 10, 80, 80);
+  rect(110, 10, 80, 80); // part B: no record
+  const loops = findLoops(st);
+  const loopOf = (sid) => loops.find((l) => l.edges.includes(sid));
+  const rec = (cutType, cutDepth) => ({ cutType, cutDepth, cutOffset: 0, toolDia: 3.175 });
+  // the board: a Stock loop around part A (its own Pocket record) and part B (no record)
+  CUT_PLAN.set(keyOf('loop', loopOf(sBoard).id), rec('stock', 18));
+  CUT_PLAN.set(keyOf('loop', loopOf(sPartA).id), rec('pocket', 5));
+  let els = elementsOf(exportNow(st));
+  const guides = els.filter((e) => e.cutType === 'guide');
+  eq(guides.length, 2, 'Stock: the board outline + the UNASSIGNED part B as guide lines, no guide line for part A (it has its own record)');
+  const pocketA = els.filter((e) => e.cutType === 'pocket');
+  eq(pocketA.length, 1, 'part A is pocketed by its own record');
+  ok(!guides.some((e) => e.geom === pocketA[0].geom), 'no guide line along part A: ' + guides.map((e) => e.geom).join(' | '));
+  ok(guides.some((e) => /M 110 10 /.test(e.geom)), 'part B keeps its guide line: ' + guides.map((e) => e.geom).join(' | '));
+  CUT_PLAN.clear();
+
+  // an Outside plate with a hole assigned Guide: the hole is a guide line only, the plate does not cut it
+  const st2 = { joints: new Map(), shapes: [], constraints: [], groups: [], profiles: [] };
+  n = 0;
+  const rect2 = (x, y, w, h) => {
+    const ids = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(([px, py]) => { const id = 'j' + (++n); st2.joints.set(id, { x: px, y: py }); return id; });
+    const first = 's' + (n + 1);
+    for (let i = 0; i < 4; i++) st2.shapes.push({ id: 's' + (++n), type: 'line', joints: [ids[i], ids[(i + 1) % 4]] });
+    return first;
+  };
+  const s2Plate = rect2(0, 0, 90, 80), s2Mark = rect2(30, 20, 20, 20);
+  const loops2 = findLoops(st2);
+  CUT_PLAN.set(keyOf('loop', loops2.find((l) => l.edges.includes(s2Plate)).id), rec('exterior', 12));
+  CUT_PLAN.set(keyOf('loop', loops2.find((l) => l.edges.includes(s2Mark)).id), rec('guide', 0));
+  els = elementsOf(exportNow(st2));
+  eq(els.map((e) => e.cutType).sort(), ['guide', 'outside'], 'a Guide-assigned hole: the guide line and the plate outline, no Inside cut');
+  eq(planReliefItems(st2).filter((i) => i.cutType === 'interior').length, 0, 'Review: the plate does not cut the Guide-assigned hole');
+  CUT_PLAN.clear();
+}
+
 console.log(`export-own-hole-711-node: ${checks} checks passed`);

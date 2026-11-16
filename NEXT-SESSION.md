@@ -363,7 +363,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - 433 plan approved (7e44919, WORK-LOG "TURN 433"). AGY-1 now building 433b. Advisor decisions:
     - Inside = duality;
     - On line / Guide = one path per loop, holes first;
-    - a hole's own record is an ADDITIONAL path, never an override.
+    - a hole's own record is an ADDITIONAL path, never an override. CHANGED in task 711 (advisor ruling (a)): a hole's own
+      record OVERRIDES the automatic hole cut of its enclosing target, for every cut type; an unassigned hole keeps it.
   - DONE: 433b merged b27101f.
   - DONE: 440 merged 016654f (Pen Plotter exports Design geometry; one collectToolpathShapes). Its art-layer
     fallback serves only OLD saved files, a named legacy branch until UNIFY-7.

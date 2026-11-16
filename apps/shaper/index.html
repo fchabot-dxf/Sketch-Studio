@@ -122,27 +122,15 @@
     .review-stock label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .review-stock-note { color: #9aa0a6; font-size: 12px; line-height: 1.4; }
     .review-stock input { width: 90px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
-    /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it
-       (the desktop columns 220 + 300 px left Explore's canvas 0 px of 390 and cut the inspector off). Design and Prepare already fit (a full-width
-       canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode, app-sidebar.js): Explore's file tree and
-       inspector, the Vcarve panel and the Review card form ONE band under the canvas. SHORT LANDSCAPE (SHORT_VIEWPORT_QUERY, #ui/short-viewport.js,
-       spelled here because a static stylesheet cannot import it; tests/short-viewport-node.test.js checks this copy): Explore's tree and inspector
-       stack in one column on the right; Vcarve and Review keep their desktop side panel (their canvas is already 64-71 % of 844 px). */
+    /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
+       Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
+       app-sidebar.js): the Vcarve panel and the Review card form ONE band under the canvas. Short landscape: Vcarve and Review keep their desktop side
+       panel (their canvas is already 64-71 % of 844 px). (TASK 706: Explore's tree / inspector rules went with it.) */
     @media (max-width: 640px) {
-      main.layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 40%; grid-template-areas: "canvas canvas" "tree inspector"; }
-      #tree { grid-area: tree; border-top: 1px solid var(--line); }
-      #canvas { grid-area: canvas; }
-      #inspector { grid-area: inspector; border-top: 1px solid var(--line); }
       #view-vcarve { flex-direction: column-reverse; }
       #vcarve-panel { flex: 0 0 40%; border-right: 0; border-top: 1px solid #1f2937; }
       #view-review { flex-direction: column; }
       #review-side { width: auto; flex: 0 0 40%; border-left: 0; border-top: 1px solid #1f2535; }
-    }
-    @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
-      main.layout { grid-template-columns: minmax(0, 1fr) 30%; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "canvas tree" "canvas inspector"; }
-      #tree { grid-area: tree; border-right: 0; border-left: 1px solid var(--line); }
-      #canvas { grid-area: canvas; }
-      #inspector { grid-area: inspector; border-top: 1px solid var(--line); }
     }
     /* SP1j-4: the Export panel (dark chrome) — a Generate button + a status line. */
     #simexport-panel { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
@@ -323,17 +311,7 @@
   </style>
 </head>
 <body>
-  <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
-
-  <main class="layout">
-    <aside id="tree" class="pane tree"></aside>
-    <section id="canvas" class="pane canvas">
-      <div class="empty">Drop an SVG here, or click “Open SVG”</div>
-    </section>
-    <aside id="inspector" class="pane inspector"></aside>
-  </main>
-
-  <!-- Shared #core-backed Design canvas (S1 proof). Hidden until the Design tab is toggled. -->
+  <!-- Shared #core-backed Design canvas (S1 proof). The first and default stage (TASK 706). -->
   <section id="design-view" hidden>
     <!-- S7b: full-width tool ribbon on top; below, a row of [collapsible info panel | canvas]. Populated by main.js. -->
     <div id="design-ribbon"></div>

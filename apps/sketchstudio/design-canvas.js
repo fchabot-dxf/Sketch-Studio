@@ -40,11 +40,12 @@ export function applyInitialView(state, svgEl) {
   }
 }
 
-/** The options createDocumentBuffer gets from SketchStudio (no host sidecar). No status text (TASK 602, owner): the document tab's dot shows the save state. */
-export function studioBufferOptions({ state, engine, svg }) {
+/** The options createDocumentBuffer gets from SketchStudio (no host sidecar). No status text (TASK 602, owner): the document tab's dot shows the save state.
+ *  showDesign(): TASK 706, how the page shows its Design view (main.js), declared to the buffer: a design the user opens is shown in Design. */
+export function studioBufferOptions({ state, engine, svg, showDesign = null }) {
   return {
     state,
-    app: 'sketchstudio', canvas: svg, // TASK 474: the design records who saved it last
+    app: 'sketchstudio', canvas: svg, showDesign, // TASK 474: the design records who saved it last
     onRestored: ({ reason }) => { try { engine.solve(500); } catch (_) {} if (reason !== 'switch') fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view). TASK 587: a TAB SWITCH keeps the tab's own view (the buffer already put it back)
   };
 }
@@ -63,12 +64,12 @@ export function studioFrame({ engine, state, svg, worldGroup, ribbon, onSolved }
 
 /**
  * TASK 610: SketchStudio's SVG / DXF import, moved out of main.js unchanged: the sidebar's "Import SVG / DXF…" entry (importFile) and the drop on the canvas
- * (mountDrop). SketchStudio declares no importer options: its sketch state is what the importer works on, and the result is shown as a notification.
- * The page and the node test kit both call it.
+ * (mountDrop). SketchStudio's sketch state is what the importer works on, and the result is shown as a notification. Its one importer option is
+ * showDesign() (TASK 706: the page's, main.js: an import from the Export view shows Design first). The page and the node test kit both call it.
  */
-export function createStudioImporter({ state, svg }) {
+export function createStudioImporter({ state, svg, showDesign = null }) {
   const importFile = (text, fileName) => {
-    const res = importIntoSketch(text, fileName, { state, svg }, {}); // the importer frames the imported shapes (the render loop solves each frame)
+    const res = importIntoSketch(text, fileName, { state, svg }, { showDesign }); // the importer frames the imported shapes (the render loop solves each frame)
     showNotification(res.message, res.ok ? 'success' : 'error', 6000);
   };
   const mountDrop = () => mountImportDrop(svg, importFile); // a drop on the canvas imports too

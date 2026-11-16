@@ -17,6 +17,8 @@
 //                             it as `paint` (Pen Plotter: fill / stroke -> its pen styles)
 //     options.describeElement (el) -> extra descriptor fields (Shaper: the element's cut record)
 //     options.keepDescIds     keep `descId` on the imported shapes (Shaper: the cut plan is keyed by it); default: removed after afterImport
+//     options.showDesign      () -> void: TASK 706, how the host shows its Design view; called FIRST (an import lands in Design, shown: the canvas then
+//                             has its size for the fit, and the host's status line is seen). Omitted (Trace: it shows its Edit tab itself), the stage is not changed
 //     options.afterImport     (ctx) -> string | void, called once the shapes are in the sketch (ctx = { controller, state, format, fileName,
 //                             descs, shapes, joints, sketch, root }); a returned string is added to the status message
 //   mountImportDrop(el, run, { onHover })   a file dropped on `el` runs run(text, fileName)
@@ -101,6 +103,7 @@ function skipRows(skippedEls, parserSkipped) {
 }
 
 export function importIntoSketch(text, fileName, controller, options = {}) {
+  if (options.showDesign) options.showDesign();
   const st = controller.state;
   const format = looksLikeDxf(fileName, text) ? 'dxf' : 'svg';
   const fail = (message) => ({ ok: false, message, imported: 0, sketch: null, format });

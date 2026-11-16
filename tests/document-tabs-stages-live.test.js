@@ -1,9 +1,9 @@
 // tests/document-tabs-stages-live.test.js — TASK 605: the document tab strip in Shaper, Pen Plotter and Trace, KEPT ACROSS STAGES, in the REAL pages with the real pointer.
 // A tab is the whole document. Switching tabs from a stage that is not Design switches the document and the app stays in that stage; the stage's own state
 // (the tab's session: Prepare's selected loop, the Toolpath stage's selected pen folder, Trace's photo / trace / scale) comes back with the tab:
-//   Shaper       Prepare: a rectangle is drawn in Design and its loop selected in Prepare; "+" in Prepare shows an empty document with nothing selected, still in
-//                Prepare; the first tab back shows the loop selected again. The strip is visible in Explore, Design, Vcarve, Prepare and Review.
-//   Pen Plotter  Toolpath: a pen is added and its folder selected; "+" in Toolpath shows no pens; the first tab back shows the pen and its selected folder. The
+//   Shaper       Prepare: a rectangle is drawn in Design and its loop selected in Prepare; "+" in Prepare shows the new (empty) document in Design (TASK 706:
+//                a new design is shown in Design, from any stage); its Prepare has nothing selected; the first tab back (from Prepare) shows the loop selected again. The strip is visible in Design, Vcarve, Prepare and Review (TASK 706: no Explore).
+//   Pen Plotter  Toolpath: a pen is added and its folder selected; "+" in Toolpath shows the new design in Design (TASK 706), its Toolpath has no pens; the first tab back shows the pen and its selected folder. The
 //                strip is visible in Design, Toolpath and Export.
 //   Trace        Export (its other mode) and Trace: a photo is loaded and traced, its scale typed; "+" shows no photo, no trace, no scale and disabled downloads; the
 //                first tab back shows the photo, the trace and the scale, in the same mode. The strip is visible in Trace, Edit and Export.
@@ -56,7 +56,7 @@ await (async () => {
       await twoDesigns('shaper');
       await noStatusText('shaper');
       const modeBtn = (m) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${m}"]').click()`);
-      for (const m of ['explore', 'design', 'vcarve', 'prepare', 'review']) { await modeBtn(m); await sleep(500); assert(await stripVisible(), `shaper ${m}: the strip is visible and uncovered`); }
+      for (const m of ['design', 'vcarve', 'prepare', 'review']) { await modeBtn(m); await sleep(500); assert(await stripVisible(), `shaper ${m}: the strip is visible and uncovered`); }
       // a closed rectangle in Design (real pointer: line tool, four clicks, back to the first point)
       await modeBtn('design'); await sleep(600);
       const r = await evalJs(`(() => { const b = document.getElementById('design-canvas').getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height }; })()`);
@@ -74,7 +74,8 @@ await (async () => {
       assert.strictEqual(await selected(), 1); const nLoops = await loops();
       await shot('shaper-prepare-before-switch.png', { x: 0, y: 0, width: 1400, height: 360 });
       await newTab();
-      assert.strictEqual(await mode(), 'prepare', 'shaper: "+" in Prepare stays in Prepare');
+      assert.strictEqual(await mode(), 'design', 'shaper: "+" in Prepare shows the new design in Design (TASK 706; was: stayed in Prepare)');
+      await modeBtn('prepare'); await sleep(800);
       assert.strictEqual(await loops(), 0, 'shaper: the new tab shows an empty document in Prepare (no loops)');
       assert.strictEqual(await selected(), 0, 'shaper: nothing selected in the new tab');
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot:not(.saving)').length`), 0, 'shaper: an empty new tab shows no not-saved dot');
@@ -87,12 +88,12 @@ await (async () => {
       // from Review (a stage with no per-tab view): the switch works and the app stays in Review
       await modeBtn('review'); await sleep(800);
       await newTab();
-      assert.strictEqual(await mode(), 'review', 'shaper: "+" in Review stays in Review');
+      assert.strictEqual(await mode(), 'design', 'shaper: "+" in Review shows the new design in Design (TASK 706; was: stayed in Review)');
       assert(await stripVisible(), 'shaper review: the strip is visible after the switch');
       assert.deepStrictEqual(await names(), ['Beta', 'Untitled', 'Untitled']);
       // the save state is the tab's dot: an Untitled with content shows it
       assert.strictEqual(await activeName(), 'Untitled');
-      console.log('shaper: strip in every mode; Prepare selection kept across a switch; Review stays');
+      console.log('shaper: strip in every mode; Prepare selection kept across a switch; a new tab shows Design');
     }
 
     // ---- Pen Plotter ---------------------------------------------------------------------------------------------------------------------
@@ -110,7 +111,8 @@ await (async () => {
       assert.strictEqual(await evalJs(`document.querySelectorAll('.group-row.pen-selected').length`), 1, 'the pen folder is selected');
       await shot('penplotter-toolpath-before-switch.png', { x: 0, y: 0, width: 700, height: 420 });
       await newTab();
-      assert.strictEqual(await cur(), 'toolpath', 'penplotter: "+" in Toolpath stays in Toolpath');
+      assert.strictEqual(await cur(), 'design', 'penplotter: "+" in Toolpath shows the new design in Design (TASK 706; was: stayed in Toolpath)');
+      await stage('toolpath'); await sleep(600);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.pc-row').length`), 0, 'penplotter: the new tab has no pens');
       assert.strictEqual(await evalJs(`document.querySelectorAll('.group-row.pen-selected').length`), 0, 'penplotter: and no selected folder');
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot:not(.saving)').length`), 0, 'penplotter: an empty new tab shows no not-saved dot');

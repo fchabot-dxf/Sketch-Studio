@@ -40,11 +40,12 @@ export function restoreTabSession(s) {
  * design's pens and toolpaths). refreshPanels(): the page's panels (inside the same try as the solve); afterSidecar(): the page's repaint
  * once the plotter document is back (it gets { reason }: a tab switch keeps the tab's own view, TASK 587). afterSession(): the page repaints once the tab's session is back (TASK 605). No header status text: the tab dot shows the save state (TASK 605).
  * TASK 587: `session` = the Toolpath / Export stages' own undo stacks (history.js): in memory, not in the document, so a tab keeps them aside while another is shown.
+ * showDesign(): TASK 706, how the page shows its Design stage (sketch-stage.js), declared to the buffer.
  */
-export function plotterBufferOptions({ controller, canvas, refreshPanels = () => {}, afterSidecar = () => {}, afterSession = () => {} }) {
+export function plotterBufferOptions({ controller, canvas, refreshPanels = () => {}, afterSidecar = () => {}, afterSession = () => {}, showDesign = null }) {
   return {
     state: controller.state,
-    app: 'penplotter', canvas,
+    app: 'penplotter', canvas, showDesign, // TASK 706: a design the user opens is shown in Design (document-buffer.js OPENING_REASONS)
     onRestored: ({ hosts, reason }) => {
       try { controller.engine.solve(500); refreshPanels(); } catch (_) {}
       if (hosts && hosts.penplotter) applyPlotterDoc(hosts.penplotter); else resetPlotterDoc();

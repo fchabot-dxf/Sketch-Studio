@@ -2,11 +2,12 @@
 //   left:  Undo, Redo (history-control.js: the same dispatch as Ctrl+Z / Ctrl+Y in the showing stage),
 //          Delete (red filled circle + white X: the exact Delete key path handleDelete), Clear sketch (outlined trash can, near-black ink, after a small gap: one-step undoable clear of active sketch after confirm),
 //          Parameters (TASK 677, owner turn 1730: the "fx" opener of the Parameters window, always visible; it was hidden in the ribbon's Inspect dropdown)
-//   right: Recenter (every host whose Design / Explore surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
+//   right: Recenter (every host whose Design surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
 // mountAppFooter({ router, view, footer, parameters }) -> { el, refresh, destroy }
 //   router: the host's history router (createHistoryRouter).
-//   view(): { svg, state } of the Design surface that shows now, { fit } for Shaper's Explore, or null while the stage has none (Pen Plotter's Toolpath, ...):
-//     Delete / Clear sketch show only while a sketch (`v.state`) is shown; Recenter shows whenever `v` is truthy. Recenter is pan-zoom.js fitViewToExtents (or `v.fit()`).
+//   view(): { svg, state } of the Design surface that shows now, or null while the stage has none (Pen Plotter's Toolpath, ...):
+//     Delete / Clear sketch show only while a sketch (`v.state`) is shown; Recenter shows whenever `v` is truthy. Recenter is pan-zoom.js fitViewToExtents.
+//     (TASK 706: the `{ fit }` form was Shaper's Explore viewer's, gone with it.)
 //   parameters (default true): the Parameters button + its window (#ui/parameters-window.js, opened over `view().svg`, undo / redo through `router`);
 //     false = a declared opt-out (Trace: no project file, decision O14). ONE declaration here for every host.
 //   footer: an element the host already has (SketchStudio's status bar): the groups go into it. Without one a footer is created at the page's bottom
@@ -198,7 +199,6 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   const recenterBtn = mk(end, 'btn-recenter-view', 'Recenter view', 'icon-recenter');
   recenterBtn.addEventListener('click', () => {
     const v = view(); if (!v) return;
-    if (typeof v.fit === 'function') { v.fit(); return; }
     if (v.state && v.state.view) fitViewToExtents(v.svg, v.state.view, v.state);
   });
 

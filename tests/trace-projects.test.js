@@ -56,7 +56,7 @@ await (async () => {
       ['Pen Plotter', '/apps/penplotter/index.html', `!!window.__sketch`],
       ['Trace', '/apps/trace/index.html', `!!document.getElementById('tab-edit')`],
     ];
-    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export', 'explore-open', 'explore-export', 'style', 'settings', 'log', 'debug', 'tune']); // each host's declared extras (hostActions): download/export/settings/tools moved into ☰ menu (TASK 602, 619)
+    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export', 'style', 'settings', 'log', 'debug', 'tune']); // each host's declared extras (hostActions): download/export/settings/tools moved into ☰ menu (TASK 602, 619)
     const menus = {};
     for (const [name, url, ready] of apps) {
       await goto(url);

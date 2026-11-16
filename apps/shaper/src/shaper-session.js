@@ -2,25 +2,21 @@
 // (main.js) and the node test kit (tests/helpers/node-app.js) both build it). The document, the cut plan and the stock ride in the document + the sidecar
 // (shaper-doc.js); this is the in-memory rest, the document buffer's `session` hook (capture when a tab is put aside, restore when it comes back, restore(undefined)
 // for a design that has none yet):
-//   Explore   the SVG opened in the explorer and its selected element (the explorer is a view of one file, so it goes with the tab)
 //   Prepare   the selected loops / edges / chains and the pan / zoom of the Prepare view (prepare-stage.js keeps them for the view's next mount)
 //   Vcarve    the Vcarve view's pan / zoom (the region, V-bit and depths are in the document: state.vcarves)
 // Not kept: the Review camera (it is placed from the tab's own stock and cuts on each entry, like a first visit), the Design canvas view (the buffer keeps it).
-import { store, setDoc, select } from './store.js';
+// TASK 706: the Explore viewer is gone, and with it the session's `explore` part (its open SVG); a session stored before (the shared open-tabs buffer,
+// TASK 684) still carries one: restore reads only `prepare` and `vcarveView`, so it is ignored.
 
-/** createShaperSession({ prepare, getVcarveView }) -> { capture, restore, stored }. A part the host has not mounted (the kit has no Vcarve) is skipped. */
+/** createShaperSession({ prepare, getVcarveView }) -> { capture, restore }. A part the host has not mounted (the kit has no Vcarve) is skipped. All of it is
+ *  storable (plain data), so the open-tabs buffer keeps the whole session. */
 export function createShaperSession({ prepare, getVcarveView = () => null }) {
   return {
     capture: () => {
       const v = getVcarveView();
-      return { explore: { doc: store.doc, selected: store.selected }, prepare: prepare.captureSession(), vcarveView: v ? v.getView() : null };
+      return { prepare: prepare.captureSession(), vcarveView: v ? v.getView() : null };
     },
-    // TASK 684: what the shared open-tabs working buffer (IndexedDB) keeps across a reload: Prepare's selection + view and Vcarve's view. Not the
-    // Explore file (a live <svg> element: it cannot be stored, and it is a view of a file, not of the design).
-    stored: (s) => ({ explore: { doc: null, selected: null }, prepare: s.prepare, vcarveView: s.vcarveView }),
     restore: (s) => {
-      setDoc(s ? s.explore.doc : null);
-      if (s && s.explore.selected) select(s.explore.selected);
       prepare.restoreSession(s ? s.prepare : null);
       const v = getVcarveView();
       if (v) v.setView(s ? s.vcarveView : null);

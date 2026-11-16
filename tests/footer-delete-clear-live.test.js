@@ -66,7 +66,7 @@ await (async () => {
 
     const HOSTS = {
       studio:     { url: '/apps/sketchstudio/index.html', enter: null, otherTab: null, ready: `!!document.querySelector('#svgCanvas')`, canvas: '#svgCanvas', dark: false },
-      shaper:     { url: '/apps/shaper/index.html', enter: '.sk-header-tab[data-tab="design"]', otherTab: '.sk-header-tab[data-tab="explore"]', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')`, canvas: '#design-canvas', dark: true },
+      shaper:     { url: '/apps/shaper/index.html', enter: '.sk-header-tab[data-tab="design"]', otherTab: '.sk-header-tab[data-tab="prepare"]' /* TASK 706: Explore removed */, ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')`, canvas: '#design-canvas', dark: true },
       penplotter: { url: '/apps/penplotter/index.html', enter: '.sk-header-tab[data-tab="design"]', otherTab: '.sk-header-tab[data-tab="toolpath"]', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')`, canvas: '#design-canvas', dark: false },
       trace:      { url: '/apps/trace/index.html', enter: '.sk-header-tab[data-tab="edit"]', otherTab: '.sk-header-tab[data-tab="trace"]', ready: `!!document.querySelector('.sk-header-tab[data-tab="edit"]')`, canvas: '#design-canvas', dark: true },
     };

@@ -16056,3 +16056,12 @@ Task 730: − / + steppers on Shaper's numeric fields, ONE widget. `apps/shaper/
 - Other numeric inputs: left as they are (see the REPORT).
 Tests: tests/number-stepper-730-node.test.js (rule, card, undo, hold, inches), tests/number-stepper-730-live.test.js (desktop mouse + phone 390 touch). Evidence: .evidence/730/.
 - 730 addition: the `.cut-field` / `.cut-row` / `#prepare-panel .cut-card` display:flex rules beat the [hidden] attribute (an unselected card showed with its stepped rows and stale values). ONE fix: `.cut-field[hidden], .cut-row[hidden], #prepare-panel .cut-card[hidden] { display: none }` (apps/shaper/index.html). The only `hidden` the card sets on these is `card.hidden`; rows hide via style.display (already worked). Evidence: .evidence/730/card-nothing-selected-BEFORE.png (display flex) / -AFTER.png (display none). Live test asserts no card with nothing selected and no stepped rows for a plain Pocket; stepped rows: stepped-adaptive-717-node.
+
+## TURN 736
+No app-imposed minimum on Shaper's sizes (owner turn 2071). ONE rule: any value > 0 typed or stepped is kept exactly; 0 / negative / non-numbers are refused (the box reverts); − never produces 0.
+- Removed `STEP_DEPTH.minMm` / `STEP_RESOLUTION.minMm` and every clamp of them (stepped-cut.js steppedTerraces, cut-plan.js remember*, cut-panel.js typed handlers); `grep minMm apps packages` is empty.
+- number-stepper.js: new spec flag `positive: true` (a size): a press whose result would be below one step stays where it is (nextValue 6th arg). Bit / step depth / resolution (cut-panel.js) and thickness (stock-card.js) declare it instead of `min`.
+- Behaviour change beyond the task's list: the typed bit diameter now refuses 0 / negative like the other sizes (before, it stored them).
+- Tiny values (R3 fillet / drafted 10deg pocket, depth 8): step 0.01 -> 126 / 1 steps, 19 / 6 ms; resolution 0.001 -> 1 / 1 steps, 60 / 92 ms (identical consecutive outlines within 0.01 mm merge, so counts collapse); export build 5-10 ms. No freeze, no cap.
+- steppedTerraces output identical to origin/main for 72 fixture x option combos at values >= the old floors (.evidence/736/identical.txt).
+- Tests: tests/no-min-736-node.test.js (new); 714 / 717 / 730 node tests and 730 live updated for the removed floors; 716 live gained the 0.05 mm bit / 0.01 mm step phase (.evidence/736/card-tiny-736.png). Vcarve (734) untouched.

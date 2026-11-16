@@ -1,5 +1,6 @@
 // apps/shaper/src/number-stepper.js — the ONE − / + stepper of Shaper's numeric fields (TASK 730; generalised from the cut card's depth stepper).
 // A host DECLARES per field a spec { step: { mm, in }, min, max } and the field's own read / commit; this file holds the only press / hold / snap code.
+//   positive  true for a SIZE (bit, thickness, step depth, resolution): any value above 0 is kept, a press never gives 0
 //   step  the increment in the DOCUMENT unit, per unit family (cm steps as mm / 10); min / max in BASE mm (omit = unbounded)
 //   a step lands on the next clean MULTIPLE of the step in the direction pressed (6.3 + 0.5 -> 6.5, 6.3 - 0.5 -> 6.0); a value already on a multiple moves by one step
 //   from an unset field (read() === null) the first press lands on one step; a value at its min / max stays (nothing is committed, so no undo step)
@@ -13,13 +14,14 @@ const EPS = 1e-6;
 export const stepIn = (spec, unit) => (unit === 'in' ? spec.step.in : unit === 'cm' ? spec.step.mm / 10 : spec.step.mm);
 
 /** The value one press in direction `dir` (+1 / -1) gives: cur and the result in the document unit; null cur = unset. */
-export function nextValue(cur, dir, step, min = -Infinity, max = Infinity) {
+export function nextValue(cur, dir, step, min = -Infinity, max = Infinity, positive = false) {
   let n;
   if (cur == null) n = step;
   else {
     const q = cur / step, r = Math.round(q);
     n = (Math.abs(q - r) < EPS ? r + dir : (dir > 0 ? Math.ceil(q) : Math.floor(q))) * step;
   }
+  if (positive && n < step - EPS) return cur; // a size: a press never gives 0 (stays on the smallest positive multiple, or where it is when already below one step)
   return Math.min(max, Math.max(min, +n.toFixed(6)));
 }
 
@@ -39,7 +41,7 @@ export function attachStepper(input, spec, { unit, toDoc, read, commit }, { labe
   const stepOnce = (dir) => {
     if (input.disabled) return;
     const cur = read();
-    const next = nextValue(cur, dir, stepIn(spec, unit()), spec.min == null ? -Infinity : toDoc(spec.min), spec.max == null ? Infinity : toDoc(spec.max));
+    const next = nextValue(cur, dir, stepIn(spec, unit()), spec.min == null ? -Infinity : toDoc(spec.min), spec.max == null ? Infinity : toDoc(spec.max), spec.positive === true);
     if (cur == null || Math.abs(next - cur) > EPS) commit(next);
   };
 

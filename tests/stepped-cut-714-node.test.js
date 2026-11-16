@@ -61,8 +61,8 @@ const TAN10 = Math.tan((10 * Math.PI) / 180); // 0.17633 mm per mm of depth
   ok(T3.steps[0].outlines[0].walk, 'the interpolated ring keeps an exact walk');
   near(T3.steps.at(-1).depth, 8, 1e-12, 'the last step is at the floor');
   for (let i = 1; i < T3.steps.length; i++) ok(!sameOutline(T3.steps[i - 1].outlines[0].polygon, T3.steps[i].outlines[0].polygon), `drafted: every step differs from the one above (${i})`);
-  // the step never goes below STEP_DEPTH.minMm, and defaults to STEP_DEPTH.defaultMm
-  eq(steppedTerraces(slope, { kind: 'pocket', step: 0.01, depth: 8 }).steps.length, 80, `a step under ${STEP_DEPTH.minMm} mm is cut at ${STEP_DEPTH.minMm} mm`);
+  // no step depth: STEP_DEPTH.defaultMm (a small step is kept as given: TASK 736 removed the 0.1 mm floor; the drafted pocket's steps 0.0017 mm apart merge into one)
+  eq(steppedTerraces(slope, { kind: 'pocket', step: 0.01, depth: 8 }).steps.length, 1, 'a step of 0.01 mm is kept as given: the identical-outline merge leaves ONE step');
   eq(steppedTerraces(slope, { kind: 'pocket', depth: 8 }).steps.length, 8, `no step depth: ${STEP_DEPTH.defaultMm} mm`);
 }
 {
@@ -182,7 +182,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     eq(planReliefItems(app.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth), [2, 4, 6, 8], 'Review follows');
     eq(h.note(), ['Pocket 1 (8mm): 4 steps, 2 to 8 mm \u00b7 outlines 0.35 mm apart'], 'the note follows');
     h.setStep('0.01');
-    eq(CUT_PLAN.get(pk).stepDepth, STEP_DEPTH.minMm, 'a step under the minimum is stored as the minimum (0.1 mm)');
+    eq(CUT_PLAN.get(pk).stepDepth, 0.01, 'a step of 0.01 mm is stored as typed (no minimum)');
     app.key('z', { ctrl: true });
     eq(CUT_PLAN.get(pk).stepDepth, 2, 'Ctrl+Z: step 2 again');
     app.key('z', { ctrl: true });
@@ -201,7 +201,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     eq(h.menu().filter((id) => id.startsWith('stepped')), ['stepped-inside'], 'a countersunk hole: Stepped inside only');
     h.pick('stepped-inside');
     const [hk] = recAt('stepped-inside');
-    eq(CUT_PLAN.get(hk).stepDepth, STEP_DEPTH.minMm, `the next cut switched to a stepped type starts with the last step used (${STEP_DEPTH.minMm} mm, set above)`);
+    eq(CUT_PLAN.get(hk).stepDepth, 0.01, 'the next cut switched to a stepped type starts with the last step used (0.01 mm, set above)');
     h.setStep('1');
     eq(elems(exportOf(app)).filter((e) => e.type === 'inside').map((e) => `${e.tag} ${e.geom} @${e.depth}`), ['circle cx="60" cy="-40" r="4" @1.000 mm', 'circle cx="60" cy="-40" r="3" @19.000 mm'], 'export: an inside circle r 4 at 1 mm, then ONE inside circle r 3 at 19 mm');
 

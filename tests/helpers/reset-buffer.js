@@ -1,15 +1,13 @@
-// tests/helpers/reset-buffer.js — ONE declared test helper to clear both CURRENT_DESIGN_KEY and the local open-tabs working buffers (TASK 624).
+// tests/helpers/reset-buffer.js — ONE declared test helper to clear both CURRENT_DESIGN_KEY and the local open-tabs working buffer (TASK 624).
 // Tests that reset to a clean Untitled state call resetBuffer(store) instead of bare store.setCurrent(null), so a saved working buffer
-// does not reopen previous tabs or Untitled content on the next launch / restore. The buffer is kept PER APP (project-store.js
-// readBuffer / writeBuffer({ app })), so the reset clears each host's own one.
+// does not reopen previous tabs or Untitled content on the next launch / restore. TASK 684: the buffer is ONE for all apps (project-store.js
+// readBuffer / updateBuffer); reading it first merges away any TASK 624 per-app buffer (openTabsBuffer:<app>), so none survives the reset.
 
-/** The hosts that keep an open-tabs working buffer (each createDocumentBuffer's `app`). */
-export const BUFFER_APPS = ['sketchstudio', 'shaper', 'penplotter', 'trace'];
-
-/** Reset the current design pointer AND clear every app's open-tabs working buffer on `store`. */
+/** Reset the current design pointer AND clear the shared open-tabs working buffer on `store`. */
 export async function resetBuffer(store) {
   await store.setCurrent(null);
-  for (const app of BUFFER_APPS) await store.writeBuffer(null, { app });
+  await store.readBuffer({}); // migrates (and so removes) any legacy per-app buffer key
+  await store.updateBuffer(() => null);
 }
 
 /** The same reset in a live browser (a cdp-browser.js instance): it LEAVES the app page first (an open app page writes its tabs back to its

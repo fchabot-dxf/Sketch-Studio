@@ -109,6 +109,7 @@ export function createRouterAdapter({ local, getRemote, signedIn = () => false, 
     getMeta: (k) => local.getMeta(k),
     setMeta: (k, v) => local.setMeta(k, v),
     setMetaIfAbsent: (k, v) => local.setMetaIfAbsent(k, v),
+    updateMeta: (k, fn) => local.updateMeta(k, fn),
     /** Where a NEW project / design is created: always on Google Drive (TASK 624). Throws `cloud-auth` when signed out. */
     async newId(kind, projectId) {
       if (!signedIn()) throw new Error('cloud-auth');

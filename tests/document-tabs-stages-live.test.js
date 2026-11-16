@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 await (async () => {
@@ -39,7 +40,8 @@ await (async () => {
     const names = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
     const activeName = () => evalJs(`(document.querySelector('.sk-doctab.active .sk-doctab-name') || {}).textContent`);
     const stripVisible = () => evalJs(`(() => { const s = document.querySelector('.sk-doctabs'); const r = s && s.getBoundingClientRect(); return !!r && r.width > 300 && r.height === 33 && s.contains(document.elementFromPoint(r.left + 40, r.top + 12)); })()`);
-    const twoDesigns = async (app) => { // two stored designs; the page restores the last (Beta)
+    const twoDesigns = async (app) => { // two stored designs; the page restores the last (Beta). TASK 684: the open tabs are ONE list for all apps, so each app starts from none
+      await resetBufferLive(cdp);
       await navigate(url(app), 10000);
       await evalJs(CREATE_NAMED_DESIGN(app, 'Alpha')); await evalJs(CREATE_NAMED_DESIGN(app, 'Beta'));
       await navigate(url(app), 10000);

@@ -20,11 +20,11 @@ const { APPS, siteClosure } = require('./site-closure.cjs');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-// Each app's own Pages project (the advisor created sketch-shaper / sketch-penplotter / sketch-trace; sketch-studio is the existing one).
+// Each app's own Pages project (owner turn 1862: shaper-svg; penplotter = the owner's older Pen Plotter project, now this app; sketch-trace; sketch-studio is the existing one).
 const SITE_HOST = {
   sketchstudio: 'sketch-studio.pages.dev',
-  shaper: 'sketch-shaper.pages.dev',
-  penplotter: 'sketch-penplotter.pages.dev',
+  shaper: 'shaper-svg.pages.dev',
+  penplotter: 'penplotter.pages.dev',
   trace: 'sketch-trace.pages.dev',
 };
 

@@ -15,7 +15,7 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { solveGivingWay } from '#core/creation-placement.js';
 import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
 import { projectDimLabel } from '#core/dim-label.js';
-import { replaceParameters, usersOf, planChange, entryName, entryValue, writeEntry } from '#core/parameters.js';
+import { replaceParameters, usersOf, planChange, entryName, entryValue, writeEntry, reconcileKeptDimensions } from '#core/parameters.js';
 import { editPatterns, patternValuesRefusal } from '#core/pattern.js';
 import { patternSlotChanges, patternValuesIn, patternValueSlots } from '#core/pattern-values.js';
 import { OFFSET_ZERO_REASON, offsetValueRefusal } from '#core/offset.js';
@@ -235,6 +235,7 @@ export function applyParameterChange(state, plan, label = 'change parameter', op
   }
   replaceParameters(state.parameters, plan.paramsAfter);
   for (const e of plan.edits) writeEntry(e, { name: e.name, expression: e.expression });
+  reconcileKeptDimensions(state); // TASK 709 (O10): a deleted dimension's kept value nothing reads any more goes
   return { ok: true };
 }
 

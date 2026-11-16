@@ -2,7 +2,7 @@
 //   A. Shaper: entering the Vcarve tab in an Untitled creates NO vcarve record: no not-saved dot, closing asks nothing; setting a Vcarve value does: the dot, and closing asks THE question.
 //   B. Trace: a tab put aside keeps its photo as the compressed file (re-decoded when shown); switching back restores the photo, its mask, its trace and its scale. Prints the
 //      measured numbers: a 12 MP photo's decoded size (w x h x 4), its file size, the time to decode it again.
-//   C. Trace: a design that has a drawing but no photo, switched to while the Trace tab shows, opens in Edit with the toast "This design has no photo: showing its drawing in Edit".
+//   C. Trace: a design that has a drawing but no photo, switched to while the Trace tab shows, opens in Edit with the toast "This design has no photo: showing its drawing in Design".
 import assert from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,7 +122,7 @@ await (async () => {
     assert.strictEqual(await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`), 'trace', 'in the Trace tab');
     await clickEl('.sk-doctab-main', 2);
     await waitFor(`document.querySelector('.sk-header-tab.active').dataset.tab === 'edit'`, 'the drawing-only design opens in Edit');
-    await waitFor(`/This design has no photo: showing its drawing in Edit/.test(document.body.innerText)`, 'the toast');
+    await waitFor(`/This design has no photo: showing its drawing in Design/.test(document.body.innerText)`, 'the toast');
     assert.strictEqual(await evalJs(`document.querySelectorAll('#design-canvas .shape-elem').length`), 10, "and shows the design's drawing");
     console.log('trace: a drawing-only design switched to from the Trace tab opens in Edit with the toast');
     console.log('task-609-live: ok');

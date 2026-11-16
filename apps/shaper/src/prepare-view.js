@@ -519,7 +519,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         if (!t) return null;
         const prev = stockKeyOf(CUT_PLAN), mine = targetKey(t);
         if (prev && prev !== mine) { setFieldFor(prev, 'cutType', null); onNotice('Stock moved to this loop (there is one Stock per document)'); }
-        else if (!prev) onNotice('This closed loop is now the Stock: the board in Review');
+        else if (!prev) onNotice('This closed loop is now the Stock: the board in Export');
         lastRec = setFieldFor(mine, 'cutType', STOCK_TYPE_ID);
         refreshLook();
         return lastRec;

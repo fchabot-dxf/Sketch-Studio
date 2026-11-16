@@ -7,6 +7,7 @@ import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath
 import { mountExportStage } from './export-stage.js'; // PP-6: the Export stage (gcode + zip + pen-width sim)
 import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618: Undo / Redo of the showing stage (the keys and the header buttons share it)
 import { sketchHistory } from '#ui/input-manager.js';
+import { commonStage } from '#ui/stage-names.js'; // TASK 707: the common step names, declared once
 import { penHistory } from './history.js';
 import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
 
@@ -14,10 +15,10 @@ import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'D
 // nav AND (later) its mount(). Adding/reordering a stage is ONE edit here; the nav + the stage bodies + the router
 // all DERIVE from this list (single source of truth), so there are no hardcoded tabs or containers to keep in sync.
 export const STAGES = [
-  { id: 'design',   label: 'Design',   part: 'UNIFY-4', blurb: 'Draw + precise + constraint geometry — one #core store, pen colors.' },
+  commonStage('design', 'design', { part: 'UNIFY-4', blurb: 'Draw + precise + constraint geometry — one #core store, pen colors.' }),
   // MERGE-1: Fill folded into Toolpath (one shared state.toolpaths record) — pipeline is Design -> Toolpath -> Export.
-  { id: 'toolpath', label: 'Toolpath', part: 'PP-2', blurb: 'Pen, fill/outline, order, optimize, up/down, feeds.' },
-  { id: 'export',   label: 'Export',   part: 'PP-2', blurb: 'G-code per pen + a zip.' },
+  commonStage('prepare', 'toolpath', { part: 'PP-2', blurb: 'Pen, fill/outline, order, optimize, up/down, feeds.' }), // TASK 707: shown as "Prepare"; the id stays 'toolpath'
+  commonStage('export', 'export', { part: 'PP-2', blurb: 'G-code per pen + a zip.' }),
 ];
 export const STAGE_KEY = 'penplotter-stage'; // persist the active stage across reloads (mirrors Shaper's MODE_KEY)
 

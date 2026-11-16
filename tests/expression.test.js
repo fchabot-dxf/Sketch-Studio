@@ -34,6 +34,9 @@ const ROWS = [
   ['2 cm', '', [20, 1, 0]], ['0.5cm', '', [5, 1, 0]],
   ['1 in', '', [25.4, 1, 0]], ['0.25in', '', [6.35, 1, 0]], ['1"', '', [25.4, 1, 0]], ['1 "', '', [25.4, 1, 0]], ['2 IN', '', [50.8, 1, 0]],
   ['30 deg', '', [30, 0, 1]], ['30deg', '', [30, 0, 1]], ['30 DEG', '', [30, 0, 1]],
+  // TASK 694: the degree sign is a unit of the table (an alias of deg, like " of in): wherever deg works
+  ['90°', 'A', [90, 0, 1], '90 deg'], ['-90 °', 'A', [-90, 0, 1], '-90 deg'], ['45° * 2', 'A', [90, 0, 1], '45 deg * 2'], ['ang + 10°', '', [55, 0, 1], 'ang + 10 deg'],
+  ['(1/2)°', '', [0.5, 0, 1]], ['90°', 'L', 'UNIT_MISMATCH@0,3'], ['90°°', '', 'SYNTAX@3,4'],
   ['1 rad', '', [180 / Math.PI, 0, 1]], ['PI rad', '', [180, 0, 1]],
   ['(1 + 2) mm', '', [3, 1, 0]], ['(1/2) in', '', [12.7, 1, 0]], ['holes mm', '', [4, 1, 0]], ['width mm', '', 'UNIT_MISMATCH@0,8'],
   // ── FRACTION_UNIT (O20) ──
@@ -246,6 +249,7 @@ for (const [name, kind, want] of NAMES) {
 {
   assert(UNIT_TABLE.mm.f === 1 && UNIT_TABLE.cm.f === 10 && UNIT_TABLE.in.f === 25.4, 'length factors');
   assert(UNIT_TABLE['"'].alias === 'in', '" is an alias of in');
+  assert(UNIT_TABLE['°'].alias === 'deg' && unitInfo('°').name === 'deg' && unitInfo('°').kind === 'angle', '° is an alias of deg (task 694)');
   assert(UNIT_TABLE.deg.kind === 'angle' && UNIT_TABLE.deg.f === 1 && UNIT_TABLE.rad.f === 180 / Math.PI, 'angle factors (base degrees)');
   assert(unitInfo('"').name === 'in' && unitInfo('IN').f === 25.4 && unitInfo('RAD').kind === 'angle' && unitInfo('furlong') === null && unitInfo(5) === null, 'unitInfo');
   assert(basePer('in') === 25.4 && basePer('cm') === 10 && basePer('mm') === 1 && basePer('zz') === 1, 'basePer reads the table');

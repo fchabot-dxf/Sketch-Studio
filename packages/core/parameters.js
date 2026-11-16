@@ -4,6 +4,11 @@
 //   state.parameters   an array of USER parameters { name, unit, expression, comment? } (one list per DOCUMENT: decision O1).
 //   a dimension        a DISTANCE, ANGLE or OFFSET (task 650: the offset distance) constraint; it carries `name` (always: d1, d2, ...) and `expression` (only when a formula
 //                      was typed). `value` stays the solver's truth; this module only computes what it SHOULD be.
+//   a pattern value    TASK 694 (Fusion: a sketch pattern's quantity / distance / total angle are model parameters d<n>): each declared value of a sketch
+//                      pattern (#core/pattern-values.js PATTERN_VALUES) is a dimension ENTRY of its own, named and driven exactly like a dimension.
+//   ENTRY              { c, slot }: slot null = the dimension constraint `c` itself; a slot = that value of the pattern `c`. dimensionEntries lists
+//                      them all in constraint order (a pattern's values in declared order); entryName / entryValue / entryExpression / entryKind read
+//                      one; writeEntry is the ONE writer of a name / formula. A count's kind is 'count' (a plain number, no unit).
 //
 // The dependency graph is built fresh on demand (never stored): node = every user parameter + every DRIVING dimension; edge = a
 // name an expression reads. REFERENCE (driven) dimensions are not nodes and a formula cannot read one (decision O9).
@@ -13,6 +18,7 @@
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { unitInfo, format as formatUnit } from '#core/units.js';
 import { parseInput, evaluate, canonicalize, dependencies, print, validateName, foldName, functionTable } from '#core/expression.js';
+import { patternValueSlots, patternSlot, patternSlotValue } from '#core/pattern-values.js';
 
 // ── DECLARED DECISIONS (docs/PARAMETERS-DESIGN.md owner table). Each switch is ONE constant. ──
 export const AUTO_NAME_PREFIX = 'd';                  // O22  the automatic dimension name is prefix + number; the number is (highest existing dN) + 1,
@@ -25,15 +31,73 @@ export const isDimension = (c) => !!c && (c.type === CONSTRAINT_TYPES.DISTANCE |
 export const isReferenceDimension = (c) => !!c && !!(c.isDriven || c.driven);
 const dimensionKind = (c) => (c.type === CONSTRAINT_TYPES.ANGLE ? 'angle' : 'length');
 
-// nextDimensionName(constraints) → 'd' + (highest dN among the constraints' names + 1)  (O22)
+// ── the dimension ENTRIES (TASK 694): a dimension constraint, or one value of a sketch pattern ──
+/** Every entry of `constraints` in constraint order: { c, slot } (slot null = the dimension `c`; else that pattern value of `c`). */
+export function dimensionEntries(constraints) {
+  const out = [];
+  for (const c of constraints || []) {
+    if (isDimension(c)) out.push({ c, slot: null });
+    else for (const s of patternValueSlots(c)) out.push({ c, slot: s.slot });
+  }
+  return out;
+}
+const slotOf = (e) => (e && e.slot ? e.slot : null);
+export const entryName = (e) => (slotOf(e) ? ((e.c.names && e.c.names[e.slot]) || undefined) : e.c.name);
+export const entryExpression = (e) => (slotOf(e) ? ((e.c.expressions && e.c.expressions[e.slot]) || null) : (e.c.expression || null));
+export const entryValue = (e) => (slotOf(e) ? patternSlotValue(e.c, e.slot) : e.c.value);
+export const entryKind = (e) => (slotOf(e) ? (patternSlot(e.c, e.slot) || { kind: 'length' }).kind : dimensionKind(e.c));
+const isReferenceEntry = (e) => !slotOf(e) && isReferenceDimension(e.c);
+/** The unit an entry's value is shown in: '' for a count, degrees for an angle, the document unit for a length. */
+export const entryUnit = (e, docUnit) => { const k = entryKind(e); return k === 'count' ? '' : k === 'angle' ? 'deg' : docUnit; };
+// the evaluator's target of an entry kind (#core/expression.js: a count is a plain number, 'none')
+const targetOf = (kind) => (kind === 'count' ? 'none' : kind);
+// a count that is a whole number but for the floating-point noise of its formula (0.7 * 10 = 7.000000000000001) is that whole number; any
+// other count stays as computed (2.5 stays 2.5: #core/pattern.js patternValuesRefusal refuses it)
+const countValue = (v) => (Number.isFinite(v) && Math.abs(v - Math.round(v)) <= SAME_VALUE * Math.max(1, Math.abs(v)) ? Math.round(v) : v);
+/**
+ * THE writer of an entry's name and formula (expression null = none). A pattern's `names` / `expressions` objects are replaced, never changed in
+ * place (the undo snapshot copies a constraint shallowly).
+ */
+export function writeEntry(e, { name, expression }) {
+  if (!slotOf(e)) {
+    if (name !== undefined) e.c.name = name;
+    if (expression) e.c.expression = expression; else delete e.c.expression;
+    return;
+  }
+  if (name !== undefined) e.c.names = { ...(e.c.names || {}), [e.slot]: name };
+  const ex = { ...(e.c.expressions || {}) };
+  if (expression) ex[e.slot] = expression; else delete ex[e.slot];
+  if (Object.keys(ex).length) e.c.expressions = ex; else delete e.c.expressions;
+}
+
+// nextDimensionName(constraints) → 'd' + (highest dN among the constraints' names and their pattern values' names + 1)  (O22)
 export function nextDimensionName(constraints) {
   let highest = 0;
   const re = new RegExp(`^${AUTO_NAME_PREFIX}(\\d+)$`);
+  const see = (name) => { const m = typeof name === 'string' ? re.exec(name) : null; if (m) highest = Math.max(highest, parseInt(m[1], 10)); };
   for (const c of constraints || []) {
-    const m = c && typeof c.name === 'string' ? re.exec(c.name) : null;
-    if (m) highest = Math.max(highest, parseInt(m[1], 10));
+    if (!c) continue;
+    see(c.name);
+    for (const s of patternValueSlots(c)) see(c.names && c.names[s.slot]);
   }
   return `${AUTO_NAME_PREFIX}${highest + 1}`;
+}
+/**
+ * TASK 694: give every value of the pattern `c` that has no name the next automatic one (O22), in declared order (Fusion's: quantity one / two,
+ * distance one / two; quantity, total angle). `constraints` = the document's (with or without `c`). The ONE naming of pattern values: a new
+ * pattern (#core/pattern.js applyPattern), a loaded document's patterns saved before task 694 (#core/document.js, after every constraint is
+ * loaded, so a name is never one a later constraint of the file carries) and a pasted pattern (#ui/clipboard.js). → the names given.
+ */
+export function namePatternValues(constraints, c) {
+  const given = [];
+  const all = (constraints || []).includes(c) ? constraints : [...(constraints || []), c];
+  for (const s of patternValueSlots(c)) {
+    if (c.names && c.names[s.slot]) continue;
+    const name = nextDimensionName(all);
+    c.names = { ...(c.names || {}), [s.slot]: name };
+    given.push(name);
+  }
+  return given;
 }
 
 // ── the ONE copy / restore of the parameter list (document save/load, undo snapshot, cancelUndoGroup all use these) ──
@@ -56,8 +120,8 @@ export const parameterKind = (p) => { const u = p && p.unit ? unitInfo(p.unit) :
 function modelOf(state) {
   return {
     params: cloneParameters(state.parameters),
-    dims: (state.constraints || []).filter(isDimension).map((c) => ({
-      c, name: c.name, kind: dimensionKind(c), driven: isReferenceDimension(c), value: c.value, expression: c.expression || null,
+    dims: dimensionEntries(state.constraints).map((e) => ({
+      c: e.c, slot: e.slot, name: entryName(e), kind: entryKind(e), driven: isReferenceEntry(e), value: entryValue(e), expression: entryExpression(e),
     })),
   };
 }
@@ -132,7 +196,7 @@ function graphOf(model) {
 // ── evaluation ──
 const quantityOfDimension = (d) => ({ v: d.value, L: d.kind === 'length' ? 1 : 0, A: d.kind === 'angle' ? 1 : 0 });
 function contextOf(node, docUnit) {
-  if (node.type === 'dimension') return { target: node.ref.kind, unit: docUnit };
+  if (node.type === 'dimension') return { target: targetOf(node.ref.kind), unit: docUnit };
   const kind = parameterKind(node.ref);
   const u = node.ref.unit ? unitInfo(node.ref.unit) : null;
   return { target: kind, unit: u && kind === 'length' ? u.name : docUnit, angleUnit: u && kind === 'angle' ? u.name : undefined };
@@ -232,14 +296,17 @@ function numberText(base, unit) {
 
 // ── planChange ──
 // planChange(state, change, { unit }) → { ok:true, paramsAfter, edits, affected, solve, created?, named? } | { ok:false, code, message, ... }
-//   Pure: nothing in `state` is touched. `edits` lists, per affected dimension (constraint order), what the batch commit must write:
-//   { c, name, value (base mm / degrees), expression (string | null) } — only dimensions whose value, expression or name changes.
+//   Pure: nothing in `state` is touched. `edits` lists, per affected dimension ENTRY (constraint order), what the batch commit must write:
+//   { c, slot, name, value (base mm / degrees / a count), expression (string | null) } — only entries whose value, expression or name changes
+//   (slot null = the dimension `c`; else that value of the pattern `c`, TASK 694).
 //   `affected` = every dimension that depends (directly or through other formulas) on what changed, plus the one edited.
 //   `solve` = some value changes (renames and comment edits skip the solve).
 //   change: { type:'setDimension', name, text }          text: a number, a formula, or  name = expr: an existing USER parameter's name sets that
 //                                                        parameter (O4); any other free name NAMES THIS DIMENSION (owner ruling, task 677, Fusion
 //                                                        measured): the dimension is renamed (every formula reading it follows) and takes expr
 //                                                        (`named` = the new name); another dimension's name is NAME_TAKEN
+//           { type:'setValues', values:[{ name, value }] } TASK 694: dimensions set to plain numbers (base units / a count), their formulas
+//                                                        replaced (a pattern dialog's spinner, drag arrow or distribution switch)
 //           { type:'setParameter', name, text }          the Expression cell of a user parameter (no "=")
 //           { type:'createParameter', name, unit, text, comment? }
 //           { type:'renameParameter' | 'renameDimension', name, to }
@@ -283,7 +350,7 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
       if (d.driven) return { ok: false, code: 'REFERENCE_DIM', message: `${d.name} is a reference dimension` };
       const parsed = parseInput(change.text);
       if (!parsed.ok) return parsed;
-      const dctx = { target: d.kind, unit };
+      const dctx = { target: targetOf(d.kind), unit };
       let newExpression;
       const existing = parsed.assign ? paramOf(parsed.assign.name) : null;
       if (existing) { // O4: `name = expr` where name is a USER parameter sets that parameter; this dimension then reads it
@@ -312,6 +379,16 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
       }
       d.expression = newExpression;
       roots.add(foldName(d.name));
+      break;
+    }
+    case 'setValues': {
+      for (const { name, value } of change.values || []) {
+        const d = dimOf(name);
+        if (!d) return noSuch('dimension', name);
+        if (d.driven) return { ok: false, code: 'REFERENCE_DIM', message: `${d.name} is a reference dimension` };
+        d.value = Number(value); d.expression = null;
+        roots.add(foldName(d.name));
+      }
       break;
     }
     case 'setParameter': {
@@ -393,13 +470,13 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
     const touched = closure.has(key);
     if (touched) affected.push(d.name);
     const v = e1.values.get(key);
-    const value = v ? v.v : d.value;
-    const before = d.c;
-    const valueChanged = !(Math.abs(value - before.value) <= SAME_VALUE * Math.max(1, Math.abs(value)));
-    const expressionChanged = (d.expression || null) !== (before.expression || null);
-    const nameChanged = d.name !== before.name;
+    const value = d.kind === 'count' ? countValue(v ? v.v : d.value) : (v ? v.v : d.value);
+    const entry = { c: d.c, slot: d.slot };
+    const valueChanged = !(Math.abs(value - entryValue(entry)) <= SAME_VALUE * Math.max(1, Math.abs(value)));
+    const expressionChanged = (d.expression || null) !== entryExpression(entry);
+    const nameChanged = d.name !== entryName(entry);
     if (valueChanged || expressionChanged || nameChanged) {
-      edits.push({ c: before, name: d.name, value, expression: d.expression || null });
+      edits.push({ c: d.c, slot: d.slot, name: d.name, value, expression: d.expression || null });
       if (valueChanged) solve = true;
     }
   }
@@ -427,7 +504,7 @@ export function freezeReferencesTo(state, removedNames, { unit = 'mm' } = {}) {
       const p = (state.parameters || []).find((x) => x.name === n.name);
       p.expression = numberText(q.v, p.unit);
     } else {
-      delete n.ref.c.expression;
+      writeEntry({ c: n.ref.c, slot: n.ref.slot }, { expression: null });
     }
   }
   return { ok: true, frozen: hit.map((n) => n.name) };
@@ -453,19 +530,22 @@ const withUnit = (text, unit) => (unit ? `${text} ${unit}` : text);
 //   { ok:true, hint, plan, kind:'value'|'name'|'set', name?, others:[dimension names also changed] }
 //     hint: '= 60.0 mm'  |  'names it width = 120.0 mm' (task 677: `width = 120` names THIS dimension)  |  'sets width 120.0 -> 150.0 mm, also changes d3, d7'
 // `plan` is the planChange result applyParameterChange commits (ONE path: the box commits THIS plan, it never builds a second one).
-export function previewDimensionInput(state, c, text, { unit = 'mm' } = {}) {
-  if (!isDimension(c)) return { ok: false, code: 'SYNTAX', hint: 'not a dimension' };
+// TASK 694: `slot` = a value of the pattern `c` (its dialog boxes and its Parameters rows go through here too); `own` = the entry's name now.
+export function previewDimensionInput(state, c, text, { unit = 'mm', slot = null } = {}) {
+  const entry = { c, slot };
+  if (slot ? !patternSlot(c, slot) : !isDimension(c)) return { ok: false, code: 'SYNTAX', hint: 'not a dimension' };
   if (String(text == null ? '' : text).trim() === '') return { ok: false, empty: true, hint: '' };
-  if (!c.name) return { ok: false, code: 'UNKNOWN_NAME', hint: 'this dimension has no name' };
-  const plan = planChange(state, { type: 'setDimension', name: c.name, text: String(text) }, { unit });
+  const own = entryName(entry);
+  if (!own) return { ok: false, code: 'UNKNOWN_NAME', hint: 'this dimension has no name' };
+  const plan = planChange(state, { type: 'setDimension', name: own, text: String(text) }, { unit });
   if (!plan.ok) return { ok: false, code: plan.code, hint: plan.message, at: plan.at, plan };
-  const mine = plan.edits.find((e) => e.c === c);
-  const myValue = mine ? mine.value : c.value;
-  const shown = dimensionUnit(c, unit);
-  if (plan.named && plan.named !== c.name) { // the dimension is renamed (owner ruling, task 677): it keeps being a dimension, now called plan.named
+  const mine = plan.edits.find((e) => e.c === c && (e.slot || null) === slot);
+  const myValue = mine ? mine.value : entryValue(entry);
+  const shown = entryUnit(entry, unit);
+  if (plan.named && plan.named !== own) { // the dimension is renamed (owner ruling, task 677): it keeps being a dimension, now called plan.named
     const others = plan.affected.filter((n) => n !== plan.named);
     return {
-      ok: true, kind: 'name', name: plan.named, others, plan, value: myValue,
+      ok: true, kind: 'name', name: plan.named, own, others, plan, value: myValue,
       hint: `names it ${plan.named} = ${withUnit(quantityText(myValue, shown), shown)}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
     };
   }
@@ -477,14 +557,14 @@ export function previewDimensionInput(state, c, text, { unit = 'mm' } = {}) {
     const qAfter = evAfter.values && evAfter.values.get(after.name);
     const newText = withUnit(quantityText(qAfter ? qAfter.v : NaN, after.unit), after.unit);
     const before = evaluateAll(state, { unit }).values.get(after.name);
-    const others = plan.affected.filter((n) => n !== c.name);
+    const others = plan.affected.filter((n) => n !== own);
     const oldText = quantityText(before ? before.v : NaN, after.unit);
     return {
-      ok: true, kind: 'set', name: after.name, others, plan, value: myValue,
+      ok: true, kind: 'set', name: after.name, own, others, plan, value: myValue,
       hint: `sets ${after.name} ${oldText} -> ${newText}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
     };
   }
-  return { ok: true, kind: 'value', others: [], plan, value: myValue, hint: `= ${withUnit(quantityText(myValue, shown), shown)}` };
+  return { ok: true, kind: 'value', own, others: [], plan, value: myValue, hint: `= ${withUnit(quantityText(myValue, shown), shown)}` };
 }
 
 // ── autocomplete (OWNER REQUIREMENT R3, docs/PARAMETERS-DESIGN.md section E): ONE pure function; the DOM list is a thin view over it ──
@@ -520,11 +600,12 @@ export function completionsFor(state, text, caret, { unit = 'mm', exclude = [] }
     candidates.push({ kind: 'parameter', name: p.name, insert: p.name, value: q ? quantityText(q.v, p.unit) : '', unit: p.unit || '', detail: '' });
   }
   if (!leftOfAssign) {
-    for (const c of (state && state.constraints) || []) {
-      if (!isDimension(c) || isReferenceDimension(c) || !c.name) continue;
-      const q = values.get(c.name);
-      const u = dimensionUnit(c, unit);
-      candidates.push({ kind: 'dimension', name: c.name, insert: c.name, value: q ? quantityText(q.v, u) : '', unit: u, detail: '' });
+    for (const e of dimensionEntries(state && state.constraints)) { // TASK 694: a pattern's values too
+      const name = entryName(e);
+      if (isReferenceEntry(e) || !name) continue;
+      const q = values.get(name);
+      const u = entryUnit(e, unit);
+      candidates.push({ kind: 'dimension', name, insert: name, value: q ? quantityText(q.v, u) : '', unit: u, detail: '' });
     }
     for (const f of functionTable()) {
       const args = f.max === Infinity ? 'a; b; ...' : f.min === 1 ? 'x' : 'a; b';

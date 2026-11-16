@@ -1,0 +1,347 @@
+{
+ "version": 3,
+ "geometry": {
+  "joints": [
+   [
+    "j_origin",
+    {
+     "x": 0,
+     "y": 0,
+     "fixed": true,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j1_1794806032010",
+    {
+     "x": 0,
+     "y": -40,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j2_1794806032017",
+    {
+     "x": 10,
+     "y": -40,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j3_1794806032017",
+    {
+     "x": 20,
+     "y": -40,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j4_1794806032017",
+    {
+     "x": 0,
+     "y": -60,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j5_1794806032017",
+    {
+     "x": 40,
+     "y": -60,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j6_1794806032021",
+    {
+     "x": 5,
+     "y": 0,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j7_1794806032021",
+    {
+     "x": 4.330127018922194,
+     "y": -2.4999999999999996,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j8_1794806032021",
+    {
+     "x": 2.5000000000000004,
+     "y": -4.330127018922193,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j9_1794806032021",
+    {
+     "x": 3.061616997868383e-16,
+     "y": -5,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ]
+  ],
+  "shapes": [
+   {
+    "id": "s1794806032010_1",
+    "type": "circle",
+    "joints": [
+     "j1_1794806032010"
+    ],
+    "radius": 2,
+    "isConstruction": false,
+    "sketchId": "sketch-1"
+   },
+   {
+    "type": "circle",
+    "radius": 2,
+    "isConstruction": false,
+    "id": "s1794806032017_2_p0",
+    "joints": [
+     "j2_1794806032017"
+    ],
+    "sketchId": "sketch-1"
+   },
+   {
+    "type": "circle",
+    "radius": 2,
+    "isConstruction": false,
+    "id": "s1794806032017_3_p0",
+    "joints": [
+     "j3_1794806032017"
+    ],
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s1794806032017_4",
+    "type": "line",
+    "joints": [
+     "j4_1794806032017",
+     "j5_1794806032017"
+    ],
+    "isConstruction": false,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s1794806032021_5",
+    "type": "circle",
+    "joints": [
+     "j6_1794806032021"
+    ],
+    "radius": 1,
+    "isConstruction": false,
+    "sketchId": "sketch-1"
+   },
+   {
+    "type": "circle",
+    "radius": 1,
+    "isConstruction": false,
+    "id": "s1794806032021_6_p0",
+    "joints": [
+     "j7_1794806032021"
+    ],
+    "sketchId": "sketch-1"
+   },
+   {
+    "type": "circle",
+    "radius": 1,
+    "isConstruction": false,
+    "id": "s1794806032021_7_p0",
+    "joints": [
+     "j8_1794806032021"
+    ],
+    "sketchId": "sketch-1"
+   },
+   {
+    "type": "circle",
+    "radius": 1,
+    "isConstruction": false,
+    "id": "s1794806032021_8_p0",
+    "joints": [
+     "j9_1794806032021"
+    ],
+    "sketchId": "sketch-1"
+   }
+  ],
+  "constraints": [
+   {
+    "type": "distance",
+    "shape": "s1794806032010_1",
+    "value": 2,
+    "offset": 4.242640687119286,
+    "isRadius": true,
+    "isDriven": false,
+    "driven": false,
+    "name": "d1",
+    "glyphPos": {
+     "x": 3,
+     "y": -43
+    },
+    "labelAngle": -0.7853981633974483,
+    "__newlyPlaced": false,
+    "__placing": false
+   },
+   {
+    "type": "rectangularPattern",
+    "sources": {
+     "shapes": [
+      "s1794806032010_1"
+     ],
+     "points": [
+      "j1_1794806032010"
+     ],
+     "shapeJoints": [
+      [
+       0
+      ]
+     ]
+    },
+    "directions": [
+     null,
+     null
+    ],
+    "quantity": [
+     3,
+     1
+    ],
+    "distance": [
+     10,
+     10
+    ],
+    "distanceType": "spacing",
+    "symmetric": [
+     false,
+     false
+    ],
+    "suppressed": [],
+    "instances": [
+     {
+      "at": [
+       1,
+       0
+      ],
+      "shapes": [
+       "s1794806032017_2_p0"
+      ],
+      "joints": [
+       "j2_1794806032017"
+      ]
+     },
+     {
+      "at": [
+       2,
+       0
+      ],
+      "shapes": [
+       "s1794806032017_3_p0"
+      ],
+      "joints": [
+       "j3_1794806032017"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "distance",
+    "joints": [
+     "j4_1794806032017",
+     "j5_1794806032017"
+    ],
+    "value": 40,
+    "offset": -10,
+    "isRadius": false,
+    "isDriven": false,
+    "driven": false,
+    "dimMode": "horizontal",
+    "name": "d2",
+    "__placing": false,
+    "__newlyPlaced": false,
+    "glyphPos": {
+     "x": 20,
+     "y": -70
+    }
+   },
+   {
+    "type": "circularPattern",
+    "sources": {
+     "shapes": [
+      "s1794806032021_5"
+     ],
+     "points": [
+      "j6_1794806032021"
+     ],
+     "shapeJoints": [
+      [
+       0
+      ]
+     ]
+    },
+    "centre": "j_origin",
+    "quantity": 4,
+    "angle": 90,
+    "symmetric": false,
+    "suppressed": [],
+    "instances": [
+     {
+      "at": [
+       1
+      ],
+      "shapes": [
+       "s1794806032021_6_p0"
+      ],
+      "joints": [
+       "j7_1794806032021"
+      ]
+     },
+     {
+      "at": [
+       2
+      ],
+      "shapes": [
+       "s1794806032021_7_p0"
+      ],
+      "joints": [
+       "j8_1794806032021"
+      ]
+     },
+     {
+      "at": [
+       3
+      ],
+      "shapes": [
+       "s1794806032021_8_p0"
+      ],
+      "joints": [
+       "j9_1794806032021"
+      ]
+     }
+    ]
+   }
+  ],
+  "sketches": [
+   {
+    "id": "sketch-1",
+    "name": "Sketch 1",
+    "visible": true
+   }
+  ],
+  "activeSketchId": "sketch-1",
+  "groups": [],
+  "profiles": [],
+  "parameters": [],
+  "vcarves": []
+ },
+ "hosts": {}
+}

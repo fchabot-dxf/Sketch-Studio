@@ -125,6 +125,9 @@ export function deserializeDocument(doc, state) {
   state.shapes.length = 0;
   state.shapes.push(...(g.shapes || []).map((s) => ({ ...withoutDragTarget(s), joints: s.joints ? [...s.joints] : [] })));
 
+  // the parameter list first (TASK 709): a dimension named while loading (a version-1 file) must not take a kept value's name (O10)
+  if (Array.isArray(state.parameters)) replaceParameters(state.parameters, g.parameters);
+
   state.constraints.length = 0;
   const scene = sceneJoints(state.joints);
   for (const c of (g.constraints || [])) {
@@ -141,7 +144,7 @@ export function deserializeDocument(doc, state) {
   }
   // TASK 694 (migration): a pattern saved before its values were named gets their names now, in constraint order, after the whole file is
   // loaded (a name is never one a later constraint of the file carries). Names only: no value, no geometry changes.
-  for (const c of state.constraints) namePatternValues(state.constraints, c);
+  for (const c of state.constraints) namePatternValues(state.constraints, c, state.parameters);
 
   if (Array.isArray(state.sketches)) {
     state.sketches.length = 0;
@@ -158,7 +161,6 @@ export function deserializeDocument(doc, state) {
     state.profiles.length = 0;
     state.profiles.push(...cloneProfiles(g.profiles || []));
   }
-  if (Array.isArray(state.parameters)) replaceParameters(state.parameters, g.parameters);
   if (Array.isArray(state.vcarves)) {
     state.vcarves.length = 0;
     state.vcarves.push(...(g.vcarves || []).map((v) => ({ ...v, vbit: v.vbit ? { ...v.vbit } : undefined })));

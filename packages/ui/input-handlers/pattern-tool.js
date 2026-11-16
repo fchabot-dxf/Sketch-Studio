@@ -301,7 +301,7 @@ function setSlotText(slot, text, el) {
   let why = null;
   if (!_s.c) {
     const draft = { ...currentRec() };
-    namePatternValues(state.constraints, draft);
+    namePatternValues(state.constraints, draft, state.parameters);
     const pv = previewDimensionInput({ parameters: state.parameters, constraints: [...state.constraints, draft] }, draft, text, { unit, slot });
     const bad = pv.ok ? patternPlanRefusal(pv.plan) : null;
     why = !pv.ok ? (pv.hint || 'type a value') : bad ? bad.message : null;

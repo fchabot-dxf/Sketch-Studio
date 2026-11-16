@@ -519,7 +519,7 @@ export function applyPattern(state, type, objects, values) {
   const why = patternValuesRefusal(rec) || placementRefusal(state, rec);
   if (why) return { ok: false, reason: why };
   state.constraints.push(rec);
-  namePatternValues(state.constraints, rec);
+  namePatternValues(state.constraints, rec, state.parameters);
   syncPattern(state, rec);
   return { ok: true, constraint: rec, shapes: rec.instances.flatMap((i) => i.shapes), joints: rec.instances.flatMap((i) => i.joints) };
 }

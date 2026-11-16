@@ -6,7 +6,8 @@
 //   `pitch * 2`; pitch = 30 mm in the table -> the pattern AND d1 move, ONE undo step; 2.5 typed into the quantity is refused with THE pattern
 //   rule's message under the row, the table keeps 4; the canvas label shows no fx (pitch is named, not a formula).
 //   circular: a user angle parameter `turn` = -90 deg (+ Add), a new line picked, the Circular Pattern tool, its centre picked on the line's
-//   end, Distribution Angle, `turn` typed into the Angle box, OK -> the copies run CLOCKWISE (task 691), the label reads fx: 3 x -90.
+//   end, Distribution Angle, `turn` typed into the Angle box; `-90°` (the degree sign) typed there is -90; `turn` again; OK -> the copies run
+//   CLOCKWISE (task 691), the label reads fx: 3 x -90.
 // Cropped screenshots (table + canvas) in .evidence/694/.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -32,7 +33,7 @@ await (async () => {
   const Enter = async () => { await key('Enter', 'Enter', 13, 0, '\r'); await sleep(500); };
   const Tab = () => key('Tab', 'Tab', 9);
   const selectAll = () => key('a', 'KeyA', 65, 2);
-  const SIGN = { ' ': ['Space', 32], '=': ['Equal', 187], '*': ['Digit8', 56], '-': ['Minus', 189], '.': ['Period', 190], '/': ['Slash', 191] };
+  const SIGN = { ' ': ['Space', 32], '=': ['Equal', 187], '*': ['Digit8', 56], '-': ['Minus', 189], '.': ['Period', 190], '/': ['Slash', 191], '°': ['Unidentified', 0] };
   const type = async (text) => {
     for (const ch of text) {
       const [code, vk] = /[a-z]/i.test(ch) ? ['Key' + ch.toUpperCase(), ch.toUpperCase().charCodeAt(0)] : /\d/.test(ch) ? ['Digit' + ch, ch.charCodeAt(0)] : SIGN[ch];
@@ -194,6 +195,15 @@ await (async () => {
     await pointer(await toScreen(0, 0));
     await waitFor(`window.__designController.state.constraints.some((c) => c.type === 'circularPattern')`, `${tag}: the centre picked: the live pattern`);
     await closeDialogToasts();
+    // the degree sign (the shared parser's unit, task 694 fix): -90° typed into the Angle box is -90 degrees, a plain number (no formula)
+    const angleBox = '.sk-pattern-dialog [data-field="Angle"]';
+    await press(angleBox); await selectAll(); await type('-90°');
+    let k0 = await pat('circularPattern');
+    assert.ok(await evalJs(`document.querySelector('${angleBox}').value`) === '-90°' && await evalJs(`document.querySelector('${angleBox}').getAttribute('aria-invalid')`) === 'false'
+      && k0.angle === -90 && !(k0.expressions && k0.expressions.angle), `${tag}: '-90°' typed into the Angle box: -90, no formula (${JSON.stringify(k0)})`);
+    await selectAll(); await type('turn');
+    k0 = await pat('circularPattern');
+    assert.ok(k0.expressions && k0.expressions.angle === 'turn', `${tag}: turn typed again drives it`);
     await press('.sk-pattern-dialog .sk-pat-ok');
     await waitFor(`!document.querySelector('.sk-pattern-dialog:not([hidden])')`, `${tag}: OK`);
     const k = await pat('circularPattern');

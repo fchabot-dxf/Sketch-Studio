@@ -154,7 +154,7 @@ await (async () => {
 
       await setBraceField('thickD', 250);
       let stD = await braceErrState();
-      assert.match(stD.err, /Right-angle brace cannot be drawn with these values/, `[${kind}] thickD=250 shows refusal`);
+      assert.match(stD.err, / thickness is too big/, `[${kind}] thickD=250 shows refusal`);
       assert.strictEqual(stD.disabled, true, `[${kind}] thickD=250 disables Open`);
       assert.ok(stD.texts.includes('38'), `[${kind}] thickD=250 keeps last good preview`);
       await shot(`after-${kind}-brace-thickD-250-refused.png`, '.sk-tp-panel', 4);
@@ -167,13 +167,13 @@ await (async () => {
       if (!phone) {
         await setBraceField('thickV', 350);
         let stV = await braceErrState();
-        assert.match(stV.err, /Right-angle brace cannot be drawn with these values/, '[desktop] thickV=350 refused');
+        assert.match(stV.err, / thickness is too big/, '[desktop] thickV=350 refused');
         assert.strictEqual(stV.disabled, true, '[desktop] thickV=350 disables Open');
         await setBraceField('thickV', 38);
 
         await setBraceField('thickH', 600);
         let stH = await braceErrState();
-        assert.match(stH.err, /Right-angle brace cannot be drawn with these values/, '[desktop] thickH=600 refused');
+        assert.match(stH.err, / thickness is too big/, '[desktop] thickH=600 refused');
         assert.strictEqual(stH.disabled, true, '[desktop] thickH=600 disables Open');
         await setBraceField('thickH', 38);
       }

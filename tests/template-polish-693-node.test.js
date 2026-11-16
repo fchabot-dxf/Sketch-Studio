@@ -40,7 +40,7 @@ for (const [label, params] of [
 ]) {
   assert.throws(
     () => buildTemplate(brace, params),
-    /Right-angle brace cannot be drawn with these values/,
+    / thickness is too big/,
     `brace refuses ${label}`
   );
 }
@@ -158,18 +158,18 @@ try {
     inp.focus(); inp.value = ''; app.type(String(val)); await settle(300);
   };
   await setNum('thickD', 250);
-  assert.match(q('.sk-tp-err').textContent, /Right-angle brace cannot be drawn with these values/, 'brace thickD=250 refuses in error line');
+  assert.match(q('.sk-tp-err').textContent, / thickness is too big/, 'brace thickD=250 refuses in error line');
   assert.strictEqual(q('.sk-tp-open').disabled, true, 'brace thickD=250 disables Open');
   await setNum('thickD', 38);
   assert.strictEqual(q('.sk-tp-err').textContent, '', 'valid thickD clears error');
   assert.strictEqual(q('.sk-tp-open').disabled, false, 'valid thickD re-enables Open');
 
   await setNum('thickH', 600);
-  assert.match(q('.sk-tp-err').textContent, /Right-angle brace cannot be drawn with these values/, 'brace thickH=600 refuses in error line');
+  assert.match(q('.sk-tp-err').textContent, / thickness is too big/, 'brace thickH=600 refuses in error line');
   assert.strictEqual(q('.sk-tp-open').disabled, true, 'brace thickH=600 disables Open');
   await setNum('thickH', 38);
   await setNum('thickV', 350);
-  assert.match(q('.sk-tp-err').textContent, /Right-angle brace cannot be drawn with these values/, 'brace thickV=350 refuses in error line');
+  assert.match(q('.sk-tp-err').textContent, / thickness is too big/, 'brace thickV=350 refuses in error line');
   assert.strictEqual(q('.sk-tp-open').disabled, true, 'brace thickV=350 disables Open');
 
   console.log('template-polish-693-node: ok');

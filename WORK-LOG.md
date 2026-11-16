@@ -15694,3 +15694,8 @@ The engine and every shared package stay ONE copy in the repo; a site is BUILT f
   arrow drag, the undimensioned drag rule, 688's box placement.
 - Evidence (.evidence/690, local): mouse-/touch-1-box-5-below, -2-box-minus5-above, -3-made-above, -4-dimension-minus3-below (label -3.0),
   -5-parameter-minus2-below, -6-parameters-window.
+
+## TURN 697
+Live value boxes (Line / Rectangle / Circle / Arc / Polygon ...) now stay INSIDE the canvas svg's rect. `placeLiveBox` (packages/ui/numeric-input-manager.js) clamped to the WINDOW (innerWidth/innerHeight - 8): near the bottom edge a box sat over the footer bar. Now ONE rule: clamp to the canvas svg rect (the bounds placeAnchoredBox uses); the window clamp is replaced. A canvas smaller than the box pins it to the canvas's left/top edge. 602's touch dock and 597's no-horizontal-overflow hold.
+Second cause found while measuring: the shared single box (circle / arc / slot radius, SketchStudio's existing #dimInput) lives in a positioned container, but placeLiveBox wrote viewport coordinates into left/top, so in SketchStudio it sat offset by the container origin (circle box at y=932 in an 800 px window; touch dock 137 px too low). left/top are now written relative to the box's offsetParent (position:fixed boxes: viewport).
+Test: tests/live-box-canvas-697-live.test.js (mouse 1280x800 + touch 390x844, SketchStudio + Pen Plotter, line / rect / circle at the 4 canvas edges). Before: 21 failures; after: ok. Evidence .evidence/697/{before,after}.

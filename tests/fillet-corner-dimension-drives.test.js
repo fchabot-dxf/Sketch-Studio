@@ -14,7 +14,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion fai
     classList: { _set: new Set(), add(s) { this._set.add(s); }, remove(s) { this._set.delete(s); }, contains(s) { return this._set.has(s); } },
     style: {}, focus() {}, select() {}, value: '', addEventListener() {}, removeEventListener() {}
   };
-  global.document = { getElementById: (id) => (id === 'dimInput' ? dimInput : null) };
+  global.document = { getElementById: (id) => (id === 'dimInput' ? dimInput : null), addEventListener() {}, removeEventListener() {} }; // the open box listens for a press outside it (task 723)
   global.window = global.window || {};
   global.requestAnimationFrame = global.requestAnimationFrame || ((cb) => setTimeout(cb, 0));
   global.cancelAnimationFrame = global.cancelAnimationFrame || ((id) => clearTimeout(id));

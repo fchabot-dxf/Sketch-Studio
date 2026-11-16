@@ -39,6 +39,7 @@ globalThis.document = {
   body: { appendChild() {} }, head: { appendChild() {}, querySelector: () => null },
   getElementById: (id) => (id === 'dimInput' ? dimInput : id === 'notification-container' ? container : null),
   createElement: mkEl, querySelector: () => null, querySelectorAll: () => [],
+  addEventListener() {}, removeEventListener() {}, // the open box listens for a press outside it (task 723)
 };
 globalThis.window = { addEventListener() {}, removeEventListener() {}, dispatchEvent() {} };
 globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);

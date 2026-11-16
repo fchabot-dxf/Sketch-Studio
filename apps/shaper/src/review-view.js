@@ -40,7 +40,7 @@ export function planarUVs(positions, tile = TILE_MM, grainAlongX = false) {
  * mountReviewView({ host, info, getInputs, wood }) -> Promise<{ refresh, reset, top, fit, setWood, destroy, lastBuild, wood }>
  *   host       the element the canvas is appended to
  *   info       element receiving the one-line build summary (and the "not shown" notes)
- *   getInputs  () => { stock, items, bounds }  (see buildRelief)
+ *   getInputs  () => { stock, items, bounds, notes? }  (see buildRelief; notes = extra info lines, TASK 714: the stepped cuts' steps / undercuts)
  *   wood       initial state of the Wood texture (default true); setWood(bool) switches the face texture on / off
  */
 export async function mountReviewView({ host, info, getInputs, wood = true }) {
@@ -163,7 +163,8 @@ export async function mountReviewView({ host, info, getInputs, wood = true }) {
   function refresh(sig) {
     if (sig !== undefined && sig === lastSig) { size(); render(); return lastBuild; }
     const t0 = performance.now();
-    const rel = buildRelief({ ...getInputs(), cache: reliefCache }); // the cache reuses the work of unchanged cuts / levels
+    const inputs = getInputs();
+    const rel = buildRelief({ ...inputs, cache: reliefCache }); // the cache reuses the work of unchanged cuts / levels
     const T = rel.stockBox.thickness;
     disposeGroup();
     group = new THREE.Group();
@@ -191,7 +192,8 @@ export async function mountReviewView({ host, info, getInputs, wood = true }) {
     if (nPart) lines.push(`${nPart} cut${nPart === 1 ? '' : 's'} extend${nPart === 1 ? 's' : ''} past the stock edge: only the part on the board is cut`);
     if (rel.stats.unsetThrough.length) lines.push(`${rel.stats.unsetThrough.length} Outside/Inside cut${rel.stats.unsetThrough.length === 1 ? '' : 's'} with depth unset shown cut through (amber label)`);
     if (notShown) lines.push(`${notShown} cut${notShown === 1 ? '' : 's'} not shown (Pocket or On Line with no depth)`);
-    info.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');
+    if (Array.isArray(inputs.notes)) lines.push(...inputs.notes);
+    info.replaceChildren(...lines.map((l) => { const d = document.createElement('div'); d.textContent = l; return d; })); // text, never markup (a note carries a Fusion label)
     return lastBuild;
   }
 

@@ -89,7 +89,8 @@ export function polygonContains(outer, inner) {
   return true;
 }
 
-function num(n) {
+// SVG path number: <= 4 dp, trailing zeros trimmed, no "-0" (world units = base mm). Exported for #core/stepped-cut.js (TASK 714: a terrace's exact path).
+export function num(n) {
   let r = Math.round(Number(n) * 1e4) / 1e4;
   if (Object.is(r, -0)) r = 0;
   return String(r);

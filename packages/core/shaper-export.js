@@ -17,7 +17,8 @@ import { findLoops, findOpenChains } from './loop-finder.js';
 import { formatShaperParam } from './units.js';
 import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
 import { loopPolygon, loopToPathD, compoundPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
-import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey, deriveProfileCuts, ownedLoopIds } from './profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey, ownedLoopIds } from './profile-model.js';
+import { deriveCuts } from './stepped-cut.js'; // TASK 714: deriveProfileCuts + a stepped cut's terraces
 export { loopToPathD, polyToPathD };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -196,12 +197,18 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
     if (e.target.kind === 'loop' && vcarveExcludedLoops.has(e.target.id)) continue;
     if (e.target.kind === 'profile' && vcarveExcludedProfiles.has(e.target.id)) continue;
-    const cuts = deriveProfileCuts(e.target, e.rec, state, loops, ensurePolys(), owned);
+    // TASK 714: a STEPPED type's encoding declares `terraceAs` (the plain type each terrace is cut as): deriveCuts then returns one
+    // plain cut per terrace, each written with ITS type's encoding at its own depth, and its own outline (`geom`). The Origin sees plain cuts.
+    const typeEnc = encOf(e.rec.cutType);
+    const rec = typeEnc && typeEnc.terraceAs ? { ...e.rec, terraceAs: typeEnc.terraceAs } : e.rec;
+    const cuts = deriveCuts(e.target, rec, state, loops, ensurePolys(), owned);
     for (const cut of cuts) {
       const c = encOf(cut.rec.cutType);
       if (!c) continue;
       let geom = null;
-      if (cut.isCompound) {
+      if (cut.geom) {
+        geom = cut.geom;
+      } else if (cut.isCompound) {
         if (cut.d) {
           geom = { tag: 'path', a: `d="${cut.d}"` };
         } else if (cut.holeLoops && cut.holeLoops.length > 0) {

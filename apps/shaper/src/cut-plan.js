@@ -6,8 +6,11 @@
 // Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter). This is app STATE (not #core).
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
-import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID } from './shaper.js';
+import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey, makeProfile, ownedLoopIds } from '#core/profile-model.js';
+import { steppedTerraces, terraceKind, deriveCuts, STEP_DEPTH } from '#core/stepped-cut.js';
+import { format as formatUnit } from '#core/units.js';
+import { docUnit } from '#core/settings-manager.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
@@ -19,6 +22,40 @@ export const CUT_PLAN = new Map(); // key → cut record
 
 export function getCutRecord(key) { return CUT_PLAN.get(key) || defaultCutRecord(); }
 export function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec[field] = value; CUT_PLAN.set(key, rec); return rec; }
+
+// TASK 714: the STEP DEPTH a target switched to a stepped type gets when its record has none: the last step depth the user set on any stepped
+// cut (owner turn 1947), STEP_DEPTH.defaultMm (#core/stepped-cut.js) until one is set. Base mm, never below STEP_DEPTH.minMm. App state, like CUT_PLAN.
+let lastStep = STEP_DEPTH.defaultMm;
+export const lastStepDepth = () => lastStep;
+export function rememberStepDepth(mm) { const n = Number(mm); if (n > 0) lastStep = Math.max(STEP_DEPTH.minMm, n); return lastStep; }
+
+/**
+ * steppedSummary(storedRec) — TASK 714: what a STEPPED record's terraces are (the same steppedTerraces call #core/stepped-cut deriveCuts makes, through
+ * the effective record): { count, depths (base mm, shallow to deep), undercutBelow (mm | null), label, error }, or null for any other record.
+ */
+export function steppedSummary(storedRec) {
+  const rec = effectiveCutRecord(storedRec);
+  if (!rec || !rec.terraceAs || !rec.slope) return null;
+  const T = steppedTerraces(rec.slope, { kind: terraceKind(rec.terraceAs), step: rec.stepDepth, depth: rec.cutDepth });
+  return { count: T.steps.length, depths: T.steps.map((st) => st.depth), undercutBelow: T.undercutBelow, label: rec.slope.label || null, error: T.error };
+}
+/** The note lines of a stepped record, in the document unit ("Pocket 1 (8mm): 8 steps, 1 to 8 mm"; "Outline: undercut below 17 mm cut straight"). */
+export function steppedNoteLines(storedRec) {
+  const s = steppedSummary(storedRec);
+  if (!s) return [];
+  const u = docUnit(), f = (mm) => String(Number(formatUnit(mm, u, { decimals: 3 })));
+  const name = s.label || (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Stepped cut';
+  if (s.error) return [`${name}: the slope could not be read (${s.error}): nothing is cut`];
+  const lines = [`${name}: ${s.count} step${s.count === 1 ? '' : 's'}, ${s.count > 1 ? `${f(s.depths[0])} to ` : ''}${f(s.depths[s.depths.length - 1])} ${u}`];
+  if (s.undercutBelow !== null) lines.push(`${name}: undercut below ${f(s.undercutBelow)} ${u} cut straight`);
+  return lines;
+}
+/** The note lines of every stepped record of the plan (the 3D Review's info). */
+export function planSteppedNotes(plan = CUT_PLAN) {
+  const out = [];
+  for (const rec of plan.values()) if (rec && rec.cutType) out.push(...steppedNoteLines(rec));
+  return out;
+}
 
 // All ASSIGNED entries (a cutType is set) → [{ target:{kind,id}, rec }] for the exporter. Loop targets are resolved
 // against the live design at export time (findLoops), so a stale id simply yields nothing.
@@ -101,7 +138,7 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = nul
 
 /**
  * deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) — THE ONE composition of the cut derivations for one plan
- * target: effectiveCutRecord -> deriveProfileCuts -> deriveCutFootprint. Returns { rec, cuts, footprints } (rec = the effective
+ * target: effectiveCutRecord -> deriveProfileCuts (#core/stepped-cut deriveCuts: + a stepped cut's terraces) -> deriveCutFootprint. Returns { rec, cuts, footprints } (rec = the effective
  * record the footprints were derived with), or null when the target derives to nothing (stale key). Both Prepare's preview
  * (computeLook) and the 3D Review (planReliefItems) call this; no cut geometry is computed here.
  * `loops` must carry the host-side `polygon` (see loopsWithPolygons); `loopPolys` = { [loop id]: polygon }; `owned` = the loops with
@@ -109,7 +146,7 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = nul
  */
 export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) {
   const rec = effectiveCutRecord(storedRec); // TASK 450: On line / Guide take no offset: a stored one is ignored
-  const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys, owned);
+  const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned); // TASK 714: a stepped record derives to its terraces (the exporter's derivation too)
   if (!cuts || !cuts.length) return null;
   return { rec, cuts, footprints: deriveCutFootprint(cuts, rec, state) };
 }
@@ -181,7 +218,7 @@ export function planReliefItems(state, plan = CUT_PLAN) {
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
     const atW = (w) => { if (!at.has(w)) at.set(w, deriveCutFootprintAt(d.cuts, d.rec, state, w)); return at.get(w); };
     const geo = cutsSig(d.cuts, state);
-    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, d.rec, geo]), cutType: fp.cutType, cutDepth: d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) }));
+    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, d.rec, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth
   }
   return items;
 }

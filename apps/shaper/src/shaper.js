@@ -48,6 +48,16 @@ export const CUT_TYPES = [
   // three), `params` = the rows the Prepare card shows. Declared AFTER the guide so classify() (import) reads blue as a GUIDE:
   // re-importing gives a Guide the owner can re-mark Stock.
   { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthLabel: 'Thickness', icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
+  // TASK 714: the STEPPED types (owner turns 1939-1948): a wall that is not vertical (drafted, chamfered, filleted, countersunk), cut with a
+  // straight end mill as a stair of PLAIN cuts. Generated in the app (#core/stepped-cut.js steppedTerraces, through deriveProfileCuts), so
+  // the Origin sees plain cuts, as for V-carve; distinct here. `terraceAs` = the plain type each terrace is cut as (its encoding is what the
+  // export writes, at the terrace's own depth); `slopeKind` = the slope a target must carry to be offered this type (the Fusion region's
+  // cutType: a pocket, a through hole = inside, the outline = outside; cut-plan record field `slope`, stored by fusion-import.js);
+  // `stepDepth` = the step row of the card (#core STEP_DEPTH). fill / stroke = the plain type's, and declared AFTER it, so classify() (import)
+  // never reads a stepped type. No autoOffsetFraction: a stepped pocket's terraces take the pocket's own (effectiveCutRecord).
+  { id: 'stepped-pocket',  label: 'Stepped pocket',  cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'A sloped pocket as a stair of pockets, one per step depth', targetKind: 'region', menuLabel: 'Stepped pocket', terraceAs: 'pocket', slopeKind: 'pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 13.5V10.5h3v-3h3v-3h3' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linejoin='round'/>", params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth'] },
+  { id: 'stepped-inside',  label: 'Stepped inside',  cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'A hole with a sloped / rounded edge as a stair of inside cuts', targetKind: 'region', menuLabel: 'Stepped inside', terraceAs: 'interior', slopeKind: 'inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13V10h3V7h3V5' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='12' r='1.4' fill='currentColor'/>", params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth'] },
+  { id: 'stepped-outside', label: 'Stepped outside', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'An outline with a sloped / rounded edge as a stair of outside cuts', targetKind: 'region', menuLabel: 'Stepped outside', terraceAs: 'exterior', slopeKind: 'outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><path d='M5 13V10h3.5V7H12V5' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth'] },
 ];
 
 // TASK 472: the id of the Stock type, and the encoding the EXPORT gets: CUT_TYPES with each entry's `exportParams` (if any) as its
@@ -86,7 +96,9 @@ export function effectiveCutRecord(rec) {
   if (cutTypeById(rec.cutType) && cutTypeById(rec.cutType).offsetMovesCut === false) out.cutOffset = 0; // preview only: the cut stays centred
   if (!cutTypeHasParam(rec.cutType, 'toolDia')) out.toolDia = 0;
   const t = cutTypeById(rec.cutType);
-  out.autoOffset = (t && t.autoOffsetFraction) ? (Number(out.toolDia) || 0) * t.autoOffsetFraction : 0; // TASK 452: the Origin's automatic pocket offset
+  if (t && t.terraceAs) out.terraceAs = t.terraceAs; // TASK 714: the derivation cuts a stepped type as terraces of this plain type
+  const own = t && t.terraceAs ? cutTypeById(t.terraceAs) : t; // a stepped pocket's terraces are pockets: the pocket's automatic offset
+  out.autoOffset = (own && own.autoOffsetFraction) ? (Number(out.toolDia) || 0) * own.autoOffsetFraction : 0; // TASK 452: the Origin's automatic pocket offset
   return out;
 }
 
@@ -113,9 +125,12 @@ export const OFFSET_PRESETS = [
 
 // Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'profile' | 'chain').
 // A LOOP or PROFILE is both a closed region AND a closed path → all 5. A CHAIN is an open path → only the 'path' types.
-export function availableTypes(selectedKind) {
-  return CUT_TYPES.filter((t) => t.targetKind === 'path' || selectedKind === 'loop' || selectedKind === 'profile');
+// TASK 714: a STEPPED type (declared `slopeKind`) only on a target whose record carries a slope of that kind (`record.slope`, from a Fusion
+// region with sloped walls); without the record it is never offered.
+export function availableTypes(selectedKind, record = null) {
+  return CUT_TYPES.filter((t) => (t.targetKind === 'path' || selectedKind === 'loop' || selectedKind === 'profile') && (!t.slopeKind || hasSlopeOf(record, t.slopeKind)));
 }
+export const hasSlopeOf = (record, kind) => Boolean(record && record.slope && record.slope.kind === kind && Array.isArray(record.slope.rings) && record.slope.rings.length >= 2);
 
 const NAMED = {
   black: '#000000', white: '#ffffff', gray: '#808080', grey: '#808080',

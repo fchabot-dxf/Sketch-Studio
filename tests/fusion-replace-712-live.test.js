@@ -85,6 +85,13 @@ async function run({ width, height, pileUp }) {
       plan: [...m.CUT_PLAN.entries()].map(([k, r]) => k.split(':')[0] + ':' + r.cutType).sort(),
     };
   })`);
+  // the page's own pagehide flush writes its open tabs to the shared buffer (IndexedDB); wait until the buffer holds the drawing (n shapes) before leaving
+  // the page (as tests/shared-tabs-684-live.test.js waits for the write to land)
+  const leaveWhenStored = async (n) => {
+    await flushAutosave();
+    await waitFor(`import('/packages/ui/project-store.js').then((m) => m.getProjectStore().readBuffer({})).then((b) => !!b && b.tabs.some((t) => t.doc && t.doc.geometry && t.doc.geometry.shapes.length === ${n}))`,
+      `the shared buffer to hold the ${n} shapes`);
+  };
   const openFusion = async () => {
     await navigate(FUSION_URL);
     await waitForApp('design-canvas');
@@ -136,7 +143,7 @@ async function run({ width, height, pileUp }) {
       `[${label}] a body + chains payload lands as one plan`);
 
     // 5. a reload in Fusion mode shows the last selection (the stored design)
-    await flushAutosave();
+    await leaveWhenStored(8);
     await openFusion();
     await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 8`, 'after a reload: the last selection in Prepare');
     const reloaded = await look();
@@ -157,7 +164,7 @@ async function run({ width, height, pileUp }) {
       const pile = await evalJs(`({ sketches: window.__designController.state.sketches.map((s) => s.name), shapes: window.__designController.state.shapes.length })`);
       console.log(`[${label}] normal app import, pile:`, JSON.stringify(pile));
       assert.deepStrictEqual(pile.sketches, [...n0, 'old-a', 'old-b'], `[${label}] the normal Import SVG adds a NEW sketch each time, the earlier kept`);
-      await flushAutosave();
+      await leaveWhenStored(pile.shapes);
       await openFusion();
       await waitFor(`window.__designController.state.sketches.length === ${pile.sketches.length}`, 'the pile-up shown in Fusion mode');
       await select(SECOND);

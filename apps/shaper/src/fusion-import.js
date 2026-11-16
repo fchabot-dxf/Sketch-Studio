@@ -197,7 +197,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
       chainCount: chains.length,
       cutKeys: [],
       warnings,
-      message: `Nothing to import from ${sourceName}: ${counts}; the design is unchanged`,
+      message: `Added ${sourceName}: ${counts}`, // nothing importable: the design is unchanged (wording as before TASK 712)
     };
   }
 

@@ -174,7 +174,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
   }
 }
 
-// ── 5. A selection with nothing importable leaves the design as it is, and says so ──
+// ── 5. A selection with nothing importable leaves the design as it is (its notice wording is unchanged from before TASK 712) ──
 {
   CUT_PLAN.clear();
   const app = await open({ host: 'shaper' });
@@ -183,7 +183,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     importFusionSelection(FIRST, { controller: app.controller, prepare: app.prepare });
     const before = { sketches: sketchNames(st), shapes: shapeIds(st), plan: planTypes(), hist: st.history.length };
     const res = importFusionSelection(msg('Empty', [], []), { controller: app.controller, prepare: app.prepare });
-    eq(res.message, 'Nothing to import from Empty: 0 regions, 0 chains; the design is unchanged', 'the notice for an empty selection');
+    eq(res.message, 'Added Empty: 0 regions, 0 chains', 'the notice for an empty selection (unchanged wording)');
     eq({ sketches: sketchNames(st), shapes: shapeIds(st), plan: planTypes(), hist: st.history.length }, before, 'an empty selection changes nothing');
   } finally {
     await app.close();

@@ -15,6 +15,8 @@ import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPE_TAGS = new Set(['path', 'circle', 'polygon', 'polyline', 'rect', 'ellipse', 'line']);
 const TAP_PX = 4;          // a press that moves less than this is a tap (a pick), more is a pan (the Vcarve view's rule)
+const SHADE_SHALLOW = 70, SHADE_DEEP = 30; // TASK 719: the pockets' grey lightness (%) at the shallowest / deepest depth of THIS export
+const POCKET_OUTLINE = '#222';             // the thin outline every pocket gets (the file's pockets have none)
 const FIT_MARGIN = 0.06;   // empty space round the drawing on each side after fit(), a fraction of its size
 
 /** Parse a Shaper SVG string into its root <svg> element (an XML parse: the shaper: namespace is kept). A string that does not parse throws. */
@@ -41,6 +43,25 @@ export function previewItems(root) {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
     return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null };
   });
+}
+
+/**
+ * TASK 719: the PREVIEW's shade of each pocket depth: { shades: Map(depth string -> css colour), lo, hi }. Lightness runs linearly from SHADE_SHALLOW (the
+ * shallowest pocket of this export) to SHADE_DEEP (the deepest); one depth only = the middle. Display only: the file's own fill stays in the download.
+ */
+export function pocketShades(items) {
+  const pockets = items.filter((it) => it.cutType === 'pocket');
+  const num = (it) => parseFloat(it.depth);
+  const ds = pockets.map(num).filter(Number.isFinite);
+  const lo = Math.min(...ds), hi = Math.max(...ds);
+  const shades = new Map();
+  for (const it of pockets) {
+    const d = num(it);
+    if (!Number.isFinite(d) || shades.has(it.depth)) continue;
+    const t = hi > lo ? (d - lo) / (hi - lo) : 0.5;
+    shades.set(it.depth, `hsl(0, 0%, ${(SHADE_SHALLOW + (SHADE_DEEP - SHADE_SHALLOW) * t).toFixed(1)}%)`);
+  }
+  return { shades, lo, hi };
 }
 
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
@@ -72,6 +93,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
   const doc = canvas.ownerDocument;
   const viewState = { view: null, allowEmptyPan: true, _panZoom: { isPanning: false, lastPanPoint: null, lastTouchDistance: null, touchPoints: new Map(), isPinching: false, lastPinchCenter: null, lastPinchDistance: null } };
   setupPanZoom(canvas, viewState, { attachListeners: true });
+  let shading = { shades: new Map(), lo: NaN, hi: NaN };
   let layer = null, items = [], rows = [], byEl = new Map(), picked = [], pickedLabel = null, lastSig, fitPending = false;
   const rowButtons = [], rowOf = []; // the list's row buttons and the row each one picks
 
@@ -113,9 +135,21 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
     pick(row.items, itemLabel(row.items[0]) + (row.items.length > 1 ? ` · ${row.items.length} elements` : ''), i);
   }
 
+  const depthKey = (pick) => [...shading.shades.keys()].reduce((a, k) => (pick(parseFloat(k), parseFloat(a)) ? k : a));
+  const minDepthKey = () => depthKey((x, y) => x < y);
+  const maxDepthKey = () => depthKey((x, y) => x > y);
+
   function renderList() {
     rowButtons.length = 0; rowOf.length = 0;
     const out = [];
+    if (shading.shades.size) {
+      const lg = doc.createElement('div'); lg.className = 'rv2d-legend';
+      const sw = doc.createElement('span'); sw.className = 'rv2d-ramp';
+      sw.style.background = `linear-gradient(to right, ${shading.shades.get(minDepthKey())}, ${shading.shades.get(maxDepthKey())})`;
+      const tx = doc.createElement('span'); tx.textContent = 'pockets: lighter = shallower, darker = deeper';
+      lg.append(sw, tx);
+      out.push(lg);
+    }
     for (const g of rows) {
       const head = doc.createElement('div'); head.className = 'rv2d-type';
       const name = doc.createElement('span'); name.textContent = g.cutType;
@@ -126,6 +160,8 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
         const t = doc.createElement('span'); t.textContent = [row.depth || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null].filter(Boolean).join(' · ');
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
+        const shade = g.cutType === 'pocket' ? shading.shades.get(row.depth) : null;
+        if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
         b.append(t, c);
         const i = rowButtons.length;
         b.addEventListener('click', () => pickRow(i));
@@ -141,7 +177,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
     if (sig !== undefined && sig === lastSig) { if (fitPending) fit(); return inspect(); }
     lastSig = sig;
     if (layer) layer.remove();
-    layer = null; items = []; rows = []; byEl = new Map(); picked = []; pickedLabel = null;
+    layer = null; items = []; rows = []; shading = { shades: new Map(), lo: NaN, hi: NaN }; byEl = new Map(); picked = []; pickedLabel = null;
     const text = getSvg();
     if (text) {
       const root = parseShaperSvg(text, doc);
@@ -151,6 +187,12 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
       items = previewItems(layer);
       rows = previewRows(items);
       byEl = new Map(items.map((it) => [it.el, it]));
+      // TASK 719: the display's own styling, on the mounted copy only: pockets shaded by depth + outlined (attributes, so the picked class still wins)
+      shading = pocketShades(items);
+      for (const it of items) {
+        const shade = it.cutType === 'pocket' ? shading.shades.get(it.depth) : null;
+        if (shade) { it.el.setAttribute('fill', shade); it.el.setAttribute('stroke', POCKET_OUTLINE); }
+      }
     }
     renderList();
     showInfo();

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { extractCutRecord, CUT_TYPES } from '../apps/shaper/src/shaper.js';
-import { parseSvg } from '../apps/shaper/src/svgio.js';
+import { parseSvgText as parseSvg } from '#ui/sketch-import.js'; // the one SVG parser (TASK 706: Shaper's svgio.js re-export went with Explore)
 import { importSvgGeometry, computeImportScale } from '#core/svg-import.js';
 import { findLoops } from '#core/loop-finder.js';
 import { keyOf, CUT_PLAN } from '../apps/shaper/src/cut-plan.js';

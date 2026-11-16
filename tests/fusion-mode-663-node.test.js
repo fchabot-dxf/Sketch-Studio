@@ -28,13 +28,13 @@ eq(isFusionMode('?host=web'), false, 'other host value is normal mode');
 eq(isFusionMode('?fusion=1'), false, 'unrelated query param is normal mode');
 
 // 3. Stage filtering and initial-mode resolution
-deepEq(shaperStagesFor({ fusion: false }), SHAPER_STAGES, 'normal mode keeps all 5 Shaper stages');
+deepEq(shaperStagesFor({ fusion: false }), SHAPER_STAGES, 'normal mode keeps all 4 Shaper stages (TASK 706: Explore removed)');
 const fusionStages = shaperStagesFor({ fusion: true });
 deepEq(fusionStages.map((s) => s.id), ['prepare', 'review'], 'Fusion mode shows only Prepare and Review');
-ok(FUSION_HIDDEN_STAGES.includes('design') && FUSION_HIDDEN_STAGES.includes('explore') && FUSION_HIDDEN_STAGES.includes('vcarve'),
-  'Explore, Design, Vcarve are declared hidden in Fusion mode');
+ok(FUSION_HIDDEN_STAGES.includes('design') && FUSION_HIDDEN_STAGES.includes('vcarve'),
+  'Design, Vcarve are declared hidden in Fusion mode (TASK 706: Explore is no stage at all)');
 
-eq(resolveInitialMode(null, { fusion: false }), 'explore', 'normal mode defaults to Explore');
+eq(resolveInitialMode(null, { fusion: false }), 'design', 'normal mode defaults to Design (TASK 706: was Explore)');
 eq(resolveInitialMode('design', { fusion: false }), 'design', 'normal mode restores stored Design');
 eq(resolveInitialMode('simexport', { fusion: false }), 'review', 'normal mode maps legacy simexport -> review');
 
@@ -47,7 +47,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
 // Mode router makes hidden stages unreachable in Fusion mode
 {
   const makeView = () => ({ hidden: false, style: {} });
-  const views = { explore: makeView(), design: makeView(), vcarve: makeView(), prepare: makeView(), review: makeView() };
+  const views = { design: makeView(), vcarve: makeView(), prepare: makeView(), review: makeView() };
   let active = null, designStarts = 0;
   const router = createModeRouter({
     views,
@@ -61,7 +61,6 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
   eq(router.current(), 'prepare', 'showMode("design") is unreachable in Fusion mode and falls back to Prepare');
   eq(active, 'prepare', 'chrome synced to Prepare');
   eq(views.design.hidden, true, 'Design container stays hidden');
-  eq(views.explore.style.display, 'none', 'Explore container stays hidden');
   eq(views.vcarve.hidden, true, 'Vcarve container stays hidden');
   eq(views.prepare.hidden, false, 'Prepare container is shown');
   eq(designStarts, 0, 'Design ensureSketch never triggered by blocked showMode("design")');
@@ -232,7 +231,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     const chromeNormal = mountAppChrome({
       appId: 'shaper',
       stages: shaperStagesFor({ fusion: false }),
-      activeStage: 'explore',
+      activeStage: 'design',
       getBuffer: () => null,
       importFile: () => {},
       documentTabs: true,

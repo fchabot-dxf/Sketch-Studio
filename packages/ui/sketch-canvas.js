@@ -11,7 +11,7 @@ import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manag
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
-import { createSketches, stampSketch, sketchOf, hiddenSketchIds } from '#core/sketch-model.js'; // SKETCH-1a/2b: container + visibility
+import { createSketches, stampSketch, visibleScene } from '#core/sketch-model.js'; // SKETCH-1a/2b: container + visibility
 import { draw } from '#ui/svg-renderer.js';
 import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
 import { updateGridFromSettings } from '#ui/canvas-grid.js';
@@ -145,15 +145,9 @@ export function mountSketch(svgEl, opts = {}) {
     // lets the HOST gate solve to when geometry is actually being manipulated (drag/selection); idle frames skip it and
     // the last-solved geometry stays put. DEFAULT (no shouldSolve) = always solve = byte-identical (Studio/Shaper).
     if (!opts.shouldSolve || opts.shouldSolve()) engine.solve(SolverConfig.ITERATIONS || 500);
-    // SKETCH-2b: hide a HIDDEN sketch's geometry from the canvas (a layer filter). Default (all visible) → empty set →
+    // SKETCH-2b: hide a HIDDEN sketch's geometry from the canvas (a layer filter, #core/sketch-model.js visibleScene). Default (all visible) →
     // the originals pass through UNCHANGED → byte-identical. A constraint stays if ANY of its joints is still visible.
-    let dJoints = state.joints, dShapes = state.shapes, dConstraints = state.constraints;
-    const hidden = hiddenSketchIds(state);
-    if (hidden.size) {
-      dJoints = new Map(); for (const [id, j] of state.joints) if (!hidden.has(sketchOf(j))) dJoints.set(id, j);
-      dShapes = state.shapes.filter((s) => !hidden.has(sketchOf(s)));
-      dConstraints = state.constraints.filter((c) => !(c.joints && c.joints.length) || c.joints.some((jid) => { const j = state.joints.get(jid); return j && !hidden.has(sketchOf(j)); }));
-    }
+    let { joints: dJoints, shapes: dShapes, constraints: dConstraints } = visibleScene(state);
     // UNIFY-throttle: a HOST-injected static-skip seam. When opts.isStatic(shape) is provided, SKIP static shapes +
     // their joint glyphs from the per-frame render (the host draws them once in its color underlay); only the FEW
     // live (e.g. selected/edited) shapes redraw each frame -> dense scenes stay interactive. Live joints = those used

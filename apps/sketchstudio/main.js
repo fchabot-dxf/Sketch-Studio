@@ -7,6 +7,8 @@ import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618/619: Undo / Redo
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { CANVAS_ID, createStudioImporter, initStudioCanvas, mountStudioBrowser, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { setupUI } from './ui/ui-manager.js';
+import { STUDIO_STAGES, STAGE_KEY, initialStage, isStage } from './stages.js'; // TASK 725: Design | Build, declared once
+import { mountBuildView } from './build-view.js'; // TASK 725: the Build step (the clean, read-only drawing)
 import { createEngine } from '#core/constraint-solver.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -31,6 +33,7 @@ let view = { ...DEFAULT_VIEW };
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app; a sidebar reads it lazily
 let sidePanel = null; // task 586: the floating Design browser (SKETCHES tree + constraint lists); the render loop ticks it
 let toolRibbon = null; // S7c-2d: the shared tool ribbon (from setupUI); the render loop refreshes its active highlight
+let buildView = null; // TASK 725: the Build step's view; while it shows, the render loop draws it instead of Design
 
 function updateView(){ 
   if(!svg) return;
@@ -146,15 +149,20 @@ function initApp(){
   const mainEl = document.querySelector('main');
   const footerEl = document.querySelector('footer');
   const exportPanelEl = document.getElementById('export-panel');
-  let viewMode = 'design'; // the view that shows: 'design' | 'export'
+  let storedStage = null;
+  try { storedStage = localStorage.getItem(STAGE_KEY); } catch (_) { /* storage blocked: open on Design */ }
+  const firstStage = initialStage(storedStage); // TASK 725: the stored step restores (Design | Build)
+  let viewMode = firstStage; // the view that shows: a step ('design' | 'build') or the ☰ 'export' view
   function showView(mode) {
     viewMode = mode;
-    const design = mode !== 'export';
+    const design = mode === 'design';
     if (ribbonEl) ribbonEl.style.display = design ? '' : 'none';
     if (mainEl) mainEl.style.display = design ? '' : 'none';
     if (sidePanel) { sidePanel.close(); sidePanel.toggleEl.style.display = design ? '' : 'none'; }
     if (footerEl) footerEl.style.display = design ? '' : 'none';
-    if (exportPanelEl) exportPanelEl.classList.toggle('hidden', design); // Export view = the existing export form
+    if (exportPanelEl) exportPanelEl.classList.toggle('hidden', mode !== 'export'); // Export view = the existing export form
+    if (buildView) buildView.setShown(mode === 'build'); // TASK 725: the Build step (its own view; Design's view is left as it was)
+    if (isStage(mode)) { try { localStorage.setItem(STAGE_KEY, mode); } catch (_) { /* storage blocked: the step is not remembered */ } }
     if (design) setTimeout(updateView, 0); // recompute the canvas viewBox aspect once it reflows back in
   }
 
@@ -168,8 +176,8 @@ function initApp(){
   const chrome = mountAppChrome({
     appId: 'sketchstudio',
     container: document.getElementById('app-header-host'),
-    stages: [{ id: 'design', label: 'Design' }],
-    activeStage: 'design',
+    stages: STUDIO_STAGES, // TASK 725: Design | Build (stages.js)
+    activeStage: firstStage,
     onStageChange: showView,
     getBuffer: () => docBuffer,
     importFile: importer.importFile,
@@ -187,7 +195,8 @@ function initApp(){
   mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), footer: document.querySelector('footer.sk-statusbar') }); // TASK 618/619: Undo / Redo / Delete / Clear (left), Recenter (right); Construction lives in .sk-canvas-corner (design-browser.js)
   // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer
   sidePanel = mountStudioBrowser({ svg, state, engine }); // design-canvas.js
-  showView('design');
+  buildView = mountBuildView({ state, getName: () => (docBuffer ? docBuffer.designName() : '') }); // TASK 725: the Build step (build-view.js)
+  showView(firstStage);
 
   // TASK 602 (owner): no "Saved" text in the header: the document tab's dot shows unsaved / saving / failed (document-tabs.js)
   docBuffer = createDocumentBuffer(studioBufferOptions({ state, engine, svg, showDesign })); // design-canvas.js
@@ -200,7 +209,7 @@ function initApp(){
     if (b) b.addEventListener('click', () => route('design'));
   });
 
-  setupInput(svg, state);
+  setupInput(svg, state, { isActive: () => viewMode !== 'build' }); // TASK 725: no Design key / pointer listener acts while Build shows (read-only)
   importer.mountDrop(); // TASK 566: a drop on the canvas imports too
 
   // Auto-focus SVG when window regains focus to ensure shortcuts work immediately
@@ -228,6 +237,7 @@ window.__dimEditHandler = (cIdx) => {
 
 // Render loop: solve → draw
 function loop(){
+  if (buildView && buildView.isShown()) { buildView.frame(); requestAnimationFrame(loop); return; } // TASK 725: Build draws the live document, read-only (no solve)
   if (sidePanel) sidePanel.tick();
   studioFrame({ engine, state, svg, worldGroup, ribbon: toolRibbon, onSolved: () => {
     // Expose latest solve stats for debug/UI consumers (AI Vision reads window.__lastSolveStats)

@@ -86,6 +86,17 @@ export function hiddenSketchIds(state) {
   return ids;
 }
 
+// SKETCH-2b (moved here from sketch-canvas.js by TASK 725, unchanged): what a canvas draws of `state` when some sketches are HIDDEN: the joints and shapes
+// of the visible sketches, and the constraints with no joints or with at least one visible joint. Nothing hidden -> the state's own containers, unchanged.
+export function visibleScene(state) {
+  const hidden = hiddenSketchIds(state);
+  if (!hidden.size) return { joints: state.joints, shapes: state.shapes, constraints: state.constraints };
+  const joints = new Map(); for (const [id, j] of state.joints) if (!hidden.has(sketchOf(j))) joints.set(id, j);
+  const shapes = state.shapes.filter((s) => !hidden.has(sketchOf(s)));
+  const constraints = state.constraints.filter((c) => !(c.joints && c.joints.length) || c.joints.some((jid) => { const j = state.joints.get(jid); return j && !hidden.has(sketchOf(j)); }));
+  return { joints, shapes, constraints };
+}
+
 // All entity ids in a sketch: { joints:[id…], shapes:[id…] }.
 export function entitiesInSketch(state, id) {
   const joints = [], shapes = [];

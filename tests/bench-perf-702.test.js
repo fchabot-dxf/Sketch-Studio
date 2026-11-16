@@ -1,10 +1,12 @@
-// gate: exclusive
 // tests/bench-perf-702.test.js -- TASK 702: the Curved bench seat template at 40 slats built in about 2.5 s (main face604); the cost was the
 // solver core redoing whole-sketch work on every tool operation of the recipe (packages/core/solver/engine.js): the rank probe's Gram-Schmidt
 // basis rebuilt from scratch per probe (cubic in the sketch), a row's shapes found by a scan of every shape (rows x shapes per assembly), a
 // solve assembling the same point two or three times, the nullspace sweep over zero columns. Each is now done once, on the same numbers, so
 // every document is IDENTICAL to main's (the deep-equal of every template is the task's evidence, .evidence/702).
-//   1. TIMING (a wall-time limit: exclusive): the bench seat at 40 slats builds in under CEILING_MS (median of 3; main took ~2450 ms)
+//   1. the WORK of one 40-slat build, COUNTED (deterministic, not wall time: the advisor's send-back, a time ceiling flakes under load): the
+//      rows the rank probes' Gram-Schmidt reduces and the assemblies, through this test's own wrappers of the solver's methods. main face604:
+//      78207 rows, 2875 assemblies (2032 full + 843 residuals-only); this change: 1943 rows, 1199 assemblies (.evidence/702/count-*.txt).
+//      The wall time is printed only.
 //   2. the KEPT rank basis answers exactly as a fresh solver: every dimension of a built bench seat lifted out (its row taken from the middle
 //      of the kept rows: the basis cut back), a determined quantity (a slat's chord, true), after a joint moved (rows changed from the middle),
 //      after unknowns were added (a new free line: more columns), after a constraint was made a reference (a row gone)
@@ -12,7 +14,7 @@ import assert from 'node:assert';
 import { templateById, buildTemplate } from '#core/templates.js';
 import { deserializeDocument } from '#core/document.js';
 import { isDimensionDetermined } from '#core/dimension-seams.js';
-import { createNewtonSolver } from '#core/solver/engine.js';
+import { createNewtonSolver, NewtonSolver } from '#core/solver/engine.js';
 import { sceneJoints, sceneShapes } from '#core/reference-lines.js';
 import * as ops from '#core/tool-ops.js';
 
@@ -20,16 +22,18 @@ const muted = (f) => { const l = console.log, w = console.warn, e = console.erro
 const bench = templateById('curved-bench-seat');
 let checks = 0;
 
-// ---- 1. timing
-const CEILING_MS = 1500;
-const median = (n) => {
-  const t = [];
-  for (let i = 0; i < 3; i++) { const t0 = performance.now(); muted(() => buildTemplate(bench, { slats: n })); t.push(performance.now() - t0); }
-  return t.sort((a, b) => a - b)[1];
-};
-const times = Object.fromEntries([10, 20, 40].map((n) => [n, median(n)]));
-console.log(`curved bench seat build (median of 3): 10 slats ${times[10].toFixed(0)} ms, 20 slats ${times[20].toFixed(0)} ms, 40 slats ${times[40].toFixed(0)} ms`);
-assert.ok(times[40] < CEILING_MS, `40 slats builds in ${times[40].toFixed(0)} ms, under ${CEILING_MS} ms`); checks++;
+// ---- 1. the work of a 40-slat build, counted (each rank-probe row reduced: _rankReduce; each assembly: _assemble)
+const MAX_GS_ROWS = 4000, MAX_ASSEMBLIES = 1600; // main: 78207 and 2875
+const P = NewtonSolver.prototype, count = { gsRows: 0, assemblies: 0 };
+assert.strictEqual(typeof P._rankReduce, 'function', 'the rank probe reduces one row at a time (_rankReduce)'); checks++;
+const { _rankReduce, _assemble } = P;
+P._rankReduce = function (...a) { count.gsRows++; return _rankReduce.apply(this, a); };
+P._assemble = function (...a) { count.assemblies++; return _assemble.apply(this, a); };
+let ms;
+try { const t0 = performance.now(); muted(() => buildTemplate(bench, { slats: 40 })); ms = performance.now() - t0; } finally { P._rankReduce = _rankReduce; P._assemble = _assemble; }
+console.log(`curved bench seat, 40 slats: ${count.gsRows} Gram-Schmidt rows, ${count.assemblies} assemblies (main: 78207, 2875); wall time ${ms.toFixed(0)} ms (printed only)`);
+assert.ok(count.gsRows <= MAX_GS_ROWS, `the rank probes reduce ${count.gsRows} rows, at most ${MAX_GS_ROWS} (main 78207)`); checks++;
+assert.ok(count.assemblies <= MAX_ASSEMBLIES, `${count.assemblies} assemblies, at most ${MAX_ASSEMBLIES} (main 2875)`); checks++;
 
 // ---- 2. the kept rank basis = a fresh solver's answer
 const S = ops.newSketchState();

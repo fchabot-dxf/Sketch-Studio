@@ -60,12 +60,24 @@
       --sk-header-sep: #3a3d42;
       --sk-header-hover: rgba(255,255,255,0.08);
       --sk-footer-ink: var(--sk-header-fg);
+      /* TASK 737: the surfaces directly below the document tab strip, declared once: the stage's view paints it, the strip's active tab takes it */
+      --shaper-vcarve-panel-bg: #111827;  /* Vcarve's docked panel (left, under the first tab) */
+      --shaper-cream: #F4EFE1;            /* the Design / Vcarve canvas paper */
+      --shaper-prepare-bg: #3F4145;       /* the Prepare canvas (#view-prepare --sk-prep-bg) */
+      --shaper-review-bg: #14161a;        /* the Export stage's 3D view (#review-stage) */
+      /* the strip is the header colour: the 13 % tint toward the text (document-tabs.js default) IS the Prepare canvas grey, so the active tab could not be told from the strip there */
+      --sk-doctabs-bg: var(--sk-header-bg);
     }
+    /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
+    :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-vcarve-panel-bg); }
+    :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--shaper-prepare-bg); }
+    :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); }
+    @media (max-width: 640px) { :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-cream); --sk-doctab-surface-fg: #202020; } } /* the panel moves below the canvas */
     #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
     #view-vcarve { flex-direction: row; }
-    #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
+    #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: var(--shaper-vcarve-panel-bg); border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
     #vcarve-canvas { flex: 1; min-width: 0; min-height: 0; }
     .vcarve-section { margin-bottom: 16px; }
     .vcarve-h { font-weight: 700; color: #e6e6e6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; margin: 6px 0 8px; }
@@ -85,7 +97,7 @@
        (would wash out on cream), so we RE-override them here to the light (dark-on-cream) palette — the sketcher.css
        light defaults, but with a cream surface + cream-hollow joints. (The shared canvas grid — #ui/canvas-grid.js, GRID_MODE — is drawn behind the geometry using the --sk-grid-* vars below.) */
     #design-canvas, #vcarve-canvas {         /* VCARVE-3a: the Vcarve canvas reuses the cream Design theme */
-      background-color: #F4EFE1;             /* warm paper cream — explicitly not white */
+      background-color: var(--shaper-cream); /* warm paper cream — explicitly not white */
       --sk-canvas-bg: #F4EFE1;
       --sk-canvas-bg-snapping: #F1E9D6;
       --sk-grid-minor: #d8cfba; --sk-grid-major: #c4b896;
@@ -111,7 +123,7 @@
     #design-canvas.snapping { background-color: #F1E9D6; }
     /* Review (TASK 459): a 3D canvas + a side card (stock, export). */
     #view-review { flex-direction: row; color: #9aa0a6; font: 15px system-ui, sans-serif; }
-    #review-stage { position: relative; flex: 1; min-width: 0; background: #14161a; }
+    #review-stage { position: relative; flex: 1; min-width: 0; background: var(--shaper-review-bg); }
     #review-canvas-host, #review-canvas-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
     #review-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
     #review-toolbar button { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
@@ -195,7 +207,7 @@
     /* TASK 455: the Prepare look (Shaper Studio): ONE token block for the Prepare canvas AND the cut card (the card sits inside
        #view-prepare, so it inherits them). Colours are advisor-SAMPLED from the owner's Studio screenshots unless marked (~). */
     #view-prepare { flex-direction: column;
-      --sk-prep-bg: #3F4145;              /* canvas background */
+      --sk-prep-bg: var(--shaper-prepare-bg); /* canvas background */
       --sk-prep-geo: #DFE1E7;             /* idle geometry: thin white (1px) */
       --sk-prep-geo-selected: #1BE09E;    /* selected geometry: bold mint (2px) */
       --sk-prep-geo-hover: #1BE09E;       /* hover on an unassigned target: thin mint */

@@ -24,6 +24,10 @@
   --sk-footer-ink: var(--sk-header-fg);
   --sk-doctab-accent: var(--accent); /* TASK 681: the document tab strip's accent line (Trace declares no --sk-selection at :root) */
 }
+/* TASK 737: per stage, the surface directly below the document tab strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js).
+   Design (edit): the tool ribbon (the default). */
+:root[data-sk-stage="trace"] { --sk-doctab-surface: var(--panel); } /* the settings sidebar (left, under the first tab) */
+:root[data-sk-stage="export"] { --sk-doctab-surface: var(--bg); }   /* the page itself (the export card is centred below) */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

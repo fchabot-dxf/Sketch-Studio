@@ -4,7 +4,7 @@
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
+import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#core/dimension-seams.js';
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';

@@ -76,7 +76,7 @@ console.log('Running tests for packages/core/fillet.js...');
 
   // Editing the dimension re-solves the arc to the new radius
   state.engine = createNewtonSolver(joints, constraints, shapes, {});
-  const { commitDimensionEdit } = await import('../packages/ui/dimension-seams.js');
+  const { commitDimensionEdit } = await import('../packages/core/dimension-seams.js');
   const r = commitDimensionEdit(state, rc, 12);
   assert.strictEqual(r.reverted, false, 'edit must converge: ' + r.clash);
   const [cj, sj] = res.arc.joints;

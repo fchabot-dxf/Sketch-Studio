@@ -22,7 +22,7 @@ const mods = {
   createSketchState: (await import('../packages/core/sketch-state.js')).createSketchState,
   deserializeDocument: (await import('../packages/core/document.js')).deserializeDocument,
   draw: (await import('../packages/ui/svg-renderer.js')).draw,
-  commitDimensionEdit: (await import('../packages/ui/dimension-seams.js')).commitDimensionEdit,
+  commitDimensionEdit: (await import('../packages/core/dimension-seams.js')).commitDimensionEdit,
 };
 const { outcomesOf } = await import('./harness/angle-legacy.js');
 const { measureResidual } = await import('../packages/core/constraint-verifier.js');

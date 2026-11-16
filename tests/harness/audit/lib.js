@@ -1,25 +1,20 @@
 // TASK 508 -- constraint audit harness (library). NOT a test: tests/constraint-audit.test.js and scripts/constraint-audit.cjs
-// both run the pipeline defined here. It builds drawings through the SAME core APIs the tools use (makeRectFromTwoJoints,
-// makeArc, applyFillet, makePolygon, ConstraintManager.createConstraint, commitDimensionEdit, deleteConstraints,
-// state.saveState/undo) and OBSERVES: it never fixes anything and never hand-writes solver rows.
+// both run the pipeline defined here. It builds drawings through the SAME core APIs the tools use (#core/tool-ops.js: rect, arc, fillet,
+// polygon, circle, polyline; ConstraintManager.createConstraint, commitDimensionEdit, deleteConstraints, state.saveState/undo) and OBSERVES: it never fixes anything and never hand-writes solver rows.
 //
 // Pipeline per drawing (letters follow the task):
 //   A geometry only -> B apply the recipe step by step -> C final state -> D verify + perturbed re-solves ->
 //   E edit every dimension (0.8x / 1.25x / restore) -> F abuse (redundant, conflicting, delete, undo) -> G planegcs oracle.
-import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#core/sketch-state.js';
+import * as ops from '#core/tool-ops.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 import { deleteConstraints } from '#core/delete-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import { makeRectFromTwoJoints, makeArc, makePolygon } from '#core/shapes.js';
-import { addConstraint } from '#core/constraints.js';
 import { perpendicularDistance } from '#core/geometry.js';
 import { createNewtonSolver, hasRadiusUnknown } from '#core/solver/engine.js';
 import { sceneJoints, sceneShapes } from '#core/reference-lines.js';
 import { symmetricRowCount } from '#core/symmetric.js';
-import { findCornerBetweenLines, applyFillet } from '#core/fillet.js';
 import { init_planegcs_module, GcsWrapper } from '@salusoft89/planegcs';
 
 export const ITER = 500;
@@ -29,75 +24,35 @@ export const SEEDS = [11, 23, 37, 51, 73];   // fixed jitter seeds
 const NONE = () => {};
 
 // ---------------------------------------------------------------- sketch
-// NOTE: createEngine() shares one module-level store, so only ONE sketch lives at a time; drawings run one after another.
+// TASK 680: the tool-faithful drawing helpers are #core/tool-ops.js (ONE copy, shared with the template recipes); these wrap them on S.
 export function newSketch() {
-  const engine = createEngine(null);
-  engine.init();
-  const state = createSketchState(engine, { x: 0, y: 0, w: 800, h: 800 });
-  const S = { engine, state, msgs: [], names: {} };
+  const state = ops.newSketchState();
+  const S = { engine: state.engine, state, msgs: [], names: {} };
   setConstraintNotifier((msg) => { S.msgs.push(String(msg)); });
   return S;
 }
 export const origin = 'j_origin';
 
-export function point(S, x, y) { const id = S.state.genJ(); S.state.joints.set(id, { x, y, fixed: false }); return id; }
+// a click on empty canvas: a new joint (#core/tool-ops.js click)
+export function point(S, x, y) { return ops.click(S.state, x, y); }
+// NOT a tool: a line shape on two EXISTING joints (shared), for drawings that need exactly that structure
 export function line(S, a, b, construction = false) {
   const id = 's_line_' + a + '_' + b;
   S.state.shapes.push({ id, type: 'line', joints: [a, b], isConstruction: construction });
   return id;
 }
-// line-tool polyline: every segment owns its two joints; the corners are joined by an auto 'coincident' constraint (what line-tool.js adds),
-// NOT by a shared joint. Returns the segment shape ids and their [start,end] joint pairs.
-export function polyline(S, pts, closed = true) {
-  const segs = [];
-  const n = closed ? pts.length : pts.length - 1;
-  for (let i = 0; i < n; i++) {
-    const a = point(S, pts[i][0], pts[i][1]), b = point(S, pts[(i + 1) % pts.length][0], pts[(i + 1) % pts.length][1]);
-    segs.push({ id: line(S, a, b), a, b });
-  }
-  for (let i = 0; i + 1 < segs.length || (closed && i < segs.length); i++) {
-    const nx = segs[(i + 1) % segs.length];
-    ConstraintManager.createConstraint(S.state, 'coincident', { joints: [segs[i].b, nx.a] }, { source: 'line' });
-  }
-  return segs;
-}
-export function circle(S, cx, cy, r) {
-  const c = point(S, cx, cy);
-  const id = 's_circle_' + c;
-  S.state.shapes.push({ id, type: 'circle', joints: [c], radius: r, isConstruction: false });   // exactly what circle-tool.js stores
-  return { id, c };
-}
-// rect-tool: shapes pushed, then every structural constraint through ConstraintManager.createConstraint(source 'rect').
-export function rect(S, x1, y1, x2, y2) {
-  const c1 = point(S, x1, y1), c3 = point(S, x2, y2);
-  const built = makeRectFromTwoJoints(S.state.joints, c1, c3, S.state.genJ);
-  built.shapes.forEach(s => S.state.shapes.push(s));
-  built.constraints.forEach(c => ConstraintManager.createConstraint(S.state, c.type, c, { source: 'rect' }));
-  const [top, right, bottom, left] = built.shapes.map(s => s.id);
-  return { top, right, bottom, left, lines: [top, right, bottom, left], c1, c3 };
-}
-// fillet-tool: the two-line pick -> findCornerBetweenLines -> applyFillet (it adds the arc, the virtual sharp V, the tangents and the radius dimension)
-export function fillet(S, lineA, lineB, r) {
-  const corner = findCornerBetweenLines(S.state, shape(S, lineA), shape(S, lineB));
-  if (!corner) throw new Error('no fillet corner between ' + lineA + ' and ' + lineB);
-  const res = applyFillet(S.state, corner, r);
-  if (!res || !res.success) throw new Error('fillet failed: ' + (res && res.reason));
-  return { arc: res.arc.id, V: res.virtualSharp, center: res.joints[0], tA: res.joints[1], tB: res.joints[2] };
-}
-// arc-tool: makeArc(centre, start, end), shape pushed, its structural constraint through ConstraintManager.createConstraint(source 'arc')
-export function arc(S, c, a, b) {
-  const built = makeArc(S.state.joints, c, a, b, 'CENTER');
-  built.shapes.forEach(s => S.state.shapes.push(s));
-  built.constraints.forEach(k => ConstraintManager.createConstraint(S.state, k.type, k, { source: 'arc' }));
-  return built.shapes[0].id;
-}
-// polygon-tool: centre joint + first-corner joint, makePolygon, shapes pushed, constraints through the raw addConstraint (as polygon-tool.js does)
-export function polygon(S, c, v, n) {
-  const built = makePolygon(S.state.joints, c, v, n, S.state.genJ);
-  built.shapes.forEach(s => S.state.shapes.push(s));
-  built.constraints.forEach(k => addConstraint(S.state, k.type, k));
-  return built;
-}
+// Line tool polyline (#core/tool-ops.js polyline): every segment owns its two joints, the corners are joined by the auto coincident the line tool adds
+export function polyline(S, pts, closed = true) { return ops.polyline(S.state, pts, closed); }
+// Circle tool (#core/tool-ops.js circle) -> { id, c }
+export function circle(S, cx, cy, r) { return ops.circle(S.state, cx, cy, r); }
+// Rect tool (#core/tool-ops.js rect) -> { top, right, bottom, left, lines, c1, c3 }
+export function rect(S, x1, y1, x2, y2) { return ops.rect(S.state, x1, y1, x2, y2); }
+// Fillet tool, two-line pick (#core/tool-ops.js fillet)
+export function fillet(S, lineA, lineB, r) { return ops.fillet(S.state, lineA, lineB, r); }
+// Arc tool on three click joints (#core/tool-ops.js arc)
+export function arc(S, c, a, b) { return ops.arc(S.state, c, a, b); }
+// Polygon tool (#core/tool-ops.js polygon)
+export function polygon(S, c, v, n) { return ops.polygon(S.state, c, v, n); }
 export const shape = (S, id) => S.state.shapes.find(s => s.id === id);
 
 // ---------------------------------------------------------------- measuring

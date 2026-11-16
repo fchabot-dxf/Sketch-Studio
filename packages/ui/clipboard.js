@@ -23,7 +23,7 @@ import { newShapeId } from '#core/shape-id.js';
 import { evaluateAll, isDimension, isReferenceDimension, remapExpressionNames } from '#core/parameters.js';
 import { userToWorldY } from '#core/units.js';
 import { SolverConfig } from '#core/solver-config.js';
-import { commitDimensionEdits } from '#ui/dimension-seams.js';
+import { commitDimensionEdits } from '#core/dimension-seams.js';
 import { isPatternConstraint, patternRefs, remapPattern } from '#core/pattern.js';
 
 // ── DECLARED: the clipboard format and the paste step ──

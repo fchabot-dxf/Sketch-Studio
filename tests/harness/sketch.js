@@ -15,7 +15,7 @@ import { makeRectFromTwoJoints } from '#core/shapes.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 // The harness drives the REAL app edit/toggle logic via shared headless seams (single source of truth).
-import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
+import { commitDimensionEdit, toggleDriving } from '#core/dimension-seams.js';
 import { replayJournal, documentHash } from '#core/journal.js';
 
 const ITER = SolverConfig.ITERATIONS || 500;

@@ -30,6 +30,9 @@ try {
   // Templates...: Blank first, then every template; Esc closes with nothing changed
   await openSb(); pressEl('[data-action="templates"]'); await settle();
   assert.deepStrictEqual(qa('.sk-tp-card').map((c) => c.dataset.template), expectedOrder, 'Templates...: Blank first, then every template');
+  // TASK 680: the cards' previews are built after the modal shows (a recipe takes real time), one card per task: wait until every card has one
+  const drawn = () => qa('.sk-tp-card[data-template]:not([data-template="blank"])').every((c) => c.querySelectorAll('svg *').length > 3);
+  for (let i = 0; i < 200 && !drawn(); i++) await settle(50);
   assert(qa('.sk-tp-card[data-template]:not([data-template="blank"])').every((c) => c.querySelectorAll('svg *').length > 3 && c.querySelector('.sk-tp-name').textContent && c.querySelector('.sk-tp-desc').textContent), 'every card: a drawn preview, a name, a description');
   app.key('Escape'); await settle();
   assert.strictEqual(q('.sk-tp-panel'), null, 'Esc closes the modal');

@@ -9,7 +9,7 @@ globalThis.document = globalThis.document || { getElementById: () => null };
   const { makeRectFromTwoJoints } = await import('#core/shapes.js');
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const { findCornerAtPoint, applyFillet } = await import('#core/fillet.js');
-  const { commitDimensionEdit } = await import('#ui/dimension-seams.js');
+  const { commitDimensionEdit } = await import('#core/dimension-seams.js');
   const { findLoops } = await import('#core/loop-finder.js');
   const { deleteShapes, deleteSelection } = await import('#core/delete-manager.js');
 

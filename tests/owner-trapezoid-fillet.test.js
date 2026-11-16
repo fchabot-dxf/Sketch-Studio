@@ -3,7 +3,7 @@ import { createEngine } from '#core/constraint-solver.js';
 import { createSketchState } from '#core/sketch-state.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { deserializeDocument } from '#core/document.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { seedFilletForRadius } from '#core/fillet.js';
 
 const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };

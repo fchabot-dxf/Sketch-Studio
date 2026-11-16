@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { findCornerAtJoint, findCornerAtPoint, findCornerBetweenLines, findFilletShapeAtPoint, applyFillet, cornerFilletGeometry, diagnoseNoFillet } from '#core/fillet.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { createNewtonSolver } from '#core/solver/engine.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 
 const TOL = 1e-3;
 const near = (a, b, msg) => assert(Math.abs(a - b) < TOL, `${msg}: ${a} vs ${b}`);

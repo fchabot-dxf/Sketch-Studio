@@ -21,7 +21,7 @@
 import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { mirrorObjects } from '#core/mirror.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 

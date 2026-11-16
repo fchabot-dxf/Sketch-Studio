@@ -8,8 +8,8 @@
 import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
-import { updateConstraintOffset } from '#ui/input-handlers/dimension-tool.js';
-import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
+import { updateConstraintOffset } from '#core/dim-label.js';
+import { commitDimensionEdit, toggleDriving } from '#core/dimension-seams.js';
 
 // Scenarios that FAIL today: scenario number -> one-line reason. When one starts passing the test fails loudly: delete its entry.
 const KNOWN = {};

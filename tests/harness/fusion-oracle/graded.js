@@ -7,7 +7,7 @@ import * as L from '../audit/lib.js';
 import { build } from '../coverage/matrix-build.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { toggleFixedSelection } from '#ui/input-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { serDoc } from './export.js';
 
 export const TOL_F = 1e-6;      // Fusion: stayed < 1e-6 mm

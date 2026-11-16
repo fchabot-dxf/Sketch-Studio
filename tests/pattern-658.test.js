@@ -13,7 +13,7 @@ import {
   patternHandles, isPatternConstraint
 } from '#core/pattern.js';
 import { measureResidual } from '#core/constraint-verifier.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { selectionToEnvelope, pasteDocument } from '#ui/clipboard.js';

@@ -4,7 +4,7 @@
 // one starts passing). `severity` / `diagnosis` feed docs/COVERAGE-AUDIT.md.
 import * as L from '../audit/lib.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
-import { toggleDriving } from '#ui/dimension-seams.js';
+import { toggleDriving } from '#core/dimension-seams.js';
 import { findCornerBetweenLines } from '#core/fillet.js';
 import { panelDof, buildDrawing } from './prop-lib.js';
 import { runCase } from './prop-random.js';

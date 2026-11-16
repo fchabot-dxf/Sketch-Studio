@@ -108,7 +108,7 @@ await (async () => {
     await sleep(300); await shot('start-view-polygon-8-cw.png', '.sk-tp-panel', { pad: 4 });
     await openIt('polygon');
     assert.deepStrictEqual(await params(), [['side_length', '300 mm'], ['thickness', '38 mm']], 'polygon: its user parameters');
-    assert.strictEqual(await S(`s.shapes.filter((x) => x.isConstruction).length`), 8, 'polygon: 8 sides (8 construction radii)');
+    assert.strictEqual(await S(`s.shapes.filter((x) => x.isConstruction).length`), 16, 'polygon: 8 sides (TASK 680: the inner polygon is made by the Polygon tool, construction: 8 sides + 8 radii)');
     await canvasShot('polygon-8-cw-canvas.png');
 
     // the stair stringer

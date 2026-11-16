@@ -12,7 +12,7 @@ import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { showEditInput } from '#ui/numeric-input-manager.js';
 import { isPatternConstraint } from '#core/pattern.js';
 import { editPatternFromLabel } from '#ui/input-handlers/pattern-tool.js';
-import { dragDimensionLabel } from '#ui/dimension-seams.js';
+import { dragDimensionLabel } from '#core/dimension-seams.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';

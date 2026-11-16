@@ -15,7 +15,7 @@ import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
-import { toggleDriving } from '#ui/dimension-seams.js';
+import { toggleDriving } from '#core/dimension-seams.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';

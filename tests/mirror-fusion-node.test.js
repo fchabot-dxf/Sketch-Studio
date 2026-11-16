@@ -23,7 +23,7 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { serializeDocument } from '#core/document.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { mirrorPoint } from '#core/symmetric.js';
-import { commitDimensionEdits } from '#ui/dimension-seams.js';
+import { commitDimensionEdits } from '#core/dimension-seams.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 
 let checks = 0;

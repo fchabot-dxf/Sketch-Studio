@@ -14,7 +14,7 @@ import * as L from './harness/audit/lib.js';
 import { offsetChainOf, offsetChainGeometry, applyOffset, offsetSideAt } from '#core/offset.js';
 import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
 import { previewDimensionInput } from '#core/parameters.js';
-import { applyParameterChange } from '#ui/dimension-seams.js';
+import { applyParameterChange } from '#core/dimension-seams.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 
 let checks = 0;

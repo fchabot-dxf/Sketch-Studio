@@ -2,7 +2,7 @@
 // deleted, or the arc copied and pasted alone) keeps an editable radius dimension: the edit is the plain arc radius edit. Before: the edit
 // was refused and reverted with "fillet geometry is incomplete" (the fillet seed needs V and both legs).
 import * as L from './harness/audit/lib.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { deleteShapes, deleteJoints } from '#core/delete-manager.js';
 import { selectionToEnvelope, pasteDocument } from '#ui/clipboard.js';
 

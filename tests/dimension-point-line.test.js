@@ -7,7 +7,7 @@ import { TOOL_MODES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { deleteConstraints } from '#core/delete-manager.js';
 import { perpendicularDistance } from '#core/geometry.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { handleDimensionPointerDown, anchorPlacingDimension, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 
 const svg = { viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 800 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 800 }), setPointerCapture() {}, releasePointerCapture() {} };

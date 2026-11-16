@@ -1,38 +1,45 @@
 // packages/core/templates.js -- TASK 651: the BANK of template drawings, DECLARED as data. PURE, no DOM.
 //
-// A template is { id, name, description, params, build(params) }. build() returns a version-3 project document (serializeDocument's shape) made
-// with the existing shape builders (makePolygon, makeArc) and the ordinary constraint records, so a template opens as a normal drawing:
-// every one is FULLY DIMENSIONED (driving dimensions, fixed by the origin anchor) and editable after it opens.
+// A template is { id, name, description, params, dimensions, build(d, params) }. TASK 680 (owner turn 1734: "templates should be built using the
+// app's tools"): build() is a RECIPE. It draws on a fresh headless sketch of its own (#core/tool-ops.js newSketchState: its own engine store and
+// sketch state, task 679, so a preview never touches the open design) with the app's TOOL OPERATIONS only (#core/tool-ops.js: the Line, Rect,
+// Arc, Circle, Polygon, Slot and Fillet tools, the constraint tools, the Dimension tool and its value box, the Parameters window's + Add row, the
+// Pattern tool): each one calls exactly the core function its tool calls, so a template is exactly what a user drawing it with the tools gets.
+// buildTemplate() then serializes the sketch through serializeDocument (the one save path). Every template is FULLY DIMENSIONED (driving
+// dimensions, fixed by the origin anchor) and editable after it opens.
 //
 // UNITS: templates are authored in mm = world units (units.js BASE). A document's unit (mm | cm | in) is a display lens over the same world
 // values, so a template opens at the same physical size in an inch document; there is no conversion here.
 // ORIENTATION: authored with Y UP (as the user sees it) and stored through userToWorldY (the one Y seam).
-// ANCHOR: each template has one joint tied to the origin (a `coincident` with j_origin) so the drawing is fully constrained; it sits at (0, 0).
+// ANCHOR: each template has one point on the origin (a tool's click on the origin: its snap's coincident, or a line drawn from the origin);
+// d.origin(x, y) says which authored point that is, so the drawing is placed with that point at (0, 0) before it is drawn.
 // PARAMETERS (TASK 670): a template's LENGTH / ANGLE params open as the document's USER PARAMETERS (the Parameters table: name = paramName(key),
-// expression = the value in mm / deg, comment = the label), made by #core/parameters.js planChange (the ONE parameter model), and every driving
-// dimension is a FORMULA of them (its `expression`), so changing a parameter later goes through the existing parameter -> dimension -> solve path.
+// expression = the value in mm / deg, comment = the label), and every driving dimension is a FORMULA reading them DIRECTLY (owner ruling, turn
+// 1729: no dimension reads another dimension), typed into the dimension's value box as a user would, so changing a parameter later goes through
+// the existing parameter -> dimension -> solve path.
 // COUNT / CHOICE params (and a length declared `atOpen`) are chosen in the start modal only: they change the topology (how many boards, which joint)
 // or a value no dimension carries (a pattern's spacing), so a user parameter could not drive them and none is made.
 
 import { serializeDocument } from '#core/document.js';
-import { makeArc, makePolygon } from '#core/shapes.js';
 import { userToWorldY, worldToUserY } from '#core/units.js';
 import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES } from '#core/constants.js';
-import { applyPattern, patternDefaults } from '#core/pattern.js';
-import { planChange, nextDimensionName } from '#core/parameters.js';
+import { patternDefaults } from '#core/pattern.js';
 import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
 import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES } from '#core/frame-geometry.js';
-import { resolveDimEndpoints, linearDimFrame } from '#core/dim-label.js';
+import { resolveDimEndpoints, linearDimFrame, linearParamsToPoint, projectDimLabel } from '#core/dim-label.js';
 import { arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
+import * as ops from '#core/tool-ops.js';
 
 const R = (v) => Math.round(v * 1e6) / 1e6;
+const T = CONSTRAINT_TYPES;
 
 // ── TASK 672 (owner, turn 1732: "template dimension should be offset further away"): THE placement rule of every linear template dimension ──
-// A template call gives a dimension only its SIDE (the sign of its `offset`: along the dimension frame's normal, #core/dim-label.js
-// linearDimFrame, the frame the canvas draws it in). Its dimension line (and its label, on it) then sits OUTSIDE the drawing: DIM_GAP past the
-// solid outline's extent in that direction, DIM_GAP = DIM_FRACTION of the larger side of the drawing's bounding box, never under DIM_FLOOR mm;
-// the dimensions on one side are stacked in lanes, DIM_GAP apart, shorter spans nearer the outline, two in one lane only when their spans
-// (each at least DIM_GAP long: the label's room) do not overlap. Radius / angle dimensions keep their offsets.
+// A recipe gives a dimension only its SIDE (where its label is dropped: the sign of its `offset` along the dimension frame's normal,
+// #core/dim-label.js linearDimFrame, the frame the canvas draws it in). Its dimension line (and its label, on it) then sits OUTSIDE the drawing:
+// DIM_GAP past the solid outline's extent in that direction, DIM_GAP = DIM_FRACTION of the larger side of the drawing's bounding box, never
+// under DIM_FLOOR mm; the dimensions on one side are stacked in lanes, DIM_GAP apart, shorter spans nearer the outline, two in one lane only
+// when their spans (each at least DIM_GAP long: the label's room) do not overlap. Radius / angle dimensions keep their offsets.
+// TASK 680: each label is then DRAGGED there (#core/dim-label.js projectDimLabel, the select tool's label drag).
 export const DIM_FRACTION = 0.15, DIM_FLOOR = 10;
 /** The rule's distance for a drawing (world joints Map, shapes): DIM_FRACTION of its larger side, at least DIM_FLOOR. */
 export function dimensionGap(joints, shapes) {
@@ -68,7 +75,7 @@ function placeDimensions(joints, shapes, constraints) {
     const a = Math.min(along(j1), along(j2)), b = Math.max(along(j1), along(j2)), mid = (a + b) / 2, half = Math.max(b - a, gap) / 2;
     const key = `${Math.round(Math.atan2(uy, ux) * 180 / Math.PI)}`;
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ c, side, ux, uy, len: b - a, span: [mid - half, mid + half], at: f.mid.x * ux + f.mid.y * uy });
+    groups.get(key).push({ c, f, side, ux, uy, len: b - a, span: [mid - half, mid + half], at: f.mid.x * ux + f.mid.y * uy });
   }
   for (const items of groups.values()) {
     items.sort((p, q) => p.len - q.len);
@@ -77,374 +84,398 @@ function placeDimensions(joints, shapes, constraints) {
       let lane = 0;
       while ((lanes[lane] || []).some(([s0, s1]) => it.span[0] < s1 && it.span[1] > s0)) lane++;
       (lanes[lane] = lanes[lane] || []).push(it.span);
-      it.c.offset = R(it.side * (ext(it.ux, it.uy) + gap * (1 + lane) - it.at));
+      const offset = R(it.side * (ext(it.ux, it.uy) + gap * (1 + lane) - it.at));
+      projectDimLabel(it.c, linearParamsToPoint(it.f, offset, it.c.labelSlide || 0), joints, shapes); // the label dragged to its lane
     }
   }
 }
 
-// One small sketch builder: joints in user coordinates, shapes and constraints as plain records.
-function sketcher(id) {
-  const joints = new Map(), shapes = [], constraints = [];
-  let jn = 0, sn = 0;
-  const named = (c, expr) => { const d = { ...c, name: nextDimensionName(constraints) }; if (expr) d.expression = expr; constraints.push(d); return d.name; };
-  const genJ = () => `jt${++jn}`;
-  const sid = (k) => `st_${id}_${++sn}_${k}`;
-  const b = {
-    joints, shapes, constraints, genJ,
-    pt(x, y) { const j = genJ(); joints.set(j, { x: R(x), y: R(userToWorldY(y)), fixed: false }); return j; },
-    at(j) { const p = joints.get(j); return { x: p.x, y: userToWorldY(p.y) }; },
-    line(a, c, construction = false) { const s = sid('line'); shapes.push({ id: s, type: 'line', joints: [a, c], isConstruction: construction }); return s; },
-    // an arc about `c` from `a` to `e`, counter-clockwise AS THE USER SEES IT (makeArc adds the equal-radius rule of its rim points)
-    arc(c, a, e) {
-      const built = makeArc(joints, c, a, e, 'CENTER');
-      const s = built.shapes[0]; s.id = sid('arc'); s.sweep = false; // sweep false = negative world angle = counter-clockwise on screen (Y-down world)
-      shapes.push(s); constraints.push(...built.constraints);
-      return s.id;
+// ── TASK 680: the DRAWING a recipe works on: the tool operations (#core/tool-ops.js) in the template's user coordinates ──────────────────────
+// Points are [x, y] in user coordinates (Y up, before the anchor shift) or the id of an existing joint (a click on it). Lines come back as
+// the Line tool's segments ({ id, a, b }: its shape and its own two joints).
+const LABEL_AWAY = 10; // where a recipe drops a linear dimension's label (mm from its points; the placement rule above moves it out later)
+function drawing() {
+  const state = ops.newSketchState();
+  let ox = 0, oy = 0, swap = false;
+  const across = { horizontal: 'vertical', vertical: 'horizontal' };
+  const d = {
+    state,
+    /** The authored point that lands on the origin (the anchor): every point is placed relative to it. */
+    origin(x, y) { ox = x; oy = y; },
+    /** TASK 670's layout seam: from here on the authored x and y are swapped (a mirror in the diagonal through the anchor). */
+    mirrorDiagonal() { swap = true; },
+    w(x, y) { const [u, v] = swap ? [y, x] : [x, y]; return [u - (swap ? oy : ox), userToWorldY(v - (swap ? ox : oy))]; },
+    pos(j) { return state.joints.get(j); },
+    pt(x, y) { const [a, b] = d.w(x, y); return ops.click(state, a, b); },
+    poly(pts, closed = false, construction = false) { return ops.polyline(state, pts.map((p) => (typeof p === 'string' ? p : d.w(p[0], p[1]))), closed, construction); },
+    line(a, b, construction = false) { return d.poly([a, b], false, construction)[0]; },
+    circle(x, y, r, construction = false) { const [a, b] = d.w(x, y); return ops.circle(state, a, b, r, construction); },
+    // an arc about `c` from `a` to `e` (three click joints), counter-clockwise AS THE USER SEES IT (the Arc tool's winding: sweep false)
+    arc(c, a, e) { return ops.arc(state, c, a, e, { sweep: false }); },
+    h(a, b) { return ops.constrain(state, swap ? T.VERTICAL : T.HORIZONTAL, { joints: [a, b] }); },
+    v(a, b) { return ops.constrain(state, swap ? T.HORIZONTAL : T.VERTICAL, { joints: [a, b] }); },
+    hl(seg) { return d.h(seg.a, seg.b); },
+    vl(seg) { return d.v(seg.a, seg.b); },
+    equal(s1, s2) { return ops.constrain(state, T.EQUAL, { shapes: [s1, s2] }); },
+    equalChain(list) { for (let i = 0; i + 1 < list.length; i++) d.equal(list[i], list[i + 1]); },
+    parallel(s1, s2) { return ops.constrain(state, T.PARALLEL, { shapes: [s1, s2] }); },
+    midpoint(a, b, m) { return ops.constrain(state, T.MIDPOINT, { joints: [a, b, m] }); }, // the Midpoint tool's three points: m halfway from a to b
+    coincident(a, b) { return ops.constrain(state, T.COINCIDENT, { joints: [a, b] }); },
+    on(j, shape) { ops.snap(state, j, { shape }); }, // a point dragged / drawn onto a curve
+    anchor(j) { ops.snap(state, j, ORIGIN_JOINT_ID); }, // a point on the origin
+    /**
+     * A point-to-point dimension. `mode` and `side` say where the user drops the label (as the old offset did): 'aligned' beside the middle,
+     * 'horizontal' / 'vertical' beyond the end that is outermost on that side. The Dimension tool picks the mode from the label point (its
+     * detectDimMode; TASK 680: a level / plumb pair is always a horizontal / vertical dimension, like Fusion). `text` is typed in its box.
+     */
+    dim(a, b, mode, side, text) {
+      if (swap) { mode = across[mode] || mode; side = -side; }
+      const label = labelPoint(state, { type: T.DISTANCE, joints: [a, b], dimMode: mode }, side);
+      const c = ops.dimension(state, { joints: [a, b] }, label, text);
+      const A = state.joints.get(a), B = state.joints.get(b);
+      const want = Math.abs(A.y - B.y) < 1e-9 ? 'horizontal' : Math.abs(A.x - B.x) < 1e-9 ? 'vertical' : mode; // a level / plumb pair: its own axis
+      if (c.dimMode !== want) throw new Error(`dimension ${c.name}: the label point made a ${c.dimMode} dimension, not ${want}`);
+      return c;
     },
-    circle(c, r, construction = false) { const s = sid('circle'); shapes.push({ id: s, type: 'circle', joints: [c], radius: r, isConstruction: construction }); return s; },
-    h(a, c) { constraints.push({ type: 'horizontal', joints: [a, c] }); },
-    v(a, c) { constraints.push({ type: 'vertical', joints: [a, c] }); },
-    equalShapes(chain) { for (let i = 0; i + 1 < chain.length; i++) constraints.push({ type: 'equal', shapes: [chain[i], chain[i + 1]] }); },
-    equalLengths(chain) { for (let i = 0; i + 1 < chain.length; i++) constraints.push({ type: 'equal', joints: [...chain[i], ...chain[i + 1]] }); }, // chain of [a, b] pairs
-    pointOn(j, shape) { constraints.push({ type: 'pointOnLine', joint: j, shape }); },
-    midpoint(m, a, c) { constraints.push({ type: 'midpoint', joints: [a, c, m] }); },
-    parallel(s1, s2) { constraints.push({ type: 'parallel', shapes: [s1, s2] }); }, // TASK 672
-    // TASK 672: a driving ANGLE dimension (degrees) from line s1's direction to line s2's, counter-clockwise in the world (#core/angle-sector.js:
-    // the default sector, stored so a load measures this one)
-    angle(s1, s2, value, offset = 40, expr) { return named({ type: 'angle', shapes: [s1, s2], value: R(value), offset, sector: { ray1: 1, ray2: 1, turn: 1 }, isDriven: false, driven: false }, expr); },
-    // driving dimensions: mode 'aligned' | 'horizontal' | 'vertical'; offset = where the label sits (mm from the geometry); expr = its formula
-    // (TASK 670: every template dimension has one, of the user parameters or of an earlier dimension; `value` is what it gives at the built
-    // values). Each is NAMED here (d1, d2, ... in order: the names a load would give) so a formula can read an earlier one; each returns its name.
-    dim(a, c, value, mode = 'aligned', offset = 8, expr) { return named({ type: 'distance', joints: [a, c], value: R(value), dimMode: mode, offset, isDriven: false, driven: false }, expr); },
-    radius(shape, value, offset = 8, expr) { return named({ type: 'distance', shape, value: R(value), isRadius: true, offset, isDriven: false, driven: false }, expr); },
-    gap(s1, s2, value, offset = 8, expr) { return named({ type: 'distance', shapes: [s1, s2], value: R(value), offset, isDriven: false, driven: false }, expr); },
-    // the anchor: `j` goes to (0, 0) (everything moves with it) and is tied to the origin
-    finish(j) {
-      const p = joints.get(j);
-      const dx = p.x, dy = p.y;
-      for (const q of joints.values()) { q.x = R(q.x - dx); q.y = R(q.y - dy); }
-      constraints.push({ type: 'coincident', joints: [j, ORIGIN_JOINT_ID] });
-      placeDimensions(joints, shapes, constraints); // TASK 672: the one placement rule of the linear dimensions
-      return serializeDocument({ joints, shapes, constraints, parameters: [] });
+    /** A line-to-line distance (two parallel lines), the label on `side` of the dimension line. */
+    gap(l1, l2, side, text) {
+      if (swap) side = -side;
+      return ops.dimension(state, { lines: [l1, l2] }, labelPoint(state, { type: T.DISTANCE, shapes: [l1, l2] }, side), text);
+    },
+    /** A radius dimension, its label `dist` from the centre, up and to the right as the user sees it. */
+    radius(shape, text, dist = 10) {
+      const sh = state.shapes.find((s) => s.id === shape), c = state.joints.get(sh.joints[0]);
+      return ops.dimension(state, { shape }, { x: c.x + dist * Math.SQRT1_2, y: c.y - dist * Math.SQRT1_2 }, text);
+    },
+    /** An angle dimension between two lines, its label dropped at the authored point [x, y] (the sector under it is the one it measures). */
+    angle(l1, l2, at, text) { const [x, y] = d.w(at[0], at[1]); return ops.dimension(state, { lines: [l1, l2] }, { x, y }, text); },
+    /** A text typed into an existing dimension's box (a double click on its label). */
+    type(c, text) { return ops.typeDimension(state, c, text); },
+    /** The drawing as a document: the linear labels dragged to the placement rule's lanes, then the one save path. */
+    finish() {
+      placeDimensions(state.joints, state.shapes, state.constraints);
+      return serializeDocument(state);
     },
   };
-  return b;
+  return d;
 }
+// where a user drops a linear dimension's label to get `side` (the sign of its offset along the frame of `cLike`, the old template offset): beside
+// the middle for an aligned one (and for a line-to-line one), beyond the outermost end on that side for a horizontal / vertical one
+function labelPoint(state, cLike, side) {
+  const { j1, j2 } = resolveDimEndpoints(cLike, state.joints, state.shapes), f = linearDimFrame(cLike, j1, j2);
+  const ux = side * f.nx, uy = side * f.ny;
+  const at = cLike.dimMode === 'horizontal' || cLike.dimMode === 'vertical' ? (j1.x * ux + j1.y * uy >= j2.x * ux + j2.y * uy ? j1 : j2) : f.mid;
+  return { x: at.x + ux * LABEL_AWAY, y: at.y + uy * LABEL_AWAY };
+}
+// a closed polyline's corner k (the start joint of its segment k)
+const corners = (segs) => segs.map((s) => s.a);
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 
 // ── TASK 672: BOARD sketches (the frame templates), one path from board outlines to a sketch and its rules ──────────────────────────────────
 const NEAR = 1e-6; // two corners closer than this (mm) are ONE point (a frame engine computes a shared corner twice, a float apart)
-// Board OUTLINES (world polygons: frame-calc's frame, Y down) -> the sketch: every polygon corner is ONE joint, every edge is split at the
-// corners lying on it and each piece is drawn ONCE (a seam two boards share is one line). (Task 670's right-angle corner, made reusable.)
-// -> { J(q): the joint at a world point, corners: [{ q, j }], pieces: [{ a, b, shape }] (a, b: corners; in drawing order) }
-function drawBoards(s, polys) {
+// Board OUTLINES (world polygons: frame-calc's frame, Y down) -> the sketch, drawn with the LINE TOOL: every edge is split at the corners lying
+// on it and each piece is drawn ONCE (a seam two boards share is one line). Each board's pieces not drawn yet are drawn as polylines along the
+// board (the whole outline closed when none is drawn yet); a polyline starts on a corner's joint when that corner has one, and ends on it (the
+// Line tool's coincident). Each corner's FIRST joint is its joint for the rules and the dimensions (`homes`: corners given a joint beforehand).
+// -> { J(q): a corner's joint, corners: [{ q, j }], pieces: [{ a, b, shape }] (a, b: corners; in drawing order) }
+function drawBoards(d, polys, homes = []) {
   const corners = [];
   const find = (q) => corners.find((c) => Math.abs(c.q.x - q.x) < NEAR && Math.abs(c.q.y - q.y) < NEAR);
-  for (const poly of polys) for (const q of poly) if (!find(q)) corners.push({ q, j: s.pt(q.x, worldToUserY(q.y)) });
+  for (const h of homes) corners.push({ q: h.q, j: h.j });
+  for (const poly of polys) for (const q of poly) if (!find(q)) corners.push({ q, j: null });
+  const key = (u, v) => [corners.indexOf(u), corners.indexOf(v)].sort((x, y) => x - y).join('|');
   const pieces = [], drawn = new Set();
-  for (const poly of polys) poly.forEach((a, i) => {
-    const b = poly[(i + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-    const on = corners.map((c) => ({ c, u: ((c.q.x - a.x) * dx + (c.q.y - a.y) * dy) / (len * len), off: Math.abs((c.q.x - a.x) * dy - (c.q.y - a.y) * dx) / len }))
-      .filter((o) => o.off < NEAR && o.u > -NEAR / len && o.u < 1 + NEAR / len).sort((u, v) => u.u - v.u); // the joints ON this edge, from a to b
-    for (let k = 0; k + 1 < on.length; k++) {
-      const u = on[k].c, v = on[k + 1].c, id = [u.j, v.j].sort().join('|');
-      if (drawn.has(id)) continue; // the shared seam: drawn once
-      drawn.add(id);
-      pieces.push({ a: u, b: v, shape: s.line(u.j, v.j) });
+  const userPt = (c) => c.j || [c.q.x, worldToUserY(c.q.y)];
+  for (const poly of polys) {
+    const ring = []; // this board's pieces, in order round it
+    poly.forEach((a, i) => {
+      const b = poly[(i + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+      const on = corners.map((c) => ({ c, u: ((c.q.x - a.x) * dx + (c.q.y - a.y) * dy) / (len * len), off: Math.abs((c.q.x - a.x) * dy - (c.q.y - a.y) * dx) / len }))
+        .filter((o) => o.off < NEAR && o.u > -NEAR / len && o.u < 1 + NEAR / len).sort((u, v) => u.u - v.u); // the corners ON this edge, from a to b
+      for (let k = 0; k + 1 < on.length; k++) ring.push([on[k].c, on[k + 1].c]);
+    });
+    const todo = ring.map(([u, v]) => !drawn.has(key(u, v)));
+    const runs = [];
+    if (todo.every(Boolean)) runs.push({ pieces: ring, closed: true });
+    else {
+      const s0 = todo.findIndex((t, i) => !t && todo[(i + 1) % ring.length]); // a run starts after a drawn piece
+      let run = null;
+      for (let k = 1; k <= ring.length; k++) {
+        const i = (s0 + k) % ring.length;
+        if (todo[i]) { if (!run) runs.push(run = { pieces: [], closed: false }); run.pieces.push(ring[i]); } else run = null;
+      }
     }
-  });
+    for (const run of runs) {
+      const pts = run.closed ? run.pieces.map(([u]) => userPt(u)) : [userPt(run.pieces[0][0]), ...run.pieces.map(([, v]) => userPt(v))];
+      const segs = d.poly(pts, run.closed);
+      run.pieces.forEach(([u, v], k) => {
+        if (!u.j) u.j = segs[k].a;
+        if (!v.j) v.j = segs[k].b;
+        drawn.add(key(u, v));
+        pieces.push({ a: u, b: v, shape: segs[k].id });
+      });
+    }
+  }
   return { J: (q) => find(q).j, corners, pieces };
 }
 // The RULES of a board sketch, from its CARRIER lines: every board edge lies on one (a frame's outer and inner faces), and every corner sits
 // where two carriers cross, so holding each corner on its carriers leaves only the carriers to place (the template's dimensions and parallels).
 // A carrier declared 'h' / 'v' chains its corners, in order along it, with horizontal / vertical rules (k - 1 rules for k corners: the carrier
 // keeps one freedom, its offset); a free (slanted) carrier keeps two (offset and angle): its first drawn piece is its REFERENCE line and every
-// other corner on it is a point-on-line of that piece (k - 2 rules). carriers: [{ a, b, axis: 'h' | 'v' | null }] (world points, a != b).
-// -> per carrier { corners (in order along it), ref (the reference piece's shape id) }
-function carrierRules(s, board, carriers) {
+// other corner on it is held on that piece (k - 2 rules: the point dragged onto the line). carriers: [{ a, b, axis: 'h' | 'v' | null }] (world
+// points, a != b). -> per carrier { corners (in order along it), ref (the reference piece's shape id) }
+function carrierRules(d, board, carriers) {
   return carriers.map((cr) => {
     const dx = cr.b.x - cr.a.x, dy = cr.b.y - cr.a.y, len = Math.hypot(dx, dy);
     const onIt = (q) => Math.abs((q.x - cr.a.x) * dy - (q.y - cr.a.y) * dx) / len < NEAR;
     const along = (q) => (q.x - cr.a.x) * dx + (q.y - cr.a.y) * dy;
-    const corners = board.corners.filter((c) => onIt(c.q)).sort((u, v) => along(u.q) - along(v.q));
+    const cs = board.corners.filter((c) => onIt(c.q)).sort((u, v) => along(u.q) - along(v.q));
     const ref = board.pieces.find((p) => onIt(p.a.q) && onIt(p.b.q));
-    if (cr.axis) for (let i = 0; i + 1 < corners.length; i++) (cr.axis === 'h' ? s.h : s.v)(corners[i].j, corners[i + 1].j);
-    else for (const c of corners) if (c !== ref.a && c !== ref.b) s.pointOn(c.j, ref.shape);
-    return { corners, ref: ref && ref.shape };
+    if (cr.axis) for (let i = 0; i + 1 < cs.length; i++) (cr.axis === 'h' ? d.h : d.v)(cs[i].j, cs[i + 1].j);
+    else for (const c of cs) if (c !== ref.a && c !== ref.b) d.on(c.j, ref.shape);
+    return { corners: cs, ref: ref && ref.shape };
   });
 }
 
-// ── the bank ────────────────────────────────────────────────────────────────────────────────────────────────────
-function buildSlot(p) {
-  const L = num(p.length, 40), W = num(p.width, 10), r = W / 2, d = L - W; // d = centre-to-centre distance of the two ends
-  const s = sketcher('slot');
-  const CL = s.pt(0, 0), CR = s.pt(d, 0);
-  const TL = s.pt(0, r), BL = s.pt(0, -r), TR = s.pt(d, r), BR = s.pt(d, -r);
-  s.line(TL, TR); s.line(BL, BR);
-  s.arc(CL, TL, BL); s.arc(CR, BR, TR);
-  s.h(TL, TR); s.h(BL, BR); s.v(CL, TL); s.v(CL, BL); s.v(CR, TR); s.v(CR, BR);
-  s.dim(TL, BL, W, 'vertical', -7, 'width');
-  s.dim(CL, CR, d, 'horizontal', -r - 4, 'length - width');
-  return s.finish(CL);
+// ── the bank: one RECIPE per template (what a user does with the tools to draw it) ────────────────────────────────────────────────────────
+// TASK 680: the Slot tool (centre to centre, task 673) from the origin: its two ends, the lines tangent to them, its width (the tool's own
+// diameter dimension, `width` typed in it); the centre line horizontal and the centres `length - width` apart.
+function buildSlot(d, p) {
+  const L = num(p.length, 40), W = num(p.width, 10), c = L - W; // c = centre-to-centre distance of the two ends
+  const CR = d.pt(c, 0);
+  const built = ops.slot(d.state, ORIGIN_JOINT_ID, CR, W); // the first pick on the origin (the Slot tool reuses that joint)
+  const width = d.state.constraints.find((k) => k.type === T.DISTANCE && k.isRadius && k.shape === built.meta.e1.id);
+  d.type(width, 'width');
+  d.h(ORIGIN_JOINT_ID, CR);
+  d.dim(ORIGIN_JOINT_ID, CR, 'horizontal', -1, 'length - width');
 }
 
-function buildRoundedRect(p) {
+// TASK 680: the Rect tool, its width and height dimensioned, then each corner rounded by the Fillet tool: four fillets, each with its OWN radius
+// dimension (the fillet's own, `radius` typed in it) and no equal rule between them (owner, turns 1735-1742). The bottom-left fillet's centre is
+// on the origin (as before).
+function buildRoundedRect(d, p) {
   const w = num(p.width, 60), h = num(p.height, 40), r = num(p.radius, 5);
-  const s = sketcher('rrect');
-  const corner = (cx, cy, ax, ay, bx, by) => ({ c: s.pt(cx, cy), a: s.pt(ax, ay), b: s.pt(bx, by) });
-  const x0 = r, x1 = w - r, y0 = r, y1 = h - r;
-  const bl = corner(x0, y0, x0, 0, 0, y0), br = corner(x1, y0, x1, 0, w, y0), tr = corner(x1, y1, x1, h, w, y1), tl = corner(x0, y1, x0, h, 0, y1);
-  s.line(tl.a, tr.a); s.line(tr.b, br.b); s.line(br.a, bl.a); s.line(bl.b, tl.b);
-  const arcs = [s.arc(tl.c, tl.a, tl.b), s.arc(bl.c, bl.b, bl.a), s.arc(br.c, br.a, br.b), s.arc(tr.c, tr.b, tr.a)];
-  s.h(tl.a, tr.a); s.h(br.a, bl.a); s.v(tr.b, br.b); s.v(bl.b, tl.b);
-  for (const k of [tl, tr, bl, br]) { s.v(k.c, k.a); s.h(k.c, k.b); }
-  s.equalLengths([[tl.c, tl.a], [tr.c, tr.a], [br.c, br.a], [bl.c, bl.a]]);
-  s.radius(arcs[0], r, 10, 'radius');
-  s.dim(tl.b, tr.b, w, 'horizontal', -5, 'width');
-  s.dim(tl.a, bl.a, h, 'vertical', -6, 'height');
-  return s.finish(bl.c);
+  d.origin(r, r);
+  const [x0, y0] = d.w(0, 0), [x1, y1] = d.w(w, h);
+  const rc = ops.rect(d.state, x0, y0, x1, y1); // world: y0 is the bottom edge (the larger y), y1 the top
+  const line = (id) => d.state.shapes.find((s) => s.id === id);
+  const bottom = rc.top, right = rc.right, top = rc.bottom, left = rc.left; // makeRectFromTwoJoints names its edges for a first click top-left
+  d.dim(line(top).joints[0], line(top).joints[1], 'horizontal', -1, 'width');
+  d.dim(line(left).joints[0], line(left).joints[1], 'vertical', -1, 'height');
+  let bl = null;
+  for (const [a, b] of [[top, right], [right, bottom], [bottom, left], [left, top]]) {
+    const f = ops.fillet(d.state, a, b, r);
+    d.type(d.state.constraints.find((k) => k.isRadius && k.shape === f.arc), 'radius');
+    if (a === bottom) bl = f;
+  }
+  d.anchor(bl.center);
 }
 
-function buildKeyhole(p) {
+function buildKeyhole(d, p) {
   const R0 = num(p.radius, 10), neck = num(p.neck, 8), depth = num(p.depth, 35);
-  const s = sketcher('keyhole');
   const hw = neck / 2, ph = Math.sqrt(Math.max(R0 * R0 - hw * hw, 0));
-  const CB = s.pt(0, 0), P1 = s.pt(hw, -ph), P2 = s.pt(-hw, -ph);
-  const Q1 = s.pt(hw, -depth), Q2 = s.pt(-hw, -depth), CS = s.pt(0, -depth);
-  const big = s.arc(CB, P1, P2); // from the right shoulder up and over the top (counter-clockwise) to the left shoulder
-  s.line(P2, Q2); s.line(P1, Q1);
-  s.arc(CS, Q2, Q1); // the rounded end of the neck, round the bottom
-  s.h(P1, P2); s.v(P1, Q1); s.v(P2, Q2); s.h(CS, Q1); s.h(Q1, Q2);
-  s.radius(big, R0, 12, 'radius'); s.dim(P1, P2, neck, 'horizontal', 6, 'neck'); s.dim(CB, CS, depth, 'vertical', 14, 'depth');
-  return s.finish(CB);
+  const CB = d.pt(0, 0), P1 = d.pt(hw, -ph), P2 = d.pt(-hw, -ph);
+  const big = d.arc(CB, P1, P2); // from the right shoulder up and over the top (counter-clockwise) to the left shoulder
+  d.anchor(CB);
+  const CS = d.pt(0, -depth), Q2 = d.pt(-hw, -depth), Q1 = d.pt(hw, -depth);
+  d.arc(CS, Q2, Q1); // the rounded end of the neck, round the bottom
+  const left = d.line(P2, Q2), right = d.line(P1, Q1); // the neck's sides, from the shoulders down to the end arc's points
+  d.h(P1, P2); d.vl(right); d.vl(left); d.h(CS, Q1); d.h(Q1, Q2);
+  d.radius(big, 'radius', 12); d.dim(P1, P2, 'horizontal', 1, 'neck'); d.dim(CB, CS, 'vertical', 1, 'depth');
 }
 
-function buildHexagon(p) {
+function buildHexagon(d, p) {
   const af = num(p.acrossFlats, 20), rc = af / 2 / Math.cos(Math.PI / 6);
-  const s = sketcher('hex');
-  const C = s.pt(0, 0), V = s.pt(rc, 0);
-  const built = makePolygon(s.joints, C, V, 6, s.genJ);
-  s.shapes.push(...built.shapes); s.constraints.push(...built.constraints);
+  const C = d.pt(0, 0), V = d.pt(rc, 0);
+  const built = ops.polygon(d.state, C, V, 6);
+  d.anchor(C);
   const sides = built.shapes.filter((x) => !x.isConstruction);
   // the polygon's first corner is on the right, so side 1 (60 to 120 degrees) is the flat on top and side 4 the one at the bottom
-  s.h(sides[1].joints[0], sides[1].joints[1]);
-  s.gap(sides[1].id, sides[4].id, af, 8, 'across_flats');
-  return s.finish(C);
+  d.h(sides[1].joints[0], sides[1].joints[1]);
+  d.gap(sides[1].id, sides[4].id, 1, 'across_flats');
 }
 
-function buildStar(p) {
+function buildStar(d, p) {
   const Ro = num(p.outer, 25), Ri = num(p.inner, 10);
-  const s = sketcher('star');
-  const C = s.pt(0, 0), o = [], ii = [], radO = [], radI = [];
+  const pts = [];
   for (let k = 0; k < 5; k++) {
     const a = Math.PI / 2 + k * 2 * Math.PI / 5, b = a + Math.PI / 5;
-    o.push(s.pt(Ro * Math.cos(a), Ro * Math.sin(a)));
-    ii.push(s.pt(Ri * Math.cos(b), Ri * Math.sin(b)));
+    pts.push([Ro * Math.cos(a), Ro * Math.sin(a)], [Ri * Math.cos(b), Ri * Math.sin(b)]);
   }
-  const sides = [];
-  for (let k = 0; k < 5; k++) { sides.push(s.line(o[k], ii[k])); sides.push(s.line(ii[k], o[(k + 1) % 5])); }
-  for (let k = 0; k < 5; k++) { radO.push(s.line(C, o[k], true)); radI.push(s.line(C, ii[k], true)); }
-  s.equalShapes(radO); s.equalShapes(radI); s.equalShapes(sides);
-  s.v(C, o[0]);
-  s.dim(C, o[0], Ro, 'aligned', 8, 'outer'); s.dim(C, ii[0], Ri, 'aligned', -8, 'inner');
-  return s.finish(C);
+  const sides = d.poly(pts, true), at = corners(sides); // the outline: outer point, inner point, ... (the Line tool, closed)
+  const radO = [], radI = [];
+  for (let k = 0; k < 5; k++) { radO.push(d.line(ORIGIN_JOINT_ID, at[2 * k], true)); radI.push(d.line(ORIGIN_JOINT_ID, at[2 * k + 1], true)); } // construction radii from the centre
+  d.equalChain(radO.map((s) => s.id)); d.equalChain(radI.map((s) => s.id)); d.equalChain(sides.map((s) => s.id));
+  d.vl(radO[0]);
+  d.dim(ORIGIN_JOINT_ID, at[0], 'aligned', 1, 'outer'); d.dim(ORIGIN_JOINT_ID, at[1], 'aligned', -1, 'inner');
 }
 
-function buildArrow(p) {
+function buildArrow(d, p) {
   const shaftL = num(p.shaftLength, 40), shaftW = num(p.shaftWidth, 10), headL = num(p.headLength, 20), headW = num(p.headWidth, 30);
-  const s = sketcher('arrow');
-  const M = s.pt(0, 0), S = s.pt(-shaftL, 0);
-  const P0 = s.pt(-shaftL, shaftW / 2), P1 = s.pt(0, shaftW / 2), P2 = s.pt(0, headW / 2), P3 = s.pt(headL, 0);
-  const P4 = s.pt(0, -headW / 2), P5 = s.pt(0, -shaftW / 2), P6 = s.pt(-shaftL, -shaftW / 2);
-  const ring = [P0, P1, P2, P3, P4, P5, P6];
-  ring.forEach((j, i) => s.line(j, ring[(i + 1) % ring.length]));
-  s.h(P0, P1); s.h(P5, P6); s.v(P0, P6); s.v(P1, P2); s.v(P4, P5); s.v(P2, P4);
-  s.midpoint(M, P2, P4); s.midpoint(S, P0, P6); s.h(S, M); s.h(M, P3);
-  s.dim(P0, P6, shaftW, 'vertical', -8, 'shaft_width'); s.dim(P0, P1, shaftL, 'horizontal', 12, 'shaft_length'); s.dim(P2, P4, headW, 'vertical', 12, 'head_width'); s.dim(M, P3, headL, 'horizontal', -headW / 2 - 6, 'head_length');
-  return s.finish(M);
+  const ring = d.poly([[-shaftL, shaftW / 2], [0, shaftW / 2], [0, headW / 2], [headL, 0], [0, -headW / 2], [0, -shaftW / 2], [-shaftL, -shaftW / 2]], true);
+  const [P0, P1, P2, P3, P4, P5, P6] = corners(ring);
+  d.hl(ring[0]); d.hl(ring[5]); d.vl(ring[6]); d.vl(ring[1]); d.vl(ring[4]); d.v(P2, P4);
+  const axis = d.line(ORIGIN_JOINT_ID, [-shaftL, 0], true), tip = d.line(ORIGIN_JOINT_ID, P3, true); // the arrow's axis, construction, from the origin
+  d.midpoint(P2, P4, ORIGIN_JOINT_ID); d.midpoint(P0, P6, axis.b); d.hl(axis); d.hl(tip);
+  d.dim(P0, P6, 'vertical', -1, 'shaft_width'); d.dim(P0, P1, 'horizontal', 1, 'shaft_length'); d.dim(P2, P4, 'vertical', 1, 'head_width'); d.dim(ORIGIN_JOINT_ID, P3, 'horizontal', -1, 'head_length');
 }
 
-function buildLBracket(p) {
+function buildLBracket(d, p) {
   const w = num(p.width, 60), h = num(p.height, 50), t = num(p.thickness, 10), hd = num(p.holeDiameter, 5);
-  const s = sketcher('lbracket');
-  const P0 = s.pt(0, 0), P1 = s.pt(w, 0), P2 = s.pt(w, t), P3 = s.pt(t, t), P4 = s.pt(t, h), P5 = s.pt(0, h);
-  const ring = [P0, P1, P2, P3, P4, P5];
-  ring.forEach((j, i) => s.line(j, ring[(i + 1) % ring.length]));
-  s.h(P0, P1); s.v(P1, P2); s.h(P2, P3); s.v(P3, P4); s.h(P4, P5); s.v(P5, P0);
-  s.dim(P0, P1, w, 'horizontal', -8, 'width'); s.dim(P0, P5, h, 'vertical', -8, 'height'); s.dim(P1, P2, t, 'vertical', 8, 'thickness'); s.dim(P5, P4, t, 'horizontal', 8, 'thickness');
-  const c1 = s.pt(w - t, t / 2), c2 = s.pt(t / 2, h - t);
-  const k1 = s.circle(c1, hd / 2), k2 = s.circle(c2, hd / 2);
-  s.dim(P0, c1, w - t, 'horizontal', 8 + t, 'width - thickness'); s.dim(P0, c1, t / 2, 'vertical', -14, 'thickness / 2');
-  s.dim(P0, c2, t / 2, 'horizontal', -14, 'thickness / 2'); s.dim(P0, c2, h - t, 'vertical', 8 + t, 'height - thickness');
-  s.radius(k1, hd / 2, 6, 'hole_diameter / 2'); s.equalShapes([k1, k2]);
-  return s.finish(P0);
+  const ring = d.poly([[0, 0], [w, 0], [w, t], [t, t], [t, h], [0, h]], true);
+  const [P0, P1, P2, , P4, P5] = corners(ring);
+  d.anchor(P0);
+  ring.forEach((s, i) => (i % 2 ? d.vl(s) : d.hl(s)));
+  d.dim(P0, P1, 'horizontal', -1, 'width'); d.dim(P0, P5, 'vertical', -1, 'height'); d.dim(P1, P2, 'vertical', 1, 'thickness'); d.dim(P5, P4, 'horizontal', 1, 'thickness');
+  const k1 = d.circle(w - t, t / 2, hd / 2), k2 = d.circle(t / 2, h - t, hd / 2);
+  d.dim(P0, k1.c, 'horizontal', 1, 'width - thickness'); d.dim(P0, k1.c, 'vertical', -1, 'thickness / 2');
+  d.dim(P0, k2.c, 'horizontal', -1, 'thickness / 2'); d.dim(P0, k2.c, 'vertical', 1, 'height - thickness');
+  d.radius(k1.id, 'hole_diameter / 2', 6); d.equal(k1.id, k2.id);
 }
 
-function buildBoltCircle(p) {
+function buildBoltCircle(d, p) {
   const Ro = num(p.outerRadius, 30), Rb = num(p.boltRadius, 20), hr = num(p.holeRadius, 3);
-  const s = sketcher('bolt');
-  const C = s.pt(0, 0);
-  const outer = s.circle(C, Ro), bolt = s.circle(C, Rb, true);
+  const outer = d.circle(0, 0, Ro), bolt = d.circle(0, 0, Rb, true);
+  d.anchor(outer.c); d.anchor(bolt.c);
   const holes = [], centres = [];
   for (let k = 0; k < 6; k++) {
-    const a = Math.PI / 2 + k * Math.PI / 3, c = s.pt(Rb * Math.cos(a), Rb * Math.sin(a));
-    centres.push(c); holes.push(s.circle(c, hr)); s.pointOn(c, bolt);
+    const a = Math.PI / 2 + k * Math.PI / 3, c = d.circle(Rb * Math.cos(a), Rb * Math.sin(a), hr);
+    holes.push(c.id); centres.push(c.c); d.on(c.c, bolt.id); // each centre clicked on the bolt circle
   }
-  const chords = centres.map((c, k) => s.line(c, centres[(k + 1) % 6], true));
-  s.equalShapes(chords); s.equalShapes(holes); s.v(C, centres[0]);
-  s.radius(outer, Ro, 6, 'outer_radius'); s.radius(bolt, Rb, 6, 'bolt_radius'); s.radius(holes[0], hr, 4, 'hole_radius');
-  return s.finish(C);
+  const chords = d.poly(centres, true, true); // construction chords between the hole centres
+  d.equalChain(chords.map((s) => s.id)); d.equalChain(holes); d.v(ORIGIN_JOINT_ID, centres[0]);
+  d.radius(outer.id, 'outer_radius', 6); d.radius(bolt.id, 'bolt_radius', 6); d.radius(holes[0], 'hole_radius', 4);
 }
 
-function buildFingerEdge(p) {
+function buildFingerEdge(d, p) {
   const tab = num(p.tabWidth, 10), gap = num(p.gapWidth, 10), depth = num(p.depth, 5), n = 5;
-  const s = sketcher('fingers');
-  const pitch = tab + gap, top = [], low = [], tabs = [], gaps = [], verts = [];
-  let first = null, prev = null;
-  const line = (a, c) => s.line(a, c);
+  const pitch = tab + gap, pts = [];
   for (let i = 0; i < n; i++) {
-    const x = i * pitch, a = s.pt(x, depth), c = s.pt(x + tab, depth);
-    if (!first) first = a;
-    if (prev) { verts.push(line(prev, a)); s.v(prev, a); }
-    tabs.push(line(a, c)); s.h(a, c); top.push([a, c]);
-    if (i < n - 1) {
-      const d = s.pt(x + tab, 0), e = s.pt(x + pitch, 0);
-      verts.push(line(c, d)); s.v(c, d);
-      gaps.push(line(d, e)); s.h(d, e); low.push([d, e]);
-      prev = e;
-    }
+    const x = i * pitch;
+    pts.push([x, depth], [x + tab, depth]);
+    if (i < n - 1) pts.push([x + tab, 0], [x + pitch, 0]);
   }
-  s.equalShapes(tabs); s.equalShapes(gaps); s.equalShapes(verts);
-  s.dim(top[0][0], top[0][1], tab, 'horizontal', 8, 'tab_width');
-  s.dim(low[0][0], low[0][1], gap, 'horizontal', -8, 'gap_width');
-  s.dim(top[0][1], low[0][0], depth, 'vertical', 8, 'depth');
-  return s.finish(first);
+  const segs = d.poly(pts, false); // one open polyline: tab, down, gap, up, tab, ...
+  const tabs = [], gaps = [], verts = [];
+  segs.forEach((s, i) => (i % 4 === 0 ? tabs : i % 4 === 2 ? gaps : verts).push(s));
+  for (const s of [...tabs, ...gaps]) d.hl(s);
+  for (const s of verts) d.vl(s);
+  d.anchor(segs[0].a);
+  d.equalChain(tabs.map((s) => s.id)); d.equalChain(gaps.map((s) => s.id)); d.equalChain(verts.map((s) => s.id));
+  d.dim(tabs[0].a, tabs[0].b, 'horizontal', 1, 'tab_width');
+  d.dim(gaps[0].a, gaps[0].b, 'horizontal', -1, 'gap_width');
+  d.dim(tabs[0].b, gaps[0].a, 'vertical', 1, 'depth');
 }
 
 // TASK 669: DOG-BONE POCKET. The classic DIAGONAL dog-bone: at each inside corner C the relief circle (the bit's radius r) has its centre K on the
 // corner's diagonal, r inside the corner, so the circle PASSES THROUGH C and crosses the two walls 2a = sqrt(2) r from C (a = r / sqrt(2)): the
 // two crossing points H (on the horizontal wall) and V (on the vertical wall) are opposite ends of a diameter, so the relief is a HALF circle
-// bulging past the corner. One closed loop: wall line, half-circle arc, wall line, ... The corner C itself is a construction point (it gives the
-// 45 degree rule: construction |CH| = |CV|, and |KC| = |KH| puts C on the circle); it is the origin anchor of the bottom left corner.
-function buildDogBone(p) {
-  const w = num(p.width, 60), h = num(p.height, 40), d = num(p.bitDiameter, 6.35), r = d / 2, a = r / Math.SQRT2;
-  const s = sketcher('dogbone');
+// bulging past the corner. One closed loop: wall line, half-circle arc, wall line, ... TASK 680: the four reliefs are Arc tool arcs, the walls
+// Line tool lines from one arc's end to the next; the corner C is the middle point of a construction polyline H -> C -> V (its two legs
+// horizontal / vertical and equal: the 45 degrees) held on the relief arc (the point on the circle); the bottom-left C is on the origin. Each
+// relief has its own radius dimension `bit_diameter / 2` (TASK 680: no equal rule between arcs, as the rounded rectangle's corners).
+function buildDogBone(d, p) {
+  const w = num(p.width, 60), h = num(p.height, 40), bd = num(p.bitDiameter, 6.35), r = bd / 2, a = r / Math.SQRT2;
+  const TAU = 2 * Math.PI, mod = (x) => ((x % TAU) + TAU) % TAU;
   const corner = (cx, cy, ix, iy) => {
-    const C = s.pt(cx, cy), K = s.pt(cx + a * ix, cy + a * iy), H = s.pt(cx + 2 * a * ix, cy), V = s.pt(cx, cy + 2 * a * iy);
-    const ang = (j) => { const q = s.at(j), k = s.at(K); return Math.atan2(q.y - k.y, q.x - k.x); };
-    const TAU = 2 * Math.PI, mod = (x) => ((x % TAU) + TAU) % TAU;
+    const K = [cx + a * ix, cy + a * iy], H = [cx + 2 * a * ix, cy], V = [cx, cy + 2 * a * iy];
+    const ang = (q) => Math.atan2(q[1] - K[1], q[0] - K[0]);
     // the counter-clockwise arc (as the user sees it) that passes through C: from H to V if that sweep contains C, else from V to H
-    const cIn = mod(ang(C) - ang(H)) < mod(ang(V) - ang(H));
-    const arc = cIn ? s.arc(K, H, V) : s.arc(K, V, H);
-    s.h(C, H); s.v(C, V);
-    const cH = s.line(C, H, true), cV = s.line(C, V, true);
-    s.equalShapes([cH, cV]);
-    s.equalLengths([[K, C], [K, H]]);
-    return { C, K, H, V, arc };
+    const cIn = mod(ang([cx, cy]) - ang(H)) < mod(ang(V) - ang(H));
+    const [from, to] = cIn ? [H, V] : [V, H];
+    const k = d.pt(...K), f = d.pt(...from), t = d.pt(...to);
+    const arc = d.arc(k, f, t);
+    return { cx, cy, arc, H: cIn ? f : t, V: cIn ? t : f };
   };
   const bl = corner(0, 0, 1, 1), br = corner(w, 0, -1, 1), tr = corner(w, h, -1, -1), tl = corner(0, h, 1, -1);
-  s.line(bl.H, br.H); s.line(br.V, tr.V); s.line(tr.H, tl.H); s.line(tl.V, bl.V);
-  s.h(bl.H, br.H); s.v(br.V, tr.V); s.h(tr.H, tl.H); s.v(tl.V, bl.V);
-  s.equalLengths([[bl.K, bl.H], [br.K, br.H], [tr.K, tr.H], [tl.K, tl.H]]);
-  s.radius(bl.arc, r, 10, 'bit_diameter / 2');
-  s.dim(bl.V, br.V, w, 'horizontal', -12, 'width');
-  s.dim(bl.H, tl.H, h, 'vertical', -12, 'height');
-  return s.finish(bl.C);
+  const walls = [d.line(bl.H, br.H), d.line(br.V, tr.V), d.line(tr.H, tl.H), d.line(tl.V, bl.V)];
+  d.hl(walls[0]); d.vl(walls[1]); d.hl(walls[2]); d.vl(walls[3]);
+  for (const k of [bl, br, tr, tl]) {
+    const [cH, cV] = d.poly([k.H, [k.cx, k.cy], k.V], false, true); // construction: H -> the corner -> V
+    d.hl(cH); d.vl(cV); d.equal(cH.id, cV.id);
+    d.on(cH.b, k.arc);
+    k.C = cH.b;
+  }
+  d.anchor(bl.C);
+  for (const k of [bl, br, tr, tl]) d.radius(k.arc, 'bit_diameter / 2', 10);
+  d.dim(bl.V, br.V, 'horizontal', -1, 'width');
+  d.dim(bl.H, tl.H, 'vertical', -1, 'height');
 }
 
 // TASK 669: T-SLOT, the 2D profile of a T-track slot (opening up at the top, centred on the origin): a 19 mm wide slot 9.5 mm deep (3/4 inch
 // T-track) over a 25 mm wide slot, 16 mm deep in all. The origin is the middle of the opening (the closing edge at the top).
-function buildTSlot(p) {
+function buildTSlot(d, p) {
   const tw = num(p.topWidth, 19), td = num(p.topDepth, 9.5), bw = num(p.bottomWidth, 25), D = num(p.totalDepth, 16);
-  const s = sketcher('tslot');
-  const TL = s.pt(-tw / 2, 0), TR = s.pt(tw / 2, 0), NR = s.pt(tw / 2, -td), OR = s.pt(bw / 2, -td), BR = s.pt(bw / 2, -D), BL = s.pt(-bw / 2, -D), OL = s.pt(-bw / 2, -td), NL = s.pt(-tw / 2, -td);
-  const ring = [TL, TR, NR, OR, BR, BL, OL, NL];
-  ring.forEach((j, i) => s.line(j, ring[(i + 1) % ring.length]));
-  s.h(TL, TR); s.v(TR, NR); s.h(NR, OR); s.v(OR, BR); s.h(BR, BL); s.v(BL, OL); s.h(OL, NL); s.v(NL, TL); s.h(NR, NL);
-  const M = s.pt(0, 0), Mb = s.pt(0, -D);
-  s.midpoint(M, TL, TR); s.midpoint(Mb, BL, BR); s.v(M, Mb);
-  s.dim(TL, TR, tw, 'horizontal', 6, 'top_width'); s.dim(TR, NR, td, 'vertical', 6, 'top_depth'); s.dim(OL, OR, bw, 'horizontal', -6, 'bottom_width'); s.dim(TR, BR, D, 'vertical', 16, 'total_depth');
-  return s.finish(M);
+  const ring = d.poly([[-tw / 2, 0], [tw / 2, 0], [tw / 2, -td], [bw / 2, -td], [bw / 2, -D], [-bw / 2, -D], [-bw / 2, -td], [-tw / 2, -td]], true);
+  const [TL, TR, NR, OR, BR, , OL, NL] = corners(ring);
+  ring.forEach((s, i) => (i % 2 ? d.vl(s) : d.hl(s))); d.h(NR, NL);
+  const axis = d.line(ORIGIN_JOINT_ID, [0, -D], true); // the centre line, construction, from the origin down to the bottom
+  d.midpoint(TL, TR, ORIGIN_JOINT_ID); d.midpoint(ring[4].a, ring[4].b, axis.b); d.vl(axis);
+  d.dim(TL, TR, 'horizontal', 1, 'top_width'); d.dim(TR, NR, 'vertical', 1, 'top_depth'); d.dim(OL, OR, 'horizontal', -1, 'bottom_width'); d.dim(TR, BR, 'vertical', 1, 'total_depth');
 }
 
 // TASK 669: BUTTERFLY KEY (bow-tie / dovetail key), centred on its waist: 50 mm long, 25 mm wide at the two ends, 10 mm at the waist, straight sides.
-function buildButterflyKey(p) {
+function buildButterflyKey(d, p) {
   const L = num(p.length, 50), ew = num(p.endWidth, 25), ww = num(p.waistWidth, 10);
-  const s = sketcher('butterfly');
-  const P0 = s.pt(-L / 2, ew / 2), P1 = s.pt(0, ww / 2), P2 = s.pt(L / 2, ew / 2), P3 = s.pt(L / 2, -ew / 2), P4 = s.pt(0, -ww / 2), P5 = s.pt(-L / 2, -ew / 2);
-  const ring = [P0, P1, P2, P3, P4, P5];
-  ring.forEach((j, i) => s.line(j, ring[(i + 1) % ring.length]));
-  const W = s.pt(0, 0), EL = s.pt(-L / 2, 0), ER = s.pt(L / 2, 0);
-  s.v(P2, P3); s.v(P5, P0); s.v(P1, P4);
-  s.midpoint(W, P1, P4); s.midpoint(ER, P2, P3); s.midpoint(EL, P5, P0); s.midpoint(W, EL, ER); s.h(EL, ER);
-  s.equalLengths([[P2, P3], [P5, P0]]);
-  s.dim(EL, ER, L, 'horizontal', 6, 'length'); s.dim(P2, P3, ew, 'vertical', 8, 'end_width'); s.dim(P1, P4, ww, 'vertical', 6, 'waist_width');
-  return s.finish(W);
+  const ring = d.poly([[-L / 2, ew / 2], [0, ww / 2], [L / 2, ew / 2], [L / 2, -ew / 2], [0, -ww / 2], [-L / 2, -ew / 2]], true);
+  const [, P1, P2, P3, P4] = corners(ring);
+  const toL = d.line(ORIGIN_JOINT_ID, [-L / 2, 0], true), toR = d.line(ORIGIN_JOINT_ID, [L / 2, 0], true); // the long axis, construction, from the waist
+  const EL = toL.b, ER = toR.b;
+  d.vl(ring[2]); d.vl(ring[5]); d.v(P1, P4);
+  d.midpoint(P1, P4, ORIGIN_JOINT_ID); d.midpoint(ring[2].a, ring[2].b, ER); d.midpoint(ring[5].a, ring[5].b, EL); d.midpoint(EL, ER, ORIGIN_JOINT_ID); d.h(EL, ER);
+  d.equal(ring[2].id, ring[5].id);
+  d.dim(EL, ER, 'horizontal', 1, 'length'); d.dim(P2, P3, 'vertical', 1, 'end_width'); d.dim(P1, P4, 'vertical', 1, 'waist_width');
 }
 
 // TASK 669: CUP HINGE BORE, the European cup-hinge layout: a 35 mm cup hole at the origin, and two 8 mm screw (dowel) holes 45 mm apart on a line
 // 9.5 mm from the cup's centre (below it), centred on it. (The common layout; hinge makers vary, edit the dimensions for another.)
-function buildCupHinge(p) {
+function buildCupHinge(d, p) {
   const cd = num(p.cupDiameter, 35), sp = num(p.screwSpacing, 45), off = num(p.screwOffset, 9.5), sd = num(p.screwDiameter, 8);
-  const s = sketcher('cuphinge');
-  const C = s.pt(0, 0), S1 = s.pt(-sp / 2, -off), S2 = s.pt(sp / 2, -off), M = s.pt(0, -off);
-  const cup = s.circle(C, cd / 2), k1 = s.circle(S1, sd / 2), k2 = s.circle(S2, sd / 2);
-  s.midpoint(M, S1, S2); s.v(C, M); s.h(S1, S2); s.equalShapes([k1, k2]);
-  s.radius(cup, cd / 2, 8, 'cup_diameter / 2'); s.radius(k1, sd / 2, 6, 'screw_diameter / 2'); s.dim(S1, S2, sp, 'horizontal', -sd / 2 - 8, 'screw_spacing'); s.dim(C, M, off, 'vertical', -cd / 2 - 8, 'screw_offset');
-  return s.finish(C);
+  const cup = d.circle(0, 0, cd / 2);
+  d.anchor(cup.c);
+  const k1 = d.circle(-sp / 2, -off, sd / 2), k2 = d.circle(sp / 2, -off, sd / 2);
+  const drop = d.line(ORIGIN_JOINT_ID, [0, -off], true); // construction, from the cup centre down to the screw line
+  d.midpoint(k1.c, k2.c, drop.b); d.vl(drop); d.h(k1.c, k2.c); d.equal(k1.id, k2.id);
+  d.radius(cup.id, 'cup_diameter / 2', 8); d.radius(k1.id, 'screw_diameter / 2', 6); d.dim(k1.c, k2.c, 'horizontal', -1, 'screw_spacing'); d.dim(cup.c, drop.b, 'vertical', -1, 'screw_offset');
 }
 
-// TASK 669: SHELF-PIN ROW: ONE source hole + ONE rectangular pattern constraint (pattern.js applyPattern, the app's own pattern, no new code: the
-// builder calls it on its own joints / shapes / constraints). The copies follow the source (its radius dimension) and the pattern's spacing;
-// count and spacing are the pattern's values, not sketch dimensions. 32 mm centres (the 32 mm cabinet system).
-function buildShelfPins(p) {
+// TASK 669: SHELF-PIN ROW: ONE source hole + ONE rectangular pattern (the Rectangular Pattern tool, #core/pattern.js applyPattern). The copies
+// follow the source (its radius dimension) and the pattern's spacing; count and spacing are the pattern's values, not sketch dimensions. 32 mm
+// centres (the 32 mm cabinet system).
+function buildShelfPins(d, p) {
   const n = Math.max(2, Math.round(num(p.count, 5))), sp = num(p.spacing, 32), hd = num(p.holeDiameter, 5);
-  const s = sketcher('shelfpins');
-  const c = s.pt(0, 0), hole = s.circle(c, hd / 2);
-  s.radius(hole, hd / 2, 6, 'hole_diameter / 2');
-  const made = applyPattern({ joints: s.joints, shapes: s.shapes, constraints: s.constraints }, CONSTRAINT_TYPES.RECTANGULAR_PATTERN, { shapes: [hole], joints: [] },
-    { ...patternDefaults(CONSTRAINT_TYPES.RECTANGULAR_PATTERN), quantity: [n, 1], distance: [sp, sp] });
-  if (!made.ok) throw new Error('shelf-pin pattern: ' + made.reason);
-  return s.finish(c);
+  const hole = d.circle(0, 0, hd / 2);
+  d.anchor(hole.c);
+  d.radius(hole.id, 'hole_diameter / 2', 6);
+  ops.pattern(d.state, T.RECTANGULAR_PATTERN, { shapes: [hole.id], joints: [] }, { ...patternDefaults(T.RECTANGULAR_PATTERN), quantity: [n, 1], distance: [sp, sp] });
 }
 
 // TASK 669: BOX FRAME (front view) of a plywood cubby / bookcase carcass, the long direction VERTICAL: two SIDE boards the FULL length, two END
 // boards BETWEEN the sides, and N - 1 DIVIDERS between the sides, all t thick, splitting the inside into N equal compartments. The boards SHARE
-// their edges (one line and one pair of joints per shared edge: no gaps, no overlaps). Joint grid: four x levels (0, t, W - t, W) and 2 (N + 1)
-// y levels (the bottom and the top of the N + 1 cross boards); the inner columns carry a joint at every level. Every segment is horizontal / vertical.
-// TASK 670 (no FOLD): every board thickness and every opening but the top one is a SIGNED horizontal / vertical dimension (the solver locks which
-// side its second joint is on, engine.js dimSign), a formula of the USER PARAMETERS: every board's thickness dimension reads `thickness`, an
-// opening is (length - (N + 1) * thickness) / N (TASK 672, owner ruling: every dimension reads the parameters directly, none reads another
-// dimension; the parameter is what moves every board). The top opening is what the overall length leaves (linear: it cannot flip either). The task 669 equal-LENGTH rules were unsigned, so
-// shrinking the length could land the solve on a folded branch (the top end board flipped above the top edge, the top opening absorbing it).
+// their edges (one line per shared edge: no gaps, no overlaps). Every segment is horizontal / vertical.
+// TASK 670 (no FOLD): every board's thickness and every opening but the top one is dimensioned, a formula of the USER PARAMETERS: every
+// thickness reads `thickness`, an opening is (length - (N + 1) * thickness) / N (TASK 672, owner ruling: every dimension reads the parameters
+// directly). The top opening is what the overall length leaves. TASK 680: the dimensions are the Dimension tool's: on these level / plumb
+// pairs it makes SIGNED horizontal / vertical dimensions (like Fusion: the solver locks which side the second point is on, so no board folds).
 // TASK 670 LAYOUT: 'Vertical' (above) or 'Horizontal' = the SAME construction with x and y swapped (a mirror in the diagonal through the
 // origin, which stays the bottom-left corner): the full-length boards become the bottom and the top, the ends and dividers stand between
-// them, the compartments sit side by side; every horizontal rule / dimension becomes vertical and the other way round.
+// them, the compartments sit side by side; every horizontal rule becomes vertical and the other way round.
 // TASK 672 CORNER JOINT (one choice for the 4 outer corners, #core/corner-joint.js cornerJointPoints, frame-calc's): 'V-Through' (default) =
-// the construction above (the sides run the full length: the owner's original rule); 'H-Through' = the ends run the full width, the sides stand
-// between them; 'Miter' = 45 degree seams. The boards are frame-calc's stud-layout buildFrameGeometry ones (the jambs = the sides, the plates =
-// the ends, the rails = the dividers), drawn through the one board path (drawBoards + carrierRules: every edge is on one of the 4 x levels or
-// the 2 (N + 1) y levels); the dimensions are the same 2 N + 4 in every joint (only which corner joint carries a board's thickness changes). The
-// joint is in the construction's frame: the Horizontal layout mirrors the whole drawing, joint included, so 'V-Through' is always "the
-// full-length boards run through" (#ui/template-glyphs.js draws its glyph mirrored there).
+// the sides run the full length (the owner's original rule); 'H-Through' = the ends run the full width, the sides stand between them; 'Miter' =
+// 45 degree seams. The boards are frame-calc's stud-layout buildFrameGeometry ones (the jambs = the sides, the plates = the ends, the rails =
+// the dividers), drawn through the one board path (drawBoards + carrierRules: every edge is on one of the 4 x levels or the 2 (N + 1) y
+// levels); the dimensions are the same 2 N + 4 in every joint. The Horizontal layout mirrors the whole drawing, joint included, so 'V-Through'
+// is always "the full-length boards run through" (#ui/template-glyphs.js draws its glyph mirrored there).
 export const BOX_FRAME_LAYOUTS = Object.freeze([
   Object.freeze({ value: 'Vertical', label: 'Vertical layout' }),
   Object.freeze({ value: 'Horizontal', label: 'Horizontal layout' }),
 ]);
-function buildBoxFrame(p) {
+function buildBoxFrame(d, p) {
   const Lg = num(p.length, 1500), W = num(p.width, 400), t = num(p.thickness, 18), n = Math.max(1, Math.round(num(p.compartments, 5)));
-  const swap = p.layout === 'Horizontal';
   const joint = CORNER_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'V-Through';
   const g = (Lg - (n + 1) * t) / n;
-  const b0 = sketcher('boxframe');
-  // the swap seam: the construction below is written for the vertical layout; `s` puts each point, rule and dimension where the layout wants it
-  const across = { horizontal: 'vertical', vertical: 'horizontal' };
-  const s = !swap ? b0 : {
-    ...b0,
-    pt: (x, y) => b0.pt(y, x), h: b0.v, v: b0.h,
-    dim: (a, c, value, mode, offset, expr) => b0.dim(a, c, value, across[mode] || mode, -offset, expr),
-  };
+  if (p.layout === 'Horizontal') d.mirrorDiagonal(); // the construction below is written for the vertical layout
   const levels = []; // the bottom and the top y of each cross board, from the bottom
   for (let k = 0; k <= n; k++) { const b = k * (g + t); levels.push(b, b + t); }
   // the four outer corners (user coordinates of the construction): the horizontal board is an END, the vertical one a SIDE
@@ -457,47 +488,41 @@ function buildBoxFrame(p) {
   ];
   for (let k = 1; k < n; k++) boards.push(rect(t, levels[2 * k], W - 2 * t, t)); // the dividers, between the sides
   const world = (q) => ({ x: q.x, y: userToWorldY(q.y) });
-  const board = drawBoards(s, boards.map((poly) => poly.map(world)));
-  carrierRules(s, board, [
+  const board = drawBoards(d, boards.map((poly) => poly.map(world)));
+  const J = (q) => board.J(world(q)), col = (i) => J({ x: t, y: levels[i] });
+  const L0 = J({ x: 0, y: 0 }), R0 = J({ x: W, y: 0 });
+  d.anchor(L0);
+  carrierRules(d, board, [
     ...[0, t, W - t, W].map((x) => ({ a: world({ x, y: 0 }), b: world({ x, y: Lg }), axis: 'v' })),
     ...levels.map((y) => ({ a: world({ x: 0, y }), b: world({ x: W, y }), axis: 'h' })),
   ]);
-  const J = (q) => board.J(world(q)), col = (i) => J({ x: t, y: levels[i] });
-  const L0 = J({ x: 0, y: 0 }), R0 = J({ x: W, y: 0 });
-  s.dim(L0, R0, W, 'horizontal', -12, 'width');
-  // TASK 672 (owner ruling, turn 1729): every dimension reads the USER PARAMETERS directly (`thickness`, `length`), never another dimension:
-  // no dimension is a special "driver" box
-  s.dim(L0, J({ x: 0, y: Lg }), Lg, 'vertical', -12, 'length');
-  s.dim(L0, J(BL.vInner), t, 'horizontal', 12, 'thickness'); // the left side
-  s.dim(J(BR.vInner), R0, t, 'horizontal', 12, 'thickness'); // the right side
-  // the right column has the same levels (horizontal rows), so the left column (and its corners) carries the cross boards' rules
-  s.dim(J(BL.hOuter), J(BL.hInner), t, 'vertical', 10, 'thickness'); // the bottom end
-  for (let k = 1; k < n; k++) s.dim(col(2 * k), col(2 * k + 1), t, 'vertical', 10, 'thickness'); // each divider
-  s.dim(J(TL.hInner), J(TL.hOuter), t, 'vertical', 10, 'thickness'); // the top end
-  for (let k = 0; k + 1 < n; k++) s.dim(col(2 * k + 1), col(2 * k + 2), g, 'vertical', 10, `(length - ${n + 1} * thickness) / ${n}`); // the openings but the top one
-  return s.finish(L0);
+  d.dim(L0, R0, 'horizontal', -1, 'width');
+  d.dim(L0, J({ x: 0, y: Lg }), 'vertical', -1, 'length');
+  d.dim(L0, J(BL.vInner), 'horizontal', 1, 'thickness'); // the left side
+  d.dim(J(BR.vInner), R0, 'horizontal', 1, 'thickness'); // the right side
+  // the right column has the same levels (horizontal rows), so the left column (and its corners) carries the cross boards' dimensions
+  d.dim(J(BL.hOuter), J(BL.hInner), 'vertical', 1, 'thickness'); // the bottom end
+  for (let k = 1; k < n; k++) d.dim(col(2 * k), col(2 * k + 1), 'vertical', 1, 'thickness'); // each divider
+  d.dim(J(TL.hInner), J(TL.hOuter), 'vertical', 1, 'thickness'); // the top end
+  for (let k = 0; k + 1 < n; k++) d.dim(col(2 * k + 1), col(2 * k + 2), 'vertical', 1, `(length - ${n + 1} * thickness) / ${n}`); // the openings but the top one
 }
 
 // TASK 670: RIGHT-ANGLE FRAME CORNER: a horizontal and a vertical board meeting at 90 degrees (the top-left corner of a frame: the horizontal
 // board runs right from the outer corner, the vertical one runs down), both `thickness` thick, each its length long from the OUTER corner, joined
 // by the corner joint the start modal picks ('Miter' | 'H-Through' | 'V-Through'). The two board outlines are #core/corner-joint.js
 // cornerBoards (frame-calc's cornerJointPoints) in WORLD coordinates (Y down, as frame-calc's), so the seam moves exactly as frame-calc's does.
-// The boards SHARE their seam: every polygon corner is one joint, every edge is split at the other board's corners lying on it and drawn once.
-// Rules: each straight edge horizontal / vertical (a miter seam is the only slanted one); the two lengths and the two boards' thicknesses are
-// SIGNED horizontal / vertical dimensions (no fold): both thicknesses read `thickness` (TASK 672, owner: every dimension reads the parameter;
-// with the miter: the 45 degree seam). Outer corner
-// at the origin.
-function buildRightAngleCorner(p) {
+// The boards SHARE their seam (drawn once). Rules: each straight edge horizontal / vertical (a miter seam is the only slanted one); the two
+// lengths and the two boards' thicknesses are dimensions; both thicknesses read `thickness`. Outer corner at the origin.
+function buildRightAngleCorner(d, p) {
   const lh = num(p.horizontalLength, 300), lv = num(p.verticalLength, 200), t = num(p.thickness, 18);
   const type = CORNER_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'H-Through';
   const boards = cornerBoards(0, 0, 1, 1, t, lh, lv, type);
-  const s = sketcher('corner');
-  const { J, pieces } = drawBoards(s, [boards.h, boards.v]); // TASK 672: the one board path (task 670's code, moved there)
-  for (const { a: u, b: v } of pieces) if (Math.abs(u.q.y - v.q.y) < 1e-9) s.h(u.j, v.j); else if (Math.abs(u.q.x - v.q.x) < 1e-9) s.v(u.j, v.j);
+  const { J, pieces } = drawBoards(d, [boards.h, boards.v]);
   const O = J({ x: 0, y: 0 }), A = J(boards.h[1]), B = J(boards.h[2]), C = J(boards.v[1]), D = J(boards.v[2]);
-  s.dim(O, A, lh, 'horizontal', 12, 'horizontal_length'); s.dim(O, C, lv, 'vertical', -12, 'vertical_length');
-  s.dim(A, B, t, 'vertical', 10, 'thickness'); s.dim(C, D, t, 'horizontal', 10, 'thickness'); // TASK 672: both read the parameter (owner ruling)
-  return s.finish(O);
+  d.anchor(O);
+  for (const { a: u, b: v } of pieces) if (Math.abs(u.q.y - v.q.y) < 1e-9) d.h(u.j, v.j); else if (Math.abs(u.q.x - v.q.x) < 1e-9) d.v(u.j, v.j);
+  d.dim(O, A, 'horizontal', 1, 'horizontal_length'); d.dim(O, C, 'vertical', -1, 'vertical_length');
+  d.dim(A, B, 'vertical', 1, 'thickness'); d.dim(C, D, 'horizontal', 1, 'thickness');
 }
 
 // TASK 672: STAIR STRINGER, a cut stringer from one board (side view; the origin at the foot of the first riser, on the floor; Y up). `steps`
@@ -507,34 +532,29 @@ function buildRightAngleCorner(p) {
 // treads, and the foot of the first riser), `throat` below it (the board left under every notch, square to the pitch). The board the stringer
 // is cut from is a construction line `board width` above the lower edge (the board's top edge: the notches' tips must stay under it).
 // Rules (no fold: once the pitch is set every one is linear): risers vertical, treads horizontal, the inner corners on the pitch line, the tips
-// (the nosings) on a construction line parallel to it, so every step is the first one; the first riser and tread are signed dimensions; the
-// throat and the board width are line-to-line dimensions of parallel lines; the board's top edge spans the stringer (front to plumb cut).
-function buildStringer(p) {
+// (the nosings) on a construction line parallel to it, so every step is the first one; the first riser and tread are dimensioned; the throat
+// and the board width are line-to-line dimensions of parallel lines; the board's top edge spans the stringer (front to plumb cut).
+function buildStringer(d, p) {
   const n = Math.max(2, Math.round(num(p.steps, 4))), r = num(p.rise, 180), g = num(p.run, 250), w = num(p.boardWidth, 286), th = num(p.throat, 125);
   const L = Math.hypot(r, g), drop = th * L / g, top = (w - th) * L / g; // the lower edge: y = (r / g) x - drop; the board's top edge: y = (r / g) x + top
-  const s = sketcher('stringer');
-  const F = s.pt(0, 0), T = [], C = [];
-  for (let k = 1; k <= n; k++) { T.push(s.pt((k - 1) * g, k * r)); C.push(s.pt(k * g, k * r)); } // the tip and the inner corner of each notch
-  const P = s.pt(n * g, n * r - drop), B = s.pt(th * L / r, 0); // the lower edge's two ends: on the plumb cut, on the floor
-  const S1 = s.pt(0, top), S2 = s.pt(n * g, n * r + top); // the board's top edge, over the front and over the plumb cut
-  s.line(F, T[0]); s.v(F, T[0]);
-  for (let k = 0; k < n; k++) {
-    s.line(T[k], C[k]); s.h(T[k], C[k]); // tread k + 1
-    if (k + 1 < n) { s.line(C[k], T[k + 1]); s.v(C[k], T[k + 1]); } // riser k + 2
-  }
-  s.line(C[n - 1], P); s.v(C[n - 1], P); // the plumb cut
-  const lower = s.line(P, B);
-  s.line(B, F); s.h(B, F); // the level cut
-  const pitch = s.line(F, C[n - 1], true), tips = s.line(T[0], T[n - 1], true), board = s.line(S1, S2, true);
-  for (let k = 0; k + 1 < n; k++) s.pointOn(C[k], pitch);
-  for (let k = 1; k + 1 < n; k++) s.pointOn(T[k], tips);
-  s.parallel(tips, pitch); s.parallel(lower, pitch); s.parallel(board, lower);
-  s.v(F, S1); s.v(P, S2);
-  s.dim(F, T[0], r, 'vertical', -10, 'rise');
-  s.dim(T[0], C[0], g, 'horizontal', 10, 'run');
-  s.gap(pitch, lower, th, 10, 'throat');
-  s.gap(lower, board, w, 10, 'board_width');
-  return s.finish(F);
+  const pts = [[0, 0]];
+  for (let k = 1; k <= n; k++) pts.push([(k - 1) * g, k * r], [k * g, k * r]); // the tip and the inner corner of each notch
+  pts.push([n * g, n * r - drop], [th * L / r, 0]); // the lower edge's two ends: on the plumb cut, on the floor
+  const segs = d.poly(pts, true), at = corners(segs); // the outline (the Line tool, closed): riser, tread, riser, ..., plumb cut, lower edge, level cut
+  const F = at[0], Tk = (k) => at[1 + 2 * k], Ck = (k) => at[2 + 2 * k];
+  d.anchor(F);
+  for (let i = 0; i < 2 * n; i++) (i % 2 ? d.hl(segs[i]) : d.vl(segs[i])); // risers vertical, treads horizontal
+  const plumb = segs[2 * n], lower = segs[2 * n + 1], level = segs[2 * n + 2];
+  d.vl(plumb); d.hl(level);
+  const pitch = d.line(F, Ck(n - 1), true), tips = d.line(Tk(0), Tk(n - 1), true), board = d.line([0, top], [n * g, n * r + top], true);
+  for (let k = 0; k + 1 < n; k++) d.on(Ck(k), pitch.id);
+  for (let k = 1; k + 1 < n; k++) d.on(Tk(k), tips.id);
+  d.parallel(tips.id, pitch.id); d.parallel(lower.id, pitch.id); d.parallel(board.id, lower.id);
+  d.v(F, board.a); d.v(plumb.b, board.b);
+  d.dim(F, Tk(0), 'vertical', -1, 'rise');
+  d.dim(Tk(0), Ck(0), 'horizontal', 1, 'run');
+  d.gap(pitch.id, lower.id, 1, 'throat');
+  d.gap(lower.id, board.id, 1, 'board_width');
 }
 
 // TASK 672: CURVED BENCH SEAT, a ring segment (the centre at the origin, the seat above it, symmetric about the Y axis) split into `slats`
@@ -543,39 +563,38 @@ function buildStringer(p) {
 // and the seat's two ends sit gap / 2 inside the end radials (every slat the same: one cutting pattern). The outer and the inner edge of each
 // slat are real ARCS on the ring's two circles. Rules, every one LOCAL to the slats (a rule about a side's tiny distance from the far centre,
 // a tangent to a gap-sized circle there or equal side lengths, flips or crawls: a side 1000 away turns 0.6 degree to pass the centre):
-//   every corner on its circle: each arc's own rule, the arcs of a circle equal, the two radius dimensions;
-//   each GAP: its two sides parallel and a gap dimension (each reads `gap`, the user parameter: two distinct parallel lines
-//   `gap` apart cannot merge, so no gap can close);
-//   IDENTICAL slats: every slat's outer chord and inner chord equal to the first slat's (the same angle and the same width);
-//   the first and the last slat SYMMETRIC (their two diagonals equal): with the gaps, every slat is, so each side is gap / 2 from its radial;
+//   every arc centred on the origin, the outer arcs equal (the Equal tool: one circle), the inner arcs equal, the two radius dimensions;
+//   each GAP: its two sides parallel and a gap dimension (each reads `gap`, the user parameter: two distinct parallel lines `gap` apart cannot
+//   merge, so no gap can close);
+//   IDENTICAL slats: every slat's outer chord and inner chord (construction lines) equal to the first slat's (the same angle and the same width);
+//   the first and the last slat SYMMETRIC (their two construction diagonals equal): with the gaps, every slat is, so each side is gap / 2 from
+//   its radial;
 //   the ANGLE between the seat's two end sides = the sweep; the middle of the seat on the Y axis (the two outer corners either side of it level).
-function buildBenchSeat(p) {
+function buildBenchSeat(d, p) {
   const n = Math.max(2, Math.round(num(p.slats, 8))), Ro = num(p.outerRadius, 900), Ri = num(p.innerRadius, 450), sw = num(p.sweepAngle, 60), gap = num(p.gap, 10);
   const h = gap / 2, step = (sw / n) * Math.PI / 180, a0 = Math.PI / 2 - (sw / 2) * Math.PI / 180;
-  const s = sketcher('bench');
-  const C = s.pt(0, 0);
   // the corner on the circle of radius rho of the line parallel to the radial at angle phi, h to its counter-clockwise (+1) or clockwise (-1) side
-  const corner = (rho, phi, side) => { const t = Math.sqrt(rho * rho - h * h), ux = Math.cos(phi), uy = Math.sin(phi); return s.pt(t * ux - side * h * uy, t * uy + side * h * ux); };
+  const corner = (rho, phi, side) => { const t = Math.sqrt(rho * rho - h * h), ux = Math.cos(phi), uy = Math.sin(phi); return d.pt(t * ux - side * h * uy, t * uy + side * h * ux); };
+  const arcAt = (rho, phi1, phi2) => { const c = d.pt(0, 0), a = corner(rho, phi1, 1), b = corner(rho, phi2, -1), id = d.arc(c, a, b); d.anchor(c); return { id, a, b }; };
   const slats = [];
   for (let k = 0; k < n; k++) { // counter-clockwise from the right end
     const pa = a0 + k * step, pb = pa + step;
-    const IA = corner(Ri, pa, 1), OA = corner(Ro, pa, 1), IB = corner(Ri, pb, -1), OB = corner(Ro, pb, -1);
-    const A = s.line(IA, OA), outer = s.arc(C, OA, OB), B = s.line(IB, OB), inner = s.arc(C, IA, IB);
-    slats.push({ IA, OA, IB, OB, A, B, outer, inner });
+    const outer = arcAt(Ro, pa, pb), inner = arcAt(Ri, pa, pb);
+    const A = d.line(inner.a, outer.a), B = d.line(inner.b, outer.b); // the two sides, from the inner arc's ends to the outer arc's
+    slats.push({ IA: inner.a, OA: outer.a, IB: inner.b, OB: outer.b, A: A.id, B: B.id, outer: outer.id, inner: inner.id });
   }
-  s.equalLengths(slats.map((x) => [C, x.OA])); // the outer arcs on ONE circle (each arc's own rule holds its other end)
-  s.equalLengths(slats.map((x) => [C, x.IA])); // the inner arcs on one circle
-  s.equalLengths(slats.map((x) => [x.OA, x.OB])); // identical slats: the outer chords
-  s.equalLengths(slats.map((x) => [x.IA, x.IB])); // and the inner chords
-  for (const x of [slats[0], slats[n - 1]]) s.equalLengths([[x.OA, x.IB], [x.OB, x.IA]]); // the end slats symmetric
+  d.equalChain(slats.map((x) => x.outer)); // the outer arcs on ONE circle (each arc's centre on the origin)
+  d.equalChain(slats.map((x) => x.inner)); // the inner arcs on one circle
+  d.equalChain(slats.map((x) => d.line(x.OA, x.OB, true).id)); // identical slats: the outer chords
+  d.equalChain(slats.map((x) => d.line(x.IA, x.IB, true).id)); // and the inner chords
+  for (const x of [slats[0], slats[n - 1]]) d.equal(d.line(x.OA, x.IB, true).id, d.line(x.OB, x.IA, true).id); // the end slats symmetric
   const rim = slats.flatMap((x) => [x.OA, x.OB]);
-  s.h(rim[n - 1], rim[n]); // the middle slat (n odd) or the middle gap (n even) level: the seat symmetric about the Y axis
-  for (let k = 0; k + 1 < n; k++) s.parallel(slats[k].B, slats[k + 1].A); // each gap: two parallel sides
-  s.radius(slats[0].outer, Ro, 10, 'outer_radius');
-  s.radius(slats[0].inner, Ri, 10, 'inner_radius');
-  s.angle(slats[n - 1].B, slats[0].A, sw, 40, 'sweep_angle');
-  for (let k = 0; k + 1 < n; k++) s.gap(slats[k].B, slats[k + 1].A, gap, 8, 'gap'); // each gap's width: every one reads the parameter
-  return s.finish(C);
+  d.h(rim[n - 1], rim[n]); // the middle slat (n odd) or the middle gap (n even) level: the seat symmetric about the Y axis
+  for (let k = 0; k + 1 < n; k++) d.parallel(slats[k].B, slats[k + 1].A); // each gap: two parallel sides
+  d.radius(slats[0].outer, 'outer_radius', 10);
+  d.radius(slats[0].inner, 'inner_radius', 10);
+  d.angle(slats[n - 1].B, slats[0].A, [0, (Ro + Ri) / 2], 'sweep_angle'); // the label dropped in the seat's middle: the sector the seat spans
+  for (let k = 0; k + 1 < n; k++) d.gap(slats[k].B, slats[k + 1].A, 1, 'gap'); // each gap's width: every one reads the parameter
 }
 
 // TASK 672: RIGHT-ANGLE BRACE, frame-calc's triangle frame (#core/frame-geometry.js calculateFramingGeometry, PORTED): a vertical board, a
@@ -584,62 +603,65 @@ function buildBenchSeat(p) {
 // bottom-left, bottom-right: frame-calc's options for each) that cuts the boards exactly as frame-calc does. The boards go through the one board
 // path (drawBoards); every edge lies on one of six carriers (the outer and the inner face of each board: two vertical, two horizontal, two
 // slanted) and every corner where two of them cross (carrierRules), so the drawing is held by the width and the height (the outer corners), the
-// three thicknesses (signed horizontal / vertical dimensions for the vertical and the horizontal board, a line-to-line one for the diagonal) and
-// the diagonal's inner face parallel to its outer face. frame-calc's frame (the apex at its origin, Y down) is moved so the outer right-angle
-// corner (bottom-left) is the origin.
-function buildBrace(p) {
+// three thicknesses (dimensions for the vertical and the horizontal board, a line-to-line one for the diagonal) and the diagonal's inner face
+// parallel to its outer face. frame-calc's frame (the apex at its origin, Y down) is placed so the outer right-angle corner (bottom-left) is the
+// origin.
+function buildBrace(d, p) {
   const pick = (v, opts) => (opts.some((o) => o.value === v) ? v : opts[0].value);
   const g = calculateFramingGeometry({ width: num(p.width, 300), height: num(p.height, 600), thickV: num(p.thickV, 38), thickH: num(p.thickH, 38), thickD: num(p.thickD, 38),
     topJoint: pick(p.topJoint, BRACE_JOINTS.top), blJoint: pick(p.blJoint, BRACE_JOINTS.bl), brJoint: pick(p.brJoint, BRACE_JOINTS.br) });
   const { W, H, Tv, Th, Td, L } = g, P = g.points;
-  const s = sketcher('brace');
-  const board = drawBoards(s, [P.V, P.H, P.D].map((b) => Object.values(b)));
-  const [, iV, , iH, oD, iD] = carrierRules(s, board, [
+  d.origin(0, worldToUserY(H)); // the bottom-left corner (frame-calc's (0, H)) on the origin
+  const board = drawBoards(d, [P.V, P.H, P.D].map((b) => Object.values(b)));
+  const T0 = board.J({ x: 0, y: 0 }), BL = board.J({ x: 0, y: H }), BR = board.J({ x: W, y: H });
+  d.anchor(BL);
+  const [, iV, , iH, oD, iD] = carrierRules(d, board, [
     { a: { x: 0, y: 0 }, b: { x: 0, y: H }, axis: 'v' }, { a: { x: Tv, y: 0 }, b: { x: Tv, y: H }, axis: 'v' }, // the vertical board's outer / inner face
     { a: { x: 0, y: H }, b: { x: W, y: H }, axis: 'h' }, { a: { x: 0, y: H - Th }, b: { x: W, y: H - Th }, axis: 'h' }, // the horizontal board's
     { a: { x: 0, y: 0 }, b: { x: W, y: H }, axis: null }, { a: { x: 0, y: Td * L / W }, b: { x: W - Td * L / H, y: H }, axis: null }, // the diagonal's
   ]);
-  s.parallel(iD.ref, oD.ref);
-  const T = board.J({ x: 0, y: 0 }), BL = board.J({ x: 0, y: H }), BR = board.J({ x: W, y: H });
-  s.dim(BL, BR, W, 'horizontal', -12, 'width');
-  s.dim(BL, T, H, 'vertical', -12, 'height');
-  s.dim(BL, iV.corners[iV.corners.length - 1].j, Tv, 'horizontal', -24, 'thick_v'); // to the lowest corner of the vertical board's inner face
-  s.dim(BL, iH.corners[0].j, Th, 'vertical', -24, 'thick_h'); // to the leftmost corner of the horizontal board's inner face
-  s.gap(oD.ref, iD.ref, Td, 10, 'thick_d');
-  return s.finish(BL);
+  d.parallel(iD.ref, oD.ref);
+  d.dim(BL, BR, 'horizontal', -1, 'width');
+  d.dim(BL, T0, 'vertical', -1, 'height');
+  d.dim(BL, iV.corners[iV.corners.length - 1].j, 'horizontal', -1, 'thick_v'); // to the lowest corner of the vertical board's inner face
+  d.dim(BL, iH.corners[0].j, 'vertical', -1, 'thick_h'); // to the leftmost corner of the horizontal board's inner face
+  d.gap(oD.ref, iD.ref, 1, 'thick_d');
 }
 
 // TASK 672: POLYGON FRAME, frame-calc's polygon frame: a regular N-sided frame of boards. The outer polygon is frame-calc's (#core/frame-geometry.js
 // regularPolygonVertices: P_0 on top, centred on the origin), the boards come from THE per-vertex frame engine (calculatePolygonFrameGeometry,
 // frame-calc's calculateQuadFrameGeometry: the one engine every polygon frame uses) with ONE joint at every corner (Miter | CW-Through |
-// CCW-Through). Drawn through the one board path; every edge lies on the outer or the inner face of a board (2 N slanted carriers,
-// carrierRules). Rules: the INNER polygon is regular about the centre (construction radii to its corners, equal, its sides equal, the first
-// radius vertical), each outer corner on its corner's radius, the outer faces parallel to the inner ones (N - 1 of them: the last one follows),
-// the outer side length and the thickness (the first board's two faces).
-function buildPolygonFrame(p) {
+// CCW-Through). TASK 680: the INNER polygon is the Polygon tool's (construction, centred on the origin, its first corner straight above the
+// centre: its sides equal, its radii equal), the boards are drawn on its corners through the one board path; every edge lies on the outer or
+// the inner face of a board (2 N slanted carriers, carrierRules). Each outer corner on its corner's radius, the outer faces parallel to the
+// inner ones (N - 1 of them: the last one follows), the outer side length and the thickness (the first board's two faces).
+function buildPolygonFrame(d, p) {
   const N = Math.round(num(p.sides, 6)), side = num(p.sideLength, 300), t = num(p.thickness, 38);
   const joint = POLYGON_JOINT_TYPES.some((o) => o.value === p.joint) ? p.joint : 'Miter';
   const g = calculatePolygonFrameGeometry({ P: regularPolygonVertices(N, side), thick: t, joints: Array(N).fill(joint) });
-  const s = sketcher('polyframe');
-  const C = s.pt(0, 0); // the centre (the origin)
-  const board = drawBoards(s, g.boards.map((b) => [b.p1, b.p2, b.p3, b.p4]));
-  const n = g.P.length, carriers = [];
+  const n = g.P.length, user = (q) => [q.x, worldToUserY(q.y)];
+  const C = d.pt(0, 0), V = d.pt(...user(g.Q[0]));
+  const poly = ops.polygon(d.state, C, V, n, true); // the inner polygon (construction), its first corner Q_0
+  d.anchor(C);
+  const radial = (j) => poly.shapes.find((s) => s.isConstruction && s.joints[0] === C && s.joints[1] === j && !s.groupId);
+  const nearest = (q) => [...new Set(poly.shapes.flatMap((s) => s.joints))].filter((j) => j !== C)
+    .reduce((best, j) => { const a = d.pos(j), e = Math.hypot(a.x - q.x, a.y - q.y); return !best || e < best.e ? { j, e } : best; }, null).j;
+  const Qj = g.Q.map(nearest);
+  const board = drawBoards(d, g.boards.map((b) => [b.p1, b.p2, b.p3, b.p4]), g.Q.map((q, k) => ({ q, j: Qj[k] })));
+  const carriers = [];
   for (const ring of [g.P, g.Q]) ring.forEach((q, k) => carriers.push({ a: q, b: ring[(k + 1) % n], axis: null })); // outer faces, then inner faces
-  const cr = carrierRules(s, board, carriers), outer = cr.slice(0, n), inner = cr.slice(n);
-  const Pj = g.P.map((q) => board.J(q)), Qj = g.Q.map((q) => board.J(q));
-  const radii = Qj.map((j) => s.line(C, j, true));
-  s.equalShapes(radii);
-  s.equalLengths(Qj.map((j, k) => [j, Qj[(k + 1) % n]]));
-  s.v(C, Qj[0]);
-  Pj.forEach((j, k) => s.pointOn(j, radii[k]));
-  for (let k = 0; k + 1 < n; k++) s.parallel(outer[k].ref, inner[k].ref);
-  s.dim(Pj[0], Pj[1], side, 'aligned', 12, 'side_length');
-  s.gap(outer[0].ref, inner[0].ref, t, 10, 'thickness');
-  return s.finish(C);
+  const cr = carrierRules(d, board, carriers), outer = cr.slice(0, n), inner = cr.slice(n);
+  const Pj = g.P.map((q) => board.J(q));
+  d.v(C, Qj[0]);
+  Pj.forEach((j, k) => d.on(j, radial(Qj[k]).id));
+  for (let k = 0; k + 1 < n; k++) d.parallel(outer[k].ref, inner[k].ref);
+  d.dim(Pj[0], Pj[1], 'aligned', 1, 'side_length');
+  d.gap(outer[0].ref, inner[0].ref, 1, 'thickness');
 }
 
 /**
- * THE bank. id: stable key; params: { key: spec } (the defaults build() uses; mm); build(params) -> a v3 document.
+ * THE bank. id: stable key; params: { key: spec } (the defaults build() uses; mm); build(d, params) draws the template's RECIPE on the drawing `d`
+ * with the app's tool operations (TASK 680); buildTemplate() makes the document.
  * A param spec: { label, default, kind?, ... }. kind (default 'length'):
  *   'length' | 'angle'  a user parameter of the opened document (mm | deg), unless `atOpen: true` (chosen in the start modal only: no dimension
  *                       carries it, so a parameter could not drive it)
@@ -649,7 +671,7 @@ function buildPolygonFrame(p) {
  */
 export const TEMPLATES = [
   { id: 'slot', name: 'Slot', description: 'A straight slot with round ends: 10 mm wide, the two end centres 30 mm apart (40 mm overall).', params: { length: { label: 'Length', default: 40 }, width: { label: 'Width', default: 10 } }, dimensions: 2, build: buildSlot },
-  { id: 'rounded-rectangle', name: 'Rounded rectangle', description: '60 by 40 mm with four 5 mm corner radii, all equal.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, radius: { label: 'Corner radius', default: 5 } }, dimensions: 3, build: buildRoundedRect },
+  { id: 'rounded-rectangle', name: 'Rounded rectangle', description: '60 by 40 mm with four 5 mm corner radii, all equal.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, radius: { label: 'Corner radius', default: 5 } }, dimensions: 6, build: buildRoundedRect },
   { id: 'keyhole', name: 'Keyhole', description: 'A 20 mm round head on a 8 mm neck with a round end, 35 mm deep.', params: { radius: { label: 'Head radius', default: 10 }, neck: { label: 'Neck width', default: 8 }, depth: { label: 'Depth', default: 35 } }, dimensions: 3, build: buildKeyhole },
   { id: 'hexagon', name: 'Hexagon', description: 'A regular hexagon, 20 mm across the flats (a nut or a bolt head).', params: { acrossFlats: { label: 'Across flats', default: 20 } }, dimensions: 1, build: buildHexagon },
   { id: 'star', name: 'Star', description: 'A five-point star, 25 mm outer and 10 mm inner radius.', params: { outer: { label: 'Outer radius', default: 25 }, inner: { label: 'Inner radius', default: 10 } }, dimensions: 2, build: buildStar },
@@ -657,7 +679,7 @@ export const TEMPLATES = [
   { id: 'l-bracket', name: 'L-bracket', description: 'A 60 by 50 mm L-bracket, 10 mm thick, with two 5 mm holes.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 50 }, thickness: { label: 'Thickness', default: 10 }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 9, build: buildLBracket },
   { id: 'bolt-circle', name: 'Bolt circle', description: 'A 60 mm disc with six 6 mm holes on a 40 mm bolt circle.', params: { outerRadius: { label: 'Disc radius', default: 30 }, boltRadius: { label: 'Bolt circle radius', default: 20 }, holeRadius: { label: 'Hole radius', default: 3 } }, dimensions: 3, build: buildBoltCircle },
   { id: 'finger-edge', name: 'Finger-joint edge', description: 'The tabbed edge of a box panel: five 10 mm tabs, 5 mm deep.', params: { tabWidth: { label: 'Tab width', default: 10 }, gapWidth: { label: 'Gap width', default: 10 }, depth: { label: 'Depth', default: 5 } }, dimensions: 3, build: buildFingerEdge },
-  { id: 'dog-bone-pocket', name: 'Dog-bone pocket', description: 'A 60 by 40 mm pocket with a diagonal dog-bone relief in each corner for a 1/4 inch (6.35 mm) bit.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, bitDiameter: { label: 'Bit diameter', default: 6.35 } }, dimensions: 3, build: buildDogBone },
+  { id: 'dog-bone-pocket', name: 'Dog-bone pocket', description: 'A 60 by 40 mm pocket with a diagonal dog-bone relief in each corner for a 1/4 inch (6.35 mm) bit.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, bitDiameter: { label: 'Bit diameter', default: 6.35 } }, dimensions: 6, build: buildDogBone },
   { id: 't-slot', name: 'T-slot', description: 'A T-track slot profile: 19 mm wide and 9.5 mm deep over a 25 mm wide slot, 16 mm deep in all.', params: { topWidth: { label: 'Top width', default: 19 }, topDepth: { label: 'Top depth', default: 9.5 }, bottomWidth: { label: 'Bottom width', default: 25 }, totalDepth: { label: 'Total depth', default: 16 } }, dimensions: 4, build: buildTSlot },
   { id: 'butterfly-key', name: 'Butterfly key', description: 'A bow-tie key: 50 mm long, 25 mm wide at the ends, 10 mm at the waist.', params: { length: { label: 'Length', default: 50 }, endWidth: { label: 'End width', default: 25 }, waistWidth: { label: 'Waist width', default: 10 } }, dimensions: 3, build: buildButterflyKey },
   { id: 'cup-hinge-bore', name: 'Cup hinge bore', description: 'A 35 mm hinge cup hole with two 8 mm screw holes 45 mm apart, 9.5 mm from the cup centre.', params: { cupDiameter: { label: 'Cup diameter', default: 35 }, screwSpacing: { label: 'Screw spacing', default: 45 }, screwOffset: { label: 'Screw line offset', default: 9.5 }, screwDiameter: { label: 'Screw diameter', default: 8 } }, dimensions: 4, build: buildCupHinge },
@@ -697,24 +719,11 @@ export function paramRefusal(spec, value) {
 }
 
 /**
- * The document's USER PARAMETERS for the param values (the live ones, in declaration order): { name, unit, expression: '<value> <unit>',
- * comment: label }, made by #core/parameters.js planChange createParameter (the one model: its name rule and its canonical text).
- */
-export function templateParameters(t, values) {
-  let parameters = [];
-  for (const [k, spec] of Object.entries(t.params)) {
-    if (!isLiveParam(spec)) continue;
-    const unit = paramUnit(spec);
-    const plan = planChange({ parameters, constraints: [] }, { type: 'createParameter', name: paramName(k), unit, text: `${values[k]} ${unit}`, comment: spec.label });
-    if (!plan.ok) throw new Error(`template ${t.id}: parameter ${k}: ${plan.message}`);
-    parameters = plan.paramsAfter;
-  }
-  return parameters;
-}
-
-/**
- * Build a template's document with its default parameters (or `params` over them): the drawing, its dimensions as formulas, and its user
- * parameters. A value the param refuses (paramRefusal) throws: the start modal checks every value before it opens a template.
+ * Build a template's document with its default parameters (or `params` over them): TASK 680, its RECIPE on a fresh sketch of its own: the user
+ * parameters first (the Parameters window's + Add row, in declaration order: { name, unit, expression: '<value> <unit>', comment: label }), then
+ * the drawing with the app's tools, its dimensions' texts reading those parameters, and the document through serializeDocument. A value the
+ * param refuses (paramRefusal) throws: the start modal checks every value before it opens a template. Values the tools cannot draw (a step
+ * refused, e.g. boards thicker than the length leaves) throw "<name> cannot be drawn with these values (<the tool's reason>)".
  */
 export function buildTemplate(t, params = {}) {
   const values = { ...defaultParams(t), ...params };
@@ -723,8 +732,17 @@ export function buildTemplate(t, params = {}) {
     if (why) throw new Error(`template ${t.id}: ${why}`);
     if (paramKind(spec) !== 'choice') values[k] = R(Number(values[k])); // the drawing and its parameter read the SAME number
   }
-  const doc = t.build(values);
-  doc.geometry.parameters = templateParameters(t, values);
-  return doc;
+  const d = drawing();
+  for (const [k, spec] of Object.entries(t.params)) {
+    if (!isLiveParam(spec)) continue;
+    const unit = paramUnit(spec);
+    ops.parameter(d.state, paramName(k), unit, `${values[k]} ${unit}`, spec.label);
+  }
+  try {
+    t.build(d, values);
+  } catch (e) { // a tool refused a step (e.g. a dimension that would collapse a board): these values make no drawing
+    throw new Error(`${t.name} cannot be drawn with these values (${e.message})`, { cause: e });
+  }
+  return d.finish();
 }
 export const templateById = (id) => TEMPLATES.find((t) => t.id === id) || null;

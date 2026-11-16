@@ -20,7 +20,7 @@ import { isDimension } from '#core/parameters.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { CONSTRAINT_TYPES, TOOL_MODES } from '#core/constants.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { labelEl } from './helpers/node-dom-read.js';

@@ -12,8 +12,8 @@ global.document = { head: { appendChild() {} }, getElementById: () => null, crea
 const L = await import('./harness/audit/lib.js');
 const { ConstraintManager } = await import('../packages/core/constraint-manager.js');
 const { measureResidual } = await import('../packages/core/constraint-verifier.js');
-const { commitDimensionEdit, toggleDriving } = await import('../packages/ui/dimension-seams.js');
-const { updateConstraintOffset } = await import('../packages/ui/input-handlers/dimension-tool.js');
+const { commitDimensionEdit, toggleDriving } = await import('../packages/core/dimension-seams.js');
+const { updateConstraintOffset } = await import('../packages/core/dim-label.js');
 const { draw } = await import('../packages/ui/svg-renderer.js');
 const { serializeDocument, deserializeDocument } = await import('../packages/core/document.js');
 const { getLineIntersection } = await import('../packages/core/geometry.js');

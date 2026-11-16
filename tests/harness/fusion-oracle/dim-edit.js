@@ -1,11 +1,11 @@
 // TASK 528 -- FUSION AS AN ORACLE FOR EDITING A DIMENSION VALUE. A cell = one hold state of the graded grid (tests/harness/fusion-oracle/graded.js: the same builders,
 // the same levels) + a dimension placed at its measured value + ONE edit of its value (grow x2, shrink x0.5, tiny, huge x20, zero, negative). Fusion's side is
-// replayed by scripts/fusion-oracle/run-dim-edit.py (parameter.expression = the box); OUR side is commitDimensionEdit (packages/ui/dimension-seams.js), the one
+// replayed by scripts/fusion-oracle/run-dim-edit.py (parameter.expression = the box); OUR side is commitDimensionEdit (packages/core/dimension-seams.js), the one
 // path the app uses when a value is typed. Everything here is DATA and pure node: nothing knows Fusion's API.
 import * as L from '../audit/lib.js';
 import { build } from '../coverage/matrix-build.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { perpendicularDistance } from '#core/geometry.js';
 import { buildCells, materialize, applyLevel, TOL_F, TOL_O } from './graded.js';
 import { serDoc } from './export.js';

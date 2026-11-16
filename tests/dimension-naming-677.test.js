@@ -13,7 +13,7 @@ import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { previewDimensionInput, planChange } from '#core/parameters.js';
-import { applyParameterChange, dimensionInputLabel } from '#ui/dimension-seams.js';
+import { applyParameterChange, dimensionInputLabel } from '#core/dimension-seams.js';
 import { formatConstraintValue, dimensionNameTag } from '#ui/svg-renderer.js';
 
 let checks = 0;

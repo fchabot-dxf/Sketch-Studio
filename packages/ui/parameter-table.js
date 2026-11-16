@@ -22,7 +22,7 @@ import { parseInput } from '#core/expression.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { labelGeometry, constraintGeometryText } from '#ui/geometry-labels.js';
 import { toggleConstraintSelection } from '#ui/design-info-panel.js';
-import { applyParameterChange, dimensionInputLabel } from '#ui/dimension-seams.js';
+import { applyParameterChange, dimensionInputLabel } from '#core/dimension-seams.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';

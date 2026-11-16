@@ -8,7 +8,7 @@ import { createEngine } from '#core/constraint-solver.js';
 import { createSketchState } from '#core/sketch-state.js';
 import { addConstraintObject } from '#core/constraints.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
-import { placeRadiusLabel } from '#ui/input-handlers/dimension-tool.js';
+import { placeRadiusLabel } from '#core/dim-label.js';
 import { arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 import { draw } from '#ui/svg-renderer.js';
 

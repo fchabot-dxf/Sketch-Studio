@@ -5,7 +5,7 @@ import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { TEMPLATES, buildTemplate, templateById } from '#core/templates.js';
 import { DOCUMENT_VERSION, deserializeDocument, validateDocument } from '#core/document.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 
 assert.ok(TEMPLATES.length >= 6, 'a bank of templates');
@@ -89,9 +89,14 @@ const real = (S, type) => S.state.shapes.filter((x) => x.type === type && !x.isC
       near(Math.abs(K.y - corners[k][1]), d / 2 / Math.SQRT2, 'centre on the corner diagonal: y offset r / sqrt 2');
     }
     assert.strictEqual(used.size, 4, 'dog-bone: one relief per corner');
+    // TASK 680: drawn with the tools, a piece's end is its own joint tied to the next piece's by a coincident: a closed loop = 8 POINTS (joints
+    // joined by coincidents), each the end of exactly two pieces
+    const point = new Map(); // joint -> its point (the smallest joint id of its coincident group)
+    const root = (j) => { while (point.has(j) && point.get(j) !== j) j = point.get(j); return j; };
+    for (const c of S.state.constraints.filter((k) => k.type === 'coincident')) { const [a, b] = c.joints.map(root); if (a !== b) point.set(a < b ? b : a, a < b ? a : b); }
     const deg = new Map();
-    for (const sh of S.state.shapes.filter((x) => !x.isConstruction)) for (const j of (sh.type === 'arc' ? [sh.joints[1], sh.joints[2]] : sh.joints)) deg.set(j, (deg.get(j) || 0) + 1);
-    assert.ok([...deg.values()].every((n) => n === 2) && deg.size === 8, 'dog-bone: ONE closed loop (8 joints, each on exactly two pieces)');
+    for (const sh of S.state.shapes.filter((x) => !x.isConstruction)) for (const j of (sh.type === 'arc' ? [sh.joints[1], sh.joints[2]] : sh.joints)) deg.set(root(j), (deg.get(root(j)) || 0) + 1);
+    assert.ok([...deg.values()].every((n) => n === 2) && deg.size === 8, 'dog-bone: ONE closed loop (8 points, each the end of exactly two pieces)');
   }
 }
 { // T-slot: 19 wide x 9.5 deep over 25 wide, 16 deep in all

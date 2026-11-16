@@ -3,7 +3,7 @@ import { createSketchState } from '#core/sketch-state.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { findCornerAtPoint, applyFillet } from '#core/fillet.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit } from '#core/dimension-seams.js';
 
 const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

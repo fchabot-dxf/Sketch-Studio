@@ -9,7 +9,7 @@ import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { perpendicularDistance } from '#core/geometry.js';
 import { planChange } from '#core/parameters.js';
-import { commitDimensionEdit, commitDimensionEdits, applyParameterChange } from '#ui/dimension-seams.js';
+import { commitDimensionEdit, commitDimensionEdits, applyParameterChange } from '#core/dimension-seams.js';
 import inventory from './harness/coverage/inventory.js';
 
 let checks = 0;

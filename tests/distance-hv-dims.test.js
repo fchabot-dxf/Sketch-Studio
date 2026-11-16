@@ -8,7 +8,7 @@ globalThis.document = globalThis.document || { getElementById: () => null };
   const { ConstraintManager } = await import('#core/constraint-manager.js');
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const { measureResidual } = await import('#core/constraint-verifier.js');
-  const { commitDimensionEdit } = await import('#ui/dimension-seams.js');
+  const { commitDimensionEdit } = await import('#core/dimension-seams.js');
 
   for (const [mode, value, key] of [['horizontal', 10, 'x'], ['vertical', 5, 'y']]) {
     const engine = createEngine(null); engine.init();

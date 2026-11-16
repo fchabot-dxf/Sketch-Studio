@@ -61,8 +61,8 @@ const TAN10 = Math.tan((10 * Math.PI) / 180); // 0.17633 mm per mm of depth
   ok(T3.steps[0].outlines[0].walk, 'the interpolated ring keeps an exact walk');
   near(T3.steps.at(-1).depth, 8, 1e-12, 'the last step is at the floor');
   for (let i = 1; i < T3.steps.length; i++) ok(!sameOutline(T3.steps[i - 1].outlines[0].polygon, T3.steps[i].outlines[0].polygon), `drafted: every step differs from the one above (${i})`);
-  // no step depth: STEP_DEPTH.defaultMm (a small step is kept as given: TASK 736 removed the 0.1 mm floor; the drafted pocket's steps 0.0017 mm apart merge into one)
-  eq(steppedTerraces(slope, { kind: 'pocket', step: 0.01, depth: 8 }).steps.length, 1, 'a step of 0.01 mm is kept as given: the identical-outline merge leaves ONE step');
+  // no step depth: STEP_DEPTH.defaultMm (a small step is kept as given: TASK 736 removed the 0.1 mm floor; the merge compares with the run's FIRST outline)
+  eq(steppedTerraces(slope, { kind: 'pocket', step: 0.01, depth: 8 }).steps.length, 160, 'a step of 0.01 mm is kept as given: 160 steps (each merged step drifts <= 0.01 mm from its first outline: 8 mm x tan 10 deg / 0.01 mm ~ 141 runs, plus run-boundary rounding)');
   eq(steppedTerraces(slope, { kind: 'pocket', depth: 8 }).steps.length, 8, `no step depth: ${STEP_DEPTH.defaultMm} mm`);
 }
 {

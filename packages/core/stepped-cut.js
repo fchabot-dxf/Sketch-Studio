@@ -390,11 +390,14 @@ export function steppedTerraces(slope, { kind = 'pocket', step, depth, deviation
     for (let i = 1; i * s < D - Z_EPS; i++) depths.push(Math.round(i * s * 1e9) / 1e9);
     depths.push(D);
   }
+  // identical steps merge into the DEEPER one (the bottom-of-step rule), compared with the run's FIRST outline (its reference), never with the step just merged:
+  // a gradual slope otherwise creeps into one step, so a smaller step could give fewer steps. Drift inside one merged step stays within SAME_OUTLINE_TOL_MM.
   const steps = [];
+  let reference = null;
   for (const d of depths) {
     const outlines = outlinesAt(pr, Math.min(d, zMax));
-    if (steps.length && sameOutlines(steps[steps.length - 1].outlines, outlines)) steps[steps.length - 1] = { depth: d, outlines };
-    else steps.push({ depth: d, outlines });
+    if (steps.length && sameOutlines(reference, outlines)) steps[steps.length - 1] = { depth: d, outlines };
+    else { steps.push({ depth: d, outlines }); reference = outlines; }
   }
   const undercut = pr.undercutBelow !== null && pr.undercutBelow < D - Z_EPS ? pr.undercutBelow : null;
   const out = { steps, undercutBelow: undercut, zTop: pr.rings[0].z, zMax, error: null };

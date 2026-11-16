@@ -40,7 +40,22 @@ for (const [name, fixture] of [['R3 fillet', '03-pocket-floor-fillet'], ['10 deg
   }
   console.log(name + ': ' + out.join(' | '));
 }
-eq(stepped.steppedTerraces(slopeOf('03-pocket-floor-fillet'), { kind: 'pocket', depth: 8, step: 0.01 }).steps.length, 126, 'R3 fillet at 0.01 mm: 126 steps (identical consecutive outlines merge)');
+eq(stepped.steppedTerraces(slopeOf('03-pocket-floor-fillet'), { kind: 'pocket', depth: 8, step: 0.01 }).steps.length, 184, 'R3 fillet at 0.01 mm: 184 steps');
+// a smaller step / finer resolution never gives FEWER steps (the merge compares with the run's first outline, not the step it just merged)
+for (const [fixture, kind] of [['03-pocket-floor-fillet', 'pocket'], ['02-drafted-pocket', 'pocket'], ['01-chamfer-outline', 'outside']]) {
+  let s = null; for (const r of payload(fixture).regions) { const x = slopeFromRegion(r, { scale: 1, yUp: true }, []); if (x && x.kind === kind) s = x; }
+  const steps = [2, 1, 0.5, 0.1, 0.05, 0.01].map((st) => stepped.steppedTerraces(s, { kind, step: st }).steps.length);
+  const devs = [0.5, 0.25, 0.1, 0.01, 0.001].map((d) => stepped.steppedTerraces(s, { kind, deviation: d }).steps.length);
+  console.log(fixture + ' steps 2..0.01: ' + steps.join(' ') + ' | deviations 0.5..0.001: ' + devs.join(' '));
+  for (const row of [steps, devs]) for (let i = 1; i < row.length; i++) ok(row[i] >= row[i - 1], `${fixture}: a smaller step / finer resolution gives at least as many steps (${row.join(' ')})`);
+}
+// drafted 10 deg wall at 0.01 mm: every merged step's left edge is within the tolerance of the run's FIRST outline (run i+1 starts one step below step i)
+{
+  const T = stepped.steppedTerraces(slopeOf('02-drafted-pocket'), { kind: 'pocket', depth: 8, step: 0.01 });
+  const TAN10 = Math.tan(10 * Math.PI / 180), left = (st) => Math.min(...st.outlines[0].polygon.map((q) => q.x));
+  for (let i = 1; i < T.steps.length; i++) ok(left(T.steps[i]) - (30 + (T.steps[i - 1].depth + 0.01) * TAN10) <= stepped.SAME_OUTLINE_TOL_MM + 1e-6, `step ${i}: drift from its run's first outline within ${stepped.SAME_OUTLINE_TOL_MM} mm`);
+  eq(T.steps.length, 160, 'drafted pocket at 0.01 mm: 160 steps (8 mm x tan 10 deg = 1.41 mm of wall / 0.01 mm tolerance ~ 141, plus run-boundary rounding)');
+}
 
 // ── 2. the real card and the stock field ──
 SettingsManager.set('DOC_UNIT', 'mm');

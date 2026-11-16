@@ -9,8 +9,8 @@
 //   anchor (tasks 642, 646, 650, 653): the point the button sits beside, in client px: the Line tool's lineChainAnchor (the last committed joint, or
 //   the end once typed length AND angle lock it, never the live rubber band), the Fillet's corner, the Offset's anchor. The button never chases the
 //   cursor, and (task 653) never sits on its anchor or within a finger's reach (MIN_GAP, 44 px, centre to anchor) of it; null / omitted = the
-//   canvas corner (the Mirror tool has no rubber band). avoid: the tools' boxes' and handles' rects, which the button covers only when every slot is
-//   covered (then the least-covered one, see placeDone).
+//   canvas corner (the Mirror tool has no rubber band). avoid: the tools' boxes' and handles' rects; visible toasts (#notification-container [data-level])
+//   are treated as obstacles too (task 689), which the button covers only when every slot is covered (then the least-covered one, see placeDone).
 //   sync(touchInput): call after any pointer event; touchInput = the pointer that just acted was a finger (picks the size).
 
 const STYLE_ID = 'sk-done-styles';
@@ -67,17 +67,32 @@ export function createDoneButton({ svg, isChainOpen, onDone, enabled = () => tru
 
   let touchInput = false;
   let frame = null;
+  const visibleToasts = () => {
+    const box = document.getElementById('notification-container');
+    return box ? [...box.querySelectorAll('[data-level]')].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()) : [];
+  };
   // beside the anchor (below-right, flipped near a canvas edge) when the tool has one, else the canvas's bottom-right corner
   function place() {
     const r = svg.getBoundingClientRect();
     const end = anchor();
+    const obstacles = [...avoid(), ...visibleToasts()];
+    const size = btn.offsetWidth || (touchInput ? 52 : 40);
     if (!end) {
-      btn.style.left = btn.style.top = '';
-      btn.style.right = Math.max(MARGIN, window.innerWidth - r.right + MARGIN) + 'px';
-      btn.style.bottom = Math.max(MARGIN, window.innerHeight - r.bottom + MARGIN) + 'px';
+      const rx = r.right - MARGIN - size, ry = r.bottom - MARGIN - size;
+      const blocked = obstacles.some((o) => rx < o.right && rx + size > o.left && ry < o.bottom && ry + size > o.top);
+      if (!blocked) {
+        btn.style.left = btn.style.top = '';
+        btn.style.right = Math.max(MARGIN, window.innerWidth - r.right + MARGIN) + 'px';
+        btn.style.bottom = Math.max(MARGIN, window.innerHeight - r.bottom + MARGIN) + 'px';
+        return;
+      }
+      const [x, y] = placeDone({ anchor: { x: r.right, y: r.bottom }, size, bounds: r, obstacles });
+      btn.style.right = btn.style.bottom = '';
+      btn.style.left = x + 'px';
+      btn.style.top = y + 'px';
       return;
     }
-    const [x, y] = placeDone({ anchor: end, size: btn.offsetWidth, bounds: r, obstacles: avoid() });
+    const [x, y] = placeDone({ anchor: end, size, bounds: r, obstacles });
     btn.style.right = btn.style.bottom = '';
     btn.style.left = x + 'px';
     btn.style.top = y + 'px';

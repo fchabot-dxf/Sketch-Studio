@@ -132,7 +132,7 @@ await (async () => {
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent`), 'Slot');
     await waitFor(`document.querySelectorAll('svg .shape-elem').length >= 4`, 'the slot drawn');
     const slotShapes = await shapes();
-    assert.strictEqual(slotShapes, 4, 'the slot: two lines and two arcs');
+    assert.strictEqual(slotShapes, 5, 'the slot (TASK 680: made by the Slot tool): two lines, two arcs and its construction centre line');
     assert.strictEqual(await evalJs(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot')`), true, 'the template design is unsaved (the not-saved dot)');
     await sleep(1200); await shot('opened-slot.png', 'body');
     // Undo does not remove the starting drawing (it is the document it began as, not an edit)

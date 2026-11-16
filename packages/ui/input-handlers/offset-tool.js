@@ -10,12 +10,16 @@
 // as the fillet's) sits at #core/offset.js offsetHandleAnchor, pointing the way the distance grows; dragging it (mouse or finger, ONE path)
 // sets the distance live through the SAME state as typing (_open.d, written into the box). Dragging it across the source FLIPS the side (the
 // offset follows the pointer to the other side of the curve); a distance too small to show in the box (< 0.01 mm) is held at 0.01 mm.
+// TASK 690: the box takes a SIGNED distance (#core/offset.js parseOffsetDistance): a negative one puts the offset on the OTHER side of the source
+// at |value| (offsetSideAndDistance, the core's one negative rule), the same flip the arrow drag makes; 0 is refused. _open.side is the side the
+// pointer / the last press picked, _open.d the signed distance in the box: the offset shown and applied is offsetSideAndDistance(side, d), and
+// applyOffset gets that side and |d| (the new offset dimension holds |d|; a dimension edited later keeps its sign, #core/offset.js header).
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
 import { dragArrowSvg, dragArrowHit } from '#ui/drag-arrow-handle.js';
 import {
   offsetChainOf, offsetChainGeometry, offsetSideAt, offsetHandleAnchor, offsetArcSpan, applyOffset, defaultOffsetDistance, parseOffsetDistance,
-  OFFSET_UNDO_LABEL
+  offsetSideAndDistance, OFFSET_ZERO_REASON, OFFSET_UNDO_LABEL
 } from '#core/offset.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
@@ -40,7 +44,7 @@ export function setupOffsetTool({ exit } = {}) {
   _exit = typeof exit === 'function' ? exit : null;
 }
 let _distanceUnit = null;   // the document unit the default was seeded for; a unit change re-seeds it
-let _open = null;           // { chain, pickId, side, d, el, svg, state, unsubHistory } while the distance box is open
+let _open = null;           // { chain, pickId, side, d (signed, task 690), el, svg, state, unsubHistory } while the distance box is open
 let _hover = false;         // the pointer is over the arrow (it draws darker)
 let _drag = null;           // { pointerId, grab } while the arrow is dragged (grab = arrow point minus pointer, world)
 let _press = null;          // a press on the canvas while the box is open: a click / tap sets the side on release, a pan / pinch does not
@@ -58,7 +62,9 @@ const pickRule = (state) => { const inert = inertEntities(state); return (s) => 
 export function offsetInputOpen() { return !!_open; }
 /** Where the check sits beside: the anchor of the preview (#core/offset.js offsetHandleAnchor), null when no box is open / no offset. */
 export function offsetAnchorPoint() { const a = anchor(); return a ? a.point : null; }
-const anchor = () => (_open ? offsetHandleAnchor(_open.state, _open.chain, _open.side, _open.d) : null);
+// the offset the box describes: the picked side and the signed distance through the ONE negative rule -> { side, d > 0 }
+const shown = () => offsetSideAndDistance(_open.side, _open.d);
+const anchor = () => { if (!_open) return null; const o = shown(); return offsetHandleAnchor(_open.state, _open.chain, o.side, o.d); };
 
 /** Leave the tool (a tool switch, Esc): nothing is made. */
 export function resetOffsetState() { cancelAll(); }
@@ -139,9 +145,10 @@ function overArrow(svg, e) {
 function dragArrowTo(svg, e) {
   const a = anchor();
   if (!a) return;
+  const o = shown(); // the drag starts from the offset shown (a negative box value is already on the other side); it writes a positive distance
   const w = screenToWorld(svg, e.clientX, e.clientY);
-  const s = _open.d + (w.x + _drag.grab.x - a.point.x) * a.normal.x + (w.y + _drag.grab.y - a.point.y) * a.normal.y;
-  const side = s <= -MIN_DRAG_MM ? -_open.side : _open.side;
+  const s = o.d + (w.x + _drag.grab.x - a.point.x) * a.normal.x + (w.y + _drag.grab.y - a.point.y) * a.normal.y;
+  const side = s <= -MIN_DRAG_MM ? -o.side : o.side;
   const unit = docUnit();
   const text = formatUnit(Math.max(Math.abs(s), MIN_DRAG_MM), unit, { decimals: decimalsFor(unit) });
   const v = parseOffsetDistance(text, unit);
@@ -228,9 +235,10 @@ function ensureViewListener() {
 /** Enter / the check: apply the offset with the distance in the box (ONE undo step). The box stays open, with a warning, when it cannot apply. */
 export function commitOffsetInput() {
   if (!_open) return;
-  const { el, chain, side, state } = _open;
-  const d = parseOffsetDistance(el.value, docUnit());
-  if (d == null) { showNotification('Offset: enter a distance greater than zero.', 'warning'); return; }
+  const { el, chain, state } = _open;
+  const v = parseOffsetDistance(el.value, docUnit());
+  if (v == null) { showNotification(`Offset: enter a distance; ${OFFSET_ZERO_REASON}.`, 'warning'); return; }
+  const { side, d } = offsetSideAndDistance(_open.side, v);
   const pre = offsetChainGeometry(state, chain, d, side);
   if (!pre.ok) { showNotification('Offset: ' + pre.reason + '.', 'warning', HINT_MS); return; }
   _committing = true;
@@ -258,7 +266,8 @@ function cancelAll() { removeInput(); const g = document.getElementById(OVERLAY_
 // The picked chain lit (amber, as the Fillet's picked line), the offset at the box's distance on the current side (dashed blue), or the reason
 // there is none (red, at the picked curve).
 function renderOffsetOverlay() {
-  const { svg, state, chain, side, d, pickId } = _open;
+  const { svg, state, chain, pickId } = _open;
+  const { side, d } = shown();
   let g = document.getElementById(OVERLAY_ID);
   if (!g) {
     g = document.createElementNS('http://www.w3.org/2000/svg', 'g');

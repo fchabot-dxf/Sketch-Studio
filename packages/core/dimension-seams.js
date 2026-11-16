@@ -16,6 +16,7 @@ import { solveGivingWay } from '#core/creation-placement.js';
 import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
 import { projectDimLabel } from '#core/dim-label.js';
 import { replaceParameters, usersOf } from '#core/parameters.js';
+import { OFFSET_ZERO_REASON, offsetValueRefusal } from '#core/offset.js';
 import { format as formatUnit } from '#core/units.js';
 import { docUnit } from '#core/settings-manager.js';
 
@@ -67,10 +68,12 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   // TASK 550 / 553: an ANGLE dimension takes 0 < value <= 360 (Fusion's dimension box, measured with real keys, task 551: 0 and negative
   // values are refused, 190 / 270 / 360 accepted: the stored sector keeps opening the same way round as the value grows, past 180, see the
   // walk below). Refused before anything changes.
+  // TASK 690: an OFFSET dimension takes any value but 0, a negative one putting the offset on the other side (#core/offset.js offsetValueRefusal).
   for (let i = 0; i < edits.length; i++) {
     const e = edits[i];
-    if (e.c.type !== CONSTRAINT_TYPES.ANGLE) continue;
-    const why = !(Number(e.value) > 0) ? 'an angle must be more than 0 degrees' : !(Number(e.value) <= 360) ? 'an angle must be at most 360 degrees' : null;
+    let why = null;
+    if (e.c.type === CONSTRAINT_TYPES.ANGLE) why = !(Number(e.value) > 0) ? 'an angle must be more than 0 degrees' : !(Number(e.value) <= 360) ? 'an angle must be at most 360 degrees' : null;
+    else if (e.c.type === CONSTRAINT_TYPES.OFFSET && !(Number(e.value) !== 0)) why = OFFSET_ZERO_REASON;
     if (why) return { reverted: true, clash: '', reason: why, culprit: { index: i, name: labelOf(e, i), reason: why } };
   }
   if (opts.refuseReference) {
@@ -87,7 +90,16 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   const oldValues = edits.map(e => e.c.value);
   const sizesBefore = measureShapeSizes(state);
   const restoreAll = () => { edits.forEach((e, i) => { e.c.value = oldValues[i]; }); restoreSolverState(joints, shapes, snap); };
-  const revert = (res) => { restoreAll(); engine.solve(ITER()); return res; };
+  // TASK 690: a refused list that holds an offset edit asking an offset arc / circle to shrink past its centre says THAT (read on the restored
+  // sketch) instead of the generic collapse / conflict: the solve refused it (it never folds), this only names the cause.
+  const offsetCause = (list) => {
+    for (const e of list) {
+      const why = e.c.type === CONSTRAINT_TYPES.OFFSET ? offsetValueRefusal(e.c, e.value, joints, shapes, (v) => formatUnit(v, docUnit(), { unit: true })) : null;
+      if (why) return why;
+    }
+    return null;
+  };
+  const revert = (res, list) => { restoreAll(); engine.solve(ITER()); const why = offsetCause(list); return why ? { ...res, clash: '', reason: why } : res; };
 
   // ONE attempt at a list of edits from the snapshot state. On a refusal it leaves the state as it found it (restored + re-solved).
   const attempt = (list) => {
@@ -141,7 +153,7 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     }
     list.forEach(e => { e.c.value = e.value; });
     const collapsedFillet = allFillets.find(f => filletHasCollapsedLine(state, f.arc));
-    if (collapsedFillet) return revert({ reverted: true, clash: '', reason: `R = ${formatUnit(collapsedFillet.value, docUnit(), { unit: true })} collapsed a line to zero length` });
+    if (collapsedFillet) return revert({ reverted: true, clash: '', reason: `R = ${formatUnit(collapsedFillet.value, docUnit(), { unit: true })} collapsed a line to zero length` }, list);
     // Any constraint satisfied by collapsing a line / arc / circle to a point (or an arc's two ends together) is no solution (task 521,
     // task 550); the edited dimension's own size is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET
     // radius edit goes through the same rule for every shape (the fillet arc included: its two ends must not meet) EXCEPT the fillet's own
@@ -151,11 +163,11 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     const collapsed = findCollapsedShape(state, sizesBefore, legs);
     if (collapsed) {
       const own = list.find((e, i) => !fillets[i]) || list[0];
-      return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse ${withIndefiniteArticle(collapsed.type)} to a point` });
+      return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse ${withIndefiniteArticle(collapsed.type)} to a point` }, list);
     }
     if (result && result.converged === false) {
       const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');
-      return revert({ reverted: true, clash });
+      return revert({ reverted: true, clash }, list);
     }
     return { reverted: false, clash: '' };
   };

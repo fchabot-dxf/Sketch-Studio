@@ -1,6 +1,7 @@
 import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { patternsAfterDelete } from './pattern.js';
+import { undimensionOffset } from './offset.js';
 import { SolverConfig } from './solver-config.js';
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo, constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from './sketch-model.js'; // TASK 577/619
 
@@ -38,12 +39,7 @@ export function deleteConstraints(state, constraintsOrIds) {
     if (idx !== -1) {
       const target = state.constraints[idx];
       if (target && target.type === CONSTRAINT_TYPES.OFFSET && target.dimensioned !== false) {
-        target.dimensioned = false;
-        delete target.name;
-        delete target.expression;
-        delete target.isDriven;
-        delete target.driven;
-        delete target.drivenReason;
+        undimensionOffset(target); // task 667: the relation stays with a free distance (task 690: a negative value turns positive, sides flipped)
         removed++;
         continue;
       }

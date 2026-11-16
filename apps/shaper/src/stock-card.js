@@ -6,22 +6,34 @@ import { getStock, setStockField, resolveStock } from './stock.js';
 import { CUT_PLAN } from './cut-plan.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 import { docUnit, lengthDecimals } from '#core/settings-manager.js';
+import { attachStepper } from './number-stepper.js';
+
+// TASK 730: the thickness field's − / + step (document unit; min in BASE mm: never 0, as typing 0 is refused too)
+const THICKNESS_STEPPER = { step: { mm: 1, in: 1 / 16 }, min: 0.1 };
 
 /** createStockCard({ input, noteEl, getController, onChange }) -> { show }. getController(): the Design sketch controller (null before it exists). onChange(): after a typed value. */
 export function createStockCard({ input: thick, noteEl: note, getController, onChange = () => {} }) {
+  let stepper = null; // set below; show() keeps its buttons' disabled state with the field's
   const show = () => {
     const designController = getController();
     const loop = designController ? resolveStock(designController.state, CUT_PLAN).fromLoop : null; // TASK 472: with a Stock loop the thickness is set on that loop in Prepare
     thick.value = formatUnit(loop ? loop.thickness : getStock().thickness, docUnit(), { decimals: lengthDecimals(3) });
     thick.disabled = !!loop;
     note.textContent = loop ? (loop.thicknessSet ? 'The board is your Stock loop; set its thickness in Prepare.' : 'The board is your Stock loop; no thickness set on it, so the default applies. Set it in Prepare.') : 'No Stock loop: the board is the design bounds + margin.';
+    if (stepper) stepper.refresh();
   };
   show();
-  thick.addEventListener('change', () => {
-    const v = parseUnit(thick.value, docUnit());
+  const apply = (v) => {
     if (v != null && v > 0) setStockField('thickness', v);
     show();
     onChange();
-  });
+  };
+  thick.addEventListener('change', () => apply(parseUnit(thick.value, docUnit())));
+  stepper = attachStepper(thick, THICKNESS_STEPPER, {
+    unit: docUnit, toDoc: (mm) => Number(formatUnit(mm, docUnit(), { decimals: 6 })),
+    read: () => Number(formatUnit(getStock().thickness, docUnit(), { decimals: 6 })),
+    commit: (docNum) => apply(parseUnit(String(docNum), docUnit())), // -> base mm
+  }, { label: 'thickness' });
+  stepper.refresh();
   return { show };
 }

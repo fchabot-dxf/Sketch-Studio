@@ -173,11 +173,11 @@ export function createCutPanel(hostEl, opts = {}) {
     }
   };
   // ONE stepper widget (number-stepper.js) for every stepped field: it reads the record's exact value (never the rounded text) and commits a doc-unit number -> base mm
-  const stepperFor = (field, input, opts) => attachStepper(input, STEPPERS[field], {
+  const stepperFor = (field, input, label, opts) => attachStepper(input, STEPPERS[field], {
     unit: docUnit, toDoc: toDocNum,
     read: () => (field === 'cutDepth' ? (isUnset(current.cutDepth) ? null : toDocNum(Number(current.cutDepth))) : toDocNum(fieldBase(field))),
     commit: (docNum) => onSetField(field, parseUnit(String(docNum), docUnit())), // -> base mm
-  }, opts);
+  }, { label, ...opts });
   const fieldBase = (field) => field === 'cutOffset' ? Number(current.cutOffset) || 0
     : field === 'toolDia' ? Number(current.toolDia) || 0
     : field === 'stepDepth' ? (Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm)
@@ -208,11 +208,11 @@ export function createCutPanel(hostEl, opts = {}) {
   flipBtn.addEventListener('click', () => onSetField('cutOffset', -(Number(current.cutOffset) || 0))); // sign flip (base mm)
   bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, docUnit()); if (n != null) onSetField('toolDia', n); });
 
-  stepperFor('cutDepth', depthInput, { box: depthInput.closest('.cut-box'), before: depthInput.closest('.cut-mid') });
-  stepperFor('stepDepth', stepInput, { box: stepInput.closest('.cut-box') });
-  stepperFor('stepDeviation', deviationInput, { box: deviationInput.closest('.cut-box') });
-  stepperFor('cutOffset', offsetInput, { box: offsetInput.closest('.cut-box') });
-  stepperFor('toolDia', bitInput, { box: bitInput.closest('.cut-box'), before: bitInput.closest('.cut-box').querySelector('.cut-dia-prefix') });
+  stepperFor('cutDepth', depthInput, 'depth', { box: depthInput.closest('.cut-box'), before: depthInput.closest('.cut-mid') });
+  stepperFor('stepDepth', stepInput, 'step depth', { box: stepInput.closest('.cut-box') });
+  stepperFor('stepDeviation', deviationInput, 'resolution', { box: deviationInput.closest('.cut-box') });
+  stepperFor('cutOffset', offsetInput, 'offset', { box: offsetInput.closest('.cut-box') });
+  stepperFor('toolDia', bitInput, 'bit diameter', { box: bitInput.closest('.cut-box'), before: bitInput.closest('.cut-box').querySelector('.cut-dia-prefix') });
 
   // cutter shape popover: flat / ball nose / V-bit rows; the V-bit row carries its angle presets (the EXISTING VBIT_PRESETS)
   const buildShapePop = () => {

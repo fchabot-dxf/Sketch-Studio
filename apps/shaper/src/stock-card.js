@@ -33,7 +33,7 @@ export function createStockCard({ input: thick, noteEl: note, getController, onC
     unit: docUnit, toDoc: (mm) => Number(formatUnit(mm, docUnit(), { decimals: 6 })),
     read: () => Number(formatUnit(getStock().thickness, docUnit(), { decimals: 6 })),
     commit: (docNum) => apply(parseUnit(String(docNum), docUnit())), // -> base mm
-  });
+  }, { label: 'thickness' });
   stepper.refresh();
   return { show };
 }

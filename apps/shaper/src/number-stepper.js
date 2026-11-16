@@ -23,18 +23,17 @@ export function nextValue(cur, dir, step, min = -Infinity, max = Infinity) {
   return Math.min(max, Math.max(min, +n.toFixed(6)));
 }
 
-/** attachStepper(input, spec, { unit, toDoc, read, commit }, { box, before }) -> { refresh, destroy }
+/** attachStepper(input, spec, { unit, toDoc, read, commit }, { label, box, before }) -> { refresh, destroy }
  *  unit(): the document unit; toDoc(baseMm): base mm -> the document unit number; read(): the field's exact value in the document unit (null = unset);
- *  commit(docNumber): store it (the host converts to base mm). The − button goes before `before` (default the input) in `box` (default the input's parent), the + at the box's end.
+ *  commit(docNumber): store it (the host converts to base mm). label: the buttons' accessible name ("depth" -> "Decrease depth"). The − button goes before `before` (default the input) in `box` (default the input's parent), the + at the box's end.
  *  refresh(): re-sync the buttons' disabled state with the input's; destroy(): remove the buttons. */
-export function attachStepper(input, spec, { unit, toDoc, read, commit }, { box = input.parentElement, before = input } = {}) {
+export function attachStepper(input, spec, { unit, toDoc, read, commit }, { label, box = input.parentNode, before = input } = {}) {
   const make = (d, label, text) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'cut-step'; b.dataset.d = String(d); b.setAttribute('aria-label', label); b.textContent = text;
     return b;
   };
-  const name = (input.closest('.cut-row, label') && (input.closest('.cut-row, label').querySelector('.cut-field-label') || input.closest('label')))?.textContent.replace(/\s+/g, ' ').trim().toLowerCase() || 'value';
-  const minus = make(-1, 'Decrease ' + name, '−'), plus = make(1, 'Increase ' + name, '+');
+  const minus = make(-1, 'Decrease ' + label, '−'), plus = make(1, 'Increase ' + label, '+');
   box.insertBefore(minus, before); box.appendChild(plus);
 
   const stepOnce = (dir) => {
@@ -58,5 +57,5 @@ export function attachStepper(input, spec, { unit, toDoc, read, commit }, { box 
     b.addEventListener('click', () => { if (swallowClick) { swallowClick = false; return; } stepOnce(dir); }); // a pointer press already stepped on pointerdown
     b.addEventListener('contextmenu', (e) => e.preventDefault());       // a touch long-press is a hold, not a menu
   }
-  return { refresh() { minus.disabled = plus.disabled = input.disabled; }, destroy() { stop(); minus.remove(); plus.remove(); } };
+  return { refresh() { minus.disabled = plus.disabled = input.disabled; }, destroy() { stop(); box.removeChild(minus); box.removeChild(plus); } };
 }

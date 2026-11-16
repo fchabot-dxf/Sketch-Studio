@@ -164,8 +164,8 @@ export function mountVcarveView(state) {
   els.maxdepth.addEventListener('change', () => setMaxDepth(numFrom(els.maxdepth.value, 6)));
   const mmUnits = { unit: () => 'mm', toDoc: (mm) => mm };
   const steppers = [
-    attachStepper(els.dstep, DSTEP_STEPPER, { ...mmUnits, read: () => peek().dStep, commit: setDStep }),
-    attachStepper(els.maxdepth, MAXDEPTH_STEPPER, { ...mmUnits, read: () => peek().maxDepth, commit: setMaxDepth }),
+    attachStepper(els.dstep, DSTEP_STEPPER, { ...mmUnits, read: () => peek().dStep, commit: setDStep }, { label: 'depth step' }),
+    attachStepper(els.maxdepth, MAXDEPTH_STEPPER, { ...mmUnits, read: () => peek().maxDepth, commit: setMaxDepth }, { label: 'max depth' }),
   ];
   els.recompute.addEventListener('click', recompute);
 

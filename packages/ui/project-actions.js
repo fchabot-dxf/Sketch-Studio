@@ -6,7 +6,7 @@
 //   closes: the UI closes itself after a successful run (Open); run returning null means "cancelled" (a file picker) and keeps it open.
 // Failures THROW (a readable message); the UI shows it and changes nothing.
 // TASK 558 (owner ruling 2026-11-12): an action that would replace an UNSAVED Untitled with content (Open, Open recent, Open from file, New
-// design; GO TO another app no longer since TASK 684: the tabs go across) first asks THE question settleUnsaved() declares: Save… (the Save as name prompt, then go on) / Don't save
+// design) first asks THE question settleUnsaved() declares: Save… (the Save as name prompt, then go on) / Don't save
 // (discard it, then go on) / Cancel (nothing happens). TASK 624: all named saves go ONLY to Google Drive; if signed out, saving first asks
 // to sign in to Google (calling account.signIn() synchronously inside the click gesture), then continues seamlessly or cancels cleanly.
 

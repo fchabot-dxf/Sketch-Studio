@@ -8,7 +8,8 @@
 //   C. An EMPTY Untitled has no not-saved dot after a reload (inactive and active) and in another app; one with content keeps it.
 //   D. TWO PAGES at once (the simplest safe rule): tabs either page opened are both kept; a tab both edited keeps both versions; a tab one closed is dropped;
 //      each app's session slot survives the other page's write.
-//   E. keepTabs() (what GO TO runs) resolves false when the buffer cannot be written; a session's stored() part is what the buffer keeps.
+//   E. a session's stored() part is what the buffer keeps. (TASK 696: keepTabs(), what GO TO ran before leaving, went with GO TO; a page writes the
+//      buffer with flush(), as on pagehide / visibility hidden.)
 //   F. a design on (fake) Google Drive with a save not confirmed yet: the next app opens it with every app's sidecar, and its own save keeps the unconfirmed one.
 //   G. a current design the buffer does not hold (another page picked it) opens as one more tab, after the buffered ones (they are not dropped).
 import assert from 'node:assert';
@@ -94,7 +95,7 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   step(studio.st, 'line', 'ju');
   await studio.buf.openTab(s.id);
   assert.deepStrictEqual(studio.names(), ['Untitled', 'Saved']);
-  assert.strictEqual(await studio.buf.keepTabs(), true, 'GO TO: the tabs are kept');
+  await studio.buf.flush(); // the tabs are written: the next page of this origin reads them
   const keys = studio.buf.tabs().map((x) => x.key);
   // Shaper: the same tabs, the same active one; a cut plan on the saved design (autosaved, its own sidecar) and on the unsaved one (in the buffer)
   let shaper = page('shaper', store, { hostName: 'shaper' });
@@ -113,7 +114,7 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   shaper.side.data = { cut: 2 };
   await shaper.buf.activate(keys[1]);
   assert.deepStrictEqual(shaper.side.data, { cut: 1 }, 'switching back: the saved design has its own cut plan');
-  assert.strictEqual(await shaper.buf.keepTabs(), true);
+  await shaper.buf.flush();
   // Pen Plotter: the same tabs; showing the saved design writes nothing
   const before = (await store.get(s.id)).updatedAt;
   const pen = page('penplotter', store, { hostName: 'penplotter' });
@@ -123,7 +124,7 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   await pen.buf.flush();
   assert.strictEqual((await store.get(s.id)).updatedAt, before, 'Pen Plotter showing the design did not write it');
   await pen.buf.activate(keys[0]); await pen.buf.activate(keys[1]);
-  assert.strictEqual(await pen.buf.keepTabs(), true);
+  await pen.buf.flush();
   // Studio again: the geometry is unchanged, every sidecar is still there
   studio = page('sketchstudio', store);
   await studio.buf.restore();
@@ -132,7 +133,7 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   await studio.buf.activate(keys[0]);
   assert.deepStrictEqual(ids(studio.st), ['ju'], 'Studio: the unsaved drawing, unchanged');
   assert.strictEqual(studio.buf.needsSavePrompt(), 'unsaved');
-  assert.strictEqual(await studio.buf.keepTabs(), true);
+  await studio.buf.flush();
   const bufTabs = (await store.readBuffer({})).tabs;
   assert.deepStrictEqual(bufTabs[0].doc.hosts.shaper, { cut: 2 }, "the unsaved tab still carries Shaper's cut plan (Studio passed it through)");
   assert.strictEqual(bufTabs[0].doc.hosts.penplotter, undefined, 'and Pen Plotter added no default sidecar on mere visit (task 687)');
@@ -161,13 +162,13 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   step(a.st, 'line', 'jc');
   await a.buf.newTab();
   assert.deepStrictEqual(a.dots(), [true, false]);
-  await a.buf.keepTabs();
+  await a.buf.flush();
   const reload = page('sketchstudio', store);
   await reload.buf.restore();
   assert.deepStrictEqual(reload.dots(), [true, false], 'after a reload: the empty Untitled (active) has no dot, the one with content keeps it');
   await reload.buf.activate(reload.buf.tabs()[0].key);
   assert.deepStrictEqual(reload.dots(), [true, false], 'after a reload: the INACTIVE empty Untitled has no dot');
-  await reload.buf.keepTabs();
+  await reload.buf.flush();
   const again = page('sketchstudio', store);
   await again.buf.restore();
   assert.deepStrictEqual(again.dots(), [true, false], 'a second reload: still no dot on the empty one');
@@ -183,25 +184,25 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
 {
   const store = mkStore(createMemoryAdapter());
   const seed = page('sketchstudio', store);
-  await seed.buf.restore(); step(seed.st, 'line', 'j1'); await seed.buf.keepTabs();
+  await seed.buf.restore(); step(seed.st, 'line', 'j1'); await seed.buf.flush();
   const A = page('sketchstudio', store);
   const B = page('shaper', store, { session: true });
   await A.buf.restore(); await B.buf.restore();
   const k1 = A.buf.tabs()[0].key;
   assert.strictEqual(B.buf.tabs()[0].key, k1, 'both pages hold the same tab');
-  await A.buf.newTab(); step(A.st, 'line', 'jA'); await A.buf.keepTabs();
-  await B.buf.newTab(); step(B.st, 'line', 'jB'); B.side.sel = 'b-sel'; await B.buf.keepTabs();
+  await A.buf.newTab(); step(A.st, 'line', 'jA'); await A.buf.flush();
+  await B.buf.newTab(); step(B.st, 'line', 'jB'); B.side.sel = 'b-sel'; await B.buf.flush();
   let buffer = await store.readBuffer({});
   const docs = () => buffer.tabs.map((x) => x.doc.geometry.joints.map((j) => j[0]).filter((k) => k !== 'j_origin').join() || '-');
   assert.deepStrictEqual(docs().sort(), ['j1', 'jA', 'jB'], 'a tab each page opened: both kept (B wrote last and kept A\'s)');
   // both edit the SAME tab: both versions are kept
-  await A.buf.activate(k1); step(A.st, 'line', 'jA2'); await A.buf.keepTabs();
-  await B.buf.activate(k1); step(B.st, 'line', 'jB2'); await B.buf.keepTabs();
+  await A.buf.activate(k1); step(A.st, 'line', 'jA2'); await A.buf.flush();
+  await B.buf.activate(k1); step(B.st, 'line', 'jB2'); await B.buf.flush();
   buffer = await store.readBuffer({});
   assert.ok(docs().includes('j1,jB2') && docs().includes('j1,jA2'), 'a tab both pages changed: both versions kept: ' + JSON.stringify(docs()));
   // A closes its own tab (B never touched it): dropped. B's session of its tab survives A's write.
   const kA = A.buf.tabs().find((x) => x.key !== k1).key;
-  await A.buf.closeTab(kA); await A.buf.keepTabs();
+  await A.buf.closeTab(kA); await A.buf.flush();
   buffer = await store.readBuffer({});
   assert.ok(!docs().includes('jA'), 'the tab A closed is gone: ' + JSON.stringify(docs()));
   const bTab = buffer.tabs.find((x) => docs()[buffer.tabs.indexOf(x)] === 'jB');
@@ -213,16 +214,12 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   console.log('two pages: ' + JSON.stringify(docs()));
 }
 
-// ---- E. keepTabs refuses when the buffer cannot be written; a session's stored() part is what is written ----------------------------------------
+// ---- E. a session's stored() part is what is written ------------------------------------------------------------------------------------------
 {
   const store = mkStore(createMemoryAdapter());
-  const failing = { ...store, updateBuffer: async () => { throw new Error('quota exceeded'); } };
-  const p = page('sketchstudio', failing);
-  await p.buf.restore(); step(p.st, 'line', 'jq');
-  assert.strictEqual(await p.buf.keepTabs(), false, 'keepTabs resolves false: GO TO stays on the page');
   const live = page('trace', store, { session: true, stored: (s) => ({ sel: s.sel }) }); // the capture holds a function (not storable, like a canvas): stored() drops it
   await live.buf.restore(); step(live.st, 'line', 'jt'); live.side.sel = 'kept';
-  assert.strictEqual(await live.buf.keepTabs(), true, 'the stored part can be written');
+  await live.buf.flush(); // the stored part can be written
   assert.deepStrictEqual((await store.readBuffer({})).tabs[0].hostSessions, { trace: { sel: 'kept' } }, 'only the stored part is in the buffer');
 }
 
@@ -230,7 +227,7 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
 {
   const store = mkStore(createMemoryAdapter());
   const a = page('sketchstudio', store);
-  await a.buf.restore(); step(a.st, 'line', 'jg'); await a.buf.keepTabs();
+  await a.buf.restore(); step(a.st, 'line', 'jg'); await a.buf.flush();
   const x = await store.newDesign('Elsewhere'); await store.save(docWith('jx'), { id: x.id }); // current now (as a design picked on another page)
   const b = page('shaper', store, { hostName: 'shaper' });
   await b.buf.restore();
@@ -265,4 +262,4 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   assert.deepStrictEqual(onDrive, { penplotter: { pens: 2 }, shaper: { cut: 1 }, trace: { params: 3 } }, "Drive ends with every app's sidecar: " + JSON.stringify(onDrive));
 }
 
-console.log('shared-tabs-684: migration, across apps, empty-tab dot, two pages, keepTabs, Drive local copy OK');
+console.log('shared-tabs-684: migration, across apps, empty-tab dot, two pages, stored session part, Drive local copy OK');

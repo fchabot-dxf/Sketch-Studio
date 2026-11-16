@@ -52,3 +52,6 @@ HANDOFF.md
 .fleet/
 scripts/live-evidence-*.cjs
 
+
+# --- TASK 696: the built website of one app (node scripts/build-site.cjs <app>) ---
+dist/

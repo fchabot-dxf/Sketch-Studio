@@ -27,7 +27,7 @@
 //      focusin / focusout and in key() for Enter, once per change (the baseline is the value after the last change event).
 //      Tab in a text field takes the focus off it (the next field is not modelled).
 //   14. sidebar (task 583): open({ sidebar: true }) mounts the shared project sidebar (packages/ui/sidebar-projects.js mountProjectSidebar, which every page script calls with
-//      the host's appId and buffer) on the profile's store, in #app-sidebar-host (or the body): its Ctrl+S, New / Open / Open recent / Projects / Open from file / GO TO and the
+//      the host's appId and buffer) on the profile's store, in #app-sidebar-host (or the body): its Ctrl+S, New / Open / Open recent / Projects / Open from file and the
 //      Save… / Don't save / Cancel question are the app's own. The host's own sidebar actions (Download, Import) are not mounted.
 //   15. file chooser (task 583): a browser opens its file chooser when a page clicks an <input type=file>; happy-dom opens nothing. The kit notes the click:
 //      app.hasFileChooser() is true while one is open, app.chooseFile({ name, text }) answers it as the user does (the input gets that File, its change fires).

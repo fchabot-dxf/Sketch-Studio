@@ -15917,3 +15917,6 @@ Deleting geometry deletes its dimensions (owner turn 1896; Fusion: a deleted cur
 - Stage ids are UNCHANGED ('review', 'toolpath', 'edit'): a stored id still opens the right stage, so no alias map was needed (Shaper's old 'simexport' -> 'review' stays in resolveInitialMode).
 - User-visible text: Pen Plotter "Prepare tab" hints (export-stage.js, sketch-stage.js), Shaper notice "the board in Export" and "Export failed:", Trace "Send to Design" button + empty-state text + toast "showing its drawing in Design". Left alone: Pen Plotter's "Toolpath Operations" / "Active Toolpath" panel headings (the toolpath is the object's name, not a step).
 - Tests: new tests/step-names-707-node.test.js (order + labels, ids unchanged, stored ids open); updated review-wiring, shared-header-live (labels), task-609-live (toast), design-only-706-live (message). Evidence: .evidence/707/ (local).
+
+## TURN 711 (send-back: stage label)
+Task 707 renamed Shaper's "Review" step label to "Export" (stage id still 'review'), and tests/export-own-hole-711-live.test.js found the button by the label text. It now clicks the shared header's step button by its stable stage id (`.sk-header-tab[data-tab="review"]`, packages/ui/app-header.js). The node test has no label lookups.

@@ -1,7 +1,7 @@
 // tests/export-own-hole-711-live.test.js — TASK 711: the real Fusion solid (tests/fixtures/real-solid-plate-711.json: a 200x120x19 plate with
 // R10 corners, 2 d8 through holes, a through slot, pockets at 4 / 6 / 8 / 10 mm, the 4 mm one stepped down to the 10 mm one, the 8 mm one
 // around an island) sent to the Shaper page in Fusion mode the way the add-in sends it (fusionJavaScriptHandler.handle('selection_data')),
-// then Review -> Generate Shaper SVG: the downloaded file holds exactly 1 Outside cut (the outline), 3 Inside cuts (the 2 circles and the
+// then the Export step (stage 'review') -> Generate Shaper SVG: the downloaded file holds exactly 1 Outside cut (the outline), 3 Inside cuts (the 2 circles and the
 // slot, once each) and 4 pockets at 4 / 6 / 8 / 10 mm (the 4 mm with the inner step as its hole, the 8 mm with the island as its hole),
 // nothing else: no pocket outline as an Inside cut through the plate, no hole written twice. The 3D Review's input (planReliefItems, the
 // page's own module) holds the same cuts. Runs in the browser because the outline's arcs need the page's arc sampler (Node draws chords).
@@ -50,9 +50,10 @@ try {
   assert.strictEqual(outlineKey.length, 1, 'one Outside record');
   assert.ok(outlineKey[0].startsWith('loop:'), 'the Outline is a loop:<id> target: ' + outlineKey[0]);
 
-  // Review -> Generate Shaper SVG (the user's path)
-  await evalJs(`[...document.querySelectorAll('button, a')].find((e) => /^\\s*Review\\s*$/.test(e.textContent) && e.getClientRects().length).click()`);
-  await waitFor(`!document.getElementById('view-review').hidden && !!document.getElementById('btn-generate-svg')`, 'the Review stage');
+  // the Export step (stage id 'review'; its label comes from packages/ui/stage-names.js) -> Generate Shaper SVG (the user's path).
+  // The shared header marks each step button with its stable stage id (data-tab), so the label can change without this test.
+  await evalJs(`document.querySelector('.sk-header-tab[data-tab="review"]').click()`);
+  await waitFor(`!document.getElementById('view-review').hidden && !!document.getElementById('btn-generate-svg')`, 'the Export stage (review)');
   await evalJs(`document.getElementById('btn-generate-svg').click()`);
   let file = null;
   for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }

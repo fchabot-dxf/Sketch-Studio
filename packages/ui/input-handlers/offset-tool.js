@@ -23,7 +23,7 @@ import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
-import { ensureNumericInputStyles, handleBoxUndoKey } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 
 const OVERLAY_ID = 'offset-tool-overlay';
@@ -121,7 +121,7 @@ export function handleOffsetKeyDown(e) {
 function pick(svg, state, shape, world) {
   const res = offsetChainOf(state, shape.id, pickRule(state));
   if (!res.ok) { showNotification('Offset: ' + res.reason + '.', 'warning', HINT_MS); return true; }
-  openInput(svg, state, res.chain, shape.id, offsetSideAt(state, res.chain, world));
+  openInput(svg, state, res.chain, shape.id, offsetSideAt(state, res.chain, world), world);
   return true;
 }
 
@@ -161,7 +161,7 @@ function setSide(world) {
 
 // ---- the distance box (input BEFORE apply) -----------------------------------------------------------------------------------------
 
-function openInput(svg, state, chain, pickId, side) {
+function openInput(svg, state, chain, pickId, side, pickPt) {
   ensureNumericInputStyles();
   removeInput();
   const unit = docUnit();
@@ -177,7 +177,7 @@ function openInput(svg, state, chain, pickId, side) {
   document.body.appendChild(el);
   // an Undo / Redo ends the offset in progress: the chain it was on may be gone
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
-  _open = { chain, pickId, side, d: currentDistance, el, svg, state, unsubHistory };
+  _open = { chain, pickId, side, d: currentDistance, el, svg, state, pickPt, unsubHistory };
   ensureViewListener();
   const applyInputValue = () => {
     const v = parseOffsetDistance(el.value, docUnit());
@@ -199,19 +199,22 @@ function openInput(svg, state, chain, pickId, side) {
   setTimeout(focusIt, 60);
 }
 
-// the box sits beside the preview's anchor (below-right), wherever the view has moved it; beside the picked curve while there is no offset
-function placeInput() {
-  const { el, svg, state, pickId } = _open;
+function refresh() {
+  renderOffsetOverlay(); // draw the drag arrow first so placeAnchoredBox keeps the box clear of it
+  if (!_open) return;
+  const { el, svg, state, pickId, pickPt } = _open;
   const a = anchor();
-  let w = a && a.point;
-  if (!w) { const s = state.shapes.find((x) => x.id === pickId); const j = s && state.joints.get(s.joints[s.type === 'arc' ? 1 : 0]); w = j ? { x: j.x, y: j.y } : null; }
-  if (!w) return;
-  const q = worldToScreen(svg, w);
-  el.style.left = `${Math.round(q.x + 14)}px`;
-  el.style.top = `${Math.round(q.y + 14)}px`;
+  let world = a && a.point;
+  if (!world) {
+    const s = state.shapes.find((x) => x.id === pickId);
+    const j = s && state.joints.get(s.joints[s.type === 'arc' ? 1 : 0]);
+    world = j ? { x: j.x, y: j.y } : null;
+  }
+  placeAnchoredBox({
+    el, svg, world, panAnchor: pickPt || world,
+    obstacles: document.querySelector(`#${OVERLAY_ID} .offset-handle`),
+  });
 }
-
-function refresh() { placeInput(); renderOffsetOverlay(); }
 
 function ensureViewListener() {
   if (_viewListening) return;

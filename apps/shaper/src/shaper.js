@@ -8,6 +8,7 @@
 // from this table.
 
 import { parse as parseUnit } from '#core/units.js';
+import { POCKET_CLEARING } from '#core/pocket-clearing.js'; // TASK 745: the Clearing choices of the Pocket card
 
 const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 
@@ -39,13 +40,18 @@ const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 // Tabs `tabCount` (Auto | a number) and `tabWidth`, for both `holdThickness` (the tab / skin thickness). Never written to the export as attributes
 // (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one derivation (deriveCuts).
 const HOLD_PARAMS = ['holdPart', 'tabCount', 'tabWidth', 'holdThickness'];
+// TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js): the plain Pocket declares its card rows: `clearing` (Freehand | Concentric | Raster | Morphed
+// spiral) and for a computed pattern `stepover` (% of the bit), `wallAllowance`, `passDepth` (empty = one pass at the full depth) and, for Raster, `rasterAngle`.
+// Never written to the export as attributes (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one
+// derivation (deriveCuts), which writes a programmed pocket as on-line paths + the finish pass (an inside cut, islands as outside cuts).
+const CLEARING_PARAMS = ['clearing', 'stepover', 'wallAllowance', 'passDepth', 'rasterAngle'];
 // TASK 743: `opRank` = where an OPERATION of this type goes in the DEFAULT operation order (apps/shaper/src/operations.js), lowest first: what is not cut
 // (Guide, Stock: 0), then on line (1), pockets (2), inside cuts = the holes (3), and last the outside cuts that free the part (4). A stepped type ranks as
 // its plain type (it is cut as terraces of it). Prepare only: never written to the export.
 export const CUT_TYPES = [
   { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><rect x='5' y='5' width='8' height='8' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", opRank: 4, params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
   { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><rect x='5.5' y='5.5' width='7' height='7' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='9' r='1.4' fill='currentColor'/>", opRank: 3, params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
-  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 4.5l9 9M13.5 4.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='1.5 1.5'/>", opRank: 2, params: ['cutDepth', 'cutOffset', 'toolDia'], autoOffsetFraction: 0.25 },
+  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 4.5l9 9M13.5 4.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='1.5 1.5'/>", opRank: 2, params: ['cutDepth', 'cutOffset', 'toolDia', ...CLEARING_PARAMS], autoOffsetFraction: 0.25 },
   { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.4' stroke-dasharray='1.8 1.6'/><circle cx='16' cy='11' r='1.6' fill='currentColor'/>", opRank: 1, params: ['cutDepth', 'cutOffset', 'toolDia'], offsetMovesCut: false },
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide', icon: "<path d='M8 2h8v8M2 8v8h8' fill='none' stroke='currentColor' stroke-width='1.6'/>", opRank: 0, params: ['cutDepth', 'cutOffset', 'toolDia'] },
   // TASK 472: STOCK = the board itself, drawn as a closed profile in Design and marked here. NOT a cut: the Review extrudes it to its
@@ -67,6 +73,16 @@ export const CUT_TYPES = [
   { id: 'stepped-inside',  label: 'Stepped inside',  cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'A hole with a sloped / rounded edge as a stair of inside cuts', targetKind: 'region', menuLabel: 'Stepped inside', terraceAs: 'interior', slopeKind: 'inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13V10h3V7h3V5' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='12' r='1.4' fill='currentColor'/>", opRank: 3, params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation'] },
   { id: 'stepped-outside', label: 'Stepped outside', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'An outline with a sloped / rounded edge as a stair of outside cuts', targetKind: 'region', menuLabel: 'Stepped outside', terraceAs: 'exterior', slopeKind: 'outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><path d='M5 13V10h3.5V7H12V5' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", opRank: 4, params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation'] },
 ];
+
+// TASK 745: the Clearing choices of the Pocket card (#core POCKET_CLEARING.patterns, in its order) with the icon of each pattern (18x18 inner markup in
+// currentColor, as CUT_TYPES.icon): Freehand = a hand-drawn stroke, Concentric = nested rings, Raster = parallel passes, Morphed spiral = a square spiral.
+const CLEARING_ICONS = {
+  freehand: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 12.5c1.6-4.5 2.6 1.5 4.2-2.6s2.6 1.2 4.8-4.4' fill='none' stroke='currentColor' stroke-width='1.3' stroke-linecap='round'/>",
+  concentric: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><rect x='5' y='5' width='8' height='8' fill='none' stroke='currentColor' stroke-width='1.2'/><rect x='7.6' y='7.6' width='2.8' height='2.8' fill='none' stroke='currentColor' stroke-width='1.2'/>",
+  raster: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 5h9M4.5 7.7h9M4.5 10.3h9M4.5 13h9' fill='none' stroke='currentColor' stroke-width='1.2'/>",
+  spiral: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M9 9h1.6v-2.2H7v4.6h6V4.6H4.6v9h8.6' fill='none' stroke='currentColor' stroke-width='1.2' stroke-linejoin='round'/>",
+};
+export const CLEARING_CHOICES = POCKET_CLEARING.patterns.map((p) => ({ ...p, icon: CLEARING_ICONS[p.id] }));
 
 // TASK 472: the id of the Stock type, and the encoding the EXPORT gets: CUT_TYPES with each entry's `exportParams` (if any) as its
 // `params`, so a Stock loop exports exactly like a Guide while its Prepare card shows only the thickness row.

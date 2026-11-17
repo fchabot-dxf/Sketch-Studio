@@ -13,6 +13,10 @@
 //    (data-op, like data-step), which maps the list to the elements: a tool heading ("Change to ¼″ end mill") per run of operations with the same bit, one
 //    header per operation (a tap picks all its elements), then its rows (depth, step, hold; the cut type too when the operation writes more than one,
 //    e.g. an Outside plate's own holes). Elements of no listed operation (V-carve) keep the grouping by cut type, after the operations.
+//  * TASK 745: a programmed pocket is on-line paths + its finish pass (an inside cut, islands as outside cuts) in the file; the preview copy carries data-clear
+//    ("ring 2/12", "raster 3/22", "cleanup 1/1", "spiral", "wall", "island 1/2", + " pass 1/3" with depth passes): labels "on line · 6 mm · ring 2 of 12",
+//    list rows "rings" / "raster passes" / "clean-up ring" / "spiral" / "wall" / "islands". Display only: the islands and then the clearing paths are
+//    painted in FRONT (the wall's white inside-cut fill, written after the paths, would hide them; an island is not moved to the back as other outsides).
 //  * A tap / click on an element (a press that moves less than 4 px) picks it: a highlight and its label ("pocket · 7.333 mm · step 2 of 4");
 //    a tap on empty space clears it. The list (rows by cut type, then depth and step, each with its element count) picks a row's elements.
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare and Vcarve). The first build
@@ -55,14 +59,28 @@ function paintOf(el, name) {
   return null;
 }
 
-/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap', k?, n? } | null, op: the operation id (TASK 743, data-op) | null }. */
+/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap', k?, n? } | null, op: the operation id (TASK 743, data-op) | null,
+ *  clear: TASK 745 { role, k?, n?, pass?, passes? } | null }. */
 export function previewItems(root) {
   return [...root.querySelectorAll('*')].filter((el) => SHAPE_TAGS.has(el.localName)).map((el) => {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
     const h = /^(pass|skin)$|^gap (\d+)\/(\d+)$/.exec(el.getAttribute('data-hold') || ''); // TASK 742
     const hold = h ? (h[1] ? { kind: h[1] } : { kind: 'gap', k: Number(h[2]), n: Number(h[3]) }) : null;
-    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null };
+    const c = /^(ring|raster|cleanup|island|wall|spiral)(?: (\d+)\/(\d+))?(?: pass (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745
+    const clear = c ? { role: c[1], ...(c[2] ? { k: Number(c[2]), n: Number(c[3]) } : {}), ...(c[4] ? { pass: Number(c[4]), passes: Number(c[5]) } : {}) } : null;
+    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear };
   });
+}
+/** TASK 745: a programmed pocket element's words: "ring 2 of 12" | "raster pass 3 of 22" | "clean-up ring" | "spiral" | "wall" | "island 1 of 2" (+ ", depth pass 1 of 3");
+ *  a list row of them: "rings" | "raster passes" | "clean-up ring" | "spiral" | "wall" | "islands". */
+const CLEAR_ROW = { ring: 'rings', raster: 'raster passes', cleanup: 'clean-up ring', spiral: 'spiral', wall: 'wall', island: 'islands' };
+const CLEAR_PATH_ROLES = new Set(['ring', 'raster', 'cleanup', 'spiral']);
+function clearText(clear, row = false) {
+  if (!clear) return null;
+  if (row) return CLEAR_ROW[clear.role];
+  const what = clear.role === 'ring' ? `ring ${clear.k} of ${clear.n}` : clear.role === 'raster' ? `raster pass ${clear.k} of ${clear.n}` : clear.role === 'cleanup' ? 'clean-up ring'
+    : clear.role === 'island' ? `island ${clear.k} of ${clear.n}` : clear.role;
+  return clear.passes > 1 ? `${what}, depth pass ${clear.pass} of ${clear.passes}` : what;
 }
 /** TASK 742: a held element's words: "pass (tabs)" | "onion skin" | "gap 2 of 4" (the element), "gaps" (a list row of them). */
 const holdText = (hold, row = false) => (!hold ? null : hold.kind === 'pass' ? 'pass (tabs)' : hold.kind === 'skin' ? 'onion skin' : row ? 'gaps' : `gap ${hold.k} of ${hold.n}`);
@@ -110,7 +128,7 @@ export const depthText = (depth) => {
   return lengthText(Number(m[1]) * u.f, { unit: u.name, show: m[2] ? 'unit' : 'bare' });
 };
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
-export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold)].filter(Boolean).join(' · ');
+export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear)].filter(Boolean).join(' · ');
 
 /**
  * The list: TASK 743: one group per OPERATION of `ops` (operations.js planOperations: their order; { op, count, types, rows }), then one per cut type for the
@@ -127,8 +145,8 @@ export function previewRows(items, ops = []) {
     if (!groups.has(gk)) groups.set(gk, { op: null, cutType: type, count: 0, types: new Set(), rows: new Map() });
     const g = groups.get(gk);
     g.count++; g.types.add(type);
-    const key = `${type}|${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}`; // TASK 742: a held cut's gaps are one row
-    if (!g.rows.has(key)) g.rows.set(key, { cutType: type, depth: it.depth, step: it.step, hold: it.hold, items: [] });
+    const key = `${type}|${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}|${it.clear ? it.clear.role : ''}`; // TASK 742: a held cut's gaps are one row; TASK 745: a programmed pocket's rings at one depth are one row
+    if (!g.rows.has(key)) g.rows.set(key, { cutType: type, depth: it.depth, step: it.step, hold: it.hold, clear: it.clear, items: [] });
     g.rows.get(key).items.push(it);
   }
   return [...groups.values()].filter((g) => g.count > 0).map((g) => ({ op: g.op, cutType: g.cutType, count: g.count, types: [...g.types], rows: [...g.rows.values()] }));
@@ -238,7 +256,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       }
       for (const row of g.rows) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
-        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true)].filter(Boolean).join(' · ');
+        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true), clearText(row.clear, true)].filter(Boolean).join(' · ');
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
         const shade = row.cutType === 'pocket' ? shading.shades.get(row.depth) : (row.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (row.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
@@ -285,13 +303,25 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       // with its black fill; a stepped outside's terraces are nested outlines (a shallow step INSIDE a deeper one, written first: TASK 719), so deepest
       // first shows every ledge. Display only, on the mounted copy: the element keeps the paint it had (copied from the <g> it inherited it from); the
       // picks and the list read `items` (file order), not the DOM order.
-      const outs = items.filter((it) => it.cutType === 'outside');
+      const outs = items.filter((it) => it.cutType === 'outside' && !(it.clear && it.clear.role === 'island')); // TASK 745: a programmed pocket's island goes in front (below)
       if (outs.length) {
         const back = doc.createElementNS(SVG_NS, 'g'); back.setAttribute('class', 'rv2d-back');
         layer.insertBefore(back, layer.firstChild);
         for (const it of [...outs].sort((a, b) => parseFloat(b.depth) - parseFloat(a.depth))) {
           for (const name of ['fill', 'stroke']) { const v = paintOf(it.el, name); if (v !== null && !it.el.hasAttribute(name)) it.el.setAttribute(name, v); }
           back.appendChild(it.el);
+        }
+      }
+      // TASK 745: a programmed pocket's islands (outside cuts, black) and then its clearing paths in FRONT of everything (its wall is an inside cut with the
+      // file's white fill: the paths written before it and the islands moved back by the rule above would be hidden); display only, the element keeps the
+      // paint it inherited (copied from its <g>)
+      const front = [...items.filter((it) => it.clear && it.clear.role === 'island'), ...items.filter((it) => it.clear && CLEAR_PATH_ROLES.has(it.clear.role))];
+      if (front.length) {
+        const top = doc.createElementNS(SVG_NS, 'g'); top.setAttribute('class', 'rv2d-front');
+        layer.appendChild(top);
+        for (const it of front) {
+          for (const name of ['fill', 'stroke']) { const v = paintOf(it.el, name); if (v !== null && !it.el.hasAttribute(name)) it.el.setAttribute(name, v); }
+          top.appendChild(it.el);
         }
       }
     }
@@ -319,7 +349,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
   function inspect() {
     return {
       elements: items.length,
-      rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), count: r.items.length })) })),
+      rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), ...(r.clear ? { clear: r.clear.role } : {}), count: r.items.length })) })),
       picked: picked.length, label: info.textContent, view: viewState.view ? { ...viewState.view } : null,
     };
   }

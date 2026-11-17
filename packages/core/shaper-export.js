@@ -139,6 +139,7 @@ function datumPolygon(datum) {
 //                                             ("pass" | "skin" | "gap k/N", holdData) the same way. TASK 743: an entry may carry `op` (the id of
 //                                             the app's OPERATION it belongs to, a display grouping); its elements carry data-op="<id>" the
 //                                             same way (the Export step's operations list finds them by it). The file never changes.
+//                                             TASK 745: a programmed pocket's element carries data-clear (clearData) the same way.
 // TASK 742: the PREVIEW copy's data-hold of a held cut (#core/hold-part): "pass" (tabs' pass 1) | "skin" (an onion skin) | "gap k/N" (a gap strip);
 // a refused hold or none: nothing. Never in the downloaded file (previewData only).
 function holdData(hold) {
@@ -146,6 +147,13 @@ function holdData(hold) {
   if (hold.role === 'pass') return ` data-hold="${hold.mode === 'skin' ? 'skin' : 'pass'}"`;
   if (hold.role === 'strip') return ` data-hold="gap ${hold.index + 1}/${hold.count}"`;
   return '';
+}
+// TASK 745: the PREVIEW copy's data-clear of a programmed pocket's cut (#core/pocket-clearing): "ring k/N" | "raster k/N" | "cleanup k/N" | "spiral" |
+// "wall" | "island k/N", then " pass p/P" when it has several depth passes; a refused clearing or none: nothing. Never in the downloaded file.
+function clearData(cl) {
+  if (!cl || cl.role === 'refused') return '';
+  const what = cl.role === 'wall' || cl.role === 'spiral' ? cl.role : `${cl.role} ${cl.index}/${cl.count}`;
+  return ` data-clear="${what}${cl.passes > 1 && cl.role !== 'wall' && cl.role !== 'island' ? ` pass ${cl.pass + 1}/${cl.passes}` : ''}"`;
 }
 
 export function exportShaperSVG({ state, entries, encoding, docUnit, options = {}, loopPolys } = {}) {
@@ -239,7 +247,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       } else if (cut.loop) {
         geom = loopGeom(cut.loop, state, shapeById);
       }
-      const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) : ''))
+      const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) : ''))
         + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
       if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
     }

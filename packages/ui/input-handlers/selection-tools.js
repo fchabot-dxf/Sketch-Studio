@@ -55,6 +55,7 @@ function showCoincidentGlyphsForCluster(state, cluster){
 import { selectPick, applyHoverPriority } from '#ui/hover-manager.js';
 import { findConnectedChain } from '#core/loop-finder.js'; // TASK 588: the double-click chain
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
+import { selectUnit, shapesInGroup, enteredGroup, enterGroup, leaveGroups, isInGroup, stepOutOfGroup, groupIndex } from '#core/group-model.js'; // TASK 751: user groups, one level at a time
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MASKING HELPER (Rigid Drag Logic)
@@ -169,7 +170,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     const pressOn = (key) => {
         selectionState.lastClickedIndex = key;
         return key != null && prevPress.key === key && now - prevPress.time < DOUBLE_CLICK_MS && !!prevPress.at
-            && Math.hypot(e.clientX - prevPress.at.x, e.clientY - prevPress.at.y) <= DOUBLE_CLICK_SLOP_PX;
+            && Math.hypot(e.clientX - prevPress.at.x, e.clientY - prevPress.at.y) <= doubleClickSlop(e);
     };
     // Test environments may pass synthetic pointer events whose target lacks
     // .closest(); fall back to null so the dim-label branch is skipped.
@@ -225,6 +226,15 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     // TASK 588: a press on a member of a selection of several shapes / points (no Shift) MOVES the whole selection (startGroupDrag); a
     // release without a move is the click it was before (the one entity selected). The second press of a double click on a shape selects its
     // connected chain (selectChain). Both are decided before the selection is cleared.
+    // TASK 751: a press on a member of a USER GROUP (one of its curves or their points) is a press on the group at the entered level
+    // (#core/group-model.js selectUnit): pressGroup selects the whole group and drags it; the second press of a double click enters it.
+    // A press on geometry outside the entered group leaves the entered group first.
+    if (pick && (pick.joint || pick.shape)) {
+        const owner = pick.shape ? pick.shape.shape.id : shapeOfJoint(state, pick.joint.id);
+        if (owner && enteredGroup(state) && !isInGroup(state, owner, enteredGroup(state))) leaveGroups(state);
+        const unit = owner ? selectUnit(state, owner) : null;
+        if (unit) return pressGroup(e, svg, state, unit, owner, pressOn('group:' + unit));
+    }
     if (pick && pick.joint) {
         if (!e.shiftKey && inGeometrySelection(state, 'joint', pick.joint.id)) return startGroupDrag(e, svg, state, pick.joint.id, { kind: 'joint', id: pick.joint.id });
         return handleJointSelection(e, svg, state, pick.joint);
@@ -262,6 +272,10 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
 
 const DOUBLE_CLICK_MS = 500; // two presses on the same target within this pair into a double click (the app's one pairing window)
 const DOUBLE_CLICK_SLOP_PX = 5; // ... and no farther apart than this (screen px; the click radius a press may move and stay a click)
+// TASK 751: ... or this, for a FINGER: the two taps of a double tap land several px apart (real CDP touch at 390 px: taps 6 and 10 px apart
+// were two single taps, so the owner tapped until two landed within 5 px: "I have to triple click"). Half the 44 px touch target.
+const DOUBLE_TAP_SLOP_PX = 22;
+const doubleClickSlop = (e) => ((e.pointerType === 'touch' || !!e.isTouch) ? DOUBLE_TAP_SLOP_PX : DOUBLE_CLICK_SLOP_PX);
 
 function clearSelection(state) {
     if(state.selectedJoints) state.selectedJoints.clear();
@@ -291,6 +305,18 @@ function inGeometrySelection(state, kind, id) {
 // release. drag.group serves only the undo label, the no-snap rule and the click handling. It moves once the pointer
 // leaves the click radius (5 px, handleSelectionPointerMove's isDragging), so a click on a member stays a click: its release selects the
 // pressed entity alone (drag.click), what the press selected before.
+// TASK 751: the ONE place a drag moves bezier control points: each follows its end joint by that joint's displacement since the press (a rigid
+// move carries the whole curve; new arrays, so the undo snapshot keeps the old ones). Called after every drag step of a group drag and at its release.
+function carryControlPoints(state, drag) {
+    for (const { shape, c1, c2 } of (drag.controls || [])) {
+        const a = state.joints.get(shape.joints[0]), b = state.joints.get(shape.joints[shape.joints.length - 1]);
+        const a0 = drag.initial.get(shape.joints[0]), b0 = drag.initial.get(shape.joints[shape.joints.length - 1]);
+        if (!a || !b || !a0 || !b0) continue;
+        shape.c1 = [c1[0] + a.x - a0.x, c1[1] + a.y - a0.y];
+        shape.c2 = [c2[0] + b.x - b0.x, c2[1] + b.y - b0.y];
+    }
+}
+
 function startGroupDrag(e, svg, state, primaryId, click) {
     const startWorld = screenToWorld(svg, e.clientX, e.clientY); // the selection moves by the CURSOR's displacement (no jump to the press point)
     const ids = new Set(state.selectedJoints || []);
@@ -298,7 +324,11 @@ function startGroupDrag(e, svg, state, primaryId, click) {
     const jointIds = [...ids].filter(id => state.joints.has(id));
     const initial = new Map(jointIds.map(id => { const j = state.joints.get(id); return [id, { x: j.x, y: j.y }]; }));
     svg.setPointerCapture(e.pointerId);
-    state.drag = { type: DRAG_TYPES.CLUSTER, group: true, id: primaryId, jointIds, initial, startWorld, lastTarget: startWorld, arcRims: [], click, pointerId: e.pointerId };
+    // TASK 751: a bezier's two control points are shape DATA, not solver points (#core/shapes.js makeBezier): the group drag carries each with
+    // its own end joint (c1 with joints[0], c2 with joints[1]), from where they were at the press (carryControlPoints)
+    const controls = (state.shapes || []).filter(s => s.type === 'bezier' && Array.isArray(s.c1) && Array.isArray(s.c2) && (s.joints || []).length >= 2 && initial.has(s.joints[0]) && initial.has(s.joints[s.joints.length - 1]))
+        .map(s => ({ shape: s, c1: [...s.c1], c2: [...s.c2] }));
+    state.drag = { type: DRAG_TYPES.CLUSTER, group: true, id: primaryId, jointIds, initial, startWorld, lastTarget: startWorld, arcRims: [], click, pointerId: e.pointerId, controls };
     dbg.log('selection', '[selection-tools] group drag', { joints: jointIds.length, click });
     return true;
 }
@@ -310,12 +340,58 @@ function startGroupDrag(e, svg, state, primaryId, click) {
 function selectChain(e, svg, state, hitShape) {
     const inert = inertEntities(state);
     const chain = findConnectedChain(state, hitShape.shape.id, s => !isShapeInert(inert, s.id));
+    dbg.log('selection', '[selection-tools] chain selected', { from: hitShape.shape.id, chain });
+    return selectAndDrag(e, svg, state, chain, hitShape);
+}
+
+// The press selects `ids` (Shift adds them) and drags like any press on the selection: a group drag when the selection holds several
+// entities, else the one shape's own drag (hitShape: the press was on that shape's body; without it, a press on a point of a one-shape
+// group, the press only selects).
+function selectAndDrag(e, svg, state, ids, hitShape) {
     if (!e.shiftKey) clearSelection(state);
     if (!state.selectedShapes) state.selectedShapes = new Set();
-    for (const id of chain) state.selectedShapes.add(id);
-    dbg.log('selection', '[selection-tools] chain selected', { from: hitShape.shape.id, chain });
-    if ((state.selectedShapes.size + (state.selectedJoints ? state.selectedJoints.size : 0)) > 1) return startGroupDrag(e, svg, state, hitShape.shape.joints[0], null);
-    return startShapeDrag(e, svg, state, hitShape);
+    for (const id of ids) state.selectedShapes.add(id);
+    const first = (state.shapes || []).find(s => s.id === ids[0]);
+    if ((state.selectedShapes.size + (state.selectedJoints ? state.selectedJoints.size : 0)) > 1) return startGroupDrag(e, svg, state, first.joints[0], null);
+    return hitShape ? startShapeDrag(e, svg, state, hitShape) : true;
+}
+
+// TASK 751: the shape a picked point belongs to (the first shape that has it; a point of no shape: null). A point of a grouped curve is a
+// press on that curve's group.
+function shapeOfJoint(state, jointId) {
+    const s = (state.shapes || []).find(x => (x.joints || []).includes(jointId));
+    return s ? s.id : null;
+}
+
+// TASK 751: a press on a member of user group `gid` (the group at the entered level, selectUnit). Every user group, hand-made or made by an
+// import, behaves the same:
+//  - the second press of a double click (`second`) ENTERS the group one level (#core/group-model.js enterGroup); that press then selects what
+//    it is on at the new level (a child group, or the curve itself at the innermost level, where the next double click is TASK 588's chain);
+//  - Shift toggles the WHOLE group in the selection (added: the press drags the selection; removed: no drag);
+//  - otherwise the press selects the whole group and drags it (startGroupDrag, the existing group drag); when the group is already part
+//    of a larger selection the press drags that whole selection and a click without a move selects the group alone (as TASK 588).
+function pressGroup(e, svg, state, gid, ownerId, second) {
+    const inert = inertEntities(state);
+    if (second) {
+        enterGroup(state, gid);
+        dbg.log('selection', '[selection-tools] group entered', { gid });
+        const inner = selectUnit(state, ownerId);
+        if (inner) return selectAndDrag(e, svg, state, shapesInGroup(state, inner).filter(id => !isShapeInert(inert, id)), null);
+        if (!e.shiftKey) clearSelection(state);
+        selectShape({ shiftKey: true }, state, ownerId);
+        return true;
+    }
+    const ids = shapesInGroup(state, gid).filter(id => !isShapeInert(inert, id));
+    const sel = state.selectedShapes || new Set();
+    const whole = ids.length > 0 && ids.every(id => sel.has(id));
+    if (e.shiftKey && whole) { for (const id of ids) sel.delete(id); return true; }
+    if (!e.shiftKey && whole) {
+        const more = sel.size + (state.selectedJoints ? state.selectedJoints.size : 0) > ids.length;
+        const first = (state.shapes || []).find(s => s.id === ids[0]);
+        return startGroupDrag(e, svg, state, first.joints[0], more ? { kind: 'group', ids } : null);
+    }
+    dbg.log('selection', '[selection-tools] group selected', { gid, shapes: ids.length });
+    return selectAndDrag(e, svg, state, ids, null);
 }
 
 /**
@@ -609,6 +685,7 @@ export function handleSelectionPointerMove(e, svg, state) {
     const n = (maxStep > 0 && state.drag.id && state.joints.has(state.drag.id)) ? Math.max(1, Math.ceil(jump / maxStep)) : 1;
     for (let k = 1; k < n; k++) dragToward(e, svg, state, { x: from.x + (wpt.x - from.x) * k / n, y: from.y + (wpt.y - from.y) * k / n }, false);
     dragToward(e, svg, state, wpt, true);
+    if (state.drag.group) carryControlPoints(state, state.drag); // TASK 751
     state.drag.lastPointer = wpt;
     return true;
 }
@@ -873,9 +950,14 @@ export function handleSelectionPointerUp(e, svg, state) {
         const y2 = Math.max(start.y, end.y);
         
         const inRect = (p) => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
-        
+
+        // TASK 751: a CLICK on empty canvas (the box never left the click radius) steps out of the entered group, one level
+        const boxPx = Math.hypot(selectionState.marqueeEnd.x - selectionState.marqueeStart.x, selectionState.marqueeEnd.y - selectionState.marqueeStart.y);
+        if (state.currentTool === TOOL_MODES.SELECT && boxPx <= DOUBLE_CLICK_SLOP_PX) stepOutOfGroup(state);
+
         // Select Shapes
         const inert = inertEntities(state); // TASK 577: a marquee selects nothing of a locked or hidden sketch
+        const boxed = new Set(); // the shapes the box takes (window: every point inside; crossing: any)
         state.shapes.forEach(s => {
             if (s.joints && !isShapeInert(inert, s.id)) {
                 const joints = s.joints.map(jid => state.joints.get(jid)).filter(j => j);
@@ -884,17 +966,33 @@ export function handleSelectionPointerUp(e, svg, state) {
                     const anyIn = joints.some(j => inRect(j));
                     
                     if (selectionState.selectMode === 'window') {
-                        if (allIn) state.selectedShapes.add(s.id);
+                        if (allIn) boxed.add(s.id);
                     } else {
-                        if (anyIn) state.selectedShapes.add(s.id);
+                        if (anyIn) boxed.add(s.id);
                     }
                 }
             }
         });
+        // TASK 751: the box selects WHOLE groups at the entered level (selectUnit): a window box takes a group only when it takes all of it,
+        // a crossing box when it takes any of it; the points of grouped curves are not selected one by one. Ungrouped curves: as before.
+        const gx = groupIndex(state);
+        const groupedJoints = new Set();
+        const units = new Map();
+        for (const s of state.shapes) {
+            const unit = gx.unitOf(s.id);
+            if (!unit) continue;
+            for (const jid of (s.joints || [])) groupedJoints.add(jid);
+            if (boxed.has(s.id) && !units.has(unit)) units.set(unit, gx.shapesOf(unit).filter(id => !isShapeInert(inert, id)));
+        }
+        for (const id of boxed) if (!gx.unitOf(id)) state.selectedShapes.add(id);
+        for (const ids of units.values()) {
+            if (selectionState.selectMode === 'window' && !ids.every(id => boxed.has(id))) continue;
+            for (const id of ids) state.selectedShapes.add(id);
+        }
         
         // Select Joints
         state.joints.forEach((j, id) => {
-            if (id === 'j_origin' || isJointInert(inert, id)) return;
+            if (id === 'j_origin' || isJointInert(inert, id) || groupedJoints.has(id)) return;
             if (inRect(j)) state.selectedJoints.add(id);
         });
         
@@ -907,12 +1005,14 @@ export function handleSelectionPointerUp(e, svg, state) {
     // Cleanup drag targets so joints stop trying to follow the mouse (a body drag: its shape's one target, task 538), BEFORE a
     // snap-on-release below solves (TASK 575: the one release, #core/sketch-state.js releaseDragTargets)
     releaseDragTargets(state, state.drag);
+    if (state.drag && state.drag.group) carryControlPoints(state, state.drag); // TASK 751: where the last frames left the end joints
 
     // TASK 588: a group drag adds nothing on release; released without a move it was a click on the pressed member: that entity alone is
     // then selected, exactly as the press selected it before (selectShape / selectJoint after the press's clear).
     if (state.drag && state.drag.group && state.drag.click && !selectionState.isDragging) {
         const press = { shiftKey: false };
         if (state.drag.click.kind === 'shape') { clearSelection(state); selectShape(press, state, state.drag.click.id); }
+        else if (state.drag.click.kind === 'group') { clearSelection(state); for (const id of state.drag.click.ids) state.selectedShapes.add(id); } // TASK 751
         else selectJoint(press, state, state.drag.click.id);
     }
 

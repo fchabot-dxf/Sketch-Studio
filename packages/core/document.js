@@ -173,6 +173,7 @@ export function deserializeDocument(doc, state) {
   if (state.selectedJoints instanceof Set) state.selectedJoints.clear();
   if (state.selectedConstraints instanceof Set) state.selectedConstraints.clear();
   if (state.selectedShapes instanceof Set) state.selectedShapes.clear();
+  if ('enteredGroupId' in state) state.enteredGroupId = null; // TASK 751: the entered user group is session UI too
   state.active = null;
 
   // TASK 741: g.vcarves (a document saved while Shaper had V-carve) is not loaded (above: no state part reads it); removedVcarves = how many had a region

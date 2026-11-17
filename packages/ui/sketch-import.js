@@ -17,6 +17,8 @@
 //                             it as `paint` (Pen Plotter: fill / stroke -> its pen styles)
 //     options.describeElement (el) -> extra descriptor fields (Shaper: the element's cut record)
 //     options.keepDescIds     keep `descId` on the imported shapes (Shaper: the cut plan is keyed by it); default: removed after afterImport
+//     options.groupImport     TASK 751: a host with user groups (Shaper) groups the import in the app (#core/group-model.js groupImported): each
+//                             profile (an outline with its holes) / open chain one group, the whole file one group around them; same undo step
 //     options.showDesign      () -> void: TASK 706, how the host shows its Design view; called FIRST (an import lands in Design, shown: the canvas then
 //                             has its size for the fit, and the host's status line is seen). Omitted (Trace: it shows its Edit tab itself), the stage is not changed
 //     options.afterImport     (ctx) -> string | void, called once the shapes are in the sketch (ctx = { controller, state, format, fileName,
@@ -29,6 +31,7 @@
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js';
 import { importDxf, looksLikeDxf } from '#core/dxf-import.js';
 import { addSketch, activateSketch } from '#core/sketch-model.js';
+import { groupImported } from '#core/group-model.js'; // TASK 751: the import's user groups (options.groupImport)
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from './input-handlers/pan-zoom.js';
 import { browserFileSeam, IMPORT_FILE_PICK } from './project-file.js';
@@ -83,7 +86,8 @@ function svgDescriptors(svg, { silentTags = DEFAULT_SILENT_TAGS, inheritPaint = 
       if (tag === 'g' || tag === 'svg') { walk(el, elCtm, elPaint); continue; } // groups (and a nested svg) recurse
       if (!SVG_IMPORT_TAGS.has(tag)) { if (tag && !silentTags.has(tag)) skippedEls.push('<' + tag + '>'); continue; }
       const a = (n) => el.getAttribute(n);
-      const base = { tag, ctm: elCtm, descId: 'desc_' + (descSeq++), ...(elPaint ? { paint: elPaint } : {}), ...(describeElement ? describeElement(el) : {}) };
+      const elementId = el.getAttribute('id'); // TASK 751: names the element's group (groupImport)
+      const base = { tag, ctm: elCtm, descId: 'desc_' + (descSeq++), ...(elementId ? { elementId } : {}), ...(elPaint ? { paint: elPaint } : {}), ...(describeElement ? describeElement(el) : {}) };
       if (tag === 'line') descs.push({ ...base, x1: a('x1'), y1: a('y1'), x2: a('x2'), y2: a('y2') });
       else if (tag === 'rect') descs.push({ ...base, x: a('x'), y: a('y'), width: a('width'), height: a('height'), rx: a('rx'), ry: a('ry') });
       else if (tag === 'circle') descs.push({ ...base, cx: a('cx'), cy: a('cy'), r: a('r') });
@@ -101,6 +105,19 @@ function skipRows(skippedEls, parserSkipped) {
   const rows = (parserSkipped || []).map((s) => ({ ...s }));
   for (const tag of skippedEls) { const r = rows.find((x) => x.tag === tag && x.reason === 'not imported'); if (r) r.count++; else rows.push({ tag, reason: 'not imported', count: 1 }); }
   return rows;
+}
+
+// TASK 751: a piece's group is named after its SVG element's id when the piece is exactly that element's shapes (a letter drawn as
+// one <path id="A">); otherwise (a DXF, an element of several pieces, a piece of several elements) groupImported numbers it.
+function elementNamer(descs, shapes) {
+  const idOf = new Map(descs.filter((d) => d.elementId).map((d) => [d.descId, d.elementId]));
+  const descOf = new Map(shapes.map((s) => [s.id, s.descId]));
+  const count = new Map();
+  for (const s of shapes) count.set(s.descId, (count.get(s.descId) || 0) + 1);
+  return (piece) => {
+    const d = descOf.get(piece.shapeIds[0]);
+    return idOf.has(d) && piece.shapeIds.every((id) => descOf.get(id) === d) && count.get(d) === piece.shapeIds.length ? idOf.get(d) : null;
+  };
 }
 
 export function importIntoSketch(text, fileName, controller, options = {}) {
@@ -140,6 +157,7 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
   activateSketch(st, sketch.id);
   for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
   for (const s of shapes) st.shapes.push(s);
+  if (options.groupImport) groupImported(st, shapes, { fileName: sketch.name, nameOf: elementNamer(descs, shapes) });
 
   const extra = options.afterImport ? options.afterImport({ controller, state: st, format, fileName, descs, shapes, joints, sketch, root }) : null;
   if (!options.keepDescIds) for (const s of shapes) delete s.descId;

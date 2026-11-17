@@ -36,6 +36,7 @@ export function importShaperFile(designController, text, fileName, getDocUnit, {
     showDesign,
     describeElement: (el) => ({ cutRecord: extractCutRecord(inheritedCutAttributes(el), getDocUnit()) }),
     keepDescIds: true,
+    groupImport: true, // TASK 751: Shaper has user groups: the import lands grouped (each profile, and the whole file)
     afterImport: ({ state, descs }) => {
       const cutRecordByDesc = new Map();
       for (const d of descs) {

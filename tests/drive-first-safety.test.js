@@ -123,7 +123,10 @@ for (const skew of [0, 3_600_000, -3_600_000]) { // A's clock right, an hour ahe
   assert.strictEqual(fileX(drive, d.id), 10, 'tab 1\'s write stands');
   assert.strictEqual(copies(drive).length, 1, 'tab 2\'s edit was kept as a conflicted copy');
   await settle();
-  assert(st2.joints.has('j1') && st2.joints.get('j1').x === 10 && !st2.joints.has('mine'), 'tab 2 now shows Drive\'s version instead of writing its older state over it');
+  // TASK 766: the running design is NOT replaced under the user's hands: tab 2 keeps its edit and offers Drive's version, loaded on the user's choice
+  assert(st2.joints.has('mine') && buf2.driveChanged(), 'tab 2 still shows its own edit, and knows Drive has another version');
+  await buf2.loadDriveVersion(); await settle();
+  assert(st2.joints.has('j1') && st2.joints.get('j1').x === 10 && !st2.joints.has('mine') && !buf2.driveChanged(), 'chosen: tab 2 now shows Drive\'s version instead of writing its older state over it');
   buf2.stop(); void listeners;
 }
 { // an unchanged version is a plain overwrite: no copy, nothing else

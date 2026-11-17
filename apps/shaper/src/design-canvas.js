@@ -4,6 +4,7 @@
 // Prepare, Review) come in as hooks; a host without them (the kit) passes none.
 
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
+import { SAME_TAB_REASONS } from '#ui/document-buffer.js'; // TASK 766: the same tab shown again keeps its view
 import { captureShaperDoc, applyShaperDoc } from './shaper-doc.js';
 import SettingsManager from '#core/settings-manager.js';
 import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
@@ -36,7 +37,7 @@ export function shaperBufferOptions({ controller, canvas, session = null, refres
       const { hosts, reason } = restore;
       try {
         controller.engine.solve(500);
-        if (reason !== 'switch') fitToDrawing(canvas, controller.state); // TASK 494: frame the restored drawing (armed until the canvas has a size). TASK 587: a tab switch keeps the tab's own view
+        if (!SAME_TAB_REASONS.has(reason)) fitToDrawing(canvas, controller.state); // TASK 494: frame the restored drawing (armed until the canvas has a size). TASK 587 / 766: the same tab shown again (a switch, its Drive version loaded) keeps its own view
         refreshViews();
       } catch (_) {}
       // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable). No sidecar (an old buffer): defaults.

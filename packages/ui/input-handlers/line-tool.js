@@ -18,6 +18,7 @@ import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionLi
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 // TASK 597: lockedLength / lockedAngle (degrees) are what the user TYPED in the length + angle boxes (null = the cursor sets it)
 let lineState = { lockedLength: null, lockedAngle: null };
@@ -200,7 +201,7 @@ export function handleLineKeyDown(e, svg, state) {
     // the last click to the cursor) is DISCARDED — same as Escape but more
     // ergonomic to reach for. deactivateLineTool removes the in-flight start
     // joint and any pending coincident constraint that the polyline auto-added.
-    if (e.key === 'Enter') {
+    if (matchesShortcut(e, 'line.finish')) {
         try { finishLineChain(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
         return true;
     }

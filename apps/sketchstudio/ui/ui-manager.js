@@ -13,6 +13,7 @@ import { resetPatternState } from '#ui/input-handlers/pattern-tool.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 export function setupUI(state){
   // S7c-2d: the shared tool ribbon (mounted below). setTool syncs its active highlight via refresh().
   let toolRibbon = null;
@@ -222,35 +223,14 @@ export function setupUI(state){
     } catch (e) { try{ showNotification('Export error', 'error'); }catch(_){} }
   });
   
-  // Keyboard shortcuts
+  // Keyboard: Esc (the declared Cancel, shortcuts.js) drops a pending constraint and returns to Select. TASK 727: the letter map that sat
+  // here was never reached (it was read only inside the Esc branch, under the lowercase 'escape'); the tool letters are input-manager.js's.
   document.addEventListener('keydown',(e)=>{
     // Don't trigger shortcuts if user is typing in an input
     if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    
-    const shortcuts = {
-      'l': TOOL_MODES.LINE,
-      'r': TOOL_MODES.RECT,
-      'c': TOOL_MODES.CIRCLE,
-      's': TOOL_MODES.SELECT,
-      'Escape': TOOL_MODES.SELECT
-    };
-    
-    const key = e.key.toLowerCase();
-    
-    // Escape key: cancel any pending constraint and switch to select
-    if(e.key === 'Escape'){
-      if(state.pendingConstraint){
-        state.pendingConstraint = null;
-        setTool(TOOL_MODES.SELECT); // S7c-2d: syncs the ribbon (no #tool-select null-deref)
-        return;
-      }
-      
-      // Tool shortcuts
-      if(shortcuts[key]){
-        const tool = shortcuts[key];
-        const el = document.getElementById('tool-'+tool);
-        if(el) el.click();
-      }
+    if(matchesShortcut(e, 'edit.cancel') && state.pendingConstraint){
+      state.pendingConstraint = null;
+      setTool(TOOL_MODES.SELECT); // S7c-2d: syncs the ribbon (no #tool-select null-deref)
     }
   });
 

@@ -24,6 +24,7 @@ import { createDocumentTabs } from './document-tabs.js';
 import { importSidebarAction } from './sketch-import.js';
 import { openProjectManager, relativeTime } from './project-manager.js';
 import { openTemplatePicker, openChoiceModal, openPromptModal } from './template-picker.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 export { relativeTime };
 
@@ -156,7 +157,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     if (await projectActions.saveAsPrompt()) sidebar.close();
   }
   const onKeyDown = projects ? (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || (e.key !== 's' && e.key !== 'S')) return;
+    if (!matchesShortcut(e, 'file.save')) return;
     e.preventDefault(); e.stopImmediatePropagation();
     saveNow().catch(fail);
   } : null;

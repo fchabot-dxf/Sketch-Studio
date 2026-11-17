@@ -4,14 +4,12 @@
 // (`current()`, null = this stage has no history) and gets a router: the keyboard handlers and the header buttons both call
 // router.run(action), so a click does exactly what Ctrl+Z / Ctrl+Y does in that stage (one dispatch, no second path).
 
-/** THE one mapping of the history keys: Ctrl/Cmd+Z undo; Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y redo; null for any other key. */
+import { matchShortcut } from '#ui/shortcuts.js';
+
+/** THE one mapping of the history keys (declared in shortcuts.js: edit.undo, edit.redo): 'undo' | 'redo' | null for any other key. */
 export function undoRedoKeyAction(e) {
-  const mod = e.ctrlKey || e.metaKey;
-  if (!mod) return null;
-  const z = e.key === 'z' || e.key === 'Z';
-  if (z && !e.shiftKey) return 'undo';
-  if ((z && e.shiftKey) || e.key === 'y' || e.key === 'Y') return 'redo';
-  return null;
+  const id = matchShortcut(e, ['edit.undo', 'edit.redo']);
+  return id === 'edit.undo' ? 'undo' : id === 'edit.redo' ? 'redo' : null;
 }
 
 /** createHistoryRouter({ current }) -> { run, runKey, canUndo, canRedo, refresh, onChange }.

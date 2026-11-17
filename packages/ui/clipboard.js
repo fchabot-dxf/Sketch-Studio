@@ -28,6 +28,7 @@ import { userToWorldY } from '#core/units.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { commitDimensionEdits } from '#core/dimension-seams.js';
 import { isPatternConstraint, patternRefs, remapPattern } from '#core/pattern.js';
+import { matchShortcut } from '#ui/shortcuts.js'; // TASK 727: the clipboard keys are declared there
 
 // ── DECLARED: the clipboard format and the paste step ──
 export const CLIPBOARD_FORMAT = 'sketch-studio/geometry';
@@ -44,12 +45,12 @@ const refsOf = (c, keys) => keys.flatMap((k) => asList(c[k]));
 const jointRefsOf = (c) => (isPatternConstraint(c) ? patternRefs(c).joints : refsOf(c, JOINT_REFS));
 const shapeRefsOf = (c) => (isPatternConstraint(c) ? patternRefs(c).shapes : refsOf(c, SHAPE_REFS));
 
-// ── the keys (declared here, bound in input-manager.js next to the other shortcuts) ──
+// ── the keys (declared in shortcuts.js: edit.copy / edit.cut / edit.paste; bound in input-manager.js next to the other shortcuts) ──
 // Ctrl/Cmd+C copy, Ctrl/Cmd+X cut, Ctrl/Cmd+V paste (no Shift/Alt: Ctrl+Shift+C is Combine). Ctrl+D is NOT bound (the browser's bookmark key).
+const CLIP_ACTIONS = { 'edit.copy': 'copy', 'edit.cut': 'cut', 'edit.paste': 'paste' };
 export function clipboardKeyAction(e) {
-  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return null;
-  const k = typeof e.key === 'string' ? e.key.toLowerCase() : '';
-  return k === 'c' ? 'copy' : k === 'x' ? 'cut' : k === 'v' ? 'paste' : null;
+  const id = matchShortcut(e, Object.keys(CLIP_ACTIONS));
+  return id ? CLIP_ACTIONS[id] : null;
 }
 // a key aimed at a text control, or while page text is selected, is the browser's own copy / paste (the dimension box, the Params window, filters)
 export function isTextEditingTarget(target) {

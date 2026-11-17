@@ -17,6 +17,7 @@ import { TOOL_MODES, SNAP, TIME } from '#core/constants.js';
 import { makeBezier } from '#core/shapes.js';
 import { newShapeId } from '#core/shape-id.js';
 import { clearPreview } from '#ui/preview-manager.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 // Module-level pen session (mirrors the other create tools' module state). anchors: committed anchors of the
 // current path, each { jointId, x, y, hOutX, hOutY, hInX, hInY } in WORLD coords.
@@ -139,7 +140,7 @@ export function handleBezierPointerUp(e, svg, state, w) {
 
 export function handleBezierKeyDown(e, svg, state) {
   if (state.currentTool !== TOOL_MODES.BEZIER) return false;
-  if (e.key === 'Enter') { endPath(state); return true; }
+  if (matchesShortcut(e, 'bezier.finish')) { endPath(state); return true; }
   return false; // Escape is handled by input-manager's global handleEscape (which calls resetBezierState)
 }
 

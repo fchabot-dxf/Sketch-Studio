@@ -12,7 +12,8 @@ import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprin
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastWallAllowance, rememberWallAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
-import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
+import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
+import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
 import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
@@ -36,6 +37,9 @@ function edgesMarkup(state) {
     } else if (s.type === 'arc') {
       const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id));
       if (p1 && p2 && p3) out.push(`<path data-shape-id="${s.id}" d="${calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep })}" class="${EDGE_CLASS}"/>`);
+    } else if (s.type === 'bezier') { // TASK 761: a bezier edge, its kind's path (#core/curve-kinds: a cubic C); Prepare did not draw it before
+      const k = curveKind(s), [ja, jb] = k ? k.ends(s.joints) : [], a = ja && J.get(ja), b = jb && J.get(jb);
+      if (a && b) out.push(`<path data-shape-id="${s.id}" d="M ${a.x} ${a.y} ${k.pathSeg(s, state, a, b)}" class="${EDGE_CLASS}"/>`);
     }
   }
   return out.join('');
@@ -224,7 +228,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const edgeHits = (state.shapes || []).map((s) => {
     if (s.type === 'line') { const a = state.joints.get(s.joints[0]), b = state.joints.get(s.joints[1]); return (a && b) ? { id: s.id, kind: 'seg', a, b } : null; }
     if (s.type === 'circle') { const c = state.joints.get(s.joints[0]); const r = (s.radius > 0) ? s.radius : 0; return (c && r) ? { id: s.id, kind: 'circle', c, r } : null; }
-    if (s.type === 'arc') { const samples = sampleArc(s, state, 32); return (samples.length >= 2) ? { id: s.id, kind: 'poly', samples } : null; }
+    if (s.type === 'arc' || s.type === 'bezier') { const samples = curveKind(s) ? curveKind(s).points(s, state, 32) : []; return (samples.length >= 2) ? { id: s.id, kind: 'poly', samples } : null; } // TASK 761: a bezier's points too (#core/curve-kinds)
     return null;
   }).filter(Boolean);
 

@@ -17,7 +17,7 @@
 //    Every end cap is exactly the strip width long (else another part of the outline's offset is in the way: refused).
 //    The return leg runs in waste (optional). The strip WIDTH is the only number computed from the bit.
 //  * COUNT: Auto = one tab per HOLD_PART.autoPerMm of perimeter (rounded up), at least HOLD_PART.autoMin; or the record's number.
-//  * PLACEMENT: a tab lies inside ONE segment of the outline (a line or an arc; a circle is one closed segment with no ends) with its centre at
+//  * PLACEMENT: a tab lies inside ONE segment of the outline (a line, an arc or a bezier; a circle is one closed segment with no ends) with its centre at
 //    least width / 2 + bit radius from that segment's ends (a corner, or a joint with the next arc / line), or width / 2 + strip width from an
 //    end where the outline turns toward the strips' side (a concave corner seen from the waste: the strips' offsets meet there): a segment
 //    shorter than that takes no tab, nor an arc that curves round the strips' side with a radius up to the strip width. The tabs are spread evenly by perimeter (k * perimeter / count from the middle of the longest stretch
@@ -28,6 +28,7 @@
 //    in a strip (an offset over stripExtraMm / 2).
 import { arcSweepInfo } from './geometry.js';
 import { num } from './loop-geometry.js';
+import { curvePointsFrom } from './curve-kinds.js'; // TASK 761: a bezier's points (its kind's declaration, at CURVE_TOLERANCE_MM)
 import { offsetPolygonRound } from './plot/clip.js';
 
 export const HOLD_PART = Object.freeze({
@@ -59,31 +60,49 @@ export function holdMode(rec) {
 }
 
 // ── the outline as an exact WALK: lines { type:'line', a, b } and arcs { type:'arc', c, r, t0, sw } (start angle, signed sweep; a circle is one
-// arc of sweep 2 pi, `closed`), end to end, wound with a POSITIVE signed area (world x / y), so the part side is on the LEFT of travel ──
+// arc of sweep 2 pi, `closed`), end to end, wound with a POSITIVE signed area (world x / y), so the part side is on the LEFT of travel. TASK 761: a
+// bezier is ONE segment { type:'poly', pts, cum } (its points, #core/curve-kinds at CURVE_TOLERANCE_MM, and their running lengths), walked by length ──
 const P = (x, y) => ({ x, y });
 const TAU = 2 * Math.PI;
-const segLen = (s) => (s.type === 'line' ? Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) : s.r * Math.abs(s.sw));
+/** A polyline segment of the walk (a bezier's points, start to end): its points and their running lengths. */
+function polySeg(pts) {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  return { type: 'poly', pts, cum };
+}
+// the chord of a poly segment holding length u: its index i (pts[i] -> pts[i + 1]) and the fraction along it
+function polyAt(s, u) {
+  let i = 0;
+  while (i < s.pts.length - 2 && s.cum[i + 1] < u) i++;
+  const L = s.cum[i + 1] - s.cum[i];
+  return { i, k: L > 0 ? Math.min(1, Math.max(0, (u - s.cum[i]) / L)) : 0 };
+}
+const segLen = (s) => (s.type === 'line' ? Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) : s.type === 'poly' ? s.cum[s.cum.length - 1] : s.r * Math.abs(s.sw));
 const arcPt = (s, t) => P(s.c.x + s.r * Math.cos(t), s.c.y + s.r * Math.sin(t));
-const segStart = (s) => (s.type === 'line' ? s.a : arcPt(s, s.t0));
+const segStart = (s) => (s.type === 'line' ? s.a : s.type === 'poly' ? s.pts[0] : arcPt(s, s.t0));
 function pointAt(s, u) {
   if (s.type === 'line') { const L = segLen(s), k = L > 0 ? u / L : 0; return P(s.a.x + (s.b.x - s.a.x) * k, s.a.y + (s.b.y - s.a.y) * k); }
+  if (s.type === 'poly') { const { i, k } = polyAt(s, u), a = s.pts[i], b = s.pts[i + 1]; return P(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k); }
   return arcPt(s, s.t0 + Math.sign(s.sw) * (u / s.r));
 }
 function tangentAt(s, u) {
   if (s.type === 'line') { const L = segLen(s); return P((s.b.x - s.a.x) / L, (s.b.y - s.a.y) / L); }
+  if (s.type === 'poly') { const { i } = polyAt(s, u), a = s.pts[i], b = s.pts[i + 1], L = Math.hypot(b.x - a.x, b.y - a.y) || 1; return P((b.x - a.x) / L, (b.y - a.y) / L); }
   const t = s.t0 + Math.sign(s.sw) * (u / s.r), g = Math.sign(s.sw);
   return P(-Math.sin(t) * g, Math.cos(t) * g);
 }
 function subSeg(s, u0, u1) {
   if (s.type === 'line') return { type: 'line', a: pointAt(s, u0), b: pointAt(s, u1) };
+  if (s.type === 'poly') return polySeg([pointAt(s, u0), ...s.pts.filter((_, i) => s.cum[i] > u0 + 1e-12 && s.cum[i] < u1 - 1e-12), pointAt(s, u1)]);
   const g = Math.sign(s.sw);
   return { type: 'arc', c: s.c, r: s.r, t0: s.t0 + g * (u0 / s.r), sw: g * ((u1 - u0) / s.r) };
 }
-const reverseSeg = (s) => (s.type === 'line' ? { type: 'line', a: s.b, b: s.a } : { ...s, t0: s.t0 + s.sw, sw: -s.sw });
+const reverseSeg = (s) => (s.type === 'line' ? { type: 'line', a: s.b, b: s.a } : s.type === 'poly' ? polySeg(s.pts.slice().reverse()) : { ...s, t0: s.t0 + s.sw, sw: -s.sw });
 const maxAngle = (r, tol) => (r <= tol ? Math.PI / 4 : Math.min(Math.PI / 4, 2 * Math.acos(1 - tol / r)));
 /** A segment's points from its start (included) to its end (excluded), arcs sampled at `tol`. */
 function segSamples(s, tol = HOLD_PART.chordTolMm) {
   if (s.type === 'line') return [s.a];
+  if (s.type === 'poly') return s.pts.slice(0, -1);
   const n = Math.max(1, Math.ceil(Math.abs(s.sw) / maxAngle(s.r, tol)));
   const out = [];
   for (let k = 0; k < n; k++) out.push(arcPt(s, s.t0 + (s.sw * k) / n));
@@ -92,6 +111,7 @@ function segSamples(s, tol = HOLD_PART.chordTolMm) {
 /** A segment as SVG path text from its start (no M): `L x y` or `A r r 0 large sweep x y` (SVG sweep 1 = the angle increases, as #core/stepped-cut walkPathD). A full circle is two half arcs. */
 function segD(s) {
   if (s.type === 'line') return `L ${num(s.b.x)} ${num(s.b.y)}`;
+  if (s.type === 'poly') return s.pts.slice(1).map((q) => `L ${num(q.x)} ${num(q.y)}`).join(' ');
   if (Math.abs(s.sw) > TAU - 1e-9) { const h = { ...s, sw: s.sw / 2 }; return `${segD(h)} ${segD({ ...h, t0: s.t0 + s.sw / 2 })}`; }
   const e = arcPt(s, s.t0 + s.sw);
   return `A ${num(s.r)} ${num(s.r)} 0 ${Math.abs(s.sw) > Math.PI ? 1 : 0} ${s.sw > 0 ? 1 : 0} ${num(e.x)} ${num(e.y)}`;
@@ -105,7 +125,7 @@ function signedArea(poly) {
 /**
  * loopWalk(loop, state) -> { segs, closed, length, starts } | null — a loop (#core/loop-finder: joints[] + edges[], edge k joins joint k to
  * k + 1, the last one closes) as its exact walk from the shapes (line ends; an arc's stored centre / start / end + sweep, the same reading as
- * #core/loop-geometry arcSeg; a circle's centre + radius), wound with a positive signed area. `closed` = a circle (one segment with no ends).
+ * #core/curve-kinds arcSeg; a circle's centre + radius; TASK 761: a bezier's points, #core/curve-kinds), wound with a positive signed area. `closed` = a circle (one segment with no ends).
  */
 export function loopWalk(loop, state) {
   if (!loop || !Array.isArray(loop.joints) || !Array.isArray(loop.edges) || !state || !state.joints) return null;
@@ -133,6 +153,10 @@ export function loopWalk(loop, state) {
         segs.push({ type: 'arc', c: P(c.x, c.y), r, t0: Math.atan2(from.y - c.y, from.x - c.x), sw: (forward ? info.dir : -info.dir) * info.span });
       } else if (s.type === 'line') {
         if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-9) segs.push({ type: 'line', a: P(from.x, from.y), b: P(to.x, to.y) });
+      } else if (s.type === 'bezier') { // TASK 761: the bezier's points from this joint, one segment
+        const pts = curvePointsFrom(s, state, from);
+        if (pts.length < 2) return null;
+        segs.push(polySeg(pts.map((q) => P(q.x, q.y))));
       } else return null;
     }
   }

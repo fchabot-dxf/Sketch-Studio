@@ -1,0 +1,177 @@
+// packages/core/curve-kinds.js — TASK 761: THE GEOMETRY OF EACH CURVE KIND, declared ONCE. Every reader of a curve's shape between its two end joints
+// reads it here: the loop finder (#core/loop-finder: which joints a curve joins, the direction it leaves an end in, the area it adds to a face), the
+// loop / chain geometry (#core/loop-geometry: polygons, SVG paths), the hold part walk (#core/hold-part), the chain footprint (#core/profile-model),
+// the plotter's polylines (#core/core-shape-to-polyline), Prepare's edges and picking, and the SketchStudio SVG / DXF export.
+//
+// A kind declares:
+//   min                   the joints a shape of the kind has at least
+//   ends(joints)          its two END joints, start then end (a chain of curves passes through these)
+//   leave(s, J, atEnd)    the direction it LEAVES an end in ({ dx, dy } along the curve, from its start when atEnd is false, from its end walking back
+//                         when true) and `bend`, its signed curvature there (+ turns left / counter-clockwise), or null. A kind without `leave` is straight:
+//                         its direction is its chord (the loop finder keeps today's exact arithmetic for a line).
+//   bulge(s, J)           the signed area between the curve walked start -> end and its chord (end -> start back along the chord): 0 for a line. Exact
+//                         (an arc: the circular segment; a bezier: Green's integral by 3-point Gauss-Legendre, exact for its degree-5 integrand).
+//   points(s, state, n)   the curve sampled start -> end ([{x, y}], both ends included): a line its two joints; an arc the rendered curve (sampleArc, n
+//                         samples, as before); a bezier at CURVE_TOLERANCE_MM (chord deviation, the step count from the de Casteljau bound).
+//   pathSeg(s, state, from, to)  the SVG path command from `from` to `to` (no M): `L`, a direction-aware `A`, a cubic `C` (control points in the walk's order).
+// A shape whose kind is not declared here (a circle: a closed curve with no ends) is no curve between ends.
+
+import { calculateArcPath, arcSweepInfo } from './geometry.js';
+import { flattenCubic } from './svg-import.js'; // the ONE cubic flattener (de Casteljau), here with the step count the tolerance asks for
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** The CHORD DEVIATION (base mm) a bezier is sampled at wherever a polyline stands for it (loop polygons: containment, picking, offsets, the pocket
+ *  clearing and hold part regions, the 3D Review; the plotter's strokes): the same 0.005 mm the hold part and the pocket clearing sample arcs at
+ *  (HOLD_PART.chordTolMm, POCKET_CLEARING.chordTolMm), far below a router bit's or a pen's own error. The document and the exported files keep the
+ *  exact cubic. */
+export const CURVE_TOLERANCE_MM = 0.005;
+/** A bound on the steps of one bezier (a huge curve at the tolerance): 2048 segments. */
+export const BEZIER_MAX_STEPS = 2048;
+
+// SVG path number: <= 4 dp, trailing zeros trimmed, no "-0" (world units = base mm). (Moved here from #core/loop-geometry, which re-exports it.)
+export function num(n) {
+  let r = Math.round(Number(n) * 1e4) / 1e4;
+  if (Object.is(r, -0)) r = 0;
+  return String(r);
+}
+
+// Sample an arc shape into points (start→end) using the SAME path math the renderer uses (TRUE curve, not chord). Needs the DOM (the browser SVG
+// path API); in Node it degrades to the endpoints. (Moved here unchanged from #core/loop-geometry, which re-exports it.)
+export function sampleArc(s, state, N = 24) {
+  const [p1, p2, p3] = (s.joints || []).map((id) => state.joints.get(id));
+  if (!p1 || !p2 || !p3) return [];
+  const d = calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep });
+  if (typeof document === 'undefined' || !document.createElementNS) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
+  const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d);
+  let len = 0; try { len = path.getTotalLength(); } catch (_) {}
+  if (!len) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
+  const pts = [];
+  for (let i = 0; i <= N; i++) { try { const pt = path.getPointAtLength((i / N) * len); pts.push({ x: pt.x, y: pt.y }); } catch (_) {} }
+  return pts;
+}
+
+// An arc's `A` command from fromPos to toPos, walked either way (moved here unchanged from #core/loop-geometry).
+function arcSeg(shape, fromPos, toPos, state) {
+  const center = state.joints.get(shape.joints[0]);
+  const start = state.joints.get(shape.joints[1]);
+  const end = state.joints.get(shape.joints[2]);
+  if (!center || !start || !end) return `L ${num(toPos.x)} ${num(toPos.y)}`;
+  const r = Math.hypot(start.x - center.x, start.y - center.y);
+  const info = arcSweepInfo(center, start, end, { sweep: shape.sweep });   // TASK 550: direction + derived large-arc, one function
+  const stored = info.dir > 0 ? 1 : 0;
+  const forward = Math.hypot(fromPos.x - start.x, fromPos.y - start.y) <= Math.hypot(fromPos.x - end.x, fromPos.y - end.y);
+  const sweep = forward ? stored : (stored ? 0 : 1);
+  const largeArc = info.large ? 1 : 0;
+  return `A ${num(r)} ${num(r)} 0 ${largeArc} ${sweep} ${num(toPos.x)} ${num(toPos.y)}`;
+}
+
+// an arc's centre, start, end, radius and sweep (arcSweepInfo: the stored direction), or null
+function arcParts(s, J) {
+  const c = J.get(s.joints[0]), a = J.get(s.joints[1]), b = J.get(s.joints[2]);
+  if (!c || !a || !b) return null;
+  const r = Math.hypot(a.x - c.x, a.y - c.y);
+  if (!(r > 0)) return null;
+  return { c, a, b, r, info: arcSweepInfo(c, a, b, { sweep: s.sweep }) };
+}
+
+/** A bezier shape's four points [P0, P1, P2, P3] ({x, y}: its end joints and its two control points, shape data c1 / c2), or null. */
+export function bezierPoints(s, J) {
+  const a = J.get(s.joints[0]), b = J.get(s.joints[s.joints.length - 1]);
+  if (!a || !b || !Array.isArray(s.c1) || !Array.isArray(s.c2)) return null;
+  return [{ x: a.x, y: a.y }, { x: s.c1[0], y: s.c1[1] }, { x: s.c2[0], y: s.c2[1] }, { x: b.x, y: b.y }];
+}
+const sub = (p, q) => ({ x: p.x - q.x, y: p.y - q.y });
+const cross = (u, v) => u.x * v.y - u.y * v.x;
+const len = (u) => Math.hypot(u.x, u.y);
+// leaving P0 of the cubic P (P1 - P0; P2 - P0 / P3 - P0 when the control point sits on the end) and the signed curvature there
+function cubicLeave(P) {
+  const d1 = sub(P[1], P[0]), d2 = sub(P[2], P[0]), d3 = sub(P[3], P[0]);
+  const eps = 1e-12;
+  const dir = len(d1) > eps ? d1 : len(d2) > eps ? d2 : d3;
+  if (!(len(dir) > eps)) return null;
+  const b1 = { x: 3 * d1.x, y: 3 * d1.y }, b2 = { x: 6 * (P[2].x - 2 * P[1].x + P[0].x), y: 6 * (P[2].y - 2 * P[1].y + P[0].y) };
+  const s = len(b1);
+  return { dx: dir.x, dy: dir.y, bend: s > eps ? cross(b1, b2) / (s * s * s) : 0 };
+}
+const GL3 = [[0.5 - Math.sqrt(15) / 10, 5 / 18], [0.5, 8 / 18], [0.5 + Math.sqrt(15) / 10, 5 / 18]];
+// the signed area under the cubic, 1/2 ∫ (x y' - y x') dt over [0, 1] (degree 5: 3-point Gauss-Legendre is exact), minus its chord's share
+function cubicBulge(P) {
+  let I = 0;
+  for (const [t, w] of GL3) {
+    const u = 1 - t;
+    const x = u * u * u * P[0].x + 3 * u * u * t * P[1].x + 3 * u * t * t * P[2].x + t * t * t * P[3].x;
+    const y = u * u * u * P[0].y + 3 * u * u * t * P[1].y + 3 * u * t * t * P[2].y + t * t * t * P[3].y;
+    const dx = 3 * (u * u * (P[1].x - P[0].x) + 2 * u * t * (P[2].x - P[1].x) + t * t * (P[3].x - P[2].x));
+    const dy = 3 * (u * u * (P[1].y - P[0].y) + 2 * u * t * (P[2].y - P[1].y) + t * t * (P[3].y - P[2].y));
+    I += w * (x * dy - y * dx);
+  }
+  return I / 2 - (P[0].x * P[3].y - P[3].x * P[0].y) / 2;
+}
+/** The steps a cubic is sampled in for a chord deviation <= tol: deviation <= (1/8) max|B''| / n^2 with max|B''| <= 6 max(|P0 - 2P1 + P2|, |P1 - 2P2 + P3|). */
+export function bezierSteps(P, tol = CURVE_TOLERANCE_MM) {
+  const m = Math.max(Math.hypot(P[0].x - 2 * P[1].x + P[2].x, P[0].y - 2 * P[1].y + P[2].y), Math.hypot(P[1].x - 2 * P[2].x + P[3].x, P[1].y - 2 * P[2].y + P[3].y));
+  return Math.min(BEZIER_MAX_STEPS, Math.max(1, Math.ceil(Math.sqrt((0.75 * m) / tol))));
+}
+
+export const CURVE_KINDS = Object.freeze({
+  line: {
+    min: 2,
+    ends: (j) => [j[0], j[1]],
+    bulge: () => 0,
+    points(s, state) { const a = state.joints.get(s.joints[0]), b = state.joints.get(s.joints[1]); return a && b ? [a, b] : []; },
+    pathSeg: (s, state, from, to) => `L ${num(to.x)} ${num(to.y)}`,
+  },
+  arc: {
+    min: 3,
+    ends: (j) => [j[1], j[2]], // joints[0] is its centre
+    leave(s, J, atEnd) {
+      const p = arcParts(s, J);
+      if (!p) return null;
+      const at = atEnd ? p.b : p.a, g = atEnd ? -p.info.dir : p.info.dir; // walking back from the end turns the other way
+      return { dx: -(at.y - p.c.y) * g, dy: (at.x - p.c.x) * g, bend: g / p.r };
+    },
+    bulge(s, J) { const p = arcParts(s, J); return p ? (p.info.dir * p.r * p.r * (p.info.span - Math.sin(p.info.span))) / 2 : 0; },
+    points: (s, state, n = 24) => sampleArc(s, state, n),
+    pathSeg: (s, state, from, to) => arcSeg(s, from, to, state),
+  },
+  bezier: {
+    min: 2,
+    ends: (j) => [j[0], j[j.length - 1]],
+    leave(s, J, atEnd) { const P = bezierPoints(s, J); return P ? cubicLeave(atEnd ? P.slice().reverse() : P) : null; },
+    bulge(s, J) { const P = bezierPoints(s, J); return P ? cubicBulge(P) : 0; },
+    points(s, state) {
+      const P = bezierPoints(s, state.joints);
+      if (!P) return [];
+      const pts = [P[0]];
+      flattenCubic(P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y, (x, y) => pts.push({ x, y }), bezierSteps(P));
+      pts[pts.length - 1] = P[3]; // the end joint itself (t = 1)
+      return pts;
+    },
+    pathSeg(s, state, from, to) {
+      const P = bezierPoints(s, state.joints);
+      if (!P) return `L ${num(to.x)} ${num(to.y)}`;
+      const forward = Math.hypot(from.x - P[0].x, from.y - P[0].y) <= Math.hypot(from.x - P[3].x, from.y - P[3].y);
+      const [c1, c2] = forward ? [P[1], P[2]] : [P[2], P[1]];
+      return `C ${num(c1.x)} ${num(c1.y)} ${num(c2.x)} ${num(c2.y)} ${num(to.x)} ${num(to.y)}`;
+    },
+  },
+});
+
+/** The kind declaration of shape s (CURVE_KINDS), or null when it is no curve between two ends (a circle, an unknown kind, too few joints). */
+export function curveKind(s) {
+  const k = s && CURVE_KINDS[s.type];
+  return k && Array.isArray(s.joints) && s.joints.length >= k.min ? k : null;
+}
+
+/** Shape s sampled from the end nearest `fromPos` to the other ([{x, y}], both ends), the kind's points; [] for no curve. */
+export function curvePointsFrom(s, state, fromPos, n) {
+  const k = curveKind(s);
+  if (!k) return [];
+  const pts = k.points(s, state, n);
+  if (pts.length >= 2 && fromPos) {
+    const d = (p) => (p.x - fromPos.x) ** 2 + (p.y - fromPos.y) ** 2;
+    if (d(pts[pts.length - 1]) < d(pts[0])) return pts.slice().reverse();
+  }
+  return pts;
+}

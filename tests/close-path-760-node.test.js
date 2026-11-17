@@ -1,7 +1,7 @@
 // tests/close-path-760-node.test.js — TASK 760 (node): CLOSE PATH, the shared Design tab's command (#core/close-path.js, #ui/close-path-actions.js).
 //  1. an open polyline is closed with ONE line (the chain's kind, sketch; coincident at both ends; nothing else added); the result is a loop findLoops returns;
 //  2. near-coincident ends (gap <= CLOSE_PATH_COINCIDENT_MM): made coincident, no new curve, the end of the LAST curve moves, by <= the tolerance;
-//  3. arc and bezier end curves (their end joints); a bezier chain is closed topologically (findLoops has no bezier edge: not a loop there);
+//  3. arc and bezier end curves (their end joints); a bezier chain closed is a findLoops loop (TASK 761: a bezier is an edge); an arc closed by its chord too;
 //  4. a chain inside a user group (an import's): the line joins the chain's innermost group, the group (not entered) stays ONE rigid block whose shape the
 //     solver keeps, state.constraints gains only the coincidents;
 //  5. refused with the reason (never silent), no undo step: a branch (T junction), a closed outline, a circle, a single straight line;
@@ -120,7 +120,17 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   eq(rb.closed.length, 1, '3: a chain ending in a BEZIER is closed');
   const lb = sb.shapes[sb.shapes.length - 1];
   eq(new Set(lb.joints.map((j) => { const p = sb.joints.get(j); return `${p.x},${p.y}`; })), new Set(['0,0', '0,15']), '3: joined at the bezier\'s last joint');
-  eq(openChainEnds(sb).length, 0, '3: no open end left (closed topologically; findLoops has no bezier edge, so it is not a findLoops loop: documented)');
+  eq(openChainEnds(sb).length, 0, '3: no open end left');
+  ok(loopOf(sb, [m1.id, 'bz', lb.id]), '3: TASK 761: line + bezier + closing line is a findLoops loop (a bezier is an edge now)');
+  // TASK 761: one arc closed by its own chord (refused before: "one arc and its chord do not make a profile the app can find") is a loop now
+  const sa = newSketchState();
+  const ac = click(sa, 10, 0), aa = click(sa, 20, 0), ab = click(sa, 0, 0);
+  const lone = arc(sa, ac, aa, ab, { sweep: true });
+  const plan = planClosePaths(sa, [lone])[0];
+  ok(plan.ok && plan.mode === 'line', '3: TASK 761: a lone arc: plannable (a closing line, its chord)');
+  const ra = run(sa, [lone]);
+  eq(ra.closed.length, 1, '3: TASK 761: the lone arc is closed by its chord');
+  ok(loopOf(sa, [lone, sa.shapes[sa.shapes.length - 1].id]), '3: TASK 761: the arc + its chord is a findLoops loop');
 }
 
 // ── 4. a chain inside a user group (an import's), the group a rigid block

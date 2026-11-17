@@ -40,8 +40,9 @@ export function shaperBufferOptions({ controller, canvas, session = null, refres
         refreshViews();
       } catch (_) {}
       // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable). No sidecar (an old buffer): defaults.
-      applyShaperDoc(hosts && hosts.shaper);
-      afterSidecar(restore);
+      // TASK 761: reconciled with the restored sketch's regions there (shaper-doc.js applyShaperDoc); its counts ride to afterSidecar as `cutPlan` (the notice).
+      const cutPlan = applyShaperDoc(hosts && hosts.shaper, controller.state);
+      afterSidecar({ ...restore, cutPlan });
     },
     hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
     session, // TASK 605: the tab's in-memory stage state (shaper-session.js); the save state is the tab dot (document-tabs.js) + the canvas's data-save-state

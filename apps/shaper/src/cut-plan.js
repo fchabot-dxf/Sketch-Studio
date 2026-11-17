@@ -325,6 +325,74 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN) {
   return { dropped, moved };
 }
 
+// The shape ids a loop / chain id names ('loop_' / 'chain_' + its shape ids sorted and joined with '-', #core/loop-finder), split back against the
+// document's shape ids (an id may itself hold a '-'): the ids in order, or null when the text is not made of the document's shape ids.
+function idsNamedBy(text, shapeIds) {
+  const tok = text.split('-'), n = tok.length;
+  const back = new Array(n + 1).fill(null);
+  back[0] = -1;
+  for (let i = 0; i < n; i++) {
+    if (back[i] === null) continue;
+    for (let j = i + 1; j <= n; j++) if (back[j] === null && shapeIds.has(tok.slice(i, j).join('-'))) back[j] = i;
+  }
+  if (back[n] === null) return null;
+  const out = [];
+  for (let j = n; j > 0; j = back[j]) out.unshift(tok.slice(back[j], j).join('-'));
+  return out;
+}
+
+/**
+ * reconcileCutPlan(state, plan = CUT_PLAN) -> { edgeMoved, edgeDropped, kept, removed } — THE reconciliation of a stored cut plan with the
+ * document's regions, run ONCE where a Shaper document is read (shaper-doc.js applyShaperDoc, before any reader of the plan: Prepare, the
+ * operations list, Export 2D / 3D, Generate / Sync), never on undo snapshots:
+ *  - the legacy `edge:<shapeId>` records (migrateEdgeRecords: moved to their chain, or dropped when the shape is in a loop);
+ *  - TASK 761 (advisor ruling on the 761 STOP): a bezier is an edge of the loop finder now, so an outline with a bezier that was an OPEN CHAIN when
+ *    the plan was saved can be a LOOP. A stored `chain:<id>` record that no longer resolves, where a loop has EXACTLY the chain's shapes (the same
+ *    sorted ids: 'chain_X' -> 'loop_X'), MOVES to `loop:<id>` with its settings (On line / Guide are cut on a loop the same way), in its place in
+ *    the plan (the operations' first-record order). The stored operation order needs no renaming: an operation key is the tool, cut type and
+ *    settings (operations.js opKeyOf), never the target. A stored chain / loop record that no longer resolves for the same cause and has no exact
+ *    match (a chain that is now a loop plus open tails; a line loop a bezier now splits) is REMOVED: its shapes all exist and one of them is a
+ *    bezier, or an edge of a loop that has a bezier edge. Any other stale record is left as before (it derives to nothing).
+ * The counts feed the one notice (cutPlanNotice). Mutates `plan` (order kept).
+ */
+export function reconcileCutPlan(state, plan = CUT_PLAN) {
+  const loops = findLoops(state), chains = findOpenChains(state, loops);
+  const { dropped: edgeDropped, moved: edgeMoved } = migrateEdgeRecords(loops, chains, plan);
+  const loopIds = new Set(loops.map((l) => l.id)), chainIds = new Set(chains.map((c) => c.id));
+  const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
+  const shapeIds = new Set(shapeById.keys());
+  const isBezier = (id) => (shapeById.get(id) || {}).type === 'bezier';
+  const nearBezier = new Set(loops.filter((l) => l.edges.some(isBezier)).flatMap((l) => l.edges)); // the edges of loops that have a bezier edge
+  const rename = new Map(), remove = new Set();
+  for (const key of plan.keys()) {
+    const { kind, id } = parseKey(key);
+    const stale = (kind === 'chain' && !chainIds.has(id)) || (kind === 'loop' && !loopIds.has(id));
+    if (!stale || !id.startsWith(kind + '_')) continue;
+    const named = id.slice(kind.length + 1);
+    if (kind === 'chain' && loopIds.has('loop_' + named) && !plan.has(keyOf('loop', 'loop_' + named))) { rename.set(key, keyOf('loop', 'loop_' + named)); continue; }
+    const members = idsNamedBy(named, shapeIds);
+    if (members && members.some((m) => isBezier(m) || nearBezier.has(m))) remove.add(key);
+  }
+  if (rename.size || remove.size) {
+    const entries = [...plan];
+    plan.clear();
+    for (const [key, rec] of entries) if (!remove.has(key)) plan.set(rename.get(key) || key, rec);
+  }
+  return { edgeMoved, edgeDropped, kept: rename.size, removed: remove.size };
+}
+
+/** The one-time notice of a reconciliation (reconcileCutPlan's counts), or null when nothing changed. The legacy edge part is worded as before. */
+export function cutPlanNotice(r) {
+  if (!r) return null;
+  const groups = [], edge = [];
+  if (r.edgeMoved > 0) edge.push(`${r.edgeMoved} edge cut${r.edgeMoved === 1 ? '' : 's'} moved to chain`);
+  if (r.edgeDropped > 0) edge.push(`${r.edgeDropped} dropped from closed loop${r.edgeDropped === 1 ? '' : 's'}`);
+  if (edge.length) groups.push(edge.join(', '));
+  if (r.kept > 0) groups.push(r.kept === 1 ? '1 cut was on an outline that is now a closed shape and was kept' : `${r.kept} cuts were on outlines that are now closed shapes and were kept`);
+  if (r.removed > 0) groups.push(r.removed === 1 ? '1 cut no longer matches a shape and was removed: assign it again' : `${r.removed} cuts no longer match a shape and were removed: assign them again`);
+  return groups.length ? `Cut plan updated: ${groups.join('; ')}` : null;
+}
+
 /**
  * deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) — THE ONE composition of the cut derivations for one plan
  * target: effectiveCutRecord -> deriveProfileCuts (#core/stepped-cut deriveCuts: + a stepped cut's terraces) -> deriveCutFootprint. Returns { rec, cuts, footprints } (rec = the effective

@@ -32,6 +32,7 @@ export const FEATURES = Object.freeze([
   'import:image',      // a photo loaded to trace (Trace)
   'drive:save',        // a design saved under a name (#ui/document-buffer.js saveAs: saving goes to Google Drive)
   'drive:open',        // a stored design opened (#ui/project-actions.js openDesign)
+  'print',             // the Print button of SketchStudio's Drawing step (apps/sketchstudio/drawing-view.js)
   'settings',          // the settings / style panel opened (#ui/style-panel.js)
 ]);
 

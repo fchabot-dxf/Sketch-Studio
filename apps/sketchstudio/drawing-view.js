@@ -1,15 +1,15 @@
-// apps/sketchstudio/build-view.js — TASK 725: SketchStudio's BUILD step. A clean, read-only drawing of the design, to review it and build it:
+// apps/sketchstudio/drawing-view.js — TASK 725: SketchStudio's DRAWING step. A clean, read-only drawing of the design, to review it and make it:
 // only the solid geometry of the visible sketches and every dimension, drawn by the ONE renderer (#ui/svg-renderer.js draw) with its declared
 // CLEAN_DISPLAY profile (what it hides and keeps is listed there). Nothing else: no ribbon, browser, footer, drawer handle, toast, glyph, point,
-// construction, axis or grid, no selection or hover (Build hands the renderer no selection, hover, tool or snap).
+// construction, axis or grid, no selection or hover (Drawing hands the renderer no selection, hover, tool or snap).
 //
-//   const build = mountBuildView({ state, getName });
-//   build.setShown(true | false)   the page's step router shows / hides it (main.js)
-//   build.frame()                  one frame: the page's render loop calls it INSTEAD of Design's frame while Build shows
-//   build.fit()                    the Fit button: frames the drawing with its dimension labels
+//   const drawing = mountDrawingView({ state, getName });
+//   drawing.setShown(true | false)   the page's step router shows / hides it (main.js)
+//   drawing.frame()                  one frame: the page's render loop calls it INSTEAD of Design's frame while Drawing shows
+//   drawing.fit()                    the Fit button: frames the drawing with its dimension labels
 //
-// Read-only: the page gates every Design key / pointer listener off while Build shows (setupInput's isActive); here the only input is the shared
-// pan-zoom (#ui/input-handlers/pan-zoom.js: wheel zoom, left / middle drag pan, two-finger pinch + pan) on Build's OWN view, so Design's view is never
+// Read-only: the page gates every Design key / pointer listener off while Drawing shows (setupInput's isActive); here the only input is the shared
+// pan-zoom (#ui/input-handlers/pan-zoom.js: wheel zoom, left / middle drag pan, two-finger pinch + pan) on Drawing's OWN view, so Design's view is never
 // touched. Always current: every frame draws the live document (state), never a copy.
 //
 // PRINT (owner turn 2035): the Print button (next to Fit) opens the browser's print dialog (its "Save as PDF" makes the PDF: no PDF library). The SAME
@@ -25,14 +25,15 @@ import { visibleScene } from '#core/sketch-model.js';
 import { docUnit } from '#core/settings-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { SHORT_VIEWPORT_QUERY } from '#ui/short-viewport.js';
+import { track } from '#ui/analytics.js'; // TASK 746: the Print action is a declared feature
 
-/** The render context Build draws with: the clean display profile, and nothing else (no grid mount, no active sketch, so no dimming). */
-export const BUILD_RENDER_CTX = Object.freeze({ display: CLEAN_DISPLAY });
+/** The render context Drawing draws with: the clean display profile, and nothing else (no grid mount, no active sketch, so no dimming). */
+export const DRAWING_RENDER_CTX = Object.freeze({ display: CLEAN_DISPLAY });
 
-/** One Build frame: the live document's visible sketches, through the ONE renderer, with no selection / hover / tool / snap. */
-export function drawBuild({ state, svg, world }) {
+/** One Drawing frame: the live document's visible sketches, through the ONE renderer, with no selection / hover / tool / snap. */
+export function drawDrawing({ state, svg, world }) {
   const scene = visibleScene(state);
-  draw(scene.joints, scene.shapes, svg, null, null, scene.constraints, new Set(), new Set(), null, null, new Set(), null, null, null, null, null, false, world, BUILD_RENDER_CTX);
+  draw(scene.joints, scene.shapes, svg, null, null, scene.constraints, new Set(), new Set(), null, null, new Set(), null, null, null, null, null, false, world, DRAWING_RENDER_CTX);
 }
 
 // ── Print layout ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -92,30 +93,30 @@ function injectStyles() {
   if (stylesInjected || typeof document === 'undefined' || !document.head) return;
   stylesInjected = true;
   const s = document.createElement('style');
-  s.id = 'sk-build-styles';
+  s.id = 'sk-drawing-styles';
   s.textContent = `
-/* the Build view covers the page under the step bar (the header row), so nothing of Design shows through it; the ☰ drawer (z 9400+) still opens over it */
-.sk-build { position: fixed; left: 0; right: 0; bottom: 0; top: var(--sk-header-h, 44px); z-index: 9300; background: var(--sk-build-paper, #ffffff); }
-.sk-build[hidden] { display: none; }
-.sk-build-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
-.sk-build-world * { pointer-events: none; } /* nothing in the drawing is a target: a press lands on the canvas (pan) */
-.sk-build-title { display: none; }
-/* phone portrait / short landscape: Design keeps the steps in the ☰ drawer behind its peeking handle; Build shows the step bar instead (the way back)
+/* the Drawing view covers the page under the step bar (the header row), so nothing of Design shows through it; the ☰ drawer (z 9400+) still opens over it */
+.sk-drawing { position: fixed; left: 0; right: 0; bottom: 0; top: var(--sk-header-h, 44px); z-index: 9300; background: var(--sk-drawing-paper, #ffffff); }
+.sk-drawing[hidden] { display: none; }
+.sk-drawing-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.sk-drawing-world * { pointer-events: none; } /* nothing in the drawing is a target: a press lands on the canvas (pan) */
+.sk-drawing-title { display: none; }
+/* phone portrait / short landscape: Design keeps the steps in the ☰ drawer behind its peeking handle; Drawing shows the step bar instead (the way back)
    and no drawer handle over the drawing */
 @media (max-width: 640px), ${SHORT_VIEWPORT_QUERY} {
-  body.sk-build-shown { --sk-header-h: 44px; } /* the header row's desktop height (sketcher.css sets 0 px there: no header bar on phones) */
-  body.sk-build-shown .sk-header { display: flex !important; }
-  body.sk-build-shown .sk-sidebar-handle { display: none !important; }
+  body.sk-drawing-shown { --sk-header-h: 44px; } /* the header row's desktop height (sketcher.css sets 0 px there: no header bar on phones) */
+  body.sk-drawing-shown .sk-header { display: flex !important; }
+  body.sk-drawing-shown .sk-sidebar-handle { display: none !important; }
 }
-body.sk-build-shown #notification-container { display: none !important; } /* no toast from Design over the drawing */
+body.sk-drawing-shown #notification-container { display: none !important; } /* no toast from Design over the drawing */
 @media print {
   html, body { height: auto !important; overflow: visible !important; background: #ffffff !important; }
-  body.sk-build-shown > :not(.sk-build) { display: none !important; }
-  body.sk-build-shown .sk-build { position: static; display: flex; flex-direction: column; align-items: center; background: #ffffff;
+  body.sk-drawing-shown > :not(.sk-drawing) { display: none !important; }
+  body.sk-drawing-shown .sk-drawing { position: static; display: flex; flex-direction: column; align-items: center; background: #ffffff;
     --sk-geo-fixed: #000000; --sk-constraint-stroke: #000000; --sk-muted: #ffffff; --sk-joint-fill: #000000; }
-  body.sk-build-shown .sk-build-actions { display: none !important; }
-  body.sk-build-shown .sk-build-canvas { flex: none; cursor: auto; }
-  body.sk-build-shown .sk-build-title { display: block; box-sizing: border-box; margin-top: 2mm; padding-top: 1.5mm; border-top: 0.3mm solid #000000;
+  body.sk-drawing-shown .sk-drawing-actions { display: none !important; }
+  body.sk-drawing-shown .sk-drawing-canvas { flex: none; cursor: auto; }
+  body.sk-drawing-shown .sk-drawing-title { display: block; box-sizing: border-box; margin-top: 2mm; padding-top: 1.5mm; border-top: 0.3mm solid #000000;
     font: 8.5pt/1.2 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #000000; white-space: nowrap; overflow: hidden; }
 }
 `;
@@ -123,30 +124,30 @@ body.sk-build-shown #notification-container { display: none !important; } /* no 
 }
 
 /**
- * Mounts the (hidden) Build view on the page. getName(): the design's name for the print title line.
+ * Mounts the (hidden) Drawing view on the page. getName(): the design's name for the print title line.
  * Returns { el, svg, world, view, isShown, setShown, frame, fit, preparePrint, endPrint }.
  */
-export function mountBuildView({ state, getName = () => '' }) {
+export function mountDrawingView({ state, getName = () => '' }) {
   injectStyles();
   ensureIconSymbols(['icon-recenter']);
   const el = document.createElement('div');
-  el.className = 'sk-build';
-  el.id = 'build-view';
+  el.className = 'sk-drawing';
+  el.id = 'drawing-view';
   el.hidden = true;
   el.innerHTML =
-    '<svg id="buildCanvas" class="sk-build-canvas" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Build drawing"><g class="sk-build-world"></g></svg>' +
-    '<div class="sk-canvas-corner sk-build-actions">' +
+    '<svg id="drawingCanvas" class="sk-drawing-canvas" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Drawing"><g class="sk-drawing-world"></g></svg>' +
+    '<div class="sk-canvas-corner sk-drawing-actions">' +
     // TASK 725 (owner turn 2035): Print sits next to Fit, the same small corner button
-    '<button type="button" class="sk-corner-btn" id="btn-build-fit" title="Fit" aria-label="Fit the drawing"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-recenter"/></svg></button>' +
-    `<button type="button" class="sk-corner-btn" id="btn-build-print" title="Print (or Save as PDF)" aria-label="Print">${PRINT_ICON}</button>` +
+    '<button type="button" class="sk-corner-btn" id="btn-drawing-fit" title="Fit" aria-label="Fit the drawing"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-recenter"/></svg></button>' +
+    `<button type="button" class="sk-corner-btn" id="btn-drawing-print" title="Print (or Save as PDF)" aria-label="Print">${PRINT_ICON}</button>` +
     '</div>' +
-    '<div class="sk-build-title"></div>';
+    '<div class="sk-drawing-title"></div>';
   document.body.appendChild(el);
   const svg = el.querySelector('svg');
-  const world = el.querySelector('.sk-build-world');
-  const titleEl = el.querySelector('.sk-build-title');
+  const world = el.querySelector('.sk-drawing-world');
+  const titleEl = el.querySelector('.sk-drawing-title');
 
-  // Build's OWN view (Design's state.view is never read or written here), panned / zoomed by the shared pan-zoom
+  // Drawing's OWN view (Design's state.view is never read or written here), panned / zoomed by the shared pan-zoom
   const viewState = {
     view: { x: 0, y: 0, w: 100, h: 100 },
     allowEmptyPan: true, // a left drag on the drawing pans (there is no tool)
@@ -155,7 +156,7 @@ export function mountBuildView({ state, getName = () => '' }) {
   setupPanZoom(svg, viewState, { attachListeners: true });
 
   let shown = false;
-  let pendingFit = false; // entering Build frames the drawing, once it has geometry and the canvas has a size (a stored Build step opens before the design restores)
+  let pendingFit = false; // entering Drawing frames the drawing, once it has geometry and the canvas has a size (a stored Drawing step opens before the design restores)
   let printing = null; // the screen view kept while the drawing is laid out for paper
   const sized = () => { const r = svg.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   // a press or a wheel is the user taking the view: an entry fit still pending is dropped
@@ -171,21 +172,21 @@ export function mountBuildView({ state, getName = () => '' }) {
   const frame = () => {
     if (!shown) return;
     if (pendingFit && !printing && fit()) pendingFit = false;
-    drawBuild({ state, svg, world });
+    drawDrawing({ state, svg, world });
   };
   const setShown = (on) => {
     on = !!on;
     if (on === shown) return;
     shown = on;
     el.hidden = !on;
-    document.body.classList.toggle('sk-build-shown', on);
+    document.body.classList.toggle('sk-drawing-shown', on);
     resetPanZoomState(viewState);
     if (on) { pendingFit = true; frame(); }
   };
 
   // ── print: lay the same svg out for paper while the browser prints, then put the screen view back ──
   const pageStyle = document.createElement('style');
-  pageStyle.id = 'sk-build-page';
+  pageStyle.id = 'sk-drawing-page';
   const preparePrint = () => {
     if (!shown || printing) return;
     const plan = planPrint(state);
@@ -202,7 +203,7 @@ export function mountBuildView({ state, getName = () => '' }) {
     titleEl.textContent = titleLine({ name: getName(), unit: docUnit(), date: new Date().toLocaleDateString(), plan });
     el.dataset.printScale = plan ? plan.scaleText : '';
     el.dataset.printOrientation = plan ? plan.orientation : '';
-    drawBuild({ state, svg, world }); // the drawing at the paper zoom (labels keep their size on paper)
+    drawDrawing({ state, svg, world }); // the drawing at the paper zoom (labels keep their size on paper)
   };
   const endPrint = () => {
     if (!printing) return;
@@ -217,8 +218,8 @@ export function mountBuildView({ state, getName = () => '' }) {
   window.addEventListener('beforeprint', preparePrint);
   window.addEventListener('afterprint', endPrint);
 
-  el.querySelector('#btn-build-fit').addEventListener('click', () => { pendingFit = false; fit(); frame(); });
-  el.querySelector('#btn-build-print').addEventListener('click', () => window.print());
+  el.querySelector('#btn-drawing-fit').addEventListener('click', () => { pendingFit = false; fit(); frame(); });
+  el.querySelector('#btn-drawing-print').addEventListener('click', () => { track('print'); window.print(); }); // TASK 746: that a print was asked for, nothing about the design
 
   return { el, svg, world, view: viewState.view, isShown: () => shown, setShown, frame, fit, preparePrint, endPrint };
 }

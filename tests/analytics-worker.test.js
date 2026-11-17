@@ -91,7 +91,7 @@ ok(aeUnknownCalls("SELECT toDate(timestamp), COALESCE(blob1, '') FROM x").join()
   eq(ae[0].indexes, [ID], 'index1 = the anonymous id');
   ok(!JSON.stringify(ae[0]).includes('203.0.113.7'), 'the IP is never stored');
 }
-for (const name of ['stage:prepare', 'stage:review', 'template:slot', 'template:blank', 'export:svg', 'export:shaper', 'import:fusion', 'drive:save', 'settings']) {
+for (const name of ['stage:prepare', 'stage:review', 'template:slot', 'template:blank', 'export:svg', 'export:shaper', 'import:fusion', 'drive:save', 'settings', 'print']) {
   const { env, ae } = makeEnv();
   const res = await worker.fetch(post({ ...goodVisit, event: 'feature', name, host: 'fusion', dev: 1 }), env);
   eq([res.status, ae.length && ae[0].blobs[0], ae.length && ae[0].blobs[1], ae.length && ae[0].blobs[5], ae.length && ae[0].blobs[8]], [204, 'feature', name, 'fusion', '1'], `feature ${name} (Fusion, dev) is stored`);

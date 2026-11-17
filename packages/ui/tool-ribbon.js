@@ -13,7 +13,7 @@ import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
 import { loadSection, saveSection, defaultSection } from '#ui/ribbon-layout.js';
-import { titleWithShortcut } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration
+import { titleWithShortcut, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration (TASK 747: and follows the user's keys)
 
 // TASK 647: the ribbon never scrolls. Each section shows the tools that are "in the bar" (the user's checkboxes) and fit, then its NAME, a button
 // that opens the section's dropdown (every tool of the section: run it, check it in / out of the bar, hold-drag its grip to reorder). The fit
@@ -308,6 +308,8 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   const el = document.createElement('div'); el.className = 'sk-ribbon';
   const toolBtns = []; // { btn, tool } — for active-sync
   const menus = [];    // TASK 607: popovers on document.body, removed in destroy()
+  const retitles = []; // TASK 747: each button's title setter, run again when a shortcut's key changes
+  const offShortcuts = onShortcutsChange(() => retitles.forEach((f) => f()));
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };
   function selectTool(tool) {
@@ -326,7 +328,8 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (t.id) b.id = t.id;
     else if (t.tool) b.id = 'tool-' + t.tool;
     else if (t.action) b.id = 'action-' + t.action;
-    b.title = titleWithShortcut(t.title || t.label, t.shortcut); // TASK 740: "Line (L)" (every built-in button names its shortcut)
+    const retitle = () => { b.title = titleWithShortcut(t.title || t.label, t.shortcut); }; // TASK 740: "Line (L)" (every built-in button names its shortcut)
+    retitle(); retitles.push(retitle);
     if (t.tool) b.dataset.tool = t.tool;
     if (t.action) b.dataset.action = t.action;
     if (t.ariaLabel) b.setAttribute('aria-label', t.ariaLabel);
@@ -353,7 +356,9 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   const variantPops = [];
   function variantItem(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn sk-ribbon-dd';
-    b.dataset.tool = t.tool; b.title = titleWithShortcut(t.label, t.shortcut); // TASK 740: "Rect (R)"
+    b.dataset.tool = t.tool;
+    const retitle = () => { b.title = titleWithShortcut(t.label, t.shortcut); }; // TASK 740: "Rect (R)"
+    retitle(); retitles.push(retitle);
     if (t.tool) b.id = 'tool-' + t.tool;
     const activeMode = (state && state[t.modeKey]) || t.variants[0].mode;
     const initialVariant = t.variants.find(v => v.mode === activeMode) || t.variants[0];
@@ -633,6 +638,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     },
     refresh,
     destroy: () => {
+      offShortcuts();
       if (unlistenHistory) unlistenHistory();
       sectPop.close();
       document.removeEventListener('pointerup', syncSoon);

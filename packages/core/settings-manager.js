@@ -78,6 +78,9 @@ const DEFAULT_SETTINGS = {
     RIBBON_LAYOUT: null,
     // Task 692: favourite template ids in the order they were starred ({ v: 1, ids: [id...] }); local-only, shared across all four apps.
     TEMPLATE_FAVOURITES: { v: 1, ids: [] },
+    // Task 747: the user's own keyboard shortcuts ({ v: 1, keys: { <shortcut id>: [combo...] } }), ONLY the ids the user changed ([] = no key).
+    // Read and written only by #ui/shortcuts.js (it validates the shape on read); local, shared by all four apps, never in a document.
+    SHORTCUT_KEYS: { v: 1, keys: {} },
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,

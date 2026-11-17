@@ -4,7 +4,7 @@
 // (`current()`, null = this stage has no history) and gets a router: the keyboard handlers and the header buttons both call
 // router.run(action), so a click does exactly what Ctrl+Z / Ctrl+Y does in that stage (one dispatch, no second path).
 
-import { matchShortcut } from '#ui/shortcuts.js';
+import { matchShortcut, titleWithShortcut, onShortcutsChange } from '#ui/shortcuts.js';
 
 /** THE one mapping of the history keys (declared in shortcuts.js: edit.undo, edit.redo): 'undo' | 'redo' | null for any other key. */
 export function undoRedoKeyAction(e) {
@@ -51,8 +51,8 @@ const ICONS = {
   redo: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 7v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const BUTTONS = [
-  { id: 'btn-undo', action: 'undo', can: 'canUndo', label: 'Undo (Ctrl+Z)' },
-  { id: 'btn-redo', action: 'redo', can: 'canRedo', label: 'Redo (Ctrl+Y)' },
+  { id: 'btn-undo', action: 'undo', can: 'canUndo', label: 'Undo', shortcut: 'edit.undo' }, // TASK 747: the title's key is the table's ("Undo (Ctrl+Z)")
+  { id: 'btn-redo', action: 'redo', can: 'canRedo', label: 'Redo', shortcut: 'edit.redo' },
 ];
 
 let stylesInjected = false;
@@ -80,10 +80,12 @@ export function mountHistoryButtons({ router, header, before = null }) {
   injectStyles();
   const el = document.createElement('span');
   el.className = 'sk-history';
+  const retitles = [];
   const paints = BUTTONS.map((d) => {
     const b = document.createElement('button');
     b.type = 'button'; b.id = d.id; b.className = 'sk-history-btn';
-    b.title = d.label; b.setAttribute('aria-label', d.label);
+    const retitle = () => { const t = titleWithShortcut(d.label, d.shortcut); b.title = t; b.setAttribute('aria-label', t); };
+    retitle(); retitles.push(retitle);
     b.innerHTML = ICONS[d.action];
     b.addEventListener('click', () => router.run(d.action));
     el.appendChild(b);
@@ -91,7 +93,8 @@ export function mountHistoryButtons({ router, header, before = null }) {
   });
   const paint = () => paints.forEach((p) => p());
   const off = router.onChange(paint);
+  const offKeys = onShortcutsChange(() => retitles.forEach((f) => f())); // TASK 747: the user's keys
   header.insertBefore(el, before && before.parentNode === header ? before : null);
   router.refresh();
-  return { el, destroy: () => { off(); el.remove(); } };
+  return { el, destroy: () => { off(); offKeys(); el.remove(); } };
 }

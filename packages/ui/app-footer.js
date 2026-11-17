@@ -23,7 +23,7 @@ import { activeSketchName, canClearActiveSketch, clearActiveSketch, hasSelection
 import { DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { GEAR_GLYPH } from '#ui/app-sidebar.js';
-import { matchesShortcut, titleWithShortcut } from '#ui/shortcuts.js'; // TASK 740: the Parameters key (view.parameters), declared there
+import { matchesShortcut, titleWithShortcut, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: the Parameters key (view.parameters), declared there
 import { isTextEditingTarget } from '#ui/clipboard.js';
 
 let stylesInjected = false;
@@ -183,11 +183,14 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   let paramsBtn = null;
   let paramsWin = null;
   let onParamsKey = null;
+  let offParamsTitle = null; // TASK 747: the title follows the user's key
   const syncParams = () => { if (paramsBtn) paramsBtn.setAttribute('aria-expanded', String(!!(paramsWin && paramsWin.isOpen()))); };
   if (parameters) {
     paramsBtn = document.createElement('button');
     paramsBtn.type = 'button'; paramsBtn.id = 'btn-parameters'; paramsBtn.className = 'sk-footer-btn ink';
-    paramsBtn.title = titleWithShortcut('Parameters', 'view.parameters'); paramsBtn.setAttribute('aria-label', 'Parameters'); // TASK 740: "Parameters (Shift+P)"
+    const retitle = () => { paramsBtn.title = titleWithShortcut('Parameters', 'view.parameters'); }; // TASK 740: "Parameters (Shift+P)"
+    retitle(); offParamsTitle = onShortcutsChange(retitle);
+    paramsBtn.setAttribute('aria-label', 'Parameters');
     paramsBtn.setAttribute('aria-haspopup', 'dialog'); paramsBtn.setAttribute('aria-expanded', 'false');
     paramsBtn.innerHTML = FX_ICON;
     actions.appendChild(paramsBtn);
@@ -305,6 +308,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
       }
       if (stopSettingsWatch) stopSettingsWatch();
       if (onParamsKey) document.removeEventListener('keydown', onParamsKey);
+      if (offParamsTitle) offParamsTitle();
       history.destroy();
       if (paramsWin) paramsWin.destroy();
       if (start.remove) start.remove();

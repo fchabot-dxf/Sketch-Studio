@@ -3,8 +3,8 @@
 // a "Download (.zip)" link, the add-in's version and the install steps.
 //
 // The zip is NOT in this repo (the add-in's repo is private; this one is public): shaper-addin's `make_release.py` writes shaper-addin.zip +
-// shaper-addin.json, and `node scripts/build-site.cjs shaper --addin <that folder>` copies both into the SITE at apps/shaper/downloads/
-// (build-site.cjs ADDIN_DOWNLOAD). The view reads the json; one code path: no json served = "not available in this build".
+// shaper-addin.json, and `node scripts/build-site.cjs shaper --addin <that folder>` copies both into the SITE at downloads/ (the app folder is the
+// top of its site, TASK 763: https://shaper-svg.pages.dev/downloads/shaper-addin.zip; build-site.cjs ADDIN_DOWNLOAD). The view reads the json; one code path: no json served = "not available in this build".
 // The json is an OPTIONAL site file, so its URL is written relative to the page without a leading './' (scripts/site-closure.cjs requires every
 // './x.json' literal to exist; this one exists only in a site built with --addin).
 // In Fusion mode (?host=fusion: the add-in's own palette) the user already has the add-in: the entry is hidden.
@@ -13,7 +13,7 @@ import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 
 export const ADDIN_ACTION_ID = 'fusion-addin';
 export const ADDIN_VIEW_ID = 'fusion-addin';
-// = build-site.cjs ADDIN_DOWNLOAD.dir (apps/shaper/) + ADDIN_DOWNLOAD.json, resolved against the page /apps/shaper/ (the node test checks they agree)
+// = build-site.cjs ADDIN_DOWNLOAD.dir + ADDIN_DOWNLOAD.json, resolved against the page: /apps/shaper/ in development, the site root / in a built site (the node test checks they agree)
 export const ADDIN_RELEASE_JSON = 'downloads/shaper-addin.json';
 export const ADDIN_UNAVAILABLE = 'The add-in download is not available in this build.';
 

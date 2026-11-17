@@ -46,9 +46,12 @@ Output: `output/sketch-studio-unified-v1.0.html`.
 ## Websites: one per app
 
 Each app is its own website (its own Cloudflare Pages project). The engine and every shared package stay ONE copy in this repo:
-`node scripts/build-site.cjs <app>` copies `apps/<app>/`, `packages/`, the root files the app reaches (the glyph sheet),
-`privacy.html` and that site's `_redirects` (`/` opens the app; the query string, e.g. `?host=fusion`, is kept) into `dist/`.
-No other app's folder is in a site (`tests/site-closure.test.js` checks it).
+`node scripts/build-site.cjs <app>` writes the app at the ROOT of its site (task 763: the address bar shows https://shaper-svg.pages.dev/):
+the files of `apps/<app>/` at the top of `dist/`, then `packages/`, the root files the app reaches (the glyph sheet), `privacy.html`, a `404.html`
+and that site's `_redirects`. No source file changes: the page's `../../packages/` links stop at the root, and the build checks every reference of
+the page lands on the same file as in the repo. No other app's folder is in a site (`tests/site-closure.test.js`, `tests/site-root-763.test.js`).
+The old addresses keep working: `/apps/<app>/`, `/apps/<app>/index.html` and any `/apps/<app>/<file>` forward (302) to `/` / `/<file>`, the query
+string kept (`/apps/shaper/?host=fusion` -> `/?host=fusion`: the Fusion add-in) and the `#hash` kept by the browser.
 
 | Site | Pages project | Build command | Output dir |
 |---|---|---|---|
@@ -59,7 +62,8 @@ No other app's folder is in a site (`tests/site-closure.test.js` checks it).
 
 `npm run site:<app>` runs the same build. A direct-upload site is deployed from the REPO ROOT (`wrangler pages deploy dist --project-name <project>`):
 wrangler uploads the `functions/` folder of the directory it runs in (the Google sign-in routes), not one inside `dist/`.
-sketch-studio's site keeps the old links: `/shaper`, `/penplotter`, `/trace` and `/apps/<app>/*` redirect (302, query string kept) to the app's own site.
+sketch-studio's site keeps the old links: `/shaper`, `/penplotter`, `/trace` and `/apps/<app>/*` redirect (302, query string kept) to the app's own site, at its root.
+Check a built site the way Cloudflare serves it, locally, with no login and no deploy: `node tests/site-root-763-live.test.js` (it runs `wrangler pages dev`).
 
 Each Pages project needs the same three secrets (names only): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_KEY`.
 All four sites use the SAME Google OAuth client (Drive files made by one app stay visible to the others: the drive.file scope is per client).

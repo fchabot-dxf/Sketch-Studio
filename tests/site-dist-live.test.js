@@ -1,5 +1,5 @@
 // tests/site-dist-live.test.js — TASK 696 (live): each app opened from ITS OWN built site. For each app: scripts/build-site.cjs into a temp dir, a static
-// server on that dist only (its own port = its own origin, as each app's own website is), the app's page in headless Edge: the Design canvas finishes
+// server on that dist only (its own port = its own origin, as each app's own website is), the app's page (TASK 763: the site's root, /) in headless Edge: the Design canvas finishes
 // its restore (data-doc-ready) and the network log has no failed same-origin request (no 404: nothing the page loads is missing from its site).
 // The /auth/google/... routes are Pages Functions (compiled from ./functions by wrangler, not files of the site; a plain static server has none):
 // a request to one is listed apart, never as a missing file (tests/site-closure.test.js checks each route has its function file).
@@ -38,10 +38,10 @@ await (async () => {
       servers.push(srv.server);
       const origin = `http://127.0.0.1:${srv.port}`;
       log = [];
-      await navigate(`${origin}/apps/${app}/`, 15000);
+      await navigate(`${origin}/`, 15000);
       await waitForApp(CANVAS[app]);
       await sleep(1500); // the lazy loads after the restore (the glyph sheet, the stage modules) land in the log too
-      assert.strictEqual(await evalJs(`location.pathname`), `/apps/${app}/`, `${app}: served from its own site`);
+      assert.strictEqual(await evalJs(`location.pathname`), '/', `${app}: served from its own site, at its root`);
       const sent = new Map(log.filter((x) => x.status === 'sent').map((x) => [x.id, x.url]));
       const done = log.filter((x) => x.status !== 'sent').map((x) => (x.failedId ? { url: sent.get(x.failedId) || x.url, status: x.status } : x));
       const mine = done.filter((x) => x.url.startsWith(origin));
@@ -53,7 +53,7 @@ await (async () => {
         const s = await send('Page.captureScreenshot', { format: 'png' });
         fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, `dist-${app}.png`), Buffer.from(s.data, 'base64'));
       }
-      console.log(`${app}: ${origin}/apps/${app}/ ready, ${mine.length} same-origin responses, 0 failed / 404${fnRoutes.length ? `; Pages Function routes (no Functions on a static server): ${fnRoutes.map((x) => new URL(x.url).pathname + ' ' + x.status).join(', ')}` : ''}`);
+      console.log(`${app}: ${origin}/ ready, ${mine.length} same-origin responses, 0 failed / 404${fnRoutes.length ? `; Pages Function routes (no Functions on a static server): ${fnRoutes.map((x) => new URL(x.url).pathname + ' ' + x.status).join(', ')}` : ''}`);
     }
     console.log('site-dist-live: the 4 apps load from their own dist with no missing file');
   } finally {

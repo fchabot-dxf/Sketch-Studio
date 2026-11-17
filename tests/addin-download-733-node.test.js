@@ -23,7 +23,7 @@ import {
 } from '../apps/shaper/src/addin-download.js';
 
 const require = createRequire(import.meta.url);
-const { buildSite, ADDIN_DOWNLOAD } = require('../scripts/build-site.cjs');
+const { buildSite, sitePath, ADDIN_DOWNLOAD } = require('../scripts/build-site.cjs');
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 let checks = 0;
@@ -44,17 +44,19 @@ try {
   fs.writeFileSync(path.join(rel, 'shaper-addin.json'), JSON.stringify(json));
 
   const withAddin = buildSite('shaper', path.join(tmp, 'with'), { addin: rel });
-  const dl = path.join(tmp, 'with', ...ADDIN_DOWNLOAD.dir.split('/'));
-  eq(ADDIN_DOWNLOAD.dir, 'apps/shaper/downloads', 'the fixed site path');
-  ok(fs.readFileSync(path.join(dl, 'shaper-addin.zip')).equals(zipBytes), 'the zip is at apps/shaper/downloads/shaper-addin.zip, byte for byte');
+  const siteDir = sitePath('shaper', ADDIN_DOWNLOAD.dir); // TASK 763: the app folder is the top of its site
+  const dl = path.join(tmp, 'with', ...siteDir.split('/'));
+  eq(ADDIN_DOWNLOAD.dir, 'apps/shaper/downloads', 'the fixed repo path (next to the page in development)');
+  eq(siteDir, 'downloads', 'TASK 763: in the site, downloads/ at the top (https://shaper-svg.pages.dev/downloads/)');
+  ok(fs.readFileSync(path.join(dl, 'shaper-addin.zip')).equals(zipBytes), 'the zip is at downloads/shaper-addin.zip, byte for byte');
   deepEq(JSON.parse(fs.readFileSync(path.join(dl, 'shaper-addin.json'), 'utf8')), json, 'the json is beside it, unchanged');
-  deepEq(withAddin.addin, { version: '9.8.7', bytes: zipBytes.length, sha256: sha, files: ['apps/shaper/downloads/shaper-addin.json', 'apps/shaper/downloads/shaper-addin.zip'] }, 'buildSite reports the add-in it copied');
-  ok(fs.existsSync(path.join(tmp, 'with', 'apps', 'shaper', 'index.html')), 'the rest of the site is built as before');
+  deepEq(withAddin.addin, { version: '9.8.7', bytes: zipBytes.length, sha256: sha, files: ['downloads/shaper-addin.json', 'downloads/shaper-addin.zip'] }, 'buildSite reports the add-in it copied');
+  ok(fs.existsSync(path.join(tmp, 'with', 'index.html')), 'the rest of the site is built as before');
 
   const without = buildSite('shaper', path.join(tmp, 'without'));
   eq(without.addin, null, 'no --addin: no add-in reported');
-  ok(fs.existsSync(path.join(tmp, 'without', 'apps', 'shaper', 'index.html')), 'no --addin: the build still succeeds');
-  ok(!fs.existsSync(path.join(tmp, 'without', ...ADDIN_DOWNLOAD.dir.split('/'))), 'no --addin: the site has no downloads folder');
+  ok(fs.existsSync(path.join(tmp, 'without', 'index.html')), 'no --addin: the build still succeeds');
+  ok(!fs.existsSync(path.join(tmp, 'without', ...siteDir.split('/'))), 'no --addin: the site has no downloads folder');
   eq(without.files + 2, withAddin.files, 'the option adds exactly the two files');
 
   const bad = path.join(tmp, 'bad');
@@ -68,8 +70,10 @@ try {
 
   // ---- 2. the view's json URL = the path build-site writes, seen from the Shaper page
   eq(ADDIN_RELEASE_JSON, path.posix.relative('apps/shaper', `${ADDIN_DOWNLOAD.dir}/${ADDIN_DOWNLOAD.json}`), 'addin-download.js reads the json where build-site puts it');
-  eq(new URL(ADDIN_RELEASE_JSON, 'https://shaper-svg.pages.dev/apps/shaper/').pathname, '/apps/shaper/downloads/shaper-addin.json', 'from /apps/shaper/');
-  eq(new URL(ADDIN_RELEASE_JSON, 'https://shaper-svg.pages.dev/apps/shaper/index.html?host=fusion').pathname, '/apps/shaper/downloads/shaper-addin.json', 'from /apps/shaper/index.html');
+  eq(new URL(ADDIN_RELEASE_JSON, 'http://127.0.0.1:8000/apps/shaper/').pathname, '/apps/shaper/downloads/shaper-addin.json', 'development: from /apps/shaper/');
+  eq(new URL(ADDIN_RELEASE_JSON, 'http://127.0.0.1:8000/apps/shaper/index.html?host=fusion').pathname, '/apps/shaper/downloads/shaper-addin.json', 'development: from /apps/shaper/index.html');
+  eq(new URL(ADDIN_RELEASE_JSON, 'https://shaper-svg.pages.dev/').pathname, `/${siteDir}/shaper-addin.json`, 'TASK 763: the site, from its root: where build-site puts it');
+  eq(new URL(ADDIN_RELEASE_JSON, 'https://shaper-svg.pages.dev/?host=fusion').pathname, '/downloads/shaper-addin.json', 'TASK 763: the site in Fusion mode');
 
   // ---- 3. the declared item: Shaper has it (hidden in Fusion mode), the other apps never reference it
   let opened = 0;
@@ -98,7 +102,7 @@ try {
 
   // ---- 3b. the shared sidebar renders the declared item (normal) and leaves it out (Fusion mode); the click shows the view
   {
-    const win = new Window({ url: 'https://shaper-svg.pages.dev/apps/shaper/' });
+    const win = new Window({ url: 'https://shaper-svg.pages.dev/' });
     const prev = { document: globalThis.document, getComputedStyle: globalThis.getComputedStyle };
     globalThis.document = win.document;
     globalThis.getComputedStyle = win.getComputedStyle.bind(win);
@@ -128,11 +132,11 @@ try {
 
   // ---- 4. the view reads the json (one code path) — loadAddinRelease against fake responses, then the rendered view
   const res = (status, type, body) => ({ status, ok: status >= 200 && status < 300, headers: { get: (h) => (h.toLowerCase() === 'content-type' ? type : null) }, json: async () => JSON.parse(body) });
-  const base = 'https://shaper-svg.pages.dev/apps/shaper/index.html';
+  const base = 'https://shaper-svg.pages.dev/'; // TASK 763: the site's page is its root
   let asked = null;
   deepEq(await loadAddinRelease({ base, fetchImpl: async (u) => { asked = u; return res(200, 'application/json', JSON.stringify(json)); } }),
-    { available: true, version: '9.8.7', bytes: zipBytes.length, zipUrl: 'https://shaper-svg.pages.dev/apps/shaper/downloads/shaper-addin.zip' }, 'a served json: the version and the zip next to it');
-  eq(asked, 'https://shaper-svg.pages.dev/apps/shaper/downloads/shaper-addin.json', 'it asks for the json next to the page');
+    { available: true, version: '9.8.7', bytes: zipBytes.length, zipUrl: 'https://shaper-svg.pages.dev/downloads/shaper-addin.zip' }, 'a served json: the version and the zip next to it');
+  eq(asked, 'https://shaper-svg.pages.dev/downloads/shaper-addin.json', 'it asks for the json next to the page');
   deepEq(await loadAddinRelease({ base, fetchImpl: async () => res(404, 'text/plain', 'nf') }), { available: false }, '404: not in this build');
   deepEq(await loadAddinRelease({ base, fetchImpl: async () => res(200, 'text/html; charset=utf-8', '<!doctype html>') }), { available: false }, 'an HTML answer (single-page fallback): not in this build');
   await assert.rejects(loadAddinRelease({ base, fetchImpl: async () => res(500, 'text/plain', 'boom') }), /HTTP 500/); checks++;
@@ -157,8 +161,8 @@ try {
     await win.happyDOM.close();
     return out;
   };
-  const avail = await renderWith(async () => ({ available: true, version: '9.8.7', bytes: 31260, zipUrl: 'https://shaper-svg.pages.dev/apps/shaper/downloads/shaper-addin.zip' }));
-  eq(avail.href, 'https://shaper-svg.pages.dev/apps/shaper/downloads/shaper-addin.zip', 'available: the Download link points at the zip');
+  const avail = await renderWith(async () => ({ available: true, version: '9.8.7', bytes: 31260, zipUrl: 'https://shaper-svg.pages.dev/downloads/shaper-addin.zip' }));
+  eq(avail.href, 'https://shaper-svg.pages.dev/downloads/shaper-addin.zip', 'available: the Download link points at the zip');
   eq(avail.linkText, 'Download (.zip)', 'the link reads "Download (.zip)"');
   eq(avail.version, 'Version 9.8.7 · 31 KB', 'the add-in version (and size)');
   eq(avail.unavailable, null, 'no "not available" message');

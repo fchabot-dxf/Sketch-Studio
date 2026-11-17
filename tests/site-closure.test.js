@@ -1,5 +1,6 @@
 // tests/site-closure.test.js — TASK 696: each app is its own website. For each app, build its site (scripts/build-site.cjs) into a temp dir and follow
-// EVERY reference from apps/<app>/index.html inside that dist (scripts/site-closure.cjs: static / dynamic imports, the import map, CSS @import / url(),
+// EVERY reference from its page inside that dist (TASK 763: the app folder is the top of its site, so the page is index.html; in the repo it is
+// apps/<app>/index.html) (scripts/site-closure.cjs: static / dynamic imports, the import map, CSS @import / url(),
 // <script src>, <link href>, every other src= / href=, new URL(.., import.meta.url) (the Trace worker, Shaper's wood images), the site paths a module
 // fetches (the glyph sheet), Pages Function routes): every one must exist in the dist, and no file of another app is in it.
 //   FAIL-FIRST, kept as part of the test: in a copy of a built site a reached file is deleted, a package module is deleted and a link to another app
@@ -15,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { APPS, siteClosure, jsRefs } = require('../scripts/site-closure.cjs');
-const { buildSite } = require('../scripts/build-site.cjs');
+const { buildSite, sitePath, siteRedirects } = require('../scripts/build-site.cjs');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'site-696-'));
 const tree = (dir) => fs.readdirSync(dir, { withFileTypes: true }).map((e) => e.name + (e.isDirectory() ? '/' : '')).sort();
@@ -38,25 +39,19 @@ try {
   for (const app of APPS) {
     const out = path.join(tmp, app);
     buildSite(app, out);
-    assert.deepStrictEqual(tree(out), ['_redirects', 'apps/', 'assets/', 'packages/', 'privacy.html'], `${app}: the top level of its site`);
-    assert.deepStrictEqual(tree(path.join(out, 'apps')), [app + '/'], `${app}: no other app's folder in its site`);
+    // TASK 763: the app folder is the top of its site (the root layout): no apps/ folder, no folder of another app
+    assert.ok(!tree(out).includes('apps/'), `${app}: no apps/ folder: the app is at the top of its site`);
+    assert.deepStrictEqual(tree(out).filter((n) => ['404.html', '_redirects', 'assets/', 'index.html', 'packages/', 'privacy.html'].includes(n)), ['404.html', '_redirects', 'assets/', 'index.html', 'packages/', 'privacy.html'], `${app}: the site's own files at its top`);
+    for (const other of APPS.filter((a) => a !== app)) assert.ok(!fs.existsSync(path.join(out, 'apps', other)) && !fs.existsSync(path.join(out, other)), `${app}: no folder of ${other} in its site`);
     assert.ok(!fs.existsSync(path.join(out, 'functions')) && !fs.existsSync(path.join(out, 'tests')) && !fs.existsSync(path.join(out, 'packages', 'core', 'tests')), `${app}: no functions/ (wrangler compiles them from its cwd), no tests in the site`);
-    const c = siteClosure({ root: out, app, functionsRoot: REPO_ROOT });
+    const c = siteClosure({ root: out, app, entry: 'index.html', functionsRoot: REPO_ROOT });
     assert.deepStrictEqual(c.missing, [], `${app} (dist): every reference resolves inside the site`);
     assert.deepStrictEqual(c.crossApp, [], `${app} (dist): no reference into another app`);
-    assert.strictEqual(c.files.size, siteClosure({ root: REPO_ROOT, app }).files.size, `${app}: the dist serves exactly what the repo page reaches`);
-    const redirects = fs.readFileSync(path.join(out, '_redirects'), 'utf8').trim().split('\n').map((l) => l.trim().split(/\s+/));
-    assert.deepStrictEqual(redirects[0], ['/', `/apps/${app}/`, '302'], `${app}: / opens the app`);
-    if (app === 'sketchstudio') {
-      const old = redirects.slice(1).map((x) => x.join(' '));
-      const HOST = { shaper: 'shaper-svg', penplotter: 'penplotter', trace: 'sketch-trace' }; // owner turn 1862
-      for (const o of ['shaper', 'penplotter', 'trace']) {
-        const site = `https://${HOST[o]}.pages.dev/apps/${o}/`;
-        for (const line of [`/${o} ${site} 302`, `/apps/${o} ${site} 302`, `/apps/${o}/* ${site}:splat 302`]) assert.ok(old.includes(line), `sketchstudio keeps the old link: ${line}`);
-      }
-      assert.strictEqual(old.length, 9, 'sketchstudio: the old links of the three other apps, nothing else');
-    } else assert.strictEqual(redirects.length, 1, `${app}: only its / rule`);
-    console.log(`${app} dist: ${tree(out).join(' ')} | apps/: ${tree(path.join(out, 'apps')).join(' ')} | ${c.files.size} reached files, 0 missing, 0 other-app`);
+    const repo = siteClosure({ root: REPO_ROOT, app });
+    assert.deepStrictEqual([...c.files].sort(), [...repo.files].map((f) => sitePath(app, f)).sort(), `${app}: the dist serves exactly what the repo page reaches, each file at its root-layout path`);
+    // the rules themselves: tests/site-root-763.test.js (every rule of every app)
+    assert.strictEqual(fs.readFileSync(path.join(out, '_redirects'), 'utf8'), siteRedirects(app), `${app}: its _redirects`);
+    console.log(`${app} dist: ${tree(out).join(' ')} | ${c.files.size} reached files, 0 missing, 0 other-app`);
   }
 
   // ---- FAIL-FIRST: a broken copy of a site must be reported ----
@@ -64,9 +59,9 @@ try {
   fs.cpSync(path.join(tmp, 'penplotter'), broken, { recursive: true });
   fs.rmSync(path.join(broken, 'assets', 'constraint-glyphs.svg'));          // the glyph sheet a module fetches
   fs.rmSync(path.join(broken, 'packages', 'ui', 'app-registry.js'));         // a shared module the sidebar imports
-  const page = path.join(broken, 'apps', 'penplotter', 'index.html');
-  fs.writeFileSync(page, fs.readFileSync(page, 'utf8').replace('</body>', '<a href="../shaper/">Shaper</a></body>')); // a link to another app
-  const b = siteClosure({ root: broken, app: 'penplotter', functionsRoot: REPO_ROOT });
+  const page = path.join(broken, 'index.html');
+  fs.writeFileSync(page, fs.readFileSync(page, 'utf8').replace('</body>', '<a href="apps/shaper/">Shaper</a></body>')); // a link to another app
+  const b = siteClosure({ root: broken, app: 'penplotter', entry: 'index.html', functionsRoot: REPO_ROOT });
   const missingTo = b.missing.map((m) => m.to);
   assert.ok(missingTo.includes('assets/constraint-glyphs.svg'), 'fail-first: the deleted glyph sheet is reported: ' + JSON.stringify(missingTo));
   assert.ok(missingTo.includes('packages/ui/app-registry.js'), 'fail-first: the deleted shared module is reported: ' + JSON.stringify(missingTo));

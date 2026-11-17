@@ -78,8 +78,8 @@ await (async () => {
     buildSite('shaper', path.join(tmp, 'without'));
     const withSrv = await startServer(path.join(tmp, 'with')); servers.push(withSrv.server);
     const withoutSrv = await startServer(path.join(tmp, 'without')); servers.push(withoutSrv.server);
-    const withUrl = `http://127.0.0.1:${withSrv.port}/apps/shaper/`;
-    const withoutUrl = `http://127.0.0.1:${withoutSrv.port}/apps/shaper/`;
+    const withUrl = `http://127.0.0.1:${withSrv.port}/`; // TASK 763: the app at its site's root
+    const withoutUrl = `http://127.0.0.1:${withoutSrv.port}/`;
 
     // ---- desktop, the site with the add-in
     await navigate(withUrl, 15000);

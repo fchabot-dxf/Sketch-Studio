@@ -36,9 +36,16 @@ export function captureShaperDoc() {
 // 'spiral' (the Morphed spiral) -> 'morphed'. Mapped HERE only, on reading a stored document (the one read of the Shaper part of a document: the shared
 // #core/document.js hands doc.hosts.shaper over untouched); 749 never writes the old values, so the mapping is unambiguous. An operation key of the stored
 // order (operations.js opKeyOf: JSON with the record's clearing pattern) is mapped the same way, so a reordered pocket keeps its place.
+// TASK 750: a stored depth per pass (`passDepth`, 745) is DROPPED here (the Origin's Pass Depth / AutoPass makes the step-downs; the clearing is written once at
+// the full depth), from the record and from a stored operation key (`"passDepth":<n | null>` in its clearing settings). An old 'concentric' pocket opens as
+// Spiral with Loop off (no `loop` field): its open lines + the Origin's inside cut on the wall.
 const OLD_CLEARING = Object.freeze({ concentric: 'linked', spiral: 'morphed' });
-const withClearingNow = (rec) => (rec && Object.hasOwn(OLD_CLEARING, rec.clearing) ? { ...rec, clearing: OLD_CLEARING[rec.clearing] } : rec);
-const opKeyNow = (k) => (typeof k === 'string' ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`) : k);
+function withClearingNow(rec) {
+  if (!rec || typeof rec !== 'object') return rec;
+  const { passDepth, ...now } = rec;
+  return Object.hasOwn(OLD_CLEARING, now.clearing) ? { ...now, clearing: OLD_CLEARING[now.clearing] } : now;
+}
+const opKeyNow = (k) => (typeof k === 'string' ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`).replace(/,"passDepth":(null|-?[\d.eE+-]+)/, '') : k);
 
 /** Restore a persisted Shaper document. Missing parts keep their defaults (an old buffer carries none of this; no opOrder = the default order). */
 export function applyShaperDoc(d) {

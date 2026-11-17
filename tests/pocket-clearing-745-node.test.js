@@ -1,13 +1,13 @@
 // tests/pocket-clearing-745-node.test.js — TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js through THE cut derivation #core/stepped-cut deriveCuts:
 // the export, the Prepare look and the 3D Review read the same cuts) and the Operations list's delete bin.
 //  1. the rules on a rectangle, an L, a circle, a pocket with an island and a dumbbell (a neck narrower than the bit), bit 6 mm, stepover 40 %, allowance 0.5:
-//     Spiral (TASK 749: 745's Concentric rings, joined; the wall separate here, its own test is pocket-clearing-749-node): every ring of every line,
+//     Spiral (TASK 749: 745's Concentric rings, joined; Loop off: TASK 750's Loop is pocket-clearing-750-node): every ring of every line,
 //     ring k (level k) = the region offset by r + allowance + k * stepover within 0.01 mm (every vertex), splits on the dumbbell; Raster at 0 / 45 / 90 deg: every pass inside the inset region, the passes one stepover apart, along the angle, zigzag, + the clean-up ring;
 //     Morphed spiral: ONE open path, every turn within one stepover of the next one out (sampled), inside the inset region, the last turn = the inset
 //     contour; refused with its reason on the island pocket and the dumbbell; for every pattern the swept area covers the region minus the reported
 //     leftover (sampled on a 0.5 mm grid), the rectangle's leftover = its 4 corners (4 (1 - pi / 4) r²), the dumbbell's neck reported.
 //  2. the export: Freehand = byte-identical (deriveCuts returns the SAME array; a record with clearing 'freehand' and settings writes the same file as one
-//     without); Spiral (wall separate) = its open on-line lines at each depth pass + the wall as an inside cut on the pocket's own loop + islands as outside cuts; depth
+//     without); Spiral (Loop off) = its open on-line lines ONCE at the full depth (TASK 750: no depth per pass) + the wall as an inside cut on the pocket's own loop + islands as outside cuts; depth
 //     passes repeat the ring set at each pass depth; the preview copy's data-clear, never in the download.
 //  3. the app: the Clearing dropdown (one undo step, the defaults, the rows, the note, the stepper), the spiral greyed with its reason on an island pocket,
 //     the operations list's one row, save + reload byte-identical, inch defaults; the bin of an operation with 2 regions unassigns both in ONE undo step.
@@ -20,7 +20,7 @@ import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { deriveCuts } from '#core/stepped-cut.js';
 import { deriveProfileCuts, deriveCutFootprint } from '#core/profile-model.js';
-import { POCKET_CLEARING, planClearing, clearingSettings, passDepths, pocketRings, applyPocketClearing } from '#core/pocket-clearing.js';
+import { POCKET_CLEARING, planClearing, clearingSettings, pocketRings, applyPocketClearing } from '#core/pocket-clearing.js';
 import { CUT_PLAN, cutPlanEntries, keyOf, planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
@@ -55,7 +55,7 @@ const SHAPES = {
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 const outerLoopOf = (st) => { const loops = findLoops(st); return loops.reduce((a, l) => (Math.abs(area(polysOf(st)[l.id])) > Math.abs(area(polysOf(st)[a.id])) ? l : a), loops[0]); };
 function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y; return a / 2; }
-const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, wallAllowance: ALLOW, rasterAngle: 0, passDepth: null, ...more });
+const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, wallAllowance: ALLOW, rasterAngle: 0, ...more });
 const cutsOf = (st, rec) => { const loops = findLoops(st); return deriveCuts({ kind: 'loop', id: outerLoopOf(st).id }, rec, st, loops, polysOf(st), new Set()); };
 const exportOf = (st, rec, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 
@@ -92,12 +92,11 @@ function coverage(name, reg, plan) {
 // ── 1. the rules ──
 const settings = (pattern, more = {}) => ({ ...clearingSettings(POCKET({ clearing: pattern, ...more })), pattern });
 eq([POCKET_CLEARING.stepoverPct.default, POCKET_CLEARING.wallAllowance.mm, POCKET_CLEARING.wallAllowance.in, POCKET_CLEARING.rasterAngle, POCKET_CLEARING.feedMmPerMin], [40, 0.5, 0.508, 0, 1000], 'declared: stepover 40 %, allowance 0.5 mm / 0.02 in, raster 0 deg, the time at 1000 mm/min');
-eq([passDepths(6, null), passDepths(6, 2), passDepths(6, 2.5), passDepths(6, 8), passDepths('unset', 2)], [[6], [2, 4, 6], [2.5, 5, 6], [6], ['unset']], 'depth passes: at most passDepth each, the last at the full depth; unset = one pass');
 const results = {};
 for (const [name, mk] of Object.entries(SHAPES)) {
   const st = mk(), reg = regionOf(st);
-  // Spiral (TASK 749: the rings joined; the wall separate, as 745's finish pass)
-  const conc = planClearing(reg.rings, settings('linked', { wall: 'separate' }));
+  // Spiral (TASK 749: the rings joined; Loop off: the wall is 745's finish pass)
+  const conc = planClearing(reg.rings, settings('linked'));
   results[name] = { conc };
   eq(conc.refused, null, `${name}: Spiral is programmed`);
   const spans = conc.clear.flatMap((c) => c.rings.map((g) => ({ ...g, pts: c.points.slice(g.start, g.end + 1) })));
@@ -173,9 +172,9 @@ ok(results.dumbbell.conc.loops > results.dumbbell.conc.levels, 'dumbbell: the ri
 ok(results.island.conc.loops > results.island.conc.levels, 'island: rings round the island too');
 { // a stepover too big for the bit: the pattern misses material, and says so (100 x 66, 100 %: the last ring leaves a 5 mm strip the 3 mm radius cannot reach)
   const reg = regionOf(polyState([[[0, 0], [100, 0], [100, 66], [0, 66]]]));
-  const big = planClearing(reg.rings, settings('linked', { stepover: 100, wall: 'separate' }));
+  const big = planClearing(reg.rings, settings('linked', { stepover: 100 }));
   ok(big.leftover.missed > POCKET_CLEARING.leftoverTolMm2, `spiral at 100 %: ${big.leftover.missed.toFixed(1)} mm² missed between passes, reported`);
-  near(planClearing(reg.rings, settings('linked', { wall: 'separate' })).leftover.missed, 0, 0.1, 'the same pocket at 40 %: nothing missed');
+  near(planClearing(reg.rings, settings('linked')).leftover.missed, 0, 0.1, 'the same pocket at 40 %: nothing missed');
 }
 console.log('rules: ' + JSON.stringify(Object.fromEntries(Object.entries(results).map(([k, v]) => [k, { rings: v.conc.levels, loops: v.conc.loops, lines: v.conc.lines, rasterPasses: v.ras.passes, turns: v.sp.turns, leftoverMm2: +v.conc.leftover.area.toFixed(2) }]))));
 
@@ -199,18 +198,16 @@ const elementsOf = (svg) => {
   const cuts = deriveProfileCuts({ kind: 'loop', id: outerLoopOf(st).id }, plain, st, findLoops(st), polysOf(st));
   ok(applyPocketClearing(cuts, plain, st) === cuts && applyPocketClearing(cuts, { ...plain, clearing: 'freehand', stepover: 30 }, st) === cuts, 'Freehand: applyPocketClearing returns the SAME array (the derivation is untouched)');
   const svg0 = exportOf(st, plain);
-  eq(exportOf(st, { ...plain, clearing: 'freehand', stepover: 30, wallAllowance: 1, passDepth: 2, rasterAngle: 45 }), svg0, 'Freehand: byte-identical to a record without clearing (the settings never reach the file)');
+  eq(exportOf(st, { ...plain, clearing: 'freehand', stepover: 30, wallAllowance: 1, loop: true, rasterAngle: 45 }), svg0, 'Freehand: byte-identical to a record without clearing (the settings never reach the file)');
   eq(elementsOf(svg0).map((e) => e.cutType), ['pocket'], 'Freehand: one pocket element, as before');
-  // Spiral (wall separate) with 3 depth passes
-  const rec = POCKET({ clearing: 'linked', wall: 'separate', passDepth: 2 });
+  // Spiral (Loop off), ONCE at the full depth (TASK 750: the Origin's Pass Depth / AutoPass makes the step-downs)
+  const rec = POCKET({ clearing: 'linked' });
   const plan = results.island.conc;
   const els = elementsOf(exportOf(st, rec));
   const rings = els.filter((e) => e.cutType === 'online');
-  eq(rings.length, plan.lines * 3, `Spiral x 3 depth passes: its ${plan.lines} lines at each of 2 / 4 / 6 mm`);
-  eq([...new Set(rings.map((e) => e.depth))], ['2.000 mm', '4.000 mm', '6.000 mm'], 'the line set at each pass depth, shallow to deep');
+  eq(rings.length, plan.lines, `Spiral: its ${plan.lines} lines, once`);
+  eq([...new Set(rings.map((e) => e.depth))], ['6.000 mm'], 'the lines at the full depth only');
   ok(rings.every((e) => !/Z$/.test(e.d) && e.tool === '6.000 mm' && e.offset === '0mm'), 'every line is an open on-line path with the card\'s bit (toolDia 6 mm), offset 0');
-  const byDepth = (d) => rings.filter((e) => e.depth === d).map((e) => e.d);
-  eq(byDepth('2.000 mm'), byDepth('6.000 mm'), 'each depth pass repeats the same lines');
   eq(els.slice(-2).map((e) => [e.cutType, e.depth]), [['inside', '6.000 mm'], ['outside', '6.000 mm']], 'last: the wall as an inside cut and the island as an outside cut, at the full depth');
   eq(els.at(-2).d, elementsOf(exportOf(st, plain))[0].d.split(' M ')[0], 'the wall is the pocket\'s own outer loop, exactly as the file writes it');
   // the exported rings are the derivation's: each ring's points = the plan's
@@ -219,7 +216,7 @@ const elementsOf = (svg) => {
   eq(first, planPts, 'the file\'s lines are the derivation\'s lines, point for point (inside out)');
   // the preview copy: data-clear on each element; the download has none
   const pv = elementsOf(exportOf(st, rec, { groupByCut: true, previewData: true }));
-  eq(pv.filter((e) => e.cutType === 'online').map((e) => e.clear), [1, 2, 3].flatMap((p) => plan.clear.map((c) => `linked ${c.index}/${plan.lines} pass ${p}/3`)), 'preview: data-clear "linked k/N pass p/P" (line k of N)');
+  eq(pv.filter((e) => e.cutType === 'online').map((e) => e.clear), plan.clear.map((c) => `linked ${c.index}/${plan.lines}`), 'preview: data-clear "linked k/N" (line k of N)');
   eq(pv.slice(-2).map((e) => e.clear), ['wall', 'island 1/1'], 'preview: "wall", "island 1/1"');
   ok(!/data-/.test(exportOf(st, rec)), 'the download has no data-* attribute');
   // the 3D Review / Prepare: one footprint per cut, the band = the sweep of the cut's own centre path
@@ -276,7 +273,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     h.pick('pocket');
     h.typed('.cut-depth', '6');
     h.typed('.cut-bit', '6');
-    ok(h.shown('clearing') && !h.shown('stepover') && !h.shown('wallAllowance') && !h.shown('passDepth') && !h.shown('rasterAngle'), 'Pocket: the Clearing row, Freehand: no other clearing row');
+    ok(h.shown('clearing') && !h.shown('stepover') && !h.shown('wallAllowance') && !h.shown('loop') && !h.shown('rasterAngle'), 'Pocket: the Clearing row, Freehand: no other clearing row');
     eq([h.q('.cut-clear-cur').textContent, h.note()], ['Freehand', []], 'Freehand by default, no note');
     const kR = keyAt(st, 170, 10), svgFree = shaperSvgOf(st, cutPlanEntries());
     h.pressEl('.cut-clear-trigger');
@@ -287,25 +284,25 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     h.clearing('linked');
     eq(st.history.length, n0 + 1, 'Spiral: ONE undo step');
     const r = CUT_PLAN.get(kR);
-    eq([r.clearing, r.stepover, r.wallAllowance, r.passDepth, r.rasterAngle, r.wall], ['linked', 40, 0.5, null, 0, undefined], 'the defaults: stepover 40 %, allowance 0.5 mm, one pass, raster 0 (no wall field: the wall in the line)');
-    ok(h.shown('stepover') && h.shown('wallAllowance') && h.shown('passDepth') && !h.shown('rasterAngle') && h.shown('wall'), 'Spiral: Stepover, Wall allowance, Depth per pass, Wall (no Raster angle)');
-    eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-wall-allowance').value, h.q('.cut-pass-depth').value, h.q('.cut-pass-depth').placeholder], ['40', '= 2.4 mm', '0.500', '', 'full depth'], 'the fields: 40 % = 2.4 mm, 0.500, depth per pass empty (full depth)');
+    eq([r.clearing, r.stepover, r.wallAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 0, false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster 0 (no depth per pass field)');
+    ok(h.shown('stepover') && h.shown('wallAllowance') && h.shown('loop') && !h.shown('rasterAngle') && !h.q('.cut-pass-depth'), 'Spiral: Stepover, Wall allowance, Loop (no Raster angle, no Depth per pass row)');
+    eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-wall-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.500', false], 'the fields: 40 % = 2.4 mm, 0.500, depth per pass empty (full depth)');
     const nt = h.note();
     console.log('card note: ' + JSON.stringify(nt));
-    ok(/^Pocket: spiral, 12 turns \+ wall in 1 line, stepover 2\.4 mm, \d+\.\d m of path, about \d+ min at 1000 mm\/min$/.test(nt[0]), 'the note: turns + wall in 1 line, stepover, path length, time at the declared feed: ' + nt[0]);
+    ok(/^Pocket: spiral, 12 turns in 1 line \+ wall, stepover 2\.4 mm, \d+\.\d m of path, about \d+ min at 1000 mm\/min$/.test(nt[0]), 'the note: turns in 1 line + wall, stepover, path length, time at the declared feed: ' + nt[0]);
     eq(nt[1], 'Drawn for a 6 mm bit: a smaller bit leaves ridges', 'the note names the bit the rings are drawn for');
-    eq(nt[2], 'Wall cut in the same line: exact for a 6 mm bit only', 'the note: the wall in the line is exact for the card\'s bit only');
+    eq(nt[2], 'Depth passes: set Pass Depth or AutoPass on the Origin', 'the note: the step-downs are the Origin\'s (TASK 750)');
     ok(/^Leftover: 7\.\d mm² not reached by a 6 mm bit \(sharp inside corners, necks narrower than the bit\)$/.test(nt[3]), 'the leftover (the 4 corners): ' + nt[3]);
     ok(h.q('.cut-note .cut-note-warn') && h.q('.cut-note .cut-note-warn').textContent.startsWith('7.'), 'the leftover is in the warning colour');
     const els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
-    eq(els.map((e) => e.cutType), ['online'], 'the download: ONE on-line path (the 12 turns + the wall in one line)');
+    eq(els.map((e) => e.cutType), ['online', 'inside'], 'the download: ONE on-line path (the 12 turns) + the wall');
     // the stepper: + 5 % -> 45 %, ONE undo step, the rings redraw
     n0 = st.history.length;
     h.step('stepover', 1);
     eq([CUT_PLAN.get(kR).stepover, st.history.length], [45, n0 + 1], 'stepover + -> 45 %, ONE undo step');
-    ok(/^Pocket: spiral, 10 turns \+ wall in 1 line, stepover 2\.7 mm/.test(h.note()[0]), 'the note follows: ' + h.note()[0]);
+    ok(/^Pocket: spiral, 10 turns in 1 line \+ wall, stepover 2\.7 mm/.test(h.note()[0]), 'the note follows: ' + h.note()[0]);
     h.typed('.cut-bit', '3.175');
-    ok(/^Pocket: spiral, \d+ turns \+ wall in 1 line, stepover 1\.43 mm/.test(h.note()[0]) && h.note()[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
+    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 1\.43 mm/.test(h.note()[0]) && h.note()[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
     app.undo();
     eq(CUT_PLAN.get(kR).toolDia, 6, 'undo: the bit back to 6 mm');
     // Raster: + its angle row; presets
@@ -317,15 +314,10 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     eq(CUT_PLAN.get(kR).rasterAngle, 45, 'preset 45');
     ok(/^Pocket: raster 45°/.test(h.note()[0]), 'the note follows the angle');
     // depth per pass
-    h.typed('.cut-pass-depth', '2');
-    eq(CUT_PLAN.get(kR).passDepth, 2, 'depth per pass 2 mm');
-    ok(h.note().some((t) => t === 'Depth passes at 2 · 4 · 6 mm; the wall at the full depth') && /× 3 depth passes \+ wall/.test(h.note()[0]), 'the note lists the depth passes');
-    h.typed('.cut-pass-depth', '');
-    eq(CUT_PLAN.get(kR).passDepth, null, 'empty = one pass at the full depth');
     // the spiral
-    ok(!h.shown('wall'), 'Raster: no Wall row (the separate wall)');
+    ok(h.shown('loop'), 'Raster: the Loop row too');
     h.clearing('morphed');
-    ok(/^Pocket: morphed spiral: \d+ turns \+ wall/.test(h.note()[0]) && !h.shown('rasterAngle') && !h.shown('wall'), 'Morphed spiral: its note, no angle row, no Wall row');
+    ok(/^Pocket: morphed spiral: \d+ turns \+ wall/.test(h.note()[0]) && !h.shown('rasterAngle') && h.shown('loop'), 'Morphed spiral: its note, no angle row, the Loop row');
     // the island pocket: the spiral greyed with its reason
     h.clickAt(5, 5);
     h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
@@ -339,7 +331,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     // the operations list: ONE row per programmed pocket
     const list = h.ops();
     console.log('ops: ' + JSON.stringify(list));
-    ok(list.some((t) => /^Pocket \(spiral\) · 6 mm \| 1 region · spiral, 14 turns \+ wall in 3 lines \(the pocket has islands\)$/.test(t)) && list.some((t) => /^Pocket \(morphed spiral\) · 6 mm \| 1 region · morphed spiral: \d+ turns \+ wall$/.test(t)), 'the operations list: ONE row per programmed pocket with its clearing');
+    ok(list.some((t) => /^Pocket \(spiral\) · 6 mm \| 1 region · spiral, 14 turns in 3 lines \(the pocket has islands\) \+ wall$/.test(t)) && list.some((t) => /^Pocket \(morphed spiral\) · 6 mm \| 1 region · morphed spiral: \d+ turns \+ wall$/.test(t)), 'the operations list: ONE row per programmed pocket with its clearing');
     // the 3D Review: every cut at its own depth
     const items = planReliefItems(st);
     ok(items.length > 2 && items.every((i) => i.cutDepth === 6), `Review: ${items.length} items (the spiral, the rings, walls, the island), all at 6 mm`);
@@ -405,7 +397,7 @@ CUT_PLAN.clear(); setOpOrder([]);
     eq(r.wallAllowance, 0.508, 'inches: the allowance default 0.02 in (0.508 mm)');
     eq(r.stepover, 45, 'the last stepover set (45 %, above) is used by the next pocket');
     eq(h.q('.cut-wall-allowance').value, '0.020', 'shown as 0.020 in');
-    ok(/^Pocket: spiral, \d+ turns \+ wall in 1 line, stepover 0\.1125 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[0]), 'the inch note: ' + h.note()[0]);
+    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 0\.1125 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[0]), 'the inch note: ' + h.note()[0]);
     ok(/^Leftover: 0\.\d+ in² not reached by a 0\.25 in bit/.test(h.note().at(-1)), 'the inch leftover: ' + h.note().at(-1));
   } finally { await app.close(); SettingsManager.set('DOC_UNIT', 'mm'); }
 }

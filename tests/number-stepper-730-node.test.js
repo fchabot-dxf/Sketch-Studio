@@ -50,7 +50,7 @@ try {
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   eq([...doc.querySelectorAll('.cut-card .cut-step')].map((b) => b.getAttribute('aria-label')),
-    ['Decrease depth', 'Increase depth', 'Decrease stepover', 'Increase stepover', 'Decrease wall allowance', 'Increase wall allowance', 'Decrease depth per pass', 'Increase depth per pass', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type)
+    ['Decrease depth', 'Increase depth', 'Decrease stepover', 'Increase stepover', 'Decrease wall allowance', 'Increase wall allowance', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type)
       'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution',
       'Decrease tab count', 'Increase tab count', 'Decrease tab width', 'Increase tab width', 'Decrease thickness', 'Increase thickness', // TASK 742: the Hold part rows (hidden for a stepped type)
       'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],

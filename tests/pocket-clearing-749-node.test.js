@@ -1,15 +1,14 @@
 // tests/pocket-clearing-749-node.test.js — TASK 749: the Shaper pocket's SPIRAL (#core/pocket-clearing.js 'linked'): 745's concentric rings traversed inside
-// out as ONE open on-line path per chain of rings, a straight LINK from the end of each ring to the nearest point of the next ring out; and (owner turns
-// 2202-2203) its WALL IN THE SAME LINE (record field `wall`: 'inline', the default | 'separate' = 745's finish pass, the Origin's inside cut).
-//  1. rectangle, L, circle, island pocket, dumbbell (bit 6 mm, stepover 40 %, allowance 0.5 mm), wall separate: the lines (1 / 1 / 1 / 3 / 2: one per chain);
+// out as ONE open on-line path per chain of rings, a straight LINK from the end of each ring to the nearest point of the next ring out. (749's "wall in the
+// same line" became TASK 750's Loop: tests/pocket-clearing-750-node.test.js; Loop off here.)
+//  1. rectangle, L, circle, island pocket, dumbbell (bit 6 mm, stepover 40 %, allowance 0.5 mm): the lines (1 / 1 / 1 / 3 / 2: one per chain);
 //     every ring of an independent computation (the region offset by r + a + k s with #core/plot/clip.js) is ONE full loop of one line, each once; inside
 //     out; every LINK lies inside the region of its outer ring (so inside the inset region: never across the wall or an island) and is one stepover long
 //     within the stated bound (s - 0.02 <= |link| <= s + 0.02 mm); the swept area == the separate rings' swept area (+ the finish pass); the leftover ==
 //     origin/main's Concentric leftover on the same fixture (tests/fixtures/pocket-clearing-749-main.json); the coverage on a 0.5 mm grid.
-//  2. the wall IN THE SAME LINE: the line = the separate line + a link of the allowance + ONE full turn at exactly r from the wall (0.01 mm), the turn before
-//     it at r + a; the island's turn joined (island pocket), the leftover == what the separate inside cut leaves; allowance 0: the last ring IS the turn (not
-//     written twice); the export: no inside / outside element, ONE on-line path per line per depth pass; separate: the lines + the wall / island cuts as 745.
-//  3. Freehand / Raster / Morphed spiral downloads byte-identical to origin/main's (md5 of 120 downloads in the fixture, from main's own exporter).
+//  2. (moved to pocket-clearing-750-node: the Loop.) The export: the lines once at the full depth, then the wall / island cuts as 745.
+//  3. Freehand / Raster / Morphed spiral downloads byte-identical to origin/main's (md5 of 120 downloads in the fixture, from main's own exporter); TASK 750:
+//     a record that still says passDepth 2.5 exports as main's one-pass download (no depth per pass: the clearing once, at the full depth).
 //  4. an old document ('concentric' / 'spiral' and the stored operation order) opens as 'linked' / 'morphed' (apps/shaper/src/shaper-doc.js, the one read),
 //     its operation order kept, its export == the same document authored with the new values.
 import assert from 'node:assert';
@@ -55,7 +54,7 @@ const LINES = { rectangle: 1, L: 1, circle: 1, island: 3, dumbbell: 2 };
 function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y; return a / 2; }
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 const outerLoopOf = (st) => { const loops = findLoops(st), lp = polysOf(st); return loops.reduce((a, l) => (Math.abs(area(lp[l.id])) > Math.abs(area(lp[a.id])) ? l : a), loops[0]); };
-const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, wallAllowance: ALLOW, rasterAngle: 0, passDepth: null, ...more });
+const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, wallAllowance: ALLOW, rasterAngle: 0, ...more });
 const exportOf = (st, rec, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 const plan = (reg, more) => planClearing(reg.rings, clearingSettings(POCKET({ clearing: 'linked', ...more })));
 const distSeg = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy; const t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)) : 0; return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
@@ -93,10 +92,10 @@ const elementsOf = (svg) => {
 const dPts = (d) => d.replace(/[MLZ]/g, ' ').trim().split(/\s+/).map(Number);
 const ptsD = (pts) => pts.flatMap((p) => [Math.round(p.x * 1e4) / 1e4, Math.round(p.y * 1e4) / 1e4]);
 
-// ── 1. the Spiral (wall separate) ──
+// ── 1. the Spiral (Loop off) ──
 const measured = {};
 for (const [name, mk] of Object.entries(SHAPES)) {
-  const st = mk(), reg = regionOf(st), pl = plan(reg, { wall: 'separate' });
+  const st = mk(), reg = regionOf(st), pl = plan(reg, {});
   eq([pl.refused, pl.lines, pl.clear.length], [null, LINES[name], LINES[name]], `${name}: ${LINES[name]} line(s): one per chain of rings`);
   eq(pl.linesWhy, LINES[name] === 1 ? null : name === 'island' ? 'islands' : 'splits', `${name}: why several lines`);
   ok(pl.clear.every((c) => c.role === 'linked' && !c.closed), `${name}: every line is an open path`);
@@ -154,59 +153,18 @@ for (const [name, mk] of Object.entries(SHAPES)) {
 }
 console.log('spiral: ' + JSON.stringify(measured));
 
-// ── 2. the wall in the same line ──
-{
-  const inlineMeasured = {};
-  for (const [name, mk] of Object.entries(SHAPES)) {
-    const st = mk(), reg = regionOf(st);
-    const sep = plan(reg, { wall: 'separate' }), inl = plan(reg, {}), inl0 = plan(reg, { wallAllowance: 0 }), sep0 = plan(reg, { wallAllowance: 0, wall: 'separate' });
-    eq([clearingSettings(POCKET({ clearing: 'linked' })).wall, inl.wallInline, sep.wallInline], ['inline', true, false], `${name}: the wall in the same line is the Spiral's default`);
-    eq(inl.lines, sep.lines, `${name}: the same number of lines`);
-    const fin = spansOf(inl).filter((g) => g.finish);
-    const turnsAtR = ringsOf(reg, R).out[0].length; // the contours of the region inset by exactly r: the wall's turn(s) and each island's
-    ok(fin.length === turnsAtR && fin.every((g) => g.level === -1), `${name}: one finish turn per contour at r (${fin.length} of ${turnsAtR}), one level outside ring 0`);
-    let worstF = 0; for (const g of fin) for (const p of g.pts) worstF = Math.max(worstF, Math.abs(reg.dist(p) - R));
-    ok(worstF <= 0.01, `${name}: the finish turn is the region inset by exactly the bit radius (worst ${worstF.toFixed(5)} mm)`);
-    // a finish turn follows a ring-0 ring of the same line (the turn before it at r + a) unless no line reaches it (a line of its own: that one turn)
-    for (const c of inl.clear) c.rings.forEach((g, i) => { if (g.finish && i > 0) { eq(c.rings[i - 1].level, 0, `${name}: the turn before the finish turn is ring 0`); let w = 0; for (const p of c.points.slice(c.rings[i - 1].start, c.rings[i - 1].end + 1)) w = Math.max(w, Math.abs(reg.dist(p) - D0)); ok(w <= 0.01, `${name}: ring 0 at r + allowance (worst ${w.toFixed(5)})`); } });
-    const finLinks = linksOf(inl).filter((l) => l.outer.finish);
-    ok(finLinks.every((l) => Math.abs(Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) - ALLOW) <= LINK_TOL), `${name}: the link to the finish turn is the allowance long (${finLinks.map((l) => Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y).toFixed(4))})`);
-    // each separate line is a prefix of its inline line (the same turns, then the link and the finish turn)
-    const prefixes = sep.clear.filter((c) => inl.clear.some((d) => d.points.length > c.points.length && c.points.every((p, i) => p.x === d.points[i].x && p.y === d.points[i].y)));
-    ok(prefixes.length >= 1, `${name}: the inline line = the separate line + the link + the finish turn (${prefixes.length} of ${sep.clear.length} lines)`);
-    if (name === 'island') eq(inl.clear.map((c) => c.rings.at(-1).finish), [false, true, true], 'island: the island\'s turn is in the line of the rings round the island; the wall\'s in the outer line; the line that ends deeper stays as it was');
-    // coverage: the finish turns sweep what the separate finish pass sweeps: the same leftover
-    near(inl.leftover.area, sep.leftover.area, 0.01, `${name}: the leftover == what the separate inside cut leaves for the same bit`);
-    eq(inl.finishLength, 0, `${name}: no separate finish pass length`);
-    // allowance 0: the last ring IS the finish turn (not written twice)
-    eq(spansOf(inl0).length, sep0.loops, `${name}: allowance 0: no extra turn (${sep0.loops} loops)`);
-    ok(spansOf(inl0).filter((g) => g.finish).every((g) => g.level === 0) && spansOf(inl0).some((g) => g.finish), `${name}: allowance 0: ring 0 is the finish turn`);
-    // the export: no inside / outside element, ONE on-line path per line per depth pass
-    const els = elementsOf(exportOf(st, POCKET({ clearing: 'linked', passDepth: 2 })));
-    eq(els.map((e) => e.cutType), Array(inl.lines * 3).fill('online'), `${name}: inline: ${inl.lines} on-line path(s) per depth pass x 3, no wall / island element`);
-    const byDepth = (d) => els.filter((e) => e.depth === d).map((e) => e.d);
-    eq([byDepth('2.000 mm'), byDepth('4.000 mm')], [byDepth('6.000 mm'), byDepth('6.000 mm')], `${name}: each depth pass repeats the same lines`);
-    eq(byDepth('6.000 mm').map(dPts), inl.clear.map((c) => ptsD(c.points)), `${name}: the file's paths are the derivation's lines, point for point`);
-    ok(els.every((e) => !/Z$/.test(e.d) && e.tool === '6.000 mm' && e.offset === '0mm'), `${name}: open on-line paths, the card's bit, offset 0`);
-    // separate: the lines + the wall (inside) and islands (outside) as 745 wrote them
-    const sepEls = elementsOf(exportOf(st, POCKET({ clearing: 'linked', wall: 'separate' })));
-    const free = elementsOf(exportOf(st, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT }))[0];
-    eq(sepEls.map((e) => e.cutType), [...Array(sep.lines).fill('online'), 'inside', ...reg.holes.map(() => 'outside')], `${name}: separate: the lines, then the wall and the islands`);
-    eq(sepEls.filter((e) => e.cutType === 'online').map((e) => dPts(e.d)), sep.clear.map((c) => ptsD(c.points)), `${name}: separate: its lines = the derivation's (no finish turn)`);
-    eq(sepEls.find((e) => e.cutType === 'inside').d, free.d ? free.d.split(' M ')[0] : null, `${name}: separate: the wall is the pocket's own outer loop, as 745 (a circle: its circle element)`);
-    inlineMeasured[name] = { lines: inl.lines, finishTurns: fin.length, finishLinks: finLinks.map((l) => +Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y).toFixed(4)), leftover: +inl.leftover.area.toFixed(4) };
-  }
-  console.log('wall in the line: ' + JSON.stringify(inlineMeasured));
-}
-
 // ── 3. Freehand / Raster / Morphed spiral: byte-identical to origin/main ──
 {
   const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
   let n = 0;
   for (const [key, want] of Object.entries(MAIN.exports)) {
     const [name, pat, more, okey] = key.split('|');
-    const svg = exportOf(SHAPES[name](), POCKET({ clearing: pat, ...JSON.parse(more) }), okey === 'grouped' ? { groupByCut: true } : {});
-    eq(md5(svg), want, `${key}: byte-identical to origin/main`);
+    const m = JSON.parse(more);
+    const svg = exportOf(SHAPES[name](), POCKET({ clearing: pat, ...m }), okey === 'grouped' ? { groupByCut: true } : {});
+    if (m.passDepth > 0) { // TASK 750: no depth per pass: the record's passDepth is ignored, the download = main's ONE-pass download of the same record
+      const one = MAIN.exports[[name, pat, JSON.stringify({ ...m, passDepth: null }), okey].join('|')];
+      eq(md5(svg), one, `${key}: = main's one-pass download (no stacked copies)`);
+    } else eq(md5(svg), want, `${key}: byte-identical to origin/main`);
     n++;
   }
   console.log(`byte-identical to origin/main ${MAIN.from}: ${n} downloads (Freehand, Raster 0/45/90/30, Morphed spiral; 5 fixtures; 1 or 3 depth passes)`);
@@ -221,7 +179,7 @@ console.log('spiral: ' + JSON.stringify(measured));
   const scratch = createSketchState();
   deserializeDocument({ version: 3, geometry: { joints, shapes, constraints: [] } }, scratch);
   const loopOf = (prefix) => findLoops(scratch).find((l) => l.edges.includes(prefix + 's0')).id;
-  const recs = { A: POCKET({ clearing: 'linked' }), L: POCKET({ clearing: 'morphed' }), B: POCKET({ clearing: 'linked', wall: 'separate', toolDia: 3.175 }) };
+  const recs = { A: POCKET({ clearing: 'linked' }), L: POCKET({ clearing: 'morphed' }), B: POCKET({ clearing: 'linked', toolDia: 3.175 }) };
   const keysNew = Object.values(recs).map(opKeyOf).reverse(); // a stored order the user set (not the default)
   const doc = (recOf, keys) => JSON.parse(JSON.stringify({
     version: 3,
@@ -244,7 +202,7 @@ console.log('spiral: ' + JSON.stringify(measured));
   eq(seen.old.clearing, { A: 'linked', L: 'morphed', B: 'linked' }, 'the old document opens with concentric -> linked (Spiral), spiral -> morphed (Morphed spiral)');
   eq(seen.old.order, keysNew, 'its stored operation order is mapped the same way (the user\'s order is kept)');
   eq(seen.old.svg, seen.new.svg, 'its export == the same document authored with the new values (byte for byte)');
-  ok(elementsOf(seen.new.svg).filter((e) => e.cutType === 'inside').length === 2, 'that export: the morphed pocket\'s and the separate Spiral\'s walls are inside cuts; the inline Spiral has none');
+  ok(elementsOf(seen.new.svg).filter((e) => e.cutType === 'inside').length === 3, 'that export: each pocket\'s wall is an inside cut (Loop off)');
   CUT_PLAN.clear(); setOpOrder([]);
 }
 console.log(`pocket-clearing-749-node.test.js: ok (${checks} checks)`);

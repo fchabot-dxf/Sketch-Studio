@@ -114,16 +114,16 @@ export function planHoldNotes(state, plan = CUT_PLAN) {
   return out;
 }
 
-// TASK 745: the PROGRAMMED POCKET. The last stepover / wall allowance / depth per pass / raster angle set on any record are the next record's when its Clearing
-// is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; depth per pass empty =
-// one pass at the full depth). A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
-let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastPassDepthV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle;
+// TASK 745: the PROGRAMMED POCKET. The last stepover / wall allowance / raster angle / Loop (TASK 750) set on any record are the next record's when its
+// Clearing is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; Loop off).
+// A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
+let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle, lastLoopV = false;
 export const lastStepover = () => lastStepoverV;
 export function rememberStepover(pct) { const n = Number(pct); if (n > 0) lastStepoverV = n; return lastStepoverV; }
 export const lastWallAllowance = () => lastAllowanceV ?? allowanceDefault(docUnit());
 export function rememberWallAllowance(mm) { const n = Number(mm); if (Number.isFinite(n) && n >= 0) lastAllowanceV = n; return lastWallAllowance(); }
-export const lastPassDepth = () => lastPassDepthV;
-export function rememberPassDepth(mm) { lastPassDepthV = Number(mm) > 0 ? Number(mm) : null; return lastPassDepthV; }
+export const lastLoop = () => lastLoopV;
+export function rememberLoop(on) { lastLoopV = on === true; return lastLoopV; }
 export const lastRasterAngle = () => lastRasterAngleV;
 export function rememberRasterAngle(deg) { const n = Number(deg); if (Number.isFinite(n)) lastRasterAngleV = n; return lastRasterAngleV; }
 
@@ -153,22 +153,25 @@ export const CLEARING_REFUSED = {
   splits: 'splits at a neck narrower than the bit: use Spiral or Raster',
   'morphed islands': 'has islands: use Spiral or Raster',
   'morphed splits': 'splits at a neck narrower than the bit: use Spiral or Raster',
+  'raster join': 'a raster pass cannot be joined to the next inside the pocket; cut as open passes + the wall',
   'islands close': 'an island is closer to the wall or to another island than the bit: the finish pass would cut it',
   'bit too big': 'the bit does not fit in the pocket',
   'no bit': 'set a bit diameter',
   outline: 'the outline could not be read',
 };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-/** TASK 745: a pocket's clearing in a few words: "spiral, 12 turns + wall in 1 line" (TASK 749: the wall in the same line; "spiral, 12 turns in 1 line + wall"
- *  with the separate wall; several lines say why: "spiral, 14 turns in 3 lines (the pocket has islands) + wall"), "raster 0°: 22 passes + 1 ring + wall",
- *  "morphed spiral: 13 turns + wall" (x depth passes). */
+/** TASK 745: a pocket's clearing in a few words: "spiral, 12 turns in 1 line + wall" (TASK 749; several lines say why: "spiral, 14 turns in 3 lines (the
+ *  pocket has islands) + wall"), "raster 0°: 22 passes + 1 ring + wall", "morphed spiral: 13 turns + wall"; TASK 750 Loop on: the turns + wall, then
+ *  "one closed loop, ends where it starts" ("3 closed loops (the pocket has islands), each ends where it starts"). */
 const LINES_WHY = { splits: ' (the pocket narrows)', islands: ' (the pocket has islands)' };
 export function clearingWords(sum) {
   if (!sum || sum.refused) return null;
   const what = sum.pattern === 'raster' ? `raster ${Number(sum.settings.angle)}°: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
     : sum.pattern === 'morphed' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}`
-    : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.wallInline ? ' + wall' : ''} in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`;
-  return `${what}${sum.depths.length > 1 ? ` × ${sum.depths.length} depth passes` : ''}${sum.wallInline ? '' : ' + wall'}`;
+    : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.loop ? '' : ` in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`}`;
+  if (!sum.loop) return `${what} + wall`;
+  const why = sum.linesWhy && sum.loopCount > 1 ? LINES_WHY[sum.linesWhy] : '';
+  return `${what} + wall: ${sum.loopCount === 1 ? 'one closed loop, ends where it starts' : `${sum.loopCount} closed loops${why}, each ends where it starts`}`;
 }
 // an area (mm²) in the document unit's area: mm² (under 1 cm²) / cm², or in²
 export function areaText(mm2, u) {
@@ -191,14 +194,15 @@ export function clearingNoteItems(storedRec, sum) {
     return [{ text, warn: text.slice('Pocket: '.length), title: 'the clearing is not programmed: the Origin clears this pocket by hand' }];
   }
   const st = sum.settings, bit = `${lengthText(st.toolDia, { unit: u, auto: u === 'in' ? 4 : 3, trim: 'always', show: 'field' })} ${u}`; // the bit as its field shows it (3.175 mm, not 3.17)
-  const total = sum.length * sum.depths.length + (sum.finishLength || 0);
+  const total = sum.length + (sum.finishLength || 0);
   const pathWords = u === 'in' ? `${(total / 304.8).toFixed(1)} ft` : `${(total / 1000).toFixed(1)} m`;
   const feed = u === 'in' ? `${Math.round(POCKET_CLEARING.feedMmPerMin / 25.4)} in/min` : `${POCKET_CLEARING.feedMmPerMin} mm/min`;
   const minutes = total / POCKET_CLEARING.feedMmPerMin;
   const items = [{ text: `Pocket: ${clearingWords(sum)}, stepover ${f(st.stepover)} ${u}, ${pathWords} of path, about ${minutes < 1 ? 1 : Math.round(minutes)} min at ${feed}` }];
-  if (sum.depths.length > 1) items.push({ text: `Depth passes at ${sum.depths.map((d) => f(d)).join(' · ')} ${u}; ${sum.wallInline ? 'the wall in the line at each pass' : 'the wall at the full depth'}` });
   if (sum.clear.length) items.push({ text: `Drawn for a ${bit} bit: a smaller bit leaves ridges` });
-  if (sum.wallInline) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only` }); // TASK 749: the Origin does not offset an on-line path
+  if (sum.loop) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only` }); // TASK 750: the Origin does not offset an on-line path
+  if (sum.loopRefused) { const t = `Loop refused: ${CLEARING_REFUSED[sum.loopRefused] || sum.loopRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut with open paths + the Origin\'s inside cut on the wall' }); }
+  items.push({ text: 'Depth passes: set Pass Depth or AutoPass on the Origin' }); // TASK 750: the clearing is written once, at the full depth
   const lo = sum.leftover;
   if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {
     let t = `${areaText(lo.area, u)} not reached by a ${bit} bit`;

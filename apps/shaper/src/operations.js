@@ -80,7 +80,7 @@ export function settingsOf(rec) {
   if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), thickness: round6(rec.holdThickness) };
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
   const pat = clearingPattern(eff); // TASK 745: a programmed pocket's clearing and the values it is computed with (Freehand adds nothing: the key is the one before 745)
-  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), passDepth: c.passDepth == null ? null : round6(c.passDepth), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(pat === 'linked' && c.wall === 'separate' ? { wall: 'separate' } : {}) }; } // TASK 749: the Spiral's separate wall (the default, in the line, adds nothing)
+  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true } : {}) }; } // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing)
   return s;
 }
 

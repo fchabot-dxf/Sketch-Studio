@@ -41,10 +41,11 @@ const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 // (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one derivation (deriveCuts).
 const HOLD_PARAMS = ['holdPart', 'tabCount', 'tabWidth', 'holdThickness'];
 // TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js): the plain Pocket declares its card rows: `clearing` (Freehand | Spiral | Raster | Morphed
-// spiral; TASK 749: Spiral replaced Concentric) and for a computed pattern `stepover` (% of the bit), `wallAllowance`, `passDepth` (empty = one pass at the full depth) and, for Raster, `rasterAngle`.
+// spiral; TASK 749: Spiral replaced Concentric) and for a computed pattern `stepover` (% of the bit), `wallAllowance`, `loop` (TASK 750: the whole pocket as closed loops,
+// the finish turn in them; the step-downs are the Origin's Pass Depth / AutoPass) and, for Raster, `rasterAngle`.
 // Never written to the export as attributes (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one
 // derivation (deriveCuts), which writes a programmed pocket as on-line paths + the finish pass (an inside cut, islands as outside cuts).
-const CLEARING_PARAMS = ['clearing', 'stepover', 'wallAllowance', 'passDepth', 'rasterAngle', 'wall']; // TASK 749: `wall` = the Spiral's finish pass: 'inline' (default) | 'separate'
+const CLEARING_PARAMS = ['clearing', 'stepover', 'wallAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern
 // TASK 743: `opRank` = where an OPERATION of this type goes in the DEFAULT operation order (apps/shaper/src/operations.js), lowest first: what is not cut
 // (Guide, Stock: 0), then on line (1), pockets (2), inside cuts = the holes (3), and last the outside cuts that free the part (4). A stepped type ranks as
 // its plain type (it is cut as terraces of it). Prepare only: never written to the export.

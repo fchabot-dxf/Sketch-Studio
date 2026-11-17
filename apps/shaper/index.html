@@ -277,6 +277,8 @@
     /* TASK 745: a programmed pocket in Prepare: its clearing paths as thin tool-path lines (the clean-up ring dashed), the material the bit does not reach filled */
     .sk-clear-path { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; stroke-opacity: 0.9; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
     .sk-clear-path.sk-clear-cleanup { stroke-dasharray: 4 2; }
+    /* TASK 750: a closed loop (Loop on) and where it starts and ends */
+    .sk-clear-start { fill: var(--sk-prep-path); stroke: #000; stroke-width: 1; vector-effect: non-scaling-stroke; }
     .sk-leftover { fill: var(--sk-prep-leftover); stroke: var(--sk-prep-leftover); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .sk-chip-bg { fill: var(--sk-prep-chip-bg); }
     .sk-chip-text { fill: var(--sk-prep-chip-text); font-family: system-ui, sans-serif; font-size: 11px; }
@@ -400,11 +402,6 @@
     .cut-row[data-row="holdPart"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
-    /* TASK 749: the Spiral's Wall: In the same line | Separate (Origin's inside cut): one choice per line (the labels are long), 44 px on a phone */
-    .cut-row[data-row="wall"] .cut-presets { grid-template-columns: 1fr; margin-top: 0; }
-    .cut-row[data-row="wall"] .cut-presets .cut-preset { font-size: 12px; padding: 0 10px; justify-content: flex-start; white-space: nowrap; background: var(--sk-prep-field-bg); }
-    .cut-row[data-row="wall"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
-    @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="wall"] .cut-presets .cut-preset { height: 44px; } }
     .cut-presets.cut-in-box { display: flex; margin: 0; height: 100%; flex: 0 0 auto; }
     .cut-presets.cut-in-box .cut-preset { height: 100%; padding: 0 10px; font-size: 12px; border-radius: 0; }
     /* popovers: LEFT of the card, blue 2px border, 14px radius (cut type / offset presets / cutter shape) */

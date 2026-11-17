@@ -21,9 +21,14 @@ export function mountAppChrome({
   let header = null;
   let sidebar = null;
 
+  // TASK 737: the shown stage is also named on <html data-sk-stage="...">, so a host's CSS DECLARES per stage the surface directly below the document tab strip
+  // (--sk-doctab-surface, document-tabs.js: the active tab takes that colour and joins it). Every host switches its stage through here.
+  const markStage = (id) => { if (id != null && typeof document !== 'undefined' && document.documentElement) document.documentElement.dataset.skStage = id; };
+
   const setActiveStage = (id) => {
     if (header) header.setActiveTab(id);
     if (sidebar) sidebar.setActiveStage(id);
+    markStage(id);
   };
 
   const selectStage = (id) => {
@@ -32,6 +37,7 @@ export function mountAppChrome({
   };
 
   const initial = activeStage ?? (stages[0] && stages[0].id) ?? null;
+  markStage(initial);
 
   sidebar = mountProjectSidebar({
     appId,

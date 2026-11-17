@@ -185,6 +185,61 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   eq([st.shapes.length, st.constraints.length, findLoops(st).length], [nShapes + 1, nCons + 3, 3], '6: redo closes both again');
 }
 
+// ── 6b. TASK 760b, the group rule: a chain reached only through a group holding other curves (a whole imported file) is closed only when near-closed
+{
+  const build = (plateGap) => {
+    const st = newSketchState();
+    const plate = polyline(st, [[0, 0], [30, 0], [30, 20], [0, 20], [0, plateGap]], false);
+    const z1 = polyline(st, [[0, 40], [10, 50], [20, 40], [30, 52]], false); // two engraving zigzags (gaps about 31 mm and 20 mm)
+    const z2 = polyline(st, [[0, 60], [10, 70], [20, 60]], false);
+    const shapes = [...plate, ...z1, ...z2].map((x) => st.shapes.find((y) => y.id === x.id));
+    groupImported(st, shapes, { fileName: 'file' });
+    return { st, plate, z1, z2, all: shapes.map((x) => x.id) };
+  };
+  // the whole file selected (a click on the art with nothing entered): only the near-closed plate closes, ONE undo step
+  {
+    const { st, plate, z1, z2, all } = build(0.08);
+    for (const id of all) st.selectedShapes.add(id);
+    const n = { s: st.shapes.length, h: st.history.length };
+    const res = run(st, all);
+    eq([res.closed.length, res.leftOpen.length, res.refused.length], [1, 2, 0], '6b: file group: the plate closed, the two engraving lines left open');
+    eq([st.shapes.length, st.history.length], [n.s + 1, n.h + 1], '6b: one line, ONE undo step');
+    ok(loopOf(st, [...plate.map((x) => x.id), st.shapes[st.shapes.length - 1].id]), '6b: the plate is a loop');
+    eq(openChainEnds(st).length, 4, '6b: both zigzags keep their two free ends');
+    eq(lastNote().m, 'Close path: Closed 1 outline · 2 open paths left open (click one with Close path to close it)', '6b: the notice says what was closed and left');
+    void z1; void z2;
+  }
+  // the whole file, nothing near-closed: nothing changes, the notice says so
+  {
+    const { st, all } = build(5);
+    for (const id of all) st.selectedShapes.add(id);
+    const n = { s: st.shapes.length, h: st.history.length };
+    const res = run(st, all);
+    eq([res.closed.length, res.leftOpen.length, st.shapes.length, st.history.length], [0, 3, n.s, n.h], '6b: nothing near-closed: nothing changes, no undo step');
+    eq(lastNote().m, 'Close path: Nothing near-closed in the selected group · 3 open paths left open (click one with Close path to close it)', '6b: the notice');
+  }
+  // a single chain picked directly (the tool's click, or its own group selected inside the entered file): closed with a line, its gap 30 mm
+  {
+    const { st, z1 } = build(5);
+    const r1 = run(st, [z1[1].id]); // the Close path tool's click on one zigzag line
+    eq([r1.closed.length, r1.closed[0] && r1.closed[0].mode], [1, 'line'], '6b: a click on one zigzag closes it with a line');
+    const b = build(5);
+    const zg = b.st.shapes.find((x) => x.id === b.z2[0].id).userGroupId;
+    b.st.enteredGroupId = b.st.groups.find((g) => g.id === zg).parentId; // inside the file: the zigzag's own group is the unit
+    const ids = b.z2.map((x) => x.id);
+    for (const id of ids) b.st.selectedShapes.add(id);
+    const r2 = run(b.st, ids);
+    eq([r2.closed.length, r2.leftOpen.length], [1, 0], "6b: the zigzag's own group selected (inside the file): closed with a line");
+  }
+  // two far-gap chains selected individually (no group): both closed
+  {
+    const st = newSketchState();
+    const a = polyline(st, [[0, 0], [10, 10], [20, 0]], false), b = polyline(st, [[40, 0], [50, 10], [60, 0]], false);
+    const res = run(st, [a[0].id, b[0].id]);
+    eq([res.closed.length, res.leftOpen.length], [2, 0], '6b: two far-gap chains picked individually: both closed');
+  }
+}
+
 // ── 7. the markers' source: the active sketch's open ends only
 {
   const st = newSketchState();

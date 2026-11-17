@@ -18,6 +18,11 @@
 // topologically (no free end left) and not checked against findLoops.
 // Refused, with the reason: a circle (always closed), a chain already closed, a chain that branches, a single straight line (nothing to enclose).
 //
+// TASK 760b, WHAT A COMMAND CLOSES (planCommandClose, the ONE rule every entry runs): a chain gets an added LINE (a gap above the near-closed
+// tolerance) only when the user picked THAT chain: its own curves, or a whole group holding no other curve (its own innermost group); a chain the
+// picks reach only through a group that holds other curves too (a whole imported file, an entered parent's child group) is closed only when it is
+// NEAR-CLOSED (isNearClosed: the import offer's tolerance, the coincident case included); the others are left open and counted.
+//
 // THE IMPORT OFFER (nearClosedChains): the open chains of an import whose gap is at most NEAR_CLOSED_MM AND at most NEAR_CLOSED_REL of the
 // chain's own size (its bounding box diagonal) are OFFERED for closing (never closed without the user); every other open chain of the import
 // is counted as left open (an engraving line, a path drawn open on purpose).
@@ -26,7 +31,7 @@ import { buildNodeMap, curveEnds, findConnectedChains, findLoops } from './loop-
 import { addConstraint } from './constraints.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { newShapeId } from './shape-id.js';
-import { groupChain } from './group-model.js';
+import { groupChain, groupIndex } from './group-model.js';
 import { inertEntities, activeSketchPick, sketchOf } from './sketch-model.js';
 
 // The tolerances (base unit mm). COINCIDENT: at or below it the two free ends are made coincident, the move at most this. 0.01 mm is the finest
@@ -235,12 +240,45 @@ export function nearClosedChains(state, shapeIds) {
   const offered = [];
   let leftOpen = 0, largestGap = 0;
   for (const p of plans) {
-    if (p.ok && p.gap <= NEAR_CLOSED_MM && p.gap <= NEAR_CLOSED_REL * chainSize(state, p.shapes)) {
+    if (isNearClosed(state, p)) {
       offered.push({ ids: p.ids, gap: p.gap });
       largestGap = Math.max(largestGap, p.gap);
     } else if (!(p.reason === 'the path is already closed' || p.reason === 'a circle is already closed')) leftOpen++;
   }
   return { offered, leftOpen, largestGap };
+}
+
+/** Is plan p a NEAR-CLOSED chain (closable, gap <= NEAR_CLOSED_MM and <= NEAR_CLOSED_REL of its size)? The import offer's rule and the group rule's. */
+export function isNearClosed(state, p) {
+  return !!(p && p.ok && p.gap <= NEAR_CLOSED_MM && p.gap <= NEAR_CLOSED_REL * chainSize(state, p.shapes));
+}
+
+const ALREADY_CLOSED = new Set(['the path is already closed', 'a circle is already closed']);
+
+/**
+ * planCommandClose(state, shapeIds, include) -> { plans: [plan to close], refused: [plan], leftOpen: [plan] }   THE command rule (header, 760b) on the
+ * curves the user picked (a Close path click: [that curve]; the Select tool's selection otherwise). A pick that reaches a chain only through a whole
+ * group holding other curves too (groupIndex unitOf at the entered level) closes it only when it is near-closed; the rest of such chains, and their
+ * refusals other than "already closed", are leftOpen. A chain picked directly is planned as planClosePath plans it (closed or refused with its reason).
+ */
+export function planCommandClose(state, shapeIds, include = closePathPick(state)) {
+  const sel = new Set(shapeIds || []);
+  const ix = groupIndex(state);
+  const unitOf = new Map(); // a picked curve -> the whole picked group it is reached through (null: picked itself)
+  for (const id of sel) {
+    let u = ix.unitOf(id);
+    if (u && !ix.shapesOf(u).every((x) => sel.has(x))) u = null; // the group is not picked whole: the curve is
+    unitOf.set(id, u);
+  }
+  const out = { plans: [], refused: [], leftOpen: [] };
+  for (const p of planClosePaths(state, [...sel], include)) {
+    const chain = new Set(p.ids);
+    const direct = p.ids.some((id) => sel.has(id) && (!unitOf.get(id) || ix.shapesOf(unitOf.get(id)).every((x) => chain.has(x))));
+    if (direct) (p.ok ? out.plans : out.refused).push(p);
+    else if (isNearClosed(state, p)) out.plans.push(p);
+    else if (!(p.reason && ALREADY_CLOSED.has(p.reason))) out.leftOpen.push(p);
+  }
+  return out;
 }
 
 // a chain's size: the diagonal of the box of its curves' points (an arc's centre is not on the curve: left out)

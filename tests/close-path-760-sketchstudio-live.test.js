@@ -4,6 +4,7 @@
 //     the gap after (the closing line + its point); Ctrl+Z puts it back open (the import stays);
 //  2. the ribbon: the Modify dropdown lists Close path right after Break; running it marks the 4 open ends (screenshot); a click on the plate's edge
 //     closes the plate (one line more, 2 ends left marked); Ctrl+Z;
+//  2b. (TASK 760b) a click on the art selects the whole file group; Shift+C on it closes only the near-closed plate, the zigzag keeps its 2 open ends;
 //  3. Shift+C switches to the tool (S back to Select); C is still Circle;
 //  4. the right-click menu: the plate selected (a double click enters the file group), "Close path" is offered and closes it; on the closed plate it is
 //     not offered.
@@ -60,6 +61,17 @@ else {
     assert.deepStrictEqual(out.toolClose, { shapes: base + IMPORTED + 1, markers: 2 }, '2: a click on the plate closes it: one line, 2 ends left');
     await t.keys.undo();
     assert.strictEqual(await t.markers(), 4, '2: Ctrl+Z: 4 open ends again');
+    // 2b. TASK 760b: a click on the art with nothing entered selects the WHOLE file group; Close path (Shift+C) on that selection closes only the
+    // near-closed plate: the engraving zigzag keeps its two free ends (it may be open on purpose)
+    await t.keys.select();
+    await t.click(await t.toScreen(25, 10));
+    await t.keys.closePath();
+    out.fileGroup = { shapes: await t.shapeCount(), markers: await t.markers() };
+    assert.deepStrictEqual(out.fileGroup, { shapes: base + IMPORTED + 1, markers: 2 }, "2b: the whole file selected: only the plate closed, the zigzag's 2 ends still open");
+    out.fileGroupNote = await t.evalJs(`[...document.querySelectorAll('#notification-container pre')].map((p) => p.textContent).filter((x) => x.startsWith('Close path:')).pop()`);
+    assert.strictEqual(out.fileGroupNote, 'Close path: Closed 1 outline · 1 open path left open (click one with Close path to close it)', '2b: the notice');
+    await t.keys.undo();
+    assert.strictEqual(await t.shapeCount(), base + IMPORTED, '2b: Ctrl+Z');
     // 3. the keys
     await t.keys.select();
     assert.ok(!(await t.toolActive()) && (await t.markers()) === 0, '3: S: Select, no marker');

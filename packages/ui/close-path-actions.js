@@ -2,13 +2,14 @@
 // The geometry is #core/close-path.js; this module is the command: ONE undo step per run (recordConstraintStep: saved only when something was
 // closed), the notice that says what happened and why anything was refused (never silent), and the import's offer. Its entries:
 //   the ribbon button (Modify, beside Break: #ui/tool-ribbon.js) and its key (tool.closePath, #ui/shortcuts.js) switch to the CLOSE_PATH tool;
-//   switching to it runs beginClosePath (input-manager.js TOOL_BEGIN): with a Select-tool selection its chains are closed at once, else the tool
+//   switching to it runs beginClosePath (input-manager.js TOOL_BEGIN): with a Select-tool selection its chains are closed at once (TASK 760b: a chain the
+//   selection reaches only through a group holding other curves, e.g. a whole imported file, only when near-closed: #core/close-path.js planCommandClose), else the tool
 //   waits for a click on an open outline (handleClosePathPointerDown). While the tool is on, every free end of every open chain in the active
 //   sketch is marked on the canvas (#ui/svg-renderer.js, from #core/close-path.js openChainEnds). The tool stays on (as Trim, Break, Fillet).
 //   the canvas right-click / touch-and-hold menu's "Close path" (context-menu.js, shown when the selection holds an open chain it can close).
 //   the import's offer (#ui/sketch-import.js offerToCloseImported): ONE notice with a "Close them" action.
 
-import { planClosePaths, applyClosePath, closeOfferedChains, nearClosedChains, closePathPick, CLOSE_PATH_UNDO_LABEL } from '#core/close-path.js';
+import { planCommandClose, applyClosePath, closeOfferedChains, nearClosedChains, closePathPick, CLOSE_PATH_UNDO_LABEL } from '#core/close-path.js';
 import { lengthText } from '#core/settings-manager.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js';
@@ -24,23 +25,27 @@ function reasonsText(refused) {
 }
 
 /**
- * closePathOnShapes(state, shapeIds, notify) -> { closed: [plan], refused: [plan] }   the chains of these curves (the active sketch's) are
- * closed, each as #core/close-path.js plans it, in ONE undo step (none when nothing was closed). notify(message, level) says what was done and,
- * for each refused chain, why. The closed chains (and their new lines) are selected: the result is seen.
+ * closePathOnShapes(state, shapeIds, notify) -> { closed: [plan], refused: [plan], leftOpen: [plan] }   the chains of the curves the user picked (a
+ * Close path click: [that curve]; the Select tool's selection: the menu entry, the tool's start) are closed as #core/close-path.js planCommandClose
+ * says (TASK 760b: a chain reached only through a group that holds other curves is closed only when near-closed; the others are left open), in
+ * ONE undo step (none when nothing was closed). notify(message, level) says what was done, what was left open and why anything was refused. The
+ * closed chains (and their new lines) are selected: the result is seen.
  */
 export function closePathOnShapes(state, shapeIds, notify = () => {}) {
-  const plans = planClosePaths(state, shapeIds);
-  const ok = plans.filter((p) => p.ok), refused = plans.filter((p) => !p.ok);
-  if (!plans.length) { notify('Close path: click an open outline (a line, an arc or a curve of the active sketch).', 'info'); return { closed: [], refused }; }
+  const { plans: ok, refused, leftOpen } = planCommandClose(state, shapeIds);
+  if (!ok.length && !refused.length && !leftOpen.length) { notify('Close path: no open outline picked (click a line, an arc or a curve of the active sketch).', 'info'); return { closed: [], refused, leftOpen }; }
   const results = ok.length ? recordConstraintStep(state, CLOSE_PATH_UNDO_LABEL, () => ok.map((p) => applyClosePath(state, p))) : [];
   if (ok.length) {
     track('close-path');
     selectClosed(state, ok, results);
   }
-  const done = ok.length ? `Closed ${plural(ok.length, 'path')}` + detail(ok, results) : '';
-  const no = refused.length ? `${ok.length ? ' · ' : ''}${refused.length === 1 && !ok.length ? 'Not closed' : plural(refused.length, 'path') + ' not closed'}: ${reasonsText(refused)}` : '';
-  notify('Close path: ' + done + no, ok.length ? 'success' : 'warning');
-  return { closed: ok, refused };
+  const parts = [];
+  if (ok.length) parts.push(`Closed ${plural(ok.length, leftOpen.length ? 'outline' : 'path')}` + (leftOpen.length ? '' : detail(ok, results)));
+  else if (leftOpen.length) parts.push('Nothing near-closed in the selected group');
+  if (leftOpen.length) parts.push(`${plural(leftOpen.length, 'open path')} left open (click one with Close path to close it)`);
+  if (refused.length) parts.push(`${refused.length === 1 && !ok.length && !leftOpen.length ? 'Not closed' : plural(refused.length, 'path') + ' not closed'}: ${reasonsText(refused)}`);
+  notify('Close path: ' + parts.join(' · '), ok.length ? 'success' : (refused.length ? 'warning' : 'info'));
+  return { closed: ok, refused, leftOpen };
 }
 
 // "(a line added)" / "(ends joined, moved 0.004 mm)" for one path; the counts for several
@@ -81,10 +86,10 @@ export function handleClosePathPointerDown(e, state, hitJoint, hitShape, otherSh
   return true;
 }
 
-/** The canvas menu's "Close path" applies: the selection holds an open chain Close path can close. */
+/** The canvas menu's "Close path" applies: the command would close something on the selection (planCommandClose, the TASK 760b rule). */
 export function canClosePathSelection(state) {
   const sel = state.selectedShapes ? [...state.selectedShapes] : [];
-  return sel.length > 0 && planClosePaths(state, sel).some((p) => p.ok);
+  return sel.length > 0 && planCommandClose(state, sel).plans.length > 0;
 }
 
 /** The actions the shared context menu's Close path entry calls (context-menu.js): the same function as the tool. */

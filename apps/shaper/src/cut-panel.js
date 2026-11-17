@@ -32,13 +32,13 @@ const presetsFor = (table) => table[docUnit()] || table.mm;
 // TASK 717: the Resolution presets of adaptive stepping (the named maximum deviations, #core STEP_RESOLUTION; values base mm). A typed value = Custom.
 const RESOLUTION_PRESETS = STEP_RESOLUTION.levels.map((l) => ({ label: l.label, value: l.mm }));
 // TASK 730: each stepped field DECLARES its − / + step (in the DOCUMENT unit, per family; number-stepper.js holds the one press / hold / snap code) and min (BASE mm).
-// min: the depth may reach 0 (as typing allows); a bit / step / resolution stays above 0; the offset has no min (negative = the other side, as today).
+// min: the depth may reach 0 (as typing allows); a bit / step / resolution is a size (positive: any value above 0, never 0); the offset has no min (negative = the other side, as today).
 const STEPPERS = {
   cutDepth:      { step: { mm: 0.5, in: 1 / 32 }, min: 0 },
   cutOffset:     { step: { mm: 0.25, in: 1 / 64 } },
-  toolDia:       { step: { mm: 0.5, in: 1 / 32 }, min: 0.1 },
-  stepDepth:     { step: { mm: 0.5, in: 1 / 32 }, min: STEP_DEPTH.minMm },
-  stepDeviation: { step: { mm: 0.05, in: 0.002 }, min: STEP_RESOLUTION.minMm },
+  toolDia:       { step: { mm: 0.5, in: 1 / 32 }, positive: true },
+  stepDepth:     { step: { mm: 0.5, in: 1 / 32 }, positive: true },
+  stepDeviation: { step: { mm: 0.05, in: 0.002 }, positive: true },
 };
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
@@ -184,11 +184,11 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'stepDepth' ? (Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm)
     : (Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm);
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
-  // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored; never below STEP_DEPTH.minMm)
-  stepInput.addEventListener('change', () => { const n = parseUnit(stepInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDepth', Math.max(STEP_DEPTH.minMm, n)); else renderFields(); });
-  // TASK 717: ADAPTIVE stepping (per record) and its RESOLUTION (the maximum deviation: doc unit in, base mm stored, never below STEP_RESOLUTION.minMm)
+  // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored)
+  stepInput.addEventListener('change', () => { const n = parseUnit(stepInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDepth', n); else renderFields(); });
+  // TASK 717: ADAPTIVE stepping (per record) and its RESOLUTION (the maximum deviation: doc unit in, base mm stored)
   adaptiveInput.addEventListener('change', () => onSetField('adaptiveSteps', adaptiveInput.checked));
-  deviationInput.addEventListener('change', () => { const n = parseUnit(deviationInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDeviation', Math.max(STEP_RESOLUTION.minMm, n)); else renderFields(); });
+  deviationInput.addEventListener('change', () => { const n = parseUnit(deviationInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('stepDeviation', n); else renderFields(); });
   // offset presets popover (3x2): opens on focus (the value is selected so typing replaces it), closes on blur / pick
   const buildOffsetPop = () => {
     offsetPop.innerHTML = '<div class="cut-pop-title">presets</div><div class="cut-pop-grid"></div>';
@@ -207,7 +207,7 @@ export function createCutPanel(hostEl, opts = {}) {
   offsetInput.addEventListener('blur', () => { offsetPop.hidden = true; syncOpenState(); });
   offsetInput.addEventListener('change', () => onSetField('cutOffset', parseUnit(offsetInput.value, docUnit()) ?? 0));
   flipBtn.addEventListener('click', () => onSetField('cutOffset', -(Number(current.cutOffset) || 0))); // sign flip (base mm)
-  bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, docUnit()); if (n != null) onSetField('toolDia', n); });
+  bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('toolDia', n); else renderFields(); });
 
   stepperFor('cutDepth', depthInput, 'depth', { box: depthInput.closest('.cut-box'), before: depthInput.closest('.cut-mid') });
   stepperFor('stepDepth', stepInput, 'step depth', { box: stepInput.closest('.cut-box') });

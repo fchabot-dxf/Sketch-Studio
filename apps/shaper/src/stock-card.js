@@ -8,8 +8,8 @@ import { parse as parseUnit, unitNumber } from '#core/units.js';
 import { docUnit, lengthText } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
 
-// TASK 730: the thickness field's − / + step (document unit; min in BASE mm: never 0, as typing 0 is refused too)
-const THICKNESS_STEPPER = { step: { mm: 1, in: 1 / 16 }, min: 0.1 };
+// TASK 730: the thickness field's − / + step (document unit; a size: any value above 0, never 0, as typing 0 is refused too)
+const THICKNESS_STEPPER = { step: { mm: 1, in: 1 / 16 }, positive: true };
 
 /** createStockCard({ input, noteEl, getController, onChange }) -> { show }. getController(): the Design sketch controller (null before it exists). onChange(): after a typed value. */
 export function createStockCard({ input: thick, noteEl: note, getController, onChange = () => {} }) {

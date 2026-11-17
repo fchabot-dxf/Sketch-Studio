@@ -97,14 +97,17 @@ function pocketLabelPoint(clearedOuter, clearedHoles) {
   return c;
 }
 // TASK 455: the depth chip — a rounded dark rect with white text "↓ 0.300 in" (arrow, BOLD value, lighter unit); "↓ unset" when unset.
-const depthChip = (x, y, cutDepth) => {
+const CHIP_H_PX = 16;
+const depthChip = (x, y, cutDepth, k) => {
   const v = Number(cutDepth);
   const set = cutDepth != null && cutDepth !== 'unset' && Number.isFinite(v);
   let val = 'unset', unit = '';
   if (set) { val = lengthText(v, { auto: 3, show: 'field' }); unit = ' ' + docUnit(); } // TASK 728: the value's text is the one length-format decider's
-  const w = (2 + val.length + unit.length) * 2.9 + 6, h = 8.5;
-  return `<g class="sk-chip"><rect class="sk-chip-bg" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="2.5"/>` +
-    `<text class="sk-chip-text" x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
+  // TASK 731: CONSTANT SCREEN SIZE. The chip is laid out in screen px (font 11 = the dimension labels', height 16, 6.3 px per glyph + 10 padding)
+  // inside a <g> scaled by k = world units per screen px (worldTolerance(svg, 1), the one zoom-stable conversion), so it never grows with zoom or a small design.
+  const w = (2 + val.length + unit.length) * 6.3 + 10, h = CHIP_H_PX;
+  return `<g class="sk-chip" transform="translate(${x} ${y}) scale(${k})"><rect class="sk-chip-bg" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="4"/>` +
+    `<text class="sk-chip-text" x="0" y="0" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
 };
 const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
 
@@ -377,7 +380,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const pos = near || lastChip.get(key) || look.anchor;
       if (!pos) continue;
       lastChip.set(key, pos);
-      out += depthChip(pos.x, pos.y, look.depth);
+      out += depthChip(pos.x, pos.y, look.depth, worldTolerance(svgEl, 1));
     }
     // TASK 472: the Stock loop always carries its label (it is the board): "STOCK <thickness>" just above the loop's top-left corner
     const sk = stockKeyOf(CUT_PLAN);
@@ -441,9 +444,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const onWheel = (e) => {
     handlePanZoomWheel(e, svgEl, viewState);
+    renderChips(); // TASK 731: the chip keeps its screen size across a zoom
   };
   const onMove = (e) => {
-    if (handlePanZoomPointerMove(e, svgEl, viewState)) return;
+    if (handlePanZoomPointerMove(e, svgEl, viewState)) { renderChips(); return; } // a pinch changes the zoom
     const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     if (!wp) return;
     hoverPt = wp;
@@ -502,7 +506,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     renderSelection(); renderHover();
     onSelectionChange(selectedTarget());
   };
-  const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); };
+  const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); renderChips(); };
+  const chipResizeObs = typeof ResizeObserver === 'function' ? new ResizeObserver(() => renderChips()) : null; // TASK 731: a resize changes world-per-px
+  if (chipResizeObs) chipResizeObs.observe(svgEl);
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
   const unsubDocUnit = SettingsManager && SettingsManager.subscribe
@@ -549,8 +555,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) onto every selected target + refresh LIVE.
     setFieldOnSelected(field, value) {
       if (selection.size === 0) return null;
-      if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: never below the minimum; the next cut switched to a stepped type starts from it
-      if (field === 'adaptiveSteps') value = rememberAdaptiveSteps(value); // TASK 717: same for adaptive stepping and its resolution (never below STEP_RESOLUTION.minMm)
+      if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: the next cut switched to a stepped type starts from it
+      if (field === 'adaptiveSteps') value = rememberAdaptiveSteps(value); // TASK 717: same for adaptive stepping and its resolution
       if (field === 'stepDeviation') value = rememberStepDeviation(value);
       let lastRec = null;
       for (const t of selection.values()) {
@@ -561,6 +567,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     },
     destroy() {
       if (unsubDocUnit) unsubDocUnit();
+      if (chipResizeObs) chipResizeObs.disconnect();
       svgEl.removeEventListener('wheel', onWheel);
       svgEl.removeEventListener('pointermove', onMove);
       svgEl.removeEventListener('pointerleave', onLeave);

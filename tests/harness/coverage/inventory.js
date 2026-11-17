@@ -59,6 +59,7 @@ const TOOL_SOLVER_ROLE = {
   circle: 'creates a circle shape (1 joint, radius is shape data)', polygon: 'creates N sides + N radii + equal constraints',
   arc: 'creates an arc (3 joints + equal radius)', bezier: 'creates bezier shapes (2 joints, control points are data)',
   trim: 'splits / removes segments: rewrites shapes, joints and constraints', break: 'splits a line: new joint, constraints migrate',
+  closePath: 'joins the two free ends of an open chain: a coincident (gap <= 0.01 mm, the end moved onto the other) or ONE line + two coincidents (task 760, #core/close-path.js)',
   fillet: 'creates an arc + virtual sharp + tangents + radius dim',
   dim: 'creates distance / angle / radius constraints (a point-to-line dimension is one 3-joint distance)',
   coincident: 'coincident', hv: 'horizontal | vertical', parallel: 'parallel', perp: 'perpendicular', collinear: 'collinear',

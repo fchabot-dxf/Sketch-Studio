@@ -18,6 +18,7 @@
 
 import { calculateArcPath, arcSweepInfo } from './geometry.js';
 import { flattenCubic } from './svg-import.js'; // the ONE cubic flattener (de Casteljau), here with the step count the tolerance asks for
+import { TOOL_MODES, MIRROR_STEPS } from './constants.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -174,4 +175,37 @@ export function curvePointsFrom(s, state, fromPos, n) {
     if (d(pts[pts.length - 1]) < d(pts[0])) return pts.slice().reverse();
   }
   return pts;
+}
+
+/** TASK 762: THE uses a curve kind has no maths for, declared ONCE, each with the reason the app's notice gives. A press on such a curve's BODY (THE shared
+ *  pick, #ui/snap-detection.js findSnap) is refused with that reason instead of doing nothing (input-manager handlePointerDown, before the tool sees the
+ *  press; the Mirror tool's line step reads its own key). Keys: a tool (#core/constants.js TOOL_MODES), `mirror:line` (Mirror's mirror-line pick) and
+ *  `pointOnCurve` (a point held on the curve: a snap's point-on-curve constraint, #core/constraint-manager.js createConstraint). A use not listed takes the
+ *  kind: for a bezier, Select (hover, click, drag, double click, box, the hold menu), Close path, Mirror's objects, and Offset, which gives its own reason
+ *  (#core/offset.js offsetChainOf). What each refused tool would take is in WORK-LOG TURN 762. */
+const NO_BEZIER = (what) => `${what}: not available on a Bezier curve`;
+export const CURVE_REFUSALS = Object.freeze({
+  bezier: Object.freeze({
+    [TOOL_MODES.TRIM]: NO_BEZIER('Trim') + ' (Trim cuts lines only)',
+    [TOOL_MODES.BREAK]: NO_BEZIER('Break') + ' (Break splits lines only)',
+    [TOOL_MODES.FILLET]: NO_BEZIER('Fillet') + ' (Fillet rounds corners of lines and arcs only)',
+    [TOOL_MODES.DIMENSION]: NO_BEZIER('Dimension') + ' (pick its end points to dimension the distance between them)',
+    [TOOL_MODES.COINCIDENT]: NO_BEZIER('Coincident') + ' (a point cannot be held on its curve: pick its end point)',
+    [TOOL_MODES.HORIZONTAL_VERTICAL]: NO_BEZIER('Horizontal / Vertical') + ' (pick its two end points)',
+    [TOOL_MODES.PARALLEL]: NO_BEZIER('Parallel') + ' (lines only)',
+    [TOOL_MODES.PERPENDICULAR]: NO_BEZIER('Perpendicular') + ' (lines only)',
+    [TOOL_MODES.COLLINEAR]: NO_BEZIER('Collinear') + ' (lines only)',
+    [TOOL_MODES.TANGENT]: NO_BEZIER('Tangent') + ' (lines, circles and arcs only)',
+    [TOOL_MODES.EQUAL]: NO_BEZIER('Equal') + ' (lines, circles and arcs only)',
+    [TOOL_MODES.MIDPOINT]: NO_BEZIER('Midpoint') + ' (a point and a line only)',
+    [TOOL_MODES.SYMMETRIC]: NO_BEZIER('Symmetric') + ' (points, lines, circles and arcs only)',
+    [`${TOOL_MODES.MIRROR}:${MIRROR_STEPS.LINE}`]: NO_BEZIER('Mirror line') + ' (pick a line, a construction line or the X / Y axis)',
+    pointOnCurve: 'Point on curve: a point cannot be held on a Bezier curve (it stays where it was placed, not held)',
+  }),
+});
+
+/** The reason `use` (a CURVE_REFUSALS key) refuses shape s, or null when the use takes it. */
+export function curveRefusal(s, use) {
+  const r = s && CURVE_REFUSALS[s.type];
+  return (r && r[use]) || null;
 }

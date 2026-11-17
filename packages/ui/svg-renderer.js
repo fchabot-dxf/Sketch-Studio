@@ -93,6 +93,7 @@ import { constraintTargets } from '#ui/geometry-labels.js';
 import { profileFillLoops } from '#ui/profile-fill.js';
 import { sketchOf, inActiveSketch, constraintSketch, hiddenSketchIds, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { ORIGIN_JOINT_ID } from '#core/constants.js';
+import { enteredGroup, shapesInGroup } from '#core/group-model.js'; // TASK 751: the entered user group (the rest draws dimmed)
 
 // TASK 661: the markup collector. Behaves as the plain array draw() always built (push / join); while `dim` names a sketch, the chunks pushed
 // are gathered into ONE run drawn inside a <g class="sketch-inactive"> (the group opacity is the CSS token --sk-inactive-sketch-opacity,
@@ -446,7 +447,14 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // not in the active sketch and is not lit (hovered / selected / bound by the hovered or selected constraint stays fully visible).
   const dimsSketches = typeof ctx.getActiveSketchId === 'function';
   const activeSketchState = { activeSketchId: (dimsSketches && ctx.getActiveSketchId()) || DEFAULT_SKETCH_ID };
-  const dimUnlessLit = (entity, lit) => { out.dim = (dimsSketches && !lit && entity && !inActiveSketch(activeSketchState, entity)) ? sketchOf(entity) : null; };
+  // TASK 751: while the Select tool has ENTERED a user group (#core/group-model.js), the geometry outside that group draws dimmed the same
+  // way (the same run, the same --sk-inactive-sketch-opacity token), unless lit. Read through ctx.getState (a host without it never enters).
+  const renderState = ctx.getState ? ctx.getState() : null;
+  const enteredId = renderState ? enteredGroup(renderState) : null;
+  const insideShapes = enteredId ? new Set(shapesInGroup(renderState, enteredId)) : null;
+  const insideJoints = insideShapes ? new Set(shapes.filter((s) => insideShapes.has(s.id)).flatMap((s) => (s.joints || []).map((jid) => joints.get(jid)))) : null;
+  const outsideEntered = (entity) => !!insideShapes && !insideJoints.has(entity) && !(entity.id !== undefined && insideShapes.has(entity.id));
+  const dimUnlessLit = (entity, lit) => { out.dim = (!lit && entity && ((dimsSketches && !inActiveSketch(activeSketchState, entity)) || outsideEntered(entity))) ? sketchOf(entity) : null; };
   // A constraint / dimension belongs to its sketch (the origin belongs to none); one spanning sketches shows with each, so it dims only when the active sketch is none of them.
   const dimConstraintUnlessLit = (c, lit) => {
     out.dim = null;

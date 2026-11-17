@@ -152,30 +152,54 @@ export function curveEnds(s) {
  * (a circle) is a chain of itself. The start shape comes first, then breadth-first order.
  */
 export function findConnectedChain(state, shapeId, include = () => true) {
-  const shapes = (state && state.shapes) || [];
-  const start = shapes.find((s) => s && s.id === shapeId);
-  if (!start) return [];
-  const construction = !!start.isConstruction;
+  const start = ((state && state.shapes) || []).find((s) => s && s.id === shapeId);
+  return start ? chainWalker(state, include)(start) : [];
+}
+
+/**
+ * findConnectedChains(state, include) -> [shape ids]   (TASK 751: an import's pieces)
+ * EVERY chain of the state's shapes (those include() accepts), each exactly what findConnectedChain gives from its first shape, in the order of
+ * the shapes; the graph is built once (a drawing of thousands of chains: one pass, not one per chain).
+ */
+export function findConnectedChains(state, include = () => true) {
+  const walk = chainWalker(state, include);
+  const seen = new Set(), chains = [];
+  for (const s of ((state && state.shapes) || [])) {
+    if (!s || seen.has(s.id) || !include(s)) continue;
+    const chain = walk(s);
+    for (const id of chain) seen.add(id);
+    chains.push(chain);
+  }
+  return chains;
+}
+
+// THE chain rule, its graph built once for a state: walk(start) -> the chain of `start` (findConnectedChain's rule above): the curves
+// include() accepts, linked through their end joints (merged by coincidence, buildNodeMap), a curve only with curves of its own kind.
+function chainWalker(state, include) {
   const node = buildNodeMap(state);
-  const byNode = new Map();
-  for (const s of shapes) {
-    if (!s || s === start || !!s.isConstruction !== construction || !include(s)) continue;
+  const key = (s, j) => (s.isConstruction ? 'c:' : 'n:') + node(j);
+  const byKey = new Map();
+  for (const s of ((state && state.shapes) || [])) {
+    if (!s || !include(s)) continue;
     for (const j of (curveEnds(s) || [])) {
-      const n = node(j);
-      if (!byNode.has(n)) byNode.set(n, []);
-      byNode.get(n).push(s);
+      const k = key(s, j);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(s);
     }
   }
-  const chain = [start.id], seen = new Set(chain), queue = [start];
-  while (queue.length) {
-    for (const j of (curveEnds(queue.shift()) || [])) {
-      for (const s of (byNode.get(node(j)) || [])) {
-        if (seen.has(s.id)) continue;
-        seen.add(s.id); chain.push(s.id); queue.push(s);
+  return (start) => {
+    const chain = [start.id], seen = new Set(chain), queue = [start];
+    while (queue.length) {
+      const cur = queue.shift();
+      for (const j of (curveEnds(cur) || [])) {
+        for (const s of (byKey.get(key(start, j)) || [])) {
+          if (seen.has(s.id)) continue;
+          seen.add(s.id); chain.push(s.id); queue.push(s);
+        }
       }
     }
-  }
-  return chain;
+    return chain;
+  };
 }
 
 /**

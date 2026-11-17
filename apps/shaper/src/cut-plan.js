@@ -9,8 +9,7 @@
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey, makeProfile, ownedLoopIds } from '#core/profile-model.js';
 import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel } from '#core/stepped-cut.js';
-import { format as formatUnit } from '#core/units.js';
-import { docUnit, lengthDecimals } from '#core/settings-manager.js';
+import { docUnit, lengthText } from '#core/settings-manager.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
@@ -85,7 +84,8 @@ const HOLD_REFUSED = {
  */
 export function holdNoteItems(storedRec, hold) {
   if (!hold || !storedRec) return [];
-  const u = docUnit(), f = (mm) => String(Number(formatUnit(mm, u, { decimals: lengthDecimals(u === 'in' ? 4 : 3) })));
+  // each length's text is lengthText's (the one decider, TASK 728: an inch fraction in Fractional); the unit is written after it
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 3, trim: 'always', show: 'field' });
   const name = (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Cut';
   const what = hold.mode === 'skin' ? 'onion skin' : 'tabs';
   if (hold.role === 'refused') {
@@ -125,17 +125,20 @@ export const CLOSE_OUTLINES_MM = 25.4 / 16;
 export function steppedNoteItems(storedRec) {
   const s = steppedSummary(storedRec);
   if (!s) return [];
-  const u = docUnit(), f = (mm) => String(Number(formatUnit(mm, u, { decimals: lengthDecimals(3) })));
+  // the text of each length is lengthText's (the one decider); the unit is written once after the list. g: adaptive depths, gTol: the resolution and the
+  // outline spacing (tolerances finer than any inch fraction: always decimals)
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: 3, trim: 'always', show: 'field' });
   const name = s.label || (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Stepped cut';
   if (s.error) return [{ text: `${name}: the slope could not be read (${s.error}): nothing is cut` }];
   const n = `${s.count} step${s.count === 1 ? '' : 's'}`;
-  const g = (mm) => String(Number(formatUnit(mm, u, { decimals: lengthDecimals(u === 'in' ? 4 : 2) })));
+  const g = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 2, trim: 'always', show: 'field' });
+  const gTol = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 2, trim: 'always', show: 'field', fractions: false });
   const item = { text: s.deviation === null
     ? `${name}: ${n}, ${s.count > 1 ? `${f(s.depths[0])} to ` : ''}${f(s.depths[s.depths.length - 1])} ${u}`
-    : `${name}: adaptive, ${(resolutionLevel(s.deviation) || { label: 'Custom' }).label} (${g(s.deviation)} ${u}): ${n} at ${s.depths.map(g).join(' \u00b7 ')} ${u}` };
+    : `${name}: adaptive, ${(resolutionLevel(s.deviation) || { label: 'Custom' }).label} (${gTol(s.deviation)} ${u}): ${n} at ${s.depths.map(g).join(' \u00b7 ')} ${u}` };
   if (s.gaps.length) {
     const lo = Math.min(...s.gaps), hi = Math.max(...s.gaps);
-    const spacing = ` \u00b7 outlines ${g(lo) === g(hi) ? g(lo) : `${g(lo)}\u2013${g(hi)}`} ${u} apart`;
+    const spacing = ` \u00b7 outlines ${gTol(lo) === gTol(hi) ? gTol(lo) : `${gTol(lo)}\u2013${gTol(hi)}`} ${u} apart`;
     item.text += spacing;
     if (lo < CLOSE_OUTLINES_MM - 1e-9) { item.warn = spacing; item.title = `outlines this close may be hard to pick on the Origin: try a ${s.deviation === null ? 'bigger step' : 'coarser resolution'}`; } // TASK 717: adaptive has no step
   }

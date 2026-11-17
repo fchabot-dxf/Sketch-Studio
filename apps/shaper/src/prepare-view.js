@@ -10,8 +10,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part
-import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
-import SettingsManager, { docUnit, lengthDecimals, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
+import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
@@ -104,7 +103,7 @@ const depthChip = (x, y, cutDepth, k) => {
   const v = Number(cutDepth);
   const set = cutDepth != null && cutDepth !== 'unset' && Number.isFinite(v);
   let val = 'unset', unit = '';
-  if (set) { const f = formatShaperParam(v, docUnit(), { decimals: lengthDecimals(3) }); const i = f.lastIndexOf(' '); val = f.slice(0, i); unit = f.slice(i); }
+  if (set) { val = lengthText(v, { auto: 3, show: 'field' }); unit = ' ' + docUnit(); } // TASK 728: the value's text is the one length-format decider's
   // TASK 731: CONSTANT SCREEN SIZE. The chip is laid out in screen px (font 11 = the dimension labels', height 16, 6.3 px per glyph + 10 padding)
   // inside a <g> scaled by k = world units per screen px (worldTolerance(svg, 1), the one zoom-stable conversion), so it never grows with zoom or a small design.
   const w = (2 + val.length + unit.length) * 6.3 + 10, h = CHIP_H_PX;
@@ -396,7 +395,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (poly && poly.length >= 3) {
         const x0 = Math.min(...poly.map((p) => p.x)), y0 = Math.min(...poly.map((p) => p.y));
         const t = Number(CUT_PLAN.get(sk).cutDepth), set = CUT_PLAN.get(sk).cutDepth !== 'unset' && Number.isFinite(t);
-        const txt = 'STOCK ' + (set ? formatShaperParam(t, docUnit(), { decimals: lengthDecimals(3) }) : '(thickness unset)');
+        const txt = 'STOCK ' + (set ? lengthText(t, { auto: 3, show: 'unit' }) : '(thickness unset)');
         out += `<text class="sk-stock-label" x="${x0}" y="${y0 - 2.5}">${txt}</text>`;
       }
     }

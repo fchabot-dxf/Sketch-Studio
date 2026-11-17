@@ -11,12 +11,13 @@
 //   unary   = {"+"|"-"} power
 //   power   = postfix ["^" unary]                    (right-associative; -2^2 = -4)
 //   postfix = primary [UNIT]                         ("10 mm", "(1/2) in", "30 deg")
-//   primary = NUMBER | FRACTION_UNIT | NAME | call | "(" expr ")"
+//   primary = NUMBER | MIXED | FRACTION_UNIT | NAME | call | "(" expr ")"
 //   call    = FUNC "(" expr {(";"|",") expr} ")"
 //   FRACTION_UNIT = digits "/" digits UNIT           ("1/2 in" = 0.5 in, decision O20)
+//   MIXED   = digits digits "/" digits               ("1 1/2" = 1.5, a tape-measure number, TASK 728; "1 1/2 in", 1 1/2", "-1 1/2" = -1.5)
 //
 // AST nodes (all carry start/end, half-open character offsets, when they come from the parser):
-//   { t:'num', value }  { t:'name', name }  { t:'unit', unit, arg }  { t:'neg', arg }
+//   { t:'num', value }  { t:'mixed', whole, num, den }  { t:'name', name }  { t:'unit', unit, arg }  { t:'neg', arg }
 //   { t:'bin', op:'+'|'-'|'*'|'/'|'^', left, right }  { t:'call', fn, args }
 //
 // Values are quantities { v, L, A }: v in the BASE units (mm, degrees), L the length exponent, A the angle exponent.
@@ -198,6 +199,14 @@ function makeParser(toks, firstTok) {
   function parsePrimary() {
     const t = peek();
     if (t.type === 'num') {
+      // TASK 728: a mixed number "1 1/2" (whole, space, whole / whole): ONE literal, so "1 1/2 in" = 1.5 in and "-1 1/2" = -1.5 (two numbers
+      // side by side were a syntax error before, so no text that parsed changes meaning). "1-1/2" stays a subtraction (= 1/2).
+      if (t.whole && peek(1).type === 'num' && peek(1).whole && isOp(peek(2), '/') && peek(3).type === 'num' && peek(3).whole) {
+        const num = peek(1), den = peek(3);
+        if (den.value === 0) throw new Bail(fail('DIV_ZERO', 'division by zero', den));
+        p += 4;
+        return { t: 'mixed', whole: t.value, num: num.value, den: den.value, start: t.start, end: den.end };
+      }
       if (FRACTION_UNIT_IS_ONE_NUMBER && t.whole && isOp(peek(1), '/') && peek(2).type === 'num' && peek(2).whole && peek(3).type === 'unit') {
         const den = peek(2), u = peek(3);
         p += 4;
@@ -318,7 +327,7 @@ const LV = { add: 1, mul: 2, neg: 3, pow: 4, unit: 5, atom: 6 };
 function levelOf(n) {
   switch (n.t) {
     case 'num': return n.value < 0 ? LV.neg : LV.atom;
-    case 'name': case 'call': return LV.atom;
+    case 'mixed': case 'name': case 'call': return LV.atom;
     case 'unit': return LV.unit;
     case 'neg': return LV.neg;
     case 'bin': return n.op === '+' || n.op === '-' ? LV.add : n.op === '*' || n.op === '/' ? LV.mul : LV.pow;
@@ -334,6 +343,7 @@ function pr(n, min) { const s = raw(n); return levelOf(n) < min ? `(${s})` : s; 
 function raw(n) {
   switch (n.t) {
     case 'num': return String(n.value);
+    case 'mixed': return `${n.whole} ${n.num}/${n.den}`;
     case 'name': return n.name;
     case 'unit': return `${pr(n.arg, LV.atom)} ${n.unit}`;
     case 'neg': return `-${pr(n.arg, LV.neg)}`;
@@ -398,14 +408,18 @@ function writtenUnitLiteral(node) {
   if (x.t !== 'unit') return null;
   const u = unitInfo(x.unit);
   if (x.arg.t === 'num') return { n: sign * x.arg.value, f: u.f };
+  if (x.arg.t === 'mixed') return { n: sign * mixedValue(x.arg), f: u.f };
   if (x.arg.t === 'bin' && x.arg.op === '/' && x.arg.left.t === 'num' && x.arg.right.t === 'num') return { n: (sign * x.arg.left.value) / x.arg.right.value, f: u.f };
   return null;
 }
+
+const mixedValue = (n) => n.whole + n.num / n.den;
 
 function walk(n, env) {
   const at = span(n);
   switch (n.t) {
     case 'num': return finite({ v: n.value, L: 0, A: 0, bare: true, node: n }, at);
+    case 'mixed': return finite({ v: mixedValue(n), L: 0, A: 0, bare: true, node: n }, at);
     case 'name': {
       const k = foldedConstant(n.name);
       if (k !== undefined) return { v: k, L: 0, A: 0, bare: true, node: n };

@@ -11,8 +11,7 @@ import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '
 import { curveEnds } from '#core/loop-finder.js';
 import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
-import SettingsManager, { docUnit, lengthDecimals, angleDecimals } from '#core/settings-manager.js';
-import { format as formatUnit } from '#core/units.js';
+import SettingsManager, { docUnit, lengthText, angleDecimals } from '#core/settings-manager.js';
 import { fusionGlyphMarkup, glyphHitMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
@@ -27,7 +26,8 @@ import { isAutoDimName } from '#core/expression.js';
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
 // The Design canvas renders on a continuous solve→draw RAF, so labels re-label on the next frame after a unit toggle
 // (no explicit re-render wire needed).
-export const formatLenLabel = (v) => formatUnit(v, docUnit(), { decimals: lengthDecimals(1) });
+// TASK 728: the text itself is lengthText's (#core/settings-manager.js, the one length-format decider: decimals or an inch fraction).
+export const formatLenLabel = (v) => lengthText(v, { auto: 1 });
 
 /**
  * Shared formatter for constraint / dimension values (S5b / TASK 439).
@@ -48,7 +48,7 @@ export function formatConstraintValue(c, options = {}) {
 export function dimensionNameTag(c) {
   if (!c || typeof c.name !== 'string' || c.name === '' || isAutoDimName(c.name)) return '';
   const u = dimensionUnit(c, docUnit());
-  const what = typeof c.expression === 'string' && c.expression !== '' ? c.expression : `${quantityText(c.value, u)} ${u}`;
+  const what = typeof c.expression === 'string' && c.expression !== '' ? c.expression : quantityText(c.value, u, 'unit');
   return `${c.name} : ${what}`;
 }
 const dimensionNameTitle = (c) => { const t = dimensionNameTag(c); return t ? `<title>${t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>` : ''; };

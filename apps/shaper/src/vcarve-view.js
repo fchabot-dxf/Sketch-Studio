@@ -9,15 +9,23 @@ import { resolveProfileAtPoint, resolveTargetKey, listSketchProfiles } from '#co
 import { deriveVcarveContours, deriveVcarveFootprint } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
 import { attachStepper } from './number-stepper.js';
-import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
-import { parse as parseUnit } from '#core/units.js';
-import { lengthText, areaText, lengthNumber } from './doc-length.js';
+import SettingsManager, { docUnit, isPrecisionKey, lengthText, areaText } from '#core/settings-manager.js';
+import { parse as parseUnit, unitNumber } from '#core/units.js';
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 
 // TASK 730 / 734: the two numeric fields' − / + steps, in the DOCUMENT unit (inches: 1/64 and 1/32); no app minimum, the value only stays > 0 (positive: the − stops at the smallest positive multiple).
 const DSTEP_STEPPER = { step: { mm: 0.5, in: 1 / 64 }, positive: true };
 const MAXDEPTH_STEPPER = { step: { mm: 0.5, in: 1 / 32 }, positive: true };
+
+// TASK 734 / 728: the panel's texts are the one length-format decider's (#core/settings-manager.js lengthText / areaText): the doc unit with its unit, the
+// panel's usual decimals while Length precision is Auto (trailing zeros dropped: "0.5 mm", "0.0156 in"), an inch fraction in Fractional. The DEPTH STEP is a
+// resolution (1/64 in, 0.5 mm: below the 1/16 a fraction would round it to 0"): always decimals. Areas are never fractions.
+const AUTO_DECIMALS = { mm: 3, cm: 4, in: 4 };
+const AUTO_AREA_DECIMALS = { mm: 0, cm: 2, in: 2 };
+const depthText = (mm) => lengthText(mm, { auto: AUTO_DECIMALS[docUnit()] ?? 3, trim: 'auto', show: 'unit' });
+const stepText = (mm) => lengthText(mm, { auto: AUTO_DECIMALS[docUnit()] ?? 3, trim: 'auto', show: 'unit', fractions: false });
+const docNumber = (mm) => unitNumber(mm, docUnit()); // the steppers step from the exact doc-unit number, never the text
 
 export function mountVcarveView(state) {
   const els = {
@@ -71,7 +79,7 @@ export function mountVcarveView(state) {
     let html = '<option value="">— pick a profile —</option>';
     for (const it of entries) {
       const holeSuffix = it.holePolys.length ? ` · ${it.holePolys.length} hole${it.holePolys.length === 1 ? '' : 's'}` : '';
-      html += `<option value="${it.key}">${it.title} (${areaText(it.netArea)}${holeSuffix})</option>`;
+      html += `<option value="${it.key}">${it.title} (${areaText(it.netArea, { auto: AUTO_AREA_DECIMALS[docUnit()] ?? 0 })}${holeSuffix})</option>`;
     }
     els.region.innerHTML = html;
 
@@ -90,8 +98,8 @@ export function mountVcarveView(state) {
   function syncControls() {
     const r = peek();
     els.vbit.value = String(r.vbit.angle);
-    els.dstep.value = lengthText(r.dStep);
-    els.maxdepth.value = lengthText(r.maxDepth);
+    els.dstep.value = stepText(r.dStep);
+    els.maxdepth.value = depthText(r.maxDepth);
   }
 
   let lastRegion = null;
@@ -123,7 +131,7 @@ export function mountVcarveView(state) {
     const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
     render(els.canvas, boundary, contours, r.maxDepth, holePolys, vcarveViewState, regionChanged, otherPolys, deriveVcarveFootprint(contours, r));
     const maxD = contours.length ? contours[contours.length - 1].depth : 0;
-    els.readout.textContent = `${contours.length} contours · max ${lengthText(maxD)}`;
+    els.readout.textContent = `${contours.length} contours · max ${depthText(maxD)}`;
   }
 
   function pickAtWorldPoint(wp) {
@@ -160,23 +168,23 @@ export function mountVcarveView(state) {
   els.region.addEventListener('change', () => { try { state.saveState && state.saveState('vcarve region'); } catch (_) {} rec().region = els.region.value || null; recompute(); });
   els.vbit.addEventListener('change', () => { rec().vbit = { angle: Number(els.vbit.value) || 90 }; recompute(); });
   // typed and stepped values take the same path: one record write (BASE mm), the field text (document unit), the recompute
-  const setDStep = (mm) => { rec().dStep = mm; els.dstep.value = lengthText(rec().dStep); recompute(); };
-  const setMaxDepth = (mm) => { rec().maxDepth = mm; els.maxdepth.value = lengthText(rec().maxDepth); recompute(); };
+  const setDStep = (mm) => { rec().dStep = mm; els.dstep.value = stepText(rec().dStep); recompute(); };
+  const setMaxDepth = (mm) => { rec().maxDepth = mm; els.maxdepth.value = depthText(rec().maxDepth); recompute(); };
   // a typed value parses in the document unit exactly as the cut card's fields do; only a positive length is taken (else the field shows the record's value again).
   // A box left as prefilled never commits (724: the shown text is rounded, writing it back would drift the stored value).
-  const typed = (input, current, set) => {
-    if (input.value === lengthText(current())) return;
+  const typed = (input, current, set, text) => {
+    if (input.value === text(current())) return;
     const mm = parseUnit(input.value, docUnit());
     if (mm != null && Number.isFinite(mm) && mm > 0) set(mm); else syncControls();
   };
-  els.dstep.addEventListener('change', () => typed(els.dstep, () => peek().dStep, setDStep));
-  els.maxdepth.addEventListener('change', () => typed(els.maxdepth, () => peek().maxDepth, setMaxDepth));
-  const units = { unit: docUnit, toDoc: lengthNumber };
+  els.dstep.addEventListener('change', () => typed(els.dstep, () => peek().dStep, setDStep, stepText));
+  els.maxdepth.addEventListener('change', () => typed(els.maxdepth, () => peek().maxDepth, setMaxDepth, depthText));
+  const units = { unit: docUnit, toDoc: docNumber };
   // a stepped doc-unit number is converted to base mm by the same parse
   const stepTo = (set) => (docNum) => set(parseUnit(String(docNum), docUnit()));
   const steppers = [
-    attachStepper(els.dstep, DSTEP_STEPPER, { ...units, read: () => lengthNumber(peek().dStep), commit: stepTo(setDStep) }, { label: 'depth step' }),
-    attachStepper(els.maxdepth, MAXDEPTH_STEPPER, { ...units, read: () => lengthNumber(peek().maxDepth), commit: stepTo(setMaxDepth) }, { label: 'max depth' }),
+    attachStepper(els.dstep, DSTEP_STEPPER, { ...units, read: () => docNumber(peek().dStep), commit: stepTo(setDStep) }, { label: 'depth step' }),
+    attachStepper(els.maxdepth, MAXDEPTH_STEPPER, { ...units, read: () => docNumber(peek().maxDepth), commit: stepTo(setMaxDepth) }, { label: 'max depth' }),
   ];
   els.recompute.addEventListener('click', recompute);
 

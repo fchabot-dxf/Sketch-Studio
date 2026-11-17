@@ -13,7 +13,8 @@
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare and Vcarve). The first build
 //    fits; a rebuild (the plan changed) keeps the view, as the 3D view keeps its camera; fit() frames the drawing again.
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
-import { lengthDecimals } from '#core/settings-manager.js';
+import { lengthDecimals, lengthFraction, lengthText } from '#core/settings-manager.js';
+import { unitInfo } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPE_TAGS = new Set(['path', 'circle', 'polygon', 'polyline', 'rect', 'ellipse', 'line']);
@@ -88,10 +89,14 @@ function shadesOf(list, shallow, deep) {
   return { shades, lo, hi };
 }
 
-/** TASK 724: a depth as the file writes it ("0.100 in") shown at the Length precision setting ("0.1 in" at 1); the file's own text while the setting is Auto. Display only. */
+/**
+ * TASK 724: a depth as the file writes it ("0.100 in") shown at the Length precision setting ("0.1 in" at 1); the file's own text while the setting is Auto.
+ * TASK 728: the text is the one length-format decider's (lengthText), so an inch document showing fractions reads 1/8". Display only.
+ */
 export const depthText = (depth) => {
-  const p = lengthDecimals(null), m = p === null ? null : /^(-?\d+(?:\.\d+)?)\s*(\S*)$/.exec(depth || '');
-  return m ? `${Number(m[1]).toFixed(p)}${m[2] ? ' ' + m[2] : ''}` : depth;
+  const m = /^(-?\d+(?:\.\d+)?)\s*(\S*)$/.exec(depth || ''), u = m && unitInfo(m[2] || 'mm');
+  if (!m || !u || u.kind !== 'length' || (lengthDecimals(null) === null && !lengthFraction(u.name))) return depth;
+  return lengthText(Number(m[1]) * u.f, { unit: u.name, show: m[2] ? 'unit' : 'bare' });
 };
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
 export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold)].filter(Boolean).join(' · ');

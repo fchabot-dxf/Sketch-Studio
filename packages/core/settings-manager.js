@@ -2,6 +2,7 @@
 // Single source for UI-configurable settings with project/local persistence
 
 import { SolverConfig } from './solver-config.js';
+import { format as formatUnit, formatFraction, basePer } from './units.js';
 
 let fs = null;
 let path = null;
@@ -111,7 +112,11 @@ const DEFAULT_SETTINGS = {
     // decimals (today's), so nothing changes until the user picks a number. LENGTH_PRECISION 0-6 applies to every displayed length, ANGLE_PRECISION
     // 0-4 to every displayed angle. Display only: stored values, expressions, exported files and the solver never read these. Local, shared by all four apps.
     LENGTH_PRECISION: null,
-    ANGLE_PRECISION: null
+    ANGLE_PRECISION: null,
+    // Task 728: how an INCH document shows its lengths: 'decimal' (1.5 in, the precision above) | 'fractional' (1 1/2", the nearest LENGTH_FRACTION-th
+    // of an inch, like a tape measure). Read only while DOC_UNIT is 'in' (mm / cm documents are always decimal). Display only, local, shared by all four apps.
+    INCH_DISPLAY: 'decimal',
+    LENGTH_FRACTION: 16
 };
 
 /** The active document unit ('mm' | 'cm' | 'in'), defaulting to 'mm'. */
@@ -121,12 +126,47 @@ export const docUnit = () => mgr.get('DOC_UNIT') || 'mm';
 export const LENGTH_PRECISION_MAX = 6;
 export const ANGLE_PRECISION_MAX = 4;
 const precisionOr = (key, max, auto) => { const p = mgr.get(key); return Number.isInteger(p) && p >= 0 && p <= max ? p : auto; };
-/** Whether a changed setting key is a display-precision one (views that cache formatted text re-render on it). */
-export const isPrecisionKey = (key) => key === 'LENGTH_PRECISION' || key === 'ANGLE_PRECISION';
+/** Whether a changed setting key is a display-precision / length-format one (views that cache formatted text re-render on it). */
+export const isPrecisionKey = (key) => key === 'LENGTH_PRECISION' || key === 'ANGLE_PRECISION' || key === 'INCH_DISPLAY' || key === 'LENGTH_FRACTION';
 /** Decimals for a displayed length (any unit): the Length precision setting, else `auto`. */
 export const lengthDecimals = (auto) => precisionOr('LENGTH_PRECISION', LENGTH_PRECISION_MAX, auto);
 /** Decimals for a displayed angle (degrees): the Angle precision setting, else `auto`. */
 export const angleDecimals = (auto) => precisionOr('ANGLE_PRECISION', ANGLE_PRECISION_MAX, auto);
+
+// Task 728: THE one place that decides the TEXT of a displayed length (every view calls lengthText; none formats a length itself).
+export const LENGTH_FRACTIONS = [8, 16, 32, 64];      // the Fractional precision choices: 1/8 .. 1/64 of an inch
+/** The fraction denominator a length shown in `unit` gets: the LENGTH_FRACTION setting while an inch document shows fractions, else null (decimals). */
+export const lengthFraction = (unit = docUnit()) => {
+    if (unit !== 'in' || docUnit() !== 'in' || mgr.get('INCH_DISPLAY') !== 'fractional') return null;
+    const d = mgr.get('LENGTH_FRACTION');
+    return LENGTH_FRACTIONS.includes(d) ? d : DEFAULT_SETTINGS.LENGTH_FRACTION;
+};
+/**
+ * A length (base mm) as display text in `unit` (default the document unit).
+ *   auto: the view's usual decimals (used while Length precision is Auto).
+ *   trim: 'auto' drops trailing zeros while Length precision is Auto ("0.5", not "0.500"); 'always' drops them at any precision; false keeps them.
+ *   fractions: false for a TOLERANCE finer than any fraction (Shaper's stepping resolution 0.004 in, the spacing of stepped outlines): always decimals.
+ *   show: 'bare'  the number alone, as a dimension label / an edit box shows it: "1.500" | 1 1/2"   (a fraction always carries its inch mark)
+ *         'unit'  with its unit, as a sentence shows it:                             "1.500 in" | 1 1/2"
+ *         'field' the number in a field whose unit is printed beside it:              "1.500" | "1 1/2"
+ *         'compact' the number glued to its unit, trailing zeros dropped (a tool box / a notice): "1.5in" | 1 1/2"
+ * In Fractional mode the value is shown as the NEAREST fraction (Fusion's way: no "≈" mark), like a decimal precision rounds. Display only.
+ */
+export function lengthText(mm, { unit = docUnit(), auto = 1, trim = false, show = 'bare', fractions = true } = {}) {
+    if (mm == null || !Number.isFinite(Number(mm))) return '';
+    const den = fractions ? lengthFraction(unit) : null;
+    if (den) { const f = formatFraction(Number(mm) / basePer('in'), den); return show === 'field' ? f : `${f}"`; }
+    const set = lengthDecimals(null);
+    if (show === 'compact') return formatUnit(mm, unit, { unit: true, decimals: set ?? auto });
+    let body = formatUnit(mm, unit, { decimals: set ?? auto });
+    if (trim === 'always' || (trim === 'auto' && set === null)) body = String(Number(body));
+    return show === 'unit' ? `${body} ${unit}` : body;
+}
+/** An area (base mm²) as "2.48 in²" text: decimals always (the Length precision, else `auto`), never a fraction. */
+export const areaText = (mm2, { unit = docUnit(), auto = 2 } = {}) => {
+    const f = basePer(unit);
+    return `${(mm2 / (f * f)).toFixed(lengthDecimals(auto))} ${unit}²`;
+};
 
 class SettingsManager {
     constructor() {

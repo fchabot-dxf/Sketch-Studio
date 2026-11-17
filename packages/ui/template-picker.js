@@ -11,7 +11,7 @@
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
 import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, parseParam, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
-import SettingsManager, { docUnit, lengthDecimals, angleDecimals } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthText, angleDecimals } from '#core/settings-manager.js';
 import { basePer } from '#core/units.js';
 import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
@@ -120,7 +120,8 @@ function segmentHitsBox(p, q, b) {
 export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } = {}) {
   // TASK 722: a length label says the value in the document's unit (mm: as before, 2 decimals; cm / in: up to 4, trailing zeros dropped)
   // TASK 724: the Length / Angle precision settings (Auto = the above) set the exact decimals of every label
-  const lengthText = (mm) => { const p = lengthDecimals(null); return p !== null ? (mm / basePer(unit)).toFixed(p) : unit === 'mm' ? fmt(mm) : String(Math.round((mm / basePer(unit)) * 1e4) / 1e4); };
+  // TASK 728: a length label's text is the one length-format decider's (lengthText: decimals, or an inch fraction 1 1/2")
+  const labelText = (mm) => lengthText(mm, { unit, auto: unit === 'mm' ? 2 : 4, trim: 'auto' });
   const angleText = (deg) => { const p = angleDecimals(null); return p !== null ? deg.toFixed(p) : fmt(deg); };
   const g = document_.geometry;
   const J = new Map(g.joints.map(([id, j]) => [id, j]));
@@ -224,7 +225,7 @@ export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } 
       const sideBase = horiz ? (dir > 0 ? y1 : y0) : (dir > 0 ? x1 : x0);
       for (const { c, a, b, u0, u1 } of items) {
         const spanPad = fs * 0.4;
-        const t = lengthText(c.value);
+        const t = labelText(c.value);
         let lane = 0;
         let pos, tx, ty, anchor;
         for (; ; lane++) {
@@ -269,7 +270,7 @@ export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } 
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       let nx = -dy / l, ny = dx / l;
       if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }
-      const t = lengthText(c.value);
+      const t = labelText(c.value);
       const minA = Math.min(a.x * nx + a.y * ny, b.x * nx + b.y * ny);
       let d = Math.max(gap, maxProj(nx, ny) - minA + gap * 0.9);
       const w = String(t).length * fs * 0.64, h = fs * 1.15;
@@ -289,7 +290,7 @@ export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } 
     for (const c of radiusDims) {
       const sh = shapes.find((s) => s.id === c.shape), cc = J.get(sh.joints[0]);
       const r = sh.type === 'circle' ? sh.radius : Math.hypot(J.get(sh.joints[1]).x - cc.x, J.get(sh.joints[1]).y - cc.y);
-      const t = 'R' + lengthText(c.value);
+      const t = 'R' + labelText(c.value);
       const candidates = [];
       if (sh.type === 'arc') {
         const info = arcSweepInfo(cc, J.get(sh.joints[1]), J.get(sh.joints[2]), { sweep: sh.sweep });
@@ -683,7 +684,9 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
           const id = `sk-tp-f-${t.id}-${k}`;
           const label = document.createElement('label'); label.htmlFor = id; label.textContent = spec.label;
           const input = document.createElement('input'); input.id = id; input.className = 'sk-tp-input'; 
-          input.value = String(values[k]);
+          // TASK 728: a length field shows its default through the one length-format decider (an inch fraction "1 1/2" in Fractional; the unit is beside it).
+          // Display only: values[k] stays the exact number until the user types (the input event), so an untouched field builds the exact default.
+          input.value = kind === 'length' ? lengthText(values[k] * basePer(unit), { unit, auto: 6, trim: 'auto', show: 'field' }) : String(values[k]);
           // TASK 722: a count is a whole-number spinner; a length / angle is TEXT (it accepts "1/8 in", 3", 38mm: parseParam, the shared expression parser)
           if (kind === 'count') { input.type = 'number'; input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.type = 'text'; input.inputMode = 'decimal'; input.autocomplete = 'off'; }
           input.addEventListener('input', () => { values[k] = parseParam(spec, input.value, unit); clearError(); changed(); });

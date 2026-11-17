@@ -27,7 +27,9 @@ import { parse, format, BASE, UNITS, worldToUserY, userToWorldY } from '#core/un
   assert(parse('   ') === null, 'whitespace → null');
   assert(parse('abc') === null, 'abc → null');
   assert(parse('5x') === null, 'bad suffix → null');
-  assert(parse('1/8') === null, 'fractions unsupported in U1 → null (noted for U3)');
+  // TASK 728: fractions and mixed numbers ARE numbers now (one grammar: the shared expression parser); arithmetic and names stay refused
+  assert(close(parse('1/8', 'in'), 3.175), "'1/8' in an inch doc → 1/8 in");
+  assert(parse('1-1/2', 'in') === null && parse('2*3') === null && parse('PI') === null, 'arithmetic / a name → null (a field takes one number)');
   assert(parse(null) === null, 'null → null');
   assert(parse(undefined) === null, 'undefined → null');
 

@@ -23,8 +23,7 @@ import {
 } from '#core/offset.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
-import { docUnit, lengthDecimals } from '#core/settings-manager.js';
-import { format as formatUnit } from '#core/units.js';
+import { docUnit, lengthText } from '#core/settings-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
 import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
@@ -52,7 +51,8 @@ let _press = null;          // a press on the canvas while the box is open: a cl
 let _viewListening = false;
 let _committing = false;
 
-const decimalsFor = (unit) => lengthDecimals(unit === 'in' ? 3 : 2);
+// TASK 728: the box / notice text is lengthText's (the one length-format decider: decimals, or an inch fraction 1/2")
+const autoDecimals = (unit) => (unit === 'in' ? 3 : 2);
 function ensureDistance() {
   const unit = docUnit();
   if (currentDistance == null || _distanceUnit !== unit) { currentDistance = defaultOffsetDistance(unit); _distanceUnit = unit; }
@@ -151,7 +151,7 @@ function dragArrowTo(svg, e) {
   const s = o.d + (w.x + _drag.grab.x - a.point.x) * a.normal.x + (w.y + _drag.grab.y - a.point.y) * a.normal.y;
   const side = s <= -MIN_DRAG_MM ? -o.side : o.side;
   const unit = docUnit();
-  const text = formatUnit(Math.max(Math.abs(s), MIN_DRAG_MM), unit, { decimals: decimalsFor(unit) });
+  const text = lengthText(Math.max(Math.abs(s), MIN_DRAG_MM), { unit, auto: autoDecimals(unit) });
   const v = parseOffsetDistance(text, unit);
   if (v == null || !offsetChainGeometry(_open.state, _open.chain, v, side).ok) return;
   _open.el.value = text;
@@ -179,7 +179,7 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
   el.type = 'text';
   el.className = 'dim-input';
   el.setAttribute('aria-label', 'Offset distance');
-  const defaultValue = formatUnit(currentDistance, unit, { decimals: decimalsFor(unit) });
+  const defaultValue = lengthText(currentDistance, { unit, auto: autoDecimals(unit) });
   el.value = defaultValue;
   el.style.position = 'fixed';
   el.style.width = '90px';
@@ -250,7 +250,7 @@ export function commitOffsetInput() {
   if (!res.ok) { showNotification('Offset: ' + res.reason + '.', 'warning', HINT_MS); return; }
   currentDistance = d; // |v|: the distance USED is the remembered one
   cancelAll();
-  showNotification(`Offset applied (${formatUnit(d, docUnit(), { unit: true, decimals: decimalsFor(docUnit()) })})`, 'info');
+  showNotification(`Offset applied (${lengthText(d, { auto: autoDecimals(docUnit()), show: 'compact' })})`, 'info');
   if (_exit) _exit();
 }
 

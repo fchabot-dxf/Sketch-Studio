@@ -16,7 +16,7 @@ import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRou
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
 import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + CUT_PLAN + stock
 import { dbg } from '#core/debug.js';
-import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
+import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
@@ -34,6 +34,7 @@ import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
+import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
 
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
@@ -64,11 +65,14 @@ const chrome = mountAppChrome({
       if (!payload) { groupStatus(NO_CUTS); return; }
       download('shaper-export.svg', payload.svg);
     } },
+    fusionAddinAction({ fusion: fusionMode, open: () => chrome.sidebar.showView(ADDIN_VIEW_ID) }),
     { divider: true },
     { id: 'settings', label: 'Settings', icon: SIDEBAR_ICONS.gear, onClick: () => stylePanel.toggle() },
     { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
   ],
 });
+
+chrome.sidebar.registerView(ADDIN_VIEW_ID, fusionAddinView()); // TASK 733: the drawer view the Fusion add-in entry opens
 
 const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // the Export step's message with an empty plan (Generate, Download, the 2D view)
 
@@ -388,6 +392,10 @@ const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves 
 const REVIEW_VIEW_KEY = 'shaper-review-view';
 let reviewViewMode = '3d';
 try { if (localStorage.getItem(REVIEW_VIEW_KEY) === '2d') reviewViewMode = '2d'; } catch (err) { dbg.warn('shaper', 'REVIEW_VIEW_KEY read failed', err && err.message); }
+// TASK 729: the 3D board's look (review-view.js LOOKS + each colour-taking look's own colour), remembered per app the same way
+const REVIEW_LOOK_KEY = 'shaper-review-look';
+let reviewLook = normaliseLook(null);
+try { const s = localStorage.getItem(REVIEW_LOOK_KEY); if (s) reviewLook = normaliseLook(JSON.parse(s)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY read failed', err && err.message); }
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
   getSvg: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? p.svg : null; },
@@ -414,7 +422,7 @@ async function enterReview(st) {
   try {
     if (!reviewView) {
       info.textContent = 'Loading 3D…';
-      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), wood: document.getElementById('review-wood').checked });
+      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), look: reviewLook });
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));
@@ -427,8 +435,39 @@ async function enterReview(st) {
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
   document.getElementById('review-fit').addEventListener('click', () => (reviewViewMode === '2d' ? exportPreview.fit() : reviewView && reviewView.fit())); // TASK 718: Fit frames the view shown
-  document.getElementById('review-wood').addEventListener('change', (e) => reviewView && reviewView.setWood(e.target.checked)); // per session
 }
+// TASK 729: the Look card: the Material select (one option per LOOKS row) and, for a look that takes a colour, its preset swatches (+ the
+// native colour picker when the look allows any colour). A pick swaps the 3D view's materials only; the 2D view and the export never read it.
+function showReviewLook() {
+  const select = document.getElementById('review-look-select'), colors = document.getElementById('review-look-colors');
+  if (!select.options.length) for (const l of LOOKS) select.add(new Option(l.label, l.id));
+  select.value = reviewLook.id;
+  const row = LOOKS.find((l) => l.id === reviewLook.id), cur = reviewLook.colors[row.id];
+  colors.hidden = !row.colors;
+  if (colors.dataset.look !== row.id) { // a new look: its own swatches (rebuilt only then, so an open colour picker is never replaced under the user)
+    colors.dataset.look = row.id;
+    const kids = (row.colors || []).map((p) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.hex = p.hex; b.title = p.label; b.setAttribute('aria-label', p.label); b.style.background = p.hex; return b; });
+    if (row.custom) { const c = document.createElement('input'); c.type = 'color'; c.id = 'review-look-custom'; c.title = 'Any colour'; c.setAttribute('aria-label', 'Any colour'); kids.push(c); }
+    colors.replaceChildren(...kids);
+  }
+  const preset = !!row.colors && row.colors.some((p) => p.hex === cur);
+  for (const b of colors.querySelectorAll('button[data-hex]')) b.setAttribute('aria-pressed', b.dataset.hex === cur ? 'true' : 'false');
+  const custom = document.getElementById('review-look-custom');
+  if (custom) { custom.value = cur; custom.setAttribute('aria-pressed', preset ? 'false' : 'true'); }
+}
+function setReviewLook(next) {
+  reviewLook = normaliseLook(next);
+  try { localStorage.setItem(REVIEW_LOOK_KEY, JSON.stringify(reviewLook)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY write failed', err && err.message); }
+  showReviewLook();
+  if (reviewView) reviewView.setLook(reviewLook);
+}
+showReviewLook();
+document.getElementById('review-look-select').addEventListener('change', (e) => setReviewLook({ ...reviewLook, id: e.target.value }));
+const pickReviewColor = (hex) => setReviewLook({ ...reviewLook, colors: { ...reviewLook.colors, [reviewLook.id]: hex } });
+document.getElementById('review-look-colors').addEventListener('click', (e) => { const b = e.target.closest('button[data-hex]'); if (b) pickReviewColor(b.dataset.hex); });
+document.getElementById('review-look-colors').addEventListener('input', (e) => { if (e.target.id === 'review-look-custom') pickReviewColor(e.target.value); });
+// the 3D view as mounted (null until the Export step first shows 3D): read by the live tests through this module, no window global
+export const currentReviewView = () => reviewView;
 
 ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
 if (fusionMode) {

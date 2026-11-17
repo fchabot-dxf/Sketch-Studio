@@ -1,7 +1,8 @@
 // packages/ui/app-footer.js: the ONE app footer (TASK 618), mounted by every host: a thin row under the work area.
 //   left:  Undo, Redo (history-control.js: the same dispatch as Ctrl+Z / Ctrl+Y in the showing stage),
 //          Delete (red filled circle + white X: the exact Delete key path handleDelete), Clear sketch (outlined trash can, near-black ink, after a small gap: one-step undoable clear of active sketch after confirm),
-//          Parameters (TASK 677, owner turn 1730: the "fx" opener of the Parameters window, always visible; it was hidden in the ribbon's Inspect dropdown)
+//          Parameters (TASK 677, owner turn 1730: the "fx" opener of the Parameters window, always visible; it was hidden in the ribbon's Inspect dropdown;
+//          TASK 740: its key, Shift+P, is this button while it shows)
 //   right: Recenter (every host whose Design surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
 //          then Settings (TASK 726, the gear: the host's Style panel, the same one the drawer's Style item toggles; the far right end)
 // mountAppFooter({ router, view, footer, parameters, settings }) -> { el, refresh, destroy }
@@ -22,6 +23,8 @@ import { activeSketchName, canClearActiveSketch, clearActiveSketch, hasSelection
 import { DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { GEAR_GLYPH } from '#ui/app-sidebar.js';
+import { matchesShortcut, titleWithShortcut } from '#ui/shortcuts.js'; // TASK 740: the Parameters key (view.parameters), declared there
+import { isTextEditingTarget } from '#ui/clipboard.js';
 
 let stylesInjected = false;
 function injectStyles() {
@@ -179,11 +182,12 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   // The window is made on first use over the Design canvas showing now; closing it (its X, Esc) returns the focus here.
   let paramsBtn = null;
   let paramsWin = null;
+  let onParamsKey = null;
   const syncParams = () => { if (paramsBtn) paramsBtn.setAttribute('aria-expanded', String(!!(paramsWin && paramsWin.isOpen()))); };
   if (parameters) {
     paramsBtn = document.createElement('button');
     paramsBtn.type = 'button'; paramsBtn.id = 'btn-parameters'; paramsBtn.className = 'sk-footer-btn ink';
-    paramsBtn.title = 'Parameters (fx)'; paramsBtn.setAttribute('aria-label', 'Parameters');
+    paramsBtn.title = titleWithShortcut('Parameters', 'view.parameters'); paramsBtn.setAttribute('aria-label', 'Parameters'); // TASK 740: "Parameters (Shift+P)"
     paramsBtn.setAttribute('aria-haspopup', 'dialog'); paramsBtn.setAttribute('aria-expanded', 'false');
     paramsBtn.innerHTML = FX_ICON;
     actions.appendChild(paramsBtn);
@@ -199,6 +203,14 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
       windowOf(v.state).toggle();
       syncParams();
     });
+    // TASK 740: the key does what the button does, while the button shows (a sketch on screen); a key typed into a text field is the field's
+    // (the window's own fields never pass a key on: parameters-window.js stops it).
+    onParamsKey = (e) => {
+      if (!matchesShortcut(e, 'view.parameters') || paramsBtn.hidden || isTextEditingTarget(e.target)) return;
+      e.preventDefault();
+      paramsBtn.click();
+    };
+    document.addEventListener('keydown', onParamsKey);
   }
 
   const recenterBtn = mk(end, 'btn-recenter-view', 'Recenter view', 'icon-recenter');
@@ -292,6 +304,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
         for (const ev of docEvs) document.removeEventListener(ev, scheduleRefresh, false);
       }
       if (stopSettingsWatch) stopSettingsWatch();
+      if (onParamsKey) document.removeEventListener('keydown', onParamsKey);
       history.destroy();
       if (paramsWin) paramsWin.destroy();
       if (start.remove) start.remove();

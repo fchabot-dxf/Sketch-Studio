@@ -55,7 +55,7 @@ await (async () => {
     await navigate(url('/apps/sketchstudio/index.html'), 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('btn-parameters'); })()`, 'SketchStudio to load with its Parameters button');
     await waitForApp('svgCanvas');
-    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'the button has a label, a title, a pressed state and announces a dialog');
+    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (Shift+P)' }, 'the button has a label, a title, a pressed state and announces a dialog');
     assert.strictEqual(await inFooter(), true, 'the button is in the footer, on screen, uncovered, without opening any menu');
     assert.strictEqual(await winOpen(), false, 'before the first click no window is shown');
     // open: real click
@@ -192,7 +192,7 @@ await (async () => {
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab with its Parameters button');
     await waitForApp('design-canvas');
     await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design canvas to show');
-    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Shaper: the same declared button');
+    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (Shift+P)' }, 'Shaper: the same declared button');
     const seed = () => evalJs(`(() => {
       const st = window.__designController.state;
       for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
@@ -289,7 +289,7 @@ await (async () => {
     await waitFor(`!!window.__sketch && !!document.getElementById('btn-parameters')`, 'Pen Plotter Design with its Parameters button');
     await sleep(1000);
     await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(500);
-    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Pen Plotter: the same declared button');
+    assert.deepStrictEqual(await btnState(), { label: 'Parameters', expanded: 'false', popup: 'dialog', title: 'Parameters (Shift+P)' }, 'Pen Plotter: the same declared button');
     await evalJs(`(() => {
       const st = window.__sketch.controller.state;
       st.clearDocument(); // the shared autosave buffer carried the Shaper drawing over

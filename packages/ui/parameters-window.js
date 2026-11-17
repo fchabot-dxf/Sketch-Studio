@@ -14,6 +14,7 @@
 import { createTabbedDockPanel } from '#ui/tabbed-dock-panel.js';
 import { createParameterTable } from '#ui/parameter-table.js';
 import { docUnit } from '#core/settings-manager.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 740: the window's own key (view.parameters) is let through to the footer's toggle
 
 export const PARAMETERS_PERSIST_KEY = 'sk-parameters';
 const SIZE = { w: 460, h: 360 };
@@ -56,7 +57,9 @@ export function createParametersWindow({ state, anchor = () => null, above = nul
     onClose: () => { stop(); if (typeof onClose === 'function') onClose(); },
   });
   dock.el.classList.add('sk-pwin');
-  dock.el.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); }); // typing here is not a tool shortcut (Esc is the dock's)
+  // typing here is not a tool shortcut (Esc is the dock's); TASK 740: the Parameters key itself goes on, so it closes the window it opened (the footer
+  // ignores it in a text field, where it types)
+  dock.el.addEventListener('keydown', (e) => { if (e.key !== 'Escape' && !matchesShortcut(e, 'view.parameters')) e.stopPropagation(); });
 
   let raf = null;
   const tick = () => {

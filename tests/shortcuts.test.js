@@ -6,9 +6,11 @@
 //     keys: Enter / Esc in a value box, menu and tab-list arrows, a focus trap, Esc closing a modal / popover / drawer), each with its
 //     reason and its exact count, so a new one fails here until it is declared or exempted on purpose;
 //  5. no two shortcuts of one app bind the same key in scopes that are live together (the 727 stop condition);
-//  6. the matcher keeps today's modifier rules (the letters ignore Ctrl / Shift / Alt; Ctrl+S needs no Shift; ...);
+//  6. the matcher keeps today's modifier rules (the letters ignore Shift; TASK 740: they never fire with Ctrl / Cmd / Alt; Ctrl+S needs no Shift; ...);
 //  7. the per-app lists (what Settings > Shortcuts shows) and the key caps;
-//  8. every SIDEBAR_ICONS.<key> an app names exists, and the footer's gear is the drawer's gear artwork.
+//  8. every SIDEBAR_ICONS.<key> an app names exists, and the footer's gear is the drawer's gear artwork;
+//  9. TASK 740: every ribbon button (tool, constraint, Lock, Combine) names a declared shortcut whose key opens that button's tool, a host's own
+//     ribbon button is exempt only with its reason here, every button title reads the table, and the Parameters window has its key.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +19,10 @@ import { SHORTCUTS, APP_HOSTS, matchesShortcut, matchShortcut, shortcutsForHost,
 import { undoRedoKeyAction } from '#ui/history-control.js';
 import { clipboardKeyAction } from '#ui/clipboard.js';
 import { SIDEBAR_ICONS, GEAR_GLYPH } from '#ui/app-sidebar.js';
+import { RIBBON_TOOLS } from '#ui/tool-ribbon.js';
+import { TOOL_SHORTCUTS, TOOL_BEGIN } from '#ui/input-manager.js';
+import { titleWithShortcut, shortcutHint } from '#ui/shortcuts.js';
+import { TOOL_MODES, CONSTRAINT_TOOLS } from '#core/constants.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join('/');
@@ -151,7 +157,22 @@ assert.deepStrictEqual(clashes, [], 'one key, two meanings in one context');
 // ── 6. the matcher keeps today's modifier rules ──
 const ev = (key, mods = {}, extra = {}) => ({ key, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, shiftKey: !!mods.shift, altKey: !!mods.alt, ...extra });
 assert(matchesShortcut(ev('l'), 'tool.line') && matchesShortcut(ev('L', { shift: true }), 'tool.line'), 'L / Shift+L = Line');
-assert(matchesShortcut(ev('d', { ctrl: true }), 'tool.dimension'), 'Ctrl+D still opens Dimension (the letters ignore modifiers: unchanged, reported)');
+// TASK 740 (owner turn 2103): the tool and constraint letters never fire with Ctrl / Cmd / Alt held: Ctrl+D (bookmark), Ctrl+R (reload), Ctrl+L,
+// Ctrl+A, Ctrl+E ... are the browser's again. Shift is ignored as before, except where Shift+letter is its own shortcut.
+assert(!matchesShortcut(ev('d', { ctrl: true }), 'tool.dimension') && matchesShortcut(ev('d'), 'tool.dimension'), 'Ctrl+D is NOT Dimension; D is');
+const LETTER_IDS = SHORTCUTS.filter((s) => s.scope === 'canvas' && (s.group === 'Tools' || s.group === 'Constrain')).map((s) => s.id); // the Design canvas letters (not Pen Plotter's retired, unlisted art-tool letters: unchanged)
+for (const k of 'abcdefghijklmnopqrstuvwxyz') {
+  for (const mods of [{ ctrl: true }, { meta: true }, { alt: true }, { ctrl: true, shift: true }]) {
+    assert.strictEqual(matchShortcut(ev(k, mods), LETTER_IDS), null, `${JSON.stringify(mods)}+${k} is no tool / constraint key`);
+  }
+}
+assert(matchesShortcut(ev('T', { shift: true }), 'tool.perpendicular') && matchesShortcut(ev('F', { shift: true }), 'sketch.fix'), 'Shift still ignored on the older letters');
+// the three Shift+letter pairs (TASK 740): the plain letter is one shortcut, Shift+letter the other
+assert.strictEqual(matchShortcut(ev('b'), LETTER_IDS), 'tool.bezier'); assert.strictEqual(matchShortcut(ev('B', { shift: true }), LETTER_IDS), 'tool.break');
+assert.strictEqual(matchShortcut(ev('m'), LETTER_IDS), 'tool.mirror'); assert.strictEqual(matchShortcut(ev('M', { shift: true }), LETTER_IDS), 'tool.midpoint');
+assert.strictEqual(matchShortcut(ev('p'), [...LETTER_IDS, 'view.parameters']), 'tool.polygon');
+assert.strictEqual(matchShortcut(ev('P', { shift: true }), [...LETTER_IDS, 'view.parameters']), 'view.parameters');
+assert(!matchesShortcut(ev('p', { ctrl: true, shift: true }), 'view.parameters') && !matchesShortcut(ev('p'), 'view.parameters'), 'Ctrl+Shift+P / P are not Parameters');
 assert(matchesShortcut(ev('k'), 'sketch.construction') && matchesShortcut(ev('K', { shift: true }), 'sketch.construction'), 'K / Shift+K');
 assert(!matchesShortcut(ev('k', { ctrl: true }), 'sketch.construction') && !matchesShortcut(ev('k', { alt: true }), 'sketch.construction'), 'Ctrl+K / Alt+K are not Construction');
 assert(matchesShortcut(ev('s', { ctrl: true }), 'file.save') && matchesShortcut(ev('S', { meta: true }), 'file.save'), 'Ctrl+S / Cmd+S');
@@ -207,5 +228,52 @@ assert.deepStrictEqual(missing, [], 'SIDEBAR_ICONS keys the apps use but the tab
 assert(SIDEBAR_ICONS.gear.includes(GEAR_GLYPH) && SIDEBAR_ICONS.style.includes(GEAR_GLYPH), 'gear / style draw the one gear glyph');
 const footer = fs.readFileSync(path.join(ROOT, 'packages/ui/app-footer.js'), 'utf8');
 assert(/import \{ GEAR_GLYPH \} from '#ui\/app-sidebar\.js'/.test(footer) && !footer.includes('<circle cx="9" cy="9" r="2.5"/>'), 'the footer gear wraps GEAR_GLYPH, no second copy of the drawing');
+
+// ── 9. TASK 740: every ribbon button has its key ──
+const asButton = (t) => t.tool || t.action;
+for (const t of RIBBON_TOOLS) {
+  assert(typeof t.shortcut === 'string', 'ribbon button without a shortcut: ' + asButton(t));
+  const s = shortcutById(t.shortcut);
+  assert(s.hosts.length === APP_HOSTS.length || t.action === 'combine' || t.action === 'uncombine', t.shortcut + ': every app has the shared ribbon button');
+}
+// a tool button's key opens THAT tool: through TOOL_SHORTCUTS (switchToTool), or H / E's own branch (it applies to a preselection first, then
+// switches to the same tool); Lock = sketch.fix (toggleFixedSelection), Combine / Uncombine = their own Ctrl+Shift keys
+const OWN_BRANCH = { 'tool.horizontalVertical': TOOL_MODES.HORIZONTAL_VERTICAL, 'tool.equal': TOOL_MODES.EQUAL };
+for (const t of RIBBON_TOOLS.filter((x) => x.tool)) {
+  assert.strictEqual(TOOL_SHORTCUTS[t.shortcut] || OWN_BRANCH[t.shortcut], t.tool, `${t.shortcut} opens ${t.tool}`);
+}
+assert.deepStrictEqual(RIBBON_TOOLS.filter((x) => x.action).map((x) => [x.action, x.shortcut]), [['combine', 'sketch.combine'], ['uncombine', 'sketch.uncombine'], ['lock', 'sketch.fix']]);
+const ribbonTools = new Set(RIBBON_TOOLS.map((t) => t.tool).filter(Boolean));
+assert(CONSTRAINT_TOOLS.every((c) => ribbonTools.has(c)), 'every constraint tool has a ribbon button (so a key)');
+const toolKeyIds = Object.keys(TOOL_SHORTCUTS);
+assert.strictEqual(new Set(toolKeyIds.map((id) => TOOL_SHORTCUTS[id])).size, toolKeyIds.length, 'one key per tool');
+assert(toolKeyIds.every((id) => ids.includes(id)), 'every TOOL_SHORTCUTS id is declared');
+assert.deepStrictEqual(Object.keys(TOOL_BEGIN).sort(), [TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.MIRROR, TOOL_MODES.RECTANGULAR_PATTERN].sort(), 'the tools that start a pick when switched to');
+const ribbonSrc = fs.readFileSync(path.join(ROOT, 'packages/ui/tool-ribbon.js'), 'utf8');
+assert(!/\bbegin:/.test(ribbonSrc), 'no ribbon button carries its own begin (one TOOL_BEGIN, so the key and the button start the same pick)');
+// a host's own ribbon button (extraGroups) is exempt only here, with its reason
+const BUTTON_EXEMPT = {
+  'freehand-btn': 'Pen Plotter\'s own Draw > Freehand button (extraGroups): it sets the plotter-side capture tool in sketch-stage.js, not a shared tool; a key would need Pen Plotter key code (asked in the TASK 740 report)',
+};
+const hostButtons = [];
+for (const f of SRC.filter((x) => x.file.startsWith('apps/'))) {
+  for (const m of f.text.matchAll(/extraGroups:\s*\[([\s\S]*?)\]\s*\}\s*\]/g)) for (const b of m[1].matchAll(/\bid:\s*'([\w-]+)'/g)) hostButtons.push(b[1]);
+}
+assert.deepStrictEqual(hostButtons.sort(), Object.keys(BUTTON_EXEMPT).sort(), 'a host ribbon button needs a key, or an exemption with its reason here');
+// every button title reads the table (no key written by hand into a title)
+assert.strictEqual((ribbonSrc.match(/\btitleWithShortcut\(/g) || []).length, 2, 'the tool button and the variant button titles read the table');
+assert(!/\((?:Ctrl\+|Shift\+|[A-Z])\)/.test(ribbonSrc.replace(/\/\/.*$/gm, '')), 'no key written by hand into a ribbon title');
+assert.strictEqual(titleWithShortcut('Line', 'tool.line'), 'Line (L)');
+assert.strictEqual(titleWithShortcut('Break', 'tool.break', { mac: false }), 'Break (Shift+B)');
+assert.strictEqual(titleWithShortcut('Combine Shapes', 'sketch.combine', { mac: false }), 'Combine Shapes (Ctrl+Shift+C)');
+assert.strictEqual(titleWithShortcut('Combine Shapes', 'sketch.combine', { mac: true }), 'Combine Shapes (Cmd+Shift+C)');
+assert.strictEqual(shortcutHint('sketch.fix'), 'F');
+// the Parameters window: Shift+P in the three apps that have it (Trace has none, O14), bound by the footer to its own button
+assert.deepStrictEqual(shortcutById('view.parameters').hosts, ['sketchstudio', 'shaper', 'penplotter']);
+assert.strictEqual(shortcutHint('view.parameters'), 'Shift+P');
+assert(!listIds('trace').includes('view.parameters') && listIds('shaper').includes('view.parameters'), 'Trace lists no Parameters key');
+const footerSrc = fs.readFileSync(path.join(ROOT, 'packages/ui/app-footer.js'), 'utf8');
+assert(/matchesShortcut\(e, 'view\.parameters'\)[\s\S]{0,120}paramsBtn\.click\(\)/.test(footerSrc), 'the key clicks the Parameters button (the same toggle)');
+for (const h of APP_HOSTS) for (const t of RIBBON_TOOLS) if (shortcutById(t.shortcut).hosts.includes(h)) assert(listIds(h).includes(t.shortcut), `${h} lists ${t.shortcut}`);
 
 console.log(`shortcuts: ok (${SHORTCUTS.length} declared, ${asked.size} ids asked for in ${users.length} files, ${Object.keys(EXEMPT).length} widget-local files exempt)`);

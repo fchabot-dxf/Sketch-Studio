@@ -6,15 +6,14 @@
 // → Shaper) from the SAME component. Self-contained: injects its <style> once + inject-IF-MISSING icon symbols
 // (reuses cursor-manager's ICONS, the single source of truth) so #icon-* resolve in any host.
 
-import { switchToTool, toggleFixedSelection, selectionLockState } from '#ui/input-manager.js';
+import { switchToTool, toggleFixedSelection, selectionLockState, TOOL_BEGIN } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
-import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
-import { beginCircularPattern, beginRectangularPattern } from '#ui/input-handlers/pattern-tool.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
 import { loadSection, saveSection, defaultSection } from '#ui/ribbon-layout.js';
+import { titleWithShortcut } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration
 
 // TASK 647: the ribbon never scrolls. Each section shows the tools that are "in the bar" (the user's checkboxes) and fit, then its NAME, a button
 // that opens the section's dropdown (every tool of the section: run it, check it in / out of the bar, hold-drag its grip to reorder). The fit
@@ -40,59 +39,64 @@ const SLOT_VARIANTS = [
   { mode: SLOT_MODES.CENTER_POINT_ARC, icon: 'icon-tool-slot-arccenter', label: 'Center Point Arc Slot' },
 ];
 
-// The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label).
+// The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label; shortcut = its id in shortcuts.js, TASK 740:
+// the key that does what the button does, shown in the button's title).
 // TASK 647: Select is its own section, first, like Fusion's SELECT panel.
 const SELECT = [
-  { tool: TOOL_MODES.SELECT, icon: 'icon-tool-select',  label: 'Select' },
+  { tool: TOOL_MODES.SELECT, icon: 'icon-tool-select',  label: 'Select', shortcut: 'tool.select' },
 ];
 const CREATE = [
-  { tool: TOOL_MODES.LINE,    icon: 'icon-tool-line',     label: 'Line' },
-  { tool: TOOL_MODES.RECT,    icon: 'icon-tool-rect-2pt', label: 'Rect', variants: RECT_VARIANTS, modeKey: 'rectMode', eventName: 'rectMode' },
-  { tool: TOOL_MODES.SLOT,    icon: 'icon-tool-slot-c2c', label: 'Slot', variants: SLOT_VARIANTS, modeKey: 'slotMode', eventName: 'slotMode' },
-  { tool: TOOL_MODES.CIRCLE,  icon: 'icon-tool-circle',   label: 'Circle' },
-  { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon',  label: 'Polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
-  { tool: TOOL_MODES.ARC,     icon: 'icon-tool-arc-cse',  label: 'Arc' }, // single-mode in the source (no dropdown)
-  { tool: TOOL_MODES.BEZIER,  icon: 'icon-tool-bezier',   label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
+  { tool: TOOL_MODES.LINE,    icon: 'icon-tool-line',     label: 'Line', shortcut: 'tool.line' },
+  { tool: TOOL_MODES.RECT,    icon: 'icon-tool-rect-2pt', label: 'Rect', variants: RECT_VARIANTS, modeKey: 'rectMode', eventName: 'rectMode', shortcut: 'tool.rect' },
+  { tool: TOOL_MODES.SLOT,    icon: 'icon-tool-slot-c2c', label: 'Slot', variants: SLOT_VARIANTS, modeKey: 'slotMode', eventName: 'slotMode', shortcut: 'tool.slot' },
+  { tool: TOOL_MODES.CIRCLE,  icon: 'icon-tool-circle',   label: 'Circle', shortcut: 'tool.circle' },
+  { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon',  label: 'Polygon', shortcut: 'tool.polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
+  { tool: TOOL_MODES.ARC,     icon: 'icon-tool-arc-cse',  label: 'Arc', shortcut: 'tool.arc' }, // single-mode in the source (no dropdown)
+  { tool: TOOL_MODES.BEZIER,  icon: 'icon-tool-bezier',   label: 'Bezier', shortcut: 'tool.bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
 ];
 // TRACE-1: Edit/modify tools — trim + break. No cursor-manager symbols yet; icons provided as SVG inline.
 const EDIT = [
-  { tool: TOOL_MODES.TRIM,  iconSvg: '<path d="M4 12h6M14 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#ef4444"/>', label: 'Trim' },
-  { tool: TOOL_MODES.BREAK, iconSvg: '<path d="M5 12h5M14 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="#fbbf24" stroke-width="2" fill="none"/>', label: 'Break' },
-  { tool: TOOL_MODES.FILLET, iconSvg: '<path d="M5 19V12a7 7 0 0 1 7-7h7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M5 12V5h7" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none"/>', label: 'Fillet' },
-  // TASK 585: Mirror. `begin` runs when the button starts the tool (the pre-selection). TASK 647 (owner): in Modify after Fillet, not Create
+  { tool: TOOL_MODES.TRIM,  iconSvg: '<path d="M4 12h6M14 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#ef4444"/>', label: 'Trim', shortcut: 'tool.trim' },
+  { tool: TOOL_MODES.BREAK, iconSvg: '<path d="M5 12h5M14 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="#fbbf24" stroke-width="2" fill="none"/>', label: 'Break', shortcut: 'tool.break' },
+  { tool: TOOL_MODES.FILLET, iconSvg: '<path d="M5 19V12a7 7 0 0 1 7-7h7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M5 12V5h7" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none"/>', label: 'Fillet', shortcut: 'tool.fillet' },
+  // TASK 585: Mirror. Switching to it starts its pick (the pre-selection: input-manager.js TOOL_BEGIN). TASK 647 (owner): in Modify after Fillet, not Create
   // (Fusion keeps Mirror under CREATE: a declared divergence).
-  { tool: TOOL_MODES.MIRROR, icon: 'icon-tool-mirror',  label: 'Mirror', title: 'Mirror: the objects, then the mirror line, then Enter', begin: beginMirror },
+  { tool: TOOL_MODES.MIRROR, icon: 'icon-tool-mirror',  label: 'Mirror', title: 'Mirror: the objects, then the mirror line, then Enter', shortcut: 'tool.mirror' },
   // TASK 658: Fusion's Circular / Rectangular Pattern (owner ruling: in Modify right after Mirror; Fusion keeps them under CREATE: a declared
-  // divergence). `begin` opens the pattern dialog (a pre-selection is the objects). Icons: the source solid, its copies dashed (the Fillet / Offset style).
-  { tool: TOOL_MODES.CIRCULAR_PATTERN, label: 'Circular', title: 'Circular Pattern', ariaLabel: 'Circular Pattern', begin: beginCircularPattern,
+  // divergence). Switching to one opens the pattern dialog (TOOL_BEGIN; a pre-selection is the objects). Icons: the source solid, its copies dashed (the Fillet / Offset style).
+  { tool: TOOL_MODES.CIRCULAR_PATTERN, label: 'Circular', title: 'Circular Pattern', ariaLabel: 'Circular Pattern', shortcut: 'tool.circularPattern',
     iconSvg: '<circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="4.5" r="2.6" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="18.5" cy="15.8" r="2.6" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/><circle cx="5.5" cy="15.8" r="2.6" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/>' },
-  { tool: TOOL_MODES.RECTANGULAR_PATTERN, label: 'Rect Pat', title: 'Rectangular Pattern', ariaLabel: 'Rectangular Pattern', begin: beginRectangularPattern,
+  { tool: TOOL_MODES.RECTANGULAR_PATTERN, label: 'Rect Pat', title: 'Rectangular Pattern', ariaLabel: 'Rectangular Pattern', shortcut: 'tool.rectangularPattern',
     iconSvg: '<rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 1.5" fill="none"/>' },
   // TASK 650: like Fusion's Create > Offset (owner ruling: in Modify). Icon: a curve and its dashed offset, in the Fillet icon's style.
-  { tool: TOOL_MODES.OFFSET, iconSvg: '<path d="M4 20V11a7 7 0 0 1 7-7h9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M9 20v-8a3 3 0 0 1 3-3h8" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none" stroke-linecap="round"/>', label: 'Offset', title: 'Offset: click a curve (its chain), choose the side, type the distance, Enter' },
+  { tool: TOOL_MODES.OFFSET, iconSvg: '<path d="M4 20V11a7 7 0 0 1 7-7h9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M9 20v-8a3 3 0 0 1 3-3h8" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none" stroke-linecap="round"/>', label: 'Offset', title: 'Offset: click a curve (its chain), choose the side, type the distance, Enter', shortcut: 'tool.offset' },
 ];
 
 // Profile actions (COMBINE / UNCOMBINE): opt-in for hosts declaring profiles: true
 const PROFILE_ACTIONS = [
-  { action: 'combine', id: 'btn-combine', iconSvg: '<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="8.5" y="8.5" width="7" height="7" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 1.5" fill="none"/>', label: 'Combine', title: 'Combine Shapes (Ctrl+Shift+C)' },
-  { action: 'uncombine', id: 'btn-uncombine', iconSvg: '<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 2" fill="none"/><rect x="8.5" y="8.5" width="7" height="7" stroke="currentColor" stroke-width="1.4" fill="none"/>', label: 'Uncomb', title: 'Uncombine Profile (Ctrl+Shift+U)' },
+  { action: 'combine', id: 'btn-combine', iconSvg: '<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="8.5" y="8.5" width="7" height="7" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 1.5" fill="none"/>', label: 'Combine', title: 'Combine Shapes', shortcut: 'sketch.combine' },
+  { action: 'uncombine', id: 'btn-uncombine', iconSvg: '<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 2" fill="none"/><rect x="8.5" y="8.5" width="7" height="7" stroke="currentColor" stroke-width="1.4" fill="none"/>', label: 'Uncomb', title: 'Uncombine Profile', shortcut: 'sketch.uncombine' },
 ];
 const INSPECT = [
-  { tool: TOOL_MODES.DIMENSION, icon: 'icon-tool-dim', label: 'Dim' },
+  { tool: TOOL_MODES.DIMENSION, icon: 'icon-tool-dim', label: 'Dim', shortcut: 'tool.dimension' },
 ];
 const CONSTRAIN = [
-  { tool: TOOL_MODES.COINCIDENT,          icon: 'icon-coincident',   label: 'Coinc' },
-  { tool: TOOL_MODES.HORIZONTAL_VERTICAL, icon: 'icon-hv',           label: 'H/V' },
-  { tool: TOOL_MODES.PARALLEL,            icon: 'icon-parallel',     label: 'Para' },
-  { tool: TOOL_MODES.PERPENDICULAR,       icon: 'icon-perpendicular', label: 'Perp' },
-  { tool: TOOL_MODES.COLLINEAR,           icon: 'icon-collinear',    label: 'Coll' },
-  { tool: TOOL_MODES.TANGENT,             icon: 'icon-tangent',      label: 'Tang' },
-  { tool: TOOL_MODES.EQUAL,               icon: 'icon-equal',        label: 'Equal' },
-  { tool: TOOL_MODES.MIDPOINT,            icon: 'icon-midpoint',     label: 'Mid' },
-  { tool: TOOL_MODES.SYMMETRIC,           icon: 'icon-symmetric',    label: 'Sym' },   // task 563: entity, entity, then the symmetry line
+  { tool: TOOL_MODES.COINCIDENT,          icon: 'icon-coincident',   label: 'Coinc', shortcut: 'tool.coincident' },
+  { tool: TOOL_MODES.HORIZONTAL_VERTICAL, icon: 'icon-hv',           label: 'H/V', shortcut: 'tool.horizontalVertical' },
+  { tool: TOOL_MODES.PARALLEL,            icon: 'icon-parallel',     label: 'Para', shortcut: 'tool.parallel' },
+  { tool: TOOL_MODES.PERPENDICULAR,       icon: 'icon-perpendicular', label: 'Perp', shortcut: 'tool.perpendicular' },
+  { tool: TOOL_MODES.COLLINEAR,           icon: 'icon-collinear',    label: 'Coll', shortcut: 'tool.collinear' },
+  { tool: TOOL_MODES.TANGENT,             icon: 'icon-tangent',      label: 'Tang', shortcut: 'tool.tangent' },
+  { tool: TOOL_MODES.EQUAL,               icon: 'icon-equal',        label: 'Equal', shortcut: 'tool.equal' },
+  { tool: TOOL_MODES.MIDPOINT,            icon: 'icon-midpoint',     label: 'Mid', shortcut: 'tool.midpoint' },
+  { tool: TOOL_MODES.SYMMETRIC,           icon: 'icon-symmetric',    label: 'Sym', shortcut: 'tool.symmetric' },   // task 563: entity, entity, then the symmetry line
 ];
 // Lock is an ACTION (not a drawing mode): the same toggleFixedSelection as the F key and the context menu.
-const LOCK = { action: 'lock', id: 'btn-lock', icon: 'icon-lock', label: 'Lock', title: 'Lock / Unlock (F)' };
+const LOCK = { action: 'lock', id: 'btn-lock', icon: 'icon-lock', label: 'Lock', title: 'Lock / Unlock', shortcut: 'sketch.fix' };
+
+// TASK 740: every built-in button, for tests/shortcuts.test.js (each names its shortcut). Not tools of their own: the Rect / Slot variant rows (they
+// set the tool's mode; the tool's key opens it with the last mode) and the section names (they open a dropdown).
+export const RIBBON_TOOLS = Object.freeze([...SELECT, ...CREATE, ...EDIT, ...PROFILE_ACTIONS, ...INSPECT, ...CONSTRAIN, LOCK]);
 
 // Every #icon-* the ribbon references (for inject-if-missing).
 const ICON_IDS = [
@@ -306,11 +310,12 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   const menus = [];    // TASK 607: popovers on document.body, removed in destroy()
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };
-  function selectTool(tool, begin = null) {
+  function selectTool(tool) {
     state.closeDrawStep(); // TASK 549: picking a tool in the middle of a draw cancels it (nothing committed: no orphan point, no undo step)
-    if (typeof onToolClick === 'function') { try { onToolClick(tool); } catch (_) {} } // host owns activation
-    else { try { switchToTool(state, tool); } catch (_) {} }                            // default: shared tool-switch
-    if (begin) begin(state); // TASK 585: a tool declared with `begin` (Mirror) starts its pick from the state the switch left
+    if (typeof onToolClick === 'function') {                                              // host owns activation
+      try { onToolClick(tool); } catch (_) {}
+      if (TOOL_BEGIN[tool]) TOOL_BEGIN[tool](state); // TASK 585 / 740: Mirror / a pattern starts its pick from the state the switch left
+    } else { try { switchToTool(state, tool); } catch (_) {} }                          // default: shared tool-switch (it runs TOOL_BEGIN)
     fire('tool', tool);
     refresh();
   }
@@ -321,7 +326,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (t.id) b.id = t.id;
     else if (t.tool) b.id = 'tool-' + t.tool;
     else if (t.action) b.id = 'action-' + t.action;
-    b.title = t.title || t.label;
+    b.title = titleWithShortcut(t.title || t.label, t.shortcut); // TASK 740: "Line (L)" (every built-in button names its shortcut)
     if (t.tool) b.dataset.tool = t.tool;
     if (t.action) b.dataset.action = t.action;
     if (t.ariaLabel) b.setAttribute('aria-label', t.ariaLabel);
@@ -338,7 +343,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
         else if (t.action === 'uncombine') doUncombine(state, notify || undefined);
         fire('action', { id: b.id, action: t.action });
       } else {
-        selectTool(t.tool, t.begin);
+        selectTool(t.tool);
       }
     };
     b.addEventListener('click', run);
@@ -348,7 +353,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   const variantPops = [];
   function variantItem(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn sk-ribbon-dd';
-    b.dataset.tool = t.tool; b.title = t.label;
+    b.dataset.tool = t.tool; b.title = titleWithShortcut(t.label, t.shortcut); // TASK 740: "Rect (R)"
     if (t.tool) b.id = 'tool-' + t.tool;
     const activeMode = (state && state[t.modeKey]) || t.variants[0].mode;
     const initialVariant = t.variants.find(v => v.mode === activeMode) || t.variants[0];

@@ -30,7 +30,7 @@ import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager
 import { handleLineKeyDown, finishLineChain, lineChainAnchor } from '#ui/input-handlers/line-tool.js';
 import { createLongPress } from '#ui/long-press.js';
 import { createDoneButton } from '#ui/done-button.js';
-import { handleMirrorPointerDown, mirrorDone, mirrorStep } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
+import { handleMirrorPointerDown, mirrorDone, mirrorStep, beginMirror } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleSlotKeyDown, isSlotActive, finishSlotStep, slotAnchorPoint } from '#ui/input-handlers/slot-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
@@ -40,7 +40,7 @@ import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrim
 import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletInputValid, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
 import { setupOffsetTool, handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
 import { isDimension } from '#core/parameters.js';
-import { setupPatternTool, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS, PATTERN_INLINE_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658 + 662
+import { setupPatternTool, beginCircularPattern, beginRectangularPattern, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS, PATTERN_INLINE_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658 + 662
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -1179,14 +1179,26 @@ export function sketchHistory(state) {
 }
 
 // TASK 727: the tool each declared tool key opens (the keys themselves are in shortcuts.js). H and E have their own branch below (they act
-// on a preselection first).
-const TOOL_SHORTCUTS = {
+// on a preselection first). TASK 740: every ribbon tool and constraint; the key runs switchToTool, which is what its ribbon button runs.
+export const TOOL_SHORTCUTS = Object.freeze({
     'tool.line': 'line', 'tool.rect': 'rect', 'tool.circle': 'circle', 'tool.arc': 'arc', // drawing tools
+    'tool.slot': TOOL_MODES.SLOT, 'tool.polygon': TOOL_MODES.POLYGON, 'tool.bezier': TOOL_MODES.BEZIER,
+    'tool.trim': TOOL_MODES.TRIM, 'tool.break': TOOL_MODES.BREAK, 'tool.fillet': TOOL_MODES.FILLET, 'tool.offset': TOOL_MODES.OFFSET, // modify
+    'tool.mirror': TOOL_MODES.MIRROR, 'tool.circularPattern': TOOL_MODES.CIRCULAR_PATTERN, 'tool.rectangularPattern': TOOL_MODES.RECTANGULAR_PATTERN,
     'tool.select': 'select', 'tool.pan': 'pan', // selection and navigation (V for View)
     'tool.coincident': TOOL_MODES.COINCIDENT, 'tool.perpendicular': TOOL_MODES.PERPENDICULAR, 'tool.tangent': TOOL_MODES.TANGENT,
     'tool.collinear': TOOL_MODES.COLLINEAR, 'tool.parallel': TOOL_MODES.PARALLEL,
+    'tool.midpoint': TOOL_MODES.MIDPOINT, 'tool.symmetric': TOOL_MODES.SYMMETRIC,
     'tool.dimension': 'dim',
-};
+}); // exported for tests/shortcuts.test.js (each ribbon button's key opens that button's tool)
+
+// TASK 740: the tools that START a pick when switched to (Mirror's objects step, a pattern's dialog: TASK 585 / 658), declared once. The
+// ribbon button and the key both reach it: switchToTool runs it (below); a ribbon whose host activates tools itself (onToolClick) runs it after.
+export const TOOL_BEGIN = Object.freeze({
+    [TOOL_MODES.MIRROR]: beginMirror,
+    [TOOL_MODES.CIRCULAR_PATTERN]: beginCircularPattern,
+    [TOOL_MODES.RECTANGULAR_PATTERN]: beginRectangularPattern,
+});
 
 function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
@@ -1286,7 +1298,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
             }
         }
 
-        // Tool switching shortcuts (declared in shortcuts.js; the letters ignore Ctrl / Shift / Alt, as they always have)
+        // Tool switching shortcuts (declared in shortcuts.js; TASK 740: the letters never fire with Ctrl / Cmd / Alt held, those are the browser's)
         const toolId = matchShortcut(e, Object.keys(TOOL_SHORTCUTS));
         if (toolId) { switchToTool(state, TOOL_SHORTCUTS[toolId]); e.preventDefault(); }
         // H: If a single line is preselected, apply H/V immediately. Otherwise switch to tool and wait for selection.
@@ -1513,6 +1525,7 @@ export function switchToTool(state, toolName) {
         const effectiveType = (toolName === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : toolName;
         state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
     }
+    if (TOOL_BEGIN[toolName]) TOOL_BEGIN[toolName](state); // TASK 740: Mirror / a pattern starts its pick (the ribbon used to run it itself)
 }
 
 // TASK 585: Enter / the touch Done button in the Mirror tool. The tool ends (back to Select) once the copy is made, like Fusion's command.

@@ -46,7 +46,8 @@ const jointRefsOf = (c) => (isPatternConstraint(c) ? patternRefs(c).joints : ref
 const shapeRefsOf = (c) => (isPatternConstraint(c) ? patternRefs(c).shapes : refsOf(c, SHAPE_REFS));
 
 // ── the keys (declared in shortcuts.js: edit.copy / edit.cut / edit.paste; bound in input-manager.js next to the other shortcuts) ──
-// Ctrl/Cmd+C copy, Ctrl/Cmd+X cut, Ctrl/Cmd+V paste (no Shift/Alt: Ctrl+Shift+C is Combine). Ctrl+D is NOT bound (the browser's bookmark key).
+// Ctrl/Cmd+C copy, Ctrl/Cmd+X cut, Ctrl/Cmd+V paste (no Shift/Alt: Ctrl+Shift+C is Combine). Ctrl+D is NOT bound: it stays the browser's bookmark
+// key (TASK 740: the tool letters never fire with Ctrl / Cmd / Alt held, so Ctrl+D is no longer Dimension).
 const CLIP_ACTIONS = { 'edit.copy': 'copy', 'edit.cut': 'cut', 'edit.paste': 'paste' };
 export function clipboardKeyAction(e) {
   const id = matchShortcut(e, Object.keys(CLIP_ACTIONS));

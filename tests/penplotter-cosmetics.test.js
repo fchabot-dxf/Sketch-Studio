@@ -23,7 +23,11 @@ await (async () => {
   try {
     await send('DOM.enable');
     const click = async (x, y) => {
-      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 }); await sleep(30);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 });
+      // On the Design canvas wait until the app has taken in the move (state.lastMouse) before pressing: under load the browser
+      // drops a press that follows a move the page has not processed yet (seen: pointermove delivered, pointerdown never).
+      await waitFor(`(() => { const el = document.elementFromPoint(${x}, ${y}); if (!el || !el.closest('#design-canvas')) return true; const m = window.__sketch.controller.state.lastMouse; return !!m && Math.abs(m.x - ${x}) < 1 && Math.abs(m.y - ${y}) < 1; })()`, 'the app saw the move to ' + x + ',' + y);
+      await sleep(30);
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 }); await sleep(30);
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 }); await sleep(200);
     };

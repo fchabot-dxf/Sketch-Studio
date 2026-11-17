@@ -190,7 +190,7 @@ try {
   // shape (edge midpoint)
   let m = await holdAt(hotspots.mid);
   assert.strictEqual(m.n, 1, 'a 700 ms hold on a shape opens the context menu');
-  assert.deepStrictEqual(m.rows.map((r) => r[0]), ['Lock', 'Delete']);
+  assert.deepStrictEqual(m.rows.map((r) => r[0]), ['Lock', 'Delete', 'Close path']); // TASK 760: the shape is an open chain of two lines: Close path is offered
   for (const [label, h] of m.rows) assert.ok(h >= 44, `${label} row is ${h}px (>= 44)`);
   assert.ok(m.left >= 0 && m.right <= 390 && m.top >= 0 && m.bottom <= 844, 'the menu is inside the viewport');
   console.log('menu', JSON.stringify(m), 'finger', JSON.stringify(hotspots.mid));

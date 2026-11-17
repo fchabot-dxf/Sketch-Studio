@@ -100,7 +100,7 @@ export async function runRibbonSections(hostName, part) {
         assert.deepStrictEqual(by.constrain.shown, by.constrain.all, tag + ': every Constrain tool shows on the desktop');
         assert.deepStrictEqual(by.modify.shown, ['tool-trim'], tag + ': Modify shows its first tool only (defaultInBar 1)');
         assert.deepStrictEqual(by.inspect.shown, ['tool-dim'], tag + ': Inspect shows its first tool only (defaultInBar 1)');
-        assert.deepStrictEqual(by.modify.all.slice(0, 4), ['tool-trim', 'tool-break', 'tool-fillet', 'tool-mirror'], tag + ': Modify = Trim, Break, Fillet, Mirror (owner: Mirror after Fillet)');
+        assert.deepStrictEqual(by.modify.all.slice(0, 5), ['tool-trim', 'tool-break', 'tool-closePath', 'tool-fillet', 'tool-mirror'], tag + ': Modify = Trim, Break, Close path, Fillet, Mirror (owner: Mirror after Fillet; TASK 760: Close path beside Break)');
         assert(!by.create.all.includes('tool-mirror') && !by.create.all.includes('tool-select'), tag + ': Mirror and Select are not in Create');
       } else assert.deepStrictEqual(L.bad, [], tag + ': every shown tool and section name is >= 44 x 44 and uncovered');
 

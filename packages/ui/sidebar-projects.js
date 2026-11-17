@@ -30,6 +30,12 @@ import { openTemplatePicker, openChoiceModal, openPromptModal } from './template
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 import { OPEN_DOCUMENT_EVENT } from './sketch-import.js'; // TASK 759: a design file dropped on a drawing
 import { homeLabel, HOME_KINDS } from './document-home.js';
+// TASK 768: THE Save button (save-button.js) at the end of the header (the tab strip where the header is hidden), the loading tab and the loading overlay,
+// all reading this page's ONE document activity (document-activity.js) and THE save state (save-state.js); mounted with the document tab strip.
+import { createDocumentActivity } from './document-activity.js';
+import { createSaveButton } from './save-button.js';
+import { mountLoadingOverlay } from './loading-overlay.js';
+import { saveStateOf, tabSaveState } from './save-state.js';
 
 export { relativeTime };
 
@@ -43,8 +49,10 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   let currentDesignId = null;
   let manager = null;   // the open project manager modal, if any
   const showDocumentTabs = Boolean(documentTabs && projects);
+  const activity = createDocumentActivity(); // TASK 768: what the shown document is doing (loading / THE Save command), for every view of it
+  const signedIn = () => !account || account.state().signedIn;
   // what can be done with a design / a project: declared once (project-actions.js), shared with the project manager
-  const projectActions = projects ? createProjectActions({ store, getBuffer, account, importFile, tabs: showDocumentTabs, pickTemplate: openTemplatePicker, chooseModal: openChoiceModal, promptModal: openPromptModal, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)), openProjects: () => openManager('projects') }) : null;
+  const projectActions = projects ? createProjectActions({ store, getBuffer, account, importFile, tabs: showDocumentTabs, pickTemplate: openTemplatePicker, chooseModal: openChoiceModal, promptModal: openPromptModal, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)), openProjects: () => openManager('projects'), activity }) : null;
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
@@ -146,13 +154,27 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
 
   let tabStrip = null;
   let tabObserver = null;
+  let saveButton = null, overlay = null;
+  let shownTabs = null; // the tabs as the strip last read them (null before the first restore)
   if (showDocumentTabs) {
-    tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName });
+    // TASK 768: the button shows the ACTIVE tab's save state (or the load in flight); a press runs saveNow, THE Save command (Ctrl+S, the menu's Save)
+    saveButton = createSaveButton({
+      getState: () => {
+        const load = activity.loading();
+        const t = shownTabs && shownTabs.find((x) => x.active);
+        return load || !t ? saveStateOf({ loading: load }) : tabSaveState(t, { store, signedIn, activity });
+      },
+      onPress: () => { saveNow().catch(fail); },
+    });
+    tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName,
+      activity, signedIn, onRefresh: (list) => { shownTabs = list; saveButton.refresh(); } });
+    overlay = mountLoadingOverlay({ activity, below: () => tabStrip.el });
     // the host appends the sidebar's button into its header AFTER this call: place the strip as soon as the button has a <header>
     const place = () => {
       const header = sidebar.el.closest('header');
       if (!header || !header.parentNode) return false;
       header.parentNode.insertBefore(tabStrip.el, header.nextSibling); // TASK 602 (owner): below the header, above the ribbon
+      saveButton.placeIn({ header, strip: tabStrip.el }); // TASK 768: the header's right end; the strip's where the header is hidden
       return true;
     };
     if (!place()) {
@@ -176,13 +198,17 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     if (tabStrip) tabStrip.note(text); else sidebar.notify(text, 'info');
     return r;
   }
+  // TASK 768: run through the page's activity (the Save button and the tab show it running; a second press / Ctrl+S while it runs does nothing)
   async function saveNow() {
     const b = getBuffer && getBuffer();
     if (!b) return null;
     await b.ready; // a stored design may still be restoring: it is not an Untitled
-    const r = afterSave(await projectActions.save());
-    await refreshName();
-    return r;
+    const t = b.tabs().find((x) => x.active);
+    return activity.save(t ? t.key : null, async () => {
+      const r = afterSave(await projectActions.save());
+      await refreshName();
+      return r;
+    });
   }
   const onKeyDown = projects ? (e) => {
     if (!matchesShortcut(e, 'file.save')) return;
@@ -204,6 +230,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       if (onDropDocument) window.removeEventListener(OPEN_DOCUMENT_EVENT, onDropDocument);
       if (tabObserver) { tabObserver.disconnect(); tabObserver = null; }
       if (tabStrip) { tabStrip.destroy(); tabStrip = null; }
+      if (saveButton) { saveButton.destroy(); saveButton = null; }
+      if (overlay) { overlay.destroy(); overlay = null; }
       baseDestroy();
     },
   };

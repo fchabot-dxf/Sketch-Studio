@@ -56,5 +56,8 @@ scripts/live-evidence-*.cjs
 # --- TASK 696: the built website of one app (node scripts/build-site.cjs <app>) ---
 dist/
 
+# --- TASK 738: the analytics Worker's local deploy log (analytics/deploy.mjs) ---
+analytics/.deploy-log.jsonl
+
 # --- TASK 733: the Fusion add-in download is copied into the SHAPER SITE only (build-site.cjs --addin); never in this repo ---
 apps/shaper/downloads/

@@ -44,6 +44,7 @@
 import { serializeDocument, deserializeDocument, validateDocument } from '#core/document.js';
 import { getProjectStore, emptyDocument } from '#ui/project-store.js';
 import { browserFileSeam, serializeProjectFile, projectFileName } from '#ui/project-file.js';
+import { track } from '#ui/analytics.js'; // TASK 738: a design saved under a name
 
 /** T7 (owner ruling 2026-11-12): at most this many designs open at once (each tab keeps up to HISTORY_DEPTH undo steps in memory). */
 export const MAX_TABS = 10;
@@ -458,12 +459,14 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       boundId = d.id; name = d.name; emptySig = null; saveOk = true; resetHostBaseline(docHasOwnHost(doc.hosts)); lastSig = sig;
       notify('saved');
       await saveWorkingBuffer();
+      track('drive:save'); // TASK 738
       return d;
     }
     await flush();
     const p = await store.saveAs(newName, { app, fromId: boundId });
     boundId = p.id; name = p.name; lastSig = sigNow();
     await saveWorkingBuffer();
+    track('drive:save'); // TASK 738
     return p;
   }
   /** Save a design to a file: `designId` (a design picked in the project manager), else the shown one: the bound design, or the unsaved

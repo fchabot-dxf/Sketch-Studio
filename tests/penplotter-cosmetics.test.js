@@ -70,11 +70,18 @@ await (async () => {
     // ---- item 1: a coloured shape + an EMPTY palette -> the Pen-mix box says why it is off
     await clickEl('.sk-header-tab[data-tab="design"]'); await stageOn('design');
     await clickEl('#tool-line');
+    await waitFor(`window.__sketch.controller.state.currentTool === 'line'`, 'line tool active after clicking #tool-line');
     const a = await world(20, 30), b = await world(60, 30);
-    await click(a.x, a.y); await click(b.x, b.y);
+    await click(a.x, a.y);
+    await waitFor(`!!window.__sketch.controller.state.active`, 'line started after the first click');
+    await click(b.x, b.y);
+    await waitFor(`window.__sketch.controller.state.shapes.length === 1`, 'the line committed after the second click (before Escape)');
     await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await waitFor(`!window.__sketch.controller.state.active`, 'Escape ended the line chain');
     await clickEl('#tool-select');
+    await waitFor(`window.__sketch.controller.state.currentTool === 'select'`, 'select tool active after clicking #tool-select');
     const m = await world(40, 30); await click(m.x, m.y);
+    await waitFor(`window.__sketch.controller.state.selectedShapes.size === 1`, 'the line selected after the midpoint click');
     await waitFor(`!document.getElementById('strokeColor').disabled`, 'strokeColor enabled after selecting line');
     await evalJs(`(() => { const e = document.getElementById('strokeColor'); e.value = '#ff0000'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await waitFor(`document.getElementById('mixStatus').textContent.length > 0`, 'mixStatus explains why Pen-mix is off');
@@ -95,6 +102,7 @@ await (async () => {
     const before = await st('state.toolpaths.map(t => t.name)');
     assert(before.includes('Outline'), 'the starter toolpath is still there before: ' + before);
     await clickEl('#tool-select');
+    await waitFor(`window.__sketch.controller.state.currentTool === 'select'`, 'select tool active before selecting the circle');
     const c = await world(82, 25); await click(c.x, c.y);       // the circle's edge (stroke #0000ff, fill #00ff00)
     await waitFor(`import('/apps/penplotter/src/state.js').then(m => m.state.selectedShapeIds.size === 1)`, 'circle selected for + Outline');
     await clickEl('.sk-header-tab[data-tab="toolpath"]'); await stageOn('toolpath');

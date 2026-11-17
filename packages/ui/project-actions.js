@@ -11,6 +11,7 @@
 // to sign in to Google (calling account.signIn() synchronously inside the click gesture), then continues seamlessly or cancels cleanly.
 
 import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
+import { track } from './analytics.js'; // TASK 738: a design opened, a template started
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
@@ -54,6 +55,7 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     if (!tabs && !(await settleUnsaved())) return null;
     const out = await (tabs ? buf().openTab(id) : buf().openDesign(id));
     if (!out.restored) throw new Error(out.reason || 'This design could not be opened.');
+    track('drive:open'); // TASK 738
     return out;
   }
   // (the *Now forms assume the pending edits are already saved)
@@ -122,7 +124,9 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     const choice = pickTemplate ? await pickTemplate() : { blank: true };
     if (!choice) return null;
     const template = choice.template ? { name: choice.name, document: choice.document } : null;
-    return tabs ? buf().newTab(template) : (await settleUnsaved()) ? buf().newDesign(template) : null;
+    const out = tabs ? await buf().newTab(template) : (await settleUnsaved()) ? await buf().newDesign(template) : null;
+    if (out) track('template:' + (choice.template ? choice.template.id : 'blank')); // TASK 738: the template's declared id (#core/templates.js), never its name
+    return out;
   };
   const openFile = async () => {
     if (!tabs && !(await settleUnsaved())) return null;

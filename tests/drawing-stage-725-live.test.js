@@ -1,17 +1,17 @@
-// tests/build-stage-725-live.test.js -- TASK 725: SketchStudio's Build step in the REAL page (headless, real mouse / touch / keys via CDP).
+// tests/drawing-stage-725-live.test.js -- TASK 725: SketchStudio's Drawing step in the REAL page (headless, real mouse / touch / keys via CDP).
 // A named design with H / V / coincident constraints, a construction diagonal and 4 dimensions (two driving lengths, a driving radius, a driven
 // reference length) is stored and reloaded. Then, at 1280 x 800 with the mouse:
-//  1. Design | Build is the step bar; Build (a real click on its step button) shows ONLY the drawing: the 5 solid curves, the 4 dimension labels with
+//  1. Design | Drawing is the step bar; Drawing (a real click on its step button) shows ONLY the drawing: the 5 solid curves, the 4 dimension labels with
 //     the same texts as Design's (unit + display precision), and zero constraint glyphs / point dots / construction / axes / grid; the ribbon, the
 //     Sketches browser, the footer and the drawer handle are not rendered; nothing covers the drawing but the Fit and Print buttons.
 //  2. Read-only: real clicks / a double click on a curve and a label, a drag, and keys (Delete, Backspace, Ctrl+Z, Ctrl+A, l, d, k, 5, Enter, Escape)
 //     change nothing: the stored document and Design's history are unchanged.
-//  3. Wheel zoom and drag pan move Build's view only; Fit frames the drawing with its labels.
+//  3. Wheel zoom and drag pan move Drawing's view only; Fit frames the drawing with its labels.
 //  4. Print: under print media (the browser's beforeprint lays it out) only the drawing + the title line show; Page.printToPDF gives a 1-page PDF
-//     (.evidence/725/build-print.pdf), landscape for this wide drawing.
+//     (.evidence/725/drawing-print.pdf), landscape for this wide drawing.
 //  5. Design (its step button) restores the editing UI and Design's own view (viewBox unchanged).
-//  6. The stored step restores on reload (Build), and a later Design edit (a line drawn with the real Line tool) shows next time Build opens.
-// Then at 390 x 844 with touch: the step bar shows in Build (no drawer handle), a pinch zooms, Fit, a tap changes nothing, Design restores.
+//  6. The stored step restores on reload (Drawing), and a later Design edit (a line drawn with the real Line tool) shows next time Drawing opens.
+// Then at 390 x 844 with touch: the step bar shows in Drawing (no drawer handle), a pinch zooms, Fit, a tap changes nothing, Design restores.
 // Screenshots (.evidence/725/).
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -42,7 +42,7 @@ const DOC = { version: 3, hosts: {}, geometry: {
 const md5 = (buf) => createHash('md5').update(buf).digest('hex').toUpperCase();
 const evidence = [];
 
-const cdp = await launchBrowser({ tag: '725-build', width: 1280, height: 800 });
+const cdp = await launchBrowser({ tag: '725-drawing', width: 1280, height: 800 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
 const { port, send, evalJs, waitFor, waitForApp, navigate, flushAutosave, close } = cdp;
 const url = `http://127.0.0.1:${port}/apps/sketchstudio/index.html`;
@@ -69,9 +69,9 @@ const KEY = { Delete: ['Delete', 'Delete', 46], Backspace: ['Backspace', 'Backsp
   l: ['l', 'KeyL', 76, 'l'], d: ['d', 'KeyD', 68, 'd'], k: ['k', 'KeyK', 75, 'k'], 5: ['5', 'Digit5', 53, '5'], z: ['z', 'KeyZ', 90], a: ['a', 'KeyA', 65] };
 const key = (k, mods = 0) => { const [kk, code, vk, text] = KEY[k]; return sendRealKey(send, kk, code, vk, mods, mods ? '' : (text || '')); };
 
-// what the page shows: Build's drawing and what is rendered around it
-const buildInfo = () => evalJs(`(() => {
-  const v = document.getElementById('build-view'), svg = document.getElementById('buildCanvas'), w = svg.querySelector('.sk-build-world');
+// what the page shows: Drawing's drawing and what is rendered around it
+const drawingInfo = () => evalJs(`(() => {
+  const v = document.getElementById('drawing-view'), svg = document.getElementById('drawingCanvas'), w = svg.querySelector('.sk-drawing-world');
   const rendered = (sel) => [...document.querySelectorAll(sel)].some((e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden');
   const sr = svg.getBoundingClientRect();
   const labels = [...w.querySelectorAll('.dim-label')].map((g) => { const r = g.getBoundingClientRect(); return { text: g.textContent.trim(), inside: r.width > 0 && r.left >= sr.left && r.right <= sr.right && r.top >= sr.top && r.bottom <= sr.bottom }; });
@@ -100,7 +100,7 @@ const buildInfo = () => evalJs(`(() => {
 const designInfo = () => evalJs(`(() => { const s = document.getElementById('svgCanvas'); return {
   shapes: [...s.querySelectorAll('.shape-elem')].map((e) => e.dataset.shapeId).sort(), labels: [...s.querySelectorAll('.dim-label')].map((g) => g.textContent.trim()).sort(),
   glyphs: s.querySelectorAll('.constraint-glyph').length, ribbon: document.getElementById('toolsRibbon').getClientRects().length > 0, footer: document.querySelector('footer.sk-statusbar').getClientRects().length > 0,
-  viewBox: s.getAttribute('viewBox'), undoDisabled: document.getElementById('btn-undo').disabled, buildShown: !document.getElementById('build-view').hidden }; })()`);
+  viewBox: s.getAttribute('viewBox'), undoDisabled: document.getElementById('btn-undo').disabled, drawingShown: !document.getElementById('drawing-view').hidden }; })()`);
 const storedDoc = async (id) => { await flushAutosave(); return evalJs(`import('/packages/ui/project-store.js').then(async (m) => JSON.stringify((await m.getProjectStore().get(${JSON.stringify(id)})).document))`); };
 const vb = (s) => s.split(/\s+/).map(Number);
 const world = (svgId, x, y) => evalJs(`(() => { const svg = document.getElementById('${svgId}'); const p = svg.createSVGPoint(); p.x = ${x}; p.y = ${y}; const s = p.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
@@ -119,60 +119,60 @@ try {
   const d0 = await designInfo();
   console.log('Design: ' + JSON.stringify(d0));
   assert.deepStrictEqual(d0.shapes, ['C', 'CL', 'E1', 'E2', 'E3', 'E4'], 'Design draws the 5 curves and the construction line');
-  assert.ok(d0.glyphs > 0 && d0.ribbon && d0.footer && !d0.buildShown, 'Design shows its glyphs, ribbon and footer');
-  assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.sk-header-tab')].map((t) => t.textContent.trim())`), ['Design', 'Build'], 'the step bar is Design | Build');
+  assert.ok(d0.glyphs > 0 && d0.ribbon && d0.footer && !d0.drawingShown, 'Design shows its glyphs, ribbon and footer');
+  assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.sk-header-tab')].map((t) => t.textContent.trim())`), ['Design', 'Drawing'], 'the step bar is Design | Drawing');
   await shot('design-desktop.png');
   const before = await storedDoc(designId);
 
-  await clickEl('.sk-header-tab[data-tab="build"]');
-  await waitFor(`!document.getElementById('build-view').hidden && document.querySelectorAll('#buildCanvas .dim-label').length === 4`, 'Build shows the drawing');
+  await clickEl('.sk-header-tab[data-tab="drawing"]');
+  await waitFor(`!document.getElementById('drawing-view').hidden && document.querySelectorAll('#drawingCanvas .dim-label').length === 4`, 'Drawing shows the drawing');
   await sleep(300);
-  const b1 = await buildInfo();
-  console.log('Build: ' + JSON.stringify(b1));
-  assert.ok(b1.shown, 'Build is shown');
-  assert.deepStrictEqual(b1.stepBar, ['Design', 'Build*'], 'Build is the active step');
-  assert.deepStrictEqual(b1.shapes, ['C', 'E1', 'E2', 'E3', 'E4'], 'Build draws the 5 solid curves, not the construction line');
+  const b1 = await drawingInfo();
+  console.log('Drawing: ' + JSON.stringify(b1));
+  assert.ok(b1.shown, 'Drawing is shown');
+  assert.deepStrictEqual(b1.stepBar, ['Design', 'Drawing*'], 'Drawing is the active step');
+  assert.deepStrictEqual(b1.shapes, ['C', 'E1', 'E2', 'E3', 'E4'], 'Drawing draws the 5 solid curves, not the construction line');
   assert.deepStrictEqual(b1.labels, d0.labels, 'the 4 dimension labels, with the same texts as Design (document unit + display precision)');
   assert.strictEqual(b1.labels.length, 4, '4 labels');
   assert.ok(b1.labelsInside, 'every label is inside the drawing after the entry fit');
   assert.deepStrictEqual({ glyphs: b1.glyphs, dots: b1.dots, construction: b1.construction, axes: b1.axes, grid: b1.grid, joints: b1.joints }, { glyphs: 0, dots: 0, construction: 0, axes: 0, grid: 0, joints: 0 }, 'no glyph, point, construction, axis or grid');
   assert.deepStrictEqual({ ribbon: b1.ribbon, browser: b1.browser, footer: b1.footer, handle: b1.handle, doctabs: b1.doctabs }, { ribbon: false, browser: false, footer: false, handle: false, doctabs: false }, 'no ribbon, Sketches browser, footer, drawer handle or document tabs');
-  assert.deepStrictEqual(b1.buttons, ['btn-build-fit', 'btn-build-print'], 'Build has only Fit and Print');
-  assert.ok(b1.over.every((o) => o === 'btn-build-fit' || o === 'btn-build-print'), 'nothing but Fit / Print over the drawing: ' + JSON.stringify(b1.over));
+  assert.deepStrictEqual(b1.buttons, ['btn-drawing-fit', 'btn-drawing-print'], 'Drawing has only Fit and Print');
+  assert.ok(b1.over.every((o) => o === 'btn-drawing-fit' || o === 'btn-drawing-print'), 'nothing but Fit / Print over the drawing: ' + JSON.stringify(b1.over));
   assert.strictEqual(b1.designViewBox, d0.viewBox, 'Design\'s view is not touched');
-  await shot('build-desktop.png');
+  await shot('drawing-desktop.png');
 
   // ── 2. read-only: clicks, a double click, a drag, keys ──
-  const lineMid = await world('buildCanvas', 30, 0);
+  const lineMid = await world('drawingCanvas', 30, 0);
   await click(lineMid.x, lineMid.y); await click(lineMid.x, lineMid.y, 2);
-  const lab = await centerOf('#buildCanvas .dim-label');
+  const lab = await centerOf('#drawingCanvas .dim-label');
   await click(lab.x, lab.y); await click(lab.x, lab.y, 2);
   for (const k of ['Delete', 'Backspace', 'l', 'd', 'k', 5, 'Enter', 'Escape']) { await key(k); await sleep(60); }
   await key('z', 2); await key('a', 2); await sleep(300);
   assert.strictEqual(await evalJs(`!!document.querySelector('.dim-input:not(.hidden), #dimInput:not(.hidden)')`), false, 'no value box opened');
   const afterInput = await storedDoc(designId);
-  assert.strictEqual(afterInput, before, 'the stored document is unchanged by clicks and keys in Build');
+  assert.strictEqual(afterInput, before, 'the stored document is unchanged by clicks and keys in Drawing');
   assert.strictEqual(await evalJs(`document.getElementById('btn-undo').disabled`), true, 'nothing went on Design\'s undo history');
 
-  // ── 3. zoom / pan / Fit (Build's own view) ──
+  // ── 3. zoom / pan / Fit (Drawing's own view) ──
   const fitted = vb(b1.viewBox);
-  const mid = await centerOf('#buildCanvas');
+  const mid = await centerOf('#drawingCanvas');
   await mouseEv('mouseMoved', mid.x, mid.y);
   await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: -300 }); await sleep(250);
-  const zoomed = vb((await buildInfo()).viewBox);
+  const zoomed = vb((await drawingInfo()).viewBox);
   assert.ok(zoomed[2] < fitted[2] * 0.9, `wheel zooms in: ${fitted[2]} -> ${zoomed[2]}`);
   await mouseEv('mousePressed', mid.x, mid.y, 1); await sleep(40);
   for (let i = 1; i <= 5; i++) { await mouseEv('mouseMoved', mid.x + i * 20, mid.y + i * 10, 1); await sleep(30); }
   await mouseEv('mouseReleased', mid.x + 100, mid.y + 50); await sleep(250);
-  const panned = vb((await buildInfo()).viewBox);
+  const panned = vb((await drawingInfo()).viewBox);
   assert.ok(Math.abs(panned[0] - zoomed[0]) > 1e-6 && Math.abs(panned[2] - zoomed[2]) < 1e-9, `a drag pans: ${zoomed} -> ${panned}`);
-  await shot('build-desktop-zoomed.png');
-  await clickEl('#btn-build-fit'); await sleep(250);
-  const b3 = await buildInfo();
+  await shot('drawing-desktop-zoomed.png');
+  await clickEl('#btn-drawing-fit'); await sleep(250);
+  const b3 = await drawingInfo();
   const refit = vb(b3.viewBox);
   assert.ok(refit.every((v, i) => Math.abs(v - fitted[i]) < 1e-6 * Math.max(1, Math.abs(fitted[i]))), `Fit frames the drawing again: ${fitted} vs ${refit}`);
   assert.ok(b3.labelsInside, 'after Fit every label is inside');
-  assert.strictEqual(b3.designViewBox, d0.viewBox, 'zoom / pan / Fit in Build leave Design\'s view alone');
+  assert.strictEqual(b3.designViewBox, d0.viewBox, 'zoom / pan / Fit in Drawing leave Design\'s view alone');
   assert.strictEqual(await storedDoc(designId), before, 'zoom / pan / Fit change no document');
 
   // ── 4. Print ──
@@ -180,17 +180,17 @@ try {
   assert.ok(printed);
   const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
   const pdfBuf = Buffer.from(pdf.data, 'base64');
-  fs.writeFileSync(path.join(EVIDENCE_DIR, 'build-print.pdf'), pdfBuf);
+  fs.writeFileSync(path.join(EVIDENCE_DIR, 'drawing-print.pdf'), pdfBuf);
   const pdfText = pdfBuf.toString('latin1');
   const pages = (pdfText.match(/\/Type\s*\/Page[^s]/g) || []).length;
   const box = (pdfText.match(/\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/) || []).slice(1).map(Number);
-  console.log(`build-print.pdf: ${pdfBuf.length} bytes, pages ${pages}, MediaBox ${JSON.stringify(box)}, beforeprint fired ${await evalJs('window.__bp')} md5=${md5(pdfBuf)}`);
-  evidence.push(`build-print.pdf md5=${md5(pdfBuf)} pages=${pages} MediaBox=${JSON.stringify(box)}`);
+  console.log(`drawing-print.pdf: ${pdfBuf.length} bytes, pages ${pages}, MediaBox ${JSON.stringify(box)}, beforeprint fired ${await evalJs('window.__bp')} md5=${md5(pdfBuf)}`);
+  evidence.push(`drawing-print.pdf md5=${md5(pdfBuf)} pages=${pages} MediaBox=${JSON.stringify(box)}`);
   assert.strictEqual(await evalJs('window.__bp'), 1, 'printing fires the browser\'s beforeprint (the layout for paper)');
   assert.strictEqual(pages, 1, 'the printout is one page');
   assert.ok(box.length === 4 && box[2] > box[3], 'the wide drawing prints landscape: ' + JSON.stringify(box));
   await sleep(200);
-  assert.deepStrictEqual(vb((await buildInfo()).viewBox), refit, 'after printing (afterprint) the screen view is back');
+  assert.deepStrictEqual(vb((await drawingInfo()).viewBox), refit, 'after printing (afterprint) the screen view is back');
   // the print media itself, as the browser lays it out between beforeprint and afterprint (the events the browser fires around a print are sent here
   // by hand: a media emulation alone does not print)
   await send('Emulation.setEmulatedMedia', { media: 'print' });
@@ -198,16 +198,16 @@ try {
   const pm = await evalJs(`(() => {
     const visible = (e) => e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden';
     const shownTop = [...document.body.children].filter(visible).map((e) => e.id || e.className);
-    const v = document.getElementById('build-view'), svg = document.getElementById('buildCanvas'), t = v.querySelector('.sk-build-title');
+    const v = document.getElementById('drawing-view'), svg = document.getElementById('drawingCanvas'), t = v.querySelector('.sk-drawing-title');
     const geo = svg.querySelector('.shape-elem'), lab = svg.querySelector('.dim-label text');
-    return { shownTop, actions: visible(v.querySelector('.sk-build-actions')), title: visible(t) ? t.textContent : null,
-      svgW: svg.style.width, svgH: svg.style.height, page: (document.getElementById('sk-build-page') || {}).textContent || null,
+    return { shownTop, actions: visible(v.querySelector('.sk-drawing-actions')), title: visible(t) ? t.textContent : null,
+      svgW: svg.style.width, svgH: svg.style.height, page: (document.getElementById('sk-drawing-page') || {}).textContent || null,
       geoStroke: getComputedStyle(geo).stroke, labelFill: getComputedStyle(lab).fill, bg: getComputedStyle(v).backgroundColor,
       chrome: [...document.querySelectorAll('.sk-header, .sk-sidebar, .sk-sidebar-handle, .sk-doctabs, #notification-container, #toolsRibbon, footer')].filter(visible).length,
       labels: svg.querySelectorAll('.dim-label').length, scale: v.dataset.printScale, orientation: v.dataset.printOrientation };
   })()`);
   console.log('print media: ' + JSON.stringify(pm));
-  assert.deepStrictEqual(pm.shownTop, ['build-view'], 'under print media only the Build view is shown');
+  assert.deepStrictEqual(pm.shownTop, ['drawing-view'], 'under print media only the Drawing view is shown');
   assert.strictEqual(pm.chrome, 0, 'no step bar, menu, handle, tabs, toast, ribbon or footer in the printout');
   assert.strictEqual(pm.actions, false, 'no Fit / Print buttons in the printout');
   assert.ok(pm.title && /Task 725 plate/.test(pm.title) && /Units: mm/.test(pm.title) && /Sketch Studio/.test(pm.title) && /Scale \d+:\d+ \(print at 100%\)/.test(pm.title), 'the title line: ' + pm.title);
@@ -218,41 +218,41 @@ try {
   assert.strictEqual(pm.labelFill, 'rgb(0, 0, 0)', 'black dimension text');
   assert.strictEqual(pm.bg, 'rgb(255, 255, 255)', 'on white');
   assert.strictEqual(pm.labels, 4, 'the 4 dimensions are printed');
-  await shot('build-print-media.png');
+  await shot('drawing-print-media.png');
   await evalJs(`window.dispatchEvent(new Event('afterprint'))`);
   await send('Emulation.setEmulatedMedia', { media: '' }); await sleep(200);
-  assert.deepStrictEqual(vb((await buildInfo()).viewBox), refit, 'back on screen: the screen view');
+  assert.deepStrictEqual(vb((await drawingInfo()).viewBox), refit, 'back on screen: the screen view');
 
   // ── 5. back to Design: the editing UI and Design's own view ──
   await clickEl('.sk-header-tab[data-tab="design"]');
-  await waitFor(`document.getElementById('build-view').hidden && document.getElementById('toolsRibbon').getClientRects().length > 0`, 'Design shows again');
+  await waitFor(`document.getElementById('drawing-view').hidden && document.getElementById('toolsRibbon').getClientRects().length > 0`, 'Design shows again');
   await sleep(300);
   const d1 = await designInfo();
   assert.deepStrictEqual(d1, d0, 'Design is as it was (view, glyphs, labels, ribbon, footer, no undo step)');
-  assert.strictEqual(await storedDoc(designId), before, 'the document is unchanged after the whole Build visit');
-  await shot('design-desktop-after-build.png');
+  assert.strictEqual(await storedDoc(designId), before, 'the document is unchanged after the whole Drawing visit');
+  await shot('design-desktop-after-drawing.png');
 
-  // ── 6. the stored step restores; a later Design edit shows next time Build opens ──
-  await clickEl('.sk-header-tab[data-tab="build"]');
-  await waitFor(`!document.getElementById('build-view').hidden`, 'Build again');
+  // ── 6. the stored step restores; a later Design edit shows next time Drawing opens ──
+  await clickEl('.sk-header-tab[data-tab="drawing"]');
+  await waitFor(`!document.getElementById('drawing-view').hidden`, 'Drawing again');
   await navigate(url, 8000); await waitForApp('svgCanvas');
-  await waitFor(`!document.getElementById('build-view').hidden && document.querySelectorAll('#buildCanvas .dim-label').length === 4`, 'a reload opens on the stored Build step, with the restored design');
+  await waitFor(`!document.getElementById('drawing-view').hidden && document.querySelectorAll('#drawingCanvas .dim-label').length === 4`, 'a reload opens on the stored Drawing step, with the restored design');
   await sleep(300);
-  const b6 = await buildInfo();
-  assert.deepStrictEqual(b6.stepBar, ['Design', 'Build*'], 'the stored step restores');
+  const b6 = await drawingInfo();
+  assert.deepStrictEqual(b6.stepBar, ['Design', 'Drawing*'], 'the stored step restores');
   assert.ok(b6.labelsInside && b6.shapes.length === 5, 'and is framed with its labels: ' + JSON.stringify(b6));
   await clickEl('.sk-header-tab[data-tab="design"]');
-  await waitFor(`document.getElementById('build-view').hidden`, 'Design');
+  await waitFor(`document.getElementById('drawing-view').hidden`, 'Design');
   await sleep(300);
   await clickEl('#tool-line');
   const p1 = await world('svgCanvas', 10, 30), p2 = await world('svgCanvas', 25, 30);
   await click(p1.x, p1.y); await click(p2.x, p2.y); await key('Escape'); await sleep(200); await key('Escape'); await sleep(200);
   await waitFor(`document.querySelectorAll('#svgCanvas .shape-elem').length === 7`, 'the real Line tool drew a line in Design');
-  await clickEl('.sk-header-tab[data-tab="build"]');
-  await waitFor(`document.querySelectorAll('#buildCanvas .shape-elem').length === 6`, 'Build shows the new line (the live document)');
-  console.log('a line drawn in Design shows in Build: ' + JSON.stringify((await buildInfo()).shapes));
+  await clickEl('.sk-header-tab[data-tab="drawing"]');
+  await waitFor(`document.querySelectorAll('#drawingCanvas .shape-elem').length === 6`, 'Drawing shows the new line (the live document)');
+  console.log('a line drawn in Design shows in Drawing: ' + JSON.stringify((await drawingInfo()).shapes));
   await clickEl('.sk-header-tab[data-tab="design"]');
-  await waitFor(`document.getElementById('build-view').hidden`, 'Design');
+  await waitFor(`document.getElementById('drawing-view').hidden`, 'Design');
   await clickEl('#btn-undo'); await waitFor(`document.querySelectorAll('#svgCanvas .shape-elem').length === 6`, 'the line undone');
   await clickEl('#tool-select');
   await flushAutosave();
@@ -272,44 +272,44 @@ try {
   await tapEl('.sk-sidebar-handle');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'phone: the drawer opens');
   await sleep(300);
-  await tapEl('.sk-sidebar-stage[data-tab="build"]');
-  await waitFor(`!document.getElementById('build-view').hidden && document.querySelectorAll('#buildCanvas .dim-label').length === 4`, 'phone: Build');
+  await tapEl('.sk-sidebar-stage[data-tab="drawing"]');
+  await waitFor(`!document.getElementById('drawing-view').hidden && document.querySelectorAll('#drawingCanvas .dim-label').length === 4`, 'phone: Drawing');
   await sleep(400);
-  const bp = await buildInfo();
-  console.log('phone Build: ' + JSON.stringify(bp));
-  assert.ok(bp.header && !bp.handle, 'phone Build: the step bar shows (the way back) and no drawer handle');
-  const hb = await evalJs(`(() => { const h = document.querySelector('.sk-header').getBoundingClientRect(), v = document.getElementById('build-view').getBoundingClientRect(); return { top: h.top, h: h.height, viewTop: v.top }; })()`);
-  assert.deepStrictEqual(hb, { top: 0, h: 44, viewTop: 44 }, 'phone Build: the 44 px step bar on top, the drawing under it');
-  assert.deepStrictEqual(bp.shapes, ['C', 'E1', 'E2', 'E3', 'E4'], 'phone Build: the 5 solid curves');
-  assert.deepStrictEqual(bp.labels, b1.labels, 'phone Build: the same 4 labels');
-  assert.ok(bp.labelsInside, 'phone Build: framed with its labels');
-  assert.deepStrictEqual({ glyphs: bp.glyphs, dots: bp.dots, construction: bp.construction, axes: bp.axes, grid: bp.grid, ribbon: bp.ribbon, browser: bp.browser, footer: bp.footer }, { glyphs: 0, dots: 0, construction: 0, axes: 0, grid: 0, ribbon: false, browser: false, footer: false }, 'phone Build: nothing but the drawing');
-  assert.ok(bp.over.every((o) => o === 'btn-build-fit' || o === 'btn-build-print'), 'phone: nothing but Fit / Print over the drawing: ' + JSON.stringify(bp.over));
-  assert.strictEqual(await evalJs(`document.getElementById('btn-build-fit').getBoundingClientRect().width`), 44, 'phone: the Fit button is a 44 px finger target');
-  await shot('build-phone.png');
+  const bp = await drawingInfo();
+  console.log('phone Drawing: ' + JSON.stringify(bp));
+  assert.ok(bp.header && !bp.handle, 'phone Drawing: the step bar shows (the way back) and no drawer handle');
+  const hb = await evalJs(`(() => { const h = document.querySelector('.sk-header').getBoundingClientRect(), v = document.getElementById('drawing-view').getBoundingClientRect(); return { top: h.top, h: h.height, viewTop: v.top }; })()`);
+  assert.deepStrictEqual(hb, { top: 0, h: 44, viewTop: 44 }, 'phone Drawing: the 44 px step bar on top, the drawing under it');
+  assert.deepStrictEqual(bp.shapes, ['C', 'E1', 'E2', 'E3', 'E4'], 'phone Drawing: the 5 solid curves');
+  assert.deepStrictEqual(bp.labels, b1.labels, 'phone Drawing: the same 4 labels');
+  assert.ok(bp.labelsInside, 'phone Drawing: framed with its labels');
+  assert.deepStrictEqual({ glyphs: bp.glyphs, dots: bp.dots, construction: bp.construction, axes: bp.axes, grid: bp.grid, ribbon: bp.ribbon, browser: bp.browser, footer: bp.footer }, { glyphs: 0, dots: 0, construction: 0, axes: 0, grid: 0, ribbon: false, browser: false, footer: false }, 'phone Drawing: nothing but the drawing');
+  assert.ok(bp.over.every((o) => o === 'btn-drawing-fit' || o === 'btn-drawing-print'), 'phone: nothing but Fit / Print over the drawing: ' + JSON.stringify(bp.over));
+  assert.strictEqual(await evalJs(`document.getElementById('btn-drawing-fit').getBoundingClientRect().width`), 44, 'phone: the Fit button is a 44 px finger target');
+  await shot('drawing-phone.png');
   const pfit = vb(bp.viewBox);
-  const pm2 = await centerOf('#buildCanvas');
-  const lp = await world('buildCanvas', 30, 0);
+  const pm2 = await centerOf('#drawingCanvas');
+  const lp = await world('drawingCanvas', 30, 0);
   await tap(lp.x, lp.y); await tap(pm2.x, pm2.y);
   // a two-finger pinch out zooms in
   await touchEv('touchStart', [{ x: pm2.x - 40, y: pm2.y }, { x: pm2.x + 40, y: pm2.y }]);
   for (let i = 1; i <= 6; i++) { await touchEv('touchMove', [{ x: pm2.x - 40 - i * 15, y: pm2.y }, { x: pm2.x + 40 + i * 15, y: pm2.y }]); await sleep(40); }
   await touchEv('touchEnd', []); await sleep(300);
-  const pz = vb((await buildInfo()).viewBox);
+  const pz = vb((await drawingInfo()).viewBox);
   assert.ok(pz[2] < pfit[2] * 0.8, `phone: a pinch zooms in: ${pfit[2]} -> ${pz[2]}`);
-  await tapEl('#btn-build-fit'); await sleep(300);
-  const pr = vb((await buildInfo()).viewBox);
+  await tapEl('#btn-drawing-fit'); await sleep(300);
+  const pr = vb((await drawingInfo()).viewBox);
   assert.ok(pr.every((v, i) => Math.abs(v - pfit[i]) < 1e-6 * Math.max(1, Math.abs(pfit[i]))), `phone: Fit frames it again: ${pfit} vs ${pr}`);
   assert.strictEqual(await storedDoc(designId), phoneBefore, 'phone: taps / pinch / Fit change no document');
   await tapEl('.sk-header-tab[data-tab="design"]');
-  await waitFor(`document.getElementById('build-view').hidden`, 'phone: Design again');
+  await waitFor(`document.getElementById('drawing-view').hidden`, 'phone: Design again');
   await sleep(400);
   const dp1 = await designInfo();
   assert.deepStrictEqual(dp1, dp0, 'phone: Design is as it was (its view too)');
   assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-header')).display`), 'none', 'phone Design: the header row is gone again');
   assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-sidebar-handle')).display`), 'flex', 'phone Design: the drawer handle is back');
 
-  console.log('build-stage-725-live: ok');
+  console.log('drawing-stage-725-live: ok');
 } finally {
   console.log('EVIDENCE ' + evidence.join(' | '));
   await close();

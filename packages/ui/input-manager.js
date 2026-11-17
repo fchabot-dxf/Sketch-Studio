@@ -30,6 +30,7 @@ import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handl
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
+import { curveRefusal } from '#core/curve-kinds.js'; // TASK 762: the uses a curve kind refuses
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
 import { handleLineKeyDown, finishLineChain, lineChainAnchor } from '#ui/input-handlers/line-tool.js';
 import { createLongPress } from '#ui/long-press.js';
@@ -688,6 +689,11 @@ function handlePointerDown(e, svg, state) {
         const ph = handlePanZoomPointerDown(e, svg, state);
         if(ph) return true;
     }
+
+    // TASK 762: a press on the BODY of a curve whose kind the tool has no maths for (#core/curve-kinds.js CURVE_REFUSALS: a Bezier for Trim, Break,
+    // Fillet, Dimension and the constraint tools) is refused with the reason, the tool kept, nothing changed. (A dimension being placed, or a glyph / label under the pointer, takes the press.)
+    const refused = !hitJoint && !hitConstraint && hitShape && hitShape.shape && !state.placingConstraint ? curveRefusal(hitShape.shape, state.currentTool) : null;
+    if (refused) { showNotification(refused, 'warning'); return true; }
 
     let handled = false;
     // Since TOUCH_OFFSET_Y is 0, pass the original PointerEvent `e` directly to preserve prototype properties like pointerId and shiftKey

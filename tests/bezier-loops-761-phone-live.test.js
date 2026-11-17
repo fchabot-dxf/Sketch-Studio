@@ -1,7 +1,7 @@
 // tests/bezier-loops-761-phone-live.test.js — TASK 761: the Bezier tool's closed outline is a region on the PHONE (Shaper, 390 x 844, touch; the page
 // tools of tests/helpers/pocket-live.js):
 //  1. Design: the ribbon's Bezier tool by taps: a tap (corner), a tap (corner), a one-finger DRAG (a smooth anchor), a tap back on the first anchor, the
-//     tool ended by Select; Close path from the ribbon, a tap on the path's end point: the two ends coincident; the page's findLoops: ONE loop of 3 beziers;
+//     tool ended by Select; TASK 762: that tap on the first anchor closed the outline (the two ends coincident); the page's findLoops: ONE loop of 3 beziers;
 //  2. Prepare (from the drawer): a tap inside picks the region; Inside / Outside / Pocket are offered; Outside is taken (screenshots: the phone screen, and zoomed on the curve).
 import assert from 'node:assert';
 import path from 'node:path';
@@ -32,11 +32,8 @@ try {
   await pressRibbonTool(evalJs, tap, 'tool-select');
   out.drawn = await evalJs(`${ST}.shapes.map((s) => s.type)`);
   assert.deepStrictEqual(out.drawn, ['bezier', 'bezier', 'bezier'], '1: three beziers drawn by touch');
-  await pressRibbonTool(evalJs, tap, 'tool-closePath');
-  await tap(A);
   out.added = await evalJs(`${ST}.constraints.map((k) => k.type)`);
-  assert.deepStrictEqual(out.added, ['coincident'], '1: Close path: the two ends coincident');
-  await pressRibbonTool(evalJs, tap, 'tool-select');
+  assert.deepStrictEqual(out.added, ['coincident'], '1: the tap back on the first anchor closed the outline (TASK 762): the two ends coincident');
   const L = await evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/packages/core/loop-geometry.js')]).then(([F, G]) => { const st = ${ST}, by = new Map(st.shapes.map((s) => [s.id, s]));
     return F.findLoops(st).map((l) => { const p = G.loopPolygon(l, st, by); const cx = p.reduce((s, q) => s + q.x, 0) / p.length, cy = p.reduce((s, q) => s + q.y, 0) / p.length; return { kinds: l.edges.map((e) => by.get(e).type), inner: G.pointInPolygon(p, { x: cx, y: cy }) ? { x: cx, y: cy } : null, box: p.reduce((b, q) => [Math.min(b[0], q.x), Math.min(b[1], q.y), Math.max(b[2], q.x), Math.max(b[3], q.y)], [Infinity, Infinity, -Infinity, -Infinity]) }; }); })`);
   out.loops = L.map((l) => l.kinds);

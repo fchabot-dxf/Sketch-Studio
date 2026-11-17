@@ -47,6 +47,7 @@ const STEPPERS = {
   rasterAngle:   { step: { mm: 15, in: 15 }, min: 0, max: 180 },
 };
 // TASK 745: the Raster angle presets (degrees)
+const WALL_PRESETS = POCKET_CLEARING.wallModes.map((m) => ({ label: m.label, value: m.id })); // TASK 749: the Spiral's Wall row
 const ANGLE_PRESETS = [{ label: '0\u00b0', value: 0 }, { label: '45\u00b0', value: 45 }, { label: '90\u00b0', value: 90 }];
 const CLEARING_CHOICE = (id) => CLEARING_CHOICES.find((c) => c.id === id) || CLEARING_CHOICES[0];
 // TASK 742: the Hold part choice (#core HOLD_PART.modes: Off | Tabs | Onion skin) and the count's Auto, as preset buttons (the ONE preset widget)
@@ -113,6 +114,10 @@ export function createCutPanel(hostEl, opts = {}) {
           <input type="text" class="cut-num cut-pass-depth" inputmode="decimal" placeholder="full depth">
           <span class="cut-unit">mm</span>
         </div>
+      </div>
+      <div class="cut-row" data-row="wall">
+        <label class="cut-field-label">Wall</label>
+        <div class="cut-presets cut-wall-modes"></div>
       </div>
       <div class="cut-row" data-row="rasterAngle">
         <label class="cut-field-label">Raster angle</label>
@@ -204,9 +209,9 @@ export function createCutPanel(hostEl, opts = {}) {
   const holdModesWrap = $('.cut-hold-modes'), countInput = $('.cut-tab-count'), countPresetsWrap = $('.cut-row[data-row="tabCount"] .cut-presets') /* the Auto button, inside the count box (a row of its own would push the card past a phone's screen) */, tabWidthInput = $('.cut-tab-width'), holdThicknessInput = $('.cut-hold-thickness'); // TASK 742
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
   const clearTrigger = $('.cut-clear-trigger'), clearPop = $('.cut-clear-pop'), clearIc = $('.cut-clear-ic'), clearCur = $('.cut-clear-cur'); // TASK 745
-  const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-wall-allowance'), passDepthInput = $('.cut-pass-depth'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
+  const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-wall-allowance'), passDepthInput = $('.cut-pass-depth'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets'), wallModesWrap = $('.cut-wall-modes');
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, wallAllowance: null, passDepth: null, rasterAngle: null, clearingInfo: null, record: null, note: [] };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, wallAllowance: null, passDepth: null, rasterAngle: null, wall: 'inline', clearingInfo: null, record: null, note: [] };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop, clearPop];
@@ -338,12 +343,12 @@ export function createCutPanel(hostEl, opts = {}) {
   };
   shapeTrigger.addEventListener('click', (e) => { e.stopPropagation(); if (shapePop.hidden) { buildShapePop(); openPop(shapePop, shapeTrigger); } else closePops(null); });
 
-  // TASK 745: the Clearing dropdown (the card's own popover widget, as the cut type / cutter shape): Freehand | Concentric | Raster | Morphed spiral, each with its
-  // pattern's icon; a choice the target cannot take (the spiral on a pocket with islands / a neck) stays listed, greyed, with its reason under it
+  // TASK 745: the Clearing dropdown (the card's own popover widget, as the cut type / cutter shape): Freehand | Spiral (TASK 749) | Raster | Morphed spiral, each
+  // with its pattern's icon; a choice the target cannot take (the Morphed spiral on a pocket with islands / a neck) stays listed, greyed, with its reason under it
   const buildClearPop = () => {
     clearPop.innerHTML = '';
     for (const c of CLEARING_CHOICES) {
-      const why = c.id === 'spiral' && current.clearingInfo && current.clearingInfo.spiral ? (CLEARING_REFUSED[current.clearingInfo.spiral] || current.clearingInfo.spiral) : null;
+      const why = c.id === 'morphed' && current.clearingInfo && current.clearingInfo.morphed ? (CLEARING_REFUSED[current.clearingInfo.morphed] || current.clearingInfo.morphed) : null;
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt cut-clear-opt' + (c.id === current.clearing ? ' is-current' : '') + (why ? ' is-disabled' : '');
       opt.setAttribute('role', 'option'); opt.dataset.clearing = c.id; opt.disabled = Boolean(why);
@@ -413,6 +418,8 @@ export function createCutPanel(hostEl, opts = {}) {
     const angle = Number.isFinite(Number(current.rasterAngle)) && current.rasterAngle !== null ? Number(current.rasterAngle) : POCKET_CLEARING.rasterAngle;
     angleInput.value = String(Math.round(angle * 100) / 100);
     renderPresets(anglePresetsWrap, clearing === 'raster' ? ANGLE_PRESETS : [], 'rasterAngle', angle);
+    card.querySelector('.cut-row[data-row="wall"]').style.display = clearing === 'linked' ? '' : 'none'; // TASK 749: the Spiral only (the others keep the separate wall)
+    renderPresets(wallModesWrap, clearing === 'linked' ? WALL_PRESETS : [], 'wall', current.wall);
     noteEl.innerHTML = '';
     for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
       const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');
@@ -443,10 +450,10 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, wallAllowance: null, passDepth: null, rasterAngle: null, clearingInfo: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, wallAllowance: null, passDepth: null, rasterAngle: null, wall: 'inline', clearingInfo: null, record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
-      clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, wallAllowance: rec.wallAllowance ?? null, passDepth: rec.passDepth ?? null, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
+      clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, wallAllowance: rec.wallAllowance ?? null, passDepth: rec.passDepth ?? null, rasterAngle: rec.rasterAngle ?? null, wall: rec.wall === 'separate' ? 'separate' : 'inline', clearingInfo: model.clearing || null, // TASK 745
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;

@@ -57,7 +57,7 @@ const polyRingD = (poly) => (poly && poly.length >= 3) ? ('M ' + poly.map((p) =>
 // TASK 745: a tool-centre path ({ points, closed }) and regions ({ outer, holes }: closed [[x,y]] rings) as path text
 const toolPathD = (tp) => (tp.closed ? polyRingD(tp.points) : (tp.points.length >= 2 ? 'M ' + tp.points.map((p) => p.x + ' ' + p.y).join(' L ') : ''));
 const regionsD = (regions) => regions.flatMap((r) => [r.outer, ...r.holes]).map((g) => 'M ' + g.map((q) => q[0] + ' ' + q[1]).join(' L ') + ' Z').join(' ');
-const CLEAR_PATH_ROLES = new Set(['ring', 'raster', 'cleanup', 'spiral']);
+const CLEAR_PATH_ROLES = new Set(['linked', 'raster', 'cleanup', 'morphed']); // TASK 749: a Spiral line ('linked'), the Morphed spiral ('morphed')
 const profilePathMarkup = (outerPoly, holePolys, cls) => {
   const parts = [polyRingD(outerPoly), ...(holePolys || []).map(polyRingD)].filter(Boolean);
   return parts.length ? `<path d="${parts.join(' ')}" fill-rule="evenodd" class="${cls}"/>` : '';
@@ -302,7 +302,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.wallAllowance}|${rec.passDepth}|${rec.rasterAngle}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.wallAllowance}|${rec.passDepth}|${rec.rasterAngle}|${rec.wall}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [] };
@@ -326,14 +326,14 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (fp.clearing) {
         const cl = fp.clearing;
         toolPaths.push(...(fp.toolPaths || []));
+        if (cl.summary) { // the cut that carries the plan: the wall's (TASK 749: a Spiral's last line when its wall is in the line)
+          if (cl.summary.swept && cl.summary.swept.length) region += `<path d="${regionsD(cl.summary.swept)}" fill-rule="evenodd" class="sk-band"/>`;
+          if (cl.summary.leftover && cl.summary.leftover.regions.length) region += `<path d="${regionsD(cl.summary.leftover.regions)}" fill-rule="evenodd" class="sk-leftover"/>`;
+        }
         if (CLEAR_PATH_ROLES.has(cl.role)) {
           if (cl.pass === cl.passes - 1) for (const tp of fp.toolPaths || []) path += `<path class="sk-clear-path${cl.role === 'cleanup' ? ' sk-clear-cleanup' : ''}" d="${toolPathD(tp)}"/>`;
           if (!chip && fp.anchor) chip = fp.anchor;
           continue;
-        }
-        if (cl.summary) {
-          if (cl.summary.swept && cl.summary.swept.length) region += `<path d="${regionsD(cl.summary.swept)}" fill-rule="evenodd" class="sk-band"/>`;
-          if (cl.summary.leftover && cl.summary.leftover.regions.length) region += `<path d="${regionsD(cl.summary.leftover.regions)}" fill-rule="evenodd" class="sk-leftover"/>`;
         }
         const travel = deriveCutTravel([fp]);
         for (const t of travel) {
@@ -612,7 +612,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         const k = targetKey(t);
         if (field === 'clearing' && value !== 'freehand') { // TASK 745: the Morphed spiral only where it is possible (never a silent fallback); a pocket set to a computed
           // clearing without its own values takes the last ones set (or the declared defaults)
-          if (value === 'spiral') { const av = clearingAvailability(k, CUT_PLAN.get(k) || {}, state, loops, loopPolys); if (!av || av.spiral) continue; }
+          if (value === 'morphed') { const av = clearingAvailability(k, CUT_PLAN.get(k) || {}, state, loops, loopPolys); if (!av || av.morphed) continue; }
           const r = CUT_PLAN.get(k) || {};
           if (!(Number(r.stepover) > 0)) setFieldFor(k, 'stepover', lastStepover());
           if (!(r.wallAllowance != null && Number(r.wallAllowance) >= 0)) setFieldFor(k, 'wallAllowance', lastWallAllowance());

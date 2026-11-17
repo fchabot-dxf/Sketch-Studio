@@ -24,7 +24,7 @@ import { keyOf, loopsWithPolygons, steppedSummary, clearingWords } from './cut-p
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH } from '#core/stepped-cut.js';
 import { holdMode } from '#core/hold-part.js';
-import { clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
+import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
 import { format as formatUnit } from '#core/units.js';
 import { docUnit, lengthDecimals } from '#core/settings-manager.js';
 
@@ -80,7 +80,7 @@ export function settingsOf(rec) {
   if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), thickness: round6(rec.holdThickness) };
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
   const pat = clearingPattern(eff); // TASK 745: a programmed pocket's clearing and the values it is computed with (Freehand adds nothing: the key is the one before 745)
-  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), passDepth: c.passDepth == null ? null : round6(c.passDepth), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}) }; }
+  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), passDepth: c.passDepth == null ? null : round6(c.passDepth), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(pat === 'linked' && c.wall === 'separate' ? { wall: 'separate' } : {}) }; } // TASK 749: the Spiral's separate wall (the default, in the line, adds nothing)
   return s;
 }
 
@@ -172,10 +172,10 @@ function describe(op) {
     if (holds.some((h) => h.role === 'refused')) detail = (detail ? detail + ', ' : '') + `${s.hold.mode === 'skin' ? 'onion skin' : 'tabs'} refused on ${holds.filter((h) => h.role === 'refused').length}`;
   }
   let typeWords = typeLabel;
-  if (s.clearing) { // TASK 745: a programmed pocket: "Pocket (concentric)" and its clearing from the derivation ("12 rings + wall"), summed words per region
-    const sums = op.records.map((r) => (r.cuts.find((c) => c.clearing && (c.clearing.role === 'wall' || c.clearing.role === 'refused')) || {}).clearing).filter(Boolean);
-    typeWords = `${typeLabel} (${s.clearing.pattern === 'spiral' ? 'morphed spiral' : s.clearing.pattern})`;
-    const words = [...new Set(sums.filter((c) => c.role === 'wall').map((c) => clearingWords(c.summary)))];
+  if (s.clearing) { // TASK 745: a programmed pocket: "Pocket (spiral)" and its clearing from the derivation ("spiral, 12 turns in 1 line + wall"), summed words per region
+    const sums = op.records.map((r) => (r.cuts.find((c) => c.clearing && c.clearing.summary) || {}).clearing).filter(Boolean); // the cut that carries the plan (TASK 749: a Spiral's last line)
+    typeWords = `${typeLabel} (${POCKET_CLEARING.patterns.find((p) => p.id === s.clearing.pattern).label.toLowerCase()})`; // TASK 749: the pattern's own label
+    const words = [...new Set(sums.filter((c) => c.role !== 'refused').map((c) => clearingWords(c.summary)))];
     const refused = sums.filter((c) => c.role === 'refused').length;
     detail = [words.join('; '), refused ? `refused on ${refused}: cut as Freehand` : null].filter(Boolean).join(', ') || null;
   }

@@ -32,9 +32,17 @@ export function captureShaperDoc() {
   return { version: DOC_VERSION, cutPlan: captureCutPlan(), stock: getStock(), opOrder: opOrder() };
 }
 
+// TASK 749: a programmed pocket's `clearing` before 749 -> today's value: 'concentric' (the separate rings, replaced by the rings joined) -> 'linked' (Spiral),
+// 'spiral' (the Morphed spiral) -> 'morphed'. Mapped HERE only, on reading a stored document (the one read of the Shaper part of a document: the shared
+// #core/document.js hands doc.hosts.shaper over untouched); 749 never writes the old values, so the mapping is unambiguous. An operation key of the stored
+// order (operations.js opKeyOf: JSON with the record's clearing pattern) is mapped the same way, so a reordered pocket keeps its place.
+const OLD_CLEARING = Object.freeze({ concentric: 'linked', spiral: 'morphed' });
+const withClearingNow = (rec) => (rec && Object.hasOwn(OLD_CLEARING, rec.clearing) ? { ...rec, clearing: OLD_CLEARING[rec.clearing] } : rec);
+const opKeyNow = (k) => (typeof k === 'string' ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`) : k);
+
 /** Restore a persisted Shaper document. Missing parts keep their defaults (an old buffer carries none of this; no opOrder = the default order). */
 export function applyShaperDoc(d) {
-  applyCutPlan(d && d.cutPlan);
+  applyCutPlan(d && Array.isArray(d.cutPlan) ? d.cutPlan.map(([key, rec]) => [key, withClearingNow(rec)]) : d && d.cutPlan);
   setStock(d && d.stock);
-  setOpOrder(d && d.opOrder);
+  setOpOrder(d && Array.isArray(d.opOrder) ? d.opOrder.map(opKeyNow) : d && d.opOrder);
 }

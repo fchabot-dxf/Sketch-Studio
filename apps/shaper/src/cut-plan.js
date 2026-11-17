@@ -13,7 +13,7 @@ import { docUnit, lengthText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
-import { POCKET_CLEARING, clearingPattern, allowanceDefault, spiralBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
+import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -136,36 +136,39 @@ export function clearingSummary(key, storedRec, state, loops, loopPolys, owned) 
   const rec = effectiveCutRecord(storedRec);
   if (clearingPattern(rec) === 'freehand') return null;
   const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned) || [];
-  const c = cuts.find((x) => x.clearing && (x.clearing.role === 'wall' || x.clearing.role === 'refused'));
+  const c = cuts.find((x) => x.clearing && x.clearing.summary); // the wall cut, a refused pocket, or (TASK 749) a Spiral's last line when its wall is in the line
   return c ? { ...c.clearing.summary, refused: c.clearing.role === 'refused' ? c.clearing.refused : null } : null;
 }
-/** TASK 745: why the Morphed spiral is not possible on a target ({ spiral: null | 'islands' | 'splits' | another refusal }) for its record's settings, or null
+/** TASK 745: why the Morphed spiral is not possible on a target ({ morphed: null | 'islands' | 'splits' | another refusal }) for its record's settings, or null
  *  for a target that is not a pocket region. */
 export function clearingAvailability(key, storedRec, state, loops, loopPolys) {
   const rec = effectiveCutRecord(storedRec);
   if (!rec || rec.cutType !== 'pocket') return null;
   const pocket = (deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys) || []).find((c) => c.isCompound);
-  return pocket ? { spiral: spiralBlocker(pocket, rec, state) } : null;
+  return pocket ? { morphed: morphedBlocker(pocket, rec, state) } : null;
 }
 /** TASK 745: the words of a refusal / a disabled choice. */
 export const CLEARING_REFUSED = {
-  islands: 'has islands: use Concentric or Raster',
-  splits: 'splits at a neck narrower than the bit: use Concentric or Raster',
-  'spiral islands': 'has islands: use Concentric or Raster',
-  'spiral splits': 'splits at a neck narrower than the bit: use Concentric or Raster',
+  islands: 'has islands: use Spiral or Raster',
+  splits: 'splits at a neck narrower than the bit: use Spiral or Raster',
+  'morphed islands': 'has islands: use Spiral or Raster',
+  'morphed splits': 'splits at a neck narrower than the bit: use Spiral or Raster',
   'islands close': 'an island is closer to the wall or to another island than the bit: the finish pass would cut it',
   'bit too big': 'the bit does not fit in the pocket',
   'no bit': 'set a bit diameter',
   outline: 'the outline could not be read',
 };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-/** TASK 745: a pocket's clearing in a few words: "12 rings + wall", "raster 0°: 22 passes + 1 ring + wall", "morphed spiral: 13 turns + wall" (x depth passes). */
+/** TASK 745: a pocket's clearing in a few words: "spiral, 12 turns + wall in 1 line" (TASK 749: the wall in the same line; "spiral, 12 turns in 1 line + wall"
+ *  with the separate wall; several lines say why: "spiral, 14 turns in 3 lines (the pocket has islands) + wall"), "raster 0°: 22 passes + 1 ring + wall",
+ *  "morphed spiral: 13 turns + wall" (x depth passes). */
+const LINES_WHY = { splits: ' (the pocket narrows)', islands: ' (the pocket has islands)' };
 export function clearingWords(sum) {
   if (!sum || sum.refused) return null;
   const what = sum.pattern === 'raster' ? `raster ${Number(sum.settings.angle)}°: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
-    : sum.pattern === 'spiral' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}`
-    : `${plural(sum.levels, 'ring', 'rings')}${sum.loops > sum.levels ? ` (${sum.loops} loops)` : ''}`;
-  return `${what}${sum.depths.length > 1 ? ` × ${sum.depths.length} depth passes` : ''} + wall`;
+    : sum.pattern === 'morphed' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}`
+    : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.wallInline ? ' + wall' : ''} in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`;
+  return `${what}${sum.depths.length > 1 ? ` × ${sum.depths.length} depth passes` : ''}${sum.wallInline ? '' : ' + wall'}`;
 }
 // an area (mm²) in the document unit's area: mm² (under 1 cm²) / cm², or in²
 export function areaText(mm2, u) {
@@ -173,7 +176,7 @@ export function areaText(mm2, u) {
   return mm2 < 100 ? `${mm2 < 10 ? mm2.toFixed(1) : Math.round(mm2)} mm²` : `${(mm2 / 100).toFixed(1)} cm²`;
 }
 /**
- * clearingNoteItems(storedRec, sum) — TASK 745: the card note of a programmed pocket (doc unit), from its clearingSummary: "Pocket: 12 rings + wall, stepover
+ * clearingNoteItems(storedRec, sum) — TASK 745: the card note of a programmed pocket (doc unit), from its clearingSummary: "Pocket: spiral, 12 turns in 1 line + wall, stepover
  * 2.4 mm, 3.4 m of path, about 4 min at 1000 mm/min" (the path = every clearing path at every depth pass + the finish pass; the time at the declared feed
  * POCKET_CLEARING.feedMmPerMin), the depth passes, then "Drawn for a 6 mm bit: a smaller bit leaves ridges" (the rings follow the card's bit; the wall does
  * not), then the leftover (warning colour) "7.8 mm² not reached by a 6 mm bit (sharp inside corners, necks narrower than the bit)" (or how much the pattern
@@ -193,8 +196,9 @@ export function clearingNoteItems(storedRec, sum) {
   const feed = u === 'in' ? `${Math.round(POCKET_CLEARING.feedMmPerMin / 25.4)} in/min` : `${POCKET_CLEARING.feedMmPerMin} mm/min`;
   const minutes = total / POCKET_CLEARING.feedMmPerMin;
   const items = [{ text: `Pocket: ${clearingWords(sum)}, stepover ${f(st.stepover)} ${u}, ${pathWords} of path, about ${minutes < 1 ? 1 : Math.round(minutes)} min at ${feed}` }];
-  if (sum.depths.length > 1) items.push({ text: `Depth passes at ${sum.depths.map((d) => f(d)).join(' · ')} ${u}; the wall at the full depth` });
+  if (sum.depths.length > 1) items.push({ text: `Depth passes at ${sum.depths.map((d) => f(d)).join(' · ')} ${u}; ${sum.wallInline ? 'the wall in the line at each pass' : 'the wall at the full depth'}` });
   if (sum.clear.length) items.push({ text: `Drawn for a ${bit} bit: a smaller bit leaves ridges` });
+  if (sum.wallInline) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only` }); // TASK 749: the Origin does not offset an on-line path
   const lo = sum.leftover;
   if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {
     let t = `${areaText(lo.area, u)} not reached by a ${bit} bit`;

@@ -18,6 +18,7 @@ import { updateGridFromSettings } from '#ui/canvas-grid.js';
 import { createSketchState } from '#core/sketch-state.js';
 import { setupInput } from '#ui/input-manager.js';
 import { shapesInGroup, hoveredUnit } from '#core/group-model.js'; // TASK 756: the hovered user group renders live
+import { openChainEnds } from '#core/close-path.js'; // TASK 760: the open ends the Close path tool marks
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -136,6 +137,7 @@ export function mountSketch(svgEl, opts = {}) {
     getState: () => state,
     getActiveSketchId: () => state.activeSketchId, // TASK 661: draw() dims the other sketches
     getGroups: () => state, // TASK 756: the user groups (the entered group dims the rest, the hovered group is lit): SketchStudio declares the same
+    openEnds: () => openChainEnds(state), // TASK 760: the open ends the Close path tool marks (the whole state: a static underlay's too); SketchStudio declares the same
   };
   if (opts.grid && svgEl) {
     renderCtx.updateGrid = (a) => { try { updateGridFromSettings({ ...a, svgEl }); } catch (_) { /* grid is non-essential */ } };

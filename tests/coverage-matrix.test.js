@@ -18,7 +18,7 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const diff = (a, b) => `got ${JSON.stringify([...a].sort())} expected ${JSON.stringify([...b].sort())}`;
 
 const EXPECTED = {
-  tools: ['select', 'line', 'rect', 'slot', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'offset', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror', 'circularPattern', 'rectangularPattern'],
+  tools: ['select', 'line', 'rect', 'slot', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'closePath', 'fillet', 'offset', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror', 'circularPattern', 'rectangularPattern'],
   notInRibbon: ['pan'],
   constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern'],
   definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern', 'mouse_spring'],
@@ -55,7 +55,8 @@ ok('every inventory item carries a file:line', [...I.tools, ...I.constraintTypes
 const rowIds = ROWS.map(r => r.id), kindLetters = KINDS.map(k => k.k);
 const COVER = {
   tools: { select: ['deferred', 'drag + pick: not a constraint x geometry cell'], line: ['kinds', 'L', 'C'], rect: ['kinds', 'R'], slot: ['deferred', 'five straight / arc slot modes (#core/slot.js): tests/slot-tool-node.test.js, tests/slot-tool-live.test.js'], circle: ['kinds', 'O'], polygon: ['kinds', 'S'], arc: ['kinds', 'A'], bezier: ['kinds', 'B'],
-    trim: ['deferred', 'rewrites shapes/joints: a part 2/3 edit audit'], break: ['deferred', 'splits a line: a part 2/3 edit audit'], fillet: ['kinds', 'F'],
+    trim: ['deferred', 'rewrites shapes/joints: a part 2/3 edit audit'], break: ['deferred', 'splits a line: a part 2/3 edit audit'],
+    closePath: ['deferred', 'joins the free ends of ONE picked chain with a coincident or a new line + coincidents (no pair of existing operands): tests/close-path-760-node.test.js'], fillet: ['kinds', 'F'],
     dim: ['rows', 'dim-aligned', 'dim-horizontal', 'dim-vertical', 'dim-length', 'dim-point-line', 'dim-line-line', 'dim-angle-xy', 'dim-radius'],
     coincident: ['rows', 'coincident'], hv: ['rows', 'horizontal-2pt', 'vertical-2pt', 'horizontal-line', 'vertical-line'], parallel: ['rows', 'parallel'], perp: ['rows', 'perpendicular'],
     collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-3pt'], symmetric: ['rows', 'symmetric'],

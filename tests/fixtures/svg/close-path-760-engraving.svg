@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TASK 760 fixture: a deliberately open engraving line (a zigzag), and a 30 x 20 mm outline 0.08 mm short of closed. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">
+  <polyline id="engrave" points="10,70 20,80 30,70 40,80 50,70" fill="none" stroke="#000"/>
+  <path id="plate" d="M 10 10 L 40 10 L 40 30 L 10 30 L 10 10.08" fill="none" stroke="#000"/>
+</svg>

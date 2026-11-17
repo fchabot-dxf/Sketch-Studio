@@ -116,6 +116,7 @@ export const TOOL_MODES = {
   BEZIER: 'bezier',
   TRIM: 'trim',   // TRACE-1: trim a line/polyline segment at intersections
   BREAK: 'break', // TRACE-1: split a line at a clicked point
+  CLOSE_PATH: 'closePath', // TASK 760: join the two free ends of an open outline (#core/close-path.js); beside Break in Modify
   FILLET: 'fillet', // corner fillet / rounding
   COINCIDENT: 'coincident',
   EQUAL: 'equal',
@@ -146,7 +147,7 @@ export const CONSTRAINT_TOOLS = Object.freeze([
 
 // The tools whose snap picks in input-manager search ONLY the active sketch (and emit the task-660 warning when another sketch is aimed at).
 export const ACTIVE_SKETCH_SNAP_TOOLS = Object.freeze([
-  TOOL_MODES.OFFSET, TOOL_MODES.MIRROR, TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.RECTANGULAR_PATTERN,
+  TOOL_MODES.OFFSET, TOOL_MODES.MIRROR, TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.RECTANGULAR_PATTERN, TOOL_MODES.CLOSE_PATH, // TASK 760
 ]);
 // Every active-sketch-only tool whose idle hover in hover-manager must also narrow to the active sketch so non-active curves never hover-highlight or shadow active ones.
 export const ACTIVE_SKETCH_HOVER_TOOLS = Object.freeze([

@@ -36,6 +36,7 @@ export const FEATURES = Object.freeze([
   'local:open',        // TASK 759: a design file opened from this device (#ui/document-buffer.js openFile / openFileTab: Open > Local, or a file dropped on the drawing)
   'print',             // the Print button of SketchStudio's Drawing step (apps/sketchstudio/drawing-view.js)
   'settings',          // the settings / style panel opened (#ui/style-panel.js)
+  'close-path',        // TASK 760: open paths closed by Close path (the tool, its menu entry or an import's "Close them": #ui/close-path-actions.js)
   'shortcut-changed',  // TASK 747: a keyboard shortcut given another key, swapped or left with none in Settings > Shortcuts (#ui/shortcuts-list.js); never which key
 ]);
 

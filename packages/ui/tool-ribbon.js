@@ -58,6 +58,10 @@ const CREATE = [
 const EDIT = [
   { tool: TOOL_MODES.TRIM,  iconSvg: '<path d="M4 12h6M14 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#ef4444"/>', label: 'Trim', shortcut: 'tool.trim' },
   { tool: TOOL_MODES.BREAK, iconSvg: '<path d="M5 12h5M14 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="#fbbf24" stroke-width="2" fill="none"/>', label: 'Break', shortcut: 'tool.break' },
+  // TASK 760 (owner: "beside Break"): Close path. Switching to it closes the selection's open chains, else waits for a click on one (#ui/close-path-actions.js).
+  // Icon: an open outline, its two ends dotted, the closing segment in the warning amber the open-end markers use.
+  { tool: TOOL_MODES.CLOSE_PATH, label: 'Close', title: 'Close path: join the two free ends of an open outline', ariaLabel: 'Close Path', shortcut: 'tool.closePath',
+    iconSvg: '<path d="M8 19L4 12l4-7h8l4 7-4 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/><path d="M8.5 19h7" stroke="#f59e0b" stroke-width="2" stroke-dasharray="2 1.6"/><circle cx="8" cy="19" r="1.6" fill="currentColor"/><circle cx="16" cy="19" r="1.6" fill="currentColor"/>' },
   { tool: TOOL_MODES.FILLET, iconSvg: '<path d="M5 19V12a7 7 0 0 1 7-7h7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M5 12V5h7" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none"/>', label: 'Fillet', shortcut: 'tool.fillet' },
   // TASK 585: Mirror. Switching to it starts its pick (the pre-selection: input-manager.js TOOL_BEGIN). TASK 647 (owner): in Modify after Fillet, not Create
   // (Fusion keeps Mirror under CREATE: a declared divergence).

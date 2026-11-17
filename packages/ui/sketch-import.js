@@ -4,7 +4,8 @@
 // composed CTM, hand the descriptors to the PURE #core/svg-import (or the DXF text to #core/dxf-import), then land the result as ONE new
 // named active sketch in ONE undo step. What differs between hosts is DECLARED as options, never branched on a host name:
 //
-//   importIntoSketch(text, fileName, controller, options) -> { ok, message, imported, sketch, format, fitted }
+//   importIntoSketch(text, fileName, controller, options) -> { ok, message, imported, sketch, format, fitted, closeOffer }
+//     closeOffer (TASK 760): the near-closed outlines offered for closing in one notice (#ui/close-path-actions.js offerToCloseImported), or null
 //     the parser is picked by the file extension, else by the sniffed content (looksLikeDxf); `controller.state` is the #core state and
 //     `controller.svg` its canvas: TASK 570: the view is fitted to the IMPORTED shapes (the app's own fitToDrawing, here and nowhere else;
 //     options.frame (optional) = () => { shapes, joints } the host wants framed instead of the imported shapes (TASK 573).
@@ -34,6 +35,8 @@ import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from './input-handlers/pan-zoom.js';
 import { browserFileSeam, IMPORT_FILE_PICK, PROJECT_FILE_EXT } from './project-file.js';
 import { track } from './analytics.js'; // TASK 738: an SVG / DXF imported
+import { showNotification } from './notification-manager.js';
+import { offerToCloseImported } from './close-path-actions.js'; // TASK 760: near-closed outlines are OFFERED for closing (one notice, never closed unasked)
 
 export const IMPORT_ACTION_LABEL = 'Import SVG / DXF…';
 
@@ -168,10 +171,13 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
   const fitted = fitToDrawing(controller.svg, Object.create(st, Object.fromEntries(Object.entries(framed).map(([k, v]) => [k, { value: v }]))));
 
   if (format === 'dxf') track('import:dxf'); else track('import:svg'); // TASK 738: the format only, never the file name
+  // TASK 760: the import's outlines that are ALMOST closed (#core/close-path.js nearClosedChains) are offered in ONE notice with a "Close them"
+  // action (the shared toast, every app); nothing is closed unless the user picks it, and that is its own undo step after the import's
+  const closeOffer = offerToCloseImported(st, shapes, showNotification);
   const detail = skipped.map((s) => `${s.tag} ${s.reason} ×${s.count}`).join('; ');
   const message = `Imported ${shapes.length} shapes → ${sketch.name} @ ${label}${assumed ? ' (assumed)' : ''}` +
     (construction ? ` · ${construction} construction` : '') + (extra ? ` · ${extra}` : '') + (skipN ? ` · ${skipN} skipped/degraded: ${detail}` : '');
-  return { ok: true, message, imported: shapes.length, sketch, format, fitted };
+  return { ok: true, message, imported: shapes.length, sketch, format, fitted, closeOffer };
 }
 
 /** A file dropped on `el` runs run(text, fileName) (the first file; the parser is picked from the name / content). onHover(bool) shows a drop cue. */

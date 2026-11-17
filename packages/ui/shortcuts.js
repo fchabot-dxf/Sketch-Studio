@@ -48,12 +48,13 @@ export const SHORTCUTS = Object.freeze([
   tool('tool.line', 'l', 'Line'),
   tool('tool.rect', 'r', 'Rectangle'),
   tool('tool.slot', 'j', 'Slot'),            // TASK 740: no free letter in the name (S Select, L Line, O Tangent, T Perpendicular)
-  tool('tool.circle', 'c', 'Circle'),
+  tool('tool.circle', 'c', 'Circle', 'Tools', false), // Shift+C = Close path (TASK 760)
   tool('tool.polygon', 'p', 'Polygon', 'Tools', false), // Shift+P = Parameters
   tool('tool.arc', 'a', 'Arc'),
   tool('tool.bezier', 'b', 'Bezier', 'Tools', false),   // Shift+B = Break
   tool('tool.trim', 'w', 'Trim'),            // Fusion's T is our Perpendicular; no free letter in the name
   tool('tool.break', 'b', 'Break', 'Tools', true),      // B is Bezier
+  tool('tool.closePath', 'c', 'Close path', 'Tools', true), // TASK 760: C is Circle (no free letter: every letter is taken)
   tool('tool.fillet', 'n', 'Fillet'),        // no free letter in the name (F Fix)
   tool('tool.mirror', 'm', 'Mirror', 'Tools', false),   // Shift+M = Midpoint
   tool('tool.circularPattern', 'u', 'Circular Pattern'),   // circUlar

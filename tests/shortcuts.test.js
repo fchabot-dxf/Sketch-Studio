@@ -169,7 +169,8 @@ for (const k of 'abcdefghijklmnopqrstuvwxyz') {
   }
 }
 assert(matchesShortcut(ev('T', { shift: true }), 'tool.perpendicular') && matchesShortcut(ev('F', { shift: true }), 'sketch.fix'), 'Shift still ignored on the older letters');
-// the three Shift+letter pairs (TASK 740): the plain letter is one shortcut, Shift+letter the other
+// the Shift+letter pairs (TASK 740; TASK 760: C / Shift+C): the plain letter is one shortcut, Shift+letter the other
+assert.strictEqual(matchShortcut(ev('c'), LETTER_IDS), 'tool.circle'); assert.strictEqual(matchShortcut(ev('C', { shift: true }), LETTER_IDS), 'tool.closePath');
 assert.strictEqual(matchShortcut(ev('b'), LETTER_IDS), 'tool.bezier'); assert.strictEqual(matchShortcut(ev('B', { shift: true }), LETTER_IDS), 'tool.break');
 assert.strictEqual(matchShortcut(ev('m'), LETTER_IDS), 'tool.mirror'); assert.strictEqual(matchShortcut(ev('M', { shift: true }), LETTER_IDS), 'tool.midpoint');
 assert.strictEqual(matchShortcut(ev('p'), [...LETTER_IDS, 'view.parameters']), 'tool.polygon');
@@ -251,7 +252,7 @@ assert(CONSTRAINT_TOOLS.every((c) => ribbonTools.has(c)), 'every constraint tool
 const toolKeyIds = Object.keys(TOOL_SHORTCUTS);
 assert.strictEqual(new Set(toolKeyIds.map((id) => TOOL_SHORTCUTS[id])).size, toolKeyIds.length, 'one key per tool');
 assert(toolKeyIds.every((id) => ids.includes(id)), 'every TOOL_SHORTCUTS id is declared');
-assert.deepStrictEqual(Object.keys(TOOL_BEGIN).sort(), [TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.MIRROR, TOOL_MODES.RECTANGULAR_PATTERN].sort(), 'the tools that start a pick when switched to');
+assert.deepStrictEqual(Object.keys(TOOL_BEGIN).sort(), [TOOL_MODES.CIRCULAR_PATTERN, TOOL_MODES.MIRROR, TOOL_MODES.RECTANGULAR_PATTERN, TOOL_MODES.CLOSE_PATH].sort(), 'the tools that start a pick when switched to (TASK 760: Close path closes the selection chains)');
 const ribbonSrc = fs.readFileSync(path.join(ROOT, 'packages/ui/tool-ribbon.js'), 'utf8');
 assert(!/\bbegin:/.test(ribbonSrc), 'no ribbon button carries its own begin (one TOOL_BEGIN, so the key and the button start the same pick)');
 // a host's own ribbon button (extraGroups) is exempt only here, with its reason

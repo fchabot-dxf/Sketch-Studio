@@ -178,6 +178,23 @@ export const defaultRenderCtx = {
   },
 };
 
+// TASK 725: the DISPLAY PROFILES of this ONE renderer. A host picks one through its render context (`ctx.display`); a context without one draws
+// EDIT_DISPLAY (Design: everything, exactly as before). Each field names one layer of the drawing; false leaves that layer out of the markup:
+//   grid           the canvas grid (ctx.updateGrid is not called)
+//   axes           the red / green origin axes and a lit reference line
+//   points         every point: the origin, the joint dots, the virtual-sharp crosses, the endpoint handle rings, the red origin-coincident discs
+//   glyphs         every constraint glyph (coincident, parallel, perpendicular, H / V, tangent, equal, symmetric, midpoint, point-on-line...) and the
+//                  snap / inference / constraint-preview glyphs (all drawn through drawUnifiedGlyph / drawConstraintGlyph)
+//   construction   construction geometry (shapes with isConstruction)
+//   fills          the closed-loop tint, the PROFILE_FILL tint, the profile tints and the invalid-profile outline
+//   statusColors   geometry coloured by its constraint status (blue free / black fully constrained / LOCKED_LINE_COLOR); false: every curve is drawn
+//                  in the fully-constrained ink (#202020, the --sk-geo-fixed token)
+//   debug          the SHOW_DEBUG_OVERLAY labels
+// Dimensions (linear, radius / diameter, angle, offset, a pattern's count label: driving and reference) are drawn by every profile.
+export const EDIT_DISPLAY = Object.freeze({ grid: true, axes: true, points: true, glyphs: true, construction: true, fills: true, statusColors: true, debug: true });
+/** The CLEAN drawing (SketchStudio's Build step): the solid geometry and its dimensions only. */
+export const CLEAN_DISPLAY = Object.freeze({ grid: false, axes: false, points: false, glyphs: false, construction: false, fills: false, statusColors: false, debug: false });
+
 // TASK 429: the last {total, visible} constraint summary draw() logged (-1 never matches a real count).
 let lastLoggedConstraints = { total: -1, visible: -1 };
 
@@ -445,6 +462,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const opJoints = sceneJoints(joints), opShapes = sceneShapes(shapes);
   // Container for overlays that must be drawn last (ensures top-most stacking)
   let lateOverlay = '';
+  const show = ctx.display || EDIT_DISPLAY; // TASK 725: the display profile (which layers of the drawing are drawn)
   // Calculate zoom factor to keep stroke widths constant in screen space
   const vb = svg.viewBox.baseVal;
   const rect = svg.getBoundingClientRect();
@@ -638,6 +656,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // Unified glyph drawing helper - background first, icon last (ensures consistent layering)
   const drawUnifiedGlyph = (c, x, y, iconId = null, rotateDeg = 0, opts = {}) => {
+    if (!show.glyphs) return; // TASK 725: the clean profile draws no glyph
     if (dimLabelBounds.length) ({ x, y } = freeGlyphSpot(x, y, ICON_PX, dimLabelBounds, ICON_PX / 2));
     // c may be null for non-constraint uses (inference previews)
     const isPreview = !!(opts.isPreview || (c && c.__isPreview));
@@ -676,10 +695,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Update SVG pattern grid stroke widths to maintain constant screen pixel width
   // This replaces the manual JS grid loop and fixes the "zooming in" stroke issue.
   // Ancillary (P3): the host's render ctx mounts + retunes the shared canvas grid (default ctx → #ui/canvas-grid.js on `svg`).
-  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale, scale, svg });
+  if (show.grid) ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale, scale, svg });
 
   // Closed-shape fills: build simple loops from grouped line shapes
-  try {
+  if (show.fills) try {
     const groupLines = new Map();
     for (const s of shapes) {
       if (!s || s.type !== 'line' || !s.groupId || s.isConstruction) continue;
@@ -743,7 +762,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // PROFILE_FILL: every closed loop (rectangle, circle, polygon, closed line/arc chain) gets a translucent tint behind the
   // geometry; overlapping loops stack a little darker. Loops are cached against the geometry (profile-fill.js).
-  if (PROFILE_FILL_ON) {
+  if (PROFILE_FILL_ON && show.fills) {
     try {
       const fillShapeById = new Map(shapes.map((sh) => [sh.id, sh]));
       for (const { d, shapeId } of profileFillLoops(joints, shapes, constraints)) {
@@ -760,7 +779,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const invalidProfileDs = [];
   try {
     const st = ctx?.getState ? ctx.getState() : null;
-    if (st && Array.isArray(st.profiles) && st.profiles.length > 0) {
+    if (show.fills && st && Array.isArray(st.profiles) && st.profiles.length > 0) {
       const views = resolveProfileViews(st);
       for (const p of st.profiles) {
         const view = views.get(p.id);
@@ -784,14 +803,16 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const originStroke = scale(1.5);
   const AXIS_COLOR = { x: '#ef4444', y: '#22c55e' }; // the one source of the axis colour: plain axes and both lit cases
   const litAxisStroke = scale(BASE_LINE_STROKE_HOVERED);
+  if (show.axes) {
   // X axis (horizontal, red)
   out.push(`<line x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0" stroke="${AXIS_COLOR.x}" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
   // Y axis (vertical, green)  
   out.push(`<line x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}" stroke="${AXIS_COLOR.y}" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
+  }
 
   // Reference lines (task 539): an axis is lit ONLY while a tool is asking for a target and it is hovered, or it is the pending
   // first target (the tool put its id in the selected set). Never lit in any other mode: it is not selectable geometry there.
-  for (const ref of REFERENCE_SHAPES) {
+  for (const ref of (show.axes ? REFERENCE_SHAPES : [])) {
     const lit = (hoveredShape === ref.id && !hoveredConstraint && !hoveredJoint) || (selectedShapes && selectedShapes.has(ref.id));
     if (!lit) continue;
     const hl = ref.axis === 'axis-x'
@@ -801,7 +822,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   }
 
   // Debug overlay: show joint fixed status and ids
-  const showDebugOverlay = !!SettingsManager.get('SHOW_DEBUG_OVERLAY');
+  const showDebugOverlay = show.debug && !!SettingsManager.get('SHOW_DEBUG_OVERLAY');
   if (showDebugOverlay) {
     // Precompute true-vertex set once per frame to avoid per-joint checks inside tight loops
     const trueVertices = computeTrueVertexSet(shapes);
@@ -1204,6 +1225,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   
   // draw shapes (clickable for selection)
   for(const s of shapes){ 
+    if (!show.construction && s.isConstruction) continue; // TASK 725: the clean profile draws no construction geometry
     const isSelected = selectedShapes && selectedShapes.has(s.id);
     const isHovered = (hoveredShape === s.id) && !hoveredConstraint && !hoveredJoint;
     const isConstraintPart = constraintShapes.has(s.id);
@@ -1223,6 +1245,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     } else {
         strokeColor = '#60A5FA'; // Blue (paler) — under-constrained, can still move
     }
+    if (!show.statusColors) strokeColor = '#202020'; // TASK 725: one ink for every curve (the fully-constrained black, --sk-geo-fixed)
 
     if(hoverBoundShapes.has(s.id)){
       strokeWidth = scale(BASE_LINE_STROKE_HOVERED);
@@ -1359,7 +1382,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     }
   }
-  if (invalidProfileDs.length > 0) {
+  if (show.fills && invalidProfileDs.length > 0) {
     const invStrokeW = scale(Math.max(3.5, BASE_LINE_STROKE + 0.5));
     for (const invD of invalidProfileDs) {
       out.push(`<path d="${invD}" fill="none" stroke="#ef4444" stroke-width="${invStrokeW}" stroke-dasharray="${scale(10)} ${scale(8)}" fill-rule="evenodd" pointer-events="none"/>`);
@@ -1388,7 +1411,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     }
   }
   // Draw red overlay for joints coincident to origin *beneath* joints (above grid)
-  for (const pid of pointsCoincidentToOrigin) {
+  for (const pid of (show.points ? pointsCoincidentToOrigin : [])) {
     const pj = joints.get(pid);
     if (!pj) continue;
     out.push(`<circle cx="${pj.x}" cy="${pj.y}" r="${scale(6)}" fill="#ef4444" style="pointer-events:none; opacity:0.95"/>`);
@@ -1476,7 +1499,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   if (highlight.kind === 'joint' && highlight.id) { highlight.id = getClusterLeader(highlight.id); }
 
   let originDrawn = false;
-  for(const [id,j] of joints.entries()){ 
+  for(const [id,j] of (show.points ? joints.entries() : [])){ 
     // Render the origin as part of the joint pass so it shares the same z-order and is interactable
     out.dim = null; // the origin belongs to no sketch: never dimmed
     if(id === 'j_origin'){
@@ -2063,6 +2086,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   
   // Draw a single constraint glyph (handles preview visuals when c.__isPreview is set)
   function drawConstraintGlyph(svg, c, opts = {}){
+    if (!show.glyphs) return; // TASK 725: the clean profile draws no glyph (and stamps no __visible)
     const preview = !!c.__isPreview || !!opts.isPreview;
     const previewAttr = preview ? ' data-preview="1"' : '';
     

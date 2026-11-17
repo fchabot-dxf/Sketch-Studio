@@ -48,7 +48,8 @@ const run = (href, opts = {}, { endpoint = STUB, app = 'shaper', host = 'web', f
 };
 
 // ── THE rule ───────────────────────────────────────────────────────────────────────────────────────
-const PUBLIC = 'https://shaper-svg.pages.dev/apps/shaper/';
+const PUBLIC = 'https://shaper-svg.pages.dev/'; // TASK 763: the app at its site's root
+eq(run('https://shaper-svg.pages.dev/apps/shaper/').sent.length, 2, 'TASK 763: the rule reads the protocol and host only, never the path (the old /apps/shaper/ address counts the same)');
 eq(run(PUBLIC).sent.length, 2, 'a public page with ENDPOINT set: the visit + the feature are sent');
 eq(run(PUBLIC, {}, { endpoint: '' }).sent.length, 0, 'ENDPOINT empty (the repo until the Worker is deployed): nothing is sent');
 for (const href of ['http://localhost:8090/apps/shaper/', 'http://127.0.0.1:61234/apps/shaper/index.html', 'http://[::1]:8080/', 'http://192.168.1.20:8080/', 'http://10.0.0.7/',

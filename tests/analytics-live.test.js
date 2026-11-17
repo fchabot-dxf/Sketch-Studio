@@ -1,7 +1,7 @@
 // tests/analytics-live.test.js — TASK 738 (live): the analytics in the real page, one app per host type (Shaper on the web, Shaper in the Fusion 360
 // palette), against a LOCAL STUB endpoint that is the Worker's own fetch handler (analytics/src/index.js, run here in Node with an in-memory dataset):
 // so what the page sends is checked AND accepted by the Worker, field by field.
-// The Shaper site is built (scripts/build-site.cjs, as deployed) into a temp dir, and ONLY its copy of packages/ui/analytics.js gets the stub's URL as
+// The Shaper site is built (scripts/build-site.cjs, as deployed: TASK 763, the app at the site root, opened at /) into a temp dir, and ONLY its copy of packages/ui/analytics.js gets the stub's URL as
 // ENDPOINT (the repo's points at the deployed Worker). The page is opened under made-up public host names (*.analytics-738.test, mapped to 127.0.0.1 by the browser's
 // --host-resolver-rules), so it is a PUBLIC page for analytics.js; each phase has its own host name, so its own localStorage (no carry between phases).
 //   L. the gate's case: the same built site opened from http://127.0.0.1: a stage switch, and NOTHING reaches the stub, no analytics key is stored;
@@ -94,7 +94,7 @@ try {
   console.log(`site build ${built.build}; stub ${STUB_URL}`);
 
   // L. the gate's case: 127.0.0.1 never sends, even with an ENDPOINT
-  await navigate(`http://127.0.0.1:${site.port}/apps/shaper/index.html?dev=1`);
+  await navigate(`http://127.0.0.1:${site.port}/?dev=1`);
   await waitForApp('design-canvas');
   await openStage('prepare');
   await sleep(1500);
@@ -105,7 +105,7 @@ try {
 
   // W. the web: visit, stage, import, stage, export
   const w0 = points.length;
-  await navigate(`http://web.${DOMAIN}:${site.port}/apps/shaper/index.html`);
+  await navigate(`http://web.${DOMAIN}:${site.port}/`);
   await waitForApp('design-canvas');
   await until(() => points.length >= w0 + 1, 'W: the visit');
   await openStage('prepare');
@@ -122,7 +122,7 @@ try {
   assert.ok(ch, 'W: the file chooser opened');
   await send('DOM.setFileInputFiles', { files: [SVG], backendNodeId: ch.backendNodeId });
   await until(() => points.length >= w0 + 3, 'W: import:svg');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.size > 0)`, 'W: the imported cut in the plan');
+  await waitFor(`import('/src/cut-plan.js').then((m) => m.CUT_PLAN.size > 0)`, 'W: the imported cut in the plan');
   await openStage('review');
   await generate();
   await until(() => points.length >= w0 + 5, 'W: stage:review and export:shaper');
@@ -146,7 +146,7 @@ try {
   const d0 = points.length;
   for (const q of ['?dev=1', '', '?dev=0']) {
     const before = points.length;
-    await navigate(`http://web.${DOMAIN}:${site.port}/apps/shaper/index.html${q}`);
+    await navigate(`http://web.${DOMAIN}:${site.port}/${q}`);
     await waitForApp('design-canvas');
     await until(() => points.length >= before + 1, `D: the visit of ${q || 'a reload'}`);
   }
@@ -156,7 +156,7 @@ try {
 
   // F. the Fusion palette
   const f0 = points.length;
-  await navigate(`http://fusion.${DOMAIN}:${site.port}/apps/shaper/index.html?host=fusion`);
+  await navigate(`http://fusion.${DOMAIN}:${site.port}/?host=fusion`);
   await waitForApp('design-canvas');
   await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection') && !document.getElementById('view-prepare').hidden`, 'F: the Fusion Prepare bar');
   await until(() => points.length >= f0 + 1, 'F: the visit');

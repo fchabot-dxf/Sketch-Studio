@@ -1,5 +1,33 @@
 // packages/core/shaper-cloud.js — direct programmatic upload to ShaperHub / Shaper Origin "My Files".
 // PURE, uses standard fetch (Node 18+, Cloudflare Workers, modern runtimes).
+//
+// CREDIT: the ShaperHub calls below (the /token sign-in, the /blobs/ upload and the /files/userspace/tree entry, their headers and
+// field names) are a JavaScript port of shaper-sync by Antoine Millet: https://github.com/NaPs/shaper-sync (shaper_sync.py), MIT licence.
+// Shaper publishes no API; shaper-sync documents the one its own apps use. The notice its licence requires:
+//
+// MIT License
+//
+// Copyright (c) 2026 Antoine Millet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
+// (also listed in THIRD-PARTY-NOTICES.md at the repo root)
 
 export const SHAPER_AUTH_URL = 'https://auth.shapertools.com';
 export const SHAPER_API_URL = 'https://api.shapertools.com';

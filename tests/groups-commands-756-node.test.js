@@ -85,7 +85,7 @@ const mid = (app, id) => { const st = app.state, s = st.shapes.find((x) => x.id 
     // the menu entries, declared once (context-menu.js): what applies only
     const ids = (kind) => contextMenuItems(kind, { target: {}, actions: { ...groupMenuActions(st), lockState: () => ({ locked: false }), toggleLock() {}, deleteSelection() {} } }).map((i) => i.id);
     select(st, rIds);
-    eq([ids('geometry'), ids('group')], [['geo-lock', 'geo-delete', 'grp-ungroup', 'grp-enter'], ['grp-ungroup', 'grp-enter']], 'one group: Ungroup + Enter group (canvas menu after its own entries; the row menu alone)');
+    eq([ids('geometry'), ids('group')], [['geo-lock', 'geo-delete', 'grp-ungroup', 'grp-enter', 'grp-lock-size', 'grp-lock-full'], ['grp-ungroup', 'grp-enter', 'grp-lock-size', 'grp-lock-full']], 'one group: Ungroup + Enter group + (TASK 753) its two locks (canvas menu after its own entries; the row menu alone)');
     select(st, [...rIds, 'S']);
     eq(ids('group'), ['grp-group', 'grp-ungroup'], 'a group + a line: Group + Ungroup');
     st.enteredGroupId = 'group-1'; select(st, ['rE1']);
@@ -110,7 +110,7 @@ const mid = (app, id) => { const st = app.state, s = st.shapes.find((x) => x.id 
     // the canvas menu: a right click on a member of R (nothing selected) selects R whole, then the menu
     app.esc(); select(st, []);
     let p = mid(app, 'rE2'); app.rightClick(p.x, p.y);
-    eq([sel(st), menuIds()], [rIds, ['geo-lock', 'geo-delete', 'grp-ungroup', 'grp-enter']], 'right click on a member of R: R selected, the menu offers Ungroup / Enter group');
+    eq([sel(st), menuIds()], [rIds, ['geo-lock', 'geo-delete', 'grp-ungroup', 'grp-enter', 'grp-lock-size', 'grp-lock-full']], 'right click on a member of R: R selected, the menu offers Ungroup / Enter group (and, TASK 753, its two locks)');
     choose('grp-enter');
     eq([st.enteredGroupId, st.selectedShapes.size], ['group-1', 0], 'Enter group from the menu');
     p = mid(app, 'rE3'); app.rightClick(p.x, p.y);
@@ -134,7 +134,7 @@ const mid = (app, id) => { const st = app.state, s = st.shapes.find((x) => x.id 
     const row = (name) => [...doc.querySelectorAll('.sk-group-row')].find((r) => r.querySelector('.sk-info-lbl').textContent === name);
     ok(row('R') && row('Q'), 'the browser lists the groups R and Q');
     row('Q').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50, button: 2 })); app.frames();
-    eq([sel(st), menuIds()], [qIds, ['grp-ungroup', 'grp-enter']], 'the row menu: Q selected; Ungroup / Enter group');
+    eq([sel(st), menuIds()], [qIds, ['grp-ungroup', 'grp-enter', 'grp-lock-size', 'grp-lock-full']], 'the row menu: Q selected; Ungroup / Enter group (and, TASK 753, its two locks)');
     choose('grp-ungroup');
     eq([names(st), app.browser.panel.el.querySelectorAll('.sk-group-row').length], [['R'], 1], 'Ungroup from the row: Q dissolved, its row gone');
     measured.ways = 'ok';

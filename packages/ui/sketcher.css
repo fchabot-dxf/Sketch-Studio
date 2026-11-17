@@ -60,6 +60,16 @@
   --sk-glyph-selected: #ca8a04;
   --sk-origin: #3B82F6;
 
+  /* TASK 753: a group's transform box (#ui/transform-box.js) and its two padlocks. Filled badges with a white glyph (on) and a white badge with a
+     grey glyph (off), so the same values read on a light and a dark canvas; colour is never the only cue (round / square badge, closed / open
+     shackle, a tooltip and an aria-label). */
+  --sk-tbox: #017AFD;               /* the box outline and its handles' stroke (the selection blue) */
+  --sk-tbox-handle-fill: #ffffff;   /* a handle's fill */
+  --sk-lock-size: #16a34a;          /* "Lock size & angle" on (green, round badge) */
+  --sk-lock-full: #dc2626;          /* "Full lock" on (red, square badge) */
+  --sk-lock-off: #4b5563;           /* a padlock that is off: its outline and glyph */
+  --sk-lock-off-fill: #ffffff;      /* ... and its badge */
+
   /* Feedback */
   --sk-error: #ef4444;
   /* TASK 646: a warning on the canvas: the part of a line a fillet would EXTEND past its far end (fillet-tool.js preview) */

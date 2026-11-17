@@ -15,7 +15,53 @@
 
 import { findLoops, findConnectedChains } from './loop-finder.js';
 import { loopPolygon, polygonContains } from './loop-geometry.js';
-import { TOOL_MODES } from './constants.js';
+import { TOOL_MODES, ORIGIN_JOINT_ID } from './constants.js';
+
+// TASK 753: THE two LOCKS of a group, declared once (the box's padlocks, the canvas / hold menu and the browser row all read and toggle these).
+// Each is ONE flat field on the group entry (absent = off: every group, imported or hand-made, starts unlocked; a document without locks
+// saves exactly as before). Full lock implies Lock size & angle.
+//   sizeAngle  "Lock size & angle": no rotate / scale (the box shows no handles, typed values are refused); the group still moves.
+//   full       "Full lock": the group cannot move, rotate or scale (the solver holds it: rigidBlocks below).
+export const GROUP_LOCKS = Object.freeze({
+  sizeAngle: Object.freeze({ field: 'lockSizeAngle', label: 'Lock size & angle' }),
+  full: Object.freeze({ field: 'fullLock', label: 'Full lock' }),
+});
+// THE hold a full-locked block carries (TASK 753): the origin, the one point every document holds fixed, as one more MEMBER of the block. The
+// solver's own rule for a block (TASK 752, engine.js _pack: "a block holding a fixed point cannot move: every joint of it is a constant") then
+// pins it: no solver change, and the DOF / colours show it as fixed through the same block. Never drawn, saved or exported (it lives only in
+// rigidBlocks' answer).
+export const FULL_LOCK_HOLD = Object.freeze({ id: 'full-lock-hold', type: 'hold', joints: Object.freeze([ORIGIN_JOINT_ID]) });
+
+// The group's OWN lock state (what its padlocks show and toggle): { sizeAngle, full } (full implies sizeAngle).
+export function groupLockState(state, gid) {
+  const g = ((state && state.groups) || []).find((x) => x.id === gid);
+  const full = !!(g && g[GROUP_LOCKS.full.field]);
+  return { sizeAngle: full || !!(g && g[GROUP_LOCKS.sizeAngle.field]), full };
+}
+
+// Set lock `kind` ('sizeAngle' | 'full') of group `gid` on or off (the flat field; off removes it). -> false when there is no such group.
+export function setGroupLock(state, gid, kind, on) {
+  const g = ((state && state.groups) || []).find((x) => x.id === gid);
+  const lock = GROUP_LOCKS[kind];
+  if (!g || !lock) return false;
+  if (on) g[lock.field] = true; else delete g[lock.field];
+  return true;
+}
+
+// The group in `gid`'s nest (the group itself first, then the groups inside it) that holds lock `kind`, or null: a rotate / scale of a group is
+// refused when it or a group inside it is locked (a locked child would turn with its parent). Full lock counts as Lock size & angle.
+export function lockHolder(state, gid, kind) {
+  const ix = indexOf(state);
+  const byId = new Map(((state && state.groups) || []).map((g) => [g.id, g]));
+  const has = (g) => !!g && (kind === 'full' ? !!g[GROUP_LOCKS.full.field] : !!(g[GROUP_LOCKS.full.field] || g[GROUP_LOCKS.sizeAngle.field]));
+  const queue = [gid];
+  while (queue.length) {
+    const id = queue.shift();
+    if (has(byId.get(id))) return id;
+    queue.push(...(ix.kids.get(id) || []));
+  }
+  return null;
+}
 
 // An entity's USER group — its stored `userGroupId` (its innermost group), or null (ungrouped). NOT the factory `groupId`.
 export function groupOf(shape) { return (shape && shape.userGroupId) || null; }
@@ -76,16 +122,20 @@ export function selectUnit(state, shapeId) { return indexOf(state).unitOf(shapeI
 // rotation, no scale). The direct members of the entered group, and ungrouped shapes, are in no block. Derived at every solve from the
 // shapes' `userGroupId`, `groups` and `enteredGroupId` (nothing stored, nothing added to the constraints). `state` = { shapes, groups,
 // enteredGroupId }. Returns [{ id: groupId, shapes: [shape, ...] }] in the order of each block's first shape; [] when there is no group.
+// TASK 753: a block whose group, or a group inside it, has FULL LOCK on also holds FULL_LOCK_HOLD (the origin as a member): the solver pins it.
 export function rigidBlocks(state) {
   if (!state || !Array.isArray(state.groups) || !state.groups.length) return [];
   const ix = indexOf(state), out = new Map();
+  const fullIds = new Set(state.groups.filter((g) => g[GROUP_LOCKS.full.field]).map((g) => g.id));
+  const held = new Set();
   for (const s of (state.shapes || [])) {
     const u = s && s.userGroupId ? ix.unitOf(s.id) : null;
     if (!u) continue;
     if (!out.has(u)) out.set(u, []);
     out.get(u).push(s);
+    if (fullIds.size && !held.has(u)) { const chain = ix.chainOf(groupOf(s)); if (chain.slice(0, chain.indexOf(u) + 1).some((g) => fullIds.has(g))) held.add(u); }
   }
-  return [...out].map(([id, shapes]) => ({ id, shapes }));
+  return [...out].map(([id, shapes]) => ({ id, shapes: held.has(id) ? [...shapes, FULL_LOCK_HOLD] : shapes }));
 }
 
 // Is shape `shapeId` inside group `gid` (a member of it or of one of its child groups)?

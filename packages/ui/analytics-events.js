@@ -37,6 +37,10 @@ export const FEATURES = Object.freeze([
   'print',             // the Print button of SketchStudio's Drawing step (apps/sketchstudio/drawing-view.js)
   'settings',          // the settings / style panel opened (#ui/style-panel.js)
   'close-path',        // TASK 760: open paths closed by Close path (the tool, its menu entry or an import's "Close them": #ui/close-path-actions.js)
+  'group-move',        // TASK 753: a whole selected group moved by a drag (#ui/input-handlers/selection-tools.js, the box's move)
+  'group-rotate',      // TASK 753: a group rotated by its box (the handle or a typed angle: #ui/transform-box.js)
+  'group-scale',       // TASK 753: a group scaled by its box (a corner handle or a typed scale / width: #ui/transform-box.js)
+  'group-lock',        // TASK 753: a group's Lock size & angle or Full lock turned on / off (#ui/group-actions.js toggleGroupLock: padlock, menu, browser row)
   'shortcut-changed',  // TASK 747: a keyboard shortcut given another key, swapped or left with none in Settings > Shortcuts (#ui/shortcuts-list.js); never which key
 ]);
 

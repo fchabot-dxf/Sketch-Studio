@@ -93,6 +93,7 @@ import { constraintTargets } from '#ui/geometry-labels.js';
 import { profileFillLoops } from '#ui/profile-fill.js';
 import { sketchOf, inActiveSketch, constraintSketch, hiddenSketchIds, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { ORIGIN_JOINT_ID } from '#core/constants.js';
+import { transformBoxMarkup } from '#ui/transform-box.js'; // TASK 753: a group's transform box
 import { enteredShapes, shapesInGroup, hoveredUnit } from '#core/group-model.js'; // TASK 751: the entered user group (the rest draws dimmed); TASK 756: the hovered group
 
 // TASK 661: the markup collector. Behaves as the plain array draw() always built (push / join); while `dim` names a sketch, the chunks pushed
@@ -2902,6 +2903,10 @@ switch(c.type){
     lastLoggedConstraints = constraintSummary;
     dbg.log('renderer', 'constraints', constraintSummary);
   }
+
+  // TASK 753: the transform box of the selected / hovered user group (#ui/transform-box.js: Select tool only; nothing for a host without groups)
+  out.dim = null;
+  if (groupState) out.push(transformBoxMarkup(groupState, zoom));
 
   // Apply accumulated SVG markup in a single DOM update to avoid partial-frame painting.
   // Ensure overlays that must be on top are appended last (guarantees highest stacking within this SVG)

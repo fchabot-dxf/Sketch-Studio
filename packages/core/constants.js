@@ -184,7 +184,8 @@ export const DRAG_TYPES = {
   JOINT: 'joint',
   CLUSTER: 'cluster',
   LINE: 'line',
-  DIMENSION: 'dim'
+  DIMENSION: 'dim',
+  TRANSFORM: 'transform' // TASK 753: a rotate / scale handle of a group's transform box (#ui/transform-box.js)
 };
 
 // TASK 545: the undo step label of every drag that changes geometry (the journal and the undo history show it). A LINE-type drag is

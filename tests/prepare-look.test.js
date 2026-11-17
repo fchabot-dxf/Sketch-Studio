@@ -129,9 +129,10 @@ await (async () => {
     // ── 3. the cut card look + its type list ──
     await click(targets.outside.x, targets.outside.y);
     const card = await evalJs(`(() => { const c = getComputedStyle(document.querySelector('.cut-card')); const f = getComputedStyle(document.querySelector('.cut-box')); const l = document.querySelector('.cut-field-label');
-      return { bg: c.backgroundColor, radius: c.borderRadius, field: f.backgroundColor, labelCase: getComputedStyle(l).textTransform, dPrefix: !!document.querySelector('.cut-dia-prefix'), presets: [...document.querySelectorAll('.cut-preset')].map((b) => b.textContent) }; })()`);
+      return { bg: c.backgroundColor, radius: c.borderRadius, field: f.backgroundColor, labelCase: getComputedStyle(l).textTransform, dPrefix: !!document.querySelector('.cut-dia-prefix'), presets: [...document.querySelectorAll('.cut-preset')].map((b) => b.textContent), bitPresets: [...document.querySelectorAll('.cut-row[data-param="toolDia"] .cut-preset')].map((b) => b.textContent) }; })()`);
     assert.strictEqual(card.bg, 'rgb(10, 10, 11)'); assert.strictEqual(card.field, 'rgb(42, 43, 45)'); assert.strictEqual(card.labelCase, 'lowercase'); assert.ok(card.dPrefix);
-    assert.deepStrictEqual(card.presets, ['.02', '⅛', '¼', '½']);
+    assert.deepStrictEqual(card.bitPresets, ['.02', '⅛', '¼', '½']);
+    assert.deepStrictEqual(card.presets, ['Off', 'Tabs', 'Onion skin', '.02', '⅛', '¼', '½'], 'an Outside card: the Hold part choice (TASK 742) and the bit presets');
     const popOpen = (sel) => waitFor(`(() => { const e = document.querySelector('${sel}'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; })()`, sel + ' open');
     const planHas = (cond) => waitFor(`import('/apps/shaper/src/cut-plan.js').then(({ CUT_PLAN }) => [...CUT_PLAN.values()].some((r) => r.cutType === 'exterior' && (${cond})))`, 'exterior cut record: ' + cond);
     await clickEl('.cut-type-trigger'); await popOpen('.cut-type-menu');
@@ -184,12 +185,12 @@ await (async () => {
     assert.ok(Math.abs(outsideRec.cutOffset - 3.175) < 1e-9, 'picking 1/8 stores 3.175 mm as the offset');
 
     // bit diameter: the preset matching the value is filled
-    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-presets .cut-preset.is-active')).backgroundColor`), 'rgb(24, 46, 109)', 'the active bit preset is #182E6D');
-    assert.strictEqual(await evalJs(`document.querySelector('.cut-presets .cut-preset.is-active').textContent`), '¼', '0.250 in -> the 1/4 preset');
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-row[data-param="toolDia"] .cut-presets .cut-preset.is-active')).backgroundColor`), 'rgb(24, 46, 109)', 'the active bit preset is #182E6D'); // TASK 742: the bit row's (the Hold part choice also has an active button)
+    assert.strictEqual(await evalJs(`document.querySelector('.cut-row[data-param="toolDia"] .cut-presets .cut-preset.is-active').textContent`), '¼', '0.250 in -> the 1/4 preset');
 
     // cutter shape: the row sits below bit diameter; popover to the left with flat / ball / V-bit (+ the V-bit angle presets)
     const order = await evalJs(`[...document.querySelectorAll('.cut-rows .cut-row')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.param || r.dataset.row)`); // the rows shown (TASK 714: a stepped type's Step depth row is hidden here)
-    assert.deepStrictEqual(order, ['cutDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'cutter shape is directly below bit diameter');
+    assert.deepStrictEqual(order, ['cutDepth', 'holdPart', 'cutOffset', 'toolDia', 'cutterShape'], 'cutter shape is directly below bit diameter (TASK 742: an Outside card has its Hold part row under the depth)');
     await clickEl('.cut-shape-trigger'); await popOpen('.cut-shape-pop');
     const sp = await rectOf('.cut-shape-pop');
     assert.ok(sp && sp.right <= cardR.left, 'cutter shape popover opens to the LEFT');

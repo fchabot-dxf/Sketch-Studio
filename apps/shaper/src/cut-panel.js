@@ -5,6 +5,7 @@
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
 import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
+import { HOLD_PART, holdDefaults } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults
 import SettingsManager, { docUnit, lengthDecimals } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
@@ -39,7 +40,14 @@ const STEPPERS = {
   toolDia:       { step: { mm: 0.5, in: 1 / 32 }, positive: true },
   stepDepth:     { step: { mm: 0.5, in: 1 / 32 }, positive: true },
   stepDeviation: { step: { mm: 0.05, in: 0.002 }, positive: true },
+  // TASK 742: Hold part: a tab's width / a tab's or skin's thickness are sizes (positive); the count is a plain number (its unit family ignored: 1 in both)
+  tabWidth:      { step: { mm: 1, in: 1 / 16 }, positive: true },
+  holdThickness: { step: { mm: 0.5, in: 1 / 64 }, positive: true },
+  tabCount:      { step: { mm: 1, in: 1 }, positive: true },
 };
+// TASK 742: the Hold part choice (#core HOLD_PART.modes: Off | Tabs | Onion skin) and the count's Auto, as preset buttons (the ONE preset widget)
+const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ label: m.label, value: m.id }));
+const COUNT_PRESETS = [{ label: 'Auto', value: 'auto' }];
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
 const fmt = (baseMM) => formatUnit(baseMM, docUnit(), { decimals: lengthDecimals(3) });   // BASE mm → doc-unit string (3 dp unless the Length precision setting says otherwise)
@@ -92,6 +100,31 @@ export function createCutPanel(hostEl, opts = {}) {
         </div>
         <div class="cut-presets"></div>
       </div>
+      <div class="cut-row" data-row="holdPart">
+        <label class="cut-field-label">Hold part</label>
+        <div class="cut-presets cut-hold-modes"></div>
+      </div>
+      <div class="cut-row" data-row="tabCount">
+        <label class="cut-field-label">Tab count</label>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-tab-count" inputmode="numeric" placeholder="Auto">
+          <span class="cut-presets cut-in-box"></span>
+        </div>
+      </div>
+      <div class="cut-row" data-row="tabWidth">
+        <label class="cut-field-label">Tab width</label>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-tab-width" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+      </div>
+      <div class="cut-row" data-row="holdThickness">
+        <label class="cut-field-label">Tab thickness</label>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-hold-thickness" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+      </div>
       <div class="cut-note" hidden></div>
       <div class="cut-row" data-param="cutOffset">
         <label class="cut-field-label">Offset</label>
@@ -126,9 +159,10 @@ export function createCutPanel(hostEl, opts = {}) {
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
   const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets');
   const adaptiveInput = $('.cut-adaptive'), deviationInput = $('.cut-step-deviation'), deviationPresetsWrap = $('.cut-row[data-row="stepDeviation"] .cut-presets'); // TASK 717
+  const holdModesWrap = $('.cut-hold-modes'), countInput = $('.cut-tab-count'), countPresetsWrap = $('.cut-row[data-row="tabCount"] .cut-presets') /* the Auto button, inside the count box (a row of its own would push the card past a phone's screen) */, tabWidthInput = $('.cut-tab-width'), holdThicknessInput = $('.cut-hold-thickness'); // TASK 742
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, record: null, note: [] };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, record: null, note: [] };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop];
@@ -137,7 +171,8 @@ export function createCutPanel(hostEl, opts = {}) {
     shapeTrigger.setAttribute('aria-expanded', String(!shapePop.hidden)); shapeTrigger.classList.toggle('is-open', !shapePop.hidden);
   };
   const closePops = (except) => { for (const p of pops) if (p !== except) p.hidden = true; syncOpenState(); };
-  const openPop = (pop, anchor) => { closePops(pop); pop.style.top = (anchor.closest('.cut-row, .cut-field') || anchor).offsetTop + 'px'; pop.hidden = false; syncOpenState(); };
+  const rowsEl = card.querySelector('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll)
+  const openPop = (pop, anchor) => { closePops(pop); const row = anchor.closest('.cut-row, .cut-field') || anchor; pop.style.top = (row.offsetTop - (rowsEl.contains(row) ? rowsEl.scrollTop : 0)) + 'px'; pop.hidden = false; syncOpenState(); };
 
   // ── cut-type dropdown (SP1f) ──
   const closeMenu = () => { menu.hidden = true; syncOpenState(); };
@@ -167,7 +202,8 @@ export function createCutPanel(hostEl, opts = {}) {
     wrap.innerHTML = '';
     for (const p of presets) {
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'cut-preset' + (Math.abs(p.value - value) < 1e-6 ? ' is-active' : ''); b.dataset.value = String(p.value); b.textContent = p.label;
+      const same = typeof p.value === 'number' ? Math.abs(p.value - value) < 1e-6 : p.value === value; // TASK 742: a choice preset (a string value) is active when equal
+      b.type = 'button'; b.className = 'cut-preset' + (same ? ' is-active' : ''); b.dataset.value = String(p.value); b.textContent = p.label;
       b.addEventListener('click', () => onSetField(field, p.value)); // base mm
       wrap.appendChild(b);
     }
@@ -181,6 +217,8 @@ export function createCutPanel(hostEl, opts = {}) {
   const fieldBase = (field) => field === 'cutOffset' ? Number(current.cutOffset) || 0
     : field === 'toolDia' ? Number(current.toolDia) || 0
     : field === 'stepDepth' ? (Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm)
+    : field === 'tabWidth' ? (Number(current.tabWidth) > 0 ? Number(current.tabWidth) : holdDefaults(docUnit()).tabWidth)
+    : field === 'holdThickness' ? (Number(current.holdThickness) > 0 ? Number(current.holdThickness) : holdDefaults(docUnit()).thickness)
     : (Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm);
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
   // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored)
@@ -207,12 +245,29 @@ export function createCutPanel(hostEl, opts = {}) {
   offsetInput.addEventListener('change', () => onSetField('cutOffset', parseUnit(offsetInput.value, docUnit()) ?? 0));
   flipBtn.addEventListener('click', () => onSetField('cutOffset', -(Number(current.cutOffset) || 0))); // sign flip (base mm)
   bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('toolDia', n); else renderFields(); });
+  // TASK 742: Hold part sizes (doc unit in, base mm stored; > 0 only, as the other sizes) and the tab count (Auto when empty / "auto", else a whole number >= 1)
+  tabWidthInput.addEventListener('change', () => { const n = parseUnit(tabWidthInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('tabWidth', n); else renderFields(); });
+  holdThicknessInput.addEventListener('change', () => { const n = parseUnit(holdThicknessInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('holdThickness', n); else renderFields(); });
+  countInput.addEventListener('change', () => {
+    const v = countInput.value.trim().toLowerCase(), n = Number(v);
+    if (v === '' || v === 'auto') onSetField('tabCount', 'auto');
+    else if (Number.isInteger(n) && n >= 1) onSetField('tabCount', n);
+    else renderFields();
+  });
 
   stepperFor('cutDepth', depthInput, 'depth', { box: depthInput.closest('.cut-box'), before: depthInput.closest('.cut-mid') });
   stepperFor('stepDepth', stepInput, 'step depth', { box: stepInput.closest('.cut-box') });
   stepperFor('stepDeviation', deviationInput, 'resolution', { box: deviationInput.closest('.cut-box') });
   stepperFor('cutOffset', offsetInput, 'offset', { box: offsetInput.closest('.cut-box') });
   stepperFor('toolDia', bitInput, 'bit diameter', { box: bitInput.closest('.cut-box'), before: bitInput.closest('.cut-box').querySelector('.cut-dia-prefix') });
+  stepperFor('tabWidth', tabWidthInput, 'tab width', { box: tabWidthInput.closest('.cut-box') });
+  stepperFor('holdThickness', holdThicknessInput, 'thickness', { box: holdThicknessInput.closest('.cut-box') });
+  // the count is a number, not a length: the same stepper with no unit conversion; from Auto it steps from the count Auto gave (the derivation's, model.hold)
+  attachStepper(countInput, STEPPERS.tabCount, {
+    unit: () => 'mm', toDoc: (n) => n,
+    read: () => (Number(current.tabCount) >= 1 ? Number(current.tabCount) : current.hold && current.hold.requested >= 1 ? current.hold.requested : null),
+    commit: (n) => onSetField('tabCount', Math.max(1, Math.round(n))),
+  }, { label: 'tab count', box: countInput.closest('.cut-box') });
 
   // cutter shape popover: flat / ball nose / V-bit rows; the V-bit row carries its angle presets (the EXISTING VBIT_PRESETS)
   const buildShapePop = () => {
@@ -255,6 +310,19 @@ export function createCutPanel(hostEl, opts = {}) {
     stepInput.value = fmt(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
     const deviation = Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm;
     deviationInput.value = formatUnit(deviation, docUnit(), { decimals: lengthDecimals(docUnit() === 'in' ? 4 : 3) }); // 0.1 mm = 0.0039 in
+    // TASK 742: Hold part, for a type that declares it (a plain Outside / Inside): the choice, then the Tabs rows (count, width, thickness) or the Onion skin row (thickness)
+    const hold = declares('holdPart') ? (current.holdPart === 'tabs' || current.holdPart === 'skin' ? current.holdPart : 'off') : null;
+    card.querySelector('.cut-row[data-row="holdPart"]').style.display = hold ? '' : 'none';
+    card.querySelector('.cut-row[data-row="tabCount"]').style.display = hold === 'tabs' ? '' : 'none';
+    card.querySelector('.cut-row[data-row="tabWidth"]').style.display = hold === 'tabs' ? '' : 'none';
+    card.querySelector('.cut-row[data-row="holdThickness"]').style.display = hold === 'tabs' || hold === 'skin' ? '' : 'none';
+    card.querySelector('.cut-row[data-row="holdThickness"] .cut-field-label').textContent = hold === 'skin' ? 'Skin thickness' : 'Tab thickness';
+    renderPresets(holdModesWrap, hold ? HOLD_PRESETS : [], 'holdPart', hold); // hidden rows keep no preset buttons
+    renderPresets(countPresetsWrap, hold === 'tabs' ? COUNT_PRESETS : [], 'tabCount', Number(current.tabCount) >= 1 ? Number(current.tabCount) : 'auto');
+    countInput.value = Number(current.tabCount) >= 1 ? String(Math.floor(Number(current.tabCount))) : '';
+    countInput.placeholder = current.hold && current.hold.requested >= 1 && !(Number(current.tabCount) >= 1) ? `Auto (${current.hold.requested})` : 'Auto';
+    tabWidthInput.value = fmt(fieldBase('tabWidth'));
+    holdThicknessInput.value = fmt(fieldBase('holdThickness'));
     noteEl.innerHTML = '';
     for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
       const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');
@@ -285,9 +353,9 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, record: null, note: [] }; return; }
     const rec = model.record || {};
-    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, record: rec, note: Array.isArray(model.note) ? model.note : [] };
+    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null, record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;
     curLabel.textContent = t ? t.menuLabel : 'Select type';

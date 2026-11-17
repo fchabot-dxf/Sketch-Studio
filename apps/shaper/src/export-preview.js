@@ -6,6 +6,8 @@
 //    attributes shared by several elements to a <g>). A stepped cut's "step k of N" cannot be read from the file (two cuts' steps at the same
 //    depth are written alike), so the PREVIEW copy carries it: data-step="k/N" on the element (#core/shaper-export `previewData`, from the
 //    terrace deriveCuts made); the downloaded file never has it.
+//  * TASK 742: a held cut (tabs / onion skin) is plain cuts in the file too (the pass is an outside / inside cut, each gap strip an inside cut);
+//    the preview copy carries data-hold="pass" | "skin" | "gap k/N" the same way, so the label and the list say "pass (tabs)", "onion skin", "gap 2 of 4".
 //  * A tap / click on an element (a press that moves less than 4 px) picks it: a highlight and its label ("pocket · 7.333 mm · step 2 of 4");
 //    a tap on empty space clears it. The list (rows by cut type, then depth and step, each with its element count) picks a row's elements.
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare and Vcarve). The first build
@@ -41,13 +43,17 @@ function cutAttr(el, name) {
   return null;
 }
 
-/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null }. */
+/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap', k?, n? } | null }. */
 export function previewItems(root) {
   return [...root.querySelectorAll('*')].filter((el) => SHAPE_TAGS.has(el.localName)).map((el) => {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
-    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null };
+    const h = /^(pass|skin)$|^gap (\d+)\/(\d+)$/.exec(el.getAttribute('data-hold') || ''); // TASK 742
+    const hold = h ? (h[1] ? { kind: h[1] } : { kind: 'gap', k: Number(h[2]), n: Number(h[3]) }) : null;
+    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold };
   });
 }
+/** TASK 742: a held element's words: "pass (tabs)" | "onion skin" | "gap 2 of 4" (the element), "gaps" (a list row of them). */
+const holdText = (hold, row = false) => (!hold ? null : hold.kind === 'pass' ? 'pass (tabs)' : hold.kind === 'skin' ? 'onion skin' : row ? 'gaps' : `gap ${hold.k} of ${hold.n}`);
 
 /**
  * TASK 719: the PREVIEW's shade of each pocket depth: { shades: Map(depth string -> css colour), lo, hi }. Lightness runs linearly from SHADE_SHALLOW (the
@@ -88,9 +94,9 @@ export const depthText = (depth) => {
   return m ? `${Number(m[1]).toFixed(p)}${m[2] ? ' ' + m[2] : ''}` : depth;
 };
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
-export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null].filter(Boolean).join(' · ');
+export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold)].filter(Boolean).join(' · ');
 
-/** The list: one group per cut type (file order) with its element count, one row per depth + step in it (file order) with its elements. */
+/** The list: one group per cut type (file order) with its element count, one row per depth + step (+ TASK 742 hold kind) in it (file order) with its elements. */
 export function previewRows(items) {
   const groups = new Map();
   for (const it of items) {
@@ -98,8 +104,8 @@ export function previewRows(items) {
     if (!groups.has(type)) groups.set(type, { cutType: type, count: 0, rows: new Map() });
     const g = groups.get(type);
     g.count++;
-    const key = `${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}`;
-    if (!g.rows.has(key)) g.rows.set(key, { depth: it.depth, step: it.step, items: [] });
+    const key = `${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}`; // TASK 742: a held cut's gaps are one row
+    if (!g.rows.has(key)) g.rows.set(key, { depth: it.depth, step: it.step, hold: it.hold, items: [] });
     g.rows.get(key).items.push(it);
   }
   return [...groups.values()].map((g) => ({ cutType: g.cutType, count: g.count, rows: [...g.rows.values()] }));
@@ -191,7 +197,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
       out.push(head);
       for (const row of g.rows) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
-        const t = doc.createElement('span'); t.textContent = [depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null].filter(Boolean).join(' · ');
+        const t = doc.createElement('span'); t.textContent = [depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true)].filter(Boolean).join(' · ');
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
         const shade = g.cutType === 'pocket' ? shading.shades.get(row.depth) : (g.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (g.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
@@ -267,7 +273,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
   function inspect() {
     return {
       elements: items.length,
-      rows: rows.map((g) => ({ cutType: g.cutType, count: g.count, rows: g.rows.map((r) => ({ depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, count: r.items.length })) })),
+      rows: rows.map((g) => ({ cutType: g.cutType, count: g.count, rows: g.rows.map((r) => ({ depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), count: r.items.length })) })),
       picked: picked.length, label: info.textContent, view: viewState.view ? { ...viewState.view } : null,
     };
   }

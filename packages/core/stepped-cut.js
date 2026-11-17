@@ -28,6 +28,7 @@
 import { regionsFromRings, intersectRegions, unionRegions } from './plot/clip.js';
 import { num, polyToPathD, loopToPathD } from './loop-geometry.js';
 import { deriveProfileCuts } from './profile-model.js';
+import { applyHoldPart } from './hold-part.js'; // TASK 742: tabs / onion skin on a plain Outside / Inside cut
 
 /** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet. */
 export const STEP_DEPTH = Object.freeze({ defaultMm: 1 });
@@ -415,9 +416,11 @@ export function steppedTerraces(slope, { kind = 'pocket', step, depth, deviation
  * (rec.cutDepth), `geom` (the exported element: the ring's exact lines / arcs / circle, or the boolean's polygon) and
  * `terrace` = { index, count, depth, undercutBelow, label }. The plain cut's other cuts (an Outside plate's holes) are kept as they are.
  * No slope, or a slope that does not read (steppedTerraces error): no cut at all (never a straight cut in its place).
+ * TASK 742: a plain record's cuts go through #core/hold-part applyHoldPart (tabs / onion skin; the same array when the record holds nothing).
+ * A stepped record never holds its part (holdMode is 'off' for it).
  */
 export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
-  if (!rec || !rec.terraceAs) return deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoops);
+  if (!rec || !rec.terraceAs) return applyHoldPart(deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoops), rec, state); // TASK 742: unchanged unless the record holds its part
   const { terraceAs, slope, ...rest } = rec;
   if (!slope) return [];
   const plain = deriveProfileCuts(target, { ...rest, cutType: terraceAs }, state, loops, loopPolys, ownedLoops);

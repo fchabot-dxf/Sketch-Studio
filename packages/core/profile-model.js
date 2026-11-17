@@ -941,6 +941,36 @@ export function deriveCutTravel(footprints) {
   return out;
 }
 
+// thinTravel(rings, minGap, gaps) — TASK 757: which of one STEPPED cut's travel rings (its terraces' centre paths: many close outlines) carry travel marks so
+// they never pack closer than `minGap` (world units; the view passes its declared minimum on SCREEN converted at the current zoom). Rule: the rings in order
+// outermost first (largest |area|), the first is kept, then each ring whose gap to EVERY kept ring is at least minGap. Returns the kept indices (ascending).
+// gap = the smallest distance between two rings, each sampled to at most TRAVEL_GAP_SAMPLES vertices (a display decision; exact to the chord sagitta), memoised
+// in `gaps` (a Map the caller keeps per cut: a zoom re-thins without measuring again).
+export const TRAVEL_GAP_SAMPLES = 64;
+const sampleRing = (ring) => { const k = Math.max(1, Math.ceil(ring.length / TRAVEL_GAP_SAMPLES)); return ring.filter((_, i) => i % k === 0); };
+function ringGap(a, b) {
+  let best = Infinity;
+  const side = (P, Q) => {
+    for (const p of P) for (let i = 0; i < Q.length; i++) {
+      const u = Q[i], v = Q[(i + 1) % Q.length], vx = v.x - u.x, vy = v.y - u.y, len2 = vx * vx + vy * vy;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - u.x) * vx + (p.y - u.y) * vy) / len2)) : 0;
+      const d = Math.hypot(p.x - u.x - t * vx, p.y - u.y - t * vy);
+      if (d < best) best = d;
+    }
+  };
+  side(a, b); side(b, a);
+  return best;
+}
+export function thinTravel(rings, minGap, gaps = new Map()) {
+  const order = rings.map((r, i) => i).sort((i, j) => Math.abs(polyArea(rings[j])) - Math.abs(polyArea(rings[i])));
+  const samples = new Map();
+  const sample = (i) => { if (!samples.has(i)) samples.set(i, sampleRing(rings[i])); return samples.get(i); };
+  const gap = (i, j) => { const k = i < j ? `${i},${j}` : `${j},${i}`; if (!gaps.has(k)) gaps.set(k, ringGap(sample(i), sample(j))); return gaps.get(k); };
+  const kept = [];
+  for (const i of order) if (kept.every((j) => gap(i, j) >= minGap)) kept.push(i);
+  return kept.sort((a, b) => a - b);
+}
+
 // nearestPointOnPaths(toolPaths, pt) — TASK 455: the point of the bit-centre path(s) NEAREST a cursor position (world coords),
 // where the Prepare depth chip rides. toolPaths = [{ points, closed }]; returns {x, y} or null when there are none.
 export function nearestPointOnPaths(toolPaths, pt) {

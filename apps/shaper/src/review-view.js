@@ -6,6 +6,7 @@
 import { buildRelief, createReliefCache } from '#core/relief-model.js';
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { reviewGridSpec, designCanvasColors, gridMaterialSource, GRID_FADE } from './review-grid.js';
+import { mountDisclosure, isPhone, CARET_SVG } from './disclosure.js'; // TASK 757: the info folds on a phone (the Operations sheet's fold)
 
 export const TILE_MM = 400;        // one repeat of the birch image covers 400 x 400 mm of board (a plausible plywood grain scale)
 export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).href;
@@ -125,14 +126,15 @@ export function planarUVs(positions, tile = TILE_MM, grainAlongX = false) {
 const GRID_SETTING_KEYS = new Set(['GRID_MODE', 'GRID_SIZE', 'GRID_MAJOR_STEP', 'INCH_GRID_DIVISIONS', 'INCH_GRID_MAJOR', 'DOC_UNIT', 'STYLE_TEMPLATE', 'STYLE_PRESETS']);
 
 /**
- * mountReviewView({ host, info, getInputs, look, designCanvas }) -> Promise<{ refresh, reset, top, fit, setLook, inspect, screenOf, destroy, lastBuild, look }>
+ * mountReviewView({ host, info, getInputs, look, designCanvas, emptyText }) -> Promise<{ refresh, reset, top, fit, setLook, inspect, screenOf, destroy, lastBuild, look }>
  *   host       the element the canvas is appended to
  *   info       element receiving the one-line build summary (and the "not shown" notes)
  *   getInputs  () => { stock, items, bounds, notes? }  (see buildRelief; notes = extra info lines, TASK 714: the stepped cuts' steps / undercuts)
  *   look       the initial look state { id, colors } (TASK 729, normaliseLook; default Plywood); setLook(state) swaps the MATERIALS only (no geometry rebuild)
  *   designCanvas  the Design canvas element (TASK 754): the background and the grid colours are read from its own tokens (review-grid.js)
+ *   emptyText  TASK 757: the info's text when there is nothing to build (an empty design: buildRelief's board 'none'); no mesh is shown then
  */
-export async function mountReviewView({ host, info, getInputs, look: initialLook, designCanvas }) {
+export async function mountReviewView({ host, info, getInputs, look: initialLook, designCanvas, emptyText }) {
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
@@ -326,8 +328,15 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     const t0 = performance.now();
     const inputs = getInputs();
     const rel = buildRelief({ ...inputs, cache: reliefCache }); // the cache reuses the work of unchanged cuts / levels
-    const T = rel.stockBox.thickness;
     disposeGroup();
+    if (rel.stats.board === 'none') { // TASK 757: an empty design: no board, no grid, the Export step's empty-state message (the 2D view's) in the info
+      box = null; lastSig = sig;
+      lastBuild = { ms: performance.now() - t0, stages: rel.stats.ms, triangles: 0, levels: 0, skipped: rel.stats.skipped, unsetThrough: [], marks: 0, outsideStock: [], partlyOutside: [], board: 'none' };
+      size(); render();
+      showInfo([emptyText]);
+      return lastBuild;
+    }
+    const T = rel.stockBox.thickness;
     group = new THREE.Group();
     const grainAlongX = rel.stockBox.maxX - rel.stockBox.minX >= rel.stockBox.maxY - rel.stockBox.minY;
     for (const [name, m] of Object.entries(rel.meshes)) {
@@ -361,8 +370,23 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     if (rel.stats.unsetThrough.length) lines.push(`${rel.stats.unsetThrough.length} Outside/Inside cut${rel.stats.unsetThrough.length === 1 ? '' : 's'} with depth unset shown cut through (amber label)`);
     if (notShown) lines.push(`${notShown} cut${notShown === 1 ? '' : 's'} not shown (Pocket or On Line with no depth)`);
     if (Array.isArray(inputs.notes)) lines.push(...inputs.notes);
-    info.replaceChildren(...lines.map((l) => { const d = document.createElement('div'); d.textContent = l; return d; })); // text, never markup (a note carries a Fusion label)
+    showInfo(lines);
     return lastBuild;
+  }
+  // The info's lines, as text (never markup: a note carries a Fusion label). TASK 757: on a PHONE, more than one line FOLDS (disclosure.js, the Operations sheet's
+  // fold): the first line is the header button (one line, with the caret), the others its body, folded by default so the notes never hide the part; a tap
+  // unfolds them (the full text, unchanged) and the choice is kept across rebuilds. A wide screen shows every line as before.
+  let infoOpen = false;
+  function showInfo(lines) {
+    const line = (t) => { const d = document.createElement('div'); d.textContent = t; return d; };
+    if (!isPhone(window) || lines.length < 2) { delete info.dataset.open; info.replaceChildren(...lines.map(line)); return; }
+    const head = document.createElement('button'); head.type = 'button'; head.className = 'review-info-head';
+    const sum = document.createElement('span'); sum.textContent = lines[0];
+    head.append(sum); head.insertAdjacentHTML('beforeend', CARET_SVG);
+    const body = document.createElement('div'); body.className = 'review-info-body';
+    body.append(...lines.slice(1).map(line));
+    info.replaceChildren(head, body);
+    mountDisclosure({ host: info, head, body, open: infoOpen, onToggle: (open) => { infoOpen = open; } });
   }
 
   const ro = new ResizeObserver(() => { size(); render(); });

@@ -25,8 +25,7 @@ import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH } from '#core/stepped-cut.js';
 import { holdMode } from '#core/hold-part.js';
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
-import { format as formatUnit } from '#core/units.js';
-import { docUnit, lengthDecimals } from '#core/settings-manager.js';
+import { docUnit, lengthText } from '#core/settings-manager.js';
 
 // ── the user's ORDER (operation keys), per document: the one stored fact ──
 let order = [];
@@ -39,11 +38,12 @@ const round6 = (n) => Math.round(Number(n) * 1e6) / 1e6;
 const isSet = (d) => d != null && d !== 'unset' && Number.isFinite(Number(d));
 const depthOf = (d) => (isSet(d) ? round6(d) : 'unset');
 
-/** A length in the document unit at the Length precision setting, as the cut card's notes write it ("6 mm", "0.25 in"). (lengthText of task 728 is not on
- *  main yet; this is the notes' formula.) */
+/** A length in the document unit as an operation's words write it ("6 mm", "0.25 in", 1/16 in in Fractional): TASK 757, the one length-format decider (lengthText,
+ *  TASK 728) at the cut card's precision (3 decimals while Length precision is Auto: its fields, its depth chips and the Export list show the same digits),
+ *  trailing zeros dropped, the unit written after it as the card's notes write it. */
 export function lengthLabel(mm) {
   const u = docUnit();
-  return `${Number(formatUnit(mm, u, { decimals: lengthDecimals(u === 'in' ? 4 : 3) }))} ${u}`;
+  return `${lengthText(mm, { unit: u, auto: 3, trim: 'always', show: 'field' })} ${u}`;
 }
 
 /** A tool's name: "¼″ end mill", "6 mm ball nose", "⅛″ 60° V-bit" (a bit of a BIT_PRESETS size goes by its fraction). */

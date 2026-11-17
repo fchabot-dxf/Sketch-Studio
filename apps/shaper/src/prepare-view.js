@@ -13,7 +13,7 @@ import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprin
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastWallAllowance, rememberWallAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 import { updateViewBox } from '#ui/input-manager.js'; // TASK 605: put a document tab's own Prepare view back
@@ -26,6 +26,7 @@ const EDGE_CLASS = 'sk-edge'; // idle: ONLY the thin white svg line (guide targe
 function edgesMarkup(state) {
   const J = state.joints, out = [];
   for (const s of (state.shapes || [])) {
+    if (s.isConstruction) continue; // TASK 757: construction geometry (a Slot's centre line, a centreline) is never a cut edge: the loop finder ignores it (TASK 478), Prepare does not draw it
     if (s.type === 'line') {
       const a = s.joints && J.get(s.joints[0]); const b = s.joints && J.get(s.joints[1]);
       if (a && b) out.push(`<line data-shape-id="${s.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="${EDGE_CLASS}"/>`);
@@ -116,6 +117,7 @@ const depthChip = (x, y, cutDepth, k) => {
     `<text class="sk-chip-text" x="0" y="0" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
 };
 const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
+const TRAVEL_MIN_GAP_PX = 12; // TASK 757: a stepped cut's marked outlines are at least this far apart on SCREEN (renderStepTravel: two dash lengths of .sk-travel)
 
 // World-space tolerance from screen px, derived from the live CTM scale (zoom-stable).
 function worldTolerance(svgEl, screenPx) {
@@ -319,6 +321,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const tpClass = isOnline ? 'sk-tp sk-tp-online' : 'sk-tp';
     let region = '', path = '', hasTravel = false, chip = null;
     const toolPaths = [];
+    // TASK 449: a travel's marks (marching dashes + the reduced-motion arrows); TASK 757: a STEPPED cut's (a terrace's) go to `stepped`, thinned at draw time
+    // (renderStepTravel: the outlines closer on screen than TRAVEL_MIN_GAP_PX carry none), every other cut's into the path markup as before
+    const stepped = [];
+    const addTravel = (fp, t) => {
+      const markup = `<path class="sk-travel" d="${polyRingD(t.path)}"/><g class="sk-travel-arrows">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
+      if (fp.terrace) stepped.push({ ring: t.path, markup }); else path += markup;
+    };
     for (const fp of footprints) {
       // TASK 745: a programmed pocket: the clearing paths as thin tool-path lines (the deepest depth pass only: the shallower passes run the same paths), the
       // area the bit sweeps (clearing + finish pass) as ONE band from its wall cut's plan, and the material the bit does not reach (the leftover) in the
@@ -339,11 +348,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
           continue;
         }
         const travel = deriveCutTravel([fp]);
-        for (const t of travel) {
-          path += `<path class="sk-travel" d="${polyRingD(t.path)}"/>`;
-          path += `<g class="sk-travel-arrows">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
-          hasTravel = true;
-        }
+        for (const t of travel) { addTravel(fp, t); hasTravel = true; }
         if (!travel.length) for (const tp of fp.toolPaths || []) path += `<path class="${tpClass}" d="${toolPathD(tp)}"/>`; // a wall that splits into several loops (a neck): their centre lines
         if (!chip && fp.anchor) chip = fp.anchor;
         continue;
@@ -365,11 +370,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (fp.hold && fp.hold.role === 'pass') for (const d of fp.hold.marks || []) path += `<path class="${fp.hold.mode === 'skin' ? 'sk-skin-mark' : 'sk-tab-mark'}" d="${d}"/>`;
       if (fp.hold && fp.hold.role === 'strip') { path += `<path class="sk-strip" d="${fp.hold.d}"/>`; continue; }
       const travel = deriveCutTravel([fp]);
-      for (const t of travel) {
-        path += `<path class="sk-travel" d="${polyRingD(t.path)}"/>`;
-        path += `<g class="sk-travel-arrows">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
-        hasTravel = true;
-      }
+      for (const t of travel) { addTravel(fp, t); hasTravel = true; }
       if (fp.kind === 'pocket') {
         if (rings.length && !chip) chip = pocketLabelPoint(rings[0], rings.slice(1));
       } else if (fp.chain) {
@@ -380,7 +381,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       }
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, path, hasTravel, toolPaths, anchor: chip, depth: rec.cutDepth };
+    return { region, path, hasTravel, toolPaths, anchor: chip, depth: rec.cutDepth, stepped, steppedGaps: new Map() };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
@@ -400,8 +401,24 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const renderToolpaths = () => {
     let out = '';
     for (const [key, rec] of CUT_PLAN) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
-    toolpathG.innerHTML = out;
+    toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g>';
+    renderStepTravel();
   };
+  // TASK 757: a stepped cut's travel marks, THINNED (#core thinTravel): on its outermost outline, then on each outline at least TRAVEL_MIN_GAP_PX on screen from
+  // every outline already marked, so many close terraces (a dished floor) read as terraces, not a swirl of dashes. Zoom-dependent: redrawn with the chips.
+  const renderStepTravel = () => {
+    const layer = toolpathG.querySelector('.sk-travel-steps');
+    if (!layer) return;
+    const minGap = worldTolerance(svgEl, TRAVEL_MIN_GAP_PX);
+    let out = '';
+    for (const [key, rec] of CUT_PLAN) {
+      if (!(rec && rec.cutType && stateOf(key))) continue;
+      const look = getLook(key, rec);
+      if (look.stepped && look.stepped.length) for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) out += look.stepped[i].markup;
+    }
+    layer.innerHTML = out;
+  };
+  const renderZoomed = () => { renderStepTravel(); renderChips(); }; // what a zoom changes: the thinned travel marks (TASK 757), the chips' screen size (TASK 731)
   // TASK 455: the depth chip sits ON the tool path (centred on the dashed line) at the point NEAREST THE CURSOR and follows the cursor
   // along it while hovering; selected-but-not-hovered it STAYS at its last spot (a target's first appearance uses the stable
   // default anchor the footprint derivation provides).
@@ -482,10 +499,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const onWheel = (e) => {
     handlePanZoomWheel(e, svgEl, viewState);
-    renderChips(); // TASK 731: the chip keeps its screen size across a zoom
+    renderZoomed(); // TASK 731: the chip keeps its screen size across a zoom; TASK 757: the stepped travel marks re-thin
   };
   const onMove = (e) => {
-    if (handlePanZoomPointerMove(e, svgEl, viewState)) { renderChips(); return; } // a pinch changes the zoom
+    if (handlePanZoomPointerMove(e, svgEl, viewState)) { renderZoomed(); return; } // a pinch changes the zoom
     const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     if (!wp) return;
     hoverPt = wp;
@@ -544,8 +561,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     renderSelection(); renderHover();
     onSelectionChange(selectedTarget());
   };
-  const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); renderChips(); };
-  const chipResizeObs = typeof ResizeObserver === 'function' ? new ResizeObserver(() => renderChips()) : null; // TASK 731: a resize changes world-per-px
+  const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); renderZoomed(); };
+  const chipResizeObs = typeof ResizeObserver === 'function' ? new ResizeObserver(() => renderZoomed()) : null; // TASK 731: a resize changes world-per-px
   if (chipResizeObs) chipResizeObs.observe(svgEl);
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look

@@ -11,7 +11,7 @@
 //    hold released without a move reorders nothing, and it never also fires the row's tap (the click that follows is swallowed).
 //  * Keyboard: the grip is focusable; ArrowUp / ArrowDown on it move the row (the grip keeps the focus).
 // DELETE (owner turn 2174): the bin calls onDelete(op) (the stage unassigns every region / path of the operation in ONE undo step).
-const PHONE_QUERY = '(max-width: 640px)';
+import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 757: the fold (open on a wide screen, folded on a phone)
 const DRAG_START_PX = 4;    // a grip press (mouse / pen) that moves less than this is not a drag
 export const HOLD_MS = 350; // a touch held this long without moving lifts the row
 const SCROLL_SLOP_PX = 8;   // a touch that moves more than this before the hold is a scroll
@@ -34,14 +34,12 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
   hostEl.innerHTML = '';
   const head = doc.createElement('button');
   head.type = 'button'; head.className = 'ops-head';
-  head.innerHTML = '<span class="ops-title">Operations</span><span class="ops-count"></span><svg class="ops-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  head.innerHTML = '<span class="ops-title">Operations</span><span class="ops-count"></span>' + CARET_SVG;
   const body = doc.createElement('div');
   body.className = 'ops-body';
   hostEl.append(head, body);
-  let open = !(win.matchMedia && win.matchMedia(PHONE_QUERY).matches);
-  const setOpen = (v) => { open = v; hostEl.dataset.open = String(open); head.setAttribute('aria-expanded', String(open)); body.hidden = !open; };
-  setOpen(open);
-  head.addEventListener('click', () => setOpen(!open));
+  const fold = mountDisclosure({ host: hostEl, head, body }); // TASK 757: the fold, declared once (disclosure.js), reused by the Export step's 3D info
+  const setOpen = (v) => fold.setOpen(v);
 
   let ops = [];
   const keys = () => ops.map((op) => op.key);
@@ -167,7 +165,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
 
   /** What the list shows: { open, items: [{ heading } | { id, text, sub, picked } | { empty }] } (tests). */
   const inspect = () => ({
-    open,
+    open: fold.open,
     items: [...body.children].map((el) => (el.classList.contains('ops-tool') ? { heading: el.textContent }
       : el.classList.contains('ops-row') ? { id: el.dataset.id, text: el.querySelector('.ops-name').textContent, sub: el.querySelector('.ops-sub').textContent, picked: el.classList.contains('is-picked') } : { empty: el.textContent })),
   });

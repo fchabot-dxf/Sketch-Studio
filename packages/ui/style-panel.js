@@ -106,10 +106,14 @@ function injectStyles() {
 .sk-style-tab.sk-active { color: var(--sk-selection, #3B82F6); border-bottom-color: var(--sk-selection, #3B82F6); }
 .sk-style-tabpanel { display: flex; flex-direction: column; gap: 8px; }
 .sk-style-tabpanel[hidden], .sk-style-row[hidden] { display: none; }
-.sk-style-rowtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.sk-style-input { width: 80px; text-align: right; padding: 2px 4px; border-radius: 4px; background: transparent;
+/* TASK 757: a row whose label and control do not fit on one line puts the control on the next line (right-aligned): a select is as wide as its
+   longest option (its own intrinsic width), never wider than the panel, so no choice is cut ("Auto (as each view shows)", "Fractional (e.g. 1 1/2")") */
+.sk-style-rowtop { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.sk-style-rowtop > .sk-style-input { margin-left: auto; }
+.sk-style-input { text-align: right; padding: 2px 4px; border-radius: 4px; background: transparent;
   color: inherit; border: 1px solid var(--sk-style-sep, #cbd5e1); }
-.sk-style-input[type="checkbox"] { width: auto; }
+.sk-style-input[type="number"] { width: 80px; }
+select.sk-style-input { max-width: 100%; }
 .sk-style-slider { width: 100%; accent-color: var(--sk-selection, #3B82F6); cursor: pointer; }
 .sk-style-presetbar { display: flex; flex-wrap: wrap; gap: 6px; }
 .sk-style-presetbar [hidden] { display: none; }

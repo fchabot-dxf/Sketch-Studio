@@ -41,6 +41,7 @@ let docBuffer = null; // TASK 474: the autosave buffer / project actions of this
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
 // Vcarve/Prepare/Review — designController may not exist yet, so its state is read lazily.
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const fusionMode = isFusionMode();
 if (!fusionMode) getGoogleAccount().init();
@@ -248,10 +249,8 @@ function doUngroup() {
 }
 document.addEventListener('keydown', (e) => {
   if (modes.current() !== 'design') return;
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
-    e.preventDefault();
-    if (e.shiftKey) doUngroup(); else doGroup();
-  }
+  if (matchesShortcut(e, 'sketch.group')) { e.preventDefault(); doGroup(); }
+  else if (matchesShortcut(e, 'sketch.ungroup')) { e.preventDefault(); doUngroup(); }
 });
 
 // SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js), with Shaper's own options

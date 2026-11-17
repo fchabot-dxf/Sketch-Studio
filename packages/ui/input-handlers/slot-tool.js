@@ -29,6 +29,7 @@ import {
     openCreationBoxes,
     followCreationBoxes,
 } from '#ui/input-handlers/base-tool.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const MIN_SPAN = 0.1;
 const ARC_LOCK_ANGLE = 0.15;
@@ -553,7 +554,7 @@ export function handleSlotPointerUp(e, svg, state, hitSnap, w) {
 
 export function handleSlotKeyDown(e, svg, state) {
     if (state.currentTool !== TOOL_MODES.SLOT || !state.active || state.active.mode !== TOOL_MODES.SLOT) return false;
-    if (/^[0-9.]$/.test(e.key) && !isInputActive()) {
+    if (matchesShortcut(e, 'draw.typeValue') && !isInputActive()) {
         const active = state.active;
         const cursor = localState.cursor || active.picks[0].pt;
         const p1 = active.picks[0].pt;

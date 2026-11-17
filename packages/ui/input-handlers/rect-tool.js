@@ -10,6 +10,7 @@ import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constrain
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
 import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };
 const localState = { isDragging: false, dragStartScreen: null, boxes: false, cursor: null };
@@ -287,7 +288,7 @@ export function handleRectKeyDown(e, svg, state) {
 	dbg.log('rect-tool', '[DEBUG RECT] handleRectKeyDown called:', { key: e.key, tool: state.currentTool, hasActive: !!state.active, hasStart: !!(state.active && state.active.start), inputActive: isInputActive() });
 	if (state.currentTool !== TOOL_MODES.RECT) return false;
 	if (!state.active || !state.active.start) return false;
-	if (/^[0-9.]$/.test(e.key) && !isInputActive()) {
+	if (matchesShortcut(e, 'draw.typeValue') && !isInputActive()) {
 		dbg.log('rect-tool', '[DEBUG RECT] Opening dual input');
 		const c1 = state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null);
 		const c2 = state.active.preview && state.active.preview.pt ? state.active.preview.pt : c1;

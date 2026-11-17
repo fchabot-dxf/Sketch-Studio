@@ -23,6 +23,7 @@ import { sketchesSignature } from '#core/sketch-model.js';
 import SettingsManager from '#core/settings-manager.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport, onShortViewportChange } from '#ui/short-viewport.js';
 import { dbg } from '#core/debug.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 export const BROWSER_PHONE_BREAKPOINT = 641; // phone toggle below this width: the app's one phone breakpoint is max-width 640
 
@@ -143,9 +144,8 @@ export function mountDesignBrowser({ container, state, engine, label = 'Sketches
     };
     if (typeof document !== 'undefined' && document.addEventListener) {
       document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
-        if (e.key && e.key.toLowerCase() === 'k' && isVisible()) constructBtn.click();
+        if (matchesShortcut(e, 'sketch.construction') && isVisible()) constructBtn.click();
       });
     }
     paintConstruct();

@@ -10,8 +10,9 @@
 // Comments are skipped (a JS tokenizer that knows strings, template literals and regex literals), external URLs (http:, https:, data:, blob:, mailto:)
 // are not followed. A /api/... or /auth/... URL is a Pages Function route: it must have its file under <functionsRoot>/functions (wrangler compiles
 // ./functions from the directory it runs in, not from dist/).
-// siteClosure({ root, app, functionsRoot }) -> { files: Set<rel path>, refs: [{ from, spec, to, base }], missing: [{ from, spec, to }],
-//                                                crossApp: [{ from, spec, to }], functions: [{ from, spec, file }] }
+// siteClosure({ root, app, functionsRoot, entry }) -> { files: Set<rel path>, refs: [{ from, spec, to, base }], missing: [{ from, spec, to }],
+//                                                       crossApp: [{ from, spec, to }], functions: [{ from, spec, file }] }
+// `entry` = the page, relative to root: apps/<app>/index.html (the repo), or index.html (a built site: TASK 763, the app at the top of its site).
 // One resolver for build-site.cjs (which copies the root files it lists, e.g. assets/constraint-glyphs.svg) and tests/site-closure.test.js.
 'use strict';
 const fs = require('fs');
@@ -155,9 +156,8 @@ function functionFile(functionsRoot, pathname) {
   return null;
 }
 
-function siteClosure({ root, app, functionsRoot = root }) {
+function siteClosure({ root, app, functionsRoot = root, entry = `apps/${app}/index.html` }) {
   if (!APPS.includes(app)) throw new Error(`site-closure: unknown app "${app}" (one of ${APPS.join(', ')})`);
-  const entry = `apps/${app}/index.html`;
   const pageUrl = urlOf(entry);
   const files = new Set();
   const refs = [], missing = [], crossApp = [], functions = [];

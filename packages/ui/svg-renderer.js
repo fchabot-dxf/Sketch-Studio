@@ -446,8 +446,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Analyze constraint status for visualization (Green/Black/Blue)
   // Filter out driven dimensions (reference only) so they don't affect DOF calculation
   const activeConstraints = constraints.filter(c => !c.isDriven && !c.driven);
-  // TASK 752: the user groups (read through ctx.getState, as the entered group below): a member of a group that is not entered has its block's DOF
-  const groupState = ctx.getState ? ctx.getState() : null;
+  // TASK 752: the user groups: a member of a group that is not entered has its block's DOF. TASK 756: read through ctx.getGroups (the state
+  // holding groups / enteredGroupId / hoverOwner), which every app's Design canvas declares (sketch-canvas.js, SketchStudio design-canvas.js);
+  // a render without it (Drawing) has no groups, no entered group and no hover. ONE read, used for the DOF colours, the dimming and the hover.
+  const groupState = ctx.getGroups ? ctx.getGroups() : null;
   const { fixedJoints, constrainedJoints, fixedShapes, constrainedShapes, jointDOFs, lockedAxisX, lockedAxisY, radialLocked, dofSources } = analyzeConstraintStatus({ joints, shapes, constraints: activeConstraints, groups: groupState && groupState.groups, enteredGroupId: groupState && groupState.enteredGroupId });
 
   // Accumulate SVG markup and set once at the end to avoid partial-frame renders
@@ -458,10 +460,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const dimsSketches = typeof ctx.getActiveSketchId === 'function';
   const activeSketchState = { activeSketchId: (dimsSketches && ctx.getActiveSketchId()) || DEFAULT_SKETCH_ID };
   // TASK 751: while the Select tool has ENTERED a user group (#core/group-model.js), the geometry outside that group draws dimmed the same
-  // way (the same run, the same --sk-inactive-sketch-opacity token), unless lit. TASK 756: read through ctx.getGroups (the state holding
-  // groups / enteredGroupId / hoverOwner), which every app's Design canvas declares (sketch-canvas.js, SketchStudio design-canvas.js);
-  // a render without it (Drawing) has no entered group and no hover.
-  const groupState = ctx.getGroups ? ctx.getGroups() : null;
+  // way (the same run, the same --sk-inactive-sketch-opacity token), unless lit (groupState: read once above).
   const insideShapes = groupState ? enteredShapes(groupState) : null; // TASK 756: the one answer Pen Plotter's static layer reads too
   const insideJoints = insideShapes ? new Set(shapes.filter((s) => insideShapes.has(s.id)).flatMap((s) => (s.joints || []).map((jid) => joints.get(jid)))) : null;
   const outsideEntered = (entity) => !!insideShapes && !insideJoints.has(entity) && !(entity.id !== undefined && insideShapes.has(entity.id));

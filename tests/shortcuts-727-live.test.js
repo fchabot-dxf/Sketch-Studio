@@ -1,6 +1,6 @@
 // tests/shortcuts-727-live.test.js: TASK 727 (live headless, REAL mouse / touch / keys), all four apps, desktop 1280 and phone 390.
 //  A. Settings (the footer gear) > Shortcuts: the app's shortcuts from THE declaration (shortcuts.js), grouped; e.g. Ctrl+Z Undo, L Line, R Rectangle,
-//     D Dimension (Shaper also Ctrl+G Group, the others not); the filter box narrows the list; nothing scrolls sideways at 390 px.
+//     D Dimension, Ctrl+G Group (TASK 756: every app); the filter box narrows the list; nothing scrolls sideways at 390 px.
 //  B. SketchStudio with the dev-only Solver Tuning panel loaded (it loads on 127.0.0.1): T switches to Perpendicular ONLY (ruling 1: the panel gave
 //     its T up); the drawer's "Tune solver" item has its gear icon and opens the panel; Esc (the one Cancel) closes it. Shaper's Settings item has the icon.
 //  C. Delete on a focused document tab is the tab's (its close question) and the selected line SURVIVES; Delete on the canvas still deletes it.
@@ -63,8 +63,7 @@ await (async () => {
         assert.deepStrictEqual(await row('tool.dimension'), { keys: ['D'], label: 'Dimension', shown: true }, `${tag} ${name}: D Dimension`);
         assert.deepStrictEqual(await row('tool.perpendicular'), { keys: ['T'], label: 'Perpendicular', shown: true }, `${tag} ${name}: T Perpendicular`);
         const group = await row('sketch.group');
-        if (name === 'shaper') assert.deepStrictEqual(group, { keys: ['Ctrl', 'G'], label: 'Group', shown: true }, 'Shaper: Ctrl+G Group');
-        else assert.strictEqual(group, null, `${name}: no Shaper-only Group row`);
+        assert.deepStrictEqual(group, { keys: ['Ctrl', 'G'], label: 'Group', shown: true }, `${name}: Ctrl+G Group (TASK 756: user groups in every app)`);
         assert.strictEqual(await row('plotter.art.line'), null, `${name}: the removed art-tool keys have no row`);
         const fit = await evalJs(`(() => { const p = document.querySelector('.sk-style-panel'), r = p.getBoundingClientRect(); return { left: r.left, right: r.right, vw: innerWidth, pageSW: document.documentElement.scrollWidth, pSW: p.scrollWidth, pCW: p.clientWidth }; })()`);
         assert(fit.left >= -0.5 && fit.right <= fit.vw + 0.5 && fit.pageSW <= fit.vw + 0.5 && fit.pSW <= fit.pCW + 0.5, `${tag} ${name}: fits, no sideways scroll ` + JSON.stringify(fit));

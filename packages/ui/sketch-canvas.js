@@ -17,6 +17,7 @@ import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
 import { updateGridFromSettings } from '#ui/canvas-grid.js';
 import { createSketchState } from '#core/sketch-state.js';
 import { setupInput } from '#ui/input-manager.js';
+import { shapesInGroup, hoveredUnit } from '#core/group-model.js'; // TASK 756: the hovered user group renders live
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -134,6 +135,7 @@ export function mountSketch(svgEl, opts = {}) {
   const renderCtx = {
     getState: () => state,
     getActiveSketchId: () => state.activeSketchId, // TASK 661: draw() dims the other sketches
+    getGroups: () => state, // TASK 756: the user groups (the entered group dims the rest, the hovered group is lit): SketchStudio declares the same
   };
   if (opts.grid && svgEl) {
     renderCtx.updateGrid = (a) => { try { updateGridFromSettings({ ...a, svgEl }); } catch (_) { /* grid is non-essential */ } };
@@ -155,8 +157,11 @@ export function mountSketch(svgEl, opts = {}) {
     // (no opts.isStatic) leaves dJoints/dShapes/dConstraints UNCHANGED -> byte-identical (Studio/Shaper pass nothing).
     if (typeof opts.isStatic === 'function') {
       const liveShapes = [], liveJ = new Set(['j_origin']);
+      // TASK 756: the user group the Select tool's hover lights (#core/group-model.js hoveredUnit) renders live, as a hovered single
+      // shape does in the host's isStatic (its highlight shows); computed once per frame
+      const hu = hoveredUnit(state), hoverLit = new Set(hu ? shapesInGroup(state, hu) : []);
       for (const s of dShapes) {
-        let st; try { st = opts.isStatic(s); } catch (_) { st = false; }
+        let st; if (hoverLit.has(s.id)) st = false; else try { st = opts.isStatic(s); } catch (_) { st = false; }
         if (st) continue;
         liveShapes.push(s); if (s.joints) for (const jid of s.joints) liveJ.add(jid);
       }

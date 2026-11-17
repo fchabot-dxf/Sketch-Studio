@@ -31,7 +31,6 @@ import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
-import { makeGroup, ungroup, groupOf, selectUnit } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
@@ -43,7 +42,6 @@ let docBuffer = null; // TASK 474: the autosave buffer / project actions of this
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
 // Prepare/Review — designController may not exist yet, so its state is read lazily.
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
-import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const fusionMode = isFusionMode();
 if (!fusionMode) getGoogleAccount().init();
@@ -222,36 +220,9 @@ if (syncForm) {
   });
 }
 
-// SKETCH-4d: the GROUP / UNGROUP action (Shaper Design only). Ctrl+G groups the selected shapes (≥2) under a NEW
-// userGroupId; Ctrl+Shift+G ungroups the selection's group(s). Operates on the Design selection (state.selectedShapes);
-// the group belongs to the active sketch (makeGroup) for organisation only (no hole meaning). Shaper-only.
+// Shaper's one-line status toast over the Design view: the import's result, Prepare's notices, and the shared Design tab's own messages
+// (mountSketch notify below: Combine / Uncombine, TASK 756: Group / Ungroup, whose keys and menus are now the shared #ui/group-actions.js)
 const groupStatus = createGroupStatus(() => VIEWS.design); // TASK 610: group-status.js (the page and the node test kit both create it)
-function doGroup() {
-  if (!designController) return;
-  const st = designController.state;
-  const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
-  if (sel.length < 2) { groupStatus('Select 2+ shapes to group'); return; }
-  try { st.saveState && st.saveState('group'); } catch (_) {}
-  const g = makeGroup(st, sel);
-  groupStatus(`Grouped ${sel.length} shapes → ${g ? g.name : 'group'}`);
-}
-function doUngroup() {
-  if (!designController) return;
-  const st = designController.state;
-  const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
-  const byId = new Map((st.shapes || []).map((s) => [s.id, s]));
-  // TASK 751: the group the selection holds at the entered level (selectUnit: a whole selected group), else a curve's own group; ONE level is dissolved
-  const gids = new Set(); for (const id of sel) { const gid = selectUnit(st, id) || groupOf(byId.get(id)); if (gid) gids.add(gid); }
-  if (!gids.size) { groupStatus('No group on the selection'); return; }
-  try { st.saveState && st.saveState('ungroup'); } catch (_) {}
-  for (const gid of gids) ungroup(st, gid);
-  groupStatus(`Ungrouped ${gids.size} group${gids.size === 1 ? '' : 's'}`);
-}
-document.addEventListener('keydown', (e) => {
-  if (modes.current() !== 'design') return;
-  if (matchesShortcut(e, 'sketch.group')) { e.preventDefault(); doGroup(); }
-  else if (matchesShortcut(e, 'sketch.ungroup')) { e.preventDefault(); doUngroup(); }
-});
 
 // SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js), with Shaper's own options
 // declared in cut-import.js (TASK 583: each element's cut record, kept descIds, the cuts kept in CUT_PLAN; the node test kit calls it too).

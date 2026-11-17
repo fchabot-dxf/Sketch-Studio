@@ -18,6 +18,7 @@ import { mirrorPoint } from './symmetric.js';
 import { makeArc } from './shapes.js';
 import { newShapeId } from './shape-id.js';
 import { inertEntities, inActiveSketch } from './sketch-model.js';
+import { copyGroups } from './group-model.js'; // TASK 756: a copy of a whole user group is a group
 
 // How each shape kind is copied and linked. `centre`: joints[0] is linked by the CIRCLE form of the symmetric ({ shapes: [s, s'], line }:
 // centres mirror + radii equal) instead of a point pair; `copy(copy, src, M)`: the kind's own data mirrored (M = the mirror of a point);
@@ -117,17 +118,19 @@ export function mirrorObjects(state, objects, lineId) {
     out.joints.push(copyOf.get(p));
   }
   const seq = newShapeId('');
-  const groups = new Map();
+  const groups = new Map(), copies = new Map();
   shapes.forEach((src, i) => {
-    const { id, joints, sketchId, userGroupId, groupId, filletSharp, dragTarget, ...rest } = src; // the copy is no fillet's arc and in no user group
+    const { id, joints, sketchId, userGroupId, groupId, filletSharp, dragTarget, ...rest } = src; // the copy is no fillet's arc (its user group: copyGroups below)
     const copy = { ...rest, id: `s${seq}_m${i}`, joints: joints.map((j) => copyOf.get(j)) };
     if (groupId) { if (!groups.has(groupId)) groups.set(groupId, `mirror_${seq}_${groups.size}`); copy.groupId = groups.get(groupId); }
     const kind = MIRROR_KINDS[src.type];
     if (kind.copy) kind.copy(copy, src, M);
     state.shapes.push(copy); // no sketchId: the shapes.push wrap stamps the ACTIVE sketch
+    copies.set(src.id, copy);
     out.shapes.push(copy.id);
     if (kind.own) kind.own(copy).forEach(add);
   });
+  copyGroups(state, state, copies); // TASK 756: the copy of a whole user group is a group beside the original (#core/group-model.js)
   for (const p of lead) if (!centres.has(copyOf.get(p))) add({ type: CONSTRAINT_TYPES.SYMMETRIC, joints: [p, copyOf.get(p)], line: line.id });
   shapes.forEach((src, i) => { if (MIRROR_KINDS[src.type].centre) add({ type: CONSTRAINT_TYPES.SYMMETRIC, shapes: [src.id, out.shapes[i]], line: line.id }); });
   out.constraints = state.constraints.slice(before);

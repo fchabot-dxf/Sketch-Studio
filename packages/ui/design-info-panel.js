@@ -10,7 +10,8 @@ import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT
   recordUndo, setSketchLocked, showOnlySketch, reorderSketch } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch; TASK 577: sketches as layers
 import { deleteSketch } from '#core/delete-manager.js';
 import { groupIndex, enterGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: the user groups as nested rows
-import { showContextMenu } from '#ui/context-menu.js';
+import { showContextMenu, contextMenuItems } from '#ui/context-menu.js';
+import { groupMenuActions } from '#ui/group-actions.js'; // TASK 756: a group row's menu runs the same group commands as the canvas
 import { createLongPress } from '#ui/long-press.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { formatConstraintValue } from '#ui/svg-renderer.js';
@@ -294,14 +295,28 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
           const lbl = document.createElement('span'); lbl.className = 'sk-info-lbl'; lbl.textContent = g.name;
           const n = document.createElement('span'); n.className = 'sk-info-geo'; n.textContent = String(ids.length);
           row.append(ic, lbl, n);
-          row.addEventListener('click', () => {
+          const selectGroup = () => {
             if (g.parentId) enterGroup(state, g.parentId); else leaveGroups(state);
             if (state.selectedJoints) state.selectedJoints.clear();
             if (state.selectedConstraints) state.selectedConstraints.clear();
             state.selectedShapes.clear();
             for (const id of ids) state.selectedShapes.add(id);
             refresh();
-          });
+          };
+          // TASK 756: the row's menu (right click; a touch hold, #ui/long-press.js): the group is selected as a row click selects it, then the
+          // shared menu shows the group entries (context-menu.js kind 'group': Ungroup, Enter group, Leave group), the canvas menu's functions
+          let lastType = 'mouse', held = false;
+          const openMenu = (x, y, touch) => {
+            selectGroup();
+            showContextMenu({ x, y, touch, returnFocusTo: listEl, items: contextMenuItems('group', { actions: groupMenuActions(state, showNotification) }) });
+          };
+          const hold = createLongPress({ onFire: (x, y) => { held = true; openMenu(x, y, true); } });
+          row.addEventListener('pointerdown', (e) => { lastType = e.pointerType || 'mouse'; held = false; if (lastType === 'touch') hold.start(e); });
+          row.addEventListener('pointermove', (e) => { hold.move(e); });
+          row.addEventListener('pointerup', () => hold.cancel());
+          row.addEventListener('pointercancel', () => hold.cancel());
+          row.addEventListener('contextmenu', (e) => { e.preventDefault(); if (lastType !== 'touch') openMenu(e.clientX, e.clientY, false); });
+          row.addEventListener('click', () => { if (held) { held = false; return; } selectGroup(); }); // the release of a hold is not a click
           wrap.appendChild(row);
           rowsOf(gid, depth + 1);
         }

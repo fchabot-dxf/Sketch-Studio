@@ -135,7 +135,17 @@ function datumPolygon(datum) {
 //                                             carries data-step="k/N" (its terrace, from deriveCuts: what the file alone cannot say, since
 //                                             two cuts' steps at the same depth are written alike). Never in the downloaded file: with it
 //                                             off (the default) the string is byte-identical; the attribute is on the element only, so the
-//                                             <g> grouping is the same either way.
+//                                             <g> grouping is the same either way. TASK 742: a held cut's element carries data-hold
+//                                             ("pass" | "skin" | "gap k/N", holdData) the same way.
+// TASK 742: the PREVIEW copy's data-hold of a held cut (#core/hold-part): "pass" (tabs' pass 1) | "skin" (an onion skin) | "gap k/N" (a gap strip);
+// a refused hold or none: nothing. Never in the downloaded file (previewData only).
+function holdData(hold) {
+  if (!hold) return '';
+  if (hold.role === 'pass') return ` data-hold="${hold.mode === 'skin' ? 'skin' : 'pass'}"`;
+  if (hold.role === 'strip') return ` data-hold="gap ${hold.index + 1}/${hold.count}"`;
+  return '';
+}
+
 export function exportShaperSVG({ state, entries, encoding, docUnit, options = {}, loopPolys } = {}) {
   const ents = Array.isArray(entries) ? entries : [];
   const enc = Array.isArray(encoding) ? encoding : [];
@@ -227,7 +237,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       } else if (cut.loop) {
         geom = loopGeom(cut.loop, state, shapeById);
       }
-      const data = options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : '';
+      const data = options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) : '');
       if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
     }
   }

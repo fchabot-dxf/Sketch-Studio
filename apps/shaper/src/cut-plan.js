@@ -13,6 +13,7 @@ import { docUnit, lengthText } from '#core/settings-manager.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
+import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -46,6 +47,73 @@ export function steppedSummary(storedRec) {
   const T = steppedTerraces(rec.slope, terraceOptions(rec));
   return { count: T.steps.length, gaps: stepGaps(T.steps), depths: T.steps.map((st) => st.depth), undercutBelow: T.undercutBelow, label: rec.slope.label || null, error: T.error, deviation: T.deviation ?? null };
 }
+// TASK 742: HOLD PART. The last tab count / width / thickness set on any record are the next record's when its Hold part is first turned on (null = never set:
+// the declared default of the document unit, #core/hold-part holdDefaults; count Auto). App state, like the step depth above.
+let lastTabCountV = 'auto', lastTabWidthV = null, lastHoldThicknessV = null;
+export const lastTabCount = () => lastTabCountV;
+export function rememberTabCount(v) { if (v === 'auto' || Number(v) >= 1) lastTabCountV = v === 'auto' ? 'auto' : Math.floor(Number(v)); return lastTabCountV; }
+export const lastTabWidth = () => lastTabWidthV ?? holdDefaults(docUnit()).tabWidth;
+export function rememberTabWidth(mm) { const n = Number(mm); if (n > 0) lastTabWidthV = n; return lastTabWidth(); }
+export const lastHoldThickness = () => lastHoldThicknessV ?? holdDefaults(docUnit()).thickness;
+export function rememberHoldThickness(mm) { const n = Number(mm); if (n > 0) lastHoldThicknessV = n; return lastHoldThickness(); }
+
+/**
+ * holdSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 742: what a record's Hold part does, read off THE derivation (deriveCuts through
+ * the effective record, as Prepare / Review / the export cut it): the `hold` of its outline cut (#core/hold-part applyHoldPart: role 'pass' with
+ * depth / count / requested ..., or 'refused' with its error), or null when the record holds nothing.
+ */
+export function holdSummary(key, storedRec, state, loops, loopPolys, owned) {
+  const rec = effectiveCutRecord(storedRec);
+  if (holdMode(rec) === 'off') return null;
+  const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned) || [];
+  const c = cuts.find((x) => x.hold && x.hold.role !== 'strip');
+  return c ? c.hold : null;
+}
+const HOLD_REFUSED = {
+  'no cut depth': 'set a cut depth first',
+  'no thickness': 'set a thickness',
+  'no tab width': 'set a tab width',
+  thickness: 'nothing to hold',
+  outline: 'the outline could not be read',
+  strip: 'the outline is too tight for the gap strips here (or the offset is wider than the strip allows)',
+};
+/**
+ * holdNoteItems(storedRec, hold) — TASK 742: the card note of a held record (doc unit), from its holdSummary: "Outside: 4 tabs, 10 mm wide, 2 mm thick:
+ * 1 pass at 16 mm + 4 gaps at 18 mm", then "Gaps: cut the side against the part; the return leg is optional"; an onion skin "Outside: onion skin 2 mm:
+ * 1 pass at 16 mm"; fewer tabs than asked: "only 2 of 4 tabs fit" (warning colour); a refused hold says why (warning colour; the cut is made without it).
+ */
+export function holdNoteItems(storedRec, hold) {
+  if (!hold || !storedRec) return [];
+  // each length's text is lengthText's (the one decider, TASK 728: an inch fraction in Fractional); the unit is written after it
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 3, trim: 'always', show: 'field' });
+  const name = (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Cut';
+  const what = hold.mode === 'skin' ? 'onion skin' : 'tabs';
+  if (hold.role === 'refused') {
+    const why = hold.error === 'thickness' ? `${hold.mode === 'skin' ? 'skin' : 'tab'} thickness ${f(hold.thickness)} ${u} is not less than the cut depth ${f(Number(hold.fullDepth))} ${u}: nothing to hold`
+      : hold.error === 'no room' ? `no straight or curved stretch is long enough for a ${f(hold.width)} ${u} tab`
+      : HOLD_REFUSED[hold.error] || hold.error;
+    const text = `${name}: ${what} refused: ${why}; cut without them`;
+    return [{ text, warn: text.slice(name.length + 2), title: 'Hold part is not applied to this cut' }];
+  }
+  if (hold.mode === 'skin') return [{ text: `${name}: onion skin ${f(hold.thickness)} ${u}: 1 pass at ${f(hold.depth)} ${u}` }];
+  const n = hold.count, gaps = `${n} gap${n === 1 ? '' : 's'}`;
+  const items = [{ text: `${name}: ${n} tab${n === 1 ? '' : 's'}, ${f(hold.width)} ${u} wide, ${f(hold.thickness)} ${u} thick: 1 pass at ${f(hold.depth)} ${u} + ${gaps} at ${f(Number(hold.fullDepth))} ${u}` }];
+  if (n < hold.requested) { const t = ` (only ${n} of ${hold.requested} tabs fit)`; items[0].text += t; items[0].warn = t; items[0].title = 'the outline has too few stretches long enough for a tab'; }
+  items.push({ text: `Gaps: cut the side against the part; the return leg is optional` });
+  return items;
+}
+/** TASK 742: the hold notes of every held record of the plan (the 3D Review's info). */
+export function planHoldNotes(state, plan = CUT_PLAN) {
+  const out = [];
+  let geo = null;
+  for (const [key, rec] of plan) {
+    if (!rec || !rec.cutType || holdMode(effectiveCutRecord(rec)) === 'off') continue;
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
+    out.push(...holdNoteItems(rec, holdSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
+  }
+  return out;
+}
+
 /** Outlines closer than this (base mm, 1/16 in) are flagged on the card: hard to pick one by one on the Origin (advisor hint, owner may remove). */
 export const CLOSE_OUTLINES_MM = 25.4 / 16;
 /**
@@ -248,7 +316,7 @@ export function planReliefItems(state, plan = CUT_PLAN) {
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
     const atW = (w) => { if (!at.has(w)) at.set(w, deriveCutFootprintAt(d.cuts, d.rec, state, w)); return at.get(w); };
     const geo = cutsSig(d.cuts, state);
-    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, d.rec, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth
+    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, d.rec, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : fp.hold && fp.hold.depth != null ? fp.hold.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth; TASK 742: a held cut's pass / gap strip at its own
   }
   return items;
 }

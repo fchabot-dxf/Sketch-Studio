@@ -29,17 +29,24 @@ function injectStyles() {
   if (document.getElementById('sk-doctabs-styles')) { stylesInjected = true; return; }
   const s = document.createElement('style'); s.id = 'sk-doctabs-styles';
   s.textContent = `
-/* TASK 681 (owner turn 1749: "would be great if tabs were better visible"): ONE look for the four hosts, from their own tokens. The strip is a band a shade
-   toward the text colour (--sk-doctabs-bg overrides it); an inactive tab is outlined, its title the host text colour at 82 %; the ACTIVE tab takes the work
-   area's background below it (--sk-ribbon-bg, the ribbon the strip sits on), a 3 px accent line on its top edge (--sk-doctab-accent, else --sk-selection) and
-   a bold full-strength title; the "+" is an outlined button. Sizes: a mouse 32 px tabs (a 33 px row = tabs + the 1 px line under the strip), a finger keeps
-   TASK 608's thin 30 px tabs (31 px row; owner ruling: the phone canvas share), 13 px titles. */
+/* TASK 737 (owner turn 2074: "make the file tab nicer or clearer", picked BROWSER-STYLE; it replaces TASK 681's outlined tabs): ONE look for the four hosts,
+   from their own tokens. The strip is a band a shade toward the header text colour (--sk-doctabs-bg overrides it). The ACTIVE tab is lifted out of it and JOINS
+   the surface directly below the strip: its fill is --sk-doctab-surface, which each host DECLARES per stage (its CSS reads html[data-sk-stage], set by
+   app-chrome.js where the stage switches; never measured from the page), its title --sk-doctab-surface-fg, full strength and bold; a 3 px accent line on its top
+   edge (--sk-doctab-accent, else --sk-selection: kept, so the tab reads as the active one even where the surface is close to the strip); the strip's 1 px bottom
+   line runs under the inactive tabs only (the active tab paints over it). An INACTIVE tab is flat (no box), its title dimmer (the text colour at 78 %: >= 4.5:1 in
+   every host), a subtle hover; a thin separator between two inactive tabs, hidden next to the active or a hovered tab. The not-saved / saving / failed dot sits
+   where the close x is; hovering the tab shows the x instead; with no hover (touch) the active tab shows its x, the others their dot. The "+" is a flat round
+   icon button after the last tab. Sizes: a mouse 32 px tabs (a 33 px row = tabs + the 1 px line under the strip), a finger keeps TASK 608's thin 30 px tabs
+   (31 px row; owner ruling: the phone canvas share), 13 px titles. */
 :root { --sk-doctabs-row: 33px; } /* TASK 605: the strip's whole row height (the 32 px tabs + the 1 px line), for a host whose views are placed absolutely under the header (Shaper) */
 @media (pointer: coarse) { :root { --sk-doctabs-row: 31px; } }
 .sk-doctabs { --sk-doctabs-h: 32px; --sk-doctab-inset: 0px; --sk-doctabs-gap: 3px; --sk-doctab-max: 240px; --sk-doctab-min: 72px; --sk-doctab-x: 24px; --sk-doctab-new-w: 30px;
   --sk-doctabs-font: 13px; --sk-doctab-dot: 7px;
   --sk-doctab-strip: var(--sk-doctabs-bg, color-mix(in srgb, var(--sk-header-fg, #334155) 13%, var(--sk-header-bg, #ffffff)));
-  --sk-doctab-line: color-mix(in srgb, var(--sk-header-fg, #334155) 45%, var(--sk-doctab-strip));
+  --sk-doctab-dim: color-mix(in srgb, var(--sk-header-fg, #334155) 78%, var(--sk-doctab-strip));
+  --sk-doctab-sep: color-mix(in srgb, var(--sk-header-fg, #334155) 35%, var(--sk-doctab-strip));
+  --sk-doctab-fill: var(--sk-doctab-surface, var(--sk-ribbon-bg, #ffffff));
   --sk-doctab-acc: var(--sk-doctab-accent, var(--sk-selection, #3B82F6)); }
 @media (pointer: coarse) { .sk-doctabs { --sk-doctabs-h: 30px; --sk-doctabs-gap: 4px; --sk-doctab-min: 104px; --sk-doctab-x: 44px; --sk-doctab-new-w: 44px; } }
 .sk-doctabs { display: flex; align-items: flex-start; gap: var(--sk-doctabs-gap); padding: 0 8px; box-sizing: border-box; flex: 0 0 auto;
@@ -48,25 +55,31 @@ function injectStyles() {
   color: var(--sk-header-fg, #334155); font: var(--sk-doctabs-font) system-ui, sans-serif; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .sk-doctabs::-webkit-scrollbar { display: none; }
 .sk-doctabs * { box-sizing: border-box; }
-.sk-doctab { display: flex; align-items: stretch; flex: 0 1 var(--sk-doctab-max); min-width: var(--sk-doctab-min); height: var(--sk-doctabs-h);
-  border: 1px solid var(--sk-doctab-line); border-bottom: 0; border-radius: 6px 6px 0 0;
-  color: color-mix(in srgb, var(--sk-header-fg, #334155) 82%, var(--sk-doctab-strip)); }
-.sk-doctab:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 16%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); }
-.sk-doctab.active { position: relative; z-index: 1; background: var(--sk-ribbon-bg, #ffffff); border-top: 3px solid var(--sk-doctab-acc); color: var(--sk-header-fg, #334155);
-  box-shadow: 0 1px 0 var(--sk-ribbon-bg, #ffffff); font-weight: 700; } /* the shadow paints over the strip's 1 px line: the tab runs into the work area */
+.sk-doctab { position: relative; display: flex; align-items: stretch; flex: 0 1 var(--sk-doctab-max); min-width: var(--sk-doctab-min); height: var(--sk-doctabs-h);
+  border-radius: 6px 6px 0 0; color: var(--sk-doctab-dim); }
+.sk-doctab + .sk-doctab::before { content: ''; position: absolute; left: calc(var(--sk-doctabs-gap) / -2 - 0.5px); top: 25%; bottom: 25%; width: 1px;
+  background: var(--sk-doctab-sep); pointer-events: none; } /* the separator between two tabs */
+.sk-doctab.active::before, .sk-doctab.active + .sk-doctab::before, .sk-doctab:hover::before, .sk-doctab:hover + .sk-doctab::before { visibility: hidden; }
+.sk-doctab:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 9%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); }
+.sk-doctab.active { z-index: 1; background: var(--sk-doctab-fill); color: var(--sk-doctab-surface-fg, var(--sk-header-fg, #334155)); font-weight: 700;
+  box-shadow: inset 0 3px 0 var(--sk-doctab-acc), 0 1px 0 var(--sk-doctab-fill); } /* the top accent line; the outer shadow paints over the strip's 1 px line: the tab runs into the surface */
 .sk-doctab-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; background: transparent; border: 0; color: inherit; font: inherit;
-  cursor: pointer; padding: 0 2px 0 9px; }
+  cursor: pointer; padding: 0 2px 0 10px; }
 .sk-doctab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sk-doctab-dot { flex: 0 0 auto; width: var(--sk-doctab-dot); height: var(--sk-doctab-dot); border-radius: 50%; background: var(--sk-doctab-acc); }
 .sk-doctab-dot.failed { background: #dc2626; }
 .sk-doctab-dot.saving { background: transparent; border: 1.5px solid currentColor; opacity: 0.7; }
-.sk-doctab-x, .sk-doctab-new { flex: 0 0 var(--sk-doctab-x); width: var(--sk-doctab-x); padding: 0; background: transparent; border: 0; color: inherit; font: inherit;
-  cursor: pointer; border-radius: 4px; opacity: 0.8; line-height: 1; }
-.sk-doctab-x { font-size: 16px; }
-.sk-doctab-new { flex-basis: var(--sk-doctab-new-w); width: var(--sk-doctab-new-w); height: calc(var(--sk-doctabs-h) - 6px); margin-top: 3px; font-size: 18px; opacity: 1;
-  border: 1px solid var(--sk-doctab-line); background: color-mix(in srgb, var(--sk-header-fg, #334155) 8%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); }
-.sk-doctab-x:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 18%, transparent); opacity: 1; }
-.sk-doctab-new:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 20%, var(--sk-doctab-strip)); border-color: var(--sk-doctab-acc); }
+.sk-doctab-x, .sk-doctab-new { display: flex; align-items: center; justify-content: center; padding: 0; background: transparent; border: 0; color: inherit; font: inherit;
+  cursor: pointer; line-height: 1; }
+.sk-doctab-x { flex: 0 0 var(--sk-doctab-x); width: var(--sk-doctab-x); font-size: 16px; border-radius: 4px; opacity: 0.8; }
+/* the dot sits in the close x's place: the tab shows ONE of the two (hover shows the x; with no hover: the active tab its x, the others their dot) */
+.sk-doctab.has-dot .sk-doctab-xg { display: none; }
+@media (hover: hover) { .sk-doctab.has-dot:hover .sk-doctab-xg { display: inline; } .sk-doctab.has-dot:hover .sk-doctab-dot { display: none; } }
+@media (hover: none) { .sk-doctab.active.has-dot .sk-doctab-xg { display: inline; } .sk-doctab.active.has-dot .sk-doctab-dot { display: none; } }
+.sk-doctab-new { flex: 0 0 var(--sk-doctab-new-w); width: var(--sk-doctab-new-w); height: calc(var(--sk-doctabs-h) - 6px); margin-top: 3px; font-size: 18px;
+  border-radius: 999px; color: var(--sk-doctab-dim); }
+.sk-doctab-x:hover { background: color-mix(in srgb, currentColor 18%, transparent); opacity: 1; }
+.sk-doctab-new:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 14%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); }
 .sk-doctab-main:focus-visible, .sk-doctab-x:focus-visible, .sk-doctab-new:focus-visible { outline: 2px solid var(--sk-doctab-acc); outline-offset: -2px; }
 .sk-doctabs-msg { flex: 0 0 auto; align-self: center; margin: 0 8px 0 auto; padding-left: 12px; font-size: 11px; color: #b45309; white-space: nowrap; }
 `;
@@ -136,9 +149,14 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
       main.setAttribute('aria-selected', t.active ? 'true' : 'false'); main.tabIndex = t.active ? 0 : -1; main.title = dot ? `${name} (${dot.tip})` : name;
       const label = doc.createElement('span'); label.className = 'sk-doctab-name'; label.textContent = name;
       main.appendChild(label);
-      if (dot) { const d = doc.createElement('span'); d.className = 'sk-doctab-dot ' + dot.cls; d.setAttribute('aria-hidden', 'true'); main.appendChild(d); }
       main.addEventListener('click', () => run('activate', t.key, () => actions.activateTab(t.key)));
-      const x = doc.createElement('button'); x.type = 'button'; x.className = 'sk-doctab-x'; x.tabIndex = -1; x.title = 'Close'; x.setAttribute('aria-label', `Close ${name}`); x.textContent = '×';
+      const x = doc.createElement('button'); x.type = 'button'; x.className = 'sk-doctab-x'; x.tabIndex = -1; x.title = 'Close'; x.setAttribute('aria-label', `Close ${name}`);
+      const glyph = doc.createElement('span'); glyph.className = 'sk-doctab-xg'; glyph.setAttribute('aria-hidden', 'true'); glyph.textContent = '×';
+      x.appendChild(glyph);
+      if (dot) { // TASK 737: the dot sits in the close x's place (the CSS shows one of the two); the x button stays where it was and still closes the tab
+        wrap.classList.add('has-dot');
+        const d = doc.createElement('span'); d.className = 'sk-doctab-dot ' + dot.cls; d.setAttribute('aria-hidden', 'true'); x.appendChild(d);
+      }
       x.addEventListener('click', () => run('close', t.key, () => actions.closeTab(t.key)));
       wrap.append(main, x);
       el.insertBefore(wrap, plus);

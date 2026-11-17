@@ -60,12 +60,24 @@
       --sk-header-sep: #3a3d42;
       --sk-header-hover: rgba(255,255,255,0.08);
       --sk-footer-ink: var(--sk-header-fg);
+      /* TASK 737: the surfaces directly below the document tab strip, declared once: the stage's view paints it, the strip's active tab takes it */
+      --shaper-vcarve-panel-bg: #111827;  /* Vcarve's docked panel (left, under the first tab) */
+      --shaper-cream: #F4EFE1;            /* the Design / Vcarve canvas paper */
+      --sk-prep-bg: #3F4145;              /* the Prepare canvas background: TASK 455's token (#view-prepare below), on :root so the strip reads it in Prepare */
+      --shaper-review-bg: #14161a;        /* the Export stage's 3D view (#review-stage) */
+      /* the strip is the header colour: the 13 % tint toward the text (document-tabs.js default) IS the Prepare canvas grey, so the active tab could not be told from the strip there */
+      --sk-doctabs-bg: var(--sk-header-bg);
     }
+    /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
+    :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-vcarve-panel-bg); }
+    :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
+    :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); }
+    @media (max-width: 640px) { :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-cream); --sk-doctab-surface-fg: #202020; } } /* the panel moves below the canvas */
     #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
     #view-vcarve { flex-direction: row; }
-    #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
+    #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: var(--shaper-vcarve-panel-bg); border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
     #vcarve-canvas { flex: 1; min-width: 0; min-height: 0; }
     .vcarve-section { margin-bottom: 16px; }
     .vcarve-h { font-weight: 700; color: #e6e6e6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; margin: 6px 0 8px; }
@@ -85,7 +97,7 @@
        (would wash out on cream), so we RE-override them here to the light (dark-on-cream) palette — the sketcher.css
        light defaults, but with a cream surface + cream-hollow joints. (The shared canvas grid — #ui/canvas-grid.js, GRID_MODE — is drawn behind the geometry using the --sk-grid-* vars below.) */
     #design-canvas, #vcarve-canvas {         /* VCARVE-3a: the Vcarve canvas reuses the cream Design theme */
-      background-color: #F4EFE1;             /* warm paper cream — explicitly not white */
+      background-color: var(--shaper-cream); /* warm paper cream — explicitly not white */
       --sk-canvas-bg: #F4EFE1;
       --sk-canvas-bg-snapping: #F1E9D6;
       --sk-grid-minor: #d8cfba; --sk-grid-major: #c4b896;
@@ -111,7 +123,7 @@
     #design-canvas.snapping { background-color: #F1E9D6; }
     /* Review (TASK 459): a 3D canvas + a side card (stock, export). */
     #view-review { flex-direction: row; color: #9aa0a6; font: 15px system-ui, sans-serif; }
-    #review-stage { position: relative; flex: 1; min-width: 0; background: #14161a; }
+    #review-stage { position: relative; flex: 1; min-width: 0; background: var(--shaper-review-bg); }
     #review-canvas-host, #review-canvas-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
     #review-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
     #review-toolbar button { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
@@ -195,7 +207,7 @@
     /* TASK 455: the Prepare look (Shaper Studio): ONE token block for the Prepare canvas AND the cut card (the card sits inside
        #view-prepare, so it inherits them). Colours are advisor-SAMPLED from the owner's Studio screenshots unless marked (~). */
     #view-prepare { flex-direction: column;
-      --sk-prep-bg: #3F4145;              /* canvas background */
+      /* --sk-prep-bg (the canvas background) is declared on :root (TASK 737: the document tab strip's active tab takes it in Prepare) */
       --sk-prep-geo: #DFE1E7;             /* idle geometry: thin white (1px) */
       --sk-prep-geo-selected: #1BE09E;    /* selected geometry: bold mint (2px) */
       --sk-prep-geo-hover: #1BE09E;       /* hover on an unassigned target: thin mint */
@@ -221,6 +233,7 @@
       --sk-prep-select-text: #0D41AC;     /* selected input text highlight */
       --sk-prep-list-hover: #232426;      /* ~ hovered popover row (not sampled) */
       --sk-prep-disabled: #5A5C61;        /* ~ greyed types */
+      --sk-prep-tab: #FFB547;             /* TASK 742: tab / onion-skin marks on a held cut (an amber that reads on the band and the canvas; not sampled) */
     }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; background: var(--sk-prep-bg); }
     .sk-edge { fill: none; stroke: var(--sk-prep-geo); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
@@ -261,6 +274,10 @@
     .sk-mark { stroke: var(--sk-prep-mark); stroke-width: 0.45; stroke-linecap: round; }
     .sk-tp { fill: none; stroke: var(--sk-prep-path); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-dasharray: 5 3; stroke-linejoin: round; }
     .sk-tp-online { stroke: var(--sk-prep-path-online); }
+    /* TASK 742: a held cut in Prepare: its tabs as short bold marks on the outline (an onion skin: the whole outline dashed), each gap strip's outline as exported */
+    .sk-tab-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linecap: butt; }
+    .sk-skin-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 2 4; }
+    .sk-strip { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
     .sk-chip-bg { fill: var(--sk-prep-chip-bg); }
     .sk-chip-text { fill: var(--sk-prep-chip-text); font-family: system-ui, sans-serif; font-size: 11px; }
     .sk-chip-val { font-weight: 700; }
@@ -274,6 +291,11 @@
     @media (prefers-reduced-motion: reduce) { .sk-travel { animation: none; } .sk-travel-arrows { display: inline; } }
     #prepare-dir-legend { position: absolute; left: 12px; bottom: 10px; z-index: 6; color: #9aa0a6; font: 12px system-ui, sans-serif; pointer-events: none; }
     #prepare-panel { position: absolute; top: 12px; right: 12px; width: 232px; z-index: 6; pointer-events: none; }
+    /* TASK 742: the panel ends 12 px above the view's bottom and a card taller than that scrolls its rows (the type field and the popovers stay put),
+       so every row of a long card (a stepped cut, an Outside with Tabs) stays reachable on a short screen; a card that fits is unchanged */
+    #prepare-panel { bottom: 12px; display: flex; flex-direction: column; align-items: stretch; }
+    #prepare-panel .cut-card { max-height: 100%; min-height: 0; }
+    #prepare-panel .cut-rows { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: none; } /* no scrollbar: it would narrow every row; the wheel / a finger / the focus scroll it */
     /* TASK 455: the cut card, built to the owner-approved mock-up (values only): 200px card, #0A0A0B, 14px radius; 34px fields on
        #2A2B2D with 6px radius; labels 11px; values 15px/600 with a 11px lighter unit; popovers open to the LEFT with the blue
        focus border. The mock-up's font is IBM Plex Sans; the app loads no web font, so the closest system stack is used. */
@@ -335,6 +357,12 @@
     .cut-check input { margin: 0; width: 15px; height: 15px; accent-color: var(--sk-prep-focus); cursor: pointer; }
     .cut-row[data-row="stepDeviation"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .cut-row[data-row="stepDeviation"] .cut-presets .cut-preset { font-size: 12px; }
+    /* TASK 742: Hold part: Off | Tabs | Onion skin (three columns, smaller text); the tab count's Auto button */
+    .cut-row[data-row="holdPart"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
+    .cut-row[data-row="holdPart"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
+    .cut-row[data-row="holdPart"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    .cut-presets.cut-in-box { display: flex; margin: 0; height: 100%; flex: 0 0 auto; }
+    .cut-presets.cut-in-box .cut-preset { height: 100%; padding: 0 10px; font-size: 12px; border-radius: 0; }
     /* popovers: LEFT of the card, blue 2px border, 14px radius (cut type / offset presets / cutter shape) */
     .cut-pop { position: absolute; right: calc(100% + 10px); box-sizing: border-box; background: var(--sk-prep-card-bg); border: 2px solid var(--sk-prep-focus); border-radius: 14px; z-index: 12; box-shadow: 0 10px 28px rgba(0,0,0,0.6); }
     .cut-pop[hidden] { display: none; }

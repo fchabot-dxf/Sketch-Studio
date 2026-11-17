@@ -9,12 +9,15 @@ import { resolveProfileAtPoint, resolveTargetKey, listSketchProfiles } from '#co
 import { deriveVcarveContours, deriveVcarveFootprint } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
 import { attachStepper } from './number-stepper.js';
+import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
+import { parse as parseUnit } from '#core/units.js';
+import { lengthText, areaText, lengthNumber } from './doc-length.js';
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 
-// TASK 730: the two numeric fields' − / + steps (mm: this panel shows its values in mm, as before); min in mm; one declared spec per field.
-const DSTEP_STEPPER = { step: { mm: 0.5, in: 0.5 }, min: 0.1 };
-const MAXDEPTH_STEPPER = { step: { mm: 0.5, in: 0.5 }, min: 0.5 };
+// TASK 730 / 734: the two numeric fields' − / + steps, in the DOCUMENT unit (inches: 1/64 and 1/32); no app minimum, the value only stays > 0 (positive: the − stops at the smallest positive multiple).
+const DSTEP_STEPPER = { step: { mm: 0.5, in: 1 / 64 }, positive: true };
+const MAXDEPTH_STEPPER = { step: { mm: 0.5, in: 1 / 32 }, positive: true };
 
 export function mountVcarveView(state) {
   const els = {
@@ -56,7 +59,6 @@ export function mountVcarveView(state) {
   els.vbit.innerHTML = VBIT_PRESETS.map((v) => `<option value="${v.angle}">${v.angle}°</option>`).join('');
 
   const shapeById = () => new Map((state.shapes || []).map((s) => [s.id, s]));
-  const numFrom = (v, d) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : d; };
 
   function populateRegions() {
     const entries = listSketchProfiles(state);
@@ -69,7 +71,7 @@ export function mountVcarveView(state) {
     let html = '<option value="">— pick a profile —</option>';
     for (const it of entries) {
       const holeSuffix = it.holePolys.length ? ` · ${it.holePolys.length} hole${it.holePolys.length === 1 ? '' : 's'}` : '';
-      html += `<option value="${it.key}">${it.title} (${it.netArea.toFixed(0)} mm²${holeSuffix})</option>`;
+      html += `<option value="${it.key}">${it.title} (${areaText(it.netArea)}${holeSuffix})</option>`;
     }
     els.region.innerHTML = html;
 
@@ -88,8 +90,8 @@ export function mountVcarveView(state) {
   function syncControls() {
     const r = peek();
     els.vbit.value = String(r.vbit.angle);
-    els.dstep.value = r.dStep + ' mm';
-    els.maxdepth.value = r.maxDepth + ' mm';
+    els.dstep.value = lengthText(r.dStep);
+    els.maxdepth.value = lengthText(r.maxDepth);
   }
 
   let lastRegion = null;
@@ -121,7 +123,7 @@ export function mountVcarveView(state) {
     const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
     render(els.canvas, boundary, contours, r.maxDepth, holePolys, vcarveViewState, regionChanged, otherPolys, deriveVcarveFootprint(contours, r));
     const maxD = contours.length ? contours[contours.length - 1].depth : 0;
-    els.readout.textContent = `${contours.length} contours · max ${maxD.toFixed(2)} mm`;
+    els.readout.textContent = `${contours.length} contours · max ${lengthText(maxD)}`;
   }
 
   function pickAtWorldPoint(wp) {
@@ -157,20 +159,31 @@ export function mountVcarveView(state) {
 
   els.region.addEventListener('change', () => { try { state.saveState && state.saveState('vcarve region'); } catch (_) {} rec().region = els.region.value || null; recompute(); });
   els.vbit.addEventListener('change', () => { rec().vbit = { angle: Number(els.vbit.value) || 90 }; recompute(); });
-  // typed and stepped values take the same path: one record write, the field text, the recompute
-  const setDStep = (n) => { rec().dStep = n; els.dstep.value = rec().dStep + ' mm'; recompute(); };
-  const setMaxDepth = (n) => { rec().maxDepth = n; els.maxdepth.value = rec().maxDepth + ' mm'; recompute(); };
-  els.dstep.addEventListener('change', () => setDStep(numFrom(els.dstep.value, 0.5)));
-  els.maxdepth.addEventListener('change', () => setMaxDepth(numFrom(els.maxdepth.value, 6)));
-  const mmUnits = { unit: () => 'mm', toDoc: (mm) => mm };
+  // typed and stepped values take the same path: one record write (BASE mm), the field text (document unit), the recompute
+  const setDStep = (mm) => { rec().dStep = mm; els.dstep.value = lengthText(rec().dStep); recompute(); };
+  const setMaxDepth = (mm) => { rec().maxDepth = mm; els.maxdepth.value = lengthText(rec().maxDepth); recompute(); };
+  // a typed value parses in the document unit exactly as the cut card's fields do; only a positive length is taken (else the field shows the record's value again).
+  // A box left as prefilled never commits (724: the shown text is rounded, writing it back would drift the stored value).
+  const typed = (input, current, set) => {
+    if (input.value === lengthText(current())) return;
+    const mm = parseUnit(input.value, docUnit());
+    if (mm != null && Number.isFinite(mm) && mm > 0) set(mm); else syncControls();
+  };
+  els.dstep.addEventListener('change', () => typed(els.dstep, () => peek().dStep, setDStep));
+  els.maxdepth.addEventListener('change', () => typed(els.maxdepth, () => peek().maxDepth, setMaxDepth));
+  const units = { unit: docUnit, toDoc: lengthNumber };
+  // a stepped doc-unit number is converted to base mm by the same parse
+  const stepTo = (set) => (docNum) => set(parseUnit(String(docNum), docUnit()));
   const steppers = [
-    attachStepper(els.dstep, DSTEP_STEPPER, { ...mmUnits, read: () => peek().dStep, commit: setDStep }, { label: 'depth step' }),
-    attachStepper(els.maxdepth, MAXDEPTH_STEPPER, { ...mmUnits, read: () => peek().maxDepth, commit: setMaxDepth }, { label: 'max depth' }),
+    attachStepper(els.dstep, DSTEP_STEPPER, { ...units, read: () => lengthNumber(peek().dStep), commit: stepTo(setDStep) }, { label: 'depth step' }),
+    attachStepper(els.maxdepth, MAXDEPTH_STEPPER, { ...units, read: () => lengthNumber(peek().maxDepth), commit: stepTo(setMaxDepth) }, { label: 'max depth' }),
   ];
   els.recompute.addEventListener('click', recompute);
 
   function refresh() { populateRegions(); syncControls(); recompute(); }
   refresh();
+  // the document unit (and the Length precision) change the shown text: re-show the fields, the region list and the readout
+  const unsub = SettingsManager.subscribe((key) => { if (key === 'DOC_UNIT' || isPrecisionKey(key)) refresh(); });
   return {
     refresh,
     pickAtWorldPoint,
@@ -182,6 +195,7 @@ export function mountVcarveView(state) {
       else { vcarveViewState.view = null; recompute(); }
     },
     destroy() {
+      unsub();
       for (const st of steppers) st.destroy();
       els.canvas.removeEventListener('pointerdown', onCanvasDown);
       els.canvas.removeEventListener('pointerup', onCanvasUp);

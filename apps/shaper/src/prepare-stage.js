@@ -8,7 +8,7 @@ import { capturePrepare, applyPrepare } from './shaper-doc.js'; // TASK 460: the
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { CUT_PLAN, migrateEdgeRecords, cutPlanEntries } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { CUT_PLAN, migrateEdgeRecords, cutPlanEntries, setFieldFor } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { planOperations, setOpOrder } from './operations.js'; // TASK 743: the operations (derived) and their order (the one stored fact)
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 
@@ -28,7 +28,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // changes (every cut-plan edit, an undo / redo, a selection change, a re-mount), so it is refreshed here too.
   const refreshCutPanel = () => {
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does
+    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take
     opList.refresh();
   };
   // TASK 724: the card's stepped note is text built from the display precision when the card is updated: a precision change rebuilds it (the stage lives as long as the page)
@@ -54,11 +54,20 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // TASK 743: the operations of the plan (derived: operations.js) in the document's order; a reorder is ONE undo step (cutEdit: the snapshot carries the order);
   // a tap on an operation selects its regions (the card then edits them all, as a shift-selection does)
   const opsOf = () => { const c = getController(); return c ? planOperations(c.state, cutPlanEntries()) : []; };
+  const isPicked = (op) => Boolean(prepareView) && prepareView.selection.size === op.records.length && op.records.every((r) => prepareView.selection.has(r.planKey));
   const opList = createOpList(opsEl, {
     getOps: opsOf,
     onMove: (keys) => cutEdit(() => setOpOrder(keys)),
     onPick: (op) => { if (prepareView) prepareView.setSelection(op.records.map((r) => r.target)); },
-    isPicked: (op) => Boolean(prepareView) && prepareView.selection.size === op.records.length && op.records.every((r) => prepareView.selection.has(r.planKey)),
+    isPicked,
+    // TASK 745: the bin of an operation UNASSIGNS every region / path of it: each record's cut type is cleared (cut-plan.js setFieldFor(key, 'cutType', null),
+    // the path the Stock move already takes to unassign a loop), ONE undo step for the whole operation (cutEdit: the snapshot carries the plan and the order,
+    // so Undo brings it back in its place); the selection clears when it was that operation. The sketch is never touched.
+    onDelete: (op) => cutEdit(() => {
+      const picked = isPicked(op);
+      for (const r of op.records) setFieldFor(r.planKey, 'cutType', null);
+      if (prepareView) { if (picked) prepareView.setSelection([]); prepareView.refreshLook(); }
+    }),
   });
 
   // The geometry signature the mounted Prepare view was built from: an undo that changed only the cut plan just repaints it

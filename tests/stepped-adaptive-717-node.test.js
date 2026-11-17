@@ -151,7 +151,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     eq(h.menu().filter((id) => id.startsWith('stepped')), [], 'a vertical pocket offers no stepped type');
     eq(availableTypes('loop', recAt('pocket')[1]).filter((t) => t.slopeKind).length, 0, 'availableTypes: none for a record without a slope');
     h.pick('pocket');
-    eq(h.rows(), ['cutDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'a plain Pocket: no Adaptive stepping, Step depth or Resolution row');
+    eq(h.rows(), ['cutDepth', 'clearing', 'cutOffset', 'toolDia', 'cutterShape'], 'a plain Pocket: no Adaptive stepping, Step depth or Resolution row (TASK 745: its Clearing row, Freehand)');
 
     // the R3 floor fillet (03), Stepped pocket: OFF by default = 716
     CUT_PLAN.clear();

@@ -14,6 +14,7 @@ import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
+import { POCKET_CLEARING, clearingPattern, allowanceDefault, spiralBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -110,6 +111,107 @@ export function planHoldNotes(state, plan = CUT_PLAN) {
     if (!rec || !rec.cutType || holdMode(effectiveCutRecord(rec)) === 'off') continue;
     if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
     out.push(...holdNoteItems(rec, holdSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
+  }
+  return out;
+}
+
+// TASK 745: the PROGRAMMED POCKET. The last stepover / wall allowance / depth per pass / raster angle set on any record are the next record's when its Clearing
+// is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; depth per pass empty =
+// one pass at the full depth). A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
+let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastPassDepthV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle;
+export const lastStepover = () => lastStepoverV;
+export function rememberStepover(pct) { const n = Number(pct); if (n > 0) lastStepoverV = n; return lastStepoverV; }
+export const lastWallAllowance = () => lastAllowanceV ?? allowanceDefault(docUnit());
+export function rememberWallAllowance(mm) { const n = Number(mm); if (Number.isFinite(n) && n >= 0) lastAllowanceV = n; return lastWallAllowance(); }
+export const lastPassDepth = () => lastPassDepthV;
+export function rememberPassDepth(mm) { lastPassDepthV = Number(mm) > 0 ? Number(mm) : null; return lastPassDepthV; }
+export const lastRasterAngle = () => lastRasterAngleV;
+export function rememberRasterAngle(deg) { const n = Number(deg); if (Number.isFinite(n)) lastRasterAngleV = n; return lastRasterAngleV; }
+
+/**
+ * clearingSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 745: what a programmed pocket's clearing is, read off THE derivation (deriveCuts through
+ * the effective record, as Prepare / Review / the export cut it): the plan carried by its wall cut ({ pattern, levels, passes, turns, length, leftover,
+ * settings, depths, ... }: #core/pocket-clearing applyPocketClearing), or for a refused one the pocket cut's { refused, summary }; null when the record is Freehand.
+ */
+export function clearingSummary(key, storedRec, state, loops, loopPolys, owned) {
+  const rec = effectiveCutRecord(storedRec);
+  if (clearingPattern(rec) === 'freehand') return null;
+  const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned) || [];
+  const c = cuts.find((x) => x.clearing && (x.clearing.role === 'wall' || x.clearing.role === 'refused'));
+  return c ? { ...c.clearing.summary, refused: c.clearing.role === 'refused' ? c.clearing.refused : null } : null;
+}
+/** TASK 745: why the Morphed spiral is not possible on a target ({ spiral: null | 'islands' | 'splits' | another refusal }) for its record's settings, or null
+ *  for a target that is not a pocket region. */
+export function clearingAvailability(key, storedRec, state, loops, loopPolys) {
+  const rec = effectiveCutRecord(storedRec);
+  if (!rec || rec.cutType !== 'pocket') return null;
+  const pocket = (deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys) || []).find((c) => c.isCompound);
+  return pocket ? { spiral: spiralBlocker(pocket, rec, state) } : null;
+}
+/** TASK 745: the words of a refusal / a disabled choice. */
+export const CLEARING_REFUSED = {
+  islands: 'has islands: use Concentric or Raster',
+  splits: 'splits at a neck narrower than the bit: use Concentric or Raster',
+  'spiral islands': 'has islands: use Concentric or Raster',
+  'spiral splits': 'splits at a neck narrower than the bit: use Concentric or Raster',
+  'islands close': 'an island is closer to the wall or to another island than the bit: the finish pass would cut it',
+  'bit too big': 'the bit does not fit in the pocket',
+  'no bit': 'set a bit diameter',
+  outline: 'the outline could not be read',
+};
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+/** TASK 745: a pocket's clearing in a few words: "12 rings + wall", "raster 0°: 22 passes + 1 ring + wall", "morphed spiral: 13 turns + wall" (x depth passes). */
+export function clearingWords(sum) {
+  if (!sum || sum.refused) return null;
+  const what = sum.pattern === 'raster' ? `raster ${Number(sum.settings.angle)}°: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
+    : sum.pattern === 'spiral' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}`
+    : `${plural(sum.levels, 'ring', 'rings')}${sum.loops > sum.levels ? ` (${sum.loops} loops)` : ''}`;
+  return `${what}${sum.depths.length > 1 ? ` × ${sum.depths.length} depth passes` : ''} + wall`;
+}
+// an area (mm²) in the document unit's area: mm² (under 1 cm²) / cm², or in²
+export function areaText(mm2, u) {
+  if (u === 'in') { const a = mm2 / 645.16; return `${a.toFixed(a < 0.1 ? 3 : 2)} in²`; }
+  return mm2 < 100 ? `${mm2 < 10 ? mm2.toFixed(1) : Math.round(mm2)} mm²` : `${(mm2 / 100).toFixed(1)} cm²`;
+}
+/**
+ * clearingNoteItems(storedRec, sum) — TASK 745: the card note of a programmed pocket (doc unit), from its clearingSummary: "Pocket: 12 rings + wall, stepover
+ * 2.4 mm, 3.4 m of path, about 4 min at 1000 mm/min" (the path = every clearing path at every depth pass + the finish pass; the time at the declared feed
+ * POCKET_CLEARING.feedMmPerMin), the depth passes, then "Drawn for a 6 mm bit: a smaller bit leaves ridges" (the rings follow the card's bit; the wall does
+ * not), then the leftover (warning colour) "7.8 mm² not reached by a 6 mm bit (sharp inside corners, necks narrower than the bit)" (or how much the pattern
+ * missed); a refused clearing says why (warning colour; the pocket is cut Freehand).
+ */
+export function clearingNoteItems(storedRec, sum) {
+  if (!sum || !storedRec) return [];
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 2, trim: 'always', show: 'field', fractions: false });
+  const label = (POCKET_CLEARING.patterns.find((p) => p.id === clearingPattern(effectiveCutRecord(storedRec))) || {}).label || 'Clearing';
+  if (sum.refused) {
+    const text = `Pocket: ${label} refused: ${CLEARING_REFUSED[sum.refused] || sum.refused}; cut as Freehand`;
+    return [{ text, warn: text.slice('Pocket: '.length), title: 'the clearing is not programmed: the Origin clears this pocket by hand' }];
+  }
+  const st = sum.settings, bit = `${lengthText(st.toolDia, { unit: u, auto: u === 'in' ? 4 : 3, trim: 'always', show: 'field' })} ${u}`; // the bit as its field shows it (3.175 mm, not 3.17)
+  const total = sum.length * sum.depths.length + (sum.finishLength || 0);
+  const pathWords = u === 'in' ? `${(total / 304.8).toFixed(1)} ft` : `${(total / 1000).toFixed(1)} m`;
+  const feed = u === 'in' ? `${Math.round(POCKET_CLEARING.feedMmPerMin / 25.4)} in/min` : `${POCKET_CLEARING.feedMmPerMin} mm/min`;
+  const minutes = total / POCKET_CLEARING.feedMmPerMin;
+  const items = [{ text: `Pocket: ${clearingWords(sum)}, stepover ${f(st.stepover)} ${u}, ${pathWords} of path, about ${minutes < 1 ? 1 : Math.round(minutes)} min at ${feed}` }];
+  if (sum.depths.length > 1) items.push({ text: `Depth passes at ${sum.depths.map((d) => f(d)).join(' · ')} ${u}; the wall at the full depth` });
+  if (sum.clear.length) items.push({ text: `Drawn for a ${bit} bit: a smaller bit leaves ridges` });
+  const lo = sum.leftover;
+  if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {
+    let t = `${areaText(lo.area, u)} not reached by a ${bit} bit`;
+    t += lo.missed > POCKET_CLEARING.leftoverTolMm2 ? ` (${areaText(lo.missed, u)} of it missed between passes: lower the stepover)` : ' (sharp inside corners, necks narrower than the bit)';
+    items.push({ text: `Leftover: ${t}`, warn: t, title: 'material the bit does not reach (orange in Prepare)' });
+  }
+  return items;
+}
+/** TASK 745: the clearing notes of every programmed pocket of the plan (the 3D Review's info). */
+export function planClearingNotes(state, plan = CUT_PLAN) {
+  const out = [];
+  let geo = null;
+  for (const [key, rec] of plan) {
+    if (!rec || !rec.cutType || clearingPattern(effectiveCutRecord(rec)) === 'freehand') continue;
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
+    out.push(...clearingNoteItems(rec, clearingSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
   }
   return out;
 }

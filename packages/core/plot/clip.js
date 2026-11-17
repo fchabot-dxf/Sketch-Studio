@@ -169,3 +169,64 @@ export function intersectRegions(a, b) {
     const pa = _regionPaths(a), pb = _regionPaths(b);
     return pa.length && pb.length ? _execTree(ClipperLib.ClipType.ctIntersection, pa, pb, _NZ(), _NZ()) : [];
 }
+
+// ── TASK 745: the PROGRAMMED POCKET's offsets (#core/pocket-clearing.js): region offsets, the area a round bit sweeps along tool-centre paths,
+// open lines clipped to regions, region areas. Same canonical region form as above (outer positive, holes negative). ──
+
+/** Offset regions (outer + holes) by `amount` mm with ROUND joins: negative shrinks each region (its holes grow), positive grows it. The true
+ *  parallel offset (an erosion / dilation by a disc), round corners within `arcTolMm`. Returns regions (an inward offset can split a region). */
+export function offsetRegions(regions, amount, arcTolMm = 0.005) {
+    const paths = _regionPaths(regions);
+    if (!paths.length) return [];
+    if (amount === 0) return _execTree(ClipperLib.ClipType.ctUnion, paths, [], _NZ(), _NZ());
+    const co = new ClipperLib.ClipperOffset(2, arcTolMm * CLIP_SCALE);
+    co.AddPaths(paths, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+    const tree = new ClipperLib.PolyTree();
+    co.Execute(tree, amount * CLIP_SCALE);
+    return _regionsFromTree(tree);
+}
+
+/** The area a disc of `radius` mm sweeps with its centre along each path ({ points: [[x,y],...], closed }): a closed path as a closed line (both
+ *  sides), an open one with round ends; one union, as regions. */
+export function sweepPaths(paths, radius, arcTolMm = 0.005) {
+    if (!(radius > 0)) return [];
+    const co = new ClipperLib.ClipperOffset(2, arcTolMm * CLIP_SCALE);
+    let added = 0;
+    for (const p of paths || []) {
+        const path = toClipper(p.points);
+        if (path.length < 2) continue;
+        co.AddPath(path, ClipperLib.JoinType.jtRound, p.closed && path.length >= 3 ? ClipperLib.EndType.etClosedLine : ClipperLib.EndType.etOpenRound);
+        added++;
+    }
+    if (!added) return [];
+    const tree = new ClipperLib.PolyTree();
+    co.Execute(tree, radius * CLIP_SCALE);
+    return _regionsFromTree(tree);
+}
+
+/** Open polylines ([[x,y],...] each) clipped to regions: the pieces inside, each an open [[x,y],...] (in Clipper's direction). */
+export function clipOpenPaths(lines, regions) {
+    const clip = _regionPaths(regions);
+    if (!clip.length) return [];
+    const clipper = new ClipperLib.Clipper();
+    let added = 0;
+    for (const l of lines || []) {
+        const path = l.map(p => ({ X: Math.round(p[0] * CLIP_SCALE), Y: Math.round(p[1] * CLIP_SCALE) }));
+        if (path.length >= 2) { clipper.AddPath(path, ClipperLib.PolyType.ptSubject, false); added++; }
+    }
+    if (!added) return [];
+    clipper.AddPaths(clip, ClipperLib.PolyType.ptClip, true);
+    const tree = new ClipperLib.PolyTree();
+    clipper.Execute(ClipperLib.ClipType.ctIntersection, tree, _NZ(), _NZ());
+    return ClipperLib.Clipper.OpenPathsFromPolyTree(tree).filter(p => p.length >= 2).map(p => p.map(pt => [pt.X / CLIP_SCALE, pt.Y / CLIP_SCALE]));
+}
+
+/** The area (mm²) of regions: each outer minus its holes. */
+export function regionsArea(regions) {
+    let a = 0;
+    for (const r of regions || []) {
+        a += Math.abs(ClipperLib.Clipper.Area(toClipper(r.outer)));
+        for (const h of r.holes) a -= Math.abs(ClipperLib.Clipper.Area(toClipper(h)));
+    }
+    return a / (CLIP_SCALE * CLIP_SCALE);
+}

@@ -245,6 +245,7 @@
       --sk-prep-list-hover: #232426;      /* ~ hovered popover row (not sampled) */
       --sk-prep-disabled: #5A5C61;        /* ~ greyed types */
       --sk-prep-tab: #FFB547;             /* TASK 742: tab / onion-skin marks on a held cut (an amber that reads on the band and the canvas; not sampled) */
+      --sk-prep-leftover: #FF5A36;        /* TASK 745: a programmed pocket's leftover (material the bit does not reach): an orange-red that reads on the band (not sampled) */
     }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; background: var(--sk-prep-bg); }
     .sk-edge { fill: none; stroke: var(--sk-prep-geo); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
@@ -289,6 +290,10 @@
     .sk-tab-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linecap: butt; }
     .sk-skin-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 2 4; }
     .sk-strip { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+    /* TASK 745: a programmed pocket in Prepare: its clearing paths as thin tool-path lines (the clean-up ring dashed), the material the bit does not reach filled */
+    .sk-clear-path { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; stroke-opacity: 0.9; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+    .sk-clear-path.sk-clear-cleanup { stroke-dasharray: 4 2; }
+    .sk-leftover { fill: var(--sk-prep-leftover); stroke: var(--sk-prep-leftover); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .sk-chip-bg { fill: var(--sk-prep-chip-bg); }
     .sk-chip-text { fill: var(--sk-prep-chip-text); font-family: system-ui, sans-serif; font-size: 11px; }
     .sk-chip-val { font-weight: 700; }
@@ -318,12 +323,12 @@
     /* the display rules above and on .cut-card beat the [hidden] attribute: an empty / unselected card and any row cut-panel.js hides must really hide */
     .cut-field[hidden], .cut-row[hidden], #prepare-panel .cut-card[hidden] { display: none; }
     .cut-rows { display: flex; flex-direction: column; gap: 12px; margin: 0; }
-    .cut-type-trigger, .cut-shape-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
-    .cut-type-trigger.is-open, .cut-shape-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
+    .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
+    .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-type-cur { text-transform: lowercase; }
-    .cut-type-cur, .cut-shape-cur { flex: 1; text-align: left; }
+    .cut-type-cur, .cut-shape-cur, .cut-clear-cur { flex: 1; text-align: left; }
     .cut-caret { flex: 0 0 auto; color: var(--sk-prep-chip-text); transition: transform 0.12s; }
-    .cut-type-trigger.is-open .cut-caret, .cut-shape-trigger.is-open .cut-caret { transform: rotate(180deg); }
+    .cut-type-trigger.is-open .cut-caret, .cut-shape-trigger.is-open .cut-caret, .cut-clear-trigger.is-open .cut-caret { transform: rotate(180deg); }
     .cut-ic { width: 18px; height: 18px; flex: 0 0 auto; color: var(--sk-prep-chip-text); }
     .cut-box { display: flex; align-items: center; box-sizing: border-box; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; overflow: hidden; }
     .cut-box:focus-within { box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
@@ -347,8 +352,9 @@
     .cut-mid .cut-num { text-align: right; width: 5.2ch; }
     .cut-inline .cut-num { flex: 1; width: auto; padding-left: 10px; }
     .cut-num::selection { background: var(--sk-prep-select-text); }
-    .cut-unit { color: var(--sk-prep-unit); font-size: 11px; flex: 0 0 auto; }
-    .cut-inline .cut-unit { padding-right: 10px; }
+    .cut-unit, .cut-unit-fixed { color: var(--sk-prep-unit); font-size: 11px; flex: 0 0 auto; }
+    .cut-inline .cut-unit, .cut-inline .cut-unit-fixed { padding-right: 10px; }
+    .cut-hint { font-size: 11px; color: var(--sk-prep-unit); padding: 4px 12px 0; }
     .cut-dia-prefix { color: var(--sk-prep-unit); font-size: 11px; padding-left: 10px; }
     .cut-inline .cut-dia-prefix + .cut-num { padding-left: 8px; }
     /* TASK 730: a phone (narrow screen or a coarse pointer): 44 px touch targets for the steppers and the flip; the card widens to hold three of them in the offset row */
@@ -362,7 +368,8 @@
     }
     /* TASK 743: the OPERATIONS list (op-list.js): a card like the cut card, top-left of the Prepare view on a wide screen (it ends above the direction
        legend; its rows scroll), a folding bar along the bottom on a phone (open: up to 55 % of the view; the cut card then ends above the bar).
-       Rows: a drag grip, the number, the operation (type · depths, regions · steps / tabs), and up / down buttons (44 px on a phone). */
+       Rows: a drag grip, the number, the operation (type · depths, regions · steps / tabs), and (TASK 745) a delete bin (44 px on a phone); no arrow buttons:
+       a mouse drags the grip, a finger holds then drags the row (the list keeps native scrolling: no touch-action none), the keyboard moves a focused grip. */
     #prepare-ops { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
       background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
     #view-prepare.is-fusion #prepare-ops { top: 56px; max-height: calc(100% - 96px); }
@@ -373,17 +380,18 @@
     .ops-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 10px; }
     .ops-body[hidden] { display: none; }
     .ops-tool { margin: 8px 6px 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sk-prep-unit); }
-    .ops-row { display: flex; align-items: stretch; gap: 0; min-height: 44px; margin-bottom: 4px; background: var(--sk-prep-field-bg); border: 2px solid transparent; border-radius: 6px; box-sizing: border-box; }
+    .ops-row { display: flex; align-items: stretch; gap: 0; min-height: 44px; margin-bottom: 4px; background: var(--sk-prep-field-bg); border: 2px solid transparent; border-radius: 6px; box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
     .ops-row.is-picked { border-color: var(--sk-prep-geo-selected); }
-    .ops-grip { flex: 0 0 24px; display: flex; align-items: center; justify-content: center; color: var(--sk-prep-unit); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .ops-grip { flex: 0 0 24px; display: flex; align-items: center; justify-content: center; color: var(--sk-prep-unit); cursor: grab; border-radius: 4px; }
+    .ops-grip:focus-visible { outline: 2px solid var(--sk-prep-focus); outline-offset: -2px; }
     .ops-pick { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 4px; cursor: pointer; }
     .ops-num { flex: 0 0 20px; height: 20px; border-radius: 50%; background: var(--sk-prep-card-bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
     .ops-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
     .ops-name { font-size: 13px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
     .ops-sub { font-size: 11px; line-height: 1.3; color: var(--sk-prep-unit); overflow-wrap: anywhere; }
-    .ops-move { all: unset; box-sizing: border-box; flex: 0 0 28px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--sk-prep-chip-text); cursor: pointer; touch-action: manipulation; }
-    .ops-move:disabled { opacity: 0.3; cursor: default; }
-    .ops-move:not(:disabled):active { background: var(--sk-prep-selected-fill); }
+    .ops-del { all: unset; box-sizing: border-box; flex: 0 0 30px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; opacity: 0.75; touch-action: manipulation; }
+    .ops-del:hover, .ops-del:focus-visible { opacity: 1; background: var(--sk-prep-list-hover); }
+    .ops-row.ops-lifted { border-color: var(--sk-prep-focus); box-shadow: 0 6px 18px rgba(0,0,0,0.65); transform: scale(1.02); }
     .ops-row.ops-dragging { opacity: 0.5; }
     .ops-row.ops-drop-before { box-shadow: 0 -3px 0 var(--sk-prep-focus); }
     .ops-row.ops-drop-after { box-shadow: 0 3px 0 var(--sk-prep-focus); }
@@ -392,8 +400,8 @@
       #prepare-ops, #view-prepare.is-fusion #prepare-ops { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 55%; }
       .ops-head { height: 44px; }
       .ops-row { min-height: 48px; }
-      .ops-grip { flex-basis: 32px; }
-      .ops-move { flex-basis: 44px; font-size: 20px; }
+      .ops-grip { flex-basis: 44px; }
+      .ops-del { flex-basis: 44px; font-size: 17px; }
       #prepare-panel { bottom: 68px; }        /* the cut card ends above the folded bar (12 + 44 + 12) */
       #prepare-dir-legend { bottom: 66px; }
     }
@@ -416,6 +424,17 @@
     .cut-pop[hidden] { display: none; }
     .cut-type-menu, .cut-shape-pop { width: 134px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .cut-shape-pop { width: 164px; }
+    /* TASK 745: the Clearing popover: each pattern with its icon, a choice the region cannot take greyed with its reason under it */
+    .cut-clear-pop { width: 176px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .cut-clear-pop .cut-type-opt { height: auto; min-height: 30px; flex-wrap: wrap; row-gap: 2px; padding: 5px 10px; }
+    .cut-clear-pop .cut-type-opt span { text-transform: none; }
+    .cut-clear-pop .cut-clear-name { flex: 1; min-width: 0; line-height: 1.2; }
+    .cut-clear-pop .cut-clear-why { flex: 0 0 100%; font-size: 11px; line-height: 1.3; }
+    .cut-row[data-row="rasterAngle"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 640px), (pointer: coarse) {
+      .cut-clear-pop { width: 128px; padding: 8px; gap: 4px; }
+      .cut-clear-pop .cut-type-opt { min-height: 40px; font-size: 13px; gap: 6px; padding: 4px 8px; }
+    }
     /* TASK 714: a stepped type's longer label ("stepped outside") stays on one line: the menu grows past its 134px only then */
     .cut-type-menu { width: auto; min-width: 134px; }
     .cut-type-menu .cut-type-opt { white-space: nowrap; }

@@ -785,6 +785,9 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoo
  * Uncut material (corners the bit cannot reach) is simply the area the footprint does not cover.
  * TASK 714: a terrace of a stepped cut (#core/stepped-cut.js deriveCuts) carries its `terrace` (its own depth) onto its footprint.
  * TASK 742: a held Outside / Inside cut's pass and gap strips (#core/hold-part applyHoldPart) carry their `hold` (its depth, role, marks) the same way.
+ * TASK 745: a programmed pocket's cuts (#core/pocket-clearing applyPocketClearing: the clearing paths, the wall, the islands) carry their tool-centre
+ *   paths (`centers`) and `sweep(radius)`, the area the bit sweeps along them (the same sweep the clearing's leftover check uses): the band is that
+ *   sweep at this record's radius, the tool paths are the centres; `clearing` rides along.
  */
 export function deriveCutFootprint(cuts, rec, state) {
   const out = [];
@@ -793,6 +796,15 @@ export function deriveCutFootprint(cuts, rec, state) {
   const off = Number(rec.cutOffset) || 0;
   const isGuide = rec.cutType === 'guide';
   for (const cut of cuts) {
+    if (typeof cut.sweep === 'function' && Array.isArray(cut.centers)) { // TASK 745
+      const rings = !isGuide && r > 0 ? cut.sweep(r) : [];
+      const toolPaths = cut.centers.map((c) => ({ points: c.points, closed: c.closed }));
+      const center = cut.centers.length === 1 && cut.centers[0].closed ? cut.centers[0].points : null;
+      const first = cut.centers[0] && cut.centers[0].points;
+      const anchor = first && first.length ? { ...first.reduce((best, p) => (p.y < best.y ? p : best), first[0]) } : null;
+      out.push({ kind: 'band', cutType: String(cut.cutType || ''), fillRule: 'nonzero', rings, center, chain: null, anchor, toolPaths, clearing: cut.clearing });
+      continue;
+    }
     if (cut.isCompound) {
       // TASK 452: the Origin's real TWO-STAGE pocket. Stage 1 CLEARS with the cutter kept back from the wall by the Origin's
       // automatic offset (rec.autoOffset, declared on the pocket CUT_TYPES record = 1/4 of the cutter diameter) plus the

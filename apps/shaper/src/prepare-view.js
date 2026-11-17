@@ -9,7 +9,8 @@ import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
-  holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part
+  holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
+  clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastWallAllowance, rememberWallAllowance, lastPassDepth, rememberPassDepth, lastRasterAngle, rememberRasterAngle } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
@@ -53,6 +54,10 @@ const SVG_NS_G = SVG_NS;
 const mkGroup = (id) => { const g = document.createElementNS(SVG_NS_G, 'g'); g.id = id; return g; };
 const polyMarkup = (poly, style) => `<polygon points="${poly.map((p) => p.x + ',' + p.y).join(' ')}" style="${style}"/>`;
 const polyRingD = (poly) => (poly && poly.length >= 3) ? ('M ' + poly.map((p) => p.x + ' ' + p.y).join(' L ') + ' Z') : '';
+// TASK 745: a tool-centre path ({ points, closed }) and regions ({ outer, holes }: closed [[x,y]] rings) as path text
+const toolPathD = (tp) => (tp.closed ? polyRingD(tp.points) : (tp.points.length >= 2 ? 'M ' + tp.points.map((p) => p.x + ' ' + p.y).join(' L ') : ''));
+const regionsD = (regions) => regions.flatMap((r) => [r.outer, ...r.holes]).map((g) => 'M ' + g.map((q) => q[0] + ' ' + q[1]).join(' L ') + ' Z').join(' ');
+const CLEAR_PATH_ROLES = new Set(['ring', 'raster', 'cleanup', 'spiral']);
 const profilePathMarkup = (outerPoly, holePolys, cls) => {
   const parts = [polyRingD(outerPoly), ...(holePolys || []).map(polyRingD)].filter(Boolean);
   return parts.length ? `<path d="${parts.join(' ')}" fill-rule="evenodd" class="${cls}"/>` : '';
@@ -297,7 +302,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.wallAllowance}|${rec.passDepth}|${rec.rasterAngle}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [] };
@@ -315,6 +320,31 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     let region = '', path = '', hasTravel = false, chip = null;
     const toolPaths = [];
     for (const fp of footprints) {
+      // TASK 745: a programmed pocket: the clearing paths as thin tool-path lines (the deepest depth pass only: the shallower passes run the same paths), the
+      // area the bit sweeps (clearing + finish pass) as ONE band from its wall cut's plan, and the material the bit does not reach (the leftover) in the
+      // warning colour; the wall / islands keep their travel marks
+      if (fp.clearing) {
+        const cl = fp.clearing;
+        toolPaths.push(...(fp.toolPaths || []));
+        if (CLEAR_PATH_ROLES.has(cl.role)) {
+          if (cl.pass === cl.passes - 1) for (const tp of fp.toolPaths || []) path += `<path class="sk-clear-path${cl.role === 'cleanup' ? ' sk-clear-cleanup' : ''}" d="${toolPathD(tp)}"/>`;
+          if (!chip && fp.anchor) chip = fp.anchor;
+          continue;
+        }
+        if (cl.summary) {
+          if (cl.summary.swept && cl.summary.swept.length) region += `<path d="${regionsD(cl.summary.swept)}" fill-rule="evenodd" class="sk-band"/>`;
+          if (cl.summary.leftover && cl.summary.leftover.regions.length) region += `<path d="${regionsD(cl.summary.leftover.regions)}" fill-rule="evenodd" class="sk-leftover"/>`;
+        }
+        const travel = deriveCutTravel([fp]);
+        for (const t of travel) {
+          path += `<path class="sk-travel" d="${polyRingD(t.path)}"/>`;
+          path += `<g class="sk-travel-arrows">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
+          hasTravel = true;
+        }
+        if (!travel.length) for (const tp of fp.toolPaths || []) path += `<path class="${tpClass}" d="${toolPathD(tp)}"/>`; // a wall that splits into several loops (a neck): their centre lines
+        if (!chip && fp.anchor) chip = fp.anchor;
+        continue;
+      }
       const rings = fp.rings.filter((ring) => ring.length >= 3);
       // TASK 452: the pocket's FINISH ring (the Inside/Outside band at zero offset, wall -> 2r in) under the clearing area
       const finish = (fp.finishRings || []).filter((ring) => ring.length >= 3);
@@ -526,10 +556,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind, getCutRecord(targetKey(t))) : []), // TASK 714: the stepped types need the record's slope
     holdFor: (t) => (t ? holdSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 742: what its Hold part does (the derivation's)
-    noteFor(t) { // TASK 714: a stepped cut's steps / undercut, for the cut card; TASK 742: its Hold part
+    clearingFor: (t) => (t ? clearingAvailability(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys) : null), // TASK 745: which Clearing choices it can take
+    clearingSummaryFor: (t) => (t ? clearingSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 745: what its clearing is (the derivation's)
+    noteFor(t) { // TASK 714: a stepped cut's steps / undercut, for the cut card; TASK 742: its Hold part; TASK 745: its programmed clearing
       if (!t) return [];
       const rec = getCutRecord(targetKey(t));
-      return [...steppedNoteItems(rec), ...holdNoteItems(rec, this.holdFor(t))];
+      return [...steppedNoteItems(rec), ...holdNoteItems(rec, this.holdFor(t)), ...clearingNoteItems(rec, this.clearingSummaryFor(t))];
     },
     // Write the cut type onto every selected target + refresh the tool-aware look (panel calls this).
     refreshLook, // TASK 463: repaint after an undo/redo restored the cut plan
@@ -571,9 +603,22 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (field === 'tabCount') value = rememberTabCount(value); // TASK 742: the next record turned to Tabs / Onion skin starts from them
       if (field === 'tabWidth') value = rememberTabWidth(value);
       if (field === 'holdThickness') value = rememberHoldThickness(value);
+      if (field === 'stepover') value = rememberStepover(value); // TASK 745: the next pocket set to a computed clearing starts from them
+      if (field === 'wallAllowance') value = rememberWallAllowance(value);
+      if (field === 'passDepth') value = rememberPassDepth(value);
+      if (field === 'rasterAngle') value = rememberRasterAngle(value);
       let lastRec = null;
       for (const t of selection.values()) {
         const k = targetKey(t);
+        if (field === 'clearing' && value !== 'freehand') { // TASK 745: the Morphed spiral only where it is possible (never a silent fallback); a pocket set to a computed
+          // clearing without its own values takes the last ones set (or the declared defaults)
+          if (value === 'spiral') { const av = clearingAvailability(k, CUT_PLAN.get(k) || {}, state, loops, loopPolys); if (!av || av.spiral) continue; }
+          const r = CUT_PLAN.get(k) || {};
+          if (!(Number(r.stepover) > 0)) setFieldFor(k, 'stepover', lastStepover());
+          if (!(r.wallAllowance != null && Number(r.wallAllowance) >= 0)) setFieldFor(k, 'wallAllowance', lastWallAllowance());
+          if (!('passDepth' in r)) setFieldFor(k, 'passDepth', lastPassDepth());
+          if (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null) setFieldFor(k, 'rasterAngle', lastRasterAngle());
+        }
         if (field === 'holdPart' && value !== 'off') { // TASK 742: a record turned to Tabs / Onion skin without its own values takes the last ones set (or the unit's defaults)
           const r = CUT_PLAN.get(k) || {};
           if (!(r.tabCount === 'auto' || Number(r.tabCount) >= 1)) setFieldFor(k, 'tabCount', lastTabCount());

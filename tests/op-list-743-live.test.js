@@ -4,10 +4,12 @@
 //  * the list: tool headings ("Change to ⅛″ end mill" then "Change to ¼″ end mill": the 1/8 in bit's last cut is a hole, the 1/4 in bit's the outside cut
 //    that frees the part) and the operations in the default order (On line, Inside | Pocket 1/8, Pocket 1/4, Outside), each with its depth in the doc unit;
 //  * a tap on an operation selects its regions on the canvas (the card shows the type, the rows are marked);
-//  * ↓ / ↑ buttons and a drag on the grip reorder (one undo step each: the footer's Undo puts the order back);
+//  * TASK 745: NO arrow buttons; a drag reorders (one undo step each: the footer's Undo puts the order back): on the desktop a mouse drag on the grip, on the
+//    phone a PRESS-AND-HOLD (the row lifts) then a drag anywhere on the row; on the phone a quick swipe on the list scrolls it and reorders nothing, and a
+//    hold released without a move selects nothing and reorders nothing; each row's delete bin unassigns its regions (one undo step brings them back);
 //  * Export 2D: the same operations in the same order under the same headings; a header picks its elements. Operations are DISPLAY ONLY (owner ruling,
 //    the 743 send-back): the downloaded SVG is byte-identical before and after the reorders, with no <g id> / <title> / data-*;
-//  * phone: the list is a folded bar at the bottom (opens on a tap), its ↑ / ↓ are 44 px, a touch drag reorders, no sideways scroll.
+//  * phone: the list is a folded bar at the bottom (opens on a tap), its grips and bins are 44 px wide, no sideways scroll.
 // Screenshots to .evidence/743/.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -52,13 +54,14 @@ try {
     await press(p.x, p.y);
     return p;
   };
-  // a drag from the centre of `fromSel` to the point `to` in small moves (mouse on the desktop, one finger on the phone)
+  // a drag from the centre of `fromSel` to the point `to` in small moves (mouse on the desktop: at once; one finger on the phone: TASK 745, held HOLD_MS + 150 first)
   const drag = async (fromSel, to) => {
     const p = await boxOf(fromSel);
     assert.ok(p && p.onTop, `${fromSel} is on screen: ${JSON.stringify(p)}`);
     const steps = 8;
     if (phone) {
       await T('touchStart', [{ x: p.x, y: p.y }]);
+      await sleep(500);
       for (let i = 1; i <= steps; i++) { await T('touchMove', [{ x: p.x, y: Math.round(p.y + (to.y - p.y) * i / steps) }]); await sleep(30); }
       await T('touchEnd', []);
     } else {
@@ -156,8 +159,10 @@ try {
     assert.deepStrictEqual(l0, ['# Change to ⅛″ end mill', `1. On line · ${L.online} | 1 path`, `2. Inside · ${L.full} | 2 regions`,
       '# Change to ¼″ end mill', `3. Pocket · ${L.shallow} | 1 region`, `4. Pocket · ${L.deep} | 2 regions`, `5. Outside · ${L.full} | 1 region`], label + ': the default order under tool headings');
     assert.strictEqual(await stored(), 0, label + ': no order stored yet (the default)');
-    const targets = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-move, #prepare-ops .ops-grip, #prepare-ops .ops-pick')].map((b) => { const r = b.getBoundingClientRect(); return [b.className, Math.round(r.width), Math.round(r.height)]; })`);
-    if (phone) for (const [c, w, h] of targets.filter((t) => /ops-move/.test(t[0]))) assert.ok(w >= 44 && h >= 44, `${label}: ${c} is ${w} x ${h} (44 px on a phone)`);
+    assert.strictEqual(await evalJs(`document.querySelectorAll('#prepare-ops .ops-up, #prepare-ops .ops-down, #prepare-ops .ops-move').length`), 0, label + ': TASK 745: no arrow buttons');
+    const targets = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-grip, #prepare-ops .ops-del')].map((b) => { const r = b.getBoundingClientRect(); return [b.className, Math.round(r.width), Math.round(r.height)]; })`);
+    assert.strictEqual(targets.length, 10, label + ': a grip and a bin on each of the 5 rows');
+    if (phone) for (const [c, w, h] of targets) assert.ok(w >= 44 && h >= 44, `${label}: ${c} is ${w} x ${h} (44 px on a phone)`);
     await shot(`${D}-prepare-ops.png`);
     await shot(`${D}-ops-list.png`, '#prepare-ops', phone ? 1 : 2);
 
@@ -176,25 +181,56 @@ try {
     await openMode('prepare');
     if (phone && await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head');
 
-    // ↓ on operation 1 (On line): Inside first; the order is stored; the footer Undo puts it back, Redo again
-    await clickEl(await rowSel(1, '.ops-down'));
+    // TASK 745, the phone: a quick swipe on the list scrolls and reorders nothing; a hold released without a move lifts the row, then selects and reorders nothing
+    if (phone) {
+      const order0 = rowsText(await list());
+      const sel0 = await evalJs(`window.__prepareView.selection.size`);
+      const r2 = await boxOf(await rowSel(2, '.ops-name'));
+      await evalJs(`document.querySelector('#prepare-ops .ops-body').scrollTop = 0`);
+      await T('touchStart', [{ x: r2.x, y: r2.y }]);
+      for (let i = 1; i <= 6; i++) { await T('touchMove', [{ x: r2.x, y: r2.y - 14 * i }]); await sleep(16); }
+      await T('touchEnd', []);
+      await sleep(400);
+      const swiped = await evalJs(`({ lifted: document.querySelectorAll('#prepare-ops .ops-lifted').length, scrollable: (() => { const b = document.querySelector('#prepare-ops .ops-body'); return b.scrollHeight > b.clientHeight; })(), scrollTop: document.querySelector('#prepare-ops .ops-body').scrollTop })`);
+      console.log(label + ' swipe: ' + JSON.stringify(swiped));
+      assert.deepStrictEqual(rowsText(await list()), order0, label + ': a quick swipe reorders nothing');
+      assert.strictEqual(await stored(), 0, label + ': nothing stored by the swipe');
+      if (swiped.scrollable) assert.ok(swiped.scrollTop > 0, label + ': the swipe scrolled the list');
+      await evalJs(`document.querySelector('#prepare-ops .ops-body').scrollTop = 0`);
+      await sleep(200);
+      const r3 = await boxOf(await rowSel(3, '.ops-name'));
+      await T('touchStart', [{ x: r3.x, y: r3.y }]);
+      await sleep(550);
+      const lifted = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => r.classList.contains('ops-lifted'))`);
+      await shot(`${D}-ops-row-lifted.png`, '#prepare-ops', 2);
+      await T('touchEnd', []);
+      await sleep(500);
+      assert.deepStrictEqual(lifted, [false, false, true, false, false], label + ': after the hold the row is LIFTED');
+      assert.deepStrictEqual(rowsText(await list()), order0, label + ': hold + release reorders nothing');
+      assert.strictEqual(await evalJs(`window.__prepareView.selection.size`), sel0, label + ': hold + release selects nothing (the row\u2019s tap is swallowed)');
+      assert.strictEqual(await evalJs(`document.querySelectorAll('#prepare-ops .ops-lifted').length`), 0, label + ': the row drops back');
+    }
+    // a drag of operation 1 (On line) below operation 2 (Inside): Inside first; the order is stored; the footer Undo puts it back, Redo again
+    const b2 = await boxOf(await rowSel(2));
+    await drag(phone ? await rowSel(1, '.ops-name') : await rowSel(1, '.ops-grip'), { y: b2.y + Math.round(b2.h / 2) - 4 });
     const l1 = await list();
-    console.log(label + ' after down: ' + JSON.stringify(l1));
-    assert.deepStrictEqual(rowsText(l1), [`Inside · ${L.full}`, `On line · ${L.online}`, `Pocket · ${L.shallow}`, `Pocket · ${L.deep}`, `Outside · ${L.full}`], label + ': ↓ moved On line below Inside');
+    console.log(label + ' after drag 1: ' + JSON.stringify(l1));
+    assert.deepStrictEqual(rowsText(l1), [`Inside · ${L.full}`, `On line · ${L.online}`, `Pocket · ${L.shallow}`, `Pocket · ${L.deep}`, `Outside · ${L.full}`], label + ': the drag moved On line below Inside');
     assert.strictEqual(await stored(), 5, label + ': the order is stored (5 keys)');
     await clickEl('#btn-undo');
     await waitFor(`document.querySelector('#prepare-ops .ops-row .ops-name').textContent.startsWith('On line')`, label + ': Undo puts On line back first');
     assert.deepStrictEqual(rowsText(await list()), rowsText(l0), label + ': Undo: the default order again');
     await clickEl('#btn-redo');
     await waitFor(`document.querySelector('#prepare-ops .ops-row .ops-name').textContent.startsWith('Inside')`, label + ': Redo moves it again');
-    // ↑ on the last (Outside): above the 1/4 in pockets
-    await clickEl(await rowSel(5, '.ops-up'));
+    // the last (Outside) dragged above the deep pocket
+    const b4 = await boxOf(await rowSel(4));
+    await drag(phone ? await rowSel(5, '.ops-name') : await rowSel(5, '.ops-grip'), { y: b4.y - Math.round(b4.h / 2) + 6 });
     const l2 = await list();
-    console.log(label + ' after up: ' + JSON.stringify(l2));
-    assert.deepStrictEqual(rowsText(l2), [`Inside · ${L.full}`, `On line · ${L.online}`, `Pocket · ${L.shallow}`, `Outside · ${L.full}`, `Pocket · ${L.deep}`], label + ': ↑ moved Outside above the deep pocket');
+    console.log(label + ' after drag 2: ' + JSON.stringify(l2));
+    assert.deepStrictEqual(rowsText(l2), [`Inside · ${L.full}`, `On line · ${L.online}`, `Pocket · ${L.shallow}`, `Outside · ${L.full}`, `Pocket · ${L.deep}`], label + ': the drag moved Outside above the deep pocket');
     // a drag on the grip of row 5 (Pocket 1/4 in) to the top of row 3 (Pocket 1/8 in): it goes before it
     const r3 = await boxOf(await rowSel(3));
-    await drag(await rowSel(5, '.ops-grip'), { y: r3.top + 6 });
+    await drag(await rowSel(5, phone ? '.ops-name' : '.ops-grip'), { y: r3.top + 6 }); // the phone holds the row anywhere
     const l3 = await list();
     console.log(label + ' after drag: ' + JSON.stringify(l3));
     assert.deepStrictEqual(rowsText(l3), [`Inside · ${L.full}`, `On line · ${L.online}`, `Pocket · ${L.deep}`, `Pocket · ${L.shallow}`, `Outside · ${L.full}`], label + ': the drag put the deep pocket above the shallow one');
@@ -225,6 +261,33 @@ try {
     console.log(label + ` download: ${file0.length} bytes before, ${file1.length} after the reorders`);
     assert.strictEqual(file1, file0, label + ': the download is byte-identical before and after the reorders');
     assert.ok(!/<g id=|<title>|data-/.test(file1), label + ': no <g id>, <title> or data-* in the downloaded file');
+    // TASK 745: the bin of the Inside operation (the 2 holes): both unassigned in ONE undo step, the export loses exactly those two elements; Undo brings them back
+    await openMode('prepare');
+    if (phone && await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head');
+    const plan0 = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => JSON.stringify([...m.CUT_PLAN]))`);
+    const order0 = await evalJs(`import('/apps/shaper/src/operations.js').then((m) => m.opOrder())`);
+    assert.ok(/^Inside/.test(rowsText(await list())[0]), label + ': row 1 is the Inside operation');
+    await clickEl(await rowSel(1, '.ops-del'));
+    await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 4`, label + ': the operation is gone');
+    const holes = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [${JSON.stringify(keys[1])}, ${JSON.stringify(keys[4])}].map((k) => m.CUT_PLAN.get(k).cutType))`);
+    assert.deepStrictEqual(holes, [null, null], label + ': both holes unassigned');
+    await shot(`${D}-ops-after-delete.png`, '#prepare-ops', phone ? 1 : 2);
+    const file2 = await download();
+    // the file's elements with their resolved cut attributes (a <g> hoists the shared ones)
+    const els = (f) => { const out = []; let g = ''; for (const l of f.split(String.fromCharCode(10)).map((x) => x.trim())) { if (l.startsWith('<g')) g = l.slice(3, -1); else if (l.startsWith('</g')) g = ''; else if (/^<(path|circle)/.test(l)) out.push(l.replace('/>', ' ' + g).trim()); } return out; };
+    const gone = els(file1).filter((l) => !els(file2).includes(l)), added = els(file2).filter((l) => !els(file1).includes(l));
+    console.log(label + ' delete: the export lost ' + JSON.stringify(gone) + ', gained ' + JSON.stringify(added));
+    assert.deepStrictEqual(gone.map((l) => [l.split(' ')[0], /toolDia="0\.125 in"|toolDia="3\.175 mm"/.test(l)]), [['<circle', true], ['<circle', true]], label + ': the export loses exactly the two holes’ own cuts (1/8 in bit)');
+    assert.deepStrictEqual(added.map((l) => [l.split(' ')[0], /cutType="inside"/.test(l), /toolDia="0\.250 in"|toolDia="6\.350 mm"/.test(l)]), [['<circle', true, true], ['<circle', true, true]],
+      label + ': unassigned, they are the Outside plate’s automatic holes again (TASK 711: a hole with no record of its own is cut by its plate, with the plate’s bit)');
+    assert.strictEqual(els(file2).length, els(file1).length, label + ': nothing else changes');
+    await openMode('prepare');
+    await clickEl('#btn-undo');
+    await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 5`, label + ': Undo brings the operation back');
+    assert.strictEqual(await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => JSON.stringify([...m.CUT_PLAN]))`), plan0, label + ': Undo: the records as before');
+    assert.deepStrictEqual(await evalJs(`import('/apps/shaper/src/operations.js').then((m) => m.opOrder())`), order0, label + ': and the order (the operation in its place)');
+    assert.deepStrictEqual(rowsText(await list()), rowsText(l3), label + ': the list as before');
+    assert.strictEqual(await download(), file1, label + ': the export as before');
     await openMode('prepare');
   };
 
@@ -243,6 +306,38 @@ try {
   await evalJs(`import('/apps/shaper/src/operations.js').then((m) => m.setOpOrder([]))`);
   await setUnit('mm');
   await phase('phone (mm)');
+  // TASK 745: a list long enough to scroll (12 pockets, 12 depths = 12 operations): a quick swipe on a row SCROLLS the list (native scrolling) and reorders nothing
+  await openMode('design');
+  await evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/apps/shaper/src/cut-plan.js'), import('/apps/shaper/src/operations.js')]).then(([L, C, O]) => {
+    const st = window.__designController.state;
+    for (const k of [...st.joints.keys()]) st.joints.delete(k);
+    st.shapes.length = 0; st.constraints.length = 0;
+    for (let n = 0; n < 12; n++) { const x0 = (n % 4) * 30, y0 = Math.floor(n / 4) * 30; [[x0, y0], [x0 + 20, y0], [x0 + 20, y0 + 20], [x0, y0 + 20]].forEach(([x, y], i) => st.joints.set('Q' + n + 'j' + i, { x, y }));
+      for (let i = 0; i < 4; i++) st.shapes.push({ id: 'Q' + n + 's' + i, type: 'line', joints: ['Q' + n + 'j' + i, 'Q' + n + 'j' + ((i + 1) % 4)] }); }
+    const loops = L.findLoops(st);
+    C.CUT_PLAN.clear(); O.setOpOrder([]);
+    for (let n = 0; n < 12; n++) C.CUT_PLAN.set('loop:' + loops.find((l) => l.edges.includes('Q' + n + 's0')).id, { cutType: 'pocket', cutDepth: n + 1, cutOffset: 0, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90 });
+  })`);
+  await openMode('prepare');
+  await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 12`, 'phone: 12 operations');
+  if (await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head');
+  await evalJs(`document.querySelector('#prepare-ops .ops-body').scrollTop = 0`);
+  await sleep(200);
+  const before = rowsText(await list());
+  const can = await evalJs(`(() => { const b = document.querySelector('#prepare-ops .ops-body'); return { sh: b.scrollHeight, ch: b.clientHeight }; })()`);
+  assert.ok(can.sh > can.ch, 'phone: the 12-row list overflows its sheet (it scrolls) ' + JSON.stringify(can));
+  const rr = await boxOf('#prepare-ops .ops-row:nth-of-type(3) .ops-name');
+  await T('touchStart', [{ x: rr.x, y: rr.y }]);
+  for (let i = 1; i <= 8; i++) { await T('touchMove', [{ x: rr.x, y: rr.y - 18 * i }]); await sleep(16); }
+  await T('touchEnd', []);
+  await sleep(600);
+  const after = await evalJs(`({ top: document.querySelector('#prepare-ops .ops-body').scrollTop, lifted: document.querySelectorAll('#prepare-ops .ops-lifted').length, sel: window.__prepareView.selection.size })`);
+  console.log('phone swipe on a long list: ' + JSON.stringify(after));
+  assert.ok(after.top > 0, 'phone: the quick swipe scrolled the list (scrollTop ' + after.top + ')');
+  assert.deepStrictEqual([after.lifted, after.sel], [0, 0], 'phone: no row lifted, nothing selected');
+  assert.deepStrictEqual(rowsText(await list()), before, 'phone: the swipe reordered nothing');
+  assert.strictEqual(await stored(), 0, 'phone: no order stored');
+  await shot('phone-ops-long-list-swiped.png', '#prepare-ops', 1);
   const side = await evalJs(`({ doc: document.documentElement.scrollWidth, vw: innerWidth })`);
   assert.ok(side.doc <= side.vw, 'phone: no sideways scroll ' + JSON.stringify(side));
   await send('Emulation.setTouchEmulationEnabled', { enabled: false });

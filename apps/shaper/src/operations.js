@@ -20,10 +20,11 @@
 //  that comes before it in the default order (at the top when none does).
 // An operation's regions are listed in the plan's order.
 import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS } from './shaper.js';
-import { keyOf, loopsWithPolygons, steppedSummary } from './cut-plan.js';
+import { keyOf, loopsWithPolygons, steppedSummary, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH } from '#core/stepped-cut.js';
 import { holdMode } from '#core/hold-part.js';
+import { clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
 import { format as formatUnit } from '#core/units.js';
 import { docUnit, lengthDecimals } from '#core/settings-manager.js';
 
@@ -78,6 +79,8 @@ export function settingsOf(rec) {
   const m = holdMode(eff); // TASK 742: a held cut's mode and its values (Off adds nothing)
   if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), thickness: round6(rec.holdThickness) };
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
+  const pat = clearingPattern(eff); // TASK 745: a programmed pocket's clearing and the values it is computed with (Freehand adds nothing: the key is the one before 745)
+  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), passDepth: c.passDepth == null ? null : round6(c.passDepth), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}) }; }
   return s;
 }
 
@@ -132,7 +135,7 @@ const numText = (n) => String(round6(n));
 function assignIds(ops) {
   const base = (op) => { const s = op.settings || {}; return 'op-' + [op.cutType, s.depth !== undefined ? (s.depth === 'unset' ? 'unset' : numText(s.depth) + 'mm') : null,
     s.offset ? `offset-${numText(s.offset)}mm` : null, s.steps ? (s.steps.deviation != null ? `adaptive-${numText(s.steps.deviation)}mm` : `step-${numText(s.steps.step)}mm`) : null,
-    s.hold ? s.hold.mode : null, op.tool ? `${op.tool.shape}-${numText(op.tool.dia)}mm${op.tool.angle != null ? '-' + op.tool.angle + 'deg' : ''}` : null].filter(Boolean).map(slug).join('-'); };
+    s.hold ? s.hold.mode : null, s.clearing ? s.clearing.pattern : null, op.tool ? `${op.tool.shape}-${numText(op.tool.dia)}mm${op.tool.angle != null ? '-' + op.tool.angle + 'deg' : ''}` : null].filter(Boolean).map(slug).join('-'); };
   const seen = new Map();
   for (const op of [...ops].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))) {
     const b = base(op), n = (seen.get(b) || 0) + 1;
@@ -168,8 +171,16 @@ function describe(op) {
     }
     if (holds.some((h) => h.role === 'refused')) detail = (detail ? detail + ', ' : '') + `${s.hold.mode === 'skin' ? 'onion skin' : 'tabs'} refused on ${holds.filter((h) => h.role === 'refused').length}`;
   }
+  let typeWords = typeLabel;
+  if (s.clearing) { // TASK 745: a programmed pocket: "Pocket (concentric)" and its clearing from the derivation ("12 rings + wall"), summed words per region
+    const sums = op.records.map((r) => (r.cuts.find((c) => c.clearing && (c.clearing.role === 'wall' || c.clearing.role === 'refused')) || {}).clearing).filter(Boolean);
+    typeWords = `${typeLabel} (${s.clearing.pattern === 'spiral' ? 'morphed spiral' : s.clearing.pattern})`;
+    const words = [...new Set(sums.filter((c) => c.role === 'wall').map((c) => clearingWords(c.summary)))];
+    const refused = sums.filter((c) => c.role === 'refused').length;
+    detail = [words.join('; '), refused ? `refused on ${refused}: cut as Freehand` : null].filter(Boolean).join(', ') || null;
+  }
   if (s.offset) detail = (detail ? detail + ', ' : '') + `offset ${len(s.offset)}`;
-  const what = [typeLabel, depthText].filter(Boolean).join(' · ');
+  const what = [typeWords, depthText].filter(Boolean).join(' · ');
   const tail = detail ? ` · ${detail}` : '';
   return { typeLabel, depthText, detail, regions,
     rowText: what,                                                             // the row (the tool is its heading)

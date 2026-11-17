@@ -216,9 +216,11 @@ CUT_PLAN.clear(); setOpOrder([]);
       eq([...app.prepare.view().selection.keys()].sort(), [K.ha, K.hb].sort(), 'a tap selects the operation\'s regions');
       ok(rowOf(/^Inside/).classList.contains('is-picked'), 'its row is marked');
       eq(app.document.querySelector('.cut-type-cur').textContent, 'Inside', 'the card shows them');
-      // ↓ on the first row: ONE undo step; Ctrl+Z / Ctrl+Y
+      // ArrowDown on the first row's grip (TASK 745: no arrow buttons; the focused grip moves its row): ONE undo step; Ctrl+Z / Ctrl+Y
+      const gripKey = (grip, key) => { grip.focus(); grip.dispatchEvent(new app.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); };
+      eq(app.document.querySelectorAll('#prepare-ops .ops-up, #prepare-ops .ops-down, #prepare-ops .ops-move').length, 0, 'TASK 745: no arrow buttons');
       const n0 = st.history.length;
-      app.press(app.document.querySelector('#prepare-ops .ops-row .ops-down'));
+      gripKey(app.document.querySelector('#prepare-ops .ops-row .ops-grip'), 'ArrowDown');
       const l1 = listOf(app);
       eq(l1.filter((t) => !t.startsWith('# ')).slice(0, 2).map((t) => t.split(' | ')[0]), ['1. On line · 0.0625 in', '2. Guide'], '↓ moved Guide below On line');
       eq(st.history.length, n0 + 1, 'the reorder is ONE undo step');
@@ -228,9 +230,10 @@ CUT_PLAN.clear(); setOpOrder([]);
       eq(opOrder(), [], 'Ctrl+Z: no stored order');
       app.redo();
       eq(listOf(app), l1, 'Ctrl+Y: the reorder again');
-      // ↑ on the last (the Outside) twice: above both ¼ in pockets
-      app.press([...app.document.querySelectorAll('#prepare-ops .ops-row .ops-up')].at(-1));
-      app.press([...app.document.querySelectorAll('#prepare-ops .ops-row .ops-up')].at(-2));
+      // ArrowUp on the last (the Outside) twice: above both ¼ in pockets (the grip keeps the focus: the second ArrowUp goes to the same, moved row)
+      gripKey([...app.document.querySelectorAll('#prepare-ops .ops-row .ops-grip')].at(-1), 'ArrowUp');
+      ok(app.document.activeElement === [...app.document.querySelectorAll('#prepare-ops .ops-row .ops-grip')].at(-2), 'the grip of the moved row keeps the focus');
+      gripKey(app.document.activeElement, 'ArrowUp');
       listBefore = listOf(app);
       console.log('app list after reorders: ' + JSON.stringify(listBefore));
       eq(listBefore.slice(-4), ['# Change to ¼″ end mill', listBefore.at(-3), listBefore.at(-2), listBefore.at(-1)], 'still one ¼ in heading');

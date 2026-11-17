@@ -1,0 +1,409 @@
+// tests/pocket-clearing-745-node.test.js — TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js through THE cut derivation #core/stepped-cut deriveCuts:
+// the export, the Prepare look and the 3D Review read the same cuts) and the Operations list's delete bin.
+//  1. the rules on a rectangle, an L, a circle, a pocket with an island and a dumbbell (a neck narrower than the bit), bit 6 mm, stepover 40 %, allowance 0.5:
+//     Concentric: every ring closed, ring k (level k) = the region offset by r + allowance + k * stepover within 0.01 mm (every vertex), splits on the
+//     dumbbell; Raster at 0 / 45 / 90 deg: every pass inside the inset region, the passes one stepover apart, along the angle, zigzag, + the clean-up ring;
+//     Morphed spiral: ONE open path, every turn within one stepover of the next one out (sampled), inside the inset region, the last turn = the inset
+//     contour; refused with its reason on the island pocket and the dumbbell; for every pattern the swept area covers the region minus the reported
+//     leftover (sampled on a 0.5 mm grid), the rectangle's leftover = its 4 corners (4 (1 - pi / 4) r²), the dumbbell's neck reported.
+//  2. the export: Freehand = byte-identical (deriveCuts returns the SAME array; a record with clearing 'freehand' and settings writes the same file as one
+//     without); Concentric = closed on-line rings at each depth pass + the wall as an inside cut on the pocket's own loop + islands as outside cuts; depth
+//     passes repeat the ring set at each pass depth; the preview copy's data-clear, never in the download.
+//  3. the app: the Clearing dropdown (one undo step, the defaults, the rows, the note, the stepper), the spiral greyed with its reason on an island pocket,
+//     the operations list's one row, save + reload byte-identical, inch defaults; the bin of an operation with 2 regions unassigns both in ONE undo step.
+import assert from 'node:assert';
+import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
+import { worldToScreen } from '#ui/coords.js';
+import SettingsManager from '#core/settings-manager.js';
+import { exportShaperSVG } from '#core/shaper-export.js';
+import { findLoops } from '#core/loop-finder.js';
+import { loopPolygon } from '#core/loop-geometry.js';
+import { deriveCuts } from '#core/stepped-cut.js';
+import { deriveProfileCuts, deriveCutFootprint } from '#core/profile-model.js';
+import { POCKET_CLEARING, planClearing, clearingSettings, passDepths, pocketRings, applyPocketClearing } from '#core/pocket-clearing.js';
+import { CUT_PLAN, cutPlanEntries, keyOf, planReliefItems } from '../apps/shaper/src/cut-plan.js';
+import { exportEncoding } from '../apps/shaper/src/shaper.js';
+import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
+import { opOrder, setOpOrder } from '../apps/shaper/src/operations.js';
+
+let checks = 0;
+const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
+const ok = (c, m) => { assert.ok(c, m); checks++; };
+const near = (a, b, tol, m) => { assert.ok(Math.abs(a - b) <= tol, `${m}: ${a} vs ${b} (tol ${tol})`); checks++; };
+const BIT = 6, R = BIT / 2, ALLOW = 0.5, S = 0.4 * BIT, D0 = R + ALLOW;
+
+function polyState(loops, circles = []) {
+  const joints = new Map(), shapes = [];
+  loops.forEach((pts, li) => pts.forEach((p, i) => {
+    joints.set(`j${li}_${i}`, { x: p[0], y: p[1] });
+    shapes.push({ id: `s${li}_${i}`, type: 'line', joints: [`j${li}_${i}`, `j${li}_${(i + 1) % pts.length}`] });
+  }));
+  for (const [id, c, r] of circles) { joints.set(id + 'o', { x: c[0], y: c[1] }); shapes.push({ id, type: 'circle', joints: [id + 'o'], radius: r }); }
+  return { joints, shapes, constraints: [], groups: [], profiles: [] };
+}
+const RECT = [[0, 0], [100, 0], [100, 60], [0, 60]];
+const LSHAPE = [[0, 0], [100, 0], [100, 40], [40, 40], [40, 100], [0, 100]];
+const ISLAND = [[40, 20], [60, 20], [60, 40], [40, 40]];
+const DUMBBELL = [[0, 0], [40, 0], [40, 18], [60, 18], [60, 0], [100, 0], [100, 40], [60, 40], [60, 22], [40, 22], [40, 40], [0, 40]]; // a 4 mm neck: narrower than the 6 mm bit
+const SHAPES = {
+  rectangle: () => polyState([RECT]),
+  L: () => polyState([LSHAPE]),
+  circle: () => polyState([], [['c', [50, 50], 30]]),
+  island: () => polyState([RECT, ISLAND]),
+  dumbbell: () => polyState([DUMBBELL]),
+};
+const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
+const outerLoopOf = (st) => { const loops = findLoops(st); return loops.reduce((a, l) => (Math.abs(area(polysOf(st)[l.id])) > Math.abs(area(polysOf(st)[a.id])) ? l : a), loops[0]); };
+function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y; return a / 2; }
+const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, wallAllowance: ALLOW, rasterAngle: 0, passDepth: null, ...more });
+const cutsOf = (st, rec) => { const loops = findLoops(st); return deriveCuts({ kind: 'loop', id: outerLoopOf(st).id }, rec, st, loops, polysOf(st), new Set()); };
+const exportOf = (st, rec, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
+
+// geometry checks against the pocket's EXACT boundary (its loops' walks: arcs to 0.005 mm)
+const distSeg = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy; const t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)) : 0; return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
+const distPolyline = (p, pts, closed) => { let m = Infinity; const n = closed ? pts.length : pts.length - 1; for (let i = 0; i < n; i++) m = Math.min(m, distSeg(p, pts[i], pts[(i + 1) % pts.length])); return m; };
+const inPoly = (p, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c; } return c; };
+function regionOf(st) {
+  const pocket = deriveProfileCuts({ kind: 'loop', id: outerLoopOf(st).id }, { cutType: 'pocket' }, st, findLoops(st), polysOf(st)).find((c) => c.isCompound);
+  const rings = pocketRings(pocket, st);
+  const toXY = (ring) => ring.slice(0, -1).map(([x, y]) => ({ x, y }));
+  const outer = toXY(rings.outer), holes = rings.holes.map(toXY);
+  return { rings, outer, holes, inside: (p) => inPoly(p, outer) && !holes.some((h) => inPoly(p, h)), dist: (p) => Math.min(distPolyline(p, outer, true), ...holes.map((h) => distPolyline(p, h, true))) };
+}
+const regionsHit = (regions, p) => regions.some((g) => inPoly(p, g.outer.map(([x, y]) => ({ x, y }))) && !g.holes.some((h) => inPoly(p, h.map(([x, y]) => ({ x, y })))));
+// the swept area covers the region minus the reported leftover: every point of a 0.5 mm grid inside the region is within r of a cut path, or in the leftover
+function coverage(name, reg, plan) {
+  const paths = [...plan.clear.map((c) => ({ pts: c.points, closed: c.closed })), ...plan.wall.map((pts) => ({ pts, closed: true })), ...plan.islands.flat().map((pts) => ({ pts, closed: true }))];
+  const xs = reg.outer.map((p) => p.x), ys = reg.outer.map((p) => p.y);
+  let inside = 0, missed = 0, worst = null;
+  for (let x = Math.min(...xs) + 0.25; x < Math.max(...xs); x += 0.5) for (let y = Math.min(...ys) + 0.25; y < Math.max(...ys); y += 0.5) {
+    const p = { x, y };
+    if (!reg.inside(p)) continue;
+    inside++;
+    if (paths.some((q) => distPolyline(p, q.pts, q.closed) <= R + 0.01)) continue;
+    if (regionsHit(plan.leftover.regions, p)) continue;
+    // on the leftover's edge (its slivers are filtered at 0.01 mm): allowed within 0.02 mm of the swept edge
+    if (paths.some((q) => distPolyline(p, q.pts, q.closed) <= R + 0.03)) continue;
+    missed++; worst = p;
+  }
+  eq(missed, 0, `${name}: the swept area covers the region minus the reported leftover (${inside} grid points; first miss ${JSON.stringify(worst)})`);
+}
+
+// ── 1. the rules ──
+const settings = (pattern, more = {}) => ({ ...clearingSettings(POCKET({ clearing: pattern, ...more })), pattern });
+eq([POCKET_CLEARING.stepoverPct.default, POCKET_CLEARING.wallAllowance.mm, POCKET_CLEARING.wallAllowance.in, POCKET_CLEARING.rasterAngle, POCKET_CLEARING.feedMmPerMin], [40, 0.5, 0.508, 0, 1000], 'declared: stepover 40 %, allowance 0.5 mm / 0.02 in, raster 0 deg, the time at 1000 mm/min');
+eq([passDepths(6, null), passDepths(6, 2), passDepths(6, 2.5), passDepths(6, 8), passDepths('unset', 2)], [[6], [2, 4, 6], [2.5, 5, 6], [6], ['unset']], 'depth passes: at most passDepth each, the last at the full depth; unset = one pass');
+const results = {};
+for (const [name, mk] of Object.entries(SHAPES)) {
+  const st = mk(), reg = regionOf(st);
+  // Concentric
+  const conc = planClearing(reg.rings, settings('concentric'));
+  results[name] = { conc };
+  eq(conc.refused, null, `${name}: Concentric is programmed`);
+  ok(conc.levels > 0 && conc.clear.length === conc.loops, `${name}: ${conc.levels} rings, ${conc.loops} loops`);
+  ok(conc.clear.every((c) => c.closed && c.role === 'ring' && c.points.length >= 3), `${name}: every ring is a closed loop`);
+  let worstRing = 0;
+  for (const c of conc.clear) for (const p of c.points) worstRing = Math.max(worstRing, Math.abs(reg.dist(p) - (D0 + c.level * S)));
+  ok(worstRing <= 0.01, `${name}: ring k is the region offset by r + allowance + k * stepover within 0.01 mm (worst ${worstRing.toFixed(5)} mm)`);
+  ok(conc.clear.every((c, i) => i === 0 || c.level <= conc.clear[i - 1].level), `${name}: inside out (the innermost ring first)`);
+  coverage(`${name} concentric`, reg, conc);
+  // Raster at 0 / 45 / 90
+  for (const angle of [0, 45, 90]) {
+    const ras = planClearing(reg.rings, settings('raster', { rasterAngle: angle }));
+    eq(ras.refused, null, `${name}: Raster ${angle} is programmed`);
+    const passes = ras.clear.filter((c) => c.role === 'raster'), cleanup = ras.clear.filter((c) => c.role === 'cleanup');
+    ok(passes.length > 0 && passes.length === ras.passes && cleanup.length === ras.cleanup && cleanup.length >= 1, `${name} raster ${angle}: ${passes.length} passes + ${cleanup.length} clean-up ring(s)`);
+    ok(passes.every((c) => !c.closed && c.points.length === 2), `${name} raster ${angle}: each pass is one open straight path`);
+    let worstIn = Infinity;
+    for (const c of passes) for (let t = 0; t <= 1; t += 0.05) { const a = c.points[0], b = c.points[1], p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; ok(reg.inside(p), `${name} raster ${angle}: inside the region`); worstIn = Math.min(worstIn, reg.dist(p)); }
+    ok(worstIn >= D0 - 0.01, `${name} raster ${angle}: every pass lies inside the inset region (closest ${worstIn.toFixed(4)} mm >= r + allowance ${D0})`);
+    const dir = { x: Math.cos(angle * Math.PI / 180), y: -Math.sin(angle * Math.PI / 180) };
+    ok(passes.every((c) => { const a = c.points[0], b = c.points[1], L = Math.hypot(b.x - a.x, b.y - a.y); return Math.abs(Math.abs(((b.x - a.x) * dir.x + (b.y - a.y) * dir.y) / L) - 1) < 1e-6; }), `${name} raster ${angle}: every pass runs along ${angle} deg (on screen, counterclockwise from X)`);
+    const offs = [...new Set(passes.map((c) => Math.round(c.offset * 1e6) / 1e6))].sort((a, b) => a - b);
+    const steps = offs.slice(1).map((o, i) => (o - offs[i]) / S); // a gap of two or more: no pass there (the inset region is split, e.g. the dumbbell's neck)
+    ok(steps.length === 0 || (steps.every((k) => Math.abs(k - Math.round(k)) < 1e-6) && Math.min(...steps.map(Math.round)) === 1), `${name} raster ${angle}: neighbouring passes are exactly one stepover (${S} mm) apart (every gap a whole number of stepovers: ${[...new Set(steps.map(Math.round))]})`);
+    // the passes' own spacing measured: the distance between neighbouring parallel passes (the perpendicular gap)
+    const nrm = { x: -dir.y, y: dir.x }, proj = (c) => c.points[0].x * nrm.x + c.points[0].y * nrm.y;
+    const gaps = [...new Set(passes.map((c) => Math.round(proj(c) * 1e2) / 1e2))].map((g) => passes.map(proj).find((v) => Math.round(v * 1e2) / 1e2 === g)).sort((a, b) => a - b);
+    ok(gaps.slice(1).every((g, i) => { const k = Math.round((g - gaps[i]) / S); return k >= 1 && Math.abs(g - gaps[i] - k * S) < 2e-3; }), `${name} raster ${angle}: measured spacing == stepover (to the clipper's 0.001 mm grid)`);
+    let zig = true;
+    for (let i = 1; i < passes.length; i++) if (passes[i].offset !== passes[i - 1].offset) { const a = passes[i - 1], b = passes[i]; const da = { x: a.points[1].x - a.points[0].x, y: a.points[1].y - a.points[0].y }, db = { x: b.points[1].x - b.points[0].x, y: b.points[1].y - b.points[0].y }; if (da.x * db.x + da.y * db.y >= 0) zig = false; }
+    ok(zig, `${name} raster ${angle}: consecutive passes alternate direction (zigzag)`);
+    let worstClean = 0;
+    for (const c of cleanup) for (const p of c.points) worstClean = Math.max(worstClean, Math.abs(reg.dist(p) - D0));
+    ok(worstClean <= 0.01, `${name} raster ${angle}: the clean-up ring is the region offset by r + allowance (worst ${worstClean.toFixed(5)})`);
+    coverage(`${name} raster ${angle}`, reg, ras);
+    if (angle === 0) results[name].ras = ras;
+  }
+  // Morphed spiral
+  const sp = planClearing(reg.rings, settings('spiral'));
+  results[name].sp = sp;
+  if (name === 'island') { eq([sp.refused, sp.spiralBlocked, sp.clear.length], ['spiral islands', 'islands', 0], 'island: the spiral is refused: has islands'); continue; }
+  if (name === 'dumbbell') { eq([sp.refused, sp.spiralBlocked, sp.clear.length], ['spiral splits', 'splits', 0], 'dumbbell: the spiral is refused: the rings split at the neck'); continue; }
+  eq([sp.refused, sp.clear.length, sp.clear[0].role, sp.clear[0].closed], [null, 1, 'spiral', false], `${name}: the spiral is ONE open path`);
+  const pts = sp.clear[0].points, starts = sp.clear[0].turnStarts;
+  eq(starts.length, conc.levels + 1, `${name}: ${starts.length} turns = the central loop + one per ring out + the closing turn`);
+  let worstIn = Infinity;
+  for (const p of pts) { ok(reg.inside(p), `${name} spiral: inside the region`); worstIn = Math.min(worstIn, reg.dist(p)); }
+  ok(worstIn >= D0 - 0.02, `${name} spiral: inside the inset region (closest ${worstIn.toFixed(4)} mm)`);
+  const turn = (j) => pts.slice(starts[j], j + 1 < starts.length ? starts[j + 1] + 1 : pts.length);
+  let worstGap = 0;
+  for (let j = 0; j + 1 < starts.length; j++) {
+    const a = turn(j), b = turn(j + 1);
+    for (let i = 0; i + 1 < a.length; i++) {
+      const L = Math.hypot(a[i + 1].x - a[i].x, a[i + 1].y - a[i].y), n = Math.max(1, Math.ceil(L / 0.2));
+      for (let k = 0; k < n; k++) { const p = { x: a[i].x + ((a[i + 1].x - a[i].x) * k) / n, y: a[i].y + ((a[i + 1].y - a[i].y) * k) / n }; worstGap = Math.max(worstGap, distPolyline(p, b, false)); }
+    }
+  }
+  ok(worstGap <= S + 0.03, `${name} spiral: every turn is within one stepover of the next turn out (worst ${worstGap.toFixed(4)} mm, stepover ${S})`);
+  const last = turn(starts.length - 1);
+  let worstLast = 0;
+  for (const p of last) worstLast = Math.max(worstLast, Math.abs(reg.dist(p) - D0));
+  ok(worstLast <= 0.02, `${name} spiral: the closing turn runs along the inset contour (worst ${worstLast.toFixed(4)})`);
+  near(Math.hypot(pts[0].x - last[last.length - 1].x, pts[0].y - last[last.length - 1].y) > 0 ? 1 : 0, 1, 0, `${name} spiral: it starts in the middle, not where it ends`);
+  coverage(`${name} spiral`, reg, sp);
+}
+const corner = 4 * (1 - Math.PI / 4) * R * R;
+near(results.rectangle.conc.leftover.area, corner, corner * 0.03, 'rectangle: the leftover is its 4 sharp corners, 4 (1 - pi/4) r²');
+near(results.rectangle.conc.leftover.missed, 0, 0.1, 'rectangle: nothing missed between rings');
+near(results.circle.conc.leftover.area, 0, 0.1, 'circle: no leftover');
+ok(results.dumbbell.conc.leftover.area > 50 && results.dumbbell.conc.leftover.unreachable > 50, `dumbbell: the 4 mm neck is reported (${results.dumbbell.conc.leftover.area.toFixed(1)} mm² not reached by the 6 mm bit)`);
+ok(results.dumbbell.conc.loops > results.dumbbell.conc.levels, 'dumbbell: the rings split into two areas');
+ok(results.island.conc.loops > results.island.conc.levels, 'island: rings round the island too');
+{ // a stepover too big for the bit: the pattern misses material, and says so (100 x 66, 100 %: the last ring leaves a 5 mm strip the 3 mm radius cannot reach)
+  const reg = regionOf(polyState([[[0, 0], [100, 0], [100, 66], [0, 66]]]));
+  const big = planClearing(reg.rings, settings('concentric', { stepover: 100 }));
+  ok(big.leftover.missed > POCKET_CLEARING.leftoverTolMm2, `concentric at 100 %: ${big.leftover.missed.toFixed(1)} mm² missed between passes, reported`);
+  near(planClearing(reg.rings, settings('concentric')).leftover.missed, 0, 0.1, 'the same pocket at 40 %: nothing missed');
+}
+console.log('rules: ' + JSON.stringify(Object.fromEntries(Object.entries(results).map(([k, v]) => [k, { rings: v.conc.levels, loops: v.conc.loops, rasterPasses: v.ras.passes, turns: v.sp.turns, leftoverMm2: +v.conc.leftover.area.toFixed(2) }]))));
+
+// ── 2. the export ──
+const elementsOf = (svg) => {
+  const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
+  const out = []; let group = null;
+  for (const line of svg.split('\n').map((l) => l.trim())) {
+    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('</g')) { group = null; continue; }
+    const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
+    if (!m) continue;
+    const a = { ...(group || {}), ...attrs(m[2]) };
+    out.push({ tag: m[1], cutType: a['shaper:cutType'], depth: a['shaper:cutDepth'], tool: a['shaper:toolDia'], offset: a['shaper:cutOffset'], d: a.d || null, clear: a['data-clear'] || null });
+  }
+  return out;
+};
+{
+  const st = SHAPES.island();
+  const plain = { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT };
+  const cuts = deriveProfileCuts({ kind: 'loop', id: outerLoopOf(st).id }, plain, st, findLoops(st), polysOf(st));
+  ok(applyPocketClearing(cuts, plain, st) === cuts && applyPocketClearing(cuts, { ...plain, clearing: 'freehand', stepover: 30 }, st) === cuts, 'Freehand: applyPocketClearing returns the SAME array (the derivation is untouched)');
+  const svg0 = exportOf(st, plain);
+  eq(exportOf(st, { ...plain, clearing: 'freehand', stepover: 30, wallAllowance: 1, passDepth: 2, rasterAngle: 45 }), svg0, 'Freehand: byte-identical to a record without clearing (the settings never reach the file)');
+  eq(elementsOf(svg0).map((e) => e.cutType), ['pocket'], 'Freehand: one pocket element, as before');
+  // Concentric with 3 depth passes
+  const rec = POCKET({ clearing: 'concentric', passDepth: 2 });
+  const plan = results.island.conc;
+  const els = elementsOf(exportOf(st, rec));
+  const rings = els.filter((e) => e.cutType === 'online');
+  eq(rings.length, plan.loops * 3, `Concentric x 3 depth passes: ${plan.loops} rings at each of 2 / 4 / 6 mm`);
+  eq([...new Set(rings.map((e) => e.depth))], ['2.000 mm', '4.000 mm', '6.000 mm'], 'the ring set at each pass depth, shallow to deep');
+  ok(rings.every((e) => /Z$/.test(e.d) && e.tool === '6.000 mm' && e.offset === '0mm'), 'every ring is a closed on-line path with the card\'s bit (toolDia 6 mm), offset 0');
+  const byDepth = (d) => rings.filter((e) => e.depth === d).map((e) => e.d);
+  eq(byDepth('2.000 mm'), byDepth('6.000 mm'), 'each depth pass repeats the same rings');
+  eq(els.slice(-2).map((e) => [e.cutType, e.depth]), [['inside', '6.000 mm'], ['outside', '6.000 mm']], 'last: the wall as an inside cut and the island as an outside cut, at the full depth');
+  eq(els.at(-2).d, elementsOf(exportOf(st, plain))[0].d.split(' M ')[0], 'the wall is the pocket\'s own outer loop, exactly as the file writes it');
+  // the exported rings are the derivation's: each ring's points = the plan's
+  const first = rings.filter((e) => e.depth === '6.000 mm').map((e) => e.d.replace(/[MLZ]/g, ' ').trim().split(/\s+/).map(Number));
+  const planPts = plan.clear.map((c) => c.points.flatMap((p) => [Math.round(p.x * 1e4) / 1e4, Math.round(p.y * 1e4) / 1e4]));
+  eq(first, planPts, 'the file\'s rings are the derivation\'s rings, point for point (inside out)');
+  // the preview copy: data-clear on each element; the download has none
+  const pv = elementsOf(exportOf(st, rec, { groupByCut: true, previewData: true }));
+  eq(pv.filter((e) => e.cutType === 'online').map((e) => e.clear), [1, 2, 3].flatMap((p) => plan.clear.map((c) => `ring ${c.index}/${plan.levels} pass ${p}/3`)), 'preview: data-clear "ring k/N pass p/P" (the loops of one ring share its k)');
+  eq(pv.slice(-2).map((e) => e.clear), ['wall', 'island 1/1'], 'preview: "wall", "island 1/1"');
+  ok(!/data-/.test(exportOf(st, rec)), 'the download has no data-* attribute');
+  // the 3D Review / Prepare: one footprint per cut, the band = the sweep of the cut's own centre path
+  const cutsP = cutsOf(st, rec), fps = deriveCutFootprint(cutsP, rec, st);
+  eq(fps.length, cutsP.length, 'one footprint per cut');
+  ok(fps.every((f) => f.clearing && f.rings.length > 0), 'every footprint carries its clearing role and its swept band');
+  // Raster + spiral export: open paths
+  const ras = elementsOf(exportOf(SHAPES.rectangle(), POCKET({ clearing: 'raster' })));
+  ok(ras.filter((e) => e.cutType === 'online').length === results.rectangle.ras.passes + 1 && ras.filter((e) => e.cutType === 'online' && !/Z$/.test(e.d)).length === results.rectangle.ras.passes, 'Raster: open on-line passes + the closed clean-up ring');
+  const spx = elementsOf(exportOf(SHAPES.L(), POCKET({ clearing: 'spiral' })));
+  eq(spx.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', false], ['inside', true]], 'Morphed spiral: ONE open on-line path, then the wall');
+  const refused = elementsOf(exportOf(SHAPES.island(), POCKET({ clearing: 'spiral' })));
+  eq(refused.map((e) => e.cutType), ['pocket'], 'a refused spiral (islands) is cut Freehand (its note says so)');
+}
+
+// ── 3. the app ──
+SettingsManager.set('DOC_UNIT', 'mm');
+SettingsManager.set('LENGTH_PRECISION', null);
+const drawInto = (app, st0) => {
+  const st = app.state;
+  for (const k of [...st.joints.keys()]) st.joints.delete(k);
+  st.shapes.length = 0; st.constraints.length = 0;
+  for (const [k, v] of st0.joints) st.joints.set(k, v);
+  st.shapes.push(...st0.shapes);
+};
+const harness = (app) => {
+  const doc = app.document, q = (s) => doc.querySelector(s);
+  const pressEl = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
+  const clickAt = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
+  const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
+  const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
+  const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const shown = (row) => q(`.cut-row[data-row="${row}"]`).style.display !== 'none';
+  const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);
+  const ops = () => [...doc.querySelectorAll('#prepare-ops .ops-row')].map((r) => `${r.querySelector('.ops-name').textContent} | ${r.querySelector('.ops-sub').textContent}`);
+  return { q, pressEl, clickAt, pick, clearing, note, typed, shown, step, ops };
+};
+const keyAt = (st, x, y) => { const loops = findLoops(st), lp = polysOf(st); const l = loops.filter((x0) => inPoly({ x, y }, lp[x0.id])).sort((a, b) => Math.abs(area(lp[a.id])) - Math.abs(area(lp[b.id])))[0]; return keyOf('loop', l.id); };
+let svgSaved = null, recSaved = null;
+const profile = await createProfile();
+await createNamedDesign(profile, 'shaper', 'Pocket 745');
+{
+  CUT_PLAN.clear(); setOpOrder([]);
+  const app = await open({ host: 'shaper', profile });
+  try {
+    const h = harness(app), st = app.state;
+    h.pressEl('.sk-header-tab[data-tab="design"]');
+    // a pocket with an island (left), a plain rectangle pocket (right), a second plain pocket (bottom right)
+    drawInto(app, polyState([RECT, ISLAND, [[120, 0], [220, 0], [220, 60], [120, 60]], [[120, 80], [180, 80], [180, 120], [120, 120]]]));
+    st.saveState('draw');
+    h.pressEl('.sk-header-tab[data-tab="prepare"]');
+    h.clickAt(170, 10);
+    h.pick('pocket');
+    h.typed('.cut-depth', '6');
+    h.typed('.cut-bit', '6');
+    ok(h.shown('clearing') && !h.shown('stepover') && !h.shown('wallAllowance') && !h.shown('passDepth') && !h.shown('rasterAngle'), 'Pocket: the Clearing row, Freehand: no other clearing row');
+    eq([h.q('.cut-clear-cur').textContent, h.note()], ['Freehand', []], 'Freehand by default, no note');
+    const kR = keyAt(st, 170, 10), svgFree = shaperSvgOf(st, cutPlanEntries());
+    h.pressEl('.cut-clear-trigger');
+    eq([...app.document.querySelectorAll('.cut-clear-opt')].map((b) => [b.dataset.clearing, b.querySelector('.cut-clear-name').textContent, b.disabled, b.querySelector('svg.cut-ic') !== null]),
+      [['freehand', 'Freehand', false, true], ['concentric', 'Concentric', false, true], ['raster', 'Raster', false, true], ['spiral', 'Morphed spiral', false, true]], 'the dropdown: 4 choices, each with its pattern icon');
+    h.pressEl('.cut-clear-trigger');
+    let n0 = st.history.length;
+    h.clearing('concentric');
+    eq(st.history.length, n0 + 1, 'Concentric: ONE undo step');
+    const r = CUT_PLAN.get(kR);
+    eq([r.clearing, r.stepover, r.wallAllowance, r.passDepth, r.rasterAngle], ['concentric', 40, 0.5, null, 0], 'the defaults: stepover 40 %, allowance 0.5 mm, one pass, raster 0');
+    ok(h.shown('stepover') && h.shown('wallAllowance') && h.shown('passDepth') && !h.shown('rasterAngle'), 'Concentric: Stepover, Wall allowance, Depth per pass (no Raster angle)');
+    eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-wall-allowance').value, h.q('.cut-pass-depth').value, h.q('.cut-pass-depth').placeholder], ['40', '= 2.4 mm', '0.500', '', 'full depth'], 'the fields: 40 % = 2.4 mm, 0.500, depth per pass empty (full depth)');
+    const nt = h.note();
+    console.log('card note: ' + JSON.stringify(nt));
+    ok(/^Pocket: 12 rings \+ wall, stepover 2\.4 mm, \d+\.\d m of path, about \d+ min at 1000 mm\/min$/.test(nt[0]), 'the note: rings + wall, stepover, path length, time at the declared feed: ' + nt[0]);
+    eq(nt[1], 'Drawn for a 6 mm bit: a smaller bit leaves ridges', 'the note names the bit the rings are drawn for');
+    ok(/^Leftover: 7\.\d mm² not reached by a 6 mm bit \(sharp inside corners, necks narrower than the bit\)$/.test(nt[2]), 'the leftover (the 4 corners): ' + nt[2]);
+    ok(h.q('.cut-note .cut-note-warn') && h.q('.cut-note .cut-note-warn').textContent.startsWith('7.'), 'the leftover is in the warning colour');
+    const els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
+    eq(els.map((e) => e.cutType), [...Array(12).fill('online'), 'inside'], 'the download: 12 rings + the wall');
+    // the stepper: + 5 % -> 45 %, ONE undo step, the rings redraw
+    n0 = st.history.length;
+    h.step('stepover', 1);
+    eq([CUT_PLAN.get(kR).stepover, st.history.length], [45, n0 + 1], 'stepover + -> 45 %, ONE undo step');
+    ok(/^Pocket: 10 rings \+ wall, stepover 2\.7 mm/.test(h.note()[0]), 'the note follows: ' + h.note()[0]);
+    h.typed('.cut-bit', '3.175');
+    ok(/^Pocket: \d+ rings \+ wall, stepover 1\.43 mm/.test(h.note()[0]) && h.note()[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
+    app.undo();
+    eq(CUT_PLAN.get(kR).toolDia, 6, 'undo: the bit back to 6 mm');
+    // Raster: + its angle row; presets
+    h.clearing('raster');
+    ok(h.shown('rasterAngle'), 'Raster: the Raster angle row');
+    eq([...h.q('.cut-angle-presets').querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['0°*', '45°', '90°'], 'angle presets 0 / 45 / 90, 0 active');
+    ok(/^Pocket: raster 0°: \d+ passes \+ 1 ring \+ wall/.test(h.note()[0]), 'Raster note: ' + h.note()[0]);
+    h.pressEl('.cut-angle-presets .cut-preset[data-value="45"]');
+    eq(CUT_PLAN.get(kR).rasterAngle, 45, 'preset 45');
+    ok(/^Pocket: raster 45°/.test(h.note()[0]), 'the note follows the angle');
+    // depth per pass
+    h.typed('.cut-pass-depth', '2');
+    eq(CUT_PLAN.get(kR).passDepth, 2, 'depth per pass 2 mm');
+    ok(h.note().some((t) => t === 'Depth passes at 2 · 4 · 6 mm; the wall at the full depth') && /× 3 depth passes \+ wall/.test(h.note()[0]), 'the note lists the depth passes');
+    h.typed('.cut-pass-depth', '');
+    eq(CUT_PLAN.get(kR).passDepth, null, 'empty = one pass at the full depth');
+    // the spiral
+    h.clearing('spiral');
+    ok(/^Pocket: morphed spiral: \d+ turns \+ wall/.test(h.note()[0]) && !h.shown('rasterAngle'), 'Morphed spiral: its note, no angle row');
+    // the island pocket: the spiral greyed with its reason
+    h.clickAt(5, 5);
+    h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
+    h.pressEl('.cut-clear-trigger');
+    const spiralOpt = h.q('.cut-clear-opt[data-clearing="spiral"]');
+    eq([spiralOpt.disabled, spiralOpt.classList.contains('is-disabled'), spiralOpt.querySelector('.cut-clear-why').textContent], [true, true, 'has islands: use Concentric or Raster'], 'the island pocket: Morphed spiral greyed with its reason');
+    h.pressEl('.cut-clear-opt[data-clearing="concentric"]');
+    const kI = keyAt(st, 5, 5);
+    eq(CUT_PLAN.get(kI).clearing, 'concentric', 'the island pocket: Concentric');
+    // the operations list: ONE row per programmed pocket
+    const list = h.ops();
+    console.log('ops: ' + JSON.stringify(list));
+    ok(list.some((t) => /^Pocket \(concentric\) · 6 mm \| 1 region · 7 rings \(14 loops\) \+ wall$/.test(t)) && list.some((t) => /^Pocket \(morphed spiral\) · 6 mm \| 1 region · morphed spiral: \d+ turns \+ wall$/.test(t)), 'the operations list: ONE row per programmed pocket with its clearing');
+    // the 3D Review: every cut at its own depth
+    const items = planReliefItems(st);
+    ok(items.length > 2 && items.every((i) => i.cutDepth === 6), `Review: ${items.length} items (the spiral, the rings, walls, the island), all at 6 mm`);
+    svgSaved = shaperSvgOf(st, cutPlanEntries()); recSaved = JSON.stringify([...CUT_PLAN]);
+    ok(svgSaved !== svgFree, 'the download changed with the clearing');
+    const d = await app.storedDoc();
+    ok(JSON.stringify(d.hosts.shaper.cutPlan).includes('"clearing":"spiral"'), 'the autosave stores the clearing');
+  } finally { await app.close(); }
+}
+CUT_PLAN.clear(); setOpOrder([]);
+{
+  const app = await open({ host: 'shaper', profile });
+  try {
+    app.modes.showMode('prepare');
+    eq(JSON.stringify([...CUT_PLAN]), recSaved, 'after a reload the records are back');
+    eq(shaperSvgOf(app.state, cutPlanEntries()), svgSaved, 'and the download is byte-identical');
+    // the bin of an operation with 2 regions: both unassigned in ONE undo step
+    const h = harness(app), st = app.state;
+    h.clickAt(130, 90); h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
+    h.clickAt(5, 5); h.pick('exterior');
+    h.clickAt(130, 90, { shift: true });
+    // two plain pockets of the same settings = one operation: make the second like the first
+    CUT_PLAN.clear(); setOpOrder([]);
+    const kA = keyAt(st, 170, 10), kB = keyAt(st, 130, 90), kI = keyAt(st, 5, 5);
+    CUT_PLAN.set(kA, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
+    CUT_PLAN.set(kB, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
+    CUT_PLAN.set(kI, { cutType: 'exterior', cutDepth: 12, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
+    app.prepare.view().refreshLook(); app.prepare.opList.refresh();
+    const rows = [...app.document.querySelectorAll('#prepare-ops .ops-row')];
+    eq(h.ops(), ['Pocket · 6 mm | 2 regions', 'Outside · 12 mm | 1 region'], 'two operations: the 2 pockets, the outside');
+    h.pressEl(rows[0].querySelector('.ops-pick'));
+    eq(app.prepare.view().selection.size, 2, 'the pockets\' operation is picked');
+    const before = shaperSvgOf(st, cutPlanEntries()), elsBefore = elementsOf(before), plan0 = JSON.stringify([...CUT_PLAN]), order0 = opOrder();
+    const bin = rows[0].querySelector('.ops-del');
+    eq([bin.textContent, bin.getAttribute('aria-label')], ['\u{1F5D1}', 'Delete operation 1: unassign its 2 regions'], 'the row\'s bin (the Parameters table\'s glyph)');
+    const n0 = st.history.length;
+    h.pressEl(bin);
+    eq(st.history.length, n0 + 1, 'the delete is ONE undo step');
+    eq([CUT_PLAN.get(kA).cutType, CUT_PLAN.get(kB).cutType, CUT_PLAN.get(kI).cutType], [null, null, 'exterior'], 'both regions unassigned (cut type cleared), the other kept');
+    eq(h.ops(), ['Outside · 12 mm | 1 region'], 'the list loses the operation');
+    eq(app.prepare.view().selection.size, 0, 'the selection (that operation) clears');
+    const elsAfter = elementsOf(shaperSvgOf(st, cutPlanEntries()));
+    eq(elsAfter, elsBefore.filter((e) => e.cutType !== 'pocket'), 'the export loses exactly those two pocket elements');
+    eq(st.shapes.length, 16, 'the sketch geometry is untouched');
+    app.undo();
+    eq(JSON.stringify([...CUT_PLAN]), plan0, 'Ctrl+Z: the records back');
+    eq([opOrder(), h.ops()], [order0, ['Pocket · 6 mm | 2 regions', 'Outside · 12 mm | 1 region']], 'and the operation in its place');
+    eq(shaperSvgOf(st, cutPlanEntries()), before, 'the export as before');
+  } finally { await app.close(); }
+}
+CUT_PLAN.clear(); setOpOrder([]);
+{ // inches: the allowance default is 0.02 in
+  SettingsManager.set('DOC_UNIT', 'in');
+  const app = await open({ host: 'shaper' });
+  try {
+    const h = harness(app), st = app.state;
+    h.pressEl('.sk-header-tab[data-tab="design"]');
+    drawInto(app, polyState([RECT])); st.saveState('draw');
+    h.pressEl('.sk-header-tab[data-tab="prepare"]');
+    h.clickAt(50, 30); h.pick('pocket'); h.typed('.cut-depth', '0.25'); h.typed('.cut-bit', '0.25');
+    h.clearing('concentric');
+    const r = CUT_PLAN.get(keyAt(st, 50, 30));
+    eq(r.wallAllowance, 0.508, 'inches: the allowance default 0.02 in (0.508 mm)');
+    eq(r.stepover, 45, 'the last stepover set (45 %, above) is used by the next pocket');
+    eq(h.q('.cut-wall-allowance').value, '0.020', 'shown as 0.020 in');
+    ok(/^Pocket: \d+ rings \+ wall, stepover 0\.1125 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[0]), 'the inch note: ' + h.note()[0]);
+    ok(/^Leftover: 0\.\d+ in² not reached by a 0\.25 in bit/.test(h.note().at(-1)), 'the inch leftover: ' + h.note().at(-1));
+  } finally { await app.close(); SettingsManager.set('DOC_UNIT', 'mm'); }
+}
+CUT_PLAN.clear(); setOpOrder([]);
+console.log(`pocket-clearing-745-node.test.js: ok (${checks} checks)`);

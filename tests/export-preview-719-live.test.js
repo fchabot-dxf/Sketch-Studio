@@ -42,7 +42,7 @@ const tap = async (x, y) => {
 };
 // a real click / tap on the element's centre, after checking nothing covers it there
 const clickEl = async (sel) => {
-  const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect();
+  const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); // TASK 743: the side card scrolls (the operations list is taller)
     const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
     return { x, y, onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
   assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
@@ -124,8 +124,8 @@ try {
     console.log('legend / chips: ' + JSON.stringify(ui));
     assert.ok(/lighter = shallower/.test(ui.legend) && ui.chips.length === 4, 'the legend and 4 chips');
   }
-  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-row')].findIndex((b) => b.textContent.includes('10.000 mm'))`);
-  await clickEl(`#review-cuts-list .rv2d-row:nth-of-type(${row10 + 1})`);
+  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && b.textContent.includes('10.000 mm'))`);
+  await clickEl(`#review-cuts-list > button:nth-of-type(${row10 + 1})`); // TASK 743: the list's buttons are the operation headers and their rows
   assert.strictEqual(await label(), 'pocket · 10.000 mm');
   if (!BEFORE) assert.strictEqual(await pinkStroke(), 'rgb(255, 45, 149)', 'the picked element keeps its pink outline over the shading');
   await shot('desktop-2d-real-solid.png', '#view-review');

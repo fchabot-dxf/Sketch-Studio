@@ -147,6 +147,11 @@
     #review-2d-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; max-width: calc(100% - 20px); font: 13px system-ui, sans-serif; color: #e6e6e6; background: rgba(15,19,32,0.85); border-radius: 6px; padding: 5px 9px; line-height: 1.4; }
     .review-cuts-list { display: flex; flex-direction: column; gap: 2px; }
     .rv2d-type { display: flex; justify-content: space-between; margin-top: 6px; color: #e6e6e6; font-weight: 600; text-transform: capitalize; }
+    /* TASK 743: the 2D list is the operations list: a tool heading per run of one bit, an operation header (a tap picks all its elements), then its rows */
+    .rv2d-tool { margin-top: 10px; color: #9aa0a6; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .rv2d-op { display: flex; justify-content: space-between; gap: 8px; width: 100%; margin-top: 4px; background: transparent; color: #e6e6e6; border: 1px solid transparent; border-radius: 4px; padding: 4px 8px 2px 2px; font: 600 13px system-ui, sans-serif; text-align: left; cursor: pointer; }
+    .rv2d-op[aria-pressed="true"] { border-color: #ff2d95; }
+    .rv2d-op > span:first-child { flex: 1; }
     .rv2d-row { display: flex; justify-content: space-between; gap: 8px; width: 100%; background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 4px; padding: 5px 8px; font: 13px system-ui, sans-serif; text-align: left; cursor: pointer; }
     .rv2d-row[aria-pressed="true"] { border-color: #ff2d95; color: #fff; }
     .rv2d-legend { display: flex; align-items: center; gap: 6px; color: #9aa0a6; font-size: 12px; margin-bottom: 4px; } /* TASK 719 */
@@ -170,7 +175,7 @@
       #vcarve-panel { flex: 0 0 40%; border-right: 0; border-top: 1px solid #1f2937; }
       #view-review { flex-direction: column; }
       #review-side { width: auto; flex: 0 0 40%; border-left: 0; border-top: 1px solid #1f2535; }
-      .rv2d-row { min-height: 40px; align-items: center; } /* TASK 718: a list row is a touch target */
+      .rv2d-row, .rv2d-op { min-height: 40px; align-items: center; } /* TASK 718: a list row is a touch target (TASK 743: an operation header too) */
     }
     /* SP1j-4: the Export panel (dark chrome) — a Generate button + a status line. */
     #simexport-panel { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
@@ -355,6 +360,43 @@
       .vcarve-stepbox .cut-step, .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
       .vcarve-stepbox input, .review-stepbox input { height: 44px; box-sizing: border-box; }
     }
+    /* TASK 743: the OPERATIONS list (op-list.js): a card like the cut card, top-left of the Prepare view on a wide screen (it ends above the direction
+       legend; its rows scroll), a folding bar along the bottom on a phone (open: up to 55 % of the view; the cut card then ends above the bar).
+       Rows: a drag grip, the number, the operation (type · depths, regions · steps / tabs), and up / down buttons (44 px on a phone). */
+    #prepare-ops { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
+      background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
+    #view-prepare.is-fusion #prepare-ops { top: 56px; max-height: calc(100% - 96px); }
+    .ops-head { all: unset; box-sizing: border-box; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .ops-count { min-width: 20px; text-align: center; background: var(--sk-prep-field-bg); color: var(--sk-prep-unit); border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+    .ops-caret { margin-left: auto; transition: transform 0.12s; }
+    #prepare-ops[data-open="false"] .ops-caret { transform: rotate(-90deg); }
+    .ops-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 10px; }
+    .ops-body[hidden] { display: none; }
+    .ops-tool { margin: 8px 6px 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sk-prep-unit); }
+    .ops-row { display: flex; align-items: stretch; gap: 0; min-height: 44px; margin-bottom: 4px; background: var(--sk-prep-field-bg); border: 2px solid transparent; border-radius: 6px; box-sizing: border-box; }
+    .ops-row.is-picked { border-color: var(--sk-prep-geo-selected); }
+    .ops-grip { flex: 0 0 24px; display: flex; align-items: center; justify-content: center; color: var(--sk-prep-unit); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .ops-pick { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 4px; cursor: pointer; }
+    .ops-num { flex: 0 0 20px; height: 20px; border-radius: 50%; background: var(--sk-prep-card-bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+    .ops-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+    .ops-name { font-size: 13px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+    .ops-sub { font-size: 11px; line-height: 1.3; color: var(--sk-prep-unit); overflow-wrap: anywhere; }
+    .ops-move { all: unset; box-sizing: border-box; flex: 0 0 28px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--sk-prep-chip-text); cursor: pointer; touch-action: manipulation; }
+    .ops-move:disabled { opacity: 0.3; cursor: default; }
+    .ops-move:not(:disabled):active { background: var(--sk-prep-selected-fill); }
+    .ops-row.ops-dragging { opacity: 0.5; }
+    .ops-row.ops-drop-before { box-shadow: 0 -3px 0 var(--sk-prep-focus); }
+    .ops-row.ops-drop-after { box-shadow: 0 3px 0 var(--sk-prep-focus); }
+    .ops-empty { margin: 2px 6px 4px; font-size: 12px; line-height: 1.4; color: var(--sk-prep-unit); }
+    @media (max-width: 640px) {
+      #prepare-ops, #view-prepare.is-fusion #prepare-ops { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 55%; }
+      .ops-head { height: 44px; }
+      .ops-row { min-height: 48px; }
+      .ops-grip { flex-basis: 32px; }
+      .ops-move { flex-basis: 44px; font-size: 20px; }
+      #prepare-panel { bottom: 68px; }        /* the cut card ends above the folded bar (12 + 44 + 12) */
+      #prepare-dir-legend { bottom: 66px; }
+    }
     .cut-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
     .cut-presets .cut-preset { all: unset; box-sizing: border-box; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; }
     .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
@@ -436,6 +478,7 @@
   <section id="view-prepare" hidden>
     <svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     <div id="prepare-panel"></div>
+    <div id="prepare-ops"></div>
     <div id="prepare-notice" hidden></div>
     <div id="prepare-dir-legend" hidden>direction: conventional (Shaper Origin)</div>
   </section>

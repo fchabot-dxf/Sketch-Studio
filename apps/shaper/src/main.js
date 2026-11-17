@@ -23,7 +23,8 @@ import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vca
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
-import { shaperSvgOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy)
+import { shaperSvgOf, shaperPreviewOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations
+import { opOrder } from './operations.js';            // TASK 743: the operation order (the 2D view rebuilds when it changes)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
@@ -86,7 +87,7 @@ function activeVcarves() {
   return Array.isArray(vs) ? vs.filter((v) => v && v.region) : [];
 }
 
-// TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes)
+// TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes) and (TASK 743) the operations it lists
 function generateShaperSvgPayload({ preview = false } = {}) {
   const entries = cutPlanEntries();
   const vcarves = activeVcarves();
@@ -94,8 +95,8 @@ function generateShaperSvgPayload({ preview = false } = {}) {
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  const svg = shaperSvgOf(st, entries, { preview });
-  return { svg, entries, vcarves, state: st };
+  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, entries, vcarves, state: st }; }
+  return { svg: shaperSvgOf(st, entries), entries, vcarves, state: st };
 }
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
@@ -275,7 +276,7 @@ let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted on
 const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
-  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'),
+  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), // TASK 743: the operations list
   ensureSketch, notify: groupStatus, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
 });
 
@@ -387,7 +388,7 @@ const reviewInputs = (st) => {
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
   return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps
 };
-const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit()]); // TASK 714: the notes are in the doc unit
+const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder()]); // TASK 714: the notes are in the doc unit; TASK 743: the 2D file's groups follow the operation order
 // TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
 const REVIEW_VIEW_KEY = 'shaper-review-view';
 let reviewViewMode = '3d';
@@ -398,7 +399,7 @@ let reviewLook = normaliseLook(null);
 try { const s = localStorage.getItem(REVIEW_LOOK_KEY); if (s) reviewLook = normaliseLook(JSON.parse(s)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY read failed', err && err.message); }
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
-  getSvg: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? p.svg : null; },
+  getPreview: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? { svg: p.svg, ops: p.ops } : null; }, // TASK 743: + the operations (display only)
 });
 function showReviewViewMode() {
   const is2d = reviewViewMode === '2d';

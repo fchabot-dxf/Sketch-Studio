@@ -136,7 +136,9 @@ function datumPolygon(datum) {
 //                                             two cuts' steps at the same depth are written alike). Never in the downloaded file: with it
 //                                             off (the default) the string is byte-identical; the attribute is on the element only, so the
 //                                             <g> grouping is the same either way. TASK 742: a held cut's element carries data-hold
-//                                             ("pass" | "skin" | "gap k/N", holdData) the same way.
+//                                             ("pass" | "skin" | "gap k/N", holdData) the same way. TASK 743: an entry may carry `op` (the id of
+//                                             the app's OPERATION it belongs to, a display grouping); its elements carry data-op="<id>" the
+//                                             same way (the Export step's operations list finds them by it). The file never changes.
 // TASK 742: the PREVIEW copy's data-hold of a held cut (#core/hold-part): "pass" (tabs' pass 1) | "skin" (an onion skin) | "gap k/N" (a gap strip);
 // a refused hold or none: nothing. Never in the downloaded file (previewData only).
 function holdData(hold) {
@@ -237,7 +239,8 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       } else if (cut.loop) {
         geom = loopGeom(cut.loop, state, shapeById);
       }
-      const data = options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) : '');
+      const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) : ''))
+        + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
       if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
     }
   }

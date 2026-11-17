@@ -1,6 +1,7 @@
 // tests/save-key-leave-node-runner.js — TASK 583 (the node port of tests/save-key-leave-runner.js, TASK 558, owner rulings 2026-11-12), a real host through
 // tests/helpers/node-app.js with the shared sidebar mounted (open({ sidebar: true })):
-//   Ctrl+S on an unsaved Untitled opens the Save as name prompt (in the sidebar); the typed name stores it.
+//   Ctrl+S on an unsaved Untitled opens THE Save as dialog (TASK 759: the modal with the Google Drive | Local tabs; this store has no Drive, so its Drive tab
+//   is the store and ready); the typed name stores it.
 //   Ctrl+S on a named design writes the pending autosave NOW (before the 1.5 s poll); no prompt.
 //   Ctrl+S never reaches the canvas shortcuts (a bare "s" there picks the Select tool).
 //   The page's leave-page warning (`beforeunload`) is armed while an unsaved Untitled has content, and NOT for a clean Untitled or a named, saved design.
@@ -42,14 +43,16 @@ export async function runSaveKeyLeave({ host }) {
     drawLine();
     assert.strictEqual(leaveWarns(app), false, 'an unsaved Untitled with content lives in the working buffer: no leave-page warning');
     assert.strictEqual(shapes(), 1, 'the drawing is there');
-    // 3. Ctrl+S on the unsaved Untitled: the Save as name prompt, in the sidebar; Ctrl+S does not pick the Select tool
+    // 3. Ctrl+S on the unsaved Untitled: THE Save as dialog (TASK 759), its name field focused; Ctrl+S does not pick the Select tool
     console.log(`${host} step 3`);
     app.tool('line');
     const lineActive = () => q('#tool-line').classList.contains('active');
     const activeBefore = lineActive();
     ctrlS();
-    await app.waitFor(() => !!q('.sk-sidebar-ask input'), 'Ctrl+S on an unsaved design: the Save as name prompt', 5000);
-    assert.strictEqual(q('.sk-sidebar-ask input').value, 'Untitled', 'the prompt starts from the current name');
+    await app.waitFor(() => !!q('.sk-fd[data-file-dialog="save"] input'), 'Ctrl+S on an unsaved design: the Save as dialog', 5000);
+    assert.strictEqual(q('.sk-fd input').value, 'Untitled', 'the name field starts from the current name');
+    assert.strictEqual(q('.sk-fd').dataset.fdTab, 'drive', 'a store without Drive is ready: the dialog opens on its Google Drive tab (no tab remembered yet)');
+    assert.strictEqual(app.document.activeElement, q('.sk-fd input'), 'the name field has the focus');
     app.key('a', { ctrl: true }); app.type('Saved1'); app.key('Enter');
     await app.waitFor(async () => (await storedShapes('Saved1')) === 1, 'the typed name stores the drawing', 5000);
     assert.strictEqual(await storedShapes('Saved1'), 1, 'the typed name stores the drawing');
@@ -60,7 +63,7 @@ export async function runSaveKeyLeave({ host }) {
     drawLine();
     ctrlS();
     await app.waitFor(async () => (await storedShapes('Saved1')) === 2, 'Ctrl+S on a named design wrote the new line at once', 1200);
-    assert.strictEqual(!!q('.sk-sidebar-ask'), false, 'Ctrl+S on a named design asks nothing');
+    assert.strictEqual(!!q('.sk-sidebar-ask') || !!q('.sk-fd'), false, 'Ctrl+S on a named design asks nothing');
     assert.strictEqual(await storedShapes('Saved1'), 2, 'Ctrl+S on a named design wrote the new line at once');
     // 5. a named, saved design: no leave-page warning; the reload restores it
     console.log(`${host} step 5`);

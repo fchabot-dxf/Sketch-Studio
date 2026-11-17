@@ -4,11 +4,11 @@
 // For one host and one CHOICE, every entry path:
 //   open-projects  the Projects modal: a design tile (the question shows in the modal's question bar)
 //   open-recent    the sidebar's Open recent (the Projects modal on its Recent pane; a design tile there)
-//   open-file      the sidebar's Open from file (the page's file chooser, answered with a design file)
+//   open-file      the sidebar's Open… (TASK 759: THE Open dialog, its Local tab's "Choose a file…": the page's file chooser, answered with a design file)
 //   new            the sidebar's New design
 // (TASK 696: the GO TO path went with the sidebar's GO TO section: each app is its own website.)
 // and checks what each choice must do:
-//   save     the Save as name prompt (typing) stores the Untitled under that name, THEN the action goes on
+//   save     the Save as dialog (TASK 759; its Google Drive tab: this store has no Drive, so it is ready) stores the Untitled under the typed name, THEN the action goes on
 //   discard  the Untitled is thrown away (nothing stored), THEN the action goes on
 //   cancel   nothing happens: the drawing stays, nothing is stored, nothing opens, the page stays
 // What stays in the browser (tests/save-key-leave-live-sketchstudio.test.js): the real leave-page dialog. Here its LOGIC is asserted: the buffer arms the page's
@@ -92,19 +92,25 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
     else {
       pressEl(`${bar} [data-choice="save"]`, 'Save…');
       await app.waitFor(() => { const b = q(bar); return !!b && !!b.querySelector('input'); }, `${p}: the Save as name prompt`, 5000);
+      pressEl(`${bar} [data-fd-tab="drive"]`, 'the Google Drive tab of the Save as dialog'); await settle(); // TASK 759: the tab last used may be Local (the open-file path picked it)
       const input = q(`${bar} input`); app.press(input); input.focus();
       app.key('a', { ctrl: true }); app.type(keptName); app.key('Enter');
     }
-    // 3. the file chooser, when the action goes on
+    // 3. the Open dialog (TASK 759) and its file chooser, when the action goes on
     if (p === 'open-file') {
-      if (choice === 'cancel') { await settle(300); assert.strictEqual(app.hasFileChooser(), false, `${p}: Cancel opens no file chooser`); }
-      else { await app.waitFor(() => app.hasFileChooser(), `${p}: the file chooser opens after the answer`, 5000); app.chooseFile(file); }
+      if (choice === 'cancel') { await settle(300); assert.strictEqual(app.hasFileChooser(), false, `${p}: Cancel opens no file chooser`); assert.ok(!q('.sk-fd'), `${p}: Cancel opens no Open dialog`); }
+      else {
+        await app.waitFor(() => !!q('.sk-fd[data-file-dialog="open"] [data-fd-tab="local"]'), `${p}: the Open dialog opens after the answer`, 5000);
+        pressEl('.sk-fd [data-fd-tab="local"]', 'the Local tab'); await settle();
+        pressEl('.sk-fd [data-fd="choose-file"]', 'Choose a file…');
+        await app.waitFor(() => app.hasFileChooser(), `${p}: the file chooser opens`, 5000); app.chooseFile(file);
+      }
     }
     // 4. what the choice did
     if (choice !== 'cancel') await app.waitFor(async () => {
       const names = await recent();
       if (p === 'open-projects' || p === 'open-recent') return title() === `Other — ${H.name}`;
-      if (p === 'open-file') return names.includes('FromFile') && title() === `FromFile — ${H.name}`;
+      if (p === 'open-file') return title() === `FromFile — ${H.name}`; // TASK 759: a file opens as a document of its own (its home is the file), not stored
       return choice === 'save' ? names.includes(keptName) && title() === appTitle(H.name) : title() === appTitle(H.name) && shapesOnCanvas(H.canvas) === 0; // new
     }, `${p}: the action goes on after ${choice}`, 5000);
     else await settle(300);
@@ -122,13 +128,14 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
       assert.strictEqual(shapesOnCanvas(H.canvas), 1, `${p}: Cancel keeps the drawing`);
       assert.strictEqual(r.title, appTitle(H.name), `${p}: Cancel keeps the unsaved Untitled (title)`);
       assert.ok(r.path.startsWith(H.url.replace('index.html', '')), `${p}: Cancel stays on the page: ${r.path}`);
-      assert.ok(!names.includes('FromFile'), `${p}: Cancel opened no file`);
+      assert.ok(!names.includes('FromFile') && !/FromFile/.test(r.title), `${p}: Cancel opened no file`);
     } else if (p === 'open-projects' || p === 'open-recent') {
       assert.strictEqual(r.title, `Other — ${H.name}`, `${p}: then Other is open`);
       assert.strictEqual(shapesOnCanvas(H.canvas), 0, `${p}: the canvas shows Other (no line)`);
     } else if (p === 'open-file') {
       assert.strictEqual(r.title, `FromFile — ${H.name}`, `${p}: then the file is open`);
       assert.strictEqual(shapesOnCanvas(H.canvas), 2, `${p}: the canvas shows the file's two lines`);
+      assert.ok(!names.includes('FromFile'), `${p}: TASK 759: the opened file is not copied into the project store (its home is the file)`);
     } else if (p === 'new') {
       assert.strictEqual(r.title, appTitle(H.name), `${p}: then a new unsaved Untitled`);
       assert.strictEqual(shapesOnCanvas(H.canvas), 0, `${p}: the new design is empty`);

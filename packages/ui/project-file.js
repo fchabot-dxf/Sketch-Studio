@@ -7,8 +7,9 @@
 // validateDocument before anything is loaded, so a file made by a newer build is refused with a clear message.
 // Text out is deterministic (fixed key order, 2-space JSON, trailing newline): open -> save again gives the same bytes.
 //
-// The browser file picker is a SEAM: `{ save(text, suggestedName) -> {name}|null, open() -> {name, text}|null }`.
-// browserFileSeam is the real one (File System Access API when present, download / <input type=file> otherwise); the store
+// The browser file picker is a SEAM: `{ save(text, suggestedName) -> {name, handle}|null, write(handle, text) -> {name, handle}|null,
+// open() -> {name, text, handle}|null }` (TASK 759: the handle, when the browser gives one, lets Save write back to the same file).
+// browserFileSeam is the real one (File System Access API when fileAccess() says so, download / <input type=file> otherwise); the store
 // and everything above it only ever talk to a seam, so tests (and a later Drive adapter) plug in another one.
 
 import { validateDocument } from '#core/document.js';
@@ -55,33 +56,56 @@ export const PROJECT_FILE_PICK = { description: 'Sketch Studio project', mime: '
 export const IMPORT_FILE_PICK = { description: 'SVG or DXF drawing', mime: 'image/svg+xml', exts: ['.svg', '.dxf'] };
 const pickerTypes = (spec) => [{ description: spec.description, accept: { [spec.mime]: spec.exts } }];
 
+/** TASK 759: THE capability, declared once and read at call time (never per environment): `picker` = this browser has the File System Access API
+ *  (showSaveFilePicker / showOpenFilePicker: Chrome, Edge), so a picked file has a HANDLE and Save can write back to that same file. Without it
+ *  (Firefox, Safari, phones) a save is a download and an open is an <input type=file>: the file has a name only. */
+export function fileAccess(win = typeof window !== 'undefined' ? window : null) {
+  return { picker: !!win && typeof win.showSaveFilePicker === 'function' && typeof win.showOpenFilePicker === 'function' };
+}
+
+/** The design name a file name shows: the name without `.sketch.json` (or `.json`). */
+export function designNameOfFile(fileName) {
+  const n = String(fileName || '');
+  const base = n.endsWith(PROJECT_FILE_EXT) ? n.slice(0, -PROJECT_FILE_EXT.length) : n.endsWith('.json') ? n.slice(0, -'.json'.length) : n;
+  return base.trim() || 'Untitled';
+}
+
+const pickerCancelled = (e) => !!e && e.name === 'AbortError'; // the user closed the browser's picker: not an error
+
 export const browserFileSeam = {
-  /** Write `text`. Resolves { name } or null when the user cancelled the picker. */
+  /** Write `text` to a NEW file the user names. Resolves { name, handle } (handle: the picked file, or null for a download) or null when the user
+   *  cancelled the picker. */
   async save(text, suggestedName) {
-    if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
+    if (fileAccess().picker) {
       let handle;
       try { handle = await window.showSaveFilePicker({ suggestedName, types: pickerTypes(PROJECT_FILE_PICK) }); }
-      catch (e) { if (e && e.name === 'AbortError') return null; throw e; }
-      const w = await handle.createWritable();
-      await w.write(text);
-      await w.close();
-      return { name: handle.name };
+      catch (e) { if (pickerCancelled(e)) return null; throw e; }
+      await writeHandle(handle, text);
+      return { name: handle.name, handle };
     }
     const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url; a.download = suggestedName;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
-    return { name: suggestedName };
+    return { name: suggestedName, handle: null };
   },
-  /** Pick and read a file. Resolves { name, text } or null when the user cancelled. */
+  /** Write `text` back to the file `handle` (a file this page picked). Resolves { name, handle }, or null when the browser refused to let the
+   *  page write it (the user said no to the permission): the caller then asks for a file again. */
+  async write(handle, text) {
+    if (typeof handle.queryPermission === 'function' && (await handle.queryPermission({ mode: 'readwrite' })) !== 'granted'
+      && (await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return null;
+    await writeHandle(handle, text);
+    return { name: handle.name, handle };
+  },
+  /** Pick and read a file. Resolves { name, text, handle } (handle: the picked file, or null from an <input type=file>) or null when the user cancelled. */
   async open(spec = PROJECT_FILE_PICK) {
-    if (typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function') {
+    if (fileAccess().picker) {
       let handles;
       try { handles = await window.showOpenFilePicker({ types: pickerTypes(spec), multiple: false }); }
-      catch (e) { if (e && e.name === 'AbortError') return null; throw e; }
+      catch (e) { if (pickerCancelled(e)) return null; throw e; }
       const file = await handles[0].getFile();
-      return { name: file.name, text: await file.text() };
+      return { name: file.name, text: await file.text(), handle: handles[0] };
     }
     return new Promise((resolve, reject) => {
       const input = document.createElement('input');
@@ -92,10 +116,15 @@ export const browserFileSeam = {
       const settle = (done, value) => { input.remove(); done(value); };
       input.onchange = async () => {
         const f = input.files && input.files[0];
-        try { settle(resolve, f ? { name: f.name, text: await f.text() } : null); } catch (e) { settle(reject, e); }
+        try { settle(resolve, f ? { name: f.name, text: await f.text(), handle: null } : null); } catch (e) { settle(reject, e); }
       };
       input.oncancel = () => settle(resolve, null);
       input.click();
     });
   },
 };
+async function writeHandle(handle, text) {
+  const w = await handle.createWritable();
+  await w.write(text);
+  await w.close();
+}

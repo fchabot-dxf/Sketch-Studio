@@ -39,24 +39,26 @@ assert.deepStrictEqual(pid(false, { id: 'p1', name: 'A' }), ['rename', 'pin', 'd
 assert.deepStrictEqual(pid(true, { id: 'p1', name: 'A' }), ['use-drive', 'rename', 'pin', 'delete']);
 assert.deepStrictEqual(pid(true, { id: 'drive:p', name: 'G', location: 'drive' }), ['rename', 'pin', 'delete']);
 assert.strictEqual(mk(false).projectItems({ id: 'p1', name: 'A', pinned: true }).find((a) => a.id === 'pin').label, 'Unpin');
-// signed out: Save as… / Duplicate prompt Google sign-in first, and carry on once signed in (or cancel cleanly)
+// TASK 759: signed out, Save as… asks NO sign-in question: it opens THE Save as dialog (fileDialog), whose Drive tab is not ready (its own sign-in button) and
+// whose Local tab saves the file with no account; signing in from the Drive tab makes it ready and saves to Drive as before. Duplicate still asks (it makes a
+// Drive file of a stored design).
 calls.length = 0;
 {
   let isSigned = false;
-  const pa = createProjectActions({
-    store, getBuffer: () => buffer,
-    account: { state: () => ({ signedIn: isSigned }), signIn: async () => { calls.push(['signIn']); isSigned = true; } },
-    ask: async (spec) => {
-      calls.push(['ask', spec.kind]);
-      if (spec.kind === 'prompt') return 'Named';
-      const opt = spec.options.find((o) => o.id === 'signin');
-      if (opt && opt.onClick) opt.onClick();
-      return opt ? opt.id : null;
-    },
-    notify: (...a) => notes.push(a),
-  });
-  await pa.saveAsPrompt();
-  assert.deepStrictEqual(calls.filter((c) => c[0] !== 'flush'), [['ask', 'choose'], ['signIn'], ['ask', 'prompt'], ['saveAs', 'Named']]);
+  const dialogs = [];
+  const fakeSeam = { save: async () => null };
+  const fileBuffer = { ...buffer, home: () => ({ kind: 'none' }), saveToFile: async (n, seam) => { calls.push(['saveToFile', n, seam === fakeSeam]); return { name: n + '.sketch.json', handle: null, downloaded: true }; } };
+  const asTab = (tab) => async (spec) => { dialogs.push({ mode: spec.mode, name: spec.name, ready: spec.driveReady() }); if (tab === 'drive') await spec.signIn(); return spec.onSave(tab, 'Named'); };
+  const local = createProjectActions({ store, getBuffer: () => fileBuffer, fileSeam: fakeSeam, account: { state: () => ({ signedIn: isSigned }), signIn: async () => { calls.push(['signIn']); isSigned = true; }, subscribe: () => () => {} },
+    ask: async (spec) => { calls.push(['ask', spec.kind]); return null; }, fileDialog: asTab('local') });
+  await local.saveAsDialog();
+  assert.deepStrictEqual(calls.filter((c) => c[0] !== 'flush'), [['saveToFile', 'Named', true]], 'signed out, Save as > Local: no question, no sign-in, the file is written through the seam');
+  assert.deepStrictEqual(dialogs, [{ mode: 'save', name: 'Untitled', ready: false }], 'the dialog opened in save mode, its Drive tab not ready (signed out)');
+  calls.length = 0; dialogs.length = 0;
+  const drive = createProjectActions({ store, getBuffer: () => fileBuffer, fileSeam: fakeSeam, account: { state: () => ({ signedIn: isSigned }), signIn: async () => { calls.push(['signIn']); isSigned = true; }, subscribe: () => () => {} },
+    ask: async (spec) => { calls.push(['ask', spec.kind]); return null; }, fileDialog: asTab('drive') });
+  await drive.saveAsDialog();
+  assert.deepStrictEqual(calls.filter((c) => c[0] !== 'flush'), [['signIn'], ['saveAs', 'Named']], 'Save as > Google Drive: the tab\'s own sign-in, then today\'s Drive save');
   calls.length = 0;
   await mk(true).duplicateCurrent();
   assert.deepStrictEqual(calls.filter((c) => c[0] === 'duplicate'), [['duplicate', 'cur']], 'the menu Duplicate duplicates the current design through the same function');
@@ -75,15 +77,17 @@ await assert.rejects(() => createProjectActions({ store, getBuffer: () => null }
 // TASK 558: THE unsaved-design question before an action replaces an unsaved Untitled with content: Save… / Don't save / Cancel
 {
   for (const [answers, expect] of [
-    [['save', 'Door 2'], { go: true, log: ['ask:choose', 'ask:prompt:Untitled', 'saveAs:Door 2'] }],
-    [['save', null], { go: false, log: ['ask:choose', 'ask:prompt:Untitled'] }],       // Save…, then Cancel in the name prompt: nothing
+    [['save', 'Door 2'], { go: true, log: ['ask:choose', 'dialog:save:Untitled', 'saveAs:Door 2'] }],   // TASK 759: Save… = Save to the home: none -> THE Save as dialog
+    [['save', null], { go: false, log: ['ask:choose', 'dialog:save:Untitled'] }],       // Save…, then Cancel in the Save as dialog: nothing
     [['discard'], { go: true, log: ['ask:choose', 'discard'] }],
     [[null], { go: false, log: ['ask:choose'] }],                                       // Cancel
   ]) {
     const log = []; const a = [...answers];
-    const ub = { needsSavePrompt: () => 'unsaved', designName: () => 'Untitled', discardUnsaved: () => log.push('discard'), saveAs: async (nm) => { log.push('saveAs:' + nm); },
+    const ub = { needsSavePrompt: () => 'unsaved', designName: () => 'Untitled', discardUnsaved: () => log.push('discard'), saveAs: async (nm) => { log.push('saveAs:' + nm); return { id: 'n' }; },
+      ready: Promise.resolve(), isStored: () => false, home: () => ({ kind: 'none' }),
       openDesign: async (id) => { log.push('open:' + id); return { restored: true }; }, newDesign: async () => { log.push('new'); return {}; }, openFile: async () => { log.push('file'); return {}; } };
-    const pa = createProjectActions({ store, getBuffer: () => ub, ask: async (spec) => { log.push('ask:' + spec.kind + (spec.kind === 'prompt' ? ':' + spec.value : '')); if (spec.kind === 'choose') assert.deepStrictEqual(spec.options.map((o) => o.label), ['Save…', "Don't save"]); return a.shift(); } });
+    const pa = createProjectActions({ store, getBuffer: () => ub, ask: async (spec) => { log.push('ask:' + spec.kind + (spec.kind === 'prompt' ? ':' + spec.value : '')); if (spec.kind === 'choose') assert.deepStrictEqual(spec.options.map((o) => o.label), ['Save…', "Don't save"]); return a.shift(); },
+      fileDialog: async (spec) => { log.push('dialog:' + spec.mode + ':' + spec.name); const nm = a.shift(); return nm ? spec.onSave('drive', nm) : null; } });
     const out = await pa.openDesign('d9');
     assert.deepStrictEqual(log, expect.go ? [...expect.log, 'open:d9'] : expect.log, 'open: ' + JSON.stringify(answers));
     assert.strictEqual(out === null, !expect.go, 'a cancelled open resolves null (the Projects modal stays open)');

@@ -853,13 +853,14 @@ export function choicePicker(spec, { read, onPick, values, corner = () => undefi
 }
 
 /** TASK 681: the shared modal shell (backdrop + small panel, role=dialog aria-modal): `fill(body, actions, finish)` adds the content and the buttons; it returns the element to focus.
- *  Esc and a press outside finish(null). Focus goes back to where it was. */
-function openSmallModal(label, fill) {
+ *  Esc and a press outside finish(null). Focus goes back to where it was. TASK 759: exported, so the Save as / Open dialog (#ui/file-dialog.js) is this same
+ *  modal; `panelClass` adds a class to its panel (that dialog's own styles hang on it). */
+export function openSmallModal(label, fill, { panelClass = '' } = {}) {
   injectStyles();
   const returnTo = document.activeElement;
   return new Promise((resolve) => {
     const backdrop = document.createElement('div'); backdrop.className = 'sk-tp-backdrop';
-    const panel = document.createElement('div'); panel.className = PANEL + ' sk-tp-small'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', label);
+    const panel = document.createElement('div'); panel.className = PANEL + ' sk-tp-small' + (panelClass ? ' ' + panelClass : ''); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', label);
     const head = document.createElement('div'); head.className = 'sk-tp-head';
     const title = document.createElement('h2'); title.className = 'sk-tp-title'; title.textContent = label; head.appendChild(title);
     const body = document.createElement('div'); body.className = 'sk-tp-ask';
@@ -876,7 +877,9 @@ function openSmallModal(label, fill) {
     };
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); } }
     document.addEventListener('keydown', onKey, true);
-    stopOutside = listenOutsidePress((e) => { if (!e.composedPath().includes(panel)) finish(null); });
+    // TASK 759: the click a page script sends to a hidden <input type=file> (the file chooser opening: the Open dialog's "Choose a file…") is not a press outside
+    const choosing = (e) => !!(e.target && e.target.tagName === 'INPUT' && e.target.type === 'file');
+    stopOutside = listenOutsidePress((e) => { if (!e.composedPath().includes(panel) && !choosing(e)) finish(null); });
     const mk = (cls, text, id, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-tp-btn ' + cls; b.textContent = text; b.dataset.choice = id; b.addEventListener('click', onClick); actions.appendChild(b); return b; };
     const focusEl = fill(body, mk, finish);
     body.appendChild(actions);

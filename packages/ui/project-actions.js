@@ -9,17 +9,37 @@
 // design) first asks THE question settleUnsaved() declares: Save… (the Save as name prompt, then go on) / Don't save
 // (discard it, then go on) / Cancel (nothing happens). TASK 624: all named saves go ONLY to Google Drive; if signed out, saving first asks
 // to sign in to Google (calling account.signIn() synchronously inside the click gesture), then continues seamlessly or cancels cleanly.
+// TASK 759 (owner turn 2266): Save as and Open are ONE dialog each (#ui/file-dialog.js) with two tabs, Google Drive | Local: a design is saved to and opened
+// from a file on this device with no Google account at all, and Drive works as before inside its tab. A document has a HOME (#ui/document-home.js: Drive,
+// a file on this device, or none) and Save (Ctrl+S, the menu's Save) saves to it; no home -> Save as. A signed-out user is never asked to sign in by Save,
+// Save as, Open or Open from file: Drive (and its sign-in button) is only met inside the dialog's Drive tab.
 
 import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
 import { track } from './analytics.js'; // TASK 738: a design opened, a template started
+import { openFileDialog } from './file-dialog.js';
+import { browserFileSeam, fileAccess } from './project-file.js';
+import { saveRoute, HOME_KINDS } from './document-home.js';
+import { relativeTime } from './project-manager.js';
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
 // TASK 587: `tabs: true` (the host shows the document-tab strip, sidebar-projects.js `documentTabs`) makes Open / Open recent / Open from file / New open a
 // NEW TAB instead of replacing the shown design (docs/DOCUMENT-TABS-DESIGN.md T2, T3): the unsaved Untitled is not replaced then, so those ask no question.
-export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false, pickTemplate = null, chooseModal = null, promptModal = null }) {
+// TASK 759: `fileDialog` (default: THE Save as / Open dialog, #ui/file-dialog.js openFileDialog; a headless caller passes a scripted one, as it passes `ask`),
+// `fileSeam` (default: the browser's file picker / download, #ui/project-file.js browserFileSeam) and `openProjects()` (the host's project manager, for the
+// Open dialog's "All projects…").
+export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false, pickTemplate = null, chooseModal = null, promptModal = null,
+  fileDialog = openFileDialog, fileSeam = browserFileSeam, openProjects = () => {} }) {
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
   const signedInDrive = () => !!(account && account.state().signedIn && store.cloud);
+  /** TASK 759: the Drive tab can be used now: signed in, or a store with no Drive at all (nothing to sign in to). */
+  const driveReady = () => !account || !store.cloud || !!account.state().signedIn;
+  // what the dialog's Drive tab needs of the account (sign-in runs inside its click; the tab follows the sign-in state)
+  const dialogAccount = {
+    driveReady,
+    signIn: () => (account ? account.signIn() : null),
+    subscribeAccount: (fn) => (account && account.subscribe ? account.subscribe(fn) : () => {}),
+  };
 
   /** Ask the user to sign in to Google Drive if currently signed out (runs signIn synchronously in the button click so popups work). */
   async function ensureSignedIn() {
@@ -41,14 +61,11 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   async function settleUnsaved() {
     const b = buf();
     if (b.needsSavePrompt() !== 'unsaved') return true;
-    const choice = await (chooseModal || ask)({ kind: 'choose', label: 'This design is not saved.', options: [{ id: 'save', label: 'Save…' }, { id: 'discard', label: "Don't save" }] });
+    const label = b.home().kind === HOME_KINDS.FILE ? 'This design has changes not saved to its file.' : 'This design is not saved.';
+    const choice = await (chooseModal || ask)({ kind: 'choose', label, options: [{ id: 'save', label: 'Save…' }, { id: 'discard', label: "Don't save" }] });
     if (choice === 'discard') { b.discardUnsaved(); return true; }
     if (choice !== 'save') return false;
-    if (!(await ensureSignedIn())) return false;
-    const name = await (promptModal || ask)({ kind: 'prompt', label: 'Save as', value: b.designName(), okLabel: 'Save' }); // the name prompt that follows Save… (the menu's Save as… stays inline)
-    if (!name) return false;
-    await b.saveAs(name);
-    return true;
+    return !!(await save()); // TASK 759: Save… saves to the design's home (a file: back to it; none: the Save as dialog), never a sign-in question
   }
   /** Resolves null when the user cancelled the unsaved-design question (nothing changed). */
   async function openDesign(id) {
@@ -95,15 +112,30 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
 
   // the CURRENT design of the host's buffer (its id may only exist after the pending edits are saved, hence flush first)
   const duplicateCurrent = async () => { const b = buf(); await b.flush(); return duplicateNow(b.designId()); };
-  const saveAs = async (name) => { if (!(await ensureSignedIn())) return null; return buf().saveAs(name); };
-  async function saveAsPrompt() {
+  /** TASK 759: THE Save as dialog (Google Drive | Local). `name` pre-fills the name (default: the design's name; a stored design's: "<name> copy", as before).
+   *  Drive: today's named save (a stored design: a copy that becomes the bound one); Local: the design file on this device, which becomes its home.
+   *  Resolves what the save returned, or null (cancelled). */
+  async function saveAsDialog({ name } = {}) {
     const b = buf();
     await b.ready;
-    if (!(await ensureSignedIn())) return null;
-    const isCopy = b.isStored();
-    const name = await ask({ kind: 'prompt', label: isCopy ? 'Save a copy as' : 'Save as', value: isCopy ? b.designName() + ' copy' : b.designName(), okLabel: 'Save' });
-    if (!name) return null;
-    return b.saveAs(name);
+    const value = name || (b.isStored() ? b.designName() + ' copy' : b.designName());
+    return fileDialog({ mode: 'save', name: value, ...dialogAccount,
+      onSave: (tab, n) => (tab === 'drive' ? b.saveAs(n) : b.saveToFile(n, fileSeam)) });
+  }
+  /** TASK 759, SAVE (Ctrl+S, the menu): to the design's home (document-home.js saveRoute): Drive -> the pending autosave is written now; a file -> back to it
+   *  (or the picker again / a download); none -> the Save as dialog. Resolves { route, name? } or null (cancelled). */
+  async function save() {
+    const b = buf();
+    await b.ready;
+    const route = saveRoute(b.home(), fileAccess());
+    if (route === 'flush') { await b.flush(); return { route }; }
+    if (route === 'save-as') {
+      const r = await saveAsDialog();
+      if (!r) return null;
+      const home = b.home();
+      return { route, name: home.kind === HOME_KINDS.FILE ? home.name : b.designName(), ...(r.downloaded ? { downloaded: true } : {}) };
+    }
+    return b.saveHome(fileSeam);
   }
   async function moveCurrentProjectToDrive() {
     const b = buf();
@@ -128,11 +160,28 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     if (out) track('template:' + (choice.template ? choice.template.id : 'blank')); // TASK 738: the template's declared id (#core/templates.js), never its name
     return out;
   };
+  /** TASK 759: a design FILE from this device opens as a tab (its home is that file), with no account: `seam` (default: the browser's picker / <input type=file>).
+   *  Called synchronously from the click (the browser's picker needs it). null = cancelled. */
+  const openLocalFile = (seam = fileSeam) => (tabs ? buf().openFileTab(seam) : buf().openFile(seam));
+  /** Open from file (the project manager's toolbar): the unsaved question first (no tabs), then the file. */
   const openFile = async () => {
     if (!tabs && !(await settleUnsaved())) return null;
-    if (!(await ensureSignedIn())) return null;
-    return tabs ? buf().openFileTab() : buf().openFile();
+    return openLocalFile();
   };
+  /** TASK 759: a design file DROPPED on the drawing (#ui/sketch-import.js mountImportDrop: a .sketch.json there is a document, not a drawing to import). */
+  const openDroppedFile = async ({ name, text }) => {
+    if (!tabs && !(await settleUnsaved())) return null;
+    return openLocalFile({ open: async () => ({ name, text, handle: null }) });
+  };
+  /** TASK 759: THE Open dialog (Google Drive | Local): the recent designs on Drive (and "All projects…") / "Choose a file…". */
+  async function openDialog() {
+    if (!tabs && !(await settleUnsaved())) return null;
+    return fileDialog({ mode: 'open', ...dialogAccount,
+      listDesigns: async () => (await store.listRecent({ limit: 12 })).map((r) => ({ id: r.id, name: r.name, sub: [r.projectName, relativeTime(r.updatedAt)].filter(Boolean).join(' · ') })),
+      onOpenDesign: (id) => openDesign(id),
+      onChooseFile: () => openLocalFile(),
+      onProjects: () => openProjects() });
+  }
 
   // ---- the document-tab strip's actions (TASK 587) -------------------------------------------------------------------------------
   const activateTab = (key) => buf().activate(key);
@@ -174,5 +223,5 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     ];
   }
 
-  return { activateTab, closeTab, duplicateCurrent, saveAs, saveAsPrompt, ensureSignedIn, moveCurrentProjectToDrive, newDesign, openFile, importDrawing, toolbarItems, openDesign, duplicateDesign, saveDesignToFile, designItems, projectItems, settleUnsaved };
+  return { activateTab, closeTab, duplicateCurrent, save, saveAsDialog, driveReady, ensureSignedIn, moveCurrentProjectToDrive, newDesign, openFile, openLocalFile, openDroppedFile, openDialog, importDrawing, toolbarItems, openDesign, duplicateDesign, saveDesignToFile, designItems, projectItems, settleUnsaved };
 }

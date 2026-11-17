@@ -58,7 +58,7 @@ try {
     app.frames();
     if (HOST !== 'shaper') {
       // TASK 558: a New design is an unsaved Untitled that is never autosaved; SketchStudio is read from its autosave, so name it (Save as)
-      await actions.saveAs('Snap ' + (++namedCount));
+      await app.buffer.saveAs('Snap ' + (++namedCount)); // TASK 759: the buffer's named save (project-actions' saveAs went with the Save as dialog)
       return null;
     } // SketchStudio's origin is checked by the marker, which is drawn only for a j_origin in the state
     const d = await readDoc();

@@ -108,13 +108,13 @@ SettingsManager.set('LENGTH_PRECISION', null);
   eq(ops.length, 7, '9 records -> 7 operations (the two holes are one, the two equal pockets are one)');
   eq(view.slice(0, 6), [
     'Not cut | Guide (1 path) | guide',
-    'Change to ¼″ 60° V-bit | ¼″ 60° V-bit · On line · 0.0625 in (1 path) | slot',
-    'Change to 0.2362 in ball nose | 0.2362 in ball nose · Pocket · 0.125 in (1 region) | pd',
+    'Change to ¼″ 60° V-bit | ¼″ 60° V-bit · On line · 0.063 in (1 path) | slot',
+    'Change to 0.236 in ball nose | 0.236 in ball nose · Pocket · 0.125 in (1 region) | pd',
     'Change to ⅛″ end mill | ⅛″ end mill · Inside · 0.75 in (2 regions) | ha,hb',
     'Change to ¼″ end mill | ¼″ end mill · Pocket · 0.25 in (2 regions) | pa,pc',
-    'Change to ¼″ end mill | ¼″ end mill · Pocket · 0.25 in (1 region) · offset 0.0197 in | pb',
+    'Change to ¼″ end mill | ¼″ end mill · Pocket · 0.25 in (1 region) · offset 0.02 in | pb',
   ], 'the default order: Not cut; the V-bit (its last cut: on line), the ball nose (a pocket), the ⅛ in bit (holes), the ¼ in bit (it frees the part); pockets before the outside');
-  ok(/^Change to ¼″ end mill \| ¼″ end mill · Outside · pass 0\.6713 in \+ gaps 0\.75 in \(1 region\) · \d+ gaps \(tabs 0\.3937 in wide, 0\.0787 in thick\) \| plate$/.test(view[6]),
+  ok(/^Change to ¼″ end mill \| ¼″ end mill · Outside · pass 0\.671 in \+ gaps 0\.75 in \(1 region\) · \d+ gaps \(tabs 0\.394 in wide, 0\.079 in thick\) \| plate$/.test(view[6]),
     'the tabbed Outside: its pass + gaps, last: ' + view[6]);
   eq(ops.map((o) => o.id), ['op-guide', 'op-online-1.5875mm-vbit-6.35mm-60deg', 'op-pocket-3.175mm-ballnose-6mm', 'op-interior-19.05mm-endmill-3.175mm', 'op-pocket-6.35mm-endmill-6.35mm',
     'op-pocket-6.35mm-offset-0.5mm-endmill-6.35mm', 'op-exterior-19.05mm-tabs-endmill-6.35mm'], 'the operation ids: type, depth, the settings off their default, tool');
@@ -177,7 +177,7 @@ CUT_PLAN.clear(); setOpOrder([]);
     const ops = planOperations(app.state, cutPlanEntries());
     console.log('stepped: ' + JSON.stringify(ops.map((o) => o.label)));
     const stepped = ops.find((o) => o.cutType === 'stepped-pocket');
-    eq(stepped.rowText, 'Stepped pocket · 0.2619–0.315 in', 'the stepped operation\'s depths in the doc unit: its first to its last step (6.651 to 8 mm)');
+    eq(stepped.rowText, 'Stepped pocket · 0.262–0.315 in', 'the stepped operation\'s depths in the doc unit: its first to its last step (6.651 to 8 mm)');
     eq(stepped.detail, '4 steps, adaptive Coarse', 'the stepped operation shows its steps count');
     eq(ops.map((o) => o.cutType), ['stepped-pocket', 'exterior'], 'the stepped pocket before the outside');
     checkFiles('R3 floor fillet, Stepped pocket adaptive Coarse', app.state, app.document);
@@ -207,7 +207,7 @@ CUT_PLAN.clear(); setOpOrder([]);
       const svg0 = shaperSvgOf(st, cutPlanEntries());
       const l0 = listOf(app);
       console.log('app list: ' + JSON.stringify(l0));
-      eq(l0.filter((t) => t.startsWith('# ')), ['# Not cut', '# Change to ¼″ 60° V-bit', '# Change to 0.2362 in ball nose', '# Change to ⅛″ end mill', '# Change to ¼″ end mill'], 'the list: one heading per tool run');
+      eq(l0.filter((t) => t.startsWith('# ')), ['# Not cut', '# Change to ¼″ 60° V-bit', '# Change to 0.236 in ball nose', '# Change to ⅛″ end mill', '# Change to ¼″ end mill'], 'the list: one heading per tool run');
       eq(l0.filter((t) => !t.startsWith('# ')).length, 7, 'the list: 7 operations');
       eq(app.document.querySelector('#prepare-ops .ops-count').textContent, '7', 'the header counts them');
       // a tap on the holes' operation selects both holes
@@ -222,7 +222,7 @@ CUT_PLAN.clear(); setOpOrder([]);
       const n0 = st.history.length;
       gripKey(app.document.querySelector('#prepare-ops .ops-row .ops-grip'), 'ArrowDown');
       const l1 = listOf(app);
-      eq(l1.filter((t) => !t.startsWith('# ')).slice(0, 2).map((t) => t.split(' | ')[0]), ['1. On line · 0.0625 in', '2. Guide'], '↓ moved Guide below On line');
+      eq(l1.filter((t) => !t.startsWith('# ')).slice(0, 2).map((t) => t.split(' | ')[0]), ['1. On line · 0.063 in', '2. Guide'], '↓ moved Guide below On line');
       eq(st.history.length, n0 + 1, 'the reorder is ONE undo step');
       eq(opOrder().length, 7, 'the order is stored');
       app.undo();

@@ -84,8 +84,9 @@ const HOLD_REFUSED = {
  */
 export function holdNoteItems(storedRec, hold) {
   if (!hold || !storedRec) return [];
-  // each length's text is lengthText's (the one decider, TASK 728: an inch fraction in Fractional); the unit is written after it
-  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 3, trim: 'always', show: 'field' });
+  // each length's text is lengthText's (the one decider, TASK 728: an inch fraction in Fractional); the unit is written after it. TASK 757: at the card's precision
+  // (3 decimals while Length precision is Auto, as its tab width / thickness / depth fields and the Operations list show them: "0.063 in thick", not 0.0625)
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: 3, trim: 'always', show: 'field' });
   const name = (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Cut';
   const what = hold.mode === 'skin' ? 'onion skin' : 'tabs';
   if (hold.role === 'refused') {
@@ -193,7 +194,7 @@ export function clearingNoteItems(storedRec, sum) {
     const text = `Pocket: ${label} refused: ${CLEARING_REFUSED[sum.refused] || sum.refused}; cut as Freehand`;
     return [{ text, warn: text.slice('Pocket: '.length), title: 'the clearing is not programmed: the Origin clears this pocket by hand' }];
   }
-  const st = sum.settings, bit = `${lengthText(st.toolDia, { unit: u, auto: u === 'in' ? 4 : 3, trim: 'always', show: 'field' })} ${u}`; // the bit as its field shows it (3.175 mm, not 3.17)
+  const st = sum.settings, bit = `${lengthText(st.toolDia, { unit: u, auto: 3, trim: 'always', show: 'field' })} ${u}`; // the bit as its field shows it (3.175 mm, not 3.17; TASK 757: 0.063 in, not 0.0625)
   const total = sum.length + (sum.finishLength || 0);
   const pathWords = u === 'in' ? `${(total / 304.8).toFixed(1)} ft` : `${(total / 1000).toFixed(1)} m`;
   const feed = u === 'in' ? `${Math.round(POCKET_CLEARING.feedMmPerMin / 25.4)} in/min` : `${POCKET_CLEARING.feedMmPerMin} mm/min`;

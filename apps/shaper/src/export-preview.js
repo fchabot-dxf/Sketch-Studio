@@ -17,6 +17,7 @@
 //    ("linked 2/3" (TASK 749: a Spiral line), "raster 3/22", "cleanup 1/1", "morphed", "loop 1/1" (TASK 750: a closed loop), "wall", "island 1/2"): labels
 //    "on line · 6 mm · spiral line 2 of 3", list rows "spiral lines" / "raster passes" / "clean-up ring" / "morphed spiral" / "closed loops" / "wall" / "islands". Display only: the islands and then the clearing paths are
 //    painted in FRONT (the wall's white inside-cut fill, written after the paths, would hide them; an island is not moved to the back as other outsides).
+//  * TASK 757: a GUIDE (the Stock loop, a Guide) is shown as its outline behind every cut (GUIDE_FILL below): the file's filled board would cover the part.
 //  * A tap / click on an element (a press that moves less than 4 px) picks it: a highlight and its label ("pocket · 7.333 mm · step 2 of 4");
 //    a tap on empty space clears it. The list (rows by cut type, then depth and step, each with its element count) picks a row's elements.
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare). The first build
@@ -34,6 +35,10 @@ const SHADE_INSIDE_SHALLOW = 90, SHADE_INSIDE_DEEP = 60; // TASK 720: a stepped 
 const OUTSIDE_STEP_OUTLINE = '#9a9a9a';     // their thin light outline (the file's black outside has none, so the ledges would not show)
 const POCKET_OUTLINE = '#222';             // the thin outline every pocket gets (the file's pockets have none)
 const FIT_MARGIN = 0.06;   // empty space round the drawing on each side after fit(), a fraction of its size
+// TASK 757: the preview's one rule for a GUIDE (the Stock loop, a user's Guide): it marks, it never cuts, so it is drawn as its OUTLINE (the file's stroke, no
+// fill) BEHIND every cut. The file writes a guide filled (#0068FF fill + stroke, as Shaper Studio writes its guides) and in the plan's order, so the Stock
+// (the whole board, written after the outside / inside / on-line cuts) would cover the part. Display only: the download keeps the file's fill and order.
+const GUIDE_FILL = 'none';
 
 /** Parse a Shaper SVG string into its root <svg> element (an XML parse: the shaper: namespace is kept). A string that does not parse throws. */
 export function parseShaperSvg(text, doc = document) {
@@ -310,6 +315,18 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
         for (const it of [...outs].sort((a, b) => parseFloat(b.depth) - parseFloat(a.depth))) {
           for (const name of ['fill', 'stroke']) { const v = paintOf(it.el, name); if (v !== null && !it.el.hasAttribute(name)) it.el.setAttribute(name, v); }
           back.appendChild(it.el);
+        }
+      }
+      // TASK 757: every GUIDE as its outline (GUIDE_FILL), behind everything: its group goes first, under the outsides' back group above
+      const guides = items.filter((it) => it.cutType === 'guide');
+      if (guides.length) {
+        const gl = doc.createElementNS(SVG_NS, 'g'); gl.setAttribute('class', 'rv2d-guides');
+        layer.insertBefore(gl, layer.firstChild);
+        for (const it of guides) {
+          const stroke = paintOf(it.el, 'stroke'); // the stroke it inherited (copied from its <g>), as the rules above and below keep it
+          if (stroke !== null && !it.el.hasAttribute('stroke')) it.el.setAttribute('stroke', stroke);
+          it.el.setAttribute('fill', GUIDE_FILL);
+          gl.appendChild(it.el);
         }
       }
       // TASK 745: a programmed pocket's islands (outside cuts, black) and then its clearing paths in FRONT of everything (its wall is an inside cut with the

@@ -258,7 +258,7 @@ checkTabsExport('circle inside', circleState(), 'c', { ...TABS, cutType: 'interi
   const rec = { ...TABS, tabWidth: 25.4 * 3 / 8, holdThickness: 25.4 / 16, cutDepth: 19.05 };
   const { loops, loopPolys } = loopsWithPolygons(st);
   eq(holdNoteItems(rec, holdSummary(keyOf('loop', loop.id), rec, st, loops, loopPolys, new Set())).map((i) => i.text)[0],
-    'Outside: 4 tabs, 0.375 in wide, 0.0625 in thick: 1 pass at 0.6875 in + 4 gaps at 0.75 in', 'the note in inches (3/8 in tabs, 1/16 in thick, 3/4 in deep)');
+    'Outside: 4 tabs, 0.375 in wide, 0.063 in thick: 1 pass at 0.688 in + 4 gaps at 0.75 in', 'the note in inches (3/8 in tabs, 1/16 in thick, 3/4 in deep)');
   SettingsManager.set('DOC_UNIT', 'mm');
 }
 // ── 3. the app ──

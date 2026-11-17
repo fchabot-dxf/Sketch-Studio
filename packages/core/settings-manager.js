@@ -154,14 +154,22 @@ export const lengthFraction = (unit = docUnit()) => {
  *         'field' the number in a field whose unit is printed beside it:              "1.500" | "1 1/2"
  *         'compact' the number glued to its unit, trailing zeros dropped (a tool box / a notice): "1.5in" | 1 1/2"
  * In Fractional mode the value is shown as the NEAREST fraction (Fusion's way: no "≈" mark), like a decimal precision rounds. Display only.
+ * TASK 757: SMALL LENGTHS in Fractional mode: a length that is not zero but whose nearest fraction is 0 (|value| < half a 1/den inch: below 1/32" at 1/16)
+ * is shown as a DECIMAL, exactly as Decimal mode shows it (same forms, same trim), with at least as many decimals as its first significant digit needs
+ * (0.02 in: "0.020" at the cut card's 3, "0.02" at 1; capped at LENGTH_PRECISION_MAX), so a set value never reads "0". A zero (or less than half the finest decimal, 0.0000005 in: float noise) stays "0" / 0".
  */
 export function lengthText(mm, { unit = docUnit(), auto = 1, trim = false, show = 'bare', fractions = true } = {}) {
     if (mm == null || !Number.isFinite(Number(mm))) return '';
     const den = fractions ? lengthFraction(unit) : null;
-    if (den) { const f = formatFraction(Number(mm) / basePer('in'), den); return show === 'field' ? f : `${f}"`; }
-    const set = lengthDecimals(null);
-    if (show === 'compact') return formatUnit(mm, unit, { unit: true, decimals: set ?? auto });
-    let body = formatUnit(mm, unit, { decimals: set ?? auto });
+    let least = 0; // TASK 757: the fewest decimals a small length falling back from Fractional needs to show its first significant digit
+    if (den) {
+        const v = Number(mm) / basePer('in');
+        if (Math.abs(v) < 0.5 * 10 ** -LENGTH_PRECISION_MAX || Math.round(Math.abs(v) * den) > 0) { const f = formatFraction(v, den); return show === 'field' ? f : `${f}"`; }
+        least = Math.min(LENGTH_PRECISION_MAX, Math.ceil(-Math.log10(Math.abs(v))));
+    }
+    const set = lengthDecimals(null), decimals = Math.max(set ?? auto, least);
+    if (show === 'compact') return formatUnit(mm, unit, { unit: true, decimals });
+    let body = formatUnit(mm, unit, { decimals });
     if (trim === 'always' || (trim === 'auto' && set === null)) body = String(Number(body));
     return show === 'unit' ? `${body} ${unit}` : body;
 }

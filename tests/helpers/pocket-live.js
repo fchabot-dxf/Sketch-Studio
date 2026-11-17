@@ -332,7 +332,8 @@ export async function exportPhase(t, label) {
     if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-3d');
     await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the Review built');
     await sleep(800);
-    const info = await evalJs(`[...document.getElementById('review-info').children].map((d) => d.textContent)`);
+    // the info's lines (TASK 757: on a phone the first line is the fold's header button and the others its body)
+    const info = await evalJs(`[...document.querySelectorAll('#review-info > div:not(.review-info-body), #review-info .review-info-head > span, #review-info .review-info-body > div')].map((d) => d.textContent)`);
     console.log(label + ' 3D info: ' + JSON.stringify(info));
     assert.ok(info.some((t) => /^Pocket: spiral, \d+ turns in 1 line \+ wall,/.test(t)) && info.some((t) => /^Pocket: spiral, \d+ turns \+ wall: one closed loop/.test(t)) && info.some((t) => /closed loops \(the pocket has islands\)/.test(t)), label + ': the 3D info says the clearing');
     await shot(`${D}-export-3d.png`, '#review-canvas-host');

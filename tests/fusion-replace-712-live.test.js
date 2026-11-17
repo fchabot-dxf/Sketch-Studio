@@ -136,16 +136,16 @@ async function run({ width, height, pileUp }) {
 
     // 4. one payload with a body's regions AND chains: one plan
     await select(COMBINED);
-    await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 8`, 'the combined selection (8 edges)');
+    await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 7`, 'the combined selection (7 edges)'); // TASK 757: 8 shapes, the construction line c1 is not drawn in Prepare
     const combined = await look();
     console.log(`[${label}] combined:`, JSON.stringify(combined));
-    assert.deepStrictEqual(combined, { notice: 'Replaced with Body2 + lines: 2 regions, 2 chains', edges: 8, sketches: ['Sketch 1', 'Body2 + lines'], shapes: 8, plan: ['chain:null', 'loop:exterior', 'loop:interior'] },
+    assert.deepStrictEqual(combined, { notice: 'Replaced with Body2 + lines: 2 regions, 2 chains', edges: 7, sketches: ['Sketch 1', 'Body2 + lines'], shapes: 8, plan: ['chain:null', 'loop:exterior', 'loop:interior'] },
       `[${label}] a body + chains payload lands as one plan`);
 
     // 5. a reload in Fusion mode shows the last selection (the stored design)
     await leaveWhenStored(8);
     await openFusion();
-    await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 8`, 'after a reload: the last selection in Prepare');
+    await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 7`, 'after a reload: the last selection in Prepare');
     const reloaded = await look();
     console.log(`[${label}] reload:`, JSON.stringify(reloaded));
     assert.deepStrictEqual([reloaded.sketches, reloaded.plan], [['Sketch 1', 'Body2 + lines'], ['chain:null', 'loop:exterior', 'loop:interior']], `[${label}] a reload shows the last selection with its plan`);

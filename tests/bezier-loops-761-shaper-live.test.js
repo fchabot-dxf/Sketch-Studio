@@ -1,7 +1,8 @@
 // tests/bezier-loops-761-shaper-live.test.js — TASK 761: an outline drawn with the BEZIER tool is a real region in Shaper (desktop 1280 x 800, real mouse
 // and keys; the page tools of tests/helpers/pocket-live.js):
-//  1. DESIGN: the Bezier tool draws three curves (a corner, a smooth anchor dragged, back on the first anchor), Enter ends it; Shift+C and a click on the path's
-//     end point closes it (its two ends made coincident: the gap is 0); the page's own findLoops returns ONE loop of the three beziers (screenshot);
+//  1. DESIGN: the Bezier tool draws three curves (a corner, a smooth anchor dragged, back on the first anchor); TASK 762: the click on the first anchor
+//     closes the outline (its two ends made coincident by the tool, as the Line tool does: the gap is 0) and ends the path; the page's own findLoops
+//     returns ONE loop of the three beziers (screenshot);
 //  2. PREPARE: a click inside picks the region; the type menu offers Inside, Outside and Pocket; Pocket with the Spiral clearing (Loop on): its tool paths are
 //     drawn, every point of them inside the curved region, some in the curve's bulge (screenshot, zoomed on the curve);
 //  3. EXPORT (Loop off: the finish is the inside cut on the wall): the downloaded Shaper SVG writes the outline with a cubic `C` per bezier, the control points the shapes';
@@ -28,7 +29,7 @@ const loopsInPage = () => evalJs(`Promise.all([import('/packages/core/loop-finde
     return { id: l.id, kinds: l.edges.map((e) => by.get(e).type), poly: p, box }; }); })`);
 
 try {
-  // ── 1. Design: three beziers with the Bezier tool, closed by Close path ──
+  // ── 1. Design: three beziers with the Bezier tool, closed on its first anchor ──
   await openMode('design');
   await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0 && !!window.__designController`, 'Design shown');
   await evalJs(`(() => { const st = ${ST}; for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k); st.shapes.length = 0; st.constraints.length = 0; st.saveState('clear'); })()`);
@@ -38,17 +39,14 @@ try {
   await click(A);                                   // a corner anchor
   await click(B);                                   // a corner: A -> B is a straight cubic
   await drag(C, { x: C.x - 130, y: C.y });          // a SMOOTH anchor: its handles horizontal
-  await click(A);                                   // back on the first anchor (a new joint at the same point)
-  await key('Enter', 'Enter', 13);
+  await click(A);                                   // back on the first anchor: TASK 762, the tool closes the outline there and ends the path
   out.drawn = await evalJs(`${ST}.shapes.map((s) => s.type)`);
   assert.deepStrictEqual(out.drawn, ['bezier', 'bezier', 'bezier'], '1: the Bezier tool drew three beziers');
-  out.loopsBefore = (await loopsInPage()).length;
-  assert.strictEqual(out.loopsBefore, 0, '1: not closed yet (its last anchor is its own joint): no loop');
-  await key('C', 'KeyC', 67, 8, 'C');               // Shift+C: Close path
-  await click(A);                                   // on the path's end point (a press on a bezier's body picks nothing: the shared pick snaps to lines / arcs only)
+  out.ended = await evalJs(`!${ST}.active`);
+  assert.ok(out.ended, '1: the closing click ended the path');
   await key('s', 'KeyS', 83, 0, 's');
   out.added = await evalJs(`${ST}.constraints.map((k) => k.type)`);
-  assert.deepStrictEqual(out.added, ['coincident'], '1: Close path made the two ends coincident (gap 0), no line');
+  assert.deepStrictEqual(out.added, ['coincident'], '1: the closing click made the two ends coincident (gap 0), no line');
   const loops = await loopsInPage();
   out.loops = loops.map((l) => l.kinds);
   assert.deepStrictEqual(out.loops, [['bezier', 'bezier', 'bezier']], '1: the page\'s findLoops returns ONE loop of the three beziers');

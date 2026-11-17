@@ -309,6 +309,7 @@ function inGeometrySelection(state, kind, id) {
 // pressed entity alone (drag.click), what the press selected before.
 // TASK 751: the ONE place a drag moves bezier control points: each follows its end joint by that joint's displacement since the press (a rigid
 // move carries the whole curve; new arrays, so the undo snapshot keeps the old ones). Called after every drag step of a group drag and at its release.
+// TASK 762: and of a one-shape BODY drag (startShapeDrag: a bezier pressed on its body): drag.controls says which (none: nothing to carry).
 function carryControlPoints(state, drag) {
     for (const { shape, c1, c2 } of (drag.controls || [])) {
         const a = state.joints.get(shape.joints[0]), b = state.joints.get(shape.joints[shape.joints.length - 1]);
@@ -317,6 +318,13 @@ function carryControlPoints(state, drag) {
         shape.c1 = [c1[0] + a.x - a0.x, c1[1] + a.y - a0.y];
         shape.c2 = [c2[0] + b.x - b0.x, c2[1] + b.y - b0.y];
     }
+}
+
+// TASK 751: the beziers a drag carries the control points of: those whose two end joints are both dragged (`initial`: joint -> its position at the
+// press), each with its control points at the press. TASK 762: read by the group drag and the one-shape body drag alike.
+function dragControls(state, initial) {
+    return (state.shapes || []).filter(s => s.type === 'bezier' && Array.isArray(s.c1) && Array.isArray(s.c2) && (s.joints || []).length >= 2 && initial.has(s.joints[0]) && initial.has(s.joints[s.joints.length - 1]))
+        .map(s => ({ shape: s, c1: [...s.c1], c2: [...s.c2] }));
 }
 
 function startGroupDrag(e, svg, state, primaryId, click) {
@@ -328,8 +336,7 @@ function startGroupDrag(e, svg, state, primaryId, click) {
     svg.setPointerCapture(e.pointerId);
     // TASK 751: a bezier's two control points are shape DATA, not solver points (#core/shapes.js makeBezier): the group drag carries each with
     // its own end joint (c1 with joints[0], c2 with joints[1]), from where they were at the press (carryControlPoints)
-    const controls = (state.shapes || []).filter(s => s.type === 'bezier' && Array.isArray(s.c1) && Array.isArray(s.c2) && (s.joints || []).length >= 2 && initial.has(s.joints[0]) && initial.has(s.joints[s.joints.length - 1]))
-        .map(s => ({ shape: s, c1: [...s.c1], c2: [...s.c2] }));
+    const controls = dragControls(state, initial);
     state.drag = { type: DRAG_TYPES.CLUSTER, group: true, id: primaryId, jointIds, initial, startWorld, lastTarget: startWorld, arcRims: [], click, pointerId: e.pointerId, controls };
     dbg.log('selection', '[selection-tools] group drag', { joints: jointIds.length, click });
     return true;
@@ -555,9 +562,11 @@ function startShapeDrag(e, svg, state, hitShape) {
     };
     // TASK 538: the BODY point = the point of the shape that was grabbed, fixed ONCE here by its parameter (t along a line, the angle
     // on a circle / arc rim) through the shape kind's declared entry (definitions.js BODY_POINTS); the solver's spring pulls that point.
-    // A kind without an entry (bezier) has no body point: its drag keeps the member joint targets below.
+    // A kind without an entry (bezier) has no body point: its drag keeps the member joint targets below. TASK 762: a bezier's control points
+    // move with its two end joints (carryControlPoints: the body drag moves the whole curve, as a group drag does).
     const bodyKind = BODY_POINTS[hitShape.shape.type];
     if (bodyKind) state.drag.body = { shape: id, param: bodyKind.param(jointIds.map(jid => state.joints.get(jid)), hitShape.pt) };
+    else state.drag.controls = dragControls(state, initialPositions);
     dbg.log('selection', '[selection-tools] shape selected', { id: hitShape.shape.id, selectedCount: state.selectedShapes.size });
     return true;
 }
@@ -681,7 +690,7 @@ export function handleSelectionPointerMove(e, svg, state) {
     const n = (maxStep > 0 && state.drag.id && state.joints.has(state.drag.id)) ? Math.max(1, Math.ceil(jump / maxStep)) : 1;
     for (let k = 1; k < n; k++) dragToward(e, svg, state, { x: from.x + (wpt.x - from.x) * k / n, y: from.y + (wpt.y - from.y) * k / n }, false);
     dragToward(e, svg, state, wpt, true);
-    if (state.drag.group) carryControlPoints(state, state.drag); // TASK 751
+    carryControlPoints(state, state.drag); // TASK 751 (a group drag); TASK 762 (a bezier's body drag)
     state.drag.lastPointer = wpt;
     return true;
 }
@@ -1001,7 +1010,7 @@ export function handleSelectionPointerUp(e, svg, state) {
     // Cleanup drag targets so joints stop trying to follow the mouse (a body drag: its shape's one target, task 538), BEFORE a
     // snap-on-release below solves (TASK 575: the one release, #core/sketch-state.js releaseDragTargets)
     releaseDragTargets(state, state.drag);
-    if (state.drag && state.drag.group) carryControlPoints(state, state.drag); // TASK 751: where the last frames left the end joints
+    if (state.drag) carryControlPoints(state, state.drag); // TASK 751 / 762: where the last frames left the end joints
     if (state.drag && state.drag.group && selectionState.isDragging && boxTargets(state).some((t) => t.mode === 'select')) track('group-move'); // TASK 753: a whole group moved
 
     // TASK 588: a group drag adds nothing on release; released without a move it was a click on the pressed member: that entity alone is

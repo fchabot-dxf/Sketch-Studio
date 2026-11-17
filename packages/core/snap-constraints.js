@@ -39,7 +39,8 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
         // A point the sketch ALREADY holds on the target adds nothing (task 537's rule; TASK 575: the owner's drag added
         // pointOnLine(line end, construction line) beside the collinear that already implies it). The engine's rank test decides:
         // the snap's rows raise no rank over the existing driving constraints = already determined.
-        if (state.engine && typeof state.engine.isDistanceRedundant === 'function' && state.engine.isDistanceRedundant({ type, ...params })) {
+        // TASK 762: a point-on-curve the curve's kind cannot hold (a Bezier) skips the probe (the solver has no rows for it): the manager refuses it with the reason.
+        if (!ConstraintManager.pointOnCurveRefusal(state, type, params) && state.engine && typeof state.engine.isDistanceRedundant === 'function' && state.engine.isDistanceRedundant({ type, ...params })) {
             dbg.debug('app', '[snap-constraints] snap already held by the sketch: nothing added', { type, params });
             return false;
         }

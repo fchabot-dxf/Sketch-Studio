@@ -7,6 +7,7 @@ import { isPointLineDistance } from '../geometry.js';
 import { symmetricOperands } from '../symmetric.js';
 import { offsetOperands } from '../offset.js';
 import { patternOperands, isPatternConstraint } from '../pattern.js';
+import { rigidBlocks } from '../group-model.js';
 
 // THE declaration of the solver's non-joint unknown (task 515, like Fusion and PlaneGCS): a CIRCLE is one centre joint plus a `radius`,
 // and that radius is a solver unknown. `shape.radius` stays the ONE store: _pack reads it as the start value, _unpack writes the solved
@@ -17,22 +18,34 @@ export function hasRadiusUnknown(s) {
 
 // The solver state is joint x/y, circle radii AND any free constraint scalar unknowns (Definition.scalarUnknown):
 // a caller that tries a solve and rolls it back snapshots and restores all three here.
+// TASK 752: and the control points of every bezier (shape data, not unknowns: a rigid block's solve carries them with the block, _unpack;
+// the carry writes NEW arrays, so keeping the arrays is the snapshot).
 export function snapshotSolverState(joints, shapes, constraints) {
-  const pos = new Map(), radii = new Map(), scalars = new Map();
+  const pos = new Map(), radii = new Map(), scalars = new Map(), controls = new Map();
   for (const [id, j] of joints) pos.set(id, { x: j.x, y: j.y });
   for (const s of (shapes || [])) if (hasRadiusUnknown(s)) radii.set(s, s.radius);
+  for (const s of (shapes || [])) if (s && s.type === 'bezier') controls.set(s, [s.c1, s.c2]);
   for (const c of (constraints || [])) {
     const def = c && Definitions[c.type];
     if (def && typeof def.scalarUnknown === 'function' && !c.isDriven && !c.driven && def.scalarUnknown(c, shapes)) {
       scalars.set(c, c.value);
     }
   }
-  return { pos, radii, scalars };
+  return { pos, radii, scalars, controls };
 }
 export function restoreSolverState(joints, shapes, snap) {
   for (const [id, j] of joints) { const p = snap.pos.get(id); if (p) { j.x = p.x; j.y = p.y; } }
   for (const [s, r] of snap.radii) s.radius = r;
   if (snap.scalars) for (const [c, v] of snap.scalars) c.value = v;
+  if (snap.controls) for (const [s, [c1, c2]] of snap.controls) { s.c1 = c1; s.c2 = c2; }
+}
+
+// TASK 752: move a bezier's two control points (shape data) by (dx, dy): new arrays, so a snapshot holding the old ones keeps them.
+function carryControls(beziers, dx, dy) {
+  for (const s of beziers) {
+    if (Array.isArray(s.c1)) s.c1 = [s.c1[0] + dx, s.c1[1] + dy];
+    if (Array.isArray(s.c2)) s.c2 = [s.c2[0] + dx, s.c2[1] + dy];
+  }
 }
 
 // THE reachable directions of a point p(x) (task 538): its gradient with respect to the unknowns as sparse entries [{ col, gx, gy }]
@@ -86,6 +99,40 @@ export class NewtonSolver {
       prepassHandoffResidual: 1e-2
     }, config);
     this.interaction = new InteractionSolver(this);
+    // TASK 752: where the user groups are read at every _pack ({ groups, enteredGroupId }, read live: the sketch state): each group that
+    // is not entered is a rigid BLOCK the solver only translates (#core/group-model.js rigidBlocks). null: no group, no block.
+    this.groupState = config.groupState || null;
+  }
+
+  // TASK 752: the rigid blocks of this pack (group-model rigidBlocks over the solver's shapes and groupState), or null when there is none
+  // (the pack is then exactly the one before task 752). blockOf: joint id -> block index; two blocks sharing a joint are ONE block (they
+  // only translate, so a shared point moves them together); shapes: block index -> its shapes (circle radii frozen, bezier controls carried).
+  _blocks() {
+    const gs = this.groupState;
+    const list = gs ? rigidBlocks({ shapes: this.shapes, groups: gs.groups, enteredGroupId: gs.enteredGroupId }) : [];
+    if (!list.length) return null;
+    const up = list.map((_, i) => i);
+    const root = (i) => { while (up[i] !== i) { up[i] = up[up[i]]; i = up[i]; } return i; };
+    const owner = new Map();
+    list.forEach((b, i) => {
+      for (const s of b.shapes) {
+        for (const jid of (s.joints || [])) {
+          if (!this.joints.has(jid)) continue;
+          if (!owner.has(jid)) { owner.set(jid, i); continue; }
+          const a = root(owner.get(jid)), c = root(i);
+          if (a !== c) up[Math.max(a, c)] = Math.min(a, c);
+        }
+      }
+    });
+    const blockOf = new Map();
+    for (const [jid, i] of owner) blockOf.set(jid, root(i));
+    const shapes = new Map();
+    list.forEach((b, i) => {
+      const r = root(i);
+      if (!shapes.has(r)) shapes.set(r, []);
+      shapes.get(r).push(...b.shapes);
+    });
+    return { blockOf, shapes };
   }
 
   // Pack free joint coordinates into Float64Array and build index maps
@@ -96,6 +143,12 @@ export class NewtonSolver {
     // the Jacobian does *not* contain duplicate columns that cause rank-deficiency.
     this._varIndex = new Map();            // jointId -> varIndex (all free members mapped)
     this._clusterMembers = new Map();      // repId -> [memberIds] (only non-fixed members)
+    // TASK 752: the rigid blocks (null: none) and, with blocks, each joint's constant OFFSET from its variable (dense layout: a block
+    // member's position = the block's x/y + its offset, the offsets being the positions at this pack: nothing stored between solves) and
+    // the bezier controls each block variable carries (_unpack).
+    const blocks = this._blocks();
+    this._offset = blocks ? new Float64Array(this.joints.size * 2) : null;
+    this._blockCarry = blocks ? [] : null;
 
     const freeReps = [];
     const processed = new Set(); // joint ids already assigned to a cluster/var
@@ -112,8 +165,20 @@ export class NewtonSolver {
       while (a !== r) { const nx = parent.get(a); parent.set(a, r); a = nx; }
       return r;
     };
+    // TASK 752: with blocks, each component carries the block it belongs to (tagOf: a block member's own block, or the block of a member
+    // it is coincident with: an outside point coincident with a member moves with that block). Two components of DIFFERENT blocks are not
+    // merged: that coincident's rows stay and translate the blocks onto each other.
+    const tag = new Map();
+    const tagOf = (r) => (tag.has(r) ? tag.get(r) : blocks.blockOf.get(r));
     for (const c of this.constraints) {
-      if (c.type === 'coincident' && c.joints) { const [j1, j2] = c.joints; const a = find(j1), b = find(j2); if (a !== b) parent.set(a, b); }
+      if (c.type === 'coincident' && c.joints) {
+        const [j1, j2] = c.joints; const a = find(j1), b = find(j2);
+        if (a === b) continue;
+        if (!blocks) { parent.set(a, b); continue; }
+        const ta = tagOf(a), tb = tagOf(b);
+        if (ta !== undefined && tb !== undefined && ta !== tb) continue;
+        parent.set(a, b); tag.set(b, ta !== undefined ? ta : tb);
+      }
     }
     const inOrder = new Map(); // component root -> its joints in insertion order
     for (const [id] of this.joints.entries()) {
@@ -122,11 +187,65 @@ export class NewtonSolver {
       inOrder.get(root).push(id);
     }
 
+    // TASK 752: each block's joints in insertion order (its members and the outside points coincident with one), its held points (a fixed
+    // member first, else a fixed outside point) and, per component, the first block member in it (the HOME whose position an outside point
+    // of that component takes).
+    const rootOf = (id) => (parent.has(id) ? find(id) : id);
+    const blockInfo = new Map(), firstMember = new Map();
+    if (blocks) {
+      for (const [jid, mj] of this.joints.entries()) {
+        const r = rootOf(jid), b = tagOf(r);
+        if (b === undefined) continue;
+        let B = blockInfo.get(b);
+        if (!B) blockInfo.set(b, B = { all: [], member: [], heldMember: null, heldOutside: null });
+        const member = blocks.blockOf.get(jid) === b;
+        B.all.push(jid); B.member.push(member);
+        if (member && !firstMember.has(r)) firstMember.set(r, mj);
+        if (mj && (mj.fixed || jid === 'j_origin')) { if (member) { if (!B.heldMember) B.heldMember = jid; } else if (!B.heldOutside) B.heldOutside = jid; }
+      }
+    }
+
     // Iterate in insertion order so representative selection is deterministic
     for (const [id, j] of this.joints.entries()) {
       if (!j || j.fixed) continue;
       if (id === 'j_origin') continue;
       if (processed.has(id)) continue;
+
+      // TASK 752: a rigid BLOCK (met at its first free joint): ONE x/y variable for all its joints, each at a constant offset (its home's
+      // position at this pack minus the representative's, the first member). A block holding a fixed point (a fixed member, or a member
+      // coincident with a fixed point / the origin) cannot move: every joint of it is a constant; when that point is an outside one, the
+      // block is first moved rigidly onto it (as a coincident cluster snaps onto its anchor), its bezier controls with it.
+      const blk = blocks ? tagOf(rootOf(id)) : undefined;
+      if (blk !== undefined) {
+        const B = blockInfo.get(blk), all = B.all;
+        const home = (k) => (B.member[k] ? this.joints.get(all[k]) : firstMember.get(rootOf(all[k])));
+        const held = (mj, jid) => mj.fixed || jid === 'j_origin';
+        for (const jid of all) processed.add(jid);
+        const beziers = blocks.shapes.get(blk).filter(s => s.type === 'bezier');
+        const anchor = B.heldMember || B.heldOutside;
+        if (anchor) {
+          const ap = this.joints.get(anchor), hp = B.heldMember ? ap : firstMember.get(rootOf(anchor));
+          const dx = ap.x - hp.x, dy = ap.y - hp.y;
+          if (dx !== 0 || dy !== 0) {
+            for (let k = 0; k < all.length; ++k) { const mj = this.joints.get(all[k]); if (B.member[k] && !held(mj, all[k])) { mj.x += dx; mj.y += dy; } }
+            carryControls(beziers, dx, dy);
+          }
+          for (let k = 0; k < all.length; ++k) { const mj = this.joints.get(all[k]); if (!B.member[k] && !held(mj, all[k])) { const hj = home(k); mj.x = hj.x; mj.y = hj.y; } }
+          continue; // no variables for this block
+        }
+        const rep = all[B.member.indexOf(true)];
+        const rp = this.joints.get(rep);
+        const varIdx = freeReps.length;
+        for (let k = 0; k < all.length; ++k) {
+          this._varIndex.set(all[k], varIdx);
+          const hp = home(k), d = this._jointIndex.get(all[k]) * 2;
+          this._offset[d] = hp.x - rp.x; this._offset[d + 1] = hp.y - rp.y;
+        }
+        this._clusterMembers.set(rep, all);
+        freeReps.push(rep);
+        if (beziers.length) this._blockCarry.push({ v: varIdx, x0: rp.x, y0: rp.y, beziers });
+        continue;
+      }
 
       // The full coincident cluster (transitive), its joints in insertion order
       const clusterJoints = inOrder.get(parent.has(id) ? find(id) : id);
@@ -187,7 +306,9 @@ export class NewtonSolver {
     // Build the solution vector: x,y of each free joint representative, then circle radii (hasRadiusUnknown), then any free
     // constraint scalar unknowns (Definition.scalarUnknown). Scalar unknown k is x[_nJointVars + nR + k] and positions[2 * joints.size + nR + k].
     const nJ = freeReps.length * 2;
-    this._radiusShapes = (this.shapes || []).filter(hasRadiusUnknown);
+    // TASK 752: a circle of a rigid block keeps its radius (a constant, not an unknown: a block never resizes)
+    const blockCircles = blocks ? new Set([...blocks.shapes.values()].flatMap(list => list.filter(hasRadiusUnknown))) : null;
+    this._radiusShapes = (this.shapes || []).filter(blockCircles ? (s => hasRadiusUnknown(s) && !blockCircles.has(s)) : hasRadiusUnknown);
     this._radiusSlot = new Map(this._radiusShapes.map((s, k) => [s.id, k]));
     this._scalarConstraints = [];
     this._scalarSlot = new Map();
@@ -226,15 +347,22 @@ export class NewtonSolver {
   // Unpack solution vector back into joints map
   _unpack(x) {
     // Unpack variable vector back into all joint members of each representative cluster
+    const off = this._offset; // TASK 752: a block member = its block's x/y + its offset
     for (let i = 0; i < this._freeIds.length; ++i) {
       const repId = this._freeIds[i];
       const members = this._clusterMembers && this._clusterMembers.get(repId) ? this._clusterMembers.get(repId) : [repId];
       for (const jid of members) {
         const j = this.joints.get(jid);
         if (!j) continue;
+        if (off) { const d = this._jointIndex.get(jid) * 2; j.x = x[i*2] + off[d]; j.y = x[i*2+1] + off[d+1]; continue; }
         j.x = x[i*2];
         j.y = x[i*2+1];
       }
+    }
+    // TASK 752: a block's bezier control points move with it (by its translation since the pack)
+    if (this._blockCarry) for (const b of this._blockCarry) {
+      const dx = x[b.v*2] - b.x0, dy = x[b.v*2+1] - b.y0;
+      if (dx !== 0 || dy !== 0) carryControls(b.beziers, dx, dy);
     }
     // THE write-back of a circle's solved radius (shape.radius is its only store) and any free constraint scalar unknown (c.value).
     for (let k = 0; k < this._radiusShapes.length; ++k) this._radiusShapes[k].radius = x[this._nJointVars + k];
@@ -258,9 +386,12 @@ export class NewtonSolver {
     const nR = this._radiusShapes.length, nS = this._scalarConstraints.length;
     const positions = new Float64Array(this.joints.size * 2 + nR + nS);
     let idx = 0;
+    const off = this._offset; // TASK 752: a block member = its block's x/y + its offset
     for (const [id, j] of this.joints.entries()) {
       const varIdx = this._varIndex.has(id) ? this._varIndex.get(id) : -1;
-      if (varIdx >= 0) {
+      if (varIdx >= 0 && off) {
+        positions[idx] = x[varIdx*2] + off[idx]; positions[idx + 1] = x[varIdx*2+1] + off[idx + 1]; idx += 2;
+      } else if (varIdx >= 0) {
         positions[idx++] = x[varIdx*2]; positions[idx++] = x[varIdx*2+1];
       } else {
         // If a joint is not individually mapped but belongs to a cluster whose rep exists,

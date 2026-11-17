@@ -2,17 +2,22 @@ import { CONSTRAINT_TYPES } from './constants.js';
 import { getCoincidentJoints } from './joints.js';
 import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-lines.js';
 import { NewtonSolver } from './solver/engine.js';
+import { rigidBlocks } from './group-model.js';
 
 // The nullspace only changes when the geometry, constraints or joint positions change, so the last result is
 // reused while that signature is identical (the renderer calls analyzeConstraintStatus every frame).
+// TASK 752: the user groups (groupState = { groups, enteredGroupId }) are the engine's: every group that is not entered is ONE rigid block
+// the solver only translates, so this nullspace is built over the same blocks (the solver derives them from groupState: group-model
+// rigidBlocks) and the signature holds the block list (entering / leaving a group changes the answer).
 let lastFreedom = { key: null, value: null };
-function cachedFreedom(joints, shapes, constraints) {
+function cachedFreedom(joints, shapes, constraints, groupState) {
   const parts = [];
   for (const [id, j] of joints) parts.push(id, j.x, j.y, j.fixed ? 1 : 0);
+  const blocks = groupState ? rigidBlocks({ shapes, groups: groupState.groups, enteredGroupId: groupState.enteredGroupId }) : [];
   const key = JSON.stringify([parts, constraints.filter(c => !c.isDriven && !c.driven),
-    shapes.map(s => [s.id, s.type, s.joints, s.radius])]);
+    shapes.map(s => [s.id, s.type, s.joints, s.radius]), blocks.map(b => [b.id, b.shapes.map(s => s.id)])]);
   if (lastFreedom.key !== key) {
-    lastFreedom = { key, value: new NewtonSolver(joints, constraints, shapes).jointFreedom() };
+    lastFreedom = { key, value: new NewtonSolver(joints, constraints, shapes, { groupState }).jointFreedom() };
   }
   return lastFreedom.value;
 }
@@ -34,7 +39,9 @@ function getHVBetweenJoints(j1, j2, constraints) {
     return null;
 }
 
-export function analyzeConstraintStatus({ joints, shapes, constraints }) {
+// groups / enteredGroupId (TASK 752): the sketch state's user groups (state.groups, state.enteredGroupId): a member of a group that is not
+// entered moves only with its whole block, and its DOF is the block's. Omitted: no group.
+export function analyzeConstraintStatus({ joints, shapes, constraints, groups = null, enteredGroupId = null }) {
     // a sketch with a constraint on an axis resolves it in the scene (task 539); any other sketch is analysed exactly as before
     if ((constraints || []).some(constraintReferencesAxis)) { joints = sceneJoints(joints); shapes = sceneShapes(shapes || []); }
     // 1. Data Structures
@@ -880,7 +887,7 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
     // 5. Solver-backed Rigidity Check (Numerical Rigidity Verification)
     // The heuristic propagation above only records PROVENANCE (dofSources) and legacy radial locks. The DOF itself,
     // and every set derived from it, is the nullspace of the global constraint Jacobian (NewtonSolver.jointFreedom).
-    const truth = cachedFreedom(joints, shapes || [], constraints || []);
+    const truth = cachedFreedom(joints, shapes || [], constraints || [], groups && groups.length ? { groups, enteredGroupId } : null);
     fixedJoints.clear(); constrainedJoints.clear(); lockedAxisX.clear(); lockedAxisY.clear();
     for (const [id] of joints) {
         const f = truth.freedom.get(id) ?? 2;

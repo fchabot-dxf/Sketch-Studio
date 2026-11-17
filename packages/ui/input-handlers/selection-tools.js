@@ -68,7 +68,7 @@ function getDragDOF(state, jointIds, drag = null) {
     // Rigid masked interaction: use analyzeConstraintStatus as single source-of-truth
     let lockX = false, lockY = false, guideLine = null;
     let status = null;
-    try { status = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes || [], constraints: state.constraints || [] }); } catch (_) { status = null; }
+    try { status = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes || [], constraints: state.constraints || [], groups: state.groups, enteredGroupId: state.enteredGroupId }); } catch (_) { status = null; } // TASK 752: a group's members move as its block
 
     const jointDOFs = (status && status.jointDOFs) ? status.jointDOFs : new Map();
     const fixedJoints = (status && status.fixedJoints) ? status.fixedJoints : new Set();

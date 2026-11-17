@@ -56,6 +56,7 @@ import { isReferenceJointId } from './reference-lines.js';
 import { SolverConfig } from './solver-config.js';
 import { patternSlotTexts } from './pattern-values.js';
 import { namePatternValues } from './parameters.js';
+import { copyGroups, dropEmptyGroups } from './group-model.js'; // TASK 756: a copy of a whole user group is a group
 
 const T = CONSTRAINT_TYPES;
 export const PATTERN_TYPES = Object.freeze([T.CIRCULAR_PATTERN, T.RECTANGULAR_PATTERN]);
@@ -448,16 +449,18 @@ function makeInstance(state, c, at) {
     state.joints.set(id, src && src.orphanAllowed ? { x: 0, y: 0, fixed: false, orphanAllowed: true } : { x: 0, y: 0, fixed: false });
     return id;
   });
-  const groups = new Map();
+  const groups = new Map(), copies = new Map();
   const shapes = c.sources.shapes.map((sid, si) => {
     const src = findShape(state.shapes, sid);
-    const { id, joints: sj, sketchId, userGroupId, groupId, filletSharp, dragTarget, ...rest } = src; // a copy is no fillet's arc and in no user group
+    const { id, joints: sj, sketchId, userGroupId, groupId, filletSharp, dragTarget, ...rest } = src; // a copy is no fillet's arc (its user group: copyGroups below)
     const copy = { ...rest, id: `s${seq}_p${si}`, joints: c.sources.shapeJoints[si].map((k) => joints[k]) };
     if (groupId) { if (!groups.has(groupId)) groups.set(groupId, `pattern_${seq}_${groups.size}`); copy.groupId = groups.get(groupId); }
     state.shapes.push(copy); // the shapes.push wrap stamps the ACTIVE sketch
+    copies.set(sid, copy);
     if (PATTERN_KINDS[src.type].equal) state.constraints.push(...makeArc(null, copy.joints[0], copy.joints[1], copy.joints[2], copy.subType || 'CENTER', !!copy.isConstruction).constraints);
     return copy.id;
   });
+  copyGroups(state, state, copies); // TASK 756: each copy of a whole user group is a group beside the original (#core/group-model.js)
   return { at: at.slice(), shapes, joints };
 }
 
@@ -476,6 +479,7 @@ function removeInstance(state, inst) {
     if (k && !isPatternConstraint(k) && (names(k, SHAPE_FIELDS, shapes) || names(k, JOINT_FIELDS, joints))) state.constraints.splice(i, 1);
   }
   for (const j of joints) state.joints.delete(j);
+  dropEmptyGroups(state); // TASK 756: the instance's copy groups go with its copies
 }
 
 /** Put every copy at its exact place: each copy point at T(its source point), each circle copy's radius = its source's. */
@@ -587,6 +591,7 @@ export function editPatterns(state, list, solve = (s) => (s.engine && typeof s.e
 function backupState(state, records) {
   return {
     records: records.map((c) => [c, { ...c }]), shapes: state.shapes.slice(), constraints: state.constraints.slice(),
+    groups: Array.isArray(state.groups) ? state.groups.map((g) => ({ ...g })) : null, // TASK 756: an instance's copy groups (copyGroups)
     joints: new Map([...state.joints].map(([id, j]) => [id, { ...j }])),
     radii: state.shapes.filter((s) => typeof s.radius === 'number').map((s) => [s, s.radius]),
   };
@@ -595,6 +600,7 @@ function restoreState(state, b) {
   for (const [c, record] of b.records) { for (const k of Object.keys(c)) delete c[k]; Object.assign(c, record); }
   state.shapes.length = 0; state.shapes.push(...b.shapes);
   state.constraints.length = 0; state.constraints.push(...b.constraints);
+  if (b.groups) { state.groups.length = 0; state.groups.push(...b.groups); } // TASK 756
   for (const id of [...state.joints.keys()]) if (!b.joints.has(id)) state.joints.delete(id);
   for (const [id, j] of b.joints) { const live = state.joints.get(id); if (live) Object.assign(live, j); else state.joints.set(id, j); }
   for (const [s, r] of b.radii) s.radius = r;

@@ -86,8 +86,9 @@ export const SHORTCUTS = Object.freeze([
   { id: 'file.save', label: 'Save', group: 'Edit', hosts: ALL, scope: 'app', keys: [{ key: 's', mod: true, shift: false, alt: false }] }, // sidebar-projects.js
   // ── Sketch ──
   { id: 'sketch.construction', label: 'Construction on / off', group: 'Sketch', hosts: ALL, scope: 'app', keys: [{ key: 'k', mod: false, alt: false }] }, // design-browser.js
-  { id: 'sketch.group', label: 'Group', group: 'Sketch', hosts: ['shaper'], scope: 'canvas', keys: [{ key: 'g', mod: true, shift: false }] }, // apps/shaper/src/main.js
-  { id: 'sketch.ungroup', label: 'Ungroup', group: 'Sketch', hosts: ['shaper'], scope: 'canvas', keys: [{ key: 'g', mod: true, shift: true }] },
+  // TASK 756: every app (user groups are part of the shared Design tab): input-manager.js runs #ui/group-actions.js
+  { id: 'sketch.group', label: 'Group', group: 'Sketch', hosts: ALL, scope: 'canvas', keys: [{ key: 'g', mod: true, shift: false }] },
+  { id: 'sketch.ungroup', label: 'Ungroup', group: 'Sketch', hosts: ALL, scope: 'canvas', keys: [{ key: 'g', mod: true, shift: true }] },
   { id: 'sketch.combine', label: 'Combine', group: 'Sketch', hosts: ['shaper'], scope: 'canvas', keys: [{ key: 'c', mod: true, shift: true }] }, // the profiles opt-in
   { id: 'sketch.uncombine', label: 'Uncombine', group: 'Sketch', hosts: ['shaper'], scope: 'canvas', keys: [{ key: 'u', mod: true, shift: true }] },
   // ── Drawing (only while a tool is at work; its handler runs before the canvas letters) ──

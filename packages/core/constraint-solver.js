@@ -111,6 +111,9 @@ export function createEngine(options = {}){
 
   function jointFreedom() { return solver.jointFreedom(); }
   function bodyDragTarget(body, cursor) { return solver.bodyDragTarget(body, cursor); }
+  // TASK 752: where this engine reads the user groups ({ groups, enteredGroupId }, read at every solve: the sketch state riding this
+  // store, createSketchState). Every group that is not entered is a rigid block the solver only translates (engine.js _pack).
+  function setGroupState(gs) { solver.groupState = gs || null; }
 
-  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, isDistanceRedundant, jointFreedom, bodyDragTarget };
+  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, isDistanceRedundant, jointFreedom, bodyDragTarget, setGroupState };
 }

@@ -3,7 +3,7 @@
 //     ungroup dissolves ONE level, an old flat document loads unchanged (and selects as a one-level nest);
 //  2. Shaper's import (SVG and DXF) groups in the app: each profile (outline + holes) / open chain a group, named after its element; an
 //     island inside a hole its own group; the whole file ONE group around them; a single-profile file just that group; import + groups =
-//     ONE undo step; ungroup returns loose geometry; SketchStudio's import makes no group (SketchStudio has no Group command);
+//     ONE undo step; ungroup returns loose geometry; TASK 756: SketchStudio's import lands with the same groups (every app has user groups);
 //  3. exports are BYTE-IDENTICAL with and without the groups: Shaper's file and its 2D preview copy (no <g> gained), SketchStudio's SVG / DXF;
 //  4. the Select tool, real pointer events: a click on a letter selects the whole FILE group, a drag moves every joint by the same vector
 //     (lengths unchanged); a double click enters (the letter, outline + hole); again (its curves); a click on empty canvas / Esc steps out;
@@ -155,7 +155,8 @@ try {
   const studio = await quiet(open)({ host: 'sketchstudio', profile: await createProfile() });
   try {
     await quiet(studio.importFile)(SVG, 'letters.svg');
-    eq(studio.state.groups.length, 0, 'SketchStudio has no Group command: its import makes no group');
+    eq(studio.state.groups.map((g) => `${g.name}${g.parentId ? '<' + studio.state.groups.find((p) => p.id === g.parentId).name : ''}:${shapesInGroup(studio.state, g.id).length}`), measured.svgGroups,
+      'TASK 756: the SketchStudio import lands with the same groups as the Shaper import (user groups are part of the shared Design tab)');
   } finally { await studio.close(); }
 }
 

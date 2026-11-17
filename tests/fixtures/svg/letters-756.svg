@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="60mm" viewBox="0 0 200 60">
+  <path id="O" fill="#000000" d="M10 10 H30 V50 H10 Z M15 15 H25 V45 H15 Z"/>
+  <path id="A" fill="#000000" d="M40 50 L50 10 L60 50 Z M47 40 L50 28 L53 40 Z"/>
+  <path id="B" fill="#000000" d="M70 10 H90 V50 H70 Z M75 15 H85 V27 H75 Z M75 33 H85 V45 H75 Z"/>
+  <path id="T" fill="#000000" d="M100 10 H140 V50 H100 Z M105 15 H135 V45 H105 Z"/>
+  <rect id="isl" fill="#7F7F7F" x="112" y="22" width="16" height="16"/>
+  <polyline id="tail" points="150,10 160,20 170,10" fill="none" stroke="#7F7F7F"/>
+  <circle id="dot" fill="#000000" cx="190" cy="15" r="4"/>
+</svg>

@@ -209,7 +209,8 @@ for (const h of APP_HOSTS) {
   assert(!SHORTCUTS.some((s) => s.id.startsWith('plotter.art.') || s.id === 'plotter.finishPolyline'), h + ': the retired art-tool keys are not declared (TASK 748)');
 }
 assert(listIds('shaper').includes('sketch.group') && listIds('shaper').includes('sketch.combine'), 'Shaper lists Group and Combine');
-for (const h of ['sketchstudio', 'penplotter', 'trace']) assert(!listIds(h).includes('sketch.group') && !listIds(h).includes('sketch.combine'), h + ' does not list Shaper\'s Group / Combine');
+for (const h of APP_HOSTS) assert(listIds(h).includes('sketch.group') && listIds(h).includes('sketch.ungroup'), h + ' lists Group / Ungroup (TASK 756: user groups in every app)');
+for (const h of ['sketchstudio', 'penplotter', 'trace']) assert(!listIds(h).includes('sketch.combine'), h + ' does not list the Shaper Combine');
 assert(listIds('penplotter').includes('view.panHold') && !listIds('sketchstudio').includes('view.panHold'), 'Hold Space to pan: Pen Plotter only');
 assert(!SHORTCUTS.some((s) => s.hosts.includes('sketchstudio') && s.keys.some((c) => c.key === 't') && s.id !== 'tool.perpendicular'), 'SketchStudio: T is only Perpendicular (ruling 1)');
 assert.deepStrictEqual(comboCaps(shortcutById('edit.undo').keys[0]), ['Ctrl', 'Z']);

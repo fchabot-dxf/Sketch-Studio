@@ -103,7 +103,12 @@ await (async () => {
     assert(before.includes('Outline'), 'the starter toolpath is still there before: ' + before);
     await clickEl('#tool-select');
     await waitFor(`window.__sketch.controller.state.currentTool === 'select'`, 'select tool active before selecting the circle');
-    const c = await world(82, 25); await click(c.x, c.y);       // the circle's edge (stroke #0000ff, fill #00ff00)
+    // the circle's edge (stroke #0000ff, fill #00ff00). TASK 756: the import lands grouped (the file one group: the owner's one rule, a click
+    // selects the whole group, a double click enters it), so the circle alone is picked with a double click: the file entered, the circle selected
+    const c = await world(82, 25);
+    await click(c.x, c.y);
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c.x, y: c.y, button: 'left', buttons: 1, clickCount: 2 }); await sleep(30);
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c.x, y: c.y, button: 'left', buttons: 0, clickCount: 2 }); await sleep(200);
     await waitFor(`import('/apps/penplotter/src/state.js').then(m => m.state.selectedShapeIds.size === 1)`, 'circle selected for + Outline');
     await clickEl('.sk-header-tab[data-tab="toolpath"]'); await stageOn('toolpath');
     await clickEl('#addOutlineTp');

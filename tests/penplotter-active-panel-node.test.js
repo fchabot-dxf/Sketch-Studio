@@ -33,12 +33,13 @@ try {
 
   const imp = importDrawing(SVG, 'active.svg'); assert(imp.ok, 'the SVG import: ' + imp.message);
   assert(app.state.shapes.length > 0, 'the SVG import adds shapes');
-  // Design: a click on the circle edge selects it.
+  // Design: the circle alone selected. TASK 756: the import lands grouped (the file one group): a click selects the whole file, a double click
+  // enters it and selects the circle (a one-shape piece: a curve of the file group).
   pressEl('#tool-select');
   const pt = app.toScreen(82, 25);
-  app.click(pt.x, pt.y);
+  app.dblclick(pt.x, pt.y);
   app.frames(2);
-  assert(P.selectedShapeIds.size > 0, 'the click selects the circle');
+  assert.deepStrictEqual([...P.selectedShapeIds].map((id) => app.state.shapes.find((s) => s.id === id).type), ['circle'], 'the double click selects the circle');
   pressEl('.sk-header-tab[data-tab="toolpath"]');
   assert(q('#addOutlineTp'), 'the toolpath stage (+ Outline there)');
 

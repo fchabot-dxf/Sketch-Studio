@@ -8,6 +8,8 @@
 // PP-7b's "Bake to Draw" stays DORMANT (one-store; toolpaths target #core directly via UNIFY-2). Host wiring ONLY.
 
 import { mountSketch } from '#ui/sketch-canvas.js';
+import { enteredShapes } from '#core/group-model.js'; // TASK 756: an entered user group dims the rest (the static underlay too)
+import { setInactiveOpacityToken } from '#ui/svg-renderer.js'; // TASK 756: the same dimming token as the shared renderer
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored sketch
 import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 import { sketchesSignature } from '#core/sketch-model.js';
@@ -183,9 +185,12 @@ export function mountSketchStage(view, ctx = {}) {
   // (>=3 pts and first==last within 0.001), so a fill VISIBLE here is a fill that will actually plot. Per-SHAPE, which
   // means an imported filled outline (decomposed into separate line shapes) shows no region fill — matching the
   // pipeline, which cannot hatch it either. Multi-shape loops need #core findLoops (already roadmapped, S7).
+  // TASK 756: while a user group is ENTERED (#core/group-model.js), the static shapes outside it are drawn dimmed here too, in the shared
+  // renderer's way (one <g class="sketch-inactive">, the --sk-inactive-sketch-opacity token from the same setting), so every app dims alike.
   const renderUnderlay = () => {
     if (!underlay || !controller) return;
-    const s = controller.state, parts = [];
+    const s = controller.state, parts = [], dimmed = [];
+    const inside = enteredShapes(s);
     for (const sh of s.shapes) {
       if (!isStatic(sh)) continue; // live (selected) shapes are drawn by the sketcher (DOF) — not the underlay
       const pts = coreShapeToPolyline(sh, s.joints);
@@ -197,11 +202,12 @@ export function mountSketchStage(view, ctx = {}) {
       const ring = st.fill ? closedPolygonFor({ type: 'polyline', points: pts }) : null;
       const d = 'M ' + pts.map(p => p[0] + ' ' + p[1]).join(' L ');
       const dash = sh.isConstruction ? ' stroke-dasharray="4 3" stroke-opacity="0.5"' : '';
-      parts.push('<path data-shape-id="' + sh.id + '" d="' + d + '"' + dash +
+      (inside && !inside.has(sh.id) ? dimmed : parts).push('<path data-shape-id="' + sh.id + '" d="' + d + '"' + dash +
         (ring ? ' fill="' + st.fill + '" fill-opacity="' + FILL_PREVIEW_OPACITY + '" fill-rule="evenodd"' : ' fill="none"') +
         (strokePaint ? ' stroke="' + strokePaint + '" stroke-width="' + st.width + '"' : ' stroke="none"') +
         ' stroke-linecap="round" stroke-linejoin="round"/>');
     }
+    if (dimmed.length) { setInactiveOpacityToken(underlay); parts.unshift('<g class="sketch-inactive">' + dimmed.join('') + '</g>'); } // under the entered group's paths
     underlay.innerHTML = parts.join('');
   };
 
@@ -259,7 +265,7 @@ export function mountSketchStage(view, ctx = {}) {
     if (sig !== lastSig) { lastSig = sig; if (ribbon) ribbon.refresh(); if (infoPanel) infoPanel.refresh(); }
     // UNIFY-throttle: dirty the underlay on shape-count / SELECTION change (a shape entering/leaving the live set),
     // NOT on per-frame joint moves — so dragging a live shape does NOT rebuild the (static) underlay's many paths.
-    const uSig = nShapes + '|' + state.staticShapeIds.size + '|' + (s.selectedShapes ? [...s.selectedShapes].sort().join(',') : '');
+    const uSig = nShapes + '|' + state.staticShapeIds.size + '|' + (s.selectedShapes ? [...s.selectedShapes].sort().join(',') : '') + '|' + (s.enteredGroupId || ''); // TASK 756: + the entered group (what is dimmed)
     if (uSig !== lastUSig) { lastUSig = uSig; underlayDirty = true; }
     syncUnderlayView();                                   // per frame (cheap) — alignment during pan/zoom
     if (underlayDirty) { renderUnderlay(); underlayDirty = false; } // rebuild paths only on change

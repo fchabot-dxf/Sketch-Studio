@@ -17,8 +17,6 @@
 //                             it as `paint` (Pen Plotter: fill / stroke -> its pen styles)
 //     options.describeElement (el) -> extra descriptor fields (Shaper: the element's cut record)
 //     options.keepDescIds     keep `descId` on the imported shapes (Shaper: the cut plan is keyed by it); default: removed after afterImport
-//     options.groupImport     TASK 751: a host with user groups (Shaper) groups the import in the app (#core/group-model.js groupImported): each
-//                             profile (an outline with its holes) / open chain one group, the whole file one group around them; same undo step
 //     options.showDesign      () -> void: TASK 706, how the host shows its Design view; called FIRST (an import lands in Design, shown: the canvas then
 //                             has its size for the fit, and the host's status line is seen). Omitted (Trace: it shows its Edit tab itself), the stage is not changed
 //     options.afterImport     (ctx) -> string | void, called once the shapes are in the sketch (ctx = { controller, state, format, fileName,
@@ -31,7 +29,7 @@
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js';
 import { importDxf, looksLikeDxf } from '#core/dxf-import.js';
 import { addSketch, activateSketch } from '#core/sketch-model.js';
-import { groupImported } from '#core/group-model.js'; // TASK 751: the import's user groups (options.groupImport)
+import { groupImported } from '#core/group-model.js'; // TASK 751 / 756: the import lands grouped, in every app
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from './input-handlers/pan-zoom.js';
 import { browserFileSeam, IMPORT_FILE_PICK } from './project-file.js';
@@ -157,7 +155,9 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
   activateSketch(st, sketch.id);
   for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
   for (const s of shapes) st.shapes.push(s);
-  if (options.groupImport) groupImported(st, shapes, { fileName: sketch.name, nameOf: elementNamer(descs, shapes) });
+  // TASK 751 / 756: every app has user groups: the import lands grouped in the app (#core/group-model.js groupImported): each profile (an
+  // outline with its holes) / open chain one group, the whole file one group around them; the same undo step as the import
+  groupImported(st, shapes, { fileName: sketch.name, nameOf: elementNamer(descs, shapes) });
 
   const extra = options.afterImport ? options.afterImport({ controller, state: st, format, fileName, descs, shapes, joints, sketch, root }) : null;
   if (!options.keepDescIds) for (const s of shapes) delete s.descId;

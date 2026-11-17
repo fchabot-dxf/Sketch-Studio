@@ -110,15 +110,24 @@ function padlock(kind, on, p, lay, gid, name) {
     + `<rect x="-5" y="-1" width="10" height="7.5" rx="1.2" style="fill:${ink}"/></g>`,
   ` class="tbox-lock" data-lock="${kind}" data-state="${on ? 'on' : 'off'}" data-group-id="${esc(gid)}" role="button" aria-pressed="${on}" aria-label="${esc(label)}" style="cursor:pointer"`);
 }
-// A text chip at world point p; `leftward`: it ends at p instead of starting there (a handle on the right of the box keeps its chip on screen).
-function label(p, z, text, cls, colour, leftward = false) {
-  const w = Math.round(text.length * 6.6) + 12, x = leftward ? -w : 0;
-  return at(p, z, `<rect x="${x}" y="-11" width="${w}" height="20" rx="4" style="fill:${colour}" fill-opacity="0.95"/>`
-    + `<text x="${x + 6}" y="3.5" font-size="12" font-weight="600" style="fill:#ffffff">${esc(text)}</text>`, ` class="${cls}" role="status" pointer-events="none"`);
+// A text chip at world point p; `leftward`: it ends at p instead of starting there (a handle on the right of the box). `view` = the visible world
+// x range { x0, x1 } (the canvas viewBox): the chip is kept inside it, and a text too wide for it is broken after its ": " (a phone's 390 px).
+function label(p, z, text, cls, colour, leftward = false, view = null) {
+  const widthOf = (t) => Math.round(t.length * 6.6) + 12;
+  const room = view ? (view.x1 - view.x0) / z - 8 : Infinity;
+  const cut = text.indexOf(': ');
+  const lines = widthOf(text) > room && cut > 0 ? [text.slice(0, cut + 1), text.slice(cut + 2)] : [text];
+  const w = Math.max(...lines.map(widthOf)), h = 20 * lines.length;
+  let x = leftward ? -w : 0;
+  if (view) x = Math.max((view.x0 - p.x) / z + 4, Math.min(x, (view.x1 - p.x) / z - w - 4)); // inside the visible canvas
+  return at(p, z, `<rect x="${x}" y="-11" width="${w}" height="${h}" rx="4" style="fill:${colour}" fill-opacity="0.95"/>`
+    + lines.map((t, i) => `<text x="${x + 6}" y="${3.5 + 20 * i}" font-size="12" font-weight="600" style="fill:#ffffff">${esc(t)}</text>`).join(''),
+  ` class="${cls}" role="status" pointer-events="none"`);
 }
 
-/** The box markup of every target (boxTargets), the gesture's readout and the refusal tip, in world units. '' when there is none. */
-export function transformBoxMarkup(state, z) {
+/** The box markup of every target (boxTargets), the gesture's readout and the refusal tip, in world units. '' when there is none.
+ *  view: the visible world x range { x0, x1 } (the chips stay inside it). */
+export function transformBoxMarkup(state, z, view = null) {
   if (!state || !(z > 0)) return '';
   const isCoarse = coarse(), out = [];
   for (const t of boxTargets(state)) {
@@ -143,11 +152,11 @@ export function transformBoxMarkup(state, z) {
     out.push(`<g class="tbox" data-group-id="${esc(t.gid)}" data-mode="${t.mode}">${parts.join('')}</g>`);
   }
   const d = state.drag && state.drag.type === DRAG_TYPES.TRANSFORM ? state.drag : null;
-  if (d && d.readout) out.push(label({ x: d.readout.world.x + 14 * z, y: d.readout.world.y - 18 * z }, z, d.readout.text, 'tbox-readout', 'var(--sk-tbox, var(--sk-selection, #017AFD))'));
+  if (d && d.readout) out.push(label({ x: d.readout.world.x + 14 * z, y: d.readout.world.y - 18 * z }, z, d.readout.text, 'tbox-readout', 'var(--sk-tbox, var(--sk-selection, #017AFD))', false, view));
   const tp = currentTip();
   if (tp) {
     const b = groupBox(state, tp.gid), right = !!b && tp.world.x > b.cx;
-    out.push(label({ x: tp.world.x + (right ? 12 : -12) * z, y: tp.world.y + 30 * z }, z, tp.text, 'tbox-tip', 'var(--sk-error, #ef4444)', right));
+    out.push(label({ x: tp.world.x + (right ? 12 : -12) * z, y: tp.world.y + 30 * z }, z, tp.text, 'tbox-tip', 'var(--sk-error, #ef4444)', right, view));
   }
   return out.join('');
 }

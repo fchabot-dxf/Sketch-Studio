@@ -55,7 +55,9 @@ export async function runTransformLive(host, phase) {
   const lines = () => evalJs(`(() => { const o = {}; for (const e of document.querySelectorAll('${C} line.shape-elem[data-shape-id]')) { const a = (k) => +e.getAttribute(k); o[e.dataset.shapeId] = [a('x1'), a('y1'), a('x2'), a('y2')]; } return o; })()`);
   const boxes = () => evalJs(`[...document.querySelectorAll('${C} .tbox')].map((e) => ({ mode: e.dataset.mode, handles: [...e.querySelectorAll('[data-handle]')].map((h) => h.dataset.handle), locks: Object.fromEntries([...e.querySelectorAll('.tbox-lock')].map((l) => [l.dataset.lock, l.dataset.state])) }))`);
   const centre = (sel) => evalJs(`(() => { const e = document.querySelector('${C} ${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
-  const tipText = () => evalJs(`(() => { const t = document.querySelector('${C} .tbox-tip text'); return t ? t.textContent : null; })()`);
+  // the refusal tip's text (its lines joined) and whether it lies inside the canvas
+  const tipText = () => evalJs(`(() => { const ts = [...document.querySelectorAll('${C} .tbox-tip text')]; return ts.length ? ts.map((t) => t.textContent).join(' ') : null; })()`);
+  const tipInside = () => evalJs(`(() => { const t = document.querySelector('${C} .tbox-tip rect'), c = document.querySelector('${C}'); if (!t) return null; const a = t.getBoundingClientRect(), b = c.getBoundingClientRect(); return a.left >= b.left - 0.5 && a.right <= b.right + 0.5; })()`);
   // the box (and the refusal tip / readout, when shown) plus a margin, inside the window
   const boxClip = async (extra = 70) => evalJs(`(() => { const rs = [...document.querySelectorAll('${C} .tbox, ${C} .tbox-tip, ${C} .tbox-readout')].map((e) => e.getBoundingClientRect());
     const l = Math.min(...rs.map((r) => r.left)), t = Math.min(...rs.map((r) => r.top)), rr = Math.max(...rs.map((r) => r.right)), b = Math.max(...rs.map((r) => r.bottom));
@@ -72,6 +74,9 @@ export async function runTransformLive(host, phase) {
     return { n: ks.length, ratio: ratios[0], ratioSpread: spread(ratios), turn: turns[0], turnSpread: spread(turns) };
   };
   const ctrlZ = () => sendRealKey(send, 'z', 'KeyZ', 90, 2);
+  // select the file group again when the selection was dropped (an undo clears it); after the double-click time, so it is never a double tap
+  // that would ENTER the file
+  const reselect = async () => { if ((await boxes()).some((b) => b.mode === 'select')) return; await sleep(550); await press(await member()); };
   // Undo: Ctrl+Z (desktop), the footer's Undo button by a tap (phone)
   const undo = async () => { if (phone) await tap(await evalJs(`(() => { const r = document.getElementById('btn-undo').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`)); else await ctrlZ(); };
 
@@ -138,7 +143,7 @@ export async function runTransformLive(host, phase) {
 
     // ── a second finger during a handle drag cancels it (phone)
     if (phone) {
-      if (!(await boxes()).length) await press(await member());
+      await reselect();
       const c0 = await centre('[data-handle="scale-se"]');
       await T('touchStart', [{ ...c0, id: 1 }]); await sleep(60);
       for (let i = 1; i <= 6; i++) { await T('touchMove', [{ x: c0.x + 6 * i, y: c0.y + 6 * i, id: 1 }]); await sleep(30); }
@@ -147,11 +152,11 @@ export async function runTransformLive(host, phase) {
       out.twoFingers = { during: mid.ratio, after: compare(before, await lines()).ratio };
       await T('touchEnd', []); await sleep(500);
       assert.ok(mid.ratio > 1.01 && Math.abs(out.twoFingers.after - 1) < 1e-9, `${name}: a second finger cancels the handle (the group goes back): ${JSON.stringify(out.twoFingers)}`);
-      if (!(await boxes()).length) await press(await member());
+      await reselect();
     }
 
     // ── rotate by the handle
-    if (!(await boxes()).some((b) => b.mode === 'select')) await press(await member());
+    await reselect();
     const r0 = await lines(), rot = await centre('[data-handle="rotate"]'), mid0 = await centre('.tbox-outline');
     const R = Math.hypot(rot.x - mid0.x, rot.y - mid0.y), a1 = -Math.PI / 2 + 40 * Math.PI / 180; // 40 degrees clockwise on screen from the top
     await drag(rot, { x: mid0.x + R * Math.cos(a1), y: mid0.y + R * Math.sin(a1) }, 14, async () => {
@@ -164,7 +169,7 @@ export async function runTransformLive(host, phase) {
     out.rotateShot = await shot(`${name}-4-rotated-by-handle.png`, await boxClip(90));
     await undo();
     await sleep(600);
-    if (!(await boxes()).some((b) => b.mode === 'select')) await press(await member());
+    await reselect();
 
     // ── a typed angle: click / tap on the rotate handle, 30 + Enter: 30 degrees COUNTER-CLOCKWISE on screen
     const t0 = await lines();
@@ -183,7 +188,7 @@ export async function runTransformLive(host, phase) {
     await sleep(600);
 
     // ── move (the existing group drag)
-    if (!(await boxes()).some((b) => b.mode === 'select')) await press(await member());
+    await reselect();
     const v0 = await lines(), mm = await member();
     await drag(mm, { x: mm.x, y: mm.y + 40 }); // (straight down and back up below: a group as wide as a phone screen keeps its padlocks on it)
     out.move = compare(v0, await lines());
@@ -192,7 +197,7 @@ export async function runTransformLive(host, phase) {
     assert.ok(out.moved > 1e-6 && Math.abs(out.move.ratio - 1) < 1e-9 && Math.abs(out.move.turn) < 1e-9, `${name}: the drag moved the group rigidly: ${JSON.stringify({ ...out.move, moved: out.moved })}`);
 
     // ── GREEN padlock: Lock size & angle: no handles, the drag still moves
-    if (!(await boxes()).some((b) => b.mode === 'select')) await press(await member());
+    await reselect();
     await press(await centre('.tbox-lock[data-lock="sizeAngle"]'));
     out.green = await boxes();
     assert.deepStrictEqual(out.green[0], { mode: 'select', handles: [], locks: { sizeAngle: 'on', full: 'off' } }, `${name}: the green padlock is on and the rotate / scale handles are gone: ${JSON.stringify(out.green)}`);
@@ -204,7 +209,7 @@ export async function runTransformLive(host, phase) {
     assert.ok(out.greenMoved > 1e-6, `${name}: with Lock size & angle the group still moves (${out.greenMoved})`);
 
     // ── RED padlock: Full lock: a drag moves nothing, the reason at the box
-    if (!(await boxes()).some((b) => b.mode === 'select')) await press(await member());
+    await reselect();
     await press(await centre('.tbox-lock[data-lock="full"]'));
     out.red = await boxes();
     assert.deepStrictEqual(out.red[0].locks, { sizeAngle: 'on', full: 'on' }, `${name}: the red padlock is on (Full lock implies size & angle)`);
@@ -212,11 +217,13 @@ export async function runTransformLive(host, phase) {
     if (phone) { await T('touchStart', [fm]); await sleep(60); for (let i = 1; i <= 10; i++) { await T('touchMove', [{ x: fm.x + 4 * i, y: fm.y + 3 * i }]); await sleep(30); } await sleep(150); }
     else { await mouse('mouseMoved', fm.x, fm.y, 0); await sleep(50); await mouse('mousePressed', fm.x, fm.y, 1); await sleep(40); for (let i = 1; i <= 10; i++) { await mouse('mouseMoved', fm.x + 4 * i, fm.y + 3 * i, 1); await sleep(30); } await sleep(150); }
     out.redTip = await tipText();
+    out.redTipInside = await tipInside();
     out.redShot = await shot(`${name}-8-red-lock-drag-refused.png`, await boxClip(110));
     if (phone) await T('touchEnd', []); else await mouse('mouseReleased', fm.x + 40, fm.y + 30, 0);
     await sleep(600);
     assert.deepStrictEqual(await lines(), f0, `${name}: with Full lock a drag moves nothing`);
     assert.ok(/has Full lock on: unlock it \(red padlock\) to move/.test(out.redTip || ''), `${name}: the reason shows at the box: ${out.redTip}`);
+    assert.strictEqual(out.redTipInside, true, `${name}: the reason lies inside the canvas (broken onto two lines when too wide)`);
     // the canvas / hold menu reads the same two states (desktop: right click; phone: the hold)
     if (!phone) {
       const mp = await member();

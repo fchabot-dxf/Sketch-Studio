@@ -93,7 +93,7 @@ try {
   await mouse('mouseMoved', rot.x, rot.y, 0); await sleep(40); await mouse('mousePressed', rot.x, rot.y, 1); await sleep(40);
   for (let i = 1; i <= 6; i++) { await mouse('mouseMoved', rot.x + 12 * i, rot.y + 4 * i, 1); await sleep(30); }
   await sleep(150);
-  out.fixedTip = await evalJs(`(() => { const t = document.querySelector('${C} .tbox-tip text'); return t ? t.textContent : null; })()`);
+  out.fixedTip = await evalJs(`(() => { const ts = [...document.querySelectorAll('${C} .tbox-tip text')]; return ts.length ? ts.map((t) => t.textContent).join(' ') : null; })()`);
   out.fixedShot = await shot('sketchstudio-refusal-3-fixed-point-at-handle.png', await boxClip());
   await mouse('mouseReleased', rot.x + 72, rot.y + 24, 0); await sleep(400);
   assert.strictEqual(out.fixedTip, 'a point of Group 1 is fixed: unlock it to rotate', 'the reason shows at the rotate handle');

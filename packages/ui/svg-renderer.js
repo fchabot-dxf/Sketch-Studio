@@ -2906,7 +2906,7 @@ switch(c.type){
 
   // TASK 753: the transform box of the selected / hovered user group (#ui/transform-box.js: Select tool only; nothing for a host without groups)
   out.dim = null;
-  if (groupState) out.push(transformBoxMarkup(groupState, zoom));
+  if (groupState) out.push(transformBoxMarkup(groupState, zoom, { x0: vb.x, x1: vb.x + vb.width }));
 
   // Apply accumulated SVG markup in a single DOM update to avoid partial-frame painting.
   // Ensure overlays that must be on top are appended last (guarantees highest stacking within this SVG)

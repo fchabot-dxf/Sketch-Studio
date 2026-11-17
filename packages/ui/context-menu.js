@@ -5,6 +5,7 @@
 
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { isDimension } from '#core/parameters.js';
+import { GROUP_LOCKS } from '#core/group-model.js'; // TASK 753: the two group locks' labels
 
 const STYLE_ID = 'sk-context-menu-styles';
 const CSS = `
@@ -183,6 +184,15 @@ function sketchSubmenu(actions) {
 // "Group" when the selection holds two or more things, "Ungroup" when it holds a group, "Enter group" on one group, "Leave group" while a
 // group is entered. They run #ui/group-actions.js (the functions the Ctrl+G / Ctrl+Shift+G keys run). The canvas menu shows them after
 // its geometry entries; a group's row in the design browser shows them alone (kind 'group').
+// TASK 753: "Lock size & angle" / "Full lock" (checked = on; #core/group-model.js GROUP_LOCKS, #ui/group-actions.js toggleGroupLock). Lock size & angle
+// is shown on and cannot be turned off while Full lock (which implies it) is on.
+function lockMenuItems(actions) {
+  const l = actions.groupLocks();
+  return [
+    { id: 'grp-lock-size', label: GROUP_LOCKS.sizeAngle.label, checked: l.sizeAngle, disabled: l.full, reason: l.full ? `${GROUP_LOCKS.full.label} is on` : undefined, onSelect: () => actions.toggleGroupLock('sizeAngle') },
+    { id: 'grp-lock-full', label: GROUP_LOCKS.full.label, checked: l.full, onSelect: () => actions.toggleGroupLock('full') },
+  ];
+}
 export function groupMenuItems(actions) {
   const g = actions.groupState();
   return [
@@ -190,6 +200,8 @@ export function groupMenuItems(actions) {
     ...(g.ungroup.length ? [{ id: 'grp-ungroup', label: 'Ungroup', onSelect: () => actions.ungroup() }] : []),
     ...(g.enter ? [{ id: 'grp-enter', label: 'Enter group', onSelect: () => actions.enterGroup() }] : []),
     ...(g.leave ? [{ id: 'grp-leave', label: 'Leave group', onSelect: () => actions.leaveGroup() }] : []),
+    // TASK 753: the one selected group's two locks, each showing its state (the box's padlocks are shortcuts to these): GROUP_LOCKS
+    ...(g.enter && actions.groupLocks ? lockMenuItems(actions) : []),
   ];
 }
 

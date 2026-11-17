@@ -22,6 +22,7 @@ import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointer
 import { stepOutOfGroup, selectedGroups, pickOwner, selectUnit, shapesInGroup, enteredGroup, isInGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
 import { groupSelection, ungroupSelection, groupMenuActions } from '#ui/group-actions.js'; // TASK 756: THE group commands (keys + menus), every app
 import { beginClosePath, handleClosePathPointerDown, closePathMenuActions } from '#ui/close-path-actions.js'; // TASK 760: Close path (the tool, its menu entry), every app
+import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
 import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
@@ -563,9 +564,10 @@ function handlePointerDown(e, svg, state) {
     state.lastMouse = { x: screenX, y: screenY };
     const w = screenToWorld(svg, screenX, screenY);
 
-    // Two-finger touch gestures (pinch/pan) should take priority over tool actions
+    // Two-finger touch gestures (pinch/pan) should take priority over tool actions. TASK 753: a second finger during a transform-box handle
+    // gesture cancels it (the group goes back) and pinches / pans as always.
     if (isTouch) {
-        try { if (handlePanZoomPointerDown(e, svg, state)) return true; } catch (_) { }
+        try { if (handlePanZoomPointerDown(e, svg, state)) { cancelTransformGesture(state); return true; } } catch (_) { }
     }
 
     // Navigation Priority: Middle Mouse Button always pans, regardless of active tool
@@ -677,6 +679,10 @@ function handlePointerDown(e, svg, state) {
     // TASK 658: while a pattern dialog is open (its tool, or an edit from a label under Select) its canvas picks come first
     if (patternSessionOpen() && handlePatternPointerDown(e, svg, state, hitJoint, hitShape, otherShape)) return true;
 
+    // TASK 753: the selected / hovered group's transform box (#ui/transform-box.js): a press on a padlock, the rotate handle or a corner is the
+    // box's (its handles lie off the geometry, where a press would otherwise pan)
+    if (transformBoxPointerDown(e, svg, state, hostNotify)) return true;
+
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
     if (!hitJoint && !hitShape && !hitConstraint && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.PAN)){
         const ph = handlePanZoomPointerDown(e, svg, state);
@@ -752,6 +758,7 @@ function handlePointerMove(e, svg, state) {
             if(handlePanZoomPointerMove(e, svg, state)) return true;
         }catch(_){ }
         e.preventDefault();
+    if (state.drag && state.drag.type === DRAG_TYPES.TRANSFORM) return transformBoxPointerMove(e, svg, state); // TASK 753: a box handle dragged
     // Apply unified touch offset: keep the preview above the finger
     let screenX = e.clientX, screenY = e.clientY;
     if (e.pointerType === 'touch') screenY += TOUCH_OFFSET_Y;
@@ -869,6 +876,11 @@ function handlePointerUp(e, svg, state) {
         try { if (handlePanZoomPointerUp(e, svg, state)) return true; } catch (_) { }
     }
     if (patternSessionOpen() && handlePatternPointerUp(e)) return true; // TASK 658: a pattern arrow drag ends (the dialog stays; after the finger's pan-zoom bookkeeping)
+    if (state.drag && state.drag.type === DRAG_TYPES.TRANSFORM) { // TASK 753: a box handle released (the transform runs, or a click opens the typed value)
+        transformBoxPointerUp(e, svg, state);
+        if (typeof svg.hasPointerCapture === 'function' && svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+        return true;
+    }
 
     // Apply touch offset to pointerup coords so finalization uses virtual coords too
     let screenX = e.clientX, screenY = e.clientY;
@@ -1026,7 +1038,8 @@ function setupEventListeners(svg, state) {
                 console.error('[input-manager] handlePointerDown error', err);
                 showNotification("Input Error: " + err.message, "error");
             }
-            if (e.pointerType === 'touch' && e.isPrimary && isActiveFn() && holdTools() && pickContextTarget(svg, state, e)) hold.start(e);
+            // (TASK 753: a finger on a transform-box handle is turning / scaling, never a hold)
+            if (e.pointerType === 'touch' && e.isPrimary && isActiveFn() && holdTools() && !(state.drag && state.drag.type === DRAG_TYPES.TRANSFORM) && pickContextTarget(svg, state, e)) hold.start(e);
         });
         svg.addEventListener('pointermove', (e) => {
             if (e.pointerType === 'touch' && (hold.fired && hold.pointerId === e.pointerId || hold.move(e))) { e.preventDefault(); return; }
@@ -1574,6 +1587,7 @@ export function handleDelete(state) {
 }
 
 function handleEscape(state) {
+    if (cancelTransformGesture(state)) return; // TASK 753: Esc during a box handle drag puts the group back (the selection stays)
     // If a dimension placement is in progress, cancel it and remove the temporary constraint
     try {
         if (state.currentTool === TOOL_MODES.DIMENSION) {

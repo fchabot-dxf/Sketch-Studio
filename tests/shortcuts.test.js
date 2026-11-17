@@ -111,6 +111,7 @@ const EXEMPT = {
   'packages/ui/tabbed-dock-panel.js': [1, 'a dock window: Esc closes it'],
   'packages/ui/template-picker.js': [4, 'the template picker modal: Esc closes, Enter in its fields'],
   'packages/ui/tool-ribbon.js': [1, 'an open ribbon dropdown: Esc closes it'],
+  'packages/ui/transform-box.js': [2, 'the transform box typed angle / scale: Enter / Esc'], // TASK 753
   'apps/penplotter/src/settings.js': [1, 'the plotter settings modal: Esc = Cancel'],
   'apps/penplotter/src/toolpath-layers-panel.js': [2, 'the toolpath rename input: Enter / Esc'],
   'apps/penplotter/src/ui-dialog.js': [4, 'the plotter dialogs: Enter / Esc'],

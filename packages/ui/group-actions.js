@@ -4,7 +4,8 @@
 // input-manager.js) and a group's row in the design browser (design-info-panel.js) all run these functions; what each one can do on the
 // selection is ONE answer (#core/group-model.js groupCommands). Moved here from apps/shaper/src/main.js (task 751's Shaper-only wiring).
 
-import { makeGroup, ungroup, enterGroup, stepOutOfGroup, groupCommands } from '#core/group-model.js';
+import { makeGroup, ungroup, enterGroup, stepOutOfGroup, groupCommands, groupLockState, setGroupLock, GROUP_LOCKS } from '#core/group-model.js';
+import { track } from '#ui/analytics.js';
 
 const clearSelection = (state) => {
   if (state.selectedJoints) state.selectedJoints.clear();
@@ -49,6 +50,27 @@ export function leaveEnteredGroup(state) {
   return left;
 }
 
+/** TASK 753: toggle lock `kind` ('sizeAngle' = "Lock size & angle", 'full' = "Full lock": #core/group-model.js GROUP_LOCKS) of group `gid`
+ *  (default: the one selected group). ONE undo step. The box's padlocks, the canvas / hold menu and a group's browser row all run this.
+ *  Lock size & angle cannot be turned off while Full lock (which implies it) is on: refused with the reason.
+ *  -> { on } (the new state), or { refused: reason }. */
+export function toggleGroupLock(state, kind, gid = groupCommands(state).enter, notify = () => {}) {
+  const g = gid && (state.groups || []).find((x) => x.id === gid);
+  if (!g || !GROUP_LOCKS[kind]) return { refused: 'Select one group to lock it' };
+  const now = groupLockState(state, gid);
+  if (kind === 'sizeAngle' && now.full) {
+    const refused = `${g.name}: ${GROUP_LOCKS.full.label} is on (it holds size & angle too): unlock it first`;
+    notify(refused, 'warning');
+    return { refused };
+  }
+  const on = !now[kind];
+  if (typeof state.saveState === 'function') state.saveState(on ? 'lock group' : 'unlock group');
+  setGroupLock(state, gid, kind, on);
+  track('group-lock');
+  notify(`${g.name}: ${GROUP_LOCKS[kind].label} ${on ? 'on' : 'off'}`, 'success');
+  return { on };
+}
+
 /** The actions the shared context menu's group entries call (context-menu.js groupMenuItems): the same functions as the keys. */
 export function groupMenuActions(state, notify = () => {}) {
   return {
@@ -57,5 +79,9 @@ export function groupMenuActions(state, notify = () => {}) {
     ungroup: () => ungroupSelection(state, notify),
     enterGroup: () => enterSelectedGroup(state),
     leaveGroup: () => leaveEnteredGroup(state),
+    // TASK 753: the two locks of the one selected group (its state, and the toggle the box's padlocks run)
+    // (named apart from the geometry menu's lockState / toggleLock: the Fix of points, a different command)
+    groupLocks: () => { const gid = groupCommands(state).enter; return gid ? groupLockState(state, gid) : null; },
+    toggleGroupLock: (kind) => toggleGroupLock(state, kind, groupCommands(state).enter, notify),
   };
 }

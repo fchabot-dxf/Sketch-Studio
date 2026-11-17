@@ -9,7 +9,7 @@
 import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME,
   recordUndo, setSketchLocked, showOnlySketch, reorderSketch } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch; TASK 577: sketches as layers
 import { deleteSketch } from '#core/delete-manager.js';
-import { groupIndex, enterGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: the user groups as nested rows
+import { groupIndex, enterGroup, leaveGroups, groupLockState, GROUP_LOCKS } from '#core/group-model.js'; // TASK 751: the user groups as nested rows
 import { showContextMenu, contextMenuItems } from '#ui/context-menu.js';
 import { groupMenuActions } from '#ui/group-actions.js'; // TASK 756: a group row's menu runs the same group commands as the canvas
 import { createLongPress } from '#ui/long-press.js';
@@ -49,6 +49,7 @@ function injectStyles() {
 .sk-info-row:hover { background: var(--sk-info-hover, rgba(127,127,127,0.14)); }
 .sk-info-row.sel { background: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); color: #fff; }
 .sk-group-row .sk-info-geo { margin-left: auto; }
+.sk-group-lock { display: inline-flex; flex: none; } /* TASK 753: a locked group's row badge */
 .sk-info-ic { width: 1.1em; text-align: center; opacity: 0.85; }
 .sk-info-lbl { white-space: nowrap; }
 .sk-info-geo { flex: 1; min-width: 0; opacity: 0.75; overflow-wrap: anywhere; }
@@ -115,6 +116,16 @@ const ICONS = {
   right: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg>',
   down: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>',
 };
+
+// TASK 753: a locked group's row badge: the box padlock's look (round green "Lock size & angle", square red "Full lock", closed shackle), with its label
+function lockBadge(kind) {
+  const b = document.createElement('span');
+  b.className = 'sk-group-lock'; b.dataset.lock = kind; b.title = GROUP_LOCKS[kind].label; b.setAttribute('aria-label', GROUP_LOCKS[kind].label + ': on'); b.setAttribute('role', 'img');
+  const fill = kind === 'full' ? 'var(--sk-lock-full, #dc2626)' : 'var(--sk-lock-size, #16a34a)';
+  const badge = kind === 'full' ? '<rect x="1" y="1" width="16" height="16" rx="3"/>' : '<circle cx="9" cy="9" r="8"/>';
+  b.innerHTML = `<svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><g style="fill:${fill}">${badge}</g><g transform="translate(9 10)"><path d="M-3.2 -0.5 V-4 A3.2 3.2 0 0 1 3.2 -4 V-0.5" fill="none" stroke="#fff" stroke-width="1.6"/><rect x="-5" y="-1" width="10" height="7.5" rx="1.2" fill="#fff"/></g></svg>`;
+  return b;
+}
 
 function typeMeta(t) { return TYPE_META[t] || { icon: '◦', label: String(t || 'constraint') }; }
 
@@ -295,6 +306,9 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
           const lbl = document.createElement('span'); lbl.className = 'sk-info-lbl'; lbl.textContent = g.name;
           const n = document.createElement('span'); n.className = 'sk-info-geo'; n.textContent = String(ids.length);
           row.append(ic, lbl, n);
+          // TASK 753: the group's locks show on its row (the same state its box padlocks and its menu entries read: GROUP_LOCKS)
+          const locks = groupLockState(state, gid);
+          for (const kind of ['sizeAngle', 'full']) if (kind === 'full' ? locks.full : (locks.sizeAngle && !locks.full)) row.appendChild(lockBadge(kind));
           const selectGroup = () => {
             if (g.parentId) enterGroup(state, g.parentId); else leaveGroups(state);
             if (state.selectedJoints) state.selectedJoints.clear();

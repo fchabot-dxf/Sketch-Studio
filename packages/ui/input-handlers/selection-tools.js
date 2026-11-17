@@ -22,6 +22,8 @@ import { isWithinMagnet } from '#ui/snap-magnet.js';
 import { INFERENCE_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { releaseDragTargets } from '#core/sketch-state.js'; // TASK 575: the one release of a drag's solver targets
+import { noteGroupDragStart, boxTargets } from '#ui/transform-box.js'; // TASK 753: the group's transform box
+import { track } from '#ui/analytics.js';
 
 // Local state for selection tools
 let selectionState = {
@@ -665,6 +667,7 @@ export function handleSelectionPointerMove(e, svg, state) {
         }
     }catch(_){ }
     if (state.drag.group && !selectionState.isDragging) return true; // TASK 588: a group drag moves once the pointer leaves the click radius
+    if (state.drag.group && !state.drag.moveNoted) { state.drag.moveNoted = true; noteGroupDragStart(svg, state); } // TASK 753: a full-locked group says why it stays
 
     // Drag step (TASK 548): a JOINT drag never moves its target more than MAX_DRAG_STEP world units in one go (a lag spike, focus loss or a
     // fast flick is a huge jump). A longer pointer jump is walked as straight sub-moves of at most that length from the last pointer
@@ -999,6 +1002,7 @@ export function handleSelectionPointerUp(e, svg, state) {
     // snap-on-release below solves (TASK 575: the one release, #core/sketch-state.js releaseDragTargets)
     releaseDragTargets(state, state.drag);
     if (state.drag && state.drag.group) carryControlPoints(state, state.drag); // TASK 751: where the last frames left the end joints
+    if (state.drag && state.drag.group && selectionState.isDragging && boxTargets(state).some((t) => t.mode === 'select')) track('group-move'); // TASK 753: a whole group moved
 
     // TASK 588: a group drag adds nothing on release; released without a move it was a click on the pressed member: that entity alone is
     // then selected, exactly as the press selected it before (selectShape / selectJoint after the press's clear).

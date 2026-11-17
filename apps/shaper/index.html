@@ -189,8 +189,6 @@
     .sync-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #9ca3af; }
     .sync-field input { background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 8px 10px; color: #f3f4f6; font: 13px system-ui, sans-serif; }
     .sync-field input:focus { outline: none; border-color: #3b82f6; }
-    .sync-checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; cursor: pointer; margin-top: 2px; }
-    .sync-checkbox-label input { cursor: pointer; }
     .sync-status { min-height: 18px; font-size: 12px; line-height: 1.4; margin-top: 4px; }
     .sync-status.is-error { color: #f87171; }
     .sync-status.is-success { color: #34d399; }
@@ -201,6 +199,11 @@
     .sync-btn-primary { background: #059669; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: 13px system-ui, sans-serif; font-weight: 500; cursor: pointer; }
     .sync-btn-primary:hover:not(:disabled) { background: #10b981; }
     .sync-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* TASK 758: on a phone (narrow screen or a coarse pointer) the sign-in's fields and buttons are 44 px touch targets */
+    @media (max-width: 640px), (pointer: coarse) {
+      .sync-field input, .sync-btn-primary, .sync-btn-secondary { min-height: 44px; box-sizing: border-box; }
+      .sync-modal-close { min-width: 44px; min-height: 44px; }
+    }
     .simexport-hub-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; border-radius: 6px; padding: 10px 18px; font: 14px system-ui, sans-serif; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
     .simexport-hub-btn:hover { border-color: var(--sk-selection, #4c9aff); color: #fff; }
     .simexport-status { color: #9aa0a6; font-size: 13px; min-height: 18px; margin: 0; text-align: center; }
@@ -511,22 +514,19 @@
       </div>
       <p class="sync-modal-desc">Send your machine-ready SVG directly to your ShaperHub "My Files" folder so it appears on your Origin over Wi-Fi.</p>
       <form id="sync-modal-form" class="sync-form" method="dialog">
-        <label class="sync-field">
-          <span>Shaper Account Email</span>
-          <input id="sync-email" type="email" required autocomplete="username" placeholder="name@example.com">
-        </label>
-        <label class="sync-field">
-          <span>Password</span>
-          <input id="sync-password" type="password" required autocomplete="current-password" placeholder="••••••••">
-        </label>
-        <label class="sync-field">
-          <span>File Name (on Origin)</span>
-          <input id="sync-filename" type="text" required placeholder="my-project.svg">
-        </label>
-        <label class="sync-checkbox-label">
-          <input id="sync-remember" type="checkbox" checked>
-          <span>Remember login in this browser</span>
-        </label>
+        <!-- TASK 758: a password form the BROWSER's password manager saves and fills (the app keeps no login): name + autocomplete tokens, a label per field -->
+        <div class="sync-field">
+          <label for="sync-email">Shaper Account Email</label>
+          <input id="sync-email" name="username" type="email" required autocomplete="username" placeholder="name@example.com">
+        </div>
+        <div class="sync-field">
+          <label for="sync-password">Password</label>
+          <input id="sync-password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <div class="sync-field">
+          <label for="sync-filename">File Name (on Origin)</label>
+          <input id="sync-filename" name="filename" type="text" required placeholder="my-project.svg">
+        </div>
         <div id="sync-modal-status" class="sync-status"></div>
         <div class="sync-actions">
           <button type="button" id="sync-btn-cancel" class="sync-btn-secondary">Cancel</button>

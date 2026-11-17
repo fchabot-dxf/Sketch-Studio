@@ -52,6 +52,8 @@ export const SIDEBAR_ICONS = {
   style: GEAR_ICON,
   gear: GEAR_ICON, // TASK 727: SketchStudio's "Tune solver" and Shaper's Settings items named it, but it was missing (no icon showed)
   log: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h10M4 9h10M4 13.5h6"/></svg>',
+  // TASK 733: a puzzle piece = an add-in (the Shaper sidebar's "Fusion add-in")
+  addin: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5V4a2 2 0 0 1 4 0v.5h3.5V8H14a2 2 0 0 0 0 4h.5v3.5H11V15a2 2 0 0 0-4 0v.5H3.5V12H4a2 2 0 0 0 0-4h-.5V4.5z"/></svg>',
   debug: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l4 4-4 4M9.5 13H14"/></svg>',
 };
 

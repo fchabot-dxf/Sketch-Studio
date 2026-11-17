@@ -82,7 +82,8 @@ await (async () => {
     assert.notStrictEqual(resetShot.md5, orbitShot.md5, 'orbiting changed the picture');
     assert.notStrictEqual(orbitShot.md5, topShot.md5, 'Top changed the picture');
 
-    // TASK 497: the Wood toggle on the real board (a second view mounted by the test, with a long-X stock): flat first, then map on / off
+    // TASK 497 / 729: the plywood look on the real board (a second view mounted by the test, with a long-X stock): the photos load, then
+    // Solid colour = flat (no map on face or edge), back to Plywood = the maps again; the same two materials throughout
     const wood = await evalJs(`(async () => {
       const { mountReviewView } = await import('/apps/shaper/src/review-view.js');
       const host = document.createElement('div'); host.style.cssText = 'width:300px;height:200px;position:fixed;left:0;top:0'; document.body.appendChild(host);
@@ -90,16 +91,17 @@ await (async () => {
       v.refresh('wood');
       const first = v.inspect();
       for (let i = 0; i < 100 && !(v.inspect().mapLoaded && v.inspect().edgeLoaded); i++) await new Promise((r) => setTimeout(r, 100));
-      const on = v.inspect(); v.setWood(false); const off = v.inspect(); v.setWood(true); const back = v.inspect();
+      const on = v.inspect(); v.setLook({ id: 'solid' }); const off = v.inspect(); v.setLook({ id: 'plywood' }); const back = v.inspect();
       v.destroy(); host.remove();
       return { first, on, off, back };
     })()`);
+    assert.strictEqual(wood.on.look.id, 'plywood', 'the default look is Plywood');
     assert.strictEqual(wood.on.mapLoaded, true, 'the texture loads');
-    assert.strictEqual(wood.on.mapOn, true, 'Wood on: the face map is set');
-    assert.strictEqual(wood.off.mapOn, false, 'Wood off: flat colour');
-    assert.strictEqual(wood.back.mapOn, true, 'Wood back on');
-    assert.strictEqual(wood.on.edgeMapOn, true, 'Wood on: the edge ply texture is set');
-    assert.strictEqual(wood.off.edgeMapOn, false, 'Wood off: the edge is flat too');
+    assert.strictEqual(wood.on.face.map, 'image', 'Plywood: the face map is set');
+    assert.strictEqual(wood.off.face.map, null, 'Solid colour: flat colour');
+    assert.strictEqual(wood.back.face.map, 'image', 'Plywood back');
+    assert.strictEqual(wood.on.edge.map, 'image', 'Plywood: the edge ply texture is set');
+    assert.strictEqual(wood.off.edge.map, null, 'Solid colour: the edge is flat too');
     assert.strictEqual(wood.on.edgeLoaded, true, 'the edge texture loads');
     assert.ok(Math.abs(wood.on.top.v - wood.on.top.x / 400) < 1e-4 && Math.abs(wood.on.top.u - wood.on.top.z / 400) < 1e-4, 'top uv = x/TILE, z/TILE (swapped for a long-X board): ' + JSON.stringify(wood.on.top));
 

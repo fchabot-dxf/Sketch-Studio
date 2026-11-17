@@ -440,7 +440,7 @@ export function morphedSpiral(rings, s) {
 // ── TASK 750: the LOOP (see THE RULES): closed paths that end where they start ──
 const same = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-9;
 // a loop being built: its points, its turns ([{ start, end, kind }]: pts[start..end] is a turn / pass / ring: 'ring' | 'finish' | 'pass' | 'cleanup' |
-// 'spiral'), the length of its legs (links, steps, returns: the rest) and the turns its legs cross
+// 'morphed'), the length of its legs (links, steps, returns: the rest) and the turns its legs cross
 function loopBuilder() {
   const pts = [], turns = [];
   // a point equal to the last one (within 1e-9 mm) is not added again; a turn's own point replaces a leg's computed copy of it (its exact vertex is kept)
@@ -568,7 +568,7 @@ function rasterLoops(A0, pieces, finishLoops, a, Rr) {
  *  back), then the RETURN leg down the chain of turn starts to the first point (it crosses each turn once). */
 function morphedLoop(sp, finishLoops, a) {
   const b = loopBuilder();
-  b.turn(sp.points, a > 0 ? 'spiral' : 'finish'); // with no allowance its closing turn IS the finish turn
+  b.turn(sp.points, a > 0 ? 'morphed' : 'finish'); // with no allowance its closing turn IS the finish turn
   const e = b.last();
   if (a > 0) { const f = nearestOfLoops(finishLoops, e); b.leg([f.p]); b.turn(loopFrom(finishLoops[f.c], f), 'finish'); b.leg([e]); }
   const back = [];

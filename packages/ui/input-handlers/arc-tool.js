@@ -41,7 +41,7 @@ export const ARC_MODES = {
 // lockedRadius / lockedSweep = what the user TYPED (null = the cursor sets it); `cursor` = the last world point, `screen` = the last pointer.
 let arcState = { lockedRadius: null, lockedSweep: null, field: null, cursor: null, screen: null };
 const BOX_RADIUS = { single: { field: 'radius' } };
-const BOX_SWEEP = { single: { field: 'sweep' } };
+const BOX_SWEEP = { single: { field: 'sweep', quantity: 'angle' } }; // TASK 769: degrees (the radius box is a length)
 const MIN_R = 1e-6;
 
 function openArcBox(pos, field) {

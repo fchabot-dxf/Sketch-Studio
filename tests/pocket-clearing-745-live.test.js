@@ -37,14 +37,21 @@ try {
   };
   // a screenshot of the world box (x0, y0)-(x1, y1) on the Prepare canvas, at `scale`
   const shotWorld = async (name, b, scale = 2) => {
-    // on the phone the card covers the right of the canvas and the drawer handle its left edge: zoom the Prepare view so the box fills the free strip between
-    // them (upper part of the canvas), shoot, then put the view back
-    const before = phone ? await evalJs(`(() => { const v = window.__prepareView, svg = document.getElementById('prepare-canvas'), c = svg.getBoundingClientRect(), card = document.querySelector('#prepare-panel').getBoundingClientRect();
-      const old = { x: v.view.x, y: v.view.y, w: v.view.w }; const left = 52, right = card.left - 8, bw = ${b[2] - b[0]}, bh = ${b[3] - b[1]};
-      const k = Math.min((right - left) / bw, (c.height * 0.4) / bh); // css px per world unit
-      const w = c.width / k, cx = ${b[0]} - (left - c.left) / k + w / 2, cy = ${(b[1] + b[3]) / 2} + (c.height / 2 - (c.height * 0.3)) / k;
-      v.setView({ x: cx, y: cy, w }); return old; })()`) : null;
-    if (phone) await sleep(250);
+    // zoom the Prepare view onto the box (legible), shoot, then put the view back. The phone: the card covers the right of the canvas and the drawer handle
+    // its left edge: the box fills the free strip between them (upper part of the canvas). The desktop: the box about 600 px wide between the list and the card.
+    const before = await evalJs(`(() => { const v = window.__prepareView, svg = document.getElementById('prepare-canvas'), c = svg.getBoundingClientRect(), card = document.querySelector('#prepare-panel').getBoundingClientRect();
+      const old = { x: v.view.x, y: v.view.y, w: v.view.w }, bw = ${b[2] - b[0]}, bh = ${b[3] - b[1]};
+      if (${phone}) {
+        const left = 52, right = card.left - 8, k = Math.min((right - left) / bw, (c.height * 0.4) / bh), w = c.width / k;
+        v.setView({ x: ${b[0]} - (left - c.left) / k + w / 2, y: ${(b[1] + b[3]) / 2} + (c.height / 2 - c.height * 0.3) / k, w });
+      } else {
+        const ops = document.getElementById('prepare-ops').getBoundingClientRect(), note = document.getElementById('prepare-notice');
+        const L = ops.right + 12, R = card.left - 12, top = note && !note.hidden ? note.getBoundingClientRect().bottom + 12 : c.top + 12, bottom = c.bottom - 40;
+        const k = Math.min(600, R - L) / bw, k2 = Math.min(k, (bottom - top) / bh), w = c.width / k2;
+        v.setView({ x: ${(b[0] + b[2]) / 2} - ((L + R) / 2 - (c.left + c.width / 2)) / k2, y: ${(b[1] + b[3]) / 2} - ((top + bottom) / 2 - (c.top + c.height / 2)) / k2, w });
+      }
+      return old; })()`);
+    await sleep(250);
     const clip = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'), m = svg.getScreenCTM(); const p = (x, y) => { const q = svg.createSVGPoint(); q.x = x; q.y = y; return q.matrixTransform(m); };
       const a = p(${b[0]}, ${b[1]}), c = p(${b[2]}, ${b[3]}); const x = Math.max(0, Math.min(a.x, c.x) - 12), y = Math.max(0, Math.min(a.y, c.y) - 12);
       return { x, y, width: Math.min(innerWidth, Math.max(a.x, c.x) + 12) - x, height: Math.min(innerHeight, Math.max(a.y, c.y) + 12) - y, scale: ${scale} }; })()`);
@@ -52,7 +59,7 @@ try {
     fs.writeFileSync(path.join(EVIDENCE_DIR, name), Buffer.from(data, 'base64'));
     console.log('screenshot ' + path.join(EVIDENCE_DIR, name));
     if (phone) { const full = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(EVIDENCE_DIR, name.replace('.png', '-screen.png')), Buffer.from(full.data, 'base64')); } // the whole phone screen, as zoomed
-    if (before) await evalJs(`window.__prepareView.setView(${JSON.stringify(before)})`);
+    await evalJs(`window.__prepareView.setView(${JSON.stringify(before)})`);
   };
   const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
   const mouse = (type, x, y, buttons = 0) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });

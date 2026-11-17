@@ -27,10 +27,12 @@
 //       away along the normal), so all rings share phi; where those nearest points jump (a convex corner of the inner ring; a part of the outer
 //       ring the inner one does not reach: the end of an arm), each outer point in the jump gets its nearest point on the inner ring there (the
 //       inner corner HOLDS while phi sweeps the outer corner). The turn from ring k + 1 out to ring k: at phi, with A / B = the inner / outer ring's
-//       point at phi, the point (1 - phi) * s from B toward A (= A + phi * (B - A) where the rings are one stepover apart; deeper in an arm the
-//       inner ring does not reach, it follows the outer ring at that depth): at phi the turn is (1 - phi) * s inside ring k and the next turn out
-//       phi * s outside it along the same normal: the gap between neighbouring turns is the stepover. The point lies on the segment from B to A
-//       inside ring k's region: the path stays in A0. Turns are simplified to POCKET_CLEARING.pathTolMm.
+//       point at phi, the point A + phi * (B - A) (the lerp) while |A - B| <= s * sqrt 2 (the rings one stepover apart, or across an inner corner of 90
+//       degrees or more: there the lerp IS the inner offset of the outer ring at depth (1 - phi) * s); where |A - B| is longer (an arm of the outer ring
+//       the inner ring does not reach) the point lies (1 - phi) * reach from B toward A, the reach falling linearly from sqrt 2 stepovers at |A - B| =
+//       s * sqrt 2 to one stepover at |A - B| = 2 s and staying one stepover beyond (continuous: the turn follows the arm one stepover in). So at phi the
+//       turn is (1 - phi) * s inside ring k and the next turn out phi * s outside it along the same normal: the gap between neighbouring turns is the
+//       stepover. The point lies on the segment from B to A inside ring k's region: the path stays in A0. Turns are simplified to POCKET_CLEARING.pathTolMm.
 //       NOT POSSIBLE (the option is refused with its reason, no silent fallback): a pocket with islands, or one whose rings SPLIT (a neck).
 //  * DEPTH PASSES: the record's `passDepth` (empty = one pass at the full depth): passes at passDepth, 2 x passDepth, ... and the full depth; the
 //    clearing set is repeated at each pass depth, shallow to deep.
@@ -298,11 +300,15 @@ function ringAt(S, phi) {
 }
 // the turn from ring `inner` out to ring `outer` (both sampled with phi from 0 to 1) for a stepover s: at phi the point (1 - phi) * s from B toward A
 // (the lerp A + phi * (B - A) where |A - B| <= s)
+// the reach from the outer ring toward A, in stepovers, for |A - B| = l stepovers: l (the lerp) up to sqrt 2 (an inner corner of 90 degrees or more: the lerp is exactly the
+// inner offset there), then falling linearly to 1 at l = 2 and 1 beyond (an arm the inner ring does not reach: the turn follows the outer ring one stepover in)
+const CAP = Math.SQRT2, ARM = 2;
+const depthOf = (l) => (l <= CAP ? l : l >= ARM ? 1 : CAP - ((CAP - 1) * (l - CAP)) / (ARM - CAP));
 function transition(inner, outer, s) {
   const ev = [...inner.map((x) => ({ phi: x.phi, A: x.p })), ...outer.map((x) => ({ phi: x.phi, B: x.p }))].sort((a, b) => a.phi - b.phi);
   return ev.map((e) => {
     const A = e.A || ringAt(inner, e.phi), B = e.B || ringAt(outer, e.phi);
-    const L = Math.hypot(A.x - B.x, A.y - B.y), k = L > s ? ((1 - e.phi) * s) / L : 1 - e.phi;
+    const L = Math.hypot(A.x - B.x, A.y - B.y), k = L <= CAP * s ? 1 - e.phi : ((1 - e.phi) * depthOf(L / s) * s) / L;
     return P(B.x + k * (A.x - B.x), B.y + k * (A.y - B.y));
   });
 }

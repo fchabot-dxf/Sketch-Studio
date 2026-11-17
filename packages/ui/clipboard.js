@@ -29,6 +29,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { commitDimensionEdits } from '#core/dimension-seams.js';
 import { isPatternConstraint, patternRefs, remapPattern } from '#core/pattern.js';
 import { matchShortcut } from '#ui/shortcuts.js'; // TASK 727: the clipboard keys are declared there
+import { copyGroups, wholeGroupsOf, enteredGroup } from '#core/group-model.js'; // TASK 756: a pasted copy of a whole user group is a group
 
 // ── DECLARED: the clipboard format and the paste step ──
 export const CLIPBOARD_FORMAT = 'sketch-studio/geometry';
@@ -84,6 +85,7 @@ export function selectionToEnvelope(state) {
     shapes,
     constraints: state.constraints.filter(inside),
     parameters: [],
+    groups: wholeGroupsOf(state, shapeIds), // TASK 756: the user groups the selection holds whole (a pasted copy of one is a group)
   };
   return { format: CLIPBOARD_FORMAT, version: CLIPBOARD_VERSION, document: serializeDocument(part), copied: { shapes: shapes.map((s) => s.id), joints: freeJoints } };
 }
@@ -114,7 +116,7 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
   const g = document.geometry;
   const dx = PASTE_STEP_MM * step, dy = userToWorldY(-PASTE_STEP_MM * step); // right, and DOWN on screen (user Y points up)
   const seq = newShapeId('');   // THE shape-id generator (#core/shape-id.js): unique even for two pastes in one millisecond
-  const jointMap = new Map(), shapeMap = new Map(), groupMap = new Map();
+  const jointMap = new Map(), shapeMap = new Map(), groupMap = new Map(), copies = new Map();
   for (const [id] of g.joints) jointMap.set(id, state.genJ());
   g.shapes.forEach((s, i) => shapeMap.set(s.id, `s${seq}_${i}`));
   const groupOf = (gid) => { if (!groupMap.has(gid)) groupMap.set(gid, `paste_${seq}_${groupMap.size}`); return groupMap.get(gid); };
@@ -131,15 +133,19 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
       if (!used.has(id)) out.joints.push(jointMap.get(id));
     }
     for (const s of g.shapes) {
-      const { sketchId, userGroupId, ...rest } = s; // a user group stays with the original
+      const { sketchId, userGroupId, ...rest } = s; // the copy's user group: copyGroups below
       const copy = { ...rest, id: shapeMap.get(s.id), joints: asList(s.joints).map((j) => jointMap.get(j)) };
       if (s.groupId) copy.groupId = groupOf(s.groupId); // the renderer's closed-shape key: the copy is its own closed shape
       if (Array.isArray(s.c1)) copy.c1 = [s.c1[0] + dx, s.c1[1] + dy]; // a bezier's control points are absolute data
       if (Array.isArray(s.c2)) copy.c2 = [s.c2[0] + dx, s.c2[1] + dy];
       if (s.filletSharp) { if (jointMap.has(s.filletSharp)) copy.filletSharp = jointMap.get(s.filletSharp); else delete copy.filletSharp; }
       state.shapes.push(copy);
+      copies.set(s.id, copy);
       out.shapes.push(copy.id);
     }
+    // TASK 756: the copy of a whole user group is a group, in the group the user has entered (the paste lands where the user works, as its
+    // shapes land in the active sketch); a clipboard copied before task 756 carries no groups: its copy is loose, as it was
+    copyGroups(state, { shapes: g.shapes, groups: g.groups || [] }, copies, { parentId: enteredGroup(state) });
     // constraints: ids remapped, the name dropped (addConstraint gives a dimension the next free dN), positions that are data moved
     const before = state.constraints.length;
     const renamed = new Map(); // old dimension name -> the pasted dimension's name (task 694: a pasted pattern's values too)

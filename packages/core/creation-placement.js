@@ -23,6 +23,7 @@ import { isPatternConstraint, patternCopyOperands } from './pattern.js';
 import { getCoincidentJoints } from './joints.js';
 import { findShapeById } from './reference-lines.js';
 import { isPointLineDistance } from './geometry.js';
+import { rigidBlocks } from './group-model.js';
 
 const EPS_SAT = 1e-6;     // a residual at or below this (mm or rad) is satisfied
 const EPS_WORSE = 1e-7;   // a placement may not raise an existing constraint's residual by more than this
@@ -114,7 +115,8 @@ function bodyOf(state, op, anchorJoints, mode) {
 
 // Mover = the body plus what holds it: hard pivots (points that cannot move: a joint with no freedom, an anchor joint, a fixed point the body
 // passes through) and soft attachments (free joints coincident with a joint outside the body: dragged along, or a pivot for a pure turn).
-function moverOf(state, fr, op, anchorOp, mode) {
+// rigid (TASK 752): the member joints of the rigid blocks (rigidJoints), which no placement moves (tryMotion).
+function moverOf(state, fr, op, anchorOp, mode, rigid) {
   const anchorJoints = new Set(anchorOp.kind === 'joint' ? [anchorOp.id] : ((shapeOf(state, anchorOp.id) || {}).joints || []));
   const body = bodyOf(state, op, anchorJoints, mode);
   const hardIds = [...body.joints].filter(j => !jointFree(fr, j) || anchorJoints.has(j));
@@ -135,7 +137,17 @@ function moverOf(state, fr, op, anchorOp, mode) {
     cl.delete(j);
     if (cl.size) partners.set(j, [...cl]);
   }
-  return { op, body, pivots, hardIds, partners, anchorJoints };
+  return { op, body, pivots, hardIds, partners, anchorJoints, rigid };
+}
+
+// TASK 752: the joints of the shapes of every rigid block (#core/group-model.js rigidBlocks: each group that is not entered). The solver only
+// translates a block, from the positions it starts from: a placement that moved some of its members would reshape the block, so a
+// placement never moves one (tryMotion); the new constraint then goes to the solve, which translates the block or moves the outside geometry
+// (or reports the conflict).
+function rigidJoints(state) {
+  const out = new Set();
+  for (const b of rigidBlocks(state)) for (const s of b.shapes) for (const j of (s.joints || [])) out.add(j);
+  return out;
 }
 
 // Similarity x -> P + s R(th) (x - P) + t.
@@ -412,6 +424,7 @@ function trySolveAlone(state, anchorOp, cand) {
 function tryMotion(state, M, mo, cand, before, force = false) {
   if (!mo || ![mo.s, mo.c, mo.n, mo.t.x, mo.t.y].every(Number.isFinite) || mo.s <= 0) return false;
   for (const id of M.hardIds) { const p = pos(state, id), q = moveTo(mo, p); if (len(sub(p, q)) > EPS_POS * Math.max(1, len(p))) return false; }
+  if (M.rigid.size) for (const id of M.body.joints) if (!M.hardIds.includes(id) && [id, ...(M.partners.get(id) || [])].some(j => M.rigid.has(j))) return false; // TASK 752
   const saved = new Map(), radii = new Map();
   const put = (id, x) => { const j = state.joints.get(id); if (!saved.has(id)) saved.set(id, { x: j.x, y: j.y }); j.x = x.x; j.y = x.y; };
   for (const id of M.body.joints) {
@@ -443,8 +456,9 @@ export function placeForCreation(state, type, normalized) {
   const order = firstGivesWay(co.key, holdClass(state, fr, first), holdClass(state, fr, second)) ? [first, second] : [second, first];
   const before = state.constraints.filter(isDriving).map(c => [c, measureResidual(c, state.joints, state.shapes)]);
   let start = null;
+  const rigid = rigidJoints(state);
   for (const [mover, anchor] of [order, [order[1], order[0]]]) {
-    const M = moverOf(state, fr, mover, anchor, PLACE[co.key].body || 'shape');
+    const M = moverOf(state, fr, mover, anchor, PLACE[co.key].body || 'shape', rigid);
     const mo = PLACE[co.key].place(state, M, anchor, normalized);
     if (mo === SOLVE_ALONE ? trySolveAlone(state, anchor, cand) : tryMotion(state, M, mo, cand, before)) return true;
     if (!start && mo && mo !== SOLVE_ALONE) start = { M, mo };

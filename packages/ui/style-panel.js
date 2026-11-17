@@ -4,7 +4,7 @@
 // SettingsManager (#core/settings-manager.js), so the shared renderer reacts live. App-agnostic chrome; themed via
 // --sk-* (light defaults → SketchStudio); self-contained <style>. Imports ONLY the settings store.
 
-import SettingsManager from '#core/settings-manager.js';
+import SettingsManager, { LENGTH_FRACTIONS } from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import {
@@ -17,11 +17,20 @@ import {
 // number + paired range slider. Declared control TYPES: 'checkbox' (boolean), 'select' (an `options: [{value,label}]`
 // enum — generic, e.g. GRID_MODE; `numeric: true` stores the option as a number), and the default number+slider (needs
 // min/max/step). Any control may declare `showWhen: { key, in: [values] }`: shown only while that setting's value (DOC_UNIT
-// defaults to 'mm') is in the list; no showWhen = always shown.
+// defaults to 'mm') is in the list; no showWhen = always shown. TASK 728: showWhen may also be a LIST of such conditions (shown while all hold),
+// and `hideWhen` (one condition or a list) hides the row while all of its conditions hold.
 const precisionOptions = (max) => [{ value: '', label: 'Auto (as each view shows)' }, ...Array.from({ length: max + 1 }, (_, n) => ({ value: n, label: n + (n === 1 ? ' decimal' : ' decimals') }))];
+// Task 728: an inch document showing fractions (the length-format decider's own condition, lengthFraction in #core/settings-manager.js)
+const FRACTIONAL = [{ key: 'DOC_UNIT', in: ['in'] }, { key: 'INCH_DISPLAY', in: ['fractional'] }];
 const CONTROLS = [
+  // Task 728: how an inch document shows lengths; the row exists only in an inch document (hidden for mm / cm, which are always decimal).
+  { tab: 'units', key: 'INCH_DISPLAY',            label: 'Inch display',         type: 'select', showWhen: { key: 'DOC_UNIT', in: ['in'] },
+    options: [{ value: 'decimal', label: 'Decimal (e.g. 1.5 in)' }, { value: 'fractional', label: 'Fractional (e.g. 1 1/2")' }] },
   // Task 724: display precision (decimals shown), like Fusion's Preferences > General precision; shared by all four apps. '' = Auto = null (each view keeps its usual decimals).
-  { tab: 'units', key: 'LENGTH_PRECISION',        label: 'Length precision',     type: 'select', numeric: true, options: precisionOptions(6) },
+  // Task 728: in Fractional the Length precision is a denominator instead (LENGTH_FRACTION, its own setting: back to Decimal restores the decimals picked).
+  { tab: 'units', key: 'LENGTH_PRECISION',        label: 'Length precision',     type: 'select', numeric: true, options: precisionOptions(6), hideWhen: FRACTIONAL },
+  { tab: 'units', key: 'LENGTH_FRACTION',         label: 'Length precision',     type: 'select', numeric: true, showWhen: FRACTIONAL,
+    options: LENGTH_FRACTIONS.map((d) => ({ value: d, label: `1/${d}"` })) },
   { tab: 'units', key: 'ANGLE_PRECISION',         label: 'Angle precision',      type: 'select', numeric: true, options: precisionOptions(4) },
   { tab: 'grid', key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
   { tab: 'grid', key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
@@ -56,6 +65,9 @@ const CONTROLS = [
   { tab: 'glyphs', key: 'LABEL_FONT_FAMILY',      label: 'Dimension Font',       type: 'select',
     options: [{ value: '', label: 'Inherited' }, { value: 'Segoe UI, Arial, Helvetica, sans-serif', label: 'Segoe UI / Arial (sans)' }] },
 ];
+
+// every condition of a showWhen / hideWhen (one or a list) holds for these settings
+const allHold = (conds, all) => [].concat(conds).every((c) => c.in.includes(all[c.key] || 'mm'));
 
 const TABS = [
   { id: 'lines', label: 'Lines & Joints' },
@@ -316,7 +328,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     const all = settings.getAll();
     for (const spec of CONTROLS) {
       const c = controlEls[spec.key]; if (!c) continue;
-      if (spec.showWhen) c.row.hidden = !spec.showWhen.in.includes(all[spec.showWhen.key] || 'mm');
+      if (spec.showWhen || spec.hideWhen) c.row.hidden = (!!spec.showWhen && !allHold(spec.showWhen, all)) || (!!spec.hideWhen && allHold(spec.hideWhen, all));
       const v = all[spec.key];
       if (spec.type === 'checkbox') { c.input.checked = !!v; }
       else if (spec.type === 'select') { c.input.value = spec.options.some((o) => String(o.value) === String(v ?? '')) ? (v ?? '') : spec.options[0].value; }

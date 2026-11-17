@@ -10,6 +10,8 @@
 //
 // Adopted by the dimension field (U2) + the Shaper cut params (U3); INERT until then.
 
+import { parseInput, evaluate } from '#core/expression.js';
+
 export const BASE = 'mm'; // 1 world unit = 1 mm
 
 // TASK 535 (slice 1a) — THE one unit table. Every conversion factor in the app lives here (the expression parser reads it too).
@@ -54,22 +56,29 @@ export const userToWorldY = (y) => 0 - y;
 export const UNITS = ['mm', 'cm', 'in'];
 
 // parse(str, docUnit) → base value in mm, or null on empty/invalid.
-// A trailing unit suffix (mm|cm|in, case-insensitive, optional leading space) OVERRIDES docUnit; a BARE number is
-// interpreted in docUnit. Accepts '5', '5mm', '0.25in', '5 mm', '.25in', '5MM', negatives. (Fractions like '1/8'
-// are NOT supported here — noted for the cut-param presets at U3, which already store decimals.)
+// A trailing unit suffix (mm | cm | in | ", case-insensitive, optional leading space) OVERRIDES docUnit; a BARE number is interpreted in
+// docUnit. Accepts '5', '5mm', '0.25in', '5 mm', '.25in', '5MM', negatives, and (TASK 728) fractions and mixed numbers: '1/8', '3/8 in',
+// '1 1/2', '1 1/2"', '-1 1/4 in'. ONE grammar: the text is read by the shared expression parser (#core/expression.js, the parameter / dimension
+// language), and only a single NUMBER LITERAL is taken here (a sign, a number / fraction / mixed number, an optional length unit): arithmetic
+// and names stay refused in these fields, as before ('1-1/2' is a subtraction there, so it is refused here).
+// (expression.js imports this module's unit table; this function calls the parser only at run time, so the cycle is harmless.)
 export function parse(str, docUnit = BASE) {
   if (str == null) return null;
-  const s = String(str).trim().toLowerCase();
-  if (s === '') return null;
-  const m = /^([+-]?(?:\d+\.?\d*|\.\d+))\s*(mm|cm|in)?$/.exec(s);
-  if (!m) return null;
-  const n = parseFloat(m[1]);
-  if (!Number.isFinite(n)) return null;
-  const unit = m[2] || docUnit;
-  const factor = TO_MM[unit];
-  if (factor == null) return null;
-  return n * factor;
+  const p = parseInput(String(str), { allowAssign: false });
+  if (!p.ok || !isNumberLiteral(p.ast)) return null;
+  if (!hasUnit(p.ast) && TO_MM[docUnit] == null) return null; // a bare number needs a known document unit
+  const r = evaluate(p.ast, null, { target: 'length', unit: docUnit });
+  return r.ok ? r.v : null;
 }
+// the literal forms parse() takes: [-|+] (number | whole/whole | mixed) [length unit]
+const isNumberBody = (n) => n.t === 'num' || n.t === 'mixed'
+  || (n.t === 'bin' && n.op === '/' && n.left.t === 'num' && n.right.t === 'num' && Number.isInteger(n.left.value) && Number.isInteger(n.right.value));
+function isNumberLiteral(n) {
+  const x = n.t === 'neg' ? n.arg : n;
+  if (x.t === 'unit') return unitInfo(x.unit).kind === 'length' && isNumberBody(x.arg);
+  return isNumberBody(x);
+}
+const hasUnit = (n) => (n.t === 'neg' ? n.arg : n).t === 'unit';
 
 // format(baseMM, docUnit, opts?) → string in docUnit, or '' for null/non-finite.
 // opts.decimals — display precision (default 1 = today's toFixed(1)).
@@ -88,6 +97,23 @@ export function format(baseMM, docUnit = BASE, opts = {}) {
   const decimals = (typeof opts.decimals === 'number') ? opts.decimals : 1;
   return val.toFixed(decimals);
 }
+
+// formatFraction(value, den) → TASK 728: a number (in its own unit, e.g. inches) as the NEAREST fraction of `den` (8 | 16 | 32 | 64 ...), reduced, as a
+// tape measure reads it: 0.5 → '1/2', 1.5 → '1 1/2', 23.625 → '23 5/8', 3 → '3', -1.25 → '-1 1/4', 0.1 at 16 → '1/8' (1.6 sixteenths rounds to 2),
+// and '0' for anything that rounds to zero (never '-0'). No unit mark: the caller adds it. Display only (the value itself is never rounded).
+const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+export function formatFraction(value, den) {
+  const ticks = Math.round(Math.abs(Number(value)) * den);
+  if (!Number.isFinite(ticks)) return '';
+  if (ticks === 0) return '0';
+  const whole = Math.floor(ticks / den);
+  const rest = ticks - whole * den, g = gcd(rest, den), num = rest / g, d = den / g; // reduced: 12/16 → 3/4
+  const body = rest === 0 ? String(whole) : whole === 0 ? `${num}/${d}` : `${whole} ${num}/${d}`;
+  return (Number(value) < 0 ? '-' : '') + body;
+}
+
+// unitNumber(baseMM, docUnit) → the value as a plain NUMBER in docUnit (6 decimals: exact enough to step or compare from; not display text)
+export const unitNumber = (baseMM, docUnit = BASE) => Number(format(baseMM, docUnit, { decimals: 6 }));
 
 // formatShaperParam(baseMM, docUnit, { zeroBare }) — TASK 456: THE one formatter for the shaper:cutDepth / cutOffset / toolDia
 // attribute values, matching Shaper Studio's exports: every non-zero value = 3 decimals + a SPACE + the unit ("0.100 in",

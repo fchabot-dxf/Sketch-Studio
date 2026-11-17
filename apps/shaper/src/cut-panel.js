@@ -5,9 +5,9 @@
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
 import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
-import SettingsManager, { docUnit, lengthDecimals } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthText } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
-import { parse as parseUnit, format as formatUnit } from '#core/units.js';
+import { parse as parseUnit, unitNumber } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 // TASK 714: each STEPPED type right after its plain type; a stepped type is listed only when the target can take it (its record carries that slope).
@@ -42,8 +42,9 @@ const STEPPERS = {
 };
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
-const fmt = (baseMM) => formatUnit(baseMM, docUnit(), { decimals: lengthDecimals(3) });   // BASE mm → doc-unit string (3 dp unless the Length precision setting says otherwise)
-const toDocNum = (baseMM) => Number(formatUnit(baseMM, docUnit(), { decimals: 6 }));  // BASE mm → doc-unit number
+// a field's text: lengthText (the one length-format decider: 3 decimals unless the Length precision setting says otherwise, or an inch fraction); the unit is beside it
+const fieldText = (baseMM) => lengthText(baseMM, { auto: 3, show: 'field' });
+const toDocNum = (baseMM) => unitNumber(baseMM, docUnit());  // BASE mm → doc-unit number
 const isUnset = (v) => v === 'unset' || v == null;
 
 export function createCutPanel(hostEl, opts = {}) {
@@ -195,7 +196,7 @@ export function createCutPanel(hostEl, opts = {}) {
     for (const p of OFFSET_PRESETS) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'cut-preset'; b.dataset.mm = String(p.mm);
-      b.textContent = docUnit() === 'in' ? p.label : fmt(p.mm); // mm/cm docs show the converted values (UNVERIFIED vs Studio)
+      b.textContent = docUnit() === 'in' ? p.label : fieldText(p.mm); // mm/cm docs show the converted values (UNVERIFIED vs Studio)
       if (Math.abs(Math.abs(Number(current.cutOffset) || 0) - p.mm) < 1e-6) b.classList.add('is-active');
       b.addEventListener('click', () => { onSetField('cutOffset', p.mm); closePops(null); });
       grid.appendChild(b);
@@ -239,7 +240,7 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // Re-format the displayed values (BASE mm → doc unit). Called on selection change AND on DOC_UNIT change (re-label).
   const renderFields = () => {
-    depthInput.value = isUnset(current.cutDepth) ? '' : fmt(current.cutDepth);
+    depthInput.value = isUnset(current.cutDepth) ? '' : fieldText(current.cutDepth);
     // TASK 450b: show only the rows of the params this cut type declares (Guide: none; On line: no Offset)
     card.querySelectorAll('.cut-row[data-param]').forEach((row) => { row.style.display = cutTypeHasParam(current.cutType, row.dataset.param) ? '' : 'none'; });
     // TASK 472: the cutter shape belongs with the bit: a type without a bit diameter (Stock) has no shape row; its depth row reads Thickness
@@ -252,9 +253,9 @@ export function createCutPanel(hostEl, opts = {}) {
     card.querySelector('.cut-row[data-row="stepDepth"]').style.display = declares('stepDepth') && !adaptive ? '' : 'none';
     card.querySelector('.cut-row[data-row="stepDeviation"]').style.display = declares('stepDeviation') && adaptive ? '' : 'none';
     adaptiveInput.checked = adaptive;
-    stepInput.value = fmt(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
+    stepInput.value = fieldText(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
     const deviation = Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm;
-    deviationInput.value = formatUnit(deviation, docUnit(), { decimals: lengthDecimals(docUnit() === 'in' ? 4 : 3) }); // 0.1 mm = 0.0039 in
+    deviationInput.value = lengthText(deviation, { auto: docUnit() === 'in' ? 4 : 3, show: 'field', fractions: false }); // 0.1 mm = 0.0039 in: a tolerance finer than 1/64, always decimals
     noteEl.innerHTML = '';
     for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
       const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');
@@ -268,11 +269,11 @@ export function createCutPanel(hostEl, opts = {}) {
     const curType = current.cutType ? cutTypeById(current.cutType) : null;
     card.querySelector('.cut-row[data-param="cutDepth"] .cut-field-label').textContent = (curType && curType.depthLabel) || 'Depth';
     const off = Number(current.cutOffset) || 0;
-    offsetInput.value = fmt(off);
+    offsetInput.value = fieldText(off);
     flipBtn.classList.toggle('is-on', off < 0);
     flipBtn.setAttribute('aria-pressed', String(off < 0));
     const dia = Number(current.toolDia) || 0;
-    bitInput.value = fmt(dia);
+    bitInput.value = fieldText(dia);
     renderPresets(presetsWrap, BIT_PRESETS, 'toolDia', dia);
     // hidden rows keep no preset buttons
     renderPresets(stepPresetsWrap, declares('stepDepth') && !adaptive ? presetsFor(STEP_PRESETS) : [], 'stepDepth', Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);

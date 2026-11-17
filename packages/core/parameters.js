@@ -16,8 +16,8 @@
 // Errors are DATA ({ ok:false, code, message, ... }); nothing here throws on user input.
 
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { unitInfo, format as formatUnit } from '#core/units.js';
-import { lengthDecimals, angleDecimals } from '#core/settings-manager.js';
+import { unitInfo } from '#core/units.js';
+import { lengthText, angleDecimals } from '#core/settings-manager.js';
 import { parseInput, evaluate, canonicalize, dependencies, print, validateName, foldName, functionTable } from '#core/expression.js';
 import { patternValueSlots, patternSlot, patternSlotValue } from '#core/pattern-values.js';
 
@@ -282,9 +282,9 @@ export function remapExpressionNames(text, mapName) {
   return ast == null ? { ok: false } : { ok: true, text: print(ast) };
 }
 
-// a plain number: no name, no call, no operator but a "1/2 in" fraction (typed into a dimension it REPLACES any formula)
+// a plain number: no name, no call, no operator but a "1/2 in" fraction or a "1 1/2" mixed number (typed into a dimension it REPLACES any formula)
 function isPlainNumber(n) {
-  if (n.t === 'num') return true;
+  if (n.t === 'num' || n.t === 'mixed') return true;
   if (n.t === 'neg') return isPlainNumber(n.arg);
   if (n.t === 'unit') return isPlainNumber(n.arg) || (n.arg.t === 'bin' && n.arg.op === '/' && n.arg.left.t === 'num' && n.arg.right.t === 'num');
   return false;
@@ -564,17 +564,19 @@ export function freezeReferencesTo(state, removedNames, { unit = 'mm' } = {}) {
 }
 
 // ── display text (TASK 535 slice 3: the canvas hint, the autocomplete rows and the parameter table all use THESE) ──
-// a base value (mm / degrees) as text in `unit` ('' = a plain count); 1 decimal for lengths and angles like the canvas labels, up to 4 for a count
-export function quantityText(v, unit) {
+// a base value (mm / degrees) as text in `unit` ('' = a plain count); 1 decimal for lengths and angles like the canvas labels, up to 4 for a count.
+// show (TASK 728, a length's form, see lengthText): 'field' = the number for a cell / row that prints the unit beside it (default), 'bare' = the number
+// alone ("1.5" | 1 1/2"), 'unit' = with its unit, any kind ("1.5 in" | 1 1/2" | "30.0 deg"). A length's text is decided by lengthText (one decider).
+export function quantityText(v, unit, show = 'field') {
   if (!Number.isFinite(v)) return '';
   const u = unit ? unitInfo(unit) : null;
   if (!u) return String(Math.round(v * 1e4) / 1e4);
-  if (u.kind === 'length') return formatUnit(v, u.name, { decimals: lengthDecimals(1) });
-  return (v / u.f).toFixed(angleDecimals(1));
+  if (u.kind === 'length') return lengthText(v, { unit: u.name, auto: 1, show });
+  const text = (v / u.f).toFixed(angleDecimals(1));
+  return show === 'unit' ? `${text} ${unit}` : text;
 }
 // the unit a dimension's value is shown in: degrees for an angle, the document unit for a length
 export const dimensionUnit = (c, docUnit) => (c.type === CONSTRAINT_TYPES.ANGLE ? 'deg' : docUnit);
-const withUnit = (text, unit) => (unit ? `${text} ${unit}` : text);
 
 // ── the live hint under the dimension box (docs/PARAMETERS-DESIGN.md section E) ──
 // previewDimensionInput(state, c, text, { unit }) → PURE (no solve, nothing touched).
@@ -599,7 +601,7 @@ export function previewDimensionInput(state, c, text, { unit = 'mm', slot = null
     const others = plan.affected.filter((n) => n !== plan.named);
     return {
       ok: true, kind: 'name', name: plan.named, own, others, plan, value: myValue,
-      hint: `names it ${plan.named} = ${withUnit(quantityText(myValue, shown), shown)}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
+      hint: `names it ${plan.named} = ${quantityText(myValue, shown, 'unit')}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
     };
   }
   const parsed = parseInput(String(text));
@@ -608,16 +610,16 @@ export function previewDimensionInput(state, c, text, { unit = 'mm', slot = null
     const after = plan.paramsAfter.find((p) => foldName(p.name) === key);
     const evAfter = evaluateAll({ parameters: plan.paramsAfter, constraints: state.constraints }, { unit });
     const qAfter = evAfter.values && evAfter.values.get(after.name);
-    const newText = withUnit(quantityText(qAfter ? qAfter.v : NaN, after.unit), after.unit);
+    const newText = quantityText(qAfter ? qAfter.v : NaN, after.unit, 'unit');
     const before = evaluateAll(state, { unit }).values.get(after.name);
     const others = plan.affected.filter((n) => n !== own);
-    const oldText = quantityText(before ? before.v : NaN, after.unit);
+    const oldText = quantityText(before ? before.v : NaN, after.unit, 'bare');
     return {
       ok: true, kind: 'set', name: after.name, own, others, plan, value: myValue,
       hint: `sets ${after.name} ${oldText} -> ${newText}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
     };
   }
-  return { ok: true, kind: 'value', own, others: [], plan, value: myValue, hint: `= ${withUnit(quantityText(myValue, shown), shown)}` };
+  return { ok: true, kind: 'value', own, others: [], plan, value: myValue, hint: `= ${quantityText(myValue, shown, 'unit')}` };
 }
 
 // ── autocomplete (OWNER REQUIREMENT R3, docs/PARAMETERS-DESIGN.md section E): ONE pure function; the DOM list is a thin view over it ──

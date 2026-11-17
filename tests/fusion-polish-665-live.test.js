@@ -107,7 +107,7 @@ try {
   // Import real selection
   await evalJs(`document.getElementById('btn-fusion-add-selection').click()`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(JSON.stringify(realSketchPayload))})`);
-  await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 7`, '7 edge elements in Prepare');
+  await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 6`, '6 edge elements in Prepare'); // TASK 757: the construction line is not drawn in Prepare
 
   // Click rectangle region -> opens .cut-card
   const rectScreen = await evalJs(`(() => {

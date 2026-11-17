@@ -375,7 +375,7 @@ export function setupInput(svg, state, opts = {}) {
             window.ug.debug.dof = {
                 logAll: function() {
                     const activeConstraints = (state.constraints || []).filter(c => !c.isDriven && !c.driven);
-                    const res = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes, constraints: activeConstraints });
+                    const res = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes, constraints: activeConstraints, groups: state.groups, enteredGroupId: state.enteredGroupId });
                     const out = [];
                     for (const [id, j] of state.joints) {
                         const dof = res.jointDOFs && res.jointDOFs.has(id) ? res.jointDOFs.get(id) : 2;
@@ -386,7 +386,7 @@ export function setupInput(svg, state, opts = {}) {
                 },
                 logSelection: function() {
                     const activeConstraints = (state.constraints || []).filter(c => !c.isDriven && !c.driven);
-                    const res = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes, constraints: activeConstraints });
+                    const res = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes, constraints: activeConstraints, groups: state.groups, enteredGroupId: state.enteredGroupId });
                     const sel = state.selectedJoints ? Array.from(state.selectedJoints) : [];
                     const out = sel.map(id => {
                         const j = state.joints.get(id);

@@ -4,7 +4,8 @@
 //
 // CRITICAL: `userGroupId` is DISTINCT from the shape factories' `groupId` (the RENDERER's closed-shape-fill key —
 // LEFT UNTOUCHED). The user group never reads/writes the factory `groupId`. User groups carry NO toolpath/hole meaning
-// (holes and combined faces belong exclusively to `#core/profile-model.js`) and no solver meaning (a group is not a rigid body).
+// (holes and combined faces belong exclusively to `#core/profile-model.js`). TASK 752: a group that is not entered is a rigid
+// BLOCK for the solver (rigidBlocks below; the solver only translates it).
 //
 // TASK 751: NESTED groups. A group entry may name its `parentId` (a group inside a group); a shape's `userGroupId` is its
 // INNERMOST group. A document of flat groups (no parentId) is a nest of depth one: it loads unchanged.
@@ -69,6 +70,23 @@ export function enteredGroup(state) {
 // holds the shape, or null when the shape is a direct member of the entered group (the click selects the curve itself).
 // A shape outside the entered group: its outermost group (the Select tool leaves the entered group first). Ungrouped: null.
 export function selectUnit(state, shapeId) { return indexOf(state).unitOf(shapeId); }
+
+// TASK 752: THE rigid BLOCKS of the solver. Every group a Select-tool click selects at the entered level (selectUnit: the outermost
+// group below the entered level) is ONE block the solver only TRANSLATES: its joints keep their positions relative to each other (no
+// rotation, no scale). The direct members of the entered group, and ungrouped shapes, are in no block. Derived at every solve from the
+// shapes' `userGroupId`, `groups` and `enteredGroupId` (nothing stored, nothing added to the constraints). `state` = { shapes, groups,
+// enteredGroupId }. Returns [{ id: groupId, shapes: [shape, ...] }] in the order of each block's first shape; [] when there is no group.
+export function rigidBlocks(state) {
+  if (!state || !Array.isArray(state.groups) || !state.groups.length) return [];
+  const ix = indexOf(state), out = new Map();
+  for (const s of (state.shapes || [])) {
+    const u = s && s.userGroupId ? ix.unitOf(s.id) : null;
+    if (!u) continue;
+    if (!out.has(u)) out.set(u, []);
+    out.get(u).push(s);
+  }
+  return [...out].map(([id, shapes]) => ({ id, shapes }));
+}
 
 // Is shape `shapeId` inside group `gid` (a member of it or of one of its child groups)?
 export function isInGroup(state, shapeId, gid) {

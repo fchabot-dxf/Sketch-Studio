@@ -9,7 +9,8 @@
 //     Tool picks with the group NOT entered: Coincident picks a member's point, Dimension a member's line, a Line drawn from a member's corner
 //     snaps there; the Select tool on the same spot selects the whole group; a constraint button with a group selected says why it is not used.
 //     Ctrl+Shift+G dissolves ONE level; a hand-made group (Ctrl+G) of a rectangle + a circle behaves the same.
-//     Fact for the owner: a line drawn onto a corner of a letter (a coincident) and then dragged pulls that corner: the letter deforms.
+//     Fact for the owner: a line drawn onto a corner of a letter (a coincident) and then dragged: before TASK 752 it pulled that corner alone (the
+//     letter deformed); since TASK 752 the group is a rigid block: it moves whole or the line gives. Coincident between two points of one block: refused.
 //  C. Shaper phone 390 x 844, real touch, the same word imported through the drawer: a tap selects the file group, a touch drag moves it
 //     rigidly, a double tap (taps 7 px apart) enters, a tap selects a letter, a drag moves only it, a tap on empty canvas steps out, a hold
 //     opens the menu.
@@ -199,13 +200,18 @@ try {
     const notice = await evalJs(`(document.getElementById('notification-container') || {}).textContent || ''`);
     console.log('B. Coincident pressed with the file group selected: notice = ' + JSON.stringify(notice.slice(0, 200)));
     assert.ok(/single curves and points/.test(notice), 'B. the constraint button says a group is not its operand');
-    // Coincident: a corner of O and a corner of B (two members of the same un-entered group): picks the points
+    // Coincident: a corner of O and a corner of B (two members of the same un-entered group): picks the points. TASK 752: the file group is ONE
+    // rigid block (it only translates), so a coincident between two of its points would deform it: the add is refused (the existing conflict
+    // notice), nothing is added (no undo step) and nothing moves
     const cO = await corner('O', 1), cB = await corner('B', 0);
+    const fileJ0 = await jointsOf(file);
     await click(cO); await click(cB); await sleep(300);
     const lastC = await evalJs(`(() => { const c = ${ST}.constraints[${ST}.constraints.length - 1]; return { n: ${ST}.constraints.length, type: c && c.type, joints: c && c.joints }; })()`);
-    console.log('B. Coincident tool on two member points: ' + JSON.stringify(lastC));
-    assert.ok(lastC.n === nCons + 1 && lastC.type === 'coincident' && lastC.joints.includes(cO.id) && lastC.joints.includes(cB.id), 'B. the Coincident tool picked the two member points');
-    await sendRealKey(send, 'z', 'KeyZ', 90, 2); await sleep(500);
+    const refusal = await evalJs(`(document.getElementById('notification-container') || {}).textContent || ''`);
+    console.log('B. Coincident tool on two member points: ' + JSON.stringify(lastC) + ' notice: ' + JSON.stringify(refusal.slice(-160)));
+    assert.ok(lastC.n === nCons && /Coincident rejected/.test(refusal), 'B. the Coincident tool picked the two member points; the block would deform: refused');
+    const fileJ1 = await jointsOf(file);
+    assert.ok(Object.keys(fileJ0).every((k) => fileJ0[k][0] === fileJ1[k][0] && fileJ0[k][1] === fileJ1[k][1]), 'B. the refused coincident moved nothing');
     // Dimension: a member line of A
     await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(200);
     await pressRibbonTool(evalJs, click, 'tool-dim'); await sleep(300);
@@ -233,11 +239,12 @@ try {
     console.log('B. Line drawn onto a corner of B: ' + JSON.stringify(snapped));
     assert.ok(snapped.n === n0 + 1 && snapped.onCorner && snapped.d < 1e-6, 'B. the line snapped to the member point');
     await evalJs(`document.getElementById('tool-select').click()`); await sleep(200);
-    // FACT for the owner: drag the outside line's free end: the coincident pulls the letter's corner; the rest of the letter stays
+    // FACT for the owner: drag the outside line: before TASK 752 the coincident pulled the letter's corner alone (the letter deformed); the
+    // file group is now a rigid block: it moves whole or the line gives
     await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(200);
     const Bjoints0 = await jointsOf(await groupIds('B'));
     await shot('B6-fact-before-line-drag.png', await wordClip());
-    // a body drag of the line (press its middle: an ungrouped line) pulls its corner end along
+    // a body drag of the line (press its middle: an ungrouped line)
     const mid = await evalJs(`(() => { const st = ${ST}; const L = st.shapes.find((s) => s.id === ${JSON.stringify(snapped.lineId)}); const a = st.joints.get(L.joints[0]), b = st.joints.get(L.joints[1]); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; })()`);
     const ms = await toS(mid.x, mid.y);
     await mouseDrag(ms, { x: ms.x + 40, y: ms.y - 30 });
@@ -245,7 +252,8 @@ try {
     const moved = Object.keys(Bjoints0).filter((k) => Math.hypot(Bjoints1[k][0] - Bjoints0[k][0], Bjoints1[k][1] - Bjoints0[k][1]) > 1e-6);
     results.fact1 = { letterBJoints: Object.keys(Bjoints0).length, moved: moved.length, corner: cB2.id, cornerMoved: moved.includes(cB2.id) };
     console.log('B. FACT 1 (an outside line coincident with a corner of B, dragged): ' + JSON.stringify(results.fact1));
-    await shot('B7-fact-after-line-drag-letter-deformed.png', await wordClip());
+    assert.ok(moved.length === 0 || moved.length === Object.keys(Bjoints0).length, 'B. TASK 752: the letter moved whole or not at all (never its corner alone)');
+    await shot('B7-fact-after-line-drag.png', await wordClip());
     await sendRealKey(send, 'z', 'KeyZ', 90, 2); await sleep(300); await sendRealKey(send, 'z', 'KeyZ', 90, 2); await sleep(500); // the drag, the line
 
     // Ctrl+Shift+G on the selected file group dissolves ONE level; then a hand-made group (Ctrl+G) of a rectangle (the island) + a circle (the dot)

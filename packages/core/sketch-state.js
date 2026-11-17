@@ -345,5 +345,9 @@ export function createSketchState(engine, view) {
   const _shapesPush = state.shapes.push.bind(state.shapes);
   state.shapes.push = (...items) => { for (const s of items) if (s && s.sketchId == null) stampSketch(s, state); return _shapesPush(...items); };
 
+  // TASK 752: the engine reads this state's user groups (state.groups, state.enteredGroupId) at every solve: each group that is not
+  // entered is a rigid block (#core/group-model.js rigidBlocks; the solver only translates it).
+  engine.setGroupState(state);
+
   return state;
 }

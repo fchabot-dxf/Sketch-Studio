@@ -446,7 +446,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Analyze constraint status for visualization (Green/Black/Blue)
   // Filter out driven dimensions (reference only) so they don't affect DOF calculation
   const activeConstraints = constraints.filter(c => !c.isDriven && !c.driven);
-  const { fixedJoints, constrainedJoints, fixedShapes, constrainedShapes, jointDOFs, lockedAxisX, lockedAxisY, radialLocked, dofSources } = analyzeConstraintStatus({ joints, shapes, constraints: activeConstraints });
+  // TASK 752: the user groups (read through ctx.getState, as the entered group below): a member of a group that is not entered has its block's DOF
+  const groupState = ctx.getState ? ctx.getState() : null;
+  const { fixedJoints, constrainedJoints, fixedShapes, constrainedShapes, jointDOFs, lockedAxisX, lockedAxisY, radialLocked, dofSources } = analyzeConstraintStatus({ joints, shapes, constraints: activeConstraints, groups: groupState && groupState.groups, enteredGroupId: groupState && groupState.enteredGroupId });
 
   // Accumulate SVG markup and set once at the end to avoid partial-frame renders
   const out = new MarkupLayers();

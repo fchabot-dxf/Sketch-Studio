@@ -12,8 +12,9 @@
 //          is drawing: its handler runs before the canvas letters and shadows them), 'stage:toolpath' (Pen Plotter's Toolpath / Export).
 //   keys   the combos (any one matches). A combo names ONE of: key (KeyboardEvent.key, any case), code (KeyboardEvent.code), chars
 //          (any one of these typed characters). Per modifier, mod (Ctrl, or Cmd on a Mac) / shift / alt: true = must be held,
-//          false = must not be held, absent = ignored (today's behaviour: the tool letters ignore every modifier, so Ctrl+D still opens
-//          Dimension). notIn: a CSS selector; a key aimed at an element inside it is not this shortcut (it belongs to that element).
+//          false = must not be held, absent = ignored. The tool and constraint letters FORBID Ctrl / Cmd and Alt (TASK 740, owner turn 2103:
+//          Ctrl+D, Ctrl+R, Ctrl+L ... are the browser's) and ignore Shift, except where a Shift+letter is its own shortcut (then the plain
+//          letter forbids Shift too). notIn: a CSS selector; a key aimed at an element inside it is not this shortcut (it belongs to that element).
 //   note   a few grey words, only where the row would otherwise mislead.
 //   listed false = bound but not shown in the list (with the reason beside it).
 // Remapping later: a user's own keys would REPLACE `keys` per id (stored like the other settings) before matching and listing;
@@ -26,28 +27,45 @@ const DOC_TAB = '.sk-doctab-main'; // document-tabs.js: a focused document tab o
 const letter = (ch) => ({ key: ch });
 const plain = (k) => ({ key: k });
 
-const tool = (id, ch, label, group = 'Tools') => ({ id, label, group, hosts: ALL, scope: 'canvas', keys: [letter(ch)] });
+// TASK 740: a tool / constraint key: the letter with no Ctrl / Cmd / Alt; `shift` true = Shift+letter, false = only without Shift (the letter's
+// Shift+ form is another shortcut), absent = Shift ignored (as the letters always have).
+const toolKey = (ch, shift) => ({ key: ch, mod: false, alt: false, ...(shift === undefined ? {} : { shift }) });
+const tool = (id, ch, label, group = 'Tools', shift) => ({ id, label, group, hosts: ALL, scope: 'canvas', keys: [toolKey(ch, shift)] });
 const artTool = (name, ch) => ({ id: 'plotter.art.' + name, label: 'Art tool: ' + name, group: 'Tools', hosts: ['penplotter'], scope: 'stage:toolpath', keys: [letter(ch)],
   listed: false }); // the retired Draw art tools (UNIFY-7b): the key still sets Pen Plotter's tool state, nothing a user should look for
 
 export const SHORTCUTS = Object.freeze([
   // ── Tools (input-manager.js, the Design canvas of every app) ──
-  tool('tool.line', 'l', 'Line'),
-  tool('tool.rect', 'r', 'Rectangle'),
-  tool('tool.circle', 'c', 'Circle'),
-  tool('tool.arc', 'a', 'Arc'),
+  // Every ribbon tool and constraint has one (tool-ribbon.js RIBBON_TOOLS names each button's id; the button's title shows the key). TASK 740 kept
+  // every older letter; the new ones are Fusion 360's where it has one and it is free, else a free letter of the name, else Shift + that letter.
   tool('tool.select', 's', 'Select'),
   tool('tool.pan', 'v', 'Pan'),
+  tool('tool.line', 'l', 'Line'),
+  tool('tool.rect', 'r', 'Rectangle'),
+  tool('tool.slot', 'j', 'Slot'),            // TASK 740: no free letter in the name (S Select, L Line, O Tangent, T Perpendicular)
+  tool('tool.circle', 'c', 'Circle'),
+  tool('tool.polygon', 'p', 'Polygon', 'Tools', false), // Shift+P = Parameters
+  tool('tool.arc', 'a', 'Arc'),
+  tool('tool.bezier', 'b', 'Bezier', 'Tools', false),   // Shift+B = Break
+  tool('tool.trim', 'w', 'Trim'),            // Fusion's T is our Perpendicular; no free letter in the name
+  tool('tool.break', 'b', 'Break', 'Tools', true),      // B is Bezier
+  tool('tool.fillet', 'n', 'Fillet'),        // no free letter in the name (F Fix)
+  tool('tool.mirror', 'm', 'Mirror', 'Tools', false),   // Shift+M = Midpoint
+  tool('tool.circularPattern', 'u', 'Circular Pattern'),   // circUlar
+  tool('tool.rectangularPattern', 'g', 'Rectangular Pattern'), // a Grid (rectanGular)
+  tool('tool.offset', 'z', 'Offset'),        // Fusion's O is our Tangent; no free letter in the name
   tool('tool.dimension', 'd', 'Dimension'),
   // ── Constrain ──
   tool('tool.coincident', 'x', 'Coincident', 'Constrain'),
-  tool('tool.perpendicular', 't', 'Perpendicular', 'Constrain'),
-  tool('tool.tangent', 'o', 'Tangent', 'Constrain'),
-  tool('tool.collinear', 'i', 'Collinear', 'Constrain'),
   tool('tool.horizontalVertical', 'h', 'Horizontal / Vertical', 'Constrain'),
   tool('tool.parallel', 'q', 'Parallel', 'Constrain'),
+  tool('tool.perpendicular', 't', 'Perpendicular', 'Constrain'),
+  tool('tool.collinear', 'i', 'Collinear', 'Constrain'),
+  tool('tool.tangent', 'o', 'Tangent', 'Constrain'),
   tool('tool.equal', 'e', 'Equal', 'Constrain'),
-  { id: 'sketch.fix', label: 'Fix / Unfix', group: 'Constrain', hosts: ALL, scope: 'canvas', keys: [letter('f')] },
+  tool('tool.midpoint', 'm', 'Midpoint', 'Constrain', true), // M is Mirror
+  tool('tool.symmetric', 'y', 'Symmetric', 'Constrain'),     // sYmmetric (S is Select)
+  { id: 'sketch.fix', label: 'Fix / Unfix', group: 'Constrain', hosts: ALL, scope: 'canvas', keys: [toolKey('f')] },
   // ── Edit ──
   { id: 'edit.undo', label: 'Undo', group: 'Edit', hosts: ALL, scope: 'app', keys: [{ key: 'z', mod: true, shift: false }] }, // history-control.js
   { id: 'edit.redo', label: 'Redo', group: 'Edit', hosts: ALL, scope: 'app', keys: [{ key: 'y', mod: true }, { key: 'z', mod: true, shift: true }] },
@@ -74,7 +92,10 @@ export const SHORTCUTS = Object.freeze([
   { id: 'mirror.finish', label: 'Finish the mirror', group: 'Drawing', hosts: ALL, scope: 'tool:mirror', keys: [plain('Enter')] },
   { id: 'pattern.ok', label: 'Finish the pattern', group: 'Drawing', hosts: ALL, scope: 'tool:pattern', keys: [plain('Enter')] },
   { id: 'fillet.radius', label: 'Fillet radius', group: 'Drawing', hosts: ALL, scope: 'tool:fillet', keys: [letter('r')], note: 'in Fillet' },
-  // ── View (Pen Plotter's Toolpath / Export stages: keyboard.js) ──
+  // ── View ──
+  // TASK 740: the Parameters window (app-footer.js: the same toggle as its fx button, while that button shows; Trace has none, decision O14)
+  { id: 'view.parameters', label: 'Parameters window', group: 'View', hosts: ['sketchstudio', 'shaper', 'penplotter'], scope: 'app', keys: [toolKey('p', true)] },
+  // (Pen Plotter's Toolpath / Export stages: keyboard.js)
   { id: 'view.panHold', label: 'Hold to pan', group: 'View', hosts: ['penplotter'], scope: 'stage:toolpath', keys: [{ code: 'Space' }] },
   { id: 'plotter.finishPolyline', label: 'Finish the polyline', group: 'Drawing', hosts: ['penplotter'], scope: 'stage:toolpath', keys: [plain('Enter')],
     listed: false }, // the retired art polyline tool's Enter: nothing starts one any more
@@ -103,6 +124,17 @@ export function comboMatches(c, e) {
   if (!modOk(c.mod, e.ctrlKey || e.metaKey) || !modOk(c.shift, e.shiftKey) || !modOk(c.alt, e.altKey)) return false;
   if (c.notIn && e.target && typeof e.target.closest === 'function' && e.target.closest(c.notIn)) return false;
   return true;
+}
+
+/** TASK 740: the key of shortcut `id` as a tooltip shows it, e.g. 'L', 'Shift+B', 'Ctrl+Shift+C' (its first combo; Cmd on a Mac). */
+export function shortcutHint(id, { mac = isMacPlatform() } = {}) {
+  const c = shortcutById(id).keys[0];
+  return comboCaps(c, { mac }).join(comboIsChord(c) ? '+' : ' ');
+}
+
+/** TASK 740: a button title with its key: titleWithShortcut('Line', 'tool.line') = 'Line (L)'. */
+export function titleWithShortcut(title, id, opts) {
+  return `${title} (${shortcutHint(id, opts)})`;
 }
 
 /** Is `e` the shortcut `id`? */

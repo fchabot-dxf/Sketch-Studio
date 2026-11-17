@@ -103,7 +103,9 @@ await (async () => {
       await press('.sk-tp-btn[data-choice="save"]');
       await waitFor(`!!document.querySelector('.sk-tp-backdrop [role="dialog"] input')`, mode + ': the Save as name prompt');
       m = await modal();
-      assert(/Save as/.test(m.text) && m.input && !m.inline && m.buttons.join() === 'Save,Cancel', mode + ': the name prompt is in the same modal (name field, Save, Cancel): ' + JSON.stringify(m));
+      // TASK 759: Save… opens THE Save as dialog, the same modal: its two tabs, a name field, Save / Cancel
+      const acts = await evalJs(`[...document.querySelectorAll('.sk-tp-backdrop [role="dialog"] .sk-tp-actions button')].map((b) => b.textContent).join()`);
+      assert(/Save as/.test(m.text) && m.input && !m.inline && acts === 'Save,Cancel' && m.buttons.slice(0, 2).join() === 'Google Drive,Local', mode + ': the Save as dialog is in the same modal (tabs, name field, Save, Cancel): ' + JSON.stringify(m));
       await shot(`save-as-${mode}.png`, w, phone ? 844 : 800);
       await press('.sk-tp-backdrop .sk-tp-cancel'); await sleep(400);
       assert.strictEqual((await names()).length, 2, mode + ': Cancel keeps the tab');

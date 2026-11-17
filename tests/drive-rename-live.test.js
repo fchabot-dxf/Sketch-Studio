@@ -28,13 +28,13 @@ await (async () => {
     await clickSel('.sk-sidebar-btn');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
     await clickSel('[data-action="save-as"]');
-    await waitFor(`!!document.querySelector('.sk-sidebar-input')`, 'Save as prompt');
-    await evalJs(`document.querySelector('.sk-sidebar-input').value = 'Untitled'`);
-    await clickSel('.sk-sidebar-confirm-btns .ok');
-    await waitFor(`(document.querySelector('.sk-sidebar-doc') || {}).textContent === 'Untitled'`, 'saved design is current');
+    // TASK 759: THE Save as dialog; signed in, it opens on its Google Drive tab (today's Drive save underneath)
+    await waitFor(`!!document.querySelector('.sk-fd[data-fd-tab="drive"] input')`, 'Save as dialog on the Drive tab');
+    await evalJs(`document.querySelector('.sk-fd input').value = 'Untitled'`);
+    await clickSel('.sk-fd [data-choice="ok"]');
+    await waitFor(`!document.querySelector('.sk-fd') && (document.querySelector('.sk-doctab.active .sk-doctab-name') || {}).textContent === 'Untitled' && !!document.querySelector('.sk-doctab.active .sk-doctab-home[data-home="drive"]')`, 'saved design is current (on Drive)');
     await evalJs(`(async () => { await ${S}.flushDrive(); })()`);
     assert.strictEqual(session.drive.byName('Untitled.sketch.json').length, 1, 'Untitled.sketch.json on fake Drive');
-    await clickSel('.sk-sidebar-backdrop');
 
     // draw a line (a pending autosave), then rename from the drawer straight away
     await evalJs(`document.getElementById('tool-line').click()`); await sleep(100);

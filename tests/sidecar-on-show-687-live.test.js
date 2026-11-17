@@ -102,9 +102,9 @@ await (async () => {
 
     await openMenu();
     await clickSel('[data-action="save-as"]');
-    await waitFor(`!!document.querySelector('.sk-sidebar-input')`, 'Save as input opens');
-    await evalJs(`document.querySelector('.sk-sidebar-input').value = 'Probe687'`);
-    await clickSel('.sk-sidebar-confirm-btns .ok');
+    await waitFor(`!!document.querySelector('.sk-fd[data-fd-tab="drive"] input')`, 'Save as: THE dialog (TASK 759), on its Google Drive tab (signed in)');
+    await evalJs(`document.querySelector('.sk-fd input').value = 'Probe687'`);
+    await clickSel('.sk-fd [data-choice="ok"]');
     await waitFor(`document.querySelector('.sk-doctab.active .sk-doctab-name')?.textContent === 'Probe687'`, 'Probe687 saved & named');
     await evalJs(`${STORE}.then((s) => s.flushDrive())`);
     await sleep(300);

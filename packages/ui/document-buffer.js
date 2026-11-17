@@ -640,7 +640,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     notify('idle');
     return out;
   }
-  const untouchedUntitled = () => !boundId && !activeContent() && !(state.history && state.history.length) && !(state.redoStack && state.redoStack.length);
+  // TASK 759: a design just opened from a file (a file home) is not an empty Untitled: it is never reused
+  const untouchedUntitled = () => !boundId && !fileHome && !activeContent() && !(state.history && state.history.length) && !(state.redoStack && state.redoStack.length);
   const full = () => new Error(`Close a tab first: at most ${MAX_TABS} designs are open at once.`);
   const recordOf = (key) => { const r = tabList.find((x) => x.key === key); if (!r) throw new Error('That tab is not open.'); return r; };
 

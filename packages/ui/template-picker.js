@@ -877,8 +877,9 @@ export function openSmallModal(label, fill, { panelClass = '' } = {}) {
     };
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); } }
     document.addEventListener('keydown', onKey, true);
-    // TASK 759: the click a page script sends to a hidden <input type=file> (the file chooser opening: the Open dialog's "Choose a file…") is not a press outside
-    const choosing = (e) => !!(e.target && e.target.tagName === 'INPUT' && e.target.type === 'file');
+    // TASK 759: the click a page script sends to a hidden <input type=file> (the file chooser opening: the Open dialog's "Choose a file…") or to an <a download>
+    // (a file saved as a download: the Save as dialog's Local tab), #ui/project-file.js browserFileSeam, is not a press outside
+    const choosing = (e) => !!(e.target && ((e.target.tagName === 'INPUT' && e.target.type === 'file') || (e.target.tagName === 'A' && e.target.hasAttribute('download'))));
     stopOutside = listenOutsidePress((e) => { if (!e.composedPath().includes(panel) && !choosing(e)) finish(null); });
     const mk = (cls, text, id, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-tp-btn ' + cls; b.textContent = text; b.dataset.choice = id; b.addEventListener('click', onClick); actions.appendChild(b); return b; };
     const focusEl = fill(body, mk, finish);

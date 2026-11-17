@@ -56,11 +56,11 @@ export const PROJECT_FILE_PICK = { description: 'Sketch Studio project', mime: '
 export const IMPORT_FILE_PICK = { description: 'SVG or DXF drawing', mime: 'image/svg+xml', exts: ['.svg', '.dxf'] };
 const pickerTypes = (spec) => [{ description: spec.description, accept: { [spec.mime]: spec.exts } }];
 
-/** TASK 759: THE capability, declared once and read at call time (never per environment): `picker` = this browser has the File System Access API
- *  (showSaveFilePicker / showOpenFilePicker: Chrome, Edge), so a picked file has a HANDLE and Save can write back to that same file. Without it
- *  (Firefox, Safari, phones) a save is a download and an open is an <input type=file>: the file has a name only. */
+/** TASK 759: THE capability, declared once and read at call time (never per environment): the File System Access API (Chrome, Edge). `picker` = a save
+ *  picker (showSaveFilePicker): a saved file has a HANDLE, so Save can write back to that same file; without it (Firefox, Safari, phones) a save is a
+ *  download. `openPicker` = an open picker (showOpenFilePicker): an opened file has a handle too; without it an open is an <input type=file> (a name only). */
 export function fileAccess(win = typeof window !== 'undefined' ? window : null) {
-  return { picker: !!win && typeof win.showSaveFilePicker === 'function' && typeof win.showOpenFilePicker === 'function' };
+  return { picker: !!win && typeof win.showSaveFilePicker === 'function', openPicker: !!win && typeof win.showOpenFilePicker === 'function' };
 }
 
 /** The design name a file name shows: the name without `.sketch.json` (or `.json`). */
@@ -100,7 +100,7 @@ export const browserFileSeam = {
   },
   /** Pick and read a file. Resolves { name, text, handle } (handle: the picked file, or null from an <input type=file>) or null when the user cancelled. */
   async open(spec = PROJECT_FILE_PICK) {
-    if (fileAccess().picker) {
+    if (fileAccess().openPicker) {
       let handles;
       try { handles = await window.showOpenFilePicker({ types: pickerTypes(spec), multiple: false }); }
       catch (e) { if (pickerCancelled(e)) return null; throw e; }

@@ -81,11 +81,14 @@ await (async () => {
     await sleep(300);
     await openMenu();
     await clickEl('[data-action="save-as"]'); await sleep(250);
-    await waitFor(`!!document.querySelector('.sk-sidebar-ask [data-choice="signin"]')`, 'signed out Save as asks to sign in first');
-    await clickEl('.sk-sidebar-ask [data-choice="signin"]');
-    await waitFor(`!!document.querySelector('.sk-sidebar-input')`, 'Save as name prompt after sign-in');
-    await evalJs(`document.querySelector('.sk-sidebar-input').value = 'T1'`);
-    await clickEl('.sk-sidebar-confirm-btns .ok'); await sleep(900);
+    // TASK 759: THE Save as dialog; signed out it asks no sign-in question: its Google Drive tab has the sign-in button inside it
+    await waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="save"]')`, 'signed out Save as: the dialog');
+    await clickEl('.sk-fd [data-fd-tab="drive"]');
+    await waitFor(`!!document.querySelector('.sk-fd [data-fd="sign-in"]')`, 'the Drive tab: Sign in with Google');
+    await clickEl('.sk-fd [data-fd="sign-in"]');
+    await waitFor(`!!document.querySelector('.sk-fd input') && document.querySelector('.sk-fd-name').offsetParent !== null`, 'the name field after sign-in');
+    await evalJs(`document.querySelector('.sk-fd input').value = 'T1'`);
+    await clickEl('.sk-fd [data-choice="ok"]'); await sleep(900);
     assert.strictEqual(driveSession.drive.byName('T1.sketch.json').length, 1, 'T1 saved ONLY to fake Google Drive');
     assert.ok((await recent()).includes('T1'), 'Save as T1: ' + JSON.stringify(await recent()));
     const saved = await storedCurrent();

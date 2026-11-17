@@ -51,7 +51,8 @@ eq([R({ designId: 'd' }, true), R({ file: { name: 'a', handle: 'H' } }, true), R
 eq([homeLabel(homeOf({})), homeLabel(homeOf({ designId: 'd' })), homeLabel(homeOf({ designId: 'd' }), { where: 'device' }), homeLabel(homeOf({ file: { name: 'a.sketch.json' } }))],
   ['Not saved yet', 'Saved to Google Drive', 'Saved on this device', 'On this device: a.sketch.json'], 'the one line that says where it lives');
 eq(designNameOfFile('Bracket.sketch.json'), 'Bracket', 'the design name of a file: without .sketch.json'); eq(designNameOfFile('B.json'), 'B', '... or .json');
-eq(fileAccess(null), { picker: false }, 'no window: no picker'); eq(fileAccess({ showSaveFilePicker() {}, showOpenFilePicker() {} }), { picker: true }, 'the capability is the File System Access API');
+eq(fileAccess(null), { picker: false, openPicker: false }, 'no window: no picker'); eq(fileAccess({ showSaveFilePicker() {}, showOpenFilePicker() {} }), { picker: true, openPicker: true }, 'the capability is the File System Access API');
+eq(fileAccess({ showSaveFilePicker() {} }), { picker: true, openPicker: false }, 'each picker on its own');
 
 // the buffer: each home and what Save does
 {

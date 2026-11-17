@@ -45,7 +45,6 @@ function injectStyles() {
 .sk-fd .sk-fd-tab[aria-selected="true"] { opacity: 1; font-weight: 600; border-bottom-color: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); }
 .sk-fd .sk-fd-tab:focus-visible { outline: 2px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); outline-offset: -2px; }
 .sk-fd .sk-fd-panel { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.sk-fd .sk-fd-panel[hidden], .sk-fd [hidden] { display: none; }
 .sk-fd .sk-fd-line { margin: 0; font-size: 13.5px; line-height: 1.4; opacity: 0.85; }
 .sk-fd .sk-fd-name { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .sk-fd .sk-fd-name .sk-tp-input { width: 100%; min-height: 44px; }
@@ -56,6 +55,7 @@ function injectStyles() {
 .sk-fd .sk-fd-design span:last-child { font-size: 12px; opacity: 0.7; }
 .sk-fd .sk-fd-signin, .sk-fd .sk-fd-choose, .sk-fd .sk-fd-projects { align-self: flex-start; }
 @media (max-width: 640px) { .sk-fd .sk-fd-signin, .sk-fd .sk-fd-choose, .sk-fd .sk-fd-projects { align-self: stretch; } }
+.sk-fd .sk-fd-panel[hidden], .sk-fd .sk-fd-name[hidden], .sk-fd .sk-tp-btn[hidden] { display: none; } /* last: a hidden part stays hidden whatever its own display */
 `;
   document.head.appendChild(s); stylesInjected = true;
 }

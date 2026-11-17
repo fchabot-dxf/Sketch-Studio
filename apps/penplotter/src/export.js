@@ -8,6 +8,7 @@ import { expandLayerWithFill } from "#core/plot/fills/index.js";   // PP-6: shar
 import { expandLayerOutline } from "#core/plot/outlines/index.js"; // PP-6: shared outline registry
 import { toolpathToGcodeSections, buildZip } from "#core/plot/index.js";   // PP-6: shared vpype gcode + zip
 import { collectToolpathShapes } from "./core-geometry.js";         // TASK 440: unified shapes-of-a-toolpath
+import { track } from "#ui/analytics.js"; // TASK 738
 
 export function installExportButton() {
     $("#exportBtn").onclick = onExportClick;
@@ -27,6 +28,7 @@ export async function onExportClick() {
         }
         const zip = buildZip(entries);
         downloadBlob(zip, "plotter_gcode.zip");
+        track("export:gcode"); // TASK 738
         toast(exportSummary(entries.length));
     } catch (e) {
         toast(e.message, true);

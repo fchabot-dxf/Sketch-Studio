@@ -1,0 +1,34 @@
+# Sketch Studio analytics (TASK 738): a tiny standalone Worker that receives the anonymous usage events of the four apps and writes them to
+# Cloudflare Workers Analytics Engine. Its OWN dataset and dashboard key: the DDCS Studio worker (ddcs-analytics) is a separate one, untouched.
+# Country / region / city come from request.cf at the edge; the visitor's IP is never stored.
+#
+# Deploy (from analytics/):   node deploy.mjs      (wraps `wrangler deploy`; it refuses while a REPLACE-WITH placeholder is left below)
+# Then put the printed URL + "/e" into ENDPOINT in packages/ui/analytics.js. Setup, queries, dashboard: README.md.
+
+name = "sketch-analytics"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# The dashboard (GET /dash?key=<DASH_KEY>) and the rollups read the data through the Analytics Engine SQL API: the account id (not secret, the same
+# account as the DDCS worker) + two SECRETS the owner sets himself, never in this file:
+#   wrangler secret put AE_TOKEN     # a Cloudflare API token with the permission Account Analytics: Read
+#   wrangler secret put DASH_KEY     # a long random string: the private dashboard key
+[vars]
+ACCOUNT_ID = "014e18b89793d634a95538e7910dce19"
+
+# Analytics Engine dataset, created on the first write. Bound as env.EVENTS. (src/index.js DATASET names it too: a test checks they agree.)
+[[analytics_engine_datasets]]
+binding = "EVENTS"
+dataset = "sketch_events"
+
+# D1 (SQLite) for the nightly rollups (history past AE's ~90 days). Bound as env.DB. ONE-TIME SETUP (it prints the database_id: paste it below):
+#   npx wrangler d1 create sketch_analytics
+#   npx wrangler d1 execute sketch_analytics --remote --file=migrations/0001_rollups.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "sketch_analytics"
+database_id = "ffe9f803-2b99-4f76-9768-76ee803db111"
+
+# The nightly rollup: 02:45 UTC folds YESTERDAY's events into D1 `rollups` (scheduled() in src/index.js).
+[triggers]
+crons = ["45 2 * * *"]

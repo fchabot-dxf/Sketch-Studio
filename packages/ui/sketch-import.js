@@ -32,6 +32,7 @@ import { addSketch, activateSketch } from '#core/sketch-model.js';
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from './input-handlers/pan-zoom.js';
 import { browserFileSeam, IMPORT_FILE_PICK } from './project-file.js';
+import { track } from './analytics.js'; // TASK 738: an SVG / DXF imported
 
 export const IMPORT_ACTION_LABEL = 'Import SVG / DXF…';
 
@@ -148,6 +149,7 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
   const framed = options.frame ? options.frame() : { shapes };
   const fitted = fitToDrawing(controller.svg, Object.create(st, Object.fromEntries(Object.entries(framed).map(([k, v]) => [k, { value: v }]))));
 
+  if (format === 'dxf') track('import:dxf'); else track('import:svg'); // TASK 738: the format only, never the file name
   const detail = skipped.map((s) => `${s.tag} ${s.reason} ×${s.count}`).join('; ');
   const message = `Imported ${shapes.length} shapes → ${sketch.name} @ ${label}${assumed ? ' (assumed)' : ''}` +
     (construction ? ` · ${construction} construction` : '') + (extra ? ` · ${extra}` : '') + (skipN ? ` · ${skipN} skipped/degraded: ${detail}` : '');

@@ -7,6 +7,7 @@
 import SettingsManager, { LENGTH_FRACTIONS } from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
+import { track } from '#ui/analytics.js'; // TASK 738: the panel opened
 import { createShortcutsList } from '#ui/shortcuts-list.js'; // TASK 727: the Shortcuts tab (read-only, from shortcuts.js)
 import {
   STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, USER_PRESETS_KEY, activeStyleTemplateId, applyStyleTemplate, userPresetsOf, listUserPresets,
@@ -350,6 +351,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   function open() {
     if (isOpen) return;
     isOpen = true; el.classList.remove('sk-hidden'); populate();
+    track('settings'); // TASK 738
     escHandler = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', escHandler);
     stopOutside = listenOutsidePress((e) => { if (!e.composedPath().includes(el)) close(); }); // the path, not contains(): a clicked inline-question button is already removed by then

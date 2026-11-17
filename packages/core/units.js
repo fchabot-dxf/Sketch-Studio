@@ -87,7 +87,9 @@ const hasUnit = (n) => (n.t === 'neg' ? n.arg : n).t === 'unit';
 export function format(baseMM, docUnit = BASE, opts = {}) {
   if (baseMM == null || !Number.isFinite(Number(baseMM))) return '';
   const unit = TO_MM[docUnit] ? docUnit : BASE;
-  const val = Number(baseMM) / TO_MM[unit];
+  // TASK 766: the converted value without its float error (12 significant digits): 3/16 in stored as 4.7625 mm or as 4.762499999999999 mm (a step landed
+  // there) is the SAME 0.1875 in, so it rounds the same way everywhere ("0.188" at 3 decimals, never "0.187" in one place and "0.188" in another)
+  const val = Number((Number(baseMM) / TO_MM[unit]).toPrecision(12));
   if (opts.unit) {
     const p = (typeof opts.decimals === 'number') ? opts.decimals : 4;
     let str = val.toFixed(p);

@@ -28,7 +28,6 @@ state.shapes.push({ id: 's1', type: 'line', joints: ['a', 'b'] }, { id: 's2', ty
 state.constraints.push({ type: 'distance', joints: ['a', 'b'], value: 4 });
 state.groups.push({ id: 'g1', name: 'G', shapeIds: ['s1', 's2'] });
 state.profiles.push({ id: 'p1', outer: ['s1'], holes: [] });
-state.vcarves.push({ id: 'v1', region: 'p1', vbit: { angle: 60 } });
 state.sketches.push({ id: 'sketch-2', name: 'Sketch 2', visible: true });
 state.activeSketchId = 'sketch-2';
 state.selectedShapes.add('s1'); state.selectedJoints.add('a'); state.selectedConstraints.add(state.constraints[0]);
@@ -42,7 +41,7 @@ state.clearDocument();
 
 assert.deepStrictEqual(project(state), project(make()), 'a cleared state deep-equals a fresh state');
 assert.strictEqual(state.shapes.length, 0);
-assert.strictEqual(state.groups.length + state.profiles.length + state.vcarves.length, 0, 'groups/profiles/vcarves are cleared too');
+assert.strictEqual(state.groups.length + state.profiles.length, 0, 'groups/profiles are cleared too');
 assert.strictEqual(state.sketches.length, 1, 'sketches reset to the single default sketch');
 assert.strictEqual(state.activeSketchId, state.sketches[0].id);
 assert.ok(!state.canUndo() && !state.canRedo(), 'Clear All is not undoable');

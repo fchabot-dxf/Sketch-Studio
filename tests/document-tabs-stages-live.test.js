@@ -2,7 +2,7 @@
 // A tab is the whole document. Switching tabs from a stage that is not Design switches the document and the app stays in that stage; the stage's own state
 // (the tab's session: Prepare's selected loop, the Toolpath stage's selected pen folder, Trace's photo / trace / scale) comes back with the tab:
 //   Shaper       Prepare: a rectangle is drawn in Design and its loop selected in Prepare; "+" in Prepare shows the new (empty) document in Design (TASK 706:
-//                a new design is shown in Design, from any stage); its Prepare has nothing selected; the first tab back (from Prepare) shows the loop selected again. The strip is visible in Design, Vcarve, Prepare and Review (TASK 706: no Explore).
+//                a new design is shown in Design, from any stage); its Prepare has nothing selected; the first tab back (from Prepare) shows the loop selected again. The strip is visible in Design, Prepare and Review (TASK 706: no Explore; TASK 741: no V-carve).
 //   Pen Plotter  Toolpath: a pen is added and its folder selected; "+" in Toolpath shows the new design in Design (TASK 706), its Toolpath has no pens; the first tab back shows the pen and its selected folder. The
 //                strip is visible in Design, Toolpath and Export.
 //   Trace        Export (its other mode) and Trace: a photo is loaded and traced, its scale typed; "+" shows no photo, no trace, no scale and disabled downloads; the
@@ -56,7 +56,7 @@ await (async () => {
       await twoDesigns('shaper');
       await noStatusText('shaper');
       const modeBtn = (m) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${m}"]').click()`);
-      for (const m of ['design', 'vcarve', 'prepare', 'review']) { await modeBtn(m); await sleep(500); assert(await stripVisible(), `shaper ${m}: the strip is visible and uncovered`); }
+      for (const m of ['design', 'prepare', 'review']) { await modeBtn(m); await sleep(500); assert(await stripVisible(), `shaper ${m}: the strip is visible and uncovered`); }
       // a closed rectangle in Design (real pointer: line tool, four clicks, back to the first point)
       await modeBtn('design'); await sleep(600);
       const r = await evalJs(`(() => { const b = document.getElementById('design-canvas').getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height }; })()`);

@@ -57,7 +57,7 @@ function design(joints, shapes, constraints, sketches = [{ id: 'sketch-1', name:
   return { version: 3, hosts: {}, geometry: {
     joints: [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }], ...Object.entries(joints).map(([id, [x, y, fixed, sk]]) => [id, { x, y, fixed: !!fixed, sketchId: sk || 'sketch-1' }])],
     shapes: shapes.map((s) => ({ sketchId: 'sketch-1', isConstruction: false, ...s })), constraints,
-    sketches, activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [], vcarves: [] } };
+    sketches, activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [] } };
 }
 async function openDesign(doc, centre) {
   const profile = await createProfile();

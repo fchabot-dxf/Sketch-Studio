@@ -1,6 +1,6 @@
 // apps/sketchstudio/stages.js — SketchStudio's step list, DECLARED in one importable place (TASK 725; the page script main.js and the tests read it).
 // Design (the shared Design canvas: the common step name, #ui/stage-names.js) -> Drawing (SketchStudio's own step: the clean, read-only drawing of the
-// design with only its geometry and dimensions, to review it and make it; ./drawing-view.js). Like Shaper's Vcarve and Trace's Trace, Drawing is the
+// design with only its geometry and dimensions, to review it and make it; ./drawing-view.js). Like Trace's Trace, Drawing is the
 // app's own step, so its label is declared here, not in the shared COMMON_STEPS. The ☰ menu's "Export…" view is not a step.
 import { commonStage } from '#ui/stage-names.js';
 

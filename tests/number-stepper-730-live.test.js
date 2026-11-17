@@ -1,7 +1,7 @@
 // tests/number-stepper-730-live.test.js — TASK 730: the − / + steppers in the real page, with real mouse clicks (desktop 1280 x 800) and real touch taps (phone 390 x 844):
-//   the Prepare cut card (Depth, Offset with its flip kept, Bit diameter with its presets kept), the Vcarve panel (Depth step, Max depth) and the Review card (Stock thickness).
+//   the Prepare cut card (Depth, Offset with its flip kept, Bit diameter with its presets kept) and the Review card (Stock thickness) (TASK 741: the V-carve panel's steppers went with V-carve).
 //   Each press changes its value by its step, clamps at its min, press-and-hold repeats, the targets are >= 44 px on the phone, nothing overflows at 390.
-// Screenshots to EVIDENCE_DIR (or .evidence/730/): cut-card-desktop.png, vcarve-desktop.png, review-stock-desktop.png, cut-card-phone.png, vcarve-phone.png, review-stock-phone.png.
+// Screenshots to EVIDENCE_DIR (or .evidence/730/): cut-card-desktop.png, review-stock-desktop.png, cut-card-phone.png, review-stock-phone.png.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -82,7 +82,7 @@ try {
     await press(p.x, p.y);
   };
 
-  // one phase: the cut card, the Vcarve panel, the Review stock card
+  // one phase: the cut card, the Review stock card
   const phase = async (label) => {
     const touchMin = phone ? 44 : 0;
     await openMode('prepare');
@@ -135,33 +135,6 @@ try {
     near((await rec()).toolDia, 3.5, label + ' bit + (3.175 -> the next 0.5 multiple)');
     assert.strictEqual(await evalJs(`document.querySelectorAll('.cut-row[data-param="toolDia"] .cut-preset').length`), 4, 'the bit presets are kept');
     await shot(`cut-card-${label}.png`, '#prepare-panel .cut-card');
-
-    // Vcarve panel
-    await openMode('vcarve');
-    await waitFor(`!document.getElementById('vcarve-dstep').disabled`, 'the Vcarve controls are enabled');
-    const vs = await evalJs(`[...document.querySelectorAll('#vcarve-panel .cut-step')].map((b) => { const r = b.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })`);
-    console.log(label + ' vcarve targets: ' + JSON.stringify(vs));
-    assert.strictEqual(vs.length, 4, 'two steppers = four buttons');
-    for (const [w, h] of vs) assert.ok(w >= touchMin && h >= touchMin, `${label} vcarve target ${w} x ${h}`);
-    assert.strictEqual(await val('#vcarve-dstep'), '0.5 mm'); assert.strictEqual(await val('#vcarve-maxdepth'), '6 mm');
-    const readout0 = await evalJs(`document.getElementById('vcarve-readout').textContent`);
-    await clickEl('#vcarve-dstep ~ .cut-step[data-d="1"]');
-    assert.strictEqual(await val('#vcarve-dstep'), '1 mm', label + ' depth step + 0.5');
-    await clickEl('#vcarve-maxdepth ~ .cut-step[data-d="1"]');
-    assert.strictEqual(await val('#vcarve-maxdepth'), '6.5 mm', label + ' max depth + 0.5');
-    await clickEl('#vcarve-maxdepth ~ .cut-step[data-d="1"]'); await clickEl('#vcarve-maxdepth ~ .cut-step[data-d="1"]');
-    assert.strictEqual(await val('#vcarve-maxdepth'), '7.5 mm');
-    await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="-1"]'); await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="-1"]');
-    assert.strictEqual(await val('#vcarve-dstep'), '0.5 mm', label + ' depth step: no minimum, - stops at the smallest positive multiple 0.5 mm (task 734)');
-    await evalJs(`(() => { const i = document.getElementById('vcarve-dstep'); i.value = '0.7 mm'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-    await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="1"]');
-    assert.strictEqual(await val('#vcarve-dstep'), '1 mm', label + ' typed 0.7 then + -> the next multiple 1');
-    await evalJs(`(() => { const i = document.getElementById('vcarve-dstep'); i.value = '0.5 mm'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-    await evalJs(`(() => { const i = document.getElementById('vcarve-maxdepth'); i.value = '6 mm'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-    console.log(label + ' vcarve readout: ' + readout0 + ' -> ' + await evalJs(`document.getElementById('vcarve-readout').textContent`));
-    const vfit = await evalJs(`(() => { const p = document.getElementById('vcarve-panel'); return { sw: p.scrollWidth, cw: p.clientWidth, docScroll: document.documentElement.scrollWidth, vw: innerWidth }; })()`);
-    assert.ok(vfit.sw <= vfit.cw && vfit.docScroll <= vfit.vw, label + ' vcarve panel does not overflow: ' + JSON.stringify(vfit));
-    await shot(`vcarve-${label}.png`, '#vcarve-panel');
 
     // Review: the stock thickness
     await openMode('review');

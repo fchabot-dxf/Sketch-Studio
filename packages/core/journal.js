@@ -8,7 +8,7 @@
 //
 //   journal = {
 //     base:      the OLDEST history snapshot as a document (serializeDocument shape: {version, geometry:{joints,shapes,constraints,
-//                sketches, activeSketchId, groups, profiles, vcarves}, hosts}),
+//                sketches, activeSketchId, groups, profiles, parameters}, hosts}),
 //     steps:     [{ seq, t, label, patch }]  one per history step, oldest first; applying patch k to the document after step k-1
 //                gives the document after step k; the LAST step ends at the live document,
 //     redo:      [{ seq, t, label, patch }]  the undone steps (state.redoStack) in the order Redo would re-apply them, starting from
@@ -17,10 +17,10 @@
 //     truncated: null | { droppedSteps }     set when the oldest steps were folded into `base` to respect the size cap
 //   }
 //
-// A PATCH is JSON-safe and keyed per document part: { joints, shapes, constraints, sketches, groups, profiles, parameters, vcarves, activeSketchId }
+// A PATCH is JSON-safe and keyed per document part: { joints, shapes, constraints, sketches, groups, profiles, parameters, activeSketchId }
 // — only the parts that changed are present. A list part is { removed:[indexInOld], changed:[[indexInOld, newItem]], added:[[indexInNew,
 // item]] } (or { replace: list } / { unset: true } for a reorder or a part that appears/vanishes). Items are matched by KEY: joints and
-// shapes by id, sketches/groups/profiles/vcarves by id when they have one, parameters by name, and CONSTRAINTS (which have NO stable id in this code base)
+// shapes by id, sketches/groups/profiles by id when they have one, parameters by name, and CONSTRAINTS (which have NO stable id in this code base)
 // by their content (canonical JSON) — so editing a dimension's value shows as one constraint removed + one added. activeSketchId is
 // { to: value }. applyPatch is the exact inverse of diffSnapshots.
 //
@@ -47,7 +47,6 @@ const LIST_PARTS = [
   ['groups', (item) => (item && item.id != null ? str(item.id) : null)],
   ['profiles', (item) => (item && item.id != null ? str(item.id) : null)],
   ['parameters', (item) => (item && item.name != null ? str(item.name) : null)], // TASK 535: user parameters, keyed by name
-  ['vcarves', (item) => (item && item.id != null ? str(item.id) : null)],
 ];
 
 /** snapshot (or live state) -> a JSON-safe document (serializeDocument's shape). A document passes through untouched. */

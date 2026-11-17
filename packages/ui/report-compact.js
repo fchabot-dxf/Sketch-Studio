@@ -106,7 +106,7 @@ function compactStep(prev, next, short) {
   if (addedC.length) step.addedConstraints = addedC;
   if (removedC.length) step.removedConstraints = removedC;
 
-  // every other document part (shapes, sketches, groups, profiles, parameters, vcarves, active sketch): the journal's own patch
+  // every other document part (shapes, sketches, groups, profiles, parameters, active sketch): the journal's own patch
   const patch = diffSnapshots(prev, next);
   delete patch.joints; delete patch.constraints;
   if (Object.keys(patch).length) step.patch = patch;

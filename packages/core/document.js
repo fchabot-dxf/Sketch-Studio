@@ -2,7 +2,7 @@
 //
 // A versioned, JSON-safe serialize/deserialize pair over the shared sketch geometry: the same fields
 // packages/core/sketch-state.js's _captureSnapshot/_restoreSnapshot already treat as "the whole model" for
-// undo/redo (joints, shapes, constraints, sketches, activeSketchId, groups, vcarves) — that's the
+// undo/redo (joints, shapes, constraints, sketches, activeSketchId, groups) — that's the
 // established, already-battle-tested answer in this codebase to "what does the geometry consist of."
 // This module wraps the SAME shape in a versioned envelope with a per-host sidecar, for STORAGE (a file,
 // IndexedDB) rather than an in-memory undo stack. NOTE: sketch-state.js's undo/redo snapshot is a
@@ -53,8 +53,8 @@ export function withoutDragTarget(record) {
 /**
  * serializeDocument(state, { hosts }) → a plain, JSON-safe object.
  *   state: the shared sketch state (joints: Map, shapes/constraints: arrays, plus the optional
- *     sketches/groups/vcarves arrays — whichever a given host's state actually carries; a host without
- *     one of those (e.g. no vcarves) simply omits it, matching _captureSnapshot's own `undefined` guards).
+ *     sketches/groups/profiles/parameters arrays — whichever a given host's state actually carries; a host without
+ *     one of those simply omits it, matching _captureSnapshot's own `undefined` guards).
  *   hosts: optional { <hostName>: <opaque host data> } — embedded verbatim, never interpreted here.
  */
 export function serializeDocument(state, { hosts } = {}) {
@@ -75,9 +75,6 @@ export function serializeDocument(state, { hosts } = {}) {
       groups: Array.isArray(state.groups) ? state.groups.map((g) => ({ ...g })) : undefined,
       profiles: Array.isArray(state.profiles) ? cloneProfiles(state.profiles) : undefined,
       parameters: Array.isArray(state.parameters) ? cloneParameters(state.parameters) : undefined,
-      vcarves: Array.isArray(state.vcarves)
-        ? state.vcarves.map((v) => ({ ...v, vbit: v.vbit ? { ...v.vbit } : undefined }))
-        : undefined,
     },
     hosts: hosts || {},
   };
@@ -99,7 +96,17 @@ export function validateDocument(doc) {
 }
 
 /**
- * deserializeDocument(doc, state) → { ok: true, hosts } | { ok: false, reason }
+ * TASK 741 (owner: "Remove then"): V-carve was removed from Shaper (a V-groove is now a cut with the V-bit cutter shape). A document saved before
+ * carries its V-carve records in geometry.vcarves; deserializeDocument never loads them (the state has no such part any more) and reports how many
+ * of them had a region picked, so the host can say so once. Nothing is written back: the stored file keeps them until the user saves it.
+ */
+function removedVcarveCount(doc) {
+  const list = doc && doc.geometry && doc.geometry.vcarves;
+  return Array.isArray(list) ? list.filter((v) => v && v.region).length : 0;
+}
+
+/**
+ * deserializeDocument(doc, state) → { ok: true, hosts, removedVcarves } | { ok: false, reason }
  *   Replaces state's ENTIRE geometry with doc's (lesson: opening a document replaces the whole state,
  *   never blends with what was there — clear every store to default FIRST). Constraints are re-added via
  *   addConstraintObject (the SAME validated-add path undo/redo's _restoreSnapshot already uses — not the
@@ -161,10 +168,6 @@ export function deserializeDocument(doc, state) {
     state.profiles.length = 0;
     state.profiles.push(...cloneProfiles(g.profiles || []));
   }
-  if (Array.isArray(state.vcarves)) {
-    state.vcarves.length = 0;
-    state.vcarves.push(...(g.vcarves || []).map((v) => ({ ...v, vbit: v.vbit ? { ...v.vbit } : undefined })));
-  }
 
   // Selection/active-tool state is session UI, not document content — matches _restoreSnapshot clearing it.
   if (state.selectedJoints instanceof Set) state.selectedJoints.clear();
@@ -172,5 +175,6 @@ export function deserializeDocument(doc, state) {
   if (state.selectedShapes instanceof Set) state.selectedShapes.clear();
   state.active = null;
 
-  return { ok: true, hosts: doc.hosts || {} };
+  // TASK 741: g.vcarves (a document saved while Shaper had V-carve) is not loaded (above: no state part reads it); removedVcarves = how many had a region
+  return { ok: true, hosts: doc.hosts || {}, removedVcarves: removedVcarveCount(doc) };
 }

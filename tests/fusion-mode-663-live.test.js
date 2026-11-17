@@ -140,7 +140,7 @@ try {
     fusionBar: document.getElementById('shaper-fusion-bar'),
     hasHandler: 'fusionJavaScriptHandler' in window,
   }))()`);
-  assert.deepStrictEqual(normal.tabs.map((t) => t.id), ['design', 'vcarve', 'prepare', 'review'], 'normal Shaper keeps its 4 stage tabs (TASK 706: Explore removed)');
+  assert.deepStrictEqual(normal.tabs.map((t) => t.id), ['design', 'prepare', 'review'], 'normal Shaper keeps its 3 stage tabs (TASK 706: Explore removed; TASK 741: Vcarve removed)');
   assert.strictEqual(normal.tabs.find((t) => t.id === 'design').active, true, 'normal Shaper opens on Design (TASK 706: was Explore)');
   assert.strictEqual(normal.addBtn, null, 'Add selection absent outside Fusion mode');
   assert.strictEqual(normal.fusionBar, null, 'Fusion bar absent outside Fusion mode');

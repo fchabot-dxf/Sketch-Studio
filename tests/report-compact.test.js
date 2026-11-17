@@ -43,7 +43,7 @@ function assertSameDocument(replayed, reported, label) {
   const rj = new Map(replayed.geometry.joints), dj = new Map(reported.geometry.joints);
   assert.deepStrictEqual([...rj.keys()].sort(), [...dj.keys()].sort(), `${label}: same joints`);
   for (const [id, j] of dj) near(rj.get(id), j, `${label} joint ${id}`);
-  for (const part of ['shapes', 'sketches', 'groups', 'profiles', 'parameters', 'vcarves']) near(replayed.geometry[part], reported.geometry[part], `${label} ${part}`);
+  for (const part of ['shapes', 'sketches', 'groups', 'profiles', 'parameters']) near(replayed.geometry[part], reported.geometry[part], `${label} ${part}`);
   assert.strictEqual(replayed.geometry.activeSketchId, reported.geometry.activeSketchId, `${label}: active sketch`);
   const keys = (d) => d.geometry.constraints.map((c) => constraintKey(c)).sort();
   assert.deepStrictEqual(keys(replayed), keys(reported), `${label}: the same constraints (label / glyph positions aside)`);

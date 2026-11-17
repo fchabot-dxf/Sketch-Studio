@@ -1,5 +1,5 @@
 // packages/core/shaper-export.js — pure serializer of a Prepare cut plan → a raw machine-ready Shaper Origin SVG
-// STRING. PURE (no DOM). ADDITIVE — nothing imports it yet (SketchStudio byte-identical); reused by vcarve / joints.
+// STRING. PURE (no DOM). ADDITIVE — nothing imports it yet (SketchStudio byte-identical); reused by joints.
 //
 // SP1j-1: HEADER + LINE-only loops. SP1j-2 (this slice): FULL geometry + the cut-param attrs —
 //   • ARCS in a loop → an `A r r 0 largeArc sweep x y` segment, DIRECTION-AWARE (the loop may walk the arc start→end
@@ -15,9 +15,8 @@
 
 import { findLoops, findOpenChains } from './loop-finder.js';
 import { formatShaperParam } from './units.js';
-import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
 import { loopPolygon, loopToPathD, compoundPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
-import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey, ownedLoopIds } from './profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, ownedLoopIds } from './profile-model.js';
 import { deriveCuts } from './stepped-cut.js'; // TASK 714: deriveProfileCuts + a stepped cut's terraces
 export { loopToPathD, polyToPathD };
 
@@ -123,7 +122,7 @@ function datumPolygon(datum) {
 }
 
 // exportShaperSVG({ state, entries, encoding, docUnit, options, loopPolys }) → an SVG string.
-//   state    — { joints: Map(id→{x,y}), shapes, constraints, profiles?, vcarves? } (loops re-derived via findLoops)
+//   state    — { joints: Map(id→{x,y}), shapes, constraints, profiles? } (loops re-derived via findLoops)
 //   entries  — [{ target:{kind,id}, rec:{cutType, cutDepth, cutOffset, toolDia} }] (the Prepare cut plan: loop / profile / chain)
 //   encoding — [{ id, cutType, fill, stroke }, …] INJECTED       (cutType id → the Shaper machine encoding)
 //   docUnit  — 'mm' | 'cm' | 'in' — suffixes the cut PARAMS; the geometry stays mm-canonical.
@@ -166,7 +165,6 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   const chains = findOpenChains(state || {}, loops);
   const chainById = new Map(chains.map((c) => [c.id, c]));
   const hasProfiles = Array.isArray(state?.profiles) && state.profiles.length > 0;
-  const hasVcarves = Array.isArray(state?.vcarves) && state.vcarves.length > 0;
 
   let polyMap = null;
   const ensurePolys = () => {
@@ -199,29 +197,9 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
-  const vcarveExcludedLoops = new Set();
-  const vcarveExcludedProfiles = new Set();
-  const resolvedVcarves = [];
-  if (hasVcarves) {
-    for (const vc of state.vcarves) {
-      if (!vc || !vc.region) continue;
-      const spec = resolveTargetKey(vc.region, state, loops, ensurePolys());
-      if (!spec || spec.invalid || !spec.outer) continue;
-      const vcarveSpec = { outerKey: spec.outer, holeIds: spec.inners || [], isCombined: spec.isCombined, profileId: spec.profileId };
-      resolvedVcarves.push({ vc, spec: vcarveSpec });
-      vcarveExcludedLoops.add(spec.outer);
-      if (spec.isCombined && spec.profileId) {
-        vcarveExcludedProfiles.add(spec.profileId);
-        for (const hid of (spec.inners || [])) vcarveExcludedLoops.add(hid);
-      }
-    }
-  }
-
   const owned = ownedLoopIds(ents, state, loops, ensurePolys()); // TASK 711: a hole with its own entry is cut by that entry only
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
-    if (e.target.kind === 'loop' && vcarveExcludedLoops.has(e.target.id)) continue;
-    if (e.target.kind === 'profile' && vcarveExcludedProfiles.has(e.target.id)) continue;
     // TASK 714: a STEPPED type's encoding declares `terraceAs` (the plain type each terrace is cut as): deriveCuts then returns one
     // plain cut per terrace, each written with ITS type's encoding at its own depth, and its own outline (`geom`). The Origin sees plain cuts.
     const typeEnc = encOf(e.rec.cutType);
@@ -250,24 +228,6 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) : ''))
         + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
       if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
-    }
-  }
-
-  // VCARVE-4 + profile holes: derive and emit contour stack from state.vcarves + profile holes
-  if (resolvedVcarves.length > 0) {
-    const polys = ensurePolys();
-    const onlineEnc = encOf('online') || { id: 'online', cutType: 'online', fill: 'none', stroke: '#7F7F7F' };
-    for (const { vc, spec } of resolvedVcarves) {
-      const boundary = polys[spec.outerKey];
-      if (!boundary || boundary.length < 3) continue;
-      const holePolys = spec.holeIds.map((hid) => polys[hid]).filter((p) => p && p.length >= 3);
-      const contours = deriveVcarveContours(boundary, vc, { holes: holePolys });
-      for (const c of contours) {
-        const d = polyToPathD(c.polygon);
-        if (!d) continue;
-        const common = colorAttrs(onlineEnc) + shaperAttrs({ cutDepth: c.depth }, onlineEnc, docUnit);
-        items.push({ common, tag: 'path', a: `d="${d}"` });
-      }
     }
   }
 

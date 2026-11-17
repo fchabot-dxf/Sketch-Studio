@@ -5,8 +5,7 @@
 //   • the STOCK the 3D Review reads (apps/shaper/src/stock.js, the one declaration; defaults 3/4 in thick, 1/2 in margin);
 //   • TASK 743: the OPERATION ORDER (operations.js: the operation keys in the user's order; [] = the default order). The operations themselves are
 //     derived from the cut plan, never stored.
-// The V-carve records live in the shared sketch state (state.vcarves) and already ride in the buffer's geometry, so they are
-// NOT duplicated here. Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
+// Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
 
 import { CUT_PLAN } from './cut-plan.js';
 import { opOrder, setOpOrder } from './operations.js'; // TASK 743: the user's operation order

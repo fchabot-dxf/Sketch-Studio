@@ -1,7 +1,7 @@
 // tests/document-tabs-browser-737-live.test.js — TASK 737 (owner turn 2074: "make the file tab nicer or clearer", picked BROWSER-STYLE): the ONE shared document tab
 // strip in the real pages of all four apps, with a mouse (1400 x 800) and under a finger (390 x 844), in EVERY stage of each app (Shaper: Design, Vcarve, Prepare,
 // Export; Pen Plotter: Design, Prepare, Export; Trace: Trace, Design, Export; SketchStudio: Design and its menu's Export view; the strip is uncovered in each.
-// SketchStudio's Build step (TASK 725) covers the strip with its page on purpose (build-stage-725-live asserts it): there the test checks only that it is covered):
+// SketchStudio's Drawing step (TASK 725) covers the strip with its page on purpose (drawing-stage-725-live asserts it): there the test checks only that it is covered):
 //   - the ACTIVE tab JOINS the surface directly below the strip: its computed background == the computed background of the element under it (sampled at three
 //     points across the tab, just below the strip; a tool button sitting there is skipped: the surface is what holds it). The colour is DECLARED per host / stage
 //     (--sk-doctab-surface, html[data-sk-stage]), never measured by the page. The first tab is the active one: the side panels of Shaper Vcarve, Pen Plotter
@@ -147,9 +147,9 @@ await (async () => {
         }
 
         const stages = await evalJs(`[...document.querySelectorAll('.sk-header-tab')].map((t) => t.dataset.tab)`);
-        const COVERED = { sketchstudio: ['build'] }; // stages whose view covers the strip by design
-        const EXPECTED = { sketchstudio: ['design', 'build'], shaper: ['design', 'vcarve', 'prepare', 'review'], penplotter: ['design', 'toolpath', 'export'], trace: ['trace', 'edit', 'export'] };
-        assert.deepStrictEqual(stages, EXPECTED[host], tag0 + ': every stage of the app is checked (TASK 725 added SketchStudio Build)');
+        const COVERED = { sketchstudio: ['drawing'] }; // stages whose view covers the strip by design
+        const EXPECTED = { sketchstudio: ['design', 'drawing'], shaper: ['design', 'vcarve', 'prepare', 'review'], penplotter: ['design', 'toolpath', 'export'], trace: ['trace', 'edit', 'export'] };
+        assert.deepStrictEqual(stages, EXPECTED[host], tag0 + ': every stage of the app is checked (TASK 725 added SketchStudio Drawing)');
         if (host === 'sketchstudio') stages.push('export'); // its menu's Export view
         for (const st of stages) {
           const tag = `${tag0} ${st}`;
@@ -160,9 +160,9 @@ await (async () => {
           await move(5, phone ? 800 : 780);
           const m = await evalJs(MEASURE);
           assert.strictEqual(m.stage, st, tag + ': html[data-sk-stage] names the shown stage');
-          if ((COVERED[host] || []).includes(st)) { // TASK 725: SketchStudio's Build page covers the strip on purpose (build-stage-725-live asserts no document tabs there)
-            assert(!m.uncovered, tag + ': the Build page covers the strip (TASK 725)');
-            out.push(`${tag}: the strip is covered by the Build page (TASK 725); its declared surface ${m.active.bg.slice(0, 3)}`);
+          if ((COVERED[host] || []).includes(st)) { // TASK 725: SketchStudio's Drawing page covers the strip on purpose (drawing-stage-725-live asserts no document tabs there)
+            assert(!m.uncovered, tag + ': the Drawing page covers the strip (TASK 725)');
+            out.push(`${tag}: the strip is covered by the Drawing page (TASK 725); its declared surface ${m.active.bg.slice(0, 3)}`);
             continue;
           }
           assert(m.uncovered, tag + `: the strip is not covered by the stage view (a press at a tab's centre reaches the tab)`);

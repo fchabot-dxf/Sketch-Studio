@@ -192,7 +192,7 @@ export const defaultRenderCtx = {
 //   debug          the SHOW_DEBUG_OVERLAY labels
 // Dimensions (linear, radius / diameter, angle, offset, a pattern's count label: driving and reference) are drawn by every profile.
 export const EDIT_DISPLAY = Object.freeze({ grid: true, axes: true, points: true, glyphs: true, construction: true, fills: true, statusColors: true, debug: true });
-/** The CLEAN drawing (SketchStudio's Build step): the solid geometry and its dimensions only. */
+/** The CLEAN drawing (SketchStudio's Drawing step): the solid geometry and its dimensions only. */
 export const CLEAN_DISPLAY = Object.freeze({ grid: false, axes: false, points: false, glyphs: false, construction: false, fills: false, statusColors: false, debug: false });
 
 // TASK 429: the last {total, visible} constraint summary draw() logged (-1 never matches a real count).

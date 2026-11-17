@@ -23,7 +23,7 @@ import { sketchesSignature } from '#core/sketch-model.js';
 import SettingsManager from '#core/settings-manager.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport, onShortViewportChange } from '#ui/short-viewport.js';
 import { dbg } from '#core/debug.js';
-import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
+import { matchesShortcut, titleWithShortcut, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 export const BROWSER_PHONE_BREAKPOINT = 641; // phone toggle below this width: the app's one phone breakpoint is max-width 640
 
@@ -123,7 +123,7 @@ export function mountDesignBrowser({ container, state, engine, label = 'Sketches
       constructBtn.style.backgroundColor = on ? '#f97316' : '#fed7aa'; // dark orange when active, light orange when idle
       constructBtn.style.color = on ? 'white' : '#9a3412';
       constructBtn.setAttribute('aria-pressed', String(on));
-      constructBtn.title = on ? 'Construction: ON (K)' : 'Construction: OFF (K)';
+      constructBtn.title = titleWithShortcut(on ? 'Construction: ON' : 'Construction: OFF', 'sketch.construction'); // TASK 747: its key from the table ("(K)")
     };
     constructBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -149,6 +149,7 @@ export function mountDesignBrowser({ container, state, engine, label = 'Sketches
       });
     }
     paintConstruct();
+    onShortcutsChange(paintConstruct); // TASK 747: the title follows the user's key (the browser lives as long as its page, like its key listener)
     corner.appendChild(constructBtn);
   }
   const toggleEl = document.createElement('button');

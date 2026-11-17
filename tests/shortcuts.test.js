@@ -105,6 +105,7 @@ const EXEMPT = {
   'packages/ui/parameter-table.js': [2, 'the parameter table cells: Enter / Esc'],
   'packages/ui/parameters-window.js': [1, 'the Parameters window: typing there is not a tool key (Esc is the window\'s)'],
   'packages/ui/project-manager.js': [7, 'the Projects modal: Enter / arrows / context-menu key in the grid, Esc closes, Tab focus trap'],
+  'packages/ui/shortcuts-list.js': [1, 'TASK 747: Settings > Shortcuts capturing a new key swallows the release of the key it captured (its code)'],
   'packages/ui/style-panel.js': [7, 'the Settings panel: inline preset question (Enter / Esc), tab-list arrows, Esc closes it'],
   'packages/ui/tabbed-dock-panel.js': [1, 'a dock window: Esc closes it'],
   'packages/ui/template-picker.js': [4, 'the template picker modal: Esc closes, Enter in its fields'],

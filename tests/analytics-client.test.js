@@ -136,6 +136,7 @@ eq([...sent.keys()].sort(), [...FEATURES].sort(), 'every declared feature is sen
 console.log('feature → call sites: ' + JSON.stringify(Object.fromEntries([...sent].map(([k, v]) => [k, [...new Set(v)]]))));
 eq(sent.get('stage:'), ['packages/ui/app-chrome.js'], 'stage switches: ONE call, in the shared chrome');
 eq(sent.get('template:'), ['packages/ui/project-actions.js'], 'templates: ONE call, in the shared project actions');
+eq([...new Set(sent.get('shortcut-changed'))], ['packages/ui/shortcuts-list.js'], 'TASK 747: a changed shortcut: only from the Shortcuts tab (no key data: the name is all)');
 eq([...new Set([...sent.get('import:svg'), ...sent.get('import:dxf')])], ['packages/ui/sketch-import.js'], 'SVG / DXF imports: in the ONE shared importer');
 // the families' ids are declared ids of the declared shape
 const stageIds = [...shaperStagesFor({ fusion: false }), ...shaperStagesFor({ fusion: true }), ...TRACE_STAGES, ...PEN_STAGES, { id: 'design' }].map((s) => s.id);

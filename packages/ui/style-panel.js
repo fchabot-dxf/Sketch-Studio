@@ -8,7 +8,8 @@ import SettingsManager, { LENGTH_FRACTIONS } from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the panel opened
-import { createShortcutsList } from '#ui/shortcuts-list.js'; // TASK 727: the Shortcuts tab (read-only, from shortcuts.js)
+import { createShortcutsList } from '#ui/shortcuts-list.js'; // TASK 727: the Shortcuts tab (TASK 747: the user changes the keys there)
+import { USER_KEYS_SETTING } from '#ui/shortcuts.js'; // TASK 747: the user's own keys survive the look's Reset, like the presets
 import {
   STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, USER_PRESETS_KEY, activeStyleTemplateId, applyStyleTemplate, userPresetsOf, listUserPresets,
   isUserPresetId, presetNameProblem, findUserPresetByName, saveUserPreset, renameUserPreset, deleteUserPreset,
@@ -259,7 +260,8 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   }
   body.appendChild(tabBar);
   for (const spec of CONTROLS) tabPanels[spec.tab].appendChild(buildControl(spec));
-  tabPanels.shortcuts.appendChild(createShortcutsList({ hostId }).el);
+  const shortcutsList = createShortcutsList({ hostId });
+  tabPanels.shortcuts.appendChild(shortcutsList.el);
   for (const t of TABS) body.appendChild(tabPanels[t.id]);
 
   // ONE document-unit control for every host (writes DOC_UNIT; cut params, dimension edit etc. re-read it on change).
@@ -288,8 +290,15 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   // Footer (Reset + Close)
   const foot = document.createElement('div'); foot.className = 'sk-style-foot';
   const resetBtn = document.createElement('button'); resetBtn.type = 'button'; resetBtn.className = 'sk-style-btn'; resetBtn.textContent = 'Reset';
-  // Reset restores the factory LOOK; the user's saved presets are their data, not look settings, so they are put back after it.
-  resetBtn.addEventListener('click', () => { const mine = settings.get(USER_PRESETS_KEY); settings.resetToDefaults(); settings.set(USER_PRESETS_KEY, mine, { persist: 'local' }); populate(); notify('Reset to factory defaults.', 'success'); });
+  // Reset restores the factory LOOK; the user's saved presets and (TASK 747) own shortcut keys are their data, not look settings, so they are put
+  // back after it (the Shortcuts tab has its own "Reset all shortcuts").
+  const KEPT_OVER_RESET = [USER_PRESETS_KEY, USER_KEYS_SETTING];
+  resetBtn.addEventListener('click', () => {
+    const kept = KEPT_OVER_RESET.map((k) => [k, settings.get(k)]);
+    settings.resetToDefaults();
+    for (const [k, v] of kept) settings.set(k, v, { persist: 'local' });
+    populate(); notify('Reset to factory defaults.', 'success');
+  });
   const closeBtn = document.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'sk-style-btn'; closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => close());
   foot.append(resetBtn, closeBtn);
@@ -368,6 +377,6 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   return {
     el, open, close, toggle,
     render: (container) => { if (container) container.appendChild(el); return el; },
-    destroy: () => { close(); try { unsub && unsub(); } catch (_) {} try { el.remove(); } catch (_) {} },
+    destroy: () => { close(); shortcutsList.destroy(); try { unsub && unsub(); } catch (_) {} try { el.remove(); } catch (_) {} },
   };
 }

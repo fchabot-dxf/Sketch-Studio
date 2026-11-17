@@ -185,6 +185,9 @@
     .sync-modal-close { background: transparent; border: 0; color: #9aa0a6; font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
     .sync-modal-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
     .sync-modal-desc { margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.4; }
+    .sync-modal-credit { margin: 0; color: #6b7280; font-size: 11px; line-height: 1.4; }
+    .sync-modal-credit a { color: #9ca3af; text-decoration: underline; }
+    .sync-modal-credit a:hover { color: #e5e7eb; }
     .sync-form { display: flex; flex-direction: column; gap: 12px; }
     .sync-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #9ca3af; }
     .sync-field input { background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 8px 10px; color: #f3f4f6; font: 13px system-ui, sans-serif; }
@@ -533,6 +536,8 @@
           <button type="submit" id="sync-btn-submit" class="sync-btn-primary">⚡ Send to ShaperHub</button>
         </div>
       </form>
+      <!-- the ShaperHub upload is a port of shaper-sync (MIT): THIRD-PARTY-NOTICES.md, packages/core/shaper-cloud.js -->
+      <p id="sync-modal-credit" class="sync-modal-credit">Sync based on <a href="https://github.com/NaPs/shaper-sync" target="_blank" rel="noopener noreferrer">shaper-sync</a> by Antoine Millet. Not an official Shaper connection.</p>
     </div>
   </dialog>
 

@@ -206,7 +206,7 @@ const listIds = (h) => shortcutsForHost(h).map((s) => s.id);
 for (const h of APP_HOSTS) {
   const l = listIds(h);
   for (const id of ['tool.line', 'tool.rect', 'tool.circle', 'tool.dimension', 'edit.undo', 'edit.redo', 'edit.delete', 'edit.cancel', 'file.save', 'sketch.construction']) assert(l.includes(id), h + ' lists ' + id);
-  assert(!l.some((id) => id.startsWith('plotter.art.')) && !l.includes('plotter.finishPolyline'), h + ': the retired art-tool keys are not listed');
+  assert(!SHORTCUTS.some((s) => s.id.startsWith('plotter.art.') || s.id === 'plotter.finishPolyline'), h + ': the retired art-tool keys are not declared (TASK 748)');
 }
 assert(listIds('shaper').includes('sketch.group') && listIds('shaper').includes('sketch.combine'), 'Shaper lists Group and Combine');
 for (const h of ['sketchstudio', 'penplotter', 'trace']) assert(!listIds(h).includes('sketch.group') && !listIds(h).includes('sketch.combine'), h + ' does not list Shaper\'s Group / Combine');

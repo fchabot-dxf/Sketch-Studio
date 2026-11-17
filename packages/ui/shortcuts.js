@@ -38,9 +38,6 @@ const plain = (k) => ({ key: k });
 // Shift+ form is another shortcut), absent = Shift ignored (as the letters always have).
 const toolKey = (ch, shift) => ({ key: ch, mod: false, alt: false, ...(shift === undefined ? {} : { shift }) });
 const tool = (id, ch, label, group = 'Tools', shift) => ({ id, label, group, hosts: ALL, scope: 'canvas', keys: [toolKey(ch, shift)] });
-const RETIRED = 'a retired Pen Plotter art tool'; // TASK 747: why the retired keys cannot be changed (they are not listed either)
-const artTool = (name, ch) => ({ id: 'plotter.art.' + name, label: 'Art tool: ' + name, group: 'Tools', hosts: ['penplotter'], scope: 'stage:toolpath', keys: [letter(ch)],
-  listed: false, fixed: RETIRED }); // the retired Draw art tools (UNIFY-7b): the key still sets Pen Plotter's tool state, nothing a user should look for
 
 export const SHORTCUTS = Object.freeze([
   // ── Tools (input-manager.js, the Design canvas of every app) ──
@@ -111,10 +108,6 @@ export const SHORTCUTS = Object.freeze([
   // (Pen Plotter's Toolpath / Export stages: keyboard.js)
   { id: 'view.panHold', label: 'Hold to pan', group: 'View', hosts: ['penplotter'], scope: 'stage:toolpath', keys: [{ code: 'Space' }],
     fixed: 'held while you drag with the mouse' },
-  { id: 'plotter.finishPolyline', label: 'Finish the polyline', group: 'Drawing', hosts: ['penplotter'], scope: 'stage:toolpath', keys: [plain('Enter')],
-    listed: false, fixed: RETIRED }, // the retired art polyline tool's Enter: nothing starts one any more
-  artTool('select', 'v'), artTool('rotate', 't'), artTool('scale', 's'), artTool('line', 'l'), artTool('rect', 'r'),
-  artTool('ellipse', 'e'), artTool('polyline', 'p'), artTool('freehand', 'f'), artTool('scissors', 'x'), artTool('node', 'n'),
 ]);
 
 const BY_ID = new Map(SHORTCUTS.map((s) => [s.id, s]));
@@ -236,8 +229,6 @@ export function shortcutsForHost(hostId) {
 //     handler runs first: by design, never a conflict), two tools never draw at once, and Pen Plotter's 'stage:toolpath' never meets the Design 'canvas';
 //  3. one key press is both (combosOverlap): the same key (any case; a chars combo is each of its characters; Space by code is the space key) and no
 //     modifier that one requires held while the other requires it released;
-//  4. except (the TASK 727 rule, kept for the RETIRED keys only: Pen Plotter's unlisted art letters and polyline Enter leave Ctrl / Shift / Alt free
-//     only because they predate TASK 740): a combo that requires a modifier the retired key leaves free is not a conflict with it (Ctrl+S, Shift+P).
 // Every key B has NOW counts (B's own changes included), listed or not, changeable or not. The declared defaults have no conflict under this rule
 // (tests/shortcuts-747.test.js).
 const CODE_KEYS = { Space: ' ' };
@@ -250,14 +241,12 @@ export function combosOverlap(a, b) {
 }
 /** Are two scopes live at the same moment (rule 2)? */
 export const scopesLiveTogether = (a, b) => a === b || a === 'app' || b === 'app';
-const shadowsRetired = (combo, retired) => ['mod', 'shift', 'alt'].some((m) => combo[m] === true && retired[m] === undefined);
-const retiredYields = (a, ca, b, cb) => (b.listed === false && shadowsRetired(ca, cb)) || (a.listed === false && shadowsRetired(cb, ca)); // rule 4
 /** The ids of the shortcuts `combo` would collide with if shortcut `id` took it (the rule above), in table order. `keysOf(id)` = that shortcut's
  *  keys (default: as they are now). Pure given keysOf. */
 export function shortcutConflicts(id, combo, keysOf = (x) => shortcutById(x).keys) {
   const me = defaultShortcut(id);
   return SHORTCUTS.filter((o) => o.id !== id && o.hosts.some((h) => me.hosts.includes(h)) && scopesLiveTogether(me.scope, o.scope)
-    && keysOf(o.id).some((c) => combosOverlap(c, combo) && !retiredYields(me, combo, o, c))).map((o) => o.id);
+    && keysOf(o.id).some((c) => combosOverlap(c, combo))).map((o) => o.id);
 }
 
 // ── TASK 747: the keys a page cannot or must not take, declared once (Settings > Shortcuts shows the reason). A modifier absent here = any. ──

@@ -1,5 +1,6 @@
 // tests/penplotter-draw-keys-node.test.js - TASK 629 (G7): the Draw stage's window keydown (apps/penplotter/src/keyboard.js) acts only while its
 // stages (Toolpath, Export) are showing, and never on a key aimed at a text field. In Design the Draw tool letters leave state.tool alone.
+// TASK 748: the art-tool letters are gone: in Toolpath and Export they leave state.tool alone too (tests/penplotter-art-keys-748-live.test.js, real keys).
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 
@@ -19,7 +20,11 @@ try {
   press(field, 'l');
   assert.strictEqual(app.plotter.tool, before, 'a key typed in a text field leaves state.tool alone');
   press(app.document.body, 'l');
-  assert.strictEqual(app.plotter.tool, 'line', 'Toolpath: the Draw hotkey still sets the tool');
+  for (const k of ['v', 't', 's', 'l', 'r', 'e', 'p', 'f', 'x', 'n', 'Enter']) press(app.document.body, k);
+  assert.strictEqual(app.plotter.tool, before, 'Toolpath: the removed art-tool letters leave state.tool alone');
+  app.router.showStage('export');
+  for (const k of ['v', 't', 's', 'l', 'r', 'e', 'p', 'f', 'x', 'n', 'Enter']) press(app.document.body, k);
+  assert.strictEqual(app.plotter.tool, before, 'Export: the removed art-tool letters leave state.tool alone');
   console.log('PASS penplotter draw keys');
 } finally { await app.close(); }
 process.exit(0);

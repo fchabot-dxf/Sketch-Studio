@@ -6,6 +6,7 @@
 //  4. display only: the exported Shaper file is byte-identical at Fractional 1/8 .. 1/64 and Decimal
 //  5. the untouched-box rule at Fractional (SketchStudio, node kit): a rounded fraction prefill left untouched never commits
 //  6. templates (Shaper, node kit + sidebar): the preview labels and the start-view length fields show fractions; Open on untouched fields builds the exact defaults
+//  7. the Vcarve panel: Max depth in fractions, the Depth step (a resolution) in decimals, typed fractions taken, an untouched box commits nothing
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { open } from './helpers/node-app.js';
@@ -22,6 +23,7 @@ import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, itemLabel, depthText } from '../apps/shaper/src/export-preview.js';
 import { TEMPLATES, buildTemplate, defaultParams } from '#core/templates.js';
 import { renderTemplatePreview } from '#ui/template-picker.js';
+import { mountVcarveView } from '../apps/shaper/src/vcarve-view.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -104,6 +106,23 @@ eq(evaluateText('1 1.5/2', () => null, {}).ok, false, 'a decimal is no part of a
 // 4. display only: the export is byte-identical
 const app = await open({ host: 'shaper', sidebar: true });
 try {
+  // 7. the Vcarve panel (task 734's fields): Max depth follows Fractional, the Depth step (a resolution: 1/64 in) keeps decimals, a typed fraction is taken
+  {
+    const q = (sel) => app.document.querySelector(sel);
+    const typed = (sel, v) => { const i = q(sel); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+    mode('in', 'fractional', 16);
+    app.modes.showMode('vcarve');
+    const view = mountVcarveView(app.state);
+    typed('#vcarve-maxdepth', '1/4'); typed('#vcarve-dstep', '1/64');
+    near(app.state.vcarves[0].maxDepth, 0.25 * IN, 'Vcarve: a typed 1/4 is 1/4 in'); near(app.state.vcarves[0].dStep, IN / 64, 'Vcarve: a typed 1/64 is 1/64 in');
+    eq([q('#vcarve-maxdepth').value, q('#vcarve-dstep').value], ['1/4"', '0.0156 in'], 'Vcarve in Fractional: Max depth 1/4", the Depth step keeps decimals');
+    const h0 = app.state.history.length, before = JSON.stringify(app.state.vcarves[0]);
+    q('#vcarve-maxdepth').dispatchEvent(new app.window.Event('change'));
+    eq([JSON.stringify(app.state.vcarves[0]), app.state.history.length], [before, h0], 'Vcarve: an untouched fraction box commits nothing');
+    mode('in', 'decimal');
+    eq([q('#vcarve-maxdepth').value, q('#vcarve-dstep').value], ['0.25 in', '0.0156 in'], 'Vcarve in Decimal: as 734 showed');
+    view.destroy(); app.state.vcarves.length = 0;
+  }
   // 6. templates: the slot (40 x 10 mm authored; an inch document opens it at 1 9/16 x 3/8 in, task 722's 1/16 rounding)
   const slot = TEMPLATES.find((t) => t.id === 'slot');
   const previewTexts = () => [...renderTemplatePreview(buildTemplate(slot, defaultParams(slot, 'in'), 'in'), { unit: 'in' }).querySelectorAll('text')].map((t) => t.textContent).sort();

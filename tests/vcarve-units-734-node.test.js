@@ -1,13 +1,15 @@
-// tests/vcarve-units-734-node.test.js — TASK 734: the Vcarve panel follows the DOCUMENT unit (apps/shaper/src/vcarve-view.js, doc-length.js).
+// tests/vcarve-units-734-node.test.js — TASK 734: the Vcarve panel follows the DOCUMENT unit (apps/shaper/src/vcarve-view.js; its texts are #core lengthText / areaText, task 728).
 //  shown: Depth step, Max depth, the readout's max depth and the region list's area in the doc unit (the Length precision applies); typed: parsed in the doc unit by
 //  the cut card's parse, stored in BASE mm (the record stays mm); the steppers: doc-unit steps (mm 0.5 / 0.5, in 1/64 / 1/32), no minimum but > 0;
 //  an untouched box commits nothing; switching the unit re-shows the fields; the derived contours are the same for an mm and an inch doc with the same mm values.
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
-import SettingsManager from '#core/settings-manager.js';
+import SettingsManager, { lengthText as coreLengthText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { deriveVcarveContours } from '#core/vcarve.js';
 import { mountVcarveView } from '../apps/shaper/src/vcarve-view.js';
-import { lengthText, areaText } from '../apps/shaper/src/doc-length.js';
+// TASK 728: the panel's own formatters (doc-length.js) are gone; the panel calls the core decider with its usual decimals (mm 3, cm 4, in 4, trimmed while Auto; areas mm 0, in 2)
+const lengthText = (mm) => coreLengthText(mm, { auto: { mm: 3, cm: 4, in: 4 }[SettingsManager.get('DOC_UNIT')], trim: 'auto', show: 'unit' });
+const areaText = (mm2) => coreAreaText(mm2, { auto: { mm: 0, cm: 2, in: 2 }[SettingsManager.get('DOC_UNIT')] });
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };

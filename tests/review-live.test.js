@@ -87,7 +87,7 @@ await (async () => {
     const wood = await evalJs(`(async () => {
       const { mountReviewView } = await import('/apps/shaper/src/review-view.js');
       const host = document.createElement('div'); host.style.cssText = 'width:300px;height:200px;position:fixed;left:0;top:0'; document.body.appendChild(host);
-      const v = await mountReviewView({ host, info: document.createElement('div'), getInputs: () => ({ stock: { thickness: 18, width: 500, height: 200 }, bounds: { minX: 0, maxX: 100, minY: 0, maxY: 50 }, items: [] }) });
+      const v = await mountReviewView({ host, info: document.createElement('div'), getInputs: () => ({ stock: { thickness: 18, width: 500, height: 200 }, bounds: { minX: 0, maxX: 100, minY: 0, maxY: 50 }, items: [] }), designCanvas: document.getElementById('design-canvas') }); // TASK 754: the view reads the Design canvas's paper + grid tokens
       v.refresh('wood');
       const first = v.inspect();
       for (let i = 0; i < 100 && !(v.inspect().mapLoaded && v.inspect().edgeLoaded); i++) await new Promise((r) => setTimeout(r, 100));

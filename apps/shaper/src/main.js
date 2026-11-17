@@ -410,7 +410,7 @@ async function enterReview(st) {
   try {
     if (!reviewView) {
       info.textContent = 'Loading 3D…';
-      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), look: reviewLook });
+      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), look: reviewLook, designCanvas: document.getElementById('design-canvas') }); // TASK 754: the 3D view takes the Design canvas's paper + grid
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));

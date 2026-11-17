@@ -34,6 +34,9 @@ export const normalizeGridMode = (m) => (GRID_MODES.includes(m) ? m : 'lines');
 // over a short span only (full at (1+MINOR_FADE_SPAN) x MIN_MINOR_PX).
 export const MIN_MINOR_PX = 8;
 const MINOR_FADE_SPAN = 0.05;
+// The on-screen size of the grid's marks, in screen px at any zoom (gridDefsMarkup; TASK 754: Shaper's 3D grid draws the same sizes):
+// 'lines' = the stroke width of a light / heavy line, 'points' = the radius of a light / heavy dot.
+export const GRID_MARK_PX = { lines: { minor: 1, major: 2 }, points: { minor: 1.25, major: 2 } };
 
 const MINOR_COLOR = '#CBD5E1';
 const MAJOR_COLOR = '#93C5FD';
@@ -124,6 +127,16 @@ export function gridSpacing(docUnit, settings) {
   return { GRID_SIZE: (major / n) * k, GRID_MAJOR_STEP: major * k, lodRatio: row.lodRatio[n] ?? row.lodRatio.other, unitScale: k };
 }
 
+/**
+ * gridSpacing for the CURRENT settings, read the way the Design renderer has always read them (TASK 754: one reader, called by
+ * svg-renderer.js and by Shaper's 3D grid): GRID_SIZE / GRID_MAJOR_STEP as numbers, a value that is not a finite number falls back
+ * to its declared default; the inch row's settings as stored. `settings` = SettingsManager (get / getDefault); unit = the document unit.
+ */
+export function gridSpacingFromSettings(settings = SettingsManager, unit = docUnit()) {
+  const num = (key) => { const v = Number(settings.get(key)); return Number.isFinite(v) ? v : settings.getDefault(key); };
+  return gridSpacing(unit, { GRID_SIZE: num('GRID_SIZE'), GRID_MAJOR_STEP: num('GRID_MAJOR_STEP'), INCH_GRID_DIVISIONS: settings.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: settings.get('INCH_GRID_MAJOR') });
+}
+
 /** The displayed grid level for a zoom: { factor, minor, major (world units), minorPx, fade (minor opacity 0..1) }. PURE. */
 export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, unitScale = 1 }) {
   const pxPerUnit = 1 / scale(1);
@@ -167,8 +180,8 @@ export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lo
   const op = (attr) => (fade < 1 ? ` ${attr}="${fade}"` : '');
   if (normalizeGridMode(gridMode) === 'points') {
     // Dots stay a roughly constant on-screen size (clamped in world units so they don't balloon when zoomed in).
-    const rMinor = Math.min(scale(1.25), 0.25 * factor, G / 2);
-    const rMajor = Math.min(scale(2), 0.5 * factor, M / 2);
+    const rMinor = Math.min(scale(GRID_MARK_PX.points.minor), 0.25 * factor, G / 2);
+    const rMajor = Math.min(scale(GRID_MARK_PX.points.major), 0.5 * factor, M / 2);
     // Minor pattern is offset by half a tile so its (cx,cy)=(G/2,G/2) dot lands exactly on (k·G, m·G).
     // Major dots sit on the heavy tile's four corners (each tile draws a quarter; neighbours complete the dot).
     return `<pattern id="grid" x="${-G / 2}" y="${-G / 2}" width="${G}" height="${G}" patternUnits="userSpaceOnUse">`
@@ -180,8 +193,8 @@ export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lo
       + `</pattern>`;
   }
   // Clamp stroke widths so the lines don't saturate when zooming out (same numbers the old updateGrid used).
-  const minorStroke = Math.min(scale(1), 0.2 * factor);  // max 0.2 units (10% of 2) at the base level
-  const majorStroke = Math.min(scale(2), 1.0 * factor);  // max 1.0 units (10% of 10) at the base level
+  const minorStroke = Math.min(scale(GRID_MARK_PX.lines.minor), 0.2 * factor);  // max 0.2 units (10% of 2) at the base level
+  const majorStroke = Math.min(scale(GRID_MARK_PX.lines.major), 1.0 * factor);  // max 1.0 units (10% of 10) at the base level
   return `<pattern id="grid" width="${G}" height="${G}" patternUnits="userSpaceOnUse">`
     + `<path d="M ${G} 0 L 0 0 0 ${G}" fill="none" stroke="${MINOR_COLOR}" stroke-width="${minorStroke}"${op('stroke-opacity')}/></pattern>`
     + `<pattern id="grid-heavy" width="${M}" height="${M}" patternUnits="userSpaceOnUse">`

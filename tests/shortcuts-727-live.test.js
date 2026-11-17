@@ -65,7 +65,7 @@ await (async () => {
         const group = await row('sketch.group');
         if (name === 'shaper') assert.deepStrictEqual(group, { keys: ['Ctrl', 'G'], label: 'Group', shown: true }, 'Shaper: Ctrl+G Group');
         else assert.strictEqual(group, null, `${name}: no Shaper-only Group row`);
-        assert.strictEqual(await row('plotter.art.line'), null, `${name}: the retired art-tool keys are not listed`);
+        assert.strictEqual(await row('plotter.art.line'), null, `${name}: the removed art-tool keys have no row`);
         const fit = await evalJs(`(() => { const p = document.querySelector('.sk-style-panel'), r = p.getBoundingClientRect(); return { left: r.left, right: r.right, vw: innerWidth, pageSW: document.documentElement.scrollWidth, pSW: p.scrollWidth, pCW: p.clientWidth }; })()`);
         assert(fit.left >= -0.5 && fit.right <= fit.vw + 0.5 && fit.pageSW <= fit.vw + 0.5 && fit.pSW <= fit.pCW + 0.5, `${tag} ${name}: fits, no sideways scroll ` + JSON.stringify(fit));
         const all = await visibleRows();

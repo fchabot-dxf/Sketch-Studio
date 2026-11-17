@@ -48,8 +48,18 @@ assert.deepStrictEqual(shortcutConflicts('edit.undo', k(' ')), ['view.panHold'],
 assert.deepStrictEqual(shortcutConflicts('sketch.group', k(' ')), [], 'Shaper\'s Group on Space: Hold to pan is Pen Plotter\'s only (different apps): no conflict');
 assert.deepStrictEqual(shortcutConflicts('tool.line', k('g', { mod: true })), ['sketch.group'], 'Ctrl+G on Line meets Shaper\'s Group (Line is in Shaper too)');
 assert.deepStrictEqual(shortcutConflicts('edit.undo', k('l', { shift: true })), ['tool.line'], 'Shift is no exception: Shift+L fires Line too');
-assert.deepStrictEqual(shortcutConflicts('sketch.construction', k('s')), ['tool.select', 'plotter.art.scale'], 'a bare S meets Select and the retired art S (listed or not)');
-assert.deepStrictEqual(shortcutConflicts('sketch.construction', k('s', { mod: true, shift: true })), [], 'the retired art S leaves Ctrl free: Ctrl+Shift+S does not meet it (the 727 rule, retired keys only)');
+assert.deepStrictEqual(shortcutConflicts('sketch.construction', k('s')), ['tool.select'], 'a bare S meets Select only (the retired Pen Plotter art keys are gone: TASK 748)');
+assert.deepStrictEqual(shortcutConflicts('sketch.construction', k('s', { mod: true, shift: true })), [], 'Ctrl+Shift+S meets nothing: Save is Ctrl+S without Shift (no exception rule is needed any more)');
+// TASK 748: each letter the retired Pen Plotter art keys held (V T S L R E P F X N), taken bare by an 'app' shortcut, meets only the canvas tool / constraint
+// of that letter (and Fillet's R while Fillet draws); Swap is offered exactly where there is ONE changeable conflict
+const LETTER_OWNER = { v: ['tool.pan'], t: ['tool.perpendicular'], s: ['tool.select'], l: ['tool.line'], r: ['tool.rect', 'fillet.radius'], e: ['tool.equal'],
+  p: ['tool.polygon'], f: ['sketch.fix'], x: ['tool.coincident'], n: ['tool.fillet'] };
+for (const id of ['sketch.construction', 'edit.undo', 'file.save', 'view.parameters']) for (const [ch, owners] of Object.entries(LETTER_OWNER)) {
+  assert.deepStrictEqual(shortcutConflicts(id, k(ch)), owners, `${id} on a bare ${ch.toUpperCase()}: only ${owners.join(', ')}, no retired Pen Plotter key`);
+}
+assert.deepStrictEqual(assignShortcut('sketch.construction', k('l')), { conflicts: ['tool.line'], keys: [k('l')] }, 'a bare L on Construction: one conflict, Swap is offered');
+assert.deepStrictEqual(assignShortcut('file.save', k('r')).conflicts, ['tool.rect', 'fillet.radius'], 'a bare R on Save: two conflicts (no Swap)');
+assert(!SHORTCUTS.some((s) => s.id.startsWith('plotter.')), 'no Pen Plotter art-tool / finishPolyline shortcut is declared any more (TASK 748)');
 assert.deepStrictEqual(shortcutConflicts('edit.undo', k('z', { mod: true, shift: true })), ['edit.redo'], 'Ctrl+Shift+Z is Redo\'s second key');
 for (const s of SHORTCUTS) for (const c of s.keys) assert.deepStrictEqual(shortcutConflicts(s.id, c, defaultKeys), [], `a declared default is never a conflict: ${s.id} ${JSON.stringify(c)}`);
 
@@ -67,7 +77,7 @@ for (const s of SHORTCUTS.filter((x) => !x.fixed)) for (const c of s.keys) if (c
   assert.strictEqual(refusedReason(c), null, `no default key the user could capture is refused: ${s.id}`);
 }
 const FIXED = SHORTCUTS.filter((s) => s.fixed).map((s) => s.id);
-assert.deepStrictEqual(FIXED.filter((id) => !id.startsWith('plotter.')), ['edit.cancel', 'draw.typeValue', 'dim.typeValue', 'view.panHold'], 'the fixed listed rows');
+assert.deepStrictEqual(FIXED, ['edit.cancel', 'draw.typeValue', 'dim.typeValue', 'view.panHold'], 'the fixed rows (no retired Pen Plotter key among them: TASK 748)');
 assert(SHORTCUTS.every((s) => (s.listed === false || s.keys.some((c) => c.chars !== undefined) ? !!s.fixed : true)), 'every unlisted and every chars shortcut is fixed');
 for (const id of FIXED) assert.throws(() => assignShortcut(id, k('k')), /cannot be changed/, id + ' cannot be changed');
 assert.throws(() => unassignShortcut('edit.cancel'), /cannot be changed/);
@@ -115,7 +125,7 @@ assert.deepStrictEqual(assignShortcut('tool.rect', k('c')), { conflicts: ['tool.
 swapShortcut('tool.rect', [k('c')], 'tool.circle');
 assert.deepStrictEqual(shortcutById('tool.circle').keys, [], 'Circle took Rectangle\'s "none"');
 assert.throws(() => swapShortcut('tool.line', [k('s')], 'tool.rect'), /conflicts are/, 'Swap only with THE conflict');
-assert.throws(() => swapShortcut('sketch.construction', [k('s')], 'plotter.art.scale'), /cannot be changed/, 'never with a fixed one');
+assert.throws(() => swapShortcut('sketch.construction', [k('Escape')], 'edit.cancel'), /cannot be changed/, 'never with a fixed one');
 assert.throws(() => swapShortcut('tool.line', [k('w', { mod: true })], 'tool.rect'), /refused/, 'never a refused key');
 // reset one (a reset whose default another shortcut has taken since is a conflict, with the same Swap), Ctrl+letter on a tool, a captured default
 assert.deepStrictEqual(resetShortcut('tool.circle'), { conflicts: ['tool.rect'], keys: defaultKeys('tool.circle') }, 'Circle\'s Reset: Rectangle has C now');
@@ -148,13 +158,14 @@ assert.strictEqual(store.get('sketch-studio-settings'), raw, 'and writes nothing
 // unknown / fixed / malformed entries
 const warns = []; const warn0 = console.warn; console.warn = (...a) => warns.push(a.join(' '));
 const set = (v) => { store.set('sketch-studio-settings', JSON.stringify({ [USER_KEYS_SETTING]: v })); SettingsManager.load(); };
-set({ v: 1, keys: { 'no.such': [k('k')], 'edit.cancel': [k('q')], 'tool.line': 'K', 'tool.rect': [{ key: 'q', mod: 'yes' }], 'tool.arc': [{ key: 'q', foo: 1 }], 'tool.circle': [k('q')] } });
+set({ v: 1, keys: { 'no.such': [k('k')], 'plotter.art.scale': [k('q')], 'plotter.finishPolyline': [k('q')], 'edit.cancel': [k('q')], 'tool.line': 'K', 'tool.rect': [{ key: 'q', mod: 'yes' }], 'tool.arc': [{ key: 'q', foo: 1 }], 'tool.circle': [k('q')] } });
 assert.deepStrictEqual(shortcutById('tool.line').keys, defaultKeys('tool.line'), 'a value that is not a list: the default');
 assert.deepStrictEqual(shortcutById('tool.rect').keys, defaultKeys('tool.rect'), 'a combo of the wrong shape: the default');
 assert.deepStrictEqual(shortcutById('tool.arc').keys, defaultKeys('tool.arc'), 'a combo with an unknown field: the default');
 assert.deepStrictEqual(shortcutById('edit.cancel').keys, defaultKeys('edit.cancel'), 'a fixed id: ignored');
+assert(warns.some((w) => w.includes('plotter.art.scale')) && warns.some((w) => w.includes('plotter.finishPolyline')), 'a stored key for a removed TASK 748 id is an unknown id: ignored with a warning');
 assert.deepStrictEqual(shortcutById('tool.circle').keys, [k('q')], 'the good entry next to them is kept');
-assert.strictEqual(warns.length, 5, 'each bad entry is warned about (no silent drop): ' + JSON.stringify(warns));
+assert.strictEqual(warns.length, 7, 'each bad entry is warned about (no silent drop): ' + JSON.stringify(warns));
 for (const bad of ['garbage', 7, [], { v: 2, keys: {} }, { v: 1, keys: [] }, { v: 1 }]) {
   warns.length = 0;
   set(bad);

@@ -1,21 +1,14 @@
-// Global keyboard shortcuts. Tools, delete, escape, polyline finish, space-pan.
+// Global keyboard shortcuts. Delete, escape, space-pan (the art-tool keys and the polyline Enter are gone: TASK 748).
 
 import { state } from "./state.js";
 import { canvas } from "./dom.js";
-import { setTool, cancelInteraction } from "./tools.js";
+import { cancelInteraction } from "./tools.js";
 import { renderArt as render } from "./render-art.js"; // PP-3b: Draw's trimmed renderer, not render.js
-import { commitPolyline, deleteActiveNode } from "./interaction.js";
+import { deleteActiveNode } from "./interaction.js";
 import { exitTargetEditing } from "./toolpath-layers-panel.js"; // PP-4b: real target-editing exit (un-stubbed)
 import { isTextEditingTarget } from "#ui/clipboard.js";
 import { deleteSelection } from "#core/delete-manager.js"; // BURN-DOWN-1: Delete removes #core geometry (art store retired)
-import { matchesShortcut, matchShortcut } from "#ui/shortcuts.js"; // TASK 727: the keys are declared there
-
-// the art tool each declared key sets (shortcuts.js plotter.art.*: not listed in Settings > Shortcuts, the art tools are retired)
-const TOOL_SHORTCUTS = {
-    "plotter.art.select": "select", "plotter.art.rotate": "rotate", "plotter.art.scale": "scale",
-    "plotter.art.line": "line", "plotter.art.rect": "rect", "plotter.art.ellipse": "ellipse", "plotter.art.polyline": "polyline", "plotter.art.freehand": "freehand",
-    "plotter.art.scissors": "scissors", "plotter.art.node": "node",
-};
+import { matchesShortcut } from "#ui/shortcuts.js"; // TASK 727: the keys are declared there
 
 export function installKeyboard(isActive) {
     window.addEventListener("keydown", (e) => { if (isActive()) onKeyDown(e); });
@@ -45,19 +38,12 @@ function onKeyDown(e) {
         }
         return;
     }
-    if (matchesShortcut(e, "plotter.finishPolyline")) {
-        if (state.interaction && state.interaction.kind === "polyline") commitPolyline();
-        return;
-    }
     if (matchesShortcut(e, "edit.delete")) {
         if (e.defaultPrevented) { state.selectedShapeIds.clear(); render(); return; }
         // Node tool: Delete removes the selected node, not the whole shape.
         if (state.tool === "node" && state.activeNode) { deleteActiveNode(); return; }
         return deleteSelected();
     }
-
-    const toolId = matchShortcut(e, Object.keys(TOOL_SHORTCUTS));
-    if (toolId) setTool(TOOL_SHORTCUTS[toolId]);
 }
 
 function onKeyUp(e) {

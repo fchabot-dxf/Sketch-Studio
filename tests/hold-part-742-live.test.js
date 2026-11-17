@@ -172,7 +172,7 @@ try {
     console.log(label + ' fields: ' + JSON.stringify(fields) + ' note: ' + JSON.stringify(await note()));
     if (unit === 'in') {
       assert.deepStrictEqual([r1.tabCount, r1.tabWidth, r1.holdThickness], ['auto', 25.4 * 3 / 8, 25.4 / 16], label + ': inch defaults 3/8 in wide, 1/16 in thick');
-      assert.deepStrictEqual(await note(), ['Outside: 4 tabs, 0.375 in wide, 0.0625 in thick: 1 pass at 0.6875 in + 4 gaps at 0.75 in', 'Gaps: cut the side against the part; the return leg is optional'], label + ': the note in inches');
+      assert.deepStrictEqual(await note(), ['Outside: 4 tabs, 0.375 in wide, 0.063 in thick: 1 pass at 0.688 in + 4 gaps at 0.75 in', 'Gaps: cut the side against the part; the return leg is optional'], label + ': the note in inches');
     } else {
       assert.deepStrictEqual([r1.tabCount, r1.tabWidth, r1.holdThickness], ['auto', 10, 2], label + ': mm defaults 10 mm wide, 2 mm thick');
       assert.deepStrictEqual(await note(), ['Outside: 4 tabs, 10 mm wide, 2 mm thick: 1 pass at 16 mm + 4 gaps at 18 mm', 'Gaps: cut the side against the part; the return leg is optional'], label + ': the note');

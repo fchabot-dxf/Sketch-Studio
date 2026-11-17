@@ -142,7 +142,7 @@ export function createCutPanel(hostEl, opts = {}) {
       </div>
       <div class="cut-row" data-row="tabCount">
         <label class="cut-field-label">Tab count</label>
-        <div class="cut-inline cut-box">
+        <div class="cut-inline cut-box cut-count-box">
           <input type="text" class="cut-num cut-tab-count" inputmode="numeric" placeholder="Auto">
           <span class="cut-presets cut-in-box"></span>
         </div>

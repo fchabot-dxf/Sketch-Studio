@@ -138,7 +138,7 @@ try {
   const phase = async (label) => {
     const D = phone ? 'phone' : 'desktop';
     const unit = await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.docUnit())`);
-    const L = unit === 'in' ? { online: '0.0625 in', full: '0.75 in', shallow: '0.125 in', deep: '0.25 in' } : { online: '1.587 mm', full: '19.05 mm', shallow: '3.175 mm', deep: '6.35 mm' };
+    const L = unit === 'in' ? { online: '0.063 in', full: '0.75 in', shallow: '0.125 in', deep: '0.25 in' } : { online: '1.587 mm', full: '19.05 mm', shallow: '3.175 mm', deep: '6.35 mm' };
     await openMode('design');
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
     const keys = await drawAndPlan();

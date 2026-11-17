@@ -232,7 +232,8 @@ const regionsArea = (rs) => rs.reduce((s, r) => s + Math.abs(area2(r.outer)) / 2
  *              shape?: { cutterShape, cutterAngle, toolDia }, footprintsAt?: (halfWidth) => footprints }]
  *              (shape + footprintsAt make a ball-nose / V-bit groove: terraces over its profile, see cutter-profile.js)
  *   bounds  optional {minX,maxX,minY,maxY} of the design (joints); merged with the footprint rings for the derived size
- * Each mesh = { positions, normals, indices } (typed arrays). stats: triangles, per-group areas, skipped, unsetThrough.
+ * Each mesh = { positions, normals, indices } (typed arrays). stats: triangles, per-group areas, skipped, unsetThrough, board ('rectangle' | 'profile' |
+ * TASK 757 'none': nothing gives a board, stockBox null and every mesh empty).
  */
 export function buildRelief({ stock, items = [], bounds = null, cache = null } = {}) {
   const S = { ...DEFAULT_STOCK, ...(stock || {}) };
@@ -265,14 +266,20 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   }
 
   lap('footprints');
+  // TASK 472: S.profile = { outer, holes, sig? } (closed rings [[x,y],...]) = the board IS that profile (any shape, holes allowed),
+  // taken from a Stock loop; without it the board is the derived / explicit rectangle below. `rect` is the board REGION list either way.
+  const prof = boardProfile(S.profile);
+  // TASK 757: NO BOARD: nothing to derive one from (no design bounds, no cut footprint, no Stock profile, no explicit width AND height): an empty design is
+  // not a board (it was a margin-sized cube round the origin). No mesh; stats.board = 'none' (the view shows its empty-state message).
+  if (!Number.isFinite(b.minX) && !prof && !(Number(S.width) > 0 && Number(S.height) > 0)) {
+    const none = finish({ p: [], n: [], i: [] });
+    return { stockBox: null, levels: [], meshes: { top: none, floor: none, wall: none, bottom: none, side: none }, marks: [], stats: { triangles: 0, areas: { top: 0, floor: 0, wall: 0, bottom: 0, side: 0 }, skipped, unsetThrough, levels: 0, ms: (lap('mesh'), ms), cache: C ? { hits, misses } : null, outsideStock: [], partlyOutside: [], board: 'none' } };
+  }
   // The stock box: derived = design/cut bounds + margin; explicit width/height are centred on the bounds.
   if (!Number.isFinite(b.minX)) { b.minX = 0; b.maxX = 0; b.minY = 0; b.maxY = 0; }
   const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2, m = Number(S.margin) || 0;
   const w = Number(S.width) > 0 ? Number(S.width) : (b.maxX - b.minX) + 2 * m;
   const h = Number(S.height) > 0 ? Number(S.height) : (b.maxY - b.minY) + 2 * m;
-  // TASK 472: S.profile = { outer, holes, sig? } (closed rings [[x,y],...]) = the board IS that profile (any shape, holes allowed),
-  // taken from a Stock loop; without it the board is the derived / explicit rectangle above. `rect` is the board REGION list either way.
-  const prof = boardProfile(S.profile);
   let box = { minX: cx - w / 2, maxX: cx + w / 2, minY: cy - h / 2, maxY: cy + h / 2, thickness: T };
   let rect = [rectRegion(box)];
   if (prof) { rect = [prof.region]; box = { ...prof.box, thickness: T }; }

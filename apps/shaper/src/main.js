@@ -27,6 +27,7 @@ import { opOrder } from './operations.js';            // TASK 743: the operation
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
+import { forgetOldLogin } from './shaperhub-login.js'; // TASK 758: the app keeps no ShaperHub login; an earlier version's copy is deleted at start
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
@@ -48,6 +49,8 @@ if (!fusionMode) getGoogleAccount().init();
 const activeStages = shaperStagesFor({ fusion: fusionMode });
 let initMode = null;
 try { initMode = localStorage.getItem(MODE_KEY); } catch (err) { dbg.warn('shaper', 'MODE_KEY read failed', err && err.message); }
+// TASK 758: delete the ShaperHub login an earlier version stored (shaperhub-login.js); a storage error goes to the Log (it carries no stored content)
+try { forgetOldLogin(localStorage); } catch (err) { dbg.warn('shaper', 'removing the old stored ShaperHub login failed', err && err.message); }
 initMode = resolveInitialMode(initMode, { fusion: fusionMode }); // modes.js: a stored 'simexport' (TASK 459) is Review; a stored 'explore' (TASK 706) or none: Design
 
 const chrome = mountAppChrome({
@@ -108,12 +111,10 @@ const syncForm = document.getElementById('sync-modal-form');
 const syncEmail = document.getElementById('sync-email');
 const syncPassword = document.getElementById('sync-password');
 const syncFilename = document.getElementById('sync-filename');
-const syncRemember = document.getElementById('sync-remember');
 const syncStatus = document.getElementById('sync-modal-status');
 const syncCloseBtn = document.getElementById('sync-modal-close');
 const syncCancelBtn = document.getElementById('sync-btn-cancel');
 const syncSubmitBtn = document.getElementById('sync-btn-submit');
-const CRED_STORAGE_KEY = 'shaper_hub_creds';
 
 function closeSyncModal() {
   if (syncModal && syncModal.open) syncModal.close();
@@ -131,12 +132,6 @@ if (btnSyncShaper) {
       if (status) status.textContent = NO_CUTS;
       return;
     }
-    try {
-      const saved = JSON.parse(localStorage.getItem(CRED_STORAGE_KEY) || '{}');
-      if (saved.email && syncEmail) syncEmail.value = saved.email;
-      if (saved.password && syncPassword) syncPassword.value = saved.password;
-    } catch (_) {}
-
     if (syncFilename && !syncFilename.value) {
       syncFilename.value = 'shaper-export.svg';
     }
@@ -193,11 +188,6 @@ if (syncForm) {
       }
 
       track('export:shaperhub'); // TASK 738
-      if (syncRemember && syncRemember.checked) {
-        try { localStorage.setItem(CRED_STORAGE_KEY, JSON.stringify({ email, password })); } catch (_) {}
-      } else {
-        try { localStorage.removeItem(CRED_STORAGE_KEY); } catch (_) {}
-      }
 
       if (syncStatus) {
         syncStatus.className = 'sync-status is-success';
@@ -207,6 +197,9 @@ if (syncForm) {
       if (expStatus) {
         expStatus.innerHTML = `✓ Synced <strong>${data.filename || filename}</strong> directly to ShaperHub! It will now appear on your Origin over Wi-Fi.`;
       }
+      // TASK 758: the login is NOT kept by the app. Closing the dialog hides the form after the successful fetch: that is what tells the browser's
+      // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared): a
+      // browser reads them when it sees the form go.
       setTimeout(() => {
         closeSyncModal();
       }, 1200);
@@ -344,7 +337,8 @@ mountAppFooter({
 const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
-  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN), ...planClearingNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
+  // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
+  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN), ...planClearingNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
 };
 const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder()]); // TASK 714: the notes are in the doc unit; TASK 743: the 2D file's groups follow the operation order
 // TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
@@ -381,7 +375,7 @@ async function enterReview(st) {
   try {
     if (!reviewView) {
       info.textContent = 'Loading 3D…';
-      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), look: reviewLook, designCanvas: document.getElementById('design-canvas') }); // TASK 754: the 3D view takes the Design canvas's paper + grid
+      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), look: reviewLook, designCanvas: document.getElementById('design-canvas'), emptyText: NO_CUTS }); // TASK 754: the 3D view takes the Design canvas's paper + grid; TASK 757: an empty design shows the 2D view's empty-state message
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));

@@ -9,6 +9,7 @@
 import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME,
   recordUndo, setSketchLocked, showOnlySketch, reorderSketch } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch; TASK 577: sketches as layers
 import { deleteSketch } from '#core/delete-manager.js';
+import { groupIndex, enterGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: the user groups as nested rows
 import { showContextMenu } from '#ui/context-menu.js';
 import { createLongPress } from '#ui/long-press.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -46,6 +47,7 @@ function injectStyles() {
   background: transparent; color: inherit; border: 0; border-radius: 6px; padding: 5px 8px; font: inherit; }
 .sk-info-row:hover { background: var(--sk-info-hover, rgba(127,127,127,0.14)); }
 .sk-info-row.sel { background: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); color: #fff; }
+.sk-group-row .sk-info-geo { margin-left: auto; }
 .sk-info-ic { width: 1.1em; text-align: center; opacity: 0.85; }
 .sk-info-lbl { white-space: nowrap; }
 .sk-info-geo { flex: 1; min-width: 0; opacity: 0.75; overflow-wrap: anywhere; }
@@ -272,6 +274,41 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
       }
     }
 
+    // TASK 751: a sketch's USER GROUPS as rows, nested as the groups are (a group lists under the sketch of its first shape; a group whose
+    // shapes were all deleted is not listed). A click on a row selects exactly what a click on the group in the canvas selects: the whole
+    // group, at its level (its parent group becomes the entered level; a top-level group: nothing entered). No groups: no rows.
+    function appendGroupRows(wrap, sketchId) {
+      const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
+      const selShapes = (state && state.selectedShapes instanceof Set) ? state.selectedShapes : new Set();
+      const gx = groupIndex(state);
+      const rowsOf = (parentId, depth) => {
+        for (const gid of (parentId ? gx.kids.get(parentId) : (state.groups || []).filter((g) => !g.parentId).map((g) => g.id))) {
+          const ids = gx.shapesOf(gid);
+          if (!ids.length) continue;
+          if (depth === 0 && (shapeById.get(ids[0]).sketchId || DEFAULT_SKETCH_ID) !== sketchId) continue;
+          const g = state.groups.find((x) => x.id === gid);
+          const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row sk-group-row'; row.dataset.groupId = gid;
+          row.style.paddingLeft = (6 + depth * 14) + 'px';
+          if (ids.every((id) => selShapes.has(id))) row.classList.add('sel');
+          const ic = document.createElement('span'); ic.className = 'sk-info-ic'; ic.textContent = '▣';
+          const lbl = document.createElement('span'); lbl.className = 'sk-info-lbl'; lbl.textContent = g.name;
+          const n = document.createElement('span'); n.className = 'sk-info-geo'; n.textContent = String(ids.length);
+          row.append(ic, lbl, n);
+          row.addEventListener('click', () => {
+            if (g.parentId) enterGroup(state, g.parentId); else leaveGroups(state);
+            if (state.selectedJoints) state.selectedJoints.clear();
+            if (state.selectedConstraints) state.selectedConstraints.clear();
+            state.selectedShapes.clear();
+            for (const id of ids) state.selectedShapes.add(id);
+            refresh();
+          });
+          wrap.appendChild(row);
+          rowsOf(gid, depth + 1);
+        }
+      };
+      rowsOf(null, 0);
+    }
+
     // SKETCH-1b: when opted in, a sketch-ROOTED tree — a Sketch node per state.sketches with its constraints nested as
     // children (bucketed via constraintSketch; single-sketch → all under 'Sketch 1'). DEFAULT (off) = the FLAT list →
     // SketchStudio byte-identical. (Multi-sketch UX = S-2; cross-sketch links = S-3.)
@@ -344,6 +381,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
         node.appendChild(head);
         if (!collapsed) {
           const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';
+          appendGroupRows(childWrap, sk.id);
           if (!kids.length) { const e = document.createElement('div'); e.className = 'sk-sketch-empty'; e.textContent = 'No constraints yet.'; childWrap.appendChild(e); }
           else appendGrouped(childWrap, kids.map((c) => {
             const cs = constraintSketch(c, state); // a Set → spanning → a cross-sketch link naming the OTHER sketch(es)

@@ -60,6 +60,7 @@ export function createSketchState(engine, view) {
     selectedJoints: new Set(),  // Track selected joints for showing constraint glyphs
     selectedConstraints: new Set(), // Track selected constraints (support multi-select)
     selectedShapes: new Set(),      // Track selected shapes (support multi-select)
+    enteredGroupId: null,           // TASK 751: the user group the Select tool has entered (session UI: never saved, never an undo step; #core/group-model.js)
     hoveredShape: null,          // Track hovered shape for visual feedback
     hoveredJoint: null,          // Track hovered joint for visual feedback
     hoveredConstraint: null,     // Track hovered constraint for visual feedback
@@ -172,6 +173,7 @@ export function createSketchState(engine, view) {
       this.selectedJoints.clear();
       this.selectedConstraints.clear();
       this.selectedShapes.clear();
+      this.enteredGroupId = null; // TASK 751
       this.active = null;
       this.drag = null;
       this.snapTarget = null;

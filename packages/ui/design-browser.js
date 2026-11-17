@@ -189,7 +189,8 @@ export function mountDesignBrowser({ container, state, engine, label = 'Sketches
   const tick = () => {
     let vsum = 0; for (const c of state.constraints) if (typeof c.value === 'number') vsum += c.value;
     const sig = state.constraints.length + ':' + ((state.shapes && state.shapes.length) || 0) + ':' + ((state.joints && state.joints.size) || 0) + ':' + vsum.toFixed(1)
-      + ':' + (state.selectedConstraints ? state.selectedConstraints.size : 0) + ':' + sketchesSignature(state);
+      + ':' + (state.selectedConstraints ? state.selectedConstraints.size : 0) + ':' + sketchesSignature(state)
+      + ':' + ((state.groups && state.groups.length) || 0) + ':' + (state.selectedShapes ? state.selectedShapes.size : 0) + ':' + (state.enteredGroupId || ''); // TASK 751: the group rows
     if (sig !== lastSig) { lastSig = sig; panel.refresh(); }
     if (paintConstruct && lastConstructMode !== !!state.isConstructionMode) {
       lastConstructMode = !!state.isConstructionMode;

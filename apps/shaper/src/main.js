@@ -31,7 +31,7 @@ import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
-import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
+import { makeGroup, ungroup, groupOf, selectUnit } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
@@ -240,7 +240,8 @@ function doUngroup() {
   const st = designController.state;
   const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
   const byId = new Map((st.shapes || []).map((s) => [s.id, s]));
-  const gids = new Set(); for (const id of sel) { const gid = groupOf(byId.get(id)); if (gid) gids.add(gid); }
+  // TASK 751: the group the selection holds at the entered level (selectUnit: a whole selected group), else a curve's own group; ONE level is dissolved
+  const gids = new Set(); for (const id of sel) { const gid = selectUnit(st, id) || groupOf(byId.get(id)); if (gid) gids.add(gid); }
   if (!gids.size) { groupStatus('No group on the selection'); return; }
   try { st.saveState && st.saveState('ungroup'); } catch (_) {}
   for (const gid of gids) ungroup(st, gid);

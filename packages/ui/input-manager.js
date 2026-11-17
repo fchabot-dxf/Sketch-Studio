@@ -19,6 +19,7 @@ import { toggleDriving } from '#core/dimension-seams.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
+import { stepOutOfGroup, selectedGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
 import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
@@ -1503,6 +1504,12 @@ export function switchToTool(state, toolName) {
     // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
     inputCtx.highlightActiveTool?.(toolName);
 
+    // TASK 751: a constraint / dimension takes single curves and points, never a user group. When the Select-tool selection holds a whole
+    // group the tool says so; its picks go to single curves and points whatever the group level (the selection is not used as its operand).
+    if ((CONSTRAINT_TOOLS.includes(toolName) || toolName === TOOL_MODES.DIMENSION) && selectedGroups(state).length) {
+        showNotification('Constraints and dimensions take single curves and points: pick them on the canvas. The selected group is not used (double click a group to work inside it).', 'info');
+    }
+
     // Fallback preselection for constraint tools (matches toolbar behavior)
     if (CONSTRAINT_TOOLS.includes(toolName)) {
         let firstEl = null;
@@ -1549,6 +1556,9 @@ function handleEscape(state) {
             resetDimensionState(state); // a placing preview or a first pick waiting for the second: Esc drops both (task 555)
         }
     } catch(_) {}
+
+    // TASK 751: Esc in the Select tool steps out of the entered user group, one level (nothing entered: nothing changes here)
+    if (state.currentTool === TOOL_MODES.SELECT) stepOutOfGroup(state);
 
     // 1. Clear selection sets
     if (state.selectedJoints) state.selectedJoints.clear();

@@ -22,7 +22,7 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
-import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { shaperSvgOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
@@ -42,6 +42,7 @@ let docBuffer = null; // TASK 474: the autosave buffer / project actions of this
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
 // Vcarve/Prepare/Review — designController may not exist yet, so its state is read lazily.
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const fusionMode = isFusionMode();
 if (!fusionMode) getGoogleAccount().init();
@@ -251,10 +252,8 @@ function doUngroup() {
 }
 document.addEventListener('keydown', (e) => {
   if (modes.current() !== 'design') return;
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
-    e.preventDefault();
-    if (e.shiftKey) doUngroup(); else doGroup();
-  }
+  if (matchesShortcut(e, 'sketch.group')) { e.preventDefault(); doGroup(); }
+  else if (matchesShortcut(e, 'sketch.ungroup')) { e.preventDefault(); doUngroup(); }
 });
 
 // SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js), with Shaper's own options
@@ -385,7 +384,7 @@ mountAppFooter({
 const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
-  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: planSteppedNotes(CUT_PLAN) }; // TASK 714: notes = the stepped cuts' steps / undercuts
+  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps
 };
 const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit()]); // TASK 714: the notes are in the doc unit
 // TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)

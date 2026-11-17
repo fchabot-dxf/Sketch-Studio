@@ -48,6 +48,19 @@ export function insetPolygon(polygon, amount) {
     return sol.filter(r => r.length >= 3).map(fromClipper);
 }
 
+/** TASK 742: the TRUE parallel offset of a closed polygon by `amount` mm with ROUND joins (a disc swept along the boundary): positive grows
+ *  OUTWARD, negative shrinks INWARD; round corners within `arcTolMm` of the true arc. Returns the closed ring(s) (an inward offset can split). */
+export function offsetPolygonRound(polygon, amount, arcTolMm = 0.005) {
+    const path = toClipper(polygon);
+    if (path.length < 3) return [];
+    if (!ClipperLib.Clipper.Orientation(path)) path.reverse();
+    const co = new ClipperLib.ClipperOffset(2, arcTolMm * CLIP_SCALE);
+    co.AddPath(path, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+    const sol = new ClipperLib.Paths();
+    co.Execute(sol, amount * CLIP_SCALE);
+    return sol.filter(r => r.length >= 3).map(fromClipper);
+}
+
 /** Boolean union of polygons into their combined outline. Each input is a closed ring [[x,y],...]. Returns the
  *  merged boundary as an array of closed rings in source units — usually one outer ring, plus extras for holes /
  *  disjoint pieces. */

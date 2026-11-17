@@ -8,6 +8,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the panel opened
+import { createShortcutsList } from '#ui/shortcuts-list.js'; // TASK 727: the Shortcuts tab (read-only, from shortcuts.js)
 import {
   STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, USER_PRESETS_KEY, activeStyleTemplateId, applyStyleTemplate, userPresetsOf, listUserPresets,
   isUserPresetId, presetNameProblem, findUserPresetByName, saveUserPreset, renameUserPreset, deleteUserPreset,
@@ -63,6 +64,7 @@ const TABS = [
   { id: 'grid', label: 'Grid & Snap' },
   { id: 'glyphs', label: 'Glyphs' },
   { id: 'units', label: 'Units' },
+  { id: 'shortcuts', label: 'Shortcuts' }, // TASK 727: this app's keyboard shortcuts (shortcuts-list.js)
 ];
 const UNIT_LABELS = { mm: 'Millimetres', cm: 'Centimetres', in: 'Inches' };
 
@@ -245,6 +247,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   }
   body.appendChild(tabBar);
   for (const spec of CONTROLS) tabPanels[spec.tab].appendChild(buildControl(spec));
+  tabPanels.shortcuts.appendChild(createShortcutsList({ hostId }).el);
   for (const t of TABS) body.appendChild(tabPanels[t.id]);
 
   // ONE document-unit control for every host (writes DOC_UNIT; cut params, dimension edit etc. re-read it on change).

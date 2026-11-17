@@ -89,7 +89,7 @@ export function fitViewToExtents(svg, view, state, options = {}) {
     const padding = options.padding || 1.2;
     const minWidth = options.minWidth || 10;
 
-    const geoBounds = computeGeometryBounds(state);
+    const geoBounds = computeGeometryBounds(state, { construction: options.construction !== false });
     if (!geoBounds) {
         view.x = DEFAULT_VIEW.x;
         view.y = DEFAULT_VIEW.y;
@@ -168,14 +168,15 @@ const pendingFits = new WeakMap(); // svg -> stop() of its armed "fit once the c
  * Returns true when the view was set now.
  * A canvas with no size yet (hidden tab) is not fitted: the fit is armed and runs at the first real size, unless the user
  * has panned or zoomed `state.view` in the meantime. The next call for the same svg replaces an armed fit.
+ * `construction: false` (TASK 725): a drawing that does not show construction geometry is framed without it.
  */
-export function fitToDrawing(svg, state, { margin = FIT_MARGIN, inset, avoidEl, avoidGap } = {}) {
+export function fitToDrawing(svg, state, { margin = FIT_MARGIN, inset, avoidEl, avoidGap, construction = true } = {}) {
     if (!svg || !state || !state.view) return false;
     const armed = pendingFits.get(svg);
     if (armed) armed();
-    if (!computeGeometryBounds(state)) return false;
+    if (!computeGeometryBounds(state, { construction })) return false;
     const sized = () => { const r = svg.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-    const fit = () => fitViewToExtents(svg, state.view, state, { padding: 1 + 2 * margin, minWidth: FIT_MIN_WIDTH, inset, avoidEl, avoidGap });
+    const fit = () => fitViewToExtents(svg, state.view, state, { padding: 1 + 2 * margin, minWidth: FIT_MIN_WIDTH, inset, avoidEl, avoidGap, construction });
     if (sized()) { fit(); return true; }
     if (typeof ResizeObserver === 'undefined') return false;
     const { x, y, w } = state.view;

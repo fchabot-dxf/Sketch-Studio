@@ -29,6 +29,7 @@ import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
 import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const OVERLAY_ID = 'offset-tool-overlay';
 export const OFFSET_INPUT_ID = 'offset-distance-input';
@@ -120,7 +121,7 @@ export function handleOffsetPointerUp(e, svg) {
 }
 
 export function handleOffsetKeyDown(e) {
-  if (e.key === 'Escape' && _open) { cancelAll(); return true; }
+  if (matchesShortcut(e, 'edit.cancel') && _open) { cancelAll(); return true; }
   return false;
 }
 

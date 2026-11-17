@@ -50,6 +50,7 @@ import { getMagnetThreshold, isWithinMagnet } from '#ui/snap-magnet.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createClipboard, clipboardKeyAction, isTextEditingTarget } from '#ui/clipboard.js'; // TASK 559: Ctrl+C / Ctrl+X / Ctrl+V
+import { matchesShortcut, matchShortcut } from '#ui/shortcuts.js'; // TASK 727: THE declaration of every key below
 
 // Apply some visual settings to CSS variables at startup and when changed
 function applyVisualSettings(settings) {
@@ -1177,6 +1178,16 @@ export function sketchHistory(state) {
     return h;
 }
 
+// TASK 727: the tool each declared tool key opens (the keys themselves are in shortcuts.js). H and E have their own branch below (they act
+// on a preselection first).
+const TOOL_SHORTCUTS = {
+    'tool.line': 'line', 'tool.rect': 'rect', 'tool.circle': 'circle', 'tool.arc': 'arc', // drawing tools
+    'tool.select': 'select', 'tool.pan': 'pan', // selection and navigation (V for View)
+    'tool.coincident': TOOL_MODES.COINCIDENT, 'tool.perpendicular': TOOL_MODES.PERPENDICULAR, 'tool.tangent': TOOL_MODES.TANGENT,
+    'tool.collinear': TOOL_MODES.COLLINEAR, 'tool.parallel': TOOL_MODES.PARALLEL,
+    'tool.dimension': 'dim',
+};
+
 function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
     const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : showNotification;
@@ -1204,13 +1215,13 @@ function setupKeyboardShortcuts(state, opts = {}) {
         }
 
         // Profile actions (Ctrl+Shift+C / Ctrl+Shift+U) opt-in
-        if (profilesEnabled && (e.ctrlKey || e.metaKey) && e.shiftKey) {
-            if (e.key === 'c' || e.key === 'C') {
+        if (profilesEnabled) {
+            if (matchesShortcut(e, 'sketch.combine')) {
                 e.preventDefault();
                 doCombine(state, notifyFn);
                 return;
             }
-            if (e.key === 'u' || e.key === 'U') {
+            if (matchesShortcut(e, 'sketch.uncombine')) {
                 e.preventDefault();
                 doUncombine(state, notifyFn);
                 return;
@@ -1219,13 +1230,13 @@ function setupKeyboardShortcuts(state, opts = {}) {
         // Route to focused tool handlers first
         // Dimension tool placing: Enter or click anchors & opens edit; digits open quick edit
         if (state.currentTool === TOOL_MODES.DIMENSION && isDimensionPlacing(state)) {
-            if (e.key === 'Enter') {
+            if (matchesShortcut(e, 'dim.place')) {
                 e.preventDefault();
                 const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
                 anchorPlacingDimension(svgEl, state);
                 return;
             }
-            if (/^[0-9.\-]$/.test(e.key)) {
+            if (matchesShortcut(e, 'dim.typeValue')) {
                 const pc = getPlacingConstraint(state);
                 if (pc && !pc.isDriven && !pc.driven) {
                     try {
@@ -1259,42 +1270,27 @@ function setupKeyboardShortcuts(state, opts = {}) {
         if (state.currentTool === TOOL_MODES.FILLET) {
             if (handleFilletKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; }
         }
-        if (state.currentTool === TOOL_MODES.MIRROR && e.key === 'Enter') { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
+        if (state.currentTool === TOOL_MODES.MIRROR && matchesShortcut(e, 'mirror.finish')) { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
         if (state.currentTool === TOOL_MODES.OFFSET && handleOffsetKeyDown(e)) { e.preventDefault(); return; } // TASK 650
         if (patternSessionOpen() && handlePatternKeyDown(e)) { e.preventDefault(); return; } // TASK 658: Enter = OK, Esc = Cancel
-        if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
-        if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
+        if (matchesShortcut(e, 'edit.delete')) { handleDelete(state); e.preventDefault(); } // TASK 727: not a Delete aimed at a focused document tab (it closes that tab)
+        if (matchesShortcut(e, 'edit.cancel')) { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
         if (histAction) { sketchHistory(state)[histAction](); e.preventDefault(); } // TASK 618: the same function the header buttons call
 
         // Toggle fixed on selection
-        if (e.key.toLowerCase() === 'f') {
+        if (matchesShortcut(e, 'sketch.fix')) {
             if (toggleFixedSelection(state)) {
                 e.preventDefault();
                 return;
             }
         }
 
-        // Tool switching shortcuts (case insensitive)
-        const key = e.key.toLowerCase();
-        
-        // Drawing tools
-        if (key === 'l') { switchToTool(state, 'line'); e.preventDefault(); }
-        if (key === 'r') { switchToTool(state, 'rect'); e.preventDefault(); }
-        if (key === 'c') { switchToTool(state, 'circle'); e.preventDefault(); }
-        if (key === 'a') { switchToTool(state, 'arc'); e.preventDefault(); }
-        
-        // Selection and navigation
-        if (key === 's') { switchToTool(state, 'select'); e.preventDefault(); }
-        if (key === 'v') { switchToTool(state, 'pan'); e.preventDefault(); } // V for View/Navigate
-        
-        // Constraint tools
-        if (key === 'x') { switchToTool(state, TOOL_MODES.COINCIDENT); e.preventDefault(); } // X for eXact position
-        if (key === 't') { switchToTool(state, TOOL_MODES.PERPENDICULAR); e.preventDefault(); } // T for perpendicuTar (right angle)
-        if (key === 'o') { switchToTool(state, TOOL_MODES.TANGENT); e.preventDefault(); } // O for tangent (touching circles)
-        if (key === 'i') { switchToTool(state, TOOL_MODES.COLLINEAR); e.preventDefault(); } // I for In-line
+        // Tool switching shortcuts (declared in shortcuts.js; the letters ignore Ctrl / Shift / Alt, as they always have)
+        const toolId = matchShortcut(e, Object.keys(TOOL_SHORTCUTS));
+        if (toolId) { switchToTool(state, TOOL_SHORTCUTS[toolId]); e.preventDefault(); }
         // H: If a single line is preselected, apply H/V immediately. Otherwise switch to tool and wait for selection.
-        if (key === 'h') {
+        if (matchesShortcut(e, 'tool.horizontalVertical')) {
             const selShapes = state.selectedShapes ? Array.from(state.selectedShapes) : [];
             if (selShapes.length === 1) {
                 const s = state.shapes.find(x => x.id === selShapes[0]);
@@ -1307,9 +1303,8 @@ function setupKeyboardShortcuts(state, opts = {}) {
             switchToTool(state, TOOL_MODES.HORIZONTAL_VERTICAL);
             e.preventDefault();
         }
-        if (key === 'q') { switchToTool(state, TOOL_MODES.PARALLEL); e.preventDefault(); } // Q for parallel (like ||)
         // E: If two shapes are pre-selected and valid for EQUAL, apply immediately. Otherwise enter pending mode.
-        if (key === 'e') {
+        if (matchesShortcut(e, 'tool.equal')) {
             const selShapes = state.selectedShapes ? Array.from(state.selectedShapes) : [];
             if (selShapes.length === 2) {
                 const s1 = state.shapes.find(x => x.id === selShapes[0]);
@@ -1335,12 +1330,6 @@ function setupKeyboardShortcuts(state, opts = {}) {
             switchToTool(state, TOOL_MODES.EQUAL);
             e.preventDefault();
         } // E for Equal
-        
-        // Dimension tool
-        if (key === 'd') {
-            switchToTool(state, 'dim');
-            e.preventDefault();
-        }
     });
 }
 

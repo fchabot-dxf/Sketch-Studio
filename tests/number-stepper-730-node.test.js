@@ -50,8 +50,10 @@ try {
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   eq([...doc.querySelectorAll('.cut-card .cut-step')].map((b) => b.getAttribute('aria-label')),
-    ['Decrease depth', 'Increase depth', 'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution', 'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
-    'a − / + pair on depth, step depth, resolution, offset and bit diameter');
+    ['Decrease depth', 'Increase depth', 'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution',
+      'Decrease tab count', 'Increase tab count', 'Decrease tab width', 'Increase tab width', 'Decrease thickness', 'Increase thickness', // TASK 742: the Hold part rows (hidden for a stepped type)
+      'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
+    'a − / + pair on depth, step depth, resolution, the Hold part rows, offset and bit diameter');
 
   // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps
   typed('.cut-depth', ''); // a stepped pocket arrives with its slope's depth: clear it to unset
@@ -75,12 +77,12 @@ try {
   step('cutOffset', 1); near(rec().cutOffset, 0.25, 'offset + -> 0.25');
   step('cutOffset', -1); step('cutOffset', -1); near(rec().cutOffset, -0.25, 'offset goes negative (as typing does)');
   step('toolDia', 1); near(rec().toolDia, 3.5, 'bit 3.175 + 0.5 -> 3.5');
-  typed('.cut-bit', '0.3'); step('toolDia', -1); near(rec().toolDia, 0.1, 'bit never below 0.1 mm');
+  typed('.cut-bit', '0.3'); step('toolDia', -1); near(rec().toolDia, 0.3, 'bit 0.3 - 0.5 would be 0: a size stays where it is (TASK 736: no minimum)');
   step('stepDepth', 1); near(rec().stepDepth, 1.5, 'step depth 1 + -> 1.5');
-  typed('.cut-step-depth', '0.3'); step('stepDepth', -1); near(rec().stepDepth, 0.1, 'step depth clamps at 0.1 mm');
+  typed('.cut-step-depth', '0.3'); step('stepDepth', -1); near(rec().stepDepth, 0.3, 'step depth 0.3 - 0.5 would be 0: stays (no minimum)');
   const cb = q('.cut-adaptive'); cb.checked = true; cb.dispatchEvent(new app.window.Event('change'));
   step('stepDeviation', 1); near(rec().stepDeviation, 0.3, 'resolution 0.25 + -> 0.3');
-  typed('.cut-step-deviation', '0.02'); step('stepDeviation', -1); near(rec().stepDeviation, 0.01, 'resolution clamps at 0.01 mm');
+  typed('.cut-step-deviation', '0.02'); step('stepDeviation', -1); near(rec().stepDeviation, 0.02, 'resolution 0.02 - 0.05 would be 0: stays (no minimum)');
 
   // press-and-hold: pointerdown (no pointerup) steps once, then repeats after the delay, one step each
   typed('.cut-depth', '1');

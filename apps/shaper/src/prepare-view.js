@@ -8,7 +8,8 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
-import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems } from './cut-plan.js'; // SP1j-4: shared cut-plan store
+import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
+  holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
 import SettingsManager, { docUnit, lengthDecimals, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
@@ -98,14 +99,17 @@ function pocketLabelPoint(clearedOuter, clearedHoles) {
   return c;
 }
 // TASK 455: the depth chip — a rounded dark rect with white text "↓ 0.300 in" (arrow, BOLD value, lighter unit); "↓ unset" when unset.
-const depthChip = (x, y, cutDepth) => {
+const CHIP_H_PX = 16;
+const depthChip = (x, y, cutDepth, k) => {
   const v = Number(cutDepth);
   const set = cutDepth != null && cutDepth !== 'unset' && Number.isFinite(v);
   let val = 'unset', unit = '';
   if (set) { const f = formatShaperParam(v, docUnit(), { decimals: lengthDecimals(3) }); const i = f.lastIndexOf(' '); val = f.slice(0, i); unit = f.slice(i); }
-  const w = (2 + val.length + unit.length) * 2.9 + 6, h = 8.5;
-  return `<g class="sk-chip"><rect class="sk-chip-bg" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="2.5"/>` +
-    `<text class="sk-chip-text" x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
+  // TASK 731: CONSTANT SCREEN SIZE. The chip is laid out in screen px (font 11 = the dimension labels', height 16, 6.3 px per glyph + 10 padding)
+  // inside a <g> scaled by k = world units per screen px (worldTolerance(svg, 1), the one zoom-stable conversion), so it never grows with zoom or a small design.
+  const w = (2 + val.length + unit.length) * 6.3 + 10, h = CHIP_H_PX;
+  return `<g class="sk-chip" transform="translate(${x} ${y}) scale(${k})"><rect class="sk-chip-bg" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="4"/>` +
+    `<text class="sk-chip-text" x="0" y="0" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
 };
 const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
 
@@ -294,7 +298,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [] };
@@ -324,6 +328,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       // TASK 449: conventional TRAVEL (one core derivation): marching dashes along the bit-centre path in the travel
       // direction (CSS animation, no RAF); static arrows for prefers-reduced-motion. On line has none.
       toolPaths.push(...(fp.toolPaths || []));
+      // TASK 742: a held cut: its tabs marked on the outline (an onion skin: the whole outline), each gap strip drawn as it is exported (its own
+      // band shows what the bit removes; no travel marks on the strips, their loops are too small to read)
+      if (fp.hold && fp.hold.role === 'pass') for (const d of fp.hold.marks || []) path += `<path class="${fp.hold.mode === 'skin' ? 'sk-skin-mark' : 'sk-tab-mark'}" d="${d}"/>`;
+      if (fp.hold && fp.hold.role === 'strip') { path += `<path class="sk-strip" d="${fp.hold.d}"/>`; continue; }
       const travel = deriveCutTravel([fp]);
       for (const t of travel) {
         path += `<path class="sk-travel" d="${polyRingD(t.path)}"/>`;
@@ -378,7 +386,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const pos = near || lastChip.get(key) || look.anchor;
       if (!pos) continue;
       lastChip.set(key, pos);
-      out += depthChip(pos.x, pos.y, look.depth);
+      out += depthChip(pos.x, pos.y, look.depth, worldTolerance(svgEl, 1));
     }
     // TASK 472: the Stock loop always carries its label (it is the board): "STOCK <thickness>" just above the loop's top-left corner
     const sk = stockKeyOf(CUT_PLAN);
@@ -442,9 +450,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const onWheel = (e) => {
     handlePanZoomWheel(e, svgEl, viewState);
+    renderChips(); // TASK 731: the chip keeps its screen size across a zoom
   };
   const onMove = (e) => {
-    if (handlePanZoomPointerMove(e, svgEl, viewState)) return;
+    if (handlePanZoomPointerMove(e, svgEl, viewState)) { renderChips(); return; } // a pinch changes the zoom
     const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     if (!wp) return;
     hoverPt = wp;
@@ -503,7 +512,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     renderSelection(); renderHover();
     onSelectionChange(selectedTarget());
   };
-  const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); };
+  const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); renderChips(); };
+  const chipResizeObs = typeof ResizeObserver === 'function' ? new ResizeObserver(() => renderChips()) : null; // TASK 731: a resize changes world-per-px
+  if (chipResizeObs) chipResizeObs.observe(svgEl);
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
   const unsubDocUnit = SettingsManager && SettingsManager.subscribe
@@ -515,7 +526,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     view, viewState,
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind, getCutRecord(targetKey(t))) : []), // TASK 714: the stepped types need the record's slope
-    noteFor: (t) => (t ? steppedNoteItems(getCutRecord(targetKey(t))) : []), // TASK 714: a stepped cut's steps / undercut, for the cut card
+    holdFor: (t) => (t ? holdSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 742: what its Hold part does (the derivation's)
+    noteFor(t) { // TASK 714: a stepped cut's steps / undercut, for the cut card; TASK 742: its Hold part
+      if (!t) return [];
+      const rec = getCutRecord(targetKey(t));
+      return [...steppedNoteItems(rec), ...holdNoteItems(rec, this.holdFor(t))];
+    },
     // Write the cut type onto every selected target + refresh the tool-aware look (panel calls this).
     refreshLook, // TASK 463: repaint after an undo/redo restored the cut plan
     applyCutTypeToSelected(cutType) {
@@ -550,18 +566,29 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) onto every selected target + refresh LIVE.
     setFieldOnSelected(field, value) {
       if (selection.size === 0) return null;
-      if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: never below the minimum; the next cut switched to a stepped type starts from it
-      if (field === 'adaptiveSteps') value = rememberAdaptiveSteps(value); // TASK 717: same for adaptive stepping and its resolution (never below STEP_RESOLUTION.minMm)
+      if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: the next cut switched to a stepped type starts from it
+      if (field === 'adaptiveSteps') value = rememberAdaptiveSteps(value); // TASK 717: same for adaptive stepping and its resolution
       if (field === 'stepDeviation') value = rememberStepDeviation(value);
+      if (field === 'tabCount') value = rememberTabCount(value); // TASK 742: the next record turned to Tabs / Onion skin starts from them
+      if (field === 'tabWidth') value = rememberTabWidth(value);
+      if (field === 'holdThickness') value = rememberHoldThickness(value);
       let lastRec = null;
       for (const t of selection.values()) {
-        lastRec = setFieldFor(targetKey(t), field, value);
+        const k = targetKey(t);
+        if (field === 'holdPart' && value !== 'off') { // TASK 742: a record turned to Tabs / Onion skin without its own values takes the last ones set (or the unit's defaults)
+          const r = CUT_PLAN.get(k) || {};
+          if (!(r.tabCount === 'auto' || Number(r.tabCount) >= 1)) setFieldFor(k, 'tabCount', lastTabCount());
+          if (!(Number(r.tabWidth) > 0)) setFieldFor(k, 'tabWidth', lastTabWidth());
+          if (!(Number(r.holdThickness) > 0)) setFieldFor(k, 'holdThickness', lastHoldThickness());
+        }
+        lastRec = setFieldFor(k, field, value);
       }
       refreshLook();
       return lastRec;
     },
     destroy() {
       if (unsubDocUnit) unsubDocUnit();
+      if (chipResizeObs) chipResizeObs.disconnect();
       svgEl.removeEventListener('wheel', onWheel);
       svgEl.removeEventListener('pointermove', onMove);
       svgEl.removeEventListener('pointerleave', onLeave);

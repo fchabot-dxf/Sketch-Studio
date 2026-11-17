@@ -63,14 +63,14 @@
       /* TASK 737: the surfaces directly below the document tab strip, declared once: the stage's view paints it, the strip's active tab takes it */
       --shaper-vcarve-panel-bg: #111827;  /* Vcarve's docked panel (left, under the first tab) */
       --shaper-cream: #F4EFE1;            /* the Design / Vcarve canvas paper */
-      --shaper-prepare-bg: #3F4145;       /* the Prepare canvas (#view-prepare --sk-prep-bg) */
+      --sk-prep-bg: #3F4145;              /* the Prepare canvas background: TASK 455's token (#view-prepare below), on :root so the strip reads it in Prepare */
       --shaper-review-bg: #14161a;        /* the Export stage's 3D view (#review-stage) */
       /* the strip is the header colour: the 13 % tint toward the text (document-tabs.js default) IS the Prepare canvas grey, so the active tab could not be told from the strip there */
       --sk-doctabs-bg: var(--sk-header-bg);
     }
     /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
     :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-vcarve-panel-bg); }
-    :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--shaper-prepare-bg); }
+    :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
     :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); }
     @media (max-width: 640px) { :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-cream); --sk-doctab-surface-fg: #202020; } } /* the panel moves below the canvas */
     #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
@@ -207,7 +207,7 @@
     /* TASK 455: the Prepare look (Shaper Studio): ONE token block for the Prepare canvas AND the cut card (the card sits inside
        #view-prepare, so it inherits them). Colours are advisor-SAMPLED from the owner's Studio screenshots unless marked (~). */
     #view-prepare { flex-direction: column;
-      --sk-prep-bg: var(--shaper-prepare-bg); /* canvas background */
+      /* --sk-prep-bg (the canvas background) is declared on :root (TASK 737: the document tab strip's active tab takes it in Prepare) */
       --sk-prep-geo: #DFE1E7;             /* idle geometry: thin white (1px) */
       --sk-prep-geo-selected: #1BE09E;    /* selected geometry: bold mint (2px) */
       --sk-prep-geo-hover: #1BE09E;       /* hover on an unassigned target: thin mint */

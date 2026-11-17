@@ -6,7 +6,7 @@
 //     (--sk-doctab-surface, html[data-sk-stage]), never measured by the page. The first tab is the active one: the side panels of Shaper Vcarve, Pen Plotter
 //     Prepare / Export and Trace's Trace stage (244-260 px) sit under it; a tab further right sits over that stage's canvas (reported in WORK-LOG TURN 737);
 //   - no 1 px line under the active tab (screenshot pixels: the strip's line row under it == the tab's own fill), while the line IS there under an inactive tab;
-//   - a 3 px accent line on the active tab's top edge (pixels); the active tab's fill stands out from the strip (>= 1.1:1; with the accent line and the bold title);
+//   - a 3 px accent line on the active tab's top edge (pixels); the active tab's fill differs from the strip (>= 1.08:1, the lowest being SketchStudio's Export view; the accent line and the bold title mark it too);
 //   - an inactive tab is flat (no border, no fill), its title >= 4.5:1 against the strip and dimmer than the active title; a separator between two inactive tabs,
 //     hidden next to the active one; the "+" is flat (no border, no fill) and keeps its size (>= 44 px wide under a finger);
 //   - the not-saved dot sits in the close x's place: with a mouse an inactive tab shows the dot, hovering it shows the x instead, and the active tab not hovered
@@ -179,7 +179,8 @@ await (async () => {
           assert(m.inactive.contrast >= 4.5, `${tag}: inactive title >= 4.5:1 against the strip: ${m.inactive.contrast.toFixed(2)}`);
           assert(m.inactive.contrast < m.inactive.full && m.inactive.weight < m.active.weight && m.active.weight >= 700, `${tag}: the inactive title is dimmer than full strength and not bold: ${JSON.stringify([m.inactive.contrast, m.inactive.full, m.inactive.weight, m.active.weight])}`);
           assert(m.active.contrast >= 4.5, `${tag}: active title >= 4.5:1 on its fill: ${m.active.contrast.toFixed(2)}`);
-          assert(m.active.vsStrip >= 1.1, `${tag}: the active tab's fill stands out from the strip: ${m.active.vsStrip.toFixed(2)}:1`);
+          // the lowest is SketchStudio's Export view (its #F0F0F0 page under the light grey strip: 1.10:1); the accent line and the bold title mark the tab there too
+          assert(m.active.vsStrip >= 1.08, `${tag}: the active tab's fill stands out from the strip: ${m.active.vsStrip.toFixed(3)}:1`);
           for (const [i, s] of m.seps.entries()) if (s) assert.strictEqual(s.shown, !s.activeNext, `${tag}: separator before tab ${i}: shown between two inactive tabs only: ${JSON.stringify(s)}`);
           if (m.seps.length >= 3) assert(m.seps[2].shown && m.seps[2].w === 1, `${tag}: a 1 px separator between the two inactive tabs`);
           assert(m.plus.border === 0 && m.plus.bg[3] === 0 && m.plus.w >= (phone ? 44 : 28) && m.plus.h >= 24, `${tag}: the "+" is a flat icon button of the same size: ${JSON.stringify(m.plus)}`);

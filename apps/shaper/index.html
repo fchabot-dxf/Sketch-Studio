@@ -197,6 +197,8 @@
     .sync-status.is-success { color: #34d399; }
     .sync-status.is-loading { color: #93c5fd; }
     .sync-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+    .sync-actions[hidden], .sync-exists[hidden] { display: none; }
+    .sync-exists { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; } /* TASK 767: Replace it / Keep both / Cancel */
     .sync-btn-secondary { background: #1f2937; color: #cbd5e1; border: 1px solid #374151; border-radius: 6px; padding: 8px 14px; font: 13px system-ui, sans-serif; cursor: pointer; }
     .sync-btn-secondary:hover { background: #374151; color: #fff; }
     .sync-btn-primary { background: #059669; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: 13px system-ui, sans-serif; font-weight: 500; cursor: pointer; }
@@ -531,7 +533,13 @@
           <input id="sync-filename" name="filename" type="text" required placeholder="my-project.svg">
         </div>
         <div id="sync-modal-status" class="sync-status"></div>
-        <div class="sync-actions">
+        <!-- TASK 767: the name is already in My Files: the three choices (main.js sendToShaperHub; the dialog's own Cancel / Send hide meanwhile) -->
+        <div id="sync-exists" class="sync-exists" hidden>
+          <button type="button" id="sync-btn-replace" class="sync-btn-primary">Replace it</button>
+          <button type="button" id="sync-btn-keep-both" class="sync-btn-secondary">Keep both</button>
+          <button type="button" id="sync-btn-exists-cancel" class="sync-btn-secondary">Cancel</button>
+        </div>
+        <div id="sync-actions" class="sync-actions">
           <button type="button" id="sync-btn-cancel" class="sync-btn-secondary">Cancel</button>
           <button type="submit" id="sync-btn-submit" class="sync-btn-primary">⚡ Send to ShaperHub</button>
         </div>

@@ -22,7 +22,7 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes
-import { shaperSvgOf, shaperPreviewOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations
+import { shaperSvgOf, shaperPreviewOf, exportFileName } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name
 import { opOrder } from './operations.js';            // TASK 743: the operation order (the 2D view rebuilds when it changes)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
@@ -66,7 +66,7 @@ const chrome = mountAppChrome({
     { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
       const payload = generateShaperSvgPayload();
       if (!payload) { groupStatus(NO_CUTS); return; }
-      download('shaper-export.svg', payload.svg);
+      download(designFileName(), payload.svg);
     } },
     fusionAddinAction({ fusion: fusionMode, open: () => chrome.sidebar.showView(ADDIN_VIEW_ID) }),
     { divider: true },
@@ -93,15 +93,26 @@ function generateShaperSvgPayload({ preview = false } = {}) {
   return { svg: shaperSvgOf(st, entries), entries, state: st };
 }
 
+// TASK 767: the name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync dialog's file name): the design's name
+// through the ONE rule (export-payload.js exportFileName). The design's name is the document tab's (in Fusion mode: the imported selection's, nameAfterSelection).
+const designFileName = () => exportFileName(docBuffer ? docBuffer.designName() : null);
+
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
 if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
     const payload = generateShaperSvgPayload();
     if (!payload) { if (status) status.textContent = NO_CUTS; return; }
-    download('shaper-export.svg', payload.svg);
+    const name = designFileName();
+    download(name, payload.svg);
     const n = payload.entries.length;
-    if (status) status.innerHTML = `Exported ${n} cut${n === 1 ? '' : 's'} → <strong>shaper-export.svg</strong>. Drop it into <a href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" style="color:var(--sk-selection,#4c9aff); text-decoration:underline;">ShaperHub (My Files)</a> to sync with Origin.`;
+    // built from nodes (TASK 767): the file name is the design's, text only
+    const file = document.createElement('strong');
+    file.textContent = name;
+    const hub = document.createElement('a');
+    Object.assign(hub, { href: 'https://hub.shapertools.com/my-files', target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
+    hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
+    if (status) status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. Drop it into ', hub, ' to sync with Origin.');
   });
 }
 
@@ -115,6 +126,38 @@ const syncStatus = document.getElementById('sync-modal-status');
 const syncCloseBtn = document.getElementById('sync-modal-close');
 const syncCancelBtn = document.getElementById('sync-btn-cancel');
 const syncSubmitBtn = document.getElementById('sync-btn-submit');
+const syncActions = document.getElementById('sync-actions');
+// TASK 767: the question when the name is already in My Files (index.html #sync-exists): Replace it / Keep both / Cancel
+const syncExists = document.getElementById('sync-exists');
+const syncReplaceBtn = document.getElementById('sync-btn-replace');
+const syncKeepBothBtn = document.getElementById('sync-btn-keep-both');
+const syncExistsCancelBtn = document.getElementById('sync-btn-exists-cancel');
+
+const LOGIN_HINT = 'Check the password: your browser may have filled in a saved one.'; // TASK 767: under Shaper's own words when it refuses the sign-in
+
+// TASK 767: the dialog's status area: `lines` = its lines of text (each its own line, set as text), `tone` = '' | 'is-error' | 'is-success' | 'is-loading'
+function showSyncStatus(tone, ...lines) {
+  syncStatus.className = 'sync-status' + (tone ? ' ' + tone : '');
+  syncStatus.replaceChildren(...lines.map((t) => { const d = document.createElement('div'); d.textContent = t; return d; }));
+}
+// TASK 767: asking (the three choices shown, the dialog's Cancel / Send hidden) or not
+function showExistsQuestion(on) {
+  syncExists.hidden = !on;
+  syncActions.hidden = on;
+  for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = false;
+}
+
+// TASK 767: the file name the user typed for a design, kept for THIS session only (page memory, never stored): the design = its document tab, its
+// stored id and its name (a reused Untitled tab that now holds another design starts from that design's own name)
+const syncNameEdits = new Map();
+const designKey = () => {
+  const tab = docBuffer ? docBuffer.tabs().find((t) => t.active) : null;
+  return JSON.stringify([tab ? tab.key : null, docBuffer ? docBuffer.designId() : null, docBuffer ? docBuffer.designName() : null]);
+};
+syncFilename.addEventListener('input', () => {
+  syncNameEdits.set(designKey(), syncFilename.value);
+  if (!syncExists.hidden) { showExistsQuestion(false); showSyncStatus(''); } // the question was about the name before the edit
+});
 
 function closeSyncModal() {
   if (syncModal && syncModal.open) syncModal.close();
@@ -132,13 +175,10 @@ if (btnSyncShaper) {
       if (status) status.textContent = NO_CUTS;
       return;
     }
-    if (syncFilename && !syncFilename.value) {
-      syncFilename.value = 'shaper-export.svg';
-    }
-    if (syncStatus) {
-      syncStatus.className = 'sync-status';
-      syncStatus.textContent = '';
-    }
+    const key = designKey();
+    syncFilename.value = syncNameEdits.has(key) ? syncNameEdits.get(key) : designFileName(); // TASK 767: the design's name, or what was typed for it
+    showExistsQuestion(false);
+    showSyncStatus('');
     if (syncSubmitBtn) syncSubmitBtn.disabled = false;
     if (syncModal && typeof syncModal.showModal === 'function') {
       syncModal.showModal();
@@ -146,72 +186,87 @@ if (btnSyncShaper) {
   });
 }
 
-if (syncForm) {
-  syncForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const payload = generateShaperSvgPayload();
-    if (!payload) {
-      if (syncStatus) {
-        syncStatus.className = 'sync-status is-error';
-        syncStatus.textContent = 'No cuts assigned in Prepare.';
-      }
-      return;
-    }
-    const email = syncEmail ? syncEmail.value.trim() : '';
-    const password = syncPassword ? syncPassword.value : '';
-    let filename = (syncFilename ? syncFilename.value.trim() : '') || 'shaper-export.svg';
-    if (!filename.toLowerCase().endsWith('.svg')) filename += '.svg';
+// TASK 767: what the success line says (the function's answer: shaper-cloud.js, the contract)
+const sentLine = (data) => (data.status === 'replaced' ? `Replaced ${data.filename} in My Files`
+  : data.filename !== data.requested ? `Sent as ${data.filename}` : `Sent ${data.filename} to My Files`);
 
-    if (!email || !password) {
-      if (syncStatus) {
-        syncStatus.className = 'sync-status is-error';
-        syncStatus.textContent = 'Please enter both email and password.';
-      }
-      return;
-    }
+// ONE send, for every press (Send = mode 'new'; the question's Replace it / Keep both = 'replace' / 'keep-both'). The login is read from the still-open form's
+// fields each time: the app keeps none of it (TASK 758) and never asks for it twice.
+async function sendToShaperHub(mode) {
+  const payload = generateShaperSvgPayload();
+  if (!payload) {
+    showSyncStatus('is-error', 'No cuts assigned in Prepare.');
+    return;
+  }
+  const email = syncEmail ? syncEmail.value.trim() : '';
+  const password = syncPassword ? syncPassword.value : '';
+  const filename = syncFilename.value; // the function applies the name rule (shaper-cloud.js shaperFileName)
 
-    if (syncStatus) {
-      syncStatus.className = 'sync-status is-loading';
-      syncStatus.textContent = 'Authenticating with Shaper and uploading...';
-    }
-    if (syncSubmitBtn) syncSubmitBtn.disabled = true;
+  if (!email || !password) {
+    showExistsQuestion(false);
+    showSyncStatus('is-error', 'Please enter both email and password.');
+    return;
+  }
 
-    try {
-      const res = await fetch('/api/shaper-upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, filename, svg: payload.svg })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || `Upload failed with status ${res.status}`);
-      }
+  showSyncStatus('is-loading', mode === 'replace' ? 'Replacing the file in My Files...' : mode === 'keep-both' ? 'Sending a copy under a new name...' : 'Authenticating with Shaper and uploading...');
+  if (syncSubmitBtn) syncSubmitBtn.disabled = true;
+  for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = true;
 
-      track('export:shaperhub'); // TASK 738
+  let res;
+  try {
+    res = await fetch('/api/shaper-upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, filename, svg: payload.svg, mode })
+    });
+  } catch (err) {
+    showExistsQuestion(false);
+    showSyncStatus('is-error', 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
+    if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+    return;
+  }
+  const data = await res.json().catch(() => ({ error: `The upload service answered ${res.status} without a result.`, kind: 'network' }));
+  if (!res.ok || data.error) {
+    showExistsQuestion(false);
+    const lines = [`Error: ${data.error || `Upload failed with status ${res.status}`}`];
+    if (data.kind === 'login') lines.push(LOGIN_HINT);
+    showSyncStatus('is-error', ...lines);
+    if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+    return;
+  }
+  if (data.status === 'exists') { // nothing was uploaded: ask (TASK 767)
+    showSyncStatus('', `${data.filename} is already in My Files.`);
+    showExistsQuestion(true);
+    syncReplaceBtn.focus();
+    return;
+  }
 
-      if (syncStatus) {
-        syncStatus.className = 'sync-status is-success';
-        syncStatus.textContent = `✓ Uploaded "${data.filename || filename}" to ShaperHub!`;
-      }
-      const expStatus = document.getElementById('simexport-status');
-      if (expStatus) {
-        expStatus.innerHTML = `✓ Synced <strong>${data.filename || filename}</strong> directly to ShaperHub! It will now appear on your Origin over Wi-Fi.`;
-      }
-      // TASK 758: the login is NOT kept by the app. Closing the dialog hides the form after the successful fetch: that is what tells the browser's
-      // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared): a
-      // browser reads them when it sees the form go.
-      setTimeout(() => {
-        closeSyncModal();
-      }, 1200);
-    } catch (err) {
-      if (syncStatus) {
-        syncStatus.className = 'sync-status is-error';
-        syncStatus.textContent = `Error: ${err.message}`;
-      }
-      if (syncSubmitBtn) syncSubmitBtn.disabled = false;
-    }
-  });
+  track('export:shaperhub'); // TASK 738
+  showExistsQuestion(false);
+  const line = sentLine(data);
+  showSyncStatus('is-success', line);
+  const expStatus = document.getElementById('simexport-status');
+  if (expStatus) expStatus.textContent = `✓ ${line}. It will now appear on your Origin over Wi-Fi.`;
+  // TASK 758: the login is NOT kept by the app. Closing the dialog hides the form after the successful fetch: that is what tells the browser's
+  // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared): a
+  // browser reads them when it sees the form go.
+  setTimeout(() => {
+    closeSyncModal();
+  }, 1200);
 }
+
+syncForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  sendToShaperHub('new');
+});
+syncReplaceBtn.addEventListener('click', () => sendToShaperHub('replace'));
+syncKeepBothBtn.addEventListener('click', () => sendToShaperHub('keep-both'));
+syncExistsCancelBtn.addEventListener('click', () => { // nothing is sent; the dialog stays open to change the name
+  showExistsQuestion(false);
+  showSyncStatus('', 'Nothing was sent. Change the file name and Send, or close.');
+  if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+  syncFilename.focus();
+});
 
 // Shaper's one-line status toast over the Design view: the import's result, Prepare's notices, and the shared Design tab's own messages
 // (mountSketch notify below: Combine / Uncombine, TASK 756: Group / Ungroup, whose keys and menus are now the shared #ui/group-actions.js)
@@ -423,6 +478,12 @@ document.getElementById('review-look-colors').addEventListener('input', (e) => {
 export const currentReviewView = () => reviewView;
 
 ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
+// TASK 767: in Fusion mode the design IS the imported selection (TASK 712: it replaces the design), so the design takes the selection's name
+// (fusion-import.js: the Fusion source's name, e.g. "Body1") and the export file names follow (designFileName). A stored design keeps its own name.
+function nameAfterSelection(name) {
+  if (docBuffer.isStored()) return;
+  docBuffer.rename(name).catch((err) => dbg.warn('shaper', 'naming the design after the Fusion selection failed', err && err.message));
+}
 if (fusionMode) {
   const fusionUi = mountFusionPrepareBar({
     viewPrepareEl: VIEWS.prepare,
@@ -439,7 +500,7 @@ if (fusionMode) {
           if (modes.current() === 'review') enterReview(designController.state);
         },
       });
-      if (res.ok && res.imported) track('import:fusion'); // TASK 738
+      if (res.ok && res.imported) { track('import:fusion'); nameAfterSelection(res.name); } // TASK 738; TASK 767
       return res;
     },
   });

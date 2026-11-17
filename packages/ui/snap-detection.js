@@ -4,6 +4,7 @@ import { SNAP, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findInference } from '#core/inference-engine.js';
 import { referenceEnds } from '#core/reference-lines.js';
+import { CURVE_KINDS } from '#core/curve-kinds.js'; // TASK 762: a bezier's body is its declared curve
 
 // Find joint at screen position
 export function hitJointAtScreen(joints, svg, screenX, screenY, threshold=14){
@@ -114,7 +115,7 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
     if(d < bestJointDist){ bestJointDist = d; bestJoint = { type: 'joint', targetId: id, x: j.x, y: j.y, dist: d }; }
   }
 
-  // Evaluate shapes (lines, circles, arcs)
+  // Evaluate shapes (lines, circles, arcs, beziers)
   let bestShape = null; let bestShapeDist = Infinity;
   if(!excludeLineSnap){
     const lineThreshold = SNAP.LINE_PX * boost;
@@ -202,6 +203,25 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
             }
             const sc = worldToScreen(svg, snapPt);
             dist = Math.hypot(sc.x - lastMouse.x, sc.y - lastMouse.y);
+          }
+        }
+      } else if (s.type === 'bezier') {
+        // TASK 762: a BEZIER's body: the point of its curve nearest the pointer, the curve as #core/curve-kinds.js declares it (CURVE_KINDS.bezier.points:
+        // sampled at CURVE_TOLERANCE_MM, both end joints included), the pointer projected on each sampled chord. The curve lies inside the box of its
+        // four points (the convex hull property): a pointer farther than the reach from that box cannot hit it, and the curve is not sampled.
+        const P = [joints.get(s.joints[0]), joints.get(s.joints[s.joints.length - 1])];
+        if (P[0] && P[1] && Array.isArray(s.c1) && Array.isArray(s.c2)) {
+          const reach = lineThreshold * getZoomFactor(svg);
+          const xs = [P[0].x, P[1].x, s.c1[0], s.c2[0]], ys = [P[0].y, P[1].y, s.c1[1], s.c2[1]];
+          if (worldMouse.x >= Math.min(...xs) - reach && worldMouse.x <= Math.max(...xs) + reach && worldMouse.y >= Math.min(...ys) - reach && worldMouse.y <= Math.max(...ys) + reach) {
+            const pts = CURVE_KINDS.bezier.points(s, { joints });
+            let nearest = Infinity;
+            for (let i = 1; i < pts.length; i++) {
+              const q = projectPointOnSegment(worldMouse, pts[i - 1], pts[i]);
+              const d = Math.hypot(q.x - worldMouse.x, q.y - worldMouse.y);
+              if (d < nearest) { nearest = d; snapPt = q; }
+            }
+            if (snapPt) { const sc = worldToScreen(svg, snapPt); dist = Math.hypot(sc.x - lastMouse.x, sc.y - lastMouse.y); }
           }
         }
       }

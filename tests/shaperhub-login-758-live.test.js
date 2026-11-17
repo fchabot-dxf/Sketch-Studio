@@ -51,7 +51,7 @@ ws.addEventListener('message', (e) => {
   if (new URL(request.url).pathname === '/api/shaper-upload') {
     const json = JSON.parse(body);
     uploads.push({ method: request.method, body: json });
-    const answer = JSON.stringify({ success: true, filename: json.filename, blobId: 'stub-blob' });
+    const answer = JSON.stringify({ success: true, status: 'sent', filename: json.filename, requested: json.filename, blobId: 'stub-blob' }); // TASK 767: the contract's 'sent' answer
     send('Fetch.fulfillRequest', { requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(answer).toString('base64') });
     return;
   }
@@ -196,7 +196,8 @@ const loadWithOldLogin = async (url, label) => {
   assert.deepStrictEqual(f, { email: '', password: '' }, label + ': the fields are empty');
 };
 // sign in with the fake login; `how` = 'enter' (ENTER in the password field) or 'tap' (the Send button)
-const syncOnce = async (label, how) => {
+// `name` = the file name the dialog sends (TASK 767: the design's name; an Untitled design: shaper-export.svg; in Fusion mode the selection's name)
+const syncOnce = async (label, how, name = 'shaper-export.svg') => {
   const n0 = uploads.length;
   await typeInto('#sync-email', FAKE.email);
   await typeInto('#sync-password', FAKE.password);
@@ -208,13 +209,13 @@ const syncOnce = async (label, how) => {
   await waitFor(`document.getElementById('sync-modal-status').classList.contains('is-success')`, label + ': the success state');
   const ok = await evalJs(`({ modal: document.getElementById('sync-modal-status').textContent, panel: document.getElementById('simexport-status').textContent })`);
   console.log(label + ': success ' + JSON.stringify(ok));
-  assert.match(ok.modal, /Uploaded "shaper-export\.svg" to ShaperHub/, label + ': the dialog says it uploaded');
-  assert.match(ok.panel, /Synced shaper-export\.svg directly to ShaperHub/, label + ': the Export panel says it synced');
+  assert.strictEqual(ok.modal, `Sent ${name} to My Files`, label + ': the dialog says it was sent (TASK 767 wording)');
+  assert.strictEqual(ok.panel, `✓ Sent ${name} to My Files. It will now appear on your Origin over Wi-Fi.`, label + ': the Export panel says so');
   await sleep(300);
   assert.strictEqual(uploads.length, n0 + 1, label + ': the stub received the Sync ONCE');
   const u = uploads[uploads.length - 1];
   assert.strictEqual(u.method, 'POST', label + ': a POST');
-  assert.deepStrictEqual([u.body.email, u.body.password, u.body.filename, /^<\?xml|<svg/.test(u.body.svg)], [FAKE.email, FAKE.password, 'shaper-export.svg', true], label + ': the stub got the fake login, the name and the SVG');
+  assert.deepStrictEqual([u.body.email, u.body.password, u.body.filename, /^<\?xml|<svg/.test(u.body.svg)], [FAKE.email, FAKE.password, name, true], label + ': the stub got the fake login, the name and the SVG');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, label + ': the dialog closes after the success');
 };
 // the browser's own Reload (Page.reload: the same history entry, where a browser restores form state it kept), then the sign-in opened again
@@ -293,7 +294,7 @@ try {
   await planFusion('fusion');
   await openSignIn('fusion');
   await checkFormSemantics('fusion');
-  await syncOnce('fusion', 'tap');
+  await syncOnce('fusion', 'tap', 'Body1.svg'); // TASK 767: the design is the imported selection, named after it
   await scanForLogin('fusion');
   await reloadEmpty('fusion', planFusion);
 

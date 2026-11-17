@@ -352,6 +352,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     chainCount: chains.length,
     cutKeys,
     warnings,
+    name: sourceName, // TASK 767: the design is now this selection: main.js names it so (the export file names follow)
     message: `${replaced ? 'Replaced with' : 'Added'} ${sourceName}: ${counts}`,
   };
 }

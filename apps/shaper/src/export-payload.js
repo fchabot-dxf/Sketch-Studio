@@ -8,6 +8,15 @@ import { loopPolygon } from '#core/loop-geometry.js';   // HOST computes loop po
 import { docUnit } from '#core/settings-manager.js';
 import { exportEncoding } from './shaper.js';            // injected as the exporter's encoding
 import { planOperations, opIdsByPlanKey } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
+import { shaperFileName } from '#core/shaper-cloud.js';   // TASK 767: the one name rule (the upload applies it too)
+import { UNTITLED } from '#ui/document-buffer.js';
+
+/** TASK 767: THE name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync to ShaperHub dialog's file name),
+ *  declared once: the design's name (the document tab's name; in Fusion mode the imported selection's name, main.js) cleaned by shaperFileName,
+ *  + .svg. An Untitled design (or none) gets the default name (shaper-cloud.js SHAPER_DEFAULT_NAME + .svg). */
+export function exportFileName(designName) {
+  return shaperFileName(!designName || designName === UNTITLED ? '' : designName);
+}
 
 /** The Shaper SVG of `entries` (the Prepare cut plan, cutPlanEntries()) on the solved sketch `state`: the downloaded file, or with
  *  `preview: true` the same string plus the preview-only data-* attributes. */

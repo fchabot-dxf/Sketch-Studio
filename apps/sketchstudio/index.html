@@ -19,8 +19,10 @@
         }
         @media (min-width: 768px) { :root { --sk-canvas-edge: 17px; } } /* the former Tailwind md:p-4 (16) + the border */
         /* TASK 737: per view, the surface directly below the document tab strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool
-           ribbon (the default). Export: the page itself (body bg-[#F0F0F0]). */
+           ribbon (the default). Build: its white page (TASK 725 covers the strip in Build on purpose; declared so the tab joins it if it shows). Export: the page itself (body bg-[#F0F0F0]). */
         :root[data-sk-stage="export"] { --sk-doctab-surface: #F0F0F0; }
+        :root { --sk-build-paper: #ffffff; } /* TASK 725's Build page (build-view.js .sk-build), declared here so the strip reads the same colour */
+        :root[data-sk-stage="build"] { --sk-doctab-surface: var(--sk-build-paper); }
         .sk-work-area { padding: calc(var(--sk-canvas-edge) - 1px); }
         /* CORRECTED (2026-08-27): the primary mobile symptom is body's `h-screen` (Tailwind = 100vh)
            being SIZED against the address-bar-collapsed (taller) viewport from the very first paint,

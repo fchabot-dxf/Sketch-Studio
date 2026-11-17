@@ -18,8 +18,8 @@ import { dbg } from '#core/debug.js';
 import { APPS } from './app-registry.js';
 import { HOSTS, ANON_ID, LOCAL_HOST, isFeatureName } from './analytics-events.js';
 
-// The Worker's event URL: 'https://sketch-analytics.<subdomain>.workers.dev/e' once it is deployed (analytics/README.md). '' = nothing is ever sent.
-export const ENDPOINT = '';
+// The Worker's event URL (deployed 2026-11-16, analytics/README.md). '' = nothing is ever sent.
+export const ENDPOINT = 'https://sketch-analytics.dansemur.workers.dev/e';
 // The site's build stamp, sent as `version`: 'source' here; scripts/build-site.cjs writes the build time into the copy of this line in the site it builds.
 export const BUILD = 'source';
 

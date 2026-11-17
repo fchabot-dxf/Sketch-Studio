@@ -2,7 +2,7 @@
 // palette), against a LOCAL STUB endpoint that is the Worker's own fetch handler (analytics/src/index.js, run here in Node with an in-memory dataset):
 // so what the page sends is checked AND accepted by the Worker, field by field.
 // The Shaper site is built (scripts/build-site.cjs, as deployed) into a temp dir, and ONLY its copy of packages/ui/analytics.js gets the stub's URL as
-// ENDPOINT (the repo's stays ''). The page is opened under made-up public host names (*.analytics-738.test, mapped to 127.0.0.1 by the browser's
+// ENDPOINT (the repo's points at the deployed Worker). The page is opened under made-up public host names (*.analytics-738.test, mapped to 127.0.0.1 by the browser's
 // --host-resolver-rules), so it is a PUBLIC page for analytics.js; each phase has its own host name, so its own localStorage (no carry between phases).
 //   L. the gate's case: the same built site opened from http://127.0.0.1: a stage switch, and NOTHING reaches the stub, no analytics key is stored;
 //   W. web: the visit, a stage tab clicked (stage:prepare), an SVG imported from the drawer's Import SVG / DXF… (import:svg), the Export tab
@@ -24,7 +24,7 @@ const require = createRequire(import.meta.url);
 const { buildSite } = require('../scripts/build-site.cjs');
 const realSolid = fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8');
 const DOMAIN = 'analytics-738.test';
-const ENDPOINT_LINE = "export const ENDPOINT = '';";
+const ENDPOINT_LINE = /^export const ENDPOINT = '[^']*';$/m; // the repo's one ENDPOINT line (the deployed Worker's URL since the deploy), pointed at the stub here
 
 // ── the stub endpoint: the Worker's fetch handler, its dataset in memory ───────────────────────────────
 const points = [];   // every data point the Worker wrote
@@ -48,7 +48,7 @@ const dist = path.join(tmp, 'shaper');
 const built = buildSite('shaper', dist);
 const analyticsFile = path.join(dist, 'packages', 'ui', 'analytics.js');
 const src = fs.readFileSync(analyticsFile, 'utf8');
-assert.ok(src.includes(ENDPOINT_LINE), 'the built analytics.js has the empty ENDPOINT line to point at the stub');
+assert.ok(ENDPOINT_LINE.test(src), 'the built analytics.js has its ENDPOINT line to point at the stub');
 fs.writeFileSync(analyticsFile, src.replace(ENDPOINT_LINE, `export const ENDPOINT = '${STUB_URL}';`));
 const site = await startServer(dist);
 const SVG = path.join(tmp, 'cut-square.svg');

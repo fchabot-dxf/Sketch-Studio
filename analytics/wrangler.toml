@@ -27,7 +27,7 @@ dataset = "sketch_events"
 [[d1_databases]]
 binding = "DB"
 database_name = "sketch_analytics"
-database_id = "REPLACE-WITH-D1-ID"
+database_id = "ffe9f803-2b99-4f76-9768-76ee803db111"
 
 # The nightly rollup: 02:45 UTC folds YESTERDAY's events into D1 `rollups` (scheduled() in src/index.js).
 [triggers]

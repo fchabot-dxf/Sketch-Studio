@@ -14,6 +14,7 @@ import { showNotification } from '#ui/notification-manager.js';
 import { dimensionEditLabel } from '#core/dimension-seams.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl } from '#ui/numeric-input-manager.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727
 
 let inputState = {
     active: false,
@@ -430,10 +431,11 @@ export function showEditInput(svg, state, constraint, initialKey) {
 }
 
 // Shared activation function
-function activateLiveInput(key, state, primaryField, secondaryField, updateCallback) {
+function activateLiveInput(e, state, primaryField, secondaryField, updateCallback) {
     if (inputState.active) return false;
     
-    if (/^[0-9.]$/.test(key) && state.active && state.active.start) {
+    if (matchesShortcut(e, 'draw.typeValue') && state.active && state.active.start) { // TASK 727: the typed digit is declared in shortcuts.js
+        const key = e.key;
         inputState.active = true;
         inputState.activeField = primaryField;
         
@@ -470,7 +472,7 @@ export function handleLiveRectKeyDown(e, svg, state) {
         secondary = null;
     }
     
-    const handled = activateLiveInput(e.key, state, primary, secondary, () => updateLiveRectPreview(svg, state));
+    const handled = activateLiveInput(e, state, primary, secondary, () => updateLiveRectPreview(svg, state));
     if (handled) { e.preventDefault(); return true; }
     return false;
 }

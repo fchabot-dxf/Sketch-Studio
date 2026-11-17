@@ -34,6 +34,10 @@
 import { appById } from './app-registry.js';
 import { SHORT_VIEWPORT_QUERY } from './short-viewport.js';
 
+// THE gear artwork (Settings), drawn once: the drawer's style / gear items below and the footer's Settings button (app-footer.js) wrap it.
+export const GEAR_GLYPH = '<circle cx="9" cy="9" r="2.5"/><path d="M14.2 11a1.2 1.2 0 0 0 .2 1.3l.05.05a1.4 1.4 0 1 1-2 2l-.05-.05a1.2 1.2 0 0 0-1.3-.2 1.2 1.2 0 0 0-.7 1.1V15.5a1.4 1.4 0 1 1-2.8 0v-.1a1.2 1.2 0 0 0-.8-1.1 1.2 1.2 0 0 0-1.3.2l-.05.05a1.4 1.4 0 1 1-2-2l.05-.05a1.2 1.2 0 0 0 .2-1.3 1.2 1.2 0 0 0-1.1-.7H2.5a1.4 1.4 0 0 1 0-2.8h.1a1.2 1.2 0 0 0 1.1-.8 1.2 1.2 0 0 0-.2-1.3l-.05-.05a1.4 1.4 0 1 1 2-2l.05.05a1.2 1.2 0 0 0 1.3.2H7a1.2 1.2 0 0 0 .7-1.1V2.5a1.4 1.4 0 1 1 2.8 0v.1a1.2 1.2 0 0 0 .7 1.1 1.2 1.2 0 0 0 1.3-.2l.05-.05a1.4 1.4 0 1 1 2 2l-.05.05a1.2 1.2 0 0 0-.2 1.3v.1a1.2 1.2 0 0 0 1.1.7h.1a1.4 1.4 0 0 1 0 2.8h-.1a1.2 1.2 0 0 0-1.1.7z"/>';
+const GEAR_ICON = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + GEAR_GLYPH + '</svg>';
+
 // Icons for the common actions (inline SVG, currentColor) so hosts reference them by key instead of drawing their own.
 export const SIDEBAR_ICONS = {
   download: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v9M5.5 7.5L9 11l3.5-3.5M3 14.5h12"/></svg>',
@@ -45,7 +49,8 @@ export const SIDEBAR_ICONS = {
   cloud: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13.5a3 3 0 0 1-.4-5.97A4.5 4.5 0 0 1 13.2 6.6 3.5 3.5 0 0 1 13 13.5zM9 7.5v4M7.3 9.3L9 7.5l1.7 1.8"/></svg>',
   templates: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="4.5" height="4.5" rx="1"/><rect x="10.5" y="3" width="4.5" height="4.5" rx="1"/><rect x="3" y="10.5" width="4.5" height="4.5" rx="1"/><rect x="10.5" y="10.5" width="4.5" height="4.5" rx="1"/></svg>',
   new: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5H5a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 5 15.5h8A1.5 1.5 0 0 0 14.5 14V6.5zM10.5 2.5v4h4M9 9v4M7 11h4"/></svg>',
-  style: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M14.2 11a1.2 1.2 0 0 0 .2 1.3l.05.05a1.4 1.4 0 1 1-2 2l-.05-.05a1.2 1.2 0 0 0-1.3-.2 1.2 1.2 0 0 0-.7 1.1V15.5a1.4 1.4 0 1 1-2.8 0v-.1a1.2 1.2 0 0 0-.8-1.1 1.2 1.2 0 0 0-1.3.2l-.05.05a1.4 1.4 0 1 1-2-2l.05-.05a1.2 1.2 0 0 0 .2-1.3 1.2 1.2 0 0 0-1.1-.7H2.5a1.4 1.4 0 0 1 0-2.8h.1a1.2 1.2 0 0 0 1.1-.8 1.2 1.2 0 0 0-.2-1.3l-.05-.05a1.4 1.4 0 1 1 2-2l.05.05a1.2 1.2 0 0 0 1.3.2H7a1.2 1.2 0 0 0 .7-1.1V2.5a1.4 1.4 0 1 1 2.8 0v.1a1.2 1.2 0 0 0 .7 1.1 1.2 1.2 0 0 0 1.3-.2l.05-.05a1.4 1.4 0 1 1 2 2l-.05.05a1.2 1.2 0 0 0-.2 1.3v.1a1.2 1.2 0 0 0 1.1.7h.1a1.4 1.4 0 0 1 0 2.8h-.1a1.2 1.2 0 0 0-1.1.7z"/></svg>',
+  style: GEAR_ICON,
+  gear: GEAR_ICON, // TASK 727: SketchStudio's "Tune solver" and Shaper's Settings items named it, but it was missing (no icon showed)
   log: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h10M4 9h10M4 13.5h6"/></svg>',
   debug: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l4 4-4 4M9.5 13H14"/></svg>',
 };

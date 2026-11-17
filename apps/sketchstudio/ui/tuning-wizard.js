@@ -4,6 +4,7 @@ import { SolverConfig, saveSolverConfig, loadSolverConfig, resetSolverConfig } f
 import SettingsManager from '#core/settings-manager.js';
 import { dbg } from '#core/debug.js';
 import { applyPanelStyle, createWizardPanel } from './wizard-base.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 let panelVisible = false;
 let panel = null;
@@ -235,15 +236,13 @@ export function setupTuningWizard(state) {
     // Close button
     document.getElementById('tuning-close-btn').onclick = () => togglePanel(false);
 
-    // Keyboard: T to toggle, Escape to close
+    // Keyboard: Esc (the declared Cancel) closes the panel. TASK 727: T is the Perpendicular tool's key; the panel opens from the drawer's
+    // "Tune solver" item.
     document.addEventListener('keydown', (e) => {
         // Don't trigger if typing in an input
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         
-        if (e.key === 't' || e.key === 'T') {
-            togglePanel();
-            e.preventDefault();
-        } else if (e.key === 'Escape' && panelVisible) {
+        if (matchesShortcut(e, 'edit.cancel') && panelVisible) {
             togglePanel(false);
             e.preventDefault();
         }

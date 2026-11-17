@@ -69,20 +69,23 @@ await (async () => {
     const inputsBefore = await fileInputs(); // the page owns some file inputs of its own: compare, don't expect zero
     const chooser = once('Page.fileChooserOpened');
     await openSb();
-    await clickEl('[data-action="open-file"]');
+    await clickEl('[data-action="open-file"]'); // TASK 759: "Open…" = THE Open dialog; its Local tab's "Choose a file…" is the file chooser
+    await waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="open"]')`, 'the Open dialog');
+    await clickEl('.sk-fd [data-fd-tab="local"]'); await sleep(150);
+    await clickEl('.sk-fd [data-fd="choose-file"]');
     const fc = await Promise.race([chooser, sleep(4000).then(() => null)]);
     assert.ok(fc, 'the file chooser opened');
     // a garbage collection while the picker is open must not lose the chosen file (the open input has to stay referenced)
     await send('HeapProfiler.enable'); await send('HeapProfiler.collectGarbage'); await sleep(200); await send('HeapProfiler.collectGarbage');
     await send('DOM.setFileInputFiles', { files: [bad], backendNodeId: fc.backendNodeId });
     // wait for the real condition (the async file read + refusal), not a fixed sleep; on timeout say what the drawer shows
-    await waitFor(`!!(document.querySelector('.sk-sidebar-msg.error') || {}).textContent`, 'the refusal message in the drawer', 10000).catch(async (e) => {
-      throw new Error(e.message + '; the drawer shows: ' + JSON.stringify(await evalJs(`(document.querySelector('.sk-sidebar') || {}).innerText || ''`)));
+    await waitFor(`!!(document.querySelector('.sk-fd .sk-tp-err') || {}).textContent`, 'the refusal message in the Open dialog', 10000).catch(async (e) => {
+      throw new Error(e.message + '; the dialog shows: ' + JSON.stringify(await evalJs(`(document.querySelector('.sk-fd') || {}).innerText || ''`)));
     });
     assert.strictEqual(await fileInputs(), inputsBefore, 'no stray file input is left in the DOM once the open settled');
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), true, 'the drawer stays open on a refusal');
-    const refused = await evalJs(`(document.querySelector('.sk-sidebar-msg.error') || {}).textContent || ''`);
-    assert.ok(/newer version/i.test(refused), 'the refusal message is shown in the drawer: ' + refused);
+    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-fd')`), true, 'the Open dialog stays open on a refusal');
+    const refused = await evalJs(`(document.querySelector('.sk-fd .sk-tp-err') || {}).textContent || ''`);
+    assert.ok(/newer version/i.test(refused), 'the refusal message is shown in the dialog: ' + refused);
     assert.strictEqual(JSON.stringify({ r: await recent(), s: await shapes(), t: await title() }), before, 'nothing changed (no new design, canvas and title untouched)');
     console.log('sidebar-open-refused-live: ok');
   } finally {

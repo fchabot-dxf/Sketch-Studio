@@ -96,6 +96,7 @@ const EXEMPT = {
   'packages/ui/design-info-panel.js': [2, 'the inline rename input: Enter / Esc'],
   'packages/ui/diagnostic-log.js': [1, 'the Log panel: Esc closes it'],
   'packages/ui/document-tabs.js': [5, 'the document tab list: arrows / Home / End move, Delete closes the focused tab'],
+  'packages/ui/file-dialog.js': [5, 'TASK 759: the Save as / Open dialog: its two tabs (arrows / Home / End), Enter in the name field saves'],
   'packages/ui/input-handlers/fillet-tool.js': [2, 'the fillet radius box: Enter / Esc'],
   'packages/ui/input-handlers/live-dimension-input.js': [5, 'the on-canvas value boxes: Tab / Enter / Esc / Delete (and the legacy box Enter)'],
   'packages/ui/input-handlers/offset-tool.js': [2, 'the offset distance box: Enter / Esc'],

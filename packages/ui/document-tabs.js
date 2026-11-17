@@ -16,12 +16,17 @@
 // stop at --sk-doctab-min, after which the row scrolls sideways (the active tab is kept in view). A long name ends in an ellipsis; the tab's title holds
 // the whole name.
 //
-// createDocumentTabs({ getBuffer, store, actions, onChange, doc }) -> { el, refresh, destroy }
+// createDocumentTabs({ getBuffer, store, actions, onChange, doc }) -> { el, refresh, note, destroy }
 //   getBuffer(): the host's document buffer (it may not exist yet: the strip is empty until it does)
 //   actions: { activateTab(key), closeTab(key) -> false when the user cancelled, newDesign() }  (project-actions.js: the same declaration the menu uses)
 //   onChange(): called when the active design / the tab names changed (the sidebar follows the active tab's name, status and the page title)
 // Accessibility: role=tablist "Open designs"; the arrow keys move between tabs (Home / End jump), Enter / Space activate, Delete closes.
 // Every width: ONE line; when the tabs reach their minimum width the line scrolls sideways and the active tab is scrolled into view (no second row).
+
+// TASK 759: where a tab's design lives (document-home.js): a small glyph before its name (the menu's own cloud / download icons, app-sidebar.js SIDEBAR_ICONS) and
+// the tab's tooltip; a design not saved yet has none. note(text) shows a one-off line in the strip (a Save that downloads the file again says so, once).
+import { SIDEBAR_ICONS } from './app-sidebar.js';
+import { homeLabel, HOME_KINDS } from './document-home.js';
 
 let stylesInjected = false;
 function injectStyles() {
@@ -65,6 +70,8 @@ function injectStyles() {
   box-shadow: inset 0 3px 0 var(--sk-doctab-acc), 0 1px 0 var(--sk-doctab-fill); } /* the top accent line; the outer shadow paints over the strip's 1 px line: the tab runs into the surface */
 .sk-doctab-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; background: transparent; border: 0; color: inherit; font: inherit;
   cursor: pointer; padding: 0 2px 0 10px; }
+.sk-doctab-home { flex: 0 0 auto; display: inline-flex; opacity: 0.7; }
+.sk-doctab-home svg { width: 13px; height: 13px; }
 .sk-doctab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sk-doctab-dot { flex: 0 0 auto; width: var(--sk-doctab-dot); height: var(--sk-doctab-dot); border-radius: 50%; background: var(--sk-doctab-acc); }
 .sk-doctab-dot.failed { background: #dc2626; }
@@ -130,9 +137,17 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   }
 
   const nameOf = (t) => (t.designId && names.get(t.designId)) || t.name;
+  /** TASK 759: the glyph of a tab's home: Drive (a design on Google Drive) or this device (a file); none for a design not saved yet. */
+  const homeKindOf = (t) => {
+    const h = t.home;
+    if (!h || h.kind === HOME_KINDS.NONE) return null;
+    if (h.kind === HOME_KINDS.FILE) return 'file';
+    return store && store.isRemote && store.isRemote(t.designId) ? 'drive' : null;
+  };
+  const homeTip = (t) => (t.home ? homeLabel(t.home, { where: homeKindOf(t) === 'drive' ? 'drive' : 'device' }) : '');
   function dotOf(t) {
     if (t.needsSavePrompt === 'save-failed') return { cls: 'failed', tip: 'Not saved: the last save failed' };
-    if (t.needsSavePrompt === 'unsaved') return { cls: '', tip: 'Not saved yet' };
+    if (t.needsSavePrompt === 'unsaved') return { cls: '', tip: t.home && t.home.kind === HOME_KINDS.FILE ? 'Changes not saved to the file yet' : 'Not saved yet' };
     const st = t.designId && store && store.status ? store.status(t.designId) : null;
     if (st && st.state === 'saving') return { cls: 'saving', tip: 'Saving…' };
     return null;
@@ -146,7 +161,14 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
       const dot = dotOf(t);
       const wrap = doc.createElement('div'); wrap.className = 'sk-doctab' + (t.active ? ' active' : ''); wrap.dataset.key = t.key; wrap.setAttribute('role', 'presentation');
       const main = doc.createElement('button'); main.type = 'button'; main.className = 'sk-doctab-main'; main.setAttribute('role', 'tab');
-      main.setAttribute('aria-selected', t.active ? 'true' : 'false'); main.tabIndex = t.active ? 0 : -1; main.title = dot ? `${name} (${dot.tip})` : name;
+      const where = homeKindOf(t);
+      main.setAttribute('aria-selected', t.active ? 'true' : 'false'); main.tabIndex = t.active ? 0 : -1;
+      main.title = [name, where ? homeTip(t) : '', dot ? dot.tip : ''].filter(Boolean).join(' · ');
+      if (where) { // TASK 759: where it lives
+        const g = doc.createElement('span'); g.className = 'sk-doctab-home'; g.dataset.home = where; g.setAttribute('aria-hidden', 'true');
+        g.innerHTML = where === 'drive' ? SIDEBAR_ICONS.cloud : SIDEBAR_ICONS.download;
+        main.appendChild(g);
+      }
       const label = doc.createElement('span'); label.className = 'sk-doctab-name'; label.textContent = name;
       main.appendChild(label);
       main.addEventListener('click', () => run('activate', t.key, () => actions.activateTab(t.key)));
@@ -176,7 +198,7 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
     if (watched !== b) { watched = b; b.ready.then(() => { restored = true; refresh(); }); } // the strip (and the sidebar's name) show once the stored design is back: no "Untitled" flash
     if (!restored) return;
     const list = b.tabs();
-    const sig = JSON.stringify(list.map((t) => [t.key, nameOf(t), t.active, dotOf(t) && dotOf(t).cls]));
+    const sig = JSON.stringify(list.map((t) => [t.key, nameOf(t), t.active, dotOf(t) && dotOf(t).cls, homeKindOf(t), t.home && t.home.name]));
     if (sig !== shown) { shown = sig; render(list); }
     const a = list.find((t) => t.active);
     const now = a ? `${a.key}|${a.designId}|${nameOf(a)}` : '';
@@ -222,5 +244,5 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   syncNames();
   refresh();
 
-  return { el, refresh, destroy() { clearInterval(timer); clearTimeout(syncTimer); offStore(); el.removeEventListener('keydown', onKey); el.remove(); } };
+  return { el, refresh, note: say, destroy() { clearInterval(timer); clearTimeout(syncTimer); offStore(); el.removeEventListener('keydown', onKey); el.remove(); } };
 }

@@ -33,7 +33,7 @@ import { addSketch, activateSketch } from '#core/sketch-model.js';
 import { groupImported } from '#core/group-model.js'; // TASK 751 / 756: the import lands grouped, in every app
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from './input-handlers/pan-zoom.js';
-import { browserFileSeam, IMPORT_FILE_PICK } from './project-file.js';
+import { browserFileSeam, IMPORT_FILE_PICK, PROJECT_FILE_EXT } from './project-file.js';
 import { track } from './analytics.js'; // TASK 738: an SVG / DXF imported
 import { showNotification } from './notification-manager.js';
 import { offerToCloseImported } from './close-path-actions.js'; // TASK 760: near-closed outlines are OFFERED for closing (one notice, never closed unasked)
@@ -181,6 +181,10 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
 }
 
 /** A file dropped on `el` runs run(text, fileName) (the first file; the parser is picked from the name / content). onHover(bool) shows a drop cue. */
+/** TASK 759: the event a drop target dispatches (bubbling, cancelable; detail { name, text }) for a dropped DESIGN FILE (.sketch.json): it is a document to open,
+ *  not a drawing to import. The shared sidebar (sidebar-projects.js) opens it as a tab and cancels the event; nobody cancelled it (a host with no project
+ *  layer: Shaper in Fusion) -> it goes to the import as before (which refuses it with its message). */
+export const OPEN_DOCUMENT_EVENT = 'sk-open-document';
 export function mountImportDrop(el, run, { onHover = null } = {}) {
   const hasFiles = (e) => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
   el.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); if (onHover) onHover(true); });
@@ -190,6 +194,12 @@ export function mountImportDrop(el, run, { onHover = null } = {}) {
     if (!hasFiles(e)) return;
     e.preventDefault(); if (onHover) onHover(false);
     const f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) await run(await f.text(), f.name);
+    if (!f) return;
+    const text = await f.text();
+    if (f.name.toLowerCase().endsWith(PROJECT_FILE_EXT)) {
+      const open = new CustomEvent(OPEN_DOCUMENT_EVENT, { bubbles: true, cancelable: true, detail: { name: f.name, text } });
+      if (!el.dispatchEvent(open)) return; // opened as a document
+    }
+    await run(text, f.name);
   });
 }

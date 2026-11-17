@@ -13,6 +13,9 @@
 // settleUnsaved: Save… / Don't save / Cancel), asked in the UI the action came from (this drawer, or the Projects modal while it is open).
 // Naming an unsaved Untitled (the name heading) is its first named save. Ctrl+S: on an unsaved
 // design, the Save as name prompt; on a stored one, the pending autosave is written now (nothing visible when there is nothing pending).
+// TASK 759: the menu has Save (Ctrl+S: to the design's HOME, #ui/document-home.js), Save as… (THE Save as dialog, Google Drive | Local) and Open… (THE Open
+// dialog, same tabs; the item keeps its id 'open-file'); a design file (.sketch.json) dropped on a host's drawing (its import drop target) opens as a tab.
+// Nothing here asks a signed-out user to sign in: Drive's sign-in is inside the dialogs' Drive tab and in the account row.
 
 import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
 import { getProjectStore } from './project-store.js';
@@ -25,6 +28,8 @@ import { importSidebarAction } from './sketch-import.js';
 import { openProjectManager, relativeTime } from './project-manager.js';
 import { openTemplatePicker, openChoiceModal, openPromptModal } from './template-picker.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
+import { OPEN_DOCUMENT_EVENT } from './sketch-import.js'; // TASK 759: a design file dropped on a drawing
+import { homeLabel, HOME_KINDS } from './document-home.js';
 
 export { relativeTime };
 
@@ -39,7 +44,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   let manager = null;   // the open project manager modal, if any
   const showDocumentTabs = Boolean(documentTabs && projects);
   // what can be done with a design / a project: declared once (project-actions.js), shared with the project manager
-  const projectActions = projects ? createProjectActions({ store, getBuffer, account, importFile, tabs: showDocumentTabs, pickTemplate: openTemplatePicker, chooseModal: openChoiceModal, promptModal: openPromptModal, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) }) : null;
+  const projectActions = projects ? createProjectActions({ store, getBuffer, account, importFile, tabs: showDocumentTabs, pickTemplate: openTemplatePicker, chooseModal: openChoiceModal, promptModal: openPromptModal, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)), openProjects: () => openManager('projects') }) : null;
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
@@ -57,7 +62,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     currentName = c ? c.name : (live && live.designName ? live.designName() : 'Untitled'); // an unsaved design started from a template carries its name (TASK 651)
     currentDesignId = c ? c.id : null;
     if (sidebar) { sidebar.setDocName(currentName); sidebar.refreshStatus(); }
-    applyAppIdentity(appId, { designName: c ? c.name : undefined });
+    const fileName = !c && live && live.home && live.home().kind === HOME_KINDS.FILE ? live.designName() : undefined; // TASK 759: a file home names the page too
+    applyAppIdentity(appId, { designName: c ? c.name : fileName });
   }
 
   // "Projects": the modal. The drawer closes first (focus goes back to the menu button, where the modal returns it on close).
@@ -71,18 +77,26 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); await refreshName(); }) },
     // TASK 651 / 668: the same template modal the "+" tab button and New design open (Blank design first, one picker configuration)
     { id: 'templates', label: 'Templates…', icon: SIDEBAR_ICONS.templates, tooltip: 'Start a new design from a template drawing', keepOpen: true, onClick: act(async () => { sidebar.close(); await projectActions.newDesign(); await refreshName(); }, { close: false }) },
-    { id: 'save-as', label: 'Save as…', icon: SIDEBAR_ICONS.save, keepOpen: true, onClick: act(async () => { if (await projectActions.saveAsPrompt()) sidebar.close(); }, { close: false }) },
+    // TASK 759: Save = to the design's home (Ctrl+S); Save as… = THE Save as dialog (Google Drive | Local)
+    { id: 'save', label: 'Save', icon: SIDEBAR_ICONS.save, tooltip: 'Save to where this design lives (Ctrl+S)', keepOpen: true, onClick: act(async () => { if (await saveNow()) sidebar.close(); }, { close: false }) },
+    { id: 'save-as', label: 'Save as…', icon: SIDEBAR_ICONS.save, keepOpen: true, onClick: act(async () => { sidebar.close(); afterSave(await projectActions.saveAsDialog()); await refreshName(); }, { close: false }) },
     { id: 'duplicate', label: 'Duplicate', icon: SIDEBAR_ICONS.copy, keepOpen: true, onClick: act(async () => { await projectActions.duplicateCurrent(); }, { close: false }) },
     { id: 'open-recent', label: 'Open recent', icon: SIDEBAR_ICONS.recent, keepOpen: true, onClick: () => openManager('recent') },
     { id: 'projects', label: 'Projects', icon: SIDEBAR_ICONS.folder, keepOpen: true, onClick: () => openManager('projects') },
     { divider: true },
-    { id: 'open-file', label: 'Open from file', icon: SIDEBAR_ICONS.open, keepOpen: true, onClick: act(async () => { await projectActions.openFile(); }) },
+    // TASK 759: THE Open dialog (Google Drive | Local); the id stays 'open-file' (it was "Open from file", now its Local tab)
+    { id: 'open-file', label: 'Open…', icon: SIDEBAR_ICONS.open, tooltip: 'Open a design from Google Drive or from a file on this device', keepOpen: true, onClick: act(async () => { sidebar.close(); await projectActions.openDialog(); await refreshName(); }, { close: false }) },
     ...(importFile ? [importSidebarAction({ importFile, getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open })] : []),
     ...(hostActions.length ? [{ divider: true }, ...hostActions] : []),
   ] : [...hostActions];
 
   // The one-line state under the document name, derived from the store (where the current design lives + how its last save went).
   const statusLine = () => {
+    const live = getBuffer && getBuffer();
+    const home = live && live.home ? live.home() : null;
+    if (home && home.kind === HOME_KINDS.FILE) { // TASK 759: a design whose home is a file on this device
+      return { kind: 'info', text: homeLabel(home) + (live.needsSavePrompt() === 'unsaved' ? ' (changes not saved yet)' : '') };
+    }
     const s = store.status ? store.status(currentDesignId) : { where: 'device', state: 'saved', at: null, reason: null };
     if (s.notice) return { kind: 'error', text: s.notice };
     if (s.state === 'failed' || (s.where === 'device' && s.reason)) return { kind: 'error', text: `Not saved to Google Drive: ${s.reason}. Kept on this device.` };
@@ -115,11 +129,11 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     stages, activeStage, onStageChange,
     onRenameDoc: projects ? (name) => act(async () => {
       const b = getBuffer && getBuffer();
-      if (b && !b.isStored()) {
-        if (!(await projectActions.ensureSignedIn())) return;
-        await b.saveAs(name);
-        return;
-      } // naming an unsaved Untitled is its first named save
+      if (b && !b.isStored()) { // TASK 759: never a sign-in question here
+        if (b.home().kind === HOME_KINDS.FILE) { await b.rename(name); await refreshName(); return; } // a file home: the name its next Save writes
+        if (projectActions.driveReady()) { await b.saveAs(name); return; } // naming an unsaved Untitled is its first named save (Drive ready: as before)
+        await projectActions.saveAsDialog({ name }); await refreshName(); return; // signed out: the Save as dialog, with that name
+      }
       const id = await currentId();
       if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled is named by its first save
       await store.rename(id, name);
@@ -149,12 +163,26 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
 
   // Ctrl+S (Cmd+S): save. Captured on the window, before the canvas shortcuts (where a bare "s" picks the Select tool) and the browser's
   // own "save page".
+  // TASK 759: to the design's HOME (project-actions.js save): Drive -> the pending autosave now; a file -> back to it; none -> the Save as dialog.
+  const noted = new Set(); // the tabs (keys) already told that their Save downloads the file again (said ONCE per design)
+  function afterSave(r) {
+    if (!r || !(r.route === 'download' || r.downloaded)) return r;
+    const b = getBuffer && getBuffer();
+    const t = b && b.tabs ? b.tabs().find((x) => x.active) : null;
+    const key = t ? t.key : '';
+    if (noted.has(key)) return r;
+    noted.add(key);
+    const text = `Saved "${r.name}" as a download: this browser cannot write to the file itself, so each Save downloads it again.`;
+    if (tabStrip) tabStrip.note(text); else sidebar.notify(text, 'info');
+    return r;
+  }
   async function saveNow() {
     const b = getBuffer && getBuffer();
-    if (!b) return;
+    if (!b) return null;
     await b.ready; // a stored design may still be restoring: it is not an Untitled
-    if (b.isStored()) { await b.flush(); return; }
-    if (await projectActions.saveAsPrompt()) sidebar.close();
+    const r = afterSave(await projectActions.save());
+    await refreshName();
+    return r;
   }
   const onKeyDown = projects ? (e) => {
     if (!matchesShortcut(e, 'file.save')) return;
@@ -162,11 +190,18 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     saveNow().catch(fail);
   } : null;
   if (onKeyDown) window.addEventListener('keydown', onKeyDown, true);
+  // TASK 759: a design file dropped on a host's drawing (sketch-import.js mountImportDrop announces it) opens as a document, with no account
+  const onDropDocument = projects ? (e) => {
+    e.preventDefault(); // handled: the drop target does not import it as a drawing
+    projectActions.openDroppedFile(e.detail).then(() => refreshName()).catch(fail);
+  } : null;
+  if (onDropDocument) window.addEventListener(OPEN_DOCUMENT_EVENT, onDropDocument);
   const baseDestroy = sidebar.destroy;
   return {
     ...sidebar,
     destroy() {
       if (onKeyDown) window.removeEventListener('keydown', onKeyDown, true);
+      if (onDropDocument) window.removeEventListener(OPEN_DOCUMENT_EVENT, onDropDocument);
       if (tabObserver) { tabObserver.disconnect(); tabObserver = null; }
       if (tabStrip) { tabStrip.destroy(); tabStrip = null; }
       baseDestroy();

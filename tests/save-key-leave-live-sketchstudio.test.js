@@ -2,7 +2,8 @@
 // REAL keys and clicks, SketchStudio; the buffer is shared code, so one host is enough):
 //   the browser's own leave-page dialog (beforeunload) is raised for an unsaved Untitled with content, and NOT for a clean Untitled or a named, saved design (a
 //   page-initiated reload is the probe: CDP's own Page.navigate never runs beforeunload);
-//   a REAL Ctrl+S on an unsaved Untitled opens the Save as name prompt in the sidebar and the prompt TAKES THE KEYBOARD FOCUS; the typed name stores it.
+//   a REAL Ctrl+S on an unsaved Untitled opens THE Save as dialog (TASK 759: Google Drive | Local; signed out it opens on Local and asks NO sign-in question) and its
+//   name field TAKES THE KEYBOARD FOCUS; on its Google Drive tab, the sign-in button inside the tab, then the typed name stores it on Drive.
 // What is stored, when, which design is current, Ctrl+S on a named design writing at once, Ctrl+S not reaching the canvas shortcuts, and whether the warning is armed
 // are tests/save-key-leave-sketchstudio-node.test.js and tests/save-key-leave-penplotter-node.test.js.
 import assert from 'node:assert';
@@ -57,12 +58,17 @@ await (async () => {
     await drawLine();
     assert.strictEqual(await leaveWarns(), false, 'an unsaved Untitled with content is buffered: no leave-page warning on reload');
     assert.strictEqual(await shapes(), 1, 'reload reopened the Untitled drawing from the working buffer');
-    // 3. signed out -> a real Ctrl+S on the unsaved Untitled first asks to sign in; clicking Sign in continues seamlessly to the focused Save as prompt and saves ONLY to Drive
+    // 3. signed out -> a real Ctrl+S on the unsaved Untitled: THE Save as dialog, its name field focused, no sign-in question (TASK 759); its Google Drive tab: Sign in
+    //    (inside the tab), then the typed name saves ONLY to Drive
     await clickEl('#tool-line'); await sleep(150);
     await ctrlS();
-    await waitFor(`(() => { const b = document.querySelector('.sk-sidebar-ask [data-choice="signin"]'); return !!b && b.getBoundingClientRect().left >= 0; })()`, 'signed out Ctrl+S asks to sign in first', 5000);
-    await clickEl('.sk-sidebar-ask [data-choice="signin"]');
-    await waitFor(`(() => { const a = document.querySelector('.sk-sidebar-ask input'); return !!a && document.activeElement === a; })()`, 'after sign-in: the Save as name prompt, focused', 5000);
+    await waitFor(`(() => { const a = document.querySelector('.sk-fd[data-file-dialog="save"] input'); return !!a && document.activeElement === a; })()`, 'signed out Ctrl+S: the Save as dialog, its name focused', 5000);
+    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar-ask')`), false, 'no sign-in question');
+    await clickEl('.sk-fd [data-fd-tab="drive"]');
+    await waitFor(`!!document.querySelector('.sk-fd [data-fd="sign-in"]')`, 'the Drive tab: its sign-in button', 5000);
+    await clickEl('.sk-fd [data-fd="sign-in"]');
+    await waitFor(`!!document.querySelector('.sk-fd input') && document.querySelector('.sk-fd-name').offsetParent !== null`, 'after sign-in: the name field', 5000);
+    await evalJs(`document.querySelector('.sk-fd input').focus()`);
     await key('a', 'KeyA', 65, 2); await typeText('Saved1'); await key('Enter', 'Enter', 13); await sleep(800);
     assert.strictEqual(await storedShapes('Saved1'), 1, 'the typed name stores the drawing');
     assert.strictEqual(driveSession.drive.byName('Saved1.sketch.json').length, 1, 'Saved1 was saved ONLY on Google Drive');

@@ -784,6 +784,7 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoo
  *   guide           not a cut -> no footprint (rings [], centre kept so the view stays dashed).
  * Uncut material (corners the bit cannot reach) is simply the area the footprint does not cover.
  * TASK 714: a terrace of a stepped cut (#core/stepped-cut.js deriveCuts) carries its `terrace` (its own depth) onto its footprint.
+ * TASK 742: a held Outside / Inside cut's pass and gap strips (#core/hold-part applyHoldPart) carry their `hold` (its depth, role, marks) the same way.
  */
 export function deriveCutFootprint(cuts, rec, state) {
   const out = [];
@@ -836,7 +837,7 @@ export function deriveCutFootprint(cuts, rec, state) {
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
       // TASK 455: the depth chip anchor = the top-most vertex of the bit-centre path
       const anchor = center.length >= 3 ? { ...center.reduce((best, p) => (p.y < best.y ? p : best), center[0]) } : null;
-      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }] : [], ...(cut.terrace ? { terrace: cut.terrace } : {}) });
+      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }] : [], ...(cut.terrace ? { terrace: cut.terrace } : {}), ...(cut.hold ? { hold: cut.hold } : {}) });
     }
   }
   return out;

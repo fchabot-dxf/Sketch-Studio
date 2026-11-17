@@ -10,6 +10,7 @@ import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { placeForCreation as placeByTable } from './creation-placement.js';
 import { reverseLineInAngleSectors } from './angle-sector.js';
 import { symmetricImpossible } from './symmetric.js';
+import { curveRefusal } from './curve-kinds.js'; // TASK 762: a point held on a curve kind that cannot hold one
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -150,6 +151,15 @@ export class ConstraintManager {
         // Basic validation
         if (!this.validateParams(type, params)) {
             dbg.warn('constraints', `[ConstraintManager] Invalid params for ${type}:`, params);
+            return null;
+        }
+
+        // TASK 762: a point ON a curve whose kind cannot hold one (#core/curve-kinds.js CURVE_REFUSALS pointOnCurve: a Bezier, its control points are
+        // shape data, not solver unknowns) is refused with the reason; the point stays where it was placed
+        const onCurveWhy = this.pointOnCurveRefusal(state, type, params);
+        if (onCurveWhy) {
+            notify(onCurveWhy, 'warning', 3500);
+            dbg.warn('constraints', `[ConstraintManager] ${type} refused: ${onCurveWhy}`);
             return null;
         }
 
@@ -990,6 +1000,13 @@ export class ConstraintManager {
         const dy = Math.abs(j2.y - j1.y);
         const type = dx > dy ? CONSTRAINT_TYPES.HORIZONTAL : CONSTRAINT_TYPES.VERTICAL;
         return this.createConstraint(state, type, { joints }, { source: 'auto-detect', ...options });
+    }
+
+    /** TASK 762: the reason a point-on-line constraint `params` ({ joint, shape }) cannot be held (its shape's kind holds no point: CURVE_REFUSALS
+     *  pointOnCurve), or null. createConstraint refuses it; the snap path (#core/snap-constraints.js) asks first, so its rank probe never reads it. */
+    static pointOnCurveRefusal(state, type, params) {
+        if (type !== CONSTRAINT_TYPES.POINT_ON_LINE || !params || !params.shape || !state || !Array.isArray(state.shapes)) return null;
+        return curveRefusal(state.shapes.find(s => s && s.id === params.shape), 'pointOnCurve');
     }
 
     static validateParams(type, params) {

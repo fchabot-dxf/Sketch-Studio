@@ -63,13 +63,13 @@
       /* TASK 737: the surfaces directly below the document tab strip, declared once: the stage's view paints it, the strip's active tab takes it */
       --shaper-cream: #F4EFE1;            /* the Design canvas paper */
       --sk-prep-bg: #3F4145;              /* the Prepare canvas background: TASK 455's token (#view-prepare below), on :root so the strip reads it in Prepare */
-      --shaper-review-bg: #14161a;        /* the Export stage's 3D view (#review-stage) */
+      --shaper-review-bg: var(--shaper-cream); /* the Export stage's 3D view (#review-stage): TASK 754, the Design canvas's paper (the 3D scene reads it from the Design canvas too: review-grid.js) */
       /* the strip is the header colour: the 13 % tint toward the text (document-tabs.js default) IS the Prepare canvas grey, so the active tab could not be told from the strip there */
       --sk-doctabs-bg: var(--sk-header-bg);
     }
     /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
     :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
-    :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); }
+    :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); --sk-doctab-surface-fg: var(--sk-header-bg); } /* TASK 754: a light surface, so the active tab's title is dark */
     #design-view, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* S7b: Design = a full-width tool ribbon on TOP, then a row of [canvas | collapsible info panel on the RIGHT; the left edge is reserved for the app sidebar]. */
@@ -114,7 +114,10 @@
     #review-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
     #review-toolbar button { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
     #review-toolbar button:hover { border-color: var(--sk-selection, #4c9aff); color: #fff; }
-    #review-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; font: 12px system-ui, sans-serif; color: #9aa0a6; max-width: 70%; line-height: 1.5; max-height: calc(100% - 80px); overflow-y: auto; } /* TASK 750: many notes (a phone) scroll inside it, never over the view toggle at the top */
+    #review-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; font: 12px system-ui, sans-serif; max-width: 70%; line-height: 1.5; max-height: calc(100% - 80px); overflow-y: auto; } /* TASK 750: many notes (a phone) scroll inside it, never over the view toggle at the top */
+    #review-info:empty { display: none; }
+    /* TASK 754: the 3D view's info line reads on the light paper: it takes the 2D view's info card (one rule for both) */
+    #review-info, #review-2d-info { color: #e6e6e6; background: rgba(15,19,32,0.85); border-radius: 6px; padding: 5px 9px; }
     #review-side { width: 300px; flex: none; overflow: auto; padding: 16px; background: #0f1320; border-left: 1px solid #1f2535; display: flex; flex-direction: column; gap: 14px; }
     .review-stock { display: flex; flex-direction: column; gap: 6px; color: #cbd5e1; font-size: 13px; }
     .review-stock label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -130,7 +133,7 @@
     #review-2d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
     #review-2d-canvas .rv2d-doc * { vector-effect: non-scaling-stroke; }
     #review-2d-canvas .rv2d-picked { stroke: #ff2d95; stroke-width: 3px; }
-    #review-2d-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; max-width: calc(100% - 20px); font: 13px system-ui, sans-serif; color: #e6e6e6; background: rgba(15,19,32,0.85); border-radius: 6px; padding: 5px 9px; line-height: 1.4; }
+    #review-2d-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; max-width: calc(100% - 20px); font: 13px system-ui, sans-serif; line-height: 1.4; }
     .review-cuts-list { display: flex; flex-direction: column; gap: 2px; }
     .rv2d-type { display: flex; justify-content: space-between; margin-top: 6px; color: #e6e6e6; font-weight: 600; text-transform: capitalize; }
     /* TASK 743: the 2D list is the operations list: a tool heading per run of one bit, an operation header (a tap picks all its elements), then its rows */

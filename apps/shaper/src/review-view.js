@@ -4,6 +4,8 @@
 // downloads only when the Review tab first opens (it is vendored under packages/ui/vendor/three, pinned 0.170.0).
 // Render ON DEMAND (controls 'change' / rebuild / resize): no idle animation loop.
 import { buildRelief, createReliefCache } from '#core/relief-model.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import { reviewGridSpec, designCanvasColors, gridMaterialSource, GRID_FADE } from './review-grid.js';
 
 export const TILE_MM = 400;        // one repeat of the birch image covers 400 x 400 mm of board (a plausible plywood grain scale)
 export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).href;
@@ -119,14 +121,18 @@ export function planarUVs(positions, tile = TILE_MM, grainAlongX = false) {
   return uv;
 }
 
+// TASK 754: the settings the 3D grid reads (review-grid.js): a change to one of them redraws it at once
+const GRID_SETTING_KEYS = new Set(['GRID_MODE', 'GRID_SIZE', 'GRID_MAJOR_STEP', 'INCH_GRID_DIVISIONS', 'INCH_GRID_MAJOR', 'DOC_UNIT', 'STYLE_TEMPLATE', 'STYLE_PRESETS']);
+
 /**
- * mountReviewView({ host, info, getInputs, look }) -> Promise<{ refresh, reset, top, fit, setLook, inspect, destroy, lastBuild, look }>
+ * mountReviewView({ host, info, getInputs, look, designCanvas }) -> Promise<{ refresh, reset, top, fit, setLook, inspect, screenOf, destroy, lastBuild, look }>
  *   host       the element the canvas is appended to
  *   info       element receiving the one-line build summary (and the "not shown" notes)
  *   getInputs  () => { stock, items, bounds, notes? }  (see buildRelief; notes = extra info lines, TASK 714: the stepped cuts' steps / undercuts)
  *   look       the initial look state { id, colors } (TASK 729, normaliseLook; default Plywood); setLook(state) swaps the MATERIALS only (no geometry rebuild)
+ *   designCanvas  the Design canvas element (TASK 754): the background and the grid colours are read from its own tokens (review-grid.js)
  */
-export async function mountReviewView({ host, info, getInputs, look: initialLook }) {
+export async function mountReviewView({ host, info, getInputs, look: initialLook, designCanvas }) {
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
@@ -134,7 +140,7 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   host.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x14161a);
+  scene.background = new THREE.Color(); // TASK 754: the Design canvas's paper (applyGridLook)
   scene.add(new THREE.HemisphereLight(0xffffff, 0x6b6258, 1.1));
   const sun = new THREE.DirectionalLight(0xffffff, 2.4);
   scene.add(sun, sun.target);
@@ -202,8 +208,45 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   applyLook();
   let group = null, box = null, lastBuild = null, lastSig = null;
   const reliefCache = createReliefCache();
-  const render = () => renderer.render(scene, camera);
+
+  // TASK 754: the drafting grid = ONE plane at the board's underside (the plane the workpiece sits on), drawn by one shader
+  // (review-grid.js gridMaterialSource); its spec comes from the Design canvas's own declarations (reviewGridSpec), re-read when the Export
+  // step is entered and when a grid / unit / style setting changes; the level follows the zoom on every render.
+  const gridUniforms = {
+    uMinorColor: { value: new THREE.Color() }, uMajorColor: { value: new THREE.Color() },
+    uMinor: { value: 1 }, uMajor: { value: 1 }, uMinorFade: { value: 1 }, uPoints: { value: 0 }, uPxRatio: { value: 1 },
+    uMarkMinor: { value: 1 }, uMarkMajor: { value: 1 }, uFadeFrom: { value: 1 }, uFadeTo: { value: 2 }, uCentre: { value: new THREE.Vector2() },
+  };
+  const gridMaterial = new THREE.ShaderMaterial({ ...gridMaterialSource, uniforms: gridUniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide, // seen from below too
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 4 });
+  const gridMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), gridMaterial);
+  gridMesh.name = 'grid'; gridMesh.renderOrder = -1; gridMesh.visible = false; // drawn before a see-through board, which blends over it
+  scene.add(gridMesh);
+  let gridColors = null, gridSpec = null;
+  function applyGridLook() {
+    gridColors = designCanvasColors(getComputedStyle(designCanvas));
+    scene.background.setStyle(gridColors.background);
+    gridUniforms.uMinorColor.value.setStyle(gridColors.minor);
+    gridUniforms.uMajorColor.value.setStyle(gridColors.major);
+  }
+  // where the camera looks at the grid: CSS px per mm there (the Design grid picks its level from its zoom the same way)
+  const lookPoint = new THREE.Vector3();
+  function placeGrid() {
+    if (!box) { gridMesh.visible = false; return; }
+    lookPoint.set(controls.target.x, -box.thickness, controls.target.z);
+    const d = Math.max(1e-6, camera.position.distanceTo(lookPoint));
+    const pxPerMm = Math.max(1, host.clientHeight) / (2 * d * Math.tan((camera.fov * Math.PI) / 360));
+    gridSpec = reviewGridSpec({ settings: SettingsManager, unit: docUnit(), colors: gridColors, pxPerMm });
+    gridMesh.visible = gridSpec.visible;
+    const u = gridUniforms;
+    u.uMinor.value = gridSpec.minor; u.uMajor.value = gridSpec.major; u.uMinorFade.value = gridSpec.fade;
+    u.uPoints.value = gridSpec.mode === 'points' ? 1 : 0; u.uPxRatio.value = renderer.getPixelRatio();
+    u.uMarkMinor.value = gridSpec.markPx.minor; u.uMarkMajor.value = gridSpec.markPx.major;
+  }
+  const render = () => { placeGrid(); renderer.render(scene, camera); };
   controls.addEventListener('change', render);
+  applyGridLook();
+  const unsubscribeSettings = SettingsManager.subscribe((key) => { if (key === null || GRID_SETTING_KEYS.has(key)) { applyGridLook(); render(); } });
 
   // Shade by DEPTH (height is the position's Y): a cut floor reads clearly darker than the top (even a shallow groove, seen from
   // above), deeper = darker still; walls a little darker than the floor they meet. `base` = the group's own tone.
@@ -278,6 +321,7 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   const fit = () => place(camera.position.clone().sub(controls.target).toArray());
 
   function refresh(sig) {
+    applyGridLook(); // the Design canvas's tokens may have changed since the last visit (a style template)
     if (sig !== undefined && sig === lastSig) { size(); render(); return lastBuild; }
     const t0 = performance.now();
     const inputs = getInputs();
@@ -296,6 +340,13 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     scene.add(group);
     const firstBuild = !box;
     box = rel.stockBox;
+    { // the grid plane under the board, centred on it, as wide as its fade-out (review-grid.js GRID_FADE)
+      const R = Math.hypot(box.maxX - box.minX, box.maxY - box.minY) / 2;
+      const cx = (box.minX + box.maxX) / 2, cz = (box.minY + box.maxY) / 2;
+      gridMesh.position.set(cx, -box.thickness, cz);
+      gridMesh.scale.set(2 * GRID_FADE.to * R, 1, 2 * GRID_FADE.to * R);
+      gridUniforms.uCentre.value.set(cx, cz); gridUniforms.uFadeFrom.value = GRID_FADE.from * R; gridUniforms.uFadeTo.value = GRID_FADE.to * R;
+    }
     size();
     if (firstBuild) reset(); else render();
     const ms = performance.now() - t0;
@@ -319,7 +370,8 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   renderer.domElement.addEventListener('dblclick', fit);
 
   function destroy() {
-    ro.disconnect(); controls.dispose(); disposeGroup(); faceMaterial.dispose(); edgeMaterial.dispose();
+    ro.disconnect(); unsubscribeSettings(); controls.dispose(); disposeGroup(); faceMaterial.dispose(); edgeMaterial.dispose();
+    gridMesh.geometry.dispose(); gridMaterial.dispose();
     if (labelTexture) labelTexture.dispose();
     for (const tex of textures.values()) if (tex) tex.dispose();
     renderer.dispose(); renderer.domElement.remove();
@@ -336,7 +388,15 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
       meshes: group ? group.children.filter((o) => o.isMesh).map((o) => ({ name: o.name, geometry: o.geometry.uuid, material: o.material === faceMaterial ? 'face' : o.material === edgeMaterial ? 'edge' : 'other' })) : [],
       top: p && u ? { x: p.getX(0), z: p.getZ(0), u: u.getX(0), v: u.getY(0) } : null,
       target: controls.target.toArray(), camera: camera.position.toArray(),
+      background: '#' + scene.background.getHexString(),
+      box: box && { minX: box.minX, maxX: box.maxX, minZ: box.minY, maxZ: box.maxY, y: -box.thickness }, // the board in scene axes (y = its underside)
+      grid: gridSpec && { ...gridSpec, shown: gridMesh.visible, y: gridMesh.position.y, minorColor: '#' + gridUniforms.uMinorColor.value.getHexString(), majorColor: '#' + gridUniforms.uMajorColor.value.getHexString() },
     };
   };
-  return { refresh, reset, top, fit, setLook, inspect, destroy, get look() { return look; }, get lastBuild() { return lastBuild; } };
+  // screenOf([x, y, z]) -> { x, y } CSS px inside the canvas, where that world point is drawn (read by the tests)
+  const screenOf = ([x, y, z]) => {
+    const v = new THREE.Vector3(x, y, z).project(camera);
+    return { x: ((v.x + 1) / 2) * host.clientWidth, y: ((1 - v.y) / 2) * host.clientHeight };
+  };
+  return { refresh, reset, top, fit, setLook, inspect, screenOf, destroy, get look() { return look; }, get lastBuild() { return lastBuild; } };
 }

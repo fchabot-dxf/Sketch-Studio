@@ -93,7 +93,7 @@ import { constraintTargets } from '#ui/geometry-labels.js';
 import { profileFillLoops } from '#ui/profile-fill.js';
 import { sketchOf, inActiveSketch, constraintSketch, hiddenSketchIds, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { ORIGIN_JOINT_ID } from '#core/constants.js';
-import { enteredGroup, shapesInGroup } from '#core/group-model.js'; // TASK 751: the entered user group (the rest draws dimmed)
+import { enteredShapes, shapesInGroup, hoveredUnit } from '#core/group-model.js'; // TASK 751: the entered user group (the rest draws dimmed); TASK 756: the hovered group
 
 // TASK 661: the markup collector. Behaves as the plain array draw() always built (push / join); while `dim` names a sketch, the chunks pushed
 // are gathered into ONE run drawn inside a <g class="sketch-inactive"> (the group opacity is the CSS token --sk-inactive-sketch-opacity,
@@ -429,6 +429,14 @@ export function isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd,
   return !!(isHovered || isSelected || isActiveSnap || isOpenEnd || isCenter || isLone);
 }
 
+// TASK 661 / 756: write the --sk-inactive-sketch-opacity token (the .sketch-inactive rule, sketcher.css) on `el` from its ONE source, the
+// INACTIVE_SKETCH_OPACITY setting (percent). draw() writes it on its render target; a host layer that draws Design geometry itself
+// (Pen Plotter's static underlay: what lies outside an entered user group) writes it on that layer.
+export function setInactiveOpacityToken(el) {
+  const v = Number(SettingsManager.get('INACTIVE_SKETCH_OPACITY'));
+  if (el && el.style) el.style.setProperty('--sk-inactive-sketch-opacity', String((Number.isFinite(v) ? v : 33) / 100));
+}
+
 export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedJoints=new Set(), selectedConstraints=new Set(), currentTool=null, inference=null, selectedShapes=new Set(), hoveredShape=null, hoveredJoint=null, hoveredConstraint=null, activeSnap=null, tempMousePos=null, isDragging=false, renderTarget, ctx=defaultRenderCtx){ 
   // Update cursor based on tool
   if (svg) {
@@ -448,10 +456,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const dimsSketches = typeof ctx.getActiveSketchId === 'function';
   const activeSketchState = { activeSketchId: (dimsSketches && ctx.getActiveSketchId()) || DEFAULT_SKETCH_ID };
   // TASK 751: while the Select tool has ENTERED a user group (#core/group-model.js), the geometry outside that group draws dimmed the same
-  // way (the same run, the same --sk-inactive-sketch-opacity token), unless lit. Read through ctx.getState (a host without it never enters).
-  const renderState = ctx.getState ? ctx.getState() : null;
-  const enteredId = renderState ? enteredGroup(renderState) : null;
-  const insideShapes = enteredId ? new Set(shapesInGroup(renderState, enteredId)) : null;
+  // way (the same run, the same --sk-inactive-sketch-opacity token), unless lit. TASK 756: read through ctx.getGroups (the state holding
+  // groups / enteredGroupId / hoverOwner), which every app's Design canvas declares (sketch-canvas.js, SketchStudio design-canvas.js);
+  // a render without it (Drawing) has no entered group and no hover.
+  const groupState = ctx.getGroups ? ctx.getGroups() : null;
+  const insideShapes = groupState ? enteredShapes(groupState) : null; // TASK 756: the one answer Pen Plotter's static layer reads too
   const insideJoints = insideShapes ? new Set(shapes.filter((s) => insideShapes.has(s.id)).flatMap((s) => (s.joints || []).map((jid) => joints.get(jid)))) : null;
   const outsideEntered = (entity) => !!insideShapes && !insideJoints.has(entity) && !(entity.id !== undefined && insideShapes.has(entity.id));
   const dimUnlessLit = (entity, lit) => { out.dim = (!lit && entity && ((dimsSketches && !inActiveSketch(activeSketchState, entity)) || outsideEntered(entity))) ? sketchOf(entity) : null; };
@@ -1230,12 +1239,16 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // (blue) wins over a selected constraint's colour.
   const hoverBound = hoveredConstraint ? constraintTargets(hoveredConstraint, shapes) : { joints: [], shapes: [] };
   const hoverBoundJoints = new Set(hoverBound.joints), hoverBoundShapes = new Set(hoverBound.shapes);
+  // TASK 756: the Select tool's hover on a member of a user group lights the whole group a click there selects (#ui/hover-manager.js
+  // hoverOwner, #core/group-model.js hoveredUnit at the current level; read through ctx.getGroups)
+  const hoverUnit = groupState ? hoveredUnit(groupState) : null;
+  const hoveredGroupShapes = new Set(hoverUnit ? shapesInGroup(groupState, hoverUnit) : []);
   
   // draw shapes (clickable for selection)
   for(const s of shapes){ 
     if (!show.construction && s.isConstruction) continue; // TASK 725: the clean profile draws no construction geometry
     const isSelected = selectedShapes && selectedShapes.has(s.id);
-    const isHovered = (hoveredShape === s.id) && !hoveredConstraint && !hoveredJoint;
+    const isHovered = (hoveredShape === s.id || hoveredGroupShapes.has(s.id)) && !hoveredConstraint && !hoveredJoint; // TASK 756: + the hovered group
     const isConstraintPart = constraintShapes.has(s.id);
     
     let strokeWidth = scale(BASE_LINE_STROKE);
@@ -2887,7 +2900,7 @@ switch(c.type){
   const markup = out.join('');
   const target = (renderTarget && renderTarget instanceof Element) ? renderTarget : svg;
   // TASK 661: the INACTIVE_SKETCH_OPACITY setting (percent) is the ONE source of the token the .sketch-inactive rule (sketcher.css) reads.
-  if (dimsSketches && target.style) target.style.setProperty('--sk-inactive-sketch-opacity', String(getNum('INACTIVE_SKETCH_OPACITY', 33) / 100));
+  if (dimsSketches) setInactiveOpacityToken(target);
   if (target._lastMarkup !== markup) {
     target.innerHTML = markup;
     target._lastMarkup = markup;

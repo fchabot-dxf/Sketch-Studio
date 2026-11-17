@@ -14,6 +14,7 @@
 
 import { findLoops, findConnectedChains } from './loop-finder.js';
 import { loopPolygon, polygonContains } from './loop-geometry.js';
+import { TOOL_MODES } from './constants.js';
 
 // An entity's USER group — its stored `userGroupId` (its innermost group), or null (ungrouped). NOT the factory `groupId`.
 export function groupOf(shape) { return (shape && shape.userGroupId) || null; }
@@ -121,15 +122,21 @@ export function makeGroup(state, shapeIds, name) {
   if (!nested.size && !loose.length) return null;
   const containers = new Set([...[...nested].map((gid) => ix.parent.get(gid) || null), ...loose.map((s) => groupOf(s))]);
   const parentId = containers.size === 1 ? [...containers][0] : null;
-  const used = new Set(state.groups.map((g) => g.id));
-  let n = 1; while (used.has('group-' + n)) n++;
-  const id = 'group-' + n;
+  const { id, n } = groupIdMinter(state)();
   const sketchId = state.activeSketchId || 'sketch-1';
   for (const g of state.groups) if (nested.has(g.id)) g.parentId = id;
   for (const s of loose) s.userGroupId = id;
   const g = { id, name: name || ('Group ' + n), sketchId, ...(parentId ? { parentId } : {}) };
   state.groups.push(g);
   return g;
+}
+
+// The next free 'group-N' ids of a state (the smallest unused N first): mint() → { id, n }. makeGroup, groupImported and copyGroups take
+// their ids from it, so a group is numbered the same whichever of them made it.
+function groupIdMinter(state) {
+  const used = new Set(((state && state.groups) || []).map((g) => g.id));
+  let n = 1;
+  return () => { while (used.has('group-' + n)) n++; const id = 'group-' + n; used.add(id); return { id, n }; };
 }
 
 // ungroup(state, gid) → dissolves ONE level: the group's own shapes and child groups move up to its parent (or out of any
@@ -204,15 +211,112 @@ export function importedPieces(state, shapes) {
 // more shapes (importedPieces) becomes a group named nameOf(piece) or "Outline N" / "Chain N"; then the whole file becomes ONE
 // group named `fileName` holding them (and the single-shape pieces, as its own members). A file of one piece gets that one group
 // only (no wrapper around a single child). Returns the groups made, the file's last.
+// TASK 756: ONE pass. The imported shapes are new (in no group yet), so each piece's group is written directly (what makeGroup made of
+// them: the same ids, names, order and nesting) instead of one makeGroup per piece, each re-reading every shape (2070 pieces: 0.4 s).
 export function groupImported(state, shapes, { fileName = 'Imported', nameOf = () => null } = {}) {
+  if (!Array.isArray(state.groups)) state.groups = [];
   const pieces = importedPieces(state, shapes);
-  const made = [];
+  const byId = new Map((shapes || []).map((s) => [s.id, s]));
+  const mint = groupIdMinter(state), sketchId = state.activeSketchId || 'sketch-1';
+  const made = [], loose = [];
   let outlines = 0, chains = 0;
   for (const p of pieces) {
     const label = p.outline ? 'Outline ' + (++outlines) : 'Chain ' + (++chains);
-    if (p.shapeIds.length > 1) made.push(makeGroup(state, p.shapeIds, nameOf(p) || label));
+    if (p.shapeIds.length < 2) { loose.push(...p.shapeIds); continue; }
+    const g = { id: mint().id, name: nameOf(p) || label, sketchId };
+    for (const id of p.shapeIds) byId.get(id).userGroupId = g.id;
+    state.groups.push(g); made.push(g);
   }
-  const all = (shapes || []).map((s) => s.id);
-  if (pieces.length > 1) made.push(makeGroup(state, all, fileName));
+  if (pieces.length > 1) {
+    const file = { id: mint().id, name: fileName, sketchId };
+    for (const g of made) g.parentId = file.id;
+    for (const id of loose) byId.get(id).userGroupId = file.id;
+    state.groups.push(file); made.push(file);
+  }
   return made;
+}
+
+// TASK 756: drop the group entries left with no shape (in the group or in its child groups): their shapes were all deleted. Called by
+// the ONE place geometry is removed (#core/delete-manager.js removeGeometry) and by a pattern removing an instance's copies
+// (#core/pattern.js removeInstance). -> how many entries went.
+export function dropEmptyGroups(state) {
+  if (!state || !Array.isArray(state.groups) || !state.groups.length) return 0;
+  const ix = indexOf(state);
+  const gone = new Set(state.groups.filter((g) => !ix.shapesOf(g.id).length).map((g) => g.id));
+  for (let i = state.groups.length - 1; i >= 0; i--) if (gone.has(state.groups[i].id)) state.groups.splice(i, 1);
+  return gone.size;
+}
+
+// TASK 756: a COPY of a whole group is a group (paste, mirror, pattern: each calls this once its copies are in `state`).
+// `source` = { shapes, groups } the originals come from (the state itself, or the clipboard's document); `copies` = Map original shape id
+// -> its copy (a shape object in state.shapes). Every group of `source` whose shapes are ALL copied gets a copy entry (same name, a new id,
+// the active sketch); its copied child groups stay nested in it, and the copies of its own members join it. The copy of the outermost
+// copied group goes where `parentId` says when given (the clipboard: the group the user has entered, as the active sketch is for its
+// shapes), else into the same group as the original (mirror, pattern). Copies of curves that are not a whole group stay in no group, as
+// before. -> the group entries made.
+export function copyGroups(state, source, copies, { parentId } = {}) {
+  const sx = indexOf(source);
+  const whole = ((source && source.groups) || []).filter((g) => { const ids = sx.shapesOf(g.id); return ids.length > 0 && ids.every((id) => copies.has(id)); });
+  if (!whole.length) return [];
+  if (!Array.isArray(state.groups)) state.groups = [];
+  const mint = groupIdMinter(state), sketchId = state.activeSketchId || 'sketch-1';
+  const newId = new Map(whole.map((g) => [g.id, mint().id]));
+  const made = whole.map((g) => {
+    const up = newId.has(g.parentId) ? newId.get(g.parentId) : (parentId !== undefined ? parentId : (g.parentId || null));
+    return { id: newId.get(g.id), name: g.name, sketchId, ...(up ? { parentId: up } : {}) };
+  });
+  state.groups.push(...made);
+  for (const s of (source.shapes || [])) { const g = groupOf(s); if (g && newId.has(g) && copies.has(s.id)) copies.get(s.id).userGroupId = newId.get(g); }
+  return made;
+}
+
+// TASK 756: the groups the selection holds WHOLE (every shape of the group in `shapeIds`), with their nesting, for the clipboard: a pasted
+// copy of a whole group is a group (copyGroups). A group only partly selected is not carried (its copied curves paste loose).
+export function wholeGroupsOf(state, shapeIds) {
+  const ix = indexOf(state), ids = new Set(shapeIds || []);
+  return ((state && state.groups) || []).filter((g) => { const m = ix.shapesOf(g.id); return m.length > 0 && m.every((id) => ids.has(id)); }).map((g) => ({ ...g }));
+}
+
+// TASK 756: the shape a Select-tool press or hover on a shape / a point is on (the picked shape, or the first shape using the picked point),
+// or null; its group at the entered level (selectUnit) is what the press selects. THE rule the click (selection-tools.js), the hover
+// (hover-manager.js) and the right click (input-manager.js) share.
+export function pickOwner(state, shapeId, jointId) {
+  if (shapeId) return shapeId;
+  const s = jointId ? ((state && state.shapes) || []).find((x) => (x.joints || []).includes(jointId)) : null;
+  return s ? s.id : null;
+}
+
+// TASK 756: the group the Select tool's hover lights: the group a click on the hovered shape (state.hoverOwner, #ui/hover-manager.js)
+// selects, at the CURRENT level (read when drawn, so entering or leaving a group re-aims it without a pointer move), or null. Only while the
+// Select tool is on (a tool switch without a pointer move does not leave a group lit for a tool that picks single curves).
+export function hoveredUnit(state) {
+  return state && state.hoverOwner && state.currentTool === TOOL_MODES.SELECT ? selectUnit(state, state.hoverOwner) : null;
+}
+
+// TASK 756: the shapes inside the ENTERED group (a Set), or null when no group is entered. What the canvas draws undimmed (svg-renderer.js)
+// and what a host's own static layer leaves undimmed (Pen Plotter's underlay) read this one answer.
+export function enteredShapes(state) {
+  const id = enteredGroup(state);
+  return id ? new Set(indexOf(state).shapesOf(id)) : null;
+}
+
+// TASK 756: what the GROUP COMMANDS can do on the current selection: THE answer the shortcuts, the canvas menu and a group's browser row
+// all read (#ui/group-actions.js runs them).
+//   group    the selection holds two or more things at the entered level (a whole group counts as one, a curve as one)
+//   ungroup  the groups Ungroup dissolves, one level each: the group a click on a selected curve selects (selectUnit), else the curve's own group
+//   enter    the ONE group the selection is (selectedGroups, nothing else selected), else null
+//   leave    a group is entered
+export function groupCommands(state) {
+  const ix = indexOf(state);
+  const sel = (state && state.selectedShapes instanceof Set) ? state.selectedShapes : new Set();
+  const byId = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
+  const units = new Set(), ungroupIds = new Set();
+  for (const id of sel) {
+    const u = ix.unitOf(id);
+    units.add(u || 'shape:' + id);
+    const g = u || groupOf(byId.get(id));
+    if (g) ungroupIds.add(g);
+  }
+  const whole = selectedGroups(state);
+  return { group: units.size >= 2, ungroup: [...ungroupIds], enter: whole.length === 1 && units.size === 1 ? whole[0] : null, leave: !!enteredGroup(state) };
 }

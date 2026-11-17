@@ -6,6 +6,7 @@ import { SolverConfig } from './solver-config.js';
 import { dimensionValuesOf, reconcileKeptDimensions } from './parameters.js';
 import { docUnit } from './settings-manager.js';
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo, constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from './sketch-model.js'; // TASK 577/619
+import { dropEmptyGroups } from './group-model.js'; // TASK 756: a group whose shapes all went goes too
 
 // A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
 // surviving shape uses it": the overall dimensions at a filleted corner stay attached to V as a standalone point
@@ -121,6 +122,7 @@ export function removeGeometry(state, shapeIds = [], jointIds = []) {
   for (const j of deleteJ) if (state.joints.delete(j)) joints++;
   removeOrphanJoints(state);
   patternsAfterDelete(state); // TASK 658: a deleted copy suppresses its pattern instance; a deleted source / centre / direction line ends the pattern
+  dropEmptyGroups(state); // TASK 756: a user group left with no shape (every member deleted, here or by a pattern above) is removed, in this ONE place
   reconcileKeptDimensions(state, dimsBefore, { unit: docUnit() }); // a deleted dimension (or pattern value) a formula reads keeps its name as a value (O10)
   return { shapes, joints };
 }
@@ -343,6 +345,7 @@ export function clearActiveSketch(state) {
   try { if (state.selectedJoints && state.selectedJoints.clear) state.selectedJoints.clear(); } catch (_) {}
   try { if (state.selectedConstraints && state.selectedConstraints.clear) state.selectedConstraints.clear(); } catch (_) {}
   state.hoveredShape = null;
+  state.hoverOwner = null; // TASK 756
   state.hoveredJoint = null;
   state.hoveredConstraint = null;
   state.pendingConstraint = null;

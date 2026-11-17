@@ -179,10 +179,25 @@ function sketchSubmenu(actions) {
   ] }];
 }
 
+// TASK 756: the user GROUP entries, each shown only when it applies (#core/group-model.js groupCommands, read through actions.groupState()):
+// "Group" when the selection holds two or more things, "Ungroup" when it holds a group, "Enter group" on one group, "Leave group" while a
+// group is entered. They run #ui/group-actions.js (the functions the Ctrl+G / Ctrl+Shift+G keys run). The canvas menu shows them after
+// its geometry entries; a group's row in the design browser shows them alone (kind 'group').
+export function groupMenuItems(actions) {
+  const g = actions.groupState();
+  return [
+    ...(g.group ? [{ id: 'grp-group', label: 'Group', onSelect: () => actions.group() }] : []),
+    ...(g.ungroup.length ? [{ id: 'grp-ungroup', label: 'Ungroup', onSelect: () => actions.ungroup() }] : []),
+    ...(g.enter ? [{ id: 'grp-enter', label: 'Enter group', onSelect: () => actions.enterGroup() }] : []),
+    ...(g.leave ? [{ id: 'grp-leave', label: 'Leave group', onSelect: () => actions.leaveGroup() }] : []),
+  ];
+}
+
 /**
  * The declared item list per target kind. `actions` are the EXISTING functions (see input-manager.js):
  *   toggleDriving(constraint) — toggleDriving + its notifications; deleteSelection(); toggleLock(); lockState() → { locked };
  *   sketchTargets() → every sketch with { disabled, reason } for a locked one / the selection's own, moveToSketch(id), moveToNewSketch() (TASK 577).
+ *   groupState(), group(), ungroup(), enterGroup(), leaveGroup() (TASK 756: #ui/group-actions.js groupMenuActions).
  */
 export function contextMenuItems(kind, { target, actions }) {
   if (kind === 'dimension') {
@@ -205,7 +220,9 @@ export function contextMenuItems(kind, { target, actions }) {
       { id: 'geo-delete', label: 'Delete', onSelect: () => actions.deleteSelection() },
       // TASK 577: sketches as layers: one entry per sketch the selection can move to (a flat list: the menu has no submenus)
       ...(actions.sketchTargets ? sketchSubmenu(actions) : []),
+      ...(actions.groupState ? groupMenuItems(actions) : []), // TASK 756
     ];
   }
+  if (kind === 'group') return groupMenuItems(actions); // TASK 756: a group's row in the design browser
   return [];
 }

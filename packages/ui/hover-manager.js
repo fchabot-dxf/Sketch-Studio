@@ -5,7 +5,8 @@ import { findSnap } from '#ui/snap-detection.js';
 import { screenToWorld, getZoomFactor } from '#ui/coords.js';
 import { glyphPickHit } from '#ui/fusion-glyphs.js';
 import SettingsManager from '#core/settings-manager.js';
-import { ACTIVE_SKETCH_HOVER_TOOLS } from '#core/constants.js';
+import { ACTIVE_SKETCH_HOVER_TOOLS, TOOL_MODES } from '#core/constants.js';
+import { pickOwner, hoveredUnit } from '#core/group-model.js'; // TASK 756: the Select tool's hover lights the user group a click selects
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, pickableConstraints, activeSketchScene } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered; TASK 675: active-sketch tools hover only active sketch
 
@@ -64,15 +65,24 @@ export function selectPick(svg, state, hitJoint, hitShape, screenX, screenY, tou
 
 /**
  * Set state.hovered* from the select tool's pick (selectPick: hover = click).
+ * TASK 756: with the Select tool, a pick on a member of a user group (a curve, or one of its points) is a pick on the group a click there
+ * selects (#core/group-model.js pickOwner + selectUnit, the click's rule: the whole group when it is not entered, that level's group inside an entered
+ * one): state.hoverOwner names the shape the pointer is on and the renderer lights all of hoveredUnit(state) (the unit is read when drawn,
+ * so entering / leaving a group re-aims it at once); the point itself is not lit (the click does not select it). Other tools pick single
+ * curves and points: no hoverOwner.
  */
 export function applyHoverPriority(state, svg, hitJoint, hitShape, px, py) {
     const pick = selectPick(svg, state, hitJoint, hitShape, px, py);
     state.hoveredJoint = pick && pick.joint ? pick.joint.id : null;
     state.hoveredConstraint = pick && pick.constraint ? pick.constraint : null;
     state.hoveredShape = pick && pick.shape ? pick.shape.shape.id : null;
+    state.hoverOwner = (state.currentTool === TOOL_MODES.SELECT && pick && (pick.joint || pick.shape))
+        ? pickOwner(state, state.hoveredShape, state.hoveredJoint) : null;
+    if (hoveredUnit(state)) state.hoveredJoint = null;
 }
 
 export function setHoverFromSnap(state) {
+    state.hoverOwner = null; // TASK 756: a snap is a single target (the drawing tools)
     if (!state.snapTarget) {
         state.hoveredJoint = null;
         state.hoveredConstraint = null;
@@ -122,6 +132,7 @@ export function updateHover(svg, screenX, screenY, state) {
  * Called by tools that take exclusive control (like drawing tools)
  */
 export function clearHover(state) {
+    state.hoverOwner = null; // TASK 756
     state.hoveredJoint = null;
     state.hoveredConstraint = null;
     state.hoveredShape = null;

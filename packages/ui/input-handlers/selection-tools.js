@@ -55,7 +55,7 @@ function showCoincidentGlyphsForCluster(state, cluster){
 import { selectPick, applyHoverPriority } from '#ui/hover-manager.js';
 import { findConnectedChain } from '#core/loop-finder.js'; // TASK 588: the double-click chain
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
-import { selectUnit, shapesInGroup, enteredGroup, enterGroup, leaveGroups, isInGroup, stepOutOfGroup, groupIndex } from '#core/group-model.js'; // TASK 751: user groups, one level at a time
+import { selectUnit, shapesInGroup, enteredGroup, enterGroup, leaveGroups, isInGroup, stepOutOfGroup, groupIndex, pickOwner } from '#core/group-model.js'; // TASK 751: user groups, one level at a time
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MASKING HELPER (Rigid Drag Logic)
@@ -230,7 +230,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     // (#core/group-model.js selectUnit): pressGroup selects the whole group and drags it; the second press of a double click enters it.
     // A press on geometry outside the entered group leaves the entered group first.
     if (pick && (pick.joint || pick.shape)) {
-        const owner = pick.shape ? pick.shape.shape.id : shapeOfJoint(state, pick.joint.id);
+        const owner = pickOwner(state, pick.shape ? pick.shape.shape.id : null, pick.joint ? pick.joint.id : null); // TASK 756: THE owner rule (the hover's too)
         if (owner && enteredGroup(state) && !isInGroup(state, owner, enteredGroup(state))) leaveGroups(state);
         const unit = owner ? selectUnit(state, owner) : null;
         if (unit) return pressGroup(e, svg, state, unit, owner, pressOn('group:' + unit));
@@ -354,13 +354,6 @@ function selectAndDrag(e, svg, state, ids, hitShape) {
     const first = (state.shapes || []).find(s => s.id === ids[0]);
     if ((state.selectedShapes.size + (state.selectedJoints ? state.selectedJoints.size : 0)) > 1) return startGroupDrag(e, svg, state, first.joints[0], null);
     return hitShape ? startShapeDrag(e, svg, state, hitShape) : true;
-}
-
-// TASK 751: the shape a picked point belongs to (the first shape that has it; a point of no shape: null). A point of a grouped curve is a
-// press on that curve's group.
-function shapeOfJoint(state, jointId) {
-    const s = (state.shapes || []).find(x => (x.joints || []).includes(jointId));
-    return s ? s.id : null;
 }
 
 // TASK 751: a press on a member of user group `gid` (the group at the entered level, selectUnit). Every user group, hand-made or made by an

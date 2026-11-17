@@ -19,7 +19,8 @@ import { toggleDriving } from '#core/dimension-seams.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
-import { stepOutOfGroup, selectedGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
+import { stepOutOfGroup, selectedGroups, pickOwner, selectUnit, shapesInGroup, enteredGroup, isInGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
+import { groupSelection, ungroupSelection, groupMenuActions } from '#ui/group-actions.js'; // TASK 756: THE group commands (keys + menus), every app
 import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
@@ -136,6 +137,8 @@ let inputCtx = defaultInputCtx;
 // multi-surface host (Shaper: SVG editor + Design canvas) doesn't have the inactive Design hijack global input.
 // Default ()=>true → SketchStudio (passes no isActive) is byte-identical. Shaper passes () => Design visible.
 let isActiveFn = () => true;
+// TASK 756: the host's status line (opts.notify: Shaper's one-line toast; else the shared notification), for what the canvas menu runs (the group commands)
+let hostNotify = showNotification;
 
 // TASK 562/619: automatic touch lens — a finger is down on the canvas; the lens is ON while it draws or drags (finger hides the point it works on, lens shows it 80 px above).
 let touchPointerDown = false;
@@ -261,6 +264,7 @@ export function setupInput(svg, state, opts = {}) {
     canvasSvg = svg;
     inputCtx = opts.inputCtx || defaultInputCtx;
     isActiveFn = opts.isActive || (() => true); // P5b: gate predicate (default-on → byte-identical)
+    hostNotify = typeof opts.notify === 'function' ? opts.notify : showNotification; // TASK 756
     setupSelectionTools(svg, state);
     setupDrawingTools(svg, state);
     setupConstraintTools(svg, state);
@@ -1286,6 +1290,9 @@ function setupKeyboardShortcuts(state, opts = {}) {
         if (state.currentTool === TOOL_MODES.MIRROR && matchesShortcut(e, 'mirror.finish')) { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
         if (state.currentTool === TOOL_MODES.OFFSET && handleOffsetKeyDown(e)) { e.preventDefault(); return; } // TASK 650
         if (patternSessionOpen() && handlePatternKeyDown(e)) { e.preventDefault(); return; } // TASK 658: Enter = OK, Esc = Cancel
+        // TASK 756: Group / Ungroup in every app (moved here from apps/shaper/src/main.js): the same functions as the menus' entries
+        if (matchesShortcut(e, 'sketch.group')) { e.preventDefault(); groupSelection(state, notifyFn); return; }
+        if (matchesShortcut(e, 'sketch.ungroup')) { e.preventDefault(); ungroupSelection(state, notifyFn); return; }
         if (matchesShortcut(e, 'edit.delete')) { handleDelete(state); e.preventDefault(); } // TASK 727: not a Delete aimed at a focused document tab (it closes that tab)
         if (matchesShortcut(e, 'edit.cancel')) { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
@@ -1376,8 +1383,17 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
     if (!target) return false;
     const sel = { j: state.selectedJoints, s: state.selectedShapes, c: state.selectedConstraints };
     const replaceSelection = () => { sel.j.clear(); sel.s.clear(); sel.c.clear(); };
+    // TASK 756: with the Select tool, a right click (touch hold) on a member of a user group, or on one of its points, is on the group a click
+    // there selects (#core/group-model.js selectUnit, the click's rule; outside the entered group it leaves that group first, as the click
+    // does): outside the selection, that whole group becomes the selection, so the menu's entries act on it. (The Dimension tool picks singles.)
+    const groupPick = state.currentTool === TOOL_MODES.SELECT;
+    const owner = !groupPick ? null : target.kind === 'shape' ? target.id : target.kind === 'joint' ? pickOwner(state, null, target.id) : null;
+    if (owner && enteredGroup(state) && !isInGroup(state, owner, enteredGroup(state))) leaveGroups(state);
+    const unit = owner ? selectUnit(state, owner) : null;
     if (target.kind === 'dimension' || target.kind === 'constraint') {
         if (!(sel.c.has(target.constraint) && sel.c.size === 1 && !sel.j.size && !sel.s.size)) { replaceSelection(); sel.c.add(target.constraint); }
+    } else if (unit) {
+        if (!sel.s.has(owner)) { replaceSelection(); for (const id of shapesInGroup(state, unit)) sel.s.add(id); }
     } else if (target.kind === 'joint') {
         const onSelectedShape = [...sel.s].some(sid => { const s = state.shapes.find(x => x.id === sid); return s && s.joints && s.joints.includes(target.id); });
         if (!sel.j.has(target.id) && !onSelectedShape) { replaceSelection(); sel.j.add(target.id); }
@@ -1396,6 +1412,7 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
         sketchTargets: () => moveTargets(state), // TASK 577: sketches as layers
         moveToNewSketch: () => { const r = moveSelectionToNewSketch(state); if (!r.ok) showNotification('Cannot move to a new sketch: ' + r.reason + '.', 'warning'); },
         moveToSketch: (id) => { const r = moveSelectionToSketch(state, id); if (!r.ok) showNotification('Cannot move to that sketch: ' + r.reason + '.', 'warning'); },
+        ...groupMenuActions(state, hostNotify), // TASK 756: Group / Ungroup / Enter group / Leave group
     };
     const items = contextMenuItems(target.kind === 'dimension' || target.kind === 'constraint' ? target.kind : 'geometry', { target, actions });
     showContextMenu({ x: e.clientX, y: e.clientY, items, returnFocusTo: svg, touch });

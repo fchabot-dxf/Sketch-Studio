@@ -14,6 +14,7 @@ await loadGlyphSheetFromDisk(); // task 603: a glyph is picked where its icon is
 import SettingsManager from '#core/settings-manager.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 import { findConnectedChain } from '#core/loop-finder.js';
+import { hoveredUnit } from '#core/group-model.js'; // TASK 756
 import { screenToWorld } from '#ui/coords.js';
 
 SettingsManager.set('GRID_MAGNETISM', 0.001, { persist: 'none' }); // no grid snap: the cursor is where the geometry goes
@@ -278,6 +279,43 @@ const dragBy = quiet(async (app, a, dx, dy) => {
     measured.glyphPick.dblclickBeside = sel(st);
     assert.deepStrictEqual(sel(st), ['rE1', 'rE2', 'rE3', 'rE4'], 'a double click on the line beside its glyph selects the chain');
     assert.strictEqual(st.selectedConstraints.size, 0, 'and no constraint');
+  } finally { await app.close(); }
+}
+
+// ---- 4. TASK 756: HOVER = CLICK with user groups. With the Select tool a click on a member of a group (a curve or one of its points) selects
+// the group at the entered level (#core/group-model.js selectUnit), so the hover lights that whole group (hover-manager hoverOwner -> group-model hoveredUnit, drawn
+// lit by the renderer); inside the entered group the hover lights that level's unit (here the curve); another tool's hover stays on one curve.
+{
+  const R = rect('r', [0, 0, 40, 30]);
+  const doc = design({ ...R.joints, s1: [55, 0], s2: [70, 25] }, [...R.shapes.map((s) => ({ ...s, userGroupId: 'group-1' })), { id: 'S', type: 'line', joints: ['s1', 's2'] }], R.constraints);
+  doc.geometry.groups = [{ id: 'group-1', name: 'Frame', sketchId: 'sketch-1' }];
+  const app = await openDesign(doc, { x: 30, y: 15 });
+  try {
+    const st = app.state;
+    const blue = () => [...app.svg.querySelectorAll('line.shape-elem')].filter((e) => /--sk-selection|#017afd/i.test(e.getAttribute('style') || '')).map((e) => e.dataset.shapeId).sort();
+    const hoverAndClick = async (p, { stepOut = true } = {}) => {
+      await app.pause(PAIR_GAP_MS); if (stepOut) app.esc(); else { st.selectedShapes.clear(); app.frames(); } app.move(p.x, p.y); app.frames();
+      const hover = { lit: blue(), group: hoveredUnit(st), joint: st.hoveredJoint };
+      app.click(p.x, p.y);
+      return { hover, click: sel(st) };
+    };
+    const rows = {};
+    rows.edge = await hoverAndClick(on(app, 'rE2', 0.5));
+    rows.corner = await hoverAndClick(app.toScreen(40, 0));
+    rows.loose = await hoverAndClick(on(app, 'S', 0.5));
+    const all = ['rE1', 'rE2', 'rE3', 'rE4'];
+    assert.deepStrictEqual([rows.edge.hover.lit, rows.edge.click], [all, all], 'a group edge: the hover lights the whole group, the click selects it (' + JSON.stringify(rows.edge) + ')');
+    assert.deepStrictEqual([rows.corner.hover.lit, rows.corner.hover.joint, rows.corner.click], [all, null, all], 'a group corner point: the hover lights the group (not the point), the click selects it (' + JSON.stringify(rows.corner) + ')');
+    assert.deepStrictEqual([rows.loose.hover.lit, rows.loose.hover.group, rows.loose.click], [['S'], null, ['S']], 'a loose line: the hover and the click are that line');
+    await app.pause(PAIR_GAP_MS); app.esc(); await dbl(app, 'rE2');
+    assert.strictEqual(st.enteredGroupId, 'group-1', '(the double click entered the group)');
+    rows.inside = await hoverAndClick(on(app, 'rE3', 0.5), { stepOut: false });
+    assert.deepStrictEqual([rows.inside.hover.lit, rows.inside.hover.group, rows.inside.click], [['rE3'], null, ['rE3']], 'inside the entered group: the hover lights the curve, the click selects it (' + JSON.stringify(rows.inside) + ')');
+    app.esc(); app.esc(); app.tool('line'); app.frames();
+    { const p = on(app, 'rE2', 0.5); app.move(p.x, p.y); app.frames(); }
+    rows.lineTool = { hoveredGroup: hoveredUnit(st), lit: blue() };
+    assert.ok(rows.lineTool.hoveredGroup === null && !(rows.lineTool.lit.length > 1), 'the Line tool picks single curves: no group lit (' + JSON.stringify(rows.lineTool) + ')');
+    measured.groupHover = rows;
   } finally { await app.close(); }
 }
 

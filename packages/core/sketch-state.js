@@ -62,6 +62,7 @@ export function createSketchState(engine, view) {
     selectedShapes: new Set(),      // Track selected shapes (support multi-select)
     enteredGroupId: null,           // TASK 751: the user group the Select tool has entered (session UI: never saved, never an undo step; #core/group-model.js)
     hoveredShape: null,          // Track hovered shape for visual feedback
+    hoverOwner: null,            // TASK 756: the shape under the Select tool's hover (#ui/hover-manager.js); the group it lights is #core/group-model.js hoveredUnit
     hoveredJoint: null,          // Track hovered joint for visual feedback
     hoveredConstraint: null,     // Track hovered constraint for visual feedback
     // Construction mode: when true new shapes are created as construction geometry (dashed/faded)
@@ -181,6 +182,7 @@ export function createSketchState(engine, view) {
       this.lastMouse = null;
       this.pendingConstraint = null;
       this.hoveredShape = null;
+      this.hoverOwner = null; // TASK 756
       this.hoveredJoint = null;
       this.hoveredConstraint = null;
       this.clearHistory();

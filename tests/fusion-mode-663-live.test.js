@@ -158,7 +158,7 @@ try {
   }))()`);
   await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`);
   await waitFor(`!document.querySelector('.sk-sidebar').classList.contains('open')`, 'normal Shaper drawer close');
-  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export)');
+  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'fusion-addin', 'settings', 'log'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export; TASK 733: + the Fusion add-in download, hidden in Fusion mode)');
   assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
   assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
   assert.strictEqual(normalSidebar.hasAccount, true, 'normal Shaper keeps Google account / Drive section');

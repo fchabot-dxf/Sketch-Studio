@@ -24,10 +24,10 @@ export function getCutRecord(key) { return CUT_PLAN.get(key) || defaultCutRecord
 export function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec[field] = value; CUT_PLAN.set(key, rec); return rec; }
 
 // TASK 714: the STEP DEPTH a target switched to a stepped type gets when its record has none: the last step depth the user set on any stepped
-// cut (owner turn 1947), STEP_DEPTH.defaultMm (#core/stepped-cut.js) until one is set. Base mm, never below STEP_DEPTH.minMm. App state, like CUT_PLAN.
+// cut (owner turn 1947), STEP_DEPTH.defaultMm (#core/stepped-cut.js) until one is set. Base mm. App state, like CUT_PLAN.
 let lastStep = STEP_DEPTH.defaultMm;
 export const lastStepDepth = () => lastStep;
-export function rememberStepDepth(mm) { const n = Number(mm); if (n > 0) lastStep = Math.max(STEP_DEPTH.minMm, n); return lastStep; }
+export function rememberStepDepth(mm) { const n = Number(mm); if (n > 0) lastStep = n; return lastStep; }
 // TASK 717: ADAPTIVE stepping, per record (`adaptiveSteps`, default OFF) with its RESOLUTION (`stepDeviation`, base mm, #core STEP_RESOLUTION): the last
 // values set on any stepped cut are the next record's (switched to a stepped type) defaults, as for the step depth.
 let lastAdaptive = false;
@@ -35,7 +35,7 @@ let lastDeviation = STEP_RESOLUTION.defaultMm;
 export const lastAdaptiveSteps = () => lastAdaptive;
 export function rememberAdaptiveSteps(on) { lastAdaptive = on === true; return lastAdaptive; }
 export const lastStepDeviation = () => lastDeviation;
-export function rememberStepDeviation(mm) { const n = Number(mm); if (n > 0) lastDeviation = Math.max(STEP_RESOLUTION.minMm, n); return lastDeviation; }
+export function rememberStepDeviation(mm) { const n = Number(mm); if (n > 0) lastDeviation = n; return lastDeviation; }
 /**
  * steppedSummary(storedRec) — TASK 714: what a STEPPED record's terraces are (the same steppedTerraces call #core/stepped-cut deriveCuts makes, through
  * the effective record): { count, depths (base mm, shallow to deep), undercutBelow (mm | null), label, error, deviation (TASK 717: the adaptive

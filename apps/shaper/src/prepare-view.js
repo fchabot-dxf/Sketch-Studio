@@ -556,8 +556,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) onto every selected target + refresh LIVE.
     setFieldOnSelected(field, value) {
       if (selection.size === 0) return null;
-      if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: never below the minimum; the next cut switched to a stepped type starts from it
-      if (field === 'adaptiveSteps') value = rememberAdaptiveSteps(value); // TASK 717: same for adaptive stepping and its resolution (never below STEP_RESOLUTION.minMm)
+      if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: the next cut switched to a stepped type starts from it
+      if (field === 'adaptiveSteps') value = rememberAdaptiveSteps(value); // TASK 717: same for adaptive stepping and its resolution
       if (field === 'stepDeviation') value = rememberStepDeviation(value);
       let lastRec = null;
       for (const t of selection.values()) {

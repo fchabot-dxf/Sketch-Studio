@@ -1,5 +1,5 @@
 // tests/stepped-adaptive-717-node.test.js — TASK 717: ADAPTIVE stepping for the stepped cut types: a per-record checkbox "Adaptive stepping" (default OFF);
-// ON, the Step depth row is replaced by a "Resolution" row (Coarse 0.5 / Medium 0.25 / Fine 0.1 mm presets, a typed value = Custom, min 0.01 mm) = the
+// ON, the Step depth row is replaced by a "Resolution" row (Coarse 0.5 / Medium 0.25 / Fine 0.1 mm presets, a typed value = Custom, no minimum) = the
 // MAXIMUM DEVIATION of the stair from the true slope; each next step is at the deepest depth whose step stays within it (#core/stepped-cut.js
 // steppedTerraces with `deviation`, the deviation = stepDeviation: the distance from the step's inner corner to the wall, the CAM scallop height).
 //  1. #core: the R3 floor fillet at Coarse / Medium / Fine (more steps each time, every step within the level, checked against an independent
@@ -28,7 +28,7 @@ const FIX = new URL('./fixtures/sa7-slope/', import.meta.url);
 const payload = (name) => JSON.parse(fs.readFileSync(new URL(name + '.json', FIX), 'utf8'));
 const slopeOf = (name, kind) => { for (const r of payload(name).regions) { const s = slopeFromRegion(r, { scale: 1, yUp: true }, []); if (s && s.kind === kind) return s; } return null; };
 const LEVELS = { coarse: 0.5, medium: 0.25, fine: 0.1 };
-eq([STEP_RESOLUTION.levels.map((l) => [l.label, l.mm]), STEP_RESOLUTION.defaultMm, STEP_RESOLUTION.minMm], [[['Coarse', 0.5], ['Medium', 0.25], ['Fine', 0.1]], 0.25, 0.01], 'the levels: Coarse 0.5, Medium 0.25, Fine 0.1 mm; default Medium; Custom min 0.01 mm');
+eq([STEP_RESOLUTION.levels.map((l) => [l.label, l.mm]), STEP_RESOLUTION.defaultMm, 'minMm' in STEP_RESOLUTION], [[['Coarse', 0.5], ['Medium', 0.25], ['Fine', 0.1]], 0.25, false], 'the levels: Coarse 0.5, Medium 0.25, Fine 0.1 mm; default Medium; no minimum');
 eq([resolutionLevel(0.25).label, resolutionLevel(0.3)], ['Medium', null], 'a typed value that is no level = Custom');
 
 // ── 1. the placement ──
@@ -114,7 +114,7 @@ const devs = (s, kind, ds) => ds.map((d, i) => stepDeviation(s, { kind, from: i 
     eq(JSON.stringify(steppedTerraces(s, terraceOptions({ terraceAs, stepDepth: 1, cutDepth: 'unset' }))), plain, `${name}: a 716 record (no adaptive fields) = the same`);
   }
   eq(terraceOptions({ terraceAs: 'pocket', stepDepth: 1, cutDepth: 8, adaptiveSteps: true }).deviation, 0.25, 'ON with no stored resolution: Medium');
-  eq(adaptive(slopeOf('02-drafted-pocket', 'pocket'), 'pocket', 0.001, 8).deviation, 0.01, 'a deviation under 0.01 mm is cut at 0.01 mm');
+  eq(adaptive(slopeOf('02-drafted-pocket', 'pocket'), 'pocket', 0.001, 8).deviation, 0.001, 'a deviation of 0.001 mm is kept as given');
 }
 
 // ── 2. the app ──
@@ -202,16 +202,16 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     eq(typeDepths(svg, 'pocket'), mmStr(reviewDepths(app)), 'Fine: export == Review');
     ok(h.note()[0].startsWith('Pocket 1 (8mm): adaptive, Fine (0.1 mm): 16 steps at 5.76 · 6.08'), 'Fine note: ' + h.note()[0]);
 
-    // Custom: a typed value (doc unit), no preset active; under 0.01 mm -> 0.01 mm
+    // Custom: a typed value (doc unit), no preset active; any value above 0 is kept
     h.set('.cut-step-deviation', '0.3');
     eq([CUT_PLAN.get(pk).stepDeviation, h.presets('stepDeviation'), h.q('.cut-step-deviation').value], [0.3, ['Coarse', 'Medium', 'Fine'], '0.300'], 'Custom 0.3 mm: stored, no preset active');
     ok(/^Pocket 1 \(8mm\): adaptive, Custom \(0\.3 mm\): \d+ steps at /.test(h.note()[0]), 'the note names it Custom: ' + h.note()[0]);
     const custom = reviewDepths(app);
     ok(custom.length > 4 && custom.length < 7, `Custom 0.3 mm: between Coarse and Medium (${custom.length} steps)`);
     h.set('.cut-step-deviation', '0.001');
-    eq(CUT_PLAN.get(pk).stepDeviation, 0.01, 'a typed value under the minimum is stored as 0.01 mm');
+    eq(CUT_PLAN.get(pk).stepDeviation, 0.001, 'a typed 0.001 mm is stored as typed (no minimum)');
     h.set('.cut-step-deviation', 'abc');
-    eq([CUT_PLAN.get(pk).stepDeviation, h.q('.cut-step-deviation').value], [0.01, '0.010'], 'an unreadable value changes nothing (the field shows the stored one again)');
+    eq([CUT_PLAN.get(pk).stepDeviation, h.q('.cut-step-deviation').value], [0.001, '0.001'], 'an unreadable value changes nothing (the field shows the stored one again)');
 
     // undo / redo walk back through every change to OFF
     app.key('z', { ctrl: true });

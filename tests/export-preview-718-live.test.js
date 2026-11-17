@@ -43,6 +43,9 @@ function fileElements(svg) {
   }
   return out;
 }
+// TASK 743: the 2D view paints the OUTSIDE elements at the back, deepest first (export-preview.js; the file writes the operations in cutting order, the
+// outside cut last): the view's element order = the file's with those moved first
+const paintOrder = (els) => { const depth = (e) => parseFloat(e.split(' ')[2]); const outs = els.filter((e) => e.split(' ')[1] === 'outside').sort((a, b) => depth(b) - depth(a)); return [...outs, ...els.filter((e) => !outs.includes(e))]; };
 // the 2D view's elements as the page's own module reads them (export-preview.js previewItems on the shown layer)
 const shownElements = () => evalJs(`import('/apps/shaper/src/export-preview.js').then((m) => m.previewItems(document.querySelector('#review-2d-canvas .rv2d-doc') || document.createElement('div')).map((e) => e.tag + ' ' + e.cutType + ' ' + e.depth))`);
 const label = () => evalJs(`document.getElementById('review-2d-info').textContent`);
@@ -66,7 +69,7 @@ const tap = async (x, y) => {
 };
 // a real click / tap on the element's centre, after checking nothing covers it there
 const clickEl = async (sel) => {
-  const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect();
+  const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); // TASK 743: the side card scrolls (the operations list is taller)
     const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
     return { x, y, onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
   assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
@@ -137,7 +140,7 @@ try {
   console.log('real solid, 2D view: ' + JSON.stringify(solidShown));
   console.log('real solid, downloaded file: ' + JSON.stringify(solidFileEls));
   assert.strictEqual(solidShown.length, solidFileEls.length, 'the 2D view shows as many elements as the downloaded file holds');
-  assert.deepStrictEqual(solidShown, solidFileEls, 'element by element: the same tag, type and depth, in file order');
+  assert.deepStrictEqual(solidShown, paintOrder(solidFileEls), 'element by element: the same tag, type and depth, in file order (the outside painted first, TASK 743)');
   assert.deepStrictEqual(solidFileEls.map((e) => e.split(' ')[1]).sort(), ['inside', 'inside', 'inside', 'outside', 'pocket', 'pocket', 'pocket', 'pocket'], 'the file: the 711 result (1 outside, 3 inside, 4 pockets)');
   assert.ok(!/data-/.test(solidFile), 'the downloaded file has no data-* attribute');
   const solidList = await evalJs(`[...document.querySelectorAll('#review-cuts-list > *')].map((e) => e.textContent)`);
@@ -145,9 +148,9 @@ try {
   assert.strictEqual(await label(), '8 elements · tap one to see its cut', 'the label before a pick');
   const fitted = await viewBox();
   // a list row picks its element(s): the 10 mm pocket
-  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-row')].findIndex((b) => b.textContent.startsWith('10.000 mm'))`);
+  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && b.textContent.startsWith('10.000 mm'))`);
   assert.ok(row10 >= 0, 'the list has the 10 mm pocket row');
-  await clickEl(`#review-cuts-list .rv2d-row:nth-of-type(${row10 + 1})`);
+  await clickEl(`#review-cuts-list > button:nth-of-type(${row10 + 1})`); // TASK 743: the list's buttons are the operation headers and their rows
   const rowPick = await evalJs(`({ label: document.getElementById('review-2d-info').textContent, picked: [...document.querySelectorAll('#review-2d-canvas .rv2d-picked')].length,
     pressed: [...document.querySelectorAll('#review-cuts-list .rv2d-row')].map((b) => b.getAttribute('aria-pressed')).filter((p) => p === 'true').length })`);
   console.log('list row pick: ' + JSON.stringify(rowPick));
@@ -191,7 +194,7 @@ try {
   fs.writeFileSync(path.join(EVIDENCE_DIR, 'r3-fillet-download.svg'), r3File);
   console.log('R3 fillet, 2D view: ' + JSON.stringify(r3Shown));
   console.log('R3 fillet, downloaded file: ' + JSON.stringify(fileElements(r3File)));
-  assert.deepStrictEqual(r3Shown, fileElements(r3File), 'R3 fillet: the 2D view == the downloaded file, element by element');
+  assert.deepStrictEqual(r3Shown, paintOrder(fileElements(r3File)), 'R3 fillet: the 2D view == the downloaded file, element by element (the outside painted first, TASK 743)');
   assert.deepStrictEqual(r3Shown, ['path outside 19.000 mm', 'path pocket 6.651 mm', 'path pocket 7.333 mm', 'path pocket 7.843 mm', 'path pocket 8.000 mm'], 'the outline + the 4 Coarse steps');
   assert.ok(!/data-/.test(r3File), 'the downloaded file has no data-* attribute (the step numbers are in the preview copy only)');
   await clickEl('#review-fit');
@@ -253,8 +256,8 @@ try {
   // a tap on a list row (the step 3 row) picks it
   await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-row')].find((b) => /step 3 of 4/.test(b.textContent)).scrollIntoView({ block: 'nearest' })`);
   await sleep(200);
-  const row3 = await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-row')].findIndex((b) => /step 3 of 4/.test(b.textContent))`);
-  await clickEl(`#review-cuts-list .rv2d-row:nth-of-type(${row3 + 1})`);
+  const row3 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && /step 3 of 4/.test(b.textContent))`);
+  await clickEl(`#review-cuts-list > button:nth-of-type(${row3 + 1})`); // TASK 743: the list's buttons are the operation headers and their rows
   assert.strictEqual(await label(), 'pocket · 7.843 mm · step 3 of 4', 'phone: a tap on a list row picks its element');
   assert.strictEqual(await evalJs(`document.querySelector('#review-2d-canvas .rv2d-picked').getAttribute('data-step')`), '3/4', 'phone: the step 3 element is highlighted');
   await shot('phone-2d-list-row.png');

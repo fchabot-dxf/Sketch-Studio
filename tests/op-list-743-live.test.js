@@ -137,6 +137,7 @@ try {
     await openMode('review');
     if (await evalJs(`document.getElementById('review-view-2d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-2d');
     await waitFor(`document.querySelectorAll('#review-cuts-list .rv2d-op').length > 0`, label + ': the 2D list');
+    await evalJs(`document.getElementById('review-side').scrollTop = 0`); // the list at the top of the side card (a download scrolled it to the buttons)
     await sleep(300);
     const l = await evalJs(`[...document.querySelectorAll('#review-cuts-list > *')].filter((e) => e.matches('.rv2d-tool, .rv2d-op')).map((e) => e.matches('.rv2d-tool') ? '# ' + e.textContent : e.firstChild.textContent)`);
     console.log(label + ' 2D list: ' + JSON.stringify(l));
@@ -223,9 +224,15 @@ try {
     // Export 2D: the same operations, the same order, the same headings
     const l2d = await export2d(label);
     assert.deepStrictEqual(l2d.filter((t) => t.startsWith('# ')), ['# Change to ⅛″ end mill', '# Change to ¼″ end mill'], label + ': 2D: the tool headings');
-    assert.deepStrictEqual(l2d.filter((t) => !t.startsWith('# ')).map((t) => t.split(' (')[0]), titles(l3), label + ': 2D: the operations in the Prepare order');
+    assert.deepStrictEqual(l2d.filter((t) => !t.startsWith('# ')), l3.filter((t) => !t.startsWith('# ')).map((t) => t.replace(/^\d+\. /, '').replace(' | ', ' · ')), label + ': 2D: the operations in the Prepare order, in its words');
     await shot(`${D}-export-2d-ops.png`, phone ? null : ['#review-stage', '#review-side']);
     if (!phone) await shot(`${D}-export-2d-list.png`, '#review-cuts', 2);
+    // a tap on an operation's header picks every element of it (the two 1/8 in holes)
+    await clickEl('#review-cuts-list .rv2d-op');
+    const opPick = await evalJs(`({ label: document.getElementById('review-2d-info').textContent, picked: [...document.querySelectorAll('#review-2d-canvas .rv2d-picked')].map((e) => e.localName), pressed: document.querySelector('#review-cuts-list .rv2d-op').getAttribute('aria-pressed') })`);
+    console.log(label + ' 2D op pick: ' + JSON.stringify(opPick));
+    assert.deepStrictEqual(opPick, { label: `⅛″ end mill · Inside · ${L.full} (2 regions) · 2 elements`, picked: ['circle', 'circle'], pressed: 'true' }, label + ': 2D: the operation header picks its elements');
+    if (phone) await shot(`${D}-export-2d-op-picked.png`);
     // the downloaded file: one <g> per operation in that order; each group byte-identical to the one before the reorder
     const file1 = await download();
     fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-download-reordered.svg`), file1);

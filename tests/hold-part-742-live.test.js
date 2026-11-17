@@ -125,6 +125,8 @@ try {
     st.joints.set('Ho', { x: 100, y: 50 }); st.shapes.push({ id: 'H', type: 'circle', joints: ['Ho'], radius: 15 });
   })()`);
 
+  // TASK 743: the 2D view paints the OUTSIDE elements at the back, deepest first (export-preview.js): its element order = the file's with those moved first
+  const paintOrder = (list, keyOf = (e) => e) => { const depth = (e) => parseFloat(keyOf(e).split(' ')[2]); const outs = list.filter((e) => keyOf(e).split(' ')[1] === 'outside').sort((a, b) => depth(b) - depth(a)); return [...outs, ...list.filter((e) => !outs.includes(e))]; };
   // a 2D check: the shown elements == the downloaded file (type + depth + geometry, element by element), every path closed, no data-* in the file
   const export2d = async (label, expectKeys, expectHolds) => {
     await openMode('review');
@@ -133,14 +135,15 @@ try {
     await sleep(300);
     const shown = await shownElements();
     console.log(label + ' 2D: ' + JSON.stringify(shown.map((e) => e.key + (e.hold ? ' [' + e.hold + ']' : ''))));
-    assert.deepStrictEqual(shown.map((e) => e.key), expectKeys, label + ': the 2D view elements');
-    assert.deepStrictEqual(shown.map((e) => e.hold), expectHolds, label + ': the preview\'s pass / gap marks');
+    const expected = paintOrder(expectKeys.map((k, i) => ({ key: k, hold: expectHolds[i] })), (e) => e.key); // the file order given, as the view paints it
+    assert.deepStrictEqual(shown.map((e) => e.key), expected.map((e) => e.key), label + ': the 2D view elements');
+    assert.deepStrictEqual(shown.map((e) => e.hold), expected.map((e) => e.hold), label + ': the preview\'s pass / gap marks');
     const rows = await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-row')].map((b) => b.textContent)`);
     console.log(label + ' list: ' + JSON.stringify(rows));
     const file = await download();
     fs.writeFileSync(path.join(EVIDENCE_DIR, `${label}-download.svg`), file);
     const fe = fileElements(file);
-    assert.deepStrictEqual(shown.map((e) => [e.key, e.d]), fe.map((e) => [e.key, e.d]), label + ': the 2D view == the downloaded file, element by element (geometry too)');
+    assert.deepStrictEqual(shown.map((e) => [e.key, e.d]), paintOrder(fe, (e) => e.key).map((e) => [e.key, e.d]), label + ': the 2D view == the downloaded file, element by element (geometry too)');
     assert.ok(!/data-/.test(file), label + ': the downloaded file has no data-* attribute');
     assert.ok(fe.every((e) => !e.d || /Z\s*$/.test(e.d)), label + ': every path of the file is CLOSED');
     return { shown, rows, file };

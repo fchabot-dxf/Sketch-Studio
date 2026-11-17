@@ -134,7 +134,7 @@ try {
   fs.writeFileSync(path.join(EVIDENCE_DIR, 'export-drafted-stepped.svg'), svg);
   const els = [...svg.matchAll(/<(path|circle) [^>]*shaper:cutType="([^"]+)"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => `${m[2]} ${m[3]}`);
   console.log('EXPORT ' + JSON.stringify(els));
-  assert.deepStrictEqual(els, ['outside 19.000 mm', ...[1, 2, 3, 4, 5, 6, 7, 8].map((k) => `pocket ${k}.000 mm`)], 'the export: the outline + 8 plain pockets at 1..8 mm');
+  assert.deepStrictEqual(els, [...[1, 2, 3, 4, 5, 6, 7, 8].map((k) => `pocket ${k}.000 mm`), 'outside 19.000 mm'], 'the export: 8 plain pockets at 1..8 mm + the outline (TASK 743: in operation order, the outside last)');
 
   // 4. the outline chamfered top and bottom: Stepped outside, the undercut cut straight
   await openStage('prepare');

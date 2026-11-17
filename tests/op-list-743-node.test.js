@@ -2,7 +2,8 @@
 //  1. derivation: records -> operations on a drawn plate with mixed tools (⅛ in / ¼ in end mills, a 6 mm ball nose, a ¼ in 60° V-bit), types (Guide, On line,
 //     Pocket, Inside, Outside with Tabs) and settings (two equal pockets = ONE operation of 2 regions; the same pocket with an offset = another); the labels;
 //     the default order (Not cut first; then tools by the highest rank of their cuts, so the bit that frees the part is last; in a tool on line, pockets,
-//     inside, outside, shallow before deep); a stored order is kept and a NEW operation slots in after its default-order predecessor;
+//     inside, outside, shallow before deep); a stored order is kept and a NEW operation slots in by the default rule (with its tool's operations when the
+//     order has some, else after its default-order predecessor);
 //  2. a stepped operation (the SA-7 R3 floor fillet as a Stepped pocket, adaptive Coarse) shows its steps;
 //  3. the export: one <g id><title> per operation, in the order; a reorder changes ONLY the order of the groups (each byte-identical); every element and its
 //     encoding is the one the pre-743 export wrote (same multiset of element + resolved attributes);
@@ -15,6 +16,7 @@ import fs from 'node:fs';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
+import { formatShaperParam } from '#core/units.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
@@ -123,17 +125,24 @@ SettingsManager.set('LENGTH_PRECISION', null);
   const stored = ops.map((o) => o.key).reverse();
   setOpOrder(stored);
   eq(planOperations(st, cutPlanEntries()).map((o) => o.key), stored, 'a stored order is followed');
-  // a NEW operation (a ⅛ in pocket at 1/16 in on pocket C, taken out of the ¼ in pocket operation) slots in after its default-order predecessor
+  // a NEW operation with a tool the order already has (a ⅛ in pocket at 1/16 in on pocket C, out of the ¼ in pocket operation): it joins the ⅛ in bit's
+  // operations, placed by the in-tool rule (a pocket before the holes), so the bit is not changed twice
   CUT_PLAN.set(K.pc, rec('pocket', 1.5875, 3.175));
   const after = planOperations(st, cutPlanEntries());
   const fresh = after.find((o) => o.label.startsWith('⅛″ end mill · Pocket'));
   ok(fresh, 'the new ⅛ in pocket operation');
-  const def = defaultOpOrder(after.slice());
-  const pred = def[def.findIndex((o) => o.key === fresh.key) - 1];
-  console.log('new op: ' + fresh.label + ' | default predecessor: ' + pred.label + ' | order: ' + after.map((o) => o.label.split(' (')[0]).join(' > '));
-  eq(after.findIndex((o) => o.key === fresh.key), after.findIndex((o) => o.key === pred.key) + 1, 'the new operation sits right after its default-order predecessor in the stored order');
+  console.log('new op (known tool): ' + after.map((o) => o.label.split(' (')[0]).join(' > '));
+  eq(after.findIndex((o) => o.key === fresh.key) + 1, after.findIndex((o) => o.label.startsWith('⅛″ end mill · Inside')), 'it sits right before the ⅛ in Inside (its tool, the in-tool rule)');
   eq(after.filter((o) => o !== fresh).map((o) => o.key), stored, 'the stored operations keep their order');
   eq(after.find((o) => o.label.startsWith('¼″ end mill · Pocket · 0.25 in (1 region)') && !o.detail).records.map((r) => r.planKey), [K.pa], 'pocket A alone in its operation now');
+  // a NEW tool (a ½ in end mill on pocket D): no operation of it in the order, so it goes right after its default-order predecessor
+  CUT_PLAN.set(K.pd, rec('pocket', 3.175, 12.7));
+  const after2 = planOperations(st, cutPlanEntries());
+  const half = after2.find((o) => o.tool && o.tool.label === '½″ end mill');
+  const def = defaultOpOrder(after2.slice());
+  const pred = def[def.findIndex((o) => o.key === half.key) - 1];
+  console.log('new op (new tool): ' + half.label + ' | default predecessor: ' + pred.label + ' | order: ' + after2.map((o) => o.label.split(' (')[0]).join(' > '));
+  eq(after2.findIndex((o) => o.key === half.key), after2.findIndex((o) => o.key === pred.key) + 1, 'a new tool sits right after its default-order predecessor');
   setOpOrder([]);
 }
 
@@ -275,6 +284,23 @@ CUT_PLAN.clear(); setOpOrder([]);
       eq(shaperSvgOf(app.state, cutPlanEntries()), svgBefore, 'the export is byte-identical');
     } finally { await app.close(); }
   }
+}
+// ── 6. Shaper's own importer reads the grouped file back: the cut attributes sit on the element or its nearest <g> (cut-import.js, task 706, walks up through
+// the operation <g>), the <title> is structural (sketch-import.js silent tags): every element comes back as a record with its type and depth ──
+CUT_PLAN.clear(); setOpOrder([]);
+{
+  const st = design(), K = keysOf(st);
+  plan(K);
+  CUT_PLAN.set(K.plate, rec('exterior', 19.05, 6.35)); // no tabs: one element per record
+  const svg = shaperSvgOf(st, cutPlanEntries());
+  const wanted = [...CUT_PLAN.values()].map((r) => `${r.cutType} ${r.cutDepth === 'unset' ? 'unset' : formatShaperParam(Number(r.cutDepth), 'in')}`).sort(); // as the file writes it (3 decimals of the doc unit: 1/16 in is written 0.063 in)
+  CUT_PLAN.clear();
+  const app = await open({ host: 'shaper' });
+  try {
+    app.importFile(svg, 'ops-743.svg');
+    const got = [...CUT_PLAN.values()].map((r) => `${r.cutType} ${r.cutDepth === 'unset' ? 'unset' : formatShaperParam(Number(r.cutDepth), 'in')}`).sort(); // as the file writes it (3 decimals of the doc unit: 1/16 in is written 0.063 in)
+    eq(got, wanted, 'the grouped file imports back: every record with its type and depth');
+  } finally { CUT_PLAN.clear(); await app.close(); }
 }
 CUT_PLAN.clear(); setOpOrder([]);
 console.log(`op-list-743-node.test.js: ok (${checks} checks)`);

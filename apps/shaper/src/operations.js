@@ -13,7 +13,9 @@
 //     order is the order the user happened to click regions in, which says nothing about the cutting order.
 //  2. inside one tool: by opRank (on line, pockets, inside = holes, outside last: holes before the part is freed, pockets before through cuts),
 //     then shallow before deep (unset depth last), then the smaller offset, then the plan's order.
-//  A new operation (not in the stored order) is put right after the operation that comes before it in the default order (at the top when none does).
+//  A NEW operation (not in the stored order) slots in by the same rule: when the stored order already has operations with its tool, it joins them (before
+//  the first of them that the in-tool rule puts after it, else after the last of them: no extra tool change); a new tool goes right after the operation
+//  that comes before it in the default order (at the top when none does).
 // INSIDE an operation the paths are in the plan's order of its regions, and per region in the derivation's order (#core/stepped-cut deriveCuts): an
 // Outside plate's own holes before its outline, a stepped cut's terraces shallow to deep, a held cut's pass before its gap strips.
 import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS } from './shaper.js';
@@ -88,6 +90,9 @@ export function opKeyOf(rec) {
 const rankOf = (op) => (cutTypeById(op.cutType) || {}).opRank ?? 9;
 const depthNum = (op) => (op.settings && isSet(op.settings.depth) ? op.settings.depth : Infinity);
 const shapeIndex = (tool) => CUTTER_SHAPES.findIndex((s) => s.id === tool.shape);
+const toolKeyOf = (op) => (op.tool ? op.tool.key : '');
+// inside one tool: on line, pockets, inside, outside (opRank); shallow before deep; the smaller offset; the plan's order
+const inTool = (a, b) => rankOf(a) - rankOf(b) || depthNum(a) - depthNum(b) || ((a.settings && a.settings.offset) || 0) - ((b.settings && b.settings.offset) || 0) || a.first - b.first;
 
 /** The DEFAULT order of `ops` (see the header). */
 export function defaultOpOrder(ops) {
@@ -99,11 +104,10 @@ export function defaultOpOrder(ops) {
     g.ops.push(op); g.rank = Math.max(g.rank, rankOf(op));
   }
   const byTool = (a, b) => (!a.tool ? -1 : !b.tool ? 1 : a.rank - b.rank || a.tool.dia - b.tool.dia || shapeIndex(a.tool) - shapeIndex(b.tool) || (a.tool.angle ?? 0) - (b.tool.angle ?? 0));
-  const inTool = (a, b) => rankOf(a) - rankOf(b) || depthNum(a) - depthNum(b) || ((a.settings && a.settings.offset) || 0) - ((b.settings && b.settings.offset) || 0) || a.first - b.first;
   return [...tools.values()].sort(byTool).flatMap((g) => g.ops.sort(inTool));
 }
 
-/** `ops` in the stored order `keys`; an operation not in it slots in after its default-order predecessor (see the header). */
+/** `ops` in the stored order `keys`; an operation not in it slots in by the default rule (see the header). */
 export function orderOps(ops, keys = order) {
   const def = defaultOpOrder(ops.slice());
   const byKey = new Map(ops.map((op) => [op.key, op]));
@@ -112,8 +116,10 @@ export function orderOps(ops, keys = order) {
   if (!out.length) return def;
   def.forEach((op, i) => {
     if (out.includes(op.key)) return;
+    const sameTool = out.map((k, at) => ({ op: byKey.get(k), at })).filter((x) => toolKeyOf(x.op) === toolKeyOf(op));
     let at = 0;
-    for (let j = i - 1; j >= 0; j--) { const p = out.indexOf(def[j].key); if (p >= 0) { at = p + 1; break; } }
+    if (sameTool.length) { const later = sameTool.find((x) => inTool(op, x.op) < 0); at = later ? later.at : sameTool[sameTool.length - 1].at + 1; }
+    else for (let j = i - 1; j >= 0; j--) { const p = out.indexOf(def[j].key); if (p >= 0) { at = p + 1; break; } }
     out.splice(at, 0, op.key);
   });
   return out.map((k) => byKey.get(k));

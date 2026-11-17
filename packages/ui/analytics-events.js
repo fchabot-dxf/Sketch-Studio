@@ -32,6 +32,8 @@ export const FEATURES = Object.freeze([
   'import:image',      // a photo loaded to trace (Trace)
   'drive:save',        // a design saved under a name (#ui/document-buffer.js saveAs: saving goes to Google Drive)
   'drive:open',        // a stored design opened (#ui/project-actions.js openDesign)
+  'local:save',        // TASK 759: a design saved to a file on this device (#ui/document-buffer.js saveToFile / saveHome: Save as > Local, or Save of a file home)
+  'local:open',        // TASK 759: a design file opened from this device (#ui/document-buffer.js openFile / openFileTab: Open > Local, or a file dropped on the drawing)
   'print',             // the Print button of SketchStudio's Drawing step (apps/sketchstudio/drawing-view.js)
   'settings',          // the settings / style panel opened (#ui/style-panel.js)
   'shortcut-changed',  // TASK 747: a keyboard shortcut given another key, swapped or left with none in Settings > Shortcuts (#ui/shortcuts-list.js); never which key

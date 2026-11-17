@@ -43,7 +43,8 @@
 
 import { serializeDocument, deserializeDocument, validateDocument } from '#core/document.js';
 import { getProjectStore, emptyDocument } from '#ui/project-store.js';
-import { browserFileSeam, serializeProjectFile, projectFileName } from '#ui/project-file.js';
+import { browserFileSeam, serializeProjectFile, parseProjectFile, projectFileName, designNameOfFile } from '#ui/project-file.js';
+import { homeOf } from '#ui/document-home.js'; // TASK 759: where a tab's design lives (Drive, a file on this device, or nowhere yet)
 import { track } from '#ui/analytics.js'; // TASK 738: a design saved under a name
 
 /** T7 (owner ruling 2026-11-12): at most this many designs open at once (each tab keeps up to HISTORY_DEPTH undo steps in memory). */
@@ -54,7 +55,7 @@ export const UNTITLED = 'Untitled';
  *  file. A host that declares `showDesign` shows its Design view for these, before onRestored. Not: 'switch' (a tab switch keeps the stage), 'restore' (the
  *  page's own restore keeps the stored stage), 'conflict' (a Drive reload of the same tab). (Moved here from Shaper's modes.js, TASK 705.) */
 export const OPENING_REASONS = Object.freeze(new Set(['new', 'open', 'file']));
-const TAB_BUFFER_FIELDS = ['doc', 'history', 'redoStack', 'view', 'hostSessions', 'lastSig', 'emptySig', 'hasOwnSidecar', 'content', 'saveOk', 'designId', 'name'];
+const TAB_BUFFER_FIELDS = ['doc', 'history', 'redoStack', 'view', 'hostSessions', 'lastSig', 'emptySig', 'hasOwnSidecar', 'content', 'saveOk', 'designId', 'name', 'file'];
 /** Render caches stamped by svg-renderer on live constraints; stripped from change signatures so viewing / zooming / panning never triggers a save (task 687). */
 const RENDER_CONSTRAINT_KEYS = ['glyphPos', '__visible', '__showGlyph'];
 function docChangeSig(doc) {
@@ -153,8 +154,14 @@ export function mergeTabBuffers(stored, mine, base, app) {
  *   doc / win: the page's document and window (injectable for tests): when the tab goes hidden or is closing, the buffer saves pending
  *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
- * Returns { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
- *   isStored, needsSavePrompt, discardUnsaved, tabs, openTab, openFileTab, newTab, activate, closeTab, store }.
+ * Returns { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, saveToFile, saveHome, openFile, followMoves, designId, designName,
+ *   home, rename, isStored, needsSavePrompt, discardUnsaved, tabs, openTab, openFileTab, newTab, activate, closeTab, store }.
+ *
+ * TASK 759, A FILE HOME (document-home.js): a design opened from a file on this device (openFile / openFileTab) or saved to one (saveToFile, Save as > Local) is
+ * NOT a stored design: like an unsaved Untitled it is unbound (designId() === null) and lives in the open-tabs buffer, but it carries its file ({ name,
+ * handle }) and its baseline (emptySig) is the content as last read from / written to that file, so needsSavePrompt() answers 'unsaved' (the tab's dot)
+ * exactly while it has changes not written to the file. saveHome() writes it there (the handle, else the picker again, else a download). The buffer keeps the
+ * file NAME across a reload, never the handle (a page-memory object).
  */
 export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, showDesign = null, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
   // ---- the ACTIVE tab's live binding (an inactive tab keeps the same fields in its record) ----
@@ -166,6 +173,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let otherSessions = {}; // TASK 684: the OTHER apps' sessions of the shown tab (hostSessions minus this app's): passed through the shared buffer untouched
   let hasOwnSidecar = false; // TASK 687: true once the shown document carried hosts[hostName] or the user changed something in this host
   let defaultHostSig = null; // TASK 687: getHostData() snapshot of an un-sidecar'd host right after onRestored; matching it writes no default sidecar
+  let fileHome = null;    // TASK 759: { name, handle } of an unbound design whose home is a file on this device; null = no file home
   let saveOk = true;      // the last autosave of the bound design succeeded
   let bufferOk = true;    // the last local working-buffer write succeeded (beforeunload arms on failure)
   let lastBufSig = null;  // JSON string of last successfully persisted open-tabs buffer
@@ -238,6 +246,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const withOwn = (sessions, mine) => { const o = { ...(sessions || {}) }; if (mine === undefined) delete o[app]; else o[app] = mine; return o; };
   /** What of this app's session of a tab the working buffer may keep (session.stored; the in-memory capture can hold a DOM element or a photo). */
   const storedSession = (data) => (data === undefined || !session || typeof session.stored !== 'function' ? data : session.stored(data));
+  /** TASK 759: what the open-tabs buffer keeps of a file home: its NAME only (the handle is a page-memory object; after a reload the home is "name only"). */
+  const storedFile = (f) => (f && f.name ? { name: f.name } : null);
   /** The active design is an unsaved Untitled with content. */
   const activeContent = () => !boundId && hasContent(fullSigNow(), emptySig);
 
@@ -250,8 +260,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       activeKey: active.key,
       currentId: boundId || null,
       tabs: tabList.map((t) => (t === active
-        ? { key: t.key, designId: boundId || null, name, content: activeContent(), saveOk, doc: fullDoc(), view: state.view ? { ...state.view } : null, hostSessions: withOwn(otherSessions, session ? storedSession(session.capture()) : undefined) }
-        : { key: t.key, designId: t.designId || null, name: t.name, content: !!t.content, saveOk: t.saveOk !== false, doc: t.doc, view: t.view ? { ...t.view } : null, hostSessions: withOwn(t.hostSessions, storedSession((t.hostSessions || {})[app])) })),
+        ? { key: t.key, designId: boundId || null, name, content: activeContent(), saveOk, doc: fullDoc(), view: state.view ? { ...state.view } : null, hostSessions: withOwn(otherSessions, session ? storedSession(session.capture()) : undefined), file: storedFile(fileHome) }
+        : { key: t.key, designId: t.designId || null, name: t.name, content: !!t.content, saveOk: t.saveOk !== false, doc: t.doc, view: t.view ? { ...t.view } : null, hostSessions: withOwn(t.hostSessions, storedSession((t.hostSessions || {})[app])), file: storedFile(t.file) })),
     };
   }
   /** Write the snapshot into the SHARED buffer, merged with what other pages wrote there (mergeTabBuffers). Resolves false when it could not be written. */
@@ -300,8 +310,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
 
   // ---- the binding: a stored design, or an unsaved Untitled ----------------------------------------------------------------------
-  function bindStored(design) { boundId = design.id; name = design.name; emptySig = null; saveOk = true; resetHostBaseline(docHasOwnHost(design.document && design.document.hosts)); lastSig = sigNow(); }
-  function bindUntitled() { boundId = null; name = UNTITLED; saveOk = true; foreign = {}; otherSessions = {}; resetHostBaseline(false); lastSig = sigNow(); emptySig = fullSigNow(); }
+  function bindStored(design) { boundId = design.id; name = design.name; emptySig = null; saveOk = true; fileHome = null; resetHostBaseline(docHasOwnHost(design.document && design.document.hosts)); lastSig = sigNow(); }
+  function bindUntitled() { boundId = null; name = UNTITLED; saveOk = true; fileHome = null; foreign = {}; otherSessions = {}; resetHostBaseline(false); lastSig = sigNow(); emptySig = fullSigNow(); }
 
   /** Replace the app state with a stored design and tell the host. */
   function load(design, reason) {
@@ -359,7 +369,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   // (a TASK 624 per-app buffer was converted to this form by the store's first read: project-store.js mergeLegacyBuffers)
   function recordFromBuffer(t, key, { designId = null, name: n = t.name, doc = t.doc } = {}) {
     const content = !designId && !!t.content;
-    return { key, designId, name: n || UNTITLED, content, emptySig: designId ? null : (content ? HAS_CONTENT : undefined), saveOk: true, lastSig: undefined, doc, view: t.view || null, hostSessions: t.hostSessions || {} };
+    const file = !designId && t.file && t.file.name ? { name: String(t.file.name), handle: null } : null; // TASK 759: a file home comes back by its name only
+    return { key, designId, name: n || UNTITLED, content, emptySig: designId ? null : (content ? HAS_CONTENT : undefined), saveOk: true, lastSig: undefined, doc, view: t.view || null, hostSessions: t.hostSessions || {}, file };
   }
 
   /** The initial restore (TASK 684): the tabs of the SHARED buffer (whichever app wrote them; a stored design from the store, an Untitled from the buffer),
@@ -457,7 +468,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       const doc = fullDoc();
       const sig = docChangeSig(doc);
       const d = await store.newDesign(newName, { app, document: doc }); // stored, named, current in one write; every app's sidecar goes with it (TASK 684)
-      boundId = d.id; name = d.name; emptySig = null; saveOk = true; resetHostBaseline(docHasOwnHost(doc.hosts)); lastSig = sig;
+      boundId = d.id; name = d.name; emptySig = null; saveOk = true; fileHome = null; resetHostBaseline(docHasOwnHost(doc.hosts)); lastSig = sig;
       notify('saved');
       await saveWorkingBuffer();
       track('drive:save'); // TASK 738
@@ -479,13 +490,84 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   /** "Don't save": the unsaved Untitled is thrown away (an empty Untitled takes its place), so the action the user asked for can go on.
    *  A stored design is never discarded (it is autosaved). */
   function discardUnsaved() { if (!boundId) { loadUntitled('new'); saveWorkingBuffer(); } }
+  // ---- TASK 759: a design whose home is a FILE on this device (no account, no store) ------------------------------------------------
+  /** The text of the design file as it is written now: the SAME bytes a Drive save of this design writes (#ui/cloud/drive-adapter.js stores
+   *  serializeProjectFile of the design), every app's sidecar included. */
+  const fileText = (n) => serializeProjectFile({ app, name: n, document: fullDoc() });
+  /** Read a design file through `seam` (the picker / an <input type=file> / a dropped file): { file, name, document }, null = cancelled. A bad or newer
+   *  file throws ProjectFileError (a readable message); nothing changed then. The seam is called before any await (the browser's picker needs the click). */
+  async function readFile(seam) {
+    const f = await seam.open();
+    if (!f) return null;
+    const parsed = parseProjectFile(f.text);
+    return { file: { name: f.name, handle: f.handle || null }, name: designNameOfFile(f.name), document: parsed.document };
+  }
+  /** Replace the app state with a design read from a file: unbound, its file is its home, and its baseline is the file's content (no dot). */
+  function loadFile(p) {
+    const result = deserializeDocument(p.document, state);
+    if (!result.ok) throw new Error(`This file could not be opened: ${result.reason}`);
+    boundId = null; name = p.name; saveOk = true; fileHome = p.file;
+    foreign = splitHosts(result.hosts); otherSessions = {};
+    const out = restored({ restored: true, hosts: result.hosts, name, reason: 'file', removedVcarves: result.removedVcarves });
+    resetHostBaseline(docHasOwnHost(result.hosts));
+    lastSig = sigNow(); emptySig = fullSigNow(); // taken AFTER the host applied the file's sidecar: showing the file is not a change
+    return out;
+  }
+  /** Open from file (no tabs): the file's design replaces the shown one (an unsaved one refuses, as Open does). Nothing is stored in the project store. */
   async function openFile(seam = browserFileSeam) {
     refuseIfUnsaved();
+    const p = await readFile(seam);
+    if (!p) return null;
     await flush();
-    const p = await store.importFile(seam, { app }); // a file has a name: it is stored as a named design
-    const out = p ? load(p, 'file') : null;
-    if (out) await saveWorkingBuffer();
+    await store.setCurrent(null);
+    const out = loadFile(p);
+    await saveWorkingBuffer();
+    track('local:open'); // TASK 759
     return out;
+  }
+  /** Save as > Local: write the shown design to a NEW file the user names (`newName`; the picker or a download). The file becomes the design's home: a design
+   *  that was on Drive keeps its last saved state there and this tab now edits the file. Resolves { name, handle, downloaded } or null (cancelled). */
+  async function saveToFile(newName, seam = browserFileSeam) {
+    const n = String(newName == null ? '' : newName).trim();
+    if (!n) throw new Error('A design needs a name.');
+    const r = await seam.save(fileText(n), projectFileName(n));
+    if (!r) return null;
+    if (boundId) await flush(); // the stored design keeps everything up to now
+    boundId = null; saveOk = true;
+    fileHome = { name: r.name, handle: r.handle || null };
+    name = designNameOfFile(r.name);
+    emptySig = fullSigNow(); lastSig = sigNow();
+    await store.setCurrent(null);
+    notify('idle');
+    await saveWorkingBuffer();
+    track('local:save'); // TASK 759
+    return { name: r.name, handle: fileHome.handle, downloaded: !r.handle };
+  }
+  /** Save to the file home (Save, Ctrl+S): back into the same file through its handle; a handle the browser refuses or none (a reload, a browser without the
+   *  picker) -> the picker again where there is one, else a download under the same name. Resolves { route: 'write-back' | 'repick' | 'download', name } or
+   *  null (the picker was cancelled: nothing changed). */
+  async function saveHome(seam = browserFileSeam) {
+    if (!fileHome) throw new Error('This design has no file on this device to save to.');
+    const sig = fullSigNow();
+    const text = fileText(name);
+    let r = null, route = 'write-back';
+    if (fileHome.handle) r = await seam.write(fileHome.handle, text);
+    if (!r) { r = await seam.save(text, fileHome.name || projectFileName(name)); route = r && r.handle ? 'repick' : 'download'; }
+    if (!r) return null;
+    fileHome = { name: r.name, handle: r.handle || null };
+    emptySig = sig; // clean as of the bytes written (an edit made while the write ran keeps the dot)
+    await saveWorkingBuffer();
+    track('local:save'); // TASK 759
+    return { route, name: r.name };
+  }
+  /** Rename an UNBOUND design (an Untitled or a file home) in this page: the name its next save uses. A stored design is renamed in the store instead. */
+  async function rename(newName) {
+    const n = String(newName == null ? '' : newName).trim();
+    if (!n) throw new Error('A design needs a name.');
+    if (boundId) throw new Error('A saved design is renamed in its project.');
+    name = n;
+    await saveWorkingBuffer();
+    return n;
   }
 
   /** After store.cloud.moveProjectToDrive: the designs bound here (the active one and the other tabs) may have a new id
@@ -509,7 +591,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     endInteraction();
     await poll();
     Object.assign(active, {
-      designId: boundId, name, emptySig, saveOk, lastSig, hasOwnSidecar,
+      designId: boundId, name, emptySig, saveOk, lastSig, hasOwnSidecar, file: fileHome,
       content: activeContent(),
       doc: fullDoc(),
       history: state.history, redoStack: state.redoStack,
@@ -527,6 +609,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const sessions = rec.hostSessions || {};
     otherSessions = withOwn(sessions, undefined);
     boundId = rec.designId || null; name = rec.name; emptySig = boundId ? null : rec.emptySig; saveOk = rec.saveOk !== false; lastSig = rec.lastSig;
+    fileHome = boundId ? null : (rec.file || null);
     const knownOwn = rec.hasOwnSidecar;
     if (Array.isArray(rec.history)) { state.history = rec.history; state.redoStack = rec.redoStack; }
     if (rec.view && state.view) Object.assign(state.view, rec.view);
@@ -557,7 +640,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     notify('idle');
     return out;
   }
-  const untouchedUntitled = () => !boundId && !activeContent() && !(state.history && state.history.length) && !(state.redoStack && state.redoStack.length);
+  // TASK 759: a design just opened from a file (a file home) is not an empty Untitled: it is never reused
+  const untouchedUntitled = () => !boundId && !fileHome && !activeContent() && !(state.history && state.history.length) && !(state.redoStack && state.redoStack.length);
   const full = () => new Error(`Close a tab first: at most ${MAX_TABS} designs are open at once.`);
   const recordOf = (key) => { const r = tabList.find((x) => x.key === key); if (!r) throw new Error('That tab is not open.'); return r; };
 
@@ -570,8 +654,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   function tabs() {
     syncMovedIds();
     return tabList.map((t) => (t === active
-      ? { key: t.key, designId: boundId, name, active: true, stored: !!boundId, needsSavePrompt: needsSavePrompt() }
-      : { key: t.key, designId: t.designId || null, name: t.name, active: false, stored: !!t.designId, needsSavePrompt: promptFor(t.designId, t.content, t.saveOk !== false) }));
+      ? { key: t.key, designId: boundId, name, active: true, stored: !!boundId, needsSavePrompt: needsSavePrompt(), home: homeOf({ designId: boundId, file: fileHome }) }
+      : { key: t.key, designId: t.designId || null, name: t.name, active: false, stored: !!t.designId, needsSavePrompt: promptFor(t.designId, t.content, t.saveOk !== false), home: homeOf({ designId: t.designId, file: t.file }) }));
   }
   /** Open stored design `id` in a NEW tab (T2) at the right end; already open -> its tab is activated; the active tab an untouched
    *  Untitled -> it is reused. */
@@ -596,13 +680,25 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     await saveWorkingBuffer();
     return out;
   }
-  /** Open from file into a NEW tab (T2): the file becomes a stored, named design (as openFile) and opens like any design. The tab limit is
-   *  checked BEFORE the file is imported, so a refused open leaves nothing stored. */
+  /** Open from file into a NEW tab (T2): the file's design opens as a tab whose home is that file (TASK 759: nothing is stored in the project store, no
+   *  account is needed); the active tab an untouched Untitled -> it is reused. The tab limit is checked BEFORE the file is read. */
   async function openFileTab(seam = browserFileSeam) {
     if (tabList.length >= MAX_TABS && !untouchedUntitled()) throw full();
-    await poll();
-    const p = await store.importFile(seam, { app });
-    return p ? openTab(p.id, 'file') : null;
+    const p = await readFile(seam);
+    if (!p) return null;
+    const reuse = untouchedUntitled();
+    if (!reuse) {
+      await putAside();
+      active = newRecord(); tabList.push(active);
+    } else await poll();
+    const out = loadFile(p);
+    if (!reuse && session) { session.restore(undefined); resetHostBaseline(hasOwnSidecar); lastSig = sigNow(); emptySig = fullSigNow(); }
+    if (typeof state._notifyHistory === 'function') state._notifyHistory();
+    notify('idle');
+    await store.setCurrent(null);
+    await saveWorkingBuffer();
+    track('local:open'); // TASK 759
+    return out;
   }
   /** New design in a NEW tab (T3): an unsaved Untitled, or one started from a template { name, document } (TASK 651). */
   async function newTab(template = null) {
@@ -641,8 +737,9 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
 
   return {
-    restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves,
+    restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, saveToFile, saveHome, rename, openFile, followMoves,
     designId: () => boundId, designName: () => name, isStored: () => !!boundId, needsSavePrompt, discardUnsaved,
+    home: () => homeOf({ designId: boundId, file: fileHome }),
     tabs, openTab, openFileTab, newTab, activate, closeTab, store,
   };
 }

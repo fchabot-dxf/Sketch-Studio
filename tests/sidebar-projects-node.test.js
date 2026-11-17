@@ -103,15 +103,21 @@ try {
   const fileInputs = () => doc.querySelectorAll('input[type=file]').length;
   const inputsBefore = fileInputs(); // the page owns some file inputs of its own: compare, don't expect zero
   if (!q('.sk-sidebar').classList.contains('open')) await openSb(); // (the drawer's state after the Projects modal closes: the sidebar button would toggle it shut)
+  // TASK 759: "Open…" is THE Open dialog; its Local tab's "Choose a file…" is the file chooser, and a refusal shows in the dialog (which stays open)
   pressEl('[data-action="open-file"]');
+  await app.waitFor(() => !!q('.sk-fd [data-fd-tab="local"]'), 'the Open dialog', 4000);
+  pressEl('.sk-fd [data-fd-tab="local"]'); await settle();
+  pressEl('.sk-fd [data-fd="choose-file"]');
   await app.waitFor(() => app.hasFileChooser(), 'the file chooser to open', 4000); // the click comes after the app's own async steps
   assert.ok(app.hasFileChooser(), 'the file chooser opened');
   app.chooseFile({ name: 'newer.sketch.json', text: JSON.stringify({ format: 'sketch-studio-project', version: 1, app: 'shaper', name: 'Future', document: { version: 99, geometry: { joints: [], shapes: [], constraints: [] }, hosts: {} } }) });
-  await app.waitFor(() => !!(q('.sk-sidebar-msg.error') || {}).textContent, 'the refusal message in the drawer', 10000);
+  await app.waitFor(() => !!(q('.sk-fd .sk-tp-err') || {}).textContent, 'the refusal message in the Open dialog', 10000);
   assert.strictEqual(fileInputs(), inputsBefore, 'no stray file input is left in the DOM once the open settled');
-  assert.strictEqual(q('.sk-sidebar').classList.contains('open'), true, 'the drawer stays open on a refusal');
-  const refused = (q('.sk-sidebar-msg.error') || {}).textContent || '';
-  assert.ok(/newer version/i.test(refused), 'the refusal message is shown in the drawer: ' + refused);
+  assert.ok(!!q('.sk-fd'), 'the Open dialog stays open on a refusal');
+  const refused = (q('.sk-fd .sk-tp-err') || {}).textContent || '';
+  assert.ok(/newer version/i.test(refused), 'the refusal message is shown in the dialog: ' + refused);
+  app.esc(); await settle();
+  assert.ok(!q('.sk-fd'), 'Esc closes the Open dialog');
   assert.strictEqual(JSON.stringify({ r: await recent(), s: shapes(), t: title() }), before, 'nothing changed (no new design, canvas and title untouched)');
   console.log('sidebar-projects-node: ok');
 } finally { await app.close(); }

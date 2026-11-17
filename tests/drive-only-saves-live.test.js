@@ -2,8 +2,9 @@
 // Verifies:
 //  1. Signed out: no "Save to Google Drive" menu item, no "Save to Google Drive by default" toggle, Untitled status = "Not saved yet".
 //  2. Local open-tabs buffer: drawing on Untitled (plus a second Untitled tab) survives page refresh cleanly without storing a local named design.
-//  3. Signed out Save as… asks to sign in first -> clicking "Sign in with Google" (fake GIS) continues seamlessly to Save as… -> design lives ONLY on Drive.
-//  4. Offline + signed in: brand-new Save as… refuses cleanly ("Google Drive can't be reached; your drawing is kept, try again when online");
+//  3. Signed out Save as… (TASK 759: THE Save as dialog, Google Drive | Local; it opens on Local for a signed-out user and asks NO sign-in question) -> its Google
+//     Drive tab offers "Sign in with Google" inside the tab -> clicking it (fake GIS) shows the name field there -> Save -> design lives ONLY on Drive.
+//  4. Offline + signed in: brand-new Save as… > Google Drive refuses cleanly in the dialog ("Google Drive can't be reached; your drawing is kept, try again when online");
 //     edits to an existing Drive design queue locally and sync once online again.
 //  5. Out-of-band emptied Drive folder: remembered file deleted while "My Designs" stays -> next save recreates a fresh file in the EXISTING folder.
 //  6. Legacy local design seeded from pre-624 storage opens and offers inline "Move to Google Drive", moving verified to Drive (and Drive projects have no "Make local").
@@ -74,16 +75,22 @@ await (async () => {
     await waitFor(`document.querySelectorAll('#svgCanvas .shape-elem').length === 1`, 'Untitled drawing restored across page refresh from working buffer');
     assert.strictEqual(await idbLocalDesigns(), 0, 'working buffer stored NO local named design');
 
-    // 3. Signed out Save as… -> prompts Sign in -> click Sign in -> Save as prompt -> saved ONLY to fake Drive
+    // 3. Signed out Save as… -> THE Save as dialog (TASK 759) on its Local tab, no sign-in question -> its Google Drive tab: Sign in -> the name field -> saved ONLY to fake Drive
     await clickSel('.sk-sidebar-btn');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
     await clickSel('[data-action="save-as"]');
-    await waitFor(`!!document.querySelector('.sk-sidebar-ask [data-choice="signin"]')`, 'Save as asks to sign in first');
-    await shot('02-signed-out-save-asks-signin.png');
-    await clickSel('.sk-sidebar-ask [data-choice="signin"]');
-    await waitFor(`!!document.querySelector('.sk-sidebar-input')`, 'Save as name prompt after sign-in');
-    await evalJs(`document.querySelector('.sk-sidebar-input').value = 'Bracket 624'`);
-    await clickSel('.sk-sidebar-confirm-btns .ok');
+    await waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="save"]')`, 'Save as: the dialog');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-fd').dataset.fdTab`), 'local', 'signed out: it opens on the Local tab');
+    assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar-ask')`), false, 'no sign-in question');
+    await clickSel('.sk-fd [data-fd-tab="drive"]');
+    await waitFor(`!!document.querySelector('.sk-fd [data-fd="sign-in"]')`, 'the Drive tab offers Sign in inside it');
+    await shot('02-signed-out-save-asks-signin.png', { x: 0, y: 0, width: 1280, height: 820 });
+    await clickSel('.sk-fd [data-fd="sign-in"]');
+    await waitFor(`!!document.querySelector('.sk-fd input') && document.querySelector('.sk-fd-name').offsetParent !== null`, 'the name field after sign-in');
+    await evalJs(`document.querySelector('.sk-fd input').value = 'Bracket 624'`);
+    await clickSel('.sk-fd [data-choice="ok"]');
+    await waitFor(`!document.querySelector('.sk-fd')`, 'saved: the dialog closed');
+    await clickSel('.sk-sidebar-btn');
     await waitFor(`(document.querySelector('.sk-sidebar-doc') || {}).textContent === 'Bracket 624'`, 'Bracket 624 is current');
     await evalJs(`(async () => { await ${S}.flushDrive(); })()`);
     assert.strictEqual(session.drive.byName('Bracket 624.sketch.json').length, 1, 'Bracket 624 exists on fake Drive');
@@ -111,14 +118,14 @@ await (async () => {
     await clickSel('.sk-sidebar-btn');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
     await clickSel('[data-action="save-as"]');
-    await waitFor(`!!document.querySelector('.sk-sidebar-input')`, 'Save as prompt opens');
-    await evalJs(`document.querySelector('.sk-sidebar-input').value = 'OfflineNew'`);
-    await clickSel('.sk-sidebar-confirm-btns .ok');
-    await waitFor(`/Google Drive can't be reached/.test((document.querySelector('.sk-sidebar-msg.error') || {}).textContent || '')`, 'offline new Save as refused clearly');
-    await shot('04-offline-new-save-refused.png');
+    await waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="save"] [data-fd-tab="drive"][aria-selected="true"]')`, 'the Save as dialog, on the Google Drive tab (signed in, and last used)');
+    await evalJs(`document.querySelector('.sk-fd input').value = 'OfflineNew'`);
+    await clickSel('.sk-fd [data-choice="ok"]');
+    await waitFor(`/Google Drive can't be reached/.test((document.querySelector('.sk-fd .sk-tp-err') || {}).textContent || '')`, 'offline new Save as refused clearly, in the dialog');
+    await shot('04-offline-new-save-refused.png', { x: 0, y: 0, width: 1280, height: 820 });
     assert.strictEqual(await idbLocalDesigns(), 0, 'offline failure stored no local named design');
-
-    await clickSel('.sk-sidebar-backdrop');
+    await clickSel('.sk-fd .sk-tp-cancel');
+    await waitFor(`!document.querySelector('.sk-fd')`, 'Cancel closes the dialog');
     await clickSel('.sk-doctab-main'); // switch back to Bracket 624 (first tab)
     await waitFor(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent === 'Bracket 624'`, 'Bracket 624 active');
     await drawSegment(0.68);

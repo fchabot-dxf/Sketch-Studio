@@ -1,14 +1,14 @@
-// tests/pocket-clearing-745-live.test.js — TASK 745: the PROGRAMMED POCKET in the real Shaper page. TASK 749: its Spiral (the rings joined into ONE line per
-// chain, replacing Concentric) and the Spiral's Wall row (In the same line, the default | Separate (Origin's inside cut)).
+// tests/pocket-clearing-745-live.test.js — TASK 745: the PROGRAMMED POCKET in the real Shaper page. TASK 749: its Spiral (the rings joined into one line per
+// chain). TASK 750: the Loop toggle (every programmed pattern: the whole pocket + its finish turn as closed on-line loops) and no Depth per pass.
 //  A. desktop 1280 x 800, real mouse, mm, the standalone app: a 120 x 70 pocket, an L pocket and a pocket with an island drawn; Prepare: Pocket, the Clearing
-//     dropdown (Freehand | Spiral | Raster | Morphed spiral, each with its icon), Spiral (ONE continuous line drawn, the note, the wall in the line); the Wall
-//     row toggled with 3 depth passes: the downloaded SVG has exactly one on-line path per pass (+ the inside cut when Separate); the stepover + and a smaller
-//     bit (the line redraws, the note follows), Raster (0, then the 45 preset), Morphed spiral, back to Spiral; the L: one line; the island pocket: the
-//     Morphed spiral greyed with its reason, Spiral in several lines, 3 depth passes; the operations list: one row per operation; Export 2D ("spiral lines")
-//     == the downloaded SVG element by element (only open on-line paths); Export 3D built with the cleared pockets.
-//  B. phone 390 x 844, real touch, inches: the same, by touch (card, dropdown, presets), each pattern; Export 2D / 3D; the download matches.
+//     dropdown (Freehand | Spiral | Raster | Morphed spiral, each with its icon; no Depth per pass row anywhere), Spiral with Loop off (one open line, the note);
+//     Loop ON on the rectangle for Spiral, Raster and Morphed spiral: one closed line with its start / end marker, the note, the downloaded SVG = exactly ONE
+//     closed on-line path and no inside element; Loop off again: the open line + the inside cut; the stepover + (the line redraws); the L: Spiral, Loop on
+//     (one closed loop); the island pocket: the Morphed spiral greyed with its reason, Spiral with the remembered Loop (several closed loops); the
+//     operations list; Export 2D ("spiral lines", "wall", "closed loops") == the downloaded SVG element by element; Export 3D built.
+//  B. phone 390 x 844, real touch, inches: the same, by touch.
 //  C. Fusion mode (?host=fusion, window.adsk stubbed, the SA-7 payload of the drafted pocket through fusionJavaScriptHandler, as 714's live test): the imported
-//     pocket switched to Spiral (on-line paths only), Raster and Morphed spiral, each in the download.
+//     pocket with Loop on for Spiral, Raster and Morphed spiral: each one closed on-line path in the export, no inside element.
 // Screenshots to .evidence/745/ (EVIDENCE_DIR overrides).
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -73,7 +73,7 @@ try {
   };
   const boxOf = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect();
     const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
-    return { x, y, w: Math.round(r.width), h: Math.round(r.height), onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
+    return { x, y, w: Math.round(r.width), h: Math.round(r.height), onTop: !!hit && (hit === e || e.contains(hit)), hit: hit ? hit.outerHTML.slice(0, 160) + " in " + (hit.parentElement ? hit.parentElement.outerHTML.slice(0, 120) : "") : null }; })()`);
   const clickEl = async (sel) => {
     const p = await boxOf(sel);
     assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
@@ -111,8 +111,8 @@ try {
     st.saveState('draw');
     return st.shapes.length; })()`);
   const card = () => evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, clearing: document.querySelector('.cut-clear-cur').textContent,
-    rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="wallAllowance"], .cut-row[data-row="passDepth"], .cut-row[data-row="wall"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row),
-    wall: [...document.querySelectorAll('.cut-wall-modes .cut-preset')].map((b) => [b.dataset.value, b.textContent, b.classList.contains('is-active')]),
+    rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="wallAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row),
+    loop: document.querySelector('.cut-loop').checked,
     stepover: document.querySelector('.cut-stepover').value, len: document.querySelector('.cut-stepover-len').textContent, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
   const look = () => evalJs(`({ paths: document.querySelectorAll('#prepare-toolpath-group .sk-clear-path').length, cleanup: document.querySelectorAll('#prepare-toolpath-group .sk-clear-cleanup').length,
     leftover: document.querySelectorAll('#prepare-cut-group .sk-leftover').length, band: document.querySelectorAll('#prepare-cut-group .sk-band').length,
@@ -124,7 +124,7 @@ try {
   const rec = (x, y) => evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/packages/core/loop-geometry.js'), import('/apps/shaper/src/cut-plan.js')]).then(([L, G, C]) => {
     const st = window.__designController.state, by = new Map(st.shapes.map((s) => [s.id, s]));
     const l = L.findLoops(st).map((l) => ({ l, p: G.loopPolygon(l, st, by) })).filter((o) => G.pointInPolygon(o.p, { x: ${x}, y: ${y} })).sort((a, b) => Math.abs(G.polyArea(a.p)) - Math.abs(G.polyArea(b.p)))[0];
-    const r = C.CUT_PLAN.get('loop:' + l.l.id); return r ? { cutType: r.cutType, clearing: r.clearing ?? null, stepover: r.stepover ?? null, wallAllowance: r.wallAllowance ?? null, rasterAngle: r.rasterAngle ?? null, wall: r.wall ?? null, toolDia: r.toolDia } : null; })`);
+    const r = C.CUT_PLAN.get('loop:' + l.l.id); return r ? { cutType: r.cutType, clearing: r.clearing ?? null, stepover: r.stepover ?? null, wallAllowance: r.wallAllowance ?? null, rasterAngle: r.rasterAngle ?? null, loop: r.loop ?? null, toolDia: r.toolDia } : null; })`);
   const download = async () => {
     await openMode('review');
     for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
@@ -166,7 +166,8 @@ try {
   const preview2dElements = () => evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => m.shaperPreviewOf(window.__designController.state, C.cutPlanEntries()).svg))`);
 
   // ── A / B: the standalone app ──
-  const wallPick = async (v) => { await clickEl(`.cut-wall-modes .cut-preset[data-value="${v}"]`); await sleep(300); };
+  const setLoop = async (on) => { if (await evalJs(`document.querySelector('.cut-loop').checked`) !== on) { await clickEl('#prepare-panel .cut-row[data-row="loop"] .cut-check'); await sleep(300); } };
+  const markers = () => evalJs(`document.querySelectorAll('#prepare-toolpath-group .sk-clear-start').length`);
   const phase = async (label) => {
     const D = phone ? 'phone' : 'desktop';
     const inch = await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.docUnit() === 'in')`);
@@ -185,52 +186,55 @@ try {
     await typeField('.cut-bit', inch ? '0.25' : '6');
     const c0 = await card();
     assert.deepStrictEqual([c0.type, c0.clearing, c0.rows, c0.note], ['Pocket', 'Freehand', [], []], label + ': Pocket, Clearing Freehand, no clearing rows, no note');
+    assert.strictEqual(await evalJs(`!!document.querySelector('.cut-pass-depth, .cut-row[data-row="passDepth"]')`), false, label + ': no Depth per pass row (TASK 750)');
     await openClearing();
     const opts = await evalJs(`[...document.querySelectorAll('.cut-clear-opt')].map((o) => [o.dataset.clearing, o.querySelector('.cut-clear-name').textContent, !!o.querySelector('svg.cut-ic path, svg.cut-ic rect'), o.disabled])`);
-    assert.deepStrictEqual(opts, [['freehand', 'Freehand', true, false], ['linked', 'Spiral', true, false], ['raster', 'Raster', true, false], ['morphed', 'Morphed spiral', true, false]], label + ': the 4 choices, each with its pattern icon');
+    assert.deepStrictEqual(opts, [['freehand', 'Freehand', true, false], ['linked', 'Spiral', true, false], ['raster', 'Raster', true, false], ['morphed', 'Morphed spiral', true, false]], label + ': the 4 choices (no Loop entry), each with its pattern icon');
     const pop = await evalJs(`(() => { const p = document.querySelector('.cut-clear-pop').getBoundingClientRect(); return { left: Math.round(p.left), right: Math.round(p.right), w: Math.round(p.width), optH: Math.round(document.querySelector('.cut-clear-opt').getBoundingClientRect().height) }; })()`);
-    console.log(label + ' popover: ' + JSON.stringify(pop));
     assert.ok(pop.left >= 0 && pop.right <= (phone ? 390 : 1280), label + ': the popover is on screen');
     if (phone) assert.ok(pop.optH >= 40, label + ': its choices are 40 px touch rows');
     await shot(`${D}-card-clearing-menu.png`, ['#prepare-panel .cut-card', '.cut-clear-pop'], 2);
     await clickEl('#prepare-panel .cut-clear-trigger'); // close
-    // Spiral: ONE continuous line, the wall in the same line (the default)
+    // Spiral, Loop off: open lines + the Origin's inside cut
     await pickClearing('linked');
     const r1 = await rec(60, 10);
-    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.wallAllowance, r1.rasterAngle, r1.wall], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 0, null], label + ': Spiral with the defaults (the wall in the line: no field stored)');
+    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.wallAllowance, r1.rasterAngle, r1.loop], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 0, false], label + ': Spiral with the defaults, Loop off');
     const c1 = await card();
     console.log(label + ' spiral card: ' + JSON.stringify(c1));
-    assert.deepStrictEqual(c1.rows, ['stepover', 'wallAllowance', 'passDepth', 'wall'], label + ': Stepover, Wall allowance, Depth per pass, Wall');
-    assert.deepStrictEqual(c1.wall, [['inline', 'In the same line', true], ['separate', "Separate (Origin's inside cut)", false]], label + ': the Wall row: In the same line (active) | Separate');
-    assert.ok(new RegExp(`^Pocket: spiral, \\d+ turns \\+ wall in 1 line, stepover ${inch ? '0\\.1 in' : '2\\.4 mm'}, [\\d.]+ ${inch ? 'ft' : 'm'} of path, about \\d+ min at ${inch ? '39 in' : '1000 mm'}/min$`).test(c1.note[0]), label + ': the note ' + c1.note[0]);
-    assert.ok(c1.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`), label + ': the note says the wall is exact for the card\'s bit only');
+    assert.deepStrictEqual([c1.rows, c1.loop], [['stepover', 'wallAllowance', 'loop'], false], label + ': Stepover, Wall allowance, Loop (off)');
+    assert.ok(new RegExp(`^Pocket: spiral, \\d+ turns in 1 line \\+ wall, stepover ${inch ? '0\\.1 in' : '2\\.4 mm'}, [\\d.]+ ${inch ? 'ft' : 'm'} of path, about \\d+ min at ${inch ? '39 in' : '1000 mm'}/min$`).test(c1.note[0]), label + ': the note ' + c1.note[0]);
+    assert.ok(c1.note.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), label + ': the note: the depth passes are the Origin\'s');
     const l1 = await look();
-    console.log(label + ' spiral look: ' + JSON.stringify(l1));
-    assert.ok(l1.paths === 1 && l1.leftover === 1 && l1.band >= 1, label + ': Prepare draws ONE continuous line, the cleared area and the leftover corners');
-    await shot(`${D}-card-spiral.png`, '#prepare-panel .cut-card', 2);
-    await shotWorld(`${D}-prepare-spiral.png`, [0, 0, 120, 70]);
-    await shotWorld(`${D}-prepare-spiral-links.png`, [45, 35, 75, 70], 3); // the links, close up (they run down from the middle of the innermost ring: x 60, y 35 to 67)
-    // the Wall row toggled, with 3 depth passes: the download has exactly ONE path per pass (in the line), + the inside cut (separate)
-    await typeField('.cut-pass-depth', inch ? '0.1' : '2');
-    const wallStates = {};
-    for (const w of ['inline', 'separate']) {
-      if (w === 'separate') { await wallPick('separate'); assert.strictEqual((await rec(60, 10)).wall, 'separate', label + ': Separate stored'); }
-      const cw = await card();
-      assert.strictEqual(cw.note.some((t) => t.startsWith('Wall cut in the same line')), w === 'inline', label + ` (${w}): the note's wall line`);
-      assert.ok(w === 'inline' ? / × 3 depth passes, stepover/.test(cw.note[0]) : / × 3 depth passes \+ wall, stepover/.test(cw.note[0]), label + ` (${w}): ${cw.note[0]}`);
-      await shotWorld(`${D}-wall-${w}.png`, [0, 0, 120, 70]);
-      await shot(`${D}-card-wall-${w}.png`, '#prepare-panel .cut-card', 2);
+    assert.ok(l1.paths === 1 && l1.leftover === 1 && l1.band >= 1 && await markers() === 0, label + ': ONE open line drawn, the cleared area, the leftover corners, no loop marker');
+    // Loop ON for each pattern on the rectangle: one closed line, the note, the download = ONE closed on-line path, no inside cut
+    const loopRuns = {};
+    for (const pat of ['linked', 'raster', 'morphed']) {
+      await pickClearing(pat);
+      await setLoop(true);
+      assert.strictEqual((await rec(60, 10)).loop, true, label + ` ${pat}: Loop on stored`);
+      const c = await card();
+      assert.ok(c.loop === true && /\+ wall: one closed loop, ends where it starts, stepover/.test(c.note[0]) && c.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`), label + ` ${pat}: the note ${JSON.stringify(c.note)}`);
+      const l = await look();
+      assert.ok(l.paths === 1 && await markers() === 1, label + ` ${pat}: ONE closed line drawn, with its start / end marker`);
+      if (pat === 'linked') await shot(`${D}-card-loop.png`, '#prepare-panel .cut-card', 2);
+      await shotWorld(`${D}-loop-${pat}.png`, [0, 0, 120, 70]);
       const file = await download();
-      fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-wall-${w}-download.svg`), file);
+      fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-loop-${pat}-download.svg`), file);
       const els = fileElements(file);
-      wallStates[w] = els.map((e) => [e[2], e[3], /Z$/.test(e[1]) ? 'closed' : 'open']);
-      assert.deepStrictEqual(els.filter((e) => e[2] === 'online').map((e) => /Z$/.test(e[1])), [false, false, false], label + ` (${w}): exactly ONE open on-line path per depth pass (3 passes)`);
-      assert.deepStrictEqual(els.map((e) => e[2]), w === 'inline' ? ['online', 'online', 'online'] : ['online', 'online', 'online', 'inside'], label + ` (${w}): ${w === 'inline' ? 'no separate wall element' : '+ the Origin\'s inside cut'}`);
+      loopRuns[pat] = els.map((e) => [e[2], e[3], /Z$/.test(e[1]) ? 'closed' : 'open']);
+      assert.deepStrictEqual(loopRuns[pat], [['online', inch ? '0.250 in' : '6.000 mm', 'closed']], label + ` ${pat}: the download: exactly ONE closed on-line path (once: the Origin's AutoPass steps down), no inside element`);
+      const n = els[0][1].replace(/[MLZ]/g, ' ').trim().split(/\s+/);
+      assert.ok(n[0] === n[n.length - 2] && n[1] === n[n.length - 1], label + ` ${pat}: the path ends where it starts`);
       await openMode('prepare'); await pickRect();
     }
-    console.log(label + ' wall states (download): ' + JSON.stringify(wallStates));
-    await wallPick('inline');
-    await typeField('.cut-pass-depth', '');
+    console.log(label + ' loop downloads: ' + JSON.stringify(loopRuns));
+    // back to Spiral with Loop off: the open line + the inside cut
+    await pickClearing('linked');
+    await setLoop(false);
+    const fileOff = fileElements(await download());
+    assert.deepStrictEqual(fileOff.map((e) => [e[2], /Z$/.test(e[1])]), [['online', false], ['inside', true]], label + ': Loop off: the open line + the Origin\'s inside cut');
+    await openMode('prepare'); await pickRect();
+    await shotWorld(`${D}-loop-off-spiral.png`, [0, 0, 120, 70]);
     // the stepover + : the line redraws, the note follows
     const lA = await look();
     await clickEl('.cut-row[data-row="stepover"] .cut-step[data-d="1"]');
@@ -238,69 +242,48 @@ try {
     const c2 = await card(), l2 = await look();
     assert.strictEqual(c2.stepover, '45', label + ': stepover + -> 45 %');
     assert.ok(l2.paths === 1 && l2.d < lA.d && c2.note[0] !== c1.note[0], label + `: the line redraws with fewer turns (${lA.d} -> ${l2.d} chars), the note follows: ${c2.note[0]}`);
-    // a smaller bit: more turns
-    await clickEl('#prepare-panel .cut-row[data-param="toolDia"] .cut-preset[data-value="3.175"]');
-    await sleep(400);
-    const c3 = await card(), l3 = await look();
-    assert.ok(l3.paths === 1 && l3.d > l2.d && /Drawn for a (3\.175 mm|0\.125 in|1\/8 in) bit/.test(c3.note.join(' | ')), label + `: a smaller bit: more turns (${l3.d}), the note names it: ${c3.note.join(' | ')}`);
     await clickEl('#prepare-panel .cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]');
     await sleep(300);
-    // Raster, then 45
+    // Raster: its angle row
     await pickClearing('raster');
     const c4 = await card();
-    assert.deepStrictEqual(c4.rows, ['stepover', 'wallAllowance', 'passDepth', 'rasterAngle'], label + ': Raster: the Raster angle row, no Wall row');
-    assert.ok(/^Pocket: raster 0°: \d+ passes \+ 1 ring \+ wall/.test(c4.note[0]), label + ': raster note ' + c4.note[0]);
-    const l4 = await look();
-    assert.ok(l4.cleanup === 1 && l4.paths > 5, label + ': the passes + the dashed clean-up ring');
-    await clickEl('.cut-row[data-row="rasterAngle"] .cut-preset[data-value="45"]');
-    await sleep(300);
-    assert.ok(/^Pocket: raster 45°/.test((await card()).note[0]), label + ': raster 45');
-    await shotWorld(`${D}-prepare-raster-45.png`, [0, 0, 120, 70]);
-    // Morphed spiral, then back to Spiral
-    await pickClearing('morphed');
-    const c5 = await card(), l5 = await look();
-    assert.ok(/^Pocket: morphed spiral: \d+ turns \+ wall/.test(c5.note[0]) && l5.paths === 1 && !c5.rows.includes('wall'), label + ': the morphed spiral is one path, no Wall row: ' + c5.note[0]);
-    await shotWorld(`${D}-prepare-morphed.png`, [0, 0, 120, 70]);
+    assert.deepStrictEqual(c4.rows, ['stepover', 'wallAllowance', 'loop', 'rasterAngle'], label + ': Raster: + the Raster angle row');
     await pickClearing('linked');
-    // the L pocket: Spiral (one line); the island pocket: the Morphed spiral greyed with its reason, Spiral (several lines), 3 depth passes
+    // the L pocket: Spiral, Loop on (one closed line); the island pocket: the Morphed spiral greyed with its reason, Spiral, Loop on (several loops)
     const quarter = () => clickEl('#prepare-panel .cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]'); // the 1/4 in preset (as the rectangle's now)
     await clickWorld(150, 90);
     await pickType('pocket'); await typeField('.cut-depth', inch ? '0.25' : '6'); await quarter();
     await pickClearing('linked');
-    assert.strictEqual((await rec(150, 90)).clearing, 'linked', label + ': the L takes the Spiral');
+    await setLoop(true);
     const cL = await card();
-    assert.ok(/^Pocket: spiral, \d+ turns \+ wall in 1 line,/.test(cL.note[0]) && (await look()).paths === 1, label + ': the L: ONE line drawn (the picked pocket): ' + cL.note[0]);
-    await shotWorld(`${D}-prepare-spiral-L.png`, [140, 0, 240, 100]);
-    await shotWorld(`${D}-prepare-spiral-L-links.png`, [138, 8, 172, 40], 3); // the L's links (y 24, x 143 to 163)
+    assert.ok(/^Pocket: spiral, \d+ turns \+ wall: one closed loop, ends where it starts,/.test(cL.note[0]) && (await look()).paths === 1 && await markers() === 1, label + ': the L: ONE closed loop: ' + cL.note[0]);
+    await shotWorld(`${D}-loop-spiral-L.png`, [140, 0, 240, 100]);
     await clickWorld(10, 100);
     await pickType('pocket'); await typeField('.cut-depth', inch ? '0.25' : '6'); await quarter();
     await openClearing();
     const sp = await evalJs(`(() => { const o = document.querySelector('.cut-clear-opt[data-clearing="morphed"]'), l = document.querySelector('.cut-clear-opt[data-clearing="linked"]'); return [o.disabled, o.classList.contains('is-disabled'), o.querySelector('.cut-clear-why') && o.querySelector('.cut-clear-why').textContent, l.disabled]; })()`);
     assert.deepStrictEqual(sp, [true, true, 'has islands: use Spiral or Raster', false], label + ': the island pocket: Morphed spiral greyed with its reason, Spiral never disabled');
-    await shot(`${D}-card-morphed-disabled.png`, ['#prepare-panel .cut-card', '.cut-clear-pop'], 2);
     await clickEl('.cut-clear-opt[data-clearing="linked"]');
     await sleep(300);
-    await typeField('.cut-pass-depth', inch ? '0.1' : '2');
     const cI = await card();
     console.log(label + ' island note: ' + JSON.stringify(cI.note));
-    const islandLines = Number((/in (\d+) lines \(the pocket has islands\) × 3 depth passes,/.exec(cI.note[0]) || [])[1]);
-    assert.ok(islandLines > 1, label + ': the island pocket: several lines, the note says why: ' + cI.note[0]);
-    await shotWorld(`${D}-prepare-island-spiral.png`, [0, 90, 120, 150]);
-    // the operations list: one row per programmed pocket operation
+    assert.strictEqual(cI.loop, true, label + ': the island pocket starts with the last Loop set (on)');
+    const islandLoops = Number((/\+ wall: (\d+) closed loops \(the pocket has islands\), each ends where it starts,/.exec(cI.note[0]) || [])[1]);
+    assert.ok(islandLoops > 1 && await markers() === islandLoops, label + ': the island pocket: several closed loops, each with its marker, the note says why: ' + cI.note[0]);
+    await shotWorld(`${D}-loop-island-spiral.png`, [0, 90, 120, 150]);
+    // the operations list
     if (phone) await clickEl('#prepare-ops .ops-head');
     const ops = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => r.querySelector('.ops-name').textContent + ' | ' + r.querySelector('.ops-sub').textContent)`);
     console.log(label + ' ops: ' + JSON.stringify(ops));
-    assert.strictEqual(ops.length, 2, label + ': 2 operations: the rectangle + the L (same tool, type and settings) and the island pocket (depth passes)');
-    assert.ok(ops.some((t) => /^Pocket \(spiral\) · .* \| 2 regions · spiral, \d+ turns \+ wall in 1 line; spiral, \d+ turns \+ wall in 1 line$/.test(t)), label + ': the rectangle and the L are ONE row');
-    assert.ok(ops.some((t) => new RegExp(`^Pocket \\(spiral\\) · .* \\| 1 region · spiral, \\d+ turns \\+ wall in ${islandLines} lines \\(the pocket has islands\\) × 3 depth passes$`).test(t)), label + ': the island pocket is ONE row');
+    assert.strictEqual(ops.length, 2, label + ': 2 operations: the rectangle (Loop off) and the L + the island (Loop on)');
+    assert.ok(ops.some((t) => /^Pocket \(spiral\) · .* \| 1 region · spiral, \d+ turns in 1 line \+ wall$/.test(t)), label + ': the rectangle row');
+    assert.ok(ops.some((t) => new RegExp(`^Pocket \\(spiral\\) · .* \\| 2 regions · spiral, \\d+ turns \\+ wall: one closed loop, ends where it starts; spiral, \\d+ turns \\+ wall: ${islandLoops} closed loops \\(the pocket has islands\\), each ends where it starts$`).test(t)), label + ': the L and the island: ONE row');
     await shot(`${D}-ops-list.png`, '#prepare-ops', 2);
     if (phone) await clickEl('#prepare-ops .ops-head');
     // Export 2D == the download, element by element
     const e2 = await export2d(label);
     console.log(label + ' 2D rows: ' + JSON.stringify(e2.rows));
-    assert.ok(e2.rows.some((t) => /· spiral lines \(2\)$/.test(t)) && e2.rows.some((t) => new RegExp(`· spiral lines \\(${islandLines}\\)$`).test(t)) && !e2.rows.some((t) => /· (wall|islands) \(/.test(t)), label + ': 2D lists the spiral lines, no wall / island rows (the walls are in the lines)');
-    assert.strictEqual(e2.clears.filter((c) => c === 'linked 1/1').length, 2, label + ': the rectangle and the L: one line each');
-    for (let p = 1; p <= 3; p++) assert.strictEqual(e2.clears.filter((c) => new RegExp(`^linked \\d+/${islandLines} pass ${p}/3$`).test(c)).length, islandLines, label + `: the island pocket: its ${islandLines} lines at depth pass ${p}`);
+    assert.ok(e2.rows.some((t) => /· spiral lines \(1\)$/.test(t)) && e2.rows.some((t) => /· wall \(1\)$/.test(t)) && e2.rows.some((t) => new RegExp(`· closed loops \\(${1 + islandLoops}\\)$`).test(t)) && !e2.rows.some((t) => /· islands \(/.test(t)), label + ': 2D lists the spiral line, its wall, the closed loops');
     await clickEl('#review-cuts-list .rv2d-row');
     const lab = await evalJs(`document.getElementById('review-2d-info').textContent`);
     console.log(label + ' 2D label: ' + lab);
@@ -312,14 +295,15 @@ try {
     assert.strictEqual(e2.count, fileElements(file).length, label + ': every element of the file is on the 2D canvas');
     assert.ok(!/data-/.test(file), label + ': no data-* in the download');
     const kinds = fileElements(file).map((e) => [e[2], /Z$/.test(e[1])]);
-    assert.deepStrictEqual(kinds, Array(2 + 3 * islandLines).fill(['online', false]), label + `: the download: ${2 + 3 * islandLines} open on-line paths (1 + 1 + ${islandLines} x 3 passes), no wall, island or pocket element`);
+    assert.deepStrictEqual(kinds.filter((k) => k[0] !== 'online' || !k[1]), [['online', false], ['inside', true]], label + ': the download: the rectangle\'s open line + its inside cut; no outside / pocket element');
+    assert.strictEqual(kinds.filter((k) => k[0] === 'online' && k[1]).length, 1 + islandLoops, label + `: and ${1 + islandLoops} closed on-line loops (the L, the island pocket)`);
     // Export 3D: built, the cleared pockets
     if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-3d');
     await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the Review built');
     await sleep(800);
     const info = await evalJs(`[...document.getElementById('review-info').children].map((d) => d.textContent)`);
     console.log(label + ' 3D info: ' + JSON.stringify(info));
-    assert.ok(info.filter((t) => /^Pocket: spiral, \d+ turns \+ wall in 1 line,/.test(t)).length === 2 && info.some((t) => /^Pocket: spiral, \d+ turns \+ wall in \d+ lines \(the pocket has islands\)/.test(t)), label + ': the 3D info says the clearing');
+    assert.ok(info.some((t) => /^Pocket: spiral, \d+ turns in 1 line \+ wall,/.test(t)) && info.some((t) => /^Pocket: spiral, \d+ turns \+ wall: one closed loop/.test(t)) && info.some((t) => /closed loops \(the pocket has islands\)/.test(t)), label + ': the 3D info says the clearing');
     await shot(`${D}-export-3d.png`, '#review-canvas-host');
     await openMode('prepare');
   };
@@ -358,17 +342,17 @@ try {
   const fusion = {};
   for (const id of ['linked', 'raster', 'morphed']) {
     await pickClearing(id);
+    await setLoop(true);
     const c = await card();
-    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns \\+ wall in \\d+ lines?' : id === 'raster' ? 'raster 0°: \\d+ passes \\+ 1 ring \\+ wall' : 'morphed spiral: \\d+ turns \\+ wall'}`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
+    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster 0°: \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: one closed loop, ends where it starts`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
     const l = await look();
     assert.ok(l.paths >= 1, `Fusion ${id}: drawn`);
     const b = await evalJs(`(() => { const r = [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getBBox()); return [Math.min(...r.map((q) => q.x)) - 8, Math.min(...r.map((q) => q.y)) - 8, Math.max(...r.map((q) => q.x + q.width)) + 8, Math.max(...r.map((q) => q.y + q.height)) + 8]; })()`);
-    await shotWorld(`fusion-prepare-${id}.png`, b);
+    await shotWorld(`fusion-loop-${id}.png`, b);
     const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => m.shaperSvgOf(window.__designController.state, C.cutPlanEntries())))`);
     const els = fileElements(svg).map((e) => e[2]);
     fusion[id] = els.reduce((o, k) => ({ ...o, [k]: (o[k] || 0) + 1 }), {});
-    if (id === 'linked') assert.ok(els.includes('online') && !els.includes('inside') && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => !/Z$/.test(e[1])), `Fusion spiral: the pocket is open on-line paths only (the wall in the line; the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
-    else assert.ok(els.includes('online') && els.includes('inside') && !els.includes('pocket'), `Fusion ${id}: the export has the clearing paths and the wall: ${JSON.stringify(fusion[id])}`);
+    assert.ok(els.filter((k) => k === 'online').length === 1 && !els.includes('inside') && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is ONE closed on-line path (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
     await clickWorld(60, -40);
   }
   console.log('Fusion exports: ' + JSON.stringify(fusion));

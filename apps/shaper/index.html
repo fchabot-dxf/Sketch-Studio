@@ -114,7 +114,7 @@
     #review-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
     #review-toolbar button { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
     #review-toolbar button:hover { border-color: var(--sk-selection, #4c9aff); color: #fff; }
-    #review-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; font: 12px system-ui, sans-serif; color: #9aa0a6; max-width: 70%; line-height: 1.5; }
+    #review-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; font: 12px system-ui, sans-serif; color: #9aa0a6; max-width: 70%; line-height: 1.5; max-height: calc(100% - 80px); overflow-y: auto; } /* TASK 750: many notes (a phone) scroll inside it, never over the view toggle at the top */
     #review-side { width: 300px; flex: none; overflow: auto; padding: 16px; background: #0f1320; border-left: 1px solid #1f2535; display: flex; flex-direction: column; gap: 14px; }
     .review-stock { display: flex; flex-direction: column; gap: 6px; color: #cbd5e1; font-size: 13px; }
     .review-stock label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

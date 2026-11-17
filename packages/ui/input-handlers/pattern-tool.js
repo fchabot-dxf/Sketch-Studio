@@ -44,6 +44,7 @@ import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
 
 const T = CONSTRAINT_TYPES;
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 const OVERLAY_ID = 'pattern-tool-overlay';
 export const PATTERN_DIALOG_CLASS = 'sk-pattern-dialog';
 export const PATTERN_INLINE_CLASS = 'sk-pat-inline';
@@ -415,8 +416,8 @@ export function handlePatternPointerUp(e) {
 /** Enter / Esc with the canvas focused while the dialog is open. */
 export function handlePatternKeyDown(e) {
   if (!_s) return false;
-  if (e.key === 'Escape') { userCancel(); return true; }
-  if (e.key === 'Enter') { commitPattern(); return true; }
+  if (matchesShortcut(e, 'edit.cancel')) { userCancel(); return true; }
+  if (matchesShortcut(e, 'pattern.ok')) { commitPattern(); return true; }
   return false;
 }
 

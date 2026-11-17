@@ -8,11 +8,13 @@ import { commitPolyline, deleteActiveNode } from "./interaction.js";
 import { exitTargetEditing } from "./toolpath-layers-panel.js"; // PP-4b: real target-editing exit (un-stubbed)
 import { isTextEditingTarget } from "#ui/clipboard.js";
 import { deleteSelection } from "#core/delete-manager.js"; // BURN-DOWN-1: Delete removes #core geometry (art store retired)
+import { matchesShortcut, matchShortcut } from "#ui/shortcuts.js"; // TASK 727: the keys are declared there
 
-const TOOL_KEYS = {
-    v: "select", t: "rotate", s: "scale",
-    l: "line", r: "rect", e: "ellipse", p: "polyline", f: "freehand",
-    x: "scissors", n: "node",
+// the art tool each declared key sets (shortcuts.js plotter.art.*: not listed in Settings > Shortcuts, the art tools are retired)
+const TOOL_SHORTCUTS = {
+    "plotter.art.select": "select", "plotter.art.rotate": "rotate", "plotter.art.scale": "scale",
+    "plotter.art.line": "line", "plotter.art.rect": "rect", "plotter.art.ellipse": "ellipse", "plotter.art.polyline": "polyline", "plotter.art.freehand": "freehand",
+    "plotter.art.scissors": "scissors", "plotter.art.node": "node",
 };
 
 export function installKeyboard(isActive) {
@@ -23,13 +25,13 @@ export function installKeyboard(isActive) {
 function onKeyDown(e) {
     if (isTextEditingTarget(e.target)) return;
 
-    if (e.code === "Space") {
+    if (matchesShortcut(e, "view.panHold")) {
         state.spaceDown = true;
         canvas.classList.add("panning");
         e.preventDefault();
         return;
     }
-    if (e.key === "Escape") {
+    if (matchesShortcut(e, "edit.cancel")) {
         if (state.targetEditingToolpathId) { exitTargetEditing(); return; }
         if (state.interaction) return cancelInteraction();
         // Nothing in-flight — Esc becomes a "deselect everything"
@@ -43,23 +45,23 @@ function onKeyDown(e) {
         }
         return;
     }
-    if (e.key === "Enter") {
+    if (matchesShortcut(e, "plotter.finishPolyline")) {
         if (state.interaction && state.interaction.kind === "polyline") commitPolyline();
         return;
     }
-    if (e.key === "Delete" || e.key === "Backspace") {
+    if (matchesShortcut(e, "edit.delete")) {
         if (e.defaultPrevented) { state.selectedShapeIds.clear(); render(); return; }
         // Node tool: Delete removes the selected node, not the whole shape.
         if (state.tool === "node" && state.activeNode) { deleteActiveNode(); return; }
         return deleteSelected();
     }
 
-    const tool = TOOL_KEYS[e.key.toLowerCase()];
-    if (tool) setTool(tool);
+    const toolId = matchShortcut(e, Object.keys(TOOL_SHORTCUTS));
+    if (toolId) setTool(TOOL_SHORTCUTS[toolId]);
 }
 
 function onKeyUp(e) {
-    if (e.code === "Space") {
+    if (matchesShortcut(e, "view.panHold")) {
         state.spaceDown = false;
         canvas.classList.remove("panning");
     }

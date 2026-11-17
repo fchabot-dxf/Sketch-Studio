@@ -21,6 +21,7 @@ import { handleDelete } from '#ui/input-manager.js';
 import { activeSketchName, canClearActiveSketch, clearActiveSketch, hasSelection } from '#core/delete-manager.js';
 import { DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
+import { GEAR_GLYPH } from '#ui/app-sidebar.js';
 
 let stylesInjected = false;
 function injectStyles() {
@@ -72,7 +73,7 @@ body.sk-has-footer { padding-bottom: var(--sk-footer-h); box-sizing: border-box;
 }
 
 // the gear (same artwork as SIDEBAR_ICONS.gear / .style in app-sidebar.js, drawn here at the footer's 24 viewBox)
-const GEAR_ICON = '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="2.5"/><path d="M14.2 11a1.2 1.2 0 0 0 .2 1.3l.05.05a1.4 1.4 0 1 1-2 2l-.05-.05a1.2 1.2 0 0 0-1.3-.2 1.2 1.2 0 0 0-.7 1.1V15.5a1.4 1.4 0 1 1-2.8 0v-.1a1.2 1.2 0 0 0-.8-1.1 1.2 1.2 0 0 0-1.3.2l-.05.05a1.4 1.4 0 1 1-2-2l.05-.05a1.2 1.2 0 0 0 .2-1.3 1.2 1.2 0 0 0-1.1-.7H2.5a1.4 1.4 0 0 1 0-2.8h.1a1.2 1.2 0 0 0 1.1-.8 1.2 1.2 0 0 0-.2-1.3l-.05-.05a1.4 1.4 0 1 1 2-2l.05.05a1.2 1.2 0 0 0 1.3.2H7a1.2 1.2 0 0 0 .7-1.1V2.5a1.4 1.4 0 1 1 2.8 0v.1a1.2 1.2 0 0 0 .7 1.1 1.2 1.2 0 0 0 1.3-.2l.05-.05a1.4 1.4 0 1 1 2 2l-.05.05a1.2 1.2 0 0 0-.2 1.3v.1a1.2 1.2 0 0 0 1.1.7h.1a1.4 1.4 0 0 1 0 2.8h-.1a1.2 1.2 0 0 0-1.1.7z"/></svg>';
+const GEAR_ICON = '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + GEAR_GLYPH + '</svg>'; // TASK 727: the artwork itself is app-sidebar.js GEAR_GLYPH (one drawing)
 const ICON = (id) => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#${id}"/></svg>`;
 // Fusion's "fx" mark (the Parameters command), drawn as text so it needs no symbol sheet
 const FX_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="16.5" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="13" fill="currentColor" stroke="none">fx</text></svg>';

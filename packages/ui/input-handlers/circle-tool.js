@@ -8,6 +8,7 @@ import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 let circleState = { lockedRadius: null, boxOpen: false };
 const localState = { isDragging: false, dragStartScreen: null };
@@ -158,7 +159,7 @@ export function finalizeCircleFromActive(svg, state){
 export function handleCircleKeyDown(e, svg, state) {
     if (state.currentTool !== TOOL_MODES.CIRCLE) return false;
     if (!state.active || !state.active.start) return false;
-    if (/^[0-9.]$/.test(e.key) && !isInputActive()) {
+    if (matchesShortcut(e, 'draw.typeValue') && !isInputActive()) {
         const center = state.joints.get(state.active.start) || state.active.startPt;
         const previewPt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : center;
         const currentRadius = Math.hypot((previewPt.x - center.x), (previewPt.y - center.y));

@@ -29,6 +29,7 @@ import { formatConstraintValue, formatLenLabel } from '#ui/svg-renderer.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
 import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
+import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const OVERLAY_ID = 'fillet-tool-overlay';
 const INPUT_ID = 'fillet-radius-input';
@@ -282,8 +283,8 @@ export function handleFilletPointerUp(e) {
 }
 
 export function handleFilletKeyDown(e, svg, state) {
-  if (e.key === 'Escape' && (_pick || _input)) { cancelAll(); return true; }
-  if (e.key === 'r' || e.key === 'R') {
+  if (matchesShortcut(e, 'edit.cancel') && (_pick || _input)) { cancelAll(); return true; }
+  if (matchesShortcut(e, 'fillet.radius')) {
     const unit = docUnit();
     const input = prompt('Enter Fillet Radius (' + unit + '):', formatLenLabel(currentRadius));
     if (input !== null) {

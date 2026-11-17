@@ -24,6 +24,7 @@ import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings m
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { shaperSvgOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy)
+import { opOrder } from './operations.js';            // TASK 743: the operation order (the 2D view rebuilds when it changes)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
@@ -271,7 +272,7 @@ let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted on
 const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
-  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'),
+  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), // TASK 743: the operations list
   ensureSketch, notify: groupStatus, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
 });
 
@@ -383,7 +384,7 @@ const reviewInputs = (st) => {
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
   return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps
 };
-const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit()]); // TASK 714: the notes are in the doc unit
+const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder()]); // TASK 714: the notes are in the doc unit; TASK 743: the 2D file's groups follow the operation order
 // TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
 const REVIEW_VIEW_KEY = 'shaper-review-view';
 let reviewViewMode = '3d';

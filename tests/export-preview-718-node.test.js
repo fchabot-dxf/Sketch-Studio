@@ -6,7 +6,7 @@
 //     string plus data-step="k/N" on the stepped cut's elements only (removing them gives the download back, byte for byte);
 //  2. the preview's element list (apps/shaper/src/export-preview.js previewItems on the parsed preview copy: type + depth from the element or its <g>)
 //     == the export's element list (the downloaded string read line by line, as the 711 test reads it): same count, same order, same type + depth;
-//  3. the stepped pocket's elements say "step k of N" in order (1..4 of 4), the label reads "pocket · 7.333 mm · step 2 of 4", the list groups by type.
+//  3. the stepped pocket's elements say "step k of N" in order (1..4 of 4), the label reads "pocket · 7.333 mm · step 2 of 4", the list groups by OPERATION (TASK 743).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { open } from './helpers/node-app.js';
@@ -17,6 +17,7 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
+import { planOperations, opEntries } from '../apps/shaper/src/operations.js'; // TASK 743
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, previewRows, itemLabel } from '../apps/shaper/src/export-preview.js';
 
@@ -42,9 +43,10 @@ function exportElements(svg) {
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys: lp });
+  const entries = cutPlanEntries(); // TASK 743: the page's call groups the elements by operation (operations.js), in the operation order
+  return exportShaperSVG({ state: st, entries: opEntries(planOperations(st, entries), entries), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true, groupByOp: true }, loopPolys: lp });
 };
-const stripPreview = (s) => s.replace(/ data-step="\d+\/\d+"/g, '');
+const stripPreview = (s) => s.replace(/ data-step="\d+\/\d+"/g, '').replace(/ data-op-(heading|text)="[^"]*"/g, ''); // TASK 743: + the operation groups' list words
 
 SettingsManager.set('DOC_UNIT', 'mm');
 const app = await open({ host: 'shaper' });
@@ -59,7 +61,7 @@ try {
     const download = shaperSvgOf(app.state, cutPlanEntries());
     const copy = shaperSvgOf(app.state, cutPlanEntries(), { preview: true });
     eq(download, plainExport(app.state), 'real solid: the downloaded file is byte-identical to the exporter\'s output before task 718');
-    eq(copy, download, 'real solid: no stepped cut, so the preview copy IS the downloaded string');
+    eq(stripPreview(copy), download, 'real solid: no stepped cut, so the preview copy minus its operation words IS the downloaded string');
     const ex = exportElements(download);
     const pv = preview(copy);
     console.log('real solid, export: ' + JSON.stringify(ex.map((e) => `${e.cutType} ${e.depth}`)));
@@ -70,10 +72,11 @@ try {
     eq(pv.map((e) => ({ tag: e.tag, cutType: e.cutType, depth: e.depth })), ex, 'real solid: the preview\'s element list == the export\'s (tag, type, depth, order)');
     ok(pv.every((e) => e.step === null), 'real solid: no element has a step');
     const rows = previewRows(pv);
-    console.log('real solid, list: ' + JSON.stringify(rows.map((g) => [g.cutType, g.count, g.rows.map((r) => `${r.depth} x${r.items.length}`)])));
+    console.log('real solid, list: ' + JSON.stringify(rows.map((g) => [g.op.heading, g.op.text, g.count, g.rows.map((r) => `${r.cutType} ${r.depth} x${r.items.length}`)])));
     eq(rows.reduce((n, g) => n + g.count, 0), pv.length, 'the list counts every element once');
-    eq(new Set(rows.map((g) => g.cutType)), new Set(['outside', 'inside', 'pocket']), 'the list: one group per cut type');
-    eq(rows.find((g) => g.cutType === 'pocket').rows.map((r) => r.depth).sort(), ['10.000 mm', '4.000 mm', '6.000 mm', '8.000 mm'], 'the pocket group: one row per depth');
+    // TASK 743: the list is the operations list: one group per operation (file order = the operation order), rows by cut type + depth
+    eq(rows.map((g) => g.op.text.split(' · ').slice(0, 2).join(' · ')), ['Pocket · 4 mm', 'Pocket · 6 mm', 'Pocket · 8 mm', 'Pocket · 10 mm', 'Inside · 19 mm', 'Outside · 19 mm'], 'the list: the operations, pockets shallow to deep, the holes, the outside last');
+    ok(rows.every((g) => g.op.heading === 'Change to ⅛″ end mill'), 'one bit: every operation under "Change to ⅛″ end mill"');
   }
 
   // ── the SA-7 R3 floor fillet pocket as a Stepped pocket, adaptive Coarse (717: 4 steps at 6.651 7.333 7.843 8) ──
@@ -94,10 +97,10 @@ try {
     console.log('R3 fillet, export: ' + JSON.stringify(ex.map((e) => `${e.cutType} ${e.depth}`)));
     console.log('R3 fillet, preview: ' + JSON.stringify(pv.map(itemLabel)));
     eq(pv.map((e) => ({ tag: e.tag, cutType: e.cutType, depth: e.depth })), ex, 'R3 fillet: the preview\'s element list == the export\'s (tag, type, depth, order)');
-    eq(pv.map(itemLabel), ['outside · 19.000 mm', 'pocket · 6.651 mm · step 1 of 4', 'pocket · 7.333 mm · step 2 of 4', 'pocket · 7.843 mm · step 3 of 4', 'pocket · 8.000 mm · step 4 of 4'],
-      'R3 fillet: the labels: the outline, then the 4 steps in order');
+    eq(pv.map(itemLabel), ['pocket · 6.651 mm · step 1 of 4', 'pocket · 7.333 mm · step 2 of 4', 'pocket · 7.843 mm · step 3 of 4', 'pocket · 8.000 mm · step 4 of 4', 'outside · 19.000 mm'],
+      'R3 fillet: the labels: the 4 steps in order, then the outline (TASK 743: the operation order, the outside cut last)');
     const rows = previewRows(pv);
-    eq(rows.map((g) => [g.cutType, g.count, g.rows.length]), [['outside', 1, 1], ['pocket', 4, 4]], 'the list: outside (1 element), pocket (4 elements, 4 rows)');
+    eq(rows.map((g) => [g.op.text, g.count, g.rows.length]), [['Stepped pocket · 6.651–8 mm · 1 region · 4 steps, adaptive Coarse', 4, 4], ['Outside · 19 mm · 1 region', 1, 1]], 'the list (TASK 743: operations): the stepped pocket (4 elements, 4 rows), then the outside (1 element)');
   }
   // a file that does not parse throws (never an empty view that hides the error)
   assert.throws(() => parseShaperSvg('<svg', app.document), /does not parse/); checks++;

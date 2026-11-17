@@ -137,6 +137,16 @@ function datumPolygon(datum) {
 //                                             off (the default) the string is byte-identical; the attribute is on the element only, so the
 //                                             <g> grouping is the same either way. TASK 742: a held cut's element carries data-hold
 //                                             ("pass" | "skin" | "gap k/N", holdData) the same way.
+//                groupByOp: true            → TASK 743: OPERATIONS. Each entry may carry `op` = { id, title, heading?, text? } (the app's operation;
+//                                             the app passes the entries in its operation order, each operation's entries together). Every operation
+//                                             is ONE <g id="…"> with a <title> naming it, in that order; inside it, the operation's elements are
+//                                             written exactly as without this option (groupByCut applied to that operation's elements only), two
+//                                             spaces deeper. An operation with no element is not written. Elements of entries without `op` (and
+//                                             the V-carve contours) follow, written as without this option. The <g> carries no cut attribute (the
+//                                             per-element encoding is unchanged). With previewData the <g> also carries data-op-heading and
+//                                             data-op-text (op.heading / op.text: the list's words, for the Export step's 2D list; never in the download).
+// TASK 743: text in an attribute value or element content (an operation's id / title / tool name)
+const xmlText = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // TASK 742: the PREVIEW copy's data-hold of a held cut (#core/hold-part): "pass" (tabs' pass 1) | "skin" (an onion skin) | "gap k/N" (a gap strip);
 // a refused hold or none: nothing. Never in the downloaded file (previewData only).
 function holdData(hold) {
@@ -238,7 +248,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
         geom = loopGeom(cut.loop, state, shapeById);
       }
       const data = options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) : '');
-      if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
+      if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, op: options.groupByOp && e.op ? e.op : null });
     }
   }
 
@@ -263,21 +273,35 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   const body = [];
   if (options.datum) body.push('  ' + datumPolygon(options.datum));
 
-  if (options.groupByCut) {
-    const groups = new Map(); // common → items (Map preserves first-seen order → deterministic)
-    for (const it of items) { if (!groups.has(it.common)) groups.set(it.common, []); groups.get(it.common).push(it); }
-    for (const [common, group] of groups) {
-      if (group.length >= 2) { // hoist the shared cut attrs to a <g>; the children inherit (drop their attrs)
-        body.push(`  <g${common}>`);
-        for (const it of group) body.push(`    <${it.tag} ${it.a}/>`);
-        body.push('  </g>');
-      } else {
-        body.push(`  <${group[0].tag} ${group[0].a}${common}/>`);
+  // the elements as lines at `pad`: one per element, or (groupByCut) the elements sharing IDENTICAL cut attrs under one <g> carrying them
+  const writeItems = (list, pad) => {
+    if (options.groupByCut) {
+      const groups = new Map(); // common → items (Map preserves first-seen order → deterministic)
+      for (const it of list) { if (!groups.has(it.common)) groups.set(it.common, []); groups.get(it.common).push(it); }
+      for (const [common, group] of groups) {
+        if (group.length >= 2) { // hoist the shared cut attrs to a <g>; the children inherit (drop their attrs)
+          body.push(`${pad}<g${common}>`);
+          for (const it of group) body.push(`${pad}  <${it.tag} ${it.a}/>`);
+          body.push(`${pad}</g>`);
+        } else {
+          body.push(`${pad}<${group[0].tag} ${group[0].a}${common}/>`);
+        }
       }
+    } else {
+      for (const it of list) body.push(`${pad}<${it.tag} ${it.a}${it.common}/>`);
     }
-  } else {
-    for (const it of items) body.push(`  <${it.tag} ${it.a}${it.common}/>`);
+  };
+  // TASK 743: groupByOp: one <g> per operation (first-seen order = the app's operation order), then the elements of no operation
+  const ops = new Map(); // op id → { op, items }
+  for (const it of items) if (it.op) { if (!ops.has(it.op.id)) ops.set(it.op.id, { op: it.op, items: [] }); ops.get(it.op.id).items.push(it); }
+  for (const { op, items: list } of ops.values()) {
+    const words = options.previewData ? ['heading', 'text'].filter((k) => op[k]).map((k) => ` data-op-${k}="${xmlText(op[k])}"`).join('') : '';
+    body.push(`  <g id="${xmlText(op.id)}"${words}>`);
+    body.push(`    <title>${xmlText(op.title)}</title>`);
+    writeItems(list, '    ');
+    body.push('  </g>');
   }
+  writeItems(items.filter((it) => !it.op), '  ');
 
   const b = boundsOf(state, options.datum ? datumDims(options.datum) : null);
   const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;

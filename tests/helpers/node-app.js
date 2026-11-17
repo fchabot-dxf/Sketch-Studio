@@ -209,7 +209,7 @@ const HOSTS = {
     let controller = null, modes = null, ribbon = null, buffer = null, browser = null;
     const history = M.createShaperHistory({ getController: () => controller, getMode: () => modes.current() });
     const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(), history,
-      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice') });
+      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice'), opsEl: doc.getElementById('prepare-ops') }); // TASK 743: the operations list, as the page passes it
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
     // main.js ensureSketch, run by the mode router on the first entry into Design, with the Design view already showing: the sketch, the ribbon, the buffer
     // (its restore is not awaited, as on the page), the autosave

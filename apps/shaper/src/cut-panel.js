@@ -3,7 +3,7 @@
 // callbacks. Cut params parse/format through #core/units.js per the document unit, and RE-LABEL when DOC_UNIT changes.
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
-import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
+import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it)
 import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
 import { HOLD_PART, holdDefaults } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults
 import SettingsManager, { docUnit, lengthDecimals } from '#core/settings-manager.js';
@@ -16,13 +16,6 @@ const MENU_ORDER = ['online', 'guide', 'interior', 'stepped-inside', 'pocket', '
 // TASK 455: each cut type carries its own icon (CUT_TYPES.icon, 18x18 inner markup in currentColor); colours are CSS tokens.
 const iconSvg = (t) => `<svg class="cut-ic" viewBox="0 0 18 18" aria-hidden="true">${(t && t.icon) || ''}</svg>`;
 
-// DECLARED data: quick bit-diameter presets. VALUES are BASE mm (U3a); LABELS stay imperial bit sizes (× 25.4 mm/in).
-const BIT_PRESETS = [
-  { label: '.02', value: 0.508 },   // .02 in
-  { label: '⅛', value: 3.175 },   // 1/8 in
-  { label: '¼', value: 6.35 },    // 1/4 in
-  { label: '½', value: 12.7 },    // 1/2 in
-];
 // TASK 715: the Step presets FOLLOW the document unit. VALUES are BASE mm; inches = imperial fractions, any metric unit = round mm.
 const IN = 25.4;
 const STEP_PRESETS = {

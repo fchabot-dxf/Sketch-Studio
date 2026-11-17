@@ -8,6 +8,12 @@
 //    terrace deriveCuts made); the downloaded file never has it.
 //  * TASK 742: a held cut (tabs / onion skin) is plain cuts in the file too (the pass is an outside / inside cut, each gap strip an inside cut);
 //    the preview copy carries data-hold="pass" | "skin" | "gap k/N" the same way, so the label and the list say "pass (tabs)", "onion skin", "gap 2 of 4".
+//  * TASK 743: the list is the OPERATIONS list (the same operations, in the same order, as Prepare's: operations.js): the file writes each operation as
+//    one <g id> with a <title> naming it, and the preview copy adds the list's words (data-op-heading, data-op-text: operations.js, as Prepare's list
+//    writes them); the list reads them from the file: a tool heading ("Change to ¼″ end mill") per run of operations with the same bit, one header per
+//    operation (a tap picks all its elements), then its rows (depth, step,
+//    hold; the cut type too when the operation writes more than one, e.g. an Outside plate's own holes). Elements of no operation (V-carve) keep the
+//    old grouping by cut type, after the operations.
 //  * A tap / click on an element (a press that moves less than 4 px) picks it: a highlight and its label ("pocket · 7.333 mm · step 2 of 4");
 //    a tap on empty space clears it. The list (rows by cut type, then depth and step, each with its element count) picks a row's elements.
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare and Vcarve). The first build
@@ -43,13 +49,28 @@ function cutAttr(el, name) {
   return null;
 }
 
-/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap', k?, n? } | null }. */
+// TASK 743: the operation an element belongs to: its nearest <g> with an id and a <title> (the exporter's operation group): { id, title, heading, text } | null
+function opOf(el) {
+  for (let g = el.parentNode; g && g.nodeType === 1 && g.localName === 'g'; g = g.parentNode) {
+    const title = g.id ? [...g.children].find((c) => c.localName === 'title') : null;
+    if (title) return { id: g.id, title: title.textContent, heading: g.getAttribute('data-op-heading') || null, text: g.getAttribute('data-op-text') || title.textContent };
+  }
+  return null;
+}
+
+// TASK 743: a paint attribute (fill / stroke) of the element, or of the nearest ancestor that carries it (the <g> the exporter hoisted it to), or null
+function paintOf(el, name) {
+  for (let e = el; e && e.nodeType === 1 && e.localName !== 'svg'; e = e.parentNode) if (e.hasAttribute(name)) return e.getAttribute(name);
+  return null;
+}
+
+/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap', k?, n? } | null, op: { id, title, tool } | null }. */
 export function previewItems(root) {
   return [...root.querySelectorAll('*')].filter((el) => SHAPE_TAGS.has(el.localName)).map((el) => {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
     const h = /^(pass|skin)$|^gap (\d+)\/(\d+)$/.exec(el.getAttribute('data-hold') || ''); // TASK 742
     const hold = h ? (h[1] ? { kind: h[1] } : { kind: 'gap', k: Number(h[2]), n: Number(h[3]) }) : null;
-    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold };
+    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: opOf(el) };
   });
 }
 /** TASK 742: a held element's words: "pass (tabs)" | "onion skin" | "gap 2 of 4" (the element), "gaps" (a list row of them). */
@@ -96,19 +117,24 @@ export const depthText = (depth) => {
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
 export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold)].filter(Boolean).join(' · ');
 
-/** The list: one group per cut type (file order) with its element count, one row per depth + step (+ TASK 742 hold kind) in it (file order) with its elements. */
+/**
+ * The list: TASK 743: one group per OPERATION (file order = the operation order: { op, count, types, rows }), then one per cut type for the elements of no
+ * operation ({ op: null, cutType, ... }); in each, one row per cut type + depth + step (+ TASK 742 hold kind) (file order) with its elements.
+ */
 export function previewRows(items) {
   const groups = new Map();
   for (const it of items) {
     const type = it.cutType || 'no cut type';
-    if (!groups.has(type)) groups.set(type, { cutType: type, count: 0, rows: new Map() });
-    const g = groups.get(type);
-    g.count++;
-    const key = `${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}`; // TASK 742: a held cut's gaps are one row
-    if (!g.rows.has(key)) g.rows.set(key, { depth: it.depth, step: it.step, hold: it.hold, items: [] });
+    const gk = it.op ? 'op:' + it.op.id : 'type:' + type;
+    if (!groups.has(gk)) groups.set(gk, { op: it.op, cutType: it.op ? null : type, count: 0, types: new Set(), rows: new Map() });
+    const g = groups.get(gk);
+    g.count++; g.types.add(type);
+    const key = `${type}|${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}`; // TASK 742: a held cut's gaps are one row
+    if (!g.rows.has(key)) g.rows.set(key, { cutType: type, depth: it.depth, step: it.step, hold: it.hold, items: [] });
     g.rows.get(key).items.push(it);
   }
-  return [...groups.values()].map((g) => ({ cutType: g.cutType, count: g.count, rows: [...g.rows.values()] }));
+  const all = [...groups.values()].map((g) => ({ op: g.op, cutType: g.cutType, count: g.count, types: [...g.types], rows: [...g.rows.values()] }));
+  return [...all.filter((g) => g.op), ...all.filter((g) => !g.op)];
 }
 
 /**
@@ -124,7 +150,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
   setupPanZoom(canvas, viewState, { attachListeners: true });
   let shading = { shades: new Map(), lo: NaN, hi: NaN }, outsideShading = { shades: new Map() }, insideShading = { shades: new Map() };
   let layer = null, items = [], rows = [], byEl = new Map(), picked = [], pickedLabel = null, lastSig, fitPending = false;
-  const rowButtons = [], rowOf = []; // the list's row buttons and the row each one picks
+  const rowButtons = [], rowOf = []; // the list's row buttons and the row each one picks (TASK 743: an operation's header is a row of all its elements)
 
   const sized = () => { const r = canvas.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   function fit() {
@@ -161,6 +187,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
   function pickRow(i) {
     const row = rowOf[i];
     if (!row) return;
+    if (row.op) { pick(row.items, `${row.op.title} · ${row.items.length} element${row.items.length === 1 ? '' : 's'}`, i); return; } // TASK 743: an operation
     pick(row.items, itemLabel(row.items[0]) + (row.items.length > 1 ? ` · ${row.items.length} elements` : ''), i);
   }
 
@@ -189,17 +216,34 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
       lg.append(sw, tx);
       out.push(lg);
     }
+    let lastTool;
     for (const g of rows) {
-      const head = doc.createElement('div'); head.className = 'rv2d-type';
-      const name = doc.createElement('span'); name.textContent = g.cutType;
       const n = doc.createElement('span'); n.className = 'rv2d-count'; n.textContent = String(g.count);
-      head.append(name, n);
-      out.push(head);
+      if (g.op) { // TASK 743: the tool heading (a run of operations with one bit), then the operation's header: a tap picks every element of it
+        if (g.op.heading && g.op.heading !== lastTool) {
+          lastTool = g.op.heading;
+          const th = doc.createElement('div'); th.className = 'rv2d-tool'; th.textContent = g.op.heading;
+          out.push(th);
+        }
+        const head = doc.createElement('button'); head.type = 'button'; head.className = 'rv2d-op'; head.title = g.op.title; head.dataset.op = g.op.id;
+        const name = doc.createElement('span'); name.textContent = g.op.text;
+        head.append(name, n);
+        const i = rowButtons.length, row = { op: g.op, items: g.rows.flatMap((r) => r.items) };
+        head.addEventListener('click', () => pickRow(i));
+        rowButtons.push(head); rowOf.push(row);
+        out.push(head);
+      } else {
+        lastTool = undefined;
+        const head = doc.createElement('div'); head.className = 'rv2d-type';
+        const name = doc.createElement('span'); name.textContent = g.cutType;
+        head.append(name, n);
+        out.push(head);
+      }
       for (const row of g.rows) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
-        const t = doc.createElement('span'); t.textContent = [depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true)].filter(Boolean).join(' · ');
+        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true)].filter(Boolean).join(' · ');
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
-        const shade = g.cutType === 'pocket' ? shading.shades.get(row.depth) : (g.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (g.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
+        const shade = row.cutType === 'pocket' ? shading.shades.get(row.depth) : (row.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (row.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
         b.append(t, c);
         const i = rowButtons.length;
@@ -230,16 +274,6 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
       shading = pocketShades(items);
       outsideShading = outsideStepShades(items);
       insideShading = insideStepShades(items);
-      // a stepped outside's terraces are nested outlines (a shallow step is INSIDE a deeper one) and the file writes the shallow one first, so the deeper
-      // would paint over it: stack them deepest first, in place (the first terrace's position), so every ledge shows. The picks / list read items, not the DOM order.
-      const terraces = items.filter((it) => it.cutType === 'outside' && it.step);
-      if (terraces.length > 1) {
-        const first = terraces.find((it) => terraces.every((o) => o === it || !(o.el.compareDocumentPosition(it.el) & 2))); // the earliest in document order
-        const marker = doc.createComment('');
-        first.el.parentNode.insertBefore(marker, first.el);
-        for (const it of [...terraces].sort((a, b) => parseFloat(b.depth) - parseFloat(a.depth))) marker.parentNode.insertBefore(it.el, marker);
-        marker.remove();
-      }
       for (const it of items) {
         const shade = it.cutType === 'pocket' ? shading.shades.get(it.depth) : null;
         if (shade) { it.el.setAttribute('fill', shade); it.el.setAttribute('stroke', POCKET_OUTLINE); }
@@ -247,6 +281,19 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
         if (oShade) { it.el.setAttribute('fill', oShade); it.el.setAttribute('stroke', OUTSIDE_STEP_OUTLINE); }
         const iShade = it.cutType === 'inside' && it.step ? insideShading.shades.get(it.depth) : null; // the file's black stroke stays; the file writes the shallow (larger) ring first, so every ring shows
         if (iShade) it.el.setAttribute('fill', iShade);
+      }
+      // TASK 743: every OUTSIDE element is painted at the BACK, deepest first. The file writes the operations in cutting order, so an outside cut (it frees
+      // the part) is usually last, and its black fill would cover the pockets and holes cut inside it; a stepped outside's terraces are nested outlines (a
+      // shallow step INSIDE a deeper one, written first: TASK 719), so deepest first shows every ledge. Display only: the element keeps the paint it had
+      // (copied from the <g> it inherited it from), the picks and the list read `items`, not the DOM order.
+      const outs = items.filter((it) => it.cutType === 'outside');
+      if (outs.length) {
+        const back = doc.createElementNS(SVG_NS, 'g'); back.setAttribute('class', 'rv2d-back');
+        layer.insertBefore(back, layer.firstChild);
+        for (const it of [...outs].sort((a, b) => parseFloat(b.depth) - parseFloat(a.depth))) {
+          for (const name of ['fill', 'stroke']) { const v = paintOf(it.el, name); if (v !== null && !it.el.hasAttribute(name)) it.el.setAttribute(name, v); }
+          back.appendChild(it.el);
+        }
       }
     }
     renderList();
@@ -273,7 +320,7 @@ export function mountExportPreview({ canvas, list, info, getSvg, emptyText }) {
   function inspect() {
     return {
       elements: items.length,
-      rows: rows.map((g) => ({ cutType: g.cutType, count: g.count, rows: g.rows.map((r) => ({ depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), count: r.items.length })) })),
+      rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, title: g.op.title, heading: g.op.heading, text: g.op.text } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), count: r.items.length })) })),
       picked: picked.length, label: info.textContent, view: viewState.view ? { ...viewState.view } : null,
     };
   }

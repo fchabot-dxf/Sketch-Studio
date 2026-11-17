@@ -11,6 +11,7 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
+import { planOperations, opEntries } from '../apps/shaper/src/operations.js'; // TASK 743
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, insideStepShades } from '../apps/shaper/src/export-preview.js';
 
@@ -22,7 +23,8 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys: lp });
+  const entries = cutPlanEntries(); // TASK 743: the page's call groups the elements by operation (operations.js), in the operation order
+  return exportShaperSVG({ state: st, entries: opEntries(planOperations(st, entries), entries), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true, groupByOp: true }, loopPolys: lp });
 };
 
 const L = (shade) => parseFloat(/hsl\(0, 0%, ([\d.]+)%\)/.exec(shade)[1]);

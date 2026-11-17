@@ -29,14 +29,13 @@ import { regionsFromRings, intersectRegions, unionRegions } from './plot/clip.js
 import { num, polyToPathD, loopToPathD } from './loop-geometry.js';
 import { deriveProfileCuts } from './profile-model.js';
 
-/** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet, never less than `minMm`. */
-export const STEP_DEPTH = Object.freeze({ defaultMm: 1, minMm: 0.1 });
+/** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet. */
+export const STEP_DEPTH = Object.freeze({ defaultMm: 1 });
 /** TASK 717: ADAPTIVE stepping's RESOLUTION = the maximum DEVIATION of the stair from the true slope (base mm; the CAM scallop / cusp height,
- *  see stepDeviation): the named levels, the default (Medium) and the smallest typed (Custom) value. */
+ *  see stepDeviation): the named levels, the default (Medium) and a typed (Custom) value is kept as typed. */
 export const STEP_RESOLUTION = Object.freeze({
   levels: Object.freeze([Object.freeze({ id: 'coarse', label: 'Coarse', mm: 0.5 }), Object.freeze({ id: 'medium', label: 'Medium', mm: 0.25 }), Object.freeze({ id: 'fine', label: 'Fine', mm: 0.1 })]),
   defaultMm: 0.25,
-  minMm: 0.01,
 });
 /** The named level of a deviation (base mm), or null for a typed (Custom) value. */
 export const resolutionLevel = (mm) => STEP_RESOLUTION.levels.find((l) => Math.abs(l.mm - Number(mm)) < 1e-9) || null;
@@ -366,9 +365,9 @@ export function terraceOptions(rec) {
 /**
  * steppedTerraces(slope, { kind, step, depth, deviation }) -> { steps, undercutBelow, zTop, zMax, error } (+ `deviation` when adaptive)
  *   kind   'pocket' | 'inside' | 'outside' (pocket and inside clear the INTERSECTION of the rings above a depth, outside keeps their UNION)
- *   step   the step depth (base mm; STEP_DEPTH.defaultMm when missing, never below STEP_DEPTH.minMm)
- *   deviation  TASK 717: ADAPTIVE stepping when > 0: the steps are placed by this maximum deviation (base mm, never below
- *          STEP_RESOLUTION.minMm; adaptiveDepths) instead of every `step`; everything else (outlines, merge, undercut) is the same
+ *   step   the step depth (base mm; STEP_DEPTH.defaultMm when missing)
+ *   deviation  TASK 717: ADAPTIVE stepping when > 0: the steps are placed by this maximum deviation (base mm;
+ *          adaptiveDepths) instead of every `step`; everything else (outlines, merge, undercut) is the same
  *   depth  the cut's full depth (base mm); missing / unset = the slope's deepest ring. Below the deepest ring the wall is vertical.
  *   steps  [{ depth, outlines: [{ polygon:[{x,y}], walk|null }] }], shallow to deep, identical consecutive steps merged into the deeper one
  *   undercutBelow  the depth (mm) below which the wall comes back under material left above (cut straight there), or null
@@ -382,20 +381,23 @@ export function steppedTerraces(slope, { kind = 'pocket', step, depth, deviation
   if (pr.error) return none(pr.error);
   const zMax = pr.rings[pr.rings.length - 1].z;
   const D = Number(depth) > 0 && depth !== true ? Number(depth) : zMax;
-  const tol = Number(deviation) > 0 ? Math.max(STEP_RESOLUTION.minMm, Number(deviation)) : null;
+  const tol = Number(deviation) > 0 ? Number(deviation) : null;
   let depths;
   if (tol !== null) depths = adaptiveDepths(pr, tol, D);
   else {
-    const s = Math.max(STEP_DEPTH.minMm, Number(step) > 0 ? Number(step) : STEP_DEPTH.defaultMm);
+    const s = Number(step) > 0 ? Number(step) : STEP_DEPTH.defaultMm;
     depths = [];
     for (let i = 1; i * s < D - Z_EPS; i++) depths.push(Math.round(i * s * 1e9) / 1e9);
     depths.push(D);
   }
+  // identical steps merge into the DEEPER one (the bottom-of-step rule), compared with the run's FIRST outline (its reference), never with the step just merged:
+  // a gradual slope otherwise creeps into one step, so a smaller step could give fewer steps. Drift inside one merged step stays within SAME_OUTLINE_TOL_MM.
   const steps = [];
+  let reference = null;
   for (const d of depths) {
     const outlines = outlinesAt(pr, Math.min(d, zMax));
-    if (steps.length && sameOutlines(steps[steps.length - 1].outlines, outlines)) steps[steps.length - 1] = { depth: d, outlines };
-    else steps.push({ depth: d, outlines });
+    if (steps.length && sameOutlines(reference, outlines)) steps[steps.length - 1] = { depth: d, outlines };
+    else { steps.push({ depth: d, outlines }); reference = outlines; }
   }
   const undercut = pr.undercutBelow !== null && pr.undercutBelow < D - Z_EPS ? pr.undercutBelow : null;
   const out = { steps, undercutBelow: undercut, zTop: pr.rings[0].z, zMax, error: null };

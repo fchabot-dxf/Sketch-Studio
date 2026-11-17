@@ -126,6 +126,16 @@ try {
   assert.deepStrictEqual([c.note, c.warn], [['Pocket 1 (8mm): 1 step, 8 mm'], []], 'step 8: one step, no spacing, no warning');
   await shot('card-nowarn-step8.png', '#prepare-panel .cut-card');
   assert.deepStrictEqual(await exportDepths(), ['8.000 mm'], 'step 8: export one pocket');
+  // TASK 736: no minimum: a 0.05 mm bit and a 0.01 mm step depth are kept exactly, 0 is refused, the note follows
+  await evalJs(`(() => { for (const [c, v] of [['.cut-bit', '0.05'], ['.cut-step-depth', '0.01']]) { const i = document.querySelector(c); i.value = v; i.dispatchEvent(new Event('change')); } })()`);
+  const tiny = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()].find((x) => x.cutType === 'stepped-pocket'); return [r.toolDia, r.stepDepth]; })`);
+  assert.deepStrictEqual(tiny, [0.05, 0.01], 'a 0.05 mm bit and a 0.01 mm step depth are kept exactly');
+  await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '0'; i.dispatchEvent(new Event('change')); })()`);
+  c = await cardState();
+  console.log('step 0.01: ' + JSON.stringify(c.note) + ' ' + JSON.stringify(c.warn) + ' box ' + c.step);
+  assert.strictEqual(c.step, '0.010', 'typing 0 is refused: the box shows the stored 0.010 again');
+  assert.ok(c.note.length === 1 && /^Pocket 1 \(8mm\): \d+ steps?, /.test(c.note[0]), 'the note shows for the 0.01 mm step: ' + c.note[0]);
+  await shot('card-tiny-736.png', '#prepare-panel .cut-card');
   // inches
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'in'))`);
   await preset('stepDepth', String(25.4 / 32));

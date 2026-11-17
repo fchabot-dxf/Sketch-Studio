@@ -152,7 +152,7 @@ try {
     await clickEl('#vcarve-maxdepth ~ .cut-step[data-d="1"]'); await clickEl('#vcarve-maxdepth ~ .cut-step[data-d="1"]');
     assert.strictEqual(await val('#vcarve-maxdepth'), '7.5 mm');
     await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="-1"]'); await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="-1"]');
-    assert.strictEqual(await val('#vcarve-dstep'), '0.1 mm', label + ' depth step clamps at 0.1 mm');
+    assert.strictEqual(await val('#vcarve-dstep'), '0.5 mm', label + ' depth step: no minimum, - stops at the smallest positive multiple 0.5 mm (task 734)');
     await evalJs(`(() => { const i = document.getElementById('vcarve-dstep'); i.value = '0.7 mm'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await clickEl('.vcarve-stepbox:has(#vcarve-dstep) .cut-step[data-d="1"]');
     assert.strictEqual(await val('#vcarve-dstep'), '1 mm', label + ' typed 0.7 then + -> the next multiple 1');
@@ -174,7 +174,7 @@ try {
     await clickEl('#review-stock .cut-step[data-d="1"]');
     near(Number(await val('#review-stock-thickness')), Math.floor(t0 + 1e-9) + 1, label + ' stock + 1 mm lands on the next whole mm (from ' + t0 + ')');
     await clickEl('#review-stock .cut-step[data-d="-1"]'); await clickEl('#review-stock .cut-step[data-d="-1"]');
-    near(Number(await val('#review-stock-thickness')), Math.floor(t0 + 1e-9) - 1 < 0.1 ? 0.1 : Math.floor(t0 + 1e-9) - 1, label + ' stock - 1 mm twice');
+    near(Number(await val('#review-stock-thickness')), Math.floor(t0 + 1e-9) - 1, label + ' stock - 1 mm twice');
     await shot(`review-stock-${label}.png`, '#review-stock');
     const rfit = await evalJs(`(() => { const p = document.getElementById('review-side'); return { sw: p.scrollWidth, cw: p.clientWidth, docScroll: document.documentElement.scrollWidth, vw: innerWidth }; })()`);
     assert.ok(rfit.docScroll <= rfit.vw, label + ' review does not scroll the page sideways: ' + JSON.stringify(rfit));

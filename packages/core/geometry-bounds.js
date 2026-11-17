@@ -41,8 +41,9 @@ function cubicInteriorRoots1D(p0, p1, p2, p3) {
 /**
  * Computes the axis-aligned bounding box `{ minX, minY, maxX, maxY, w, h }` over a `#core` sketch state's
  * geometry, or returns `null` when the sketch contains no geometry.
+ * `construction: false` (TASK 725: a drawing that does not show construction geometry, the clean display profile) leaves construction shapes out.
  */
-export function computeGeometryBounds(state) {
+export function computeGeometryBounds(state, { construction = true } = {}) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   let hasGeometry = false;
   const ext = (x, y) => {
@@ -56,7 +57,7 @@ export function computeGeometryBounds(state) {
 
   const J = state && state.joints;
   const hidden = hiddenSketchIds(state); // geometry of a hidden sketch is not on the canvas, so it is not in the box
-  const shapes = ((state && state.shapes) || []).filter((s) => !(s && hidden.has(sketchOf(s))));
+  const shapes = ((state && state.shapes) || []).filter((s) => !(s && hidden.has(sketchOf(s))) && !(s && !construction && s.isConstruction));
 
   if (state && Array.isArray(state.shapes) && state.shapes.length > 0 && J) {
     for (const s of shapes) {

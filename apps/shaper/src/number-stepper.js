@@ -1,5 +1,6 @@
 // apps/shaper/src/number-stepper.js — the ONE − / + stepper of Shaper's numeric fields (TASK 730; generalised from the cut card's depth stepper).
 // A host DECLARES per field a spec { step: { mm, in }, min, max } and the field's own read / commit; this file holds the only press / hold / snap code.
+//   positive  (instead of min) no app minimum, only > 0: the − stops at the smallest positive multiple of the step (TASK 734)
 //   step  the increment in the DOCUMENT unit, per unit family (cm steps as mm / 10); min / max in BASE mm (omit = unbounded)
 //   a step lands on the next clean MULTIPLE of the step in the direction pressed (6.3 + 0.5 -> 6.5, 6.3 - 0.5 -> 6.0); a value already on a multiple moves by one step
 //   from an unset field (read() === null) the first press lands on one step; a value at its min / max stays (nothing is committed, so no undo step)
@@ -39,7 +40,10 @@ export function attachStepper(input, spec, { unit, toDoc, read, commit }, { labe
   const stepOnce = (dir) => {
     if (input.disabled) return;
     const cur = read();
-    const next = nextValue(cur, dir, stepIn(spec, unit()), spec.min == null ? -Infinity : toDoc(spec.min), spec.max == null ? Infinity : toDoc(spec.max));
+    const step = stepIn(spec, unit());
+    // spec.positive: no app minimum, the value only stays > 0: the smallest allowed value is the smallest positive multiple of the step, and a − at or below it stays
+    if (spec.positive && cur != null && dir < 0 && cur <= step + EPS) return;
+    const next = nextValue(cur, dir, step, spec.min != null ? toDoc(spec.min) : spec.positive ? step : -Infinity, spec.max == null ? Infinity : toDoc(spec.max));
     if (cur == null || Math.abs(next - cur) > EPS) commit(next);
   };
 

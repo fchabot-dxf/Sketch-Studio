@@ -2,32 +2,18 @@
 // apps/shaper/src/prepare-view.js (SKETCH-4a) so profile resolution / joints can reuse the geometry.
 //
 // PURITY NOTE: `sampleArc` samples the TRUE rendered curve via the browser SVG path API (getPointAtLength), so
-// `loopPolygon` for an ARC loop needs the DOM (degrades to the endpoints in Node). `loopPolygon` for LINE/CIRCLE
+// `loopPolygon` for an ARC loop needs the DOM (degrades to the endpoints in Node). `loopPolygon` for LINE/CIRCLE/BEZIER
 // loops, `polyArea`, `pointInPolygon`, and `polygonContains` are PURE (no DOM) and Node-oracle-tested. The export
 // HOST can precompute loop polygons in the browser and pass them in to keep `shaper-export` pure.
 
-import { calculateArcPath, arcSweepInfo } from './geometry.js';
 import { buildNodeMap } from './loop-finder.js';
+import { curveKind, curvePointsFrom, num, sampleArc } from './curve-kinds.js'; // TASK 761: each curve kind's geometry, declared once
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
+export { num, sampleArc }; // TASK 761: moved to #core/curve-kinds.js (the per-kind declaration); re-exported for their callers
+
 const EPS = 1e-9;
-const dist2 = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; };
 
-// Sample an arc shape into points (start→end) using the SAME path math the renderer uses (TRUE curve, not chord).
-export function sampleArc(s, state, N = 24) {
-  const [p1, p2, p3] = (s.joints || []).map((id) => state.joints.get(id));
-  if (!p1 || !p2 || !p3) return [];
-  const d = calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep });
-  if (typeof document === 'undefined' || !document.createElementNS) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
-  const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d);
-  let len = 0; try { len = path.getTotalLength(); } catch (_) {}
-  if (!len) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
-  const pts = [];
-  for (let i = 0; i <= N; i++) { try { const pt = path.getPointAtLength((i / N) * len); pts.push({ x: pt.x, y: pt.y }); } catch (_) {} }
-  return pts;
-}
-
-// Boundary polygon (ordered world points) for a loop — straight for lines, sampled for arcs, around-the-rim for circles.
+// Boundary polygon (ordered world points) for a loop — straight for lines, sampled for arcs and beziers (their kind's points), around-the-rim for circles.
 export function loopPolygon(loop, state, shapeById) {
   const J = state.joints;
   if (loop.edges.length === 1) {
@@ -44,9 +30,8 @@ export function loopPolygon(loop, state, shapeById) {
     const fromPos = J.get(loop.joints[i]);
     if (!fromPos) continue;
     const s = shapeById.get(loop.edges[i]);
-    if (s && s.type === 'arc') {
-      let samples = sampleArc(s, state);
-      if (samples.length && dist2(samples[samples.length - 1], fromPos) < dist2(samples[0], fromPos)) samples = samples.reverse();
+    if (s && s.type !== 'line' && curveKind(s)) { // TASK 761: a curve (an arc, a bezier) sampled by its kind (#core/curve-kinds), walked from this joint
+      const samples = curvePointsFrom(s, state, fromPos);
       for (let k = 0; k < samples.length - 1; k++) pts.push(samples[k]); // next edge contributes its own start
     } else {
       pts.push({ x: fromPos.x, y: fromPos.y });
@@ -112,29 +97,8 @@ export function polygonContains(outer, inner) {
   return true;
 }
 
-// SVG path number: <= 4 dp, trailing zeros trimmed, no "-0" (world units = base mm). Exported for #core/stepped-cut.js (TASK 714: a terrace's exact path).
-export function num(n) {
-  let r = Math.round(Number(n) * 1e4) / 1e4;
-  if (Object.is(r, -0)) r = 0;
-  return String(r);
-}
-
-function arcSeg(shape, fromPos, toPos, state) {
-  const center = state.joints.get(shape.joints[0]);
-  const start = state.joints.get(shape.joints[1]);
-  const end = state.joints.get(shape.joints[2]);
-  if (!center || !start || !end) return `L ${num(toPos.x)} ${num(toPos.y)}`;
-  const r = Math.hypot(start.x - center.x, start.y - center.y);
-  const info = arcSweepInfo(center, start, end, { sweep: shape.sweep });   // TASK 550: direction + derived large-arc, one function
-  const stored = info.dir > 0 ? 1 : 0;
-  const forward = Math.hypot(fromPos.x - start.x, fromPos.y - start.y) <= Math.hypot(fromPos.x - end.x, fromPos.y - end.y);
-  const sweep = forward ? stored : (stored ? 0 : 1);
-  const largeArc = info.large ? 1 : 0;
-  return `A ${num(r)} ${num(r)} 0 ${largeArc} ${sweep} ${num(toPos.x)} ${num(toPos.y)}`;
-}
-
-// loopToPathD(loop, state) → a CLOSED SVG path "d" from the loop's ordered boundary (joints[] + edges[]). Lines →
-// `L x y`; arcs → a direction-aware `A …` segment; single-circle loops → two `A r r` half-arcs + `Z`. A line CLOSING
+// loopToPathD(loop, state) → a CLOSED SVG path "d" from the loop's ordered boundary (joints[] + edges[]). Each edge is its kind's path
+// command (#core/curve-kinds pathSeg): lines → `L x y`; arcs → a direction-aware `A …` segment; beziers → a cubic `C` (TASK 761); single-circle loops → two `A r r` half-arcs + `Z`. A line CLOSING
 // edge is left to Z (so a pure-line loop is identical to SP1j-1); an arc closing edge is drawn explicitly. Returns ''
 // on a missing loop / joint position.
 export function loopToPathD(loop, state, { reverse = false } = {}) {
@@ -167,13 +131,13 @@ export function loopToPathD(loop, state, { reverse = false } = {}) {
   for (let i = 1; i < n; i++) {
     const fromP = pos(loop.joints[i - 1]), toP = pos(loop.joints[i]);
     if (!fromP || !toP) return '';
-    const s = shapeById.get(edges[i - 1]);
-    d += ' ' + (s && s.type === 'arc' ? arcSeg(s, fromP, toP, state) : `L ${num(toP.x)} ${num(toP.y)}`);
+    const s = shapeById.get(edges[i - 1]), k = curveKind(s);
+    d += ' ' + (k ? k.pathSeg(s, state, fromP, toP) : `L ${num(toP.x)} ${num(toP.y)}`);
   }
   const closing = shapeById.get(edges[n - 1]);
-  if (closing && closing.type === 'arc') {
+  if (closing && closing.type !== 'line' && curveKind(closing)) { // a curved closing edge (an arc, a bezier) is drawn; a line is left to Z
     const fromP = pos(loop.joints[n - 1]);
-    if (fromP) d += ' ' + arcSeg(closing, fromP, p0, state);
+    if (fromP) d += ' ' + curveKind(closing).pathSeg(closing, state, fromP, p0);
   }
   return d + ' Z';
 }
@@ -188,9 +152,9 @@ export function compoundPathD(outerLoop, holeLoops, state) {
   return [outerD, ...(holeLoops || []).map((hl) => loopToPathD(hl, state, { reverse: true })).filter(Boolean)].join(' ');
 }
 
-// chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines/arcs).
-// Orders the chain's shapes end to end, emitting `M x y` then `L x y` for lines and direction-aware `arcSeg`
-// for arcs. No Z. Reuses arcSeg directly.
+// chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines / arcs / beziers).
+// Orders the chain's shapes end to end, emitting `M x y` then each curve's kind's path command (#core/curve-kinds pathSeg:
+// `L`, a direction-aware `A`, a cubic `C`). No Z. TASK 761: a bezier was skipped here before (its curve missing from the export).
 export function chainToPathD(chain, state) {
   if (!chain || !state || !state.joints) return '';
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
@@ -201,11 +165,11 @@ export function chainToPathD(chain, state) {
 
   const node = buildNodeMap(state);
   const pos = (jid) => state.joints.get(jid);
-  const endsOf = (s) => {
-    if (!s || !Array.isArray(s.joints)) return null;
-    if (s.type === 'line' && s.joints.length >= 2) return { a: s.joints[0], b: s.joints[1], na: node(s.joints[0]), nb: node(s.joints[1]) };
-    if (s.type === 'arc' && s.joints.length >= 3) return { a: s.joints[1], b: s.joints[2], na: node(s.joints[1]), nb: node(s.joints[2]) };
-    return null;
+  const endsOf = (s) => { // TASK 761: a curve of any declared kind (line, arc, bezier: #core/curve-kinds), by its end joints
+    const k = curveKind(s);
+    if (!k) return null;
+    const [a, b] = k.ends(s.joints);
+    return { a, b, na: node(a), nb: node(b) };
   };
 
   if (shapes.length === 1) {
@@ -214,8 +178,7 @@ export function chainToPathD(chain, state) {
     if (!e) return '';
     const pa = pos(e.a), pb = pos(e.b);
     if (!pa || !pb) return '';
-    const seg = (s.type === 'arc') ? arcSeg(s, pa, pb, state) : `L ${num(pb.x)} ${num(pb.y)}`;
-    return `M ${num(pa.x)} ${num(pa.y)} ${seg}`;
+    return `M ${num(pa.x)} ${num(pa.y)} ${curveKind(s).pathSeg(s, state, pa, pb)}`;
   }
 
   // Multi-shape chain: build adjacency graph
@@ -274,8 +237,7 @@ export function chainToPathD(chain, state) {
         d += (d ? ' ' : '') + `M ${num(fromP.x)} ${num(fromP.y)}`;
         subpathStarted = true;
       }
-      const seg = (s.type === 'arc') ? arcSeg(s, fromP, toP, state) : `L ${num(toP.x)} ${num(toP.y)}`;
-      d += ' ' + seg;
+      d += ' ' + curveKind(s).pathSeg(s, state, fromP, toP);
       curNode = nextNode;
     }
   }

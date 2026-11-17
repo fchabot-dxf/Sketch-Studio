@@ -9,7 +9,7 @@
 // code and NO second sampler of its own.
 
 import { sampleArc } from './loop-geometry.js';
-import { flattenCubic } from './svg-import.js'; // UNIFY-3: reuse the ONE cubic flattener (16-step de Casteljau)
+import { CURVE_KINDS } from './curve-kinds.js'; // TASK 761: a bezier's points (the ONE cubic flattener, at the declared tolerance)
 
 const CIRCLE_SEGMENTS = 64; // full-circle rim resolution (a plotter draws a circle as a fine polygon)
 
@@ -42,14 +42,10 @@ export function coreShapeToPolyline(shape, joints, opts = {}) {
       return samples.map((p) => [p.x, p.y]);
     }
     case 'bezier': {
-      // UNIFY-3: endpoints are joints[0]/joints[1]; control points are shape DATA (c1/c2 = [x,y]). Flatten via the
-      // SAME cubic flattener the SVG importer uses (16-step de Casteljau) — no 2nd sampler (north star #2). The
-      // flattener emits t=1/16..1; prepend the start point (t=0) so the polyline includes p0.
-      const p0 = J(shape.joints[0]), p3 = J(shape.joints[1]);
-      if (!p0 || !p3 || !shape.c1 || !shape.c2) return [];
-      const pts = [[p0.x, p0.y]];
-      flattenCubic(p0.x, p0.y, shape.c1[0], shape.c1[1], shape.c2[0], shape.c2[1], p3.x, p3.y, (x, y) => pts.push([x, y]));
-      return pts;
+      // UNIFY-3: endpoints are joints[0]/joints[1]; control points are shape DATA (c1/c2 = [x,y]). TASK 761: the bezier's points as its kind
+      // declares them (#core/curve-kinds: the SAME cubic flattener, de Casteljau, at CURVE_TOLERANCE_MM chord deviation instead of a fixed 16
+      // steps), the one geometry every consumer of a bezier reads; both ends included.
+      return CURVE_KINDS.bezier.points(shape, { joints }).map((p) => [p.x, p.y]);
     }
     default:
       return [];

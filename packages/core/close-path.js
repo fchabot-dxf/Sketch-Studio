@@ -12,10 +12,10 @@
 //                                      + a coincident, as the Line tool ends on an existing point), the chain's kind (construction or not), in
 //                                      the chain's sketch and in the chain's INNERMOST common user group (#core/group-model.js: an imported
 //                                      outline's group gains the line; a group that is not entered stays one rigid block, nothing else is added).
-// Nothing but the coincident constraint(s) is added to state.constraints. A chain of lines / arcs (not construction: findLoops skips it) must be
-// a loop findLoops returns once closed (checked on the planned result BEFORE anything changes: a closing line on top of the chain itself, a
-// lone arc and its chord, is refused with the reason). A bezier has no edge in findLoops (it is chord-less there): a chain with one is closed
-// topologically (no free end left) and not checked against findLoops.
+// Nothing but the coincident constraint(s) is added to state.constraints. A chain (not construction: findLoops skips it) must be a loop findLoops
+// returns once closed (checked on the planned result BEFORE anything changes: a closing line on top of the chain itself is refused with the
+// reason). TASK 761: every curve kind is an edge of findLoops (lines, arcs, beziers; their real tangents and areas, #core/curve-kinds), so a lone
+// arc closed by its chord is a loop now, and a chain with a bezier is checked like any other.
 // Refused, with the reason: a circle (always closed), a chain already closed, a chain that branches, a single straight line (nothing to enclose).
 //
 // TASK 760b, WHAT A COMMAND CLOSES (planCommandClose, the ONE rule every entry runs): a chain gets an added LINE (a gap above the near-closed
@@ -152,9 +152,8 @@ export function planClosePath(state, ids, ctx = passContext(state)) {
     else mode = gap > 0 ? 'line' : 'coincident'; // both held where they are: a line (a zero gap needs no move at all)
   }
   const plan = { ok: true, ids, shapes, mode, gap, ends, moving: [...ctx.cluster(ends[1].joint)], isConstruction: !!first.isConstruction };
-  const loopChecked = !plan.isConstruction && shapes.every((s) => s.type === 'line' || s.type === 'arc');
-  if (loopChecked && !closesToLoop(state, plan, ctx)) {
-    return { ok: false, ids, reason: shapes.length === 1 ? 'one arc and its chord do not make a profile the app can find' : 'the closing line would not enclose an area (it lies on the path itself)' };
+  if (!plan.isConstruction && !closesToLoop(state, plan, ctx)) {
+    return { ok: false, ids, reason: 'the closing line would not enclose an area (it lies on the path itself)' };
   }
   return plan;
 }

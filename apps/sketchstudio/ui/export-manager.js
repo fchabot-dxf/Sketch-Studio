@@ -1,7 +1,8 @@
-// Export manager: build SVG or DXF exports from sketch data (only lines & arcs)
+// Export manager: build SVG or DXF exports from sketch data (lines, arcs and, TASK 761, beziers: a cubic `C` / a DXF SPLINE)
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { arcSweepInfo } from '#core/geometry.js';
+import { CURVE_KINDS, bezierPoints } from '#core/curve-kinds.js'; // TASK 761: a bezier's control points / sampled points, declared once
 import { track } from '#ui/analytics.js'; // TASK 738
 
 // Task 614: the stroke width of an export when the caller passes none. A DECLARED export constant (was the LINE_STROKE display knob, whose
@@ -46,7 +47,7 @@ export function buildSVG(state, opts = {}) {
   const lineJoin = opts.lineJoin || SettingsManager.get('LINE_JOIN') || 'round';
   const closeTolerance = (typeof opts.tolerance === 'number') ? opts.tolerance : 1e-6;
 
-  const shapes = state.shapes.filter(s => s && (s.type === 'line' || s.type === 'arc'));
+  const shapes = state.shapes.filter(s => s && (s.type === 'line' || s.type === 'arc' || s.type === 'bezier'));
   if (shapes.length === 0) return null;
 
   // Compute bounds
@@ -179,6 +180,19 @@ export function buildSVG(state, opts = {}) {
     }
   }
 
+  // TASK 761: each bezier as its cubic (`M p0 C c1 c2 p3`, #core/curve-kinds bezierPoints), or with arcApprox its sampled points (the kind's points)
+  for (const s of shapes) {
+    if (s.type !== 'bezier') continue;
+    const P = bezierPoints(s, state.joints);
+    if (!P) continue;
+    const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
+    const pts = (arcApprox ? CURVE_KINDS.bezier.points(s, state) : P).map(transform);
+    for (const q of pts) { minX = Math.min(minX, q.x); minY = Math.min(minY, q.y); maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); } // the control points bound the curve
+    const f = (q) => `${formatNum(q.x, precision)} ${formatNum(q.y, precision)}`;
+    const d = arcApprox ? `M ${pts.map(f).join(' L ')}` : `M ${f(pts[0])} C ${f(pts[1])} ${f(pts[2])} ${f(pts[3])}`;
+    elems.push(`<path d="${d}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
+  }
+
   // Default viewBox padding
   if (minX === Infinity) return null;
   const pad = Math.max((maxX - minX), (maxY - minY)) * 0.05 || 10;
@@ -198,7 +212,7 @@ export function buildDXF(state, opts = {}) {
   const arcApprox = !!opts.arcApprox;
   const arcSeg = parseInt(opts.arcSeg || 32, 10) || 32;
 
-  const shapes = state.shapes.filter(s => s && (s.type === 'line' || s.type === 'arc'));
+  const shapes = state.shapes.filter(s => s && (s.type === 'line' || s.type === 'arc' || s.type === 'bezier'));
   if (shapes.length === 0) return null;
 
   const to = (p) => {
@@ -237,6 +251,19 @@ export function buildDXF(state, opts = {}) {
       } else {
         const c = to(c0); const r = r0 * scale;
         lines.push('0','ARC','8','0','10',formatNum(c.x, precision),'20',formatNum(c.y, precision),'40',formatNum(r, precision),'50',formatNum(startAngle, precision),'51',formatNum(endAngle, precision));
+      }
+    } else if (s.type === 'bezier') {
+      // TASK 761: a bezier is a cubic SPLINE (degree 3, its four control points, knots 0 0 0 0 1 1 1 1: what #core/dxf-import reads back as one
+      // bezier), or with arcApprox its sampled points as LINEs (#core/curve-kinds)
+      const P = bezierPoints(s, state.joints);
+      if (!P) continue;
+      if (arcApprox) {
+        const pts = CURVE_KINDS.bezier.points(s, state).map(to);
+        for (let i = 0; i < pts.length - 1; i++) lines.push('0','LINE','8','0','10',formatNum(pts[i].x, precision),'20',formatNum(pts[i].y, precision),'11',formatNum(pts[i+1].x, precision),'21',formatNum(pts[i+1].y, precision));
+      } else {
+        lines.push('0','SPLINE','8','0','70','8','71','3','72','8','73','4','74','0');
+        for (const k of [0, 0, 0, 0, 1, 1, 1, 1]) lines.push('40', String(k));
+        for (const q of P.map(to)) lines.push('10', formatNum(q.x, precision), '20', formatNum(q.y, precision), '30', formatNum(0, precision));
       }
     }
   }

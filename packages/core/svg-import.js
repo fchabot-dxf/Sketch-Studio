@@ -87,9 +87,9 @@ export function parsePoints(str) {
   return pts;
 }
 
-export function flattenCubic(x0, y0, x1, y1, x2, y2, x3, y3, push) {
-  for (let s = 1; s <= FLATTEN_STEPS; s++) {
-    const t = s / FLATTEN_STEPS, u = 1 - t;
+export function flattenCubic(x0, y0, x1, y1, x2, y2, x3, y3, push, steps = FLATTEN_STEPS) { // TASK 761: `steps` (default 16, the import's) for #core/curve-kinds
+  for (let s = 1; s <= steps; s++) {
+    const t = s / steps, u = 1 - t;
     push(u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
          u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3);
   }

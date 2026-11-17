@@ -2,7 +2,8 @@
 // Supports COMBINE tool (compound profiles with holes) and the DERIVED face resolver (Fusion 360 profile picking).
 
 import { findLoops, findOpenChains } from './loop-finder.js';
-import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD, compoundPathD, sampleArc } from './loop-geometry.js';
+import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD, compoundPathD } from './loop-geometry.js';
+import { curveKind } from './curve-kinds.js';
 import { offsetPolygon, openPolygon, sweptPath } from './polygon-offset.js';
 
 const EPS = 1e-9;
@@ -836,9 +837,8 @@ export function deriveCutFootprint(cuts, rec, state) {
       const toolPaths = []; // TASK 455: the polylines the chip may ride on
       if (!isGuide && r > 0) {
         for (const sh of (cut.chain && cut.chain.shapes) || []) {
-          let line = null;
-          if (sh.type === 'line') line = (sh.joints || []).slice(0, 2).map((id) => state.joints.get(id));
-          else if (sh.type === 'arc') line = sampleArc(sh, state, 24);
+          const kind = curveKind(sh); // TASK 761: each member as its kind's points (#core/curve-kinds: a line's ends, an arc's 24 samples, a bezier at CURVE_TOLERANCE_MM)
+          const line = kind ? kind.points(sh, state, 24) : null;
           if (line && line.length >= 2 && line.every(Boolean)) { rings.push(...sweptPath(line, r)); toolPaths.push({ points: line, closed: false }); if (!anchor) anchor = { ...line[Math.floor(line.length / 2)] }; }
         }
       }

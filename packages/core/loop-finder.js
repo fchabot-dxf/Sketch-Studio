@@ -1,20 +1,23 @@
 // packages/core/loop-finder.js — find the TOPOLOGICAL loops (closed cycles of joined edges) of a sketch.
-// PURE: a function of `state` (joints Map + shapes + constraints); NO DOM / rendering. Additive — nothing else in
-// #core imports it (SketchStudio byte-identical). Consumed by Shaper's Prepare (SP1c+) where a loop = a selectable
+// PURE: a function of `state` (joints Map + shapes + constraints); NO DOM / rendering. Consumed by Shaper's Prepare (SP1c+) where a loop = a selectable
 // cut-region. Topological loops only (the locked design decision); intersection-derived arrangement faces are OUT.
 //
 // ALGORITHM (stated per spec): planar FACE TRAVERSAL on the joint POSITIONS. Build the joint↔edge graph
-// (coincident joints merged into one node; lines + arc-chords = edges; circles = inherent standalone loops). At
-// each node, sort the incident half-edges CCW by angle; the next half-edge of a face is the one immediately
-// CLOCKWISE from the reverse arrival edge — tracing each BOUNDED face counter-clockwise (positive signed area).
-// The single unbounded outer face per component comes out clockwise (negative area) and is dropped. This yields the
-// MINIMAL enclosed loops (e.g. two rects sharing an edge → the 2 small loops, not the big outer one). Open chains /
-// dangling edges fall into the outer face → no loop.
-// ARCS: a 'CENTER'-subType arc stores joints[0]=center, joints[1]=start, joints[2]=end (per makeArc +
-// calculateArcPath). Chord-approximated for connectivity + the angular sort — the chord is start→end
-// (joints[1]→joints[2]); the center (joints[0]) is NOT a connectivity node. The loop's `edges` keeps the arc's
-// shapeId so a consumer renders the true curve; the topology uses the chord. (LIMITATION: two arcs sharing both
-// endpoints with an equal chord angle are ambiguous under chord-approx — disambiguating via the arc tangent is deferred.)
+// (coincident joints merged into one node; every curve between two ends = an edge: lines, arcs, beziers; circles = inherent
+// standalone loops). At each node, sort the incident half-edges CCW by the direction each LEAVES the node in; the next
+// half-edge of a face is the one immediately CLOCKWISE from the reverse arrival edge — tracing each BOUNDED face
+// counter-clockwise (positive signed area). The single unbounded outer face per component comes out clockwise (negative
+// area) and is dropped. This yields the MINIMAL enclosed loops (e.g. two rects sharing an edge → the 2 small loops, not the
+// big outer one). Open chains / dangling edges fall into the outer face → no loop.
+// TASK 761: the CURVES' REAL GEOMETRY, read from their kind's declaration (#core/curve-kinds CURVE_KINDS, the one place): a curve
+// joins its two END joints (an arc's start / end, joints[1] / [2]: its centre joints[0] is not a node; a bezier's first / last); at
+// a node a curve leaves along its TANGENT (an arc: perpendicular to its radius; a bezier: towards its control point), not its chord,
+// ties (two curves leaving tangent to each other) broken by their curvature; a face's signed area adds each curve's bulge (the area
+// between it and its chord). So the two-edge loops a chord cannot see are found (an arc and its chord, a lens of two arcs, a bezier
+// and a line). A line keeps the exact arithmetic of before (its chord direction, no bulge), so a drawing without curves is unchanged.
+// The loop's `edges` keep the shape ids; consumers draw / sample each curve by the same declaration.
+
+import { curveKind } from './curve-kinds.js'; // TASK 761: each curve kind's ends, tangent and bulge, declared once (CURVE_KINDS)
 
 // Build a joint→canonical-node map (coincident joints merged; canonical = the min joint id in the cluster — stable).
 // Equivalent to repeated getCoincidentJoints(), via one union-find pass.
@@ -47,23 +50,35 @@ function makeLoop(nodes, edges) {
   return { id, joints: nodes, edges, closed: true };
 }
 
-// Planar face traversal over straight/chord edges → the bounded (inner) faces.
-function findFaces(edges, posOf) {
+// Two half-edges leaving a node whose directions differ by less than this (radians) leave TANGENT to each other: the one that turns more to the
+// left comes later counter-clockwise (TASK 761). Never applied between two lines (they keep the exact angle order of before).
+const TANGENT_TIE = 1e-9;
+const byLeaving = (a, b) => {
+  const d = a.angle - b.angle;
+  if (d !== 0 && ((a.straight && b.straight) || Math.abs(d) > TANGENT_TIE)) return d;
+  return (a.bend - b.bend) || d;
+};
+
+// Planar face traversal over the edges (each a curve of a declared kind, walked from its start `a` to its end `b`) → the bounded (inner) faces.
+function findFaces(edges, posOf, J) {
   const half = [];
   for (const e of edges) {
-    half.push({ from: e.a, to: e.b, shapeId: e.shapeId });
-    half.push({ from: e.b, to: e.a, shapeId: e.shapeId });
+    half.push({ from: e.a, to: e.b, shapeId: e.shapeId, edge: e, forward: true });
+    half.push({ from: e.b, to: e.a, shapeId: e.shapeId, edge: e, forward: false });
   }
-  const out = new Map();      // node -> outgoing half-edges (sorted CCW by angle)
+  const out = new Map();      // node -> outgoing half-edges (sorted CCW by the direction they leave in)
   const hmap = new Map();     // "from|to|shapeId" -> half-edge (to find the reverse)
   for (const h of half) {
     const p = posOf(h.from), q = posOf(h.to);
-    h.angle = (p && q) ? Math.atan2(q.y - p.y, q.x - p.x) : 0;
+    const kind = h.edge.kind, leave = kind.leave ? kind.leave(h.edge.shape, J, !h.forward) : null; // a straight kind leaves along its chord
+    h.straight = !kind.leave;
+    h.angle = leave ? Math.atan2(leave.dy, leave.dx) : (p && q) ? Math.atan2(q.y - p.y, q.x - p.x) : 0;
+    h.bend = leave ? leave.bend : 0;
     if (!out.has(h.from)) out.set(h.from, []);
     out.get(h.from).push(h);
     hmap.set(h.from + '|' + h.to + '|' + h.shapeId, h);
   }
-  for (const arr of out.values()) arr.sort((a, b) => a.angle - b.angle);
+  for (const arr of out.values()) arr.sort(byLeaving);
 
   const next = (h) => {
     const arr = out.get(h.to); if (!arr || !arr.length) return null;
@@ -90,6 +105,7 @@ function findFaces(edges, posOf) {
       const p = posOf(e.from), q = posOf(e.to);
       if (!p || !q) { bad = true; break; }
       area += p.x * q.y - q.x * p.y;
+      if (!e.straight) area += 2 * (e.forward ? 1 : -1) * e.edge.kind.bulge(e.edge.shape, J); // TASK 761: the curve's area beyond its chord
     }
     if (bad) continue;
     area /= 2;
@@ -100,8 +116,8 @@ function findFaces(edges, posOf) {
 
 /**
  * findLoops(state) → Loop[]   Loop = { id, joints:[nodeId...], edges:[shapeId...], closed:true } (ordered boundary).
- * Pure fn of state.joints (Map id→{x,y}) + state.shapes (line: 2 joints; arc: center/start/end at [0]/[1]/[2];
- * circle: center joint + radius) + state.constraints (coincident merges). Deterministic ids + order.
+ * Pure fn of state.joints (Map id→{x,y}) + state.shapes (line: 2 joints; arc: center/start/end at [0]/[1]/[2]; bezier: its end
+ * joints + control points c1 / c2; circle: center joint + radius) + state.constraints (coincident merges). Deterministic ids + order.
  */
 export function findLoops(state) {
   if (!state || !state.joints || typeof state.joints.get !== 'function') return [];
@@ -114,34 +130,29 @@ export function findLoops(state) {
   for (const s of shapes) {
     if (!s || !Array.isArray(s.joints)) continue;
     if (s.isConstruction) continue; // TASK 478: construction geometry (a Fusion DASHED line) is never a cut path, so it must not split a loop
-    if (s.type === 'line' && s.joints.length >= 2) {
-      const a = node(s.joints[0]), b = node(s.joints[1]);
-      if (a && b && a !== b) edges.push({ shapeId: s.id, a, b });
-    } else if (s.type === 'arc' && s.joints.length >= 3) {
-      const a = node(s.joints[1]), b = node(s.joints[2]); // chord = start (joints[1]) → end (joints[2]); joints[0] = center
-      if (a && b && a !== b) edges.push({ shapeId: s.id, a, b });
+    const kind = curveKind(s);
+    if (kind) { // TASK 761: a line, an arc or a bezier joins its two end joints (CURVE_KINDS ends)
+      const [ja, jb] = kind.ends(s.joints);
+      const a = node(ja), b = node(jb);
+      if (a && b && a !== b) edges.push({ shapeId: s.id, a, b, kind, shape: s });
     } else if (s.type === 'circle' && s.joints.length >= 1) {
       const c = node(s.joints[0]);
       if (c) loops.push(makeLoop([c], [s.id])); // a circle is one inherent closed loop
     }
   }
 
-  loops.push(...findFaces(edges, posOf));
+  loops.push(...findFaces(edges, posOf, state.joints));
   loops.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)); // deterministic order
   return loops;
 }
 
 // THE END JOINTS of a curve, declared per shape kind (the joints a chain of curves passes through): a line's two joints, an arc's start /
-// end (joints[1] / [2]; joints[0] is its centre), a bezier's first / last joint. A kind without an entry (a circle) has no ends.
-const CURVE_ENDS = {
-  line: { min: 2, ends: (j) => [j[0], j[1]] },
-  arc: { min: 3, ends: (j) => [j[1], j[2]] },
-  bezier: { min: 2, ends: (j) => [j[0], j[j.length - 1]] },
-};
-// The end joint ids of shape s (CURVE_ENDS), or null when its kind declares none (or it has too few joints).
+// end (joints[1] / [2]; joints[0] is its centre), a bezier's first / last joint: TASK 761, declared with the rest of each kind's geometry in
+// #core/curve-kinds.js (CURVE_KINDS). A kind without an entry (a circle) has no ends.
+// The end joint ids of shape s, or null when its kind declares none (or it has too few joints).
 export function curveEnds(s) {
-  const d = s && CURVE_ENDS[s.type];
-  return d && Array.isArray(s.joints) && s.joints.length >= d.min ? d.ends(s.joints) : null;
+  const d = curveKind(s);
+  return d ? d.ends(s.joints) : null;
 }
 
 /**

@@ -235,7 +235,7 @@ const history = createShaperHistory({ getController: () => designController, get
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
   panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), // TASK 743: the operations list
-  ensureSketch, notify: groupStatus, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
+  ensureSketch, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
 });
 
 applyShaperUnitDefault(); // U3b (design-canvas.js, declared once: the node test kit calls it too)

@@ -16,7 +16,6 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { CUT_PLAN, cutPlanEntries, steppedNoteItems } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
-import { planOperations, opEntries } from '../apps/shaper/src/operations.js'; // TASK 743
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, previewRows, itemLabel, depthText } from '../apps/shaper/src/export-preview.js';
 
@@ -63,8 +62,7 @@ eq(depthText('0.100 in'), '0.100 in', 'Auto: the preview depth is the file\'s ow
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  const entries = cutPlanEntries(); // TASK 743: the page's call groups the elements by operation (operations.js), in the operation order
-  return exportShaperSVG({ state: st, entries: opEntries(planOperations(st, entries), entries), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true, groupByOp: true }, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys: lp });
 };
 SettingsManager.set('DOC_UNIT', 'mm', { persist: false });
 const app = await open({ host: 'shaper' });
@@ -82,13 +80,12 @@ try {
   for (const p of [0, 6]) {
     setP(p, p === 6 ? 4 : 0);
     eq(shaperSvgOf(app.state, cutPlanEntries()), base, `export byte-identical at precision ${p}`);
-    const opWords = (s) => s.replace(/ data-op-(heading|text)="[^"]*"/g, ''); // TASK 743: the preview copy's operation words (data-op-*) are the lists' words, at the display precision
-    eq(opWords(shaperSvgOf(app.state, cutPlanEntries(), { preview: true })), opWords(basePv), `preview file byte-identical at precision ${p} (but its operation words)`);
+    eq(shaperSvgOf(app.state, cutPlanEntries(), { preview: true }), basePv, `preview file byte-identical at precision ${p}`);
     const labels = previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel);
     ok(p === 0 ? labels.every((l) => !/\./.test(l)) : labels.every((l) => /\d\.\d{6} mm/.test(l)), `preview labels show exactly ${p} decimals`);
   }
   setP(1, null);
-  eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel), ['pocket · 6.7 mm · step 1 of 4', 'pocket · 7.3 mm · step 2 of 4', 'pocket · 7.8 mm · step 3 of 4', 'pocket · 8.0 mm · step 4 of 4', 'outside · 19.0 mm'], 'preview labels at precision 1 (TASK 743: the file in operation order, the pocket before the outside)');
+  eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel), ['outside · 19.0 mm', 'pocket · 6.7 mm · step 1 of 4', 'pocket · 7.3 mm · step 2 of 4', 'pocket · 7.8 mm · step 3 of 4', 'pocket · 8.0 mm · step 4 of 4'], 'preview labels at precision 1');
   eq(steppedNoteItems(CUT_PLAN.get(pk)).map((i) => i.text).join('|').includes('6.7 · 7.3 · 7.8 · 8 mm'), true, 'stepped note depths at precision 1');
   setP(null, null);
   eq(steppedNoteItems(CUT_PLAN.get(pk)).map((i) => i.text), note0, 'Auto again: the stepped note is back to what it was');

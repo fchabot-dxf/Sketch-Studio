@@ -23,7 +23,7 @@ import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vca
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
-import { shaperSvgOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy)
+import { shaperSvgOf, shaperPreviewOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations
 import { opOrder } from './operations.js';            // TASK 743: the operation order (the 2D view rebuilds when it changes)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
@@ -87,7 +87,7 @@ function activeVcarves() {
   return Array.isArray(vs) ? vs.filter((v) => v && v.region) : [];
 }
 
-// TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes)
+// TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes) and (TASK 743) the operations it lists
 function generateShaperSvgPayload({ preview = false } = {}) {
   const entries = cutPlanEntries();
   const vcarves = activeVcarves();
@@ -95,8 +95,8 @@ function generateShaperSvgPayload({ preview = false } = {}) {
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  const svg = shaperSvgOf(st, entries, { preview });
-  return { svg, entries, vcarves, state: st };
+  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, entries, vcarves, state: st }; }
+  return { svg: shaperSvgOf(st, entries), entries, vcarves, state: st };
 }
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
@@ -399,7 +399,7 @@ let reviewLook = normaliseLook(null);
 try { const s = localStorage.getItem(REVIEW_LOOK_KEY); if (s) reviewLook = normaliseLook(JSON.parse(s)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY read failed', err && err.message); }
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
-  getSvg: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? p.svg : null; },
+  getPreview: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? { svg: p.svg, ops: p.ops } : null; }, // TASK 743: + the operations (display only)
 });
 function showReviewViewMode() {
   const is2d = reviewViewMode === '2d';

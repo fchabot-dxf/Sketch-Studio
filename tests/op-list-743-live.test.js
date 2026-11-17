@@ -5,8 +5,8 @@
 //    that frees the part) and the operations in the default order (On line, Inside | Pocket 1/8, Pocket 1/4, Outside), each with its depth in the doc unit;
 //  * a tap on an operation selects its regions on the canvas (the card shows the type, the rows are marked);
 //  * ↓ / ↑ buttons and a drag on the grip reorder (one undo step each: the footer's Undo puts the order back);
-//  * Export 2D: the same operations in the same order under the same headings; the downloaded SVG has one <g> per operation in that order, and a reorder
-//    changes only the order of the groups (every group byte-identical);
+//  * Export 2D: the same operations in the same order under the same headings; a header picks its elements. Operations are DISPLAY ONLY (owner ruling,
+//    the 743 send-back): the downloaded SVG is byte-identical before and after the reorders, with no <g id> / <title> / data-*;
 //  * phone: the list is a folded bar at the bottom (opens on a tap), its ↑ / ↓ are 44 px, a touch drag reorders, no sideways scroll.
 // Screenshots to .evidence/743/.
 import assert from 'node:assert';
@@ -23,18 +23,6 @@ const cdp = await launchBrowser({ tag: '743-ops', width: 1280, height: 800 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
 const { port, send, evalJs, waitFor, navigate, close } = cdp;
 const dlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-743-dl-'));
-
-// the operation groups of a downloaded file, in order: { id, title, body } (body = the group's lines, verbatim)
-function fileOps(svg) {
-  const out = []; let cur = null;
-  for (const line of svg.split('\n')) {
-    const open = /^ {2}<g id="([^"]+)">$/.exec(line);
-    if (open) { cur = { id: open[1], title: null, body: [] }; continue; }
-    if (cur && line === '  </g>') { out.push(cur); cur = null; continue; }
-    if (cur) { const t = /^ {4}<title>(.*)<\/title>$/.exec(line); if (t && cur.title === null) cur.title = t[1]; else cur.body.push(line); }
-  }
-  return out;
-}
 
 try {
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dlDir });
@@ -184,9 +172,7 @@ try {
     assert.deepStrictEqual(picked.marked, [false, false, false, true, false], label + ': the row is marked');
     await shot(`${D}-prepare-op-picked.png`);
     const file0 = await download(); // the export before any reorder (Generate lives on the Export step: come back after)
-    const ops0 = fileOps(file0);
     fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-download-default.svg`), file0);
-    const titles = (l) => rowsText(l).map((t) => t);
     await openMode('prepare');
     if (phone && await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head');
 
@@ -233,17 +219,12 @@ try {
     console.log(label + ' 2D op pick: ' + JSON.stringify(opPick));
     assert.deepStrictEqual(opPick, { label: `⅛″ end mill · Inside · ${L.full} (2 regions) · 2 elements`, picked: ['circle', 'circle'], pressed: 'true' }, label + ': 2D: the operation header picks its elements');
     if (phone) await shot(`${D}-export-2d-op-picked.png`);
-    // the downloaded file: one <g> per operation in that order; each group byte-identical to the one before the reorder
+    // the downloaded file: the operations are a display grouping, the file is byte-identical before and after the reorders
     const file1 = await download();
     fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-download-reordered.svg`), file1);
-    const ops1 = fileOps(file1);
-    console.log(label + ' file groups: ' + JSON.stringify(ops1.map((g) => g.title)));
-    assert.deepStrictEqual(ops1.map((g) => g.title.split(' (')[0]), titles(l3).map((t, i) => (i < 2 ? '⅛″ end mill · ' : '¼″ end mill · ') + t), label + ': the file groups follow the operation order');
-    assert.ok(!/data-/.test(file1), label + ': no data-* in the downloaded file');
-    const byId = (ops) => Object.fromEntries(ops.map((g) => [g.id, [g.title, ...g.body].join('\n')]));
-    assert.deepStrictEqual(byId(ops1), byId(ops0), label + ': a reorder changes only the order of the groups (each group byte-identical)');
-    assert.deepStrictEqual(ops1.map((g) => g.id).sort(), ops0.map((g) => g.id).sort(), label + ': the same groups');
-    assert.notDeepStrictEqual(ops1.map((g) => g.id), ops0.map((g) => g.id), label + ': in a new order');
+    console.log(label + ` download: ${file0.length} bytes before, ${file1.length} after the reorders`);
+    assert.strictEqual(file1, file0, label + ': the download is byte-identical before and after the reorders');
+    assert.ok(!/<g id=|<title>|data-/.test(file1), label + ': no <g id>, <title> or data-* in the downloaded file');
     await openMode('prepare');
   };
 

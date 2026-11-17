@@ -1,28 +1,28 @@
-// tests/op-list-743-node.test.js — TASK 743: Shaper's OPERATIONS (apps/shaper/src/operations.js), each one <g> of Origin paths in the exported SVG.
+// tests/op-list-743-node.test.js — TASK 743: Shaper's OPERATIONS (apps/shaper/src/operations.js): a DISPLAY grouping of the cut plan (owner ruling on the
+// send-back: "I didn't mean to use actual SVG groups, just display groups as toolpaths"). The downloaded file never changes.
 //  1. derivation: records -> operations on a drawn plate with mixed tools (⅛ in / ¼ in end mills, a 6 mm ball nose, a ¼ in 60° V-bit), types (Guide, On line,
 //     Pocket, Inside, Outside with Tabs) and settings (two equal pockets = ONE operation of 2 regions; the same pocket with an offset = another); the labels;
 //     the default order (Not cut first; then tools by the highest rank of their cuts, so the bit that frees the part is last; in a tool on line, pockets,
 //     inside, outside, shallow before deep); a stored order is kept and a NEW operation slots in by the default rule (with its tool's operations when the
 //     order has some, else after its default-order predecessor);
 //  2. a stepped operation (the SA-7 R3 floor fillet as a Stepped pocket, adaptive Coarse) shows its steps;
-//  3. the export: one <g id><title> per operation, in the order; a reorder changes ONLY the order of the groups (each byte-identical); every element and its
-//     encoding is the one the pre-743 export wrote (same multiset of element + resolved attributes);
-//  4. a document with ONE operation exports as before except the group wrapper: exactly `<g id="…">` + `<title>…</title>` after the header, the old body
-//     two spaces deeper, `</g>` before `</svg>`;
+//  3. the DOWNLOAD is byte-identical to the pre-743 export (the exporter called as export-payload.js called it on main 10b923f: plan entries, groupByCut) on
+//     the mixed plate, the real Fusion solid (711), the R3 stepped pocket and a tabbed plate, before AND after a reorder; the PREVIEW copy (the 2D view's)
+//     is the pre-743 preview copy plus data-op="<operation id>" on each element, and maps every element to its operation (previewRows with the operations);
 //  5. the app: the list (tool headings, rows), a tap selects the operation's regions, ↓ reorders as ONE undo step (Ctrl+Z / Ctrl+Y), the autosave stores the
-//     order, a reload restores it (list + export byte-identical).
+//     order, a reload restores it; the download unchanged by the reorders.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
-import { formatShaperParam } from '#core/units.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { planOperations, defaultOpOrder, opOrder, setOpOrder } from '../apps/shaper/src/operations.js';
-import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
+import { shaperSvgOf, shaperPreviewOf } from '../apps/shaper/src/export-payload.js';
+import { parseShaperSvg, previewItems, previewRows } from '../apps/shaper/src/export-preview.js';
 import { captureShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 
@@ -65,31 +65,33 @@ function plan(K) {
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 // the export written as before task 743: the plan's entries in plan order, groupByCut (the page's call, export-payload.js before this task)
 const before743 = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: { groupByCut: true }, loopPolys: polysOf(st) });
-// the operation groups of a file, in order: { id, title, lines } (lines = the group's lines verbatim)
-function fileOps(svg) {
-  const out = []; let cur = null;
-  for (const line of svg.split('\n')) {
-    const g = /^ {2}<g id="([^"]+)">$/.exec(line);
-    if (g) { cur = { id: g[1], title: null, lines: [line] }; continue; }
-    if (cur) { cur.lines.push(line); const t = /^ {4}<title>(.*)<\/title>$/.exec(line); if (t && cur.title === null) cur.title = t[1]; }
-    if (cur && line === '  </g>') { out.push(cur); cur = null; }
-  }
-  return out;
-}
-// every drawn element of a file with its RESOLVED attributes (its own + the <g> ancestors' that carry cut attributes), as sorted strings (a multiset)
-function resolvedElements(svg) {
-  const attrs = (s) => [...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]);
-  const stack = [], out = [];
-  for (const raw of svg.split('\n')) {
-    const line = raw.trim();
-    if (/^<g[\s>]/.test(line)) { stack.push(attrs(line).filter(([k]) => k !== 'id')); continue; }
-    if (line === '</g>') { stack.pop(); continue; }
-    const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
-    if (!m) continue;
-    const a = Object.fromEntries([...stack.flat(), ...attrs(m[2])]);
-    out.push(m[1] + ' ' + Object.keys(a).sort().map((k) => `${k}=${a[k]}`).join(' '));
-  }
-  return out.sort();
+// the pre-743 PREVIEW copy (TASK 718's call with preview: true)
+const before743Preview = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: { groupByCut: true, previewData: true }, loopPolys: polysOf(st) });
+const stripOp = (svg) => svg.replace(/ data-op="[^"]*"/g, '');
+// the download and the preview copy against the pre-743 calls, before and after reversing the operation order; the preview's elements map to the operations
+function checkFiles(name, st, documentForParse) {
+  setOpOrder([]);
+  const old = before743(st), oldPv = before743Preview(st);
+  const ops = planOperations(st, cutPlanEntries());
+  eq(shaperSvgOf(st, cutPlanEntries()), old, `${name}: the download is byte-identical to the pre-743 export`);
+  const pv = shaperPreviewOf(st, cutPlanEntries());
+  eq(stripOp(pv.svg), oldPv, `${name}: the preview copy is the pre-743 preview copy + data-op only`);
+  ok(!/<title>|<g id=/.test(old) && !/data-/.test(shaperSvgOf(st, cutPlanEntries())), `${name}: no <g id>, no <title>, no data-* in the download`);
+  // every element carries the id of the operation its record belongs to; the list groups them in the operation order
+  const items = previewItems(parseShaperSvg(pv.svg, documentForParse));
+  ok(items.length > 0 && items.every((it) => ops.some((o) => o.id === it.op)), `${name}: every preview element names its operation (data-op)`);
+  const rows = previewRows(items, pv.ops);
+  eq(rows.map((g) => g.op && g.op.id), ops.map((o) => o.id), `${name}: the 2D list = the operations, in their order`);
+  for (const g of rows) eq(g.count, g.op.records.reduce((n, r) => n + r.cuts.length, 0), `${name}: ${g.op.label}: its elements = the cuts of its records`);
+  // a reorder: the download and the preview copy do not change at all; the list follows the new order
+  setOpOrder(ops.map((o) => o.key).reverse());
+  eq(shaperSvgOf(st, cutPlanEntries()), old, `${name}: after a reorder the download is byte-identical`);
+  const pv2 = shaperPreviewOf(st, cutPlanEntries());
+  eq(pv2.svg, pv.svg, `${name}: after a reorder the preview copy is byte-identical`);
+  eq(previewRows(previewItems(parseShaperSvg(pv2.svg, documentForParse)), pv2.ops).map((g) => g.op.id), ops.map((o) => o.id).reverse(), `${name}: the 2D list follows the new order`);
+  setOpOrder([]);
+  console.log(`${name}: download == pre-743 (${old.length} bytes), ${ops.length} operations, ${items.length} elements`);
+  return old;
 }
 
 SettingsManager.set('DOC_UNIT', 'in');
@@ -146,59 +148,21 @@ SettingsManager.set('LENGTH_PRECISION', null);
   setOpOrder([]);
 }
 
-// ── 3. the export: groups in operation order; a reorder changes only the order of the groups; every element / encoding as before 743 ──
+// ── 3. the mixed plate: the download unchanged, the preview mapped (fixtures in the app part below) ──
 {
   const st = design(), K = keysOf(st);
   plan(K);
-  setOpOrder([]);
-  const ops = planOperations(st, cutPlanEntries());
-  const svg = shaperSvgOf(st, cutPlanEntries());
-  const groups = fileOps(svg);
-  eq(groups.map((g) => g.title), ops.map((o) => o.title), 'one <g> per operation, in the operation order, its <title> = the operation title');
-  eq(ops.map((o) => o.title), ops.map((o) => o.label), 'at Auto precision the title is the label');
-  eq(groups.map((g) => g.id), ops.map((o) => o.id), 'the <g> ids');
-  const body = svg.split('\n').slice(1, -1);
-  eq(body.length, groups.reduce((n, g) => n + g.lines.length, 0), 'every element of the file is inside an operation group (no V-carve here)');
-  eq(resolvedElements(svg), resolvedElements(before743(st)), 'the same elements with the same encoding (resolved attributes) as the pre-743 export');
-  ok(!/data-/.test(svg), 'no data-* in the downloaded file');
-  // a reorder: the reverse order
-  setOpOrder(ops.map((o) => o.key).reverse());
-  const svg2 = shaperSvgOf(st, cutPlanEntries());
-  const groups2 = fileOps(svg2);
-  eq(groups2.map((g) => g.id), groups.map((g) => g.id).reverse(), 'the reorder reverses the groups');
-  eq(Object.fromEntries(groups2.map((g) => [g.id, g.lines.join('\n')])), Object.fromEntries(groups.map((g) => [g.id, g.lines.join('\n')])), 'each group byte-identical after the reorder');
-  eq(svg2.split('\n')[0], svg.split('\n')[0], 'the header unchanged');
-  eq(svg2.length, svg.length, 'the file length unchanged');
-  setOpOrder([]);
-  // the preview copy: the list's words on the group (data-op-heading / data-op-text), never in the download
-  const pv = shaperSvgOf(st, cutPlanEntries(), { preview: true });
-  ok(pv.includes('<g id="op-interior-19.05mm-endmill-3.175mm" data-op-heading="Change to ⅛″ end mill" data-op-text="Inside · 0.75 in · 2 regions">'), 'the preview copy carries the list words on the group');
-  eq(pv.replace(/ data-op-(heading|text)="[^"]*"/g, '').replace(/ data-(step|hold)="[^"]*"/g, ''), svg, 'the preview copy minus its data-* == the download');
-  // a display precision changes the lists' words, never the file
+  const { Window } = await import('happy-dom');
+  const win = new Window();
+  const svg = checkFiles('mixed plate (tabs on the Outside)', st, win.document);
+  // a display precision changes the lists' words, never a file
   SettingsManager.set('LENGTH_PRECISION', 1);
-  eq(shaperSvgOf(st, cutPlanEntries()), svg, 'Length precision 1: the download byte-identical (its <title>s are written at Auto)');
+  eq(shaperSvgOf(st, cutPlanEntries()), svg, 'Length precision 1: the download byte-identical');
   eq(planOperations(st, cutPlanEntries()).find((o) => o.cutType === 'interior').rowText, 'Inside · 0.8 in', 'Length precision 1: the list writes 0.8 in');
   SettingsManager.set('LENGTH_PRECISION', null);
   fs.mkdirSync('.evidence/743', { recursive: true });
   fs.writeFileSync('.evidence/743/node-mixed-export.svg', svg);
-}
-
-// ── 4. ONE operation: the export as before + the group wrapper, exactly ──
-{
-  SettingsManager.set('DOC_UNIT', 'mm');
-  const st = design(), K = keysOf(st);
-  for (const [name, keys] of [['two pockets (hoisted <g>)', [K.pa, K.pc]], ['one pocket', [K.pa]]]) {
-    CUT_PLAN.clear();
-    for (const k of keys) CUT_PLAN.set(k, rec('pocket', 6, 6.35));
-    setOpOrder([]);
-    const old = before743(st), now = shaperSvgOf(st, cutPlanEntries());
-    const [op] = planOperations(st, cutPlanEntries());
-    const lines = old.split('\n');
-    const expected = [lines[0], `  <g id="${op.id}">`, `    <title>${op.title}</title>`, ...lines.slice(1, -1).map((l) => '  ' + l), '  </g>', lines[lines.length - 1]].join('\n');
-    console.log(`one operation, ${name}: before 743\n${old}\nnow\n${now}`);
-    eq(now, expected, `one operation, ${name}: the old file + <g id="${op.id}"><title>${op.title}</title> around its body (two spaces deeper)`);
-  }
-  SettingsManager.set('DOC_UNIT', 'in');
+  await win.happyDOM.close();
 }
 
 // ── 2 + 5. the app: a stepped operation; the list, a tap, the reorder as one undo step, save + reload ──
@@ -216,6 +180,10 @@ CUT_PLAN.clear(); setOpOrder([]);
     eq(stepped.rowText, 'Stepped pocket · 0.2619–0.315 in', 'the stepped operation\'s depths in the doc unit: its first to its last step (6.651 to 8 mm)');
     eq(stepped.detail, '4 steps, adaptive Coarse', 'the stepped operation shows its steps count');
     eq(ops.map((o) => o.cutType), ['stepped-pocket', 'exterior'], 'the stepped pocket before the outside');
+    checkFiles('R3 floor fillet, Stepped pocket adaptive Coarse', app.state, app.document);
+    CUT_PLAN.clear();
+    importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+    checkFiles('real Fusion solid (711)', app.state, app.document);
   } finally { CUT_PLAN.clear(); await app.close(); }
 }
 {
@@ -236,6 +204,7 @@ CUT_PLAN.clear(); setOpOrder([]);
       const K = keysOf(st);
       plan(K);
       app.press(app.document.querySelector('.sk-header-tab[data-tab="prepare"]'));
+      const svg0 = shaperSvgOf(st, cutPlanEntries());
       const l0 = listOf(app);
       console.log('app list: ' + JSON.stringify(l0));
       eq(l0.filter((t) => t.startsWith('# ')), ['# Not cut', '# Change to ¼″ 60° V-bit', '# Change to 0.2362 in ball nose', '# Change to ⅛″ end mill', '# Change to ¼″ end mill'], 'the list: one heading per tool run');
@@ -268,7 +237,8 @@ CUT_PLAN.clear(); setOpOrder([]);
       ok(/^5\. Outside/.test(listBefore.at(-3)), 'the Outside is first of the ¼ in bit now');
       orderBefore = opOrder();
       svgBefore = shaperSvgOf(st, cutPlanEntries());
-      eq(fileOps(svgBefore).map((g) => g.title.split(' (')[0]), planOperations(st, cutPlanEntries()).map((o) => o.label.split(' (')[0]), 'the export follows the list');
+      eq(svgBefore, svg0, 'the download is byte-identical after the reorders');
+      eq(svgBefore, before743(st), 'and equal to the pre-743 export');
       const d = await app.storedDoc();
       eq(d.hosts.shaper.opOrder, orderBefore, 'the autosave stores the operation order');
       eq(captureShaperDoc().opOrder, orderBefore, 'captureShaperDoc carries it');
@@ -284,23 +254,6 @@ CUT_PLAN.clear(); setOpOrder([]);
       eq(shaperSvgOf(app.state, cutPlanEntries()), svgBefore, 'the export is byte-identical');
     } finally { await app.close(); }
   }
-}
-// ── 6. Shaper's own importer reads the grouped file back: the cut attributes sit on the element or its nearest <g> (cut-import.js, task 706, walks up through
-// the operation <g>), the <title> is structural (sketch-import.js silent tags): every element comes back as a record with its type and depth ──
-CUT_PLAN.clear(); setOpOrder([]);
-{
-  const st = design(), K = keysOf(st);
-  plan(K);
-  CUT_PLAN.set(K.plate, rec('exterior', 19.05, 6.35)); // no tabs: one element per record
-  const svg = shaperSvgOf(st, cutPlanEntries());
-  const wanted = [...CUT_PLAN.values()].map((r) => `${r.cutType} ${r.cutDepth === 'unset' ? 'unset' : formatShaperParam(Number(r.cutDepth), 'in')}`).sort(); // as the file writes it (3 decimals of the doc unit: 1/16 in is written 0.063 in)
-  CUT_PLAN.clear();
-  const app = await open({ host: 'shaper' });
-  try {
-    app.importFile(svg, 'ops-743.svg');
-    const got = [...CUT_PLAN.values()].map((r) => `${r.cutType} ${r.cutDepth === 'unset' ? 'unset' : formatShaperParam(Number(r.cutDepth), 'in')}`).sort(); // as the file writes it (3 decimals of the doc unit: 1/16 in is written 0.063 in)
-    eq(got, wanted, 'the grouped file imports back: every record with its type and depth');
-  } finally { CUT_PLAN.clear(); await app.close(); }
 }
 CUT_PLAN.clear(); setOpOrder([]);
 console.log(`op-list-743-node.test.js: ok (${checks} checks)`);

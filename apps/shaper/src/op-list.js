@@ -1,4 +1,4 @@
-// apps/shaper/src/op-list.js — TASK 743: Prepare's OPERATIONS list (operations.js: each operation = one <g> of Origin paths in the exported SVG).
+// apps/shaper/src/op-list.js — TASK 743: Prepare's OPERATIONS list (operations.js: a display grouping of the cut plan, the user's job plan; the exported SVG never changes).
 // A pure view of the operations it is given (getOps(): planOperations, in order), grouped under tool headings ("Change to ¼″ end mill": one heading per run
 // of operations with the same bit). Per row: a drag grip, the number, the operation (type · depth(s) in the doc unit, its regions and steps / tabs), and
 // ↑ / ↓ buttons. A drag on the grip (mouse, pen or a finger) or ↑ / ↓ reorders: onMove(keys) gets the whole new order. A tap on the operation selects its

@@ -7,17 +7,23 @@ import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';   // HOST computes loop polys (DOM) → serializer stays pure
 import { docUnit } from '#core/settings-manager.js';
 import { exportEncoding } from './shaper.js';            // injected as the exporter's encoding
-import { planOperations, opEntries } from './operations.js'; // TASK 743: one <g> per operation, in the operation order
+import { planOperations, opIdsByPlanKey } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
 
 /** The Shaper SVG of `entries` (the Prepare cut plan, cutPlanEntries()) on the solved sketch `state`: the downloaded file, or with
- *  `preview: true` the same string plus the preview-only data-* attributes. TASK 743: each OPERATION (operations.js planOperations, in the document's
- *  operation order) is one <g> (groupByOp); { svg, ops } = shaperExportOf. */
-export function shaperExportOf(state, entries, { preview = false } = {}) {
+ *  `preview: true` the same string plus the preview-only data-* attributes. */
+export function shaperSvgOf(state, entries, { preview = false } = {}) {
   const sById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(state)) loopPolys[l.id] = loopPolygon(l, state, sById);
-  const ops = planOperations(state, entries);
-  const options = preview ? { groupByCut: true, groupByOp: true, previewData: true } : { groupByCut: true, groupByOp: true };
-  return { svg: exportShaperSVG({ state, entries: opEntries(ops, entries), encoding: exportEncoding(), docUnit: docUnit(), options, loopPolys }), ops };
+  const options = preview ? { groupByCut: true, previewData: true } : { groupByCut: true };
+  return exportShaperSVG({ state, entries, encoding: exportEncoding(), docUnit: docUnit(), options, loopPolys });
 }
-export const shaperSvgOf = (state, entries, opts) => shaperExportOf(state, entries, opts).svg;
+
+/** TASK 743: the Export step's 2D view: { svg, ops } = the PREVIEW copy (shaperSvgOf with preview: true, each entry tagged with the id of its OPERATION, so
+ *  every element carries data-op="<id>"; the entries stay in plan order: the elements, their order and grouping are the download's) and the operations in the
+ *  document's order (operations.js planOperations, the same list Prepare shows). Operations are a display grouping: the downloaded file never changes. */
+export function shaperPreviewOf(state, entries) {
+  const ops = planOperations(state, entries);
+  const ids = opIdsByPlanKey(ops);
+  return { svg: shaperSvgOf(state, entries.map((e) => (ids.has(`${e.target.kind}:${e.target.id}`) ? { ...e, op: ids.get(`${e.target.kind}:${e.target.id}`) } : e)), { preview: true }), ops };
+}

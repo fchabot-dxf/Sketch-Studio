@@ -1,4 +1,6 @@
-// apps/shaper/src/operations.js — TASK 743: Shaper's OPERATIONS (owner turns 2099-2101 + 2145: "an op list, that's actually a group of Origin paths per op").
+// apps/shaper/src/operations.js — TASK 743: Shaper's OPERATIONS (owner turns 2099-2101 + 2145: "an op list"; send-back ruling: "I didn't mean to use actual
+// SVG groups, just display groups as toolpaths"). DISPLAY ONLY: they group and order what Prepare's list and the Export step's 2D list show (the user's job
+// plan); the downloaded / synced SVG never changes (export-payload.js: only the 2D view's PREVIEW copy tags each element with its operation, data-op).
 // An operation = the cut records that share the same TOOL (cutter shape + bit diameter, + the angle of a V-bit), the same CUT TYPE and the same
 // CUTTING SETTINGS (the params the type declares: depth, offset; a stepped type's step depth / adaptive resolution; a held cut's Tabs / Onion skin
 // values). It is DERIVED from the cut plan every time (planOperations): nothing about an operation is stored but its place in the ORDER, the one
@@ -16,8 +18,7 @@
 //  A NEW operation (not in the stored order) slots in by the same rule: when the stored order already has operations with its tool, it joins them (before
 //  the first of them that the in-tool rule puts after it, else after the last of them: no extra tool change); a new tool goes right after the operation
 //  that comes before it in the default order (at the top when none does).
-// INSIDE an operation the paths are in the plan's order of its regions, and per region in the derivation's order (#core/stepped-cut deriveCuts): an
-// Outside plate's own holes before its outline, a stepped cut's terraces shallow to deep, a held cut's pass before its gap strips.
+// An operation's regions are listed in the plan's order.
 import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS } from './shaper.js';
 import { keyOf, loopsWithPolygons, steppedSummary } from './cut-plan.js';
 import { ownedLoopIds } from '#core/profile-model.js';
@@ -37,18 +38,17 @@ const round6 = (n) => Math.round(Number(n) * 1e6) / 1e6;
 const isSet = (d) => d != null && d !== 'unset' && Number.isFinite(Number(d));
 const depthOf = (d) => (isSet(d) ? round6(d) : 'unset');
 
-/** A length in the document unit, as the cut card's notes write it ("6 mm", "0.25 in"), at the Length precision setting; `display: false` = the
- *  setting's Auto (4 decimals in inches, 3 otherwise): the words the exported FILE carries (its <title>), which a display setting must not change. */
-export function lengthLabel(mm, { display = true } = {}) {
-  const u = docUnit(), auto = u === 'in' ? 4 : 3;
-  return `${Number(formatUnit(mm, u, { decimals: display ? lengthDecimals(auto) : auto }))} ${u}`;
+/** A length in the document unit at the Length precision setting, as the cut card's notes write it ("6 mm", "0.25 in"). (lengthText of task 728 is not on
+ *  main yet; this is the notes' formula.) */
+export function lengthLabel(mm) {
+  const u = docUnit();
+  return `${Number(formatUnit(mm, u, { decimals: lengthDecimals(u === 'in' ? 4 : 3) }))} ${u}`;
 }
-const DISPLAY = (mm) => lengthLabel(mm), FILE = (mm) => lengthLabel(mm, { display: false });
 
-/** A tool's name with lengths written by `len`: "¼″ end mill", "6 mm ball nose", "⅛″ 60° V-bit" (a bit of a BIT_PRESETS size goes by its fraction). */
-function toolName(tool, len) {
+/** A tool's name: "¼″ end mill", "6 mm ball nose", "⅛″ 60° V-bit" (a bit of a BIT_PRESETS size goes by its fraction). */
+function toolName(tool) {
   const preset = BIT_PRESETS.find((p) => Math.abs(p.value - tool.dia) < 1e-6);
-  const size = tool.dia > 0 ? (preset ? `${preset.label}″` : len(tool.dia)) : 'no bit size';
+  const size = tool.dia > 0 ? (preset ? `${preset.label}″` : lengthLabel(tool.dia)) : 'no bit size';
   return [size, tool.angle != null ? `${tool.angle}°` : null, CUTTER_SHAPES.find((s) => s.id === tool.shape).label].filter(Boolean).join(' ');
 }
 
@@ -60,7 +60,7 @@ export function toolOf(rec) {
   const dia = Number(rec.toolDia) > 0 ? round6(rec.toolDia) : 0;
   const angle = shape === 'vbit' ? Number(rec.cutterAngle) || 90 : null;
   const tool = { key: `${shape}|${dia}|${angle ?? ''}`, shape, dia, angle };
-  return { ...tool, label: toolName(tool, DISPLAY) };
+  return { ...tool, label: toolName(tool) };
 }
 
 /** The CUTTING SETTINGS of a stored record that make two records one operation (the params its type declares, base mm), or null for a type not cut. */
@@ -125,7 +125,7 @@ export function orderOps(ops, keys = order) {
   return out.map((k) => byKey.get(k));
 }
 
-// an XML id for an operation (ASCII, base mm), the same whatever the order: its type, depth, the settings that are not the default (offset, the step or
+// an id for an operation (ASCII, base mm: the rows' data-id and the preview copy's data-op): its type, depth, the settings off their default (offset, the step or
 // the adaptive resolution, tabs / onion skin) and its tool; a clash (two operations that differ only by a tab count / width / thickness) gets -2, -3 by key order
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '');
 const numText = (n) => String(round6(n));
@@ -141,8 +141,9 @@ function assignIds(ops) {
   }
 }
 
-// the words of an operation, lengths written by `len`: { depthText, detail, regions, rowText, label }
-function describe(op, len) {
+// the words of an operation: { depthText, detail, regions, rowText, label }
+function describe(op) {
+  const len = lengthLabel;
   const type = cutTypeById(op.cutType);
   const typeLabel = (type && type.menuLabel) || op.cutType;
   const s = op.settings || {};
@@ -172,7 +173,7 @@ function describe(op, len) {
   const tail = detail ? ` · ${detail}` : '';
   return { typeLabel, depthText, detail, regions,
     rowText: what,                                                             // the row (the tool is its heading)
-    label: `${op.tool ? toolName(op.tool, len) + ' · ' : ''}${what} (${regions})${tail}` }; // "¼″ end mill · Pocket · 6 mm (3 regions)"
+    label: `${op.tool ? op.tool.label + ' · ' : ''}${what} (${regions})${tail}` }; // "¼″ end mill · Pocket · 6 mm (3 regions)"
 }
 
 /** The heading of a run of operations with this tool: "Change to ¼″ end mill", or "Not cut" (Guide / Stock). */
@@ -181,9 +182,8 @@ export const toolHeading = (tool) => (tool ? `Change to ${tool.label}` : 'Not cu
 /**
  * planOperations(state, entries, keys = the stored order) → the operations of the cut plan `entries` (cutPlanEntries(): [{ target, rec }] in plan order) on the
  * solved sketch `state`, in order: [{ key, id, tool, cutType, settings, records: [{ planKey, target, rec, cuts }], first, label, rowText, depthText, detail,
- * regions, heading, title }]: the words at the Length precision setting (the lists), `title` = the label at its Auto (the exported group's <title>).
- * A record that derives to no cut (a stale target) is in no operation. `cuts` = that record's cuts (#core/stepped-cut deriveCuts, as the exporter, Prepare
- * and the 3D Review derive them).
+ * regions, heading }] (the words in the doc unit at the Length precision setting). A record that derives to no cut (a stale target) is in no operation.
+ * `cuts` = that record's cuts (#core/stepped-cut deriveCuts, as the exporter, Prepare and the 3D Review derive them).
  */
 export function planOperations(state, entries, keys = order) {
   const ents = (entries || []).filter((e) => e && e.target && e.rec && e.rec.cutType);
@@ -200,17 +200,9 @@ export function planOperations(state, entries, keys = order) {
   });
   const ops = [...byKey.values()];
   assignIds(ops);
-  for (const op of ops) Object.assign(op, describe(op, DISPLAY), { heading: toolHeading(op.tool), title: describe(op, FILE).label });
+  for (const op of ops) Object.assign(op, describe(op), { heading: toolHeading(op.tool) });
   return orderOps(ops, keys);
 }
 
-/** The exporter's entries for `entries`: each operation's records in operation order, each carrying its `op` ({ id, title, heading, text }: one SVG <g>;
- *  heading and text = its tool heading and its words as Prepare's list shows them, for the Export step's preview copy only), then the
- *  records in no operation (they cut nothing, but a hole's own record still keeps its plate from cutting it: #core ownedLoopIds), in plan order. */
-export function opEntries(ops, entries) {
-  const out = [];
-  const inOp = new Set();
-  for (const op of ops) for (const r of op.records) { inOp.add(r.planKey); out.push({ target: r.target, rec: r.rec, op: { id: op.id, title: op.title, heading: op.heading, text: [op.rowText, op.regions, op.detail].filter(Boolean).join(' · ') } }); }
-  for (const e of entries || []) if (e && e.target && !inOp.has(keyOf(e.target.kind, e.target.id))) out.push(e);
-  return out;
-}
+/** The operation id of each plan key (the 2D view's preview copy tags each element with it: export-payload.js shaperPreviewOf). */
+export const opIdsByPlanKey = (ops) => new Map(ops.flatMap((op) => op.records.map((r) => [r.planKey, op.id])));

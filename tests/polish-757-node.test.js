@@ -24,7 +24,7 @@ const IN = 25.4;
 
 // ── 3. lengths ──
 set('DOC_UNIT', 'in'); set('INCH_DISPLAY', 'fractional'); set('LENGTH_FRACTION', 16); set('LENGTH_PRECISION', null);
-eq(lengthText(0.02 * IN, { auto: 3, show: 'field' }), '0.020', 'Fractional 1/16: a 0.02 in wall allowance in the card field is a decimal, not "0"');
+eq(lengthText(0.02 * IN, { auto: 3, show: 'field' }), '0.020', 'Fractional 1/16: a 0.02 in finish allowance in the card field is a decimal, not "0"');
 eq(lengthText(0.02 * IN, { auto: 1 }), '0.02', 'the decimals reach its first significant digit even at a view\'s 1 decimal');
 eq(lengthText(0.02 * IN, { auto: 3, show: 'unit' }), '0.020 in', 'a sentence: the decimal with its unit');
 eq(lengthText(0.004 * IN, { auto: 3, trim: 'always', show: 'field' }), '0.004', '0.004 in: 3 decimals');

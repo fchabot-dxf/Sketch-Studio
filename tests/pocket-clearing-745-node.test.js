@@ -55,7 +55,7 @@ const SHAPES = {
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 const outerLoopOf = (st) => { const loops = findLoops(st); return loops.reduce((a, l) => (Math.abs(area(polysOf(st)[l.id])) > Math.abs(area(polysOf(st)[a.id])) ? l : a), loops[0]); };
 function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y; return a / 2; }
-const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, wallAllowance: ALLOW, rasterAngle: 0, ...more });
+const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, finishAllowance: ALLOW, rasterAngle: 0, ...more });
 const cutsOf = (st, rec) => { const loops = findLoops(st); return deriveCuts({ kind: 'loop', id: outerLoopOf(st).id }, rec, st, loops, polysOf(st), new Set()); };
 const exportOf = (st, rec, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 
@@ -91,7 +91,7 @@ function coverage(name, reg, plan) {
 
 // ── 1. the rules ──
 const settings = (pattern, more = {}) => ({ ...clearingSettings(POCKET({ clearing: pattern, ...more })), pattern });
-eq([POCKET_CLEARING.stepoverPct.default, POCKET_CLEARING.wallAllowance.mm, POCKET_CLEARING.wallAllowance.in, POCKET_CLEARING.rasterAngle, POCKET_CLEARING.feedMmPerMin], [40, 0.5, 0.508, 0, 1000], 'declared: stepover 40 %, allowance 0.5 mm / 0.02 in, raster 0 deg, the time at 1000 mm/min');
+eq([POCKET_CLEARING.stepoverPct.default, POCKET_CLEARING.finishAllowance.mm, POCKET_CLEARING.finishAllowance.in, POCKET_CLEARING.rasterAngle, POCKET_CLEARING.feedMmPerMin], [40, 0.5, 0.508, 0, 1000], 'declared: stepover 40 %, allowance 0.5 mm / 0.02 in, raster 0 deg, the time at 1000 mm/min');
 const results = {};
 for (const [name, mk] of Object.entries(SHAPES)) {
   const st = mk(), reg = regionOf(st);
@@ -198,7 +198,7 @@ const elementsOf = (svg) => {
   const cuts = deriveProfileCuts({ kind: 'loop', id: outerLoopOf(st).id }, plain, st, findLoops(st), polysOf(st));
   ok(applyPocketClearing(cuts, plain, st) === cuts && applyPocketClearing(cuts, { ...plain, clearing: 'freehand', stepover: 30 }, st) === cuts, 'Freehand: applyPocketClearing returns the SAME array (the derivation is untouched)');
   const svg0 = exportOf(st, plain);
-  eq(exportOf(st, { ...plain, clearing: 'freehand', stepover: 30, wallAllowance: 1, loop: true, rasterAngle: 45 }), svg0, 'Freehand: byte-identical to a record without clearing (the settings never reach the file)');
+  eq(exportOf(st, { ...plain, clearing: 'freehand', stepover: 30, finishAllowance: 1, loop: true, rasterAngle: 45 }), svg0, 'Freehand: byte-identical to a record without clearing (the settings never reach the file)');
   eq(elementsOf(svg0).map((e) => e.cutType), ['pocket'], 'Freehand: one pocket element, as before');
   // Spiral (Loop off), ONCE at the full depth (TASK 750: the Origin's Pass Depth / AutoPass makes the step-downs)
   const rec = POCKET({ clearing: 'linked' });
@@ -273,7 +273,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     h.pick('pocket');
     h.typed('.cut-depth', '6');
     h.typed('.cut-bit', '6');
-    ok(h.shown('clearing') && !h.shown('stepover') && !h.shown('wallAllowance') && !h.shown('loop') && !h.shown('rasterAngle'), 'Pocket: the Clearing row, Freehand: no other clearing row');
+    ok(h.shown('clearing') && !h.shown('stepover') && !h.shown('finishAllowance') && !h.shown('loop') && !h.shown('rasterAngle'), 'Pocket: the Clearing row, Freehand: no other clearing row');
     eq([h.q('.cut-clear-cur').textContent, h.note()], ['Freehand', []], 'Freehand by default, no note');
     const kR = keyAt(st, 170, 10), svgFree = shaperSvgOf(st, cutPlanEntries());
     h.pressEl('.cut-clear-trigger');
@@ -284,9 +284,11 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     h.clearing('linked');
     eq(st.history.length, n0 + 1, 'Spiral: ONE undo step');
     const r = CUT_PLAN.get(kR);
-    eq([r.clearing, r.stepover, r.wallAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 0, false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster 0 (no depth per pass field)');
-    ok(h.shown('stepover') && h.shown('wallAllowance') && h.shown('loop') && !h.shown('rasterAngle') && !h.q('.cut-pass-depth'), 'Spiral: Stepover, Wall allowance, Loop (no Raster angle, no Depth per pass row)');
-    eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-wall-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.500', false], 'the fields: 40 % = 2.4 mm, 0.500, depth per pass empty (full depth)');
+    eq([r.clearing, r.stepover, r.finishAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 0, false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster 0 (no depth per pass field)');
+    ok(h.shown('stepover') && h.shown('finishAllowance') && h.shown('loop') && !h.shown('rasterAngle') && !h.q('.cut-pass-depth'), 'Spiral: Stepover, Finish allowance, Loop (no Raster angle, no Depth per pass row)');
+    eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-finish-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.500', false], 'the fields: 40 % = 2.4 mm, 0.500, depth per pass empty (full depth)');
+    eq(h.q('.cut-finish-hint').textContent, 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.', 'TASK 766: the Finish allowance hint, Loop off');
+    eq(h.q('.cut-row[data-row="finishAllowance"] .cut-field-label').textContent, 'Finish allowance', 'TASK 766: the row is Finish allowance');
     const nt = h.note();
     console.log('card note: ' + JSON.stringify(nt));
     ok(/^Pocket: spiral, 12 turns in 1 line \+ wall, stepover 2\.4 mm, \d+\.\d m of path, about \d+ min at 1000 mm\/min$/.test(nt[0]), 'the note: turns in 1 line + wall, stepover, path length, time at the declared feed: ' + nt[0]);
@@ -394,9 +396,9 @@ CUT_PLAN.clear(); setOpOrder([]);
     h.clickAt(50, 30); h.pick('pocket'); h.typed('.cut-depth', '0.25'); h.typed('.cut-bit', '0.25');
     h.clearing('linked');
     const r = CUT_PLAN.get(keyAt(st, 50, 30));
-    eq(r.wallAllowance, 0.508, 'inches: the allowance default 0.02 in (0.508 mm)');
+    eq(r.finishAllowance, 0.508, 'inches: the allowance default 0.02 in (0.508 mm)');
     eq(r.stepover, 45, 'the last stepover set (45 %, above) is used by the next pocket');
-    eq(h.q('.cut-wall-allowance').value, '0.020', 'shown as 0.020 in');
+    eq(h.q('.cut-finish-allowance').value, '0.020', 'shown as 0.020 in');
     ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 0\.1125 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[0]), 'the inch note: ' + h.note()[0]);
     ok(/^Leftover: 0\.\d+ in² not reached by a 0\.25 in bit/.test(h.note().at(-1)), 'the inch leftover: ' + h.note().at(-1));
   } finally { await app.close(); SettingsManager.set('DOC_UNIT', 'mm'); }

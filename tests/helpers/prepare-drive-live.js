@@ -111,7 +111,7 @@ export async function openBromont({ tag }) {
 export const CARD_EDITS = [
   ['depth +', '#prepare-panel .cut-row[data-param="cutDepth"] .cut-step[data-d="1"]', 'cutDepth'],
   ['stepover +', '#prepare-panel .cut-row[data-row="stepover"] .cut-step[data-d="1"]', 'stepover'],
-  ['wall allowance +', '#prepare-panel .cut-row[data-row="wallAllowance"] .cut-step[data-d="1"]', 'wallAllowance'],
+  ['finish allowance +', '#prepare-panel .cut-row[data-row="finishAllowance"] .cut-step[data-d="1"]', 'finishAllowance'],
   ['Loop', '#prepare-panel .cut-row[data-row="loop"] .cut-check', 'loop'],
   ['depth +', '#prepare-panel .cut-row[data-param="cutDepth"] .cut-step[data-d="1"]', 'cutDepth'],
   ['bit +', '#prepare-panel .cut-row[data-param="toolDia"] .cut-step[data-d="1"]', 'toolDia'],

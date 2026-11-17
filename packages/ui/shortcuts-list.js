@@ -2,7 +2,7 @@
 // read from THE declaration (shortcuts.js): key caps + the action name, under short headings, with a filter box. Cmd instead of Ctrl on a Mac.
 // createShortcutsList({ hostId, mac }) -> { el, setFilter(text) }
 
-import { shortcutsForHost, comboCaps, isMacPlatform } from '#ui/shortcuts.js';
+import { shortcutsForHost, comboCaps, comboIsChord, isMacPlatform } from '#ui/shortcuts.js';
 
 const GROUP_ORDER = ['Tools', 'Constrain', 'Edit', 'Sketch', 'Drawing', 'View'];
 
@@ -58,10 +58,10 @@ export function createShortcutsList({ hostId, mac = isMacPlatform() } = {}) {
         if (i) { const or = document.createElement('span'); or.className = 'sk-shortcut-or'; or.textContent = '/'; keys.appendChild(or); }
         const caps = comboCaps(c, { mac });
         caps.forEach((cap, j) => {
-          if (j) keys.appendChild(document.createTextNode('+'));
+          if (j) keys.appendChild(document.createTextNode(comboIsChord(c) ? '+' : ' '));
           const k = document.createElement('kbd'); k.textContent = cap; keys.appendChild(k);
         });
-        capsText.push(caps.join('+'));
+        capsText.push(caps.join(comboIsChord(c) ? '+' : ' '));
       });
       const label = document.createElement('span'); label.className = 'sk-shortcut-label'; label.textContent = s.label;
       if (s.note) { const n = document.createElement('span'); n.className = 'sk-shortcut-note'; n.textContent = ' ' + s.note; label.appendChild(n); }

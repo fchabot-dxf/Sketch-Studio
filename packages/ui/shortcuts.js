@@ -67,7 +67,7 @@ export const SHORTCUTS = Object.freeze([
   { id: 'sketch.uncombine', label: 'Uncombine', group: 'Sketch', hosts: ['shaper'], scope: 'canvas', keys: [{ key: 'u', mod: true, shift: true }] },
   // ── Drawing (only while a tool is at work; its handler runs before the canvas letters) ──
   { id: 'draw.typeValue', label: 'Type a size', group: 'Drawing', hosts: ALL, scope: 'tool:shape', keys: [{ chars: '0123456789.' }], note: 'while drawing' }, // rect / circle / slot
-  { id: 'dim.typeValue', label: 'Type the dimension value', group: 'Drawing', hosts: ALL, scope: 'tool:dimension', keys: [{ chars: '0123456789.-' }], note: 'while placing a dimension' },
+  { id: 'dim.typeValue', label: 'Type the dimension value', group: 'Drawing', hosts: ALL, scope: 'tool:dimension', keys: [{ chars: '0123456789.-' }] },
   { id: 'dim.place', label: 'Place the dimension', group: 'Drawing', hosts: ALL, scope: 'tool:dimension', keys: [plain('Enter')] },
   { id: 'line.finish', label: 'Finish the line', group: 'Drawing', hosts: ALL, scope: 'tool:line', keys: [plain('Enter')] },
   { id: 'bezier.finish', label: 'Finish the curve', group: 'Drawing', hosts: ALL, scope: 'tool:bezier', keys: [plain('Enter')] },
@@ -128,7 +128,8 @@ function charsCaps(chars) {
   const rest = [...chars].filter((ch) => !digits.includes(ch));
   return [digits.split('').every((d) => chars.includes(d)) ? '0-9' : null, ...rest].filter(Boolean);
 }
-/** The key caps of one combo, e.g. ['Ctrl', 'Shift', 'Z'] (['Cmd', ...] when `mac`). Only the HELD modifiers show. */
+/** The key caps of one combo, e.g. ['Ctrl', 'Shift', 'Z'] (['Cmd', ...] when `mac`). Only the HELD modifiers show. A `chars` combo's caps are
+ *  alternatives (any one of them), not a chord: comboIsChord(c) tells the list how to join them. */
 export function comboCaps(c, { mac = false } = {}) {
   const caps = [];
   if (c.mod === true) caps.push(mac ? 'Cmd' : 'Ctrl');
@@ -139,6 +140,9 @@ export function comboCaps(c, { mac = false } = {}) {
   else caps.push(KEY_NAMES[lower(c.key)] || (c.key.length === 1 ? c.key.toUpperCase() : c.key));
   return caps;
 }
+
+/** Are the caps of `c` pressed together (Ctrl+Z) rather than any one of them (0-9 .)? */
+export function comboIsChord(c) { return c.chars === undefined; }
 
 /** Is this a Mac (Cmd instead of Ctrl in the list)? */
 export function isMacPlatform(nav = typeof navigator !== 'undefined' ? navigator : null) {

@@ -16,16 +16,17 @@ import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRou
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
 import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + CUT_PLAN + stock
 import { dbg } from '#core/debug.js';
-import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
+import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
-import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
-import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
-import { shaperSvgOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy)
+import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes
+import { shaperSvgOf, shaperPreviewOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations
+import { opOrder } from './operations.js';            // TASK 743: the operation order (the 2D view rebuilds when it changes)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
+import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
@@ -34,12 +35,13 @@ import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
+import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
 
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
 
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
-// Vcarve/Prepare/Review — designController may not exist yet, so its state is read lazily.
+// Prepare/Review — designController may not exist yet, so its state is read lazily.
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -52,6 +54,7 @@ initMode = resolveInitialMode(initMode, { fusion: fusionMode }); // modes.js: a 
 
 const chrome = mountAppChrome({
   appId: 'shaper',
+  host: fusionMode ? 'fusion' : 'web', // TASK 738: the analytics tell the Fusion 360 palette from the website
   stages: activeStages,
   activeStage: initMode,
   onStageChange: (mode) => showMode(mode),
@@ -64,34 +67,29 @@ const chrome = mountAppChrome({
       if (!payload) { groupStatus(NO_CUTS); return; }
       download('shaper-export.svg', payload.svg);
     } },
+    fusionAddinAction({ fusion: fusionMode, open: () => chrome.sidebar.showView(ADDIN_VIEW_ID) }),
     { divider: true },
     { id: 'settings', label: 'Settings', icon: SIDEBAR_ICONS.gear, onClick: () => stylePanel.toggle() },
     { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
   ],
 });
 
+chrome.sidebar.registerView(ADDIN_VIEW_ID, fusionAddinView()); // TASK 733: the drawer view the Fusion add-in entry opens
+
 const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // the Export step's message with an empty plan (Generate, Download, the 2D view)
 
 // SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
 // download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
 
-// VCARVE-4: vcarve records (a region picked in the Vcarve tab) are exportable even with no Prepare cut assigned.
-function activeVcarves() {
-  ensureSketch();
-  const vs = designController && designController.state && designController.state.vcarves;
-  return Array.isArray(vs) ? vs.filter((v) => v && v.region) : [];
-}
-
-// TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes)
+// TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes) and (TASK 743) the operations it lists
 function generateShaperSvgPayload({ preview = false } = {}) {
   const entries = cutPlanEntries();
-  const vcarves = activeVcarves();
-  if (!entries.length && !vcarves.length) return null;
+  if (!entries.length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  const svg = shaperSvgOf(st, entries, { preview });
-  return { svg, entries, vcarves, state: st };
+  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, entries, state: st }; }
+  return { svg: shaperSvgOf(st, entries), entries, state: st };
 }
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
@@ -101,7 +99,7 @@ if (btnGenerateSvg) {
     const payload = generateShaperSvgPayload();
     if (!payload) { if (status) status.textContent = NO_CUTS; return; }
     download('shaper-export.svg', payload.svg);
-    const n = payload.entries.length + payload.vcarves.length;
+    const n = payload.entries.length;
     if (status) status.innerHTML = `Exported ${n} cut${n === 1 ? '' : 's'} → <strong>shaper-export.svg</strong>. Drop it into <a href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" style="color:var(--sk-selection,#4c9aff); text-decoration:underline;">ShaperHub (My Files)</a> to sync with Origin.`;
   });
 }
@@ -131,7 +129,7 @@ if (btnSyncShaper) {
   btnSyncShaper.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
     const entries = cutPlanEntries();
-    if (!entries.length && !activeVcarves().length) {
+    if (!entries.length) {
       if (status) status.textContent = NO_CUTS;
       return;
     }
@@ -196,6 +194,7 @@ if (syncForm) {
         throw new Error(data.error || `Upload failed with status ${res.status}`);
       }
 
+      track('export:shaperhub'); // TASK 738
       if (syncRemember && syncRemember.checked) {
         try { localStorage.setItem(CRED_STORAGE_KEY, JSON.stringify({ email, password })); } catch (_) {}
       } else {
@@ -259,19 +258,18 @@ document.addEventListener('keydown', (e) => {
 // (TASK 706). Either one shows Design first (modes.js showDesign, declared to the shared importer).
 const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => document.body, showDesign: () => modes.showDesign() }); // TASK 610: cut-import.js
 
-// ── S6a: 4-mode app shell — a view router over Design / Vcarve / Prepare / Review. (modes.js: declared once, the node test kit calls it too) ──
+// ── S6a: the app shell — a view router over Design / Prepare / Review. (modes.js: declared once, the node test kit calls it too) ──
 const VIEWS = findViews(document);
 let modes = null; // the mode router (created below, once the views it enters exist)
 
 let reviewView = null;       // TASK 459: the 3D Review (mounted on first entry, three imported dynamically)
 let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thickness field after a document restore (assigned below)
-let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted once, refreshed per Vcarve enter
 // SP1c-f, TASK 463, TASK 472 (prepare-stage.js): the Prepare view, the cut-settings card, every cut-plan edit as ONE step of the shared history, the cut
 // plan in the sketch's undo snapshots, the Ctrl+Z / Ctrl+Y keys while Prepare shows, the one-line notice
 const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
-  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'),
+  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), // TASK 743: the operations list
   ensureSketch, notify: groupStatus, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
 });
 
@@ -334,12 +332,12 @@ function ensureSketch() {
   // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the tab's stage state
   docBuffer = createDocumentBuffer(shaperBufferOptions({
     controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
-    session: createShaperSession({ prepare, getVcarveView: () => vcarveView }), // shaper-session.js: Prepare selection + view, Vcarve view
+    session: createShaperSession({ prepare }), // shaper-session.js: Prepare selection + view
     showDesign: () => modes.showDesign(), // TASK 706: a design the user opens (new / Open / Open from file) is shown in Design
-    refreshViews: () => { if (infoPanel) infoPanel.refresh(); if (vcarveView) vcarveView.refresh(); },
+    refreshViews: () => { if (infoPanel) infoPanel.refresh(); },
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
-    afterSidecar: () => {
-      prepare.afterRestore();
+    afterSidecar: (restore) => {
+      prepare.afterRestore(restore); // TASK 741: + the one-time notice of a document that had V-carve regions
       showStockThickness();
       if (modes.current() === 'review') enterReview(designController.state);
     },
@@ -355,13 +353,6 @@ modes = createModeRouter({
   onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
   afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design
   enter: {
-    vcarve: () => {
-      ensureSketch();
-      try { designController.engine.solve(500); } catch (_) {}
-      if (!vcarveView) vcarveView = mountVcarveView(designController.state);
-      else vcarveView.refresh();
-      window.__vcarveView = vcarveView;
-    },
     prepare: prepare.enter,
     review: () => {
       ensureSketch();
@@ -381,16 +372,20 @@ mountAppFooter({
 const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
-  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps
+  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN), ...planClearingNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
 };
-const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit()]); // TASK 714: the notes are in the doc unit
+const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder()]); // TASK 714: the notes are in the doc unit; TASK 743: the 2D file's groups follow the operation order
 // TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
 const REVIEW_VIEW_KEY = 'shaper-review-view';
 let reviewViewMode = '3d';
 try { if (localStorage.getItem(REVIEW_VIEW_KEY) === '2d') reviewViewMode = '2d'; } catch (err) { dbg.warn('shaper', 'REVIEW_VIEW_KEY read failed', err && err.message); }
+// TASK 729: the 3D board's look (review-view.js LOOKS + each colour-taking look's own colour), remembered per app the same way
+const REVIEW_LOOK_KEY = 'shaper-review-look';
+let reviewLook = normaliseLook(null);
+try { const s = localStorage.getItem(REVIEW_LOOK_KEY); if (s) reviewLook = normaliseLook(JSON.parse(s)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY read failed', err && err.message); }
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
-  getSvg: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? p.svg : null; },
+  getPreview: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? { svg: p.svg, ops: p.ops } : null; }, // TASK 743: + the operations (display only)
 });
 function showReviewViewMode() {
   const is2d = reviewViewMode === '2d';
@@ -414,7 +409,7 @@ async function enterReview(st) {
   try {
     if (!reviewView) {
       info.textContent = 'Loading 3D…';
-      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), wood: document.getElementById('review-wood').checked });
+      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), look: reviewLook });
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));
@@ -427,8 +422,39 @@ async function enterReview(st) {
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
   document.getElementById('review-fit').addEventListener('click', () => (reviewViewMode === '2d' ? exportPreview.fit() : reviewView && reviewView.fit())); // TASK 718: Fit frames the view shown
-  document.getElementById('review-wood').addEventListener('change', (e) => reviewView && reviewView.setWood(e.target.checked)); // per session
 }
+// TASK 729: the Look card: the Material select (one option per LOOKS row) and, for a look that takes a colour, its preset swatches (+ the
+// native colour picker when the look allows any colour). A pick swaps the 3D view's materials only; the 2D view and the export never read it.
+function showReviewLook() {
+  const select = document.getElementById('review-look-select'), colors = document.getElementById('review-look-colors');
+  if (!select.options.length) for (const l of LOOKS) select.add(new Option(l.label, l.id));
+  select.value = reviewLook.id;
+  const row = LOOKS.find((l) => l.id === reviewLook.id), cur = reviewLook.colors[row.id];
+  colors.hidden = !row.colors;
+  if (colors.dataset.look !== row.id) { // a new look: its own swatches (rebuilt only then, so an open colour picker is never replaced under the user)
+    colors.dataset.look = row.id;
+    const kids = (row.colors || []).map((p) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.hex = p.hex; b.title = p.label; b.setAttribute('aria-label', p.label); b.style.background = p.hex; return b; });
+    if (row.custom) { const c = document.createElement('input'); c.type = 'color'; c.id = 'review-look-custom'; c.title = 'Any colour'; c.setAttribute('aria-label', 'Any colour'); kids.push(c); }
+    colors.replaceChildren(...kids);
+  }
+  const preset = !!row.colors && row.colors.some((p) => p.hex === cur);
+  for (const b of colors.querySelectorAll('button[data-hex]')) b.setAttribute('aria-pressed', b.dataset.hex === cur ? 'true' : 'false');
+  const custom = document.getElementById('review-look-custom');
+  if (custom) { custom.value = cur; custom.setAttribute('aria-pressed', preset ? 'false' : 'true'); }
+}
+function setReviewLook(next) {
+  reviewLook = normaliseLook(next);
+  try { localStorage.setItem(REVIEW_LOOK_KEY, JSON.stringify(reviewLook)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY write failed', err && err.message); }
+  showReviewLook();
+  if (reviewView) reviewView.setLook(reviewLook);
+}
+showReviewLook();
+document.getElementById('review-look-select').addEventListener('change', (e) => setReviewLook({ ...reviewLook, id: e.target.value }));
+const pickReviewColor = (hex) => setReviewLook({ ...reviewLook, colors: { ...reviewLook.colors, [reviewLook.id]: hex } });
+document.getElementById('review-look-colors').addEventListener('click', (e) => { const b = e.target.closest('button[data-hex]'); if (b) pickReviewColor(b.dataset.hex); });
+document.getElementById('review-look-colors').addEventListener('input', (e) => { if (e.target.id === 'review-look-custom') pickReviewColor(e.target.value); });
+// the 3D view as mounted (null until the Export step first shows 3D): read by the live tests through this module, no window global
+export const currentReviewView = () => reviewView;
 
 ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
 if (fusionMode) {
@@ -437,17 +463,18 @@ if (fusionMode) {
     noticeEl: document.getElementById('prepare-notice'),
     onSelectionData: (payload) => {
       ensureSketch();
-      return importFusionSelection(payload, {
+      const res = importFusionSelection(payload, {
         controller: designController,
         prepare,
         onImport: () => {
           showStockThickness();
           if (infoPanel) infoPanel.refresh();
           history.refresh();
-          if (vcarveView) vcarveView.refresh();
           if (modes.current() === 'review') enterReview(designController.state);
         },
       });
+      if (res.ok && res.imported) track('import:fusion'); // TASK 738
+      return res;
     },
   });
   showMode(initMode);

@@ -44,7 +44,7 @@ function checkLoad(label, doc, { sameAsInput = false } = {}) {
     // the input came from this code's own serializer: it must come back identical except for name / version / parameters
     const expected = input.geometry.constraints;
     stripped.forEach((c, i) => eq(canon(c), canon(expected[i]), `${label}: constraint ${i} unchanged`));
-    for (const part of ['joints', 'shapes', 'sketches', 'activeSketchId', 'groups', 'profiles', 'vcarves']) eq(out.geometry[part], input.geometry[part], `${label}: ${part} unchanged`);
+    for (const part of ['joints', 'shapes', 'sketches', 'activeSketchId', 'groups', 'profiles']) eq(out.geometry[part], input.geometry[part], `${label}: ${part} unchanged`);
   }
   return { out, input };
 }

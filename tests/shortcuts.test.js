@@ -112,6 +112,7 @@ const EXEMPT = {
   'apps/penplotter/src/settings.js': [1, 'the plotter settings modal: Esc = Cancel'],
   'apps/penplotter/src/toolpath-layers-panel.js': [2, 'the toolpath rename input: Enter / Esc'],
   'apps/penplotter/src/ui-dialog.js': [4, 'the plotter dialogs: Enter / Esc'],
+  'apps/shaper/src/op-list.js': [2, 'TASK 745: the operations list: Arrow Up / Down on a focused drag grip move its row (no arrow buttons)'],
 };
 const found = {};
 for (const f of SRC) {

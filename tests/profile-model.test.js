@@ -162,7 +162,6 @@ import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
       sketches: [],
       groups: [],
       profiles: [],
-      vcarves: [],
     };
     const res = deserializeDocument(doc, newState);
     assert(res.ok, 'deserializeDocument succeeds');

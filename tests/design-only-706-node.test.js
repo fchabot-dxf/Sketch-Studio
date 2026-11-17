@@ -5,7 +5,7 @@
 //      its Design view BEFORE onRestored for a design the user opened (new / Open / Open from file, a new tab), never for a tab switch or the page's
 //      restore; a host that declares nothing (Trace) gets exactly the calls it got before. The shared importer (packages/ui/sketch-import.js) calls
 //      its `showDesign` option first, and nothing when it is not given.
-//   C. Shaper (node kit: the page's own modes.js / cut-import.js / design-canvas.js): an import, a new design and a new tab started on Prepare, Vcarve
+//   C. Shaper (node kit: the page's own modes.js / cut-import.js / design-canvas.js): an import, a new design and a new tab started on Prepare
 //      or Review show Design; a tab switch keeps the stage. Pen Plotter (its own stages.js / sketch-stage.js): the same from Toolpath and Export.
 //   D. GAP 4: a Shaper SVG whose cut attributes sit on a <g> (Shaper's own export, groupByCut) keeps every cut on import: export -> import -> the same
 //      records (type, depth, offset, bit); an element's own attribute wins over its group's; the root <svg>'s paint is not a cut.
@@ -30,14 +30,14 @@ let checks = 0;
 const eq = (a, b, msg) => { assert.deepStrictEqual(a, b, msg); checks++; };
 
 // ---- A. the stages -------------------------------------------------------------------------------------------------------------------------------------
-eq(SHAPER_STAGES.map((s) => s.id), ['design', 'vcarve', 'prepare', 'review'], 'Shaper has no Explore stage; Design is first');
+eq(SHAPER_STAGES.map((s) => s.id), ['design', 'prepare', 'review'], 'Shaper has no Explore stage; Design is first (TASK 741: no V-carve stage)');
 eq(resolveInitialMode(null), 'design', 'a fresh Shaper opens on Design');
 eq(resolveInitialMode('explore'), 'design', "an existing user's stored MODE_KEY 'explore' opens Design");
 eq(resolveInitialMode('simexport'), 'review', 'the older stored Simulate/Export still opens Review');
 eq(resolveInitialMode('prepare'), 'prepare', 'a stored stage that still exists is kept');
 eq(shaperStagesFor({ fusion: true }).map((s) => s.id), ['prepare', 'review'], 'Fusion mode keeps its own stages');
-eq(FUSION_HIDDEN_STAGES, ['design', 'vcarve'], 'Fusion mode hides Design and Vcarve');
-for (const stored of [null, 'explore', 'design', 'vcarve']) eq(resolveInitialMode(stored, { fusion: true }), 'prepare', `Fusion mode opens on Prepare (stored ${stored})`);
+eq(FUSION_HIDDEN_STAGES, ['design'], 'Fusion mode hides Design');
+for (const stored of [null, 'explore', 'design']) eq(resolveInitialMode(stored, { fusion: true }), 'prepare', `Fusion mode opens on Prepare (stored ${stored})`);
 
 // ---- B. the shared rule, on a bare buffer and the bare importer --------------------------------------------------------------------------------------
 const { createDocumentBuffer, OPENING_REASONS } = documentBuffer; // (a namespace import: the fail-first run on main reports the first behaviour that differs, not a link error)
@@ -82,7 +82,7 @@ const RECT = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100m
   await createNamedDesign(profile, 'shaper', 'Sign');
   const sh = await open({ host: 'shaper', profile });
   try {
-    for (const stage of ['prepare', 'vcarve', 'review']) {
+    for (const stage of ['prepare', 'review']) {
       sh.modes.showMode(stage);
       const n0 = sh.state.shapes.length;
       sh.importFile(RECT, 'from-' + stage + '.svg');
@@ -172,10 +172,10 @@ const record = (r) => [r.cutType, Math.round(Number(r.cutDepth) * 1000) / 1000, 
   const seen = [];
   const prepare = { captureSession: () => ({ targets: ['loop:L1'], view: { x: 1, y: 2, w: 3, h: 4 } }), restoreSession: (p) => seen.push(p) };
   const session = createShaperSession({ prepare });
-  const oldBlob = { explore: { doc: null, selected: null }, prepare: { targets: ['loop:L9'], view: { x: 5, y: 6, w: 7, h: 8 } }, vcarveView: null }; // main e7aae72's stored() form
+  const oldBlob = { explore: { doc: null, selected: null }, prepare: { targets: ['loop:L9'], view: { x: 5, y: 6, w: 7, h: 8 } }, vcarveView: { x: 0, y: 0, w: 9, h: 9 } }; // main e7aae72's stored() form (TASK 741: its V-carve view part is ignored too)
   session.restore(oldBlob);
-  eq(seen, [{ targets: ['loop:L9'], view: { x: 5, y: 6, w: 7, h: 8 } }], 'a session stored before TASK 706 restores Prepare (its explore part is ignored)');
-  eq(Object.keys(session.capture()).sort(), ['prepare', 'vcarveView'], 'a new capture has no explore part');
+  eq(seen, [{ targets: ['loop:L9'], view: { x: 5, y: 6, w: 7, h: 8 } }], 'a session stored before TASK 706 restores Prepare (its explore and V-carve view parts are ignored)');
+  eq(Object.keys(session.capture()).sort(), ['prepare'], 'a new capture has no explore part (TASK 741: nor a V-carve view part)');
   eq(typeof session.stored, 'undefined', 'all of it is storable: no stored() filter left');
 }
 console.log(`design-only-706-node: ${checks} checks pass`);

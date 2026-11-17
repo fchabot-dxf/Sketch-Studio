@@ -15,7 +15,7 @@ const svgTag = /<svg id="design-canvas"[^>]*>/.exec(html)[0];
 assert(!/background/i.test(svgTag), 'Trace: no inline background on the Design canvas: ' + svgTag);
 
 const css = read('apps/trace/styles/main.css');
-const block = /#design-canvas, #vcarve-canvas\s*\{([^}]*)\}/.exec(css)[1];
+const block = /#design-canvas\s*\{([^}]*)\}/.exec(css)[1]; // TASK 741: the dead second selector (a canvas Trace never had) is gone
 assert(/background-color:\s*var\(--sk-canvas-bg\)/.test(block), 'Trace: the canvas surface is the --sk-canvas-bg token');
 const read_ = new Set();
 for (const f of ['svg-renderer.js', 'canvas-grid.js']) for (const m of read('packages/ui/' + f).matchAll(/'(--sk-[a-z0-9-]+)'/g)) read_.add(m[1]);

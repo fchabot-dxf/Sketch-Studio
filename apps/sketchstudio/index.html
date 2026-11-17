@@ -18,13 +18,18 @@
             --sk-canvas-edge: 9px; /* TASK 676: the work area's padding (8) + the canvas frame border (1): how far the canvas's inside edge sits from the area; the shared floating footer (app-footer.js) insets from it */
         }
         @media (min-width: 768px) { :root { --sk-canvas-edge: 17px; } } /* the former Tailwind md:p-4 (16) + the border */
+        /* TASK 737: per view, the surface directly below the document tab strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool
+           ribbon (the default). Drawing: its white page (TASK 725 covers the strip in Drawing on purpose; declared so the tab joins it if it shows). Export: the page itself (body bg-[#F0F0F0]). */
+        :root[data-sk-stage="export"] { --sk-doctab-surface: #F0F0F0; }
+        :root { --sk-drawing-paper: #ffffff; } /* TASK 725's Drawing page (drawing-view.js .sk-drawing), declared here so the strip reads the same colour */
+        :root[data-sk-stage="drawing"] { --sk-doctab-surface: var(--sk-drawing-paper); }
         .sk-work-area { padding: calc(var(--sk-canvas-edge) - 1px); }
         /* CORRECTED (2026-08-27): the primary mobile symptom is body's `h-screen` (Tailwind = 100vh)
            being SIZED against the address-bar-collapsed (taller) viewport from the very first paint,
            while the bar is still visibly showing -- so the app renders where the still-onscreen address
            bar physically overlaps its top edge, not (primarily) a post-load scroll drift. `100dvh`
            tracks the REAL, currently-visible viewport and updates live as the browser chrome shows/hides
-           -- exactly the case this unit exists for. Tailwind's CDN build here does NOT generate a
+           -- exactly the case this unit exists for. Tailwind's CDN drawing here does NOT generate a
            `h-dvh` utility (confirmed live: a `.h-dvh` test element measured 0px), so this is a plain CSS
            override instead; confirmed live that a PLAIN `body { height: 100dvh }` LOSES the cascade to
            Tailwind's `.h-screen{height:100vh}` (class selector specificity beats a bare element

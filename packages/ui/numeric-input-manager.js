@@ -5,8 +5,8 @@ import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#core/dimension-seams.js';
-import { docUnit, lengthDecimals, angleDecimals } from '#core/settings-manager.js';
-import { format as formatUnit, basePer } from '#core/units.js';
+import { docUnit, lengthText, angleDecimals } from '#core/settings-manager.js';
+import { basePer } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
@@ -464,7 +464,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     const hasFormula = typeof constraint.expression === 'string' && constraint.expression !== '';
     const defaultValue = hasFormula ? constraint.expression
         : (typeof prefillValue === 'number'
-            ? (isAngleDim ? prefillValue.toFixed(angleDecimals(1)) : formatUnit(prefillValue, docUnit(), { decimals: lengthDecimals(1) }))
+            ? (isAngleDim ? prefillValue.toFixed(angleDecimals(1)) : lengthText(prefillValue, { auto: 1 })) // TASK 728: the label's text (decimals or 1 1/2")
             : '');
     uiState.defaults = [defaultValue, ''];
     // TASK 724: the prefill is DISPLAY text (rounded to the precision setting); `exactText` is the same number unrounded, what an untouched box commits

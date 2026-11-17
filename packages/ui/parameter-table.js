@@ -16,8 +16,7 @@
 //                                                  `history` (the Design surface's undo source) serves Ctrl+Z / Ctrl+Y typed in a cell with no pending text.
 // Lengths are formatted by the shared units formatter in the document unit; angles in degrees. All text is set with textContent.
 
-import { format as formatUnit } from '#core/units.js';
-import { lengthDecimals, angleDecimals } from '#core/settings-manager.js';
+import { lengthText, angleDecimals } from '#core/settings-manager.js';
 import { evaluateAll, isReferenceDimension, quantityText, planChange, previewDimensionInput, usersOf, cloneParameters, PARAMETER_UNITS,
   dimensionEntries, entryName, entryValue, entryExpression, entryKind, entryUnit } from '#core/parameters.js';
 import { patternSlot } from '#core/pattern-values.js';
@@ -42,7 +41,7 @@ const PATTERN_TITLE = Object.freeze({ [CONSTRAINT_TYPES.CIRCULAR_PATTERN]: 'Circ
 // the value text of an entry: a count as a whole number, an angle in degrees, a length in the document unit
 const entryValueText = (e, unit) => {
   const k = entryKind(e), v = entryValue(e);
-  return k === 'count' ? String(v) : k === 'angle' ? Number(v).toFixed(angleDecimals(1)) : formatUnit(v, unit, { decimals: lengthDecimals(1) });
+  return k === 'count' ? String(v) : k === 'angle' ? Number(v).toFixed(angleDecimals(1)) : lengthText(v, { unit, auto: 1, show: 'field' }); // the Unit column says the unit
 };
 
 /**
@@ -101,7 +100,6 @@ export function buildParameterRows(state, { unit = 'mm', filter = '' } = {}) {
 // ── the edits (PURE planning, then the ONE commit) ──
 const UNCHANGED = Object.freeze({ ok: true, changed: false });
 const sameParameters = (a, b) => JSON.stringify(cloneParameters(a)) === JSON.stringify(cloneParameters(b));
-const withUnit = (text, unit) => (unit ? `${text} ${unit}` : text);
 const refusal = (r, extra = {}) => ({ ok: false, code: r.code, message: r.message, at: r.at, ...extra });
 
 /**
@@ -130,7 +128,7 @@ export function planTableEdit(state, edit, { unit = 'mm' } = {}) {
     const after = p.paramsAfter.find((x) => x.name === name);
     const ev = evaluateAll({ parameters: p.paramsAfter, constraints: state.constraints }, { unit });
     const q = ev.values && ev.values.get(name);
-    return after && q ? withUnit(quantityText(q.v, after.unit), after.unit) : '';
+    return after && q ? quantityText(q.v, after.unit, 'unit') : '';
   };
   const also = (p, except) => { const o = p.affected.filter((n) => n !== except); return o.length ? `, also changes ${o.join(', ')}` : ''; };
   const follow = (name) => { const u = usersOf(state, name); return u.length ? `; ${u.join(', ')} follow${u.length === 1 ? 's' : ''}` : ''; };

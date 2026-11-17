@@ -1,17 +1,17 @@
-// tests/build-stage-725-node.test.js — TASK 725: SketchStudio's Build step, the node half.
+// tests/drawing-stage-725-node.test.js — TASK 725: SketchStudio's Drawing step, the node half.
 //  1. The ONE renderer's display profiles (#ui/svg-renderer.js): a render context with no profile draws exactly what it drew before (EDIT_DISPLAY);
 //     CLEAN_DISPLAY keeps the solid geometry and EVERY dimension (driving + driven linear, radius, angle) and drops the constraint glyphs, the points
 //     (origin, joint dots, endpoint rings), the construction geometry, the axes, the grid, the fills, and colours every curve in one ink.
-//  2. drawBuild (apps/sketchstudio/build-view.js) draws the live state through that profile, with no selection / hover, and leaves a hidden sketch out.
-//  3. The step list: Design | Build (Design from the shared COMMON_STEPS), the stored step restores, the Export view is not a step.
+//  2. drawDrawing (apps/sketchstudio/drawing-view.js) draws the live state through that profile, with no selection / hover, and leaves a hidden sketch out.
+//  3. The step list: Design | Drawing (Design from the shared COMMON_STEPS), the stored step restores, the Export view is not a step.
 //  4. The print layout: a standard scale, the orientation from the drawing's aspect, an empty drawing has none; the title line.
-//  5. computeGeometryBounds({ construction: false }) leaves construction geometry out (Fit and print frame what Build shows).
+//  5. computeGeometryBounds({ construction: false }) leaves construction geometry out (Fit and print frame what Drawing shows).
 import assert from 'node:assert';
 global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 global.document = { head: { appendChild() {} }, getElementById: () => null, createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }) };
 
 const { draw, EDIT_DISPLAY, CLEAN_DISPLAY, defaultRenderCtx } = await import('../packages/ui/svg-renderer.js');
-const { drawBuild, BUILD_RENDER_CTX, planPrint, scaleText, titleLine, PRINT_AREA_MM } = await import('../apps/sketchstudio/build-view.js');
+const { drawDrawing, DRAWING_RENDER_CTX, planPrint, scaleText, titleLine, PRINT_AREA_MM } = await import('../apps/sketchstudio/drawing-view.js');
 const { STUDIO_STAGES, initialStage, isStage } = await import('../apps/sketchstudio/stages.js');
 const { COMMON_STEPS } = await import('../packages/ui/stage-names.js');
 const { computeGeometryBounds } = await import('../packages/core/geometry-bounds.js');
@@ -83,32 +83,33 @@ const shapeIds = (html) => [...html.matchAll(/class="shape-elem" data-shape-id="
   assert.ok(fresh.constraints.every((c) => !('__visible' in c)), 'clean: no glyph visibility is stamped on the constraints');
 }
 
-// ── 2. drawBuild: the live state, no selection / hover, hidden sketches left out ──
+// ── 2. drawDrawing: the live state, no selection / hover, hidden sketches left out ──
 {
   const st = scene();
   st.selectedShapes = new Set(['L1']); st.hoveredShape = 'L2'; st.selectedConstraints = new Set([st.constraints[4]]); st.currentTool = 'line';
   const svg = mk();
-  drawBuild({ state: st, svg, world: null });
-  assert.strictEqual(BUILD_RENDER_CTX.display, CLEAN_DISPLAY, 'Build draws with the clean profile');
-  assert.deepStrictEqual(shapeIds(svg.innerHTML), ['C', 'H', 'L1', 'L2', 'L3', 'L4'], 'Build: the solid curves');
-  assert.ok(!/--sk-selection|#017AFD|#017afd|--sk-glyph-(hover|selected)/.test(svg.innerHTML), 'Build: no selection or hover colour, though the state has a selection and a hover');
+  drawDrawing({ state: st, svg, world: null });
+  assert.strictEqual(DRAWING_RENDER_CTX.display, CLEAN_DISPLAY, 'Drawing draws with the clean profile');
+  assert.deepStrictEqual(shapeIds(svg.innerHTML), ['C', 'H', 'L1', 'L2', 'L3', 'L4'], 'Drawing: the solid curves');
+  assert.ok(!/--sk-selection|#017AFD|#017afd|--sk-glyph-(hover|selected)/.test(svg.innerHTML), 'Drawing: no selection or hover colour, though the state has a selection and a hover');
   st.sketches[1].visible = false;
-  drawBuild({ state: st, svg, world: null });
-  assert.deepStrictEqual(shapeIds(svg.innerHTML), ['C', 'L1', 'L2', 'L3', 'L4'], 'Build: a hidden sketch is not drawn');
+  drawDrawing({ state: st, svg, world: null });
+  assert.deepStrictEqual(shapeIds(svg.innerHTML), ['C', 'L1', 'L2', 'L3', 'L4'], 'Drawing: a hidden sketch is not drawn');
   st.sketches[1].visible = true;
   st.shapes.push({ id: 'NEW', type: 'line', joints: ['a', 'o'], sketchId: 's1' });
-  drawBuild({ state: st, svg, world: null });
-  assert.ok(shapeIds(svg.innerHTML).includes('NEW'), 'Build: the live document (a shape added later is drawn on the next frame)');
+  drawDrawing({ state: st, svg, world: null });
+  assert.ok(shapeIds(svg.innerHTML).includes('NEW'), 'Drawing: the live document (a shape added later is drawn on the next frame)');
 }
 
 // ── 3. the steps ──
-assert.deepStrictEqual(STUDIO_STAGES.map((s) => s.id), ['design', 'build'], 'SketchStudio steps: design, build');
-assert.deepStrictEqual(STUDIO_STAGES.map((s) => s.label), [COMMON_STEPS.design, 'Build'], 'labels: the shared Design, then the app\'s own Build');
-assert.strictEqual(initialStage('build'), 'build', 'a stored Build step restores');
+assert.deepStrictEqual(STUDIO_STAGES.map((s) => s.id), ['design', 'drawing'], 'SketchStudio steps: design, drawing');
+assert.deepStrictEqual(STUDIO_STAGES.map((s) => s.label), [COMMON_STEPS.design, 'Drawing'], 'labels: the shared Design, then the app\'s own Drawing');
+assert.strictEqual(initialStage('drawing'), 'drawing', 'a stored Drawing step restores');
+assert.strictEqual(initialStage('build'), 'drawing', 'TASK 746: a step stored as build (before the rename) restores as Drawing');
 assert.strictEqual(initialStage('design'), 'design');
 assert.strictEqual(initialStage(null), 'design', 'nothing stored: Design');
 assert.strictEqual(initialStage('export'), 'design', 'the Export view is not a step: Design');
-assert.ok(isStage('build') && isStage('design') && !isStage('export'), 'isStage');
+assert.ok(isStage('drawing') && isStage('design') && !isStage('export'), 'isStage');
 
 // ── 4. print layout ──
 {
@@ -136,4 +137,4 @@ assert.ok(isStage('build') && isStage('design') && !isStage('export'), 'isStage'
   assert.deepStrictEqual([computeGeometryBounds(st, { construction: false }).maxX, computeGeometryBounds(st, { construction: false }).maxY], [10, 0], 'construction: false leaves it out');
 }
 
-console.log('build-stage-725-node.test.js passed');
+console.log('drawing-stage-725-node.test.js passed');

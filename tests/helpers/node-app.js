@@ -197,7 +197,7 @@ const HOSTS = {
     return { svg, state, engine, ribbon, buffer, frame, importFile: importer.importFile, browser };
   },
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer; the mode router
-  // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Vcarve and Review views are not mounted.
+  // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Review view is not mounted.
   async shaper({ win, store, designBrowser }) {
     const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }, { createShaperImporter }, { createGroupStatus }] = await Promise.all([
       import('#ui/sketch-canvas.js'), import('#ui/tool-ribbon.js'), import('#ui/document-buffer.js'), import('../../apps/shaper/src/design-canvas.js'),
@@ -209,7 +209,7 @@ const HOSTS = {
     let controller = null, modes = null, ribbon = null, buffer = null, browser = null;
     const history = M.createShaperHistory({ getController: () => controller, getMode: () => modes.current() });
     const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(), history,
-      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice') });
+      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice'), opsEl: doc.getElementById('prepare-ops') }); // TASK 743: the operations list, as the page passes it
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
     // main.js ensureSketch, run by the mode router on the first entry into Design, with the Design view already showing: the sketch, the ribbon, the buffer
     // (its restore is not awaited, as on the page), the autosave
@@ -221,7 +221,7 @@ const HOSTS = {
       ribbon = createToolRibbon({ state: controller.state, ...D.RIBBON_OPTIONS });
       ribbon.render(doc.getElementById('design-ribbon'));
       // afterSidecar: what the page does with Prepare and the Review card once the cut plan is back (it also re-enters Review, which needs three.js: not here)
-      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: () => { prepare.afterRestore(); stockCard.show(); }, showDesign: () => modes.showDesign() }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here); TASK 706: an opened design shows Design
+      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: (restore) => { prepare.afterRestore(restore); stockCard.show(); }, showDesign: () => modes.showDesign() }), store, doc, win }); // TASK 605: the tab's stage state, as on the page; TASK 706: an opened design shows Design
       buffer.restore(); buffer.start();
     };
     const { createAppHeader } = await import('#ui/app-header.js');

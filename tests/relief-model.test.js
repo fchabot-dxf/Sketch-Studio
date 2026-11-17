@@ -7,7 +7,7 @@ import { deriveCutFootprint, deriveCutFootprintAt } from '#core/profile-model.js
 import { cutterTerraces, cutterProfile, SHAPE_SLICES } from '#core/cutter-profile.js';
 import { planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { findLoops } from '#core/loop-finder.js';
-import { vbitHalfAngleTan } from '#core/vcarve.js';
+import { vbitHalfAngleTan } from '#core/cutter-profile.js'; // TASK 741: its one home (V-carve removed)
 import { effectiveCutRecord } from '../apps/shaper/src/shaper.js';
 
 const rect = (x, y, w, h) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
@@ -239,26 +239,20 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   assert.ok(minX(narrow) > minX(wide) + 1.9, 'a narrower cutter (w=1) reaches the wall less: ' + minX(narrow) + ' vs ' + minX(wide));
 }
 
-// (S3) V-CARVE: every contour ring is a V-bit pass at its own depth (the exporter emits the same rings as On Line cuts)
+// TASK 741: a V-GROOVE is an On Line cut with the V-bit cutter shape (V-carve was removed): ONE plan item, its V terraces from the cut record
 {
   const st = { joints: new Map([['a', { x: 20, y: 40 }], ['b', { x: 60, y: 40 }], ['c', { x: 60, y: 60 }], ['d', { x: 20, y: 60 }]]), constraints: [],
     shapes: [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].map(([id, p, q]) => ({ id, type: 'line', joints: [p, q] })) };
   const loop = findLoops(st)[0];
-  st.vcarves = [{ id: 'vc', region: 'loop:' + loop.id, vbit: { angle: 90 }, dStep: 0.5, maxDepth: 3 }];
-  const items = planReliefItems(st, new Map());
-  assert.strictEqual(items.length, 6, 'maxDepth 3 / dStep 0.5 at 90 deg = 6 contour rings');
-  assert.deepStrictEqual(items.map((i) => Math.round(i.cutDepth * 1000) / 1000), [0.5, 1, 1.5, 2, 2.5, 3], 'each ring has its own depth');
-  const t0 = performance.now();
+  const items = planReliefItems(st, new Map([['loop:' + loop.id, { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 6, cutterShape: 'vbit', cutterAngle: 90 }]]));
+  assert.strictEqual(items.length, 1, 'one V-bit On Line cut = one item');
+  assert.deepStrictEqual(items[0].shape, { cutterShape: 'vbit', cutterAngle: 90, toolDia: 6 }, 'the item carries the V-bit cutter shape');
   const rel = buildRelief({ stock, bounds, items });
-  const ms = performance.now() - t0;
-  for (const d of [0.5, 1, 1.5, 2, 2.5, 3]) assert.ok(rel.levels.some((l) => Math.abs(l.depth - d) < 1e-6), `a floor at the ring depth ${d}`);
+  assert.strictEqual(rel.stats.levels, SHAPE_SLICES.vbit, 'a V-bit groove = its V terraces');
   const depthAt = (x, y) => rel.levels.reduce((m, l) => (l.regions.some((g) => ptIn(g.outer, x, y) && !g.holes.some((h) => ptIn(h, x, y))) ? Math.max(m, l.depth) : m), 0);
-  for (const inset of [1, 2, 3]) assert.ok(Math.abs(depthAt(20.03 + inset, 50) - inset) <= 1.01, /* 3 slices per ring: within one 1 mm step of the true V */ `V-carve depth ~ inset: ${inset} mm in -> ${depthAt(20.03 + inset, 50)}`);
-  assert.ok(depthAt(20 + 1, 50) < depthAt(20 + 3, 50), 'deeper toward the middle (a stepped V)');
-  assert.strictEqual(depthAt(40, 50), 0, 'beyond the last ring the middle is uncut (maxDepth reached)');
-  assert.strictEqual(depthAt(10, 50), 0, 'nothing outside the shape');
-  console.log(`vcarve stack: ${rel.stats.triangles} triangles, ${rel.stats.levels} levels, ${ms.toFixed(0)} ms`);
-  assert.ok(rel.stats.triangles < 30000);
+  near(depthAt(20.01, 50), 3, 1e-6, 'the tip of the V is on the line, at the cut depth');
+  assert.ok(depthAt(21.5, 50) < 3 && depthAt(21.5, 50) > 0, 'the depth falls away from the line (a V wall)');
+  assert.strictEqual(depthAt(40, 50), 0, 'the middle of the loop is uncut');
   // the unset labels: one per SPOT
   const two = buildRelief({ stock, bounds, items: [
     { key: 'o', cutType: 'outside', cutDepth: 'unset', footprints: fp([rect(40, 40, 22, 22)]) },
@@ -306,8 +300,8 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   const st = { joints: new Map([['a', { x: 10, y: 10 }], ['b', { x: 70, y: 10 }], ['c', { x: 70, y: 50 }], ['d', { x: 10, y: 50 }]]), constraints: [],
     shapes: [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].map(([id, p, q]) => ({ id, type: 'line', joints: [p, q] })) };
   const loop = findLoops(st)[0];
-  st.vcarves = [{ id: 'vc', region: 'loop:' + loop.id, vbit: { angle: 90 }, dStep: 0.5, maxDepth: 3 }];
-  const mk = () => [...planReliefItems(st, new Map()),
+  const vgroove = new Map([['loop:' + loop.id, { cutType: 'online', cutDepth: 14, cutOffset: 0, toolDia: 6, cutterShape: 'vbit', cutterAngle: 90 }]]); // TASK 741: a V-bit On Line cut (was a V-carve stack), its V terraces deeper than the pocket so a pocket change leaves their levels cached
+  const mk = () => [...planReliefItems(st, vgroove),
     { key: 'p', sig: 'pocket-a', cutType: 'pocket', cutDepth: 5, footprints: fp([rect(75, 5, 20, 20)]) },
     { key: 'h', sig: 'hole-a', cutType: 'inside', cutDepth: 'unset', footprints: fp([rect(75, 35, 10, 10)]) }];
   const same = (a, b, msg) => { for (const k of ['top', 'floor', 'wall', 'bottom', 'side']) for (const f of ['positions', 'normals', 'indices']) assert.deepStrictEqual(Array.from(a.meshes[k][f]), Array.from(b.meshes[k][f]), `${msg}: ${k}.${f}`); };
@@ -348,8 +342,8 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   const r2 = buildRelief({ stock, bounds, items: [{ key: 'x', cutType: 'inside', cutDepth: T, footprints: fp([rect(5, 5, 10, 10)]) }], cache: c2 });
   assert.strictEqual(r2.stats.cache, null); assert.strictEqual(c2.item.size, 0);
   // signatures follow the content: a moved joint or a changed record changes the signature
-  st.joints.get('c').x = 71; const moved = planReliefItems(st, new Map());
-  assert.notStrictEqual(moved[0].sig, items0[0].sig, 'moving a joint changes the ring signatures');
+  st.joints.get('c').x = 71; const moved = planReliefItems(st, vgroove);
+  assert.notStrictEqual(moved[0].sig, items0[0].sig, 'moving a joint changes the V-groove signature');
 }
 
 // (8) determinism

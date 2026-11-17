@@ -133,14 +133,14 @@ try {
   await evalJs(`(() => { try { localStorage.removeItem('shaper-mode'); } catch (e) {} })()`);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
   await waitForApp('design-canvas');
-  await waitFor(`document.querySelectorAll('.sk-header-tab').length === 4`, 'normal Shaper header tabs'); // TASK 706: Explore removed
+  await waitFor(`document.querySelectorAll('.sk-header-tab').length === 3`, 'normal Shaper header tabs'); // TASK 706: Explore removed; TASK 741: Vcarve removed
   const normal = await evalJs(`(() => ({
     tabs: [...document.querySelectorAll('.sk-header-tab')].map((b) => ({ id: b.dataset.tab, active: b.classList.contains('active') })),
     addBtn: document.getElementById('btn-fusion-add-selection'),
     fusionBar: document.getElementById('shaper-fusion-bar'),
     hasHandler: 'fusionJavaScriptHandler' in window,
   }))()`);
-  assert.deepStrictEqual(normal.tabs.map((t) => t.id), ['design', 'vcarve', 'prepare', 'review'], 'normal Shaper keeps its 4 stage tabs (TASK 706: Explore removed)');
+  assert.deepStrictEqual(normal.tabs.map((t) => t.id), ['design', 'prepare', 'review'], 'normal Shaper keeps its 3 stage tabs (TASK 706: Explore removed; TASK 741: Vcarve removed)');
   assert.strictEqual(normal.tabs.find((t) => t.id === 'design').active, true, 'normal Shaper opens on Design (TASK 706: was Explore)');
   assert.strictEqual(normal.addBtn, null, 'Add selection absent outside Fusion mode');
   assert.strictEqual(normal.fusionBar, null, 'Fusion bar absent outside Fusion mode');
@@ -158,7 +158,7 @@ try {
   }))()`);
   await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`);
   await waitFor(`!document.querySelector('.sk-sidebar').classList.contains('open')`, 'normal Shaper drawer close');
-  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export)');
+  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'fusion-addin', 'settings', 'log'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export; TASK 733: + the Fusion add-in download, hidden in Fusion mode)');
   assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
   assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
   assert.strictEqual(normalSidebar.hasAccount, true, 'normal Shaper keeps Google account / Drive section');

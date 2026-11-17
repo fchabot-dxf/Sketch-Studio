@@ -20,7 +20,7 @@
 // active tab, unsaved Untitled tabs included. Each app shows ITS view of a document (its own sidecar, or its defaults when the document
 // has none) and passes every other app's through: the buffer keeps the WHOLE document (fullDoc: every app's sidecar) while an autosave still writes only
 // this app's sidecar (458). What stays per APP: the stage (each host's own MODE_KEY / STAGE_KEY), and each app's SESSION of a tab (hostSessions[app]:
-// Pen Plotter's toolpath undo + selection, Shaper's Prepare / Vcarve state, Trace's photo): written into the buffer under the app's own slot, the other
+// Pen Plotter's toolpath undo + selection, Shaper's Prepare state, Trace's photo): written into the buffer under the app's own slot, the other
 // apps' slots passed through. The document's undo / redo history stays with the PAGE (in memory, not in the buffer: a reload starts with an
 // empty history, as a reload always did; an undo step is a whole-state snapshot of this app's state, which another app could not apply).
 //
@@ -44,6 +44,7 @@
 import { serializeDocument, deserializeDocument, validateDocument } from '#core/document.js';
 import { getProjectStore, emptyDocument } from '#ui/project-store.js';
 import { browserFileSeam, serializeProjectFile, projectFileName } from '#ui/project-file.js';
+import { track } from '#ui/analytics.js'; // TASK 738: a design saved under a name
 
 /** T7 (owner ruling 2026-11-12): at most this many designs open at once (each tab keeps up to HISTORY_DEPTH undo steps in memory). */
 export const MAX_TABS = 10;
@@ -135,11 +136,12 @@ export function mergeTabBuffers(stored, mine, base, app) {
  *     = a design that has none yet (reset). Omit for a host with nothing of that kind. stored(data) (TASK 684): the part of it the open-tabs working
  *     buffer keeps across a reload (the buffer is IndexedDB: plain, storable data only; no DOM element, canvas, nor a photo, TASK 567);
  *     omitted = all of it is storable. It is applied to data that is already its own result too (a tab the buffer gave this page), so it must keep that.
- *   onRestored({ restored, hosts, name, reason }): OPTIONAL — called after the state was replaced (initial restore, openDesign, newDesign,
+ *   onRestored({ restored, hosts, name, reason, removedVcarves }): OPTIONAL — called after the state was replaced (initial restore, openDesign, newDesign,
  *     openFile, a Drive conflict reload, a tab switch / new tab / close). `reason`: 'restore' | 'open' | 'new' | 'file' | 'conflict' |
  *     'switch'. The host re-solves / repaints and applies ITS sidecar from `hosts` (or resets its own state to defaults when
  *     `hosts[hostName]` is absent: a design without a sidecar must not inherit the previous one). On 'switch' the tab's own view has
- *     already been put back on state.view.
+ *     already been put back on state.view. `removedVcarves` (TASK 741): #core/document.js deserializeDocument's count of the V-carve regions an old
+ *     document carried and that were not loaded (0 for any other document); Shaper says so once in Prepare, the other hosts ignore it.
  *   showDesign(): OPTIONAL (TASK 706) — how this host shows its Design view; called before onRestored when the reason is one of OPENING_REASONS (a design the
  *     user opened is shown in Design, from any stage). Omit it and the stage is never changed by a restore (Trace: its own applyHost decides).
  *   store: a project store (default: the shared IndexedDB one). pollMs: change-check interval (default 1500ms).
@@ -308,7 +310,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     foreign = splitHosts(result.hosts);
     if (reason !== 'conflict') otherSessions = {}; // a Drive conflict reloads the SAME tab: the other apps' sessions stay with it
     bindStored(design);
-    const out = restored({ restored: true, hosts: result.hosts, name: design.name, reason });
+    const out = restored({ restored: true, hosts: result.hosts, name: design.name, reason, removedVcarves: result.removedVcarves });
     resetHostBaseline(docHasOwnHost(result.hosts));
     lastSig = sigNow(); // TASK 684: the baseline is taken AFTER the host applied its sidecar (or its defaults when the design has none): showing a design never writes it
     return out;
@@ -328,7 +330,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       if (!r.ok) throw new Error(`This template could not be opened: ${r.reason}`);
       name = template.name;
       foreign = splitHosts(r.hosts);
-      out = restored({ restored: true, hosts: r.hosts, name, reason });
+      out = restored({ restored: true, hosts: r.hosts, name, reason, removedVcarves: r.removedVcarves });
       resetHostBaseline(docHasOwnHost(r.hosts));
       lastSig = sigNow();
     }
@@ -458,12 +460,14 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       boundId = d.id; name = d.name; emptySig = null; saveOk = true; resetHostBaseline(docHasOwnHost(doc.hosts)); lastSig = sig;
       notify('saved');
       await saveWorkingBuffer();
+      track('drive:save'); // TASK 738
       return d;
     }
     await flush();
     const p = await store.saveAs(newName, { app, fromId: boundId });
     boundId = p.id; name = p.name; lastSig = sigNow();
     await saveWorkingBuffer();
+    track('drive:save'); // TASK 738
     return p;
   }
   /** Save a design to a file: `designId` (a design picked in the project manager), else the shown one: the bound design, or the unsaved
@@ -527,7 +531,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (Array.isArray(rec.history)) { state.history = rec.history; state.redoStack = rec.redoStack; }
     if (rec.view && state.view) Object.assign(state.view, rec.view);
     for (const k of TAB_BUFFER_FIELDS) delete rec[k];
-    const out = restored({ restored: true, hosts: result.hosts || {}, name, reason });
+    const out = restored({ restored: true, hosts: result.hosts || {}, name, reason, removedVcarves: result.removedVcarves });
     if (session && (reason !== 'restore' || sessions[app] !== undefined)) session.restore(sessions[app]);
     resetHostBaseline(knownOwn !== undefined ? knownOwn : docHasOwnHost(result.hosts));
     // a tab from the shared buffer (another app, an earlier page): its baselines are THIS app's signatures, taken now that it shows (TASK 684). An empty

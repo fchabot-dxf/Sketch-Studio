@@ -32,13 +32,13 @@ await (async () => {
     // the header is built synchronously by main.js (no autosave restore to wait for: SketchStudio has no status text, TASK 602)
     await waitFor(`!!document.querySelector('header .sk-sidebar-btn') && !!document.querySelector('header .sk-header-tab')`, 'sketchstudio header ready', 40000);
     assert.strictEqual(await evalJs(`document.getElementById('save-status')`), null, 'sketchstudio: no "Saved" text in the header (TASK 602)');
-    assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('header .sk-header-tab')].map((t) => t.dataset.tab)`), ['design', 'build'], 'sketchstudio: the steps are Design and Build (TASK 725; Export is in the menu, TASK 602)');
+    assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('header .sk-header-tab')].map((t) => t.dataset.tab)`), ['design', 'drawing'], 'sketchstudio: the steps are Design and Drawing (TASK 725; Export is in the menu, TASK 602)');
     assert.strictEqual(await evalJs(`document.querySelectorAll('header .sk-header-action, header .sk-header-style').length`), 0, 'sketchstudio: Style and Debug live in the ☰ menu, not the header (TASK 619)');
     assert.strictEqual(await evalJs(`document.getElementById('coords-text')`), null, 'sketchstudio: the dead "X: 0 Y: 0" readout is gone');
     assert.ok(!(await evalJs(`document.querySelector('footer').textContent`)).includes('X: 0'), 'sketchstudio: no "X: 0 Y: 0" text in the status bar');
     assert.ok(!(await evalJs(`!!document.getElementById('viewport-size')`)), 'sketchstudio: the VIEW readout is gone (TASK 618)');
     assert.ok(!(await evalJs(`document.querySelector('footer').textContent`)).includes('VIEW'), 'sketchstudio: no VIEW text in the footer (TASK 618)');
-    console.log('sketchstudio: no status text, the step buttons Design | Build; X/Y and VIEW readouts removed');
+    console.log('sketchstudio: no status text, the step buttons Design | Drawing; X/Y and VIEW readouts removed');
     console.log('header-status-no-shift: ok');
   } finally {
     await cdp.close();

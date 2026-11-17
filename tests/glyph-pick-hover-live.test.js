@@ -23,7 +23,7 @@ const DOC = { version: 3, hosts: {}, geometry: {
   shapes: [['rE1', 'r1', 'r2'], ['rE2', 'r2', 'r3'], ['rE3', 'r3', 'r4'], ['rE4', 'r4', 'r1']]
     .map(([id, a, b]) => ({ id, type: 'line', joints: [a, b], sketchId: 'sketch-1', isConstruction: false })),
   constraints: [{ type: 'horizontal', joints: ['r1', 'r2'] }, { type: 'vertical', joints: ['r2', 'r3'] }, { type: 'horizontal', joints: ['r3', 'r4'] }, { type: 'vertical', joints: ['r4', 'r1'] }],
-  sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [], vcarves: [] } };
+  sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [] } };
 const EDGES = ['rE1', 'rE2', 'rE3', 'rE4'];
 const BOUND = ['rE1', 'rE2', 'rE3']; // the lines with an end on r2 / r3, which the V constraint binds (geometry-labels constraintTargets)
 

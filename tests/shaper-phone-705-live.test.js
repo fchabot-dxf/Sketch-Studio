@@ -23,7 +23,6 @@ const SIZES = [
 // each stage's main canvas and the side panels it shows beside / under it
 const STAGES = [
   { id: 'design', canvas: '#design-canvas', panels: [] },
-  { id: 'vcarve', canvas: '#vcarve-canvas', panels: ['#vcarve-panel'] },
   { id: 'prepare', canvas: '#prepare-canvas', panels: [] },
   { id: 'review', canvas: '#review-stage', panels: ['#review-side'] },
 ];

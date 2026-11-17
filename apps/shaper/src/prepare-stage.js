@@ -1,45 +1,54 @@
 // apps/shaper/src/prepare-stage.js — Shaper's PREPARE stage wiring, DECLARED in one importable place (TASK 583). The page script (main.js) and the node test
 // kit (tests/helpers/node-app.js) both call createPrepareStage(): the Prepare view mounted on the shared Design sketch, the cut-settings card, the rule that every
 // cut-plan edit is ONE step of the shared sketch history (TASK 463), the cut plan riding in the shared undo snapshots (`hostSnapshot`), the Ctrl+Z / Ctrl+Y keys
-// while Prepare shows, and what the document buffer does with Prepare after a restore. Moved out of main.js unchanged; the page keeps its own views (Vcarve,
-// Review, the info panel) and passes what only it has as options.
+// while Prepare shows, and what the document buffer does with Prepare after a restore. Moved out of main.js unchanged; the page keeps its own views
+// (Review, the info panel) and passes what only it has as options.
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { captureCutPlan, applyCutPlan } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
+import { capturePrepare, applyPrepare } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper; TASK 743: + the operation order
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { CUT_PLAN, migrateEdgeRecords } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { CUT_PLAN, migrateEdgeRecords, cutPlanEntries, setFieldFor } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { planOperations, setOpOrder } from './operations.js'; // TASK 743: the operations (derived) and their order (the one stored fact)
+import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 
 /**
- * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, ensureSketch, notify, onViewChange })
+ * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, opsEl, ensureSketch, notify, onViewChange })
  *   getController(): the mounted Design sketch controller (null before it exists). getMode(): the showing mode ('prepare' while Prepare shows).
  *   history: the Undo / Redo router (modes.js createShaperHistory); its runKey serves Ctrl+Z / Ctrl+Y while Prepare shows.
- *   panelEl / canvasEl / noticeEl: the cut card's host, the Prepare svg, the one-line notice. ensureSketch(): mounts the sketch (the page mounts it lazily).
+ *   panelEl / canvasEl / noticeEl: the cut card's host, the Prepare svg, the one-line notice. opsEl: TASK 743, the operations list's host (op-list.js). ensureSketch(): mounts the sketch (the page mounts it lazily).
  *   notify(msg): the page's status line. onViewChange(view): told when the Prepare view is (re)mounted (the page's dev / test seam).
- * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
+ * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel, opList }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
  * mount() = (re)mount the Prepare view; enter(enteringMode) = the mode router's hook for entering Prepare (modes.js); view() = the mounted view or null;
- * afterRestore() = what a document restore does with Prepare.
+ * afterRestore(restore) = what a document restore does with Prepare (restore = the document buffer's onRestored payload: TASK 741, its removedVcarves).
  */
-export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, ensureSketch = () => {}, notify = () => {}, onViewChange = () => {} }) {
+
+/** TASK 741: the one-time notice Prepare shows after a document that had V-carve regions was opened (#core/document.js deserializeDocument drops them and
+ *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
+export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
+
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ensureSketch = () => {}, notify = () => {}, onViewChange = () => {} }) {
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
-  // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it.
+  // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
+  // changes (every cut-plan edit, an undo / redo, a selection change, a re-mount), so it is refreshed here too.
   const refreshCutPanel = () => {
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does
+    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take
+    opList.refresh();
   };
   // TASK 724: the card's stepped note is text built from the display precision when the card is updated: a precision change rebuilds it (the stage lives as long as the page)
-  SettingsManager.subscribe((key) => { if (isPrecisionKey(key)) refreshCutPanel(); });
+  SettingsManager.subscribe((setting) => { if (isPrecisionKey(setting)) refreshCutPanel(); else if (setting === 'DOC_UNIT') opList.refresh(); }); // TASK 743: the list's lengths are in the doc unit
   // TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second
   // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset).
   function cutEdit(apply) {
     const designController = getController();
     const st = designController && designController.state;
-    const before = JSON.stringify(captureCutPlan());
+    const before = JSON.stringify(capturePrepare());
     if (st) st.saveState('cut plan edit');
     const n = st ? st.history.length : 0;
     apply();
-    if (st && JSON.stringify(captureCutPlan()) === before) st.discardSnapshotAt(n);
+    if (st && JSON.stringify(capturePrepare()) === before) st.discardSnapshotAt(n);
     refreshCutPanel();
   }
   const cutPanel = createCutPanel(panelEl, {
@@ -47,13 +56,31 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onSetField: (field, value) => cutEdit(() => { if (prepareView) prepareView.setFieldOnSelected(field, value); }),
     onSetFields: (o) => cutEdit(() => { if (prepareView) for (const [k, v] of Object.entries(o)) prepareView.setFieldOnSelected(k, v); }),
   });
+  // TASK 743: the operations of the plan (derived: operations.js) in the document's order; a reorder is ONE undo step (cutEdit: the snapshot carries the order);
+  // a tap on an operation selects its regions (the card then edits them all, as a shift-selection does)
+  const opsOf = () => { const c = getController(); return c ? planOperations(c.state, cutPlanEntries()) : []; };
+  const isPicked = (op) => Boolean(prepareView) && prepareView.selection.size === op.records.length && op.records.every((r) => prepareView.selection.has(r.planKey));
+  const opList = createOpList(opsEl, {
+    getOps: opsOf,
+    onMove: (keys) => cutEdit(() => setOpOrder(keys)),
+    onPick: (op) => { if (prepareView) prepareView.setSelection(op.records.map((r) => r.target)); },
+    isPicked,
+    // TASK 745: the bin of an operation UNASSIGNS every region / path of it: each record's cut type is cleared (cut-plan.js setFieldFor(key, 'cutType', null),
+    // the path the Stock move already takes to unassign a loop), ONE undo step for the whole operation (cutEdit: the snapshot carries the plan and the order,
+    // so Undo brings it back in its place); the selection clears when it was that operation. The sketch is never touched.
+    onDelete: (op) => cutEdit(() => {
+      const picked = isPicked(op);
+      for (const r of op.records) setFieldFor(r.planKey, 'cutType', null);
+      if (prepareView) { if (picked) prepareView.setSelection([]); prepareView.refreshLook(); }
+    }),
+  });
 
   // The geometry signature the mounted Prepare view was built from: an undo that changed only the cut plan just repaints it
   // (keeps selection + card); one that changed the sketch (e.g. undoing an SVG import) re-mounts it from the restored state.
   let prepareSig = null;
   const geomSig = (st) => JSON.stringify([[...st.joints.entries()].map(([k, j]) => [k, j.x, j.y]), st.shapes.map((x) => [x.id, x.type, x.joints, x.radius])]);
-  function restoreCutPlanFromHistory(entries) {
-    applyCutPlan(entries);
+  function restoreCutPlanFromHistory(snapshot) {
+    applyPrepare(snapshot);
     const designController = getController();
     if (getMode() !== 'prepare' || !designController) return;
     if (prepareView && geomSig(designController.state) === prepareSig) { prepareView.refreshLook(); refreshCutPanel(); }
@@ -62,6 +89,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
 
   // TASK 472: a transient one-line notice in Prepare (e.g. the Stock role moved to another loop)
   let prepareNoticeTimer = null;
+  let pendingRemovedNotice = null; // TASK 741: removedVcarvesNotice(n) of the last restored document, until Prepare shows it
   function prepareNotice(msg) {
     const el = noticeEl; if (!el) return;
     el.textContent = msg; el.hidden = false;
@@ -86,6 +114,16 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (prepareView && getMode() === 'prepare') applyPendingSession();
   }
 
+  // TASK 743: the first fit keeps the drawing out from under the operations list (the card's panel is the fit's avoidEl): a narrow list (the desktop
+  // side panel) costs the canvas its width on that side, a wide one (the phone's bottom bar) its height
+  function opsInset() {
+    const c = canvasEl.getBoundingClientRect(), o = opsEl ? opsEl.getBoundingClientRect() : null;
+    if (!o || !(o.width > 0 && o.height > 0 && c.width > 0 && c.height > 0)) return undefined;
+    const gap = 12;
+    if (o.width < c.width / 2) return o.left - c.left < c.right - o.right ? { left: o.right - c.left + gap } : { right: c.right - o.left + gap };
+    return o.top - c.top < c.bottom - o.bottom ? { top: o.bottom - c.top + gap } : { bottom: c.bottom - o.top + gap };
+  }
+
   // SP1a/SP1c: (re)mount the Prepare view on the shared Design sketch (no 2nd engine/RAF). TASK 460: also called after a document
   // restore so Prepare shows the restored geometry and cut plan.
   function mountPrepare() {
@@ -96,15 +134,15 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const st = designController.state;
     const loops = findLoops(st);
     const chains = findOpenChains(st, loops);
-    const { dropped, moved, vcarveUpdated } = migrateEdgeRecords(loops, chains, CUT_PLAN, st.vcarves);
-    if (dropped + moved + (vcarveUpdated || 0) > 0) {
+    const { dropped, moved } = migrateEdgeRecords(loops, chains, CUT_PLAN);
+    if (dropped + moved > 0) {
       const parts = [];
       if (moved > 0) parts.push(`${moved} edge cut${moved === 1 ? '' : 's'} moved to chain`);
       if (dropped > 0) parts.push(`${dropped} dropped from closed loop${dropped === 1 ? '' : 's'}`);
-      if (vcarveUpdated > 0) parts.push(`${vcarveUpdated} vcarve region${vcarveUpdated === 1 ? '' : 's'} updated`);
       notify(`Cut plan updated: ${parts.join(', ')}`);
     }
-    prepareView = mountPrepareView(st, canvasEl, { onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl });
+    prepareView = mountPrepareView(st, canvasEl, { onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset() });
+    if (pendingRemovedNotice) { prepareNotice(pendingRemovedNotice); pendingRemovedNotice = null; } // TASK 741: once, on the first mount after the restore
     prepareSig = geomSig(st);
     applyPendingSession();
     onViewChange(prepareView);
@@ -123,16 +161,18 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   });
 
   return {
-    hostSnapshot: { capture: captureCutPlan, restore: restoreCutPlanFromHistory }, // TASK 463: the cut plan rides in the shared undo snapshots
+    hostSnapshot: { capture: capturePrepare, restore: restoreCutPlanFromHistory }, // TASK 463: the cut plan rides in the shared undo snapshots (TASK 743: + the operation order)
     mount: mountPrepare,
     enter: (enteringMode) => { if (enteringMode || !prepareView) mountPrepare(); }, // the mode router's hook: entering Prepare mounts it afresh
     view: () => prepareView,
     captureSession, restoreSession, // TASK 605: the tab's Prepare selection + view (shaper-session.js)
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
-    afterRestore: () => {
+    afterRestore: (restore) => {
+      pendingRemovedNotice = restore && restore.removedVcarves > 0 ? removedVcarvesNotice(restore.removedVcarves) : null; // TASK 741: a document that had V-carve regions
       if (getMode() === 'prepare') mountPrepare();
       else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
     },
     cutPanel,
+    opList,
   };
 }

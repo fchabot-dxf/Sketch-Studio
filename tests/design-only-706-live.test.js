@@ -1,6 +1,6 @@
 // tests/design-only-706-live.test.js — TASK 706 ("everything in Design", owner turns 1884 / 1886), in the REAL pages (headless Edge):
 //  A. Shaper has no Explore stage: a fresh Shaper opens on Design (desktop 1280 x 800 and phone 390 x 844 touch), and an existing user's stored
-//     MODE_KEY 'explore' opens Design too; the header / drawer list Design, Vcarve, Prepare, Review.
+//     MODE_KEY 'explore' opens Design too; the header / drawer list Design, Prepare, Review (TASK 741: no Vcarve).
 //  B. Shaper: a file DROPPED anywhere on the page while Prepare shows is imported into Design (shown); a Shaper SVG whose cut attributes sit on a <g>
 //     (as Shaper's own export writes them) keeps its cut types: Prepare's cut card shows Pocket for both grouped squares and Outside for the third.
 //  C. Pen Plotter: the drawer's Import SVG / DXF… started on Toolpath lands in Design, shown, with its result line.
@@ -97,7 +97,7 @@ await (async () => {
       console.log(tag + JSON.stringify(st));
       await shot(`A-shaper-desktop-${stored || 'fresh'}.png`, { x: 0, y: 0, width: 1280, height: 420 });
       assert.strictEqual(st.stage, 'design', tag + 'Shaper opens on Design');
-      assert.deepStrictEqual(st.stages, ['design', 'vcarve', 'prepare', 'review'], tag + 'the stages: no Explore');
+      assert.deepStrictEqual(st.stages, ['design', 'prepare', 'review'], tag + 'the stages: no Explore (TASK 741: no V-carve)');
       assert.strictEqual(st.canvas, true, tag + 'the Design canvas shows');
       assert.strictEqual(st.stored, 'design', tag + 'the stored stage is now Design');
       assert.strictEqual(await evalJs(`!!document.querySelector('main.layout, #tree, #inspector, #file')`), false, tag + "Explore's markup is gone");
@@ -114,7 +114,7 @@ await (async () => {
       assert.strictEqual(await activeStage(), 'design', tag + 'Shaper opens on Design');
       assert(c.w >= 0.9 * 390 && c.h >= 0.4 * 844, tag + 'the Design canvas fills the phone: ' + JSON.stringify(c));
       await openMenu(tag);
-      assert.deepStrictEqual(await stageIds(), ['design', 'vcarve', 'prepare', 'review'], tag + 'the drawer lists Design, Vcarve, Prepare, Export (ids; TASK 707)');
+      assert.deepStrictEqual(await stageIds(), ['design', 'prepare', 'review'], tag + 'the drawer lists Design, Prepare, Export (ids; TASK 707, TASK 741)');
       await shot(`A-shaper-phone390-drawer-${stored || 'fresh'}.png`, { x: 0, y: 0, width: 390, height: 520 });
       await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`); await sleep(300);
     }

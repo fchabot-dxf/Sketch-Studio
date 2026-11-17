@@ -1,5 +1,5 @@
 // tests/task-609-live.test.js — TASK 609, in the REAL pages with the real pointer.
-//   A. Shaper: entering the Vcarve tab in an Untitled creates NO vcarve record: no not-saved dot, closing asks nothing; setting a Vcarve value does: the dot, and closing asks THE question.
+//   (A. was Shaper's Vcarve tab in an Untitled: removed with V-carve, TASK 741.)
 //   B. Trace: a tab put aside keeps its photo as the compressed file (re-decoded when shown); switching back restores the photo, its mask, its trace and its scale. Prints the
 //      measured numbers: a 12 MP photo's decoded size (w x h x 4), its file size, the time to decode it again.
 //   C. Trace: a design that has a drawing but no photo, switched to while the Trace tab shows, opens in Edit with the toast "This design has no photo: showing its drawing in Design".
@@ -30,34 +30,8 @@ await (async () => {
     // The strip re-renders whenever a tab's save dot changes and ignores clicks while its own action runs: let the autosave finish first, so the press and the release land on the same button.
     const newTab = async (n) => { await flushAutosave(); await clickEl('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card[data-template="blank"]')`, 'the template modal'); await clickEl('.sk-tp-card[data-template="blank"]'); /* TASK 651 */ await waitFor(`document.querySelectorAll('.sk-doctab-name').length === ${n} && [...document.querySelectorAll('.sk-doctab')].findIndex((e) => e.classList.contains('active')) === ${n - 1}`, 'tab ' + n + ' (made and active)'); };
 
-    // ---- A. Shaper -----------------------------------------------------------------------------------------------------------------------
-    {
-      await navigate(url('shaper'), 10000);
-      await waitFor(`!!document.querySelector('.sk-doctab-name')`, 'the strip');
-      const mode = (m) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${m}"]').click()`);
-      await mode('vcarve'); await waitFor(`!!document.getElementById('vcarve-maxdepth') && !document.getElementById('vcarve-maxdepth').disabled`, 'the Vcarve tab is mounted');
-      assert.strictEqual(await evalJs(`document.getElementById('vcarve-maxdepth').disabled`), false, 'the Vcarve tab is mounted');
-      await mode('design'); await flushAutosave(); // the buffer's own save path, not a sleep past its 1.5 s poll
-      assert.strictEqual(await dots(), 0, 'shaper: entering and leaving Vcarve in an Untitled leaves no not-saved dot');
-      await newTab(2); await mode('vcarve'); await flushAutosave();
-      assert.strictEqual(await dots(), 0, 'shaper: nor in a second Untitled, with the Vcarve tab still showing');
-      await mode('design'); await waitFor(`!document.getElementById('vcarve-maxdepth') || document.getElementById('vcarve-maxdepth').offsetParent === null`, 'the Design tab shows');
-      await clickEl('.sk-doctab-x', 1); await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 1`, 'the second Untitled closed');
-      assert(!/This design is not saved/.test(await evalJs('document.body.innerText')), 'shaper: closing the untouched Untitled asks nothing');
-      assert.deepStrictEqual(await names(), ['Untitled'], 'shaper: and it closed');
-      // set a Vcarve value: the dot, and closing asks
-      await mode('vcarve'); await waitFor(`!!document.getElementById('vcarve-maxdepth') && !document.getElementById('vcarve-maxdepth').disabled`, 'the Vcarve tab is mounted');
-      await evalJs(`(() => { const i = document.getElementById('vcarve-maxdepth'); i.value = '4 mm'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-      await waitFor(`document.querySelectorAll('.sk-doctab-dot').length === 1`, 'shaper: setting a Vcarve value marks the Untitled');
-      await newTab(2); await clickEl('.sk-doctab-main', 0); await waitFor(`document.querySelector('.sk-doctab.active') === document.querySelectorAll('.sk-doctab')[0]`, 'the first tab is active again');
-      await clickEl('.sk-doctab-x', 0);
-      await waitFor(`/This design is not saved/.test(document.body.innerText)`, 'shaper: closing the Untitled with a Vcarve value asks THE question');
-      await sendRealKey(send, 'Escape', 'Escape', 27); await waitFor(`!/This design is not saved/.test(document.body.innerText)`, 'the question is dismissed');
-      console.log('shaper: untouched Vcarve = no dot, no question; a Vcarve value = dot + question');
-    }
-
     // ---- Trace ---------------------------------------------------------------------------------------------------------------------------
-    await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: Trace starts from none, not from Shaper's tabs above
+    await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: Trace starts from none
     await navigate(url('trace'), 10000);
     await waitFor(`!!document.querySelector('.sk-doctab-name')`, 'the Trace strip');
     const tab = (t) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${t}"]').click()`);

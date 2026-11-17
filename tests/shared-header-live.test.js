@@ -8,8 +8,8 @@ import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 
 const APPS = [
-  { id: 'sketchstudio', name: 'SketchStudio', url: '/apps/sketchstudio/index.html', stages: ['Design', 'Build'], dark: false, nextStage: 'build', ready: `!!document.getElementById('svgCanvas') && !!document.querySelector('.sk-header')` },
-  { id: 'shaper',       name: 'Shaper',       url: '/apps/shaper/index.html',       stages: ['Design', 'Vcarve', 'Prepare', 'Export'], dark: true, nextStage: 'prepare', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')` },
+  { id: 'sketchstudio', name: 'SketchStudio', url: '/apps/sketchstudio/index.html', stages: ['Design', 'Drawing'], dark: false, nextStage: 'drawing', ready: `!!document.getElementById('svgCanvas') && !!document.querySelector('.sk-header')` },
+  { id: 'shaper',       name: 'Shaper',       url: '/apps/shaper/index.html',       stages: ['Design', 'Prepare', 'Export'], dark: true, nextStage: 'prepare', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')` },
   { id: 'penplotter',   name: 'Pen Plotter',  url: '/apps/penplotter/index.html',   stages: ['Design', 'Prepare', 'Export'], dark: false, nextStage: 'toolpath', ready: `!!window.__sketch && !!document.querySelector('.sk-header-tab[data-tab="design"]')` },
   { id: 'trace',        name: 'Trace',        url: '/apps/trace/index.html',        stages: ['Trace', 'Design', 'Export'], dark: true, nextStage: 'edit', ready: `!!document.querySelector('.sk-header-tab[data-tab="edit"]')` },
 ];

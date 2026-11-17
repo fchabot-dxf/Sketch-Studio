@@ -28,11 +28,11 @@ eq(isFusionMode('?host=web'), false, 'other host value is normal mode');
 eq(isFusionMode('?fusion=1'), false, 'unrelated query param is normal mode');
 
 // 3. Stage filtering and initial-mode resolution
-deepEq(shaperStagesFor({ fusion: false }), SHAPER_STAGES, 'normal mode keeps all 4 Shaper stages (TASK 706: Explore removed)');
+deepEq(shaperStagesFor({ fusion: false }), SHAPER_STAGES, 'normal mode keeps all 3 Shaper stages (TASK 706: Explore removed; TASK 741: Vcarve removed)');
 const fusionStages = shaperStagesFor({ fusion: true });
 deepEq(fusionStages.map((s) => s.id), ['prepare', 'review'], 'Fusion mode shows only Prepare and Review');
-ok(FUSION_HIDDEN_STAGES.includes('design') && FUSION_HIDDEN_STAGES.includes('vcarve'),
-  'Design, Vcarve are declared hidden in Fusion mode (TASK 706: Explore is no stage at all)');
+deepEq(FUSION_HIDDEN_STAGES, ['design'],
+  'Design is declared hidden in Fusion mode (TASK 706: Explore is no stage at all; TASK 741: nor is Vcarve)');
 
 eq(resolveInitialMode(null, { fusion: false }), 'design', 'normal mode defaults to Design (TASK 706: was Explore)');
 eq(resolveInitialMode('design', { fusion: false }), 'design', 'normal mode restores stored Design');
@@ -41,13 +41,13 @@ eq(resolveInitialMode('simexport', { fusion: false }), 'review', 'normal mode ma
 eq(resolveInitialMode(null, { fusion: true }), 'prepare', 'Fusion mode defaults to Prepare');
 eq(resolveInitialMode('design', { fusion: true }), 'prepare', 'Fusion mode ignores stored Design');
 eq(resolveInitialMode('explore', { fusion: true }), 'prepare', 'Fusion mode ignores stored Explore');
-eq(resolveInitialMode('vcarve', { fusion: true }), 'prepare', 'Fusion mode ignores stored Vcarve');
+eq(resolveInitialMode('vcarve', { fusion: true }), 'prepare', 'Fusion mode ignores a stored Vcarve (TASK 741: the removed stage)');
 eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps stored Review (visible stage)');
 
 // Mode router makes hidden stages unreachable in Fusion mode
 {
   const makeView = () => ({ hidden: false, style: {} });
-  const views = { design: makeView(), vcarve: makeView(), prepare: makeView(), review: makeView() };
+  const views = { design: makeView(), prepare: makeView(), review: makeView() };
   let active = null, designStarts = 0;
   const router = createModeRouter({
     views,
@@ -61,13 +61,12 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
   eq(router.current(), 'prepare', 'showMode("design") is unreachable in Fusion mode and falls back to Prepare');
   eq(active, 'prepare', 'chrome synced to Prepare');
   eq(views.design.hidden, true, 'Design container stays hidden');
-  eq(views.vcarve.hidden, true, 'Vcarve container stays hidden');
   eq(views.prepare.hidden, false, 'Prepare container is shown');
   eq(designStarts, 0, 'Design ensureSketch never triggered by blocked showMode("design")');
   router.showMode('explore');
   eq(router.current(), 'prepare', 'showMode("explore") falls back to Prepare');
   router.showMode('vcarve');
-  eq(router.current(), 'prepare', 'showMode("vcarve") falls back to Prepare');
+  eq(router.current(), 'prepare', 'showMode("vcarve") (TASK 741: no such stage) falls back to Prepare');
   router.showMode('review');
   eq(router.current(), 'review', 'Review stage remains reachable');
 }

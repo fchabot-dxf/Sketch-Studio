@@ -60,20 +60,18 @@
       --sk-header-sep: #3a3d42;
       --sk-header-hover: rgba(255,255,255,0.08);
       --sk-footer-ink: var(--sk-header-fg);
+      /* TASK 737: the surfaces directly below the document tab strip, declared once: the stage's view paints it, the strip's active tab takes it */
+      --shaper-cream: #F4EFE1;            /* the Design canvas paper */
+      --sk-prep-bg: #3F4145;              /* the Prepare canvas background: TASK 455's token (#view-prepare below), on :root so the strip reads it in Prepare */
+      --shaper-review-bg: #14161a;        /* the Export stage's 3D view (#review-stage) */
+      /* the strip is the header colour: the 13 % tint toward the text (document-tabs.js default) IS the Prepare canvas grey, so the active tab could not be told from the strip there */
+      --sk-doctabs-bg: var(--sk-header-bg);
     }
-    #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
-    #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
-    /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
-    #view-vcarve { flex-direction: row; }
-    #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
-    #vcarve-canvas { flex: 1; min-width: 0; min-height: 0; }
-    .vcarve-section { margin-bottom: 16px; }
-    .vcarve-h { font-weight: 700; color: #e6e6e6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; margin: 6px 0 8px; }
-    .vcarve-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 6px 0; }
-    .vcarve-row select, .vcarve-row input { background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; border-radius: 6px; padding: 4px 8px; font: inherit; width: 96px; }
-    .vcarve-btn { width: 100%; background: var(--sk-selection, #4c9aff); color: #fff; border: 0; border-radius: 6px; padding: 7px 10px; font: inherit; cursor: pointer; margin-top: 6px; }
-    .vcarve-btn:disabled, .vcarve-row select:disabled, .vcarve-row input:disabled { opacity: 0.5; cursor: default; }
-    .vcarve-hint { color: #6b7280; font-size: 12px; margin: 6px 0 0; }
+    /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
+    :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
+    :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); }
+    #design-view, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
+    #design-view[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* S7b: Design = a full-width tool ribbon on TOP, then a row of [canvas | collapsible info panel on the RIGHT; the left edge is reserved for the app sidebar]. */
     #design-view { flex-direction: column; }
     #design-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #1f2937; }
@@ -84,8 +82,8 @@
        untouched. The renderer routes geometry colours through var(--sk-*, fallback); the Shaper :root sets them dark
        (would wash out on cream), so we RE-override them here to the light (dark-on-cream) palette — the sketcher.css
        light defaults, but with a cream surface + cream-hollow joints. (The shared canvas grid — #ui/canvas-grid.js, GRID_MODE — is drawn behind the geometry using the --sk-grid-* vars below.) */
-    #design-canvas, #vcarve-canvas {         /* VCARVE-3a: the Vcarve canvas reuses the cream Design theme */
-      background-color: #F4EFE1;             /* warm paper cream — explicitly not white */
+    #design-canvas {
+      background-color: var(--shaper-cream); /* warm paper cream — explicitly not white */
       --sk-canvas-bg: #F4EFE1;
       --sk-canvas-bg-snapping: #F1E9D6;
       --sk-grid-minor: #d8cfba; --sk-grid-major: #c4b896;
@@ -111,7 +109,7 @@
     #design-canvas.snapping { background-color: #F1E9D6; }
     /* Review (TASK 459): a 3D canvas + a side card (stock, export). */
     #view-review { flex-direction: row; color: #9aa0a6; font: 15px system-ui, sans-serif; }
-    #review-stage { position: relative; flex: 1; min-width: 0; background: #14161a; }
+    #review-stage { position: relative; flex: 1; min-width: 0; background: var(--shaper-review-bg); }
     #review-canvas-host, #review-canvas-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
     #review-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
     #review-toolbar button { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
@@ -135,6 +133,11 @@
     #review-2d-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; max-width: calc(100% - 20px); font: 13px system-ui, sans-serif; color: #e6e6e6; background: rgba(15,19,32,0.85); border-radius: 6px; padding: 5px 9px; line-height: 1.4; }
     .review-cuts-list { display: flex; flex-direction: column; gap: 2px; }
     .rv2d-type { display: flex; justify-content: space-between; margin-top: 6px; color: #e6e6e6; font-weight: 600; text-transform: capitalize; }
+    /* TASK 743: the 2D list is the operations list: a tool heading per run of one bit, an operation header (a tap picks all its elements), then its rows */
+    .rv2d-tool { margin-top: 10px; color: #9aa0a6; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .rv2d-op { display: flex; justify-content: space-between; gap: 8px; width: 100%; margin-top: 4px; background: transparent; color: #e6e6e6; border: 1px solid transparent; border-radius: 4px; padding: 4px 8px 2px 2px; font: 600 13px system-ui, sans-serif; text-align: left; cursor: pointer; }
+    .rv2d-op[aria-pressed="true"] { border-color: #ff2d95; }
+    .rv2d-op > span:first-child { flex: 1; }
     .rv2d-row { display: flex; justify-content: space-between; gap: 8px; width: 100%; background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 4px; padding: 5px 8px; font: 13px system-ui, sans-serif; text-align: left; cursor: pointer; }
     .rv2d-row[aria-pressed="true"] { border-color: #ff2d95; color: #fff; }
     .rv2d-legend { display: flex; align-items: center; gap: 6px; color: #9aa0a6; font-size: 12px; margin-bottom: 4px; } /* TASK 719 */
@@ -142,17 +145,21 @@
     .rv2d-chip { flex: 0 0 14px; height: 14px; border: 1px solid #222; border-radius: 2px; margin-right: 2px; }
     .rv2d-row > span:nth-child(2):not(.rv2d-count) { flex: 1; }
     .rv2d-count { color: #9aa0a6; font-variant-numeric: tabular-nums; }
+    /* TASK 729: the Look card: the Material select and, for a look that takes a colour, its swatches (+ the native colour picker) */
+    .review-stock select { background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
+    .review-look-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+    .review-look-colors[hidden] { display: none; }
+    .review-look-colors button, .review-look-colors input[type="color"] { width: 32px; height: 32px; padding: 0; border: 2px solid #2f3646; border-radius: 6px; cursor: pointer; background: none; }
+    .review-look-colors [aria-pressed="true"] { border-color: var(--sk-selection, #4c9aff); box-shadow: 0 0 0 1px var(--sk-selection, #4c9aff); }
     .review-stock input { width: 90px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
     /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
        Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
-       app-sidebar.js): the Vcarve panel and the Review card form ONE band under the canvas. Short landscape: Vcarve and Review keep their desktop side
-       panel (their canvas is already 64-71 % of 844 px). (TASK 706: Explore's tree / inspector rules went with it.) */
+       app-sidebar.js): the Review card forms ONE band under the canvas. Short landscape: Review keeps its desktop side
+       panel (its canvas is already 64-71 % of 844 px). (TASK 706: Explore's tree / inspector rules went with it; TASK 741: so did the V-carve panel's.) */
     @media (max-width: 640px) {
-      #view-vcarve { flex-direction: column-reverse; }
-      #vcarve-panel { flex: 0 0 40%; border-right: 0; border-top: 1px solid #1f2937; }
       #view-review { flex-direction: column; }
       #review-side { width: auto; flex: 0 0 40%; border-left: 0; border-top: 1px solid #1f2535; }
-      .rv2d-row { min-height: 40px; align-items: center; } /* TASK 718: a list row is a touch target */
+      .rv2d-row, .rv2d-op { min-height: 40px; align-items: center; } /* TASK 718: a list row is a touch target (TASK 743: an operation header too) */
     }
     /* SP1j-4: the Export panel (dark chrome) — a Generate button + a status line. */
     #simexport-panel { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
@@ -195,7 +202,7 @@
     /* TASK 455: the Prepare look (Shaper Studio): ONE token block for the Prepare canvas AND the cut card (the card sits inside
        #view-prepare, so it inherits them). Colours are advisor-SAMPLED from the owner's Studio screenshots unless marked (~). */
     #view-prepare { flex-direction: column;
-      --sk-prep-bg: #3F4145;              /* canvas background */
+      /* --sk-prep-bg (the canvas background) is declared on :root (TASK 737: the document tab strip's active tab takes it in Prepare) */
       --sk-prep-geo: #DFE1E7;             /* idle geometry: thin white (1px) */
       --sk-prep-geo-selected: #1BE09E;    /* selected geometry: bold mint (2px) */
       --sk-prep-geo-hover: #1BE09E;       /* hover on an unassigned target: thin mint */
@@ -222,6 +229,7 @@
       --sk-prep-list-hover: #232426;      /* ~ hovered popover row (not sampled) */
       --sk-prep-disabled: #5A5C61;        /* ~ greyed types */
       --sk-prep-tab: #FFB547;             /* TASK 742: tab / onion-skin marks on a held cut (an amber that reads on the band and the canvas; not sampled) */
+      --sk-prep-leftover: #FF5A36;        /* TASK 745: a programmed pocket's leftover (material the bit does not reach): an orange-red that reads on the band (not sampled) */
     }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; background: var(--sk-prep-bg); }
     .sk-edge { fill: none; stroke: var(--sk-prep-geo); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
@@ -266,6 +274,10 @@
     .sk-tab-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linecap: butt; }
     .sk-skin-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 2 4; }
     .sk-strip { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+    /* TASK 745: a programmed pocket in Prepare: its clearing paths as thin tool-path lines (the clean-up ring dashed), the material the bit does not reach filled */
+    .sk-clear-path { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; stroke-opacity: 0.9; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+    .sk-clear-path.sk-clear-cleanup { stroke-dasharray: 4 2; }
+    .sk-leftover { fill: var(--sk-prep-leftover); stroke: var(--sk-prep-leftover); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .sk-chip-bg { fill: var(--sk-prep-chip-bg); }
     .sk-chip-text { fill: var(--sk-prep-chip-text); font-family: system-ui, sans-serif; font-size: 11px; }
     .sk-chip-val { font-weight: 700; }
@@ -295,12 +307,12 @@
     /* the display rules above and on .cut-card beat the [hidden] attribute: an empty / unselected card and any row cut-panel.js hides must really hide */
     .cut-field[hidden], .cut-row[hidden], #prepare-panel .cut-card[hidden] { display: none; }
     .cut-rows { display: flex; flex-direction: column; gap: 12px; margin: 0; }
-    .cut-type-trigger, .cut-shape-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
-    .cut-type-trigger.is-open, .cut-shape-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
+    .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
+    .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-type-cur { text-transform: lowercase; }
-    .cut-type-cur, .cut-shape-cur { flex: 1; text-align: left; }
+    .cut-type-cur, .cut-shape-cur, .cut-clear-cur { flex: 1; text-align: left; }
     .cut-caret { flex: 0 0 auto; color: var(--sk-prep-chip-text); transition: transform 0.12s; }
-    .cut-type-trigger.is-open .cut-caret, .cut-shape-trigger.is-open .cut-caret { transform: rotate(180deg); }
+    .cut-type-trigger.is-open .cut-caret, .cut-shape-trigger.is-open .cut-caret, .cut-clear-trigger.is-open .cut-caret { transform: rotate(180deg); }
     .cut-ic { width: 18px; height: 18px; flex: 0 0 auto; color: var(--sk-prep-chip-text); }
     .cut-box { display: flex; align-items: center; box-sizing: border-box; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; overflow: hidden; }
     .cut-box:focus-within { box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
@@ -311,21 +323,21 @@
     .cut-step[data-d="1"] { border-left: 1px solid var(--sk-prep-card-bg); }
     .cut-step:active { background: var(--sk-prep-selected-fill); }
     .cut-step:disabled { opacity: 0.4; cursor: default; }
-    /* TASK 730: the Vcarve panel's and the Review card's steppers: the same .cut-step buttons around the field, on the panel's own dark field style */
-    .vcarve-stepbox, .review-stepbox { display: inline-flex; align-items: stretch; }
-    .vcarve-stepbox .cut-step, .review-stepbox .cut-step { width: 28px; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; font-size: 16px; }
-    .vcarve-stepbox .cut-step[data-d="-1"], .review-stepbox .cut-step[data-d="-1"] { border-radius: 6px 0 0 6px; border-right: 0; }
-    .vcarve-stepbox .cut-step[data-d="1"], .review-stepbox .cut-step[data-d="1"] { border-radius: 0 6px 6px 0; border-left: 0; }
-    .vcarve-stepbox input, .review-stepbox input { border-radius: 0; width: 64px; text-align: center; }
-    .vcarve-row .vcarve-stepbox input { width: 64px; }
+    /* TASK 730: the Review card's steppers: the same .cut-step buttons around the field, on the card's own dark field style */
+    .review-stepbox { display: inline-flex; align-items: stretch; }
+    .review-stepbox .cut-step { width: 28px; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; font-size: 16px; }
+    .review-stepbox .cut-step[data-d="-1"] { border-radius: 6px 0 0 6px; border-right: 0; }
+    .review-stepbox .cut-step[data-d="1"] { border-radius: 0 6px 6px 0; border-left: 0; }
+    .review-stepbox input { border-radius: 0; width: 64px; text-align: center; }
     .cut-flip.is-on { background: var(--sk-prep-selected-fill); }
     .cut-mid { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
     .cut-num { all: unset; box-sizing: border-box; background: transparent; border: 0; color: var(--sk-prep-chip-text); font: inherit; font-size: 15px; font-weight: 600; width: 5.2ch; min-width: 0; }
     .cut-mid .cut-num { text-align: right; width: 5.2ch; }
     .cut-inline .cut-num { flex: 1; width: auto; padding-left: 10px; }
     .cut-num::selection { background: var(--sk-prep-select-text); }
-    .cut-unit { color: var(--sk-prep-unit); font-size: 11px; flex: 0 0 auto; }
-    .cut-inline .cut-unit { padding-right: 10px; }
+    .cut-unit, .cut-unit-fixed { color: var(--sk-prep-unit); font-size: 11px; flex: 0 0 auto; }
+    .cut-inline .cut-unit, .cut-inline .cut-unit-fixed { padding-right: 10px; }
+    .cut-hint { font-size: 11px; color: var(--sk-prep-unit); padding: 4px 12px 0; }
     .cut-dia-prefix { color: var(--sk-prep-unit); font-size: 11px; padding-left: 10px; }
     .cut-inline .cut-dia-prefix + .cut-num { padding-left: 8px; }
     /* TASK 730: a phone (narrow screen or a coarse pointer): 44 px touch targets for the steppers and the flip; the card widens to hold three of them in the offset row */
@@ -334,8 +346,47 @@
       .cut-step, .cut-flip { width: 44px; font-size: 22px; }
       #prepare-panel { width: 236px; }
       #prepare-panel .cut-card { width: 236px; }
-      .vcarve-stepbox .cut-step, .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
-      .vcarve-stepbox input, .review-stepbox input { height: 44px; box-sizing: border-box; }
+      .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
+      .review-stepbox input { height: 44px; box-sizing: border-box; }
+    }
+    /* TASK 743: the OPERATIONS list (op-list.js): a card like the cut card, top-left of the Prepare view on a wide screen (it ends above the direction
+       legend; its rows scroll), a folding bar along the bottom on a phone (open: up to 55 % of the view; the cut card then ends above the bar).
+       Rows: a drag grip, the number, the operation (type · depths, regions · steps / tabs), and (TASK 745) a delete bin (44 px on a phone); no arrow buttons:
+       a mouse drags the grip, a finger holds then drags the row (the list keeps native scrolling: no touch-action none), the keyboard moves a focused grip. */
+    #prepare-ops { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
+      background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
+    #view-prepare.is-fusion #prepare-ops { top: 56px; max-height: calc(100% - 96px); }
+    .ops-head { all: unset; box-sizing: border-box; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .ops-count { min-width: 20px; text-align: center; background: var(--sk-prep-field-bg); color: var(--sk-prep-unit); border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+    .ops-caret { margin-left: auto; transition: transform 0.12s; }
+    #prepare-ops[data-open="false"] .ops-caret { transform: rotate(-90deg); }
+    .ops-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 10px; }
+    .ops-body[hidden] { display: none; }
+    .ops-tool { margin: 8px 6px 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sk-prep-unit); }
+    .ops-row { display: flex; align-items: stretch; gap: 0; min-height: 44px; margin-bottom: 4px; background: var(--sk-prep-field-bg); border: 2px solid transparent; border-radius: 6px; box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    .ops-row.is-picked { border-color: var(--sk-prep-geo-selected); }
+    .ops-grip { flex: 0 0 24px; display: flex; align-items: center; justify-content: center; color: var(--sk-prep-unit); cursor: grab; border-radius: 4px; }
+    .ops-grip:focus-visible { outline: 2px solid var(--sk-prep-focus); outline-offset: -2px; }
+    .ops-pick { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 4px; cursor: pointer; }
+    .ops-num { flex: 0 0 20px; height: 20px; border-radius: 50%; background: var(--sk-prep-card-bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+    .ops-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+    .ops-name { font-size: 13px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+    .ops-sub { font-size: 11px; line-height: 1.3; color: var(--sk-prep-unit); overflow-wrap: anywhere; }
+    .ops-del { all: unset; box-sizing: border-box; flex: 0 0 30px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; opacity: 0.75; touch-action: manipulation; }
+    .ops-del:hover, .ops-del:focus-visible { opacity: 1; background: var(--sk-prep-list-hover); }
+    .ops-row.ops-lifted { border-color: var(--sk-prep-focus); box-shadow: 0 6px 18px rgba(0,0,0,0.65); transform: scale(1.02); }
+    .ops-row.ops-dragging { opacity: 0.5; }
+    .ops-row.ops-drop-before { box-shadow: 0 -3px 0 var(--sk-prep-focus); }
+    .ops-row.ops-drop-after { box-shadow: 0 3px 0 var(--sk-prep-focus); }
+    .ops-empty { margin: 2px 6px 4px; font-size: 12px; line-height: 1.4; color: var(--sk-prep-unit); }
+    @media (max-width: 640px) {
+      #prepare-ops, #view-prepare.is-fusion #prepare-ops { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 55%; }
+      .ops-head { height: 44px; }
+      .ops-row { min-height: 48px; }
+      .ops-grip { flex-basis: 44px; }
+      .ops-del { flex-basis: 44px; font-size: 17px; }
+      #prepare-panel { bottom: 68px; }        /* the cut card ends above the folded bar (12 + 44 + 12) */
+      #prepare-dir-legend { bottom: 66px; }
     }
     .cut-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
     .cut-presets .cut-preset { all: unset; box-sizing: border-box; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; }
@@ -356,6 +407,17 @@
     .cut-pop[hidden] { display: none; }
     .cut-type-menu, .cut-shape-pop { width: 134px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .cut-shape-pop { width: 164px; }
+    /* TASK 745: the Clearing popover: each pattern with its icon, a choice the region cannot take greyed with its reason under it */
+    .cut-clear-pop { width: 176px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .cut-clear-pop .cut-type-opt { height: auto; min-height: 30px; flex-wrap: wrap; row-gap: 2px; padding: 5px 10px; }
+    .cut-clear-pop .cut-type-opt span { text-transform: none; }
+    .cut-clear-pop .cut-clear-name { flex: 1; min-width: 0; line-height: 1.2; }
+    .cut-clear-pop .cut-clear-why { flex: 0 0 100%; font-size: 11px; line-height: 1.3; }
+    .cut-row[data-row="rasterAngle"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 640px), (pointer: coarse) {
+      .cut-clear-pop { width: 128px; padding: 8px; gap: 4px; }
+      .cut-clear-pop .cut-type-opt { min-height: 40px; font-size: 13px; gap: 6px; padding: 4px 8px; }
+    }
     /* TASK 714: a stepped type's longer label ("stepped outside") stays on one line: the menu grows past its 134px only then */
     .cut-type-menu { width: auto; min-width: 134px; }
     .cut-type-menu .cut-type-opt { white-space: nowrap; }
@@ -390,34 +452,13 @@
     </div>
   </section>
 
-  <!-- VCARVE-3a: the Vcarve space (before Prepare) — (1) ADAPT the SVG: pick a region; (2) HACK the offset-stack:
-       V-bit + depth-step → a live depth-shaded contour preview. SKELETON only — the live region-picker / controls /
-       contour preview + the state.vcarves record land in VCARVE-3b (the controls are disabled placeholders here). -->
-  <section id="view-vcarve" hidden>
-    <aside id="vcarve-panel">
-      <div class="vcarve-section">
-        <div class="vcarve-h">1 · Adapt</div>
-        <label class="vcarve-row">Region <select id="vcarve-region" disabled><option>—</option></select></label>
-        <p class="vcarve-hint">Pick a closed loop to carve.</p>
-      </div>
-      <div class="vcarve-section">
-        <div class="vcarve-h">2 · Carve</div>
-        <label class="vcarve-row">V-bit <select id="vcarve-vbit" disabled><option>90°</option></select></label>
-        <label class="vcarve-row">Depth step <span class="vcarve-stepbox"><input id="vcarve-dstep" type="text" value="0.5 mm" disabled></span></label>
-        <label class="vcarve-row">Max depth <span class="vcarve-stepbox"><input id="vcarve-maxdepth" type="text" value="6 mm" disabled></span></label>
-        <button id="vcarve-recompute" class="vcarve-btn" disabled>Recompute</button>
-        <p id="vcarve-readout" class="vcarve-hint">— contours</p>
-      </div>
-    </aside>
-    <svg id="vcarve-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
-  </section>
-
   <!-- S6a stub views (Prepare / Simulate-Export) — fleshed out in a later slice. -->
   <!-- SP1a/d/e/f: Prepare = a Prepare-local render of the shared #core sketch (edges, joints hidden) + loop/edge
        select + the cut-settings card (#prepare-panel, mounted by main.js). -->
   <section id="view-prepare" hidden>
     <svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     <div id="prepare-panel"></div>
+    <div id="prepare-ops"></div>
     <div id="prepare-notice" hidden></div>
     <div id="prepare-dir-legend" hidden>direction: conventional (Shaper Origin)</div>
   </section>
@@ -435,7 +476,8 @@
       <label>Thickness <span class="review-stepbox"><input id="review-stock-thickness" type="text" inputmode="decimal"></span></label>
       <div id="review-stock-note" class="review-stock-note"></div></div>
     <div class="review-stock" id="review-look"><h2 class="simexport-title">Look</h2>
-      <label style="justify-content:flex-start;gap:8px"><input id="review-wood" type="checkbox" checked> Wood</label></div>
+      <label>Material <select id="review-look-select" aria-label="Material"></select></label>
+      <div id="review-look-colors" class="review-look-colors" role="group" aria-label="Colour" hidden></div></div>
     <div id="simexport-panel">
       <h2 class="simexport-title">Export</h2>
       <p class="simexport-sub">Generate a machine-ready Shaper Origin SVG from the Prepare cut plan.</p>

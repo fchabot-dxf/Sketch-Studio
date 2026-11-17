@@ -34,8 +34,8 @@ import { previewDimensionInput, entryExpression, namePatternValues } from '#core
 import { applyParameterChange, dimensionInputLabel, editPatternValues, patternPlanRefusal, refusalReason } from '#core/dimension-seams.js';
 import { handleBoxUndoKey } from '#ui/numeric-input-manager.js';
 import { inertEntities, isJointInert, activeSketchPick, inActiveSketch } from '#core/sketch-model.js';
-import { docUnit, lengthDecimals } from '#core/settings-manager.js';
-import { format as formatUnit, parse as parseUnit } from '#core/units.js';
+import { docUnit, lengthText } from '#core/settings-manager.js';
+import { parse as parseUnit } from '#core/units.js';
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
 import { dragArrowSvg, dragArrowHit } from '#ui/drag-arrow-handle.js';
@@ -541,8 +541,8 @@ function injectStyles() {
 }
 
 const isPhone = () => typeof window !== 'undefined' && window.innerWidth <= PHONE_MAX_W;
-// the fields show their unit: a length in the document unit (#core/units.js format, the one unit source: "10mm", "0.5in"), an angle in deg
-const fmtLen = (v) => { const u = docUnit(); return formatUnit(v, u, { unit: true, decimals: lengthDecimals(u === 'in' ? 3 : 2) }); };
+// the fields show their unit: a length in the document unit (lengthText, the one length-format decider: "10mm", "0.5in", or 1/2" in Fractional), an angle in deg
+const fmtLen = (v) => lengthText(v, { auto: docUnit() === 'in' ? 3 : 2, show: 'compact' });
 const fmtAngle = (v) => `${fmtNum(v)} deg`;
 const fmtNum = (v) => String(Number(Number(v).toFixed(4)));
 

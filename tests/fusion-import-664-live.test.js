@@ -101,7 +101,7 @@ try {
 
   // Simulate Fusion returning the real selection_data payload
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(JSON.stringify(realSketchPayload))})`);
-  await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 7`, '7 edge elements rendered in Prepare');
+  await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 6`, '6 edge elements rendered in Prepare'); // TASK 757: the construction line (chain_1) is not drawn in Prepare (never a cut target)
 
   const afterImport = await evalJs(`(() => {
     const svg = document.getElementById('prepare-canvas');
@@ -119,7 +119,7 @@ try {
   assert.strictEqual(afterImport.noticeHidden, false, 'notice visible');
   assert.strictEqual(afterImport.noticeText, 'Added Sketch1: 2 regions, 2 chains', 'notice shows source name, region count, chain count');
   assert.strictEqual(afterImport.circles, 1, 'no duplicate circle elements in Prepare');
-  assert.strictEqual(afterImport.lines, 6, '6 line elements in Prepare');
+  assert.strictEqual(afterImport.lines, 5, '5 line elements in Prepare (4 rect + the open chain; TASK 757: not the construction line)');
   assert.strictEqual(afterImport.sketchName, 'Sketch1', 'sketch named after Fusion source');
 
   // Click inside rectangle region (world x=6, y=-6 -> screen px) -> Prepare selects region & shows cut card

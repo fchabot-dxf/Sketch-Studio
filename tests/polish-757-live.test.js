@@ -158,5 +158,32 @@ try {
   console.log('1 export 2D: ' + JSON.stringify(hit));
   assert.deepStrictEqual(hit, { guideFill: 'none', guideStroke: '#0068FF', hitType: 'outside', guideFirst: true }, '1: the Stock guide is its outline behind the cuts; inside the part the part shows');
   await shot('desktop-1-export-2d.png', '#review-2d');
+
+  // ── 2 in FUSION mode (757b): the add-in's selection with a Fusion CONSTRUCTION line (construction: true, as tests/fusion-import-664-live sends it).
+  // The rule: Prepare draws only what can be a cut target; a construction shape is never a loop or a chain (loop-finder, TASK 478; fusion-import keeps
+  // it isConstruction only), so it is not drawn, and every other imported shape is drawn and stays pickable.
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `if (new URLSearchParams(location.search).get('host') === 'fusion') window.adsk = { fusionSendData() { return '{}'; } };` });
+  await resetBufferLive(cdp);
+  await evalJs(`localStorage.removeItem('shaper-mode')`);
+  await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion&analytics=off`, 10000);
+  await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection')`, 'the Fusion Prepare bar');
+  const line = (x1, y1, x2, y2, more = {}) => ({ type: 'line', x1, y1, x2, y2, ...more });
+  const payload = { action: 'selection_data', version: 1, units: 'mm', coordSystem: { yAxis: 'up', frame: 'plane-2d' }, source: { kind: 'sketch', name: 'Sketch1' }, stock: { thicknessMm: null },
+    regions: [{ id: 'reg_0', label: 'Profile 1', cutType: null, depthMm: null, outer: { closed: true, segments: [line(0, 0, 40, 0), line(40, 0, 40, 30), line(40, 30, 0, 30), line(0, 30, 0, 0)] }, holes: [] }],
+    chains: [{ id: 'chain_0', label: 'Chain 1', cutType: null, depthMm: null, closed: false, segments: [line(50, 0, 70, 10)] },
+      { id: 'chain_1', label: 'Chain 2', cutType: null, depthMm: null, closed: false, segments: [line(0, 15, 40, 15, { construction: true })] }],
+    warnings: [] };
+  await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(JSON.stringify(payload))})`);
+  await waitFor(`/Added Sketch1/.test(document.getElementById('prepare-notice').textContent) && document.querySelectorAll('#prepare-world-group .sk-edge').length > 0`, 'the Fusion selection in Prepare');
+  const fz = await evalJs(`(() => { const st = window.__designController.state, drawn = new Set([...document.querySelectorAll('#prepare-world-group [data-shape-id]')].map((e) => e.getAttribute('data-shape-id')));
+    const con = st.shapes.filter((s) => s.isConstruction), cut = st.shapes.filter((s) => !s.isConstruction);
+    return { shapes: st.shapes.length, construction: con.length, drawn: drawn.size, constructionDrawn: con.filter((s) => drawn.has(s.id)).length, cutDrawn: cut.filter((s) => drawn.has(s.id)).length, cutShapes: cut.length }; })()`);
+  const pickAt = async (x, y) => { await evalJs(`window.__prepareView.setSelection([])`); await clickWorld(x, y); await sleep(150); return evalJs(`window.__prepareView.selectedTargets().map((t) => t.kind)`); };
+  const pickOnConstruction = await pickAt(8, -15), pickChain = await pickAt(60, -5);
+  console.log('2 fusion: ' + JSON.stringify({ ...fz, pickOnConstruction, pickChain }));
+  assert.ok(fz.construction === 1 && fz.constructionDrawn === 0, '2 fusion: the imported construction line is not drawn in Prepare');
+  assert.ok(fz.cutDrawn === fz.cutShapes && fz.drawn === fz.cutShapes, `2 fusion: every non-construction shape is drawn (${fz.cutDrawn} of ${fz.cutShapes})`);
+  assert.deepStrictEqual([pickOnConstruction, pickChain], [['loop'], ['chain']], '2 fusion: a tap on the construction line picks the region under it (as before: it is no target), the open chain stays pickable');
+  await shot('desktop-2-fusion-prepare.png', '#prepare-canvas');
   console.log('polish-757-live: ok');
 } finally { await close(); }

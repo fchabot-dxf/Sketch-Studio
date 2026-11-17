@@ -4,6 +4,7 @@
 //     its digest recorded on the engine before this task);
 //  1. the letter fact: an outside line coincident with one corner of a letter (no inside constraints), dragged: the letter moves whole (every
 //     joint by the same vector, every inside distance unchanged to 1e-9) or the line gives; the same drawing without its group deforms;
+//     1b. the creation placement (who moves at a constraint add) never moves a member of a block (either pick order);
 //  2. a dimension from a block to a fixed point moves the block rigidly when it is placed and when its value is edited (commitDimensionEdits);
 //  3. two blocks constrained to each other (a coincident between their corners) meet, neither deforms;
 //  4. nested groups (file > letters): not entered = the whole file is ONE block; the file entered = each letter a block; a letter entered =
@@ -163,6 +164,19 @@ function drag(t, carried, dx, dy, steps = 6) {
   const ru = rigidity(u0, posOf(u.st, U.joints));
   measured.letterNoGroup = ru;
   ok(ru.dist > 1, 'without the group the corner is pulled alone (the old behaviour of a group): ' + JSON.stringify(ru));
+}
+
+// ---- 1b. the creation placement (Fusion's who-moves, creation-placement.js) never moves a member of a block: a coincident picked outside end
+// first, member corner second (the second pick gives way: before the guard the letter's outline was moved onto the end, away from its holes)
+for (const order of ['outside end first', 'member corner first']) {
+  const t = mk(), { st } = t;
+  const B = t.letter(10, 10, 'B');
+  const a = t.P(-20, -20), b = t.P(-10, -5); t.line(a, b);
+  const p0 = posOf(st, B.joints);
+  const c = quietly(() => ConstraintManager.createConstraint(st, 'coincident', { joints: order === 'outside end first' ? [b, B.joints[0]] : [B.joints[0], b] }, { source: 'test' }));
+  const r = rigidity(p0, posOf(st, B.joints)), e = st.joints.get(b), k = st.joints.get(B.joints[0]);
+  measured['placement: ' + order] = { added: !!c, ...r, gap: Math.hypot(e.x - k.x, e.y - k.y) };
+  ok(c && r.spread < 1e-9 && r.dist < 1e-9 && measured['placement: ' + order].gap < 1e-9, 'coincident (' + order + '): added, the letter keeps its shape ' + JSON.stringify(measured['placement: ' + order]));
 }
 
 // ---- 2. a dimension from a block corner to a fixed point: placed, then its value edited

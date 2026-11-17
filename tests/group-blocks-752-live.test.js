@@ -1,12 +1,11 @@
-// tests/group-blocks-752-live.test.js — TASK 752 in the REAL Shaper (headless, REAL mouse / touch via CDP): a user group that is not entered is
-// ONE rigid block the solver only translates.
+// tests/group-blocks-752-live.test.js — TASK 752 in the REAL Shaper (headless, REAL mouse via CDP, desktop): a user group that is not entered
+// is ONE rigid block the solver only translates. The phone twin: tests/group-blocks-752-phone-live.test.js.
 //  A. desktop 1280 x 800: a word (O, B with two holes) DROPPED on the page lands grouped (the file group, a group per letter). A Line drawn onto
 //     the top corner of B (the Line tool snaps to it) and then dragged by its middle: B keeps its shape (every joint by the same vector, every
 //     inside distance unchanged to 1e-9): the file moves whole, or the line gives (751's fact 1 showed the corner pulled alone). Then a double
 //     click enters the file, a second one enters B, a drag of one of its curves RESHAPES it (inside the entered group the curves are free),
 //     Esc twice leaves, and the line dragged again moves the NEW shape whole (nothing stored: the shape at each solve is the block's).
-//  B. phone 390 x 844, real touch: the same word dropped; a Line tapped onto B's corner; the line dragged with a finger: B keeps its shape.
-// Screenshots (.evidence/752, local): A before / after the line drag, the reshaped letter, after the second drag; B phone before / after.
+// Screenshots (.evidence/752, local): A before / after the line drag, the reshaped letter, after the second drag.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,9 +27,6 @@ const cdp = await launchBrowser({ tag: '752', width: 1280, height: 800 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
 const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
 const results = {}, md5s = [];
-const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: Math.round(p.x), y: Math.round(p.y), id: i + 1, radiusX: 1, radiusY: 1, force: 1 })) });
-const tap = async (p, hold = 70) => { await T('touchStart', [p]); await sleep(hold); await T('touchEnd', []); await sleep(450); };
-const touchDrag = async (a, b, steps = 14) => { await T('touchStart', [a]); await sleep(60); for (let i = 1; i <= steps; i++) { await T('touchMove', [{ x: a.x + (b.x - a.x) * i / steps, y: a.y + (b.y - a.y) * i / steps }]); await sleep(25); } await sleep(80); await T('touchEnd', []); await sleep(400); };
 const mouse = (type, x, y, buttons, clickCount = 1) => send('Input.dispatchMouseEvent', { type, x: Math.round(x), y: Math.round(y), button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : clickCount });
 const click = async (p) => { await mouse('mouseMoved', p.x, p.y, 0); await sleep(60); await mouse('mousePressed', p.x, p.y, 1); await sleep(50); await mouse('mouseReleased', p.x, p.y, 0); await sleep(650); };
 const dblclick = async (p) => { await mouse('mouseMoved', p.x, p.y, 0); await sleep(60); await mouse('mousePressed', p.x, p.y, 1, 1); await sleep(50); await mouse('mouseReleased', p.x, p.y, 0, 1); await sleep(90); await mouse('mousePressed', p.x, p.y, 1, 2); await sleep(50); await mouse('mouseReleased', p.x, p.y, 0, 2); await sleep(650); };
@@ -131,37 +127,6 @@ try {
     await shot('A4-desktop-after-second-drag-new-shape-whole.png', clip);
   }
 
-  // ── B. phone 390, touch ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  {
-    await resetBufferLive(cdp);
-    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
-    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
-    await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000); await waitForApp('design-canvas'); await sleep(600);
-    await drop();
-    await waitFor(`${ST}.groups.length === 3`, 'B. the import and its 3 groups'); await sleep(900);
-    const corner = await bCorner();
-    const cs = await toS(corner.x, corner.y);
-    await pressRibbonTool(evalJs, tap, 'tool-line'); await sleep(250);
-    await tap(await lineStart(corner)); await tap(cs);
-    await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(250);
-    const L = await drawnLine(corner.id);
-    assert.ok(L.type === 'line' && !L.grouped && L.end, 'B. a Line tapped onto B\'s corner: ' + JSON.stringify(L));
-    await pressRibbonTool(evalJs, tap, 'tool-select'); await sleep(250);
-    const clip = await padClip(await wordClip(), 70);
-    await shot('B1-phone-line-on-B-corner-before-drag.png', clip);
-    const b0 = await groupJoints('B'), l0 = await lineEnds(L.id);
-    const m0 = await lineMid(L.id);
-    await sleep(500);
-    await touchDrag(m0, { x: m0.x + 40, y: m0.y + 50 });
-    const b1 = await groupJoints('B'), l1 = await lineEnds(L.id);
-    const rB = rigidity(b0, b1);
-    const lineMoved = Math.max(...l1.map((p, i) => Math.hypot(p[0] - l0[i][0], p[1] - l0[i][1])));
-    results.B = { B: rB, lineMoved };
-    console.log('B. phone: the line dragged with a finger: ' + JSON.stringify(results.B));
-    assert.ok(rB.spread < 1e-9 && rB.dist < 1e-9, 'B. phone: B keeps its shape');
-    assert.ok(rB.moved > 1 || lineMoved > 1, 'B. phone: the drag moved the file or the line');
-    await shot('B2-phone-after-line-drag-B-whole.png', clip);
-  }
   console.log('group-blocks-752-live: ALL CHECKS PASSED ' + JSON.stringify(results));
   console.log('screenshots: ' + md5s.join(' '));
   console.log('elapsed ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');

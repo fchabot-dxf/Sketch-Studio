@@ -29,7 +29,7 @@ import { regionsFromRings, intersectRegions, unionRegions } from './plot/clip.js
 import { num, polyToPathD, loopToPathD } from './loop-geometry.js';
 import { deriveProfileCuts } from './profile-model.js';
 import { applyHoldPart } from './hold-part.js'; // TASK 742: tabs / onion skin on a plain Outside / Inside cut
-import { applyPocketClearing } from './pocket-clearing.js'; // TASK 745: a plain Pocket's programmed clearing (Concentric / Raster / Morphed spiral)
+import { applyPocketClearing } from './pocket-clearing.js'; // TASK 745: a plain Pocket's programmed clearing (Spiral / Raster / Morphed spiral)
 
 /** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet. */
 export const STEP_DEPTH = Object.freeze({ defaultMm: 1 });

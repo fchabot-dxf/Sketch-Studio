@@ -147,12 +147,12 @@ function holdData(hold) {
   if (hold.role === 'strip') return ` data-hold="gap ${hold.index + 1}/${hold.count}"`;
   return '';
 }
-// TASK 745: the PREVIEW copy's data-clear of a programmed pocket's cut (#core/pocket-clearing): "ring k/N" | "raster k/N" | "cleanup k/N" | "spiral" |
-// "wall" | "island k/N", then " pass p/P" when it has several depth passes; a refused clearing or none: nothing. Never in the downloaded file.
+// TASK 745: the PREVIEW copy's data-clear of a programmed pocket's cut (#core/pocket-clearing): "linked k/N" (TASK 749: Spiral line k of N) | "raster k/N" | "cleanup k/N" | "morphed" | "loop k/N" (TASK 750) |
+// "wall" | "island k/N" (TASK 750: no depth passes any more); a refused clearing or none: nothing. Never in the downloaded file.
 function clearData(cl) {
   if (!cl || cl.role === 'refused') return '';
-  const what = cl.role === 'wall' || cl.role === 'spiral' ? cl.role : `${cl.role} ${cl.index}/${cl.count}`;
-  return ` data-clear="${what}${cl.passes > 1 && cl.role !== 'wall' && cl.role !== 'island' ? ` pass ${cl.pass + 1}/${cl.passes}` : ''}"`;
+  const what = cl.role === 'wall' || cl.role === 'morphed' ? cl.role : `${cl.role} ${cl.index}/${cl.count}`;
+  return ` data-clear="${what}"`;
 }
 
 export function exportShaperSVG({ state, entries, encoding, docUnit, options = {}, loopPolys } = {}) {

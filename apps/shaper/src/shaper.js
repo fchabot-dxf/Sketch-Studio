@@ -40,11 +40,12 @@ const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 // Tabs `tabCount` (Auto | a number) and `tabWidth`, for both `holdThickness` (the tab / skin thickness). Never written to the export as attributes
 // (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one derivation (deriveCuts).
 const HOLD_PARAMS = ['holdPart', 'tabCount', 'tabWidth', 'holdThickness'];
-// TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js): the plain Pocket declares its card rows: `clearing` (Freehand | Concentric | Raster | Morphed
-// spiral) and for a computed pattern `stepover` (% of the bit), `wallAllowance`, `passDepth` (empty = one pass at the full depth) and, for Raster, `rasterAngle`.
+// TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js): the plain Pocket declares its card rows: `clearing` (Freehand | Spiral | Raster | Morphed
+// spiral; TASK 749: Spiral replaced Concentric) and for a computed pattern `stepover` (% of the bit), `wallAllowance`, `loop` (TASK 750: the whole pocket as closed loops,
+// the finish turn in them; the step-downs are the Origin's Pass Depth / AutoPass) and, for Raster, `rasterAngle`.
 // Never written to the export as attributes (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one
 // derivation (deriveCuts), which writes a programmed pocket as on-line paths + the finish pass (an inside cut, islands as outside cuts).
-const CLEARING_PARAMS = ['clearing', 'stepover', 'wallAllowance', 'passDepth', 'rasterAngle'];
+const CLEARING_PARAMS = ['clearing', 'stepover', 'wallAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern
 // TASK 743: `opRank` = where an OPERATION of this type goes in the DEFAULT operation order (apps/shaper/src/operations.js), lowest first: what is not cut
 // (Guide, Stock: 0), then on line (1), pockets (2), inside cuts = the holes (3), and last the outside cuts that free the part (4). A stepped type ranks as
 // its plain type (it is cut as terraces of it). Prepare only: never written to the export.
@@ -75,12 +76,13 @@ export const CUT_TYPES = [
 ];
 
 // TASK 745: the Clearing choices of the Pocket card (#core POCKET_CLEARING.patterns, in its order) with the icon of each pattern (18x18 inner markup in
-// currentColor, as CUT_TYPES.icon): Freehand = a hand-drawn stroke, Concentric = nested rings, Raster = parallel passes, Morphed spiral = a square spiral.
+// currentColor, as CUT_TYPES.icon): Freehand = a hand-drawn stroke, Spiral (TASK 749) = a squared spiral of square rings joined by short straight links,
+// Raster = parallel passes, Morphed spiral = a square spiral whose turns grow.
 const CLEARING_ICONS = {
   freehand: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 12.5c1.6-4.5 2.6 1.5 4.2-2.6s2.6 1.2 4.8-4.4' fill='none' stroke='currentColor' stroke-width='1.3' stroke-linecap='round'/>",
-  concentric: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><rect x='5' y='5' width='8' height='8' fill='none' stroke='currentColor' stroke-width='1.2'/><rect x='7.6' y='7.6' width='2.8' height='2.8' fill='none' stroke='currentColor' stroke-width='1.2'/>",
+  linked: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M7.6 9V7.6h2.8v2.8H7.6V9H4.8V4.8h8.4v8.4H4.8V9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-linejoin='round'/>",
   raster: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 5h9M4.5 7.7h9M4.5 10.3h9M4.5 13h9' fill='none' stroke='currentColor' stroke-width='1.2'/>",
-  spiral: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M9 9h1.6v-2.2H7v4.6h6V4.6H4.6v9h8.6' fill='none' stroke='currentColor' stroke-width='1.2' stroke-linejoin='round'/>",
+  morphed: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M9 9h1.6v-2.2H7v4.6h6V4.6H4.6v9h8.6' fill='none' stroke='currentColor' stroke-width='1.2' stroke-linejoin='round'/>",
 };
 export const CLEARING_CHOICES = POCKET_CLEARING.patterns.map((p) => ({ ...p, icon: CLEARING_ICONS[p.id] }));
 

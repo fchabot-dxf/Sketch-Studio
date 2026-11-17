@@ -162,7 +162,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     const r0 = CUT_PLAN.get(pk);
     eq([r0.stepDepth, r0.adaptiveSteps, r0.stepDeviation], [1, false, 0.25], 'a new stepped record: step 1 mm, Adaptive stepping OFF, resolution Medium (0.25 mm) ready');
     eq(h.rows(), ['cutDepth', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'OFF: the checkbox, then the Step depth row (no Resolution row)');
-    eq([h.q('.cut-adaptive').checked, h.q('.cut-check').textContent.trim()], [false, 'Adaptive stepping'], 'the checkbox reads "Adaptive stepping", unchecked');
+    eq([h.q('.cut-adaptive').checked, h.q('.cut-row[data-row="adaptiveSteps"] .cut-check').textContent.trim()], [false, 'Adaptive stepping'], 'the checkbox reads "Adaptive stepping", unchecked');
     eq(h.presets('stepDeviation'), [], 'the hidden Resolution row has no preset buttons');
     eq(h.note(), ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.17–2.24 mm apart'], 'OFF: the 716 note');
     const offSvg = exportOf(app);

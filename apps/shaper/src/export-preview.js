@@ -14,8 +14,8 @@
 //    header per operation (a tap picks all its elements), then its rows (depth, step, hold; the cut type too when the operation writes more than one,
 //    e.g. an Outside plate's own holes). Elements of no listed operation (a call without `ops`) keep the grouping by cut type, after the operations.
 //  * TASK 745: a programmed pocket is on-line paths + its finish pass (an inside cut, islands as outside cuts) in the file; the preview copy carries data-clear
-//    ("ring 2/12", "raster 3/22", "cleanup 1/1", "spiral", "wall", "island 1/2", + " pass 1/3" with depth passes): labels "on line · 6 mm · ring 2 of 12",
-//    list rows "rings" / "raster passes" / "clean-up ring" / "spiral" / "wall" / "islands". Display only: the islands and then the clearing paths are
+//    ("linked 2/3" (TASK 749: a Spiral line), "raster 3/22", "cleanup 1/1", "morphed", "loop 1/1" (TASK 750: a closed loop), "wall", "island 1/2"): labels
+//    "on line · 6 mm · spiral line 2 of 3", list rows "spiral lines" / "raster passes" / "clean-up ring" / "morphed spiral" / "closed loops" / "wall" / "islands". Display only: the islands and then the clearing paths are
 //    painted in FRONT (the wall's white inside-cut fill, written after the paths, would hide them; an island is not moved to the back as other outsides).
 //  * A tap / click on an element (a press that moves less than 4 px) picks it: a highlight and its label ("pocket · 7.333 mm · step 2 of 4");
 //    a tap on empty space clears it. The list (rows by cut type, then depth and step, each with its element count) picks a row's elements.
@@ -66,21 +66,21 @@ export function previewItems(root) {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
     const h = /^(pass|skin)$|^gap (\d+)\/(\d+)$/.exec(el.getAttribute('data-hold') || ''); // TASK 742
     const hold = h ? (h[1] ? { kind: h[1] } : { kind: 'gap', k: Number(h[2]), n: Number(h[3]) }) : null;
-    const c = /^(ring|raster|cleanup|island|wall|spiral)(?: (\d+)\/(\d+))?(?: pass (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745
-    const clear = c ? { role: c[1], ...(c[2] ? { k: Number(c[2]), n: Number(c[3]) } : {}), ...(c[4] ? { pass: Number(c[4]), passes: Number(c[5]) } : {}) } : null;
+    const c = /^(linked|raster|cleanup|island|wall|morphed|loop)(?: (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745 (749: linked, morphed; 750: loop)
+    const clear = c ? { role: c[1], ...(c[2] ? { k: Number(c[2]), n: Number(c[3]) } : {}) } : null;
     return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear };
   });
 }
-/** TASK 745: a programmed pocket element's words: "ring 2 of 12" | "raster pass 3 of 22" | "clean-up ring" | "spiral" | "wall" | "island 1 of 2" (+ ", depth pass 1 of 3");
- *  a list row of them: "rings" | "raster passes" | "clean-up ring" | "spiral" | "wall" | "islands". */
-const CLEAR_ROW = { ring: 'rings', raster: 'raster passes', cleanup: 'clean-up ring', spiral: 'spiral', wall: 'wall', island: 'islands' };
-const CLEAR_PATH_ROLES = new Set(['ring', 'raster', 'cleanup', 'spiral']);
+/** TASK 745: a programmed pocket element's words: "spiral line 2 of 3" (TASK 749) | "raster pass 3 of 22" | "clean-up ring" | "morphed spiral" | "closed loop 1 of 2"
+ *  (TASK 750) | "wall" | "island 1 of 2"; a list row of them: "spiral lines" | "raster passes" | "clean-up ring" | "morphed spiral" | "closed loops" | "wall" | "islands". */
+const CLEAR_ROW = { linked: 'spiral lines', raster: 'raster passes', cleanup: 'clean-up ring', morphed: 'morphed spiral', loop: 'closed loops', wall: 'wall', island: 'islands' };
+const CLEAR_PATH_ROLES = new Set(['linked', 'raster', 'cleanup', 'morphed', 'loop']);
 function clearText(clear, row = false) {
   if (!clear) return null;
   if (row) return CLEAR_ROW[clear.role];
-  const what = clear.role === 'ring' ? `ring ${clear.k} of ${clear.n}` : clear.role === 'raster' ? `raster pass ${clear.k} of ${clear.n}` : clear.role === 'cleanup' ? 'clean-up ring'
-    : clear.role === 'island' ? `island ${clear.k} of ${clear.n}` : clear.role;
-  return clear.passes > 1 ? `${what}, depth pass ${clear.pass} of ${clear.passes}` : what;
+  const what = clear.role === 'linked' ? `spiral line ${clear.k} of ${clear.n}` : clear.role === 'raster' ? `raster pass ${clear.k} of ${clear.n}` : clear.role === 'cleanup' ? 'clean-up ring'
+    : clear.role === 'island' ? `island ${clear.k} of ${clear.n}` : clear.role === 'morphed' ? 'morphed spiral' : clear.role === 'loop' ? `closed loop ${clear.k} of ${clear.n}` : clear.role;
+  return what;
 }
 /** TASK 742: a held element's words: "pass (tabs)" | "onion skin" | "gap 2 of 4" (the element), "gaps" (a list row of them). */
 const holdText = (hold, row = false) => (!hold ? null : hold.kind === 'pass' ? 'pass (tabs)' : hold.kind === 'skin' ? 'onion skin' : row ? 'gaps' : `gap ${hold.k} of ${hold.n}`);

@@ -1,0 +1,90 @@
+{
+ "0.2px/mouse": {
+  "hash": "02369ec901994973237c7a70",
+  "counts": {
+   "none": 16419,
+   "shape": 17791,
+   "axis-y": 341,
+   "joint": 4992,
+   "midpoint": 182,
+   "axis-x": 676
+  }
+ },
+ "0.2px/touch": {
+  "hash": "5e54e6a028eeff60781c7c80",
+  "counts": {
+   "shape": 25473,
+   "none": 5829,
+   "joint": 8264,
+   "axis-y": 72,
+   "midpoint": 352,
+   "axis-x": 411
+  }
+ },
+ "1px/mouse": {
+  "hash": "c6f7e42bdb6eef57c5371c48",
+  "counts": {
+   "none": 16419,
+   "shape": 17791,
+   "axis-y": 341,
+   "joint": 4992,
+   "midpoint": 182,
+   "axis-x": 676
+  }
+ },
+ "1px/touch": {
+  "hash": "fe16c774e8c58b82bddf62fa",
+  "counts": {
+   "shape": 25473,
+   "none": 5829,
+   "joint": 8264,
+   "axis-y": 72,
+   "midpoint": 352,
+   "axis-x": 411
+  }
+ },
+ "5px/mouse": {
+  "hash": "0bf9fd96f1cc2a11818ca8e1",
+  "counts": {
+   "none": 16419,
+   "shape": 17791,
+   "axis-y": 341,
+   "joint": 4992,
+   "midpoint": 182,
+   "axis-x": 676
+  }
+ },
+ "5px/touch": {
+  "hash": "a2f8509678fbd40e16238d2b",
+  "counts": {
+   "shape": 25473,
+   "none": 5829,
+   "joint": 8264,
+   "axis-y": 72,
+   "midpoint": 352,
+   "axis-x": 411
+  }
+ },
+ "78px/mouse": {
+  "hash": "a855a4a77cb7f878d6104666",
+  "counts": {
+   "none": 16419,
+   "shape": 17791,
+   "axis-y": 341,
+   "joint": 4992,
+   "midpoint": 182,
+   "axis-x": 676
+  }
+ },
+ "78px/touch": {
+  "hash": "13206580a24bfb49bc1e2693",
+  "counts": {
+   "shape": 25473,
+   "none": 5829,
+   "joint": 8264,
+   "axis-y": 72,
+   "midpoint": 352,
+   "axis-x": 411
+  }
+ }
+}

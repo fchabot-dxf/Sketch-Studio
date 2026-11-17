@@ -25,7 +25,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it.
   const refreshCutPanel = () => {
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut
+    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does
   };
   // TASK 724: the card's stepped note is text built from the display precision when the card is updated: a precision change rebuilds it (the stage lives as long as the page)
   SettingsManager.subscribe((key) => { if (isPrecisionKey(key)) refreshCutPanel(); });

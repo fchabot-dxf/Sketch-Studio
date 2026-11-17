@@ -50,8 +50,10 @@ try {
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   eq([...doc.querySelectorAll('.cut-card .cut-step')].map((b) => b.getAttribute('aria-label')),
-    ['Decrease depth', 'Increase depth', 'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution', 'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
-    'a − / + pair on depth, step depth, resolution, offset and bit diameter');
+    ['Decrease depth', 'Increase depth', 'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution',
+      'Decrease tab count', 'Increase tab count', 'Decrease tab width', 'Increase tab width', 'Decrease thickness', 'Increase thickness', // TASK 742: the Hold part rows (hidden for a stepped type)
+      'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
+    'a − / + pair on depth, step depth, resolution, the Hold part rows, offset and bit diameter');
 
   // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps
   typed('.cut-depth', ''); // a stepped pocket arrives with its slope's depth: clear it to unset

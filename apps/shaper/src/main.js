@@ -34,6 +34,7 @@ import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
+import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
 
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
@@ -64,11 +65,14 @@ const chrome = mountAppChrome({
       if (!payload) { groupStatus(NO_CUTS); return; }
       download('shaper-export.svg', payload.svg);
     } },
+    fusionAddinAction({ fusion: fusionMode, open: () => chrome.sidebar.showView(ADDIN_VIEW_ID) }),
     { divider: true },
     { id: 'settings', label: 'Settings', icon: SIDEBAR_ICONS.gear, onClick: () => stylePanel.toggle() },
     { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
   ],
 });
+
+chrome.sidebar.registerView(ADDIN_VIEW_ID, fusionAddinView()); // TASK 733: the drawer view the Fusion add-in entry opens
 
 const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // the Export step's message with an empty plan (Generate, Download, the 2D view)
 

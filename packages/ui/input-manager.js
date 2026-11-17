@@ -21,6 +21,7 @@ import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/co
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
 import { stepOutOfGroup, selectedGroups, pickOwner, selectUnit, shapesInGroup, enteredGroup, isInGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
 import { groupSelection, ungroupSelection, groupMenuActions } from '#ui/group-actions.js'; // TASK 756: THE group commands (keys + menus), every app
+import { beginClosePath, handleClosePathPointerDown, closePathMenuActions } from '#ui/close-path-actions.js'; // TASK 760: Close path (the tool, its menu entry), every app
 import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
@@ -718,6 +719,9 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.OFFSET: // TASK 650: a curve picks its chain; a press elsewhere pans (a click there sets the side, on release)
             handled = handleOffsetPointerDown(e, svg, state, hitShape, otherShape);
             break;
+        case TOOL_MODES.CLOSE_PATH: // TASK 760: a curve (or its end point) closes its chain; a press elsewhere pans
+            handled = handleClosePathPointerDown(e, state, hitJoint, hitShape, otherShape, hostNotify);
+            break;
         case TOOL_MODES.COINCIDENT:
         case TOOL_MODES.HORIZONTAL_VERTICAL:
         case TOOL_MODES.PARALLEL:
@@ -1189,6 +1193,7 @@ export const TOOL_SHORTCUTS = Object.freeze({
     'tool.line': 'line', 'tool.rect': 'rect', 'tool.circle': 'circle', 'tool.arc': 'arc', // drawing tools
     'tool.slot': TOOL_MODES.SLOT, 'tool.polygon': TOOL_MODES.POLYGON, 'tool.bezier': TOOL_MODES.BEZIER,
     'tool.trim': TOOL_MODES.TRIM, 'tool.break': TOOL_MODES.BREAK, 'tool.fillet': TOOL_MODES.FILLET, 'tool.offset': TOOL_MODES.OFFSET, // modify
+    'tool.closePath': TOOL_MODES.CLOSE_PATH, // TASK 760
     'tool.mirror': TOOL_MODES.MIRROR, 'tool.circularPattern': TOOL_MODES.CIRCULAR_PATTERN, 'tool.rectangularPattern': TOOL_MODES.RECTANGULAR_PATTERN,
     'tool.select': 'select', 'tool.pan': 'pan', // selection and navigation (V for View)
     'tool.coincident': TOOL_MODES.COINCIDENT, 'tool.perpendicular': TOOL_MODES.PERPENDICULAR, 'tool.tangent': TOOL_MODES.TANGENT,
@@ -1203,6 +1208,7 @@ export const TOOL_BEGIN = Object.freeze({
     [TOOL_MODES.MIRROR]: beginMirror,
     [TOOL_MODES.CIRCULAR_PATTERN]: beginCircularPattern,
     [TOOL_MODES.RECTANGULAR_PATTERN]: beginRectangularPattern,
+    [TOOL_MODES.CLOSE_PATH]: (state) => beginClosePath(state, hostNotify), // TASK 760: a selection's open chains are closed at once
 });
 
 function setupKeyboardShortcuts(state, opts = {}) {
@@ -1413,6 +1419,7 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
         moveToNewSketch: () => { const r = moveSelectionToNewSketch(state); if (!r.ok) showNotification('Cannot move to a new sketch: ' + r.reason + '.', 'warning'); },
         moveToSketch: (id) => { const r = moveSelectionToSketch(state, id); if (!r.ok) showNotification('Cannot move to that sketch: ' + r.reason + '.', 'warning'); },
         ...groupMenuActions(state, hostNotify), // TASK 756: Group / Ungroup / Enter group / Leave group
+        ...closePathMenuActions(state, hostNotify), // TASK 760: Close path
     };
     const items = contextMenuItems(target.kind === 'dimension' || target.kind === 'constraint' ? target.kind : 'geometry', { target, actions });
     showContextMenu({ x: e.clientX, y: e.clientY, items, returnFocusTo: svg, touch });

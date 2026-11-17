@@ -8,6 +8,7 @@ import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: fram
 import { applyDefaultState } from '#core/state.js';
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 import { showNotification } from '#ui/notification-manager.js';
+import { openChainEnds } from '#core/close-path.js'; // TASK 760: the open ends the Close path tool marks (the same render-context entry mountSketch declares)
 import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas (the same mount all four apps use)
 
 /** The page's Design canvas (index.html <svg id="svgCanvas">). */
@@ -56,7 +57,7 @@ export function studioFrame({ engine, state, svg, worldGroup, ribbon, onSolved }
   const iters = SolverConfig.ITERATIONS || 500;
   engine.solve(iters);
   if (onSolved) onSolved();
-  draw(state.joints, state.shapes, svg, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, { ...defaultRenderCtx, getActiveSketchId: () => state.activeSketchId, getGroups: () => state }); // TASK 661: the default render context plus the active sketch (the others draw dimmed); TASK 756: + the user groups (the entered group dims the rest, the hovered group is lit), as mountSketch's render context
+  draw(state.joints, state.shapes, svg, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, { ...defaultRenderCtx, getActiveSketchId: () => state.activeSketchId, getGroups: () => state, openEnds: () => openChainEnds(state) }); // TASK 661: the default render context plus the active sketch (the others draw dimmed); TASK 756: + the user groups (the entered group dims the rest, the hovered group is lit), as mountSketch's render context; TASK 760: + the open ends the Close path tool marks
   // S7c-2d: sync the shared ribbon's active highlight to state.currentTool (covers KEYBOARD switchToTool, which
   // doesn't route through setTool). refresh() is a cheap class-toggle.
   if (ribbon) ribbon.refresh();

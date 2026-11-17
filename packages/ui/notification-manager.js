@@ -186,7 +186,9 @@ export function setupNotifications() {
     }
 }
 
-export function showNotification(message, type = 'info', duration = 3000) {
+// TASK 760: options.action = { label, onClick }: ONE button at the end of the toast (the import's "Close them" offer, #ui/close-path-actions.js);
+// a press runs onClick and dismisses the toast. Without it the toast is exactly as before.
+export function showNotification(message, type = 'info', duration = 3000, { action = null } = {}) {
     // No-op in non-DOM environments (tests, server-side imports). Notifications
     // are pure UI candy; their absence shouldn't crash logic flows.
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
@@ -325,6 +327,18 @@ export function showNotification(message, type = 'info', duration = 3000) {
             }
         });
     };
+
+    if (action && action.label && typeof action.onClick === 'function') {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'notif-action-btn';
+        btn.textContent = action.label;
+        const finger = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+        btn.style.cssText = `margin-left:8px; flex:0 0 auto; background:#ffffff; color:${bg}; border:none; border-radius:4px; padding:4px 12px; min-height:${finger ? 44 : 30}px; font:inherit; font-weight:700; cursor:pointer; user-select:none;`;
+        btn.addEventListener('click', (ev) => { ev.stopPropagation(); remove(); action.onClick(); });
+        toast.appendChild(btn);
+        layoutNotifications();
+    }
 
     setTimeout(remove, duration);
     // Do NOT dismiss on click anymore

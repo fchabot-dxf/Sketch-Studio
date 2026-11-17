@@ -198,6 +198,7 @@ export function groupMenuItems(actions) {
  *   toggleDriving(constraint) — toggleDriving + its notifications; deleteSelection(); toggleLock(); lockState() → { locked };
  *   sketchTargets() → every sketch with { disabled, reason } for a locked one / the selection's own, moveToSketch(id), moveToNewSketch() (TASK 577).
  *   groupState(), group(), ungroup(), enterGroup(), leaveGroup() (TASK 756: #ui/group-actions.js groupMenuActions).
+ *   closePathState(), closePath() (TASK 760: #ui/close-path-actions.js closePathMenuActions).
  */
 export function contextMenuItems(kind, { target, actions }) {
   if (kind === 'dimension') {
@@ -218,6 +219,8 @@ export function contextMenuItems(kind, { target, actions }) {
     return [
       { id: 'geo-lock', label: locked ? 'Unlock' : 'Lock', checked: locked, onSelect: () => actions.toggleLock() },
       { id: 'geo-delete', label: 'Delete', onSelect: () => actions.deleteSelection() },
+      // TASK 760: "Close path" when the selection holds an open chain it can close (#ui/close-path-actions.js: the tool's own function)
+      ...(actions.closePathState && actions.closePathState() ? [{ id: 'geo-close-path', label: 'Close path', onSelect: () => actions.closePath() }] : []),
       // TASK 577: sketches as layers: one entry per sketch the selection can move to (a flat list: the menu has no submenus)
       ...(actions.sketchTargets ? sketchSubmenu(actions) : []),
       ...(actions.groupState ? groupMenuItems(actions) : []), // TASK 756

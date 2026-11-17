@@ -1620,6 +1620,16 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   }
   out.dim = null;
 
+  // TASK 760: while the Close path tool is on, every free end of every open chain of the active sketch is marked: a ring in the warning token
+  // (--sk-warning), on top of the points, so the user sees WHY an outline takes no inside / outside cut. The ends come from the host's render
+  // context (ctx.openEnds: #core/close-path.js openChainEnds over the WHOLE sketch state, so a host's static underlay geometry is marked too);
+  // nothing is drawn for any other tool.
+  if (currentTool === TOOL_MODES.CLOSE_PATH && typeof ctx.openEnds === 'function') {
+    for (const p of ctx.openEnds()) {
+      out.push(`<circle class="open-end-marker" data-joint-id="${p.joint}" cx="${p.x}" cy="${p.y}" r="${scale(8)}" fill="none" style="stroke:var(--sk-warning, #f59e0b)" stroke-width="${scale(2.5)}" pointer-events="none"/>`);
+    }
+  }
+
   // draw preview (tool previews)
   if(active && active.preview){
     const p = active.preview.pt;

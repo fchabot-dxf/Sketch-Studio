@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TASK 760 fixture: a 40 x 40 mm outline drawn back to 0.05 mm short of its start (no Z: an open path), and a closed circle. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">
+  <path id="almost" d="M 10 10 L 50 10 L 50 50 L 10 50 L 10 10.05" fill="none" stroke="#000"/>
+  <circle id="hole" cx="75" cy="30" r="8" fill="none" stroke="#000"/>
+</svg>

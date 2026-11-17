@@ -1,7 +1,7 @@
 // packages/core/polygon-offset.js — parallel (Minkowski-style) offset of a closed polygon. PURE, no DOM.
 //
 // BOUNDARY (north star #2, PP-2b-1): this is the PURE SIMPLE-LOOP CAD offset — one ring in, one ring out, returns []
-// on a split — the home for Shaper export + vcarve (byte-exact, zero-dep). For ROBUST art/fill offset that must SPLIT
+// on a split — the home for Shaper export (byte-exact, zero-dep). For ROBUST art/fill offset that must SPLIT
 // a ring into many / handle holes + boolean unions, use the separate #core/plot/clip.js (Clipper). Two DISTINCT
 // capabilities; do not merge (unify = tracked debt).
 //

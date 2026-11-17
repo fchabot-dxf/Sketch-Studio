@@ -1,8 +1,8 @@
 // apps/shaper/src/prepare-stage.js — Shaper's PREPARE stage wiring, DECLARED in one importable place (TASK 583). The page script (main.js) and the node test
 // kit (tests/helpers/node-app.js) both call createPrepareStage(): the Prepare view mounted on the shared Design sketch, the cut-settings card, the rule that every
 // cut-plan edit is ONE step of the shared sketch history (TASK 463), the cut plan riding in the shared undo snapshots (`hostSnapshot`), the Ctrl+Z / Ctrl+Y keys
-// while Prepare shows, and what the document buffer does with Prepare after a restore. Moved out of main.js unchanged; the page keeps its own views (Vcarve,
-// Review, the info panel) and passes what only it has as options.
+// while Prepare shows, and what the document buffer does with Prepare after a restore. Moved out of main.js unchanged; the page keeps its own views
+// (Review, the info panel) and passes what only it has as options.
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { capturePrepare, applyPrepare } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper; TASK 743: + the operation order
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
@@ -20,8 +20,13 @@ import { createOpList } from './op-list.js';                   // TASK 743: Prep
  *   notify(msg): the page's status line. onViewChange(view): told when the Prepare view is (re)mounted (the page's dev / test seam).
  * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel, opList }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
  * mount() = (re)mount the Prepare view; enter(enteringMode) = the mode router's hook for entering Prepare (modes.js); view() = the mounted view or null;
- * afterRestore() = what a document restore does with Prepare.
+ * afterRestore(restore) = what a document restore does with Prepare (restore = the document buffer's onRestored payload: TASK 741, its removedVcarves).
  */
+
+/** TASK 741: the one-time notice Prepare shows after a document that had V-carve regions was opened (#core/document.js deserializeDocument drops them and
+ *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
+export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
+
 export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ensureSketch = () => {}, notify = () => {}, onViewChange = () => {} }) {
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
@@ -84,6 +89,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
 
   // TASK 472: a transient one-line notice in Prepare (e.g. the Stock role moved to another loop)
   let prepareNoticeTimer = null;
+  let pendingRemovedNotice = null; // TASK 741: removedVcarvesNotice(n) of the last restored document, until Prepare shows it
   function prepareNotice(msg) {
     const el = noticeEl; if (!el) return;
     el.textContent = msg; el.hidden = false;
@@ -128,15 +134,15 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const st = designController.state;
     const loops = findLoops(st);
     const chains = findOpenChains(st, loops);
-    const { dropped, moved, vcarveUpdated } = migrateEdgeRecords(loops, chains, CUT_PLAN, st.vcarves);
-    if (dropped + moved + (vcarveUpdated || 0) > 0) {
+    const { dropped, moved } = migrateEdgeRecords(loops, chains, CUT_PLAN);
+    if (dropped + moved > 0) {
       const parts = [];
       if (moved > 0) parts.push(`${moved} edge cut${moved === 1 ? '' : 's'} moved to chain`);
       if (dropped > 0) parts.push(`${dropped} dropped from closed loop${dropped === 1 ? '' : 's'}`);
-      if (vcarveUpdated > 0) parts.push(`${vcarveUpdated} vcarve region${vcarveUpdated === 1 ? '' : 's'} updated`);
       notify(`Cut plan updated: ${parts.join(', ')}`);
     }
     prepareView = mountPrepareView(st, canvasEl, { onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset() });
+    if (pendingRemovedNotice) { prepareNotice(pendingRemovedNotice); pendingRemovedNotice = null; } // TASK 741: once, on the first mount after the restore
     prepareSig = geomSig(st);
     applyPendingSession();
     onViewChange(prepareView);
@@ -161,7 +167,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     view: () => prepareView,
     captureSession, restoreSession, // TASK 605: the tab's Prepare selection + view (shaper-session.js)
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
-    afterRestore: () => {
+    afterRestore: (restore) => {
+      pendingRemovedNotice = restore && restore.removedVcarves > 0 ? removedVcarvesNotice(restore.removedVcarves) : null; // TASK 741: a document that had V-carve regions
       if (getMode() === 'prepare') mountPrepare();
       else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
     },

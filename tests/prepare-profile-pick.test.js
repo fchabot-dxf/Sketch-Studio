@@ -428,24 +428,6 @@ const ENC5 = [
     assert.strictEqual(testPlan.get(chainKey).cutType, 'online', 'P8: moved cutType preserved');
   }
 
-  // P8b: migrateEdgeRecords converts bare loop/profile ids in vcarves to 'loop:<id>' / 'profile:<id>'.
-  {
-    const state = makeFrameState();
-    const loops = findLoops(state);
-    const chains = findOpenChains(state, loops);
-    const outerLoop = loops.find((l) => l.edges.includes('so1'));
-    const testVcarves = [
-      { id: 'vc1', region: outerLoop.id, vbit: { angle: 90 } },
-      { id: 'vc2', region: 'profile-1', vbit: { angle: 60 } },
-      { id: 'vc3', region: 'loop:' + outerLoop.id, vbit: { angle: 90 } }, // already canonical -> not changed
-    ];
-    const res = migrateEdgeRecords(loops, chains, new Map(), testVcarves);
-    assert.strictEqual(res.vcarveUpdated, 2, 'P8b: 2 vcarves migrated to canonical form');
-    assert.strictEqual(testVcarves[0].region, `loop:${outerLoop.id}`, 'P8b: bare loop id converted to loop:<id>');
-    assert.strictEqual(testVcarves[1].region, 'profile:profile-1', 'P8b: bare profile-1 converted to profile:profile-1');
-    assert.strictEqual(testVcarves[2].region, `loop:${outerLoop.id}`, 'P8b: canonical key unchanged');
-  }
-
   // P9: resolveTargetKey resolves loop, profile, and chain keys cleanly; rejects invalid keys.
   {
     const state = makeFrameState();

@@ -63,7 +63,7 @@ export const CUT_TYPES = [
   { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthLabel: 'Thickness', icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
   // TASK 714: the STEPPED types (owner turns 1939-1948): a wall that is not vertical (drafted, chamfered, filleted, countersunk), cut with a
   // straight end mill as a stair of PLAIN cuts. Generated in the app (#core/stepped-cut.js steppedTerraces, through deriveProfileCuts), so
-  // the Origin sees plain cuts, as for V-carve; distinct here. `terraceAs` = the plain type each terrace is cut as (its encoding is what the
+  // the Origin sees plain cuts; distinct here. `terraceAs` = the plain type each terrace is cut as (its encoding is what the
   // export writes, at the terrace's own depth); `slopeKind` = the slope a target must carry to be offered this type (the Fusion region's
   // cutType: a pocket, a through hole = inside, the outline = outside; cut-plan record field `slope`, stored by fusion-import.js);
   // `stepDepth` = the step row of the card (#core STEP_DEPTH); TASK 717: `adaptiveSteps` = the Adaptive stepping checkbox, `stepDeviation` = its
@@ -90,11 +90,9 @@ export const STOCK_TYPE_ID = 'stock';
 export const exportEncoding = () => CUT_TYPES.map((t) => (t.exportParams ? { ...t, params: t.exportParams } : t));
 
 
-// VCARVE-3b: DECLARED V-bit presets — the INCLUDED angle (°). halfAngleTan = tan(angle/2) feeds #core/vcarve
-// vcarveContours (depth = inset / halfAngleTan). 90° → 1 (depth = inset); 60° → tan30 ≈ 0.577 (cuts ~1.73× deeper).
+// DECLARED V-bit presets — the INCLUDED angle (°), the cut card's V-bit cutter shape angles (`cutterAngle`). halfAngleTan = tan(angle/2)
+// (#core/cutter-profile.js vbitHalfAngleTan): 90° → 1; 60° → tan30 ≈ 0.577 (a groove ~1.73× deeper for the same width).
 export const VBIT_PRESETS = [{ angle: 90 }, { angle: 60 }, { angle: 45 }, { angle: 30 }, { angle: 20 }];
-// VCARVE-4: the ONE implementation lives in #core/vcarve.js (shared by the preview + the export); re-exported here.
-export { vbitHalfAngleTan } from '#core/vcarve.js';
 
 // --- Prepare cut-plan helpers (SP1f) -------------------------------------
 // The Prepare tab assigns a cut to a topological TARGET (a loop or an edge), not to an SVG element. These helpers

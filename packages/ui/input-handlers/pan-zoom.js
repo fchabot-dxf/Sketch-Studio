@@ -359,7 +359,7 @@ export function handlePanZoomPointerDown(e, svg, state) {
     }
 
     // Left-button empty-space panning when in PAN mode and nothing was hit,
-    // or when allowEmptyPan is set (canvases without tool pickers, e.g. Prepare/Vcarve)
+    // or when allowEmptyPan is set (canvases without tool pickers, e.g. Prepare)
     if (e.button === 0 && (state.currentTool === TOOL_MODES.PAN || state.allowEmptyPan) && !state.snapTarget) {
         e.preventDefault();
         try { svg.setPointerCapture(e.pointerId); } catch(_){}

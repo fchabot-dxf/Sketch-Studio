@@ -3,7 +3,7 @@
 //
 // BOUNDARY (north star #2 — TWO DISTINCT capabilities, each ONE home):
 //   - #core/polygon-offset.js = PURE simple-loop CAD offset: one ring in, one ring out, returns [] on a split.
-//     KEPT for Shaper export + vcarve (byte-exact, zero-dep). NOT rerouted through Clipper.
+//     KEPT for Shaper export (byte-exact, zero-dep). NOT rerouted through Clipper.
 //   - THIS (clip.js) = ROBUST art/fill boolean + offset: SPLITS a ring into many, handles concave regions + holes
 //     + boolean unions. The plotter's fills (arbitrary art) need this; polygon-offset cannot do it by design.
 // Eventual UNIFY (route polygon-offset's simple case through Clipper so there is one offset impl) = TRACKED DEBT.

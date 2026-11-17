@@ -155,7 +155,7 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
         { type: 'distance', joints: ['j_origin', 'r3'], value: 40, offset: -15 },
       ],
       sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }],
-      activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [], vcarves: [],
+      activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [],
     },
   };
   await createNamedDesign(profile, 'sketchstudio', 'Hover Stroke Test', doc);

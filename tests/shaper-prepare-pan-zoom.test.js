@@ -1,4 +1,4 @@
-// tests/shaper-prepare-pan-zoom.test.js — unit tests for Shaper Prepare & Vcarve pan/zoom (TASK 436)
+// tests/shaper-prepare-pan-zoom.test.js — unit tests for Shaper Prepare pan/zoom (TASK 436; TASK 741: the V-carve view's check went with the stage)
 
 import assert from 'node:assert';
 
@@ -158,11 +158,10 @@ function setupMockDom() {
   const dom = setupMockDom();
 
   const { mountPrepareView } = await import('../apps/shaper/src/prepare-view.js');
-  const { mountVcarveView } = await import('../apps/shaper/src/vcarve-view.js');
   const { computeGeometryBounds } = await import('#core/geometry-bounds.js');
   const { fitViewToExtents } = await import('#ui/input-handlers/pan-zoom.js');
 
-  console.log('Testing TASK 436: Shaper Prepare & Vcarve pan/zoom...');
+  console.log('Testing TASK 436: Shaper Prepare pan/zoom...');
 
   // Setup sample sketch state: 40x20 rectangle at (10, 10) -> (50, 30)
   const joints = new Map([
@@ -178,7 +177,7 @@ function setupMockDom() {
     { id: 'l3', type: 'line', joints: ['j3', 'j4'] },
     { id: 'l4', type: 'line', joints: ['j4', 'j1'] },
   ];
-  const state = { joints, shapes, vcarves: [] };
+  const state = { joints, shapes };
 
   // --- Check 1: computeGeometryBounds & fitViewToExtents ---
   const bounds = computeGeometryBounds(state);
@@ -327,65 +326,6 @@ function setupMockDom() {
   assert.strictEqual(selected.kind, 'loop', 'selected target must be a loop');
   console.log('Check 6 passed: loop selected correctly after zooming and panning ✅');
 
-  // --- Check 7: Vcarve canvas zoom and pan ---
-  const vcarveSvg = dom.makeElement('svg');
-  dom.register('vcarve-canvas', vcarveSvg);
-  dom.register('vcarve-region', dom.makeElement('select'));
-  dom.register('vcarve-vbit', dom.makeElement('select'));
-  // TASK 730: the two numeric fields sit in a step box (the page's .vcarve-stepbox span): the steppers' buttons are added around them
-  for (const id of ['vcarve-dstep', 'vcarve-maxdepth']) { const box = dom.makeElement('span'), input = dom.makeElement('input'); box.appendChild(input); dom.register(id, input); }
-  dom.register('vcarve-recompute', dom.makeElement('button'));
-  dom.register('vcarve-readout', dom.makeElement('p'));
-
-  const vcarve = mountVcarveView(state);
-  assert(vcarve.viewState, 'mountVcarveView must provide viewState');
-
-  // Set region to the loop and refresh
-  const loopId = prepare.loops[0].id;
-  state.vcarves.push({ id: 'vcarve-1', region: loopId, vbit: { angle: 90 }, dStep: 0.5, maxDepth: 6 }); // the record a user's pick creates (mounting the view no longer creates one: TASK 609)
-  vcarve.refresh();
-
-  assert(vcarve.viewState.view, 'vcarve view must be initialized after refresh');
-  const vcarveW0 = vcarve.viewState.view.w;
-
-  // Zoom in on Vcarve
-  vcarveSvg.dispatchEvent({
-    type: 'wheel',
-    clientX: 400,
-    clientY: 300,
-    deltaY: -100,
-    preventDefault() {},
-  });
-  assert(vcarve.viewState.view.w < vcarveW0, 'Vcarve wheel zoom in must reduce view.w');
-
-  // Pan on Vcarve
-  const vcarveX0 = vcarve.viewState.view.x;
-  vcarveSvg.dispatchEvent({
-    type: 'pointerdown',
-    button: 0,
-    clientX: 100,
-    clientY: 100,
-    pointerId: 4,
-    preventDefault() {},
-  });
-  vcarveSvg.dispatchEvent({
-    type: 'pointermove',
-    clientX: 150,
-    clientY: 100,
-    pointerId: 4,
-    preventDefault() {},
-  });
-  vcarveSvg.dispatchEvent({
-    type: 'pointerup',
-    button: 0,
-    clientX: 150,
-    clientY: 100,
-    pointerId: 4,
-    preventDefault() {},
-  });
-  assert(vcarve.viewState.view.x < vcarveX0, 'Vcarve drag must pan view');
-  console.log('Check 7 passed: Vcarve canvas supports shared wheel zoom and pan ✅');
-
   // --- Check 8: View stays preserved across cut-plan edits while in Prepare ---
   const keptView = { ...prepare.view };
   prepare.applyCutTypeToSelected('exterior');
@@ -464,7 +404,6 @@ function setupMockDom() {
 
   // Clean up
   prepare.destroy();
-  vcarve.destroy();
 
   console.log('All TASK 436 pan/zoom unit tests passed ✅');
 })().catch((err) => {

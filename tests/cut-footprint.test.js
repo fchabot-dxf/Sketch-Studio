@@ -1,9 +1,8 @@
 // tests/cut-footprint.test.js — TASK 447: the Prepare previews show the TRUE footprint of a round bit, per cut type,
-// from ONE core derivation (deriveCutFootprint / deriveVcarveFootprint). The exported SVG is unchanged (see
+// from ONE core derivation (deriveCutFootprint). The exported SVG is unchanged (see
 // shaper-export tests; also asserted here via the unchanged exportShaperSVG import path not touching footprints).
 import assert from 'node:assert';
 import { deriveCutFootprint } from '#core/profile-model.js';
-import { deriveVcarveContours, deriveVcarveFootprint } from '#core/vcarve.js';
 import { polyArea, pointInPolygon } from '#core/loop-geometry.js';
 
 const rect = (w, h) => [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
@@ -74,18 +73,5 @@ assert.deepStrictEqual(deriveCutFootprint([{ isCompound: true, outerPoly: rect(6
 {
   const [fp] = deriveCutFootprint([{ kind: 'loop', polygon: rect(20, 20), offsetSide: 0 }], { cutType: 'guide', toolDia: 4, cutOffset: 0 }, null);
   assert.strictEqual(fp.kind, 'guide'); assert.deepStrictEqual(fp.rings, []); assert.ok(fp.center);
-}
-// ── V-carve: each ring's surface width follows 2 * depth * tan(half-angle)
-{
-  const rec = { vbit: { angle: 60 }, dStep: 1, maxDepth: 6 };
-  const contours = deriveVcarveContours(rect(40, 30), rec);
-  const fps = deriveVcarveFootprint(contours, rec);
-  assert.strictEqual(fps.length, contours.length); assert.ok(fps.length >= 3);
-  const tan = Math.tan(30 * Math.PI / 180);
-  fps.forEach((f, i) => {
-    near(f.halfWidth, contours[i].depth * tan, 1e-9, `ring ${i} half-width = depth * tan(half-angle)`);
-    near(2 * f.halfWidth, 2 * (i + 1) * 1, 1e-6, `ring ${i} full width = 2 x inset step`); // inset d = step*(i+1) for a simple rect
-    assert.ok(f.rings.length > 0);
-  });
 }
 console.log('cut-footprint: ok');

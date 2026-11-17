@@ -1,5 +1,5 @@
 // tests/step-names-707-node.test.js — TASK 707 ("Same names everywhere"): every app reads the same step words in the same order, from ONE declaration
-// (packages/ui/stage-names.js): Design -> Prepare -> Export. App-specific steps (Shaper's Vcarve, Trace's Trace) are the app's own; a stored stage id
+// (packages/ui/stage-names.js): Design -> Prepare -> Export. App-specific steps (Trace's Trace) are the app's own; a stored stage id
 // (the app's own id: 'toolpath' / 'review' / 'edit') still opens the right stage.
 import assert from 'node:assert';
 import { COMMON_STEPS, COMMON_STEP_ORDER, commonStage } from '../packages/ui/stage-names.js';
@@ -19,14 +19,16 @@ assert.throws(() => commonStage('review'), /unknown common step/); checks++;
 const labels = (stages) => stages.map((s) => s.label);
 const common = (stages) => labels(stages).filter((l) => Object.values(COMMON_STEPS).includes(l));
 
-// Shaper: Design, Vcarve (its own, before Prepare), Prepare, Export (stage id 'review')
-eq(labels(SHAPER_STAGES), ['Design', 'Vcarve', 'Prepare', 'Export'], 'Shaper: Design, Vcarve, Prepare, Export');
-eq(SHAPER_STAGES.map((s) => s.id), ['design', 'vcarve', 'prepare', 'review'], 'Shaper: the stage ids are unchanged');
+// Shaper: Design, Prepare, Export (stage id 'review'). TASK 741: its own Vcarve step is gone (a V-groove is a cut with the V-bit cutter shape)
+eq(labels(SHAPER_STAGES), ['Design', 'Prepare', 'Export'], 'Shaper: Design, Prepare, Export');
+eq(SHAPER_STAGES.map((s) => s.id), ['design', 'prepare', 'review'], 'Shaper: the stage ids are unchanged');
 eq(common(SHAPER_STAGES), ['Design', 'Prepare', 'Export'], 'Shaper: the common words in the common order');
 eq(labels(shaperStagesFor({ fusion: true })), ['Prepare', 'Export'], 'Shaper in Fusion mode: Prepare, Export');
-for (const old of ['design', 'vcarve', 'prepare', 'review', 'simexport']) {
+for (const old of ['design', 'prepare', 'review', 'simexport']) {
   eq(resolveInitialMode(old), old === 'simexport' ? 'review' : old, `Shaper: a stored "${old}" opens the same stage as before`);
 }
+eq(resolveInitialMode('vcarve'), 'design', 'Shaper: a stored "vcarve" (TASK 741: the removed stage) opens Design');
+eq(resolveInitialMode('vcarve', { fusion: true }), 'prepare', 'Shaper in Fusion mode: a stored "vcarve" opens Prepare');
 
 // Trace: Trace, Design (stage id 'edit'), Export; no Prepare (Trace has no per-shape output settings)
 eq(labels(TRACE_STAGES), ['Trace', 'Design', 'Export'], 'Trace: Trace, Design, Export');

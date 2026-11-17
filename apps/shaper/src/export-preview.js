@@ -12,14 +12,14 @@
 //    the preview copy). Operations are a DISPLAY grouping (the file is unchanged by them); the preview copy tags each element with its operation's id
 //    (data-op, like data-step), which maps the list to the elements: a tool heading ("Change to ¼″ end mill") per run of operations with the same bit, one
 //    header per operation (a tap picks all its elements), then its rows (depth, step, hold; the cut type too when the operation writes more than one,
-//    e.g. an Outside plate's own holes). Elements of no listed operation (V-carve) keep the grouping by cut type, after the operations.
+//    e.g. an Outside plate's own holes). Elements of no listed operation (a call without `ops`) keep the grouping by cut type, after the operations.
 //  * TASK 745: a programmed pocket is on-line paths + its finish pass (an inside cut, islands as outside cuts) in the file; the preview copy carries data-clear
 //    ("ring 2/12", "raster 3/22", "cleanup 1/1", "spiral", "wall", "island 1/2", + " pass 1/3" with depth passes): labels "on line · 6 mm · ring 2 of 12",
 //    list rows "rings" / "raster passes" / "clean-up ring" / "spiral" / "wall" / "islands". Display only: the islands and then the clearing paths are
 //    painted in FRONT (the wall's white inside-cut fill, written after the paths, would hide them; an island is not moved to the back as other outsides).
 //  * A tap / click on an element (a press that moves less than 4 px) picks it: a highlight and its label ("pocket · 7.333 mm · step 2 of 4");
 //    a tap on empty space clears it. The list (rows by cut type, then depth and step, each with its element count) picks a row's elements.
-//  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare and Vcarve). The first build
+//  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare). The first build
 //    fits; a rebuild (the plan changed) keeps the view, as the 3D view keeps its camera; fit() frames the drawing again.
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 import { lengthDecimals, lengthFraction, lengthText } from '#core/settings-manager.js';
@@ -27,7 +27,7 @@ import { unitInfo } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPE_TAGS = new Set(['path', 'circle', 'polygon', 'polyline', 'rect', 'ellipse', 'line']);
-const TAP_PX = 4;          // a press that moves less than this is a tap (a pick), more is a pan (the Vcarve view's rule)
+const TAP_PX = 4;          // a press that moves less than this is a tap (a pick), more is a pan
 const SHADE_SHALLOW = 70, SHADE_DEEP = 30; // TASK 719: the pockets' grey lightness (%) at the shallowest / deepest depth of THIS export
 const SHADE_OUTSIDE_SHALLOW = 25;           // TASK 719: a stepped outside's terraces: dark grey (25%) at the shallowest step down to the file's black at the deepest
 const SHADE_INSIDE_SHALLOW = 90, SHADE_INSIDE_DEEP = 60; // TASK 720: a stepped inside's terraces (the through step stays the file's white)

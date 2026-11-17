@@ -9,7 +9,12 @@
 //   vbit      D(x) = depth - x / tan(halfAngle), reaching the surface at x = depth * tan(halfAngle) (capped at the flute radius r)
 // The relief model builds stair-steps: n terraces over half-widths e_j = xMax * j / n, each cut at D(mid of its step) (the
 // innermost at the true depth), so each step is within half a step of the true profile.
-import { vbitHalfAngleTan } from './vcarve.js';
+
+/** tan(half the V-bit's INCLUDED angle) (90 -> 1, 60 -> tan 30). The ONE V-bit helper (TASK 741: its home since V-carve was removed). */
+export function vbitHalfAngleTan(angle) {
+  const halfAngle = (Number(angle) || 90) / 2;
+  return Math.tan((halfAngle * Math.PI) / 180);
+}
 
 // z-slices per groove (the triangle cost is ~ slices x the groove's ring count). 6 reads as a round bottom, 5 as a clean V.
 export const SHAPE_SLICES = Object.freeze({ ballnose: 6, vbit: 5 });

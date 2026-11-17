@@ -37,7 +37,7 @@ const DOC = { version: 3, hosts: {}, geometry: {
     { type: 'distance', shape: 'C', isRadius: true, value: 8 },
     { type: 'distance', joints: ['r4', 'c0'], value: Math.hypot(30, 20), driven: true, offset: -4 },
   ],
-  sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [], vcarves: [] } };
+  sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [] } };
 
 const md5 = (buf) => createHash('md5').update(buf).digest('hex').toUpperCase();
 const evidence = [];

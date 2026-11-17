@@ -1,10 +1,10 @@
 // tests/document-tabs-browser-737-live.test.js — TASK 737 (owner turn 2074: "make the file tab nicer or clearer", picked BROWSER-STYLE): the ONE shared document tab
-// strip in the real pages of all four apps, with a mouse (1400 x 800) and under a finger (390 x 844), in EVERY stage of each app (Shaper: Design, Vcarve, Prepare,
+// strip in the real pages of all four apps, with a mouse (1400 x 800) and under a finger (390 x 844), in EVERY stage of each app (Shaper: Design, Prepare,
 // Export; Pen Plotter: Design, Prepare, Export; Trace: Trace, Design, Export; SketchStudio: Design and its menu's Export view; the strip is uncovered in each.
 // SketchStudio's Drawing step (TASK 725) covers the strip with its page on purpose (drawing-stage-725-live asserts it): there the test checks only that it is covered):
 //   - the ACTIVE tab JOINS the surface directly below the strip: its computed background == the computed background of the element under it (sampled at three
 //     points across the tab, just below the strip; a tool button sitting there is skipped: the surface is what holds it). The colour is DECLARED per host / stage
-//     (--sk-doctab-surface, html[data-sk-stage]), never measured by the page. The first tab is the active one: the side panels of Shaper Vcarve, Pen Plotter
+//     (--sk-doctab-surface, html[data-sk-stage]), never measured by the page. The first tab is the active one: the side panels of Pen Plotter
 //     Prepare / Export and Trace's Trace stage (244-260 px) sit under it; a tab further right sits over that stage's canvas (reported in WORK-LOG TURN 737);
 //   - no 1 px line under the active tab (screenshot pixels: the strip's line row under it == the tab's own fill), while the line IS there under an inactive tab;
 //   - a 3 px accent line on the active tab's top edge (pixels); the active tab's fill differs from the strip (>= 1.08:1, the lowest being SketchStudio's Export view; the accent line and the bold title mark it too);
@@ -148,7 +148,7 @@ await (async () => {
 
         const stages = await evalJs(`[...document.querySelectorAll('.sk-header-tab')].map((t) => t.dataset.tab)`);
         const COVERED = { sketchstudio: ['drawing'] }; // stages whose view covers the strip by design
-        const EXPECTED = { sketchstudio: ['design', 'drawing'], shaper: ['design', 'vcarve', 'prepare', 'review'], penplotter: ['design', 'toolpath', 'export'], trace: ['trace', 'edit', 'export'] };
+        const EXPECTED = { sketchstudio: ['design', 'drawing'], shaper: ['design', 'prepare', 'review'], /* TASK 741: no V-carve stage */ penplotter: ['design', 'toolpath', 'export'], trace: ['trace', 'edit', 'export'] };
         assert.deepStrictEqual(stages, EXPECTED[host], tag0 + ': every stage of the app is checked (TASK 725 added SketchStudio Drawing)');
         if (host === 'sketchstudio') stages.push('export'); // its menu's Export view
         for (const st of stages) {

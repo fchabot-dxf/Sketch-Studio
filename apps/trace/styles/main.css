@@ -499,7 +499,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .tr-edit-empty strong { color: var(--text); }
 
 /* Shared Design canvas inside Edit tab */
-#design-canvas, #vcarve-canvas {
+#design-canvas {
   background-color: var(--sk-canvas-bg);
   --sk-canvas-bg: #F4EFE1;
   --sk-canvas-bg-snapping: #F1E9D6;

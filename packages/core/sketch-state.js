@@ -68,7 +68,6 @@ export function createSketchState(engine, view) {
     groups: [],
     profiles: [],
     parameters: [], // TASK 535: user parameters { name, unit, expression, comment? }, one list per document (no non-test producer yet)
-    vcarves: [],
     // TASK 463: OPTIONAL generic host hook so a host's own undoable data rides in the SAME snapshots (one history, no second
     // stack): { capture() -> JSON-safe data, restore(data), [asked] }. Shaper uses it for its cut plan. null = nothing extra.
     // TASK 570: `asked: true` = the host's data rides ONLY in snapshots saved with saveState(label, { host: true }) (an import);
@@ -98,8 +97,6 @@ export function createSketchState(engine, view) {
         // COMBINE slice 1: combined profiles
         profiles: Array.isArray(this.profiles) ? cloneProfiles(this.profiles) : undefined,
         parameters: Array.isArray(this.parameters) ? cloneParameters(this.parameters) : undefined, // TASK 535
-        // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
-        vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined,
         host: hs && (!hs.asked || withHost) ? hs.capture() : undefined // TASK 463: the host's own undoable data
       };
     },
@@ -137,7 +134,6 @@ export function createSketchState(engine, view) {
         this.profiles.length = 0;
       }
       if(Array.isArray(this.parameters)) replaceParameters(this.parameters, snapshot.parameters); // TASK 535
-      if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       if (this.hostSnapshot && snapshot.host !== undefined) this.hostSnapshot.restore(snapshot.host); // TASK 463
       // Clear selections and active tool state
       this.selectedJoints.clear();
@@ -173,7 +169,6 @@ export function createSketchState(engine, view) {
       this.groups.length = 0;
       this.profiles.length = 0;
       this.parameters.length = 0; // TASK 535
-      this.vcarves.length = 0;
       this.selectedJoints.clear();
       this.selectedConstraints.clear();
       this.selectedShapes.clear();
@@ -301,7 +296,6 @@ export function createSketchState(engine, view) {
           this.profiles.push(...cloneProfiles(snapshot.profiles));
         }
         if(Array.isArray(this.parameters)) replaceParameters(this.parameters, snapshot.parameters); // TASK 535
-        if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       } else {
         // No prior snapshot - clear store
         this.history.splice(0);

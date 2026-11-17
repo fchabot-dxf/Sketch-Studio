@@ -19,7 +19,6 @@ import { dbg } from '#core/debug.js';
 import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
-import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes
@@ -42,7 +41,7 @@ let designController = null; // sketcher mounted once, at boot (ensureSketch); R
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
 
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
-// Vcarve/Prepare/Review — designController may not exist yet, so its state is read lazily.
+// Prepare/Review — designController may not exist yet, so its state is read lazily.
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -82,23 +81,15 @@ const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // th
 // SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
 // download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
 
-// VCARVE-4: vcarve records (a region picked in the Vcarve tab) are exportable even with no Prepare cut assigned.
-function activeVcarves() {
-  ensureSketch();
-  const vs = designController && designController.state && designController.state.vcarves;
-  return Array.isArray(vs) ? vs.filter((v) => v && v.region) : [];
-}
-
 // TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes) and (TASK 743) the operations it lists
 function generateShaperSvgPayload({ preview = false } = {}) {
   const entries = cutPlanEntries();
-  const vcarves = activeVcarves();
-  if (!entries.length && !vcarves.length) return null;
+  if (!entries.length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, entries, vcarves, state: st }; }
-  return { svg: shaperSvgOf(st, entries), entries, vcarves, state: st };
+  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, entries, state: st }; }
+  return { svg: shaperSvgOf(st, entries), entries, state: st };
 }
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
@@ -108,7 +99,7 @@ if (btnGenerateSvg) {
     const payload = generateShaperSvgPayload();
     if (!payload) { if (status) status.textContent = NO_CUTS; return; }
     download('shaper-export.svg', payload.svg);
-    const n = payload.entries.length + payload.vcarves.length;
+    const n = payload.entries.length;
     if (status) status.innerHTML = `Exported ${n} cut${n === 1 ? '' : 's'} → <strong>shaper-export.svg</strong>. Drop it into <a href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" style="color:var(--sk-selection,#4c9aff); text-decoration:underline;">ShaperHub (My Files)</a> to sync with Origin.`;
   });
 }
@@ -138,7 +129,7 @@ if (btnSyncShaper) {
   btnSyncShaper.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
     const entries = cutPlanEntries();
-    if (!entries.length && !activeVcarves().length) {
+    if (!entries.length) {
       if (status) status.textContent = NO_CUTS;
       return;
     }
@@ -267,13 +258,12 @@ document.addEventListener('keydown', (e) => {
 // (TASK 706). Either one shows Design first (modes.js showDesign, declared to the shared importer).
 const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => document.body, showDesign: () => modes.showDesign() }); // TASK 610: cut-import.js
 
-// ── S6a: 4-mode app shell — a view router over Design / Vcarve / Prepare / Review. (modes.js: declared once, the node test kit calls it too) ──
+// ── S6a: the app shell — a view router over Design / Prepare / Review. (modes.js: declared once, the node test kit calls it too) ──
 const VIEWS = findViews(document);
 let modes = null; // the mode router (created below, once the views it enters exist)
 
 let reviewView = null;       // TASK 459: the 3D Review (mounted on first entry, three imported dynamically)
 let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thickness field after a document restore (assigned below)
-let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted once, refreshed per Vcarve enter
 // SP1c-f, TASK 463, TASK 472 (prepare-stage.js): the Prepare view, the cut-settings card, every cut-plan edit as ONE step of the shared history, the cut
 // plan in the sketch's undo snapshots, the Ctrl+Z / Ctrl+Y keys while Prepare shows, the one-line notice
 const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
@@ -342,12 +332,12 @@ function ensureSketch() {
   // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the tab's stage state
   docBuffer = createDocumentBuffer(shaperBufferOptions({
     controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
-    session: createShaperSession({ prepare, getVcarveView: () => vcarveView }), // shaper-session.js: Prepare selection + view, Vcarve view
+    session: createShaperSession({ prepare }), // shaper-session.js: Prepare selection + view
     showDesign: () => modes.showDesign(), // TASK 706: a design the user opens (new / Open / Open from file) is shown in Design
-    refreshViews: () => { if (infoPanel) infoPanel.refresh(); if (vcarveView) vcarveView.refresh(); },
+    refreshViews: () => { if (infoPanel) infoPanel.refresh(); },
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
-    afterSidecar: () => {
-      prepare.afterRestore();
+    afterSidecar: (restore) => {
+      prepare.afterRestore(restore); // TASK 741: + the one-time notice of a document that had V-carve regions
       showStockThickness();
       if (modes.current() === 'review') enterReview(designController.state);
     },
@@ -363,13 +353,6 @@ modes = createModeRouter({
   onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
   afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design
   enter: {
-    vcarve: () => {
-      ensureSketch();
-      try { designController.engine.solve(500); } catch (_) {}
-      if (!vcarveView) vcarveView = mountVcarveView(designController.state);
-      else vcarveView.refresh();
-      window.__vcarveView = vcarveView;
-    },
     prepare: prepare.enter,
     review: () => {
       ensureSketch();
@@ -391,7 +374,7 @@ const reviewInputs = (st) => {
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
   return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN), ...planClearingNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
 };
-const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder()]); // TASK 714: the notes are in the doc unit; TASK 743: the 2D file's groups follow the operation order
+const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder()]); // TASK 714: the notes are in the doc unit; TASK 743: the 2D file's groups follow the operation order
 // TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
 const REVIEW_VIEW_KEY = 'shaper-review-view';
 let reviewViewMode = '3d';
@@ -487,7 +470,6 @@ if (fusionMode) {
           showStockThickness();
           if (infoPanel) infoPanel.refresh();
           history.refresh();
-          if (vcarveView) vcarveView.refresh();
           if (modes.current() === 'review') enterReview(designController.state);
         },
       });

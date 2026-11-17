@@ -38,7 +38,7 @@ const DOC = {
     ],
     sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }],
     activeSketchId: 'sketch-1',
-    groups: [], profiles: [], parameters: [], vcarves: [],
+    groups: [], profiles: [], parameters: [],
   },
 };
 

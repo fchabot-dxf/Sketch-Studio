@@ -61,31 +61,17 @@
       --sk-header-hover: rgba(255,255,255,0.08);
       --sk-footer-ink: var(--sk-header-fg);
       /* TASK 737: the surfaces directly below the document tab strip, declared once: the stage's view paints it, the strip's active tab takes it */
-      --shaper-vcarve-panel-bg: #111827;  /* Vcarve's docked panel (left, under the first tab) */
-      --shaper-cream: #F4EFE1;            /* the Design / Vcarve canvas paper */
+      --shaper-cream: #F4EFE1;            /* the Design canvas paper */
       --sk-prep-bg: #3F4145;              /* the Prepare canvas background: TASK 455's token (#view-prepare below), on :root so the strip reads it in Prepare */
       --shaper-review-bg: #14161a;        /* the Export stage's 3D view (#review-stage) */
       /* the strip is the header colour: the 13 % tint toward the text (document-tabs.js default) IS the Prepare canvas grey, so the active tab could not be told from the strip there */
       --sk-doctabs-bg: var(--sk-header-bg);
     }
     /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
-    :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-vcarve-panel-bg); }
     :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
     :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); }
-    @media (max-width: 640px) { :root[data-sk-stage="vcarve"] { --sk-doctab-surface: var(--shaper-cream); --sk-doctab-surface-fg: #202020; } } /* the panel moves below the canvas */
-    #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
-    #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
-    /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
-    #view-vcarve { flex-direction: row; }
-    #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: var(--shaper-vcarve-panel-bg); border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
-    #vcarve-canvas { flex: 1; min-width: 0; min-height: 0; }
-    .vcarve-section { margin-bottom: 16px; }
-    .vcarve-h { font-weight: 700; color: #e6e6e6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; margin: 6px 0 8px; }
-    .vcarve-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 6px 0; }
-    .vcarve-row select, .vcarve-row input { background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; border-radius: 6px; padding: 4px 8px; font: inherit; width: 96px; }
-    .vcarve-btn { width: 100%; background: var(--sk-selection, #4c9aff); color: #fff; border: 0; border-radius: 6px; padding: 7px 10px; font: inherit; cursor: pointer; margin-top: 6px; }
-    .vcarve-btn:disabled, .vcarve-row select:disabled, .vcarve-row input:disabled { opacity: 0.5; cursor: default; }
-    .vcarve-hint { color: #6b7280; font-size: 12px; margin: 6px 0 0; }
+    #design-view, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
+    #design-view[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* S7b: Design = a full-width tool ribbon on TOP, then a row of [canvas | collapsible info panel on the RIGHT; the left edge is reserved for the app sidebar]. */
     #design-view { flex-direction: column; }
     #design-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #1f2937; }
@@ -96,7 +82,7 @@
        untouched. The renderer routes geometry colours through var(--sk-*, fallback); the Shaper :root sets them dark
        (would wash out on cream), so we RE-override them here to the light (dark-on-cream) palette — the sketcher.css
        light defaults, but with a cream surface + cream-hollow joints. (The shared canvas grid — #ui/canvas-grid.js, GRID_MODE — is drawn behind the geometry using the --sk-grid-* vars below.) */
-    #design-canvas, #vcarve-canvas {         /* VCARVE-3a: the Vcarve canvas reuses the cream Design theme */
+    #design-canvas {
       background-color: var(--shaper-cream); /* warm paper cream — explicitly not white */
       --sk-canvas-bg: #F4EFE1;
       --sk-canvas-bg-snapping: #F1E9D6;
@@ -168,11 +154,9 @@
     .review-stock input { width: 90px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
     /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
        Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
-       app-sidebar.js): the Vcarve panel and the Review card form ONE band under the canvas. Short landscape: Vcarve and Review keep their desktop side
-       panel (their canvas is already 64-71 % of 844 px). (TASK 706: Explore's tree / inspector rules went with it.) */
+       app-sidebar.js): the Review card forms ONE band under the canvas. Short landscape: Review keeps its desktop side
+       panel (its canvas is already 64-71 % of 844 px). (TASK 706: Explore's tree / inspector rules went with it; TASK 741: so did the V-carve panel's.) */
     @media (max-width: 640px) {
-      #view-vcarve { flex-direction: column-reverse; }
-      #vcarve-panel { flex: 0 0 40%; border-right: 0; border-top: 1px solid #1f2937; }
       #view-review { flex-direction: column; }
       #review-side { width: auto; flex: 0 0 40%; border-left: 0; border-top: 1px solid #1f2535; }
       .rv2d-row, .rv2d-op { min-height: 40px; align-items: center; } /* TASK 718: a list row is a touch target (TASK 743: an operation header too) */
@@ -339,13 +323,12 @@
     .cut-step[data-d="1"] { border-left: 1px solid var(--sk-prep-card-bg); }
     .cut-step:active { background: var(--sk-prep-selected-fill); }
     .cut-step:disabled { opacity: 0.4; cursor: default; }
-    /* TASK 730: the Vcarve panel's and the Review card's steppers: the same .cut-step buttons around the field, on the panel's own dark field style */
-    .vcarve-stepbox, .review-stepbox { display: inline-flex; align-items: stretch; }
-    .vcarve-stepbox .cut-step, .review-stepbox .cut-step { width: 28px; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; font-size: 16px; }
-    .vcarve-stepbox .cut-step[data-d="-1"], .review-stepbox .cut-step[data-d="-1"] { border-radius: 6px 0 0 6px; border-right: 0; }
-    .vcarve-stepbox .cut-step[data-d="1"], .review-stepbox .cut-step[data-d="1"] { border-radius: 0 6px 6px 0; border-left: 0; }
-    .vcarve-stepbox input, .review-stepbox input { border-radius: 0; width: 64px; text-align: center; }
-    .vcarve-row .vcarve-stepbox input { width: 64px; }
+    /* TASK 730: the Review card's steppers: the same .cut-step buttons around the field, on the card's own dark field style */
+    .review-stepbox { display: inline-flex; align-items: stretch; }
+    .review-stepbox .cut-step { width: 28px; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; font-size: 16px; }
+    .review-stepbox .cut-step[data-d="-1"] { border-radius: 6px 0 0 6px; border-right: 0; }
+    .review-stepbox .cut-step[data-d="1"] { border-radius: 0 6px 6px 0; border-left: 0; }
+    .review-stepbox input { border-radius: 0; width: 64px; text-align: center; }
     .cut-flip.is-on { background: var(--sk-prep-selected-fill); }
     .cut-mid { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
     .cut-num { all: unset; box-sizing: border-box; background: transparent; border: 0; color: var(--sk-prep-chip-text); font: inherit; font-size: 15px; font-weight: 600; width: 5.2ch; min-width: 0; }
@@ -363,8 +346,8 @@
       .cut-step, .cut-flip { width: 44px; font-size: 22px; }
       #prepare-panel { width: 236px; }
       #prepare-panel .cut-card { width: 236px; }
-      .vcarve-stepbox .cut-step, .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
-      .vcarve-stepbox input, .review-stepbox input { height: 44px; box-sizing: border-box; }
+      .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
+      .review-stepbox input { height: 44px; box-sizing: border-box; }
     }
     /* TASK 743: the OPERATIONS list (op-list.js): a card like the cut card, top-left of the Prepare view on a wide screen (it ends above the direction
        legend; its rows scroll), a folding bar along the bottom on a phone (open: up to 55 % of the view; the cut card then ends above the bar).
@@ -467,28 +450,6 @@
     <div id="design-body">
       <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
-  </section>
-
-  <!-- VCARVE-3a: the Vcarve space (before Prepare) — (1) ADAPT the SVG: pick a region; (2) HACK the offset-stack:
-       V-bit + depth-step → a live depth-shaded contour preview. SKELETON only — the live region-picker / controls /
-       contour preview + the state.vcarves record land in VCARVE-3b (the controls are disabled placeholders here). -->
-  <section id="view-vcarve" hidden>
-    <aside id="vcarve-panel">
-      <div class="vcarve-section">
-        <div class="vcarve-h">1 · Adapt</div>
-        <label class="vcarve-row">Region <select id="vcarve-region" disabled><option>—</option></select></label>
-        <p class="vcarve-hint">Pick a closed loop to carve.</p>
-      </div>
-      <div class="vcarve-section">
-        <div class="vcarve-h">2 · Carve</div>
-        <label class="vcarve-row">V-bit <select id="vcarve-vbit" disabled><option>90°</option></select></label>
-        <label class="vcarve-row">Depth step <span class="vcarve-stepbox"><input id="vcarve-dstep" type="text" value="0.5 mm" disabled></span></label>
-        <label class="vcarve-row">Max depth <span class="vcarve-stepbox"><input id="vcarve-maxdepth" type="text" value="6 mm" disabled></span></label>
-        <button id="vcarve-recompute" class="vcarve-btn" disabled>Recompute</button>
-        <p id="vcarve-readout" class="vcarve-hint">— contours</p>
-      </div>
-    </aside>
-    <svg id="vcarve-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
   </section>
 
   <!-- S6a stub views (Prepare / Simulate-Export) — fleshed out in a later slice. -->

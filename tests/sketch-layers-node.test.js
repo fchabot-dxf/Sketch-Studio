@@ -231,9 +231,10 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) await canvasChecks(
     const S = app.state;
     eq(S.sketches.map((s) => [s.id, s.name, s.visible]), [['sketch-1', 'Sketch 1', true], ['sketch-2', 'Plate', true], ['sketch-3', 'Holes', false]], 'sketches as saved');
     assert(lockedSketchIds(S).size === 0, 'no sketch is locked');
-    // the host's state also carries profiles / parameters / vcarves, which the headless state that made the fixture did not: compare every key the OLD file has
+    // the host's state also carries profiles / parameters, which the headless state that made the fixture did not: compare every key the OLD file has
+    // (but its empty V-carve list: TASK 741 removed V-carve, a re-save no longer writes that part; tests/vcarve-removed-741-node.test.js)
     const again = JSON.parse(JSON.stringify(serializeDocument(S))), old = JSON.parse(raw);
-    for (const k of Object.keys(old.geometry)) eq(again.geometry[k], old.geometry[k], 'geometry.' + k + ' re-saved equals the pre-577 file');
+    for (const k of Object.keys(old.geometry).filter((k) => k !== 'vcarves')) eq(again.geometry[k], old.geometry[k], 'geometry.' + k + ' re-saved equals the pre-577 file');
     assert(JSON.stringify(again.geometry.sketches).includes('locked') === false, 'no locked key appears in a re-saved old file');
     row('old file: loads with no locked sketch; every key of the pre-577 file re-saves equal (joints, shapes, constraints, sketches, activeSketchId)');
   } finally { await app.close(); }

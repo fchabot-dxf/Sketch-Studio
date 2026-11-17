@@ -26,7 +26,7 @@ function design(joints, shapes, constraints = []) {
   return { version: 3, hosts: {}, geometry: {
     joints: [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }], ...Object.entries(joints).map(([id, [x, y]]) => [id, { x: O.x + x, y: O.y + y, fixed: false, sketchId: 'sketch-1' }])],
     shapes: shapes.map((s) => ({ sketchId: 'sketch-1', isConstruction: false, ...s })), constraints,
-    sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [], vcarves: [] } };
+    sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [] } };
 }
 const line = (id, a, b) => ({ id, type: 'line', joints: [a, b] });
 async function openDesign(doc) {

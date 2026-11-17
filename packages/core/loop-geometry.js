@@ -1,5 +1,5 @@
 // packages/core/loop-geometry.js — loop boundary polygons + point-in-polygon CONTAINMENT. Lifted from
-// apps/shaper/src/prepare-view.js (SKETCH-4a) so profile resolution / vcarve / joints can reuse the geometry.
+// apps/shaper/src/prepare-view.js (SKETCH-4a) so profile resolution / joints can reuse the geometry.
 //
 // PURITY NOTE: `sampleArc` samples the TRUE rendered curve via the browser SVG path API (getPointAtLength), so
 // `loopPolygon` for an ARC loop needs the DOM (degrades to the endpoints in Node). `loopPolygon` for LINE/CIRCLE

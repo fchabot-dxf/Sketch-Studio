@@ -11,6 +11,7 @@ import { TOOL_MODES, MIRROR_STEPS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import { mirrorObjects, mirrorObjectsOf, mirrorObjectsRefusal, mirrorLineRefusal, MIRROR_UNDO_LABEL } from '#core/mirror.js';
 import { activeSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TASK 659: only the active sketch's objects and mirror line (an axis belongs to no sketch)
 import { referenceShape } from '#core/reference-lines.js';
+import { curveRefusal } from '#core/curve-kinds.js'; // TASK 762
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
@@ -48,6 +49,8 @@ export function handleMirrorPointerDown(e, svg, state, hitJoint, hitShape, other
   }
   if (step === MIRROR_STEPS.LINE) {
     if (!shape) return otherShape && otherShape.type === 'line' ? warnOtherSketch(state, 'Mirror', otherShape) : false; // another sketch's line is not a mirror line: the warning (task 660)
+    const noLine = curveRefusal(shape, `${TOOL_MODES.MIRROR}:${MIRROR_STEPS.LINE}`); // TASK 762: a Bezier curve is no mirror line: the reason
+    if (noLine && activeSketchPick(state, shape)) { showNotification(noLine, 'warning', HINT_MS); return true; }
     if (shape.type !== 'line' || (!shape.reference && !activeSketchPick(state, shape))) return false;
     const m = state.mirror;
     const why = mirrorLineRefusal(state, m.objects, shape.id);

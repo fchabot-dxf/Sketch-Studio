@@ -15,23 +15,22 @@ function mimeType(file){
 
 const server = http.createServer((req, res) => {
   try{
-    // Endpoint for /api/shaper-upload parity with Cloudflare Pages Function
+    // Endpoint for /api/shaper-upload parity with Cloudflare Pages Function: the request text goes to the ONE implementation (TASK 767: shaper-cloud.js
+    // handleShaperUpload, whose header holds the contract: modes new / replace / keep-both, the 'exists' answer, the error kinds); its answer comes back as is
     if (req.method === 'POST' && ((req.url || '').split('?')[0]) === '/api/shaper-upload') {
       let bodyStr = '';
       req.on('data', chunk => { bodyStr += chunk; });
-      req.on('end', async () => {
-        try {
-          const body = JSON.parse(bodyStr);
-          const { uploadToShaperHub } = await import('./packages/core/shaper-cloud.js');
-          const result = await uploadToShaperHub(body);
-          res.statusCode = 200;
+      req.on('end', () => {
+        import('./packages/core/shaper-cloud.js').then((m) => m.handleShaperUpload(bodyStr)).then(({ status, body }) => {
+          res.statusCode = status;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify(result));
-        } catch (err) {
-          res.statusCode = 400;
+          res.end(JSON.stringify(body));
+        }, (err) => { // the module itself failed to load (handleShaperUpload answers every request it gets)
+          console.error('[server] /api/shaper-upload', err);
+          res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: err.message }));
-        }
+          res.end(JSON.stringify({ error: 'The upload function failed to load.', kind: 'shaper' }));
+        });
       });
       return;
     }

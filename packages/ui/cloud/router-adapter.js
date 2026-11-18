@@ -155,6 +155,11 @@ export function createRouterAdapter({ local, getRemote, signedIn = () => false, 
       onSignInChange: (fn) => subscribeSignIn(fn),
       /** "Check Google Drive connection" (the Drive adapter's own check): onStep(steps) as it goes. */
       checkConnection: (onStep) => getRemote().checkConnection(onStep),
+      /** TASK 773: the user's settings file "Sketch Studio/Settings/settings.json" (the Drive adapter's own settingsFile; only while signed in). */
+      settingsFile: {
+        read: () => getRemote().settingsFile.read(),
+        write: (text, id) => getRemote().settingsFile.write(text, id),
+      },
     },
   };
   return router;

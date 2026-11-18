@@ -12,6 +12,7 @@ import { createShortcutsList } from '#ui/shortcuts-list.js'; // TASK 727: the Sh
 import { USER_KEYS_SETTING } from '#ui/shortcuts.js'; // TASK 747: the user's own keys survive the look's Reset, like the presets
 import { mountHint } from '#ui/hint.js';
 import { SETTING_HINTS } from '#ui/design-hints.js';
+import { settingsSyncStatus, onSettingsSyncStatus, syncSettingsNow, SYNC_STATUS_TEXT } from '#ui/cloud/settings-sync.js'; // TASK 773: where the settings are kept
 import {
   STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, USER_PRESETS_KEY, activeStyleTemplateId, applyStyleTemplate, userPresetsOf, listUserPresets,
   isUserPresetId, presetNameProblem, findUserPresetByName, saveUserPreset, renameUserPreset, deleteUserPreset,
@@ -127,6 +128,11 @@ select.sk-style-input { max-width: 100%; }
 .sk-style-ask-err { color: #b91c1c; }
 .sk-style-ask-btns { display: flex; justify-content: flex-end; gap: 6px; }
 .sk-style-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+/* TASK 773: where the settings are kept (Google Drive / this device), one small line above the buttons, with "Sync now" while signed in */
+.sk-style-sync { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: 12px; padding-top: 8px;
+  border-top: 1px solid var(--sk-style-sep, #cbd5e1); font-size: 11px; color: var(--sk-style-muted, #64748b); }
+.sk-style-sync[data-sync-state="retry"] .sk-style-sync-text, .sk-style-sync[data-sync-state="newer"] .sk-style-sync-text { color: #b45309; }
+.sk-style-sync [hidden] { display: none; }
 .sk-style-btn { padding: 4px 10px; border-radius: 6px; cursor: pointer; background: transparent; color: inherit;
   border: 1px solid var(--sk-style-sep, #cbd5e1); }
 .sk-style-btn-primary { background: var(--sk-selection, #3B82F6); color: #fff; border-color: transparent; }
@@ -320,7 +326,23 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   closeBtn.addEventListener('click', () => close());
   foot.append(resetBtn, closeBtn);
 
-  el.append(head, body, foot);
+  // TASK 773: where the settings are kept, live (#ui/cloud/settings-sync.js), and "Sync now" while signed in
+  const syncRow = document.createElement('div'); syncRow.className = 'sk-style-sync'; syncRow.dataset.section = 'settings-sync';
+  const syncText = document.createElement('span'); syncText.className = 'sk-style-sync-text'; syncText.setAttribute('role', 'status');
+  const syncBtn = document.createElement('button'); syncBtn.type = 'button'; syncBtn.className = 'sk-style-btn'; syncBtn.dataset.action = 'sync-now'; syncBtn.textContent = 'Sync now';
+  syncBtn.addEventListener('click', () => { syncSettingsNow(); });
+  syncRow.append(syncText, syncBtn);
+  function showSync(s = settingsSyncStatus()) {
+    syncRow.dataset.syncState = s.state;
+    syncText.textContent = SYNC_STATUS_TEXT[s.state] || '';
+    syncText.title = s.reason || '';
+    syncBtn.hidden = s.state === 'off' || s.state === 'device';
+    syncBtn.disabled = s.state === 'saving';
+  }
+  const unsubSync = onSettingsSyncStatus(showSync);
+  showSync();
+
+  el.append(head, body, syncRow, foot);
 
   function buildControl(spec) {
     const row = document.createElement('div'); row.className = 'sk-style-row';
@@ -360,25 +382,30 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     return row;
   }
 
+  // TASK 773: a field the user is editing right now (it has the focus) is never rewritten under him, whatever changed the setting (another device's change
+  // arriving from Drive included): it shows the stored value again once he leaves it (focusout below), and what he commits there is the newer change.
+  const editing = (...els) => els.some((e) => e && e === el.ownerDocument.activeElement);
   function populate() {
     const all = settings.getAll();
     for (const spec of CONTROLS) {
       const c = controlEls[spec.key]; if (!c) continue;
       if (spec.showWhen || spec.hideWhen) c.row.hidden = (!!spec.showWhen && !allHold(spec.showWhen, all)) || (!!spec.hideWhen && allHold(spec.hideWhen, all));
+      if (editing(c.input, c.slider)) continue;
       const v = all[spec.key];
       if (spec.type === 'checkbox') { c.input.checked = !!v; }
       else if (spec.type === 'select') { c.input.value = spec.options.some((o) => String(o.value) === String(v ?? '')) ? (v ?? '') : spec.options[0].value; }
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
-    docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';
+    if (!editing(docUnitSelect)) docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';
     buildTplOptions();
-    tplSelect.value = activeStyleTemplateId(all);
+    if (!editing(tplSelect)) tplSelect.value = activeStyleTemplateId(all);
     const mine = isUserPresetId(tplSelect.value, settings);
     renameBtn.hidden = !mine; deleteBtn.hidden = !mine;
   }
 
   // Live re-populate on any external change. subscribe RETURNS its unsubscribe — keep it; call it in destroy().
   const unsub = settings.subscribe(() => { try { populate(); } catch (_) {} });
+  el.addEventListener('focusout', () => populate()); // TASK 773: a field left after editing shows the stored value (a change that arrived meanwhile)
 
   function open() {
     if (isOpen) return;
@@ -400,6 +427,6 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   return {
     el, open, close, toggle,
     render: (container) => { if (container) container.appendChild(el); return el; },
-    destroy: () => { close(); shortcutsList.destroy(); try { unsub && unsub(); } catch (_) {} try { el.remove(); } catch (_) {} },
+    destroy: () => { close(); shortcutsList.destroy(); unsubSync(); try { unsub && unsub(); } catch (_) {} try { el.remove(); } catch (_) {} },
   };
 }

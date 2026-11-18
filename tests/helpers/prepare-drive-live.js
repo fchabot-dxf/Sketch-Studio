@@ -18,7 +18,7 @@ import { parseProjectFile, serializeProjectFile } from '../../packages/ui/projec
 const COUNT_MOUNTS = `(() => { let pv = null; window.__prepareMounts = 0;
   Object.defineProperty(window, '__prepareView', { configurable: true, get: () => pv, set: (v) => { pv = v; window.__prepareMounts++; } }); })();`;
 
-export async function openBromont({ tag }) {
+export async function openBromont({ tag, drive: sharedDrive }) { // TASK 773: `drive` = a fake Drive shared with another page (a second device); default a new one
   const EVID = path.resolve(process.env.EVIDENCE_DIR || '.evidence/766');
   fs.mkdirSync(EVID, { recursive: true });
   const cdp = await launchBrowser({ tag, width: 1280, height: 800 });
@@ -26,7 +26,7 @@ export async function openBromont({ tag }) {
   const { port, send, evalJs, waitFor, navigate } = cdp;
   try {
     const net = await blockRemote(cdp);
-    const session = await installFakeDriveSession(cdp, { signedIn: true });
+    const session = await installFakeDriveSession(cdp, { signedIn: true, drive: sharedDrive });
     await send('Page.addScriptToEvaluateOnNewDocument', { source: COUNT_MOUNTS });
     let failMeta = false;
     const f0 = session.drive.fetch;

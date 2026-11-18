@@ -3,6 +3,7 @@
 //   signed out; success shows "Saved to Google Drive" + an "Open in Drive" link; failure shows the exact reason), the "Save to Google Drive by
 //   default" toggle (persisted in SettingsManager) and the "Check Google Drive connection" steps (real Drive adapter over a fake Drive,
 //   including a failing step), and the note that Drive projects are hidden while signed out.
+// TASK 776: the account (sign-in, the connection check) is the avatar's menu at the end of the header (account-avatar.js), not a drawer row.
 // EVIDENCE_DIR=<dir> also writes a screenshot of each state.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -16,7 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 
 const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">{"imports":{"#core/":"/packages/core/","#ui/":"/packages/ui/"}}</script></head>
-<body style="background:#2b2f36;font:14px system-ui"><div id="host" style="padding:8px"></div>
+<body style="background:#2b2f36;font:14px system-ui"><header id="host" class="sk-header" style="padding:8px"></header>
 <script type="module">
 import { mountProjectSidebar } from '/packages/ui/sidebar-projects.js';
 import { createDriveAdapter } from '/packages/ui/cloud/drive-adapter.js';
@@ -80,6 +81,7 @@ await (async () => {
     for (let i = 0; i < 40 && !(await ev('window.READY === true')); i++) await sleep(200);
     assert(await ev('window.READY === true'), 'fixture page did not load (module import failed?)');
     const text = (sel) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent.trim() : null; })()`);
+    const openAccount = () => ev(`(() => { const m = document.querySelector('.sk-account-menu'); if (m && m.hidden) document.querySelector('.sk-account').click(); return true; })()`);
     const has = (sel) => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 
     // 1. signed out on legacy local design: status shows "Saved on this device · Move to Google Drive", NO connection check, ONE sign-in door
@@ -87,12 +89,13 @@ await (async () => {
     assert.strictEqual(await text('[data-section=status]'), 'Saved on this device · Move to Google Drive');
     assert.strictEqual(await has('[data-action=save-drive]'), false, 'save-drive entry removed');
     assert.strictEqual(await has('[data-account=drive-default]'), false, 'default toggle removed');
+    await openAccount();
     assert.strictEqual(await has('[data-account=check-drive]'), false, 'signed out: no connection check');
     assert.strictEqual(await ev(`document.querySelectorAll('[data-account=sign-in]').length`), 1, 'exactly ONE sign-in door');
     await shot('1-signed-out');
 
     // 2. signed in: still no save-drive or default toggle; check-drive is present
-    await ev(`T.mount(true)`); await sleep(300);
+    await ev(`T.mount(true)`); await sleep(300); await openAccount();
     assert.strictEqual(await has('[data-action=save-drive]'), false, 'no copy-snapshot save-drive action');
     assert.strictEqual(await has('[data-account=drive-default]'), false, 'no default toggle');
     assert.strictEqual(await has('[data-account=check-drive]'), true, 'signed in: connection check is shown');
@@ -118,7 +121,7 @@ await (async () => {
     assert.strictEqual(await has('[data-action=move-to-drive]'), true, 'inline Move to Google Drive action offered for local design');
 
     // 5. Check Google Drive connection: the REAL adapter over a fake Drive, every step listed with its result
-    await ev(`T.mount(true)`); await sleep(300);
+    await ev(`T.mount(true)`); await sleep(300); await openAccount();
     await ev(`document.querySelector('[data-account=check-drive]').click()`); await sleep(800);
     const steps = await ev(`[...document.querySelectorAll('[data-account=check-result] li')].map((li) => [li.dataset.step, li.dataset.state, li.textContent])`);
     assert.deepStrictEqual(steps.map((s) => s[1]), ['ok', 'ok', 'ok', 'ok', 'ok'], JSON.stringify(steps));

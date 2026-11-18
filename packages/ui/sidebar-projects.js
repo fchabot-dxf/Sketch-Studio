@@ -2,7 +2,7 @@
 // (#ui/project-store.js, task 474) through each host's document buffer. ONE module, so every app gets the SAME entries:
 //   main view  document name (click to rename inline) + where it lives and its save state (TASK 506) · New design (the template modal, Blank design first) · Templates… (the same modal, Blank design first) · Save as… ·
 //              Duplicate · Open recent (opens the PROJECT MANAGER modal on its Recent pane) · Projects (opens the PROJECT MANAGER modal, project-manager.js) · Save to Google Drive (signed in only) · Open from file ·
-//              [the host's own Download actions] · the account row (the Drive default toggle and connection check)
+//              [the host's own Download actions]. The ACCOUNT is not in the drawer: it is the avatar at the right end of the header (TASK 776, account-avatar.js)
 // The project manager (modal, thumbnail grid: projects, designs, every per-design / per-project action) is #ui/project-manager.js; what
 // can be done with a design or a project is declared once in #ui/project-actions.js and used by both.
 // A host with a Design canvas also passes `importFile(text, fileName)`: that adds "Import SVG / DXF…" next to Open from file (TASK 566).
@@ -15,7 +15,7 @@
 // design, the Save as name prompt; on a stored one, the pending autosave is written now (nothing visible when there is nothing pending).
 // TASK 759: the menu has Save (Ctrl+S: to the design's HOME, #ui/document-home.js), Save as… (THE Save as dialog, Google Drive | Local) and Open… (THE Open
 // dialog, same tabs; the item keeps its id 'open-file'); a design file (.sketch.json) dropped on a host's drawing (its import drop target) opens as a tab.
-// Nothing here asks a signed-out user to sign in: Drive's sign-in is inside the dialogs' Drive tab and in the account row.
+// Nothing here asks a signed-out user to sign in: Drive's sign-in is inside the dialogs' Drive tab and in the header's account avatar menu.
 
 import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
 import { getProjectStore } from './project-store.js';
@@ -36,6 +36,7 @@ import { createDocumentActivity } from './document-activity.js';
 import { createSaveButton } from './save-button.js';
 import { mountLoadingOverlay } from './loading-overlay.js';
 import { saveStateOf, tabSaveState } from './save-state.js';
+import { createAccountAvatar } from './account-avatar.js'; // TASK 776: THE account control (the avatar at the right end of the header / of the tab strip)
 
 export { relativeTime };
 
@@ -134,8 +135,6 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     current: appId,
     docName: projects ? currentName : null,
     actions,
-    account: projects ? account : null,
-    driveControls,
     status: projects ? statusLine : null,
     stages, activeStage, onStageChange,
     onRenameDoc: projects ? (name) => act(async () => {
@@ -159,6 +158,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   let tabObserver = null;
   let saveButton = null, overlay = null;
   let shownTabs = null; // the tabs as the strip last read them (null before the first restore)
+  // TASK 776: THE account control: the avatar at the right end of the header (of the document tab strip where the header is hidden); the drawer has no account row
+  const avatar = projects && account ? createAccountAvatar({ account, check: driveControls ? driveControls.check : null }) : null;
   if (showDocumentTabs) {
     // TASK 768: the button shows the ACTIVE tab's save state (or the load in flight); a press runs saveNow, THE Save command (Ctrl+S, the menu's Save)
     saveButton = createSaveButton({
@@ -172,14 +173,19 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName,
       activity, signedIn, onRefresh: (list) => { shownTabs = list; saveButton.refresh(); } });
     overlay = mountLoadingOverlay({ activity, below: () => tabStrip.el });
-    // the host appends the sidebar's button into its header AFTER this call: place the strip as soon as the button has a <header>
-    const place = () => {
-      const header = sidebar.el.closest('header');
-      if (!header || !header.parentNode) return false;
+  }
+  // the host appends the sidebar's button into its header AFTER this call: place the strip / the buttons as soon as the button has a <header>
+  const place = () => {
+    const header = sidebar.el.closest('header');
+    if (!header || !header.parentNode) return false;
+    if (tabStrip) {
       header.parentNode.insertBefore(tabStrip.el, header.nextSibling); // TASK 602 (owner): below the header, above the ribbon
       saveButton.placeIn({ header, strip: tabStrip.el }); // TASK 768: right after menu btn before stages in desktop header; right end of strip when header hidden
-      return true;
-    };
+    }
+    if (avatar) avatar.placeIn({ header, strip: tabStrip ? tabStrip.el : null }); // TASK 776: after the Save button was placed: the very end of the header / of the strip
+    return true;
+  };
+  if (tabStrip || avatar) {
     if (!place()) {
       tabObserver = new MutationObserver(() => { if (place()) { tabObserver.disconnect(); tabObserver = null; } });
       tabObserver.observe(document.documentElement, { childList: true, subtree: true });
@@ -234,6 +240,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       if (tabObserver) { tabObserver.disconnect(); tabObserver = null; }
       if (tabStrip) { tabStrip.destroy(); tabStrip = null; }
       if (saveButton) { saveButton.destroy(); saveButton = null; }
+      if (avatar) avatar.destroy();
       if (overlay) { overlay.destroy(); overlay = null; }
       baseDestroy();
     },

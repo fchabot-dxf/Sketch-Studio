@@ -44,7 +44,7 @@ const fresh = (c) => {
   return createNewtonSolver(sceneJoints(S.joints), others, sceneShapes(S.shapes)).rankRowRedundant({ ...c, isDriven: false, driven: false });
 };
 const dims = S.constraints.filter((c) => (c.type === 'distance' || c.type === 'angle') && !c.isDriven && !c.driven);
-assert.strictEqual(dims.length, 4, 'the 20-slat circular-pattern seat: two radii and two slat half-chords'); checks++;
+assert.strictEqual(dims.length, 5, 'the 20-slat circular-pattern seat: two radii, two slat half-chords, and start angle'); checks++;
 const probeAll = (why) => {
   for (const c of dims) {
     const kept = isDimensionDetermined(S, c), alone = fresh(c);

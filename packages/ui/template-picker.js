@@ -17,6 +17,7 @@ import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
 import { calculateArcPath, arcSweepInfo, angleInArcSweep, getLineIntersection } from '#core/geometry.js';
 import { angleSectorOf, angleSectorArc } from '#core/angle-sector.js';
+import { findShapeById, sceneJoints } from '#core/reference-lines.js';
 import { listenOutsidePress } from './outside-press.js';
 
 export const GENERIC_REFUSAL = "These values can't be drawn. Try other values.";
@@ -335,7 +336,8 @@ export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } 
     // 4. TASK 672: angle dimensions: the arc of the measured sector (#core/angle-sector.js, the one the dimension stores) about the two lines'
     // crossing, its value in degrees at the middle of the arc; the arc grows by lanes until its label is clear of the placed ones
     for (const c of angleDims) {
-      const [[a1, b1], [a2, b2]] = c.shapes.map((id) => shapes.find((x) => x.id === id).joints.map((j) => J.get(j)));
+      const sJ = sceneJoints(J);
+      const [[a1, b1], [a2, b2]] = c.shapes.map((id) => findShapeById(shapes, id).joints.map((j) => sJ.get(j)));
       const at = getLineIntersection(a1, b1, a2, b2);
       if (!at) continue; // two parallel lines (0 or 180 degrees): no crossing to draw an arc about
       const arc = angleSectorArc(angleSectorOf(c), Math.atan2(b1.y - a1.y, b1.x - a1.x), Math.atan2(b2.y - a2.y, b2.x - a2.x));

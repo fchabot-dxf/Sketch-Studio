@@ -102,7 +102,7 @@ try {
     assert.strictEqual(info.top, 0, `${app.name}: header at top === 0`);
     assert.strictEqual(info.h, 44, `${app.name}: uniform 44 px header height`);
     assert.strictEqual(info.overflowX, 'auto', `${app.name}: header supports sideways scroll`);
-    assert.deepStrictEqual(info.children, ['sk-sidebar-btn', 'sk-header-tabs', 'sk-save'], `${app.name}: header contains ONLY ☰ + stages wrapper + (TASK 768) the Save button at its end`);
+    assert.deepStrictEqual(info.children, ['sk-sidebar-btn', 'sk-save', 'sk-header-tabs'], `${app.name}: header contains ONLY ☰ + Save icon + stages wrapper`);
     assert.strictEqual(info.extraHeaderItems, 0, `${app.name}: no legacy actions/undo/export in header`);
     assert.strictEqual(info.btnH, 30, `${app.name}: ☰ button height 30 px`);
     assert.deepStrictEqual(info.tabs.map((t) => t.label), app.stages, `${app.name}: exact stage labels`);

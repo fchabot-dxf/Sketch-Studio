@@ -58,7 +58,7 @@ await (async () => {
       const s = await send('Page.captureScreenshot', { format: 'png', clip: { x: Math.max(0, r.x - pad), y: Math.max(0, r.y - pad), width: r.w + 2 * pad, height: r.h + 2 * pad, scale: 2 } });
       fs.writeFileSync(path.join(EVID, name), Buffer.from(s.data, 'base64'));
     };
-    const headerAndStrip = (name) => shot(name, 'header.sk-header', 0, `const s = document.querySelector('.sk-doctabs').getBoundingClientRect(); return { x: 640, y: 0, w: 640, h: s.bottom };`);
+    const headerAndStrip = (name) => shot(name, 'header.sk-header', 0, `const s = document.querySelector('.sk-doctabs').getBoundingClientRect(); return { x: 0, y: 0, w: 640, h: s.bottom };`);
     const click = async (x, y) => {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 }); await sleep(20);
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 }); await sleep(20);
@@ -95,7 +95,7 @@ await (async () => {
     await waitState('new', 'a fresh Untitled: the button is quiet ("new")');
     let b = await btn();
     assert.strictEqual(b.inHeader, true, 'the Save button is IN the shared header');
-    assert.strictEqual(await evalJs(`document.querySelector('header.sk-header').lastElementChild.classList.contains('sk-save')`), true, 'at its right end');
+    assert.strictEqual(await evalJs(`document.querySelector('header.sk-header .sk-sidebar-btn').nextElementSibling.classList.contains('sk-save') && document.querySelector('header.sk-header .sk-save').nextElementSibling.classList.contains('sk-header-tabs')`), true, 'between menu button and stage tabs');
     assert.ok(/^Save \(Ctrl\+S\) · Not saved yet$/.test(b.title), 'its title has the shortcut from the table: ' + b.title);
     assert.strictEqual(b.label, 'Save, Not saved yet', 'aria-label with the state');
     await checkRects('new'); await headerAndStrip('desk-1-new.png');

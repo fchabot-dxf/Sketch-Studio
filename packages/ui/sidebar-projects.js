@@ -177,7 +177,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       const header = sidebar.el.closest('header');
       if (!header || !header.parentNode) return false;
       header.parentNode.insertBefore(tabStrip.el, header.nextSibling); // TASK 602 (owner): below the header, above the ribbon
-      saveButton.placeIn({ header, strip: tabStrip.el }); // TASK 768: the header's right end; the strip's where the header is hidden
+      saveButton.placeIn({ header, strip: tabStrip.el }); // TASK 768: right after menu btn before stages in desktop header; right end of strip when header hidden
       return true;
     };
     if (!place()) {

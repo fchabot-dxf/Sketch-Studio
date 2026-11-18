@@ -5,6 +5,7 @@ import { findLoops, findOpenChains } from './loop-finder.js';
 import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD, compoundPathD } from './loop-geometry.js';
 import { curveKind } from './curve-kinds.js';
 import { offsetPolygon, openPolygon, sweptPath } from './polygon-offset.js';
+import { sketchOf } from './sketch-model.js';
 
 const EPS = 1e-9;
 const cross3 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -351,19 +352,43 @@ export function profileForShape(shapeId, state, loops, loopPolys) {
 // Clicking inside a hole picks the hole/island loop's own profile.
 // COMBINE / UNCOMBINE is the power tool that overrides the derived face.
 
+function loopSketchIds(loop, shapeById) {
+  const ids = new Set();
+  for (const eid of (loop?.edges || [])) {
+    const s = shapeById.get(eid);
+    if (s) ids.add(sketchOf(s));
+  }
+  return ids;
+}
+
+function sameSketchAs(parentIds, loop, shapeById) {
+  if (!parentIds || !parentIds.size) return true;
+  const ids = loopSketchIds(loop, shapeById);
+  if (!ids.size) return true;
+  for (const id of ids) if (parentIds.has(id)) return true;
+  return false;
+}
+
 /**
  * Find all directly-contained loops (depth-1 holes) inside a parent loop.
  * A loop H is directly contained if:
- * 1. parent strictly contains H
- * 2. There is NO intermediate loop M such that parent contains M and M contains H.
+ * 1. When shape sketch ownership is available via `state`, H shares a sketch with `parentLoop` (two different sketches never auto-nest as holes)
+ * 2. parent strictly contains H
+ * 3. There is NO intermediate same-sketch loop M such that parent contains M and M contains H.
  */
 export function directlyContainedLoops(parentLoop, allLoops, loopPolys, state) {
   const parentPoly = getPoly(parentLoop, loopPolys, state);
   if (!parentPoly || parentPoly.length < 3) return [];
 
+  const shapeById = state && Array.isArray(state.shapes)
+    ? new Map(state.shapes.map((s) => [s.id, s]))
+    : null;
+  const parentSketches = shapeById ? loopSketchIds(parentLoop, shapeById) : null;
+
   const contained = [];
   for (const l of (allLoops || [])) {
     if (l.id === parentLoop.id) continue;
+    if (shapeById && !sameSketchAs(parentSketches, l, shapeById)) continue;
     const lPoly = getPoly(l, loopPolys, state);
     if (polygonContains(parentPoly, lPoly)) {
       contained.push({ loop: l, poly: lPoly });

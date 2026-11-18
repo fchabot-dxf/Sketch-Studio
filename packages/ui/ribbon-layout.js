@@ -59,3 +59,12 @@ export function loadSection(appId, key, ids, defaultInBar) {
 export function saveSection(appId, key, entry) {
   SettingsManager.set(RIBBON_LAYOUT_KEY, withSection(SettingsManager.get(RIBBON_LAYOUT_KEY), appId, key, entry));
 }
+
+/** TASK 773b: fn() whenever the stored layout may have changed (an edit here, a reset, or another device's layout arriving from Google Drive); returns the
+ *  unsubscribe. tool-ribbon.js re-reads its sections then, so a layout synced from another device shows without a reload. */
+export function onRibbonLayoutChange(fn) {
+  return SettingsManager.subscribe((key) => { if (key === null || key === RIBBON_LAYOUT_KEY) fn(); });
+}
+
+/** Two resolved sections ({ order, off: Set }) are the same layout. */
+export const sameSection = (a, b) => a.order.join('\n') === b.order.join('\n') && a.off.size === b.off.size && [...a.off].every((id) => b.off.has(id));

@@ -12,7 +12,7 @@ import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
-import { loadSection, saveSection, defaultSection } from '#ui/ribbon-layout.js';
+import { loadSection, saveSection, defaultSection, onRibbonLayoutChange, sameSection } from '#ui/ribbon-layout.js';
 import { titleWithShortcut, shortcutHint, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration (TASK 747: and follows the user's keys)
 import { mountTooltip } from '#ui/hint.js';
 import { RIBBON_HINTS } from '#ui/design-hints.js';
@@ -512,12 +512,25 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     refresh();
   }
   function relayout(sec) { applySection(sec); fit(); refresh(); }
+  // TASK 773b: the stored layout changed (another device's, arriving from Google Drive; a reset): every section follows it, re-read against its declared
+  // tools (an id this app does not have is dropped), except the one whose menu is open: the user is editing it, it follows once the menu closes.
+  function followStore() {
+    let moved = false;
+    for (const sec of sections) {
+      if (sec.fixed || sec === openSec) continue;
+      const next = loadSection(appId, sec.key, sec.ids, sec.defaultInBar);
+      if (sameSection(next, sec.layout)) continue;
+      sec.layout = next; applySection(sec); moved = true;
+    }
+    if (moved) { fit(); refresh(); }
+  }
+  const offLayout = onRibbonLayoutChange(followStore);
   function save(sec) { saveSection(appId, sec.key, sec.layout); }
 
   // ── the section dropdown (one popover element, filled for the section it opens on)
   const sectMenu = document.createElement('div'); sectMenu.className = 'sk-ribbon-sect-menu';
   let openSec = null;
-  const sectPop = createPopover(sectMenu, el, () => { if (openSec) openSec.nameEl.setAttribute('aria-expanded', 'false'); openSec = null; });
+  const sectPop = createPopover(sectMenu, el, () => { if (openSec) openSec.nameEl.setAttribute('aria-expanded', 'false'); openSec = null; followStore(); });
   menus.push(sectMenu);
   document.body.appendChild(sectMenu);
   sectMenu.addEventListener('contextmenu', (ev) => ev.preventDefault()); // a long press on a grip must not open the browser's menu
@@ -662,7 +675,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     },
     refresh,
     destroy: () => {
-      offShortcuts();
+      offShortcuts(); offLayout();
       if (unlistenHistory) unlistenHistory();
       sectPop.close();
       [...tips, ...sectTips].forEach((t) => t.destroy());

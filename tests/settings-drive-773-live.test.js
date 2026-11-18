@@ -157,7 +157,7 @@ try {
   const projects = await A.evalJs(`import('/packages/ui/project-store.js').then((m) => m.getProjectStore().listProjects()).then((ps) => ps.map((p) => p.name))`);
   assert.ok(!projects.includes('Settings'), 'the Settings folder is not a project: ' + JSON.stringify(projects));
   const fileDeviceOnly = JSON.stringify(settingsFile());
-  assert.ok(!/FILE_DIALOG_TAB|BROWSER_COLLAPSED|RIBBON_LAYOUT|sk_cloud|GOOD|bromont/.test(fileDeviceOnly), 'the file holds no device-only key, no token, no design name');
+  assert.ok(!/FILE_DIALOG_TAB|BROWSER_COLLAPSED|sk_cloud|GOOD|bromont/.test(fileDeviceOnly), 'the file holds no device-only key, no token, no design name');
   console.log('settings file keys: ' + Object.keys(settingsFile()).join(', '));
   console.log(`BLOCKED non-local requests: desktop ${A.net.blocked().length}, phone ${net.blocked().length}`);
   void session;

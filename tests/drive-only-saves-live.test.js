@@ -4,7 +4,7 @@
 //  2. Local open-tabs buffer: drawing on Untitled (plus a second Untitled tab) survives page refresh cleanly without storing a local named design.
 //  3. Signed out Save as… (TASK 759: THE Save as dialog, Google Drive | Local; it opens on Local for a signed-out user and asks NO sign-in question) -> its Google
 //     Drive tab offers "Sign in with Google" inside the tab -> clicking it (fake GIS) shows the name field there -> Save -> design lives ONLY on Drive.
-//  4. Offline + signed in: brand-new Save as… > Google Drive refuses cleanly in the dialog ("Google Drive can't be reached; your drawing is kept, try again when online");
+//  4. Offline + signed in: brand-new Save as… > Google Drive refuses cleanly in the dialog (TASK 774: the overwrite check's failed listing, "Google Drive could not be reached (...)");
 //     edits to an existing Drive design queue locally and sync once online again.
 //  5. Out-of-band emptied Drive folder: remembered file deleted while "My Designs" stays -> next save recreates a fresh file in the EXISTING folder.
 //  6. Legacy local design seeded from pre-624 storage opens and offers inline "Move to Google Drive", moving verified to Drive (and Drive projects have no "Make local").
@@ -121,7 +121,7 @@ await (async () => {
     await waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="save"] [data-fd-tab="drive"][aria-selected="true"]')`, 'the Save as dialog, on the Google Drive tab (signed in, and last used)');
     await evalJs(`document.querySelector('.sk-fd input').value = 'OfflineNew'`);
     await clickSel('.sk-fd [data-choice="ok"]');
-    await waitFor(`/Google Drive can't be reached/.test((document.querySelector('.sk-fd .sk-tp-err') || {}).textContent || '')`, 'offline new Save as refused clearly, in the dialog');
+    await waitFor(`/Google Drive could not be reached/.test((document.querySelector('.sk-fd .sk-tp-err') || {}).textContent || '')`, 'offline new Save as refused clearly, in the dialog (TASK 774: by the overwrite check, whose Drive listing failed: shown, never skipped)');
     await shot('04-offline-new-save-refused.png', { x: 0, y: 0, width: 1280, height: 820 });
     assert.strictEqual(await idbLocalDesigns(), 0, 'offline failure stored no local named design');
     await clickSel('.sk-fd .sk-tp-cancel');

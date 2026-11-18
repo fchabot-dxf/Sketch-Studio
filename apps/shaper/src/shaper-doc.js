@@ -7,11 +7,14 @@
 //     derived from the cut plan, never stored.
 // Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
 
-import { CUT_PLAN, reconcileCutPlan } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once
+import { CUT_PLAN, reconcileCutPlan, keepHolesFromOtherSketches } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once; TASK 774
 import { opOrder, setOpOrder } from './operations.js'; // TASK 743: the user's operation order
 import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 459): {thickness, width, height, margin}, base mm
 
-const DOC_VERSION = 1;
+// TASK 774: 2 = written under the SAME-SKETCH hole rule of derived faces (commit 27c00a4); a document below 2 (or a sidecar without a version) was
+// saved under the old rule: applyShaperDoc keeps its cuts' holes from other sketches (cut-plan.js keepHolesFromOtherSketches).
+const DOC_VERSION = 2;
+const SAME_SKETCH_HOLES_VERSION = 2;
 
 /** The cut-plan part: ONE capture used by the persisted document AND by the shared undo snapshots (TASK 463). */
 export const captureCutPlan = () => [...CUT_PLAN.entries()].map(([key, rec]) => [key, { ...rec }]);
@@ -53,10 +56,15 @@ const opKeyNow = (k) => (typeof k === 'string' ? k.replace(/"pattern":"(concentr
 /** Restore a persisted Shaper document. Missing parts keep their defaults (an old buffer carries none of this; no opOrder = the default order).
  *  TASK 761: with the restored sketch `state`, the plan is reconciled with its regions HERE, the one read of a stored Shaper document, before any
  *  reader of the plan (cut-plan.js reconcileCutPlan: the legacy edge records, a chain record on an outline that is now a loop); returns its counts
- *  (the page's one notice, cut-plan.js cutPlanNotice), or null without a state. The stored file changes only when the user next saves. */
+ *  (the page's one notice, cut-plan.js cutPlanNotice), or null without a state. The stored file changes only when the user next saves.
+ *  TASK 774: a document saved before the same-sketch hole rule (version below 2) keeps its cuts' holes from other sketches (keepHolesFromOtherSketches; its
+ *  counts join the same notice). */
 export function applyShaperDoc(d, state = null) {
   applyCutPlan(d && Array.isArray(d.cutPlan) ? d.cutPlan.map(([key, rec]) => [key, withClearingNow(rec)]) : d && d.cutPlan);
   setStock(d && d.stock);
   setOpOrder(d && Array.isArray(d.opOrder) ? d.opOrder.map(opKeyNow) : d && d.opOrder);
-  return state ? reconcileCutPlan(state) : null;
+  if (!state) return null;
+  const counts = reconcileCutPlan(state);
+  const old = d && Array.isArray(d.cutPlan) && !(Number(d.version) >= SAME_SKETCH_HOLES_VERSION);
+  return { ...counts, ...(old ? keepHolesFromOtherSketches(state) : { keptHoles: 0, lostHoles: 0 }) };
 }

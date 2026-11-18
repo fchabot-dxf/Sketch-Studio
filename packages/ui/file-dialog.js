@@ -170,6 +170,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     let browserInitialized = false;
     let creatingFolder = false;
     let pendingOverwrite = null;
+    let folderReadFailed = false; // TASK 774: the last read of the open folder's designs failed (its list says so, never "empty")
     let loadSeq = 0;
 
     let tab = initialFileDialogTab({ driveReady: driveReady(), settings });
@@ -182,12 +183,17 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     const showConfirm = (state) => {
       pendingOverwrite = state;
       const where = state.folderName ? ` in "${state.folderName}"` : '';
-      confirmMsg.textContent = `"${state.existingName}" already exists${where}. Are you sure you want to overwrite it?`;
+      // TASK 774: the overwrite closes another tab that shows the same design (document-buffer.js saveAs): said here, before the user chooses
+      const otherTab = state.openInOtherTab ? ' (it is open in another tab; that tab will close)' : '';
+      confirmMsg.textContent = `"${state.existingName}" already exists${where}${otherTab}. Are you sure you want to overwrite it?`;
       confirmBox.hidden = false;
       if (saveBtn) saveBtn.hidden = true;
       if (cancelBtn) cancelBtn.hidden = true;
-      confirmOverwriteBtn.focus();
+      confirmCancelBtn.focus(); // TASK 774: never the destructive Overwrite: a second Enter must not overwrite unread
     };
+    /** TASK 774: every move to another folder (a crumb, the Up row, a folder row, Refresh, a new folder): ignored while an action runs (busy), and it
+     *  drops an open overwrite question (that question is about the folder being left). */
+    const navigate = (fn) => { if (busy) return; clearConfirm(); fn(); };
     const save = () => {
       const n = nameInput.value.trim();
       if (!n) { say('A design needs a name.'); nameInput.focus(); return; }
@@ -197,7 +203,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
         act(async () => {
           const hit = await browseDrive.findExisting(n, folderId);
           if (hit) {
-            if (dlg.isConnected) showConfirm({ name: n, folderId, targetId: hit.id, existingName: hit.name, folderName: hit.folderName });
+            if (dlg.isConnected) showConfirm({ name: n, folderId, targetId: hit.id, existingName: hit.name, folderName: hit.folderName, openInOtherTab: !!hit.openInOtherTab });
             return null;
           }
           return onSave(tab, n, folderId);
@@ -232,7 +238,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
       text.append(el('span', null, r.name), el('span', 'sk-fd-design-sub', r.sub || ''));
       b.append(svgIcon(FILE_SVG), text);
       b.addEventListener('click', () => {
-        if (saving) { clearConfirm(); nameInput.value = r.name; nameInput.focus(); nameInput.select(); }
+        if (saving) { if (busy) return; clearConfirm(); nameInput.value = r.name; nameInput.focus(); nameInput.select(); }
         else act(() => onOpenDesign(r.id));
       });
       list.appendChild(b);
@@ -272,7 +278,9 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
         }
         if (seq !== loadSeq || !dlg.isConnected) return;
         browserReady = true;
+        folderReadFailed = false;
       } catch (e) {
+        if (seq === loadSeq) folderReadFailed = !!browserFolder; // TASK 774: the open folder's list was not read (its folders or its designs)
         if (seq === loadSeq && dlg.isConnected) say(e);
       } finally {
         if (seq === loadSeq) {
@@ -283,8 +291,10 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     }
 
     async function submitCreateFolder(nameText) {
+      if (busy) return; // TASK 774: as navigate
       const folderName = String(nameText || '').trim();
       if (!folderName) { say('Enter a folder name.'); return; }
+      clearConfirm(); // TASK 774: the new folder is shown next: an overwrite question about the folder left goes
       say('');
       browserLoading = true;
       renderDrivePanel();
@@ -317,7 +327,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
         const crumbs = el('nav', 'sk-fd-crumbs'); crumbs.setAttribute('aria-label', 'Google Drive app folder path');
         const rootCrumb = button('sk-fd-crumb', rootName, 'crumb-root');
         if (!browserFolder) rootCrumb.setAttribute('aria-current', 'location');
-        else rootCrumb.addEventListener('click', () => { clearConfirm(); browserFolder = null; folderDesigns = []; loadBrowser(); });
+        else rootCrumb.addEventListener('click', () => navigate(() => { browserFolder = null; folderDesigns = []; loadBrowser(); }));
         crumbs.appendChild(rootCrumb);
         if (browserFolder) {
           crumbs.appendChild(el('span', 'sk-fd-crumb-sep', '/'));
@@ -329,7 +339,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
         const tools = el('div', 'sk-fd-tools');
         const refreshBtn = button('sk-fd-tool', 'Refresh', 'refresh');
         refreshBtn.disabled = browserLoading;
-        refreshBtn.addEventListener('click', () => loadBrowser());
+        refreshBtn.addEventListener('click', () => navigate(() => loadBrowser()));
         tools.appendChild(refreshBtn);
         if (saving && browseDrive.createFolder) {
           const newBtn = button('sk-fd-tool', '+ New folder', 'new-folder');
@@ -367,9 +377,11 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
         } else if (browserFolder) {
           const up = button('sk-fd-up', null, 'up');
           up.append(svgIcon(FOLDER_SVG), el('span', null, `.. (${rootName})`));
-          up.addEventListener('click', () => { browserFolder = null; folderDesigns = []; loadBrowser(); });
+          up.addEventListener('click', () => navigate(() => { browserFolder = null; folderDesigns = []; loadBrowser(); }));
           list.appendChild(up);
-          if (!folderDesigns.length) {
+          if (folderReadFailed && !browserLoading) {
+            list.appendChild(el('p', 'sk-fd-line', 'The designs in this folder could not be read (the reason is below). Refresh to try again.')); // TASK 774: never "empty"
+          } else if (!folderDesigns.length) {
             list.appendChild(el('p', 'sk-fd-line', saving ? 'This folder is empty. Enter a name below to save here.' : 'No designs in this folder yet.'));
           } else {
             for (const r of folderDesigns) appendDesignRow(list, r);
@@ -382,7 +394,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
             const row = button('sk-fd-folder', null, 'folder'); row.dataset.folder = f.id;
             const meta = el('span', 'sk-fd-meta', f.sub || 'Open');
             row.append(svgIcon(FOLDER_SVG), el('span', null, f.name), meta);
-            row.addEventListener('click', () => { clearConfirm(); browserFolder = { id: f.id, name: f.name }; loadBrowser(); });
+            row.addEventListener('click', () => navigate(() => { browserFolder = { id: f.id, name: f.name }; loadBrowser(); }));
             list.appendChild(row);
           }
           if (!saving) {

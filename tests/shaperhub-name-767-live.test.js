@@ -8,7 +8,7 @@
 //    old entry is deleted); the question's Cancel sends nothing; an edited name is kept for this design when the dialog opens again; a wrong
 //    login shows Shaper's words + "Check the password: your browser may have filled in a saved one.";
 //  - phone 390 x 844 (touch): the question's three buttons are 44 px targets inside the screen; Keep both by taps -> "Sent as bromont (3).svg";
-//  - Fusion mode (?host=fusion, window.adsk stubbed): after a selection (Body1) the file name is Body1.svg; Send -> "Sent Body1.svg to My Files";
+//  - Fusion mode (?host=fusion, window.adsk stubbed): after a selection (Body1 of the document 06-countersink) the file name is 06-countersink.svg (TASK 774: the DOCUMENT's name); Send -> "Sent 06-countersink.svg to My Files";
 //  - the named design lives in the fake Google Drive of tests/helpers/fake-drive-session.js (it answers inside the page, no request leaves);
 //  - the 758 scan after each phase: no storage, cookie, IndexedDB record, markup or console line holds the fake login.
 // Screenshots of the dialog in each state to .evidence/767/ (EVIDENCE_DIR overrides).
@@ -315,13 +315,13 @@ try {
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'fusion: the cut card');
   await pickPocket();
   await openSignIn('fusion');
-  assert.strictEqual((await dialogState()).name, 'Body1.svg', 'fusion: the file name is the selection\'s name');
+  assert.strictEqual((await dialogState()).name, '06-countersink.svg', 'fusion: the file name is the Fusion document\'s name (TASK 774: source.documentName)');
   await fillLogin();
   await shot('fusion-1-dialog-selection-name.png');
   await clickEl('#sync-btn-submit');
   d = await untilStatus('/^Sent /', 'fusion: sent');
   await shot('fusion-2-sent.png');
-  assert.deepStrictEqual(d.status, ['Sent Body1.svg to My Files'], 'fusion: "Sent Body1.svg to My Files"');
+  assert.deepStrictEqual(d.status, ['Sent 06-countersink.svg to My Files'], 'fusion: "Sent 06-countersink.svg to My Files" (TASK 774)');
   await waitClosed('fusion');
   await scanForLogin('fusion');
 

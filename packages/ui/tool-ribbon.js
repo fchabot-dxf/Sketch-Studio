@@ -329,6 +329,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   }
 
   const tips = [];
+  const sectTips = []; // TASK 774: the tooltips of the OPEN dropdown's rows; fillSection destroys them before it builds the rows again
   const attachTip = (btn, key, titleLabel, shortcutId, extraText) => {
     const desc = extraText || (key && RIBBON_HINTS[key]) || '';
     if (!desc) return;
@@ -543,6 +544,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (byKeyboard) { const first = sectMenu.querySelector('.sk-ribbon-sect-item'); if (first) first.focus(); }
   }
   function fillSection(sec) {
+    sectTips.splice(0).forEach((t) => t.destroy());
     sectMenu.innerHTML = '';
     sectMenu.dataset.section = sec.key;
     const head = document.createElement('div'); head.className = 'sk-ribbon-sect-head'; head.textContent = sec.label;
@@ -570,7 +572,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     chkWrap.appendChild(chk);
     const runBtn = document.createElement('button'); runBtn.type = 'button'; runBtn.className = 'sk-ribbon-sect-item'; runBtn.dataset.id = it.id;
     const desc = it.hintText || (it.hintKey && RIBBON_HINTS[it.hintKey]) || '';
-    if (desc) tips.push(mountTooltip({ target: runBtn, getContent: () => ({ title: it.label, key: it.shortcut ? shortcutHint(it.shortcut) : '', text: desc }) }));
+    if (desc) sectTips.push(mountTooltip({ target: runBtn, getContent: () => ({ title: it.label, key: it.shortcut ? shortcutHint(it.shortcut) : '', text: desc }) }));
     const ic = it.btn.querySelector('svg');
     if (ic) runBtn.appendChild(ic.cloneNode(true)); // the bar button's own icon (the rect button's shows its current variant)
     const name = document.createElement('span'); name.textContent = it.label; runBtn.appendChild(name);
@@ -676,7 +678,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
       offShortcuts(); offLayout();
       if (unlistenHistory) unlistenHistory();
       sectPop.close();
-      tips.forEach((t) => t.destroy());
+      [...tips, ...sectTips].forEach((t) => t.destroy());
       document.removeEventListener('pointerup', syncSoon);
       document.removeEventListener('keyup', syncSoon);
       if (fitObserver) fitObserver.disconnect();

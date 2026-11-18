@@ -54,18 +54,18 @@ const reopen = async (app, re) => { // two quick clicks on the label of the dime
     // typing `width = 6`: the hint says what Enter will do BEFORE Enter (TASK 677: it names this dimension width)
     app.type('width = 6');
     b = box(app);
-    assert.strictEqual(b.hint, 'names it width = 6.0 mm', 'the live hint before Enter: ' + b.hint);
+    assert.strictEqual(b.hint, 'names it width = 6 mm', 'the live hint before Enter: ' + b.hint);
     assert.strictEqual(b.hintErr, false);
     app.enter();
     assert.strictEqual(box(app).open, false, 'Enter closes the box');
     let lab = labels(app);
-    assert(lab.includes('6.0') && !lab.some((t) => /^fx: /.test(t)), 'a named dimension reads a plain "6.0": ' + JSON.stringify(lab));
+    assert(lab.includes('6') && !lab.some((t) => /^fx: /.test(t)), 'a named dimension reads a plain "6": ' + JSON.stringify(lab));
     assert.deepStrictEqual(app.state.parameters, [], 'no user parameter was created');
     // dimension 2, typed as a formula on the named dimension. While it is being typed the autocomplete offers `width`
     await dimension(C, D, 60);
     app.type('wi');
     b = box(app);
-    assert.deepStrictEqual(b.list.map((x) => [x.name, x.val]), [['width', '6.0 mm']], 'autocomplete after "wi": the named dimension with its value and unit: ' + JSON.stringify(b.list));
+    assert.deepStrictEqual(b.list.map((x) => [x.name, x.val]), [['width', '6 mm']], 'autocomplete after "wi": the named dimension with its value and unit: ' + JSON.stringify(b.list));
     assert.strictEqual(b.list[0].sel, 'true', 'TASK 595: the top row is highlighted (Tab takes it)');
     app.key('ArrowDown'); // a plain Enter still commits; after Up / Down Enter inserts the highlighted row
     app.enter();
@@ -73,7 +73,7 @@ const reopen = async (app, re) => { // two quick clicks on the label of the dime
     assert.strictEqual(b.value, 'width', 'Enter inserts the picked name');
     assert.strictEqual(b.list, null, 'the list closes after an insert');
     assert.strictEqual(b.open, true, 'and Enter did NOT commit the dimension');
-    assert.strictEqual(b.hint, '= 6.0 mm', 'the hint is the value preview: ' + b.hint);
+    assert.strictEqual(b.hint, '= 6 mm', 'the hint is the value preview: ' + b.hint);
     app.type(' / 2 + pa'); // nothing named pa: no list
     assert.strictEqual(box(app).list, null, 'no match, no list');
     app.type('\b\b');
@@ -89,30 +89,30 @@ const reopen = async (app, re) => { // two quick clicks on the label of the dime
     app.type(' + 1');
     app.enter();
     lab = labels(app);
-    assert(lab.filter((t) => /^fx: /.test(t)).length === 1 && lab.includes('6.0'), 'the follower carries the fx mark, the named one does not: ' + JSON.stringify(lab));
-    assert(lab.includes('fx: 4.0'), 'width / 2 + 1 mm = 4.0 (a unitless 1 takes the document unit): ' + JSON.stringify(lab));
-    // reopen d1 with two quick clicks on its label (Select tool): the box opens with the FORMULA, not the value
+    assert(lab.filter((t) => /^fx: /.test(t)).length === 1 && lab.includes('6'), 'the follower carries the fx mark, the named one does not: ' + JSON.stringify(lab));
+    assert(lab.includes('fx: 4'), 'width / 2 + 1 mm = 4 (a unitless 1 takes the document unit): ' + JSON.stringify(lab));
+    // reopen d1 with two quick clicks on its label (Select tool): the box opens with the value, not the formula
     app.tool('select');
-    await reopen(app, /6\.0/);
+    await reopen(app, /6$/);
     b = box(app);
-    assert.strictEqual(b.value, '6.0', 'a named dimension holding a plain value opens with its value');
+    assert.strictEqual(b.value, '6', 'a named dimension holding a plain value opens with its value');
     // a plain number typed into the named dimension: every dimension that reads its name follows (Fusion)
     app.document.getElementById('dimInput').select();
     app.type('8');
     b = box(app);
-    assert.strictEqual(b.hint, '= 8.0 mm', 'the hint: ' + b.hint);
+    assert.strictEqual(b.hint, '= 8 mm', 'the hint: ' + b.hint);
     app.enter();
     lab = labels(app);
-    assert(lab.includes('8.0') && lab.includes('fx: 5.0'), 'Enter changed both dimensions: ' + JSON.stringify(lab));
+    assert(lab.includes('8') && lab.includes('fx: 5'), 'Enter changed both dimensions: ' + JSON.stringify(lab));
     // ONE undo restores both
     app.undo();
     lab = labels(app);
-    assert(lab.includes('6.0') && lab.includes('fx: 4.0') && !lab.some((t) => /8\.0|5\.0/.test(t)), 'one Ctrl+Z changed both back: ' + JSON.stringify(lab));
+    assert(lab.includes('6') && lab.includes('fx: 4') && !lab.some((t) => /^(fx: )?[85]$/.test(t)), 'one Ctrl+Z changed both back: ' + JSON.stringify(lab));
     app.redo();
     lab = labels(app);
-    assert(lab.includes('8.0') && lab.includes('fx: 5.0'), 'redo: ' + JSON.stringify(lab));
+    assert(lab.includes('8') && lab.includes('fx: 5'), 'redo: ' + JSON.stringify(lab));
     // O5: a bare unknown name is refused with the hint; the box stays open; nothing changes
-    await reopen(app, /8\.0/);
+    await reopen(app, /8$/);
     app.type('gap');
     b = box(app);
     assert.strictEqual(b.hint, "unknown parameter 'gap' (type gap = 30 to create it)", 'the O5 hint: ' + b.hint);
@@ -121,7 +121,7 @@ const reopen = async (app, re) => { // two quick clicks on the label of the dime
     b = box(app);
     assert.strictEqual(b.open, true, 'Enter on a refused text keeps the box open (and the text)'); assert.strictEqual(b.value, 'gap');
     lab = labels(app);
-    assert(lab.includes('fx: 5.0'), 'nothing changed (the edited label is hidden while its box is open): ' + JSON.stringify(lab));
+    assert(lab.includes('fx: 5'), 'nothing changed (the edited label is hidden while its box is open): ' + JSON.stringify(lab));
     // a unit mismatch and a loop are refused too
     app.document.getElementById('dimInput').select();
     app.type('30 deg'); b = box(app);
@@ -142,13 +142,13 @@ const reopen = async (app, re) => { // two quick clicks on the label of the dime
     app.type('3mm'); // a unit suffix, which a type=number box could not hold
     app.enter();
     lab = labels(app);
-    assert(lab.includes('3.0'), 'width reads 3.0: ' + JSON.stringify(lab));
+    assert(lab.includes('3'), 'width reads 3: ' + JSON.stringify(lab));
     assert(lab.includes('fx: 2.5'), 'the other dimension follows width (3 / 2 + 1): ' + JSON.stringify(lab));
     // after a reload the formulas are still there (autosave): the fx label comes back
     await app.storedDoc(); await app.close();
     app = await open({ host: 'sketchstudio', profile });
     lab = labels(app);
-    assert(lab.includes('fx: 2.5') && lab.includes('3.0'), 'after a reload the labels are the same: ' + JSON.stringify(lab));
+    assert(lab.includes('fx: 2.5') && lab.includes('3'), 'after a reload the labels are the same: ' + JSON.stringify(lab));
   } finally { await app.close(); }
 }
 
@@ -165,7 +165,7 @@ const reopen = async (app, re) => { // two quick clicks on the label of the dime
     st.constraints.push({ type: 'distance', joints: ['c', 'd'], value: 40, name: 'd2', dimMode: 'aligned', glyphPos: { x: -25, y: 25 }, offset: 15 });
     app.tool('select'); app.frames(3);
     const shaperUnit = SettingsManager.get('DOC_UNIT') || 'mm';
-    const inU = (mm) => (mm / (shaperUnit === 'in' ? 25.4 : 1)).toFixed(1);
+    const inU = (mm) => String(Number((mm / (shaperUnit === 'in' ? 25.4 : 1)).toFixed(3)));
     const re40 = new RegExp(inU(40).replace('.', '\\.'));
     await reopen(app, re40);
     let b = box(app);

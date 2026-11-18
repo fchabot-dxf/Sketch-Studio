@@ -40,9 +40,12 @@ export function captureShaperDoc() {
 // the full depth), from the record and from a stored operation key (`"passDepth":<n | null>` in its clearing settings). An old 'concentric' pocket opens as
 // Spiral with Loop off (no `loop` field): its open lines + the Origin's inside cut on the wall.
 const OLD_CLEARING = Object.freeze({ concentric: 'linked', spiral: 'morphed' });
+// TASK 766 (owner turn 2320): the allowance the clearing leaves on the walls is the FINISH allowance (the machining term); a record stored before 766 holds it
+// as `wallAllowance`: renamed HERE, the one read of a stored Shaper document (the operation key never carried the field's name: operations.js `allowance`).
 function withClearingNow(rec) {
   if (!rec || typeof rec !== 'object') return rec;
-  const { passDepth, ...now } = rec;
+  const { passDepth, wallAllowance, ...now } = rec;
+  if (wallAllowance !== undefined && now.finishAllowance === undefined) now.finishAllowance = wallAllowance;
   return Object.hasOwn(OLD_CLEARING, now.clearing) ? { ...now, clearing: OLD_CLEARING[now.clearing] } : now;
 }
 const opKeyNow = (k) => (typeof k === 'string' ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`).replace(/,"passDepth":(null|-?[\d.eE+-]+)/, '') : k);

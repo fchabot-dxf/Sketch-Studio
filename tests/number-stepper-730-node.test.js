@@ -50,7 +50,7 @@ try {
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   eq([...doc.querySelectorAll('.cut-card .cut-step')].map((b) => b.getAttribute('aria-label')),
-    ['Decrease depth', 'Increase depth', 'Decrease stepover', 'Increase stepover', 'Decrease wall allowance', 'Increase wall allowance', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type)
+    ['Decrease depth', 'Increase depth', 'Decrease stepover', 'Increase stepover', 'Decrease finish allowance', 'Increase finish allowance', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type)
       'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution',
       'Decrease tab count', 'Increase tab count', 'Decrease tab width', 'Increase tab width', 'Decrease thickness', 'Increase thickness', // TASK 742: the Hold part rows (hidden for a stepped type)
       'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
@@ -65,7 +65,7 @@ try {
   step('cutDepth', 1); step('cutDepth', 1);
   near(rec().cutDepth, 1.5, 'depth + twice -> 1.5');
   app.undo(); near(rec().cutDepth, 1, 'one undo = one press');
-  eq(q('.cut-depth').value, '1.000', 'the field shows it (3 dp)');
+  eq(q('.cut-depth').value, '1', 'the field shows it (trailing zeros dropped by default)');
   step('cutDepth', -1); step('cutDepth', -1);
   eq(rec().cutDepth, 0, 'depth - clamps at 0');
   h0 = hist(); step('cutDepth', -1);

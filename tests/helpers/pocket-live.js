@@ -114,7 +114,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false }) {
       st.saveState('draw');
       return st.shapes.length; })()`);
     const card = () => evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, clearing: document.querySelector('.cut-clear-cur').textContent,
-      rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="wallAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row),
+      rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="finishAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row),
       loop: document.querySelector('.cut-loop').checked,
       stepover: document.querySelector('.cut-stepover').value, len: document.querySelector('.cut-stepover-len').textContent, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
     const look = () => evalJs(`({ paths: document.querySelectorAll('#prepare-toolpath-group .sk-clear-path').length, cleanup: document.querySelectorAll('#prepare-toolpath-group .sk-clear-cleanup').length,
@@ -127,7 +127,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false }) {
     const rec = (x, y) => evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/packages/core/loop-geometry.js'), import('/apps/shaper/src/cut-plan.js')]).then(([L, G, C]) => {
       const st = window.__designController.state, by = new Map(st.shapes.map((s) => [s.id, s]));
       const l = L.findLoops(st).map((l) => ({ l, p: G.loopPolygon(l, st, by) })).filter((o) => G.pointInPolygon(o.p, { x: ${x}, y: ${y} })).sort((a, b) => Math.abs(G.polyArea(a.p)) - Math.abs(G.polyArea(b.p)))[0];
-      const r = C.CUT_PLAN.get('loop:' + l.l.id); return r ? { cutType: r.cutType, clearing: r.clearing ?? null, stepover: r.stepover ?? null, wallAllowance: r.wallAllowance ?? null, rasterAngle: r.rasterAngle ?? null, loop: r.loop ?? null, toolDia: r.toolDia } : null; })`);
+      const r = C.CUT_PLAN.get('loop:' + l.l.id); return r ? { cutType: r.cutType, clearing: r.clearing ?? null, stepover: r.stepover ?? null, finishAllowance: r.finishAllowance ?? null, rasterAngle: r.rasterAngle ?? null, loop: r.loop ?? null, toolDia: r.toolDia } : null; })`);
     const download = async () => {
       await openMode('review');
       for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
@@ -232,10 +232,20 @@ export async function cardPhase(t, label) {
     // Spiral, Loop off: open lines + the Origin's inside cut
     await pickClearing('linked');
     const r1 = await rec(60, 10);
-    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.wallAllowance, r1.rasterAngle, r1.loop], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 0, false], label + ': Spiral with the defaults, Loop off');
+    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.finishAllowance, r1.rasterAngle, r1.loop], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 0, false], label + ': Spiral with the defaults, Loop off');
     const c1 = await card();
     console.log(label + ' spiral card: ' + JSON.stringify(c1));
-    assert.deepStrictEqual([c1.rows, c1.loop], [['stepover', 'wallAllowance', 'loop'], false], label + ': Stepover, Wall allowance, Loop (off)');
+    assert.deepStrictEqual([c1.rows, c1.loop], [['stepover', 'finishAllowance', 'loop'], false], label + ': Stepover, Finish allowance, Loop (off)');
+    // TASK 766: the row is Finish allowance with its hint (Loop off: the Origin's inside cut takes it off); the hint wraps inside the card, never widens or clips it.
+    // TASK 770: the hint is the row's hint (hint.js): closed at rest, a click / a tap on the label opens it under the field, a second one closes it
+    await clickEl('#prepare-panel .cut-row[data-row="finishAllowance"] .cut-field-label');
+    const fin = await evalJs(`(() => { const row = document.querySelector('.cut-row[data-row="finishAllowance"]'), h = row.querySelector('.sk-hint'), c = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect(), hb = h.getBoundingClientRect();
+      return { label: row.querySelector('.cut-field-label').textContent, hint: h.textContent, fits: hb.left >= c.left - 0.5 && hb.right <= c.right + 0.5 && h.scrollWidth <= h.clientWidth + 1, cardRight: Math.round(c.right), cardW: Math.round(c.width), vw: innerWidth }; })()`);
+    console.log(label + ' finish allowance: ' + JSON.stringify(fin));
+    assert.deepStrictEqual([fin.label, fin.hint], ['Finish allowance', 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.'], label + ': the Finish allowance label and its hint (Loop off)');
+    assert.ok(fin.fits && fin.cardRight <= fin.vw, label + ': the hint wraps inside the card and the card stays on screen');
+    await clickEl('#prepare-panel .cut-row[data-row="finishAllowance"] .cut-field-label');
+    assert.strictEqual(await evalJs(`document.querySelector('.cut-row[data-row="finishAllowance"] .sk-hint').hidden`), true, label + ': TASK 770: a second click / tap closes the hint');
     assert.ok(new RegExp(`^Pocket: spiral, \\d+ turns in 1 line \\+ wall, stepover ${inch ? '0\\.1 in' : '2\\.4 mm'}, [\\d.]+ ${inch ? 'ft' : 'm'} of path, about \\d+ min at ${inch ? '39 in' : '1000 mm'}/min$`).test(c1.note[0]), label + ': the note ' + c1.note[0]);
     assert.ok(c1.note.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), label + ': the note: the depth passes are the Origin\'s');
     const l1 = await look();
@@ -252,7 +262,7 @@ export async function cardPhase(t, label) {
     // Raster: its angle row
     await pickClearing('raster');
     const c4 = await card();
-    assert.deepStrictEqual(c4.rows, ['stepover', 'wallAllowance', 'loop', 'rasterAngle'], label + ': Raster: + the Raster angle row');
+    assert.deepStrictEqual(c4.rows, ['stepover', 'finishAllowance', 'loop', 'rasterAngle'], label + ': Raster: + the Raster angle row');
     await pickClearing('linked');
 }
 

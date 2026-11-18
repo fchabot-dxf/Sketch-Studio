@@ -89,7 +89,7 @@ for (const pickFreeFirst of [false, true]) {
     else {
       assert(a && Math.abs(a.span - value) < 1e-6, `${tag}: ${value}: the arc spans ${a && a.span}`);
       assert.strictEqual(a.large, value > 180 ? 1 : 0, `${tag}: ${value}: large-arc flag`);
-      assert(a.labelInside && a.text === `${value.toFixed(1)}°`, `${tag}: ${value}: the label ${a.text} sits inside the arc`);
+      assert(a.labelInside && a.text === `${Number(value.toFixed(1))}°`, `${tag}: ${value}: the label ${a.text} sits inside the arc`);
     }
   }
   S.engine.solve = realSolve;

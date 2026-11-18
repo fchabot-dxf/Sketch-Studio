@@ -15,7 +15,7 @@ import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are de
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };
 const localState = { isDragging: false, dragStartScreen: null, boxes: false, cursor: null };
 // TASK 596: after the first click of a two-point rectangle the W x H boxes show at once (base-tool's shared creation-box path); the sides follow the cursor until typed
-const BOX = { dual: { kind: 'rect', labels: ['W', 'H'], separator: '×', digits: [1, 1] } };
+const BOX = { dual: { kind: 'rect', labels: ['W', 'H'], separator: '×', quantities: ['length', 'length'] } };
 
 /** The second corner: the cursor, but a typed width / height holds its side (the other still follows the cursor). */
 function lockedCorner(c1, pt) {

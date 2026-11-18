@@ -56,7 +56,7 @@ const LOOPS = { linked: { rectangle: 1, L: 1, circle: 1, island: 3, dumbbell: 2 
 function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y; return a / 2; }
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 const outerLoopOf = (st) => { const loops = findLoops(st), lp = polysOf(st); return loops.reduce((a, l) => (Math.abs(area(lp[l.id])) > Math.abs(area(lp[a.id])) ? l : a), loops[0]); };
-const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, wallAllowance: ALLOW, rasterAngle: 0, ...more });
+const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, finishAllowance: ALLOW, rasterAngle: 0, ...more });
 const exportOf = (st, rec, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 const distSeg = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy; const t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)) : 0; return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
 const distPolyline = (p, pts, closed) => { let m = Infinity; const n = closed ? pts.length : pts.length - 1; for (let i = 0; i < n; i++) m = Math.min(m, distSeg(p, pts[i], pts[(i + 1) % pts.length])); return m; };
@@ -155,7 +155,7 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     near(on.leftover.missed, off.leftover.missed, 0.01, `${tag}: nothing more missed`);
     // allowance 0: no turn written twice
     {
-      const on0 = plan(reg, pattern, { loop: true, wallAllowance: 0 }), off0 = plan(reg, pattern, { wallAllowance: 0 });
+      const on0 = plan(reg, pattern, { loop: true, finishAllowance: 0 }), off0 = plan(reg, pattern, { finishAllowance: 0 });
       const ringsOn0 = on0.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind !== 'pass').length, 0);
       const ringsOff0 = pattern === 'linked' ? off0.loops : pattern === 'raster' ? off0.cleanup : 1;
       eq(ringsOn0, ringsOff0, `${tag}: allowance 0: ${ringsOff0} turn(s), none written twice (the last ring IS the finish turn)`);
@@ -227,6 +227,7 @@ let saved = null;
       const n0 = st.history.length;
       h.toggleLoop();
       eq([CUT_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
+      eq(h.q('.cut-row[data-row="finishAllowance"] .sk-hint').textContent, 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
       const nt = h.note();
       ok(/\+ wall: one closed loop, ends where it starts, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`);
       ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);

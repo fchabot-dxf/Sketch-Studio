@@ -106,7 +106,10 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       return { kind: 'info', text: homeLabel(home) + (live.needsSavePrompt() === 'unsaved' ? ' (changes not saved yet)' : '') };
     }
     const s = store.status ? store.status(currentDesignId) : { where: 'device', state: 'saved', at: null, reason: null };
-    if (s.notice) return { kind: 'error', text: s.notice };
+    // TASK 766: another device changed the shown design on Drive: the running design stays as it is until the user chooses to load Drive's version
+    const driveVersion = live && live.driveChanged && live.driveChanged()
+      ? { action: { id: 'load-drive-version', label: 'Load the Drive version', onClick: act(async () => { await live.loadDriveVersion(); await refreshName(); }) } } : {};
+    if (s.notice) return { kind: 'error', text: s.notice, ...driveVersion };
     if (s.state === 'failed' || (s.where === 'device' && s.reason)) return { kind: 'error', text: `Not saved to Google Drive: ${s.reason}. Kept on this device.` };
     if (!currentDesignId) return { kind: 'info', text: 'Not saved yet' };
     if (s.where === 'device') {

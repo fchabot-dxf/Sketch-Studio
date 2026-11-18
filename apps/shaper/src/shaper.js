@@ -41,11 +41,11 @@ const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 // (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one derivation (deriveCuts).
 const HOLD_PARAMS = ['holdPart', 'tabCount', 'tabWidth', 'holdThickness'];
 // TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js): the plain Pocket declares its card rows: `clearing` (Freehand | Spiral | Raster | Morphed
-// spiral; TASK 749: Spiral replaced Concentric) and for a computed pattern `stepover` (% of the bit), `wallAllowance`, `loop` (TASK 750: the whole pocket as closed loops,
+// spiral; TASK 749: Spiral replaced Concentric) and for a computed pattern `stepover` (% of the bit), `finishAllowance`, `loop` (TASK 750: the whole pocket as closed loops,
 // the finish turn in them; the step-downs are the Origin's Pass Depth / AutoPass) and, for Raster, `rasterAngle`.
 // Never written to the export as attributes (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one
 // derivation (deriveCuts), which writes a programmed pocket as on-line paths + the finish pass (an inside cut, islands as outside cuts).
-const CLEARING_PARAMS = ['clearing', 'stepover', 'wallAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern
+const CLEARING_PARAMS = ['clearing', 'stepover', 'finishAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern
 // TASK 743: `opRank` = where an OPERATION of this type goes in the DEFAULT operation order (apps/shaper/src/operations.js), lowest first: what is not cut
 // (Guide, Stock: 0), then on line (1), pockets (2), inside cuts = the holes (3), and last the outside cuts that free the part (4). A stepped type ranks as
 // its plain type (it is cut as terraces of it). Prepare only: never written to the export.
@@ -56,12 +56,12 @@ export const CUT_TYPES = [
   { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.4' stroke-dasharray='1.8 1.6'/><circle cx='16' cy='11' r='1.6' fill='currentColor'/>", opRank: 1, params: ['cutDepth', 'cutOffset', 'toolDia'], offsetMovesCut: false },
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide', icon: "<path d='M8 2h8v8M2 8v8h8' fill='none' stroke='currentColor' stroke-width='1.6'/>", opRank: 0, params: ['cutDepth', 'cutOffset', 'toolDia'] },
   // TASK 472: STOCK = the board itself, drawn as a closed profile in Design and marked here. NOT a cut: the Review extrudes it to its
-  // thickness (the one depth row, relabelled). The EXPORT writes it as a GUIDE (owner: "ok guide then": Shaper's docs call a guide
+  // thickness (the one depth row, relabelled: `depthParam` = its entry in param-hints.js, TASK 770). The EXPORT writes it as a GUIDE (owner: "ok guide then": Shaper's docs call a guide
   // "uncuttable", so the stock line can never be cut by accident): the guide's colour and cutType, its thickness in cutDepth, in
   // the same order and format as every other cut; `exportParams` = the attributes the exported element carries (a guide keeps all
   // three), `params` = the rows the Prepare card shows. Declared AFTER the guide so classify() (import) reads blue as a GUIDE:
   // re-importing gives a Guide the owner can re-mark Stock.
-  { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthLabel: 'Thickness', icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthParam: 'stockDepth', icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
   // TASK 714: the STEPPED types (owner turns 1939-1948): a wall that is not vertical (drafted, chamfered, filleted, countersunk), cut with a
   // straight end mill as a stair of PLAIN cuts. Generated in the app (#core/stepped-cut.js steppedTerraces, through deriveProfileCuts), so
   // the Origin sees plain cuts; distinct here. `terraceAs` = the plain type each terrace is cut as (its encoding is what the

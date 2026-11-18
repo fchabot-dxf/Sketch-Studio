@@ -69,10 +69,10 @@ await (async () => {
       await press('#btn-recenter-view'); await sleep(500);
       const tool = async (id) => { await evalJs(`document.querySelector('#${id}').click()`); await sleep(200); };
       const cr = await evalJs(`(() => { const r = document.querySelector('#design-canvas').getBoundingClientRect(); return { x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.width, innerWidth), height: Math.min(r.height, innerHeight - Math.max(0, r.top)) }; })()`);
-      const ALL = { d1: '60.0', d2: '45.0°', d3: '50.0' };
+      const ALL = { d1: '60', d2: '45°', d3: '50' };
       const labelsAll = async (what) => {
         const l = await labels();
-        assert.ok(l.d1 && l.d1.startsWith('60.0') && l.d2 && l.d2.startsWith('45.0') && l.d3 && l.d3.startsWith('50.0'), `[${kind}] ${what}: the three labels are on the canvas ${JSON.stringify(l)} (${JSON.stringify(ALL)})`);
+        assert.ok(l.d1 && l.d1.startsWith('60') && l.d2 && l.d2.startsWith('45') && l.d3 && l.d3.startsWith('50'), `[${kind}] ${what}: the three labels are on the canvas ${JSON.stringify(l)} (${JSON.stringify(ALL)})`);
       };
       // the Parameters window: opened by the footer fx button, read, closed again (on a phone the sheet covers the canvas)
       const rowsNow = async (file) => {
@@ -89,7 +89,7 @@ await (async () => {
         assert.strictEqual(await hasL(), false, `[${kind}] ${how}: L is deleted`);
         const l = await labels();
         assert.deepStrictEqual({ d1: l.d1, d2: l.d2 }, { d1: null, d2: null }, `[${kind}] ${how}: no label of d1 (its length) nor d2 (its angle) on the canvas`);
-        assert.ok(l.d3 && l.d3.startsWith('50.0'), `[${kind}] ${how}: d3 (on M, which stays) keeps its label: ${l.d3}`);
+        assert.ok(l.d3 && l.d3.startsWith('50'), `[${kind}] ${how}: d3 (on M, which stays) keeps its label: ${l.d3}`);
         assert.deepStrictEqual(await rowsNow(tableShot), ['d3'], `[${kind}] ${how}: the Parameters window lists only d3`);
         assert.deepStrictEqual(await evalJs(`JSON.stringify(${STATE}.constraints.filter((c) => c.name).map((c) => c.name))`).then(JSON.parse), ['d3'], `[${kind}] ${how}: d1 and d2 are deleted with L`);
       };
@@ -163,12 +163,12 @@ await (async () => {
       assert.strictEqual(await hasL(), false, `[${kind}] D: L is deleted`);
       assert.deepStrictEqual(await evalJs(`JSON.stringify(${STATE}.parameters)`).then(JSON.parse), [{ name: 'd1', unit: 'mm', expression: '60 mm', comment: 'dimension deleted', deletedDimension: true }], `[${kind}] D: d1 is kept as a value`);
       const l3 = (await labels()).d3;
-      assert.ok(l3 && l3.includes('50.0'), `[${kind}] D: d3 still reads 50.0 on the canvas: ${l3}`);
+      assert.ok(l3 && l3.includes('50'), `[${kind}] D: d3 still reads 50 on the canvas: ${l3}`);
       await press('#btn-parameters');
       await waitFor(`!!document.querySelector(${JSON.stringify(prow('d1'))})`, `[${kind}] D: the kept d1 row`);
       await sleep(200);
       const keptRow = await evalJs(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(prow('d1'))}); const msg = r.nextElementSibling; return { user: r.classList.contains('pt-user'), value: r.querySelector('td.pt-val').textContent, expression: r.querySelector('input[data-col="expression"]').value, comment: r.querySelector('input[data-col="comment"]').value, error: !!(msg && msg.classList.contains('pt-msg-err')) }; })())`).then(JSON.parse);
-      assert.deepStrictEqual(keptRow, { user: true, value: '60.0', expression: '60 mm', comment: 'dimension deleted', error: false }, `[${kind}] D: the Parameters window lists d1 = 60 mm · dimension deleted`);
+      assert.deepStrictEqual(keptRow, { user: true, value: '60', expression: '60 mm', comment: 'dimension deleted', error: false }, `[${kind}] D: the Parameters window lists d1 = 60 mm · dimension deleted`);
       assert.deepStrictEqual(await tableRows(), ['d3'], `[${kind}] D: the sketch dimensions are only d3`);
       await shot(`${kind}-5-table-kept-d1.png`, await evalJs(`(() => { const r = document.querySelector('${W}').getBoundingClientRect(); return { x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.width, innerWidth - Math.max(0, r.left)), height: Math.min(r.height, innerHeight - Math.max(0, r.top)) }; })()`));
       await press('#btn-parameters'); await sleep(200);

@@ -162,10 +162,10 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
 
     h.pick('stepped-pocket');
     eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth, CUT_PLAN.get(pk).cutDepth], ['stepped-pocket', 1, 8], 'picked: Stepped pocket, step depth 1 mm (the default), depth 8 kept');
-    ok(h.stepRowShown() && h.q('.cut-step-depth').value === '1.000', 'the card shows the Step depth row: 1.000');
+    ok(h.stepRowShown() && h.q('.cut-step-depth').value === '1', 'the card shows the Step depth row: 1');
     eq(h.q('.cut-type-cur').textContent, 'Stepped pocket', 'the card names the type');
     ok(h.q('.cut-ic-slot svg') && h.q('.cut-ic-slot svg').innerHTML.includes('M4.5 13.5V10.5h3v-3h3v-3h3'), 'with its own icon (a stair)');
-    eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.18 mm apart'], 'the card note: the steps');
+    eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.176 mm apart'], 'the card note: the steps');
     const stepped = elems(exportOf(app));
     eq(stepped.map((e) => e.tag + ':' + e.type + '@' + e.depth), ['path:outside@19.000 mm', ...[1, 2, 3, 4, 5, 6, 7, 8].map((k) => `path:pocket@${k}.000 mm`)], 'export: the outline + 8 PLAIN pockets (shaper:cutType="pocket") at 1..8 mm');
     ok(stepped[1].geom.includes('M 89.8237 -20.1763 L 30.1763 -20.1763 L 30.1763 -59.8237 L 89.8237 -59.8237 Z'), 'the 1 mm pocket is the ring at 1 mm (30.176..89.824): ' + stepped[1].geom);
@@ -180,7 +180,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     eq(app.state.history.length, hist + 1, 'the step change is ONE undo step');
     eq(elems(exportOf(app)).filter((e) => e.type === 'pocket').map((e) => e.depth), ['2.000 mm', '4.000 mm', '6.000 mm', '8.000 mm'], 'export follows: 4 pockets');
     eq(planReliefItems(app.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth), [2, 4, 6, 8], 'Review follows');
-    eq(h.note(), ['Pocket 1 (8mm): 4 steps, 2 to 8 mm \u00b7 outlines 0.35 mm apart'], 'the note follows');
+    eq(h.note(), ['Pocket 1 (8mm): 4 steps, 2 to 8 mm \u00b7 outlines 0.353 mm apart'], 'the note follows');
     h.setStep('0.01');
     eq(CUT_PLAN.get(pk).stepDepth, 0.01, 'a step of 0.01 mm is stored as typed (no minimum)');
     app.key('z', { ctrl: true });

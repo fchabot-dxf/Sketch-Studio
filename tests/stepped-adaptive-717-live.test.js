@@ -94,22 +94,22 @@ try {
   let c = await cardState();
   console.log('OFF: ' + JSON.stringify(c));
   assert.deepStrictEqual([c.checked, c.rows.slice(0, 3)], [false, ['cutDepth', 'adaptiveSteps', 'stepDepth']], 'OFF: the checkbox (unchecked), then the Step depth row');
-  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.17–2.24 mm apart'], 'OFF: the 716 note');
+  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.172–2.236 mm apart'], 'OFF: the 716 note');
   await shot('card-off.png', '#prepare-panel .cut-card');
   // ON (a real click on the checkbox): Medium
   await clickEl('.cut-adaptive');
   await waitFor(`document.querySelector('.cut-adaptive').checked && getComputedStyle(document.querySelector('.cut-row[data-row="stepDeviation"]')).display !== 'none'`, 'the Resolution row');
   c = await cardState();
   console.log('ON: ' + JSON.stringify(c));
-  assert.deepStrictEqual([c.rows.slice(0, 3), c.resolution, c.presets], [['cutDepth', 'adaptiveSteps', 'stepDeviation'], '0.250', ['Coarse', 'Medium*', 'Fine']], 'ON: Resolution 0.250 mm, Medium active, no Step depth row');
-  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): adaptive, Medium (0.25 mm): 7 steps at 6.19 · 6.69 · 7.07 · 7.39 · 7.67 · 7.92 · 8 mm · outlines 0.27–0.99 mm apart'], 'the Medium note');
+  assert.deepStrictEqual([c.rows.slice(0, 3), c.resolution, c.presets], [['cutDepth', 'adaptiveSteps', 'stepDeviation'], '0.25', ['Coarse', 'Medium*', 'Fine']], 'ON: Resolution 0.25 mm, Medium active, no Step depth row');
+  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): adaptive, Medium (0.25 mm): 7 steps at 6.193 · 6.69 · 7.071 · 7.386 · 7.67 · 7.925 · 8 mm · outlines 0.275–0.986 mm apart'], 'the Medium note');
   await shot('card-medium.png', '#prepare-panel .cut-card');
   // Coarse: card, Review, export
   await preset('0.5');
   c = await cardState();
   console.log('Coarse: ' + JSON.stringify(c.note));
   assert.deepStrictEqual(c.presets, ['Coarse*', 'Medium', 'Fine'], 'Coarse active');
-  assert.ok(c.note[0].startsWith('Pocket 1 (8mm): adaptive, Coarse (0.5 mm): 4 steps at 6.65 · 7.33 · 7.84 · 8 mm'), 'the Coarse note');
+  assert.ok(c.note[0].startsWith('Pocket 1 (8mm): adaptive, Coarse (0.5 mm): 4 steps at 6.651 · 7.333 · 7.843 · 8 mm'), 'the Coarse note');
   await shot('card-coarse.png', '#prepare-panel .cut-card');
   const exCoarse = await exportDepths();
   console.log('Coarse export: ' + JSON.stringify(exCoarse));
@@ -127,7 +127,7 @@ try {
   c = await cardState();
   console.log('Fine: ' + JSON.stringify(c.note));
   assert.deepStrictEqual(c.presets, ['Coarse', 'Medium', 'Fine*'], 'Fine active');
-  assert.ok(c.note[0].startsWith('Pocket 1 (8mm): adaptive, Fine (0.1 mm): 16 steps at 5.76 · 6.08'), 'the Fine note');
+  assert.ok(/^Pocket 1 \(8mm\): adaptive, Fine \(0\.1 mm\): 16 steps at 5\.7\d* · 6\.0\d*/.test(c.note[0]), 'the Fine note');
   await shot('card-fine.png', '#prepare-panel .cut-card');
   const exFine = await exportDepths();
   console.log('Fine export: ' + JSON.stringify(exFine));

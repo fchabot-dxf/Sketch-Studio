@@ -33,9 +33,11 @@ import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: pro
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
-import { docUnit } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
+import { hintLabel, hintText } from './param-hints.js'; // TASK 770: THE table of labels and hints (the Export step's cards, the drawer's Download)
+import { mountHint } from './hint.js'; // TASK 770: the one hint widget
 
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
@@ -63,7 +65,7 @@ const chrome = mountAppChrome({
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
   hostActions: [
-    { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
+    { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: () => { // TASK 770: from the table (the shared drawer shows a tooltip)
       const payload = generateShaperSvgPayload();
       if (!payload) { groupStatus(NO_CUTS); return; }
       download(designFileName(), payload.svg);
@@ -98,6 +100,13 @@ function generateShaperSvgPayload({ preview = false } = {}) {
 const designFileName = () => exportFileName(docBuffer ? docBuffer.designName() : null);
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
+// TASK 770: the Export step's side cards take their labels and hints from the table (param-hints.js) through the one hint widget (hint.js): the Stock thickness,
+// the Material, and the Export title, whose hint lists the three ways out (each button is described by its own line)
+for (const e of document.querySelectorAll('#review-side [data-label]')) e.textContent = hintLabel(e.dataset.label);
+const sideHint = (id, after, fields, itemFields) => mountHint({ id, labelEl: document.querySelector(`#review-side [data-hint="${id}"]`), after, fields, itemFields });
+sideHint('stockThickness', document.querySelector('#review-stock > label'), [document.getElementById('review-stock-thickness')]);
+sideHint('material', document.querySelector('#review-look > label'), [document.getElementById('review-look-select')]);
+sideHint('export', document.querySelector('#simexport-panel .simexport-actions'), [], { generateSvg: btnGenerateSvg, syncShaperHub: document.getElementById('btn-sync-shaper'), openShaperHub: document.getElementById('link-shaper-hub') });
 if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
@@ -395,7 +404,8 @@ const reviewInputs = (st) => {
   // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
   return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN), ...planClearingNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
 };
-const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder()]); // TASK 714: the notes are in the doc unit; TASK 743: the 2D file's groups follow the operation order
+const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder(),
+  SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
 // TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
 const REVIEW_VIEW_KEY = 'shaper-review-view';
 let reviewViewMode = '3d';
@@ -440,6 +450,7 @@ async function enterReview(st) {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,
     onChange: () => { if (reviewViewMode === '2d') exportPreview.refresh(reviewSig(designController.state)); else if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card
   showStockThickness = stockCard.show;
+  SettingsManager.subscribe((key) => { if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && modes.current() === 'review' && designController) enterReview(designController.state); });
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
   document.getElementById('review-fit').addEventListener('click', () => (reviewViewMode === '2d' ? exportPreview.fit() : reviewView && reviewView.fit())); // TASK 718: Fit frames the view shown

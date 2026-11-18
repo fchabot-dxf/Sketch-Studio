@@ -1,7 +1,7 @@
 // tests/template-units-722-live.test.js -- TASK 722 in REAL Shaper and SketchStudio (desktop 1400x900 mouse + phone 390x844 touch): the document is set to
 // INCHES, then
 //   - the picker's card preview of the right-angle brace labels its dimensions in inches (23.625, not 600)
-//   - its start view shows the fields in inches (11.8125 / 23.625 / 1.5 with the unit "in") and accepts typed text: 1/8 in, 3" (and 38mm)
+//   - its start view shows the fields in inches (11.813 / 23.625 / 1.5 at default precision 3 with the unit "in") and accepts typed text: 1/8 in, 3" (and 38mm)
 //   - a refused value says the limit in inches
 //   - Shaper: Open -> the Parameters table has the parameters in inches ("3 in", "0.125 in")
 // Screenshots to .evidence/722/.
@@ -70,14 +70,14 @@ await (async () => {
       await waitFor(`!!document.querySelector('.sk-tp-card')`, `[${tag}] cards`);
       await waitFor(`document.querySelector('.sk-tp-grid').dataset.previews === 'ready'`, `[${tag}] previews`, 30000);
       const labels = await evalJs(`[...document.querySelectorAll('.sk-tp-card[data-template="right-angle-brace"] svg text')].map((t) => t.textContent)`);
-      assert.ok(labels.includes('23.625') && labels.includes('11.8125') && labels.includes('1.5'), `[${tag}] card labels in inches: ${JSON.stringify(labels)}`);
+      assert.ok(labels.includes('23.625') && labels.includes('11.813') && labels.includes('1.5'), `[${tag}] card labels in inches: ${JSON.stringify(labels)}`);
       assert.ok(!labels.includes('600') && !labels.includes('300'), `[${tag}] no mm labels: ${JSON.stringify(labels)}`);
       await shot('card-inches.png', '.sk-tp-card[data-template="right-angle-brace"]');
 
       await press('.sk-tp-card[data-template="right-angle-brace"]');
       await waitFor(`!!document.querySelector('.sk-tp-start[data-template="right-angle-brace"] .sk-tp-corner')`, `[${tag}] start view`);
       await sleep(250);
-      assert.deepStrictEqual(await field('width'), ['11.8125', 'in'], `[${tag}] width`);
+      assert.deepStrictEqual(await field('width'), ['11.813', 'in'], `[${tag}] width`);
       assert.deepStrictEqual(await field('height'), ['23.625', 'in'], `[${tag}] height`);
       assert.deepStrictEqual(await field('thickV'), ['1.5', 'in'], `[${tag}] thickV`);
       await shot('start-inches.png', '.sk-tp-panel');

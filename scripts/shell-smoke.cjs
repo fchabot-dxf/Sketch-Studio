@@ -84,8 +84,8 @@ async function cdpRun(cdp, url) {
       ['Design hides under Export', c.designHidesOnExport === true, c.designHidesOnExport],
       ['Design tab returns', c.designBack === true, c.designBack],
       ['Settings opens the shared panel', c.styleOpens === true, c.styleOpens],
-      // TASK 724: 25 + the Units tab's two display-precision selects (Length, Angle)
-      ['Settings panel has 29 controls', c.styleControls === 29, c.styleControls], // task 728: + Inch display, + Length precision as a fraction (one of the two precision rows is hidden at a time)
+      // TASK 724: 25 + 2 precision; task 728: +2 fraction/display (1 hidden); task 770: +1 Show trailing zeros
+      ['Settings panel has 30 controls', c.styleControls === 30, c.styleControls],
       ['Settings panel closes (Esc)', c.styleCloses === true, c.styleCloses],
     ];
     let failed = 0;

@@ -186,7 +186,7 @@ await (async () => {
       const d1mm = (await pats())[0].distance[0];
       assert(Math.abs(d1mm - (d0mm + 30 / pxPerMm)) < 0.6, `[${kind}] the arrow drag sets the distance (${d0mm} -> ${d1mm})`);
       const dlgDist1 = await evalJs(`document.querySelector(${JSON.stringify(field('Distance 1'))}).value`);
-      assert.strictEqual(parseFloat(dlgDist1), Number(d1mm.toFixed(2)), `[${kind}] dialog Distance 1 matches dragged distance`);
+      assert.strictEqual(parseFloat(dlgDist1), Number(d1mm.toFixed(3)), `[${kind}] dialog Distance 1 matches dragged distance`);
       assert(dlgDist1.endsWith('mm'), `[${kind}] dialog Distance 1 carries unit (${dlgDist1})`);
       const inl = await inlineBox();
       assert(inl && inl.dir === '0', `[${kind}] inline boxes appear beside arrow 0 and stay after drag release`);

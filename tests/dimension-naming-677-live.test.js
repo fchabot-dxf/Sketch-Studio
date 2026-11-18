@@ -107,7 +107,7 @@ await (async () => {
     assert.deepStrictEqual(lens, [12, 12, 12], `${tag}: the three lines are 12 long`);
     const t = await label('thickness'), f2 = await label('d2'), f3 = await label('d3');
     assert.ok(!/^fx/.test(t.text) && f2.text === 'fx: ' + t.text && f3.text === 'fx: ' + t.text, `${tag}: thickness shows a plain value, d2 / d3 show fx: ${JSON.stringify([t, f2, f3])}`);
-    const u = t.text === '12.0' ? 'mm' : 'in'; // Shaper's document unit (12 mm reads 0.5 in)
+    const u = t.text === '12' ? 'mm' : 'in'; // Shaper's document unit (12 mm reads 0.5 in)
     assert.strictEqual(t.tag, `thickness : ${t.text} ${u}`, `${tag}: the hover tag of the named dimension`);
     assert.strictEqual(f2.tag, null, `${tag}: an automatic name has no tag`);
     await sleep(200); await shot(`naming-${tag}-thickness-12.png`);

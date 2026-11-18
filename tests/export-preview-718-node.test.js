@@ -94,7 +94,7 @@ try {
     console.log('R3 fillet, export: ' + JSON.stringify(ex.map((e) => `${e.cutType} ${e.depth}`)));
     console.log('R3 fillet, preview: ' + JSON.stringify(pv.map(itemLabel)));
     eq(pv.map((e) => ({ tag: e.tag, cutType: e.cutType, depth: e.depth })), ex, 'R3 fillet: the preview\'s element list == the export\'s (tag, type, depth, order)');
-    eq(pv.map(itemLabel), ['outside · 19.000 mm', 'pocket · 6.651 mm · step 1 of 4', 'pocket · 7.333 mm · step 2 of 4', 'pocket · 7.843 mm · step 3 of 4', 'pocket · 8.000 mm · step 4 of 4'],
+    eq(pv.map(itemLabel), ['outside · 19 mm', 'pocket · 6.651 mm · step 1 of 4', 'pocket · 7.333 mm · step 2 of 4', 'pocket · 7.843 mm · step 3 of 4', 'pocket · 8 mm · step 4 of 4'],
       'R3 fillet: the labels: the outline, then the 4 steps in order');
     const rows = previewRows(pv);
     eq(rows.map((g) => [g.cutType, g.count, g.rows.length]), [['outside', 1, 1], ['pocket', 4, 4]], 'the list: outside (1 element), pocket (4 elements, 4 rows)');

@@ -85,7 +85,7 @@ await (async () => {
     await press('#btn-parameters'); // TASK 677: the footer's always-visible button
     await waitFor(`document.querySelectorAll('.sk-pwin tr.pt-user').length === 3`, 'the Parameters window with the 3 user parameters');
     const userRows = () => evalJs(`[...document.querySelectorAll('.sk-pwin tr.pt-user')].map((r) => [...r.children].slice(0, 5).map((c) => { const i = c.querySelector('input'); return i ? i.value : c.textContent; }))`); // TASK 677: Name / Expression / Comment are inputs
-    assert.deepStrictEqual(await userRows(), [['length', '1500 mm', '1500.0', 'mm', 'Overall length'], ['width', '400 mm', '400.0', 'mm', 'Width'], ['thickness', '18 mm', '18.0', 'mm', 'Plywood thickness']], 'the table shows the parameters');
+    assert.deepStrictEqual(await userRows(), [['length', '1500 mm', '1500', 'mm', 'Overall length'], ['width', '400 mm', '400', 'mm', 'Width'], ['thickness', '18 mm', '18', 'mm', 'Plywood thickness']], 'the table shows the parameters');
     const fx = await evalJs(`[...document.querySelectorAll('.sk-pwin tr.pt-dim')].map((r) => { const m = r.children[1].querySelector('.pt-fx:not([hidden])'); return (m ? m.textContent : '') + r.children[1].querySelector('input').value; })`);
     assert.ok(fx.length === 14 && fx.every((t) => t.startsWith('fx')), 'every sketch dimension row is a formula: ' + JSON.stringify(fx));
     await sleep(300); await shot('parameters-table-box-frame.png', '.sk-pwin', { pad: 4, scale: 2 });
@@ -108,7 +108,7 @@ await (async () => {
     const sides = await S(`JSON.stringify([...new Set([...s.joints.values()].map((j) => Math.round(j.x * 1e4) / 1e4))].sort((a, b) => a - b))`).then(JSON.parse);
     assert.deepStrictEqual(sides, [0, 12, 388, 400], 'both sides are 12 thick');
     assert.ok(Math.abs(lv[11] - 1500) < 1e-3 && Math.abs(lv[0]) < 1e-3, 'still 1500 long');
-    await waitFor(`[...document.querySelectorAll('.sk-pwin tr.pt-user')][2].children[2].textContent === '12.0'`, 'the table reads thickness 12.0');
+    await waitFor(`[...document.querySelectorAll('.sk-pwin tr.pt-user')][2].children[2].textContent === '12'`, 'the table reads thickness 12');
     await sleep(300); await shot('parameters-table-box-frame-thickness-12.png', '.sk-pwin', { pad: 4, scale: 2 });
     await shot('box-frame-thickness-12-canvas.png');
     await press('.sk-pwin .sk-dock-close').catch(async () => { await key('Escape', 'Escape', 27); });

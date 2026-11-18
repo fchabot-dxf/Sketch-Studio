@@ -5,6 +5,7 @@
 import { SolverConfig } from '#core/solver-config.js';
 import { draw, defaultRenderCtx } from '#ui/svg-renderer.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
+import { SAME_TAB_REASONS } from '#ui/document-buffer.js'; // TASK 766: the same tab shown again keeps its view
 import { applyDefaultState } from '#core/state.js';
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 import { showNotification } from '#ui/notification-manager.js';
@@ -47,7 +48,7 @@ export function studioBufferOptions({ state, engine, svg, showDesign = null }) {
   return {
     state,
     app: 'sketchstudio', canvas: svg, showDesign, // TASK 474: the design records who saved it last
-    onRestored: ({ reason }) => { try { engine.solve(500); } catch (_) {} if (reason !== 'switch') fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view). TASK 587: a TAB SWITCH keeps the tab's own view (the buffer already put it back)
+    onRestored: ({ reason }) => { try { engine.solve(500); } catch (_) {} if (!SAME_TAB_REASONS.has(reason)) fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view). TASK 587: a TAB SWITCH keeps the tab's own view (the buffer already put it back)
   };
 }
 

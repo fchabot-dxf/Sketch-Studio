@@ -81,31 +81,50 @@ try {
   await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
   const card = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, depth: document.querySelector('.cut-depth').value, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
 
-  // 1. Auto: as before
+  // 1. Defaults: Length 3, Angle 1, Show trailing zeros OFF
   await waitFor(`document.querySelectorAll('.cut-note div').length > 0`, 'the stepped note');
-  const auto = await card();
-  console.log('Auto card: ' + JSON.stringify(auto));
-  assert.strictEqual(auto.step, '1.000', 'Auto: Step depth keeps its 3 decimals');
-  assert.deepStrictEqual(auto.note, ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart'], 'Auto: the note is the 714 note');
-  await shot('1-card-auto.png', ['#prepare-panel .cut-card']);
+  const def = await card();
+  console.log('Default card: ' + JSON.stringify(def));
+  assert.strictEqual(def.step, '1', 'Default (3, trailing zeros OFF): Step depth 1');
+  assert.strictEqual(def.depth, '8', 'Default: Depth 8');
+  assert.deepStrictEqual(def.note, ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'], 'Default: the note follows Length 3');
+  await shot('1-card-default.png', ['#prepare-panel .cut-card']);
 
-  // 2. Length precision 5 in the Style panel: the open card re-renders at once
+  // 2. Style panel > Units tab: no Auto option, sample options + Show trailing zeros checkbox + hint
   await openStyle();
-  const rows = await evalJs(`['LENGTH_PRECISION', 'ANGLE_PRECISION'].map((k) => { const s = document.querySelector('${P} [data-key="' + k + '"]'); return [k, s && s.tagName, s && s.options.length, s && s.value, s && s.getBoundingClientRect().width > 0]; })`);
-  console.log('Style panel rows: ' + JSON.stringify(rows));
-  assert.deepStrictEqual(rows, [['LENGTH_PRECISION', 'SELECT', 8, '', true], ['ANGLE_PRECISION', 'SELECT', 6, '', true]], 'two selects on the Units tab: Auto + 0..6 and Auto + 0..4, both Auto');
+  const rows = await evalJs(`['LENGTH_PRECISION', 'ANGLE_PRECISION'].map((k) => { const s = document.querySelector('${P} [data-key="' + k + '"]'); return [k, s && s.tagName, s && s.options.length, s && s.value, [...(s ? s.options : [])].map((o) => o.textContent), s && s.getBoundingClientRect().width > 0]; })`);
+  const tz = await evalJs(`(() => { const c = document.querySelector('${P} [data-key="TRAILING_ZEROS"]'); const hints = [...document.querySelectorAll('${P} .sk-style-hint')].map((h) => h.textContent); return { exists: !!c, type: c && c.type, checked: c && c.checked, hints }; })()`);
+  console.log('Style panel rows: ' + JSON.stringify(rows) + ' tz=' + JSON.stringify(tz));
+  assert.deepStrictEqual(rows, [
+    ['LENGTH_PRECISION', 'SELECT', 7, '3', ['0', '0.0', '0.00', '0.000', '0.0000', '0.00000', '0.000000'], true],
+    ['ANGLE_PRECISION', 'SELECT', 5, '1', ['0°', '0.0°', '0.00°', '0.000°', '0.0000°'], true],
+  ], 'two selects on the Units tab: sample labels 0..6 and 0°..4°, defaults 3 and 1 (no Auto)');
+  assert.strictEqual(tz.exists && tz.type === 'checkbox' && tz.checked === false, true, 'TRAILING_ZEROS checkbox defaults unchecked');
+  assert.ok(tz.hints.includes("Trailing zeros are hidden unless 'Show trailing zeros' is on."), 'Units hint is shown');
   await shot('2-style-panel-units.png', [P]);
   await setPrecision('LENGTH_PRECISION', 5);
   assert.strictEqual(await setting('LENGTH_PRECISION'), 5, 'stored as the number 5');
+  const fiveOff = await card();
+  console.log('Length 5 (tz OFF) card: ' + JSON.stringify(fiveOff));
+  assert.strictEqual(fiveOff.step, '1', 'Length 5 with trailing zeros OFF keeps integer 1');
+  assert.strictEqual(fiveOff.depth, '8', 'Length 5 with trailing zeros OFF keeps integer 8');
+  await evalJs(`(() => { const c = document.querySelector('${P} [data-key="TRAILING_ZEROS"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(250);
   const five = await card();
-  console.log('Length 5 card: ' + JSON.stringify(five));
-  assert.strictEqual(five.step, '1.00000', 'the open card re-rendered: Step depth has 5 decimals');
+  console.log('Length 5 (tz ON) card: ' + JSON.stringify(five));
+  assert.strictEqual(five.step, '1.00000', 'the open card re-rendered on Show trailing zeros ON: Step depth has 5 decimals');
   assert.strictEqual(five.depth, '8.00000', 'the Depth field has 5 decimals');
+  await evalJs(`(() => { const c = document.querySelector('${P} [data-key="TRAILING_ZEROS"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(250);
+  const fiveOffAgain = await card();
+  assert.deepStrictEqual([fiveOffAgain.step, fiveOffAgain.depth], ['1', '8'], 'toggling Show trailing zeros OFF trims immediately');
   await setPrecision('LENGTH_PRECISION', 0);
   const zero = await card();
   console.log('Length 0 card: ' + JSON.stringify(zero));
   assert.deepStrictEqual([zero.step, zero.depth, zero.note], ['1', '8', ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0 mm apart']], 'Length 0: the fields and the note show whole numbers');
   await setPrecision('LENGTH_PRECISION', 5);
+  await evalJs(`(() => { const c = document.querySelector('${P} [data-key="TRAILING_ZEROS"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(250);
   await closeStyle();
   await shot('3-card-length5.png', ['#prepare-panel .cut-card']);
   // typing still takes any number of decimals: 1.23456789 is stored whole
@@ -114,8 +133,10 @@ try {
   assert.strictEqual(await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((r) => r.cutType === 'stepped-pocket').stepDepth)`), 1.23456789, 'typed decimals are stored whole (display only)');
 
   // 3. Design: a distance label, the Parameters value cell, an angle label (Length 3, Angle 0)
-  await openStyle(); await setPrecision('LENGTH_PRECISION', 3); await setPrecision('ANGLE_PRECISION', 0); await closeStyle();
-  assert.deepStrictEqual([await setting('LENGTH_PRECISION'), await setting('ANGLE_PRECISION')], [3, 0], 'Length 3, Angle 0 stored');
+  await openStyle(); await setPrecision('LENGTH_PRECISION', 3); await setPrecision('ANGLE_PRECISION', 0);
+  await evalJs(`(() => { const c = document.querySelector('${P} [data-key="TRAILING_ZEROS"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(250); await closeStyle();
+  assert.deepStrictEqual([await setting('LENGTH_PRECISION'), await setting('ANGLE_PRECISION'), await setting('TRAILING_ZEROS')], [3, 0, false], 'Length 3, Angle 0, TRAILING_ZEROS false stored');
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`); // (the Fusion host has no Design tab)
   await waitForApp('design-canvas');
   for (let i = 0; i < 5; i++) { await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === 'design') break; }
@@ -139,28 +160,31 @@ try {
   await sleep(500);
   const d = await seen();
   console.log('Length 3 / Angle 0: ' + JSON.stringify(d));
-  assert.ok(d.labels.includes('40.123') && d.labels.includes('90°'), 'the canvas labels: 3 decimals for the length, an integer angle: ' + JSON.stringify(d.labels));
+  assert.ok(d.labels.some((s) => s.includes('40.123')) && d.labels.some((s) => s.includes('90°')), 'the canvas labels: 3 decimals for the length, an integer angle: ' + JSON.stringify(d.labels));
   assert.deepStrictEqual(d.cells, ['40.123', '90'], 'the Parameters table values follow the same two settings');
   await shot('4-design-length3-angle0.png');
-  // back to Auto: both return to 1 decimal at once
-  await openStyle(); await setPrecision('LENGTH_PRECISION', ''); await setPrecision('ANGLE_PRECISION', ''); await closeStyle();
+  // Angle 1 -> 89.6°; trailing zeros ON with Length 4 -> 40.1235
+  await openStyle(); await setPrecision('LENGTH_PRECISION', 4); await setPrecision('ANGLE_PRECISION', 1); await closeStyle();
   await sleep(500);
   const back = await seen();
-  assert.ok(back.labels.includes('40.1') && back.labels.includes('89.6°'), 'Auto again: ' + JSON.stringify(back.labels));
-  assert.deepStrictEqual(back.cells, ['40.1', '89.6'], 'Auto again: the table');
+  assert.ok(back.labels.some((s) => s.includes('40.1235')) && back.labels.some((s) => s.includes('89.6°')), 'Length 4 / Angle 1: ' + JSON.stringify(back.labels));
+  assert.deepStrictEqual(back.cells, ['40.1235', '89.6'], 'Length 4 / Angle 1: the table');
 
-  // 4. reload keeps the setting; SketchStudio (same origin) sees it
-  await openStyle(); await setPrecision('LENGTH_PRECISION', 2); await setPrecision('ANGLE_PRECISION', 3); await closeStyle();
+  // 4. reload keeps the settings (including TRAILING_ZEROS); SketchStudio (same origin) sees them
+  await openStyle(); await setPrecision('LENGTH_PRECISION', 2); await setPrecision('ANGLE_PRECISION', 3);
+  await evalJs(`(() => { const c = document.querySelector('${P} [data-key="TRAILING_ZEROS"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(250); await closeStyle();
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
   await waitForApp('design-canvas');
-  assert.deepStrictEqual([await setting('LENGTH_PRECISION'), await setting('ANGLE_PRECISION')], [2, 3], 'Shaper after a reload keeps 2 and 3');
+  assert.deepStrictEqual([await setting('LENGTH_PRECISION'), await setting('ANGLE_PRECISION'), await setting('TRAILING_ZEROS')], [2, 3, true], 'Shaper after a reload keeps 2, 3, true');
   await openStyle();
   assert.deepStrictEqual(await evalJs(`['LENGTH_PRECISION', 'ANGLE_PRECISION'].map((k) => document.querySelector('${P} [data-key="' + k + '"]').value)`), ['2', '3'], 'the selects show the stored values');
+  assert.strictEqual(await evalJs(`document.querySelector('${P} [data-key="TRAILING_ZEROS"]').checked`), true, 'TRAILING_ZEROS stays checked after reload');
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`);
   await waitForApp('svgCanvas');
-  assert.deepStrictEqual([await setting('LENGTH_PRECISION'), await setting('ANGLE_PRECISION')], [2, 3], 'SketchStudio sees the same settings');
-  assert.deepStrictEqual(await evalJs(`import('/packages/ui/svg-renderer.js').then((m) => [m.formatLenLabel(12.3456), m.formatConstraintValue({ type: 'angle', value: 12.3456 })])`), ['12.35', '12.346°'], 'SketchStudio labels format at 2 and 3');
+  assert.deepStrictEqual([await setting('LENGTH_PRECISION'), await setting('ANGLE_PRECISION'), await setting('TRAILING_ZEROS')], [2, 3, true], 'SketchStudio sees the same settings');
+  assert.deepStrictEqual(await evalJs(`import('/packages/ui/svg-renderer.js').then((m) => [m.formatLenLabel(12.3), m.formatConstraintValue({ type: 'angle', value: 12.3 })])`), ['12.30', '12.300°'], 'SketchStudio labels format at 2 and 3 with trailing zeros ON');
 
   // 4b. precision 0 never changes geometry: an UNTOUCHED box commits nothing (exact 4.6 kept, no undo step); an edited box applies; an untouched cut card field writes nothing back
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
@@ -209,15 +233,15 @@ try {
   assert.strictEqual(await depthStored(), 7.333, 'focus + blur untouched: the stored depth stays 7.333');
   await clickEl('.cut-depth'); await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }); await sleep(300);
   assert.strictEqual(await depthStored(), 7.333, 'click in + Tab out untouched: still 7.333');
-  await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('LENGTH_PRECISION', null))`);
+  await evalJs(`import('/packages/core/settings-manager.js').then((m) => { m.default.set('LENGTH_PRECISION', 3); m.default.set('ANGLE_PRECISION', 1); m.default.set('TRAILING_ZEROS', false); })`);
 
   // 5. 390 px
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
   await waitForApp('design-canvas');
   await openStyle(true); await sleep(300);
-  const fits = await evalJs(`['LENGTH_PRECISION', 'ANGLE_PRECISION'].map((k) => { const r = document.querySelector('${P} [data-key="' + k + '"]').getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= 390; })`);
-  assert.deepStrictEqual(fits, [true, true], 'at 390 px both precision selects are on screen');
+  const fits = await evalJs(`['LENGTH_PRECISION', 'ANGLE_PRECISION', 'TRAILING_ZEROS'].map((k) => { const r = document.querySelector('${P} [data-key="' + k + '"]').getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= 390; })`);
+  assert.deepStrictEqual(fits, [true, true, true], 'at 390 px both precision selects and the trailing zeros checkbox are on screen');
   assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= 390`), true, 'no page overflow at 390 px');
   await shot('5-phone-style-units.png');
   console.log('display-precision-724-live.test.js: ok');

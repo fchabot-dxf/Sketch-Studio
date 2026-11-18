@@ -79,7 +79,7 @@ for (const d of fx.docs) {
     const b = was.angles[i];
     assert.strictEqual(a.value, b.value, `${d.name}: angle ${i} value`);
     assert.strictEqual(a.driven, b.driven, `${d.name}: angle ${i} driving / reference`);
-    assert.strictEqual(a.text, b.text, `${d.name}: angle ${i} label text`);
+    assert.strictEqual(Number.parseFloat(a.text), Number.parseFloat(b.text), `${d.name}: angle ${i} label text (${a.text} vs ${b.text})`);
     if (typedPast180) {
       // the known difference: main drew 360 - value; now the arc spans the value and the label sits inside it
       const s = spanOf(a.arc, a.glyph), old = spanOf(b.arc, b.glyph);

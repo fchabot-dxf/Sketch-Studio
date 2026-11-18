@@ -57,7 +57,7 @@ eq(lengthFraction(), 16, 'inch document + Fractional: denominator 16 (the defaul
 eq([lengthText(1.5 * IN), lengthText(1.5 * IN, { show: 'unit' }), lengthText(1.5 * IN, { show: 'field' }), lengthText(1.5 * IN, { show: 'compact' })],
   ['1 1/2"', '1 1/2"', '1 1/2', '1 1/2"'], 'the forms: bare / unit / field / compact');
 eq([0.5, 1.5, 23.625, 3, -1.25, 0, 0.1].map((x) => lengthText(x * IN)), ['1/2"', '1 1/2"', '23 5/8"', '3"', '-1 1/4"', '0"', '1/8"'], 'labels with the inch mark at 1/16');
-eq(lengthText(0.004 * IN, { fractions: false, auto: 4, show: 'field' }), '0.0040', 'a tolerance (fractions: false) keeps decimals');
+eq(lengthText(0.004 * IN, { fractions: false, show: 'field' }), '0.004', 'a tolerance (fractions: false) keeps decimals');
 eq(areaText(2.48 * IN * IN), '2.48 in²', 'an area stays decimal');
 set('LENGTH_FRACTION', 64); eq(lengthText(0.1 * IN), '3/32"', '1/64: 6.4 ticks -> 6/64 = 3/32');
 set('LENGTH_FRACTION', 7); eq(lengthFraction(), 16, 'a junk denominator falls back to 1/16');
@@ -65,8 +65,8 @@ set('LENGTH_FRACTION', 16);
 eq(constraintLabel({ type: 'distance', value: 23.625 * IN }), '23 5/8"', 'the dimension label');
 eq(constraintLabel({ type: 'distance', value: 0.5 * IN, isDriven: true }), '(1/2")', 'a reference (driven) label');
 eq(constraintLabel({ type: 'radius', value: 0.25 * IN }), 'R 1/4"', 'a radius label');
-eq(constraintLabel({ type: 'angle', value: 30 }), '30.0°', 'angles are untouched');
-eq([quantityText(1.5 * IN, 'in'), quantityText(1.5 * IN, 'in', 'unit'), quantityText(1.5 * IN, 'in', 'bare'), quantityText(30, 'deg', 'unit')], ['1 1/2', '1 1/2"', '1 1/2"', '30.0 deg'], 'quantityText');
+eq(constraintLabel({ type: 'angle', value: 30 }), '30°', 'angles are untouched');
+eq([quantityText(1.5 * IN, 'in'), quantityText(1.5 * IN, 'in', 'unit'), quantityText(1.5 * IN, 'in', 'bare'), quantityText(30, 'deg', 'unit')], ['1 1/2', '1 1/2"', '1 1/2"', '30 deg'], 'quantityText');
 eq(depthText('0.100 in'), '1/8"', 'the preview list depth');
 // the parameter table: a 1.53 in dimension and a user parameter
 const st = { parameters: [{ name: 'width', unit: 'in', expression: '23.625 in' }], constraints: [{ id: 'c1', type: 'distance', name: 'd1', value: 1.53 * IN, joints: ['a', 'b'] }], shapes: [], joints: new Map() };
@@ -76,15 +76,15 @@ eq([rows.user[0].value, rows.dimensions[0].value, rows.dimensions[0].expression]
 for (const u of ['mm', 'cm']) {
   mode(u, 'fractional', 16);
   eq(lengthFraction('in'), null, `${u} document: Fractional is not effective`);
-  eq(lengthText(1.5 * IN), (1.5 * IN / (u === 'cm' ? 10 : 1)).toFixed(1), `${u} document: the label stays decimal`);
+  eq(lengthText(1.5 * IN), Number((1.5 * IN / (u === 'cm' ? 10 : 1)).toFixed(3)).toString(), `${u} document: the label stays decimal`);
   eq(quantityText(1.5 * IN, 'in'), '1.5', `${u} document: an inch parameter stays decimal`);
 }
-// Decimal inch: what 724 showed
+// Decimal inch: unified 3 decimals, trailing zeros dropped by default
 mode('in', 'decimal', 16);
-eq([lengthText(1.5 * IN), quantityText(1.5 * IN, 'in', 'unit'), depthText('0.100 in')], ['1.5', '1.5 in', '0.100 in'], 'Decimal: as before');
+eq([lengthText(1.5 * IN), quantityText(1.5 * IN, 'in', 'unit'), depthText('0.100 in')], ['1.5', '1.5 in', '0.1 in'], 'Decimal: trailing zeros dropped');
 rows = buildParameterRows(st, { unit: 'in' });
-eq([rows.user[0].value, rows.dimensions[0].value], ['23.6', '1.5'], 'Decimal: Parameters table as before');
-set('LENGTH_PRECISION', 3); eq(lengthText(1.5 * IN), '1.500', 'Decimal + precision 3'); set('LENGTH_PRECISION', null);
+eq([rows.user[0].value, rows.dimensions[0].value], ['23.625', '1.53'], 'Decimal: Parameters table at 3 decimals');
+set('TRAILING_ZEROS', true); set('LENGTH_PRECISION', 3); eq(lengthText(1.5 * IN), '1.500', 'Decimal + precision 3 + trailing zeros ON'); set('TRAILING_ZEROS', false); set('LENGTH_PRECISION', 3);
 
 // 3. input
 for (const [text, want] of [['1 1/2', 1.5], ['1 1/2"', 1.5], ['1 1/2 in', 1.5], ['3/8 in', 0.375], ['1.5', 1.5], ['1/8', 0.125], ['-1 1/4 in', -1.25], ['23 5/8"', 23.625], ['2"', 2]]) {
@@ -110,7 +110,7 @@ try {
   mode('in', 'fractional', 16);
   eq(previewTexts(), ['1 3/16"', 'R3/8"'], 'the template preview labels in Fractional (the end-centre distance and the R label)');
   mode('in', 'decimal');
-  eq(previewTexts(), ['1.1875', 'R0.375'], 'the template preview labels in Decimal (as before: up to 4 decimals, trimmed)');
+  eq(previewTexts(), ['1.188', 'R0.375'], 'the template preview labels in Decimal (unified 3 decimals, trailing zeros dropped)');
   mode('in', 'fractional', 16);
   const q = (sel) => app.document.querySelector(sel);
   app.press(q('.sk-sidebar-btn')); await app.pause(120); app.press(q('[data-action="templates"]')); await app.pause(120);
@@ -138,7 +138,7 @@ try {
   const note = steppedNoteItems(CUT_PLAN.get(pk)).map((i) => i.text).join('|');
   ok(/\d+\/\d+ to \d+(?: \d+\/\d+)? in|to \d+\/\d+ in/.test(note) && /outlines [0-9.]+(–[0-9.]+)? in apart/.test(note), 'the stepped note: fraction depths, decimal outline spacing: ' + note);
   mode('in', 'decimal');
-  eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel).every((l) => /\d\.\d{3} in/.test(l)), true, 'Decimal again: the file\'s own text');
+  eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel).every((l) => /in\b/.test(l)), true, 'Decimal again: inches shown through lengthText');
 
 } finally { CUT_PLAN.clear(); await app.close(); }
 

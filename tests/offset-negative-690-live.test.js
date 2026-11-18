@@ -89,7 +89,7 @@ await (async () => {
       await tool('tool-offset');
       await P.tap(mid);
       await waitFor(`!!document.getElementById('offset-distance-input')`, `[${kind}] the distance box`);
-      assert.strictEqual(await box(), '5.00', `[${kind}] the box opens with the remembered 5.00 (a mm document)`);
+      assert.strictEqual(await box(), '5', `[${kind}] the box opens with the remembered 5 (a mm document)`);
       const below = { x: mid.x + 30, y: mid.y + 70 };
       await P.hover(below);
       const ySrc = (await evalJs(`JSON.stringify(${STATE}.joints.get(${STATE}.shapes[0].joints[0]))`).then(JSON.parse)).y;
@@ -114,7 +114,7 @@ await (async () => {
       // TASK 710: the typed value is the dimension's value as typed (Fusion): -5, its label -5.0, the Parameters table -5 mm
       assert.strictEqual(o.value, -5, `[${kind}] the new dimension holds -5 as typed`);
       const l5 = await labelText(o.idx);
-      assert(/^-5\.0/.test(l5), `[${kind}] the label reads -5: ${l5}`);
+      assert(/^-5(\.0+)?$/.test(l5), `[${kind}] the label reads -5: ${l5}`);
       out(`tool -5: offset made above, dimension ${o.name} = ${o.value}, label ${l5}`);
       await shot(`${kind}-3-made-above.png`, clip);
 
@@ -137,7 +137,7 @@ await (async () => {
       assert(o.src.every((p) => Math.abs(p.y - ySrc) < 1e-6), `[${kind}] the source stays`);
       assert.strictEqual(await hist(), h0 + 2, `[${kind}] ONE undo step`);
       const l3 = await labelText(o.idx);
-      assert(/^-3\.0/.test(l3), `[${kind}] the label reads the signed value: ${l3}`);
+      assert(/^-3(\.0+)?$/.test(l3), `[${kind}] the label reads the signed value: ${l3}`);
       out(`dimension -3: above at 3, label ${l3}`);
       await shot(`${kind}-4-dimension-minus3-above.png`, clip);
       await P.double(await centerOf(`#design-canvas .dim-label[data-constraint-idx="${o.idx}"]`));
@@ -174,7 +174,7 @@ await (async () => {
       o = await offset();
       assert(o.value === -2 && o.off.every((p) => Math.abs(Math.abs(p.y - ySrc) - 2) < 1e-4) && await screenSide(o.off[0].y, ySrc) === -1, `[${kind}] off = -2 mm: the offset moves ABOVE at 2: ${JSON.stringify(o)}`);
       assert.strictEqual(await hist(), h4 + 1, `[${kind}] ONE undo step`);
-      await waitFor(`document.querySelector(${JSON.stringify(row(o.name) + ' td.pt-val')}).textContent === '-2.0'`, `[${kind}] the table shows the dimension's signed value -2.0`);
+      await waitFor(`document.querySelector(${JSON.stringify(row(o.name) + ' td.pt-val')}).textContent === '-2'`, `[${kind}] the table shows the dimension's signed value -2`);
       out(`parameter off = -2 mm: above at 2, label ${await labelText(o.idx)}`);
       await shot(`${kind}-5-parameter-minus2-above.png`, clip);
       await shot(`${kind}-6-parameters-window.png`, await evalJs(`(() => { const r = document.querySelector('${W}').getBoundingClientRect(); return { x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.width, innerWidth - Math.max(0, r.left)), height: Math.min(r.height, innerHeight - Math.max(0, r.top)) }; })()`));

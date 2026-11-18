@@ -69,7 +69,7 @@ let planBefore, stockBefore, exportBefore;
     openMode(app, 'review');
     const thick = app.document.getElementById('review-stock-thickness');
     assert(thick, 'the Review stock field');
-    assert.strictEqual(thick.value, '1.000', 'the card shows the restored 25.4 mm = 1.000 in');
+    assert.strictEqual(thick.value, '1', 'the card shows the restored 25.4 mm = 1 in');
     app.press(thick); app.key('a', { ctrl: true });
     app.type('1.25');
     app.key('Enter');
@@ -83,7 +83,7 @@ let planBefore, stockBefore, exportBefore;
   const app = await open({ host: 'shaper', profile });
   try {
     openMode(app, 'review');
-    assert.strictEqual(app.document.getElementById('review-stock-thickness').value, '1.250', 'after a reload the card shows 1.250 in');
+    assert.strictEqual(app.document.getElementById('review-stock-thickness').value, '1.25', 'after a reload the card shows 1.25 in');
     assert.ok(Math.abs(getStock().thickness - 31.75) < 1e-9, 'and the stock is 31.75 mm');
     setStockField('thickness', 25.4);
     const d = await app.storedDoc();

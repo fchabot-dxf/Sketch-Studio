@@ -16,7 +16,7 @@ import { sketchesSignature } from '#core/sketch-model.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
-import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
+import { createDocumentBuffer, SAME_TAB_REASONS } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { DESIGN_CANVAS_OPTIONS, plotterBufferOptions } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc, fitViewport } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
@@ -164,7 +164,7 @@ export function mountSketchStage(view, ctx = {}) {
     // TASK 494: a restored sketch is framed (the Design canvas shows the drawing; the paper stays visible when it is near);
     // a design with no geometry keeps the paper fit.
     // TASK 587: a tab switch keeps the tab's own view (the buffer put it back): nothing is refitted.
-    if (reason !== 'switch') {
+    if (!SAME_TAB_REASONS.has(reason)) { // TASK 766: also its Drive version loaded on the user's choice
       if (fitToDrawing(designCanvas, controller.state)) markFitted(); // the pen tabs then keep this shared view
       else if (!fitDesignView()) fitViewport();
     }

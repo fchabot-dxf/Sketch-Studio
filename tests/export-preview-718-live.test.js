@@ -148,13 +148,13 @@ try {
   assert.strictEqual(await label(), '8 elements · tap one to see its cut', 'the label before a pick');
   const fitted = await viewBox();
   // a list row picks its element(s): the 10 mm pocket
-  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && b.textContent.startsWith('10.000 mm'))`);
+  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && b.textContent.startsWith('10 mm'))`);
   assert.ok(row10 >= 0, 'the list has the 10 mm pocket row');
   await clickEl(`#review-cuts-list > button:nth-of-type(${row10 + 1})`); // TASK 743: the list's buttons are the operation headers and their rows
   const rowPick = await evalJs(`({ label: document.getElementById('review-2d-info').textContent, picked: [...document.querySelectorAll('#review-2d-canvas .rv2d-picked')].length,
     pressed: [...document.querySelectorAll('#review-cuts-list .rv2d-row')].map((b) => b.getAttribute('aria-pressed')).filter((p) => p === 'true').length })`);
   console.log('list row pick: ' + JSON.stringify(rowPick));
-  assert.deepStrictEqual(rowPick, { label: 'pocket · 10.000 mm', picked: 1, pressed: 1 }, 'a list row picks its element: highlighted, labelled, the row pressed');
+  assert.deepStrictEqual(rowPick, { label: 'pocket · 10 mm', picked: 1, pressed: 1 }, 'a list row picks its element: highlighted, labelled, the row pressed');
   await shot('desktop-2d-real-solid.png', '#view-review');
 
   // 3. zoom / pan / Fit
@@ -168,7 +168,7 @@ try {
   await sleep(150);
   const panned = await viewBox();
   assert.ok(panned[0] < zoomed[0] && panned[1] < zoomed[1] && Math.abs(panned[2] - zoomed[2]) < 1e-6, `a drag pans (the view moves with the drag, same zoom): ${zoomed.map((v) => v.toFixed(2))} -> ${panned.map((v) => v.toFixed(2))}`);
-  assert.strictEqual(await label(), 'pocket · 10.000 mm', 'a drag is no tap: the pick stays');
+  assert.strictEqual(await label(), 'pocket · 10 mm', 'a drag is no tap: the pick stays');
   await clickEl('#review-fit');
   const refit = await viewBox();
   console.log('view: fitted ' + JSON.stringify(fitted) + ', zoomed ' + JSON.stringify(zoomed) + ', panned ' + JSON.stringify(panned) + ', Fit ' + JSON.stringify(refit));

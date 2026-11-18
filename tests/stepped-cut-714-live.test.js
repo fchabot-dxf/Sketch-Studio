@@ -101,13 +101,13 @@ try {
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card for the outline');
   const outlineMenu = await menuIds();
   assert.ok(!outlineMenu.some((id) => id.startsWith('stepped')), 'no stepped type on the outline (no slope): ' + outlineMenu);
-  assert.strictEqual(await evalJs(`document.querySelector('.cut-type-menu').getBoundingClientRect().width`), 134, 'a menu without a stepped type keeps its 134 px width');
+  assert.strictEqual(await evalJs(`document.querySelector('.cut-type-menu').getBoundingClientRect().width`), 220, 'a menu without a stepped type keeps its 220 px width (TASK 770 hints)');
   await clickEl('#prepare-panel .cut-type-trigger'); // close
   await clickWorld(60, -40); // the pocket
   const pocketMenu = await menuIds();
   assert.deepStrictEqual(pocketMenu, ['online', 'guide', 'interior', 'pocket', 'stepped-pocket', 'exterior', 'stock'], 'the sloped pocket: Stepped pocket after Pocket');
   await shot('prepare-stepped-menu.png', ['#prepare-panel .cut-card', '.cut-type-menu']);
-  const wide = await evalJs(`(() => { const m = document.querySelector('.cut-type-menu').getBoundingClientRect(), o = document.querySelector('.cut-type-opt[data-id="stepped-pocket"]'); return { menu: m.width, oneLine: o.getBoundingClientRect().height <= 30 }; })()`);
+  const wide = await evalJs(`(() => { const m = document.querySelector('.cut-type-menu').getBoundingClientRect(), o = document.querySelector('.cut-type-opt[data-id="stepped-pocket"] .cut-opt-name'); return { menu: m.width, oneLine: o.getBoundingClientRect().height <= 22 }; })()`);
   console.log('menu with Stepped pocket: ' + JSON.stringify(wide));
   assert.ok(wide.menu >= 134 && wide.oneLine, 'the menu grows to keep "stepped pocket" on one line');
   await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
@@ -115,11 +115,11 @@ try {
   const card = await evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, step: document.querySelector('.cut-step-depth').value,
     stepShown: getComputedStyle(document.querySelector('.cut-row[data-row="stepDepth"]')).display !== 'none', note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
   console.log('card: ' + JSON.stringify(card));
-  assert.deepStrictEqual(card, { type: 'Stepped pocket', step: '1.000', stepShown: true, note: ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.18 mm apart'] }, 'the card: Stepped pocket, Step depth 1, the note');
+  assert.deepStrictEqual(card, { type: 'Stepped pocket', step: '1', stepShown: true, note: ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.176 mm apart'] }, 'the card: Stepped pocket, Step depth 1, the note');
   await shot('prepare-stepped-card.png');
   const steppedInfo = await review(9);
   console.log('Review (stepped): ' + JSON.stringify(steppedInfo));
-  assert.ok(steppedInfo.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.18 mm apart'), 'the Review info says the steps');
+  assert.ok(steppedInfo.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.176 mm apart'), 'the Review info says the steps');
   const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutType + '@' + i.cutDepth))`);
   assert.deepStrictEqual(levels, ['exterior@19', 'pocket@1', 'pocket@2', 'pocket@3', 'pocket@4', 'pocket@5', 'pocket@6', 'pocket@7', 'pocket@8'], 'the Review input: 8 terrace pockets');
   await zoomReview();

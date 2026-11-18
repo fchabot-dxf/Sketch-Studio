@@ -20,7 +20,7 @@ import { selectedGroups, hoveredUnit, shapesInGroup, groupLockState, lockHolder,
 import { groupBox, planGroupTransform, applyGroupTransform, settleTransform, snapshotTransform, restoreTransform, runGroupTransform,
   snapAngle, MIN_SCALE, TRANSFORM_UNDO_LABELS } from '#core/transform.js';
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
-import { docUnit, lengthText, angleDecimals } from '#core/settings-manager.js';
+import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 import { parse as parseLength } from '#core/units.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
@@ -163,8 +163,8 @@ export function transformBoxMarkup(state, z, view = null) {
 
 // ---- the readout texts
 const userDegrees = (worldAngle) => -worldAngle * 180 / Math.PI; // the canvas is y-down: a positive (counter-clockwise on screen) angle is a negative world angle
-const degText = (deg) => `${Number(deg.toFixed(angleDecimals(1)))}°`;
-const scaleText = (s, box) => `${Number((s * 100).toFixed(1))}% · ${lengthText(box.w * s, { auto: 2, trim: 'auto' })} × ${lengthText(box.h * s, { auto: 2, trim: 'auto', show: 'unit' })}`;
+const degText = (deg) => angleText(deg, { show: 'deg' });
+const scaleText = (s, box) => `${Number((s * 100).toFixed(1))}% · ${lengthText(box.w * s)} × ${lengthText(box.h * s, { show: 'unit' })}`;
 
 // ---- the gesture (a handle dragged)
 /** A press with the Select tool (input-manager.js has captured the pointer; it releases it on pointerup): on a padlock it toggles that lock; on a rotate / corner handle of the selected group's box it starts the

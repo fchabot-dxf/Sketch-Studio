@@ -8,7 +8,7 @@
 // TASK 750: the LOOP toggle (record field `loop`, any programmed pattern, default off) and NO step-downs in the app: every programmed clearing is written ONCE at
 // the record's full cut depth (the Origin's own Pass Depth / AutoPass makes the step-downs; a stored per-pass depth (745) is dropped on read, shaper-doc.js).
 //
-// THE RULES (lengths base mm; r = the record's bit radius, s = the stepover = stepover % x the bit diameter, a = the wall allowance, R = the pocket
+// THE RULES (lengths base mm; r = the record's bit radius, s = the stepover = stepover % x the bit diameter, a = the finish allowance, R = the pocket
 // region (its outer loop minus its islands) moved by the record's own offset (positive = away from the wall, as a pocket's offset)):
 //  * CLEARING (the pattern), every path an ON-LINE cut (the bit's centre runs on it) at the full cut depth, inside the INSET region A0 = R offset inward
 //    by r + a (its islands grow by the same: they are respected):
@@ -95,8 +95,8 @@ export const POCKET_CLEARING = Object.freeze({
   ]),
   /** stepover, % of the bit diameter (record field `stepover`) */
   stepoverPct: Object.freeze({ default: 40, min: 1, max: 100 }),
-  /** wall allowance left for the finish pass, base mm by document unit family (record field `wallAllowance`): 0.5 mm / 0.02 in */
-  wallAllowance: Object.freeze({ mm: 0.5, in: 0.508 }),
+  /** finish allowance left for the finish pass, base mm by document unit family (record field `finishAllowance`): 0.5 mm / 0.02 in */
+  finishAllowance: Object.freeze({ mm: 0.5, in: 0.508 }),
   /** raster angle, degrees (record field `rasterAngle`) */
   rasterAngle: 0,
   /** the feed the card's time estimate assumes (mm per minute: a steady hand-guided pace on the Origin) */
@@ -118,15 +118,15 @@ export function clearingPattern(rec) {
   if (!rec || rec.terraceAs || rec.cutType !== 'pocket') return 'freehand';
   return PATTERNS.has(rec.clearing) ? rec.clearing : 'freehand';
 }
-/** The wall allowance default (base mm) for a document unit. */
-export const allowanceDefault = (unit) => (unit === 'in' ? POCKET_CLEARING.wallAllowance.in : POCKET_CLEARING.wallAllowance.mm);
+/** The finish allowance default (base mm) for a document unit. */
+export const allowanceDefault = (unit) => (unit === 'in' ? POCKET_CLEARING.finishAllowance.in : POCKET_CLEARING.finishAllowance.mm);
 
 /** A record's clearing settings: { pattern, toolDia, r, stepoverPct, stepover (mm), allowance, offset, angle (deg), loop (TASK 750: true | false) }. */
 export function clearingSettings(rec) {
   const S = POCKET_CLEARING.stepoverPct;
   const toolDia = Number(rec && rec.toolDia) > 0 ? Number(rec.toolDia) : 0;
   const pct = Number(rec && rec.stepover) > 0 ? Math.min(S.max, Math.max(S.min, Number(rec.stepover))) : S.default;
-  const allowance = rec && rec.wallAllowance != null && Number.isFinite(Number(rec.wallAllowance)) && Number(rec.wallAllowance) >= 0 ? Number(rec.wallAllowance) : POCKET_CLEARING.wallAllowance.mm;
+  const allowance = rec && rec.finishAllowance != null && Number.isFinite(Number(rec.finishAllowance)) && Number(rec.finishAllowance) >= 0 ? Number(rec.finishAllowance) : POCKET_CLEARING.finishAllowance.mm;
   const angle = rec && Number.isFinite(Number(rec.rasterAngle)) && rec.rasterAngle !== null && rec.rasterAngle !== '' ? Number(rec.rasterAngle) : POCKET_CLEARING.rasterAngle;
   return { pattern: clearingPattern(rec), toolDia, r: toolDia / 2, stepoverPct: pct, stepover: (pct / 100) * toolDia, allowance, offset: Number(rec && rec.cutOffset) || 0, angle,
     loop: Boolean(rec && rec.loop === true) };

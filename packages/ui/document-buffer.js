@@ -199,20 +199,66 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let openGate = () => {};
   const ready = new Promise((res) => { openGate = res; });
   const GATED = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'dblclick', 'wheel', 'keydown', 'keyup'];
+  const queued = [];
+  const hasTool = () => !!(state && state.currentTool && state.currentTool !== 'select');
+  const eventInit = (e) => ({
+    bubbles: e.bubbles, cancelable: e.cancelable, composed: e.composed,
+    clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY,
+    button: e.button, buttons: e.buttons, detail: e.detail,
+    ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey,
+    pointerId: e.pointerId, width: e.width, height: e.height, pressure: e.pressure,
+    pointerType: e.pointerType, isPrimary: e.isPrimary,
+  });
+  const pushQueued = (type, e) => {
+    const Ctor = (type.startsWith('pointer') && typeof PointerEvent === 'function')
+      ? PointerEvent
+      : (typeof MouseEvent === 'function' ? MouseEvent : null);
+    if (Ctor) queued.push({ Ctor, type, target: e.target, init: eventInit(e) });
+  };
+  const moveGate = (e) => {
+    if (isReady || !queued.length || !hasTool()) return;
+    if (canvas && e.target && canvas.contains(e.target)) pushQueued('pointermove', e);
+  };
   const gate = (e) => {
     if (isReady) return;
     const t = e.target;
     const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-    const blocked = e.type.startsWith('key') ? !typing : !!(canvas && t && canvas.contains(t));
-    if (blocked) { e.stopImmediatePropagation(); e.preventDefault(); }
+    const onCanvas = !!(canvas && t && canvas.contains(t));
+    const blocked = e.type.startsWith('key') ? !typing : onCanvas;
+    if (!blocked) return;
+    // TASK 771: if the user already picked a drawing tool before the initial IDB restore settled,
+    // keep their canvas presses/moves instead of silently dropping them, and deliver them once ready.
+    if (onCanvas && e.type !== 'wheel' && hasTool()) {
+      if (e.type === 'pointerdown') pushQueued('pointermove', e);
+      pushQueued(e.type, e);
+    }
+    e.stopImmediatePropagation();
+    e.preventDefault();
   };
   if (canvas) {
     canvas.dataset.docReady = '0';
-    if (win) for (const t of GATED) win.addEventListener(t, gate, true);
+    if (win) {
+      for (const t of GATED) win.addEventListener(t, gate, true);
+      win.addEventListener('pointermove', moveGate, true);
+    }
   }
   function markReady() {
     isReady = true;
-    if (canvas) { canvas.dataset.docReady = '1'; if (win) for (const t of GATED) win.removeEventListener(t, gate, true); }
+    if (canvas) {
+      canvas.dataset.docReady = '1';
+      if (win) {
+        for (const t of GATED) win.removeEventListener(t, gate, true);
+        win.removeEventListener('pointermove', moveGate, true);
+      }
+      const pending = queued.splice(0);
+      if (pending.length && hasTool()) {
+        for (const q of pending) {
+          const target = (q.target && q.target.isConnected) ? q.target : canvas;
+          try { target.dispatchEvent(new q.Ctor(q.type, q.init)); } catch (_) {}
+        }
+      }
+    }
+    queued.length = 0;
     openGate();
   }
   // TASK 602: the save state is also written on the canvas (data-save-state): a host without a status text (SketchStudio: its tab dot shows it) and the

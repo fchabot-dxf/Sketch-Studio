@@ -556,7 +556,7 @@ function updateSnapTarget(e, svg, state) {
 
 function handlePointerDown(e, svg, state) {
     e.preventDefault();
-    svg.setPointerCapture(e.pointerId);
+    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
 
     // Apply touch offset to pointerdown so selection/snap/drag use same virtual coordinates
     let screenX = e.clientX, screenY = e.clientY;

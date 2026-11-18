@@ -123,6 +123,31 @@ const DEFAULT_SETTINGS = {
     LENGTH_FRACTION: 16
 };
 
+// TASK 773: the settings that FOLLOW THE USER to his other devices (#ui/cloud/settings-sync.js keeps them in "Sketch Studio/Settings/settings.json" on his
+// Google Drive while he is signed in). The ONE declaration of which keys leave this device; every other key stays device-only (a debug knob, the file
+// dialog's last tab, the ribbon layout and the browser's collapsed state are device or screen state; see WORK-LOG ## TURN 773 for the table).
+// Only a value the user CHOSE travels (a set() persisted on this device, or a reset): a host's in-memory default (persist: false) never does.
+export const SYNCED_SETTING_KEYS = Object.freeze([
+    // Units
+    'DOC_UNIT', 'INCH_DISPLAY', 'LENGTH_PRECISION', 'LENGTH_FRACTION', 'ANGLE_PRECISION', 'TRAILING_ZEROS',
+    // Grid & snap
+    'SHOW_GRID', 'GRID_MODE', 'SNAP_MAGNETISM', 'AXIS_SNAP', 'GRID_MAGNETISM', 'GRID_MAJOR_STEP', 'GRID_SIZE', 'INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS',
+    // The look (the style template's keys, #ui/style-templates.js STYLE_SETTING_KEYS) + the inactive sketches' opacity
+    'LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT',
+    'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX',
+    'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR', 'INACTIVE_SKETCH_OPACITY',
+    // The user's own data kept as settings: the chosen template, his presets, his keyboard shortcuts, his favourite templates
+    'STYLE_TEMPLATE', 'STYLE_PRESETS', 'SHORTCUT_KEYS', 'TEMPLATE_FAVOURITES',
+]);
+const SYNCED = new Set(SYNCED_SETTING_KEYS);
+/** Whether a setting key follows the user to his other devices (TASK 773). */
+export const isSyncedSetting = (key) => SYNCED.has(key);
+const LOCAL_KEY = 'sketch-studio-settings';
+// TASK 773: when each locally persisted key was last changed, and on which device ({ KEY: { at: ms, by?: device id } }; no `by` = this device). A key
+// changed before TASK 773 has no stamp: it counts as changed at time 0 (older than any stamped change).
+const STAMPS_KEY = 'sketch-studio-settings-stamps';
+const sameValue = (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b);
+
 /** The active document unit ('mm' | 'cm' | 'in'), defaulting to 'mm'. */
 export const docUnit = () => mgr.get('DOC_UNIT') || 'mm';
 
@@ -194,12 +219,28 @@ export const areaText = (mm2, { unit = docUnit() } = {}) => {
 };
 
 class SettingsManager {
-    constructor() {
+    // storage: the Web Storage the local overrides live in (default: the page's localStorage, looked up at each use as before); now(): the clock of the
+    // TASK 773 change stamps. Both injectable so a node test can run two "devices" side by side with the same code.
+    constructor({ storage, now = () => Date.now() } = {}) {
         this._settings = { ...DEFAULT_SETTINGS };
         this._subscribers = new Set();
         this._project = {};
         this._local = {};
+        this._stamps = {};
+        this._storage = storage;
+        this._now = now;
         this.load();
+    }
+
+    _store() {
+        if (this._storage !== undefined) return this._storage;
+        return typeof localStorage !== 'undefined' ? localStorage : null;
+    }
+    _saveLocal() {
+        const st = this._store();
+        if (!st) return;
+        st.setItem(LOCAL_KEY, JSON.stringify(this._local));
+        st.setItem(STAMPS_KEY, JSON.stringify(this._stamps));
     }
 
     load() {
@@ -219,10 +260,14 @@ class SettingsManager {
 
         // 2. Load local overrides from localStorage (browser)
         this._local = {};
+        this._stamps = {};
         try {
-            if (typeof localStorage !== 'undefined') {
-                const raw = localStorage.getItem('sketch-studio-settings');
+            const st = this._store();
+            if (st) {
+                const raw = st.getItem(LOCAL_KEY);
                 if (raw) this._local = JSON.parse(raw || '{}');
+                const stamps = st.getItem(STAMPS_KEY);
+                if (stamps) this._stamps = JSON.parse(stamps) || {};
             }
         } catch (e) {
             // Not a browser, or localStorage unavailable
@@ -230,7 +275,7 @@ class SettingsManager {
 
         // 3. Merge: defaults <- project <- local
         this._settings = { ...DEFAULT_SETTINGS, ...this._project, ...this._local };
-        this._emitChange();
+        this._emitChange(null, null, { source: 'load' });
     }
 
     get(key) {
@@ -247,7 +292,8 @@ class SettingsManager {
         if (opts.persist === 'local' || opts.persist === 'both') {
             try {
                 this._local[key] = value;
-                if (typeof localStorage !== 'undefined') localStorage.setItem('sketch-studio-settings', JSON.stringify(this._local));
+                this._stamps[key] = { at: this._now() }; // TASK 773: changed now, on this device
+                this._saveLocal();
             } catch (e) { console.warn('[SettingsManager] failed to save to localStorage', e); }
         }
         if ((opts.persist === 'project' || opts.persist === 'both') && canWriteProject) {
@@ -258,15 +304,54 @@ class SettingsManager {
             } catch (e) { console.warn('[SettingsManager] failed to write project config', e); }
         }
 
-        this._emitChange(key, value);
+        this._emitChange(key, value, { source: 'local' });
     }
 
+    // fn(key, value, all, { source }): key null = every setting may have changed (a load or a reset). TASK 773: source says where the change came from:
+    // 'local' (a set() on this page), 'sync' (another device's change arriving from Google Drive), 'load', 'reset'. Every subscriber reacts the same way
+    // to each; only the settings sync reads it (it never sends a change back that it just received).
     subscribe(fn) { this._subscribers.add(fn); return () => this._subscribers.delete(fn); }
-    _emitChange(key = null, value = null) {
+    _emitChange(key = null, value = null, meta = { source: 'local' }) {
         const snap = this.getAll(), normalized = key ? readSetting(this._settings, key) : value;
         for (const fn of this._subscribers) {
-            try { fn(key, normalized, snap); } catch (e) { console.error('[SettingsManager] subscriber error', e); }
+            try { fn(key, normalized, snap, meta); } catch (e) { console.error('[SettingsManager] subscriber error', e); }
         }
+    }
+
+    /** TASK 773: this device's SYNCED settings as per-key entries { KEY: { value, at, by } | { reset: true, at, by } }: every synced key the user set
+     *  (or reset) here or received from another device. `by` null = changed on this device. A key never touched has no entry. */
+    syncEntries() {
+        const out = {};
+        for (const key of SYNCED_SETTING_KEYS) {
+            const has = Object.prototype.hasOwnProperty.call(this._local, key), stamp = this._stamps[key];
+            if (!has && !stamp) continue;
+            const at = stamp && Number.isFinite(stamp.at) ? stamp.at : 0, by = (stamp && stamp.by) || null;
+            out[key] = has ? { value: this._local[key], at, by } : { reset: true, at, by };
+        }
+        return out;
+    }
+
+    /** TASK 773: apply other devices' newer changes ({ KEY: entry } as syncEntries gives them; keys that are not synced are ignored). Each is kept on this
+     *  device with ITS stamp (so it is not sent back as a change of this device); subscribers hear every key whose value changed, with source 'sync'.
+     *  Returns the keys whose value changed. */
+    applySynced(entries) {
+        const changed = [];
+        for (const [key, e] of Object.entries(entries || {})) {
+            if (!SYNCED.has(key) || !e) continue;
+            const before = this._settings[key];
+            if (e.reset) {
+                delete this._local[key];
+                this._settings[key] = Object.prototype.hasOwnProperty.call(this._project, key) ? this._project[key] : DEFAULT_SETTINGS[key];
+            } else {
+                this._local[key] = e.value;
+                this._settings[key] = e.value;
+            }
+            this._stamps[key] = e.by ? { at: e.at, by: e.by } : { at: e.at };
+            if (!sameValue(before, this._settings[key])) changed.push(key);
+        }
+        try { this._saveLocal(); } catch (e) { console.warn('[SettingsManager] failed to save to localStorage', e); }
+        for (const key of changed) this._emitChange(key, this._settings[key], { source: 'sync' });
+        return changed;
     }
 
     // Convenience helpers
@@ -281,17 +366,24 @@ class SettingsManager {
     
     // Reset to factory defaults (ignores project and local overrides)
     resetToDefaults() {
+        // TASK 773: every key is stamped "reset now, on this device", so the reset follows the user to his other devices (a synced key) like a change does
+        const at = this._now();
+        const stamps = {};
+        for (const key of new Set([...Object.keys(DEFAULT_SETTINGS), ...Object.keys(this._local), ...Object.keys(this._stamps)])) stamps[key] = { at };
         // Clear local storage
         try {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.removeItem('sketch-studio-settings');
+            const st = this._store();
+            if (st) {
+                st.removeItem(LOCAL_KEY);
+                st.setItem(STAMPS_KEY, JSON.stringify(stamps));
             }
         } catch (e) { console.warn('[SettingsManager] failed to clear localStorage', e); }
-        
+
         // Reset internal state to defaults only (ignore project config)
         this._local = {};
+        this._stamps = stamps;
         this._settings = { ...DEFAULT_SETTINGS };
-        this._emitChange();
+        this._emitChange(null, null, { source: 'reset' });
         console.log('[SettingsManager] Reset to factory defaults');
     }
     
@@ -305,6 +397,9 @@ class SettingsManager {
         return { ...DEFAULT_SETTINGS };
     }
 }
+
+/** A separate settings store (TASK 773: a node test's second "device"); the app uses the one default instance below. */
+export const createSettingsManager = (opts) => new SettingsManager(opts);
 
 const mgr = new SettingsManager();
 export default mgr;

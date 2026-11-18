@@ -52,6 +52,7 @@ import { createRouterAdapter, CURRENT_DESIGN_KEY } from '#ui/cloud/router-adapte
 import { createDriveAdapter, driveErrorText } from '#ui/cloud/drive-adapter.js';
 import { createDriveWriter } from '#ui/cloud/drive-writer.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js';
+import { contentPrint } from '#ui/cloud/content-print.js';
 
 const CURRENT = CURRENT_DESIGN_KEY;
 // TASK 684 (owner turns 1768-1775): ONE open-tabs working buffer for ALL apps (the same tabs, order and active tab in SketchStudio, Shaper, Pen Plotter
@@ -68,16 +69,8 @@ export const DEFAULT_PROJECT_NAME = 'My Designs'; // neutral and user-facing; "U
 export const LEGACY_DESIGN_ID = 'untitled-legacy';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
-/** TASK 766: the fingerprint of a design's content as Drive stores it (the JSON of its document: a document read back from Drive gives the same text as the one
- *  written). A 53-bit hash (cyrb53) of it, so the meta stays small. */
-export function contentPrint(document) {
-  const str = JSON.stringify(document === undefined ? null : document);
-  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
-  for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-}
+// TASK 766: the fingerprint of a design's content as Drive stores it (TASK 773: moved to #ui/cloud/content-print.js, shared with the settings sync; re-exported here).
+export { contentPrint };
 const designMeta = (d) => ({ id: d.id, projectId: d.projectId, name: d.name, app: d.app, updatedAt: d.updatedAt });
 export const emptyDocument = () => ({ version: DOCUMENT_VERSION, geometry: { joints: [], shapes: [], constraints: [] }, hosts: {} });
 
@@ -821,6 +814,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       refresh: async () => { const moved = await c.refresh(); if (moved) changed(); return moved; },
       moveProjectToDrive: async (id) => { const r = await c.moveProjectToDrive(id); changed(); return r; },
       checkConnection: (onStep) => c.checkConnection(onStep),
+      settingsFile: c.settingsFile, // TASK 773: the user's settings file on Drive (read / write), used only by #ui/cloud/settings-sync.js; not a design, never listed
     };
   }
   return store;

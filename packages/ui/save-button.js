@@ -3,11 +3,10 @@
 // to the design's home, document-home.js) and SHOWS the save state of the design shown, from save-state.js (the same source the document tab's dot reads).
 // Mounted by sidebar-projects.js with the document tab strip, so a host without the project layer (Shaper in Fusion mode, `projects: false`) has none.
 //
-// WHERE (placeIn): at the right END of the desktop header (app-header.js), after the stage buttons: it never moves them (margin-left: auto takes the free
-// space to its left, the stage buttons keep their x), and nothing sits to its right. Where the header is hidden (a phone, a phone in landscape:
-// app-header.js HEADER_HIDDEN_QUERY) the same element moves to the right end of the document tab strip, the top row there, icon only, pinned (sticky) so
-// the tabs scroll under it (the strip's scroll-padding keeps a tab or the "+" scrolled into view clear of it); it is as large as the strip's own "+" and close x (44 px wide, the strip's row high: owner ruling TASK 608 for that strip).
-// FIXED FOOTPRINT: every state has the same icon slot (16 px: the save glyph, or the spinner) and the same label "Save": a state change never moves anything.
+// WHERE (placeIn): in the desktop header (app-header.js), directly after the leading menu button and BEFORE the stage buttons (.sk-header-tabs),
+// as a compact icon-only 30 px square button matching the header control height; same button moves to the right end of the document tab strip where
+// the header is hidden (a phone, a phone in landscape: app-header.js HEADER_HIDDEN_QUERY), 44 px wide x strip row height, sticky.
+// FIXED FOOTPRINT: every state has the same icon slot (16 px: the save glyph, or the spinner): a state change never shifts the stage buttons.
 // States (save-state.js): saved = dimmed; new = plain; unsaved = accent outline + an accent dot on the glyph; saving / loading = the spinner (spinner.js) in the
 // glyph's place, a press does nothing; failed = filled red, a press tries again; signin = filled amber (the menu's status text).
 // Accessibility: aria-label "Save, <state text>"; the title adds the shortcut from the table (shortcuts.js titleWithShortcut 'file.save'); aria-disabled while
@@ -24,9 +23,10 @@ function injectStyles(doc) {
   if (doc.getElementById('sk-save-styles')) { stylesInjected = true; return; }
   const s = doc.createElement('style'); s.id = 'sk-save-styles';
   s.textContent = `
-.sk-save { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;
-  height: 30px; padding: 0 12px 0 10px; margin-left: auto; border: 1px solid var(--sk-header-sep, rgba(127,127,127,0.35)); border-radius: 6px;
+.sk-save { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 0; box-sizing: border-box;
+  width: 30px; height: 30px; padding: 0; border: 1px solid var(--sk-header-sep, rgba(127,127,127,0.35)); border-radius: 6px;
   background: transparent; color: inherit; cursor: pointer; white-space: nowrap; font: 600 13px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.sk-save-label { display: none; }
 .sk-save:hover { background: var(--sk-header-hover, rgba(127,127,127,0.12)); }
 .sk-save:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: 1px; }
 .sk-save-ic { position: relative; flex: 0 0 auto; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; --sk-spinner-size: 14px; }
@@ -43,7 +43,6 @@ function injectStyles(doc) {
 /* where the header is hidden: the end of the document tab strip, icon only, as large as the strip's "+" / close x, pinned while the tabs scroll */
 .sk-doctabs > .sk-save { position: sticky; right: 0; z-index: 2; margin-left: 0; width: 44px; height: var(--sk-doctabs-h, 30px); padding: 0; border: 0; border-radius: 6px 6px 0 0; gap: 0; }
 .sk-doctabs > .sk-save:not([data-state="failed"]):not([data-state="signin"]) { background: var(--sk-doctab-strip, transparent); }
-.sk-doctabs > .sk-save .sk-save-label { display: none; }
 /* the tabs and the "+" scroll into view CLEAR of it (scrollIntoView, and the strip's own active-tab scroll, document-tabs.js, read this padding) */
 .sk-doctabs:has(> .sk-save) { scroll-padding-inline-end: 52px; }
 `;
@@ -93,7 +92,14 @@ export function createSaveButton({ getState, onPress, doc = globalThis.document,
   function placeIn({ header, strip }) {
     if (mq) mq.removeEventListener('change', onMq);
     mq = win.matchMedia(HEADER_HIDDEN_QUERY);
-    onMq = () => { const to = mq.matches ? strip : header; if (el.parentNode !== to || to.lastElementChild !== el) to.appendChild(el); };
+    onMq = () => {
+      if (mq.matches) {
+        if (el.parentNode !== strip || strip.lastElementChild !== el) strip.appendChild(el);
+      } else {
+        const tabs = header.querySelector('.sk-header-tabs');
+        if (el.parentNode !== header || el.nextElementSibling !== tabs) header.insertBefore(el, tabs);
+      }
+    };
     mq.addEventListener('change', onMq);
     onMq();
   }

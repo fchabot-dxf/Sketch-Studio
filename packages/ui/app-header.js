@@ -1,6 +1,6 @@
 // packages/ui/app-header.js — the ONE shared, declared app header across all four hosts.
-// Desktop holds: the ☰ app-menu button + the host's stage buttons, and (TASK 768) the Save button at its right end (save-button.js, placed there by
-// sidebar-projects.js; none without the project layer, e.g. Shaper in Fusion mode). Same layout, order, sizes and spacing everywhere;
+// Desktop holds: the ☰ app-menu button + (TASK 768) the Save icon button (save-button.js, placed there by sidebar-projects.js; none without
+// the project layer, e.g. Shaper in Fusion mode) + the host's stage buttons. Same layout, order, sizes and spacing everywhere;
 // each app themes it via --sk-header-* / --sk-selection tokens. Scrolls sideways when narrow. Hidden at the phone breakpoint
 // and in short landscape (SHORT_VIEWPORT_QUERY), where stage buttons and the peeking drawer handle live in app-sidebar.js.
 

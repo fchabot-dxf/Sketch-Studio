@@ -58,7 +58,7 @@ await (async () => {
     const others = [...document.querySelectorAll('.sk-header-tab, .sk-sidebar-btn, .sk-doctab, .sk-doctab-new')].filter((e) => e.getBoundingClientRect().width > 0).map((e) => ({ c: e.className.split(' ')[0], ...R(e) }));
     const tabH = document.querySelector('.sk-doctab') ? document.querySelector('.sk-doctab').getBoundingClientRect().height : null;
     const strip = document.querySelector('.sk-doctabs').getBoundingClientRect();
-    return { parent: b.parentNode.className, stripR: strip.right, last: b.parentNode.lastElementChild === b, ...R(b), w: r.width, h: r.height, tabH,
+    return { parent: b.parentNode.className, stripR: strip.right, last: b.parentNode.lastElementChild === b, afterMenuBeforeTabs: !!(b.previousElementSibling?.classList.contains('sk-sidebar-btn') && b.nextElementSibling?.classList.contains('sk-header-tabs')), ...R(b), w: r.width, h: r.height, tabH,
       labelShown: getComputedStyle(b.querySelector('.sk-save-label')).display !== 'none', onTop: !!hit && (hit === b || b.contains(hit)),
       headerShown: getComputedStyle(header).display !== 'none', headerH: header.getBoundingClientRect().height, vw: innerWidth, scrollW: document.documentElement.scrollWidth,
       overlaps: others.filter((o) => o.l < r.right - 0.5 && o.r > r.left + 0.5 && o.t < r.bottom - 0.5 && o.b > r.top + 0.5).map((o) => o.c) };
@@ -82,9 +82,10 @@ await (async () => {
         assert.ok(m.onTop, tag + 'nothing covers the button');
         assert.deepStrictEqual(m.overlaps, [], tag + 'overlaps no stage button, menu button, tab or "+"');
         if (!s.phone) {
-          assert.deepStrictEqual([m.parent, m.last, m.headerShown, Math.round(m.headerH), Math.round(m.h), m.labelShown], ['sk-header', true, true, 44, 30, true], tag + 'the header\'s last item, icon + "Save", one 44 px header row');
-          const lastStage = await evalJs(`Math.max(...[...document.querySelectorAll('.sk-header-tab')].map((e) => e.getBoundingClientRect().right))`);
-          assert.ok(m.l >= lastStage + 10, tag + `right of the stage buttons (${m.l} >= ${lastStage} + 10)`);
+          assert.deepStrictEqual([m.parent, m.afterMenuBeforeTabs, m.headerShown, Math.round(m.headerH), Math.round(m.w), Math.round(m.h), m.labelShown], ['sk-header', true, true, 44, 30, 30, false], tag + 'after menu button and before stage tabs, icon-only 30x30 on 44 px header row');
+          const menuR = await evalJs(`document.querySelector('.sk-sidebar-btn').getBoundingClientRect().right`);
+          const firstStage = await evalJs(`Math.min(...[...document.querySelectorAll('.sk-header-tab')].map((e) => e.getBoundingClientRect().left))`);
+          assert.ok(m.l >= menuR + 9 && m.r <= firstStage - 9, tag + `between menu button (${menuR}) and stage tabs (${firstStage}): ${JSON.stringify(m)}`);
         } else {
           assert.deepStrictEqual([m.parent, m.last, m.headerShown, Math.round(m.w), Math.round(m.h) === Math.round(m.tabH), m.labelShown], ['sk-doctabs', true, false, 44, true, false], tag + 'header hidden: the strip\'s last item, icon only, 44 px wide, the tabs\' height ' + JSON.stringify(m));
           assert.ok(m.r >= m.stripR - 9, tag + "at the right end of the strip " + JSON.stringify(m));
@@ -129,7 +130,7 @@ await (async () => {
     await drawLine(0.4);
     await waitState('unsaved', 'SketchStudio: an edit -> not saved');
     assert.strictEqual(await stages(), base, 'not saved: nothing moved');
-    await shot('ss-desktop-unsaved.png', { x: 1100, y: 0, width: 340, height: 80 });
+    await shot('ss-desktop-unsaved.png', { x: 0, y: 0, width: 380, height: 80 });
     await press('.sk-save');
     await waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="save"]')`, 'SketchStudio: a press with no home opens THE Save as dialog');
     await press('.sk-fd [data-fd-tab="local"]');
@@ -139,7 +140,7 @@ await (async () => {
     await waitState('saved', 'SketchStudio: saved to its file');
     assert.strictEqual(await evalJs(`document.querySelector('.sk-save').getAttribute('aria-label')`), 'Save, Saved to Sketch 768.sketch.json', 'saved: the file named');
     assert.strictEqual(await stages(), base, 'saved: nothing moved');
-    await shot('ss-desktop-saved-file.png', { x: 1100, y: 0, width: 340, height: 80 });
+    await shot('ss-desktop-saved-file.png', { x: 0, y: 0, width: 380, height: 80 });
     await drawLine(0.6);
     await waitState('unsaved', 'SketchStudio: an edit of the file');
     await press('.sk-save');

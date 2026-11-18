@@ -48,13 +48,37 @@ function injectStyles() {
 .sk-fd .sk-fd-line { margin: 0; font-size: 13.5px; line-height: 1.4; opacity: 0.85; }
 .sk-fd .sk-fd-name { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .sk-fd .sk-fd-name .sk-tp-input { width: 100%; min-height: 44px; }
-.sk-fd .sk-fd-list { display: flex; flex-direction: column; gap: 4px; max-height: min(320px, 45vh); overflow: auto; }
-.sk-fd .sk-fd-design { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 6px 10px; text-align: left; font: inherit;
+.sk-fd .sk-fd-list { display: flex; flex-direction: column; gap: 4px; max-height: min(210px, 34vh); overflow: auto; }
+.sk-fd .sk-fd-browser { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); border-radius: 8px; padding: 8px; min-height: 0; }
+.sk-fd .sk-fd-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.sk-fd .sk-fd-crumbs { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; min-width: 0; font-size: 13px; }
+.sk-fd .sk-fd-crumb { background: none; border: 0; padding: 3px 6px; border-radius: 6px; color: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); font: inherit; font-weight: 600; cursor: pointer; }
+.sk-fd .sk-fd-crumb:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
+.sk-fd .sk-fd-crumb[aria-current="location"] { color: inherit; cursor: default; background: none; opacity: 0.9; }
+.sk-fd .sk-fd-crumb-sep { opacity: 0.5; padding: 0 2px; }
+.sk-fd .sk-fd-tools { display: flex; gap: 4px; flex-wrap: wrap; }
+.sk-fd .sk-fd-tool { font: 500 12px/1.2 inherit; min-height: 30px; padding: 4px 9px; border-radius: 6px; cursor: pointer; color: inherit; background: transparent;
+  border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.4)); }
+.sk-fd .sk-fd-tool:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
+.sk-fd .sk-fd-tool:disabled { opacity: 0.45; cursor: not-allowed; }
+.sk-fd .sk-fd-tool:focus-visible, .sk-fd .sk-fd-crumb:focus-visible, .sk-fd .sk-fd-folder:focus-visible, .sk-fd .sk-fd-up:focus-visible, .sk-fd .sk-fd-design:focus-visible {
+  outline: 2px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); outline-offset: -2px; }
+.sk-fd .sk-fd-mkdir { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sk-fd .sk-fd-mkdir .sk-tp-input { flex: 1 1 130px; min-height: 34px; width: auto; }
+.sk-fd .sk-fd-folder, .sk-fd .sk-fd-up, .sk-fd .sk-fd-design { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 10px; text-align: left; font: inherit;
   color: inherit; background: transparent; cursor: pointer; border-radius: 8px; border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); }
-.sk-fd .sk-fd-design:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
-.sk-fd .sk-fd-design span:last-child { font-size: 12px; opacity: 0.7; }
+.sk-fd .sk-fd-folder:hover, .sk-fd .sk-fd-up:hover, .sk-fd .sk-fd-design:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
+.sk-fd .sk-fd-design-text { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; flex: 1; }
+.sk-fd .sk-fd-design-sub, .sk-fd .sk-fd-meta { font-size: 12px; opacity: 0.7; }
+.sk-fd .sk-fd-meta { margin-left: auto; flex: none; }
+.sk-fd .sk-fd-ic { flex: none; opacity: 0.8; display: inline-flex; align-items: center; }
+.sk-fd .sk-fd-dest { margin: 0; font-size: 12px; opacity: 0.78; }
+.sk-fd .sk-fd-section { margin: 4px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.6; }
 .sk-fd .sk-fd-signin, .sk-fd .sk-fd-choose, .sk-fd .sk-fd-projects { align-self: flex-start; }
-@media (max-width: 640px) { .sk-fd .sk-fd-signin, .sk-fd .sk-fd-choose, .sk-fd .sk-fd-projects { align-self: stretch; } }
+@media (max-width: 640px) {
+  .sk-fd .sk-fd-signin, .sk-fd .sk-fd-choose, .sk-fd .sk-fd-projects { align-self: stretch; }
+  .sk-fd .sk-fd-tool, .sk-fd .sk-fd-crumb, .sk-fd .sk-fd-folder, .sk-fd .sk-fd-up, .sk-fd .sk-fd-design { min-height: 44px; }
+}
 .sk-fd .sk-fd-panel[hidden], .sk-fd .sk-fd-name[hidden], .sk-fd .sk-tp-btn[hidden] { display: none; } /* last: a hidden part stays hidden whatever its own display */
 `;
   document.head.appendChild(s); stylesInjected = true;
@@ -62,10 +86,17 @@ function injectStyles() {
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const button = (cls, text, data) => { const b = el('button', cls, text); b.type = 'button'; if (data) b.dataset.fd = data; return b; };
+const svgIcon = (d) => {
+  const s = el('span', 'sk-fd-ic'); s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = `<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  return s;
+};
+const FOLDER_SVG = '<path d="M1.5 3.5h4.2l1.3 1.5h7.5v8h-13z"/>';
+const FILE_SVG = '<path d="M4 1.5h5.5L12.5 4.5v10H4z"/><path d="M9.5 1.5v3h3"/>';
 
 /** THE dialog. See the header for the options. */
 export function openFileDialog({ mode = 'save', name = '', driveReady = () => true, signIn = async () => {}, subscribeAccount = () => () => {}, onSave = null,
-  listDesigns = async () => [], onOpenDesign = null, onChooseFile = null, onProjects = null, settings = SettingsManager } = {}) {
+  browseDrive = null, listDesigns = async () => [], onOpenDesign = null, onChooseFile = null, onProjects = null, settings = SettingsManager } = {}) {
   injectStyles();
   const saving = mode === 'save';
   const label = saving ? 'Save as' : 'Open';
@@ -115,12 +146,25 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     }
     body.appendChild(err);
 
+    // Google Drive in-app folder browser state (for saving into or opening from "Sketch Studio")
+    let browserFolder = null; // { id, name } inside root app folder, or null at root
+    let defaultFolderName = (browseDrive && browseDrive.defaultFolderName) || 'My Designs';
+    let folders = [];
+    let folderDesigns = [];
+    let recentDesigns = [];
+    let browserLoading = false;
+    let browserReady = false;
+    let browserInitialized = false;
+    let creatingFolder = false;
+    let loadSeq = 0;
+
     let tab = initialFileDialogTab({ driveReady: driveReady(), settings });
     const save = () => {
       const n = nameInput.value.trim();
       if (!n) { say('A design needs a name.'); nameInput.focus(); return; }
       if (tab === 'drive' && !driveReady()) return;
-      act(() => onSave(tab, n));
+      const folderId = tab === 'drive' && browserFolder ? browserFolder.id : undefined;
+      act(() => onSave(tab, n, folderId));
     };
     if (saving) {
       nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
@@ -131,30 +175,208 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     const signInBlock = (panel) => {
       panel.appendChild(el('p', 'sk-fd-line', saving ? 'Save to your Google Drive: sign in with your Google account first.' : 'Open a design from your Google Drive: sign in with your Google account first.'));
       const b = button('sk-tp-btn sk-tp-open sk-fd-signin', 'Sign in with Google', 'sign-in');
-      b.addEventListener('click', () => act(() => Promise.resolve(signIn()).then(() => { render(); return null; })));
+      b.addEventListener('click', () => act(() => Promise.resolve(signIn()).then(() => { browserInitialized = false; render(); return null; })));
       panel.appendChild(b);
     };
-    function renderDrive() {
+
+    const appendDesignRow = (list, r) => {
+      const b = button('sk-fd-design', null, 'design'); b.dataset.design = r.id;
+      const text = el('span', 'sk-fd-design-text');
+      text.append(el('span', null, r.name), el('span', 'sk-fd-design-sub', r.sub || ''));
+      b.append(svgIcon(FILE_SVG), text);
+      b.addEventListener('click', () => {
+        if (saving) { nameInput.value = r.name; nameInput.focus(); nameInput.select(); }
+        else act(() => onOpenDesign(r.id));
+      });
+      list.appendChild(b);
+    };
+
+    async function loadBrowser({ resolveInitial = false } = {}) {
+      if (!driveReady() || !dlg.isConnected) return;
+      const seq = ++loadSeq;
+      browserLoading = true;
+      renderDrivePanel();
+      try {
+        if (browseDrive) {
+          const nextFolders = await browseDrive.listFolders();
+          if (seq !== loadSeq || !dlg.isConnected) return;
+          folders = nextFolders;
+          if (resolveInitial && saving && browseDrive.initialFolderId) {
+            const initId = await browseDrive.initialFolderId();
+            if (seq !== loadSeq || !dlg.isConnected) return;
+            const match = initId && folders.find((f) => f.id === initId);
+            if (match) { browserFolder = { id: match.id, name: match.name }; defaultFolderName = match.name; }
+          }
+          if (browserFolder) {
+            const match = folders.find((f) => f.id === browserFolder.id);
+            if (match) {
+              browserFolder = { id: match.id, name: match.name };
+              folderDesigns = await browseDrive.listFolderDesigns(browserFolder.id);
+            } else {
+              browserFolder = null;
+              folderDesigns = [];
+            }
+          }
+          if (!saving && !browserFolder) {
+            recentDesigns = await listDesigns();
+          }
+        } else if (!saving) {
+          recentDesigns = await listDesigns();
+        }
+        if (seq !== loadSeq || !dlg.isConnected) return;
+        browserReady = true;
+      } catch (e) {
+        if (seq === loadSeq && dlg.isConnected) say(e);
+      } finally {
+        if (seq === loadSeq) {
+          browserLoading = false;
+          if (dlg.isConnected) renderDrivePanel();
+        }
+      }
+    }
+
+    async function submitCreateFolder(nameText) {
+      const folderName = String(nameText || '').trim();
+      if (!folderName) { say('Enter a folder name.'); return; }
+      say('');
+      browserLoading = true;
+      renderDrivePanel();
+      try {
+        const created = await browseDrive.createFolder(folderName);
+        if (!dlg.isConnected) return;
+        creatingFolder = false;
+        browserFolder = { id: created.id, name: created.name };
+        await loadBrowser();
+      } catch (e) {
+        browserLoading = false;
+        say(e);
+        if (dlg.isConnected) renderDrivePanel();
+      }
+    }
+
+    function renderDrivePanel() {
       const p = panels.drive; p.textContent = '';
       if (!driveReady()) { signInBlock(p); return; }
-      if (saving) { p.appendChild(el('p', 'sk-fd-line', 'Saved to your Google Drive; from then on every change is saved there as you work.')); return; }
+
+      const rootName = (browseDrive && browseDrive.rootLabel) || 'Sketch Studio';
+      if (!browseDrive && saving) {
+        p.appendChild(el('p', 'sk-fd-line', 'Saved to your Google Drive; from then on every change is saved there as you work.'));
+        return;
+      }
+
+      if (browseDrive) {
+        const box = el('div', 'sk-fd-browser');
+        const bar = el('div', 'sk-fd-bar');
+        const crumbs = el('nav', 'sk-fd-crumbs'); crumbs.setAttribute('aria-label', 'Google Drive app folder path');
+        const rootCrumb = button('sk-fd-crumb', rootName, 'crumb-root');
+        if (!browserFolder) rootCrumb.setAttribute('aria-current', 'location');
+        else rootCrumb.addEventListener('click', () => { browserFolder = null; folderDesigns = []; loadBrowser(); });
+        crumbs.appendChild(rootCrumb);
+        if (browserFolder) {
+          crumbs.appendChild(el('span', 'sk-fd-crumb-sep', '/'));
+          const curCrumb = el('span', 'sk-fd-crumb', browserFolder.name);
+          curCrumb.setAttribute('aria-current', 'location');
+          crumbs.appendChild(curCrumb);
+        }
+
+        const tools = el('div', 'sk-fd-tools');
+        const refreshBtn = button('sk-fd-tool', 'Refresh', 'refresh');
+        refreshBtn.disabled = browserLoading;
+        refreshBtn.addEventListener('click', () => loadBrowser());
+        tools.appendChild(refreshBtn);
+        if (saving && browseDrive.createFolder) {
+          const newBtn = button('sk-fd-tool', '+ New folder', 'new-folder');
+          newBtn.disabled = browserLoading;
+          newBtn.addEventListener('click', () => {
+            creatingFolder = !creatingFolder;
+            renderDrivePanel();
+            const inp = box.querySelector('[data-fd="mkdir-input"]');
+            if (inp) inp.focus();
+          });
+          tools.appendChild(newBtn);
+        }
+        bar.append(crumbs, tools);
+        box.appendChild(bar);
+
+        if (saving && creatingFolder) {
+          const mkdirRow = el('div', 'sk-fd-mkdir'); mkdirRow.dataset.fd = 'mkdir-row';
+          const inp = el('input', 'sk-tp-input'); inp.type = 'text'; inp.placeholder = 'New folder name';
+          inp.dataset.fd = 'mkdir-input'; inp.setAttribute('aria-label', 'New folder name'); inp.autocomplete = 'off';
+          const okBtn = button('sk-fd-tool', 'Create', 'mkdir-ok'); okBtn.disabled = browserLoading;
+          const cancelBtn = button('sk-fd-tool', 'Cancel', 'mkdir-cancel');
+          okBtn.addEventListener('click', () => submitCreateFolder(inp.value));
+          cancelBtn.addEventListener('click', () => { creatingFolder = false; say(''); renderDrivePanel(); });
+          inp.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); submitCreateFolder(inp.value); }
+            else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); creatingFolder = false; renderDrivePanel(); }
+          });
+          mkdirRow.append(inp, okBtn, cancelBtn);
+          box.appendChild(mkdirRow);
+        }
+
+        const list = el('div', 'sk-fd-list'); list.dataset.fd = 'designs';
+        if (browserLoading && !browserReady) {
+          list.appendChild(el('p', 'sk-fd-line', 'Loading your folders…'));
+        } else if (browserFolder) {
+          const up = button('sk-fd-up', null, 'up');
+          up.append(svgIcon(FOLDER_SVG), el('span', null, `.. (${rootName})`));
+          up.addEventListener('click', () => { browserFolder = null; folderDesigns = []; loadBrowser(); });
+          list.appendChild(up);
+          if (!folderDesigns.length) {
+            list.appendChild(el('p', 'sk-fd-line', saving ? 'This folder is empty. Enter a name below to save here.' : 'No designs in this folder yet.'));
+          } else {
+            for (const r of folderDesigns) appendDesignRow(list, r);
+          }
+        } else {
+          if (!folders.length && saving) {
+            list.appendChild(el('p', 'sk-fd-line', `No folders in "${rootName}" yet. Click + New folder, or Save to create "My Designs".`));
+          }
+          for (const f of folders) {
+            const row = button('sk-fd-folder', null, 'folder'); row.dataset.folder = f.id;
+            const meta = el('span', 'sk-fd-meta', f.sub || 'Open');
+            row.append(svgIcon(FOLDER_SVG), el('span', null, f.name), meta);
+            row.addEventListener('click', () => { browserFolder = { id: f.id, name: f.name }; loadBrowser(); });
+            list.appendChild(row);
+          }
+          if (!saving) {
+            if (folders.length && recentDesigns.length) list.appendChild(el('p', 'sk-fd-section', 'Recent designs'));
+            if (!folders.length && !recentDesigns.length) list.appendChild(el('p', 'sk-fd-line', 'No design on your Google Drive yet.'));
+            for (const r of recentDesigns) appendDesignRow(list, r);
+          }
+        }
+        box.appendChild(list);
+        p.appendChild(box);
+
+        if (saving) {
+          const destText = browserFolder
+            ? `Saving into ${rootName} / ${browserFolder.name}`
+            : `Saving into ${rootName} / ${defaultFolderName} — or choose a folder above.`;
+          p.appendChild(el('p', 'sk-fd-dest', destText));
+        } else {
+          const all = button('sk-tp-btn sk-fd-projects', 'All projects…', 'projects');
+          all.addEventListener('click', () => { finish(null); onProjects(); });
+          p.appendChild(all);
+        }
+        return;
+      }
+
+      // Legacy fallback when only listDesigns() is supplied (no browseDrive) in Open mode
       const list = el('div', 'sk-fd-list'); list.dataset.fd = 'designs';
-      list.appendChild(el('p', 'sk-fd-line', 'Loading your designs…'));
+      if (!browserReady) list.appendChild(el('p', 'sk-fd-line', 'Loading your designs…'));
+      else if (!recentDesigns.length) list.appendChild(el('p', 'sk-fd-line', 'No design on your Google Drive yet.'));
+      else for (const r of recentDesigns) appendDesignRow(list, r);
       p.appendChild(list);
       const all = button('sk-tp-btn sk-fd-projects', 'All projects…', 'projects');
       all.addEventListener('click', () => { finish(null); onProjects(); });
       p.appendChild(all);
-      Promise.resolve(listDesigns()).then((rows) => {
-        if (!list.isConnected) return;
-        list.textContent = '';
-        if (!rows.length) { list.appendChild(el('p', 'sk-fd-line', 'No design on your Google Drive yet.')); return; }
-        for (const r of rows) {
-          const b = button('sk-fd-design', null, 'design'); b.dataset.design = r.id;
-          b.append(el('span', null, r.name), el('span', null, r.sub || ''));
-          b.addEventListener('click', () => act(() => onOpenDesign(r.id)));
-          list.appendChild(b);
-        }
-      }, (e) => { list.textContent = ''; say(e); });
+    }
+
+    function renderDrive() {
+      renderDrivePanel();
+      if (driveReady() && !browserInitialized) {
+        browserInitialized = true;
+        loadBrowser({ resolveInitial: true });
+      }
     }
     function renderLocal() {
       const p = panels.local; p.textContent = '';
@@ -177,7 +399,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     }
     function render() { renderDrive(); renderLocal(); select(tab); }
     render();
-    unsubscribe = subscribeAccount(() => { if (dlg.isConnected) render(); });
+    unsubscribe = subscribeAccount(() => { if (dlg.isConnected) { browserInitialized = false; render(); } });
     if (saving && !nameRow.hidden) return nameInput;
     return tabBtns[tab];
   }, { panelClass: 'sk-fd' });

@@ -12,7 +12,7 @@ import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
-import { loadSection, saveSection, defaultSection } from '#ui/ribbon-layout.js';
+import { loadSection, saveSection, defaultSection, onRibbonLayoutChange, sameSection } from '#ui/ribbon-layout.js';
 import { titleWithShortcut, shortcutHint, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration (TASK 747: and follows the user's keys)
 import { mountTooltip } from '#ui/hint.js';
 import { RIBBON_HINTS } from '#ui/design-hints.js';
@@ -329,6 +329,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   }
 
   const tips = [];
+  const sectTips = []; // TASK 774: the tooltips of the OPEN dropdown's rows; fillSection destroys them before it builds the rows again
   const attachTip = (btn, key, titleLabel, shortcutId, extraText) => {
     const desc = extraText || (key && RIBBON_HINTS[key]) || '';
     if (!desc) return;
@@ -511,12 +512,25 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     refresh();
   }
   function relayout(sec) { applySection(sec); fit(); refresh(); }
+  // TASK 773b: the stored layout changed (another device's, arriving from Google Drive; a reset): every section follows it, re-read against its declared
+  // tools (an id this app does not have is dropped), except the one whose menu is open: the user is editing it, it follows once the menu closes.
+  function followStore() {
+    let moved = false;
+    for (const sec of sections) {
+      if (sec.fixed || sec === openSec) continue;
+      const next = loadSection(appId, sec.key, sec.ids, sec.defaultInBar);
+      if (sameSection(next, sec.layout)) continue;
+      sec.layout = next; applySection(sec); moved = true;
+    }
+    if (moved) { fit(); refresh(); }
+  }
+  const offLayout = onRibbonLayoutChange(followStore);
   function save(sec) { saveSection(appId, sec.key, sec.layout); }
 
   // ── the section dropdown (one popover element, filled for the section it opens on)
   const sectMenu = document.createElement('div'); sectMenu.className = 'sk-ribbon-sect-menu';
   let openSec = null;
-  const sectPop = createPopover(sectMenu, el, () => { if (openSec) openSec.nameEl.setAttribute('aria-expanded', 'false'); openSec = null; });
+  const sectPop = createPopover(sectMenu, el, () => { if (openSec) openSec.nameEl.setAttribute('aria-expanded', 'false'); openSec = null; followStore(); });
   menus.push(sectMenu);
   document.body.appendChild(sectMenu);
   sectMenu.addEventListener('contextmenu', (ev) => ev.preventDefault()); // a long press on a grip must not open the browser's menu
@@ -530,6 +544,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (byKeyboard) { const first = sectMenu.querySelector('.sk-ribbon-sect-item'); if (first) first.focus(); }
   }
   function fillSection(sec) {
+    sectTips.splice(0).forEach((t) => t.destroy());
     sectMenu.innerHTML = '';
     sectMenu.dataset.section = sec.key;
     const head = document.createElement('div'); head.className = 'sk-ribbon-sect-head'; head.textContent = sec.label;
@@ -557,7 +572,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     chkWrap.appendChild(chk);
     const runBtn = document.createElement('button'); runBtn.type = 'button'; runBtn.className = 'sk-ribbon-sect-item'; runBtn.dataset.id = it.id;
     const desc = it.hintText || (it.hintKey && RIBBON_HINTS[it.hintKey]) || '';
-    if (desc) tips.push(mountTooltip({ target: runBtn, getContent: () => ({ title: it.label, key: it.shortcut ? shortcutHint(it.shortcut) : '', text: desc }) }));
+    if (desc) sectTips.push(mountTooltip({ target: runBtn, getContent: () => ({ title: it.label, key: it.shortcut ? shortcutHint(it.shortcut) : '', text: desc }) }));
     const ic = it.btn.querySelector('svg');
     if (ic) runBtn.appendChild(ic.cloneNode(true)); // the bar button's own icon (the rect button's shows its current variant)
     const name = document.createElement('span'); name.textContent = it.label; runBtn.appendChild(name);
@@ -660,10 +675,10 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     },
     refresh,
     destroy: () => {
-      offShortcuts();
+      offShortcuts(); offLayout();
       if (unlistenHistory) unlistenHistory();
       sectPop.close();
-      tips.forEach((t) => t.destroy());
+      [...tips, ...sectTips].forEach((t) => t.destroy());
       document.removeEventListener('pointerup', syncSoon);
       document.removeEventListener('keyup', syncSoon);
       if (fitObserver) fitObserver.disconnect();

@@ -58,10 +58,11 @@ export const CUT_TYPES = [
   // TASK 472: STOCK = the board itself, drawn as a closed profile in Design and marked here. NOT a cut: the Review extrudes it to its
   // thickness (the one depth row, relabelled: `depthParam` = its entry in param-hints.js, TASK 770). The EXPORT writes it as a GUIDE (owner: "ok guide then": Shaper's docs call a guide
   // "uncuttable", so the stock line can never be cut by accident): the guide's colour and cutType, its thickness in cutDepth, in
-  // the same order and format as every other cut; `exportParams` = the attributes the exported element carries (a guide keeps all
+  // the same format as every other cut (TASK 774, owner turn 2356: `exportFirst`: written FIRST in the file, before every cut, so what paints the file in order
+  // draws the board behind the cuts); `exportParams` = the attributes the exported element carries (a guide keeps all
   // three), `params` = the rows the Prepare card shows. Declared AFTER the guide so classify() (import) reads blue as a GUIDE:
   // re-importing gives a Guide the owner can re-mark Stock.
-  { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthParam: 'stockDepth', icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthParam: 'stockDepth', exportFirst: true, icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
   // TASK 714: the STEPPED types (owner turns 1939-1948): a wall that is not vertical (drafted, chamfered, filleted, countersunk), cut with a
   // straight end mill as a stair of PLAIN cuts. Generated in the app (#core/stepped-cut.js steppedTerraces, through deriveProfileCuts), so
   // the Origin sees plain cuts; distinct here. `terraceAs` = the plain type each terrace is cut as (its encoding is what the

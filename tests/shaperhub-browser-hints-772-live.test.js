@@ -238,6 +238,39 @@ try {
   const phoneSettings = await evalJs(`(() => { const r = document.querySelector('.sk-style-panel').getBoundingClientRect(); return { left: Math.round(r.left), right: Math.round(r.right), docW: document.documentElement.scrollWidth }; })()`);
   assert(phoneSettings.left >= 0 && phoneSettings.right <= 390 && phoneSettings.docW <= 390, `Phone Settings fits 390px: ${JSON.stringify(phoneSettings)}`);
   await shot('phone-settings-fits.png');
+  await clickEl('.sk-style-close');
+
+  // TASK 774 (review finding 4j: the header promised it): the Sync folder browser on the phone: the folder list's rows and the exists-question's three
+  // buttons are 44 px touch targets, the dialog fits 390 px. (The plan is set through the page's own cut-plan module, the drawing is the desktop phase's.)
+  await waitFor(`!!(window.__designController && window.__designController.state)`, 'phone designController ready');
+  await evalJs(`(async () => { const st = window.__designController.state;
+    if (!st.shapes.some((s) => s.id === 'Rs0')) { [[0, 0], [120, 0], [120, 70], [0, 70]].forEach(([x, y], i) => st.joints.set('Rj' + i, { x, y })); for (let i = 0; i < 4; i++) st.shapes.push({ id: 'Rs' + i, type: 'line', joints: ['Rj' + i, 'Rj' + ((i + 1) % 4)] }); st.saveState('draw'); }
+    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/apps/shaper/src/cut-plan.js');
+    if (!cp.cutPlanEntries().length) cp.CUT_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
+  await clickEl('.sk-header-tab[data-tab="review"]');
+  await waitFor(`!document.getElementById('view-review').hidden`, 'phone Export tab');
+  await clickEl('#btn-sync-shaper');
+  await waitFor(`document.getElementById('shaper-sync-modal').open`, 'phone Sync modal open');
+  await typeVal('#sync-email', FAKE_LOGIN.email);
+  await typeVal('#sync-password', FAKE_LOGIN.password);
+  await clickEl('#sync-btn-browse');
+  await waitFor(`!!document.querySelector('#sync-folder-list [data-folder="Furniture"]') && !!document.querySelector('#sync-folder-list [data-file="RootPlan.svg"]')`, 'phone: root folders and files listed');
+  const phoneRows = await evalJs(`(() => { const r = document.getElementById('shaper-sync-modal').getBoundingClientRect();
+    return { rows: [...document.querySelectorAll('#sync-folder-list .sync-entry')].map((e) => Math.round(e.getBoundingClientRect().height)), left: Math.round(r.left), right: Math.round(r.right), docW: document.documentElement.scrollWidth }; })()`);
+  console.log('phone sync browser: ' + JSON.stringify(phoneRows));
+  assert(phoneRows.rows.length >= 3 && phoneRows.rows.every((h) => h >= 44), `phone: every folder-list row is >= 44 px: ${JSON.stringify(phoneRows.rows)}`);
+  assert(phoneRows.left >= 0 && phoneRows.right <= 390 && phoneRows.docW <= 390, `phone: the Sync dialog fits 390 px: ${JSON.stringify(phoneRows)}`);
+  await shot('phone-sync-browser.png', '#shaper-sync-modal', 0);
+  await typeVal('#sync-filename', 'RootPlan.svg');
+  await clickEl('#sync-btn-submit');
+  await waitFor(`!document.getElementById('sync-exists').hidden`, 'phone: the exists question');
+  const phoneQ = await evalJs(`['sync-btn-replace', 'sync-btn-keep-both', 'sync-btn-exists-cancel'].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); return [id, Math.round(r.height), Math.round(r.left) >= 0 && Math.round(r.right) <= 390]; })`);
+  console.log('phone exists question: ' + JSON.stringify(phoneQ));
+  assert(phoneQ.every(([, h, inside]) => h >= 44 && inside), `phone: the three answers are 44 px and on screen: ${JSON.stringify(phoneQ)}`);
+  await shot('phone-sync-exists.png', '#shaper-sync-modal', 0);
+  await clickEl('#sync-btn-exists-cancel');
+  await clickEl('#sync-btn-cancel');
+  await scanNoSecrets('phone');
 
   console.log('shaperhub-browser-hints-772-live: ok');
 } finally {

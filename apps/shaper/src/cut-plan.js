@@ -7,7 +7,7 @@
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
-import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds } from '#core/profile-model.js';
+import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
 import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel } from '#core/stepped-cut.js';
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
@@ -380,6 +380,53 @@ export function reconcileCutPlan(state, plan = CUT_PLAN) {
   return { edgeMoved, edgeDropped, kept: rename.size, removed: remove.size };
 }
 
+/**
+ * keepHolesFromOtherSketches(state, plan = CUT_PLAN) -> { keptHoles, lostHoles } — TASK 774 (owner turn 2357), run ONCE where a Shaper document SAVED BEFORE
+ * the same-sketch hole rule is read (shaper-doc.js applyShaperDoc: a sidecar `version` below 2). Commit 27c00a4 made a derived face's automatic holes
+ * same-sketch only (#core/profile-model.js directlyContainedLoops); a stored `loop:<id>` record on a face whose holes were drawn in ANOTHER sketch then
+ * derives without them (a Pocket clears through its islands, an Outside plate loses its hole cuts). Such a record keeps the geometry it was saved with:
+ * it MOVES (its settings, its place in the plan) to an explicit combined profile with those holes ('profile:<id>', the existing makeProfile, the
+ * same as a Combine: visible in Design, Uncombine undoes it), and is counted in `keptHoles` (the one-time notice).
+ * The holes the profile gets = the face's holes under the old rule (holesFromAllSketches) that its cut actually used: every hole for a pocket (a
+ * stepped pocket too: its islands stay uncut), the holes WITHOUT their own record for any other cut (TASK 711: a hole with its own record is cut
+ * by that record only, so it stays out of the profile and its own record keeps resolving to itself).
+ * A record whose old holes cannot go into a profile without changing ANOTHER record (a pocket island with its own record, or a hole already in a
+ * combined profile: combined profiles never share a loop, resolveProfileViews) is left as it is and counted in `lostHoles` (the notice names it).
+ * A record of a face whose holes the rule did not change (no hole in another sketch; or a face a combined profile already covers) is untouched.
+ * Mutates `plan` (order kept) and state.profiles. A NEW cut made after the load follows the same-sketch rule.
+ */
+export function keepHolesFromOtherSketches(state, plan = CUT_PLAN) {
+  const { loops, loopPolys } = loopsWithPolygons(state);
+  const loopById = new Map(loops.map((l) => [l.id, l]));
+  const shapeById = shapeIndexOf(state);
+  const owned = ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys);
+  const covered = (loopId) => { const p = resolveProfileForLoop(loopId, state, loops, loopPolys, { shapeById }); return !!p && !p.isDerived; };
+  const rename = new Map();
+  let lostHoles = 0;
+  for (const [key, rec] of plan) {
+    const { kind, id } = parseKey(key);
+    if (kind !== 'loop' || !rec || !rec.cutType || !loopById.has(id)) continue;
+    const now = resolveProfileForLoop(id, state, loops, loopPolys, { shapeById });
+    if (!now || !now.isDerived) continue; // a combined profile covers it: the hole rule never applied
+    const before = derivedProfileForLoop(id, loops, loopPolys, state, { holesFromAllSketches: true });
+    const t = cutTypeById(rec.cutType);
+    const pocket = ((t && t.terraceAs) || rec.cutType) === 'pocket';
+    const used = (ids) => (pocket ? ids : ids.filter((h) => !owned.has(h)));
+    const holes = used(before.inners);
+    const nowHoles = used(now.inners);
+    if (holes.length === nowHoles.length && holes.every((h) => nowHoles.includes(h))) continue; // the cut is the same under both rules
+    if (holes.some((h) => covered(h) || (pocket && owned.has(h)))) { lostHoles++; continue; }
+    const prof = makeProfile(state, loopById.get(id), holes.map((h) => loopById.get(h)));
+    rename.set(key, keyOf('profile', prof.id));
+  }
+  if (rename.size) {
+    const entries = [...plan];
+    plan.clear();
+    for (const [key, rec] of entries) plan.set(rename.get(key) || key, rec);
+  }
+  return { keptHoles: rename.size, lostHoles };
+}
+
 /** The one-time notice of a reconciliation (reconcileCutPlan's counts), or null when nothing changed. The legacy edge part is worded as before. */
 export function cutPlanNotice(r) {
   if (!r) return null;
@@ -389,6 +436,9 @@ export function cutPlanNotice(r) {
   if (edge.length) groups.push(edge.join(', '));
   if (r.kept > 0) groups.push(r.kept === 1 ? '1 cut was on an outline that is now a closed shape and was kept' : `${r.kept} cuts were on outlines that are now closed shapes and were kept`);
   if (r.removed > 0) groups.push(r.removed === 1 ? '1 cut no longer matches a shape and was removed: assign it again' : `${r.removed} cuts no longer match a shape and were removed: assign them again`);
+  // TASK 774: keepHolesFromOtherSketches's counts
+  if (r.keptHoles > 0) groups.push(r.keptHoles === 1 ? '1 cut kept its holes from other sketches (now a combined profile)' : `${r.keptHoles} cuts kept their holes from other sketches (now combined profiles)`);
+  if (r.lostHoles > 0) groups.push(r.lostHoles === 1 ? '1 cut no longer has its holes from other sketches (a hole has its own cut): check it in Prepare' : `${r.lostHoles} cuts no longer have their holes from other sketches (a hole has its own cut): check them in Prepare`);
   return groups.length ? `Cut plan updated: ${groups.join('; ')}` : null;
 }
 

@@ -1,5 +1,5 @@
 // tests/saveas-overwrite-node.test.js -- Save as overwrite (same-name file in same Drive folder):
-//   1. findExisting returns null when no design matches, or { id, name, folderName } when the target folder holds that name.
+//   1. findExisting returns null when no design matches, or { id, name, folderName, openInOtherTab } when the target folder holds that name.
 //   2. store.overwrite updates an existing design in place (same file ID) with the new document, name, and app, clearing stale local shadows.
 //   3. buffer.saveAs(..., { projectId, overwriteId }) overwrites either another design or the currently bound design without creating duplicates,
 //      and removes any stale open tab pointing at the overwritten designId.
@@ -55,7 +55,7 @@ await actions.saveAsDialog();
 eq(await dialogOpts.browseDrive.findExisting('Bench', furn.id), null, 'non-matching name returns null');
 eq(await dialogOpts.browseDrive.findExisting('Chair', shop.id), null, 'same name in another folder does not collide');
 const hit = await dialogOpts.browseDrive.findExisting('  Chair ', furn.id);
-eq(hit, { id: existingChair.id, name: 'Chair', folderName: 'Furniture' }, 'matching name in target folder finds existing file');
+eq(hit, { id: existingChair.id, name: 'Chair', folderName: 'Furniture', openInOtherTab: false }, 'matching name in target folder finds existing file (TASK 774: and says whether another open tab shows it)');
 
 // Overwrite existingChair with current Untitled drawing via onSave(tab, name, folderId, overwriteId)
 const saved = await dialogOpts.onSave('drive', 'Chair', furn.id, hit.id);

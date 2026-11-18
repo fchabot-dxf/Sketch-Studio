@@ -17,7 +17,7 @@ import { createFakeDrive } from './harness/fake-drive.js';
 import { createDriveAdapter, SETTINGS_FOLDER_NAME, SETTINGS_FILE_NAME } from '../packages/ui/cloud/drive-adapter.js';
 import { createRouterAdapter } from '../packages/ui/cloud/router-adapter.js';
 import { createProjectStore, createMemoryAdapter } from '../packages/ui/project-store.js';
-import { createSettingsManager, SYNCED_SETTING_KEYS } from '../packages/core/settings-manager.js';
+import { createSettingsManager, SYNCED_SETTING_KEYS, SYNCED_BY_PART } from '../packages/core/settings-manager.js';
 import { createSettingsSync, mergeSettingsEntries, parseSettingsFile, serializeSettingsFile, SETTINGS_SYNC_DEBOUNCE_MS, SETTINGS_FILE_FORMAT } from '../packages/ui/cloud/settings-sync.js';
 import { STYLE_SETTING_KEYS } from '../packages/ui/style-templates.js';
 
@@ -92,14 +92,14 @@ function device(drive, name, { signedIn = true } = {}) {
   assert.ok(!('DOC_UNIT' in apply) && !('LENGTH_PRECISION' in apply), 'merge: nothing this device has newer is applied over it');
   // a device-only key is never serialised: neither by the store's syncEntries nor by the merge
   const s = createSettingsManager({ storage: memStorage(), now });
-  s.set('FILE_DIALOG_TAB', 'local', { persist: 'local' }); s.set('RIBBON_LAYOUT', { v: 1 }, { persist: 'local' }); s.set('SHOW_DEBUG_OVERLAY', true, { persist: 'local' }); s.set('BROWSER_COLLAPSED', true, { persist: 'local' });
+  s.set('FILE_DIALOG_TAB', 'local', { persist: 'local' }); s.set('SHOW_DEBUG_OVERLAY', true, { persist: 'local' }); s.set('BROWSER_COLLAPSED', true, { persist: 'local' });
   s.set('DOC_UNIT', 'cm', { persist: false }); // a host's in-memory default (Shaper's inch) is not a choice: never synced
   s.set('LENGTH_PRECISION', 2, { persist: 'local' });
   assert.deepStrictEqual(Object.keys(s.syncEntries()), ['LENGTH_PRECISION'], 'syncEntries: only the synced key the user set (device-only keys and a persist:false value never)');
   const m2 = mergeSettingsEntries({ ...s.syncEntries(), FILE_DIALOG_TAB: { value: 'local', at: 9, by: null } }, {}, 'dev-A');
   assert.deepStrictEqual(Object.keys(m2.file), ['LENGTH_PRECISION'], 'merge: a device-only key handed to it is still never written to the file');
   const text = serializeSettingsFile(m2.file);
-  assert.ok(!/FILE_DIALOG_TAB|RIBBON_LAYOUT|SHOW_DEBUG|BROWSER_COLLAPSED|token|sk_cloud/.test(text), 'the file text holds no device-only key and nothing of the account');
+  assert.ok(!/FILE_DIALOG_TAB|SHOW_DEBUG|BROWSER_COLLAPSED|token|sk_cloud/.test(text), 'the file text holds no device-only key and nothing of the account');
   assert.deepStrictEqual(JSON.parse(text), { format: SETTINGS_FILE_FORMAT, version: 1, settings: { LENGTH_PRECISION: { value: 2, at: clock, by: 'dev-A' } } }, 'the file shape: { format, version, settings: { KEY: { value, at, by } } }');
   // every Settings-panel knob of the look is synced (one declaration, no key forgotten)
   for (const k of STYLE_SETTING_KEYS) assert.ok(SYNCED_SETTING_KEYS.includes(k), 'the style template key ' + k + ' is synced');
@@ -312,6 +312,45 @@ function device(drive, name, { signedIn = true } = {}) {
   assert.strictEqual(B.sync.status().state, 'device', 'signing out: back to this device only');
   assert.strictEqual(B.settings.get('DOC_UNIT'), 'in', 'signing out keeps the local copy');
   console.log('8 signed out / sign in / debounce: ok');
+}
+
+// ---- 9. TASK 773b: the ribbon layout is synced PER APP (one app's layout never overwrites another's); an unknown tool is ignored on load ----
+{
+  const { RIBBON_LAYOUT_VERSION, appSections, withSection, resolveSection } = await import('../packages/ui/ribbon-layout.js');
+  assert.strictEqual(SYNCED_BY_PART.RIBBON_LAYOUT.empty.v, RIBBON_LAYOUT_VERSION, 'the declared empty layout has the layout version of ribbon-layout.js');
+  const drive = createFakeDrive();
+  const A = device(drive, 'A'), B = device(drive, 'B');
+  const shaperCreate = { order: ['btn-rect', 'btn-line'], off: ['btn-line'] }, studioModify = { order: ['btn-trim'], off: [] };
+  A.settings.set('RIBBON_LAYOUT', withSection(A.settings.get('RIBBON_LAYOUT'), 'shaper', 'create', shaperCreate), { persist: 'local' });
+  clock += 1000;
+  B.settings.set('RIBBON_LAYOUT', withSection(B.settings.get('RIBBON_LAYOUT'), 'sketchstudio', 'modify', studioModify), { persist: 'local' });
+  assert.deepStrictEqual(Object.keys(B.settings.syncEntries()), ['RIBBON_LAYOUT:sketchstudio'], 'one entry per app part');
+  await A.sync.syncNow(); await B.sync.syncNow(); await A.sync.syncNow();
+  for (const d of [A, B]) {
+    const raw = d.settings.get('RIBBON_LAYOUT');
+    assert.deepStrictEqual(appSections(raw, 'shaper').create, shaperCreate, d.name + ': the Shaper layout (changed on A) is there');
+    assert.deepStrictEqual(appSections(raw, 'sketchstudio').modify, studioModify, d.name + ': the SketchStudio layout (changed on B, later, as a whole value) did not overwrite it');
+    assert.strictEqual(raw.v, RIBBON_LAYOUT_VERSION);
+  }
+  assert.deepStrictEqual(Object.keys(fileEntries(drive)).sort(), ['RIBBON_LAYOUT:shaper', 'RIBBON_LAYOUT:sketchstudio'], 'the file: one entry per app');
+  // the same app's layout on both: the newer wins; another app's part is untouched
+  clock += 1000;
+  A.settings.set('RIBBON_LAYOUT', withSection(A.settings.get('RIBBON_LAYOUT'), 'shaper', 'create', null), { persist: 'local' }); // back to its defaults
+  await A.sync.syncNow(); await B.sync.syncNow();
+  assert.deepStrictEqual(appSections(B.settings.get('RIBBON_LAYOUT'), 'shaper'), {}, 'B: the Shaper section back to its defaults');
+  assert.deepStrictEqual(appSections(B.settings.get('RIBBON_LAYOUT'), 'sketchstudio').modify, studioModify, 'B: the SketchStudio part untouched');
+  // a layout that names a tool this app does not have, or a malformed part, arriving from Drive: applied without a throw, read safely
+  const f = settingsFileOf(drive)[0], doc = JSON.parse(f.content);
+  doc.settings['RIBBON_LAYOUT:sketchstudio'] = { value: { create: { order: ['btn-no-such-tool', 'btn-circle'], off: ['btn-no-such-tool'] }, modify: 'garbage' }, at: clock + 5000, by: 'dev-Z' };
+  doc.settings['RIBBON_LAYOUT:penplotter'] = { value: 42, at: clock + 5000, by: 'dev-Z' };
+  f.content = JSON.stringify(doc); f.version++;
+  await B.sync.syncNow();
+  const raw = B.settings.get('RIBBON_LAYOUT');
+  const ids = ['btn-line', 'btn-circle', 'btn-rect'];
+  assert.deepStrictEqual(resolveSection(appSections(raw, 'sketchstudio').create, ids, 3), { order: ['btn-circle', 'btn-line', 'btn-rect'], off: new Set() }, 'an unknown tool id is dropped on load');
+  assert.deepStrictEqual(resolveSection(appSections(raw, 'sketchstudio').modify, ids, 1).order, ids, 'a malformed section: the declared defaults');
+  assert.deepStrictEqual(appSections(raw, 'penplotter'), {}, 'a malformed app part: the declared defaults');
+  console.log('9 ribbon layout per app: ok');
 }
 
 console.log('settings-drive-773-node: ok');

@@ -8,7 +8,8 @@
 //   at = when the key was last changed (that device's clock, ms since 1970), by = a random id of the device that changed it (no account data).
 // THE MERGE (mergeSettingsEntries, per KEY): the newer change wins for each key; at EQUAL times Drive's entry wins (the first to reach Drive), so every
 // device ends on the same value. A key only one side has is kept. A key this version does not sync (a newer app's key) is kept in the file untouched and
-// never applied here. A change made before TASK 773 has no time: it counts as time 0 (older than any timed change).
+// never applied here. A change made before TASK 773 has no time: it counts as time 0 (older than any timed change). TASK 773b: a key synced BY PART
+// (#core/settings-manager.js SYNCED_BY_PART: RIBBON_LAYOUT, one part per app) is one entry per part, "RIBBON_LAYOUT:<appId>", merged by the same rule.
 // WHEN: signed in, at app start and when the user signs in (read + merge in the background: the app has already started with the local settings and nothing
 // waits on it), after a change to a synced key (debounced SETTINGS_SYNC_DEBOUNCE_MS = 2 s after the last change, then at most one Drive sync per 5 s and a
 // retry with backoff 5 / 10 / 20 / 40 / 60 s: the design writer's own policy, #ui/cloud/drive-writer.js), and "Sync now". Each sync is ONE read-modify-write:
@@ -21,7 +22,7 @@
 // and the Log. Signed out, nothing here runs (exactly the behaviour before TASK 773: the settings live in this browser only).
 // A corrupt file is ignored (a notice in the Log) and replaced by the merged settings at the next write; a file from a NEWER format version is never read nor
 // written over (a notice in the Log, the status says so); neither ever throws into the app or touches the local settings.
-import SettingsManager, { isSyncedSetting } from '#core/settings-manager.js';
+import SettingsManager, { isSyncedSetting, isSyncedEntryKey } from '#core/settings-manager.js';
 import { dbg } from '#core/debug.js';
 import { createDriveWriter } from '#ui/cloud/drive-writer.js';
 import { driveErrorText } from '#ui/cloud/drive-adapter.js';
@@ -81,12 +82,12 @@ const sameEntries = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorte
 export function mergeSettingsEntries(local, remote, deviceId) {
   const file = { ...remote }, apply = {};
   for (const [k, l0] of Object.entries(local)) {
-    if (!isSyncedSetting(k)) continue; // a device-only key is never written to Drive
+    if (!isSyncedEntryKey(k)) continue; // a device-only key is never written to Drive
     const l = cleanEntry(l0, l0.by || deviceId), r = remote[k];
     if (!r || l.at > r.at) { file[k] = l; continue; }
     if (!sameEntry(l, r)) apply[k] = r;
   }
-  for (const [k, r] of Object.entries(remote)) if (!local[k] && isSyncedSetting(k)) apply[k] = r;
+  for (const [k, r] of Object.entries(remote)) if (!local[k] && isSyncedEntryKey(k)) apply[k] = r;
   return { file, apply };
 }
 

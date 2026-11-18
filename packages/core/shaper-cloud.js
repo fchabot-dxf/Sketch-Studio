@@ -43,7 +43,8 @@ export const SHAPER_COMMON_HEADERS = {
 
 // ── THE REQUEST CONTRACT of POST /api/shaper-upload (TASK 767 / 772), declared once: functions/api/shaper-upload.js (the site) and server.js (local dev)
 // only pass the request text to handleShaperUpload below and send back what it answers.
-//   auth: `token` (in-memory session JWT from an earlier call) OR `email` + `password` (when both are sent with a stale token, re-signs in once on 401)
+//   auth: `token` (in-memory session JWT from an earlier call) OR `email` + `password` (when both are sent with a stale token, re-signs in once on 401);
+//         TASK 774: an upload with mode 'replace' ALWAYS carries `email` + `password` (with or without a token), else 400 kind 'login' before any call
 //   action = 'upload' (default) | 'list' | 'mkdir'
 //   action='list'   JSON { token | email+password, remotePath? }
 //                   -> 200 { success: true, path, folders: [{ name, path, modified }], files: [{ name, modified }], token }
@@ -79,9 +80,15 @@ export function joinRemotePath(remotePath, folderName) {
 // ── THE NAME RULE (TASK 767), declared once: the Shaper app's export names (apps/shaper/src/export-payload.js exportFileName: Generate Shaper SVG, the
 // sidebar Download, the Sync dialog's file name) and the upload below all go through it. Letters, digits, _ - . space and ( ) are kept (the
 // parentheses since TASK 767: "bromont (2).svg"), any other character becomes _, an empty name is the default, and the name ends in .svg.
+// TASK 774 (owner turn 2356): an ACCENTED letter first becomes its plain letter ("Étagère" -> "Etagere", "ç" -> "c": the NFD form without its
+// combining accents, U+0300-U+036F, then recomposed so a character with no plain form stays ONE character and so ONE _), and a ligature becomes
+// its letters (SHAPER_NAME_LIGATURES: "œ" -> "oe"); any other character still becomes _.
 export const SHAPER_DEFAULT_NAME = 'shaper-export';
+export const SHAPER_NAME_LIGATURES = Object.freeze({ 'œ': 'oe', 'Œ': 'OE', 'æ': 'ae', 'Æ': 'AE', 'ß': 'ss' });
+const plainLetters = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC')
+  .replace(/[œŒæÆß]/g, (c) => SHAPER_NAME_LIGATURES[c]);
 export function shaperFileName(name) {
-  const clean = String(name == null ? '' : name).trim().replace(/[^a-zA-Z0-9_\-. ()]/g, '_');
+  const clean = plainLetters(String(name == null ? '' : name).trim()).replace(/[^a-zA-Z0-9_\-. ()]/g, '_');
   return (clean || SHAPER_DEFAULT_NAME).replace(/(\.svg)?$/i, '.svg');
 }
 
@@ -281,6 +288,12 @@ export async function uploadToShaperHub({ email, password, token, session: inclu
   const secrets = [email, email && String(email).trim(), password, token].filter((s) => typeof s === 'string' && s);
   if (!Object.values(UPLOAD_MODES).includes(mode)) throw new ShaperHubError('input', `Unknown upload mode: ${plainMessage(mode, secrets)}`);
   const name = shaperFileName(filename);
+  // TASK 774, THE REPLACE RULE: a Replace DELETEs the old entry and then creates the new one; a session that ends between the two would cost the
+  // old file. So a Replace always carries the login (email + password) even when a session token is held: the token is tried first and a 401 at
+  // ANY step, the create after the DELETE included, signs in again once (makeSession). A Replace without the login is refused before any call.
+  if (mode === UPLOAD_MODES.REPLACE && !(email && String(email).trim() && password)) {
+    throw new ShaperHubError('login', 'Sign in again to replace a file: a Replace needs your email and password.');
+  }
 
   const session = await makeSession({ email, password, token }, secrets, onProgress);
 
@@ -314,19 +327,26 @@ export async function uploadToShaperHub({ email, password, token, session: inclu
 
   // Step 5: Link blob to entry in userspace tree (shaper_sync.py create_file_entry, lines 125-132)
   onProgress('linking_tree');
-  const fileRes = await session.authedCall('adding the file to My Files', treeUrl(path, target), (tok) => ({
-    method: 'POST',
-    headers: authHeaders(tok, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      type: 'file',
-      blobs: [blobId],
-    }),
-  }));
+  // TASK 774: after the DELETE of a Replace, ANY failure of the create (a refusal, a session that could not be renewed, no answer) says that the old
+  // file is gone and how to get the new one there, with the failure's own words in brackets; the failure's kind is kept (a 'login' still asks to sign in).
+  const removedButNotAdded = (kind, why) => new ShaperHubError(kind, `The old ${name} was removed but the new one could not be added ${why}. Send again to add it.`);
+  let fileRes;
+  try {
+    fileRes = await session.authedCall('adding the file to My Files', treeUrl(path, target), (tok) => ({
+      method: 'POST',
+      headers: authHeaders(tok, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        type: 'file',
+        blobs: [blobId],
+      }),
+    }));
+  } catch (err) {
+    if (replacing && err instanceof ShaperHubError) throw removedButNotAdded(err.kind, `(${err.message.replace(/\.$/, '')})`);
+    throw err;
+  }
   if (!fileRes.ok) {
     const why = `(${fileRes.status}): ${await refusalMessage(fileRes, secrets)}`;
-    throw new ShaperHubError('shaper', replacing
-      ? `The old ${name} was removed but the new one could not be added ${why}. Send again to add it.`
-      : `Creating file in My Files failed ${why}`);
+    throw replacing ? removedButNotAdded('shaper', why) : new ShaperHubError('shaper', `Creating file in My Files failed ${why}`);
   }
 
   const fileData = await fileRes.json();

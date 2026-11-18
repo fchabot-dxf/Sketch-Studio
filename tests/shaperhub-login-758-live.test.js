@@ -294,7 +294,7 @@ try {
   await planFusion('fusion');
   await openSignIn('fusion');
   await checkFormSemantics('fusion');
-  await syncOnce('fusion', 'tap', 'Body1.svg'); // TASK 767: the design is the imported selection, named after it
+  await syncOnce('fusion', 'tap', '06-countersink.svg'); // TASK 767: the design is the imported selection, named after it; TASK 774: after its Fusion DOCUMENT (source.documentName)
   await scanForLogin('fusion');
   await reloadEmpty('fusion', planFusion);
 

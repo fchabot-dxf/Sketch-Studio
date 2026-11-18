@@ -125,7 +125,7 @@ const DEFAULT_SETTINGS = {
 
 // TASK 773: the settings that FOLLOW THE USER to his other devices (#ui/cloud/settings-sync.js keeps them in "Sketch Studio/Settings/settings.json" on his
 // Google Drive while he is signed in). The ONE declaration of which keys leave this device; every other key stays device-only (a debug knob, the file
-// dialog's last tab, the ribbon layout and the browser's collapsed state are device or screen state; see WORK-LOG ## TURN 773 for the table).
+// dialog's last tab and the browser's collapsed state are device or screen state; see WORK-LOG ## TURN 773 for the table).
 // Only a value the user CHOSE travels (a set() persisted on this device, or a reset): a host's in-memory default (persist: false) never does.
 export const SYNCED_SETTING_KEYS = Object.freeze([
     // Units
@@ -138,10 +138,31 @@ export const SYNCED_SETTING_KEYS = Object.freeze([
     'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR', 'INACTIVE_SKETCH_OPACITY',
     // The user's own data kept as settings: the chosen template, his presets, his keyboard shortcuts, his favourite templates
     'STYLE_TEMPLATE', 'STYLE_PRESETS', 'SHORTCUT_KEYS', 'TEMPLATE_FAVOURITES',
+    // TASK 773b (owner turn 2364: "per account"): the tool-ribbon layout, synced PER APP (SYNCED_BY_PART below)
+    'RIBBON_LAYOUT',
 ]);
 const SYNCED = new Set(SYNCED_SETTING_KEYS);
 /** Whether a setting key follows the user to his other devices (TASK 773). */
 export const isSyncedSetting = (key) => SYNCED.has(key);
+// TASK 773b: a synced key whose value holds INDEPENDENT parts is synced and merged PART BY PART, each part with its own time, so a change to one part never
+// overwrites another part changed elsewhere. { KEY: { field, empty } }: the parts are value[field][<part id>]; `empty` is the value a device with no stored
+// copy starts from. RIBBON_LAYOUT is { v: 1, apps: { <appId>: { <section>: { order, off } } } } (#ui/ribbon-layout.js, RIBBON_LAYOUT_VERSION 1): one part
+// per APP, so a Shaper layout changed on one device and a SketchStudio layout changed on another both survive. Its entries are 'RIBBON_LAYOUT:<appId>'.
+export const SYNCED_BY_PART = Object.freeze({ RIBBON_LAYOUT: Object.freeze({ field: 'apps', empty: Object.freeze({ v: 1, apps: Object.freeze({}) }) }) });
+const PART_SEP = ':';
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const partKey = (key, id) => key + PART_SEP + id;
+const splitPartKey = (k) => { const i = String(k).indexOf(PART_SEP); return i > 0 && i < String(k).length - 1 ? { key: k.slice(0, i), id: k.slice(i + 1) } : null; };
+const partsOf = (key, value) => {
+    const f = value && typeof value === 'object' ? value[SYNCED_BY_PART[key].field] : null;
+    return f && typeof f === 'object' && !Array.isArray(f) ? f : {};
+};
+/** Whether a settings-file ENTRY key is one this version syncs: a synced key, or 'KEY:<part>' of a key synced by part (TASK 773b). */
+export function isSyncedEntryKey(k) {
+    if (SYNCED.has(k)) return !SYNCED_BY_PART[k];
+    const s = splitPartKey(k);
+    return !!(s && SYNCED.has(s.key) && SYNCED_BY_PART[s.key]);
+}
 const LOCAL_KEY = 'sketch-studio-settings';
 // TASK 773: when each locally persisted key was last changed, and on which device ({ KEY: { at: ms, by?: device id } }; no `by` = this device). A key
 // changed before TASK 773 has no stamp: it counts as changed at time 0 (older than any stamped change).
@@ -292,7 +313,12 @@ class SettingsManager {
         if (opts.persist === 'local' || opts.persist === 'both') {
             try {
                 this._local[key] = value;
-                this._stamps[key] = { at: this._now() }; // TASK 773: changed now, on this device
+                const at = this._now();
+                this._stamps[key] = { at }; // TASK 773: changed now, on this device
+                if (SYNCED_BY_PART[key]) { // TASK 773b: each part that changed is stamped on its own
+                    const a = partsOf(key, old), b = partsOf(key, value);
+                    for (const id of new Set([...Object.keys(a), ...Object.keys(b)])) if (!sameValue(a[id], b[id])) this._stamps[partKey(key, id)] = { at };
+                }
                 this._saveLocal();
             } catch (e) { console.warn('[SettingsManager] failed to save to localStorage', e); }
         }
@@ -322,7 +348,17 @@ class SettingsManager {
      *  (or reset) here or received from another device. `by` null = changed on this device. A key never touched has no entry. */
     syncEntries() {
         const out = {};
+        const entry = (stamp, body) => ({ ...body, at: stamp && Number.isFinite(stamp.at) ? stamp.at : 0, by: (stamp && stamp.by) || null });
         for (const key of SYNCED_SETTING_KEYS) {
+            if (SYNCED_BY_PART[key]) { // TASK 773b: one entry per part ('KEY:<part>'); a part removed here (back to its defaults) is a reset of that part
+                const parts = hasOwn(this._local, key) ? partsOf(key, this._local[key]) : {};
+                const stamped = Object.keys(this._stamps).map(splitPartKey).filter((x) => x && x.key === key).map((x) => x.id);
+                for (const id of new Set([...Object.keys(parts), ...stamped])) {
+                    const k = partKey(key, id);
+                    out[k] = entry(this._stamps[k], hasOwn(parts, id) ? { value: parts[id] } : { reset: true });
+                }
+                continue;
+            }
             const has = Object.prototype.hasOwnProperty.call(this._local, key), stamp = this._stamps[key];
             if (!has && !stamp) continue;
             const at = stamp && Number.isFinite(stamp.at) ? stamp.at : 0, by = (stamp && stamp.by) || null;
@@ -336,8 +372,16 @@ class SettingsManager {
      *  Returns the keys whose value changed. */
     applySynced(entries) {
         const changed = [];
+        const byPart = {}; // TASK 773b: base key -> its parts after the arrived part entries
         for (const [key, e] of Object.entries(entries || {})) {
-            if (!SYNCED.has(key) || !e) continue;
+            if (!isSyncedEntryKey(key) || !e) continue;
+            const part = SYNCED.has(key) ? null : splitPartKey(key);
+            if (part) {
+                const parts = byPart[part.key] || (byPart[part.key] = { ...partsOf(part.key, this._settings[part.key]) });
+                if (e.reset) delete parts[part.id]; else parts[part.id] = e.value;
+                this._stamps[key] = e.by ? { at: e.at, by: e.by } : { at: e.at };
+                continue;
+            }
             const before = this._settings[key];
             if (e.reset) {
                 delete this._local[key];
@@ -348,6 +392,13 @@ class SettingsManager {
             }
             this._stamps[key] = e.by ? { at: e.at, by: e.by } : { at: e.at };
             if (!sameValue(before, this._settings[key])) changed.push(key);
+        }
+        for (const [key, parts] of Object.entries(byPart)) { // the other fields of the stored value (RIBBON_LAYOUT's v) are kept
+            const before = this._settings[key], spec = SYNCED_BY_PART[key];
+            const shell = before && typeof before === 'object' && !Array.isArray(before) ? before : spec.empty;
+            const next = { ...shell, [spec.field]: parts };
+            this._local[key] = next; this._settings[key] = next;
+            if (!sameValue(before, next)) changed.push(key);
         }
         try { this._saveLocal(); } catch (e) { console.warn('[SettingsManager] failed to save to localStorage', e); }
         for (const key of changed) this._emitChange(key, this._settings[key], { source: 'sync' });
@@ -369,7 +420,8 @@ class SettingsManager {
         // TASK 773: every key is stamped "reset now, on this device", so the reset follows the user to his other devices (a synced key) like a change does
         const at = this._now();
         const stamps = {};
-        for (const key of new Set([...Object.keys(DEFAULT_SETTINGS), ...Object.keys(this._local), ...Object.keys(this._stamps)])) stamps[key] = { at };
+        const parts = Object.keys(SYNCED_BY_PART).flatMap((key) => Object.keys(partsOf(key, this._local[key])).map((id) => partKey(key, id))); // TASK 773b
+        for (const key of new Set([...Object.keys(DEFAULT_SETTINGS), ...Object.keys(this._local), ...Object.keys(this._stamps), ...parts])) stamps[key] = { at };
         // Clear local storage
         try {
             const st = this._store();

@@ -22,7 +22,7 @@ import { APPS } from '../../packages/ui/app-registry.js';
 export const DATASET = 'sketch_events';
 
 // The four sites (scripts/build-site.cjs SITE_HOST: the test checks they agree). A branch / commit deploy of one is <something>.<site>.
-export const PROD_HOSTS = Object.freeze(['sketch-studio.pages.dev', 'shaper-svg.pages.dev', 'penplotter.pages.dev', 'sketch-trace.pages.dev']);
+export const PROD_HOSTS = Object.freeze(['sketch-studio.pages.dev', 'shaper-svg.pages.dev', 'sketch-plotter.pages.dev', 'sketch-trace.pages.dev']);
 
 const APP_IDS = APPS.map((a) => a.id);
 const CORS = {

@@ -31,11 +31,11 @@ const { APPS, siteClosure } = require('./site-closure.cjs');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-// Each app's own Pages project (owner turn 1862: shaper-svg; penplotter = the owner's older Pen Plotter project, now this app; sketch-trace; sketch-studio is the existing one).
+// Each app's own Pages project (owner turn 1862: shaper-svg, sketch-trace, sketch-studio; sketch-plotter replaces penplotter.pages.dev whose edge IPs failed Chrome ECH TLS with ERR_SSL_PROTOCOL_ERROR).
 const SITE_HOST = {
   sketchstudio: 'sketch-studio.pages.dev',
   shaper: 'shaper-svg.pages.dev',
-  penplotter: 'penplotter.pages.dev',
+  penplotter: 'sketch-plotter.pages.dev',
   trace: 'sketch-trace.pages.dev',
 };
 

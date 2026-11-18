@@ -57,7 +57,7 @@ string kept (`/apps/shaper/?host=fusion` -> `/?host=fusion`: the Fusion add-in) 
 |---|---|---|---|
 | https://sketch-studio.pages.dev (SketchStudio) | `sketch-studio` (Git-connected) | `node scripts/build-site.cjs sketchstudio` | `dist` |
 | https://shaper-svg.pages.dev | `shaper-svg` (direct upload) | `node scripts/build-site.cjs shaper` | `dist` |
-| https://penplotter.pages.dev | `penplotter` (the older Pen Plotter project, deployed by upload) | `node scripts/build-site.cjs penplotter` | `dist` |
+| https://sketch-plotter.pages.dev | `sketch-plotter` (direct upload) | `node scripts/build-site.cjs penplotter` | `dist` |
 | https://sketch-trace.pages.dev | `sketch-trace` (direct upload) | `node scripts/build-site.cjs trace` | `dist` |
 
 `npm run site:<app>` runs the same build. A direct-upload site is deployed from the REPO ROOT (`wrangler pages deploy dist --project-name <project>`):

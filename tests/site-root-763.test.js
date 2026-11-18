@@ -29,7 +29,7 @@ const FORWARD = (app) => {
   const site = `https://${SITE_HOST[app]}`;
   return [[`/${app}`, `${site}/`, '302'], [`/apps/${app}`, `${site}/`, '302'], [`/apps/${app}/index.html`, `${site}/`, '302'], [`/apps/${app}/*`, `${site}/:splat`, '302']];
 };
-eq(SITE_HOST, { sketchstudio: 'sketch-studio.pages.dev', shaper: 'shaper-svg.pages.dev', penplotter: 'penplotter.pages.dev', trace: 'sketch-trace.pages.dev' }, 'the four sites (owner turn 1862)');
+eq(SITE_HOST, { sketchstudio: 'sketch-studio.pages.dev', shaper: 'shaper-svg.pages.dev', penplotter: 'sketch-plotter.pages.dev', trace: 'sketch-trace.pages.dev' }, 'the four sites');
 eq(rulesOf('shaper'), OWN('shaper'), 'shaper-svg: its own old addresses -> its root, nothing else');
 eq(rulesOf('penplotter'), OWN('penplotter'), 'penplotter: its own old addresses -> its root, nothing else');
 eq(rulesOf('trace'), OWN('trace'), 'sketch-trace: its own old addresses -> its root, nothing else');

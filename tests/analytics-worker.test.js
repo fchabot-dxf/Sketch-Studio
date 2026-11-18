@@ -137,7 +137,7 @@ eq(validateEvent({ ...goodVisit, extra: 1 }), { event: 'visit', name: '', id: ID
 // ── the site class (blob11) from the Origin header; the host is never stored ───────────────────────────
 eq([...PROD_HOSTS].sort(), Object.values(SITE_HOST).sort(), 'PROD_HOSTS are the four sites of scripts/build-site.cjs SITE_HOST');
 const originCases = [
-  ['https://sketch-studio.pages.dev', 'prod'], ['https://shaper-svg.pages.dev', 'prod'], ['https://penplotter.pages.dev', 'prod'], ['https://sketch-trace.pages.dev', 'prod'],
+  ['https://sketch-studio.pages.dev', 'prod'], ['https://shaper-svg.pages.dev', 'prod'], ['https://sketch-plotter.pages.dev', 'prod'], ['https://sketch-trace.pages.dev', 'prod'],
   ['https://a1b2c3d4.shaper-svg.pages.dev', 'preview'], ['https://agents-738.sketch-studio.pages.dev', 'preview'],
   ['http://localhost:8090', 'local'], ['http://127.0.0.1:5173', 'local'], ['http://[::1]:8090', 'local'], ['http://192.168.1.20', 'local'], ['http://10.0.0.5', 'local'],
   ['http://172.20.0.4', 'local'], ['http://shop-pc', 'local'], ['http://shop-pc.local', 'local'],

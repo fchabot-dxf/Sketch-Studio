@@ -16555,3 +16555,10 @@ Owner turn 2315 (Shaper, inch document): the Rectangle drew 12.5 x 6.6 in and it
   - `bench-seat-fix.test.js` (`173 checks passed`, asserting `pat.symmetric === false` and `0` `symmetric` constraints across sweeps `1..360`, slats `2..9`, live edits, and qty updates), `bench-perf-702.test.js` (`72 checks passed`), `templates-672.test.js` (`973 checks ok`), `template-params-670.test.js` (`914 checks ok`), `templates-node.test.js` (`23 templates ok`), `templates-ui-node.test.js` (`ok`).
   - `cmd /c npm run gate:quick`: `GATE tier=quick jobs=quick=22 files=484 pass=484 fail=0 elapsed=68s`, `PROFILES-LEFT 0`.
   - `templates-672-live.test.js`: `templates-672-live: ok`; visually verified `.evidence/bench-no-sym/bench-canvas.png` (`8 x 52.5°` non-symmetric circular pattern badge, centered slats) and `.evidence/bench-no-sym/start-view-bench.png`.
+## TURN prepare-sketch-isolation — Same-sketch-only auto-hole containment in derived profiles (worktree prepare-sketch-isolation, branch agents/prepare-sketch-isolation)
+- WHAT: Updated `directlyContainedLoops` (`packages/core/profile-model.js`) to check loop sketch membership via `sketchOf` (`packages/core/sketch-model.js`) when `state.shapes` is present, so two loops in different sketches do not automatically nest as outer-with-hole, while same-sketch holes (and untagged single-sketch entities) keep identical auto-hole behavior. Explicit `makeProfile` / `Combine` and `Shift+click` multi-selection across sketches remain supported.
+- VERIFICATION (`D:\APPS\Sketch-Studio.worktrees\prepare-sketch-isolation`):
+  - `tests/prepare-sketch-isolation-node.test.js`: `10 checks passed`.
+  - `tests/prepare-sketch-isolation-live.test.js`: `ok` (visually verified `.evidence/prepare-sketch-isolation/prepare-outer-sketch2-only.png`, `prepare-shift-multiselect.png`, `prepare-same-sketch-hole.png`).
+  - `tests/prepare-pick-732-live.test.js`: `ok`.
+  - `cmd /c npm run gate:quick`: `GATE tier=quick jobs=quick=22 files=485 pass=485 fail=0 elapsed=74s`, `PROFILES-LEFT 0`.

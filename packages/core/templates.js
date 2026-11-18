@@ -25,7 +25,7 @@
 import { serializeDocument } from '#core/document.js';
 import { userToWorldY, worldToUserY, basePer, BASE } from '#core/units.js';
 import { evaluateText } from '#core/expression.js';
-import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES } from '#core/constants.js';
+import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { patternDefaults } from '#core/pattern.js';
 import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES, cornerJointLabel } from '#core/corner-joint.js';
 import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES,
@@ -660,10 +660,14 @@ function buildBenchSeat(d, p) {
   const n = Math.max(2, Math.round(num(p.slats, 8))), Ro = num(p.outerRadius, 900), Ri = num(p.innerRadius, 450);
   const sw = num(p.sweepAngle, 60), gap = num0(p.gap, 10);
   const h = gap / 2, step = (sw / n) * Math.PI / 180;
-  // For n odd: slat 0 sits centred on +Y (90 deg). For n even: instances are -n/2..n/2-1, so slat 0 sits at 90 deg + step / 2 (with -1 at 90 - step / 2).
-  const midPhi = Math.PI / 2 + (n % 2 === 0 ? step / 2 : 0), phiA = midPhi - step / 2, phiB = midPhi + step / 2;
+  // One-sided (non-symmetric) Circular Pattern: Slat 0 sits at the right edge of the sweep (90 - theta deg, where theta = sw*(n-1)/(2*n))
+  // and instances 0..n-1 sweep counter-clockwise to 90 + theta deg, keeping the full bench centered on +Y without symmetric mode.
+  const thetaDeg = sw * (n - 1) / (2 * n), thetaRad = thetaDeg * Math.PI / 180;
+  const midPhi = Math.PI / 2 - thetaRad, phiA = midPhi - step / 2, phiB = midPhi + step / 2;
   const corner = (rho, phi, side) => { const t = Math.sqrt(rho * rho - h * h), ux = Math.cos(phi), uy = Math.sin(phi); return d.pt(t * ux - side * h * uy, t * uy + side * h * ux); };
-  const arcAt = (rho, phi1, phi2) => { const c = d.pt(0, 0), a = corner(rho, phi1, 1), b = corner(rho, phi2, -1), id = d.arc(c, a, b); d.anchor(c); return { id, a, b }; };
+  const c = d.pt(0, 0);
+  d.anchor(c);
+  const arcAt = (rho, phi1, phi2) => { const a = corner(rho, phi1, 1), b = corner(rho, phi2, -1), id = d.arc(c, a, b); return { id, a, b }; };
   const outer = arcAt(Ro, phiA, phiB), inner = arcAt(Ri, phiA, phiB);
   const sideA = d.line(inner.a, outer.a), sideB = d.line(inner.b, outer.b);
   const midOut = d.pt(Ro * Math.cos(midPhi), Ro * Math.sin(midPhi));
@@ -680,18 +684,15 @@ function buildBenchSeat(d, p) {
     centre: ORIGIN_JOINT_ID,
     quantity: n,
     angle: sw * (n - 1) / n,
-    symmetric: true,
+    symmetric: false,
   });
   const qName = pat.names.quantity;
   ops.setDimension(d.state, pat.names.angle, `sweep_angle * (${qName} - 1) / ${qName}`);
   d.dim(midOut, outer.a, 'aligned', 1, `2 * outer_radius * sin((sweep_angle / (2 * ${qName}) - asin(gap / (2 * outer_radius))) / 2)`, true);
   d.dim(midIn, inner.a, 'aligned', -1, `2 * inner_radius * sin((sweep_angle / (2 * ${qName}) - asin(gap / (2 * inner_radius))) / 2)`, true);
-  if (n % 2 === 1) {
-    d.h(outer.a, outer.b);
-  } else {
-    const instM1 = pat.instances.find((i) => i.at[0] === -1);
-    d.h(midOut, instM1.joints[pat.sources.points.indexOf(midOut)]);
-  }
+  const ray = d.line(c, midOut, true);
+  const atPhi = Math.PI / 2 - thetaRad / 2;
+  d.angle(AXIS_SNAP_TARGETS['axis-y'].shapeId, ray.id, [0.5 * Ri * Math.cos(atPhi), 0.5 * Ri * Math.sin(atPhi)], `sweep_angle * (${qName} - 1) / (2 * ${qName})`);
 }
 
 // TASK 672: RIGHT-ANGLE BRACE, frame-calc's triangle frame (#core/frame-geometry.js calculateFramingGeometry, PORTED): a vertical board, a
@@ -940,7 +941,7 @@ export const TEMPLATES = [
   { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, limits: rightAngleCornerLimits, build: buildRightAngleCorner, corners: rightAngleCorners },
   // TASK 672
   { id: 'stair-stringer', name: 'Stair stringer', description: 'A cut stringer from one 286 mm board: 4 steps of 180 rise and 250 run, a plumb cut at the top, a level cut on the floor, 125 mm throat.', params: { steps: { label: 'Steps', default: 4, kind: 'count', min: 2, max: 30 }, rise: { label: 'Rise', default: 180 }, run: { label: 'Run', default: 250 }, boardWidth: { label: 'Board width', default: 286 }, throat: { label: 'Throat', default: 125 } }, dimensions: 4, build: buildStringer },
-  { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10, allowZero: true } }, dimensions: 4, limits: benchSeatLimits, build: buildBenchSeat },
+  { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10, allowZero: true } }, dimensions: 5, limits: benchSeatLimits, build: buildBenchSeat },
   { id: 'right-angle-brace', name: 'Right-angle brace', description: 'A right-angle frame with its diagonal brace: 300 wide, 600 tall, 38 mm boards, a joint at each corner.', params: { width: { label: 'Width', default: 300 }, height: { label: 'Height', default: 600 }, thickV: { label: 'Vertical board thickness', default: 38 }, thickH: { label: 'Horizontal board thickness', default: 38 }, thickD: { label: 'Diagonal board thickness', default: 38 }, topJoint: { label: 'Top joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' }, blJoint: { label: 'Bottom-left joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, brJoint: { label: 'Bottom-right joint', default: 'H-Through', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' } }, dimensions: 5, limits: braceLimits, build: buildBrace, corners: braceCorners },
   { id: 'polygon-frame', name: 'Polygon frame', description: 'A regular 6-sided frame of 38 mm boards, 300 mm sides, one joint at every corner.', params: { sides: { label: 'Sides', default: 6, kind: 'count', min: 3, max: 12 }, sideLength: { label: 'Side length', default: 300 }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 2, build: buildPolygonFrame, corners: polygonFrameCorners },
   // TASK 674

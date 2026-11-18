@@ -16546,3 +16546,12 @@ Owner turn 2315 (Shaper, inch document): the Rectangle drew 12.5 x 6.6 in and it
   - `tests/saveas-overwrite-node.test.js`: `8 checks passed`.
   - `tests/saveas-overwrite-live.test.js`: `ok` (verified Cancel preserves original `J_OLD`, Overwrite replaces same Drive file ID with `J_NEW` and zero duplicate files; screenshot `.evidence/saveas-overwrite/overwrite-confirm.png` inspected).
   - `tests/drive-only-saves-live.test.js`: `ok`; `cmd /c npm run gate:quick`: `GATE tier=quick jobs=quick=22 files=485 pass=485 fail=0 elapsed=67s`, `PROFILES-LEFT 0`.
+## TURN bench-no-sym — Curved bench seat uses one-sided circular array without symmetric constraint (worktree bench-no-sym, branch agents/bench-no-sym)
+- WHAT: Replaced `symmetric: true` in `buildBenchSeat` (`packages/core/templates.js`) with a one-sided counter-clockwise `CIRCULAR_PATTERN` (`symmetric: false`, `angle: sweep_angle * (quantity - 1) / quantity`) starting at `midPhi = PI/2 - sweep_angle * (quantity - 1) / (2 * quantity)` constrained by an `ANGLE` dimension (`sweep_angle * (quantity - 1) / (2 * quantity)`) between `AXIS_SNAP_TARGETS['axis-y'].shapeId` and the first slat's radial midline ray (`dimensions: 5`).
+- FIXES FOR SMALL ANGLES & PREVIEW RENDERING:
+  - `packages/core/tool-ops.js`: When two lines share an endpoint position (`< 1e-4`), use tight parallel tolerance `1e-6` instead of `0.01` so small-sweep bench angles (`sw = 1` -> `theta = 0.25 deg`) form `ANGLE` rather than parallel line-line `DISTANCE`.
+  - `packages/ui/template-picker.js`: Resolve angle dimension shape/joint IDs through `findShapeById` and `sceneJoints` (`#core/reference-lines.js`) so template cards/start views render angle dimensions referencing `ref_axis_y`.
+- VERIFICATION (`D:\APPS\Sketch-Studio.worktrees\bench-no-sym`):
+  - `bench-seat-fix.test.js` (`173 checks passed`, asserting `pat.symmetric === false` and `0` `symmetric` constraints across sweeps `1..360`, slats `2..9`, live edits, and qty updates), `bench-perf-702.test.js` (`72 checks passed`), `templates-672.test.js` (`973 checks ok`), `template-params-670.test.js` (`914 checks ok`), `templates-node.test.js` (`23 templates ok`), `templates-ui-node.test.js` (`ok`).
+  - `cmd /c npm run gate:quick`: `GATE tier=quick jobs=quick=22 files=484 pass=484 fail=0 elapsed=68s`, `PROFILES-LEFT 0`.
+  - `templates-672-live.test.js`: `templates-672-live: ok`; visually verified `.evidence/bench-no-sym/bench-canvas.png` (`8 x 52.5°` non-symmetric circular pattern badge, centered slats) and `.evidence/bench-no-sym/start-view-bench.png`.

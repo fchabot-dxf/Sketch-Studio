@@ -91,6 +91,9 @@ for (const [name, text] of [['sweep_angle', '180 deg'], ['sweep_angle', '240 deg
   checks += 3;
 }
 const pat = E.state.constraints.find((c) => c.type === 'circularPattern');
+assert.strictEqual(pat.symmetric, false, 'circularPattern uses one-sided sweep (symmetric: false)');
+assert.strictEqual(E.state.constraints.filter((c) => c.type === 'symmetric').length, 0, 'zero symmetric constraints');
+checks += 2;
 for (const q of [12, 6, 8]) {
   const pl = planChange(E.state, { type: 'setDimension', name: pat.names.quantity, text: String(q) });
   assert.ok(pl.ok, `plan qty=${q}: ${pl.message}`);

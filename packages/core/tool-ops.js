@@ -207,7 +207,9 @@ export function dimension(state, pick, label, text, { unit = 'mm' } = {}) {
     const [p, q, r, t] = [s1.joints[0], s1.joints[1], s2.joints[0], s2.joints[1]].map((id) => J.get(id));
     const a1 = Math.atan2(q.y - p.y, q.x - p.x), a2 = Math.atan2(t.y - r.y, t.x - r.x);
     const d = Math.abs((a1 + Math.PI * 2) % Math.PI - (a2 + Math.PI * 2) % Math.PI);
-    const parallel = d < 0.01 || Math.abs(d - Math.PI) < 0.01;
+    const shareVertex = [p, q].some((a) => [r, t].some((b) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-4));
+    const parallelTol = shareVertex ? 1e-6 : 0.01;
+    const parallel = d < parallelTol || Math.abs(d - Math.PI) < parallelTol;
     const undimOffset = parallel ? findUndimensionedOffsetPair(state.constraints, s1.id, s2.id) : null; // task 667: an offset pair gets its own dimension back
     if (undimOffset) {
       restoreOffsetDimension(state, undimOffset);

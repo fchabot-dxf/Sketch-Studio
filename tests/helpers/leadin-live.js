@@ -243,3 +243,44 @@ export async function fusionPhase(t) {
   console.log('Fusion download (on line paths): ' + JSON.stringify(els.map((e) => e[1].slice(0, 60))));
   assert.ok(els.length === 2 && els.every((e) => !pathPoints(e[1]).closed), 'Fusion: the pocket loop and the outline: 2 OPEN on-line paths');
 }
+
+/** TASK 775 (added): the card's note (and the operations row) follow a document-unit change made in the Settings panel, without reselecting. */
+export async function unitsPhase(t, label) {
+  const { evalJs, waitFor, clickEl, pickType, typeField, pickClearing, shot } = t;
+  const { pick, note } = tools(t);
+  await drawShapes(t, `poly('P', [[0, 0], [100, 0], [100, 60], [0, 60]]);`);
+  await pick(10, 10);
+  await pickType('pocket');
+  await typeField('.cut-depth', '0.25');
+  await typeField('.cut-bit', '0.25');
+  await pickClearing('linked');
+  const before = await note();
+  console.log(label + ' note (in): ' + JSON.stringify(before));
+  assert.ok(/stepover 0\.1 in/.test(before[0]) && /in\/min/.test(before[0]) && before.includes('Drawn for a 0.25 in bit: a smaller bit leaves ridges'), label + ': the note in inches');
+  await shot('units-before-note.png', '#prepare-panel .cut-card', 2);
+  // Settings > Units > Document Unit = mm (the real control)
+  const P = '.sk-style-panel';
+  await clickEl('.sk-sidebar-btn'); await sleep(300);
+  await clickEl('.sk-sidebar [data-action="settings"], .sk-sidebar [data-action="style"]');
+  await waitFor(`!!document.querySelector('${P}') && !document.querySelector('${P}').classList.contains('sk-hidden')`, label + ': the Settings panel');
+  await clickEl(`${P} .sk-style-tab[data-tab="units"]`);
+  await evalJs(`(() => { const s = document.querySelector('${P} [data-key="DOC_UNIT"]'); s.value = 'mm'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(400);
+  await clickEl(`${P} .sk-style-foot .sk-style-btn:last-child`); // close the panel; the pocket stays selected
+  await sleep(300);
+  const after = await note();
+  console.log(label + ' note (mm, no reselect): ' + JSON.stringify(after));
+  assert.strictEqual(await evalJs(`document.querySelector('.cut-bit').value`), '6.35', label + ': the bit field reads mm');
+  assert.ok(/stepover 2\.54 mm/.test(after[0]) && /mm\/min/.test(after[0]) && after.includes('Drawn for a 6.35 mm bit: a smaller bit leaves ridges') && !after.some((x) => /\d in\b|in\/min|in²/.test(x)), label + ': the note reads mm at once: ' + JSON.stringify(after));
+  const ops = await evalJs(`[...document.querySelectorAll('#prepare-ops [data-id]')].map((e) => e.textContent).join(' | ')`);
+  assert.ok(/6\.35 mm/.test(ops) && !/\d in\b/.test(ops), label + ': the operations row reads mm: ' + ops);
+  await shot('units-after-note.png', '#prepare-panel .cut-card', 2);
+  // a key-less settings change (a load / a reset / settings from another device): back to the defaults (mm) from cm
+  await t.setUnit('cm');
+  await waitFor(`[...document.querySelectorAll('.cut-note div')].some((d) => / cm/.test(d.textContent))`, label + ': the note in cm');
+  await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.resetToDefaults())`);
+  await sleep(400);
+  const reset = await note();
+  console.log(label + ' note after a key-less change: ' + JSON.stringify(reset));
+  assert.ok(!reset.some((x) => / cm\b/.test(x)), label + ': a key-less settings change rebuilds the note too');
+}

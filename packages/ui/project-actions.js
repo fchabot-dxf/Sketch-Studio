@@ -23,6 +23,7 @@ import { relativeTime } from './project-manager.js';
 import { createDocumentActivity } from './document-activity.js';
 import { GOOGLE } from './cloud/providers.js';
 import { driveErrorText } from './cloud/drive-adapter.js';
+import { dbg } from '#core/debug.js';
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
@@ -58,19 +59,41 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
       if (lastErr) throw new Error(driveErrorText(lastErr));
       return all.filter(isDriveFolder).map((p) => ({ id: p.id, name: p.name, sub: p.updatedAt ? relativeTime(p.updatedAt) : '' }));
     };
+    const initialFolderId = async () => {
+      const cur = store.current ? await store.current() : null;
+      if (!cur || !cur.projectId) return null;
+      if (store.cloud && store.isRemote && !store.isRemote(cur.projectId)) return null;
+      return cur.projectId;
+    };
     return {
       rootLabel: GOOGLE.rootFolderName,
       listFolders,
-      initialFolderId: async () => {
-        const cur = store.current ? await store.current() : null;
-        if (!cur || !cur.projectId) return null;
-        if (store.cloud && store.isRemote && !store.isRemote(cur.projectId)) return null;
-        return cur.projectId;
-      },
+      initialFolderId,
       listFolderDesigns: async (folderId) => {
         const rows = store.listDesigns ? await store.listDesigns(folderId) : [];
         return rows.map(formatDesign);
       },
+      ...(writable && store.overwrite && store.listDesigns ? {
+        findExisting: async (name, folderId) => {
+          const clean = String(name == null ? '' : name).trim();
+          if (!clean) return null;
+          let all, rows;
+          let pid = folderId || (await initialFolderId());
+          try {
+            all = await listFolders();
+            if (!pid) pid = (all.find((p) => p.name === 'My Designs') || {}).id;
+            if (!pid) return null;
+            rows = await store.listDesigns(pid);
+          } catch (err) {
+            dbg.warn('project-actions', 'overwrite check skipped (will let Save surface error):', err && err.message);
+            return null;
+          }
+          const hit = rows.find((r) => String(r.name == null ? '' : r.name).trim() === clean);
+          if (!hit) return null;
+          const folder = all.find((p) => p.id === pid);
+          return { id: hit.id, name: hit.name, folderName: folder ? folder.name : null };
+        },
+      } : {}),
       ...(writable && store.createProject ? {
         createFolder: async (folderName) => {
           const p = await store.createProject(folderName);
@@ -159,7 +182,9 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     await b.ready;
     const value = name || (b.isStored() ? b.designName() + ' copy' : b.designName());
     return fileDialog({ mode: 'save', name: value, ...dialogAccount, browseDrive: driveBrowserHooks({ writable: true }),
-      onSave: (tab, n, projectId) => (tab === 'drive' ? (projectId ? b.saveAs(n, { projectId }) : b.saveAs(n)) : b.saveToFile(n, fileSeam)) });
+      onSave: (tab, n, projectId, overwriteId) => (tab === 'drive'
+        ? ((projectId || overwriteId) ? b.saveAs(n, { ...(projectId ? { projectId } : {}), ...(overwriteId ? { overwriteId } : {}) }) : b.saveAs(n))
+        : b.saveToFile(n, fileSeam)) });
   }
   /** TASK 759, SAVE (Ctrl+S, the menu): to the design's home (document-home.js saveRoute): Drive -> the pending autosave is written now; a file -> back to it
    *  (or the picker again / a download); none -> the Save as dialog. Resolves { route, name? } or null (cancelled). */

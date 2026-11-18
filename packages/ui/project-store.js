@@ -622,6 +622,32 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       const pid = projectId || (src && (!adapter.isRemote || isRemote(src.projectId)) ? src.projectId : undefined);
       return createDesign(name, { app: app || (src && src.app) || null, document: src ? src.document : emptyDocument(), projectId: pid });
     },
+    /** Overwrite an existing stored design in place (same file ID) with new document/name/app, clearing any stale local shadow. */
+    async overwrite(id, name, { app = null, projectId, document = emptyDocument() } = {}) {
+      const n = cleanName(name);
+      id = resolveMoved(id);
+      const at = now();
+      if (isRemote(id)) {
+        writer.cancel(id);
+        await adapter.setMeta(SHADOW + id, null);
+      }
+      const run = () => adapter.updateDesign(id, (rec) => (rec
+        ? { ...rec, ...(projectId ? { projectId } : {}), name: n, app: app || rec.app, updatedAt: at, document: clone(document) }
+        : null));
+      let d;
+      try {
+        d = await (isRemote(id) ? withLock(id, run) : run());
+      } catch (e) {
+        throw translateOfflineError(e);
+      }
+      if (!d) throw gone('design');
+      if (isRemote(d.id)) { await adoptRemote(d); writer.seed(d.id, d.updatedAt); }
+      delete d.version;
+      await touchProject(d.projectId, d.updatedAt);
+      await adapter.setMeta(CURRENT, d.id);
+      changed();
+      return clone(d);
+    },
     async rename(id, name) {
       const n = cleanName(name);
       id = resolveMoved(id);

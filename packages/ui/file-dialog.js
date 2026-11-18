@@ -73,6 +73,11 @@ function injectStyles() {
 .sk-fd .sk-fd-meta { margin-left: auto; flex: none; }
 .sk-fd .sk-fd-ic { flex: none; opacity: 0.8; display: inline-flex; align-items: center; }
 .sk-fd .sk-fd-dest { margin: 0; font-size: 12px; opacity: 0.78; }
+.sk-fd .sk-fd-confirm { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; border: 1px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff));
+  background: rgba(44, 101, 255, 0.08); }
+.sk-fd .sk-fd-confirm-msg { margin: 0; font-size: 13px; line-height: 1.35; }
+.sk-fd .sk-fd-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.sk-fd .sk-fd-confirm[hidden] { display: none; }
 .sk-fd .sk-fd-section { margin: 4px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.6; }
 .sk-fd .sk-fd-signin, .sk-fd .sk-fd-choose, .sk-fd .sk-fd-projects { align-self: flex-start; }
 @media (max-width: 640px) {
@@ -135,7 +140,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     for (const t of FILE_DIALOG_TABS) body.appendChild(panels[t.id]);
 
     // save mode: ONE name field for both tabs (a name typed in one is kept in the other)
-    let nameInput = null, saveBtn = null;
+    let nameInput = null, saveBtn = null, cancelBtn = null;
     const nameRow = el('label', 'sk-fd-name');
     if (saving) {
       nameRow.appendChild(el('span', null, 'Name'));
@@ -144,6 +149,14 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
       nameRow.appendChild(nameInput);
       body.appendChild(nameRow);
     }
+    const confirmBox = el('div', 'sk-fd-confirm'); confirmBox.dataset.fd = 'confirm'; confirmBox.hidden = true;
+    const confirmMsg = el('p', 'sk-fd-confirm-msg'); confirmMsg.setAttribute('role', 'status');
+    const confirmActions = el('div', 'sk-fd-confirm-actions');
+    const confirmCancelBtn = button('sk-tp-btn sk-tp-cancel', 'Cancel', 'confirm-cancel');
+    const confirmOverwriteBtn = button('sk-tp-btn sk-tp-open', 'Overwrite', 'confirm-overwrite');
+    confirmActions.append(confirmCancelBtn, confirmOverwriteBtn);
+    confirmBox.append(confirmMsg, confirmActions);
+    body.appendChild(confirmBox);
     body.appendChild(err);
 
     // Google Drive in-app folder browser state (for saving into or opening from "Sketch Studio")
@@ -156,21 +169,55 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
     let browserReady = false;
     let browserInitialized = false;
     let creatingFolder = false;
+    let pendingOverwrite = null;
     let loadSeq = 0;
 
     let tab = initialFileDialogTab({ driveReady: driveReady(), settings });
+    const clearConfirm = () => {
+      pendingOverwrite = null;
+      confirmBox.hidden = true;
+      if (saving) { const ready = tab !== 'drive' || driveReady(); if (saveBtn) saveBtn.hidden = !ready; }
+      if (cancelBtn) cancelBtn.hidden = false;
+    };
+    const showConfirm = (state) => {
+      pendingOverwrite = state;
+      const where = state.folderName ? ` in "${state.folderName}"` : '';
+      confirmMsg.textContent = `"${state.existingName}" already exists${where}. Are you sure you want to overwrite it?`;
+      confirmBox.hidden = false;
+      if (saveBtn) saveBtn.hidden = true;
+      if (cancelBtn) cancelBtn.hidden = true;
+      confirmOverwriteBtn.focus();
+    };
     const save = () => {
       const n = nameInput.value.trim();
       if (!n) { say('A design needs a name.'); nameInput.focus(); return; }
       if (tab === 'drive' && !driveReady()) return;
       const folderId = tab === 'drive' && browserFolder ? browserFolder.id : undefined;
+      if (tab === 'drive' && browseDrive && browseDrive.findExisting) {
+        act(async () => {
+          const hit = await browseDrive.findExisting(n, folderId);
+          if (hit) {
+            if (dlg.isConnected) showConfirm({ name: n, folderId, targetId: hit.id, existingName: hit.name, folderName: hit.folderName });
+            return null;
+          }
+          return onSave(tab, n, folderId);
+        });
+        return;
+      }
       act(() => onSave(tab, n, folderId));
     };
     if (saving) {
+      nameInput.addEventListener('input', () => { if (pendingOverwrite) clearConfirm(); });
       nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
       saveBtn = mk('sk-tp-open', 'Save', 'ok', save);
     }
-    mk('sk-tp-cancel', 'Cancel', '__cancel', () => finish(null));
+    cancelBtn = mk('sk-tp-cancel', 'Cancel', '__cancel', () => finish(null));
+    confirmCancelBtn.addEventListener('click', () => { clearConfirm(); if (nameInput) nameInput.focus(); });
+    confirmOverwriteBtn.addEventListener('click', () => {
+      const p = pendingOverwrite;
+      if (!p) return;
+      act(() => onSave('drive', p.name, p.folderId, p.targetId));
+    });
 
     const signInBlock = (panel) => {
       panel.appendChild(el('p', 'sk-fd-line', saving ? 'Save to your Google Drive: sign in with your Google account first.' : 'Open a design from your Google Drive: sign in with your Google account first.'));
@@ -185,7 +232,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
       text.append(el('span', null, r.name), el('span', 'sk-fd-design-sub', r.sub || ''));
       b.append(svgIcon(FILE_SVG), text);
       b.addEventListener('click', () => {
-        if (saving) { nameInput.value = r.name; nameInput.focus(); nameInput.select(); }
+        if (saving) { clearConfirm(); nameInput.value = r.name; nameInput.focus(); nameInput.select(); }
         else act(() => onOpenDesign(r.id));
       });
       list.appendChild(b);
@@ -270,7 +317,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
         const crumbs = el('nav', 'sk-fd-crumbs'); crumbs.setAttribute('aria-label', 'Google Drive app folder path');
         const rootCrumb = button('sk-fd-crumb', rootName, 'crumb-root');
         if (!browserFolder) rootCrumb.setAttribute('aria-current', 'location');
-        else rootCrumb.addEventListener('click', () => { browserFolder = null; folderDesigns = []; loadBrowser(); });
+        else rootCrumb.addEventListener('click', () => { clearConfirm(); browserFolder = null; folderDesigns = []; loadBrowser(); });
         crumbs.appendChild(rootCrumb);
         if (browserFolder) {
           crumbs.appendChild(el('span', 'sk-fd-crumb-sep', '/'));
@@ -335,7 +382,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
             const row = button('sk-fd-folder', null, 'folder'); row.dataset.folder = f.id;
             const meta = el('span', 'sk-fd-meta', f.sub || 'Open');
             row.append(svgIcon(FOLDER_SVG), el('span', null, f.name), meta);
-            row.addEventListener('click', () => { browserFolder = { id: f.id, name: f.name }; loadBrowser(); });
+            row.addEventListener('click', () => { clearConfirm(); browserFolder = { id: f.id, name: f.name }; loadBrowser(); });
             list.appendChild(row);
           }
           if (!saving) {
@@ -387,6 +434,7 @@ export function openFileDialog({ mode = 'save', name = '', driveReady = () => tr
       p.appendChild(b);
     }
     function select(id, { remember = false } = {}) {
+      clearConfirm();
       tab = id;
       for (const t of FILE_DIALOG_TABS) {
         const on = t.id === id;

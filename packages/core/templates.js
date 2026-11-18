@@ -133,12 +133,12 @@ function drawing() {
      * 'horizontal' / 'vertical' beyond the end that is outermost on that side. The Dimension tool picks the mode from the label point (its
      * detectDimMode; TASK 680: a level / plumb pair is always a horizontal / vertical dimension, like Fusion). `text` is typed in its box.
      */
-    dim(a, b, mode, side, text) {
+    dim(a, b, mode, side, text, exact = false) {
       if (swap) { mode = across[mode] || mode; side = -side; }
       const label = labelPoint(state, { type: T.DISTANCE, joints: [a, b], dimMode: mode }, side);
-      const c = ops.dimension(state, { joints: [a, b] }, label, text);
+      const c = ops.dimension(state, exact ? { joints: [a, b], dimMode: mode } : { joints: [a, b] }, label, text);
       const A = state.joints.get(a), B = state.joints.get(b);
-      const want = Math.abs(A.y - B.y) < 1e-9 ? 'horizontal' : Math.abs(A.x - B.x) < 1e-9 ? 'vertical' : mode; // a level / plumb pair: its own axis
+      const want = exact ? mode : (Math.abs(A.y - B.y) < 1e-9 ? 'horizontal' : Math.abs(A.x - B.x) < 1e-9 ? 'vertical' : mode); // a level / plumb pair: its own axis
       if (c.dimMode !== want) throw new Error(`dimension ${c.name}: the label point made a ${c.dimMode} dimension, not ${want}`);
       return c;
     },
@@ -191,6 +191,7 @@ const below = (x, u = BASE) => `${Math.floor(x / basePer(u) * decimals(x / baseP
 const above = (x, u = BASE) => `${Math.ceil(x / basePer(u) * decimals(x / basePer(u)) - 1e-7) / decimals(x / basePer(u))} ${u}`;
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+const num0 = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : d);
 
 // ── TASK 674: PER-CORNER joints (owner turns 1786-1787: each corner of a frame its own joint, picked on the start modal's preview) ──────────
 // A choice param declared `perCorner: true` holds ONE option (every corner takes it: the start modal's "Corner joint" row sets all of them)
@@ -649,31 +650,48 @@ function buildStringer(d, p) {
 //   the first and the last slat SYMMETRIC (their two construction diagonals equal): with the gaps, every slat is, so each side is gap / 2 from
 //   its radial;
 //   the ANGLE between the seat's two end sides = the sweep; the middle of the seat on the Y axis (the two outer corners either side of it level).
+// TASK 672 / bench-seat fix: CURVED BENCH SEAT — ONE symmetric slat + ONE symmetric Circular Pattern around the origin (`quantity = dN`,
+// `angle = sweep_angle * (dN - 1) / dN`, reading both user param `sweep_angle` and the pattern's own quantity param `dN`), with slat 0's
+// outer & inner half-chords dimensioned via exact trig formulas of `outer_radius`, `inner_radius`, `sweep_angle`, `gap`, and `dN`:
+//   2 * R * sin((sweep_angle / (2 * dN) - asin(gap / (2 * R))) / 2)
+// Keeping all dimensional constraints local to Slat 0 eliminates line-angle parallel traps at 180/360, reflex angle flips above 180, and
+// cross-instance distance-sign flips on live edits, while supporting gap = 0, any sweep in (0, 360], and live updates to any parameter.
 function buildBenchSeat(d, p) {
-  const n = Math.max(2, Math.round(num(p.slats, 8))), Ro = num(p.outerRadius, 900), Ri = num(p.innerRadius, 450), sw = num(p.sweepAngle, 60), gap = num(p.gap, 10);
-  const h = gap / 2, step = (sw / n) * Math.PI / 180, a0 = Math.PI / 2 - (sw / 2) * Math.PI / 180;
-  // the corner on the circle of radius rho of the line parallel to the radial at angle phi, h to its counter-clockwise (+1) or clockwise (-1) side
+  const n = Math.max(2, Math.round(num(p.slats, 8))), Ro = num(p.outerRadius, 900), Ri = num(p.innerRadius, 450);
+  const sw = num(p.sweepAngle, 60), gap = num0(p.gap, 10);
+  const h = gap / 2, step = (sw / n) * Math.PI / 180;
+  // For n odd: slat 0 sits centred on +Y (90 deg). For n even: instances are -n/2..n/2-1, so slat 0 sits at 90 deg + step / 2 (with -1 at 90 - step / 2).
+  const midPhi = Math.PI / 2 + (n % 2 === 0 ? step / 2 : 0), phiA = midPhi - step / 2, phiB = midPhi + step / 2;
   const corner = (rho, phi, side) => { const t = Math.sqrt(rho * rho - h * h), ux = Math.cos(phi), uy = Math.sin(phi); return d.pt(t * ux - side * h * uy, t * uy + side * h * ux); };
   const arcAt = (rho, phi1, phi2) => { const c = d.pt(0, 0), a = corner(rho, phi1, 1), b = corner(rho, phi2, -1), id = d.arc(c, a, b); d.anchor(c); return { id, a, b }; };
-  const slats = [];
-  for (let k = 0; k < n; k++) { // counter-clockwise from the right end
-    const pa = a0 + k * step, pb = pa + step;
-    const outer = arcAt(Ro, pa, pb), inner = arcAt(Ri, pa, pb);
-    const A = d.line(inner.a, outer.a), B = d.line(inner.b, outer.b); // the two sides, from the inner arc's ends to the outer arc's
-    slats.push({ IA: inner.a, OA: outer.a, IB: inner.b, OB: outer.b, A: A.id, B: B.id, outer: outer.id, inner: inner.id });
+  const outer = arcAt(Ro, phiA, phiB), inner = arcAt(Ri, phiA, phiB);
+  const sideA = d.line(inner.a, outer.a), sideB = d.line(inner.b, outer.b);
+  const midOut = d.pt(Ro * Math.cos(midPhi), Ro * Math.sin(midPhi));
+  const midIn = d.pt(Ri * Math.cos(midPhi), Ri * Math.sin(midPhi));
+  d.on(midOut, outer.id);
+  d.on(midIn, inner.id);
+  d.equal(d.line(outer.a, midOut, true).id, d.line(outer.b, midOut, true).id);
+  d.equal(d.line(inner.a, midIn, true).id, d.line(inner.b, midIn, true).id);
+  d.equal(d.line(inner.a, midOut, true).id, d.line(inner.b, midOut, true).id);
+  d.radius(outer.id, 'outer_radius', 10);
+  d.radius(inner.id, 'inner_radius', 10);
+  const pat = ops.pattern(d.state, T.CIRCULAR_PATTERN, { shapes: [outer.id, inner.id, sideA.id, sideB.id], joints: [midOut] }, {
+    ...patternDefaults(T.CIRCULAR_PATTERN),
+    centre: ORIGIN_JOINT_ID,
+    quantity: n,
+    angle: sw * (n - 1) / n,
+    symmetric: true,
+  });
+  const qName = pat.names.quantity;
+  ops.setDimension(d.state, pat.names.angle, `sweep_angle * (${qName} - 1) / ${qName}`);
+  d.dim(midOut, outer.a, 'aligned', 1, `2 * outer_radius * sin((sweep_angle / (2 * ${qName}) - asin(gap / (2 * outer_radius))) / 2)`, true);
+  d.dim(midIn, inner.a, 'aligned', -1, `2 * inner_radius * sin((sweep_angle / (2 * ${qName}) - asin(gap / (2 * inner_radius))) / 2)`, true);
+  if (n % 2 === 1) {
+    d.h(outer.a, outer.b);
+  } else {
+    const instM1 = pat.instances.find((i) => i.at[0] === -1);
+    d.h(midOut, instM1.joints[pat.sources.points.indexOf(midOut)]);
   }
-  d.equalChain(slats.map((x) => x.outer)); // the outer arcs on ONE circle (each arc's centre on the origin)
-  d.equalChain(slats.map((x) => x.inner)); // the inner arcs on one circle
-  d.equalChain(slats.map((x) => d.line(x.OA, x.OB, true).id)); // identical slats: the outer chords
-  d.equalChain(slats.map((x) => d.line(x.IA, x.IB, true).id)); // and the inner chords
-  for (const x of [slats[0], slats[n - 1]]) d.equal(d.line(x.OA, x.IB, true).id, d.line(x.OB, x.IA, true).id); // the end slats symmetric
-  const rim = slats.flatMap((x) => [x.OA, x.OB]);
-  d.h(rim[n - 1], rim[n]); // the middle slat (n odd) or the middle gap (n even) level: the seat symmetric about the Y axis
-  for (let k = 0; k + 1 < n; k++) d.parallel(slats[k].B, slats[k + 1].A); // each gap: two parallel sides
-  d.radius(slats[0].outer, 'outer_radius', 10);
-  d.radius(slats[0].inner, 'inner_radius', 10);
-  d.angle(slats[n - 1].B, slats[0].A, [0, (Ro + Ri) / 2], 'sweep_angle'); // the label dropped in the seat's middle: the sector the seat spans
-  for (let k = 0; k + 1 < n; k++) d.gap(slats[k].B, slats[k + 1].A, 1, 'gap'); // each gap's width: every one reads the parameter
 }
 
 // TASK 672: RIGHT-ANGLE BRACE, frame-calc's triangle frame (#core/frame-geometry.js calculateFramingGeometry, PORTED): a vertical board, a
@@ -890,6 +908,9 @@ const braceLimits = (v, u) => {
 const benchSeatLimits = (v, u) => {
   if (v.outerRadius <= v.innerRadius) return refusal('outerRadius', `Outer radius is too small for this inner radius: use more than ${above(v.innerRadius, u)}.`);
   if (v.innerRadius <= v.gap / 2) return refusal('innerRadius', `Inner radius is too small for this gap: use more than ${above(v.gap / 2, u)}.`);
+  if (v.sweepAngle > 360) return refusal('sweepAngle', 'Sweep angle is too big: use 360 deg or less.');
+  const maxGap = 2 * v.innerRadius * Math.sin((Math.PI * v.sweepAngle) / (360 * v.slats));
+  if (v.gap >= maxGap) return refusal('gap', `Gap is too big for ${v.slats} slats, this inner radius and sweep angle: use less than ${below(maxGap, u)}.`);
   return null;
 };
 const parallelogramLimits = (v) => (v.angle >= 180 ? refusal('angle', 'Angle is too big: use less than 180 deg.') : null);
@@ -919,7 +940,7 @@ export const TEMPLATES = [
   { id: 'right-angle-corner', name: 'Right-angle frame corner', description: 'Two 18 mm boards meeting at 90 degrees, 300 and 200 mm long: mitered, or one board running through.', params: { horizontalLength: { label: 'Horizontal length', default: 300 }, verticalLength: { label: 'Vertical length', default: 200 }, thickness: { label: 'Board thickness', default: 18 }, joint: { label: 'Corner joint', default: 'H-Through', kind: 'choice', options: CORNER_JOINT_TYPES, glyph: 'corner-joint' } }, dimensions: 4, limits: rightAngleCornerLimits, build: buildRightAngleCorner, corners: rightAngleCorners },
   // TASK 672
   { id: 'stair-stringer', name: 'Stair stringer', description: 'A cut stringer from one 286 mm board: 4 steps of 180 rise and 250 run, a plumb cut at the top, a level cut on the floor, 125 mm throat.', params: { steps: { label: 'Steps', default: 4, kind: 'count', min: 2, max: 30 }, rise: { label: 'Rise', default: 180 }, run: { label: 'Run', default: 250 }, boardWidth: { label: 'Board width', default: 286 }, throat: { label: 'Throat', default: 125 } }, dimensions: 4, build: buildStringer },
-  { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10 } }, dimensions: 10, limits: benchSeatLimits, build: buildBenchSeat },
+  { id: 'curved-bench-seat', name: 'Curved bench seat', description: 'A 60 degree ring segment, 900 and 450 mm radii, split into 8 identical tapered slats with 10 mm gaps.', params: { slats: { label: 'Slats', default: 8, kind: 'count', min: 2, max: 40 }, outerRadius: { label: 'Outer radius', default: 900 }, innerRadius: { label: 'Inner radius', default: 450 }, sweepAngle: { label: 'Sweep angle', default: 60, kind: 'angle' }, gap: { label: 'Gap', default: 10, allowZero: true } }, dimensions: 4, limits: benchSeatLimits, build: buildBenchSeat },
   { id: 'right-angle-brace', name: 'Right-angle brace', description: 'A right-angle frame with its diagonal brace: 300 wide, 600 tall, 38 mm boards, a joint at each corner.', params: { width: { label: 'Width', default: 300 }, height: { label: 'Height', default: 600 }, thickV: { label: 'Vertical board thickness', default: 38 }, thickH: { label: 'Horizontal board thickness', default: 38 }, thickD: { label: 'Diagonal board thickness', default: 38 }, topJoint: { label: 'Top joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' }, blJoint: { label: 'Bottom-left joint', default: 'V-Through', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, brJoint: { label: 'Bottom-right joint', default: 'H-Through', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' } }, dimensions: 5, limits: braceLimits, build: buildBrace, corners: braceCorners },
   { id: 'polygon-frame', name: 'Polygon frame', description: 'A regular 6-sided frame of 38 mm boards, 300 mm sides, one joint at every corner.', params: { sides: { label: 'Sides', default: 6, kind: 'count', min: 3, max: 12 }, sideLength: { label: 'Side length', default: 300 }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 2, build: buildPolygonFrame, corners: polygonFrameCorners },
   // TASK 674
@@ -972,7 +993,9 @@ export function paramRefusal(spec, value) {
     if (v < spec.min || v > spec.max) return `${spec.label} must be from ${spec.min} to ${spec.max}`;
     return null;
   }
-  return Number.isFinite(v) && v > 0 ? null : `${spec.label} must be a number more than 0`;
+  return Number.isFinite(v) && (spec.allowZero ? v >= 0 : v > 0)
+    ? null
+    : `${spec.label} must be a number ${spec.allowZero ? '0 or more' : 'more than 0'}`;
 }
 
 /**

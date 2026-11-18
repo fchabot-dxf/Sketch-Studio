@@ -44,7 +44,7 @@ const fresh = (c) => {
   return createNewtonSolver(sceneJoints(S.joints), others, sceneShapes(S.shapes)).rankRowRedundant({ ...c, isDriven: false, driven: false });
 };
 const dims = S.constraints.filter((c) => (c.type === 'distance' || c.type === 'angle') && !c.isDriven && !c.driven);
-assert.strictEqual(dims.length, 2 + 1 + 19, 'the 20-slat seat: two radii, the sweep and 19 gaps'); checks++;
+assert.strictEqual(dims.length, 4, 'the 20-slat circular-pattern seat: two radii and two slat half-chords'); checks++;
 const probeAll = (why) => {
   for (const c of dims) {
     const kept = isDimensionDetermined(S, c), alone = fresh(c);
@@ -70,9 +70,22 @@ const len = { type: 'distance', joints: [line.a, line.b], value: 111.8 };
 assert.strictEqual(S.engine.isDistanceRedundant(len), false, 'a free line\'s length is not determined (kept basis, more columns)'); checks++;
 assert.strictEqual(createNewtonSolver(sceneJoints(S.joints), S.constraints, sceneShapes(S.shapes)).rankRowRedundant(len), false, 'nor fresh'); checks++;
 probeAll('a free line added');
-// a row gone from the middle: a gap dimension made a reference
-dims[5].isDriven = true; dims[5].driven = true;
-dims.splice(5, 1);
-probeAll('a gap made a reference');
+// a row gone from the middle: a dimension made a reference (also verify on the 14-dimension box-frame)
+dims[1].isDriven = true; dims[1].driven = true;
+dims.splice(1, 1);
+probeAll('a radius made a reference');
+
+const box = templateById('box-frame');
+const B = ops.newSketchState();
+assert.ok(muted(() => deserializeDocument(JSON.parse(JSON.stringify(buildTemplate(box))), B)).ok, 'box-frame loads'); checks++;
+const bDims = B.constraints.filter((c) => (c.type === 'distance' || c.type === 'angle') && !c.isDriven && !c.driven);
+assert.strictEqual(bDims.length, 14, 'box-frame has 14 driving dimensions'); checks++;
+bDims[5].isDriven = true; bDims[5].driven = true;
+bDims.splice(5, 1);
+for (const c of bDims) {
+  const kept = isDimensionDetermined(B, c);
+  const alone = createNewtonSolver(sceneJoints(B.joints), B.constraints.filter((k) => k !== c), sceneShapes(B.shapes)).rankRowRedundant({ ...c, isDriven: false, driven: false });
+  assert.strictEqual(kept, alone, `box-frame cut middle row: ${c.name} kept=${kept} vs fresh=${alone}`); checks++;
+}
 
 console.log(`bench-perf-702: ${checks} checks passed`);

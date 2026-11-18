@@ -18,7 +18,7 @@ const localState = { isDragging: false, dragStartScreen: null };
 const live = { boxOpen: false, sides: null, lockedRadius: null, cursor: null };
 const MIN_RADIUS = 1e-6;
 const SIDES_KEY = 'sk-polygon-sides';
-const BOX = { dual: { kind: 'polygon', labels: ['R', 'N'], separator: 'sides', digits: [1, 0] } };
+const BOX = { dual: { kind: 'polygon', labels: ['R', 'N'], separator: 'sides', quantities: ['length', 'count'] } };
 
 /** The side count in force: what is typed in the open box, else the remembered one, clamped to the declared range. */
 export const polygonSides = (state) => clampPolygonSides(live.sides != null ? live.sides : (state && state.polygonSides));

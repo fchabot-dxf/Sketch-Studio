@@ -5,13 +5,28 @@ import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#core/dimension-seams.js';
-import { docUnit, lengthText, angleDecimals } from '#core/settings-manager.js';
-import { basePer } from '#core/units.js';
-import { previewDimensionInput } from '#core/parameters.js';
+import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
+import { basePer, parse as parseLength } from '#core/units.js';
+import { previewDimensionInput, quantityText } from '#core/parameters.js';
+import { evaluateText } from '#core/expression.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 
 export const NUMERIC_INPUT_STYLE_ID = 'sk-numeric-input-styles';
+
+// TASK 769: THE text and THE reading of a value in an on-canvas value box (the drawing tools' live boxes, the dimension edit box). Each field holds a
+// QUANTITY: 'length' (base mm; shown and typed in the DOCUMENT unit), 'angle' (degrees), 'count' (a plain number: a polygon's sides).
+const QUANTITY_UNIT = { length: () => docUnit(), angle: () => 'deg', count: () => null };
+/** The box text of a value: a length is exactly a dimension label's text (lengthText: the document unit, the Length precision, Fractional 1 1/2" with its
+ *  inch mark; no unit otherwise), an angle in degrees at the Angle precision (no degree sign), a count as its number. */
+export const boxValueText = (v, quantity = 'length') => quantityText(Number(v), QUANTITY_UNIT[quantity](), 'bare');
+/** The value a box's text means (base mm / degrees / a number), or NaN. A length is read by units.parse with the DOCUMENT unit as the default: a bare 2 in an
+ *  inch document is 2 in (50.8 mm), "50mm", "1 1/2", 1 1/2" and "3/8 in" convert. An angle or a count is read by the same expression parser (45, 45°, 0.5 rad). */
+export function parseBoxValue(text, quantity = 'length') {
+    if (quantity === 'length') { const v = parseLength(text, docUnit()); return v == null ? NaN : v; }
+    const r = evaluateText(String(text), () => null, { target: quantity === 'angle' ? 'angle' : 'none' });
+    return r.ok ? r.v : NaN;
+}
 
 const NUMERIC_INPUT_CSS = `
 .dim-input {
@@ -173,7 +188,10 @@ let uiState = {
     dualInputH: null,
     dualSep: null,
     dualKind: null, // TASK 596: who opened the box ('polygon': size x sides); null = the rect tool's W x H. Rides on every live event as detail.kind
-    dualDigits: [1, 1], // decimals each field shows when the box opens
+    quantities: ['length', 'length'], // TASK 769: what each field holds ('length' | 'angle' | 'count'): its text and its reading (boxValueText / parseBoxValue)
+    values: [null, null], // TASK 769: the live value each field shows (base units), and `parsed` what each typed field reads as: a unit change shows them again
+    parsed: [NaN, NaN],
+    openValues: [null, null], // TASK 769: the values the box opened with (its Ctrl+Z default text, shown again on a unit change)
     typed: [false, false], // TASK 596: which field the user has typed in (a field showing the live value is NOT typed; only a typed one locks a size)
     defaults: ['', ''], // TASK 675 C: opening default strings so Ctrl/Cmd+Z restores the default in one step
     undoneToDefault: false, // TASK 675 C: a second Ctrl/Cmd+Z right after reverting a typed creation box does nothing
@@ -341,13 +359,16 @@ function setupListeners() {
 
 // --- Public API ---
 
-export function showSingleInput(x, y, value, field, initialKey = null, focus = true) {
+export function showSingleInput(x, y, value, field, initialKey = null, focus = true, quantity = 'length') {
     if (!uiState.singleInput) return;   // a host with no DOM (the headless node tests that drive a tool's handlers bare) has no boxes: the tool runs as it does with one
     resetState();
     uiState.active = true;
     uiState.mode = 'live-single';
     uiState.field = field; // 'length', 'radius'
     uiState.typed = [!!initialKey, false];
+    uiState.quantities = [quantity, 'length'];
+    uiState.values = [typeof value === 'number' ? value : null, null];
+    uiState.openValues = uiState.values.slice();
 
     // Position
     uiState.singleInput.style.transform = '';
@@ -357,9 +378,10 @@ export function showSingleInput(x, y, value, field, initialKey = null, focus = t
     
     // Value. O15: a number being typed WHILE DRAWING stays a plain number, so a phone shows the decimal keypad here (the dimension EDIT box below is text)
     uiState.singleInput.inputMode = 'decimal';
-    const defaultValue = typeof value === 'number' ? value.toFixed(1) : '';
+    const defaultValue = typeof value === 'number' ? boxValueText(value, quantity) : '';
     uiState.defaults = [defaultValue, ''];
     uiState.singleInput.value = initialKey || defaultValue;
+    if (initialKey) uiState.parsed[0] = parseBoxValue(initialKey, quantity);
     if (focus) {   // TASK 597: a touch opens the box WITHOUT focus (no phone keyboard on every click); tapping the box focuses it
         uiState.singleInput.focus();
         if (!initialKey) uiState.singleInput.select();
@@ -368,7 +390,8 @@ export function showSingleInput(x, y, value, field, initialKey = null, focus = t
 
 /**
  * The two-field on-canvas box. The rect tool opens it as W x H; TASK 596: the polygon tool as size x sides through `opts`
- * ({ kind, labels: [first, second], separator, digits: [first, second] }), the same element, keys and events, so Tab, Enter, Esc are ONE code path.
+ * ({ kind, labels: [first, second], separator, quantities: [first, second] }), the same element, keys and events, so Tab, Enter, Esc are ONE code path.
+ * TASK 769: `quantities` says what each field holds ('length' default, 'angle', 'count'): its text is boxValueText's, a typed one is read by parseBoxValue.
  */
 export function showDualInput(x, y, w, h, opts = {}) {
     if (!uiState.dualContainer) return;   // no DOM, no boxes (see showSingleInput)
@@ -377,7 +400,9 @@ export function showDualInput(x, y, w, h, opts = {}) {
     uiState.mode = 'live-dual';
     uiState.dualKind = opts.kind || null;
     uiState.typed = [false, false];
-    uiState.dualDigits = opts.digits || [1, 1];
+    uiState.quantities = opts.quantities || ['length', 'length'];
+    uiState.values = [w, h];
+    uiState.openValues = [w, h];
     const labels = opts.labels || ['W', 'H'];
     uiState.dualInputW.placeholder = labels[0];
     uiState.dualInputH.placeholder = labels[1];
@@ -387,8 +412,8 @@ export function showDualInput(x, y, w, h, opts = {}) {
     showNumericInputEl(uiState.dualContainer);
     placeLiveBox(uiState.dualContainer, x, y);
 
-    const defW = w.toFixed(uiState.dualDigits[0]);
-    const defH = h.toFixed(uiState.dualDigits[1]);
+    const defW = boxValueText(w, uiState.quantities[0]);
+    const defH = boxValueText(h, uiState.quantities[1]);
     uiState.defaults = [defW, defH];
     uiState.dualInputW.value = defW;
     uiState.dualInputH.value = defH;
@@ -410,8 +435,9 @@ export function showDualInput(x, y, w, h, opts = {}) {
  */
 export function setLiveInputValue(index, value) {
     if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single') || uiState.typed[index]) return;
-    const el = uiState.mode === 'live-single' ? uiState.singleInput : (index === 0 ? uiState.dualInputW : uiState.dualInputH);
-    el.value = value.toFixed(uiState.mode === 'live-single' ? 1 : uiState.dualDigits[index]);
+    const el = liveField(index);
+    uiState.values[index] = value;
+    el.value = boxValueText(value, uiState.quantities[index]);
     if (typeof document !== 'undefined' && document.activeElement === el) el.select();
 }
 
@@ -464,7 +490,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     const hasFormula = typeof constraint.expression === 'string' && constraint.expression !== '';
     const defaultValue = hasFormula ? constraint.expression
         : (typeof prefillValue === 'number'
-            ? (isAngleDim ? prefillValue.toFixed(angleDecimals(1)) : lengthText(prefillValue, { auto: 1 })) // TASK 728: the label's text (decimals or 1 1/2")
+            ? boxValueText(prefillValue, isAngleDim ? 'angle' : 'length') // TASK 728 / 769: the label's text (decimals or 1 1/2"), the box's one text
             : '');
     uiState.defaults = [defaultValue, ''];
     // TASK 724: the prefill is DISPLAY text (rounded to the precision setting); `exactText` is the same number unrounded, what an untouched box commits
@@ -631,11 +657,11 @@ function handleCommit() {
         detail.typed = uiState.typed.slice();   // which fields the user typed in: only those are the user's numbers, the rest shows the live preview
         if (uiState.mode === 'live-dual') detail.kind = uiState.dualKind;
         if (uiState.mode === 'live-dual') {
-            detail.width = parseFloat(uiState.dualInputW.value);
-            detail.height = parseFloat(uiState.dualInputH.value);
+            detail.width = readLiveField(0);
+            detail.height = readLiveField(1);
         } else {
             detail.field = uiState.field;
-            detail.value = parseFloat(uiState.singleInput.value);
+            detail.value = readLiveField(0);
         }
         window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail }));
         if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
@@ -682,12 +708,12 @@ function handlePreview(resetIdx = -1) {
         detail.kind = uiState.dualKind;
         detail.typed = uiState.typed.slice();
         if (resetIdx !== -1) detail.reset = [resetIdx === 0, resetIdx === 1];
-        const w = parseFloat(uiState.dualInputW.value);
-        const h = parseFloat(uiState.dualInputH.value);
+        const w = readLiveField(0);
+        const h = readLiveField(1);
         if (!isNaN(w)) detail.width = w;
         if (!isNaN(h)) detail.height = h;
     } else {
-        const v = parseFloat(uiState.singleInput.value);
+        const v = readLiveField(0);
         detail.typed = uiState.typed.slice();
         if (resetIdx !== -1) detail.reset = [resetIdx === 0];
         if (!isNaN(v)) {
@@ -697,6 +723,30 @@ function handlePreview(resetIdx = -1) {
     }
     window.dispatchEvent(new CustomEvent('liveDimensionPreview', { detail }));
 }
+
+// TASK 769: field `index` of the open creation box (the single box is field 0), and the value its text means (THE one reading of a live box: parseBoxValue,
+// in the field's quantity). A typed field keeps what it reads as, so a unit change shows the same length again.
+function liveField(index) {
+    return uiState.mode === 'live-single' ? uiState.singleInput : (index === 0 ? uiState.dualInputW : uiState.dualInputH);
+}
+function readLiveField(index) {
+    const v = parseBoxValue(liveField(index).value, uiState.quantities[index]);
+    if (uiState.typed[index]) uiState.parsed[index] = v;
+    return v;
+}
+// TASK 769: the document unit or a display setting (precision, Decimal / Fractional) changed while a creation box is open: every field is shown again
+// through boxValueText (a typed one as the length it was typed as, the others as their live value). The canvas labels re-render on the next frame.
+function showLiveBoxAgain() {
+    if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single')) return;
+    const n = uiState.mode === 'live-dual' ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+        const q = uiState.quantities[i];
+        if (Number.isFinite(uiState.openValues[i])) uiState.defaults[i] = boxValueText(uiState.openValues[i], q);
+        const v = uiState.typed[i] ? uiState.parsed[i] : uiState.values[i];
+        if (Number.isFinite(v)) liveField(i).value = boxValueText(v, q);
+    }
+}
+SettingsManager.subscribe((name) => { if (name === 'DOC_UNIT' || isPrecisionKey(name)) showLiveBoxAgain(); });
 
 function handleCancel() {
     if (uiState.mode === 'edit' && uiState.target && (uiState.target.__newlyPlaced || uiState.target.__restoredDimension)) {
@@ -820,6 +870,10 @@ function resetState() {
     uiState.defaults = ['', ''];
     uiState.exactText = null;
     uiState.undoneToDefault = false;
+    uiState.quantities = ['length', 'length'];
+    uiState.values = [null, null];
+    uiState.parsed = [NaN, NaN];
+    uiState.openValues = [null, null];
     
     if (uiState.singleInput) {
         uiState.singleInput.classList.remove('sk-live-box');

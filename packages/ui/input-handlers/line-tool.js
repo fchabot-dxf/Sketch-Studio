@@ -24,7 +24,7 @@ import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are de
 let lineState = { lockedLength: null, lockedAngle: null };
 // the boxes shown since the segment's first click (base-tool's shared creation-box path); `cursor` = the last world point, `screen` = the last pointer
 const live = { boxOpen: false, cursor: null, screen: null };
-const BOX = { dual: { kind: 'line', labels: ['L', '°'], separator: '∠', digits: [1, 1] } };
+const BOX = { dual: { kind: 'line', labels: ['L', '°'], separator: '∠', quantities: ['length', 'angle'] } };
 const MIN_LEN = 1e-4;
 
 const startOf = (state) => (state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null))) || null;

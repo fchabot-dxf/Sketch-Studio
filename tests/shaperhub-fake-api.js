@@ -15,12 +15,32 @@ const AUTH = 'https://auth.shapertools.com';
 const API = 'https://api.shapertools.com';
 const LOCAL = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//;
 
-export function createFakeShaperApi({ files = [], fail = {}, passLocal = null } = {}) {
-  const myFiles = new Map(files.map((name, i) => [name, { name, modified: new Date(Date.UTC(2026, 10, 1, 0, i)).toISOString(), blobs: [`old-blob-${i + 1}`] }]));
+export function createFakeShaperApi({ files = [], folders = [], fail = {}, passLocal = null } = {}) {
+  const normPath = (p) => {
+    const segs = String(p || '/').split('/').filter(Boolean);
+    return segs.length ? `/${segs.join('/')}/` : '/';
+  };
+  const keyOf = (folderPath, name) => `${normPath(folderPath)}${name}`;
+  const myFolders = new Set(['/']);
+  for (const fp of folders) {
+    const segs = String(fp || '').split('/').filter(Boolean);
+    let cur = '/';
+    for (const s of segs) { cur = `${cur}${s}/`; myFolders.add(cur); }
+  }
+  const myFiles = new Map();
+  files.forEach((entry, i) => {
+    const full = String(entry);
+    const segs = full.split('/').filter(Boolean);
+    const name = segs.pop();
+    let dir = '/';
+    for (const s of segs) { dir = `${dir}${s}/`; myFolders.add(dir); }
+    myFiles.set(keyOf(dir, name), { path: dir, name, modified: new Date(Date.UTC(2026, 10, 1, 0, i)).toISOString(), blobs: [`old-blob-${i + 1}`] });
+  });
   const blobs = new Map();
   const calls = [];
   const blocked = [];
   let nBlob = 0;
+  let validToken = FAKE_TOKEN;
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const headersOf = (init) => Object.fromEntries(new Headers(init && init.headers).entries());
   const bodyText = (init) => (init && init.body !== undefined ? (typeof init.body === 'string' ? init.body : Buffer.from(init.body).toString('utf8')) : null);
@@ -30,7 +50,7 @@ export function createFakeShaperApi({ files = [], fail = {}, passLocal = null } 
     if (f === 'network') throw new TypeError('fetch failed');
     return json(f.status, { message: f.message });
   };
-  const authorised = (h) => h.authorization === `Bearer ${FAKE_TOKEN}`;
+  const authorised = (h) => h.authorization === `Bearer ${validToken}`;
 
   async function fakeFetch(input, init = {}) {
     const url = typeof input === 'string' ? input : input.url;
@@ -43,14 +63,29 @@ export function createFakeShaperApi({ files = [], fail = {}, passLocal = null } 
       record('token');
       const f = failed('token'); if (f) return f;
       const b = JSON.parse(bodyText(init));
-      if (b.username === FAKE_LOGIN.email && b.password === FAKE_LOGIN.password) return json(200, { access_token: { token: FAKE_TOKEN }, expires: '2026-12-01T00:00:00Z' });
+      if (b.username === FAKE_LOGIN.email && b.password === FAKE_LOGIN.password) return json(200, { access_token: { token: validToken }, expires: '2026-12-01T00:00:00Z' });
       return json(401, { message: 'Username and password could not be verified' });
     }
     if (u.origin === API && u.pathname === '/files/userspace/search' && method === 'GET') {
       record('search');
       const f = failed('search'); if (f) return f;
       if (!authorised(headers)) return json(401, { message: 'Unauthorized' });
-      return json(200, { results: [...myFiles.values()].sort((a, b) => (a.modified < b.modified ? 1 : -1)).map((x) => ({ name: x.name, modified: x.modified, type: 'file' })) });
+      const dir = normPath(u.searchParams.get('path') || '/');
+      const wantType = u.searchParams.get('type');
+      const results = [];
+      if (!wantType || wantType === 'folder') {
+        const depth = dir.split('/').filter(Boolean).length;
+        for (const fp of myFolders) {
+          if (fp === '/' || !fp.startsWith(dir)) continue;
+          const parts = fp.split('/').filter(Boolean);
+          if (parts.length === depth + 1) results.push({ name: parts[parts.length - 1], type: 'folder', modified: '2026-11-01T00:00:00.000Z' });
+        }
+      }
+      if (!wantType || wantType === 'file') {
+        const list = [...myFiles.values()].filter((x) => x.path === dir).sort((a, b) => (a.modified < b.modified ? 1 : -1));
+        for (const x of list) results.push({ name: x.name, modified: x.modified, type: 'file' });
+      }
+      return json(200, { results });
     }
     if (u.origin === API && u.pathname === '/blobs/' && method === 'POST') {
       record('blob');
@@ -61,23 +96,34 @@ export function createFakeShaperApi({ files = [], fail = {}, passLocal = null } 
       return json(200, { blobs: [id] });
     }
     if (u.origin === API && u.pathname.startsWith('/files/userspace/tree/')) {
-      const name = decodeURIComponent(u.pathname.slice('/files/userspace/tree/'.length));
+      const rawSegs = u.pathname.slice('/files/userspace/tree/'.length).split('/').filter(Boolean).map(decodeURIComponent);
+      const name = rawSegs.pop();
+      const dir = rawSegs.length ? `/${rawSegs.join('/')}/` : '/';
+      const key = keyOf(dir, name);
       if (method === 'POST') {
         record('create');
         const f = failed('create'); if (f) return f;
         if (!authorised(headers)) return json(401, { message: 'Unauthorized' });
         const b = JSON.parse(bodyText(init));
+        if (b.type === 'folder') {
+          if (!myFolders.has(dir)) return json(404, { message: 'Parent folder not found' });
+          const nextDir = `${dir}${name}/`;
+          if (myFolders.has(nextDir)) return json(409, { message: 'Folder name already used' });
+          myFolders.add(nextDir);
+          return json(200, { name, type: 'folder' });
+        }
         if (b.type !== 'file' || !Array.isArray(b.blobs) || !blobs.has(b.blobs[0])) return json(400, { message: 'Bad entry' });
-        if (myFiles.has(name)) return json(409, { message: 'File name already used' });
-        myFiles.set(name, { name, modified: new Date().toISOString(), blobs: b.blobs });
+        if (!myFolders.has(dir)) return json(404, { message: 'Folder not found' });
+        if (myFiles.has(key)) return json(409, { message: 'File name already used' });
+        myFiles.set(key, { path: dir, name, modified: new Date().toISOString(), blobs: b.blobs });
         return json(200, { name, type: 'file', blobs: b.blobs });
       }
       if (method === 'DELETE') {
         record('delete');
         const f = failed('delete'); if (f) return f;
         if (!authorised(headers)) return json(401, { message: 'Unauthorized' });
-        if (!myFiles.has(name)) return json(404, { message: 'Not found' });
-        myFiles.delete(name);
+        if (!myFiles.has(key)) return json(404, { message: 'Not found' });
+        myFiles.delete(key);
         return json(200, {});
       }
     }
@@ -90,9 +136,12 @@ export function createFakeShaperApi({ files = [], fail = {}, passLocal = null } 
     calls,
     blocked,
     steps: () => calls.map((c) => c.step),
-    names: () => [...myFiles.keys()].sort(),
-    entry: (name) => myFiles.get(name) || null,
+    names: (dir = '/') => { const d = normPath(dir); return [...myFiles.values()].filter((x) => x.path === d).map((x) => x.name).sort(); },
+    allPaths: () => [...myFiles.keys()].sort(),
+    folders: () => [...myFolders].sort(),
+    entry: (name, dir = '/') => myFiles.get(keyOf(dir, name)) || null,
     blob: (id) => blobs.get(id),
+    rotateToken: (next = 'rotated-jwt') => { validToken = next; },
     setFail: (next) => { for (const k of Object.keys(fail)) delete fail[k]; Object.assign(fail, next); },
     reset: () => { calls.length = 0; },
   };

@@ -23,7 +23,9 @@ import { activeSketchName, canClearActiveSketch, clearActiveSketch, hasSelection
 import { DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { GEAR_GLYPH } from '#ui/app-sidebar.js';
-import { matchesShortcut, titleWithShortcut, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: the Parameters key (view.parameters), declared there
+import { matchesShortcut, titleWithShortcut, shortcutHint, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: the Parameters key (view.parameters), declared there
+import { mountTooltip } from '#ui/hint.js';
+import { CHROME_HINTS } from '#ui/design-hints.js';
 import { isTextEditingTarget } from '#ui/clipboard.js';
 
 let stylesInjected = false;
@@ -151,6 +153,8 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   const actions = document.createElement('span'); actions.className = 'sk-footer-actions';
   start.appendChild(actions);
 
+  const tips = [];
+  const tip = (btn, title, keyId, text) => { if (btn && text) tips.push(mountTooltip({ target: btn, getContent: () => ({ title, key: keyId ? shortcutHint(keyId) : '', text }) })); };
   const mk = (parent, id, label, icon, extraClass = '') => {
     const b = document.createElement('button');
     b.type = 'button'; b.id = id;
@@ -162,6 +166,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   };
 
   const deleteBtn = mk(actions, 'btn-delete-selection', 'Delete', 'icon-circle-x', 'danger');
+  tip(deleteBtn, 'Delete', null, CHROME_HINTS.delete);
   deleteBtn.addEventListener('click', () => {
     const v = view(); if (!v || !v.state) return;
     handleDelete(v.state);
@@ -169,6 +174,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   });
 
   const clearBtn = mk(actions, 'btn-clear-sketch', 'Clear sketch', 'icon-trash', 'ink');
+  tip(clearBtn, 'Clear sketch', null, CHROME_HINTS.clear);
   clearBtn.addEventListener('click', async () => {
     const v = view(); if (!v || !v.state || !canClearActiveSketch(v.state)) return;
     const ok = await askConfirm(`Clear sketch '${activeSketchName(v.state)}'? This can be undone.`, { okLabel: 'Clear', returnFocusTo: clearBtn });
@@ -190,6 +196,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
     paramsBtn.type = 'button'; paramsBtn.id = 'btn-parameters'; paramsBtn.className = 'sk-footer-btn ink';
     const retitle = () => { paramsBtn.title = titleWithShortcut('Parameters', 'view.parameters'); }; // TASK 740: "Parameters (Shift+P)"
     retitle(); offParamsTitle = onShortcutsChange(retitle);
+    tip(paramsBtn, 'Parameters', 'view.parameters', CHROME_HINTS.parameters);
     paramsBtn.setAttribute('aria-label', 'Parameters');
     paramsBtn.setAttribute('aria-haspopup', 'dialog'); paramsBtn.setAttribute('aria-expanded', 'false');
     paramsBtn.innerHTML = FX_ICON;
@@ -217,6 +224,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   }
 
   const recenterBtn = mk(end, 'btn-recenter-view', 'Recenter view', 'icon-recenter');
+  tip(recenterBtn, 'Recenter view', null, CHROME_HINTS.recenter);
   recenterBtn.addEventListener('click', () => {
     const v = view(); if (!v) return;
     if (v.state && v.state.view) fitViewToExtents(v.svg, v.state.view, v.state);
@@ -228,6 +236,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
   if (settings) {
     const panelOpen = () => !settings.el.classList.contains('sk-hidden');
     settingsBtn = mk(end, 'btn-settings', 'Settings', 'icon-recenter', 'ink');
+    tip(settingsBtn, 'Settings', null, CHROME_HINTS.settings);
     settingsBtn.innerHTML = GEAR_ICON;
     settingsBtn.setAttribute('aria-pressed', String(panelOpen()));
     settingsBtn.addEventListener('pointerdown', () => { openAtPress = panelOpen(); });
@@ -309,6 +318,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
       if (stopSettingsWatch) stopSettingsWatch();
       if (onParamsKey) document.removeEventListener('keydown', onParamsKey);
       if (offParamsTitle) offParamsTitle();
+      tips.forEach((t) => t.destroy());
       history.destroy();
       if (paramsWin) paramsWin.destroy();
       if (start.remove) start.remove();

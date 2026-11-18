@@ -245,7 +245,7 @@ try {
   await shot('desktop-4-replaced.png');
   console.log('desktop: replace ' + JSON.stringify(d) + ', calls ' + api.steps().join(' > '));
   assert.deepStrictEqual(d.status, ['Replaced bromont.svg in My Files'], 'desktop: Replace it -> "Replaced bromont.svg in My Files"');
-  assert.deepStrictEqual(api.steps(), ['token', 'search', 'blob', 'delete', 'create'], 'desktop: the new blob is uploaded BEFORE the old entry is deleted');
+  assert.deepStrictEqual(api.steps(), ['search', 'blob', 'delete', 'create'], 'desktop: reuses in-memory session token and uploads the new blob BEFORE deleting the old entry');
   await waitClosed('desktop replace');
   // the question's Cancel sends nothing; an edited name is kept for this design
   await openSignIn('desktop cancel');
@@ -260,7 +260,8 @@ try {
   await clickEl('#sync-btn-cancel');
   await openSignIn('desktop edited');
   assert.strictEqual((await dialogState()).name, 'bromont-v2.svg', 'desktop: the name typed for this design is kept in this session');
-  // a wrong login: Shaper's words + the hint
+  // Switch account to reveal the credential inputs, then test a wrong login: Shaper's words + the hint
+  await clickEl('#sync-btn-switch');
   await fillLogin('wrong-not-a-real-password');
   await clickEl('#sync-btn-submit');
   d = await untilStatus('/Authentication failed/', 'desktop: wrong login');

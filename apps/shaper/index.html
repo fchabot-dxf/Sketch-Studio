@@ -192,6 +192,31 @@
     .sync-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #9ca3af; }
     .sync-field input { background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 8px 10px; color: #f3f4f6; font: 13px system-ui, sans-serif; }
     .sync-field input:focus { outline: none; border-color: #3b82f6; }
+    .sync-label-row { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #9ca3af; }
+    .sync-session { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 6px; background: #0b1020; border: 1px solid #233044; font-size: 12px; color: #93c5fd; }
+    .sync-session[hidden], .sync-creds[hidden], .sync-mkdir-row[hidden] { display: none; }
+    .sync-creds { display: flex; flex-direction: column; gap: 10px; }
+    .sync-browse-row { display: flex; justify-content: flex-end; }
+    .sync-link-btn { background: transparent; border: 1px solid #374151; color: #cbd5e1; border-radius: 6px; padding: 5px 10px; font: 12px system-ui, sans-serif; cursor: pointer; }
+    .sync-link-btn:hover:not(:disabled) { border-color: #3b82f6; color: #fff; }
+    .sync-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .sync-browser { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 8px; background: #0b1020; border: 1px solid #232834; }
+    .sync-browser-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+    .sync-browser-btns { display: flex; align-items: center; gap: 6px; }
+    .sync-breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: 12px; }
+    .sync-crumb { background: transparent; border: 0; color: #93c5fd; cursor: pointer; padding: 2px 5px; border-radius: 4px; font: inherit; }
+    .sync-crumb:hover { background: rgba(59,130,246,0.16); color: #fff; }
+    .sync-crumb[aria-current="location"] { color: #f3f4f6; font-weight: 600; cursor: default; }
+    .sync-crumb-sep { color: #6b7280; }
+    .sync-mkdir-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .sync-mkdir-row input { flex: 1; min-width: 120px; background: #111827; border: 1px solid #2a2d31; border-radius: 6px; padding: 6px 8px; color: #f3f4f6; font: 12px system-ui, sans-serif; }
+    .sync-folder-list { max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding-right: 2px; }
+    .sync-entry { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 6px; font-size: 12px; color: #e5e7eb; cursor: pointer; }
+    .sync-entry:hover { background: #1e293b; }
+    .sync-entry.is-file { color: #9ca3af; }
+    .sync-entry.is-file.is-selected { background: rgba(59,130,246,0.2); color: #f3f4f6; }
+    .sync-entry-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sync-browser-empty { font-size: 12px; color: #6b7280; padding: 4px 2px; line-height: 1.4; }
     .sync-status { min-height: 18px; font-size: 12px; line-height: 1.4; margin-top: 4px; }
     .sync-status.is-error { color: #f87171; }
     .sync-status.is-success { color: #34d399; }
@@ -206,7 +231,7 @@
     .sync-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     /* TASK 758: on a phone (narrow screen or a coarse pointer) the sign-in's fields and buttons are 44 px touch targets */
     @media (max-width: 640px), (pointer: coarse) {
-      .sync-field input, .sync-btn-primary, .sync-btn-secondary { min-height: 44px; box-sizing: border-box; }
+      .sync-field input, .sync-mkdir-row input, .sync-btn-primary, .sync-btn-secondary, .sync-link-btn, .sync-entry { min-height: 44px; box-sizing: border-box; }
       .sync-modal-close { min-width: 44px; min-height: 44px; }
     }
     .simexport-hub-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; border-radius: 6px; padding: 10px 18px; font: 14px system-ui, sans-serif; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
@@ -305,7 +330,9 @@
     @keyframes sk-march { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -12; } }
     .sk-travel-arrows { display: none; fill: var(--sk-prep-path); }
     @media (prefers-reduced-motion: reduce) { .sk-travel { animation: none; } .sk-travel-arrows { display: inline; } }
-    #prepare-dir-legend { position: absolute; left: 12px; bottom: 10px; z-index: 6; color: #9aa0a6; font: 12px system-ui, sans-serif; pointer-events: none; }
+    #prepare-dir-legend { position: absolute; left: 12px; bottom: 10px; z-index: 6; max-width: calc(100% - 240px); color: #9aa0a6; font: 12px system-ui, sans-serif; pointer-events: none; }
+    #prepare-dir-legend .sk-hint-trigger, #prepare-dir-legend .sk-hint { pointer-events: auto; }
+    #prepare-dir-legend .sk-hint:not([hidden]) { background: rgba(10,10,11,0.92); border: 1px solid #2a2d31; border-radius: 6px; padding: 5px 8px; margin-top: 4px; max-width: 300px; }
     #prepare-panel { position: absolute; top: 12px; right: 12px; width: 232px; z-index: 6; pointer-events: none; }
     /* TASK 742: the panel ends 12 px above the view's bottom and a card taller than that scrolls its rows (the type field and the popovers stay put),
        so every row of a long card (a stepped cut, an Outside with Tabs) stays reachable on a short screen; a card that fits is unchanged */
@@ -403,7 +430,10 @@
     #prepare-ops { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
       background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
     #view-prepare.is-fusion #prepare-ops { top: 56px; max-height: calc(100% - 96px); }
-    .ops-head { all: unset; box-sizing: border-box; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .ops-header { display: flex; align-items: center; flex: 0 0 auto; }
+    .ops-head { all: unset; box-sizing: border-box; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .ops-header > .sk-hint-i { margin-right: 12px; }
+    #prepare-ops > .sk-hint { padding: 0 14px 8px; }
     .ops-count { min-width: 20px; text-align: center; background: var(--sk-prep-field-bg); color: var(--sk-prep-unit); border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
     .ops-caret { margin-left: auto; transition: transform 0.12s; }
     [data-open="false"] .ops-caret { transform: rotate(-90deg); } /* TASK 757: a folded disclosure's caret (disclosure.js: the Operations sheet, the Export 3D info) */
@@ -513,17 +543,17 @@
     <div id="prepare-panel"></div>
     <div id="prepare-ops"></div>
     <div id="prepare-notice" hidden></div>
-    <div id="prepare-dir-legend" hidden>direction: conventional (Shaper Origin)</div>
+    <div id="prepare-dir-legend" hidden><span class="review-label-line"><span data-hint="dirLegend"></span></span></div>
   </section>
   <section id="view-review" hidden>
     <div id="review-stage">
       <div id="review-canvas-host"></div>
       <div id="review-2d" hidden><svg id="review-2d-canvas" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="The exported Shaper SVG"></svg><div id="review-2d-info"></div></div>
-      <div id="review-toolbar"><div id="review-view-switch" role="group" aria-label="View"><button id="review-view-3d" type="button" data-view="3d" aria-pressed="true">3D</button><button id="review-view-2d" type="button" data-view="2d" aria-pressed="false">2D</button></div><button id="review-reset" type="button">Reset</button><button id="review-top" type="button">Top</button><button id="review-fit" type="button">Fit</button></div>
+      <div id="review-toolbar"><div id="review-view-switch" role="group" aria-label="View"><button id="review-view-3d" type="button" data-view="3d" data-hint="reviewThreeD" aria-pressed="true">3D</button><button id="review-view-2d" type="button" data-view="2d" data-hint="reviewTwoD" aria-pressed="false">2D</button></div><button id="review-reset" type="button" data-hint="reviewReset">Reset</button><button id="review-top" type="button" data-hint="reviewTop">Top</button><button id="review-fit" type="button" data-hint="reviewFit">Fit</button></div>
       <div id="review-info"></div>
     </div>
     <aside id="review-side">
-    <div class="review-stock" id="review-cuts" hidden><h2 class="simexport-title">Cuts</h2>
+    <div class="review-stock" id="review-cuts" hidden><h2 class="simexport-title"><span data-hint="reviewCuts"></span></h2>
       <div id="review-cuts-list" class="review-cuts-list"></div></div>
     <div class="review-stock" id="review-stock"><h2 class="simexport-title">Stock</h2>
       <label><span class="review-label-line"><span data-hint="stockThickness"></span></span> <span class="review-stepbox"><input id="review-stock-thickness" type="text" inputmode="decimal"></span></label>
@@ -553,17 +583,42 @@
       </div>
       <p class="sync-modal-desc">Send your machine-ready SVG directly to your ShaperHub "My Files" folder so it appears on your Origin over Wi-Fi.</p>
       <form id="sync-modal-form" class="sync-form" method="dialog">
+        <div id="sync-session" class="sync-session" hidden>
+          <span>Signed in for this session</span>
+          <button type="button" id="sync-btn-switch" class="sync-link-btn">Switch account</button>
+        </div>
         <!-- TASK 758: a password form the BROWSER's password manager saves and fills (the app keeps no login): name + autocomplete tokens, a label per field -->
-        <div class="sync-field">
-          <label for="sync-email">Shaper Account Email</label>
-          <input id="sync-email" name="username" type="email" required autocomplete="username" placeholder="name@example.com">
+        <div id="sync-creds" class="sync-creds">
+          <div class="sync-field">
+            <label for="sync-email">Shaper Account Email</label>
+            <input id="sync-email" name="username" type="email" required autocomplete="username" placeholder="name@example.com">
+          </div>
+          <div class="sync-field">
+            <label for="sync-password">Password</label>
+            <input id="sync-password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••">
+          </div>
+          <div class="sync-browse-row">
+            <button type="button" id="sync-btn-browse" class="sync-link-btn">Browse folders</button>
+          </div>
+        </div>
+        <div id="sync-browser" class="sync-browser">
+          <div class="sync-browser-head">
+            <span class="sync-label-row"><span data-hint="syncFolder"></span></span>
+            <div class="sync-browser-btns">
+              <button type="button" id="sync-btn-refresh" class="sync-link-btn" hidden>Refresh</button>
+              <button type="button" id="sync-btn-new-folder" class="sync-link-btn" data-label="syncNewFolder" hidden></button>
+            </div>
+          </div>
+          <div id="sync-breadcrumbs" class="sync-breadcrumbs" aria-label="Destination folder path"></div>
+          <div id="sync-mkdir-row" class="sync-mkdir-row" hidden>
+            <input id="sync-mkdir-name" type="text" placeholder="New folder name">
+            <button type="button" id="sync-mkdir-ok" class="sync-btn-secondary">Create</button>
+            <button type="button" id="sync-mkdir-cancel" class="sync-link-btn">Cancel</button>
+          </div>
+          <div id="sync-folder-list" class="sync-folder-list"></div>
         </div>
         <div class="sync-field">
-          <label for="sync-password">Password</label>
-          <input id="sync-password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••">
-        </div>
-        <div class="sync-field">
-          <label for="sync-filename">File Name (on Origin)</label>
+          <div class="sync-label-row"><label for="sync-filename" data-hint="syncFilename"></label></div>
           <input id="sync-filename" name="filename" type="text" required placeholder="my-project.svg">
         </div>
         <div id="sync-modal-status" class="sync-status"></div>

@@ -13,9 +13,11 @@
 // a press would do nothing (saving / loading). The spinner is role="status" with its text (spinner.js).
 import { SIDEBAR_ICONS } from './app-sidebar.js';
 import { createSpinner } from './spinner.js';
-import { titleWithShortcut } from './shortcuts.js';
+import { titleWithShortcut, shortcutHint } from './shortcuts.js';
 import { HEADER_HIDDEN_QUERY } from './app-header.js';
 import { SAVE_STATES } from './save-state.js';
+import { mountTooltip } from './hint.js';
+import { CHROME_HINTS } from './design-hints.js';
 
 let stylesInjected = false;
 function injectStyles(doc) {
@@ -104,6 +106,15 @@ export function createSaveButton({ getState, onPress, doc = globalThis.document,
     onMq();
   }
 
+  const tip = mountTooltip({
+    target: el,
+    getContent: () => ({
+      title: `Save — ${current.text}`,
+      key: shortcutHint('file.save'),
+      text: `${CHROME_HINTS.save}${current.state === SAVE_STATES.FAILED ? ' Press to retry saving.' : ''}`,
+    }),
+  });
+
   refresh();
-  return { el, refresh, placeIn, destroy() { if (mq) mq.removeEventListener('change', onMq); el.remove(); } };
+  return { el, refresh, placeIn, destroy() { tip.destroy(); if (mq) mq.removeEventListener('change', onMq); el.remove(); } };
 }

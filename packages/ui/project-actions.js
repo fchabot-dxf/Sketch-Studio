@@ -21,6 +21,8 @@ import { browserFileSeam, fileAccess, designNameOfFile } from './project-file.js
 import { saveRoute, HOME_KINDS } from './document-home.js';
 import { relativeTime } from './project-manager.js';
 import { createDocumentActivity } from './document-activity.js';
+import { GOOGLE } from './cloud/providers.js';
+import { driveErrorText } from './cloud/drive-adapter.js';
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
@@ -44,6 +46,39 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     signIn: () => (account ? account.signIn() : null),
     subscribeAccount: (fn) => (account && account.subscribe ? account.subscribe(fn) : () => {}),
   };
+
+  /** Folder/file browser hooks inside the app folder ("Sketch Studio") on Google Drive (or local store when unclouded). */
+  function driveBrowserHooks({ writable = false } = {}) {
+    if (!store.listProjects) return null;
+    const isDriveFolder = (p) => !store.cloud || (store.isRemote ? store.isRemote(p.id) : p.location === 'drive');
+    const formatDesign = (r) => ({ id: r.id, name: r.name, sub: [r.app, relativeTime(r.updatedAt)].filter(Boolean).join(' · ') });
+    const listFolders = async () => {
+      const all = await store.listProjects();
+      const lastErr = store.cloud && store.cloud.lastError && store.cloud.lastError();
+      if (lastErr) throw new Error(driveErrorText(lastErr));
+      return all.filter(isDriveFolder).map((p) => ({ id: p.id, name: p.name, sub: p.updatedAt ? relativeTime(p.updatedAt) : '' }));
+    };
+    return {
+      rootLabel: GOOGLE.rootFolderName,
+      listFolders,
+      initialFolderId: async () => {
+        const cur = store.current ? await store.current() : null;
+        if (!cur || !cur.projectId) return null;
+        if (store.cloud && store.isRemote && !store.isRemote(cur.projectId)) return null;
+        return cur.projectId;
+      },
+      listFolderDesigns: async (folderId) => {
+        const rows = store.listDesigns ? await store.listDesigns(folderId) : [];
+        return rows.map(formatDesign);
+      },
+      ...(writable && store.createProject ? {
+        createFolder: async (folderName) => {
+          const p = await store.createProject(folderName);
+          return { id: p.id, name: p.name };
+        },
+      } : {}),
+    };
+  }
 
   /** Ask the user to sign in to Google Drive if currently signed out (runs signIn synchronously in the button click so popups work). */
   async function ensureSignedIn() {
@@ -123,8 +158,8 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     const b = buf();
     await b.ready;
     const value = name || (b.isStored() ? b.designName() + ' copy' : b.designName());
-    return fileDialog({ mode: 'save', name: value, ...dialogAccount,
-      onSave: (tab, n) => (tab === 'drive' ? b.saveAs(n) : b.saveToFile(n, fileSeam)) });
+    return fileDialog({ mode: 'save', name: value, ...dialogAccount, browseDrive: driveBrowserHooks({ writable: true }),
+      onSave: (tab, n, projectId) => (tab === 'drive' ? (projectId ? b.saveAs(n, { projectId }) : b.saveAs(n)) : b.saveToFile(n, fileSeam)) });
   }
   /** TASK 759, SAVE (Ctrl+S, the menu): to the design's home (document-home.js saveRoute): Drive -> the pending autosave is written now; a file -> back to it
    *  (or the picker again / a download); none -> the Save as dialog. Resolves { route, name? } or null (cancelled). */
@@ -186,7 +221,16 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   async function openDialog() {
     if (!tabs && !(await settleUnsaved())) return null;
     const listed = new Map(); // id -> name of the designs the dialog lists (TASK 768: the loading tab names the design being opened)
-    return fileDialog({ mode: 'open', ...dialogAccount,
+    const browseDrive = driveBrowserHooks({ writable: false });
+    const trackedBrowser = browseDrive ? {
+      ...browseDrive,
+      listFolderDesigns: async (folderId) => {
+        const rows = await browseDrive.listFolderDesigns(folderId);
+        for (const r of rows) listed.set(r.id, r.name);
+        return rows;
+      },
+    } : null;
+    return fileDialog({ mode: 'open', ...dialogAccount, browseDrive: trackedBrowser,
       listDesigns: async () => (await store.listRecent({ limit: 12 })).map((r) => { listed.set(r.id, r.name); return { id: r.id, name: r.name, sub: [r.projectName, relativeTime(r.updatedAt)].filter(Boolean).join(' · ') }; }),
       onOpenDesign: (id) => openDesign(id, listed.get(id) || null),
       onChooseFile: () => openLocalFile(),

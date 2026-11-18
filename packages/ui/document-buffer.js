@@ -531,12 +531,12 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   /** New design: an empty, UNSAVED Untitled (stored at its first named save). No design is current while it shows. */
   async function newDesign(template = null) { refuseIfUnsaved(); await flush(); await store.setCurrent(null); const out = loadUntitled('new', template); await saveWorkingBuffer(); return out; }
   /** Save as: on an unsaved Untitled, the FIRST NAMED SAVE (it is stored under `newName`, and autosaves from then on); on a stored design,
-   *  a copy under `newName` that becomes the bound one (unchanged). */
-  async function saveAs(newName) {
+   *  a copy under `newName` that becomes the bound one (`projectId` picks which app folder on Drive; omitted keeps current/default). */
+  async function saveAs(newName, { projectId = undefined } = {}) {
     if (!boundId) {
       const doc = fullDoc();
       const sig = docChangeSig(doc);
-      const d = await store.newDesign(newName, { app, document: doc }); // stored, named, current in one write; every app's sidecar goes with it (TASK 684)
+      const d = await store.newDesign(newName, { app, document: doc, projectId }); // stored, named, current in one write; every app's sidecar goes with it (TASK 684)
       boundId = d.id; name = d.name; emptySig = null; saveOk = true; fileHome = null; resetHostBaseline(docHasOwnHost(doc.hosts)); lastSig = sig;
       notify('saved');
       await saveWorkingBuffer();
@@ -544,7 +544,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       return d;
     }
     await flush();
-    const p = await store.saveAs(newName, { app, fromId: boundId });
+    const p = await store.saveAs(newName, { app, fromId: boundId, projectId });
     boundId = p.id; name = p.name; lastSig = sigNow();
     await saveWorkingBuffer();
     track('drive:save'); // TASK 738

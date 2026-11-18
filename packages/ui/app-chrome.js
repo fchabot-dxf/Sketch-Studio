@@ -4,6 +4,9 @@
 import { createAppHeader } from './app-header.js';
 import { mountProjectSidebar } from './sidebar-projects.js';
 import { startAnalytics, track } from './analytics.js'; // TASK 738: the app's visit, and the stage it picks
+import { getProjectStore } from './project-store.js';
+import { getGoogleAccount } from './cloud/google-account.js';
+import { startSettingsSync } from './cloud/settings-sync.js'; // TASK 773: the user's settings follow him through his Google Drive
 
 export function mountAppChrome({
   appId,
@@ -21,6 +24,9 @@ export function mountAppChrome({
   host = 'web', // TASK 738: where the app runs, for the analytics: 'web', or 'fusion' (Shaper's Fusion 360 palette)
 } = {}) {
   startAnalytics({ app: appId, host }); // TASK 738: the visit (once per page load; analytics.js sends only from a public page)
+  // TASK 773: the settings sync (once per page; it reads Drive in the background only while signed in). Only where the app has the projects layer and so the
+  // sign-in: Fusion mode (projects: false) keeps its settings on this device.
+  if (projects) startSettingsSync({ store: store || getProjectStore(), account: account || getGoogleAccount() });
 
   let header = null;
   let sidebar = null;

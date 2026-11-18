@@ -24,6 +24,13 @@ const FOLDER = 'application/vnd.google-apps.folder';
 const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,createdTime,version,trashed';
 const ROOT_KEY = 'driveRootId';
 const RETRIES = 4;
+// TASK 773: the user's SETTINGS file, "Sketch Studio/Settings/settings.json" (#ui/cloud/settings-sync.js reads and writes it): a folder and a file the app
+// creates itself (so the drive.file scope covers them), both marked appProperties skKind='settings', so neither is ever a project or a design: listProjects
+// leaves the folder out (a user's own project called "Settings" is a skKind='project' folder and stays listed) and listDesigns lists only skKind='design'.
+export const SETTINGS_FOLDER_NAME = 'Settings';
+export const SETTINGS_FILE_NAME = 'settings.json';
+const SETTINGS_KIND = 'settings';
+const isSettingsKind = (f) => !!(f && f.appProperties && f.appProperties.skKind === SETTINGS_KIND);
 
 /** One readable line for a Drive / sign-in failure (the reason shown in the sidebar). Drive's HTTP status stays in the text. */
 export function driveErrorText(e) {
@@ -108,7 +115,14 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
   }
   /** The root folder, CREATED when absent (only a write calls this). Two devices creating it at the same moment: the OLDEST folder is the
    *  root; a device that lost trashes its own just-created one ONLY while it is still empty, never a folder anything was put into. */
-  async function ensureRoot() {
+  // TASK 773: concurrent callers in THIS page (a design save and the settings sync at the same moment) share ONE lookup / creation, so one page never
+  // makes two roots; the rule below is for two devices.
+  let rootInFlight = null;
+  function ensureRoot() {
+    if (!rootInFlight) rootInFlight = createRootIfAbsent().finally(() => { rootInFlight = null; });
+    return rootInFlight;
+  }
+  async function createRootIfAbsent() {
     const existing = await findRoot();
     if (existing) return existing;
     const id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: config.rootFolderName, mimeType: FOLDER }))).json()).id;
@@ -121,6 +135,58 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
     await meta.setMeta(ROOT_KEY, chosen);
     return (rootId = chosen);
   }
+
+  // ---- the settings file (TASK 773) ----
+  const settingsFolders = async (root) => (await listAll(`'${root}' in parents and mimeType='${FOLDER}' and name='${SETTINGS_FOLDER_NAME}' and trashed=false`, 'id,createdTime,appProperties')).filter(isSettingsKind).sort(oldestFirst);
+  const settingsFiles = async (folder) => (await listAll(`'${folder}' in parents and name='${SETTINGS_FILE_NAME}' and trashed=false`, 'id,createdTime,version,appProperties')).filter(isSettingsKind).sort(oldestFirst);
+  /** The Settings folder, CREATED when absent (only a write calls this). Two devices creating it at the same moment: the OLDEST one is THE folder (every read
+   *  and write uses it); a device that lost trashes its own just-created folder while it is still empty (the rule of ensureRoot), so none is duplicated. */
+  async function ensureSettingsFolder() {
+    const root = await ensureRoot();
+    const found = await settingsFolders(root);
+    if (found.length) return found[0].id;
+    const id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: SETTINGS_FOLDER_NAME, mimeType: FOLDER, parents: [root], appProperties: { skKind: SETTINGS_KIND } }))).json()).id;
+    const after = await settingsFolders(root);
+    if (after.length && after[0].id !== id) {
+      if (!(await listAll(`'${id}' in parents and trashed=false`, 'id')).length) await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true }));
+      return after[0].id;
+    }
+    return id;
+  }
+  const settingsFile = {
+    /** The settings file { id, version, text }, or null when there is none yet (READ-ONLY: looking never creates the folder or the file). */
+    async read() {
+      const root = await findRoot();
+      if (!root) return null;
+      const folders = await settingsFolders(root);
+      if (!folders.length) return null;
+      const files = await settingsFiles(folders[0].id);
+      if (!files.length) return null;
+      const f = files[0];
+      const text = await (await call(`${API}/files/${f.id}?alt=media`)).text();
+      return { id: f.id, version: String(f.version), text };
+    },
+    /** Writes `text` into the file `id` (the one read() gave), or creates the file (and the folder) when `id` is null. Resolves { id, version, superseded }:
+     *  superseded = another device created the file at the same moment and its (older) file is THE one: this device's new file was trashed, nothing of it was
+     *  kept, and the caller merges again into the file that won. */
+    async write(text, id) {
+      if (id) {
+        await call(`${UPLOAD}/files/${id}?uploadType=media&fields=id`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: text });
+        const m = await getMeta(id);
+        return { id, version: m ? String(m.version) : null, superseded: false };
+      }
+      const folder = await ensureSettingsFolder();
+      const body = multipart({ name: SETTINGS_FILE_NAME, mimeType: 'application/json', parents: [folder], appProperties: { skKind: SETTINGS_KIND } }, text, 'application/json');
+      const created = (await (await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': body.type }, body: body.body })).json()).id;
+      const files = await settingsFiles(folder);
+      if (files.length && files[0].id !== created) {
+        await call(`${API}/files/${created}?fields=id`, jsonOpts('PATCH', { trashed: true }));
+        return { id: files[0].id, version: null, superseded: true };
+      }
+      const m = await getMeta(created);
+      return { id: created, version: m ? String(m.version) : null, superseded: false };
+    },
+  };
 
   // ---- projects (folders) ----
   const projectOf = (f) => ({ id: f.id, name: f.name, createdAt: Date.parse(f.createdTime) || 0, pinned: !!(f.appProperties && f.appProperties.skPinned === '1'), updatedAt: Number(f.appProperties && f.appProperties.skUpdatedAt) || Date.parse(f.modifiedTime) || 0 });
@@ -163,7 +229,7 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
     async listProjects() {
       const root = await findRoot(); // read-only: no root yet = no projects (nothing is created by looking)
       if (!root) return [];
-      return (await listAll(`'${root}' in parents and mimeType='${FOLDER}' and trashed=false`, 'id,name,appProperties,modifiedTime,createdTime')).map(projectOf);
+      return (await listAll(`'${root}' in parents and mimeType='${FOLDER}' and trashed=false`, 'id,name,appProperties,modifiedTime,createdTime')).filter((f) => !isSettingsKind(f)).map(projectOf); // TASK 773: the Settings folder is not a project
     },
     async getProject(id) { const m = await getMeta(id); return m ? projectOf(m) : null; },
     async putProject(p) { await writeProject(p, !!(await getMeta(p.id))); },
@@ -226,6 +292,8 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
       await run('trash', async () => { await call(`${API}/files/${fileId}?fields=id`, jsonOpts('PATCH', { trashed: true })); });
       return steps;
     },
+
+    settingsFile, // TASK 773: "Sketch Studio/Settings/settings.json" (read / write)
 
     // meta stays local to this device
     listMetaKeys: (prefix) => meta.listMetaKeys(prefix),

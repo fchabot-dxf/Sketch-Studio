@@ -17,9 +17,10 @@
 import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
 import { track } from './analytics.js'; // TASK 738: a design opened, a template started
 import { openFileDialog } from './file-dialog.js';
-import { browserFileSeam, fileAccess } from './project-file.js';
+import { browserFileSeam, fileAccess, designNameOfFile } from './project-file.js';
 import { saveRoute, HOME_KINDS } from './document-home.js';
 import { relativeTime } from './project-manager.js';
+import { createDocumentActivity } from './document-activity.js';
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
@@ -28,8 +29,11 @@ import { relativeTime } from './project-manager.js';
 // TASK 759: `fileDialog` (default: THE Save as / Open dialog, #ui/file-dialog.js openFileDialog; a headless caller passes a scripted one, as it passes `ask`),
 // `fileSeam` (default: the browser's file picker / download, #ui/project-file.js browserFileSeam) and `openProjects()` (the host's project manager, for the
 // Open dialog's "All projects…").
+// TASK 768: `activity` (document-activity.js; the host page's one, shared with its Save button, tab strip and loading overlay) is told of every design this
+// declaration LOADS: openDesign (Open…'s Drive tab, Open recent, Projects) for the whole open (the Drive read included), and a design file (Open…'s Local
+// tab, Open from file, a dropped file) from the moment the file is picked (never while the picker is up) until it shows.
 export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false, pickTemplate = null, chooseModal = null, promptModal = null,
-  fileDialog = openFileDialog, fileSeam = browserFileSeam, openProjects = () => {} }) {
+  fileDialog = openFileDialog, fileSeam = browserFileSeam, openProjects = () => {}, activity = createDocumentActivity() }) {
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
   const signedInDrive = () => !!(account && account.state().signedIn && store.cloud);
   /** TASK 759: the Drive tab can be used now: signed in, or a store with no Drive at all (nothing to sign in to). */
@@ -68,9 +72,9 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     return !!(await save()); // TASK 759: Save… saves to the design's home (a file: back to it; none: the Save as dialog), never a sign-in question
   }
   /** Resolves null when the user cancelled the unsaved-design question (nothing changed). */
-  async function openDesign(id) {
+  async function openDesign(id, name = null) {
     if (!tabs && !(await settleUnsaved())) return null;
-    const out = await (tabs ? buf().openTab(id) : buf().openDesign(id));
+    const out = await activity.load(name, () => (tabs ? buf().openTab(id) : buf().openDesign(id))); // TASK 768: loading until it shows (or fails)
     if (!out.restored) throw new Error(out.reason || 'This design could not be opened.');
     track('drive:open'); // TASK 738
     return out;
@@ -89,7 +93,7 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   /** The actions of one design `d` (a store design row); `projects` = the project rows, for "Move to…". */
   function designItems(d, { projects = [] } = {}) {
     return [
-      { id: 'open', label: 'Open', closes: true, run: () => openDesign(d.id) },
+      { id: 'open', label: 'Open', closes: true, run: () => openDesign(d.id, d.name) },
       { id: 'rename', label: 'Rename', ask: { kind: 'prompt', label: 'Rename design', value: d.name, okLabel: 'Rename' }, run: (name) => store.rename(d.id, name) },
       { id: 'duplicate', label: 'Duplicate', run: () => duplicateDesign(d.id) },
       { id: 'move', label: 'Move to…', visible: projects.some((p) => p.id !== d.projectId),
@@ -162,7 +166,12 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   };
   /** TASK 759: a design FILE from this device opens as a tab (its home is that file), with no account: `seam` (default: the browser's picker / <input type=file>).
    *  Called synchronously from the click (the browser's picker needs it). null = cancelled. */
-  const openLocalFile = (seam = fileSeam) => (tabs ? buf().openFileTab(seam) : buf().openFile(seam));
+  async function openLocalFile(seam = fileSeam) {
+    let done = null; // TASK 768: the file is LOADING from the moment it was picked (seam.open resolved with it) until the open settles
+    const picked = new Promise((res) => { done = res; });
+    const tracked = { ...seam, open: async (...a) => { const f = await seam.open(...a); if (f) activity.load(designNameOfFile(f.name), () => picked); return f; } };
+    try { return await (tabs ? buf().openFileTab(tracked) : buf().openFile(tracked)); } finally { done(); }
+  }
   /** Open from file (the project manager's toolbar): the unsaved question first (no tabs), then the file. */
   const openFile = async () => {
     if (!tabs && !(await settleUnsaved())) return null;
@@ -176,9 +185,10 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   /** TASK 759: THE Open dialog (Google Drive | Local): the recent designs on Drive (and "All projects…") / "Choose a file…". */
   async function openDialog() {
     if (!tabs && !(await settleUnsaved())) return null;
+    const listed = new Map(); // id -> name of the designs the dialog lists (TASK 768: the loading tab names the design being opened)
     return fileDialog({ mode: 'open', ...dialogAccount,
-      listDesigns: async () => (await store.listRecent({ limit: 12 })).map((r) => ({ id: r.id, name: r.name, sub: [r.projectName, relativeTime(r.updatedAt)].filter(Boolean).join(' · ') })),
-      onOpenDesign: (id) => openDesign(id),
+      listDesigns: async () => (await store.listRecent({ limit: 12 })).map((r) => { listed.set(r.id, r.name); return { id: r.id, name: r.name, sub: [r.projectName, relativeTime(r.updatedAt)].filter(Boolean).join(' · ') }; }),
+      onOpenDesign: (id) => openDesign(id, listed.get(id) || null),
       onChooseFile: () => openLocalFile(),
       onProjects: () => openProjects() });
   }

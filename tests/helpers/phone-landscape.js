@@ -149,14 +149,14 @@ export async function runPhoneLandscape(hostName) {
             const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue;
             let hidden = false; for (let p = e; p; p = p.parentElement) { const c = getComputedStyle(p); if (c.display === 'none' || c.visibility === 'hidden') { hidden = true; break; } } if (hidden) continue;
             const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
-            out.push({ id: (e.id || e.className || e.tagName).toString().slice(0, 40), text: (e.textContent || '').trim().slice(0, 14), left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height, free: !!hit && (hit === e || e.contains(hit)) });
+            out.push({ inStrip: !!e.closest('.sk-doctabs'), id: (e.id || e.className || e.tagName).toString().slice(0, 40), text: (e.textContent || '').trim().slice(0, 14), left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height, free: !!hit && (hit === e || e.contains(hit)) });
           } return out; })()`);
         assert(others.length >= 3, tag + 'header / canvas controls found: ' + others.length);
         for (const c of others) {
           const t = tag + `control ${c.id} "${c.text}"`;
           assert(c.left >= -0.5 && c.top >= -0.5 && c.right <= size.w + 0.5 && c.bottom <= size.h + 0.5, t + ' is inside the viewport: ' + JSON.stringify(c));
           const isHandle = /sk-sidebar-handle/.test(c.id);
-          const strip = /sk-doctab/.test(c.id); // TASK 608 (owner ruling, relaxes 562): the tab strip is a thin 31 px row: every tab / x / + is at least 24 x 24 (WCAG 2.2 AA) and fills the row
+          const strip = /sk-doctab/.test(c.id) || c.inStrip; // TASK 768: a control IN the strip (the Save button where the header is hidden) is a strip control. TASK 608 (owner ruling, relaxes 562): the tab strip is a thin 31 px row: every tab / x / + is at least 24 x 24 (WCAG 2.2 AA) and fills the row
           const minW = isHandle ? 14 : (strip ? 24 : 43.5);
           const minH = strip ? 24 : 43.5;
           assert(c.w >= minW && c.h >= minH, t + ` target size (${Math.round(c.w)} x ${Math.round(c.h)})`);

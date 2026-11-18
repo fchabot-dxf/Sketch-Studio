@@ -42,7 +42,7 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   const S = openBoxFrame();
   const rows = buildParameterRows(S.state, U);
   eq(rows.user.map((r) => [r.name, r.expression, r.value, r.unit, r.users]), [
-    ['length', '1500 mm', '1500.0', 'mm', ['d2', 'd11', 'd12', 'd13', 'd14']], ['width', '400 mm', '400.0', 'mm', ['d1']], ['thickness', '18 mm', '18.0', 'mm', ['d3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd12', 'd13', 'd14']],
+    ['length', '1500 mm', '1500', 'mm', ['d2', 'd11', 'd12', 'd13', 'd14']], ['width', '400 mm', '400', 'mm', ['d1']], ['thickness', '18 mm', '18', 'mm', ['d3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd12', 'd13', 'd14']],
   ], 'user rows: name, expression, value, unit and who reads them');
   eq(rows.dimensions.length, 14, 'the 14 box-frame dimensions');
   ok(rows.dimensions.every((r) => r.constraint && r.hasExpression && !r.reference), 'every dimension row carries its constraint and is a formula');
@@ -56,7 +56,7 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   const h0 = S.state.history.length;
   const p = plan(S, { kind: 'parameter', column: 'expression', name: 'thickness', text: '12' });
   ok(p.ok && p.changed, 'thickness = 12 plans');
-  eq(p.hint, '= 12.0 mm, also changes d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14', 'the live preview: the value and every dimension it moves');
+  eq(p.hint, '= 12 mm, also changes d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14', 'the live preview: the value and every dimension it moves');
   eq(p.label, 'change parameter thickness', 'the undo label');
   eq(image(S), before, 'planning is pure: nothing moved');
   const r = muted(() => commitTableEdit(S.state, p));
@@ -145,12 +145,12 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   const S = openBoxFrame();
   const h0 = S.state.history.length;
   const add = plan(S, { kind: 'new', name: 'gap', text: '5', unit: 'mm', comment: 'between boards' });
-  eq([add.ok, add.hint, add.label], [true, 'creates gap = 5.0 mm', 'create parameter gap'], 'a new parameter plans');
+  eq([add.ok, add.hint, add.label], [true, 'creates gap = 5 mm', 'create parameter gap'], 'a new parameter plans');
   ok(muted(() => commitTableEdit(S.state, add)).ok, 'created');
   eq(P(S, 'gap'), { name: 'gap', unit: 'mm', expression: '5 mm', comment: 'between boards' }, 'gap = 5 mm with its comment');
   eq(S.state.history.length, h0 + 1, 'ONE undo step');
   const fill = plan(S, { kind: 'new', name: '', text: 'shelf = width / 4', unit: 'mm' });
-  eq([fill.ok, fill.fill, fill.hint], [true, { name: 'shelf', expression: 'width / 4' }, 'creates shelf = 100.0 mm'], '`name = expr` in the Expression cell fills both');
+  eq([fill.ok, fill.fill, fill.hint], [true, { name: 'shelf', expression: 'width / 4' }, 'creates shelf = 100 mm'], '`name = expr` in the Expression cell fills both');
   ok(muted(() => commitTableEdit(S.state, fill)).ok && P(S, 'shelf').expression === 'width / 4', 'shelf created from name = expr');
   eq(plan(S, { kind: 'new', name: 'n', text: '4', unit: '' }).hint, 'creates n = 4', 'a unitless count');
   for (const [e, code, msg, incomplete] of [
@@ -188,9 +188,9 @@ const commit = (S, edit) => { const p = plan(S, edit); ok(p.ok, `${JSON.stringif
   const S = openBoxFrame();
   const d1 = D(S, 'd1');
   const num = plan(S, { kind: 'dimension', column: 'expression', constraint: d1, text: '420' });
-  eq([num.ok, num.hint, num.label], [true, '= 420.0 mm', 'edit dimension 400 -> 420'], 'a number: the canvas box hint and label');
+  eq([num.ok, num.hint, num.label], [true, '= 420 mm', 'edit dimension 400 -> 420'], 'a number: the canvas box hint and label');
   const mk = plan(S, { kind: 'dimension', column: 'expression', constraint: d1, text: 'deep = 380' });
-  eq([mk.ok, mk.hint, mk.label], [true, 'names it deep = 380.0 mm', 'name dimension d1 -> deep'], '`name = value` NAMES the dimension (task 677 owner ruling, as on the canvas)');
+  eq([mk.ok, mk.hint, mk.label], [true, 'names it deep = 380 mm', 'name dimension d1 -> deep'], '`name = value` NAMES the dimension (task 677 owner ruling, as on the canvas)');
   const h0 = S.state.history.length;
   ok(muted(() => commitTableEdit(S.state, mk)).ok, 'applied');
   eq([D(S, 'deep').expression, Math.round(D(S, 'deep').value * 1e9) / 1e9, P(S, 'deep'), !!D(S, 'd1')], [undefined, 380, undefined, false], 'd1 is now deep = 380 (a plain value), no user parameter');

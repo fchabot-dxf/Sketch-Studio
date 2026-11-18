@@ -286,15 +286,15 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     const r = CUT_PLAN.get(kR);
     eq([r.clearing, r.stepover, r.finishAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 0, false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster 0 (no depth per pass field)');
     ok(h.shown('stepover') && h.shown('finishAllowance') && h.shown('loop') && !h.shown('rasterAngle') && !h.q('.cut-pass-depth'), 'Spiral: Stepover, Finish allowance, Loop (no Raster angle, no Depth per pass row)');
-    eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-finish-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.500', false], 'the fields: 40 % = 2.4 mm, 0.500, depth per pass empty (full depth)');
-    eq(h.q('.cut-finish-hint').textContent, 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.', 'TASK 766: the Finish allowance hint, Loop off');
+    eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-finish-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.5', false], 'the fields: 40 % = 2.4 mm, 0.5, depth per pass empty (full depth)');
+    eq(h.q('.cut-row[data-row="finishAllowance"] .sk-hint').textContent, 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.', 'TASK 766: the Finish allowance hint, Loop off');
     eq(h.q('.cut-row[data-row="finishAllowance"] .cut-field-label').textContent, 'Finish allowance', 'TASK 766: the row is Finish allowance');
     const nt = h.note();
     console.log('card note: ' + JSON.stringify(nt));
     ok(/^Pocket: spiral, 12 turns in 1 line \+ wall, stepover 2\.4 mm, \d+\.\d m of path, about \d+ min at 1000 mm\/min$/.test(nt[0]), 'the note: turns in 1 line + wall, stepover, path length, time at the declared feed: ' + nt[0]);
     eq(nt[1], 'Drawn for a 6 mm bit: a smaller bit leaves ridges', 'the note names the bit the rings are drawn for');
     eq(nt[2], 'Depth passes: set Pass Depth or AutoPass on the Origin', 'the note: the step-downs are the Origin\'s (TASK 750)');
-    ok(/^Leftover: 7\.\d mm² not reached by a 6 mm bit \(sharp inside corners, necks narrower than the bit\)$/.test(nt[3]), 'the leftover (the 4 corners): ' + nt[3]);
+    ok(/^Leftover: 7\.\d+ mm² not reached by a 6 mm bit \(sharp inside corners, necks narrower than the bit\)$/.test(nt[3]), 'the leftover (the 4 corners): ' + nt[3]);
     ok(h.q('.cut-note .cut-note-warn') && h.q('.cut-note .cut-note-warn').textContent.startsWith('7.'), 'the leftover is in the warning colour');
     const els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
     eq(els.map((e) => e.cutType), ['online', 'inside'], 'the download: ONE on-line path (the 12 turns) + the wall');
@@ -304,7 +304,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     eq([CUT_PLAN.get(kR).stepover, st.history.length], [45, n0 + 1], 'stepover + -> 45 %, ONE undo step');
     ok(/^Pocket: spiral, 10 turns in 1 line \+ wall, stepover 2\.7 mm/.test(h.note()[0]), 'the note follows: ' + h.note()[0]);
     h.typed('.cut-bit', '3.175');
-    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 1\.43 mm/.test(h.note()[0]) && h.note()[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
+    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 1\.429 mm/.test(h.note()[0]) && h.note()[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
     app.undo();
     eq(CUT_PLAN.get(kR).toolDia, 6, 'undo: the bit back to 6 mm');
     // Raster: + its angle row; presets
@@ -398,8 +398,8 @@ CUT_PLAN.clear(); setOpOrder([]);
     const r = CUT_PLAN.get(keyAt(st, 50, 30));
     eq(r.finishAllowance, 0.508, 'inches: the allowance default 0.02 in (0.508 mm)');
     eq(r.stepover, 45, 'the last stepover set (45 %, above) is used by the next pocket');
-    eq(h.q('.cut-finish-allowance').value, '0.020', 'shown as 0.020 in');
-    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 0\.1125 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[0]), 'the inch note: ' + h.note()[0]);
+    eq(h.q('.cut-finish-allowance').value, '0.02', 'shown as 0.02 in');
+    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 0\.113 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[0]), 'the inch note: ' + h.note()[0]);
     ok(/^Leftover: 0\.\d+ in² not reached by a 0\.25 in bit/.test(h.note().at(-1)), 'the inch leftover: ' + h.note().at(-1));
   } finally { await app.close(); SettingsManager.set('DOC_UNIT', 'mm'); }
 }

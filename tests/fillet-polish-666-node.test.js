@@ -143,9 +143,9 @@ try {
     const doneBtn = () => doc.querySelector('.sk-done');
 
     assert.ok(boxEl(), 'radius box opens');
-    assert.strictEqual(boxEl().value, '5.0', `F18: radius box expected "5.0", got "${boxEl().value}"`);
+    assert.strictEqual(boxEl().value, '5', `F18: radius box expected "5", got "${boxEl().value}"`);
     assert.ok(previewLabel(), 'preview label present');
-    assert.strictEqual(previewLabel().textContent, 'R 5.0', `F18: preview text expected "R 5.0", got "${previewLabel().textContent}"`);
+    assert.strictEqual(previewLabel().textContent, 'R 5', `F18: preview text expected "R 5", got "${previewLabel().textContent}"`);
     assert.strictEqual(boxEl().getAttribute('aria-invalid'), 'false', 'F9: valid start sets aria-invalid=false');
     assert.ok(doneBtn() && !doneBtn().hidden && !doneBtn().disabled, 'F9: .sk-done enabled while valid');
 
@@ -195,9 +195,9 @@ try {
     win.__requestDraw = () => { legacyDrawCalls++; };
     app.enter();
     assert.strictEqual(legacyDrawCalls, 0, 'F23: hidden window.__requestDraw fallback must not be called');
-    assert.ok(toastTexts(doc).some((t) => t.includes('Fillet applied (R 5.0)')), `F18: toast expected "Fillet applied (R 5.0)", got ${JSON.stringify(toastTexts(doc))}`);
+    assert.ok(toastTexts(doc).some((t) => t.includes('Fillet applied (R 5)')), `F18: toast expected "Fillet applied (R 5)", got ${JSON.stringify(toastTexts(doc))}`);
     const dimLabel = doc.querySelector('.dim-label');
-    assert.ok(dimLabel && dimLabel.textContent.trim() === 'R 5.0', `F18: dim label expected "R 5.0", got "${dimLabel && dimLabel.textContent.trim()}"`);
+    assert.ok(dimLabel && dimLabel.textContent.trim() === 'R 5', `F18: dim label expected "R 5", got "${dimLabel && dimLabel.textContent.trim()}"`);
 
     // Verify F7 end-to-end through UI with 0.05mm
     const corner2 = drawCorner();

@@ -22,19 +22,21 @@ import {
 // min/max/step). Any control may declare `showWhen: { key, in: [values] }`: shown only while that setting's value (DOC_UNIT
 // defaults to 'mm') is in the list; no showWhen = always shown. TASK 728: showWhen may also be a LIST of such conditions (shown while all hold),
 // and `hideWhen` (one condition or a list) hides the row while all of its conditions hold.
-const precisionOptions = (max) => [{ value: '', label: 'Auto (as each view shows)' }, ...Array.from({ length: max + 1 }, (_, n) => ({ value: n, label: n + (n === 1 ? ' decimal' : ' decimals') }))];
+const sampleNumber = (n) => (n === 0 ? '0' : '0.' + '0'.repeat(n));
+const precisionOptions = (max, suffix = '') => Array.from({ length: max + 1 }, (_, n) => ({ value: n, label: sampleNumber(n) + suffix }));
 // Task 728: an inch document showing fractions (the length-format decider's own condition, lengthFraction in #core/settings-manager.js)
 const FRACTIONAL = [{ key: 'DOC_UNIT', in: ['in'] }, { key: 'INCH_DISPLAY', in: ['fractional'] }];
 const CONTROLS = [
   // Task 728: how an inch document shows lengths; the row exists only in an inch document (hidden for mm / cm, which are always decimal).
   { tab: 'units', key: 'INCH_DISPLAY',            label: 'Inch display',         type: 'select', showWhen: { key: 'DOC_UNIT', in: ['in'] },
     options: [{ value: 'decimal', label: 'Decimal (e.g. 1.5 in)' }, { value: 'fractional', label: 'Fractional (e.g. 1 1/2")' }] },
-  // Task 724: display precision (decimals shown), like Fusion's Preferences > General precision; shared by all four apps. '' = Auto = null (each view keeps its usual decimals).
+  // Task 724 / 770: display precision (decimals shown), like Fusion's Preferences > General precision; shared by all four apps (default 3 / 1, Auto removed).
   // Task 728: in Fractional the Length precision is a denominator instead (LENGTH_FRACTION, its own setting: back to Decimal restores the decimals picked).
   { tab: 'units', key: 'LENGTH_PRECISION',        label: 'Length precision',     type: 'select', numeric: true, options: precisionOptions(6), hideWhen: FRACTIONAL },
   { tab: 'units', key: 'LENGTH_FRACTION',         label: 'Length precision',     type: 'select', numeric: true, showWhen: FRACTIONAL,
     options: LENGTH_FRACTIONS.map((d) => ({ value: d, label: `1/${d}"` })) },
-  { tab: 'units', key: 'ANGLE_PRECISION',         label: 'Angle precision',      type: 'select', numeric: true, options: precisionOptions(4) },
+  { tab: 'units', key: 'ANGLE_PRECISION',         label: 'Angle precision',      type: 'select', numeric: true, options: precisionOptions(4, '°') },
+  { tab: 'units', key: 'TRAILING_ZEROS',          label: 'Show trailing zeros',  type: 'checkbox', hint: '0.250 instead of 0.25' },
   { tab: 'grid', key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
   { tab: 'grid', key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
     options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] },
@@ -114,6 +116,7 @@ function injectStyles() {
   color: inherit; border: 1px solid var(--sk-style-sep, #cbd5e1); }
 .sk-style-input[type="number"] { width: 80px; }
 select.sk-style-input { max-width: 100%; }
+.sk-style-hint { font-size: 11px; color: var(--sk-style-muted, #64748b); line-height: 1.35; }
 .sk-style-slider { width: 100%; accent-color: var(--sk-selection, #3B82F6); cursor: pointer; }
 .sk-style-presetbar { display: flex; flex-wrap: wrap; gap: 6px; }
 .sk-style-presetbar [hidden] { display: none; }
@@ -276,6 +279,8 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   for (const u of UNITS) { const o = document.createElement('option'); o.value = u; o.textContent = UNIT_LABELS[u] || u; docUnitSelect.appendChild(o); }
   docUnitSelect.addEventListener('change', () => settings.set('DOC_UNIT', docUnitSelect.value, { persist: 'local' }));
   unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); tabPanels.units.prepend(unitRow); // before the precision rows
+  const unitsHint = document.createElement('div'); unitsHint.className = 'sk-style-hint'; unitsHint.textContent = "Trailing zeros are hidden unless 'Show trailing zeros' is on.";
+  tabPanels.units.appendChild(unitsHint);
 
   const tabStoreKey = 'sketch-studio-style-tab:' + hostId;
   function selectTab(id) {
@@ -338,6 +343,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
       top.appendChild(input); row.append(top, slider);
       controlEls[spec.key] = { input, slider, row };
     }
+    if (spec.hint) { const h = document.createElement('div'); h.className = 'sk-style-hint'; h.textContent = spec.hint; row.appendChild(h); }
     return row;
   }
 

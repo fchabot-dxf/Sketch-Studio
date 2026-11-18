@@ -23,7 +23,7 @@
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare). The first build
 //    fits; a rebuild (the plan changed) keeps the view, as the 3D view keeps its camera; fit() frames the drawing again.
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
-import { lengthDecimals, lengthFraction, lengthText } from '#core/settings-manager.js';
+import { lengthText } from '#core/settings-manager.js';
 import { unitInfo } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -124,12 +124,12 @@ function shadesOf(list, shallow, deep) {
 }
 
 /**
- * TASK 724: a depth as the file writes it ("0.100 in") shown at the Length precision setting ("0.1 in" at 1); the file's own text while the setting is Auto.
- * TASK 728: the text is the one length-format decider's (lengthText), so an inch document showing fractions reads 1/8". Display only.
+ * TASK 724 / 770: a depth as the file writes it ("0.100 in") shown through the one formatter (lengthText: default 3 decimals, trailing zeros
+ * hidden unless TRAILING_ZEROS is ON, or 1/8" in Fractional). Display only.
  */
 export const depthText = (depth) => {
   const m = /^(-?\d+(?:\.\d+)?)\s*(\S*)$/.exec(depth || ''), u = m && unitInfo(m[2] || 'mm');
-  if (!m || !u || u.kind !== 'length' || (lengthDecimals(null) === null && !lengthFraction(u.name))) return depth;
+  if (!m || !u || u.kind !== 'length') return depth;
   return lengthText(Number(m[1]) * u.f, { unit: u.name, show: m[2] ? 'unit' : 'bare' });
 };
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */

@@ -51,8 +51,7 @@ let _press = null;          // a press on the canvas while the box is open: a cl
 let _viewListening = false;
 let _committing = false;
 
-// TASK 728: the box / notice text is lengthText's (the one length-format decider: decimals, or an inch fraction 1/2")
-const autoDecimals = (unit) => (unit === 'in' ? 3 : 2);
+// TASK 728 / 770: the box / notice text is lengthText's (the one length-format decider: decimals or an inch fraction 1/2")
 function ensureDistance() {
   const unit = docUnit();
   if (currentDistance == null || _distanceUnit !== unit) { currentDistance = defaultOffsetDistance(unit); _distanceUnit = unit; }
@@ -151,7 +150,7 @@ function dragArrowTo(svg, e) {
   const s = o.d + (w.x + _drag.grab.x - a.point.x) * a.normal.x + (w.y + _drag.grab.y - a.point.y) * a.normal.y;
   const side = s <= -MIN_DRAG_MM ? -o.side : o.side;
   const unit = docUnit();
-  const text = lengthText(Math.max(Math.abs(s), MIN_DRAG_MM), { unit, auto: autoDecimals(unit) });
+  const text = lengthText(Math.max(Math.abs(s), MIN_DRAG_MM), { unit });
   const v = parseOffsetDistance(text, unit);
   if (v == null || !offsetChainGeometry(_open.state, _open.chain, v, side).ok) return;
   _open.el.value = text;
@@ -179,7 +178,7 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
   el.type = 'text';
   el.className = 'dim-input';
   el.setAttribute('aria-label', 'Offset distance');
-  const defaultValue = lengthText(currentDistance, { unit, auto: autoDecimals(unit) });
+  const defaultValue = lengthText(currentDistance, { unit });
   el.value = defaultValue;
   el.style.position = 'fixed';
   el.style.width = '90px';
@@ -250,7 +249,7 @@ export function commitOffsetInput() {
   if (!res.ok) { showNotification('Offset: ' + res.reason + '.', 'warning', HINT_MS); return; }
   currentDistance = d; // |v|: the distance USED is the remembered one
   cancelAll();
-  showNotification(`Offset applied (${lengthText(d, { auto: autoDecimals(docUnit()), show: 'compact' })})`, 'info');
+  showNotification(`Offset applied (${lengthText(d, { show: 'compact' })})`, 'info');
   if (_exit) _exit();
 }
 

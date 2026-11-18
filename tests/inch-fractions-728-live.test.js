@@ -92,7 +92,7 @@ async function shaper(phone) {
   await navigate(url('/apps/shaper/index.html?host=fusion'));
   await waitForApp('design-canvas');
   await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection')`, 'the Fusion Prepare bar');
-  await setSettings({ DOC_UNIT: 'in', INCH_DISPLAY: 'decimal', LENGTH_FRACTION: 16, LENGTH_PRECISION: null, ANGLE_PRECISION: null });
+  await setSettings({ DOC_UNIT: 'in', INCH_DISPLAY: 'decimal', LENGTH_FRACTION: 16, LENGTH_PRECISION: 3, ANGLE_PRECISION: 1, TRAILING_ZEROS: false });
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the drafted pocket imported');
   await openMode('prepare', phone);
@@ -168,7 +168,7 @@ async function shaper(phone) {
   await shot(`4b-shaper-parameters-fractional-${tag}.png`, ['.sk-pwin']);
   await openSettings(); await pick('INCH_DISPLAY', 'decimal'); await closeSettings(); await sleep(500);
   d = await seen();
-  assert.ok(d.labels.includes('1.5') && d.cells[0] === '1.5', `${tag}: Decimal restores 1.5: ` + JSON.stringify(d));
+  assert.ok(d.labels.includes('1.53') && d.cells[0] === '1.53', `${tag}: Decimal restores 1.53: ` + JSON.stringify(d));
   await shot(`5-shaper-parameters-decimal-${tag}.png`, ['.sk-pwin']);
   assert.ok(Math.abs((await evalJs(`window.__designController.state.constraints[0].value`)) - 1.53 * IN) < 1e-9, `${tag}: the stored value never changed (display only)`);
   // a mm document: no Inch display row, decimals even with Fractional stored
@@ -176,7 +176,7 @@ async function shaper(phone) {
   await openSettings();
   assert.deepStrictEqual([await rowShown('INCH_DISPLAY'), await rowShown('LENGTH_FRACTION'), await rowShown('LENGTH_PRECISION')], [false, false, true], `${tag}: mm: the Inch display row is hidden, the decimal precision row shown`);
   await closeSettings();
-  assert.ok((await labels('#design-canvas')).includes((1.53 * IN).toFixed(1)), `${tag}: mm: the label is decimal mm`);
+  assert.ok((await labels('#design-canvas')).includes(Number((1.53 * IN).toFixed(3)).toString()), `${tag}: mm: the label is decimal mm (3 decimals)`);
   await setSettings({ DOC_UNIT: 'in' });
 }
 
@@ -187,7 +187,7 @@ async function studio(phone) {
   await navigate(url('/apps/sketchstudio/index.html'), 8000);
   await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('dimInput'); })()`, 'SketchStudio to load');
   await waitForApp('svgCanvas');
-  await setSettings({ DOC_UNIT: 'in', INCH_DISPLAY: 'fractional', LENGTH_FRACTION: 16, LENGTH_PRECISION: null });
+  await setSettings({ DOC_UNIT: 'in', INCH_DISPLAY: 'fractional', LENGTH_FRACTION: 16, LENGTH_PRECISION: 3, ANGLE_PRECISION: 1, TRAILING_ZEROS: false });
   const cv = await evalJs(`(() => { const r = document.getElementById('svgCanvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
   const A = { x: cv.x - (phone ? 120 : 300), y: cv.y + 20 }, B = { x: cv.x + (phone ? 100 : 108), y: cv.y + 20 };
   await clickEl('#tool-line');
@@ -207,8 +207,8 @@ async function studio(phone) {
   await shot(`6b-studio-parameters-fractional-${tag}.png`, ['.sk-pwin']);
   await openSettings(); await pick('INCH_DISPLAY', 'decimal'); await closeSettings(); await sleep(500);
   lab = await labels('#svgCanvas');
-  assert.ok(lab.includes('fx: 0.3'), `${tag} SketchStudio: Decimal -> fx: 0.3: ` + JSON.stringify(lab));
-  assert.deepStrictEqual(await tableValues(), ['0.3'], `${tag} SketchStudio: the Parameters row in Decimal`);
+  assert.ok(lab.includes('fx: 0.25'), `${tag} SketchStudio: Decimal -> fx: 0.25: ` + JSON.stringify(lab));
+  assert.deepStrictEqual(await tableValues(), ['0.25'], `${tag} SketchStudio: the Parameters row in Decimal`);
   await shot(`7-studio-parameters-decimal-${tag}.png`, ['.sk-pwin']);
 }
 

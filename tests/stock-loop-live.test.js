@@ -76,7 +76,7 @@ await (async () => {
     console.log('review info:', infoText);
     assert.match(infoText, /Board: your Stock loop/, 'the Review builds the board from the Stock loop');
     assert.strictEqual(await evalJs(`document.getElementById('review-stock-thickness').disabled`), true, 'the thickness is set on the loop, not here');
-    assert.strictEqual(await evalJs(`document.getElementById('review-stock-thickness').value`), '0.500');
+    assert.strictEqual(await evalJs(`document.getElementById('review-stock-thickness').value`), '0.5');
     assert.match(await evalJs(`document.getElementById('review-stock-note').textContent`), /Stock loop/);
     await clickEl('#review-top'); await sleep(400);
     const topShot = await shot('review-stock-top.png');

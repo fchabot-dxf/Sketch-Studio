@@ -8,6 +8,7 @@ import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { makeProfile } from '#core/profile-model.js';
 import { CUT_TYPES, STOCK_TYPE_ID, exportEncoding, classify, extractCutRecord, effectiveCutRecord, availableTypes } from '../apps/shaper/src/shaper.js';
+import { PARAM_HINTS } from '../apps/shaper/src/param-hints.js'; // TASK 770
 import { CUT_PLAN, planReliefItems, planStockProfile, stockKeyOf, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { resolveStock } from '../apps/shaper/src/stock.js';
 import { captureShaperDoc, applyShaperDoc, captureCutPlan, applyCutPlan } from '../apps/shaper/src/shaper-doc.js';
@@ -33,7 +34,7 @@ const loopAt = (st, x, y) => findLoops(st).find((l) => l.edges.some((e) => { con
   const t = CUT_TYPES.find((c) => c.id === STOCK_TYPE_ID);
   assert.ok(t, 'Stock is a declared cut type');
   assert.deepStrictEqual(t.params, ['cutDepth'], 'its one field is the depth row (thickness): no offset / bit rows');
-  assert.strictEqual(t.depthLabel, 'Thickness'); assert.strictEqual(t.targetKind, 'region', 'closed loops only');
+  assert.strictEqual(t.depthParam, 'stockDepth'); assert.strictEqual(PARAM_HINTS.stockDepth.label, 'Thickness', 'TASK 770: its depth row is the Thickness (param-hints.js)'); assert.strictEqual(t.targetKind, 'region', 'closed loops only');
   assert.ok(availableTypes('loop').some((c) => c.id === 'stock') && availableTypes('profile').some((c) => c.id === 'stock'));
   assert.ok(!availableTypes('chain').some((c) => c.id === 'stock'), 'an open chain cannot be the stock');
   assert.strictEqual(t.cutType, 'guide', 'its export encoding is the Guide'); assert.strictEqual(t.fill, '#0068FF');

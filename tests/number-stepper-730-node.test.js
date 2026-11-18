@@ -65,7 +65,7 @@ try {
   step('cutDepth', 1); step('cutDepth', 1);
   near(rec().cutDepth, 1.5, 'depth + twice -> 1.5');
   app.undo(); near(rec().cutDepth, 1, 'one undo = one press');
-  eq(q('.cut-depth').value, '1.000', 'the field shows it (3 dp)');
+  eq(q('.cut-depth').value, '1', 'the field shows it (trailing zeros dropped by default)');
   step('cutDepth', -1); step('cutDepth', -1);
   eq(rec().cutDepth, 0, 'depth - clamps at 0');
   h0 = hist(); step('cutDepth', -1);

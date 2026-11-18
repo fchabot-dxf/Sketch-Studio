@@ -236,12 +236,16 @@ export async function cardPhase(t, label) {
     const c1 = await card();
     console.log(label + ' spiral card: ' + JSON.stringify(c1));
     assert.deepStrictEqual([c1.rows, c1.loop], [['stepover', 'finishAllowance', 'loop'], false], label + ': Stepover, Finish allowance, Loop (off)');
-    // TASK 766: the row is Finish allowance with its hint (Loop off: the Origin's inside cut takes it off); the hint wraps inside the card, never widens or clips it
-    const fin = await evalJs(`(() => { const row = document.querySelector('.cut-row[data-row="finishAllowance"]'), h = row.querySelector('.cut-finish-hint'), c = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect(), hb = h.getBoundingClientRect();
+    // TASK 766: the row is Finish allowance with its hint (Loop off: the Origin's inside cut takes it off); the hint wraps inside the card, never widens or clips it.
+    // TASK 770: the hint is the row's hint (hint.js): closed at rest, a click / a tap on the label opens it under the field, a second one closes it
+    await clickEl('#prepare-panel .cut-row[data-row="finishAllowance"] .cut-field-label');
+    const fin = await evalJs(`(() => { const row = document.querySelector('.cut-row[data-row="finishAllowance"]'), h = row.querySelector('.sk-hint'), c = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect(), hb = h.getBoundingClientRect();
       return { label: row.querySelector('.cut-field-label').textContent, hint: h.textContent, fits: hb.left >= c.left - 0.5 && hb.right <= c.right + 0.5 && h.scrollWidth <= h.clientWidth + 1, cardRight: Math.round(c.right), cardW: Math.round(c.width), vw: innerWidth }; })()`);
     console.log(label + ' finish allowance: ' + JSON.stringify(fin));
     assert.deepStrictEqual([fin.label, fin.hint], ['Finish allowance', 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.'], label + ': the Finish allowance label and its hint (Loop off)');
     assert.ok(fin.fits && fin.cardRight <= fin.vw, label + ': the hint wraps inside the card and the card stays on screen');
+    await clickEl('#prepare-panel .cut-row[data-row="finishAllowance"] .cut-field-label');
+    assert.strictEqual(await evalJs(`document.querySelector('.cut-row[data-row="finishAllowance"] .sk-hint').hidden`), true, label + ': TASK 770: a second click / tap closes the hint');
     assert.ok(new RegExp(`^Pocket: spiral, \\d+ turns in 1 line \\+ wall, stepover ${inch ? '0\\.1 in' : '2\\.4 mm'}, [\\d.]+ ${inch ? 'ft' : 'm'} of path, about \\d+ min at ${inch ? '39 in' : '1000 mm'}/min$`).test(c1.note[0]), label + ': the note ' + c1.note[0]);
     assert.ok(c1.note.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), label + ': the note: the depth passes are the Origin\'s');
     const l1 = await look();

@@ -11,7 +11,7 @@ import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '
 import { curveEnds } from '#core/loop-finder.js';
 import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
-import SettingsManager, { docUnit, lengthText, angleDecimals } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 import { fusionGlyphMarkup, glyphHitMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
@@ -26,8 +26,8 @@ import { isAutoDimName } from '#core/expression.js';
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
 // The Design canvas renders on a continuous solve→draw RAF, so labels re-label on the next frame after a unit toggle
 // (no explicit re-render wire needed).
-// TASK 728: the text itself is lengthText's (#core/settings-manager.js, the one length-format decider: decimals or an inch fraction).
-export const formatLenLabel = (v) => lengthText(v, { auto: 1 });
+// TASK 728 / 770: the text itself is lengthText's (#core/settings-manager.js, the one length-format decider: decimals or an inch fraction).
+export const formatLenLabel = (v) => lengthText(v);
 
 /**
  * Shared formatter for constraint / dimension values (S5b / TASK 439).
@@ -66,7 +66,7 @@ function constraintValueText(c, options) {
   const wrapParens = isDrivenFlag || isPlacing;
 
   if (c.type === CONSTRAINT_TYPES.ANGLE || c.type === 'angle') {
-    const s = Number(val).toFixed(angleDecimals(1)) + '°';
+    const s = angleText(val, { show: 'deg' });
     return wrapParens ? `(${s})` : s;
   }
   const lenStr = formatLenLabel(val);
@@ -310,12 +310,11 @@ function angleDimGeomFor(c, opJoints, opShapes) {
 }
 
 function patternDimItemsFor(sc, c, scaleFn) {
-  const fmtN = (v) => String(Number(Number(v).toFixed(2)));
   // TASK 694: Fusion draws no dimension for a pattern's values (advisor's API run): the label stays, and shows Fusion's formula mark when a value it
   // shows is driven by a formula (the same 'fx: ' as a dimension label, formatConstraintValue)
   const fx = (...slots) => (slots.some((s) => c.expressions && c.expressions[s]) ? 'fx: ' : '');
   const items = c.type === CONSTRAINT_TYPES.CIRCULAR_PATTERN
-    ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scaleFn(34), y: h.point.y - scaleFn(26), text: `${fx('quantity', 'angle')}${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
+    ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scaleFn(34), y: h.point.y - scaleFn(26), text: `${fx('quantity', 'angle')}${c.quantity} × ${angleText(c.angle, { show: 'deg' })}${c.symmetric ? ' sym' : ''}` }))
     : patternHandles(sc, c).map((h) => ({
         x: h.point.x + h.dir.x * (h.extent + scaleFn(70)),
         y: h.point.y + h.dir.y * (h.extent + scaleFn(70)),

@@ -109,31 +109,31 @@ await (async () => {
       await sleep(180);
 
       const sOpen = await dState();
-      assert.strictEqual(sOpen.val, '5.0', `[desktop] opening default is "5.0", got "${sOpen.val}"`);
-      assert.strictEqual(sOpen.previewText, 'R 5.0', `[desktop] preview opens at "R 5.0", got "${sOpen.previewText}"`);
+      assert.strictEqual(sOpen.val, '5', `[desktop] opening default is "5", got "${sOpen.val}"`);
+      assert.strictEqual(sOpen.previewText, 'R 5', `[desktop] preview opens at "R 5", got "${sOpen.previewText}"`);
       assert.strictEqual(sOpen.focused, true, '[desktop] #fillet-radius-input focused');
 
       // Ctrl+Z when already showing default does nothing
       await key('z', 'KeyZ', 90, 2);
       const sCtrlUnchanged = await dState();
       assert.strictEqual(sCtrlUnchanged.open, true, '[desktop] Ctrl+Z at default keeps box open');
-      assert.strictEqual(sCtrlUnchanged.val, '5.0', '[desktop] Ctrl+Z at default keeps "5.0"');
+      assert.strictEqual(sCtrlUnchanged.val, '5', '[desktop] Ctrl+Z at default keeps "5"');
       assert.strictEqual(sCtrlUnchanged.hist, base.hist, '[desktop] Ctrl+Z at default never undoes document');
 
       // Type "12" (wait/select replacement): preview updates to R 12, history stays unchanged
       await typeChars('12');
       const sTyped = await dState();
       assert.strictEqual(sTyped.val, '12', `[desktop] typed "12", got "${sTyped.val}"`);
-      assert.strictEqual(sTyped.previewText, 'R 12.0', `[desktop] preview follows 12, got "${sTyped.previewText}"`);
+      assert.strictEqual(sTyped.previewText, 'R 12', `[desktop] preview follows 12, got "${sTyped.previewText}"`);
       assert.strictEqual(sTyped.hist, base.hist, '[desktop] typing in radius box never adds history steps');
 
-      // Press ONE Ctrl+Z -> puts "5.0" back in ONE step (not "1"!), preview back to "R 5.0", box open & focused, 0 doc steps
+      // Press ONE Ctrl+Z -> puts "5" back in ONE step (not "1"!), preview back to "R 5", box open & focused, 0 doc steps
       await key('z', 'KeyZ', 90, 2);
       const sAfter1 = await dState();
       assert.strictEqual(sAfter1.open, true, '[desktop] ONE Ctrl+Z keeps #fillet-radius-input open');
       assert.strictEqual(sAfter1.focused, true, '[desktop] #fillet-radius-input stays focused');
-      assert.strictEqual(sAfter1.val, '5.0', `[desktop] ONE Ctrl+Z restores "5.0" directly (got "${sAfter1.val}")`);
-      assert.strictEqual(sAfter1.previewText, 'R 5.0', `[desktop] preview follows restored "5.0" (got "${sAfter1.previewText}")`);
+      assert.strictEqual(sAfter1.val, '5', `[desktop] ONE Ctrl+Z restores "5" directly (got "${sAfter1.val}")`);
+      assert.strictEqual(sAfter1.previewText, 'R 5', `[desktop] preview follows restored "5" (got "${sAfter1.previewText}")`);
       assert.strictEqual(sAfter1.hist, base.hist, '[desktop] history unchanged after Ctrl+Z');
       await shotClip('c-desktop-after-ctrlz.png', clipBox);
 
@@ -141,22 +141,22 @@ await (async () => {
       await key('z', 'KeyZ', 90, 2);
       const sAfter2 = await dState();
       assert.strictEqual(sAfter2.open, true);
-      assert.strictEqual(sAfter2.val, '5.0');
+      assert.strictEqual(sAfter2.val, '5');
       assert.strictEqual(sAfter2.hist, base.hist);
 
-      // Cmd+Z (Meta+Z, modifiers: 4) also restores "5.0" in ONE step
+      // Cmd+Z (Meta+Z, modifiers: 4) also restores "5" in ONE step
       await typeChars('9');
       assert.strictEqual((await dState()).val, '9');
       await key('z', 'KeyZ', 90, 4);
-      assert.strictEqual((await dState()).val, '5.0', '[desktop] Cmd+Z (Meta+Z) restores "5.0" in 1 step');
+      assert.strictEqual((await dState()).val, '5', '[desktop] Cmd+Z (Meta+Z) restores "5" in 1 step');
 
-      // Invalid "abc" -> Ctrl+Z restores valid "5.0" & preview arc
+      // Invalid "abc" -> Ctrl+Z restores valid "5" & preview arc
       await typeChars('abc');
       assert.strictEqual((await dState()).ariaInvalid, 'true');
       assert.strictEqual((await dState()).hasPreviewArc, false);
       await key('z', 'KeyZ', 90, 2);
       const sValid = await dState();
-      assert.strictEqual(sValid.val, '5.0');
+      assert.strictEqual(sValid.val, '5');
       assert.strictEqual(sValid.ariaInvalid, 'false');
       assert.strictEqual(sValid.hasPreviewArc, true);
 
@@ -303,15 +303,15 @@ await (async () => {
       await typeChars('12');
       const pTyped = await pState();
       assert.strictEqual(pTyped.val, '12', '[phone] typed 12');
-      assert.strictEqual(pTyped.previewText, 'R 12.0', '[phone] preview R 12.0');
+      assert.strictEqual(pTyped.previewText, 'R 12', '[phone] preview R 12');
       assert.strictEqual(pTyped.hist, pBase.hist, '[phone] typing adds 0 history steps');
 
-      // ONE Ctrl+Z -> back to "5.0" in one step, box open, preview R 5.0
+      // ONE Ctrl+Z -> back to "5" in one step, box open, preview R 5
       await key('z', 'KeyZ', 90, 2);
       const pCtrlZ = await pState();
       assert.strictEqual(pCtrlZ.open, true, '[phone] ONE Ctrl+Z keeps box open');
-      assert.strictEqual(pCtrlZ.val, '5.0', `[phone] ONE Ctrl+Z restores "5.0", got "${pCtrlZ.val}"`);
-      assert.strictEqual(pCtrlZ.previewText, 'R 5.0', `[phone] preview follows "5.0", got "${pCtrlZ.previewText}"`);
+      assert.strictEqual(pCtrlZ.val, '5', `[phone] ONE Ctrl+Z restores "5", got "${pCtrlZ.val}"`);
+      assert.strictEqual(pCtrlZ.previewText, 'R 5', `[phone] preview follows "5", got "${pCtrlZ.previewText}"`);
       assert.strictEqual(pCtrlZ.hist, pBase.hist, '[phone] Ctrl+Z in box never undoes doc');
       await shotClipPhone('c-phone-after-ctrlz.png', pClip);
 

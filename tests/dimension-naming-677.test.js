@@ -54,7 +54,7 @@ ok(typeInto(S, D(S, 'd4'), 'd1 / 4').ok, 'd4 reads d1 (by its automatic name) be
 const h0 = S.state.history.length;
 const before = image(S);
 const pv = previewDimensionInput(S.state, D(S, 'd1'), 'thickness = 18');
-eq([pv.ok, pv.kind, pv.name, pv.hint], [true, 'name', 'thickness', 'names it thickness = 18.0 mm, also changes d4'], 'the hint before Enter');
+eq([pv.ok, pv.kind, pv.name, pv.hint], [true, 'name', 'thickness', 'names it thickness = 18 mm, also changes d4'], 'the hint before Enter');
 eq(dimensionInputLabel(D(S, 'd1'), pv), 'name dimension d1 -> thickness', 'the undo label');
 eq(image(S), before, 'the preview is pure');
 ok(typeInto(S, D(S, 'd1'), 'thickness = 18').ok, 'applied');
@@ -80,8 +80,8 @@ eq(previewDimensionInput(S.state, D(S, 'thickness'), 'thickness = 14').kind, 'va
 eq(previewDimensionInput(S.state, D(S, 'd3'), 'd2 = 5').code, 'RESERVED_NAME', 'an automatic dN cannot be assigned (O7)');
 
 // ================================================================ rule 2: the named one shows its plain value + the hover tag; 12 typed into it moves every reader
-eq(formatConstraintValue(D(S, 'thickness')), '18.0', 'a named dimension shows its PLAIN value');
-eq(dimensionNameTag(D(S, 'thickness')), 'thickness : 18.0 mm', 'its hover tag "name : value unit"');
+eq(formatConstraintValue(D(S, 'thickness')), '18', 'a named dimension shows its PLAIN value');
+eq(dimensionNameTag(D(S, 'thickness')), 'thickness : 18 mm', 'its hover tag "name : value unit"');
 eq(dimensionNameTag(D(S, 'd2')), '', 'an automatic name has no tag');
 const h1 = S.state.history.length;
 const twelve = typeInto(S, D(S, 'thickness'), '12');
@@ -97,7 +97,7 @@ ok(typeInto(S, D(S, 'd4'), 'gap = thickness / 4').ok && !!D(S, 'gap'), 'd4 named
 eq(dimensionNameTag(D(S, 'gap')), 'gap : thickness / 4', 'the tag of a named formula: "name : expression"');
 
 // ================================================================ rule 3: a follower shows fx:; a plain number unlinks only that follower
-eq(formatConstraintValue(D(S, 'd2')), 'fx: 12.0', 'a follower shows fx:');
+eq(formatConstraintValue(D(S, 'd2')), 'fx: 12', 'a follower shows fx:');
 ok(typeInto(S, D(S, 'd2'), '15').ok, '15 typed into d2');
 eq([D(S, 'd2').expression, D(S, 'd2').value], [undefined, 15], 'd2 is unlinked, 15');
 eq([D(S, 'd3').expression, D(S, 'd3').value, D(S, 'thickness').value], ['thickness', 12, 12], 'd3 still follows thickness (12)');
@@ -107,11 +107,11 @@ const mk = planChange(S.state, { type: 'createParameter', name: 'ply', unit: 'mm
 ok(mk.ok && muted(() => applyParameterChange(S.state, mk, 'create parameter ply')).ok, 'a user parameter ply = 20');
 ok(typeInto(S, D(S, 'd3'), 'ply').ok && typeInto(S, D(S, 'd2'), 'ply').ok, 'd2 and d3 read ply');
 const o4 = previewDimensionInput(S.state, D(S, 'd3'), 'ply = 22');
-eq([o4.kind, o4.hint], ['set', 'sets ply 20.0 -> 22.0 mm, also changes d2'], '`ply = 22` in a dimension box SETS the user parameter (O4 kept)');
+eq([o4.kind, o4.hint], ['set', 'sets ply 20 -> 22 mm, also changes d2'], '`ply = 22` in a dimension box SETS the user parameter (O4 kept)');
 ok(typeInto(S, D(S, 'd3'), 'ply = 22').ok, 'applied');
 eq([S.state.parameters.map((p) => [p.name, p.expression]), D(S, 'd3').expression, D(S, 'd3').name], [[['ply', '22 mm']], 'ply', 'd3'], 'the parameter is set, d3 keeps its name and reads ply');
 near(D(S, 'd2').value, 22, 'd2 follows ply');
-eq(formatConstraintValue(D(S, 'd3')), 'fx: 22.0', 'a dimension reading a user parameter shows fx:');
+eq(formatConstraintValue(D(S, 'd3')), 'fx: 22', 'a dimension reading a user parameter shows fx:');
 ok(typeInto(S, D(S, 'd3'), '7').ok, '7 typed into d3');
 eq([D(S, 'd3').expression, D(S, 'd3').value, D(S, 'd2').expression, D(S, 'd2').value, S.state.parameters[0].expression], [undefined, 7, 'ply', 22, '22 mm'], 'only d3 is unlinked; ply and d2 unchanged');
 

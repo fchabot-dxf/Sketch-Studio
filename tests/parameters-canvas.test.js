@@ -110,7 +110,7 @@ function drawing() {
   // the box opens with the FORMULA, not the value; a plain number then replaces it
   showEditInput(svg, S.state, d1); eq(dimInput.value, 'd2 * 2', 'prefilled with the expression'); press('Escape');
   typeInto(S, d1, '33'); ok(d1.expression === undefined && Math.abs(d1.value - 33) < 1e-6, 'a plain number deletes the formula (Fusion)');
-  showEditInput(svg, S.state, d1); eq(dimInput.value, '33.0', 'prefilled with the value when there is no formula'); press('Escape');
+  showEditInput(svg, S.state, d1); eq(dimInput.value, '33', 'prefilled with the value when there is no formula'); press('Escape');
   // an angle takes degrees; O16/O15: the edit box asks for the TEXT keyboard
   eq(dimInput.inputMode, 'text', 'the dimension box asks for the full text keyboard (O16)');
   const nothing = typeInto(S, d1, '   ');
@@ -123,12 +123,12 @@ function drawing() {
   const { S, d1, d2, d3, d4 } = drawing();
   const h0 = S.state.history.length, before = image(S.state);
   const pv = previewDimensionInput(S.state, d1, 'width = 120');
-  ok(pv.ok && pv.kind === 'name' && pv.hint === 'names it width = 120.0 mm', 'name hint: ' + pv.hint);
+  ok(pv.ok && pv.kind === 'name' && pv.hint === 'names it width = 120 mm', 'name hint: ' + pv.hint);
   ok(S.state.parameters.length === 0 && d1.name === 'd1', 'the preview changes nothing');
   typeInto(S, d1, 'width = 120');
   eq(S.state.parameters, [], 'no user parameter is created');
   ok(d1.name === 'width' && d1.expression === undefined, 'd1 is now called width and holds the plain value'); near(measuredLen(S, d1), 120, 'geometry = 120');
-  eq(formatConstraintValue(d1), '120.0', 'a named dimension shows its plain value (no fx)');
+  eq(formatConstraintValue(d1), '120', 'a named dimension shows its plain value (no fx)');
   eq(S.state.history.length, h0 + 1, 'name + value = ONE undo step');
   S.state.undo();
   eq(image(S.state), before, 'ONE undo restores the name and the value, exactly');
@@ -158,7 +158,7 @@ function drawing() {
   typeInto(S, d2, 'width / 2');                              // d2 reads width as well
   const h0 = S.state.history.length;
   const pv = previewDimensionInput(S.state, d4, 'width = 150');
-  eq(pv.hint, 'sets width 120.0 -> 150.0 mm, also changes d1, d2, d3', 'O4 hint: ' + pv.hint);
+  eq(pv.hint, 'sets width 120 -> 150 mm, also changes d1, d2, d3', 'O4 hint: ' + pv.hint);
   typeInto(S, d4, 'width = 150');
   for (const c of [d1, d3]) { near(c.value, 150, c.name + ' = 150'); near(measuredLen(S, c), 150, c.name + ' geometry'); }
   near(d2.value, 75, 'd2 = width / 2'); near(measuredLen(S, d2), 75, 'd2 geometry');
@@ -223,15 +223,15 @@ function drawing() {
 // ================================================================ 5. the fx label (and nothing else changes on the label)
 {
   const { S, d1, d2 } = drawing();
-  eq(formatConstraintValue(d1), '100.0', 'no formula: the label is unchanged');
+  eq(formatConstraintValue(d1), '100', 'no formula: the label is unchanged');
   userParam(S, 'width', '120'); typeInto(S, d1, 'width');
-  eq(formatConstraintValue(d1), 'fx: 120.0', 'a formula: fx: 120.0');
-  eq(formatConstraintValue(d1, { isPlacing: true }), '(120.0)', 'a dimension being placed shows no fx');
-  eq(formatConstraintValue({ ...d1, isDriven: true }), '(120.0)', 'a reference never has a formula');
-  eq(formatConstraintValue(d2), '40.0', 'a neighbour without a formula is unchanged');
+  eq(formatConstraintValue(d1), 'fx: 120', 'a formula: fx: 120');
+  eq(formatConstraintValue(d1, { isPlacing: true }), '(120)', 'a dimension being placed shows no fx');
+  eq(formatConstraintValue({ ...d1, isDriven: true }), '(120)', 'a reference never has a formula');
+  eq(formatConstraintValue(d2), '40', 'a neighbour without a formula is unchanged');
   const ang = { type: 'angle', value: 45, expression: '90 deg / 2', name: 'dx', isDriven: false };
-  eq(formatConstraintValue(ang), 'fx: 45.0°', 'an angle formula');
-  eq(formatConstraintValue({ type: 'distance', isRadius: true, value: 12, expression: '6 mm * 2' }), 'fx: R 12.0', 'a radius formula');
+  eq(formatConstraintValue(ang), 'fx: 45°', 'an angle formula');
+  eq(formatConstraintValue({ type: 'distance', isRadius: true, value: 12, expression: '6 mm * 2' }), 'fx: R 12', 'a radius formula');
 }
 
 // ================================================================ 7. toggleDriving (O11)
@@ -295,9 +295,9 @@ function drawing() {
   const wi = completionsFor(st, 'wi', 2);
   eq(wi.items.slice(0, 2).map((i) => i.name), ['Width', 'width'], 'wi: matching ignores case, both Width and width (table order)');
   eq(wi.items.map((i) => i.insert).slice(0, 2), ['Width', 'width'], 'the inserted name keeps its exact case');
-  eq(wi.items[1], { kind: 'parameter', name: 'width', insert: 'width', value: '60.0', unit: 'mm', detail: '' }, 'a row: name, value, unit');
+  eq(wi.items[1], { kind: 'parameter', name: 'width', insert: 'width', value: '60', unit: 'mm', detail: '' }, 'a row: name, value, unit');
   eq(completionsFor(st, 'ho', 2).items[0], { kind: 'parameter', name: 'holes', insert: 'holes', value: '4', unit: '', detail: '' }, 'a unitless parameter has no unit');
-  eq(completionsFor(st, 'tu', 2).items[0].value, '90.0', 'an angle parameter shows degrees');
+  eq(completionsFor(st, 'tu', 2).items[0].value, '90', 'an angle parameter shows degrees');
   eq(names('d', 1).filter((n) => /^d[0-9]/.test(n)), ['d1', 'd3'], 'd: dimensions d1 and d3, the reference d2 is absent');
   ok(!names('d', 1).includes('d2'), 'a reference dimension is never offered');
   eq(completionsFor(st, 'd', 1).items.find((i) => i.name === 'd3').unit, 'deg', 'an angle dimension shows deg');
@@ -365,7 +365,7 @@ function drawing() {
   const f = dims.find((c) => c.name === 'd1'), g = dims.find((c) => c.name === 'd3');
   ok(f.expression === 'width' && g.expression === 'width / 2', 'formulas survive save and load');
   eq(S2.state.parameters, [{ name: 'width', unit: 'mm', expression: '120 mm' }], 'the parameter survives');
-  eq(formatConstraintValue(f), 'fx: 120.0', 'the loaded label'); eq(formatConstraintValue(g), 'fx: 60.0', 'the loaded second label');
+  eq(formatConstraintValue(f), 'fx: 120', 'the loaded label'); eq(formatConstraintValue(g), 'fx: 60', 'the loaded second label');
   const json2 = JSON.stringify(serializeDocument(S2.state));
   deserializeDocument(JSON.parse(json2), S2.state);
   eq(JSON.stringify(serializeDocument(S2.state)), json2, 'save -> load -> save is byte-stable (from the first save on)');

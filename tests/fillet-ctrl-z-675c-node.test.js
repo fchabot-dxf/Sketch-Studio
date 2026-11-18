@@ -91,27 +91,27 @@ try {
   app.click(P(0, 0).x, P(0, 0).y);
   const fBox = doc.getElementById('fillet-radius-input');
   assert(fBox, '#fillet-radius-input opens on corner');
-  assert.strictEqual(fBox.value, '5.0', 'fillet default is 5.0');
+  assert.strictEqual(fBox.value, '5', 'fillet default is 5');
   setBoxText(fBox, '12');
   assert.strictEqual(st.history.length, histCorner, 'typing in fillet box adds 0 history steps');
   assert(doc.querySelector('#fillet-tool-overlay text')?.textContent.includes('12'), 'preview tracks 12');
 
   dispatchCtrlZ(fBox);
-  assert.strictEqual(fBox.value, '5.0', 'ONE Ctrl+Z restores 5.0 (not "1")');
+  assert.strictEqual(fBox.value, '5', 'ONE Ctrl+Z restores 5 (not "1")');
   assert.strictEqual(doc.getElementById('fillet-radius-input'), fBox, 'box stays open');
   assert.strictEqual(st.history.length, histCorner, 'history untouched while box open');
-  assert(doc.querySelector('#fillet-tool-overlay text')?.textContent.includes('5.0'), 'preview tracks restored 5.0');
+  assert(doc.querySelector('#fillet-tool-overlay text')?.textContent.includes('R 5'), 'preview tracks restored R 5');
 
   dispatchCtrlZ(fBox); // second Ctrl+Z at default
-  assert.strictEqual(fBox.value, '5.0', 'second Ctrl+Z at default is a no-op');
+  assert.strictEqual(fBox.value, '5', 'second Ctrl+Z at default is a no-op');
   assert.strictEqual(doc.getElementById('fillet-radius-input'), fBox, 'box still open after second Ctrl+Z');
   assert.strictEqual(st.history.length, histCorner, 'document not undone by second Ctrl+Z');
 
-  // Invalid text -> one Cmd+Z restores 5.0 & clears aria-invalid
+  // Invalid text -> one Cmd+Z restores 5 & clears aria-invalid
   setBoxText(fBox, 'abc');
   assert.strictEqual(fBox.getAttribute('aria-invalid'), 'true');
   dispatchCtrlZ(fBox, { meta: true });
-  assert.strictEqual(fBox.value, '5.0');
+  assert.strictEqual(fBox.value, '5');
   assert.strictEqual(fBox.getAttribute('aria-invalid'), 'false');
 
   // Confirm with Enter -> +1 history step; then ONE canvas Ctrl+Z removes arc, tangents, radius dim

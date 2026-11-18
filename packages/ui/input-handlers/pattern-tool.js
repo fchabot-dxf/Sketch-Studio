@@ -34,7 +34,7 @@ import { previewDimensionInput, entryExpression, namePatternValues } from '#core
 import { applyParameterChange, dimensionInputLabel, editPatternValues, patternPlanRefusal, refusalReason } from '#core/dimension-seams.js';
 import { handleBoxUndoKey } from '#ui/numeric-input-manager.js';
 import { inertEntities, isJointInert, activeSketchPick, inActiveSketch } from '#core/sketch-model.js';
-import { docUnit, lengthText } from '#core/settings-manager.js';
+import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 import { parse as parseUnit } from '#core/units.js';
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
@@ -542,9 +542,9 @@ function injectStyles() {
 
 const isPhone = () => typeof window !== 'undefined' && window.innerWidth <= PHONE_MAX_W;
 // the fields show their unit: a length in the document unit (lengthText, the one length-format decider: "10mm", "0.5in", or 1/2" in Fractional), an angle in deg
-const fmtLen = (v) => lengthText(v, { auto: docUnit() === 'in' ? 3 : 2, show: 'compact' });
-const fmtAngle = (v) => `${fmtNum(v)} deg`;
-const fmtNum = (v) => String(Number(Number(v).toFixed(4)));
+const fmtLen = (v) => lengthText(v, { show: 'compact' });
+const fmtAngle = (v) => angleText(v, { show: 'unit' });
+const fmtNum = (v) => String(Number(Number(v).toFixed(4))); // counts only
 
 function openDialog() {
   injectStyles();

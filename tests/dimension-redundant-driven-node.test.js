@@ -44,7 +44,7 @@ try {
   assert.strictEqual(boxOpen(app), false, 'no value box opens for a dimension the square already determines');
   let L = labels(app);
   assert.strictEqual(L.length, 3, 'three dimension labels: ' + JSON.stringify(L));
-  assert(L.some((t) => /^\(4\.2\)$/.test(t)), 'the diagonal is bracketed at its measured value 4.2: ' + JSON.stringify(L));
+  assert(L.some((t) => /^\(4\.243\)$/.test(t)), 'the diagonal is bracketed at its measured value 4.243: ' + JSON.stringify(L));
 
   // ---------------------------------------------------------------- 2. a driven dimension cannot be typed: double click in the Dimension tool and in the Select tool
   let c = bracketed(); assert(c, 'the bracketed diagonal label is on screen');
@@ -66,7 +66,7 @@ try {
   assert(toasts().some((t) => /already determines it/i.test(t)), 'the refusal message is shown: ' + JSON.stringify(toasts()));
 
   // ---------------------------------------------------------------- 3b. delete one side dimension: now Driving works and the value can be typed
-  const side = plainWith(/3[.]0/); assert(side, 'a side dimension label is on screen');
+  const side = plainWith(/^3$/); assert(side, 'a side dimension label is on screen');
   app.click(side.x, side.y, { target: () => labelEl(app, side.idx) }); app.key('Delete');
   L = labels(app);
   assert.strictEqual(L.length, 2, 'one side dimension deleted: ' + JSON.stringify(L));

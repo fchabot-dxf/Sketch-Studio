@@ -72,16 +72,16 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
     ok(!app.document.querySelector('[data-row="stepSpacing"]') && !app.document.querySelector('.cut-step-spacing'), 'the card has NO Min spacing row');
     ok(h.rows().includes('stepDepth'), 'the Step depth row is there');
     eq(CUT_PLAN.get(pk).stepSpacing, undefined, 'a new stepped record stores no spacing');
-    eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart'], 'the note shows the spacing: 0.18 mm');
-    eq(h.warn(), [[' · outlines 0.18 mm apart', 'outlines this close may be hard to pick on the Origin: try a bigger step']], 'under 1/16 in: the spacing part is flagged, with its title');
+    eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'], 'the note shows the spacing: 0.176 mm');
+    eq(h.warn(), [[' · outlines 0.176 mm apart', 'outlines this close may be hard to pick on the Origin: try a bigger step']], 'under 1/16 in: the spacing part is flagged, with its title');
     eq(pocketDepths(exportOf(app)).length, 8, 'export: 8 pockets');
     eq(reviewDepths(app), [1, 2, 3, 4, 5, 6, 7, 8], 'Review: the same 8');
-    eq(planSteppedNotes(CUT_PLAN), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart'], 'the Review info gets the same text');
+    eq(planSteppedNotes(CUT_PLAN), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'], 'the Review info gets the same text');
     // a bigger step: the spacing grows
     h.set('.cut-step-depth', '9');
     eq([h.note(), h.warn()], [['Pocket 1 (8mm): 1 step, 8 mm'], []], 'one step: no spacing, no warning');
     h.set('.cut-step-depth', '4');
-    eq(h.note(), ['Pocket 1 (8mm): 2 steps, 4 to 8 mm · outlines 0.71 mm apart'], 'step 4: 0.7 mm apart (4 x tan 10 deg)');
+    eq(h.note(), ['Pocket 1 (8mm): 2 steps, 4 to 8 mm · outlines 0.705 mm apart'], 'step 4: 0.705 mm apart (4 x tan 10 deg)');
     eq(h.warn().length, 1, '0.7 mm is still under 1/16 in (1.5875 mm): flagged');
     h.set('.cut-step-depth', '1');
     // a 715-era record: a stepSpacing and nothing else: cut as before 715

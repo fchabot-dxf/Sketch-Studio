@@ -98,7 +98,7 @@ try {
   let c = await cardState();
   console.log('card: ' + JSON.stringify(c));
   assert.strictEqual(c.minSpacingRow, false, 'the card has no Min spacing row');
-  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart'], 'the note shows the spacing');
+  assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'], 'the note shows the spacing');
   assert.strictEqual(c.warn.length, 1, 'the spacing part is flagged');
   assert.strictEqual(c.warn[0].title, 'outlines this close may be hard to pick on the Origin: try a bigger step', 'with its title');
   assert.notStrictEqual(c.warn[0].color, c.noteColor, `the warning colour differs from the note colour (${c.warn[0].color} vs ${c.noteColor})`);
@@ -107,7 +107,7 @@ try {
   assert.deepStrictEqual(await reviewDepths(), await exportDepths(), 'export == Review');
   const rev = await review(9);
   console.log('Review info: ' + JSON.stringify(rev));
-  assert.ok(rev.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.18 mm apart'), 'the Review info has the same text');
+  assert.ok(rev.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'), 'the Review info has the same text');
   await zoomReview();
   await shot('review-step1.png', '#review-canvas-host');
   await openStage('prepare');
@@ -133,7 +133,7 @@ try {
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '0'; i.dispatchEvent(new Event('change')); })()`);
   c = await cardState();
   console.log('step 0.01: ' + JSON.stringify(c.note) + ' ' + JSON.stringify(c.warn) + ' box ' + c.step);
-  assert.strictEqual(c.step, '0.010', 'typing 0 is refused: the box shows the stored 0.010 again');
+  assert.strictEqual(c.step, '0.01', 'typing 0 is refused: the box shows the stored 0.01 again');
   assert.ok(c.note.length === 1 && /^Pocket 1 \(8mm\): \d+ steps?, /.test(c.note[0]), 'the note shows for the 0.01 mm step: ' + c.note[0]);
   await shot('card-tiny-736.png', '#prepare-panel .cut-card');
   // inches
@@ -141,7 +141,7 @@ try {
   await preset('stepDepth', String(25.4 / 32));
   c = await cardState();
   console.log('inches: ' + JSON.stringify(c.note));
-  assert.ok(/ in · outlines 0\.\d+–0\.\d+ in apart/.test(c.note[0]), 'the note in inches');
+  assert.ok(/ in · outlines 0(?:\.\d+)?–0\.\d+ in apart/.test(c.note[0]), 'the note in inches');
   await shot('card-in.png', '#prepare-panel .cut-card');
   console.log('stepped-spacing-716-live.test.js: ok');
 } finally {

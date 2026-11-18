@@ -34,7 +34,7 @@
   const svgConstraint = makeSVG();
   draw(joints, shapes, svgConstraint, null, null, [c], new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
   const htmlC = svgConstraint.innerHTML;
-  assert(/60\.0°/.test(htmlC), 'Rendered ANGLE constraint should display stored value 60.0°');
+  assert(/60°/.test(htmlC), 'Rendered ANGLE constraint should display stored value 60°');
   const arcSmallC = /A\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+0\s+0\s+1/.test(htmlC);
   assert(arcSmallC, 'Rendered ANGLE constraint should draw the small arc for a 60° value');
 

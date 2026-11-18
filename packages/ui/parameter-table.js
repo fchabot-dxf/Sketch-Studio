@@ -16,7 +16,7 @@
 //                                                  `history` (the Design surface's undo source) serves Ctrl+Z / Ctrl+Y typed in a cell with no pending text.
 // Lengths are formatted by the shared units formatter in the document unit; angles in degrees. All text is set with textContent.
 
-import { lengthText, angleDecimals } from '#core/settings-manager.js';
+import { lengthText, angleText } from '#core/settings-manager.js';
 import { evaluateAll, isReferenceDimension, quantityText, planChange, previewDimensionInput, usersOf, cloneParameters, PARAMETER_UNITS,
   dimensionEntries, entryName, entryValue, entryExpression, entryKind, entryUnit } from '#core/parameters.js';
 import { patternSlot } from '#core/pattern-values.js';
@@ -41,7 +41,7 @@ const PATTERN_TITLE = Object.freeze({ [CONSTRAINT_TYPES.CIRCULAR_PATTERN]: 'Circ
 // the value text of an entry: a count as a whole number, an angle in degrees, a length in the document unit
 const entryValueText = (e, unit) => {
   const k = entryKind(e), v = entryValue(e);
-  return k === 'count' ? String(v) : k === 'angle' ? Number(v).toFixed(angleDecimals(1)) : lengthText(v, { unit, auto: 1, show: 'field' }); // the Unit column says the unit
+  return k === 'count' ? String(v) : k === 'angle' ? angleText(v) : lengthText(v, { unit, show: 'field' }); // the Unit column says the unit
 };
 
 /**

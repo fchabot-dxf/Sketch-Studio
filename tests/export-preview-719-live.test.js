@@ -124,9 +124,9 @@ try {
     console.log('legend / chips: ' + JSON.stringify(ui));
     assert.ok(/lighter = shallower/.test(ui.legend) && ui.chips.length === 4, 'the legend and 4 chips');
   }
-  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && b.textContent.includes('10.000 mm'))`);
+  const row10 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && b.textContent.includes('10 mm'))`);
   await clickEl(`#review-cuts-list > button:nth-of-type(${row10 + 1})`); // TASK 743: the list's buttons are the operation headers and their rows
-  assert.strictEqual(await label(), 'pocket · 10.000 mm');
+  assert.strictEqual(await label(), 'pocket · 10 mm');
   if (!BEFORE) assert.strictEqual(await pinkStroke(), 'rgb(255, 45, 149)', 'the picked element keeps its pink outline over the shading');
   await shot('desktop-2d-real-solid.png', '#view-review');
 

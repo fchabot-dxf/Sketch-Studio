@@ -306,7 +306,7 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
     eq([r.holdPart, r.tabCount, r.tabWidth, r.holdThickness], ['tabs', 'auto', 10, 2], 'Tabs on: count Auto, width 10 mm, thickness 2 mm (the mm defaults)');
     ok(h.shown('tabCount') && h.shown('tabWidth') && h.shown('holdThickness'), 'Tabs: count, width and thickness rows');
     eq(h.q('.cut-row[data-row="holdThickness"] .cut-field-label').textContent, 'Tab thickness', 'the thickness row reads Tab thickness');
-    eq([h.q('.cut-tab-count').value, h.q('.cut-tab-count').placeholder, h.q('.cut-tab-width').value, h.q('.cut-hold-thickness').value], ['', 'Auto (4)', '10.000', '2.000'], 'the fields: count empty with Auto (4), 10.000, 2.000');
+    eq([h.q('.cut-tab-count').value, h.q('.cut-tab-count').placeholder, h.q('.cut-tab-width').value, h.q('.cut-hold-thickness').value], ['', 'Auto (4)', '10', '2'], 'the fields: count empty with Auto (4), 10, 2');
     eq(h.note(), ['Outside: 4 tabs, 10 mm wide, 2 mm thick: 1 pass at 16 mm + 4 gaps at 18 mm', 'Gaps: cut the side against the part; the return leg is optional'], 'the card note');
     const els = elementsOf(exportOf(st, cutPlanEntries()));
     eq(els.map((e) => [e.cutType, e.depth]), [...Array(5).fill(['inside', '18.000 mm']), ['outside', '16.000 mm']], 'the export: the hole + 4 strips (one <g>: the same cut attributes), the pass');

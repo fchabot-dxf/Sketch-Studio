@@ -98,7 +98,7 @@ await (async () => {
       const h = await snap();
       assert.ok(h.bands >= 1 && h.tp >= 1 && h.chips === 1 && h.hlHoverCut >= 1 && h.hlSelect === 0, `${type}: hover shows band + path + chip + bold white boundary`);
       assert.strictEqual(h.bandFill, 'rgb(39, 40, 43)', type + ': hovered band is #27282B');
-      assert.match(h.chipText, /^↓ 0\.300 in$/, type + ': chip text');
+      assert.match(h.chipText, /^↓ 0\.3 in$/, type + ': chip text');
       assert.strictEqual(h.marks, type === 'pocket' ? 1 : 0, type + ': pocket marks only on a pocket');
       // selected: teal band + bold mint boundary
       await click(pt.x, pt.y); await move(away.x, away.y);

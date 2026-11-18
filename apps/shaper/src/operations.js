@@ -25,7 +25,7 @@ import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH } from '#core/stepped-cut.js';
 import { holdMode } from '#core/hold-part.js';
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
-import { docUnit, lengthText } from '#core/settings-manager.js';
+import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 
 // ── the user's ORDER (operation keys), per document: the one stored fact ──
 let order = [];
@@ -43,14 +43,14 @@ const depthOf = (d) => (isSet(d) ? round6(d) : 'unset');
  *  trailing zeros dropped, the unit written after it as the card's notes write it. */
 export function lengthLabel(mm) {
   const u = docUnit();
-  return `${lengthText(mm, { unit: u, auto: 3, trim: 'always', show: 'field' })} ${u}`;
+  return `${lengthText(mm, { unit: u, show: 'field' })} ${u}`;
 }
 
 /** A tool's name: "¼″ end mill", "6 mm ball nose", "⅛″ 60° V-bit" (a bit of a BIT_PRESETS size goes by its fraction). */
 function toolName(tool) {
   const preset = BIT_PRESETS.find((p) => Math.abs(p.value - tool.dia) < 1e-6);
   const size = tool.dia > 0 ? (preset ? `${preset.label}″` : lengthLabel(tool.dia)) : 'no bit size';
-  return [size, tool.angle != null ? `${tool.angle}°` : null, CUTTER_SHAPES.find((s) => s.id === tool.shape).label].filter(Boolean).join(' ');
+  return [size, tool.angle != null ? angleText(tool.angle, { show: 'deg' }) : null, CUTTER_SHAPES.find((s) => s.id === tool.shape).label].filter(Boolean).join(' ');
 }
 
 /** The TOOL of a stored record: null for a type that is not cut (Guide, Stock); else { key, shape, dia, angle, label } (label: its name, toolName). */

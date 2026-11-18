@@ -52,7 +52,7 @@ const angleGap = minGap(textBoxPoints(angleHtml, '53.1°'), arc);
 // the linear gap: a horizontal distance dimension's value beside its line
 const lj = new Map([['a', { id: 'a', x: 0, y: 0 }], ['b', { id: 'b', x: 100, y: 0 }]]);
 const lineHtml = render(lj, [{ id: 'l', type: 'line', joints: ['a', 'b'] }], [{ id: 'dh', type: 'distance', joints: ['a', 'b'], dimMode: 'horizontal', value: 100, offset: 40 }], false);
-const lineGap = minGap(textBoxPoints(lineHtml, '100.0'), Array.from({ length: 1001 }, (_, i) => ({ x: i / 10, y: 40 })));
+const lineGap = minGap(textBoxPoints(lineHtml, '100'), Array.from({ length: 1001 }, (_, i) => ({ x: i / 10, y: 40 })));
 
 assert(angleGap > 0.5, `angle text clear of the arc (gap ${angleGap})`);
 assert(Math.abs(angleGap - lineGap) <= 0.5, `angle gap ${angleGap} equals linear gap ${lineGap} within 0.5`);

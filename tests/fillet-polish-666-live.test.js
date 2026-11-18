@@ -79,10 +79,10 @@ await (async () => {
       await waitFor(`!!document.getElementById('fillet-radius-input')`, '[desktop] radius box');
       await sleep(250);
 
-      // F18: in Shaper default (inches), box ("0.3") and preview ("R 0.3") match; switch to mm -> box "5.0" and preview "R 5.0"
+      // F18: in Shaper default (inches), box ("0.25") and preview ("R 0.25") match; switch to mm -> box "5" and preview "R 5"
       const shaperIn0 = await evalJs(`({ val: document.getElementById('fillet-radius-input')?.value, txt: document.querySelector('#fillet-tool-overlay text')?.textContent })`);
-      assert.strictEqual(shaperIn0.val, '0.3', `F18 desktop (in): expected box "0.3", got "${shaperIn0.val}"`);
-      assert.strictEqual(shaperIn0.txt, 'R 0.3', `F18 desktop (in): expected preview "R 0.3", got "${shaperIn0.txt}"`);
+      assert.strictEqual(shaperIn0.val, '0.25', `F18 desktop (in): expected box "0.25", got "${shaperIn0.val}"`);
+      assert.strictEqual(shaperIn0.txt, 'R 0.25', `F18 desktop (in): expected preview "R 0.25", got "${shaperIn0.txt}"`);
       await key('Escape', 'Escape', 27);
       await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
       await pressRibbonTool(evalJs, tapMouse, 'tool-fillet');
@@ -112,8 +112,8 @@ await (async () => {
       })()`);
 
       const valid0 = await uiState();
-      assert.strictEqual(valid0.val, '5.0', `F18 desktop: expected box "5.0", got "${valid0.val}"`);
-      assert.strictEqual(valid0.previewText, 'R 5.0', `F18 desktop: expected preview "R 5.0", got "${valid0.previewText}"`);
+      assert.strictEqual(valid0.val, '5', `F18 desktop: expected box "5", got "${valid0.val}"`);
+      assert.strictEqual(valid0.previewText, 'R 5', `F18 desktop: expected preview "R 5", got "${valid0.previewText}"`);
       assert.strictEqual(valid0.ariaInvalid, 'false', 'F9 desktop: initially aria-invalid="false"');
       assert.strictEqual(valid0.doneDisabled, false, 'F9 desktop: .sk-done initially enabled');
 

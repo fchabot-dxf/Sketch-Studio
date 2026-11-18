@@ -87,7 +87,7 @@ await (async () => {
     await send('Input.insertText', { text: '3' }); await key('Enter', 'Enter', 13); await sleep(600);
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 1`, 'a dimension row to appear');
     let r = await rows();
-    assert.deepStrictEqual(r.map((x) => [x.kind, x.name, x.cells[1], x.cells[2], x.cells[3]]), [['dimension', 'd1', '3.0', '3.0', 'mm']], 'the row: name d1, plain value, value, unit: ' + JSON.stringify(r));
+    assert.deepStrictEqual(r.map((x) => [x.kind, x.name, x.cells[1], x.cells[2], x.cells[3]]), [['dimension', 'd1', '3', '3', 'mm']], 'the row: name d1, plain value, value, unit: ' + JSON.stringify(r));
     assert(/Distance/.test(r[0].cells[4]), 'the row says what it measures: ' + r[0].cells[4]);
     assert.deepStrictEqual(await groupHeads(), ['User parameters(0)', 'Sketch dimensions(1)']);
     // canvas selection lights the row; clicking empty canvas clears it
@@ -215,9 +215,9 @@ await (async () => {
     r = await rows();
     const docUnit = r[0].cells[3]; // Shaper's document unit (its own default): every length row must be in it, converted by the shared formatter
     assert(docUnit === 'in' || docUnit === 'mm', 'a document unit: ' + docUnit);
-    const inUnit = (mm) => (mm / (docUnit === 'in' ? 25.4 : 1)).toFixed(1);
+    const inUnit = (mm) => String(Number((mm / (docUnit === 'in' ? 25.4 : 1)).toFixed(3)));
     assert.deepStrictEqual(r.map((x) => [x.name, x.cells[1], x.cells[2], x.cells[3], x.cls.includes('pt-reference')]),
-      [['d1', inUnit(40), inUnit(40), docUnit, false], ['d2', '90.0', '90.0', 'deg', false], ['d3', inUnit(8), inUnit(8), docUnit, false], ['d4', '(reference)', `(${inUnit(30)})`, docUnit, true]], 'Shaper rows: distance, angle, radius, reference: ' + JSON.stringify(r));
+      [['d1', inUnit(40), inUnit(40), docUnit, false], ['d2', '90', '90', 'deg', false], ['d3', inUnit(8), inUnit(8), docUnit, false], ['d4', '(reference)', `(${inUnit(30)})`, docUnit, true]], 'Shaper rows: distance, angle, radius, reference: ' + JSON.stringify(r));
     assert.strictEqual(await evalJs(`document.querySelectorAll('${W} tr.pt-dim')[3].querySelector('.pt-ref').textContent`), 'ref', 'the reference mark');
     const wr = await rect(W); const rb = await rect('#design-ribbon .sk-ribbon');
     assert(wr.t >= rb.b, `Shaper: the window does not overlap the ribbon (${wr.t} >= ${rb.b})`);
@@ -300,7 +300,7 @@ await (async () => {
     await clickEl('#btn-parameters');
     assert.strictEqual(await winOpen(), true, 'Pen Plotter: the button opens the window');
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 1`, 'the Pen Plotter dimension row');
-    r = await rows(); assert.deepStrictEqual([r[0].name, r[0].cells[2]], ['d1', '30.0'], 'Pen Plotter row: ' + JSON.stringify(r));
+    r = await rows(); assert.deepStrictEqual([r[0].name, r[0].cells[2]], ['d1', '30'], 'Pen Plotter row: ' + JSON.stringify(r));
     const pr = await rect(W); const prb = await rect('#design-ribbon .sk-ribbon');
     assert(pr.t >= prb.b, `Pen Plotter: the window does not overlap the ribbon (${pr.t} >= ${prb.b})`);
     await shot('desktop-penplotter-window.png', await winClip());

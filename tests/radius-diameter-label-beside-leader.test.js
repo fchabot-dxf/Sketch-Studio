@@ -47,7 +47,7 @@ const radiusC = (extra) => ({ id: 'dr', type: 'distance', isRadius: true, shape:
 
 const lj = new Map([['a', { id: 'a', x: 0, y: 0 }], ['b', { id: 'b', x: 100, y: 0 }]]);
 const lineHtml = render(lj, [{ id: 'l', type: 'line', joints: ['a', 'b'] }], [{ id: 'dh', type: 'distance', joints: ['a', 'b'], dimMode: 'horizontal', value: 100, offset: 40 }], false);
-const lineGap = minGap(textBoxPoints(lineHtml, '100.0'), segment(0, 40, 100, 40));
+const lineGap = minGap(textBoxPoints(lineHtml, '100'), segment(0, 40, 100, 40));
 
 // A diameter dimension (dimMode 'diameter') has no leader branch of its own: it is drawn by the linear dimension code
 const dj = new Map([['a', { id: 'a', x: -50, y: 0 }], ['b', { id: 'b', x: 50, y: 0 }]]);
@@ -58,7 +58,7 @@ const diaGap = minGap(textBoxPoints(diaHtml, diaM[3]), segment(-50, 40, 50, 40))
 console.log('diameter gap', diaGap.toFixed(2), 'linear', lineGap.toFixed(2));
 assert(Math.abs(diaGap - lineGap) <= 0.5, `diameter gap ${diaGap} equals linear gap ${lineGap}`);
 
-for (const [name, extra, value] of [['radius', {}, 'R 50.0']]) {
+for (const [name, extra, value] of [['radius', {}, 'R 50']]) {
   const html = render(joints, shapes, [radiusC(extra)], false);
   const [x1, y1, x2, y2] = leaderOf(html);
   const gap = minGap(textBoxPoints(html, value), segment(x1, y1, x2, y2));

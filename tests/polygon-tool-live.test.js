@@ -64,7 +64,7 @@ await (async () => {
     assert.deepStrictEqual(await boxes(), [], 'before the centre click no box shows');
     const c2 = await centerOf(HOSTS.penplotter.canvas);
     await click(c2.x, c2.y);
-    assert.deepStrictEqual(await boxes(), [[['R', '0.0'], ['N', '6']]], 'after the centre click: the size and the sides (default 6)');
+    assert.deepStrictEqual(await boxes(), [[['R', '0'], ['N', '6']]], 'after the centre click: the size and the sides (default 6)');
     await key('Escape', 'Escape', 27);
     assert.deepStrictEqual(await boxes(), [], 'Esc closes them');
 
@@ -90,7 +90,7 @@ await (async () => {
     // the 8 typed above is remembered across a reload (localStorage): the next polygon starts with it
     await goto(HOSTS.penplotter.url, null, `!!document.querySelector('.sk-header-tab[data-tab="design"]')`);
     await open('penplotter'); await clickEl('#tool-polygon'); await clickEl(pp.canvas);
-    assert.deepStrictEqual(await boxes(), [[['R', '0.0'], ['N', '8']]], 'remembered across a reload');
+    assert.deepStrictEqual(await boxes(), [[['R', '0'], ['N', '8']]], 'remembered across a reload');
     await key('Escape', 'Escape', 27);
     for (const name of ['shaper']) {
       const h = await open(name);

@@ -23,8 +23,8 @@ const HOSTS = {
   sketchstudio: { url: '/apps/sketchstudio/index.html', canvas: 'svgCanvas' },
   shaper: { url: '/apps/shaper/index.html', canvas: 'design-canvas', design: true },
 };
-// what the committed labels show (independent of the app code): inch Decimal at Auto = 1 decimal; Fractional = the nearest 1/16 + "; mm = 1 decimal
-const text = (mm, unit, disp) => unit === 'mm' ? mm.toFixed(1) : disp === 'fractional' ? formatFraction(mm / IN, 16) + '"' : (mm / IN).toFixed(1);
+// what the committed labels show (independent of the app code): Decimal at default (Length 3, Show trailing zeros OFF); Fractional = nearest 1/16 + "
+const text = (mm, unit, disp) => disp === 'fractional' && unit === 'in' ? formatFraction(mm / IN, 16) + '"' : String(Number((mm / (unit === 'in' ? IN : 1)).toFixed(3)));
 
 const cdp = await launchBrowser({ tag: '769-live-' + PART, width: 1280, height: 800 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
@@ -121,7 +121,7 @@ try {
     await open(hostName);
     for (const disp of ['decimal', 'fractional']) {
       const tag = `[${hostName} in ${disp}]`;
-      await setUnits({ DOC_UNIT: 'in', INCH_DISPLAY: disp, LENGTH_FRACTION: 16, LENGTH_PRECISION: null, ANGLE_PRECISION: null });
+      await setUnits({ DOC_UNIT: 'in', INCH_DISPLAY: disp, LENGTH_FRACTION: 16, LENGTH_PRECISION: 3, ANGLE_PRECISION: 1, TRAILING_ZEROS: false });
       // Rectangle 2-point
       let v = await begin('tool-rect', [0.3, 0.3], [0.62, 0.55]);
       check(v.rect && v.rect.w > 1, `${tag} rect: the preview is drawn ${JSON.stringify(v)}`);
@@ -186,19 +186,19 @@ try {
       await sleep(300);
       await click(await pos('.sk-style-panel .sk-style-foot .sk-style-btn:last-child'));
       const after = await read();
-      check(JSON.stringify(after.box) === JSON.stringify(['50.8', after.rect.h.toFixed(1)]), `[unit change] in -> mm with the box open: the typed 2 in reads 50.8, the live height in mm: ${JSON.stringify(after)}`);
-      check(JSON.stringify(after.labels) === JSON.stringify(['50.8', after.rect.h.toFixed(1)]), `[unit change] the labels follow: ${JSON.stringify(after.labels)}`);
+      check(JSON.stringify(after.box) === JSON.stringify(['50.8', text(after.rect.h, 'mm', 'decimal')]), `[unit change] in -> mm with the box open: the typed 2 in reads 50.8, the live height in mm: ${JSON.stringify(after)}`);
+      check(JSON.stringify(after.labels) === JSON.stringify(['50.8', text(after.rect.h, 'mm', 'decimal')]), `[unit change] the labels follow: ${JSON.stringify(after.labels)}`);
       await esc(); await esc();
     }
   }
 
   lap('inch scenes');
-  // ---- MM document (SketchStudio): the texts every live value showed before this task, a bare 2 = 2 mm ----
+  // ---- MM document (SketchStudio): 3 decimals, trailing zeros hidden; a bare 2 = 2 mm ----
   if (PART === 'shaper') {
     await open('sketchstudio');
-    await setUnits({ DOC_UNIT: 'mm', INCH_DISPLAY: 'decimal', LENGTH_PRECISION: null, ANGLE_PRECISION: null });
+    await setUnits({ DOC_UNIT: 'mm', INCH_DISPLAY: 'decimal', LENGTH_PRECISION: 3, ANGLE_PRECISION: 1, TRAILING_ZEROS: false });
     let v = await begin('tool-rect', [0.3, 0.3], [0.62, 0.55]);
-    const want = [v.rect.w.toFixed(1), v.rect.h.toFixed(1)];
+    const want = [text(v.rect.w, 'mm', 'decimal'), text(v.rect.h, 'mm', 'decimal')];
     check(JSON.stringify(v.labels) === JSON.stringify(want) && JSON.stringify(v.box) === JSON.stringify(want), `[mm] rect labels ${JSON.stringify(v.labels)} box ${JSON.stringify(v.box)} != ${JSON.stringify(want)}`);
     console.log(`[mm] rect preview ${v.rect.w.toFixed(3)} x ${v.rect.h.toFixed(3)} mm: labels ${JSON.stringify(v.labels)} box ${JSON.stringify(v.box)}`);
     H = HOSTS.sketchstudio; await shot('after-rect-box-mm.png');
@@ -207,7 +207,7 @@ try {
     check(made.length === 4 && near(lens[0], 2) && near(lens[3], 1), `[mm] rect typed 2 Tab 1 = 2 x 1 mm: ${JSON.stringify(lens)}`);
     await clean();
     v = await begin('tool-line', [0.3, 0.5], [0.6, 0.4]);
-    check(v.box[0] === v.line.toFixed(1), `[mm] line box ${JSON.stringify(v.box)} (preview ${v.line})`);
+    check(v.box[0] === text(v.line, 'mm', 'decimal'), `[mm] line box ${JSON.stringify(v.box)} (preview ${v.line})`);
     made = await typed(['2']);
     check(made.length === 1 && near(made[0].len, 2), `[mm] line typed 2 = 2 mm: ${JSON.stringify(made)}`);
     await esc(); await esc();
@@ -220,11 +220,11 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     await open('shaper');
-    await setUnits({ DOC_UNIT: 'in', INCH_DISPLAY: 'decimal', LENGTH_PRECISION: null });
+    await setUnits({ DOC_UNIT: 'in', INCH_DISPLAY: 'decimal', LENGTH_PRECISION: 3, TRAILING_ZEROS: false });
     await tool('tool-line'); await sleep(150);
     await click(await C(0.2, 0.6));
     const v = await read();
-    check(v.box.length === 2 && v.box[0] === '0.0', `[phone] the docked line box reads inches (0.0 before any move): ${JSON.stringify(v.box)}`);
+    check(v.box.length === 2 && v.box[0] === '0', `[phone] the docked line box reads inches (0 before any move): ${JSON.stringify(v.box)}`);
     const boxAt = await evalJs(`(() => { const i = [...document.querySelectorAll('.sk-live-box input')].find((x) => x.getClientRects().length); const r = i.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
     await touch(boxAt);
     await evalJs(`document.activeElement && document.activeElement.select && document.activeElement.select()`);

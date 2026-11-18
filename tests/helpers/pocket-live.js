@@ -364,7 +364,7 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
       const c = await card();
       assert.ok(c.loop === true && /\+ wall: one closed loop, stepover/.test(c.note[0]) && c.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`), label + ` ${pat}: the note ${JSON.stringify(c.note)}`);
       const l = await look();
-      assert.ok(l.paths === 1 && await markers() === 1, label + ` ${pat}: ONE closed line drawn, with its start / end marker`);
+      assert.ok(l.paths === 1 && await markers() === 0, label + ` ${pat}: ONE closed line drawn, no dot (TASK 775: a closed loop has no start point)`);
       if (pat === 'linked') await shot(`${D}-card-loop.png`, '#prepare-panel .cut-card', 2);
       await shotWorld(`${D}-loop-${pat}.png`, [0, 0, 120, 70]);
       const file = await download();

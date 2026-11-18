@@ -22,10 +22,10 @@ const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}
 
 /** A fresh browser on the Shaper page: desktop (mm), phone 390 (touch, inches) or Fusion mode (mm). null when no headless browser is installed.
  *  Returns the page tools; close() closes the browser and its server and removes the download folder. */
-export async function openPocketPage({ tag, phone = false, fusion = false }) {
-  const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/745');
+export async function openPocketPage({ tag, phone = false, fusion = false, evidenceDir = null, args = undefined }) { // TASK 775: evidenceDir / args (the 3D view's swiftshader) for tests/helpers/leadin-live.js
+  const EVIDENCE_DIR = evidenceDir || process.env.EVIDENCE_DIR || path.resolve('.evidence/745');
   fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
-  const cdp = await launchBrowser({ tag, width: 1280, height: 800 });
+  const cdp = await launchBrowser({ tag, width: 1280, height: 800, ...(args ? { args } : {}) });
   if (!cdp) return null;
   const { port, send, evalJs, waitFor, waitForApp, navigate } = cdp;
   const dlDir = fs.mkdtempSync(path.join(os.tmpdir(), `sk-${tag}-dl-`));
@@ -187,7 +187,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false }) {
       await setUnit(phone ? 'in' : 'mm');
     }
     return { phone, EVIDENCE_DIR, send, evalJs, waitFor, close, shot, shotWorld, press, clickEl, clickWorld, openMode, setUnit, draw, card, look, pickType, typeField,
-      openClearing, pickClearing, rec, download, fileElements, export2d, preview2dElements, setLoop, markers };
+      openClearing, pickClearing, rec, download, fileElements, export2d, preview2dElements, setLoop, markers, dlDir };
   } catch (e) { await close(); throw e; }
 }
 

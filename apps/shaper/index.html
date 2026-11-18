@@ -481,6 +481,13 @@
     .cut-row[data-row="holdPart"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    /* TASK 775: Lead-in Off | On and its Side Outside | Inside: the Hold part choice's look; 44 px targets on a phone */
+    .cut-row[data-row="leadIn"] .cut-presets, .cut-row[data-row="leadInSide"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
+    .cut-row[data-row="leadIn"] .cut-presets .cut-preset, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
+    .cut-row[data-row="leadIn"] .cut-presets .cut-preset.is-active, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    @media (max-width: 640px), (pointer: coarse) {
+      .cut-row[data-row="leadIn"] .cut-presets .cut-preset, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset { height: 44px; min-width: 44px; }
+    }
     .cut-presets.cut-in-box { display: flex; margin: 0; height: 100%; flex: 0 0 auto; }
     .cut-presets.cut-in-box .cut-preset { height: 100%; padding: 0 8px; font-size: 12px; border-radius: 0; }
     /* TASK 757: the tab count box (− count Auto +): the count is centred between the steppers with no side padding (a count has no unit), so its longest

@@ -13,7 +13,8 @@ import { RECT_MODES } from '#core/constants.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { dimensionEditLabel } from '#core/dimension-seams.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
-import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl, boxValueText, parseBoxValue } from '#ui/numeric-input-manager.js'; // TASK 769: the boxes' one text / reading
+import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727
 
 let inputState = {
@@ -116,7 +117,7 @@ export function setupLiveDimensionInput() {
                 try { ev.preventDefault(); } catch(_) {}
                 _entered = true;
                 if (_blurTimer) { clearTimeout(_blurTimer); _blurTimer = null; }
-                window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail: { mode: 'single', field: 'length', value: parseFloat(legacyInput.value), confirmedBy: 'enter' } }));
+                window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail: { mode: 'single', field: 'length', value: parseBoxValue(legacyInput.value), confirmedBy: 'enter' } }));
             }
         });
 
@@ -124,7 +125,7 @@ export function setupLiveDimensionInput() {
             if (_blurTimer) clearTimeout(_blurTimer);
             _blurTimer = setTimeout(() => {
                 if (!_entered) {
-                    window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail: { mode: 'single', field: 'length', value: parseFloat(legacyInput.value), confirmedBy: 'blur' } }));
+                    window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail: { mode: 'single', field: 'length', value: parseBoxValue(legacyInput.value), confirmedBy: 'blur' } }));
                 }
                 _entered = false;
                 _blurTimer = null;
@@ -144,7 +145,7 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
     container.style.position = 'absolute';
     container.style.left = `${x}px`;
     container.style.top = `${y}px`;
-    el.value = (typeof initialKey === 'string') ? initialKey : (typeof value === 'number' ? value.toFixed(1) : '');
+    el.value = (typeof initialKey === 'string') ? initialKey : (typeof value === 'number' ? boxValueText(value) : '');
     try { el.focus && el.focus(); } catch(_) {}
 }
 
@@ -350,7 +351,7 @@ function handleInputKey(e, input) {
         let detail = {};
         
         if (inputState.mode === 'edit') {
-            detail.value = parseFloat(input.value);
+            detail.value = parseBoxValue(input.value, inputState.target && inputState.target.type === CONSTRAINT_TYPES.ANGLE ? 'angle' : 'length');
         } else {
             // Live Drawing: gather locked values
             if (inputState.locked.width !== null) detail.width = inputState.locked.width;
@@ -370,7 +371,7 @@ function handleInputKey(e, input) {
 function handleInputInput(e, input) {
     if (inputState.mode === 'edit') return; // Don't track locked values for edit mode
 
-    const val = parseFloat(input.value);
+    const val = parseBoxValue(input.value);
     let field;
     if (input.id === 'live-dim-width') field = 'width';
     else if (input.id === 'live-dim-height') field = 'height';
@@ -422,7 +423,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
         if (ja && jb) prefillValue = Math.abs(jb.y - ja.y);
     }
     
-    input.value = (typeof initialKey === 'string') ? initialKey : (typeof prefillValue === 'number' ? prefillValue.toFixed(1) : '');
+    input.value = (typeof initialKey === 'string') ? initialKey : (typeof prefillValue === 'number' ? boxValueText(prefillValue, constraint.type === CONSTRAINT_TYPES.ANGLE ? 'angle' : 'length') : '');
 
     requestAnimationFrame(() => {
         input.focus();
@@ -444,7 +445,7 @@ function activateLiveInput(e, state, primaryField, secondaryField, updateCallbac
             showNumericInputEl(primaryInput);
             primaryInput.focus();
             primaryInput.value = key;
-            inputState.locked[primaryField] = parseFloat(key);
+            inputState.locked[primaryField] = parseBoxValue(key);
         }
         
         const secondaryInput = inputState.inputs[secondaryField];
@@ -542,10 +543,10 @@ export function updateLiveRectPreview(svg, state) {
         heightEl.style.left = `${scrH.x - heightEl.offsetWidth - 15}px`;
         heightEl.style.top = `${scrH.y - heightEl.offsetHeight / 2}px`;
         if (document.activeElement !== widthEl && inputState.locked.width === null) {
-            widthEl.value = w.toFixed(1);
+            widthEl.value = boxValueText(w);
         }
         if (document.activeElement !== heightEl && inputState.locked.height === null) {
-            heightEl.value = h.toFixed(1);
+            heightEl.value = boxValueText(h);
         }
     }
 }
@@ -571,7 +572,7 @@ function update3PointPreview(svg, state, c1, mousePt) {
             el.style.left = `${scr.x - el.offsetWidth/2}px`;
             el.style.top = `${scr.y - el.offsetHeight - 15}px`;
             if (document.activeElement !== el && inputState.locked.width === null) {
-                el.value = len.toFixed(1);
+                el.value = boxValueText(len);
             }
             if (inputState.inputs.height) hideNumericInputEl(inputState.inputs.height);
         }
@@ -600,12 +601,20 @@ function update3PointPreview(svg, state, c1, mousePt) {
             el.style.left = `${scr.x - el.offsetWidth/2}px`;
             el.style.top = `${scr.y - el.offsetHeight/2}px`;
             if (document.activeElement !== el && inputState.locked.height === null) {
-                el.value = Math.abs(h).toFixed(1);
+                el.value = boxValueText(Math.abs(h));
             }
             if (inputState.inputs.width) hideNumericInputEl(inputState.inputs.width);
         }
     }
 }
+
+// TASK 769: the document unit or a display setting changed while these boxes are open: a typed field shows the length it holds (base mm) again in the new
+// unit; the others are written by the next preview (below), as on every move.
+SettingsManager.subscribe((name) => {
+    if (!(name === 'DOC_UNIT' || isPrecisionKey(name)) || !inputState.active) return;
+    for (const f of ['width', 'height']) if (inputState.inputs[f] && inputState.locked[f] !== null) inputState.inputs[f].value = boxValueText(inputState.locked[f]);
+    if (inputState.svg && inputState.state) updateLiveRectPreview(inputState.svg, inputState.state);
+});
 
 export function getLiveLockedPoint(state) {
     if (!state.active || !state.active.preview || !state.active.preview.pt) return null;

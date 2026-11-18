@@ -1,9 +1,14 @@
 // packages/ui/app-header.js — the ONE shared, declared app header across all four hosts.
-// Desktop holds ONLY: the ☰ app-menu button + the host's stage buttons. Same layout, order, sizes and spacing everywhere;
+// Desktop holds: the ☰ app-menu button + the host's stage buttons, and (TASK 768) the Save button at its right end (save-button.js, placed there by
+// sidebar-projects.js; none without the project layer, e.g. Shaper in Fusion mode). Same layout, order, sizes and spacing everywhere;
 // each app themes it via --sk-header-* / --sk-selection tokens. Scrolls sideways when narrow. Hidden at the phone breakpoint
 // and in short landscape (SHORT_VIEWPORT_QUERY), where stage buttons and the peeking drawer handle live in app-sidebar.js.
 
 import { SHORT_VIEWPORT_QUERY } from './short-viewport.js';
+
+/** TASK 768: where the header bar is hidden (a phone, a phone in landscape), declared once: the header's CSS below, and the Save button, which moves to
+ *  the document tab strip there (save-button.js). */
+export const HEADER_HIDDEN_QUERY = `(max-width: 640px), ${SHORT_VIEWPORT_QUERY}`;
 
 let stylesInjected = false;
 function injectStyles() {
@@ -36,7 +41,7 @@ function injectStyles() {
 .sk-header-tab:hover { background: var(--sk-header-hover, rgba(0,0,0,0.05)); opacity: 1; }
 .sk-header-tab.active { background: var(--sk-selection, #3B82F6); color: #fff; opacity: 1; }
 .sk-header-ic { display: inline-flex; align-items: center; }
-@media (max-width: 640px), ${SHORT_VIEWPORT_QUERY} {
+@media ${HEADER_HIDDEN_QUERY} {
   .sk-header { display: none !important; }
 }
 `;

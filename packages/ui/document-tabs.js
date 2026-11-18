@@ -27,6 +27,13 @@
 // the tab's tooltip; a design not saved yet has none. note(text) shows a one-off line in the strip (a Save that downloads the file again says so, once).
 import { SIDEBAR_ICONS } from './app-sidebar.js';
 import { homeLabel, HOME_KINDS } from './document-home.js';
+// TASK 768: a tab's dot / ring is ONE view of THE save state (save-state.js), the header's Save button is the other; `activity` (document-activity.js, shared
+// with that button and the loading overlay) adds what the page is doing: THE Save command running for a tab, and a design LOADING. While a design loads
+// (the page's first restore, which this strip already waits on, and every Open), a LOADING TAB sits after the tabs at once: THE spinner (spinner.js) and
+// "Loading <name>…" (class sk-doctab-loading, not sk-doctab: it is no tab, it cannot be activated or closed). It goes when the load settles.
+import { createDocumentActivity } from './document-activity.js';
+import { tabSaveState, SAVE_STATES } from './save-state.js';
+import { createSpinner } from './spinner.js';
 
 let stylesInjected = false;
 function injectStyles() {
@@ -88,13 +95,16 @@ function injectStyles() {
 .sk-doctab-x:hover { background: color-mix(in srgb, currentColor 18%, transparent); opacity: 1; }
 .sk-doctab-new:hover { background: color-mix(in srgb, var(--sk-header-fg, #334155) 14%, var(--sk-doctab-strip)); color: var(--sk-header-fg, #334155); }
 .sk-doctab-main:focus-visible, .sk-doctab-x:focus-visible, .sk-doctab-new:focus-visible { outline: 2px solid var(--sk-doctab-acc); outline-offset: -2px; }
+.sk-doctab-loading { display: flex; align-items: center; gap: 6px; flex: 0 1 var(--sk-doctab-max); min-width: var(--sk-doctab-min); height: var(--sk-doctabs-h); padding: 0 10px;
+  box-sizing: border-box; color: var(--sk-doctab-dim); --sk-spinner-size: 12px; }
+.sk-doctab-loading-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sk-doctabs-msg { flex: 0 0 auto; align-self: center; margin: 0 8px 0 auto; padding-left: 12px; font-size: 11px; color: #b45309; white-space: nowrap; }
 `;
   document.head.appendChild(s);
   stylesInjected = true;
 }
 
-export function createDocumentTabs({ getBuffer, store, actions, onChange = () => {}, doc = globalThis.document, pollMs = 500 } = {}) {
+export function createDocumentTabs({ getBuffer, store, actions, onChange = () => {}, doc = globalThis.document, pollMs = 500, activity = createDocumentActivity(), signedIn = () => true, onRefresh = () => {} } = {}) {
   injectStyles();
   const el = doc.createElement('div');
   el.className = 'sk-doctabs'; // the row has its fixed height from the first paint (nothing below it moves when the tabs appear); the tabs are drawn once the stored design has restored
@@ -145,12 +155,27 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
     return store && store.isRemote && store.isRemote(t.designId) ? 'drive' : null;
   };
   const homeTip = (t) => (t.home ? homeLabel(t.home, { where: homeKindOf(t) === 'drive' ? 'drive' : 'device' }) : '');
-  function dotOf(t) {
-    if (t.needsSavePrompt === 'save-failed') return { cls: 'failed', tip: 'Not saved: the last save failed' };
-    if (t.needsSavePrompt === 'unsaved') return { cls: '', tip: t.home && t.home.kind === HOME_KINDS.FILE ? 'Changes not saved to the file yet' : 'Not saved yet' };
-    const st = t.designId && store && store.status ? store.status(t.designId) : null;
-    if (st && st.state === 'saving') return { cls: 'saving', tip: 'Saving…' };
+  function dotOf(t) { // TASK 768: from THE save state (save-state.js), as the Save button
+    const s = tabSaveState(t, { store, signedIn, activity });
+    if (s.state === SAVE_STATES.FAILED || s.state === SAVE_STATES.SIGNIN) return { cls: 'failed', tip: s.text };
+    if (s.state === SAVE_STATES.UNSAVED) return { cls: '', tip: s.text };
+    if (s.state === SAVE_STATES.SAVING) return { cls: 'saving', tip: s.text };
     return null;
+  }
+  // TASK 768: the loading tab (after the tabs, before the "+"), drawn whenever the activity's load changes, before the first restore too
+  let loadingEl = null, loadingShown = null;
+  function drawLoading() {
+    const load = activity.loading();
+    const sig = load ? 'L:' + (load.name || '') : null;
+    if (sig === loadingShown) return;
+    loadingShown = sig;
+    if (loadingEl) { loadingEl.remove(); loadingEl = null; }
+    if (!load) return;
+    const label = load.name ? `Loading ${load.name}…` : 'Loading…';
+    loadingEl = doc.createElement('div'); loadingEl.className = 'sk-doctab-loading'; loadingEl.setAttribute('role', 'presentation'); loadingEl.title = label;
+    const name = doc.createElement('span'); name.className = 'sk-doctab-loading-name'; name.textContent = load.name || 'Loading…'; name.setAttribute('aria-hidden', 'true');
+    loadingEl.append(createSpinner({ label, doc }), name);
+    el.insertBefore(loadingEl, plus);
   }
 
   function render(list) {
@@ -181,28 +206,38 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
       }
       x.addEventListener('click', () => run('close', t.key, () => actions.closeTab(t.key)));
       wrap.append(main, x);
-      el.insertBefore(wrap, plus);
+      el.insertBefore(wrap, loadingEl || plus);
     }
     if (focusKey) { const f = el.querySelector(`[data-key="${focusKey}"] .sk-doctab-main`); if (f) f.focus(); }
     const act = el.querySelector('.sk-doctab.active');
     if (act) { // phone width: the one line scrolls; keep the active tab in view (the strip's own scroll only, never the page's)
+      // TASK 768: clear of what is pinned at the strip's end (the Save button where the header is hidden), which declares itself as the strip's scroll-padding
+      const endPad = parseFloat(doc.defaultView.getComputedStyle(el).scrollPaddingRight) || 0;
       const l = act.offsetLeft, r = l + act.offsetWidth;
-      if (l < el.scrollLeft) el.scrollLeft = l - 8; else if (r > el.scrollLeft + el.clientWidth) el.scrollLeft = r - el.clientWidth + 8;
+      if (l < el.scrollLeft) el.scrollLeft = l - 8; else if (r > el.scrollLeft + el.clientWidth - endPad) el.scrollLeft = r - el.clientWidth + 8 + endPad;
     }
   }
 
   /** Redraw when something changed (cheap to call often: it compares a signature first). */
+  // TASK 768: onRefresh(list) after every refresh: the buffer's tabs() as read here (null before the first restore), so the header's Save button follows
+  // the same heartbeat (this strip's poll, the store's and the activity's changes) without reading the buffer a second time
   function refresh() {
     const b = getBuffer && getBuffer();
-    if (!b) return;
-    if (watched !== b) { watched = b; b.ready.then(() => { restored = true; refresh(); }); } // the strip (and the sidebar's name) show once the stored design is back: no "Untitled" flash
-    if (!restored) return;
+    if (!b) { onRefresh(null); return; }
+    if (watched !== b) { // the strip (and the sidebar's name) show once the stored design is back: no "Untitled" flash; meanwhile the loading tab (TASK 768)
+      watched = b;
+      activity.load(null, () => b.ready);
+      b.ready.then(() => { restored = true; refresh(); });
+    }
+    drawLoading();
+    if (!restored) { onRefresh(null); return; }
     const list = b.tabs();
     const sig = JSON.stringify(list.map((t) => [t.key, nameOf(t), t.active, dotOf(t) && dotOf(t).cls, homeKindOf(t), t.home && t.home.name]));
     if (sig !== shown) { shown = sig; render(list); }
     const a = list.find((t) => t.active);
     const now = a ? `${a.key}|${a.designId}|${nameOf(a)}` : '';
     if (now !== lastActive) { lastActive = now; try { onChange(); } catch (e) { console.error('document tabs onChange failed', e); } }
+    onRefresh(list);
   }
 
   // The names of stored designs, and the tabs whose design was deleted (Projects, Delete): those tabs close.
@@ -223,6 +258,7 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
 
   let syncTimer = null; // a burst of store changes (every autosave notifies) is read once, a second after it settles
   const offStore = store ? store.subscribe(() => { refresh(); clearTimeout(syncTimer); syncTimer = setTimeout(syncNames, 300); }) : () => {};
+  const offActivity = activity.subscribe(() => refresh()); // TASK 768: a load / a Save press shows at once
   // the host creates its buffer a moment after the sidebar: look every 50 ms until it exists, then every pollMs
   let timer = setInterval(() => { refresh(); if (restored) { clearInterval(timer); timer = setInterval(refresh, pollMs); } }, Math.min(50, pollMs));
   const onKey = (e) => {
@@ -244,5 +280,5 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   syncNames();
   refresh();
 
-  return { el, refresh, note: say, destroy() { clearInterval(timer); clearTimeout(syncTimer); offStore(); el.removeEventListener('keydown', onKey); el.remove(); } };
+  return { el, refresh, note: say, destroy() { clearInterval(timer); clearTimeout(syncTimer); offStore(); offActivity(); el.removeEventListener('keydown', onKey); el.remove(); } };
 }

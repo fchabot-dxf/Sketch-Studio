@@ -1793,13 +1793,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linecap="round"/>`);
         out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
         
-        // Hovering Dimensions
+        // Hovering Dimensions (TASK 769: the text of a committed dimension label, formatLenLabel: the document unit and the display settings)
         const fs = scale(12);
         const off = scale(10);
         // Width (Top)
-        out.push(`<text x="${minX + w/2}" y="${minY - off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle">${w.toFixed(1)}</text>`);
+        out.push(`<text x="${minX + w/2}" y="${minY - off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle">${formatLenLabel(w)}</text>`);
         // Height (Left)
-        out.push(`<text x="${minX - off}" y="${minY + h/2}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${h.toFixed(1)}</text>`);
+        out.push(`<text x="${minX - off}" y="${minY + h/2}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${formatLenLabel(h)}</text>`);
 
       } else if(active.preview.type === 'rect-center'){
         const dx = p.x - a.x, dy = p.y - a.y;
@@ -1816,9 +1816,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const fs = scale(12);
         const off = scale(10);
         // Width (Top)
-        out.push(`<text x="${a.x}" y="${minY - off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle">${w.toFixed(1)}</text>`);
+        out.push(`<text x="${a.x}" y="${minY - off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle">${formatLenLabel(w)}</text>`);
         // Height (Left)
-        out.push(`<text x="${minX - off}" y="${a.y}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${h.toFixed(1)}</text>`);
+        out.push(`<text x="${minX - off}" y="${a.y}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${formatLenLabel(h)}</text>`);
 
       // arc preview handled above when present
       } else if(active.preview.type === 'rect-3pt'){
@@ -1841,14 +1841,14 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
             // Normal points towards c4/c3, so reverse it for "outside" label or keep it? 
             // Let's push it "out" away from the rect. If h is positive, normal points in.
             const outDir = h >= 0 ? -1 : 1; 
-            out.push(`<text x="${midBase.x + px * off * outDir}" y="${midBase.y + py * off * outDir}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${len.toFixed(1)}</text>`);
+            out.push(`<text x="${midBase.x + px * off * outDir}" y="${midBase.y + py * off * outDir}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${formatLenLabel(len)}</text>`);
 
             // Height (Side b->c3)
             const midSide = { x: (b.x + c3.x)/2, y: (b.y + c3.y)/2 };
             // Direction of base vector (normalized)
             const bx = (b.x - a.x) / len;
             const by = (b.y - a.y) / len;
-            out.push(`<text x="${midSide.x + bx * off}" y="${midSide.y + by * off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${Math.abs(h).toFixed(1)}</text>`);
+            out.push(`<text x="${midSide.x + bx * off}" y="${midSide.y + by * off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${formatLenLabel(Math.abs(h))}</text>`);
           }
         } else {
           out.push(`<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);

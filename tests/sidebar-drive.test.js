@@ -3,7 +3,7 @@
 //   signed out; success shows "Saved to Google Drive" + an "Open in Drive" link; failure shows the exact reason), the "Save to Google Drive by
 //   default" toggle (persisted in SettingsManager) and the "Check Google Drive connection" steps (real Drive adapter over a fake Drive,
 //   including a failing step), and the note that Drive projects are hidden while signed out.
-// TASK 776: the account (sign-in, the connection check) is the avatar's menu at the end of the header (account-avatar.js), not a drawer row.
+// TASK 776: the account (sign-in, the connection check) is the avatar's menu at the far right of the footer (account-avatar.js, footer-slot.js), not a drawer row.
 // EVIDENCE_DIR=<dir> also writes a screenshot of each state.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -17,7 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 
 const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">{"imports":{"#core/":"/packages/core/","#ui/":"/packages/ui/"}}</script></head>
-<body style="background:#2b2f36;font:14px system-ui"><header id="host" class="sk-header" style="padding:8px"></header>
+<body style="background:#2b2f36;font:14px system-ui"><header id="host" class="sk-header" style="padding:8px"></header><footer class="sk-footer" style="position:static"><span class="sk-footer-end"></span></footer>
 <script type="module">
 import { mountProjectSidebar } from '/packages/ui/sidebar-projects.js';
 import { createDriveAdapter } from '/packages/ui/cloud/drive-adapter.js';

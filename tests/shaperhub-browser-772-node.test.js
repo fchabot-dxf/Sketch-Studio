@@ -113,7 +113,7 @@ try {
   const kb = await uploadToShaperHub({ token: root.token, remotePath: '/Furniture/Tables/', filename: 'apron.svg', svg: SVG, mode: UPLOAD_MODES.KEEP_BOTH, session: true });
   assert.strictEqual(kb.filename, 'apron (2).svg');
   assert.strictEqual(kb.remotePath, '/Furniture/Tables/');
-  const rep = await uploadToShaperHub({ token: root.token, remotePath: '/Furniture/Tables/', filename: 'apron.svg', svg: SVG, mode: UPLOAD_MODES.REPLACE, session: true });
+  const rep = await uploadToShaperHub({ token: root.token, ...FAKE_LOGIN, /* TASK 774: a Replace carries the login (THE REPLACE RULE) */ remotePath: '/Furniture/Tables/', filename: 'apron.svg', svg: SVG, mode: UPLOAD_MODES.REPLACE, session: true });
   assert.strictEqual(rep.status, 'replaced');
   assert.deepStrictEqual(api.names('/Furniture/Tables/'), ['apron (2).svg', 'apron.svg']);
   checks += 5;

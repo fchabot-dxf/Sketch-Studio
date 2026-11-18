@@ -23,7 +23,6 @@ import { relativeTime } from './project-manager.js';
 import { createDocumentActivity } from './document-activity.js';
 import { GOOGLE } from './cloud/providers.js';
 import { driveErrorText } from './cloud/drive-adapter.js';
-import { dbg } from '#core/debug.js';
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
@@ -53,11 +52,21 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     if (!store.listProjects) return null;
     const isDriveFolder = (p) => !store.cloud || (store.isRemote ? store.isRemote(p.id) : p.location === 'drive');
     const formatDesign = (r) => ({ id: r.id, name: r.name, sub: [r.app, relativeTime(r.updatedAt)].filter(Boolean).join(' · ') });
-    const listFolders = async () => {
-      const all = await store.listProjects();
+    // TASK 774: the store's Drive listings answer [] when Drive could not be read (router-adapter.js remoteList keeps the error for store.cloud.lastError):
+    // every listing here checks it, so a failed read is shown as the failure, never as "no folders" / "empty" / "no such name"
+    const throwIfDriveFailed = () => {
       const lastErr = store.cloud && store.cloud.lastError && store.cloud.lastError();
       if (lastErr) throw new Error(driveErrorText(lastErr));
+    };
+    const listFolders = async () => {
+      const all = await store.listProjects();
+      throwIfDriveFailed();
       return all.filter(isDriveFolder).map((p) => ({ id: p.id, name: p.name, sub: p.updatedAt ? relativeTime(p.updatedAt) : '' }));
+    };
+    const listDesignsIn = async (folderId) => {
+      const rows = store.listDesigns ? await store.listDesigns(folderId) : [];
+      throwIfDriveFailed();
+      return rows;
     };
     const initialFolderId = async () => {
       const cur = store.current ? await store.current() : null;
@@ -69,29 +78,24 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
       rootLabel: GOOGLE.rootFolderName,
       listFolders,
       initialFolderId,
-      listFolderDesigns: async (folderId) => {
-        const rows = store.listDesigns ? await store.listDesigns(folderId) : [];
-        return rows.map(formatDesign);
-      },
+      listFolderDesigns: async (folderId) => (await listDesignsIn(folderId)).map(formatDesign),
       ...(writable && store.overwrite && store.listDesigns ? {
+        // TASK 774: a listing that fails THROWS (the dialog shows the error and saves nothing): an unchecked name could overwrite unasked.
+        // openInOtherTab: another open tab shows that design (the overwrite closes it: document-buffer.js saveAs)
         findExisting: async (name, folderId) => {
           const clean = String(name == null ? '' : name).trim();
           if (!clean) return null;
-          let all, rows;
           let pid = folderId || (await initialFolderId());
-          try {
-            all = await listFolders();
-            if (!pid) pid = (all.find((p) => p.name === 'My Designs') || {}).id;
-            if (!pid) return null;
-            rows = await store.listDesigns(pid);
-          } catch (err) {
-            dbg.warn('project-actions', 'overwrite check skipped (will let Save surface error):', err && err.message);
-            return null;
-          }
+          const all = await listFolders();
+          if (!pid) pid = (all.find((p) => p.name === 'My Designs') || {}).id;
+          if (!pid) return null;
+          const rows = await listDesignsIn(pid);
           const hit = rows.find((r) => String(r.name == null ? '' : r.name).trim() === clean);
           if (!hit) return null;
           const folder = all.find((p) => p.id === pid);
-          return { id: hit.id, name: hit.name, folderName: folder ? folder.name : null };
+          const b = getBuffer && getBuffer();
+          const openInOtherTab = !!b && b.tabs().some((t) => !t.active && t.designId === hit.id);
+          return { id: hit.id, name: hit.name, folderName: folder ? folder.name : null, openInOtherTab };
         },
       } : {}),
       ...(writable && store.createProject ? {

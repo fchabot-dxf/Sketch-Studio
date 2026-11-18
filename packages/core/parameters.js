@@ -17,7 +17,7 @@
 
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { unitInfo } from '#core/units.js';
-import { lengthText, angleDecimals } from '#core/settings-manager.js';
+import { lengthText, angleText } from '#core/settings-manager.js';
 import { parseInput, evaluate, canonicalize, dependencies, print, validateName, foldName, functionTable } from '#core/expression.js';
 import { patternValueSlots, patternSlot, patternSlotValue } from '#core/pattern-values.js';
 
@@ -571,9 +571,8 @@ export function quantityText(v, unit, show = 'field') {
   if (!Number.isFinite(v)) return '';
   const u = unit ? unitInfo(unit) : null;
   if (!u) return String(Math.round(v * 1e4) / 1e4);
-  if (u.kind === 'length') return lengthText(v, { unit: u.name, auto: 1, show });
-  const text = (v / u.f).toFixed(angleDecimals(1));
-  return show === 'unit' ? `${text} ${unit}` : text;
+  if (u.kind === 'length') return lengthText(v, { unit: u.name, show });
+  return angleText(v / u.f, { show: show === 'unit' ? 'unit' : 'bare' });
 }
 // the unit a dimension's value is shown in: degrees for an angle, the document unit for a length
 export const dimensionUnit = (c, docUnit) => (c.type === CONSTRAINT_TYPES.ANGLE ? 'deg' : docUnit);

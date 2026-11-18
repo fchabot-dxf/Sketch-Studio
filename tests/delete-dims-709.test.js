@@ -209,7 +209,7 @@ try {
     check(valueOf('half') === 7.5 && param('half').expression === 'd1 / 4', `${what}: half is still d1 / 4 = 7.5 (${valueOf('half')})`);
     check(errorsNow().length === 0, `${what}: no formula error (${errorsNow().join('; ')})`);
     const r = userRow('d1');
-    check(r && r.value === '30.0' && r.comment === 'dimension deleted' && [...r.users].sort().join(',') === 'd2,half', `${what}: the Parameters table shows d1 = 30.0 · dimension deleted, read by d2 and half (${JSON.stringify(r && { value: r.value, comment: r.comment, users: r.users })})`);
+    check(r && r.value === '30' && r.comment === 'dimension deleted' && [...r.users].sort().join(',') === 'd2,half', `${what}: the Parameters table shows d1 = 30 · dimension deleted, read by d2 and half (${JSON.stringify(r && { value: r.value, comment: r.comment, users: r.users })})`);
     check(!param('d3'), `${what}: d3, which nothing reads, is never a kept value`);
   };
   {

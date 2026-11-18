@@ -11,7 +11,7 @@
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
 import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, parseParam, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
-import SettingsManager, { docUnit, lengthText, angleDecimals } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 import { basePer } from '#core/units.js';
 import { dbg } from '#core/debug.js';
 import { GLYPHS } from './template-glyphs.js';
@@ -121,8 +121,7 @@ export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } 
   // TASK 722: a length label says the value in the document's unit (mm: as before, 2 decimals; cm / in: up to 4, trailing zeros dropped)
   // TASK 724: the Length / Angle precision settings (Auto = the above) set the exact decimals of every label
   // TASK 728: a length label's text is the one length-format decider's (lengthText: decimals, or an inch fraction 1 1/2")
-  const labelText = (mm) => lengthText(mm, { unit, auto: unit === 'mm' ? 2 : 4, trim: 'auto' });
-  const angleText = (deg) => { const p = angleDecimals(null); return p !== null ? deg.toFixed(p) : fmt(deg); };
+  const labelText = (mm) => lengthText(mm, { unit });
   const g = document_.geometry;
   const J = new Map(g.joints.map(([id, j]) => [id, j]));
   const shapes = g.shapes;
@@ -340,7 +339,7 @@ export function renderTemplatePreview(document_, { labels = true, unit = 'mm' } 
       const at = getLineIntersection(a1, b1, a2, b2);
       if (!at) continue; // two parallel lines (0 or 180 degrees): no crossing to draw an arc about
       const arc = angleSectorArc(angleSectorOf(c), Math.atan2(b1.y - a1.y, b1.x - a1.x), Math.atan2(b2.y - a2.y, b2.x - a2.x));
-      const mid = (arc.start + arc.end) / 2, t = angleText(c.value) + '°';
+      const mid = (arc.start + arc.end) / 2, t = angleText(c.value, { show: 'deg' });
       let rr = size * 0.18, tx, ty;
       for (let k = 0; k < 8; k++) {
         tx = at.x + (rr + fs * 0.9) * Math.cos(mid); ty = at.y + (rr + fs * 0.9) * Math.sin(mid);
@@ -686,7 +685,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
           const input = document.createElement('input'); input.id = id; input.className = 'sk-tp-input'; 
           // TASK 728: a length field shows its default through the one length-format decider (an inch fraction "1 1/2" in Fractional; the unit is beside it).
           // Display only: values[k] stays the exact number until the user types (the input event), so an untouched field builds the exact default.
-          input.value = kind === 'length' ? lengthText(values[k] * basePer(unit), { unit, auto: 6, trim: 'auto', show: 'field' }) : String(values[k]);
+          input.value = kind === 'length' ? lengthText(values[k] * basePer(unit), { unit, show: 'field' }) : String(values[k]);
           // TASK 722: a count is a whole-number spinner; a length / angle is TEXT (it accepts "1/8 in", 3", 38mm: parseParam, the shared expression parser)
           if (kind === 'count') { input.type = 'number'; input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.type = 'text'; input.inputMode = 'decimal'; input.autocomplete = 'off'; }
           input.addEventListener('input', () => { values[k] = parseParam(spec, input.value, unit); clearError(); changed(); });

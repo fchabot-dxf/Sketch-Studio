@@ -65,9 +65,9 @@ for (const unit of ['mm', 'in']) {
     assert(r.kindLabel === (isAngle ? 'Angle' : c.isRadius ? 'Radius' : 'Distance'), `${what}: kind ${r.kindLabel}`);
     assert(r.measures && r.measures.length > 0, `${what}: the geometry it measures: "${r.measures}"`);
   });
-  // the same value in the other unit really differs (25.4 mm = 1.0 in)
+  // the same value in the other unit really differs (25.4 mm = 1 in)
   const plainAligned = rows.dimensions.find((r) => !r.reference && !r.hasExpression && r.kindLabel === 'Distance');
-  eq(plainAligned.value, unit === 'mm' ? '25.4' : '1.0', `${unit}: 25.4 mm shown in the document unit`);
+  eq(plainAligned.value, unit === 'mm' ? '25.4' : '1', `${unit}: 25.4 mm shown in the document unit`);
 }
 
 // ── user parameters: built through planChange (create); values in the parameter's own unit, errors as data ──
@@ -85,15 +85,15 @@ for (const unit of ['mm', 'in']) {
   }
   const mm = buildParameterRows(state, { unit: 'mm' });
   eq(mm.user.map((r) => [r.name, r.expression, r.value, r.unit, r.comment]), [
-    ['width', '120 mm', '120.0', 'mm', 'outer width'], ['gap', 'width / 4 + 2 mm', '32.0', 'mm', ''], ['ang', '45 deg', '45.0', 'deg', ''], ['holes', '4', '4', '', ''],
+    ['width', '120 mm', '120', 'mm', 'outer width'], ['gap', 'width / 4 + 2 mm', '32', 'mm', ''], ['ang', '45 deg', '45', 'deg', ''], ['holes', '4', '4', '', ''],
   ], 'user rows: name, expression, value, unit, comment');
   assert(mm.user.every((r) => !r.error), 'no errors');
   // a parameter keeps its OWN unit whatever the document unit is
-  eq(buildParameterRows(state, { unit: 'in' }).user.map((r) => r.value), ['120.0', '32.0', '45.0', '4'], "values stay in each parameter's own unit");
+  eq(buildParameterRows(state, { unit: 'in' }).user.map((r) => r.value), ['120', '32', '45', '4'], "values stay in each parameter's own unit");
   // a dimension that reads a parameter: the formula text and the stored value
   state.constraints[0].expression = 'width / 2'; state.constraints[0].value = 60;
   const d = buildParameterRows(state, { unit: 'mm' }).dimensions[0];
-  assert(d.hasExpression && d.expression === 'width / 2' && d.value === '60.0' && !d.error, `formula dimension row: ${JSON.stringify({ ...d, constraint: null })}`);
+  assert(d.hasExpression && d.expression === 'width / 2' && d.value === '60' && !d.error, `formula dimension row: ${JSON.stringify({ ...d, constraint: null })}`);
   // an error is data on the row (a formula reading a name that does not exist)
   state.parameters.push({ name: 'broken', unit: 'mm', expression: 'nosuch + 1 mm' });
   const br = buildParameterRows(state, { unit: 'mm' }).user.find((r) => r.name === 'broken');

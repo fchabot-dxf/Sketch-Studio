@@ -17,7 +17,7 @@ export function createStockCard({ input: thick, noteEl: note, getController, onC
   const show = () => {
     const designController = getController();
     const loop = designController ? resolveStock(designController.state, CUT_PLAN).fromLoop : null; // TASK 472: with a Stock loop the thickness is set on that loop in Prepare
-    thick.value = lengthText(loop ? loop.thickness : getStock().thickness, { auto: 3 }); // the one length-format decider (no unit beside this box: an inch fraction carries its mark)
+    thick.value = lengthText(loop ? loop.thickness : getStock().thickness); // the one length-format decider (no unit beside this box: an inch fraction carries its mark)
     thick.disabled = !!loop;
     note.textContent = loop ? (loop.thicknessSet ? 'The board is your Stock loop; set its thickness in Prepare.' : 'The board is your Stock loop; no thickness set on it, so the default applies. Set it in Prepare.') : 'No Stock loop: the board is the design bounds + margin.';
     if (stepper) stepper.refresh();

@@ -8,7 +8,7 @@ import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; //
 import { CLEARING_REFUSED } from './cut-plan.js';
 import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
 import { HOLD_PART, holdDefaults } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults
-import SettingsManager, { docUnit, lengthText } from '#core/settings-manager.js';
+import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, unitNumber } from '#core/units.js';
 import { mountHint, optionHint } from './hint.js'; // TASK 770: the one hint widget
@@ -55,8 +55,8 @@ const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ label: hintLabel(choiceId('ho
 const COUNT_PRESETS = [{ label: 'Auto', value: 'auto' }];
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
-// a field's text: lengthText (the one length-format decider: 3 decimals unless the Length precision setting says otherwise, or an inch fraction); the unit is beside it
-const fieldText = (baseMM) => lengthText(baseMM, { auto: 3, show: 'field' });
+// a field's text: lengthText (the one length-format decider: Length precision, default 3, trailing zeros dropped unless TRAILING_ZEROS, or an inch fraction); the unit is beside it
+const fieldText = (baseMM) => lengthText(baseMM, { show: 'field' });
 const toDocNum = (baseMM) => unitNumber(baseMM, docUnit());  // BASE mm → doc-unit number
 const isUnset = (v) => v === 'unset' || v == null;
 
@@ -403,7 +403,7 @@ export function createCutPanel(hostEl, opts = {}) {
     adaptiveInput.checked = adaptive;
     stepInput.value = fieldText(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
     const deviation = Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm;
-    deviationInput.value = lengthText(deviation, { auto: docUnit() === 'in' ? 4 : 3, show: 'field', fractions: false }); // 0.1 mm = 0.0039 in: a tolerance finer than 1/64, always decimals
+    deviationInput.value = lengthText(deviation, { show: 'field', fractions: false }); // 0.1 mm = 0.0039 in: a tolerance finer than 1/64, always decimals
     // TASK 742: Hold part, for a type that declares it (a plain Outside / Inside): the choice, then the Tabs rows (count, width, thickness) or the Onion skin row (thickness)
     const hold = declares('holdPart') ? (current.holdPart === 'tabs' || current.holdPart === 'skin' ? current.holdPart : 'off') : null;
     card.querySelector('.cut-row[data-row="holdPart"]').style.display = hold ? '' : 'none';
@@ -427,7 +427,7 @@ export function createCutPanel(hostEl, opts = {}) {
     clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));
     const pct = Number(current.stepover) > 0 ? Number(current.stepover) : POCKET_CLEARING.stepoverPct.default;
     stepoverInput.value = String(Math.round(pct * 100) / 100);
-    stepoverLen.textContent = computed ? `= ${lengthText((pct / 100) * (Number(current.toolDia) || 0), { auto: docUnit() === 'in' ? 4 : 2, trim: 'always', show: 'unit', fractions: false })}` : '';
+    stepoverLen.textContent = computed ? `= ${lengthText((pct / 100) * (Number(current.toolDia) || 0), { show: 'unit', fractions: false })}` : '';
     allowanceInput.value = fieldText(fieldBase('finishAllowance'));
     loopInput.checked = computed && current.loop === true;
     hints.finishAllowance.refresh({ loop: current.loop === true }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js)
@@ -458,7 +458,7 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets(deviationPresetsWrap, adaptive ? RESOLUTION_PRESETS : [], 'stepDeviation', deviation);
     const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
     const shapeName = hintLabel(choiceId('cutterShape', shape.id));
-    shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${Number(current.cutterAngle) || 90}\u00b0` : shapeName;
+    shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${angleText(Number(current.cutterAngle) || 90, { show: 'deg' })}` : shapeName;
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
   };
@@ -480,9 +480,9 @@ export function createCutPanel(hostEl, opts = {}) {
     renderFields();
   };
 
-  // U3a: re-label the cut params live when the document unit changes (the Style panel's Units tab sets DOC_UNIT).
+  // U3a / TASK 770: re-label the cut params live when the document unit or display precision / trailing zeros changes.
   const unsub = (typeof SettingsManager.subscribe === 'function')
-    ? SettingsManager.subscribe((key) => { if (key === 'DOC_UNIT' && !card.hidden) renderFields(); })
+    ? SettingsManager.subscribe((key) => { if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && !card.hidden) renderFields(); })
     : () => {};
 
   return { update, destroy() { document.removeEventListener('click', onDocClick); try { unsub(); } catch (_) {} hostEl.innerHTML = ''; } };

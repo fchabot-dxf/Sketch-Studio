@@ -71,19 +71,19 @@ assert(restHtml.includes('x1="0" y1="-50" x2="17" y2="-50"'), 'bottom extension 
 assert(restHtml.includes('x1="17" y1="0" x2="17" y2="-50"'), 'dimension line intact');
 assert(!restHtml.includes('<rect'), 'at rest with DIM_LABEL_BOX=false: no <rect> box');
 
-const restLabelText = (restHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50\.0<\/text>/) || [])[1];
+const restLabelText = (restHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50<\/text>/) || [])[1];
 assert(restLabelText && restLabelText.includes('fill:var(--sk-constraint-stroke, #2563eb)'), 'at rest: label text uses --sk-constraint-stroke');
 
 // ── 2. Hovered & selected linear dimension: colour change, no blue glow box ──
 const hoverHtml = renderSvg(joints, shapes, [linDim], { hovered: linDim });
 assert(!hoverHtml.includes('<rect'), 'hovered linear dimension emits no glow <rect>');
-const hoverLabelText = (hoverHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50\.0<\/text>/) || [])[1];
+const hoverLabelText = (hoverHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50<\/text>/) || [])[1];
 assert(hoverLabelText && hoverLabelText.includes('fill:var(--sk-selection, #017AFD)'), `hovered label text uses HOVER_COLOR (#017AFD), got: ${hoverLabelText}`);
 
 const selHtml = renderSvg(joints, shapes, [linDim], { selected: new Set([linDim]) });
 assert(!selHtml.includes('<rect'), 'selected linear dimension emits no pale-blue glow <rect>');
 assert(!selHtml.includes('stroke-opacity="0.28"'), 'selected linear dimension emits no 0.28 glow');
-const selLabelText = (selHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50\.0<\/text>/) || [])[1];
+const selLabelText = (selHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50<\/text>/) || [])[1];
 assert(selLabelText && selLabelText.includes('fill:var(--sk-selection, #1e40af)'), `selected label text uses --sk-selection, got: ${selLabelText}`);
 assert(!selHtml.includes('dim-offset-handle'), 'selected linear dimension emits no .dim-offset-handle dot');
 const selCirclesOnDimLine = [...selHtml.matchAll(/<circle\b[^>]*cx="([-\d.e]+)"[^>]*cy="([-\d.e]+)"[^>]*>/g)]

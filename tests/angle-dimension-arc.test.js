@@ -59,7 +59,7 @@ const within = (arc, value, msg) => assert(arc && Math.abs(arc.span - value) < 0
   // inside the shape between the two lines: both arc ends lie on the two line directions
   const dirs = geo.shapes.filter((s) => c.shapes.includes(s.id)).map((s) => { const a = joints.get(s.joints[0]), b = joints.get(s.joints[1]); return norm360(deg(Math.atan2(b.y - a.y, b.x - a.x))); });
   assert(dirs.some((d) => angDiff(d, arc.startDeg) < 0.01) && dirs.some((d) => angDiff(d, arc.endDeg) < 0.01), `arc ends ${arc.startDeg.toFixed(2)}/${arc.endDeg.toFixed(2)} sit on the line directions ${dirs}`);
-  assert(arc.html.includes('10.0°'), 'the label reads 10.0');
+  assert(arc.html.includes('10°'), 'the label reads 10°');
 }
 
 // 2. the four sectors: the label in each one never changes the span (a label dragged there is only labelPos, which picks no sector)
@@ -103,7 +103,7 @@ for (const d2 of [0, 180]) {
   const { joints, shapes } = pair(0, 60);
   const wide = arcOf(joints, shapes, { type: 'angle', shapes: ['L1', 'L2'], value: 60, isDriven: true, driven: true, offset: 200, glyphPos: { x: -100, y: 300 } }, 2000);
   within(wide, 120, 'a driven dimension reads the sector under its label');
-  assert(wide.html.includes('(120.0°)'), 'and labels that measured span');
+  assert(wide.html.includes('(120°)'), 'and labels that measured span');
 }
 
 // 6. the pure chooser

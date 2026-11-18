@@ -102,6 +102,6 @@ try {
   const pts = (list) => list.map(([, j]) => [Math.round(j.x * 1e6) / 1e6 || 0, Math.round(j.y * 1e6) / 1e6 || 0]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   assert.deepStrictEqual(pts([...st.joints]), pts(want.joints), 'the drawing is the box frame built with the typed values, Horizontal, 3 compartments');
   const rows = buildParameterRows(st, { unit: 'mm' });
-  assert.deepStrictEqual(rows.user.map((r) => [r.name, r.value, r.unit, r.comment]), [['length', '1500.0', 'mm', 'Overall length'], ['width', '500.0', 'mm', 'Width'], ['thickness', '12.0', 'mm', 'Plywood thickness']], 'the Parameters table rows');
+  assert.deepStrictEqual(rows.user.map((r) => [r.name, r.value, r.unit, r.comment]), [['length', '1500', 'mm', 'Overall length'], ['width', '500', 'mm', 'Width'], ['thickness', '12', 'mm', 'Plywood thickness']], 'the Parameters table rows');
   console.log('template-start-670-node: ok');
 } finally { await app.close(); }

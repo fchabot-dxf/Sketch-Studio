@@ -111,7 +111,7 @@ try {
     // depth: unset -> 0.5 -> 1 -> 0.5 -> 0 (clamp) -> 0
     assert.strictEqual(await val('.cut-depth'), '', label + ': depth starts unset');
     await clickEl('.cut-row[data-param="cutDepth"] .cut-step[data-d="1"]');
-    near((await rec()).cutDepth, 0.5, label + ' depth + from unset'); assert.strictEqual(await val('.cut-depth'), '0.500');
+    near((await rec()).cutDepth, 0.5, label + ' depth + from unset'); assert.strictEqual(await val('.cut-depth'), '0.5');
     await clickEl('.cut-row[data-param="cutDepth"] .cut-step[data-d="1"]');
     near((await rec()).cutDepth, 1, label + ' depth + again');
     await clickEl('.cut-row[data-param="cutDepth"] .cut-step[data-d="-1"]'); await clickEl('.cut-row[data-param="cutDepth"] .cut-step[data-d="-1"]'); await clickEl('.cut-row[data-param="cutDepth"] .cut-step[data-d="-1"]');

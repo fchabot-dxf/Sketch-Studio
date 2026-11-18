@@ -38,7 +38,7 @@ try {
   const loaded = await look();
   assert.ok(sameView(loaded.view, start.view), 'Drive\'s version loaded: the view is kept: ' + JSON.stringify(loaded.view));
   assert.deepStrictEqual([loaded.sel, loaded.card], [[key], true], 'Drive\'s version loaded: the pocket still selected, its card open');
-  assert.strictEqual(await evalJs(`document.querySelector('.cut-depth').value`), '1.000', 'the card shows the other device\'s depth');
+  assert.strictEqual(await evalJs(`document.querySelector('.cut-depth').value`), '1', 'the card shows the other device\'s depth');
   await saved();
   await sleep(1700); await flushDrive();
   assert.strictEqual(drive.copies().length, 1, 'loading Drive\'s version made no further copy');

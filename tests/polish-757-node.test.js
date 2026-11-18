@@ -23,11 +23,11 @@ const set = (k, v) => SettingsManager.set(k, v, { persist: false });
 const IN = 25.4;
 
 // ── 3. lengths ──
-set('DOC_UNIT', 'in'); set('INCH_DISPLAY', 'fractional'); set('LENGTH_FRACTION', 16); set('LENGTH_PRECISION', null);
-eq(lengthText(0.02 * IN, { auto: 3, show: 'field' }), '0.020', 'Fractional 1/16: a 0.02 in finish allowance in the card field is a decimal, not "0"');
-eq(lengthText(0.02 * IN, { auto: 1 }), '0.02', 'the decimals reach its first significant digit even at a view\'s 1 decimal');
-eq(lengthText(0.02 * IN, { auto: 3, show: 'unit' }), '0.020 in', 'a sentence: the decimal with its unit');
-eq(lengthText(0.004 * IN, { auto: 3, trim: 'always', show: 'field' }), '0.004', '0.004 in: 3 decimals');
+set('DOC_UNIT', 'in'); set('INCH_DISPLAY', 'fractional'); set('LENGTH_FRACTION', 16); set('LENGTH_PRECISION', 3); set('TRAILING_ZEROS', false);
+eq(lengthText(0.02 * IN, { show: 'field' }), '0.02', 'Fractional 1/16: a 0.02 in finish allowance in the card field is a decimal, not "0"');
+eq(lengthText(0.02 * IN), '0.02', 'bare: 0.02');
+eq(lengthText(0.02 * IN, { show: 'unit' }), '0.02 in', 'a sentence: the decimal with its unit');
+eq(lengthText(0.004 * IN, { show: 'field' }), '0.004', '0.004 in: 3 decimals');
 eq([lengthText(0), lengthText(1e-12), lengthText(-1e-12)], ['0"', '0"', '0"'], 'zero (and float noise) stays the fraction 0');
 eq([lengthText(0.04 * IN), lengthText(0.0625 * IN), lengthText(0.5 * IN)], ['1/16"', '1/16"', '1/2"'], 'a length that rounds to a fraction stays a fraction');
 set('LENGTH_FRACTION', 64);
@@ -36,8 +36,8 @@ set('LENGTH_FRACTION', 16);
 eq([lengthLabel(0.0987 * IN), lengthLabel(0.0625 * IN), lengthLabel(0.02 * IN)], ['1/8 in', '1/16 in', '0.02 in'], 'the Operations list in Fractional: the same decider');
 set('INCH_DISPLAY', 'decimal');
 eq([lengthLabel(0.0987 * IN), lengthLabel(0.0625 * IN), lengthLabel(0.6875 * IN), lengthLabel(0.5 * IN)], ['0.099 in', '0.063 in', '0.688 in', '0.5 in'],
-  'the Operations list in Decimal: the card precision (3), trailing zeros dropped (was 0.0987 / 0.0625 / 0.6875)');
-eq(lengthText(0.02 * IN, { auto: 3, show: 'field' }), '0.020', 'Decimal: unchanged');
+  'the Operations list in Decimal: precision 3, trailing zeros dropped');
+eq(lengthText(0.02 * IN, { show: 'field' }), '0.02', 'Decimal: trailing zeros dropped');
 set('DOC_UNIT', 'mm');
 eq([lengthLabel(6), lengthLabel(1.5875)], ['6 mm', '1.587 mm'], 'mm: 3 decimals, trailing zeros dropped');
 set('DOC_UNIT', 'in');

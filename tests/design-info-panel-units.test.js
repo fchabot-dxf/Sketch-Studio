@@ -146,15 +146,15 @@ function expandSketch(container) {
     const ANGLE_45 = 45;
 
     const testCases = [
-      { name: 'distance (aligned)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, value: VAL_76_2 }, inExpected: '3.0', mmExpected: '76.2' },
-      { name: 'H distance', constraint: { type: CONSTRAINT_TYPES.DISTANCE, dimMode: 'horizontal', value: VAL_76_2 }, inExpected: '3.0', mmExpected: '76.2' },
-      { name: 'V distance', constraint: { type: CONSTRAINT_TYPES.DISTANCE, dimMode: 'vertical', value: VAL_76_2 }, inExpected: '3.0', mmExpected: '76.2' },
-      { name: 'radius (isRadius: true)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2 }, inExpected: 'R 3.0', mmExpected: 'R 76.2' },
-      { name: 'radius (type: radius)', constraint: { type: 'radius', value: VAL_76_2 }, inExpected: 'R 3.0', mmExpected: 'R 76.2' },
-      { name: 'diameter (isDiameter: true)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, isDiameter: true, value: VAL_76_2 }, inExpected: 'Ø 3.0', mmExpected: 'Ø 76.2' },
-      { name: 'diameter (dimMode: diameter)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, dimMode: 'diameter', value: VAL_76_2 }, inExpected: 'Ø 3.0', mmExpected: 'Ø 76.2' },
-      { name: 'diameter (type: diameter)', constraint: { type: 'diameter', value: VAL_76_2 }, inExpected: 'Ø 3.0', mmExpected: 'Ø 76.2' },
-      { name: 'angle (never unit-converted)', constraint: { type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45 }, inExpected: '45.0°', mmExpected: '45.0°' },
+      { name: 'distance (aligned)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, value: VAL_76_2 }, inExpected: '3', mmExpected: '76.2' },
+      { name: 'H distance', constraint: { type: CONSTRAINT_TYPES.DISTANCE, dimMode: 'horizontal', value: VAL_76_2 }, inExpected: '3', mmExpected: '76.2' },
+      { name: 'V distance', constraint: { type: CONSTRAINT_TYPES.DISTANCE, dimMode: 'vertical', value: VAL_76_2 }, inExpected: '3', mmExpected: '76.2' },
+      { name: 'radius (isRadius: true)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2 }, inExpected: 'R 3', mmExpected: 'R 76.2' },
+      { name: 'radius (type: radius)', constraint: { type: 'radius', value: VAL_76_2 }, inExpected: 'R 3', mmExpected: 'R 76.2' },
+      { name: 'diameter (isDiameter: true)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, isDiameter: true, value: VAL_76_2 }, inExpected: 'Ø 3', mmExpected: 'Ø 76.2' },
+      { name: 'diameter (dimMode: diameter)', constraint: { type: CONSTRAINT_TYPES.DISTANCE, dimMode: 'diameter', value: VAL_76_2 }, inExpected: 'Ø 3', mmExpected: 'Ø 76.2' },
+      { name: 'diameter (type: diameter)', constraint: { type: 'diameter', value: VAL_76_2 }, inExpected: 'Ø 3', mmExpected: 'Ø 76.2' },
+      { name: 'angle (never unit-converted)', constraint: { type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45 }, inExpected: '45°', mmExpected: '45°' },
     ];
 
     // Test DOC_UNIT = 'in'
@@ -175,14 +175,14 @@ function expandSketch(container) {
 
     // 2. Driven / reference dimensions (parenthesized)
     SettingsManager.set('DOC_UNIT', 'in');
-    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, value: VAL_76_2, isDriven: true }) === '(3.0)', 'driven distance in inches');
-    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2, isDriven: true }) === 'R (3.0)', 'driven radius in inches');
-    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45, isDriven: true }) === '(45.0°)', 'driven angle in inches');
+    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, value: VAL_76_2, isDriven: true }) === '(3)', 'driven distance in inches');
+    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2, isDriven: true }) === 'R (3)', 'driven radius in inches');
+    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45, isDriven: true }) === '(45°)', 'driven angle in inches');
 
     SettingsManager.set('DOC_UNIT', 'mm');
     assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, value: VAL_76_2, isDriven: true }) === '(76.2)', 'driven distance in mm');
     assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2, isDriven: true }) === 'R (76.2)', 'driven radius in mm');
-    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45, isDriven: true }) === '(45.0°)', 'driven angle in mm');
+    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45, isDriven: true }) === '(45°)', 'driven angle in mm');
     console.log('✓ Driven / reference dimensions format with parentheses in both units');
 
     // 3. Tree text vs Canvas Label Text Parity

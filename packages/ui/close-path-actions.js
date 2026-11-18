@@ -16,7 +16,7 @@ import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js';
 import { track } from '#ui/analytics.js';
 
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
-const gapText = (mm) => lengthText(mm, { auto: 3, trim: 'auto', show: 'unit', fractions: false });
+const gapText = (mm) => lengthText(mm, { show: 'unit', fractions: false });
 // a refused chain's reasons, each once with its count
 function reasonsText(refused) {
   const by = new Map();

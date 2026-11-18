@@ -147,7 +147,7 @@ try {
   assert.strictEqual(doc.querySelector('.sk-done')?.disabled, true, '666 invalid disables check button');
   assert.strictEqual(doc.querySelectorAll('#fillet-tool-overlay path[d*=" A "]').length, 0, '666 invalid hides previews');
   dispatchCtrlZ(fBox);
-  assert.strictEqual(fBox.value, '5.0', '675 C Ctrl+Z restores default 5.0 in one step');
+  assert.strictEqual(fBox.value, '5', '675 C Ctrl+Z restores default 5 in one step');
   assert.strictEqual(fBox.getAttribute('aria-invalid'), 'false', 'aria-invalid cleared after Ctrl+Z');
   assert.strictEqual(doc.querySelector('.sk-done')?.disabled, false, '.sk-done re-enabled after Ctrl+Z');
   assert.strictEqual(doc.querySelectorAll('#fillet-tool-overlay path[d*=" A "]').length, 3, 'all 3 previews return after Ctrl+Z');

@@ -42,7 +42,7 @@ try {
   const span0 = spanOf(a0);
   assert(Math.abs(span0 - 10) < 0.5, `A: the drawn arc spans ${span0.toFixed(2)} degrees; the label reads 10`);
   const label0 = app.svg.querySelector('.dim-label').textContent.replace(/\s+/g, '');
-  assert(/10\.0/.test(label0), 'A: the label reads 10.0: ' + label0);
+  assert(/10°/.test(label0), 'A: the label reads 10°: ' + label0);
   console.log('A. arc span', span0.toFixed(2), 'label', label0);
 
   // ---- B. a label drag into other sectors never changes what the arc measures
@@ -99,11 +99,11 @@ try {
   console.log('C. label in the narrow sector reads', narrow, '(' + t1 + '), in the wide sector', wide, '(' + t2 + ')');
   assert(Math.abs(narrow - 30) < 2, 'C: the narrow sector measures about 30: ' + narrow);
   assert(Math.abs(narrow + wide - 180) < 0.2, `C: the two sectors are supplements (30 + 150): ${narrow} + ${wide}`);
-  assert(t1.includes(narrow.toFixed(1)) && t2.includes(wide.toFixed(1)), 'C: the labels read what the value box showed: ' + t1 + ' / ' + t2);
+  assert(t1.includes(String(Number(narrow.toFixed(1)))) && t2.includes(String(Number(wide.toFixed(1)))), 'C: the labels read what the value box showed: ' + t1 + ' / ' + t2);
   // the wide dimension drives: typing 120 re-solves the lines so that sector is 120 (the lines were 150 apart in that sector)
   await editTo('120');
   const t3 = labels().pop();
-  assert(t3.includes('120.0'), 'C: the wide dimension was edited to 120: ' + t3);
+  assert(t3.includes('120°'), 'C: the wide dimension was edited to 120: ' + t3);
   console.log('C. wide-sector dimension typed to 120 holds:', t3);
 
   // ---- D. TASK 553: past 180 like Fusion. A new dimension in the 30 sector typed 190, then 270 in the value box: the sector keeps opening
@@ -124,13 +124,13 @@ try {
     if (text !== '190') await editTo(text);
     const a = anyArc(), g = centerOfLabel().world, rr = reflexOf(a, g), t = labels().pop();
     console.log(`D. typed ${text}: label ${t}, arc span ${rr.span.toFixed(2)}, large-arc ${a.large}, label inside ${rr.labelInside}`);
-    assert(t.includes(`${want}.0`), `D: the label reads ${want}: ${t}`);
+    assert(t.includes(`${want}°`), `D: the label reads ${want}: ${t}`);
     assert(Math.abs(rr.span - want) < 0.5 && a.large === 1 && rr.labelInside, `D: the arc spans ${rr.span.toFixed(2)} (large ${a.large}, label inside ${rr.labelInside}), not ${want}`);
   }
   const before0 = lineRows();
   await editTo('0');
   if (boxOpen(app)) app.esc();
-  assert(labels().pop().includes('270.0'), 'D: 0 is refused, the value stays 270');
+  assert(labels().pop().includes('270°'), 'D: 0 is refused, the value stays 270');
   assert.strictEqual(lineRows(), before0, 'D: 0 moved nothing');
   console.log('D. typed 0: refused, still 270, nothing moved');
   console.log('angle-dimension-arc-node: ok');

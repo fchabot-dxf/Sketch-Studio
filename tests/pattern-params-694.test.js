@@ -58,7 +58,7 @@ eq(nullity(st), 0, 'E: the drawing is fully defined (0 DOF) with the pattern mad
   eq(pr.map((r) => r.slot), ['quantity1', 'quantity2', 'distance1', 'distance2'], 'B: the pattern rows carry their values');
   eq(pr.map((r) => r.kindLabel), ['Count', 'Count', 'Length', 'Length'], 'B: kinds');
   eq(pr.map((r) => r.unit), ['', '', 'mm', 'mm'], 'B: units (a count has none)');
-  eq(pr.map((r) => r.value), ['3', '1', '10.0', '10.0'], 'B: values');
+  eq(pr.map((r) => r.value), ['3', '1', '10', '10'], 'B: values');
   ok(pr[0].measures === 'Rectangular pattern: quantity 1' && pr[3].measures === 'Rectangular pattern: distance 2', `B: what each value is (${pr.map((r) => r.measures)})`);
 }
 
@@ -78,7 +78,7 @@ eq(nullity(st), 0, 'E: the drawing is fully defined (0 DOF) with the pattern mad
   // change pitch in the table: the pattern and the dependent move, ONE undo step
   const h1 = st.history.length;
   const t = table(st, { kind: 'dimension', column: 'expression', constraint: c, slot: 'distance1', text: '30' });
-  ok(t.planned.ok && t.planned.hint === '= 30.0 mm' && t.res.ok, `C: pitch = 30 in the table (${t.planned.hint})`);
+  ok(t.planned.ok && t.planned.hint === '= 30 mm' && t.res.ok, `C: pitch = 30 in the table (${t.planned.hint})`);
   ok(st.history.length === h1 + 1, 'C: one undo step');
   ok(c.distance[0] === 30 && r2.value === 60, `C: pitch 30 -> the ring 60 (${c.distance[0]}, ${r2.value})`);
   copyCentres(st, c).forEach((p, k) => near(p.x, 30 * (k + 1), `C: copy ${k + 1} at x = ${30 * (k + 1)}`));
@@ -143,7 +143,7 @@ eq(nullity(st), 0, 'E: the drawing is fully defined (0 DOF) with the pattern mad
   const cc = ops.pattern(s2, CIRC, { shapes: [C.id], joints: [] }, { ...patternDefaults(CIRC), centre: 'j_origin', quantity: 3, angle: 90 });
   eq(cc.names, { quantity: 'd1', angle: 'd2' }, 'A: circular: quantity d1, total angle d2');
   const rows = buildParameterRows(s2, { unit: 'mm' }).dimensions;
-  eq(rows.map((r) => [r.name, r.kindLabel, r.unit, r.value]), [['d1', 'Count', '', '3'], ['d2', 'Angle', 'deg', '90.0']], 'B: circular rows');
+  eq(rows.map((r) => [r.name, r.kindLabel, r.unit, r.value]), [['d1', 'Count', '', '3'], ['d2', 'Angle', 'deg', '90']], 'B: circular rows');
   ops.parameter(s2, 'turn', 'deg', '-90');
   let t = table(s2, { kind: 'dimension', column: 'expression', constraint: cc, slot: 'angle', text: 'turn' });
   ok(t.res.ok && cc.angle === -90 && cc.expressions.angle === 'turn', `D: the total angle reads turn = -90 (${cc.angle})`);

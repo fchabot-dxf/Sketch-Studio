@@ -62,13 +62,13 @@ await (async () => {
     await key('Enter', 'Enter', 13, 0, '\r'); await sleep(500);
     let b;
     let lab = await labels('#svgCanvas');
-    assert(lab.includes('6.0'), 'TASK 677: `width = 6` names the dimension; its label reads a plain "6.0": ' + JSON.stringify(lab));
+    assert(lab.includes('6'), 'TASK 677: `width = 6` names the dimension; its label reads a plain "6": ' + JSON.stringify(lab));
 
     // ================================================================== B. 390 px phone layout
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: false });
     await sleep(800);
     await clickEl('#tool-select').catch(async () => { await evalJs(`document.getElementById('tool-select').scrollIntoView({ inline: 'center' })`); await sleep(200); await clickEl('#tool-select'); });
-    const fx = await evalJs(`(() => { const g = [...document.querySelectorAll('#svgCanvas .dim-label')].find((x) => /6\.0/.test(x.querySelector('text').textContent)); if (!g) return null; g.scrollIntoView({ block: 'center', inline: 'center' }); const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const fx = await evalJs(`(() => { const g = [...document.querySelectorAll('#svgCanvas .dim-label')].find((x) => /^6$/.test(x.querySelector('text').textContent.trim())); if (!g) return null; g.scrollIntoView({ block: 'center', inline: 'center' }); const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(fx, 'the width label is on the 390 px canvas');
     await dblclick(fx.x, fx.y);
     await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, 'the box on a phone-width screen', 5000);

@@ -63,7 +63,7 @@ await (async () => {
   const cellIn = (name, col) => `${row(name)} input[data-col="${col}"]`;
   const cellValue = (name, col) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(cellIn(name, col))}); return e ? e.value : null; })()`);
   // the canvas label of a length in the document unit (Shaper's may be inches): 12 mm reads 0.5 in, 18 mm 0.7 in
-  const docUnitText = (mm) => evalJs(`document.querySelector(${JSON.stringify(row('d3') + ' td.pt-unit')}).textContent`).then((u) => (u === 'in' ? mm / 25.4 : mm).toFixed(1));
+  const docUnitText = (mm) => evalJs(`document.querySelector(${JSON.stringify(row('d3') + ' td.pt-unit')}).textContent`).then((u) => String(Number((u === 'in' ? mm / 25.4 : mm).toFixed(3))));
   const valueText = (name) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(row(name) + ' td.pt-val')}); return e ? e.textContent : null; })()`);
   const message = (name) => evalJs(`(() => { const r = document.querySelector(${JSON.stringify(row(name))}); const m = r && r.nextElementSibling; return m && m.classList.contains('pt-msg') ? { text: m.textContent, err: m.classList.contains('pt-msg-err') } : null; })()`);
   const active = () => evalJs(`(() => { const a = document.activeElement; const r = a && a.closest && a.closest('tr.sk-ptable-row'); return a ? { tag: a.tagName, col: a.dataset.col || null, row: r ? (r.dataset.name || r.dataset.kind) : null, cls: a.className } : null; })()`);
@@ -116,7 +116,7 @@ await (async () => {
     assert.deepStrictEqual(await active(), { tag: 'INPUT', col: 'expression', row: 'thickness', cls: 'pt-in' }, 'a click puts the caret in the Expression cell');
     await selectAll(); await type('12');
     assert.strictEqual(await cellValue('thickness', 'expression'), '12', 'the keys went into the cell');
-    assert.deepStrictEqual(await message('thickness'), { text: '= 12.0 mm, also changes d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14', err: false }, 'the live preview under the row');
+    assert.deepStrictEqual(await message('thickness'), { text: '= 12 mm, also changes d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14', err: false }, 'the live preview under the row');
     assert.deepStrictEqual(await params(), [['length', '1500 mm'], ['width', '400 mm'], ['thickness', '18 mm']], 'never per keystroke: the parameter is still 18');
     assert.deepStrictEqual(await xLevels(), [0, 18, 382, 400], 'and nothing moved yet');
     assert.strictEqual(await history(), h0, 'no undo step while typing');
@@ -132,7 +132,7 @@ await (async () => {
     const t12 = await docUnitText(12);
     assert.ok((await thicknessLabel()).includes('fx: ' + t12), `the thickness dimension label on the canvas reads fx: ${t12}: ` + await thicknessLabel());
     assert.strictEqual(await history(), h0 + 1, 'ONE undo step');
-    await waitFor(`document.querySelector(${JSON.stringify(row('thickness') + ' td.pt-val')}).textContent === '12.0'`, 'the table value reads 12.0');
+    await waitFor(`document.querySelector(${JSON.stringify(row('thickness') + ' td.pt-val')}).textContent === '12'`, 'the table value reads 12');
     assert.strictEqual(await cellValue('thickness', 'expression'), '12 mm', 'the cell shows the stored (canonical) expression');
     assert.strictEqual(await message('thickness'), null, 'the preview line is gone');
     assert.deepStrictEqual(await active(), { tag: 'INPUT', col: 'expression', row: 'd1', cls: 'pt-in' }, 'Enter moved down one row in the same column (the first dimension row)');
@@ -193,7 +193,7 @@ await (async () => {
     // the new row's unit is the document unit until picked (Fusion's Add dialog default); 20 mm reads 0.8 in in an inch document
     const du = await evalJs(`document.querySelector(${JSON.stringify(row('d3') + ' td.pt-unit')}).textContent`);
     assert.strictEqual(await evalJs(`document.querySelector('${W} tr.pt-new select').value`), du, 'the new row starts in the document unit');
-    const gap20 = du === 'in' ? '0.8' : '20.0';
+    const gap20 = du === 'in' ? '0.787' : '20';
     await type('gap'); await Tab(); await type('width / 20'); await sleep(100);
     assert.deepStrictEqual(await evalJs(`(() => { const m = document.querySelector('${W} tr.pt-new').nextElementSibling; return m && m.textContent; })()`), `creates gap = ${gap20} ${du}`, 'the new row previews what Enter creates');
     await Enter(); await sleep(400);
@@ -250,7 +250,7 @@ await (async () => {
     assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= 390`), true, 'phone: no sideways scroll');
     const fit = await evalJs(`(() => { const b = document.querySelector('${W} .sk-dock-body'); const t = document.querySelector('${W} table'); const h = [...document.querySelectorAll('${W} input.pt-in')].filter((i) => i.getClientRects().length).map((i) => Math.round(i.getBoundingClientRect().height)); return { fits: t.scrollWidth <= b.clientWidth, minH: Math.min(...h), unit: getComputedStyle(document.querySelector('${W} th.pt-unit')).display, comment: getComputedStyle(document.querySelector('${W} th.pt-comment')).display }; })()`);
     assert.deepStrictEqual(fit, { fits: true, minH: 36, unit: 'none', comment: 'none' }, 'phone: the table fits, the inputs are 36 px tall, Unit merges into Value and Comment hides');
-    assert.strictEqual(await valueText('thickness') + ' ' + await evalJs(`document.querySelector(${JSON.stringify(row('thickness') + ' td.pt-val')}).dataset.unit`), '18.0 mm', 'phone: Value and Unit in one column');
+    assert.strictEqual(await valueText('thickness') + ' ' + await evalJs(`document.querySelector(${JSON.stringify(row('thickness') + ' td.pt-val')}).dataset.unit`), '18 mm', 'phone: Value and Unit in one column');
     // a tap on the row (outside its cells) shows its Comment in the Value's place
     await press(row('thickness') + ' td.pt-val');
     assert.deepStrictEqual(await evalJs(`(() => { const r = document.querySelector(${JSON.stringify(row('thickness'))}); return { open: r.classList.contains('pt-open'), comment: getComputedStyle(r.querySelector('td.pt-comment')).display, value: getComputedStyle(r.querySelector('td.pt-val')).display, text: r.querySelector('td.pt-comment input').value }; })()`),
@@ -261,7 +261,7 @@ await (async () => {
     assert.strictEqual((await active()).row, 'thickness', 'phone: a tap puts the caret in the cell');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector(${JSON.stringify(row('thickness') + ' td.pt-val')})).display`), 'table-cell', 'phone: editing the Expression shows the Value again');
     await selectAll(); await type('12');
-    assert.deepStrictEqual(await message('thickness'), { text: '= 12.0 mm, also changes d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14', err: false }, 'phone: the preview');
+    assert.deepStrictEqual(await message('thickness'), { text: '= 12 mm, also changes d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14', err: false }, 'phone: the preview');
     await sleep(200); await shot('phone-sheet-mid-edit.png');
     await Enter(); await sleep(700);
     assert.deepStrictEqual(await params(), [['length', '1500 mm'], ['width', '400 mm'], ['thickness', '12 mm']], 'phone: thickness = 12 mm');

@@ -42,7 +42,7 @@ try {
   assert.strictEqual(JSON.stringify(lines(app)), linesBefore, 'and the geometry is where it was');
   await create();
   const afterCreate = labels(app);
-  assert(afterCreate.some((t) => /3\.0/.test(t) && !/\(/.test(t)), 'a driving (no parentheses) 3.0 dimension label is shown: ' + JSON.stringify(afterCreate));
+  assert(afterCreate.some((t) => /^3$/.test(t) && !/\(/.test(t)), 'a driving (no parentheses) 3 dimension label is shown: ' + JSON.stringify(afterCreate));
   const measure = () => { const l = lines(app).sort((u, v) => u[0].y - v[0].y); const up = l[0], lo = l[1]; const pt = up[0].x > up[1].x ? up[0] : up[1]; return { pt, a: lo[0], b: lo[1], d: perpPx(pt, lo[0], lo[1]), lo }; };
   assert.strictEqual(lines(app).length, 2, 'no extra shape was added by the dimension');
   const d3 = measure().d;

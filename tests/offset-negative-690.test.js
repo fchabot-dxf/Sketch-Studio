@@ -184,8 +184,8 @@ const fixAll = (S, ids) => ids.forEach((j) => { J(S, j).fixed = true; });
     // TASK 710: the typed value IS the dimension's value (Fusion): -5 stays -5, the side is the pointer's, the sign carries the flip
     ok(c.value === -5, `tool (710): the new offset dimension holds -5 as typed (${c.value})`);
     const labNew = labelEl(app, st.constraints.indexOf(c));
-    ok(labNew && /^-5\.0/.test(labNew.textContent.trim()), `tool (710): the label reads -5 (${labNew && labNew.textContent.trim()})`);
-    // the dimension box: -3 keeps the side of -5 (the offset stays on the other side), at 3; its label shows -3.0
+    ok(labNew && /^-5\b/.test(labNew.textContent.trim()), `tool (710): the label reads -5 (${labNew && labNew.textContent.trim()})`);
+    // the dimension box: -3 keeps the side of -5 (the offset stays on the other side), at 3; its label shows -3
     app.tool('select');
     const idx = st.constraints.indexOf(c);
     await app.pause(550);
@@ -200,7 +200,7 @@ const fixAll = (S, ids) => ids.forEach((j) => { J(S, j).fixed = true; });
     ok(c.value === -3 && Math.sign(yOff() - ySrc) === Math.sign(yNeg - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 3) < 1e-4, `dimension: -3 stays on the -5 side at 3 (${c.value}, ${yOff()})`);
     ok(st.history.length === h0 + 2, 'dimension: ONE undo step');
     const lab = labelEl(app, st.constraints.indexOf(c));
-    ok(lab && /-3\.0/.test(lab.textContent), `dimension: the label shows the signed value (${lab && lab.textContent.trim()})`);
+    ok(lab && /-3\b/.test(lab.textContent), `dimension: the label shows the signed value (${lab && lab.textContent.trim()})`);
     // TASK 710: editing the dimension -3 -> 5 puts the offset back on the pointer side, at 5; Ctrl+Z restores -3 on the other
     const hF = st.history.length;
     ok(typeInto({ state: st }, c, '5').ok && c.value === 5 && Math.sign(yOff() - ySrc) === Math.sign(yBelow - ySrc) && Math.abs(Math.abs(yOff() - ySrc) - 5) < 1e-4, `dimension (710): 5 flips back to the pointer side at 5 (${c.value}, ${yOff()})`);

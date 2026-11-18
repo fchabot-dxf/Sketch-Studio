@@ -9,7 +9,7 @@
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds } from '#core/profile-model.js';
 import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel } from '#core/stepped-cut.js';
-import { docUnit, lengthText } from '#core/settings-manager.js';
+import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
@@ -86,7 +86,7 @@ export function holdNoteItems(storedRec, hold) {
   if (!hold || !storedRec) return [];
   // each length's text is lengthText's (the one decider, TASK 728: an inch fraction in Fractional); the unit is written after it. TASK 757: at the card's precision
   // (3 decimals while Length precision is Auto, as its tab width / thickness / depth fields and the Operations list show them: "0.063 in thick", not 0.0625)
-  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: 3, trim: 'always', show: 'field' });
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, show: 'field' });
   const name = (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Cut';
   const what = hold.mode === 'skin' ? 'onion skin' : 'tabs';
   if (hold.role === 'refused') {
@@ -167,17 +167,16 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const LINES_WHY = { splits: ' (the pocket narrows)', islands: ' (the pocket has islands)' };
 export function clearingWords(sum) {
   if (!sum || sum.refused) return null;
-  const what = sum.pattern === 'raster' ? `raster ${Number(sum.settings.angle)}°: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
+  const what = sum.pattern === 'raster' ? `raster ${angleText(Number(sum.settings.angle), { show: 'deg' })}: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
     : sum.pattern === 'morphed' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}`
     : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.loop ? '' : ` in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`}`;
   if (!sum.loop) return `${what} + wall`;
   const why = sum.linesWhy && sum.loopCount > 1 ? LINES_WHY[sum.linesWhy] : '';
   return `${what} + wall: ${sum.loopCount === 1 ? 'one closed loop, ends where it starts' : `${sum.loopCount} closed loops${why}, each ends where it starts`}`;
 }
-// an area (mm²) in the document unit's area: mm² (under 1 cm²) / cm², or in²
+// an area (mm²) in the document unit's area rule: mm² (under 1 cm²) / cm², or in²; formatted with the ONE length precision rule
 export function areaText(mm2, u) {
-  if (u === 'in') { const a = mm2 / 645.16; return `${a.toFixed(a < 0.1 ? 3 : 2)} in²`; }
-  return mm2 < 100 ? `${mm2 < 10 ? mm2.toFixed(1) : Math.round(mm2)} mm²` : `${(mm2 / 100).toFixed(1)} cm²`;
+  return u === 'in' ? coreAreaText(mm2, { unit: 'in' }) : coreAreaText(mm2, { unit: mm2 < 100 ? 'mm' : 'cm' });
 }
 /**
  * clearingNoteItems(storedRec, sum) — TASK 745: the card note of a programmed pocket (doc unit), from its clearingSummary: "Pocket: spiral, 12 turns in 1 line + wall, stepover
@@ -188,13 +187,13 @@ export function areaText(mm2, u) {
  */
 export function clearingNoteItems(storedRec, sum) {
   if (!sum || !storedRec) return [];
-  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 2, trim: 'always', show: 'field', fractions: false });
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, show: 'field', fractions: false });
   const label = (POCKET_CLEARING.patterns.find((p) => p.id === clearingPattern(effectiveCutRecord(storedRec))) || {}).label || 'Clearing';
   if (sum.refused) {
     const text = `Pocket: ${label} refused: ${CLEARING_REFUSED[sum.refused] || sum.refused}; cut as Freehand`;
     return [{ text, warn: text.slice('Pocket: '.length), title: 'the clearing is not programmed: the Origin clears this pocket by hand' }];
   }
-  const st = sum.settings, bit = `${lengthText(st.toolDia, { unit: u, auto: 3, trim: 'always', show: 'field' })} ${u}`; // the bit as its field shows it (3.175 mm, not 3.17; TASK 757: 0.063 in, not 0.0625)
+  const st = sum.settings, bit = `${lengthText(st.toolDia, { unit: u, show: 'field' })} ${u}`; // the bit as its field shows it
   const total = sum.length + (sum.finishLength || 0);
   const pathWords = u === 'in' ? `${(total / 304.8).toFixed(1)} ft` : `${(total / 1000).toFixed(1)} m`;
   const feed = u === 'in' ? `${Math.round(POCKET_CLEARING.feedMmPerMin / 25.4)} in/min` : `${POCKET_CLEARING.feedMmPerMin} mm/min`;
@@ -237,12 +236,12 @@ export function steppedNoteItems(storedRec) {
   if (!s) return [];
   // the text of each length is lengthText's (the one decider); the unit is written once after the list. g: adaptive depths, gTol: the resolution and the
   // outline spacing (tolerances finer than any inch fraction: always decimals)
-  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, auto: 3, trim: 'always', show: 'field' });
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, show: 'field' });
   const name = s.label || (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Stepped cut';
   if (s.error) return [{ text: `${name}: the slope could not be read (${s.error}): nothing is cut` }];
   const n = `${s.count} step${s.count === 1 ? '' : 's'}`;
-  const g = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 2, trim: 'always', show: 'field' });
-  const gTol = (mm) => lengthText(mm, { unit: u, auto: u === 'in' ? 4 : 2, trim: 'always', show: 'field', fractions: false });
+  const g = f;
+  const gTol = (mm) => lengthText(mm, { unit: u, show: 'field', fractions: false });
   const item = { text: s.deviation === null
     ? `${name}: ${n}, ${s.count > 1 ? `${f(s.depths[0])} to ` : ''}${f(s.depths[s.depths.length - 1])} ${u}`
     : `${name}: adaptive, ${(resolutionLevel(s.deviation) || { label: 'Custom' }).label} (${gTol(s.deviation)} ${u}): ${n} at ${s.depths.map(g).join(' \u00b7 ')} ${u}` };

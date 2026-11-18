@@ -11,6 +11,8 @@ import { HOLD_PART, holdDefaults } from '#core/hold-part.js'; // TASK 742: the H
 import SettingsManager, { docUnit, lengthText } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, unitNumber } from '#core/units.js';
+import { mountHint, optionHint } from './hint.js'; // TASK 770: the one hint widget
+import { hintLabel, choiceId } from './param-hints.js'; // TASK 770: THE table of every row's label and hint
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 // TASK 714: each STEPPED type right after its plain type; a stepped type is listed only when the target can take it (its record carries that slope).
@@ -49,14 +51,11 @@ const STEPPERS = {
 const ANGLE_PRESETS = [{ label: '0\u00b0', value: 0 }, { label: '45\u00b0', value: 45 }, { label: '90\u00b0', value: 90 }];
 const CLEARING_CHOICE = (id) => CLEARING_CHOICES.find((c) => c.id === id) || CLEARING_CHOICES[0];
 // TASK 742: the Hold part choice (#core HOLD_PART.modes: Off | Tabs | Onion skin) and the count's Auto, as preset buttons (the ONE preset widget)
-const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ label: m.label, value: m.id }));
+const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ label: hintLabel(choiceId('holdPart', m.id)), value: m.id }));
 const COUNT_PRESETS = [{ label: 'Auto', value: 'auto' }];
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
 // a field's text: lengthText (the one length-format decider: 3 decimals unless the Length precision setting says otherwise, or an inch fraction); the unit is beside it
-/** TASK 766 (owner turn 2320): the hint under Finish allowance. The last pass that takes the allowance off is the Origin's own inside cut with Loop off, the
- *  loop's final turn with Loop on (pocket-clearing.js: the wall pass), so the sentence follows the Loop box. */
-export const FINISH_HINT = (loop) => `Left on the walls by the clearing passes; ${loop ? 'the loop’s last turn' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.`;
 const fieldText = (baseMM) => lengthText(baseMM, { auto: 3, show: 'field' });
 const toDocNum = (baseMM) => unitNumber(baseMM, docUnit());  // BASE mm → doc-unit number
 const isUnset = (v) => v === 'unset' || v == null;
@@ -74,7 +73,7 @@ export function createCutPanel(hostEl, opts = {}) {
   card.innerHTML = `
     <div class="cut-card-title">Cut</div>
     <div class="cut-field">
-      <label class="cut-field-label">Cut type</label>
+      <button type="button" class="cut-field-label" data-hint="cutType"></button>
       <div class="cut-type-dd">
         <button type="button" class="cut-type-trigger" aria-haspopup="listbox" aria-expanded="false">
           <span class="cut-ic-slot"></span><span class="cut-type-cur">Select type</span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -83,19 +82,19 @@ export function createCutPanel(hostEl, opts = {}) {
     </div>
     <div class="cut-rows">
       <div class="cut-row" data-param="cutDepth">
-        <label class="cut-field-label">Depth</label>
+        <button type="button" class="cut-field-label" data-hint="cutDepth"></button>
         <div class="cut-stepper cut-box">
           <div class="cut-mid"><input type="text" class="cut-num cut-depth" inputmode="decimal" placeholder="unset"><span class="cut-unit">mm</span></div>
         </div>
       </div>
       <div class="cut-row" data-row="clearing">
-        <label class="cut-field-label">Clearing</label>
+        <button type="button" class="cut-field-label" data-hint="clearing"></button>
         <button type="button" class="cut-clear-trigger" aria-haspopup="listbox" aria-expanded="false">
-          <span class="cut-clear-ic"></span><span class="cut-clear-cur">Freehand</span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="cut-clear-ic"></span><span class="cut-clear-cur"></span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
       <div class="cut-row" data-row="stepover">
-        <label class="cut-field-label">Stepover</label>
+        <button type="button" class="cut-field-label" data-hint="stepover"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-stepover" inputmode="decimal">
           <span class="cut-unit-fixed">%</span>
@@ -103,18 +102,17 @@ export function createCutPanel(hostEl, opts = {}) {
         <div class="cut-hint cut-stepover-len"></div>
       </div>
       <div class="cut-row" data-row="finishAllowance">
-        <label class="cut-field-label">Finish allowance</label>
+        <button type="button" class="cut-field-label" data-hint="finishAllowance"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-finish-allowance" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
-        <div class="cut-hint cut-finish-hint"></div>
       </div>
       <div class="cut-row" data-row="loop">
-        <label class="cut-check"><input type="checkbox" class="cut-loop"><span>Loop</span></label>
+        <label class="cut-check"><input type="checkbox" class="cut-loop"><span data-hint="loop"></span></label>
       </div>
       <div class="cut-row" data-row="rasterAngle">
-        <label class="cut-field-label">Raster angle</label>
+        <button type="button" class="cut-field-label" data-hint="rasterAngle"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-raster-angle" inputmode="decimal">
           <span class="cut-unit-fixed">\u00b0</span>
@@ -122,10 +120,10 @@ export function createCutPanel(hostEl, opts = {}) {
         <div class="cut-presets cut-angle-presets"></div>
       </div>
       <div class="cut-row" data-row="adaptiveSteps">
-        <label class="cut-check"><input type="checkbox" class="cut-adaptive"><span>Adaptive stepping</span></label>
+        <label class="cut-check"><input type="checkbox" class="cut-adaptive"><span data-hint="adaptiveSteps"></span></label>
       </div>
       <div class="cut-row" data-row="stepDepth">
-        <label class="cut-field-label">Step depth</label>
+        <button type="button" class="cut-field-label" data-hint="stepDepth"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-step-depth" inputmode="decimal">
           <span class="cut-unit">mm</span>
@@ -133,7 +131,7 @@ export function createCutPanel(hostEl, opts = {}) {
         <div class="cut-presets"></div>
       </div>
       <div class="cut-row" data-row="stepDeviation">
-        <label class="cut-field-label">Resolution</label>
+        <button type="button" class="cut-field-label" data-hint="stepDeviation"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-step-deviation" inputmode="decimal">
           <span class="cut-unit">mm</span>
@@ -141,25 +139,25 @@ export function createCutPanel(hostEl, opts = {}) {
         <div class="cut-presets"></div>
       </div>
       <div class="cut-row" data-row="holdPart">
-        <label class="cut-field-label">Hold part</label>
+        <button type="button" class="cut-field-label" data-hint="holdPart"></button>
         <div class="cut-presets cut-hold-modes"></div>
       </div>
       <div class="cut-row" data-row="tabCount">
-        <label class="cut-field-label">Tab count</label>
+        <button type="button" class="cut-field-label" data-hint="tabCount"></button>
         <div class="cut-inline cut-box cut-count-box">
           <input type="text" class="cut-num cut-tab-count" inputmode="numeric" placeholder="Auto">
           <span class="cut-presets cut-in-box"></span>
         </div>
       </div>
       <div class="cut-row" data-row="tabWidth">
-        <label class="cut-field-label">Tab width</label>
+        <button type="button" class="cut-field-label" data-hint="tabWidth"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-tab-width" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
       </div>
       <div class="cut-row" data-row="holdThickness">
-        <label class="cut-field-label">Tab thickness</label>
+        <button type="button" class="cut-field-label" data-hint="holdThickness"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-hold-thickness" inputmode="decimal">
           <span class="cut-unit">mm</span>
@@ -167,7 +165,7 @@ export function createCutPanel(hostEl, opts = {}) {
       </div>
       <div class="cut-note" hidden></div>
       <div class="cut-row" data-param="cutOffset">
-        <label class="cut-field-label">Offset</label>
+        <button type="button" class="cut-field-label" data-hint="cutOffset"></button>
         <div class="cut-inline cut-box cut-offset-box">
           <button type="button" class="cut-flip" title="Flip offset direction" aria-label="Flip offset" aria-pressed="false"><svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true"><path d="M2 4h9l-2.5-2.5M12 8H3l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <input type="text" class="cut-num cut-offset" inputmode="decimal">
@@ -175,7 +173,7 @@ export function createCutPanel(hostEl, opts = {}) {
         </div>
       </div>
       <div class="cut-row" data-param="toolDia">
-        <label class="cut-field-label">Bit diameter</label>
+        <button type="button" class="cut-field-label" data-hint="toolDia"></button>
         <div class="cut-inline cut-box">
           <span class="cut-dia-prefix">D</span>
           <input type="text" class="cut-num cut-bit" inputmode="decimal">
@@ -184,9 +182,9 @@ export function createCutPanel(hostEl, opts = {}) {
         <div class="cut-presets"></div>
       </div>
       <div class="cut-row" data-row="cutterShape">
-        <label class="cut-field-label">Cutter shape</label>
+        <button type="button" class="cut-field-label" data-hint="cutterShape"></button>
         <button type="button" class="cut-shape-trigger" aria-haspopup="listbox" aria-expanded="false">
-          <span class="cut-shape-ic"></span><span class="cut-shape-cur">Flat</span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="cut-shape-ic"></span><span class="cut-shape-cur"></span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
     </div>
@@ -203,8 +201,24 @@ export function createCutPanel(hostEl, opts = {}) {
   const holdModesWrap = $('.cut-hold-modes'), countInput = $('.cut-tab-count'), countPresetsWrap = $('.cut-row[data-row="tabCount"] .cut-presets') /* the Auto button, inside the count box (a row of its own would push the card past a phone's screen) */, tabWidthInput = $('.cut-tab-width'), holdThicknessInput = $('.cut-hold-thickness'); // TASK 742
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
   const clearTrigger = $('.cut-clear-trigger'), clearPop = $('.cut-clear-pop'), clearIc = $('.cut-clear-ic'), clearCur = $('.cut-clear-cur'); // TASK 745
-  const finishHint = $('.cut-finish-hint'); // TASK 766
   const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
+  // TASK 770: every row's label and hint (hint.js; the texts: param-hints.js). A row's label is its trigger; a checkbox row (its label toggles the box) gets a
+  // small "i" beside its text. The hint line goes under the row's field; the row's inputs / dropdown / Hold part choice are described by it (aria-describedby).
+  holdModesWrap.setAttribute('role', 'group');
+  const hints = {};
+  for (const t of card.querySelectorAll('[data-hint]')) {
+    const row = t.closest('.cut-row, .cut-field'), check = t.closest('.cut-check');
+    hints[t.dataset.hint] = mountHint({ id: t.dataset.hint, trigger: check ? null : t, labelEl: check ? t : null, after: row.lastElementChild,
+      fields: [...row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger, .cut-hold-modes')] });
+  }
+  hints.holdPart.trigger.id = 'cut-hold-label';
+  holdModesWrap.setAttribute('aria-labelledby', 'cut-hold-label');
+  // TASK 770: a menu row = its icon, its name and (a second, smaller line) its hint; the name and the hint from the table
+  const optionBody = (opt, icon, param, id, nameClass = '') => {
+    opt.innerHTML = `${icon}<span class="cut-opt-text"><span class="cut-opt-name ${nameClass}"></span></span>`;
+    opt.querySelector('.cut-opt-name').textContent = hintLabel(choiceId(param, id));
+    opt.querySelector('.cut-opt-text').appendChild(optionHint(card.ownerDocument, choiceId(param, id)));
+  };
 
   let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, record: null, note: [] };
 
@@ -217,7 +231,15 @@ export function createCutPanel(hostEl, opts = {}) {
   };
   const closePops = (except) => { for (const p of pops) if (p !== except) p.hidden = true; syncOpenState(); };
   const rowsEl = card.querySelector('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll)
-  const openPop = (pop, anchor) => { closePops(pop); const row = anchor.closest('.cut-row, .cut-field') || anchor; pop.style.top = (row.offsetTop - (rowsEl.contains(row) ? rowsEl.scrollTop : 0)) + 'px'; pop.hidden = false; syncOpenState(); };
+  const openPop = (pop, anchor) => { closePops(pop); const row = anchor.closest('.cut-row, .cut-field') || anchor; pop.style.top = (row.offsetTop - (rowsEl.contains(row) ? rowsEl.scrollTop : 0)) + 'px'; pop.hidden = false; keepOnScreen(pop); syncOpenState(); };
+  // TASK 770: a menu taller than the room below its row (its rows carry their hint lines) moves up to end where the card's panel ends (above the phone's
+  // Operations bar), and scrolls when it is taller than the panel; one that fits stays at its row
+  const keepOnScreen = (pop) => {
+    const room = hostEl.getBoundingClientRect();
+    pop.style.maxHeight = `${room.height}px`;
+    const r = pop.getBoundingClientRect(), over = r.bottom - room.bottom;
+    if (over > 0) pop.style.top = `${parseFloat(pop.style.top) - Math.min(over, r.top - room.top)}px`;
+  };
 
   // ── cut-type dropdown (SP1f) ──
   const closeMenu = () => { menu.hidden = true; syncOpenState(); };
@@ -232,7 +254,7 @@ export function createCutPanel(hostEl, opts = {}) {
       opt.type = 'button';
       opt.className = 'cut-type-opt' + (id === current.cutType ? ' is-current' : '') + (enabled ? '' : ' is-disabled');
       opt.setAttribute('role', 'option'); opt.dataset.id = id; opt.disabled = !enabled;
-      opt.innerHTML = `${iconSvg(t)}<span>${t.menuLabel}</span>`;
+      optionBody(opt, iconSvg(t), 'cutType', id);
       if (enabled) opt.addEventListener('click', () => { closeMenu(); onPickType(id); });
       menu.appendChild(opt);
     }
@@ -321,7 +343,7 @@ export function createCutPanel(hostEl, opts = {}) {
     for (const sh of CUTTER_SHAPES) {
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt' + (sh.id === current.cutterShape ? ' is-current' : ''); opt.dataset.shape = sh.id;
-      opt.innerHTML = `${iconSvg(sh)}<span>${sh.label}</span>`;
+      optionBody(opt, iconSvg(sh), 'cutterShape', sh.id);
       opt.addEventListener('click', () => { onSetField('cutterShape', sh.id); if (sh.id === 'vbit') { current.cutterShape = 'vbit'; buildShapePop(); } else closePops(null); }); // a V-bit pick stays open to show its angles
       shapePop.appendChild(opt);
       if (sh.id === 'vbit' && current.cutterShape === 'vbit') {
@@ -347,8 +369,7 @@ export function createCutPanel(hostEl, opts = {}) {
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt cut-clear-opt' + (c.id === current.clearing ? ' is-current' : '') + (why ? ' is-disabled' : '');
       opt.setAttribute('role', 'option'); opt.dataset.clearing = c.id; opt.disabled = Boolean(why);
-      opt.innerHTML = `${iconSvg(c)}<span class="cut-clear-name"></span>`;
-      opt.querySelector('.cut-clear-name').textContent = c.label;
+      optionBody(opt, iconSvg(c), 'clearing', c.id, 'cut-clear-name');
       if (why) { opt.title = why; const r = document.createElement('span'); r.className = 'cut-clear-why'; r.textContent = why; opt.appendChild(r); }
       else opt.addEventListener('click', () => { closePops(null); onSetField('clearing', c.id); });
       clearPop.appendChild(opt);
@@ -389,7 +410,7 @@ export function createCutPanel(hostEl, opts = {}) {
     card.querySelector('.cut-row[data-row="tabCount"]').style.display = hold === 'tabs' ? '' : 'none';
     card.querySelector('.cut-row[data-row="tabWidth"]').style.display = hold === 'tabs' ? '' : 'none';
     card.querySelector('.cut-row[data-row="holdThickness"]').style.display = hold === 'tabs' || hold === 'skin' ? '' : 'none';
-    card.querySelector('.cut-row[data-row="holdThickness"] .cut-field-label').textContent = hold === 'skin' ? 'Skin thickness' : 'Tab thickness';
+    hints.holdThickness.setId(hold === 'skin' ? 'skinThickness' : 'holdThickness'); // TASK 770: the row is the skin's thickness with Onion skin
     renderPresets(holdModesWrap, hold ? HOLD_PRESETS : [], 'holdPart', hold); // hidden rows keep no preset buttons
     renderPresets(countPresetsWrap, hold === 'tabs' ? COUNT_PRESETS : [], 'tabCount', Number(current.tabCount) >= 1 ? Number(current.tabCount) : 'auto');
     countInput.value = Number(current.tabCount) >= 1 ? String(Math.floor(Number(current.tabCount))) : '';
@@ -403,13 +424,13 @@ export function createCutPanel(hostEl, opts = {}) {
     for (const row of ['stepover', 'finishAllowance', 'loop']) card.querySelector(`.cut-row[data-row="${row}"]`).style.display = computed ? '' : 'none';
     card.querySelector('.cut-row[data-row="rasterAngle"]').style.display = clearing === 'raster' ? '' : 'none';
     const choice = CLEARING_CHOICE(clearing || 'freehand');
-    clearIc.innerHTML = iconSvg(choice); clearCur.textContent = choice.label;
+    clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));
     const pct = Number(current.stepover) > 0 ? Number(current.stepover) : POCKET_CLEARING.stepoverPct.default;
     stepoverInput.value = String(Math.round(pct * 100) / 100);
     stepoverLen.textContent = computed ? `= ${lengthText((pct / 100) * (Number(current.toolDia) || 0), { auto: docUnit() === 'in' ? 4 : 2, trim: 'always', show: 'unit', fractions: false })}` : '';
     allowanceInput.value = fieldText(fieldBase('finishAllowance'));
     loopInput.checked = computed && current.loop === true;
-    finishHint.textContent = computed ? FINISH_HINT(current.loop === true) : ''; // TASK 766: what the finish allowance is (who takes it off depends on Loop)
+    hints.finishAllowance.refresh({ loop: current.loop === true }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js)
     const angle = Number.isFinite(Number(current.rasterAngle)) && current.rasterAngle !== null ? Number(current.rasterAngle) : POCKET_CLEARING.rasterAngle;
     angleInput.value = String(Math.round(angle * 100) / 100);
     renderPresets(anglePresetsWrap, clearing === 'raster' ? ANGLE_PRESETS : [], 'rasterAngle', angle);
@@ -424,7 +445,7 @@ export function createCutPanel(hostEl, opts = {}) {
     }
     noteEl.hidden = !current.note.length;
     const curType = current.cutType ? cutTypeById(current.cutType) : null;
-    card.querySelector('.cut-row[data-param="cutDepth"] .cut-field-label').textContent = (curType && curType.depthLabel) || 'Depth';
+    hints.cutDepth.setId((curType && curType.depthParam) || 'cutDepth'); // TASK 472 / 770: a Stock's depth row is its Thickness (its own table entry)
     const off = Number(current.cutOffset) || 0;
     offsetInput.value = fieldText(off);
     flipBtn.classList.toggle('is-on', off < 0);
@@ -436,21 +457,22 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets(stepPresetsWrap, declares('stepDepth') && !adaptive ? presetsFor(STEP_PRESETS) : [], 'stepDepth', Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
     renderPresets(deviationPresetsWrap, adaptive ? RESOLUTION_PRESETS : [], 'stepDeviation', deviation);
     const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
-    shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shape.label} ${Number(current.cutterAngle) || 90}\u00b0` : shape.label;
+    const shapeName = hintLabel(choiceId('cutterShape', shape.id));
+    shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${Number(current.cutterAngle) || 90}\u00b0` : shapeName;
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
   };
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); for (const h of Object.values(hints)) h.close(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;
-    curLabel.textContent = t ? t.menuLabel : 'Select type';
+    curLabel.textContent = t ? hintLabel(choiceId('cutType', t.id)) : 'Select type';
     curSw.innerHTML = t ? iconSvg(t) : '';
     if (!menu.hidden) buildMenu();
     if (!shapePop.hidden) buildShapePop();

@@ -227,7 +227,7 @@ let saved = null;
       const n0 = st.history.length;
       h.toggleLoop();
       eq([CUT_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
-      eq(h.q('.cut-finish-hint').textContent, 'Left on the walls by the clearing passes; the loop’s last turn takes it off for a clean edge. 0 = none.', `${pat}: TASK 766: Loop on: the hint names the loop's last turn`);
+      eq(h.q('.cut-row[data-row="finishAllowance"] .sk-hint').textContent, 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
       const nt = h.note();
       ok(/\+ wall: one closed loop, ends where it starts, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`);
       ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);

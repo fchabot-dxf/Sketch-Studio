@@ -36,6 +36,8 @@ import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shape
 import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
+import { hintLabel, hintText } from './param-hints.js'; // TASK 770: THE table of labels and hints (the Export step's cards, the drawer's Download)
+import { mountHint } from './hint.js'; // TASK 770: the one hint widget
 
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
@@ -63,7 +65,7 @@ const chrome = mountAppChrome({
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
   hostActions: [
-    { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
+    { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: () => { // TASK 770: from the table (the shared drawer shows a tooltip)
       const payload = generateShaperSvgPayload();
       if (!payload) { groupStatus(NO_CUTS); return; }
       download(designFileName(), payload.svg);
@@ -98,6 +100,13 @@ function generateShaperSvgPayload({ preview = false } = {}) {
 const designFileName = () => exportFileName(docBuffer ? docBuffer.designName() : null);
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
+// TASK 770: the Export step's side cards take their labels and hints from the table (param-hints.js) through the one hint widget (hint.js): the Stock thickness,
+// the Material, and the Export title, whose hint lists the three ways out (each button is described by its own line)
+for (const e of document.querySelectorAll('#review-side [data-label]')) e.textContent = hintLabel(e.dataset.label);
+const sideHint = (id, after, fields, itemFields) => mountHint({ id, labelEl: document.querySelector(`#review-side [data-hint="${id}"]`), after, fields, itemFields });
+sideHint('stockThickness', document.querySelector('#review-stock > label'), [document.getElementById('review-stock-thickness')]);
+sideHint('material', document.querySelector('#review-look > label'), [document.getElementById('review-look-select')]);
+sideHint('export', document.querySelector('#simexport-panel .simexport-actions'), [], { generateSvg: btnGenerateSvg, syncShaperHub: document.getElementById('btn-sync-shaper'), openShaperHub: document.getElementById('link-shaper-hub') });
 if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');

@@ -30,12 +30,13 @@ import { openTemplatePicker, openChoiceModal, openPromptModal } from './template
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 import { OPEN_DOCUMENT_EVENT } from './sketch-import.js'; // TASK 759: a design file dropped on a drawing
 import { homeLabel, HOME_KINDS } from './document-home.js';
-// TASK 768: THE Save button (save-button.js) at the end of the header (the tab strip where the header is hidden), the loading tab and the loading overlay,
+// TASK 768: THE Save button (save-button.js; TASK 776: in the footer's right end, footer-slot.js), the loading tab and the loading overlay,
 // all reading this page's ONE document activity (document-activity.js) and THE save state (save-state.js); mounted with the document tab strip.
 import { createDocumentActivity } from './document-activity.js';
 import { createSaveButton } from './save-button.js';
 import { mountLoadingOverlay } from './loading-overlay.js';
 import { saveStateOf, tabSaveState } from './save-state.js';
+import { findFooterEnd } from './footer-slot.js'; // TASK 776: the footer's right end: THE Save button and THE account avatar live there
 import { createAccountAvatar } from './account-avatar.js'; // TASK 776: THE account control (the avatar at the right end of the header / of the tab strip)
 
 export { relativeTime };
@@ -158,7 +159,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   let tabObserver = null;
   let saveButton = null, overlay = null;
   let shownTabs = null; // the tabs as the strip last read them (null before the first restore)
-  // TASK 776: THE account control: the avatar at the right end of the header (of the document tab strip where the header is hidden); the drawer has no account row
+  // TASK 776: THE account control: the avatar at the far right of the footer (footer-slot.js); the drawer has no account row
   const avatar = projects && account ? createAccountAvatar({ account, check: driveControls ? driveControls.check : null }) : null;
   if (showDocumentTabs) {
     // TASK 768: the button shows the ACTIVE tab's save state (or the load in flight); a press runs saveNow, THE Save command (Ctrl+S, the menu's Save)
@@ -174,22 +175,23 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       activity, signedIn, onRefresh: (list) => { shownTabs = list; saveButton.refresh(); } });
     overlay = mountLoadingOverlay({ activity, below: () => tabStrip.el });
   }
-  // the host appends the sidebar's button into its header AFTER this call: place the strip / the buttons as soon as the button has a <header>
+  // the tab strip goes below the host's <header> (whose menu button this sidebar owns); THE Save button and THE avatar go into the footer's right end (the host mounts the
+  // footer too, in any order: place each as soon as its place exists)
+  let stripPlaced = !tabStrip, controlsPlaced = !(saveButton || avatar);
   const place = () => {
-    const header = sidebar.el.closest('header');
-    if (!header || !header.parentNode) return false;
-    if (tabStrip) {
-      header.parentNode.insertBefore(tabStrip.el, header.nextSibling); // TASK 602 (owner): below the header, above the ribbon
-      saveButton.placeIn({ header, strip: tabStrip.el }); // TASK 768: right after menu btn before stages in desktop header; right end of strip when header hidden
+    if (!stripPlaced) {
+      const header = sidebar.el.closest('header');
+      if (header && header.parentNode) { header.parentNode.insertBefore(tabStrip.el, header.nextSibling); stripPlaced = true; } // TASK 602 (owner): below the header, above the ribbon
     }
-    if (avatar) avatar.placeIn({ header, strip: tabStrip ? tabStrip.el : null }); // TASK 776: after the Save button was placed: the very end of the header / of the strip
-    return true;
+    if (!controlsPlaced) {
+      const slot = findFooterEnd();
+      if (slot) { if (saveButton) saveButton.placeIn(slot); if (avatar) avatar.placeIn(slot); controlsPlaced = true; } // TASK 776: Save, then the avatar (the far right)
+    }
+    return stripPlaced && controlsPlaced;
   };
-  if (tabStrip || avatar) {
-    if (!place()) {
-      tabObserver = new MutationObserver(() => { if (place()) { tabObserver.disconnect(); tabObserver = null; } });
-      tabObserver.observe(document.documentElement, { childList: true, subtree: true });
-    }
+  if (!place()) {
+    tabObserver = new MutationObserver(() => { if (place()) { tabObserver.disconnect(); tabObserver = null; } });
+    tabObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   // Ctrl+S (Cmd+S): save. Captured on the window, before the canvas shortcuts (where a bare "s" picks the Select tool) and the browser's

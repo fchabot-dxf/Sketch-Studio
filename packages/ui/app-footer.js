@@ -4,7 +4,8 @@
 //          Parameters (TASK 677, owner turn 1730: the "fx" opener of the Parameters window, always visible; it was hidden in the ribbon's Inspect dropdown;
 //          TASK 740: its key, Shift+P, is this button while it shows)
 //   right: Recenter (every host whose Design surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
-//          then Settings (TASK 726, the gear: the host's Style panel, the same one the drawer's Style item toggles; the far right end)
+//          then Settings (TASK 726, the gear: the host's Style panel, the same one the drawer's Style item toggles), then (TASK 776, where the host has the project
+//          layer) THE Save button and THE account avatar at the far right end (footer-slot.js; sidebar-projects.js puts them there)
 // mountAppFooter({ router, view, footer, parameters, settings }) -> { el, refresh, destroy }
 //   router: the host's history router (createHistoryRouter).
 //   view(): { svg, state } of the Design surface that shows now, or null while the stage has none (Pen Plotter's Toolpath, ...):
@@ -27,6 +28,7 @@ import { matchesShortcut, titleWithShortcut, shortcutHint, onShortcutsChange } f
 import { mountTooltip } from '#ui/hint.js';
 import { CHROME_HINTS } from '#ui/design-hints.js';
 import { isTextEditingTarget } from '#ui/clipboard.js';
+import { FOOTER_END_CLASS } from '#ui/footer-slot.js'; // TASK 776: the right end also holds THE Save button and THE account avatar (the project layer puts them there)
 
 let stylesInjected = false;
 function injectStyles() {
@@ -47,11 +49,11 @@ function injectStyles() {
 /* The short viewport (a phone in landscape, short-viewport.js): a footer row would cost the canvas 45 px of 360, so the footer FLOATS INSIDE the canvas's bottom-left corner (TASK 676: inset by --sk-canvas-inset, the same as the corner buttons; --sk-canvas-edge is a host's gap between the rail / viewport and its canvas frame, 0 when the canvas is flush), right of the
    tool rail (no background, only the buttons take the pointer) and reserves no height: the canvas keeps its share. */
 @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
-  :root { --sk-footer-h: 0px; --sk-rail-w: 161px; } /* the tool-ribbon rail's width (24 px handle room + 2 + 88 two columns of icons + 44 section dropdown strip + 2 + 1 border; TASK 676) */
+  :root { --sk-footer-h: 0px; --sk-rail-w: 161px; --sk-footer-btn-w: 38px; } /* TASK 776: nine buttons (with Save and the account) must end before a host's right-hand panel (Pen Plotter's starts 244 px from the right edge): 44 px high, 38 px wide */ /* the tool-ribbon rail's width (24 px handle room + 2 + 88 two columns of icons + 44 section dropdown strip + 2 + 1 border; TASK 676) */
   body .sk-footer, body .sk-statusbar { position: fixed !important; left: calc(var(--sk-rail-w) + var(--sk-canvas-edge, 0px)); right: 0; bottom: calc(var(--sk-canvas-edge, 0px) + var(--sk-canvas-inset, 8px)); height: var(--sk-footer-btn-h); padding: 0 var(--sk-canvas-inset, 8px) !important; gap: 6px; background: transparent !important; border: 0 !important; box-shadow: none !important; pointer-events: none; z-index: 30; }
   body .sk-footer, body .sk-statusbar { justify-content: flex-start !important; } /* one cluster at the bottom-left, clear of a host's own right-hand panel (Pen Plotter's Design panel) */
   body .sk-footer-end { margin-left: 0; }
-  body .sk-footer .sk-history-btn, body .sk-footer .sk-footer-btn, body .sk-statusbar .sk-history-btn, body .sk-statusbar .sk-footer-btn { pointer-events: auto; background: var(--sk-header-bg, #f1f5f9); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+  body .sk-footer .sk-history-btn, body .sk-footer .sk-footer-btn, body .sk-statusbar .sk-history-btn, body .sk-statusbar .sk-footer-btn, body .sk-footer .sk-save, body .sk-footer .sk-account, body .sk-statusbar .sk-save, body .sk-statusbar .sk-account { pointer-events: auto; background: var(--sk-header-bg, #f1f5f9); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 }
 .sk-footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 8px; box-sizing: border-box;
   height: var(--sk-footer-h); padding: 0 10px; background: var(--sk-header-bg, #f1f5f9); border-top: 1px solid var(--sk-header-sep, #cbd5e1); color: var(--sk-header-fg, #334155); }
@@ -63,6 +65,9 @@ function injectStyles() {
 .sk-footer-btn.ink { color: var(--sk-footer-ink); }
 .sk-footer-btn[aria-pressed="true"], .sk-footer-btn[aria-expanded="true"] { background: var(--sk-header-hover, rgba(0,0,0,0.08)); box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); } /* TASK 677: the Parameters window is open */
 .sk-footer-end { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex: 0 0 auto; }
+/* TASK 776: THE Save button and THE account avatar in the footer's end: the footer's own button size (32 px, 44 px on touch) */
+.sk-footer-end > .sk-save, .sk-footer-end > .sk-account { width: var(--sk-footer-btn-w); height: var(--sk-footer-btn-h); }
+@media (pointer: coarse) and (max-width: 480px) { :root { --sk-footer-btn-w: min(44px, calc((100vw - 42px) / 9)); --sk-footer-danger-gap: 4px; } } /* nine buttons (undo, redo, delete, clear, fx, recenter, settings, save, account) on one row of a phone: 44 px high, as wide as the row allows (35 px at 360, 44 px from 440) */
 body.sk-has-footer { padding-bottom: var(--sk-footer-h); box-sizing: border-box; }
 .sk-footer-confirm-backdrop { position: fixed; inset: 0; z-index: 9600; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .sk-footer-confirm { box-sizing: border-box; width: 100%; max-width: 340px; padding: 16px; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);
@@ -145,7 +150,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
     document.body.appendChild(el);
   }
   const start = document.createElement('span'); start.className = 'sk-footer-start';
-  const end = document.createElement('span'); end.className = 'sk-footer-end';
+  const end = document.createElement('span'); end.className = FOOTER_END_CLASS;
   el.insertBefore(start, el.firstChild || null);
   el.appendChild(end);
 

@@ -109,6 +109,11 @@ function injectStyles() {
   body.sk-drawing-shown .sk-sidebar-handle { display: none !important; }
 }
 body.sk-drawing-shown #notification-container { display: none !important; } /* no toast from Design over the drawing */
+/* TASK 776: Drawing shows the footer (Save, Settings, the account) at the bottom of the page, under the drawing (which reserves its height, below). Undo / Redo act on Design's history
+   and the drawing is read-only: they are not shown here (Delete, Clear, Parameters and Recenter go with the footer's view(), which is null while Drawing shows). */
+body.sk-drawing-shown .sk-statusbar { margin-top: auto; }
+body.sk-drawing-shown .sk-statusbar .sk-history { display: none; }
+@media ${SHORT_VIEWPORT_QUERY} { body.sk-drawing-shown .sk-statusbar { z-index: 9301; } } /* the floating footer of a phone in landscape stays above the drawing */
 @media print {
   html, body { height: auto !important; overflow: visible !important; background: #ffffff !important; }
   body.sk-drawing-shown > :not(.sk-drawing) { display: none !important; }
@@ -124,10 +129,11 @@ body.sk-drawing-shown #notification-container { display: none !important; } /* n
 }
 
 /**
- * Mounts the (hidden) Drawing view on the page. getName(): the design's name for the print title line.
+ * Mounts the (hidden) Drawing view on the page. getName(): the design's name for the print title line. footer: the page's footer element (TASK 776, owner turn 2368:
+ * Drawing shows the footer too: the drawing gets the page above it, never under it).
  * Returns { el, svg, world, view, isShown, setShown, frame, fit, preparePrint, endPrint }.
  */
-export function mountDrawingView({ state, getName = () => '' }) {
+export function mountDrawingView({ state, getName = () => '', footer = null }) {
   injectStyles();
   ensureIconSymbols(['icon-recenter']);
   const el = document.createElement('div');
@@ -174,11 +180,18 @@ export function mountDrawingView({ state, getName = () => '' }) {
     if (pendingFit && !printing && fit()) pendingFit = false;
     drawDrawing({ state, svg, world });
   };
+  // the footer's height is the drawing's bottom margin (a footer that floats over the page, a phone in landscape, reserves none)
+  const reserveFooter = () => {
+    const room = shown && footer && footer.getClientRects().length && getComputedStyle(footer).position !== 'fixed' ? footer.offsetHeight : 0;
+    el.style.bottom = room ? room + 'px' : '';
+  };
+  if (footer && typeof ResizeObserver !== 'undefined') new ResizeObserver(reserveFooter).observe(footer);
   const setShown = (on) => {
     on = !!on;
     if (on === shown) return;
     shown = on;
     el.hidden = !on;
+    reserveFooter();
     document.body.classList.toggle('sk-drawing-shown', on);
     resetPanZoomState(viewState);
     if (on) { pendingFit = true; frame(); }

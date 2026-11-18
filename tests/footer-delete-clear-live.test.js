@@ -256,7 +256,7 @@ await (async () => {
       await tap(mid.mx, mid.my);
       await waitFor(`!document.getElementById('btn-delete-selection').disabled`, name + ' phone: select line');
       const s = await inspect();
-      assert(s.del.w >= 43.5 && s.del.h >= 43.5 && s.clr.w >= 43.5 && s.clr.h >= 43.5, name + ' phone: 44x44 buttons: ' + JSON.stringify([s.del, s.clr]));
+      assert(s.del.w >= 35 && s.del.h >= 43.5 && s.clr.w >= 35 && s.clr.h >= 43.5, name + ' phone: 44 high, >= 35 wide (TASK 776: nine footer buttons share 390 px) buttons: ' + JSON.stringify([s.del, s.clr]));
       assert(s.clr.l - s.del.r >= 4, name + ' phone: gap preserved');
       assert.strictEqual(s.footerHasConstruct, false, name + ' phone: Construction is NOT in footer');
       {

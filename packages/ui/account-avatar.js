@@ -1,6 +1,6 @@
 // packages/ui/account-avatar.js — TASK 776 (owner turn 2365, like DDCS Studio): THE account control of the shared app chrome, ONE component for the four hosts.
-// A round AVATAR at the RIGHT END of the shared header (app-header.js; the document tab strip where the header is hidden: a phone, a phone in landscape,
-// HEADER_HIDDEN_QUERY) and a small MENU under it. It is the account's ONLY UI (the drawer has no account block any more): exactly one per layout.
+// A round AVATAR at the far RIGHT END of the shared app footer (footer-slot.js, after the Save button; TASK 776, owner turn 2368: one place in every layout)
+// and a small MENU that opens UPWARD from it. It is the account's ONLY UI (the drawer has no account block any more): exactly one per layout.
 //   signed in   the Google profile picture (the `picture` of account.userInfo(): Drive's own about.get photoLink, the call the drawer's account row already
 //               made: no new scope, no new call; the <img> has referrerpolicy="no-referrer"), the initials when there is none or it does not load. The name is the
 //               tooltip / aria-label; the email is shown only in the menu.
@@ -11,7 +11,6 @@
 // sidebar-projects.js) and shows the status lines that already exist: the Google Drive connection and the settings sync (settings-sync.js SYNC_STATUS_TEXT).
 // Nothing is stored here. accountModel() is the PURE part (what to show for a state), tested in node; createAccountAvatar() draws it.
 import { listenOutsidePress } from './outside-press.js';
-import { HEADER_HIDDEN_QUERY } from './app-header.js';
 import { SYNC_STATUS_TEXT, settingsSyncStatus, onSettingsSyncStatus } from './cloud/settings-sync.js';
 import { initialsOf } from './cloud/auth-state.js';
 
@@ -59,21 +58,16 @@ function injectStyles(doc) {
   if (doc.getElementById('sk-account-styles')) { stylesInjected = true; return; }
   const s = doc.createElement('style'); s.id = 'sk-account-styles';
   s.textContent = `
-.sk-account { --sk-account-size: 32px; position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; margin: 0 0 0 auto; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 50%; }
+.sk-account { --sk-account-size: calc(var(--sk-footer-btn-h, 32px) - 8px); position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 50%; }
 .sk-account:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: 2px; }
 .sk-account-circle { position: relative; width: var(--sk-account-size); height: var(--sk-account-size); flex: 0 0 auto; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
   background: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); color: #fff; font: 700 calc(var(--sk-account-size) * 0.4)/1 system-ui, -apple-system, 'Segoe UI', sans-serif; box-sizing: border-box; }
 .sk-account-circle img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sk-account-circle.person { background: transparent; color: inherit; border: 1px solid var(--sk-header-sep, rgba(127,127,127,0.45)); padding: 15%; }
 .sk-account:hover .sk-account-circle.person { background: var(--sk-header-hover, rgba(127,127,127,0.12)); }
-.sk-account-dot { position: absolute; right: 0; bottom: 0; width: 9px; height: 9px; border-radius: 50%; background: #f59e0b; border: 2px solid var(--sk-header-bg, #fff); box-sizing: content-box; transform: translate(25%, 25%); display: none; }
+.sk-account-dot { position: absolute; right: 0; bottom: 0; width: 9px; height: 9px; border-radius: 50%; background: #f59e0b; border: 2px solid var(--sk-header-bg, #f1f5f9); box-sizing: content-box; transform: translate(25%, 25%); display: none; }
 .sk-account[data-state="lapsed"] .sk-account-dot { display: block; }
-/* where the header is hidden: the end of the document tab strip, pinned beside the Save button (save-button.js) while the tabs scroll */
-.sk-doctabs > .sk-account { --sk-account-size: 24px; position: sticky; right: 0; z-index: 2; margin: 0; width: 44px; height: var(--sk-doctabs-h, 30px); border-radius: 6px 6px 0 0; background: var(--sk-doctab-strip, transparent); }
-.sk-doctabs > .sk-save:has(~ .sk-account) { right: 44px; }
-.sk-doctabs:has(> .sk-save):has(> .sk-account) { scroll-padding-inline-end: 96px; }
-.sk-doctabs:has(> .sk-account) { scroll-padding-inline-end: 52px; }
-.sk-account-menu { position: fixed; z-index: 100000; box-sizing: border-box; width: 300px; max-width: calc(100vw - 16px); padding: 12px; outline: none;
+.sk-account-menu { position: fixed; z-index: 100000; box-sizing: border-box; width: 300px; max-width: calc(100vw - 16px); padding: 12px; outline: none; overflow-y: auto;
   background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); color: var(--sk-sidebar-fg, var(--sk-header-fg, #1e293b));
   border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; }
 .sk-account-menu * { box-sizing: border-box; }
@@ -119,7 +113,7 @@ export function createAccountAvatar({ account, check = null, doc = globalThis.do
   let steps = null;           // the last "Check Google Drive connection" result, shown in the menu
   let errorText = '';
   let model = null;
-  let isOpenFlag = false, stopOutside = null, mq = null, onMq = null;
+  let isOpenFlag = false, stopOutside = null;
 
   const fail = (e) => { errorText = (e && e.message) || String(e); if (isOpenFlag) drawMenu(); };
   const run = (fn) => () => { try { const r = fn(); if (r && r.catch) r.catch(fail); } catch (e) { fail(e); } };
@@ -214,7 +208,8 @@ export function createAccountAvatar({ account, check = null, doc = globalThis.do
   function position() {
     const r = el.getBoundingClientRect(), vw = win.innerWidth;
     const w = menu.getBoundingClientRect().width || 300;
-    menu.style.top = Math.round(r.bottom + 6) + 'px';
+    menu.style.bottom = Math.round(win.innerHeight - r.top + 6) + 'px'; // opens UPWARD from the footer
+    menu.style.maxHeight = Math.max(120, Math.round(r.top - 14)) + 'px';
     menu.style.left = Math.round(Math.max(8, Math.min(r.right - w, vw - w - 8))) + 'px';
   }
   const focusables = () => [...menu.querySelectorAll('button:not(:disabled)')];
@@ -259,23 +254,12 @@ export function createAccountAvatar({ account, check = null, doc = globalThis.do
   const offAccount = account.subscribe ? account.subscribe(refresh) : () => {};
   const offSync = onSettingsSyncStatus(() => refresh());
 
-  // the header (wide) or the document tab strip (where the header is hidden): ONE element, moved when the viewport crosses the header's breakpoint.
-  // Always LAST: the right end (the Save button sits just before it in the strip).
-  function placeIn({ header, strip = null }) {
-    if (mq) mq.removeEventListener('change', onMq);
-    mq = win.matchMedia(HEADER_HIDDEN_QUERY);
-    onMq = () => {
-      close(); // the menu belongs to the place it opened from
-      const to = mq.matches && strip ? strip : header;
-      to.appendChild(el);
-    };
-    mq.addEventListener('change', onMq);
-    onMq();
-  }
+  // the footer's right end (footer-slot.js), after the Save button: the far right of every layout
+  const placeIn = (slot) => { slot.appendChild(el); };
 
   refresh();
   return {
     el, menu, refresh, open, close, isOpen: () => isOpenFlag, placeIn,
-    destroy() { close(); offAccount(); offSync(); if (mq) mq.removeEventListener('change', onMq); el.remove(); menu.remove(); },
+    destroy() { close(); offAccount(); offSync(); el.remove(); menu.remove(); },
   };
 }

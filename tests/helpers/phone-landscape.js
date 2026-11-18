@@ -118,7 +118,7 @@ export async function runPhoneLandscape(hostName) {
         if (await evalJs(`!!document.getElementById('btn-parameters')`)) {
             const pSel = `document.getElementById('btn-parameters')`;
             const pb = await rectOf(pSel);
-            assert(pb && pb.w >= 44 && pb.h >= 44 && (await hits(pSel, pb)), tag + 'the footer Parameters button: 44 px, not covered: ' + JSON.stringify(pb));
+            assert(pb && pb.w >= 37.5 && pb.h >= 44 && (await hits(pSel, pb)), tag + 'the footer Parameters button: 44 px high (38 wide, TASK 776), not covered: ' + JSON.stringify(pb));
             await tap(pb);
             const win = await rectOf(`document.querySelector('.sk-pwin')`);
             assert.strictEqual(await evalJs(`${pSel}.getAttribute('aria-expanded')`), 'true', tag + 'a tap opens the Parameters window');
@@ -149,7 +149,7 @@ export async function runPhoneLandscape(hostName) {
             const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue;
             let hidden = false; for (let p = e; p; p = p.parentElement) { const c = getComputedStyle(p); if (c.display === 'none' || c.visibility === 'hidden') { hidden = true; break; } } if (hidden) continue;
             const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
-            out.push({ inStrip: !!e.closest('.sk-doctabs'), id: (e.id || e.className || e.tagName).toString().slice(0, 40), text: (e.textContent || '').trim().slice(0, 14), left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height, free: !!hit && (hit === e || e.contains(hit)) });
+            out.push({ inStrip: !!e.closest('.sk-doctabs'), inFooter: !!e.closest('.sk-footer, .sk-statusbar'), id: (e.id || e.className || e.tagName).toString().slice(0, 40), text: (e.textContent || '').trim().slice(0, 14), left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height, free: !!hit && (hit === e || e.contains(hit)) });
           } return out; })()`);
         assert(others.length >= 3, tag + 'header / canvas controls found: ' + others.length);
         for (const c of others) {
@@ -157,7 +157,7 @@ export async function runPhoneLandscape(hostName) {
           assert(c.left >= -0.5 && c.top >= -0.5 && c.right <= size.w + 0.5 && c.bottom <= size.h + 0.5, t + ' is inside the viewport: ' + JSON.stringify(c));
           const isHandle = /sk-sidebar-handle/.test(c.id);
           const strip = /sk-doctab/.test(c.id) || c.inStrip; // TASK 768: a control IN the strip (the Save button where the header is hidden) is a strip control. TASK 608 (owner ruling, relaxes 562): the tab strip is a thin 31 px row: every tab / x / + is at least 24 x 24 (WCAG 2.2 AA) and fills the row
-          const minW = isHandle ? 14 : (strip ? 24 : 43.5);
+          const minW = isHandle ? 14 : (strip ? 24 : (c.inFooter ? 37.5 : 43.5)); // TASK 776: the footer's nine buttons (Save and the account too) are 38 px wide, 44 px high, so the cluster ends before a host's right-hand panel
           const minH = strip ? 24 : 43.5;
           assert(c.w >= minW && c.h >= minH, t + ` target size (${Math.round(c.w)} x ${Math.round(c.h)})`);
           assert(c.free, t + ' is not covered by anything');

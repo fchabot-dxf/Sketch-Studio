@@ -225,6 +225,7 @@ export function showNotification(message, type = 'info', duration = 3000, { acti
         icon = '✅';
     }
 
+    const selectable = type === 'error';
     toast.style.cssText = `
         background-color: ${bg};
         color: ${text};
@@ -240,18 +241,18 @@ export function showNotification(message, type = 'info', duration = 3000, { acti
         opacity: 0;
         transform: translateY(30px); /* start below and slide up */
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        pointer-events: auto;
+        pointer-events: ${selectable ? 'auto' : 'none'};
         min-width: 200px;
         max-width: min(420px, calc(100vw - 24px), 100%); /* 100%: the stack's own width when it is reflowed beside a window (TASK 698) */
-        user-select: text;
-        cursor: text;
+        user-select: ${selectable ? 'text' : 'none'};
+        cursor: ${selectable ? 'text' : 'default'};
     `;
     // Build toast DOM safely (avoid innerHTML with unescaped `message`)
     const copyBtn = document.createElement('button');
     copyBtn.className = 'notif-copy-btn';
     copyBtn.type = 'button';
     copyBtn.textContent = 'Copy';
-    copyBtn.style.cssText = `margin-right:8px; background:rgba(255,255,255,0.08); border:none; color:${text}; border-radius:4px; padding:2px 8px; font-size:13px; cursor:pointer; user-select:none;`;
+    copyBtn.style.cssText = `margin-right:8px; pointer-events:auto; background:rgba(255,255,255,0.08); border:none; color:${text}; border-radius:4px; padding:2px 8px; font-size:13px; cursor:pointer; user-select:none;`;
 
     const iconSpan = document.createElement('span');
     iconSpan.textContent = icon;
@@ -334,7 +335,7 @@ export function showNotification(message, type = 'info', duration = 3000, { acti
         btn.className = 'notif-action-btn';
         btn.textContent = action.label;
         const finger = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
-        btn.style.cssText = `margin-left:8px; flex:0 0 auto; background:#ffffff; color:${bg}; border:none; border-radius:4px; padding:4px 12px; min-height:${finger ? 44 : 30}px; font:inherit; font-weight:700; cursor:pointer; user-select:none;`;
+        btn.style.cssText = `margin-left:8px; flex:0 0 auto; pointer-events:auto; background:#ffffff; color:${bg}; border:none; border-radius:4px; padding:4px 12px; min-height:${finger ? 44 : 30}px; font:inherit; font-weight:700; cursor:pointer; user-select:none;`;
         btn.addEventListener('click', (ev) => { ev.stopPropagation(); remove(); action.onClick(); });
         toast.appendChild(btn);
         layoutNotifications();

@@ -152,6 +152,10 @@ export function createSettingsSync({
       try { out = await file.write(serializeSettingsFile(merged), cur ? cur.id : null); }
       catch (e) { if (e && e.status === 404) continue; throw e; } // the file was deleted meanwhile: read again (it is re-created)
       if (out.superseded) continue; // another device created the file at the same moment: merge into the one that won
+      // read back once: another device that read before this write and wrote just after it replaced this text: merge again, so this device's changes
+      // go back on Drive now (they are never lost here either way: this device keeps them and a later sync sends them again)
+      const back = await file.read();
+      if (back && contentPrint(back.text) !== contentPrint(serializeSettingsFile(merged))) continue;
       return;
     }
     throw new Error('The settings file kept changing on another device');

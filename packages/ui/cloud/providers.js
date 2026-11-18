@@ -2,7 +2,7 @@
 // The OAuth client id is PUBLIC (it ships in the page exactly like DDCS Studio's does; no secret in this design): the SECRET
 // lives only in the Cloudflare Pages secrets of the server session (server/googleAuth.js) and is never in the repo.
 // Scope is drive.file: the app only ever sees files it created (non-sensitive, no Google verification review).
-// Authorized origins: each app's own site (TASK 696: sketch-studio / shaper-svg / penplotter / sketch-trace .pages.dev, README "Websites") and http://localhost:8000 (the latter has no Functions: it uses the GIS popup).
+// Authorized origins: each app's own site (sketch-studio / shaper-svg / sketch-plotter / sketch-trace .pages.dev, README "Websites") and http://localhost:8000 (the latter has no Functions: it uses the GIS popup).
 export const GOOGLE = {
   label: 'Google Drive',
   clientId: '983232817866-b4pl67uuhfmqdrtah42vaf22ivimfh3j.apps.googleusercontent.com',

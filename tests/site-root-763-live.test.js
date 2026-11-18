@@ -97,7 +97,7 @@ try {
   assert.deepStrictEqual([up.status, up.type, typeof up.body.error], [400, 'application/json', 'string'], `U: /api/shaper-upload is the Function at the root: ${JSON.stringify(up)}`);
   for (const [p, want] of [['/shaper?host=fusion', 'https://shaper-svg.pages.dev/?host=fusion'], ['/apps/shaper/?host=fusion', 'https://shaper-svg.pages.dev/?host=fusion'],
     ['/apps/shaper/index.html?host=fusion', 'https://shaper-svg.pages.dev/?host=fusion'], ['/apps/shaper/downloads/shaper-addin.zip', 'https://shaper-svg.pages.dev/downloads/shaper-addin.zip'],
-    ['/apps/penplotter/', 'https://penplotter.pages.dev/'], ['/trace', 'https://sketch-trace.pages.dev/'], ['/apps/sketchstudio/?a=1', '/?a=1']]) {
+    ['/apps/penplotter/', 'https://sketch-plotter.pages.dev/'], ['/trace', 'https://sketch-trace.pages.dev/'], ['/apps/sketchstudio/?a=1', '/?a=1']]) {
     const r = await head(ss.origin + p);
     assert.deepStrictEqual([r.status, r.location], [302, want], `X: sketch-studio ${p}`);
   }

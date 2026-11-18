@@ -4,7 +4,9 @@
 // (`current()`, null = this stage has no history) and gets a router: the keyboard handlers and the header buttons both call
 // router.run(action), so a click does exactly what Ctrl+Z / Ctrl+Y does in that stage (one dispatch, no second path).
 
-import { matchShortcut, titleWithShortcut, onShortcutsChange } from '#ui/shortcuts.js';
+import { matchShortcut, titleWithShortcut, shortcutHint, onShortcutsChange } from '#ui/shortcuts.js';
+import { mountTooltip } from '#ui/hint.js';
+import { CHROME_HINTS } from '#ui/design-hints.js';
 
 /** THE one mapping of the history keys (declared in shortcuts.js: edit.undo, edit.redo): 'undo' | 'redo' | null for any other key. */
 export function undoRedoKeyAction(e) {
@@ -81,11 +83,13 @@ export function mountHistoryButtons({ router, header, before = null }) {
   const el = document.createElement('span');
   el.className = 'sk-history';
   const retitles = [];
+  const tips = [];
   const paints = BUTTONS.map((d) => {
     const b = document.createElement('button');
     b.type = 'button'; b.id = d.id; b.className = 'sk-history-btn';
     const retitle = () => { const t = titleWithShortcut(d.label, d.shortcut); b.title = t; b.setAttribute('aria-label', t); };
     retitle(); retitles.push(retitle);
+    tips.push(mountTooltip({ target: b, getContent: () => ({ title: d.label, key: shortcutHint(d.shortcut), text: CHROME_HINTS[d.action] }) }));
     b.innerHTML = ICONS[d.action];
     b.addEventListener('click', () => router.run(d.action));
     el.appendChild(b);
@@ -96,5 +100,5 @@ export function mountHistoryButtons({ router, header, before = null }) {
   const offKeys = onShortcutsChange(() => retitles.forEach((f) => f())); // TASK 747: the user's keys
   header.insertBefore(el, before && before.parentNode === header ? before : null);
   router.refresh();
-  return { el, destroy: () => { off(); offKeys(); el.remove(); } };
+  return { el, destroy: () => { off(); offKeys(); tips.forEach((t) => t.destroy()); el.remove(); } };
 }

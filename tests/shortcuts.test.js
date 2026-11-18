@@ -97,6 +97,7 @@ const EXEMPT = {
   'packages/ui/diagnostic-log.js': [1, 'the Log panel: Esc closes it'],
   'packages/ui/document-tabs.js': [5, 'the document tab list: arrows / Home / End move, Delete closes the focused tab'],
   'packages/ui/file-dialog.js': [5, 'TASK 759: the Save as / Open dialog: its two tabs (arrows / Home / End), Enter in the name field saves'],
+  'packages/ui/hint.js': [1, 'TASK 772: open info hint: Esc dismisses it'],
   'packages/ui/input-handlers/fillet-tool.js': [2, 'the fillet radius box: Enter / Esc'],
   'packages/ui/input-handlers/live-dimension-input.js': [5, 'the on-canvas value boxes: Tab / Enter / Esc / Delete (and the legacy box Enter)'],
   'packages/ui/input-handlers/offset-tool.js': [2, 'the offset distance box: Enter / Esc'],
@@ -115,6 +116,7 @@ const EXEMPT = {
   'apps/penplotter/src/settings.js': [1, 'the plotter settings modal: Esc = Cancel'],
   'apps/penplotter/src/toolpath-layers-panel.js': [2, 'the toolpath rename input: Enter / Esc'],
   'apps/penplotter/src/ui-dialog.js': [4, 'the plotter dialogs: Enter / Esc'],
+  'apps/shaper/src/main.js': [3, 'TASK 772: Sync New-folder input: Enter / Esc (+ SettingsManager key === \'DOC_UNIT\')'],
   'apps/shaper/src/op-list.js': [2, 'TASK 745: the operations list: Arrow Up / Down on a focused drag grip move its row (no arrow buttons)'],
 };
 const found = {};

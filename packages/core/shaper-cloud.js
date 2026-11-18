@@ -41,25 +41,40 @@ export const SHAPER_COMMON_HEADERS = {
   'X-ApiVersion': '3.0.0',
 };
 
-// ── THE REQUEST CONTRACT of POST /api/shaper-upload (TASK 767), declared once: functions/api/shaper-upload.js (the site) and server.js (local dev)
+// ── THE REQUEST CONTRACT of POST /api/shaper-upload (TASK 767 / 772), declared once: functions/api/shaper-upload.js (the site) and server.js (local dev)
 // only pass the request text to handleShaperUpload below and send back what it answers.
-//   request  JSON { email, password, filename, svg, mode }   mode = 'new' (the default) | 'replace' | 'keep-both'
-//            filename goes through shaperFileName (the name rule below) first.
-//   answers  200 { success: true,  status: 'sent',     filename, requested, blobId, file }  a new entry `filename` (keep-both: the next free name,
-//                                                                                          so filename !== requested)
-//            200 { success: true,  status: 'replaced', filename, requested, blobId, file }  the old entry of that name removed, the new one added
-//            200 { success: false, status: 'exists',   filename }                           mode 'new' and the name is already in My Files: NOTHING was
-//                                                                                          uploaded; the client asks, then sends again with mode
-//                                                                                          'replace' or 'keep-both'
-//            400 { error, kind }   kind = 'input' (a bad request) | 'login' (Shaper refused the sign-in) | 'network' (ShaperHub could not be reached)
-//                                  | 'shaper' (Shaper refused another call: its own message, trimmed). No error text ever holds the email or password.
-//   The order of the calls: shaper_sync.py sync_file (lines 158-175) lists the remote folder FIRST, and the way Shaper refuses a create of a taken
-//   name is not documented there (create_file_entry only raise_for_status, line 131), so this checks first too:
-//   sign in (POST auth /token) -> list My Files (GET /files/userspace/search) -> [taken + mode 'new': stop, answer 'exists', nothing uploaded]
-//   -> upload the blob (POST /blobs/) -> [replace: DELETE the old entry, only now that the new blob is uploaded] -> create the entry
-//   (POST /files/userspace/tree/<name>). shaper_sync.py deletes BEFORE it uploads (lines 168-174); this deletes after, so a failed blob upload
-//   never costs the old file.
+//   auth: `token` (in-memory session JWT from an earlier call) OR `email` + `password` (when both are sent with a stale token, re-signs in once on 401)
+//   action = 'upload' (default) | 'list' | 'mkdir'
+//   action='list'   JSON { token | email+password, remotePath? }
+//                   -> 200 { success: true, path, folders: [{ name, path, modified }], files: [{ name, modified }], token }
+//   action='mkdir'  JSON { token | email+password, remotePath?, folderName }
+//                   -> 200 { success: true, path, parent, name, token }
+//   action='upload' JSON { token | email+password, remotePath?, filename, svg, mode }   mode = 'new' (default) | 'replace' | 'keep-both'
+//                   -> 200 { success: true, status: 'sent'|'replaced', filename, requested, remotePath, blobId, file, token }
+//                   |  200 { success: false, status: 'exists', filename, remotePath, token }
+//   400 { error, kind }   kind = 'input' | 'login' | 'network' | 'shaper' (no error text ever holds email, password or token)
 export const UPLOAD_MODES = Object.freeze({ NEW: 'new', REPLACE: 'replace', KEEP_BOTH: 'keep-both' });
+export const SHAPER_ACTIONS = Object.freeze({ UPLOAD: 'upload', LIST: 'list', MKDIR: 'mkdir' });
+
+/** Normalise a ShaperHub folder path: always starts and ends with '/' ('/' for My Files root); rejects '..' and control chars. */
+export function normalizeRemotePath(raw) {
+  if (raw == null || String(raw).trim() === '') return '/';
+  const s = String(raw).replace(/\\+/g, '/').trim();
+  if (/[\x00-\x1f]/.test(s)) throw new ShaperHubError('input', 'Invalid folder path.');
+  const parts = s.split('/').filter((p) => p.length > 0 && p !== '.');
+  if (parts.some((p) => p === '..')) throw new ShaperHubError('input', 'Invalid folder path.');
+  return parts.length ? `/${parts.join('/')}/` : '/';
+}
+
+/** Validate a new single subfolder name and join it under `remotePath`. */
+export function joinRemotePath(remotePath, folderName) {
+  const base = normalizeRemotePath(remotePath);
+  const name = String(folderName == null ? '' : folderName).trim();
+  if (!name || name === '.' || name === '..' || /[\\/\x00-\x1f]/.test(name)) {
+    throw new ShaperHubError('input', 'Enter a folder name without / or \\.');
+  }
+  return { parent: base, name, path: `${base}${name}/` };
+}
 
 // ── THE NAME RULE (TASK 767), declared once: the Shaper app's export names (apps/shaper/src/export-payload.js exportFileName: Generate Shaper SVG, the
 // sidebar Download, the Sync dialog's file name) and the upload below all go through it. Letters, digits, _ - . space and ( ) are kept (the
@@ -125,10 +140,13 @@ async function shaperCall(step, url, init, secrets) {
 
 const authHeaders = (token, extra = {}) => ({ ...SHAPER_COMMON_HEADERS, 'Authorization': `Bearer ${token}`, ...extra });
 
-// shaper_sync.py _tree_url (lines 53-56): the entry of `name` in the user's space; create_file_entry (lines 125-132) and delete_file (lines 134-137)
-// both use it. Only the root folder is used here. For the root shaper_sync builds ".../tree/" + "/" + name ("tree//name"); this keeps the single
-// slash the upload has used since it shipped (the owner's files were created with it).
-const treeUrl = (name) => `${SHAPER_API_URL}/files/userspace/tree/${encodeURIComponent(name)}`;
+// shaper_sync.py _tree_url (lines 53-56): the entry of `name` inside `remotePath` in the user's space.
+// Root ('/') keeps the single slash ".../tree/<name>" that shipped (TASK 767); subfolders join segments cleanly.
+const treeUrl = (remotePath, name) => {
+  const segs = normalizeRemotePath(remotePath).split('/').filter(Boolean);
+  segs.push(name);
+  return `${SHAPER_API_URL}/files/userspace/tree/${segs.map(encodeURIComponent).join('/')}`;
+};
 
 // shaper_sync.py _authenticate (lines 67-101): POST /token, the JWT at access_token.token
 async function signIn(email, password, secrets) {
@@ -158,25 +176,56 @@ async function signIn(email, password, secrets) {
   return token;
 }
 
-// shaper_sync.py list_files (lines 103-117) as get_remote_files calls it (lines 192-197): GET /files/userspace/search, the files of the root folder,
-// the names in response.results. Its limit is 200, the most recently modified first.
-async function myFileNames(token, secrets) {
-  const params = new URLSearchParams({ spaceType: 'userspace', limit: '200', path: '/', sort: 'modified:-1', type: 'file' });
-  const res = await shaperCall('listing My Files', `${SHAPER_API_URL}/files/userspace/search?${params}`, { method: 'GET', headers: authHeaders(token) }, secrets);
+// Authenticates from token or email+password, and retries once on 401 when credentials were supplied.
+async function makeSession({ email, password, token }, secrets, onProgress = () => {}) {
+  const hasToken = typeof token === 'string' && token.trim().length > 0;
+  const hasCreds = !!(email && String(email).trim() && password);
+  if (!hasToken) {
+    if (!email || !String(email).trim()) throw new ShaperHubError('input', 'Shaper account email is required');
+    if (!password) throw new ShaperHubError('input', 'Shaper account password is required');
+  }
+  let activeToken = hasToken ? String(token).trim() : null;
+  if (!activeToken) {
+    onProgress('authenticating');
+    activeToken = await signIn(email, password, secrets);
+  }
+  async function authedCall(step, url, makeInit) {
+    let res = await shaperCall(step, url, makeInit(activeToken), secrets);
+    if (res.status === 401) {
+      if (!hasCreds) throw new ShaperHubError('login', 'Session expired. Sign in again to continue.');
+      onProgress('authenticating');
+      activeToken = await signIn(email, password, [...secrets, activeToken]);
+      res = await shaperCall(step, url, makeInit(activeToken), [...secrets, activeToken]);
+    }
+    return res;
+  }
+  return { authedCall, token: () => activeToken };
+}
+
+// shaper_sync.py list_files (lines 103-117): GET /files/userspace/search for a folder path.
+async function searchUserspace(session, remotePath, fileType, secrets) {
+  const q = { spaceType: 'userspace', limit: '200', path: remotePath, sort: 'modified:-1' };
+  if (fileType) q.type = fileType;
+  const params = new URLSearchParams(q);
+  const res = await session.authedCall('listing My Files', `${SHAPER_API_URL}/files/userspace/search?${params}`, (tok) => ({ method: 'GET', headers: authHeaders(tok) }));
   if (!res.ok) throw new ShaperHubError('shaper', `Listing My Files failed (${res.status}): ${await refusalMessage(res, secrets)}`);
   const data = await res.json();
-  const results = data && Array.isArray(data.results) ? data.results : [];
+  return data && Array.isArray(data.results) ? data.results : [];
+}
+
+async function myFileNames(session, remotePath, secrets) {
+  const results = await searchUserspace(session, remotePath, 'file', secrets);
   return results.map((f) => f && f.name).filter((n) => typeof n === 'string');
 }
 
 // shaper_sync.py upload_blob (lines 139-150): POST /blobs/ the raw bytes, the id at blobs[0]
-async function uploadBlob(token, svg, secrets) {
+async function uploadBlob(session, svg, secrets) {
   const rawBytes = typeof svg === 'string' ? new TextEncoder().encode(svg) : svg;
-  const res = await shaperCall('uploading the file', `${SHAPER_API_URL}/blobs/`, {
+  const res = await session.authedCall('uploading the file', `${SHAPER_API_URL}/blobs/`, (tok) => ({
     method: 'POST',
-    headers: authHeaders(token, { 'Content-Type': 'application/octet-stream' }),
+    headers: authHeaders(tok, { 'Content-Type': 'application/octet-stream' }),
     body: rawBytes,
-  }, secrets);
+  }));
   if (!res.ok) throw new ShaperHubError('shaper', `Blob upload failed (${res.status}): ${await refusalMessage(res, secrets)}`);
   const data = await res.json();
   const blobId = data && Array.isArray(data.blobs) ? data.blobs[0] : null;
@@ -184,63 +233,95 @@ async function uploadBlob(token, svg, secrets) {
   return blobId;
 }
 
+/** List subfolders and files inside `remotePath` in the user's ShaperHub My Files. */
+export async function listShaperHubFolder({ email, password, token, remotePath = '/', onProgress = () => {} }) {
+  const path = normalizeRemotePath(remotePath);
+  const secrets = [email, email && String(email).trim(), password, token].filter((s) => typeof s === 'string' && s);
+  const session = await makeSession({ email, password, token }, secrets, onProgress);
+  onProgress('listing');
+  const results = await searchUserspace(session, path, null, secrets);
+  const folders = [];
+  const files = [];
+  for (const item of results) {
+    if (!item || typeof item.name !== 'string' || !item.name) continue;
+    if (item.type === 'folder') {
+      folders.push({ name: item.name, path: `${path}${item.name}/`, modified: item.modified || null });
+    } else {
+      files.push({ name: item.name, modified: item.modified || null });
+    }
+  }
+  folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  onProgress('done');
+  return { success: true, path, folders, files, token: session.token() };
+}
+
+/** Create a subfolder inside `remotePath` in the user's ShaperHub My Files (shaper_sync.py create_folder). */
+export async function createShaperHubFolder({ email, password, token, remotePath = '/', folderName, onProgress = () => {} }) {
+  const { parent, name, path } = joinRemotePath(remotePath, folderName);
+  const secrets = [email, email && String(email).trim(), password, token].filter((s) => typeof s === 'string' && s);
+  const session = await makeSession({ email, password, token }, secrets, onProgress);
+  onProgress('creating_folder');
+  const res = await session.authedCall('creating folder', treeUrl(parent, name), (tok) => ({
+    method: 'POST',
+    headers: authHeaders(tok, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ type: 'folder' }),
+  }));
+  if (!res.ok) throw new ShaperHubError('shaper', `Creating folder failed (${res.status}): ${await refusalMessage(res, secrets)}`);
+  onProgress('done');
+  return { success: true, path, parent, name, token: session.token() };
+}
+
 /**
- * Send an SVG to the user's ShaperHub "My Files" (the root folder) through the Shaper API. The request contract and the order of the calls: the
- * comment above UPLOAD_MODES.
- * @param {Object} opts
- * @param {string} opts.email - Shaper account email
- * @param {string} opts.password - Shaper account password
- * @param {string} [opts.filename] - the file name; shaperFileName applies (empty: 'shaper-export.svg')
- * @param {string|Uint8Array} opts.svg - SVG contents
- * @param {string} [opts.mode='new'] - UPLOAD_MODES: 'new' (answers 'exists' when the name is taken), 'replace', 'keep-both'
- * @param {Function} [opts.onProgress] - Optional status progress callback (step: string)
- * @returns {Promise<{ success: boolean, status: 'sent'|'replaced'|'exists', filename: string, requested?: string, blobId?: string, file?: any }>}
- * @throws {ShaperHubError}
+ * Send an SVG to the user's ShaperHub "My Files" (at `remotePath`, root '/' by default) through the Shaper API.
+ * Accepts either `{ token }` or `{ email, password }` and returns the active session `token` alongside the upload result.
  */
-export async function uploadToShaperHub({ email, password, filename, svg, mode = UPLOAD_MODES.NEW, onProgress = () => {} }) {
-  if (!email || !String(email).trim()) throw new ShaperHubError('input', 'Shaper account email is required');
-  if (!password) throw new ShaperHubError('input', 'Shaper account password is required');
+export async function uploadToShaperHub({ email, password, token, session: includeToken = false, remotePath = '/', filename, svg, mode = UPLOAD_MODES.NEW, onProgress = () => {} }) {
   if (!svg) throw new ShaperHubError('input', 'SVG content is required');
-  const secrets = [String(email), String(email).trim(), String(password)];
+  const path = normalizeRemotePath(remotePath);
+  const secrets = [email, email && String(email).trim(), password, token].filter((s) => typeof s === 'string' && s);
   if (!Object.values(UPLOAD_MODES).includes(mode)) throw new ShaperHubError('input', `Unknown upload mode: ${plainMessage(mode, secrets)}`);
   const name = shaperFileName(filename);
 
-  // Step 1: Authenticate to get access JWT token
-  onProgress('authenticating');
-  const token = await signIn(email, password, secrets);
+  const session = await makeSession({ email, password, token }, secrets, onProgress);
 
-  // Step 2: is the name already in My Files? (shaper_sync.py sync_file lines 166-168: `local_file.name in remote_files`, the exact name)
+  // Step 2: is the name already in the target folder?
   onProgress('checking_name');
-  const taken = await myFileNames(token, secrets);
+  const taken = await myFileNames(session, path, secrets);
   const exists = taken.includes(name);
   if (exists && mode === UPLOAD_MODES.NEW) {
     onProgress('done');
-    return { success: false, status: 'exists', filename: name };
+    return {
+      success: false,
+      status: 'exists',
+      filename: name,
+      ...(path !== '/' ? { remotePath: path } : {}),
+      ...(includeToken ? { token: session.token() } : {}),
+    };
   }
   const target = exists && mode === UPLOAD_MODES.KEEP_BOTH ? nextFreeName(name, taken) : name;
   const replacing = exists && mode === UPLOAD_MODES.REPLACE;
 
   // Step 3: Upload blob (raw SVG payload)
   onProgress('uploading_blob');
-  const blobId = await uploadBlob(token, svg, secrets);
+  const blobId = await uploadBlob(session, svg, secrets);
 
   // Step 4 (replace only; shaper_sync.py delete_file, lines 134-137): remove the old entry, now that the new blob is safely uploaded
   if (replacing) {
     onProgress('removing_old');
-    const res = await shaperCall('removing the old file', treeUrl(name), { method: 'DELETE', headers: authHeaders(token) }, secrets);
+    const res = await session.authedCall('removing the old file', treeUrl(path, name), (tok) => ({ method: 'DELETE', headers: authHeaders(tok) }));
     if (!res.ok) throw new ShaperHubError('shaper', `The old ${name} is still in My Files (nothing was changed): removing it failed (${res.status}): ${await refusalMessage(res, secrets)}`);
   }
 
-  // Step 5: Link blob to My Files entry in userspace tree (shaper_sync.py create_file_entry, lines 125-132)
+  // Step 5: Link blob to entry in userspace tree (shaper_sync.py create_file_entry, lines 125-132)
   onProgress('linking_tree');
-  const fileRes = await shaperCall('adding the file to My Files', treeUrl(target), {
+  const fileRes = await session.authedCall('adding the file to My Files', treeUrl(path, target), (tok) => ({
     method: 'POST',
-    headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+    headers: authHeaders(tok, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       type: 'file',
       blobs: [blobId],
     }),
-  }, secrets);
+  }));
   if (!fileRes.ok) {
     const why = `(${fileRes.status}): ${await refusalMessage(fileRes, secrets)}`;
     throw new ShaperHubError('shaper', replacing
@@ -250,11 +331,19 @@ export async function uploadToShaperHub({ email, password, filename, svg, mode =
 
   const fileData = await fileRes.json();
   onProgress('done');
-  return { success: true, status: replacing ? 'replaced' : 'sent', filename: target, requested: name, blobId, file: fileData };
+  return {
+    success: true,
+    status: replacing ? 'replaced' : 'sent',
+    filename: target,
+    requested: name,
+    blobId,
+    file: fileData,
+    ...(path !== '/' ? { remotePath: path } : {}),
+    ...(includeToken ? { token: session.token() } : {}),
+  };
 }
 
-/** POST /api/shaper-upload, declared once (the contract above): the request's TEXT in, { status, body } out. The Pages Function and server.js
- *  send `body` back as JSON with `status`. An error text never holds the request (a JSON parse error quotes it) nor the login. */
+/** POST /api/shaper-upload, declared once (the contract above): dispatches action ('upload'|'list'|'mkdir') and redacts secrets on errors. */
 export async function handleShaperUpload(text) {
   let request;
   try {
@@ -263,10 +352,14 @@ export async function handleShaperUpload(text) {
     return { status: 400, body: { error: 'The upload request is not JSON.', kind: 'input' } };
   }
   const opts = request && typeof request === 'object' ? request : {};
+  const action = opts.action || SHAPER_ACTIONS.UPLOAD;
   try {
-    return { status: 200, body: await uploadToShaperHub(opts) };
+    if (action === SHAPER_ACTIONS.LIST) return { status: 200, body: await listShaperHubFolder(opts) };
+    if (action === SHAPER_ACTIONS.MKDIR) return { status: 200, body: await createShaperHubFolder(opts) };
+    if (action === SHAPER_ACTIONS.UPLOAD) return { status: 200, body: await uploadToShaperHub(opts) };
+    throw new ShaperHubError('input', `Unknown action: ${action}`);
   } catch (err) {
-    const secrets = [opts.email, opts.password].filter((s) => typeof s === 'string').flatMap((s) => [s, s.trim()]);
+    const secrets = [opts.email, opts.password, opts.token].filter((s) => typeof s === 'string').flatMap((s) => [s, s.trim()]);
     return { status: 400, body: { error: plainMessage(err && err.message, secrets), kind: err instanceof ShaperHubError ? err.kind : 'shaper' } };
   }
 }

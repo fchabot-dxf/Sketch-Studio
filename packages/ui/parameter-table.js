@@ -243,11 +243,11 @@ function injectStyles() {
 .sk-ptable .pt-fx[hidden] { display: none; } /* TASK 699: the rule above sets display, which beats the [hidden] attribute */
 .sk-ptable .pt-ref { display: inline-block; font-size: 0.75em; padding: 0 4px; margin-left: 4px; border-radius: 4px; border: 1px solid currentColor; font-style: normal; }
 .sk-ptable .pt-empty { opacity: 0.6; font-style: italic; padding: 6px; }
-/* TASK 677: the editable cells: a quiet box until hovered / focused; a pending text is marked, an invalid one is red (aria-invalid) */
-.sk-ptable .pt-in { flex: 1 1 auto; width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: inherit; background: transparent;
-  border: 1px solid transparent; border-radius: 4px; padding: 2px 4px; margin: 0; }
+/* TASK 677: the editable cells: a faint box to signal editability, stronger on hover / focus; pending dashed, invalid red (aria-invalid) */
+.sk-ptable .pt-in { flex: 1 1 auto; width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: inherit; background: rgba(127,127,127,0.06);
+  border: 1px solid rgba(127,127,127,0.24); border-radius: 4px; padding: 2px 4px; margin: 0; }
 .sk-ptable .pt-name .pt-in { font-weight: 600; }
-.sk-ptable .pt-in:hover { border-color: var(--sk-dock-border, rgba(127,127,127,0.45)); }
+.sk-ptable .pt-in:hover { border-color: var(--sk-dock-border, rgba(127,127,127,0.5)); background: rgba(127,127,127,0.1); }
 .sk-ptable .pt-in:focus { outline: none; border-color: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); background: var(--sk-dock-bg, #fff); color: var(--sk-dock-text, #1f2937); }
 .sk-ptable .pt-in.pt-pending { border-style: dashed; border-color: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); }
 .sk-ptable .pt-in[aria-invalid="true"] { border: 1px solid var(--sk-error, #e5484d); box-shadow: 0 0 0 1px var(--sk-error, #e5484d); }

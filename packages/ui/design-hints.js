@@ -1,0 +1,83 @@
+// packages/ui/design-hints.js — ONE declared table of interactive hints for the shared Design tab
+// (tool ribbon buttons/variants, footer controls, header Save button, and Settings controls).
+// Consumed by tool-ribbon.js, app-footer.js, save-button.js and style-panel.js across all four apps.
+
+/** Tool ribbon hints keyed by TOOL_MODES value or action id ('lock', 'combine', 'uncombine'). */
+export const RIBBON_HINTS = Object.freeze({
+  select: 'Click to pick objects, drag points or shapes to move them, or drag an empty area to box-select.',
+  line: 'Click start and end points to draw connected line segments; press Escape or the green check to finish.',
+  rect: 'Draw a rectangle using two corners, a centre and corner, or three points (hold the button for modes).',
+  slot: 'Draw a rounded slot along a centreline or overall bounds (hold the button for all 5 slot modes).',
+  circle: 'Click a centre point, then drag or click out to set the circle diameter.',
+  polygon: 'Click a centre point, then a vertex; type the side count into the live box.',
+  arc: 'Click start, end, and a bulge point on the rim to draw a circular arc.',
+  bezier: 'Click for sharp corners, drag for smooth tangent handles, and click the start point to close.',
+  trim: 'Click a line or curve segment to cut it back to the nearest intersection.',
+  break: 'Click a line or curve where you want to split it into two connected pieces.',
+  closePath: 'Join the two open ends of an outline into a closed shape.',
+  fillet: 'Click two connected lines or their shared corner to round the corner with an arc.',
+  mirror: 'Pick shapes to reflect, pick the mirror line, then press Enter to apply.',
+  circularPattern: 'Repeat selected shapes around a centre point at equal angles.',
+  rectPattern: 'Repeat selected shapes in rows and columns along chosen directions.',
+  offset: 'Copy an outline or open chain parallel to itself at a chosen distance.',
+  combine: 'Group selected shapes into a closed profile shape.',
+  uncombine: 'Separate a combined profile back into its individual curves.',
+  dimension: 'Click a line, circle, or two points/lines to lock and edit an exact measurement.',
+  coincident: 'Lock a point onto another point, line, or curve so they move together.',
+  horizontalVertical: 'Make a line purely horizontal or vertical, or align two points along an axis.',
+  parallel: 'Keep two lines at the exact same angle.',
+  perpendicular: 'Keep two lines at a 90° angle to each other.',
+  collinear: 'Keep two lines lying along the exact same infinite line.',
+  tangent: 'Make a line or curve touch an arc or circle smoothly without a corner.',
+  equal: 'Lock two lines to the same length or two arcs/circles to the same radius.',
+  midpoint: 'Constrain a point to sit exactly halfway along a line or between two points.',
+  symmetric: 'Constrain two points to mirror each other across a symmetry line.',
+  lock: 'Pin or unpin selected points or shapes so solving and dragging cannot move them.',
+});
+
+/** Shared footer, header and action tooltips keyed by control id. */
+export const CHROME_HINTS = Object.freeze({
+  save: 'Save this design to its home location (Ctrl+S), or choose Save as… on a new Untitled design.',
+  undo: 'Step back one change in the active stage.',
+  redo: 'Re-apply a change you just undid.',
+  delete: 'Remove the selected shapes, points, or constraints.',
+  clear: 'Clear every shape and constraint from the active sketch (undoable).',
+  parameters: 'Open the Parameters table to name variables and write dimension formulas.',
+  recenter: 'Fit and centre all visible sketch geometry inside the canvas.',
+  settings: 'Customize line weights, snap sensitivity, grid spacing, units, precision, and shortcuts.',
+});
+
+/** Settings panel hints keyed by SettingsManager key (rendered inside style-panel.js). */
+export const SETTING_HINTS = Object.freeze({
+  DOC_UNIT: 'Measurement unit shown in dimensions, live drawing boxes, and exports for this design.',
+  INCH_DISPLAY: 'Show inch measurements as decimals (1.5 in) or carpenter fractions (1 1/2").',
+  LENGTH_PRECISION: 'Maximum decimal places shown for length labels and live drawing values.',
+  LENGTH_FRACTION: 'Smallest fraction denominator rounded to when Inch display is set to Fractional.',
+  ANGLE_PRECISION: 'Maximum decimal places shown on angle dimensions and live angle boxes.',
+  TRAILING_ZEROS: 'Keep trailing zeros up to your chosen precision (e.g. 0.250 instead of 0.25).',
+  SHOW_GRID: 'Show or hide the background coordinate grid behind your sketch.',
+  GRID_MODE: 'Choose between full grid lines, subtle draft dots, or no grid background.',
+  SNAP_MAGNETISM: 'How close the cursor must get before snapping to endpoints, midpoints, or curves.',
+  AXIS_SNAP: 'Automatically align points horizontally or vertically with existing points while drawing.',
+  GRID_MAGNETISM: 'How close the cursor must get before snapping to grid intersections.',
+  GRID_MAJOR_STEP: 'Spacing between darker major grid lines (stored in millimetres).',
+  GRID_SIZE: 'Spacing between finer minor grid divisions (stored in millimetres).',
+  INCH_GRID_MAJOR: 'Spacing in inches between darker major grid lines.',
+  INCH_GRID_DIVISIONS: 'Number of minor subdivisions inside each major inch square.',
+  LINE_STROKE: 'Base stroke thickness for sketch lines and curves.',
+  JOINT_RADIUS: 'Size of endpoint and control-point dots shown on hover or selection.',
+  JOINT_STROKE_MULT: 'Ring outline thickness multiplier around endpoint dots.',
+  SELECTION_FEEDBACK_MULT: 'Thickness boost applied when a shape or point is selected.',
+  HOVER_FEEDBACK_MULT: 'Thickness boost applied when hovering over a selectable entity.',
+  DASH_LENGTH_PX: 'Length of each dash in construction lines.',
+  DASH_GAP_PX: 'Gap between dashes in construction lines.',
+  PROFILE_FILL: 'Lightly shade closed sketch loops so solid regions stand out clearly.',
+  LOCKED_LINE_COLOR: 'Highlight locked geometry in Fusion green or keep the standard constrained colour.',
+  INACTIVE_SKETCH_OPACITY: 'Visibility of sketches other than the active sketch.',
+  GLYPH_SYMBOL_SIZE_PX: 'Size of geometric constraint icons shown beside lines and corners.',
+  GLYPH_INFERENCE_SIZE_PX: 'Size of snap and alignment hint badges shown while drawing.',
+  GLYPH_OFFSET_PX: 'How far constraint icons sit away from their shape.',
+  GLYPH_OUTLINE_PX: 'Halo outline thickness around constraint icons for readability.',
+  DIM_LABEL_BOX: 'Draw a solid backing pill behind dimension numbers over busy geometry.',
+  LABEL_FONT_FAMILY: 'Font used for on-canvas dimension numbers and axis labels.',
+});

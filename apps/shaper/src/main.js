@@ -38,6 +38,7 @@ import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
 import { hintLabel, hintText } from './param-hints.js'; // TASK 770: THE table of labels and hints (the Export step's cards, the drawer's Download)
 import { mountHint } from './hint.js'; // TASK 770: the one hint widget
+import { mountTooltip } from '#ui/hint.js';
 
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
@@ -102,11 +103,19 @@ const designFileName = () => exportFileName(docBuffer ? docBuffer.designName() :
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
 // TASK 770: the Export step's side cards take their labels and hints from the table (param-hints.js) through the one hint widget (hint.js): the Stock thickness,
 // the Material, and the Export title, whose hint lists the three ways out (each button is described by its own line)
-for (const e of document.querySelectorAll('#review-side [data-label]')) e.textContent = hintLabel(e.dataset.label);
+for (const e of document.querySelectorAll('#review-side [data-label], #shaper-sync-modal [data-label]')) e.textContent = hintLabel(e.dataset.label);
 const sideHint = (id, after, fields, itemFields) => mountHint({ id, labelEl: document.querySelector(`#review-side [data-hint="${id}"]`), after, fields, itemFields });
+sideHint('reviewCuts', document.getElementById('review-cuts-list'), []);
 sideHint('stockThickness', document.querySelector('#review-stock > label'), [document.getElementById('review-stock-thickness')]);
 sideHint('material', document.querySelector('#review-look > label'), [document.getElementById('review-look-select')]);
 sideHint('export', document.querySelector('#simexport-panel .simexport-actions'), [], { generateSvg: btnGenerateSvg, syncShaperHub: document.getElementById('btn-sync-shaper'), openShaperHub: document.getElementById('link-shaper-hub') });
+mountHint({ id: 'dirLegend', labelEl: document.querySelector('#prepare-dir-legend [data-hint="dirLegend"]'), after: document.querySelector('#prepare-dir-legend .review-label-line') });
+for (const b of document.querySelectorAll('#review-toolbar [data-hint], #sync-browser [data-label][data-hint]')) {
+  const id = b.dataset.hint;
+  mountTooltip({ target: b, getContent: () => ({ title: hintLabel(id), text: hintText(id) }) });
+}
+const newFolderBtnEl = document.getElementById('sync-btn-new-folder');
+if (newFolderBtnEl) mountTooltip({ target: newFolderBtnEl, getContent: () => ({ title: hintLabel('syncNewFolder'), text: hintText('syncNewFolder') }) });
 if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
@@ -125,11 +134,23 @@ if (btnGenerateSvg) {
   });
 }
 
-// Direct ShaperHub cloud sync (Wi-Fi sync to Origin)
+// Direct ShaperHub cloud sync (Wi-Fi sync to Origin) + in-memory session token & folder browser (TASK 772)
 const syncModal = document.getElementById('shaper-sync-modal');
 const syncForm = document.getElementById('sync-modal-form');
 const syncEmail = document.getElementById('sync-email');
 const syncPassword = document.getElementById('sync-password');
+const syncFormFields = document.getElementById('sync-creds');
+const syncSessionBar = document.getElementById('sync-session');
+const syncSwitchBtn = document.getElementById('sync-btn-switch');
+const syncBrowseBtn = document.getElementById('sync-btn-browse');
+const syncRefreshBtn = document.getElementById('sync-btn-refresh');
+const syncNewFolderBtn = document.getElementById('sync-btn-new-folder');
+const syncBreadcrumbs = document.getElementById('sync-breadcrumbs');
+const syncMkdirRow = document.getElementById('sync-mkdir-row');
+const syncMkdirName = document.getElementById('sync-mkdir-name');
+const syncMkdirOk = document.getElementById('sync-mkdir-ok');
+const syncMkdirCancel = document.getElementById('sync-mkdir-cancel');
+const syncFolderList = document.getElementById('sync-folder-list');
 const syncFilename = document.getElementById('sync-filename');
 const syncStatus = document.getElementById('sync-modal-status');
 const syncCloseBtn = document.getElementById('sync-modal-close');
@@ -142,7 +163,33 @@ const syncReplaceBtn = document.getElementById('sync-btn-replace');
 const syncKeepBothBtn = document.getElementById('sync-btn-keep-both');
 const syncExistsCancelBtn = document.getElementById('sync-btn-exists-cancel');
 
+mountHint({ id: 'syncFolder', labelEl: document.querySelector('#sync-browser [data-hint="syncFolder"]'), after: document.querySelector('#sync-browser .sync-browser-head') });
+mountHint({ id: 'syncFilename', labelEl: document.querySelector('#shaper-sync-modal [data-hint="syncFilename"]'), after: document.querySelector('#shaper-sync-modal [data-hint="syncFilename"]')?.parentElement, fields: [syncFilename] });
+
 const LOGIN_HINT = 'Check the password: your browser may have filled in a saved one.'; // TASK 767: under Shaper's own words when it refuses the sign-in
+
+// TASK 772: auth JWT held strictly in page RAM for this tab only (never storage/cookies/DOM/logs; Task 758 stays intact).
+let sessionToken = null;
+let currentRemotePath = '/';
+let folderState = { loaded: false, path: '/', folders: [], files: [] };
+
+function applySessionUi() {
+  const authed = !!sessionToken;
+  if (syncSessionBar) syncSessionBar.hidden = !authed;
+  if (syncFormFields) syncFormFields.hidden = authed;
+  if (syncEmail) syncEmail.required = !authed;
+  if (syncPassword) syncPassword.required = !authed;
+  if (syncRefreshBtn) syncRefreshBtn.hidden = !authed;
+  if (syncNewFolderBtn) syncNewFolderBtn.hidden = !authed;
+  if (!authed && syncMkdirRow) syncMkdirRow.hidden = true;
+}
+
+function clearSession() {
+  sessionToken = null;
+  folderState = { loaded: false, path: currentRemotePath, folders: [], files: [] };
+  applySessionUi();
+  renderFolderBrowser();
+}
 
 // TASK 767: the dialog's status area: `lines` = its lines of text (each its own line, set as text), `tone` = '' | 'is-error' | 'is-success' | 'is-loading'
 function showSyncStatus(tone, ...lines) {
@@ -155,6 +202,206 @@ function showExistsQuestion(on) {
   syncActions.hidden = on;
   for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = false;
 }
+
+const folderPlace = (path) => (!path || path === '/' ? 'My Files' : `My Files${path.slice(0, -1)}`);
+
+function renderBreadcrumbs() {
+  if (!syncBreadcrumbs) return;
+  const segs = currentRemotePath.split('/').filter(Boolean);
+  const crumbs = [{ label: 'My Files', path: '/' }];
+  let acc = '/';
+  for (const s of segs) {
+    acc += `${s}/`;
+    crumbs.push({ label: s, path: acc });
+  }
+  const nodes = [];
+  crumbs.forEach((c, idx) => {
+    if (idx > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'sync-crumb-sep';
+      sep.textContent = '/';
+      nodes.push(sep);
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sync-crumb';
+    btn.textContent = c.label;
+    btn.dataset.path = c.path;
+    if (idx === crumbs.length - 1) {
+      btn.setAttribute('aria-current', 'location');
+    } else {
+      btn.addEventListener('click', () => { openRemoteFolder(c.path); });
+    }
+    nodes.push(btn);
+  });
+  syncBreadcrumbs.replaceChildren(...nodes);
+}
+
+function renderFolderBrowser() {
+  renderBreadcrumbs();
+  if (!syncFolderList) return;
+  if (!folderState.loaded) {
+    const empty = document.createElement('div');
+    empty.className = 'sync-browser-empty';
+    empty.textContent = sessionToken
+      ? 'Click Refresh to load folder contents.'
+      : 'Sign in above or click Browse folders to view your ShaperHub folders (defaults to My Files).';
+    syncFolderList.replaceChildren(empty);
+    return;
+  }
+  const rows = [];
+  if (currentRemotePath !== '/') {
+    const segs = currentRemotePath.split('/').filter(Boolean);
+    segs.pop();
+    const parentPath = segs.length ? `/${segs.join('/')}/` : '/';
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.className = 'sync-entry is-up';
+    up.dataset.path = parentPath;
+    const icon = document.createElement('span'); icon.textContent = '↩';
+    const nm = document.createElement('span'); nm.className = 'sync-entry-name'; nm.textContent = '.. (Up a folder)';
+    up.append(icon, nm);
+    up.addEventListener('click', () => { openRemoteFolder(parentPath); });
+    rows.push(up);
+  }
+  for (const f of folderState.folders) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'sync-entry is-folder';
+    row.dataset.folder = f.name;
+    row.dataset.path = f.path;
+    const icon = document.createElement('span'); icon.textContent = '📁';
+    const nm = document.createElement('span'); nm.className = 'sync-entry-name'; nm.textContent = f.name;
+    row.append(icon, nm);
+    row.addEventListener('click', () => { openRemoteFolder(f.path); });
+    rows.push(row);
+  }
+  for (const f of folderState.files) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'sync-entry is-file';
+    row.dataset.file = f.name;
+    if (syncFilename && syncFilename.value.trim() === f.name) row.classList.add('is-selected');
+    const icon = document.createElement('span'); icon.textContent = '📄';
+    const nm = document.createElement('span'); nm.className = 'sync-entry-name'; nm.textContent = f.name;
+    row.append(icon, nm);
+    row.addEventListener('click', () => {
+      syncFilename.value = f.name;
+      syncNameEdits.set(designKey(), f.name);
+      showExistsQuestion(false);
+      showSyncStatus('', '');
+      renderFolderBrowser();
+    });
+    rows.push(row);
+  }
+  if (!rows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sync-browser-empty';
+    empty.textContent = '(Empty folder)';
+    rows.push(empty);
+  }
+  syncFolderList.replaceChildren(...rows);
+}
+
+// ONE request path for /api/shaper-upload (TASK 758/772): serialises login credentials once here when no sessionToken is cached.
+async function callShaperHub(payload) {
+  const mail = sessionToken ? undefined : (syncEmail ? syncEmail.value.trim() : '');
+  const pass = sessionToken ? undefined : (syncPassword ? syncPassword.value : '');
+  const res = await fetch('/api/shaper-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: mail, password: pass, token: sessionToken || undefined, session: true, ...payload }),
+  });
+  const data = await res.json().catch(() => ({ error: `The upload service answered ${res.status} without a result.`, kind: 'network' }));
+  if (res.ok && !data.error && typeof data.token === 'string' && data.token) {
+    sessionToken = data.token;
+    applySessionUi();
+  } else if (data && data.kind === 'login' && sessionToken) {
+    clearSession();
+  }
+  return { res, data };
+}
+
+async function openRemoteFolder(path = currentRemotePath) {
+  if (!sessionToken) {
+    const e = syncEmail ? syncEmail.value.trim() : '';
+    const p = syncPassword ? syncPassword.value : '';
+    if (!e || !p) {
+      showExistsQuestion(false);
+      showSyncStatus('is-error', 'Please enter both email and password.');
+      return;
+    }
+  }
+  showSyncStatus('is-loading', `Loading ${folderPlace(path)}...`);
+  if (syncBrowseBtn) syncBrowseBtn.disabled = true;
+  if (syncRefreshBtn) syncRefreshBtn.disabled = true;
+  let res, data;
+  try {
+    ({ res, data } = await callShaperHub({ action: 'list', remotePath: path }));
+  } catch (err) {
+    showSyncStatus('is-error', 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
+    return;
+  } finally {
+    if (syncBrowseBtn) syncBrowseBtn.disabled = false;
+    if (syncRefreshBtn) syncRefreshBtn.disabled = false;
+  }
+  if (!res.ok || data.error) {
+    const lines = [`Error: ${data.error || `Could not open folder (${res.status})`}`];
+    if (data.kind === 'login') lines.push(LOGIN_HINT);
+    showSyncStatus('is-error', ...lines);
+    return;
+  }
+  currentRemotePath = data.path || path;
+  folderState = { loaded: true, path: currentRemotePath, folders: data.folders || [], files: data.files || [] };
+  if (syncMkdirRow) syncMkdirRow.hidden = true;
+  showExistsQuestion(false);
+  showSyncStatus('', '');
+  renderFolderBrowser();
+}
+
+async function createSubfolder() {
+  const folderName = syncMkdirName ? syncMkdirName.value.trim() : '';
+  if (!folderName) {
+    showSyncStatus('is-error', 'Enter a folder name.');
+    if (syncMkdirName) syncMkdirName.focus();
+    return;
+  }
+  showSyncStatus('is-loading', `Creating folder "${folderName}"...`);
+  if (syncMkdirOk) syncMkdirOk.disabled = true;
+  let res, data;
+  try {
+    ({ res, data } = await callShaperHub({ action: 'mkdir', remotePath: currentRemotePath, folderName }));
+  } catch (err) {
+    showSyncStatus('is-error', 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
+    return;
+  } finally {
+    if (syncMkdirOk) syncMkdirOk.disabled = false;
+  }
+  if (!res.ok || data.error) {
+    showSyncStatus('is-error', `Error: ${data.error || `Folder could not be created (${res.status})`}`);
+    return;
+  }
+  if (syncMkdirName) syncMkdirName.value = '';
+  if (syncMkdirRow) syncMkdirRow.hidden = true;
+  await openRemoteFolder(data.path || currentRemotePath);
+}
+
+if (syncSwitchBtn) syncSwitchBtn.addEventListener('click', () => { clearSession(); showSyncStatus('', ''); if (syncEmail) syncEmail.focus(); });
+if (syncBrowseBtn) syncBrowseBtn.addEventListener('click', () => { openRemoteFolder(currentRemotePath); });
+if (syncRefreshBtn) syncRefreshBtn.addEventListener('click', () => { openRemoteFolder(currentRemotePath); });
+if (syncNewFolderBtn) syncNewFolderBtn.addEventListener('click', () => {
+  if (!syncMkdirRow) return;
+  syncMkdirRow.hidden = !syncMkdirRow.hidden;
+  if (!syncMkdirRow.hidden && syncMkdirName) { syncMkdirName.value = ''; syncMkdirName.focus(); }
+});
+if (syncMkdirCancel) syncMkdirCancel.addEventListener('click', () => { if (syncMkdirRow) syncMkdirRow.hidden = true; });
+if (syncMkdirOk) syncMkdirOk.addEventListener('click', () => { createSubfolder(); });
+if (syncMkdirName) syncMkdirName.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); createSubfolder(); }
+  else if (e.key === 'Escape') { e.stopPropagation(); if (syncMkdirRow) syncMkdirRow.hidden = true; }
+});
+if (syncEmail) syncEmail.addEventListener('input', () => { if (sessionToken) clearSession(); });
+if (syncPassword) syncPassword.addEventListener('input', () => { if (sessionToken) clearSession(); });
 
 // TASK 767: the file name the user typed for a design, kept for THIS session only (page memory, never stored): the design = its document tab, its
 // stored id and its name (a reused Untitled tab that now holds another design starts from that design's own name)
@@ -186,55 +433,58 @@ if (btnSyncShaper) {
     }
     const key = designKey();
     syncFilename.value = syncNameEdits.has(key) ? syncNameEdits.get(key) : designFileName(); // TASK 767: the design's name, or what was typed for it
+    applySessionUi();
+    renderFolderBrowser();
     showExistsQuestion(false);
     showSyncStatus('');
     if (syncSubmitBtn) syncSubmitBtn.disabled = false;
     if (syncModal && typeof syncModal.showModal === 'function') {
       syncModal.showModal();
     }
+    if (sessionToken) openRemoteFolder(currentRemotePath);
   });
 }
 
-// TASK 767: what the success line says (the function's answer: shaper-cloud.js, the contract)
-const sentLine = (data) => (data.status === 'replaced' ? `Replaced ${data.filename} in My Files`
-  : data.filename !== data.requested ? `Sent as ${data.filename}` : `Sent ${data.filename} to My Files`);
+// TASK 767 / 772: what the success line says (root preserves exact My Files wording; subfolders name their path)
+const sentLine = (data) => {
+  const place = folderPlace(data.remotePath || currentRemotePath);
+  return (data.status === 'replaced' ? `Replaced ${data.filename} in ${place}`
+    : data.filename !== data.requested ? `Sent as ${data.filename}` : `Sent ${data.filename} to ${place}`);
+};
 
-// ONE send, for every press (Send = mode 'new'; the question's Replace it / Keep both = 'replace' / 'keep-both'). The login is read from the still-open form's
-// fields each time: the app keeps none of it (TASK 758) and never asks for it twice.
+// ONE send, for every press (Send = mode 'new'; the question's Replace it / Keep both = 'replace' / 'keep-both').
 async function sendToShaperHub(mode) {
   const payload = generateShaperSvgPayload();
   if (!payload) {
     showSyncStatus('is-error', 'No cuts assigned in Prepare.');
     return;
   }
-  const email = syncEmail ? syncEmail.value.trim() : '';
-  const password = syncPassword ? syncPassword.value : '';
   const filename = syncFilename.value; // the function applies the name rule (shaper-cloud.js shaperFileName)
 
-  if (!email || !password) {
-    showExistsQuestion(false);
-    showSyncStatus('is-error', 'Please enter both email and password.');
-    return;
+  if (!sessionToken) {
+    const e = syncEmail ? syncEmail.value.trim() : '';
+    const p = syncPassword ? syncPassword.value : '';
+    if (!e || !p) {
+      showExistsQuestion(false);
+      showSyncStatus('is-error', 'Please enter both email and password.');
+      return;
+    }
   }
 
-  showSyncStatus('is-loading', mode === 'replace' ? 'Replacing the file in My Files...' : mode === 'keep-both' ? 'Sending a copy under a new name...' : 'Authenticating with Shaper and uploading...');
+  const targetPlace = folderPlace(currentRemotePath);
+  showSyncStatus('is-loading', mode === 'replace' ? `Replacing the file in ${targetPlace}...` : mode === 'keep-both' ? 'Sending a copy under a new name...' : sessionToken ? `Uploading to ${targetPlace}...` : 'Authenticating with Shaper and uploading...');
   if (syncSubmitBtn) syncSubmitBtn.disabled = true;
   for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = true;
 
-  let res;
+  let res, data;
   try {
-    res = await fetch('/api/shaper-upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, filename, svg: payload.svg, mode })
-    });
+    ({ res, data } = await callShaperHub({ filename, svg: payload.svg, mode, remotePath: currentRemotePath }));
   } catch (err) {
     showExistsQuestion(false);
     showSyncStatus('is-error', 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
     if (syncSubmitBtn) syncSubmitBtn.disabled = false;
     return;
   }
-  const data = await res.json().catch(() => ({ error: `The upload service answered ${res.status} without a result.`, kind: 'network' }));
   if (!res.ok || data.error) {
     showExistsQuestion(false);
     const lines = [`Error: ${data.error || `Upload failed with status ${res.status}`}`];
@@ -244,7 +494,7 @@ async function sendToShaperHub(mode) {
     return;
   }
   if (data.status === 'exists') { // nothing was uploaded: ask (TASK 767)
-    showSyncStatus('', `${data.filename} is already in My Files.`);
+    showSyncStatus('', `${data.filename} is already in ${targetPlace}.`);
     showExistsQuestion(true);
     syncReplaceBtn.focus();
     return;
@@ -257,8 +507,7 @@ async function sendToShaperHub(mode) {
   const expStatus = document.getElementById('simexport-status');
   if (expStatus) expStatus.textContent = `✓ ${line}. It will now appear on your Origin over Wi-Fi.`;
   // TASK 758: the login is NOT kept by the app. Closing the dialog hides the form after the successful fetch: that is what tells the browser's
-  // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared): a
-  // browser reads them when it sees the form go.
+  // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared).
   setTimeout(() => {
     closeSyncModal();
   }, 1200);

@@ -10,6 +10,8 @@ import { listenOutsidePress } from '#ui/outside-press.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the panel opened
 import { createShortcutsList } from '#ui/shortcuts-list.js'; // TASK 727: the Shortcuts tab (TASK 747: the user changes the keys there)
 import { USER_KEYS_SETTING } from '#ui/shortcuts.js'; // TASK 747: the user's own keys survive the look's Reset, like the presets
+import { mountHint } from '#ui/hint.js';
+import { SETTING_HINTS } from '#ui/design-hints.js';
 import {
   STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, USER_PRESETS_KEY, activeStyleTemplateId, applyStyleTemplate, userPresetsOf, listUserPresets,
   isUserPresetId, presetNameProblem, findUserPresetByName, saveUserPreset, renameUserPreset, deleteUserPreset,
@@ -91,7 +93,7 @@ function injectStyles() {
   s.id = 'sk-style-panel-styles';
   s.textContent = `
 .sk-style-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10000;
-  width: 320px; max-height: 82vh; overflow: auto; box-sizing: border-box; padding: 14px;
+  width: min(440px, calc(100vw - 24px)); max-height: 82vh; overflow: auto; box-sizing: border-box; padding: 14px;
   background: var(--sk-style-bg, #fff); color: var(--sk-style-fg, #334155);
   border: 1px solid var(--sk-style-sep, #cbd5e1); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
   font: 12px system-ui, sans-serif; }
@@ -265,6 +267,12 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     panel.setAttribute('aria-labelledby', btn.id); panel.dataset.tab = t.id;
     tabBar.appendChild(btn); tabBtns[t.id] = btn; tabPanels[t.id] = panel;
   }
+  const doc = typeof document !== 'undefined' ? document : null;
+  function attachSettingHint(key, labelEl, after, field) {
+    const text = SETTING_HINTS[key];
+    if (!text || !doc) return;
+    mountHint({ id: key, labelEl, after, fields: field ? [field] : [], text, doc });
+  }
   body.appendChild(tabBar);
   for (const spec of CONTROLS) tabPanels[spec.tab].appendChild(buildControl(spec));
   const shortcutsList = createShortcutsList({ hostId });
@@ -278,7 +286,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   const docUnitSelect = document.createElement('select'); docUnitSelect.className = 'sk-style-input'; docUnitSelect.dataset.key = 'DOC_UNIT';
   for (const u of UNITS) { const o = document.createElement('option'); o.value = u; o.textContent = UNIT_LABELS[u] || u; docUnitSelect.appendChild(o); }
   docUnitSelect.addEventListener('change', () => settings.set('DOC_UNIT', docUnitSelect.value, { persist: 'local' }));
-  unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); tabPanels.units.prepend(unitRow); // before the precision rows
+  unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); attachSettingHint('DOC_UNIT', unitLab, unitTop, docUnitSelect); tabPanels.units.prepend(unitRow); // before the precision rows
   const unitsHint = document.createElement('div'); unitsHint.className = 'sk-style-hint'; unitsHint.textContent = "Trailing zeros are hidden unless 'Show trailing zeros' is on.";
   tabPanels.units.appendChild(unitsHint);
 
@@ -320,17 +328,20 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     const top = document.createElement('div'); top.className = 'sk-style-rowtop';
     const lab = document.createElement('span'); lab.className = 'sk-style-label'; lab.textContent = spec.label;
     top.appendChild(lab);
+    let fieldEl;
     if (spec.type === 'checkbox') {
       const input = document.createElement('input'); input.type = 'checkbox'; input.className = 'sk-style-input'; input.dataset.key = spec.key;
       input.addEventListener('change', () => settings.set(spec.key, !!input.checked, { persist: 'local' }));
       top.appendChild(input); row.appendChild(top);
       controlEls[spec.key] = { input, row };
+      fieldEl = input;
     } else if (spec.type === 'select') {
       const input = document.createElement('select'); input.className = 'sk-style-input'; input.dataset.key = spec.key;
       for (const o of spec.options) { const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; input.appendChild(opt); }
       input.addEventListener('change', () => settings.set(spec.key, spec.numeric ? (input.value === '' ? null : Number(input.value)) : input.value, { persist: 'local' }));
       top.appendChild(input); row.appendChild(top);
       controlEls[spec.key] = { input, row };
+      fieldEl = input;
     } else {
       const input = document.createElement('input'); input.type = 'number'; input.className = 'sk-style-input'; input.dataset.key = spec.key;
       input.min = String(spec.min); input.max = String(spec.max); input.step = String(spec.step);
@@ -342,7 +353,9 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
       slider.addEventListener('input', () => { input.value = slider.value; write(slider.value); });
       top.appendChild(input); row.append(top, slider);
       controlEls[spec.key] = { input, slider, row };
+      fieldEl = input;
     }
+    attachSettingHint(spec.key, lab, row.lastElementChild, fieldEl);
     if (spec.hint) { const h = document.createElement('div'); h.className = 'sk-style-hint'; h.textContent = spec.hint; row.appendChild(h); }
     return row;
   }

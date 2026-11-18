@@ -45,6 +45,18 @@ const PARAMS = {
   syncShaperHub: { label: 'Sync to ShaperHub', hint: 'Sends the file to your ShaperHub My Files with your Shaper login, so the Origin gets it over Wi-Fi.' },
   openShaperHub: { label: 'Open ShaperHub (My Files)', hint: 'Opens your ShaperHub files in a new browser tab.' },
   download: { label: 'Download', hint: 'Saves the Shaper SVG of your cuts to this computer (the same file as Generate Shaper SVG).' }, // the drawer's entry (a sidebar action: its tooltip)
+  // ── TASK 772: Prepare Operations, Direction legend, Export toolbar/Cuts, and Sync to ShaperHub ──
+  operations: { label: 'Operations', hint: 'Cut order sent to the Origin: drag a grip (or hold a row on touch) to reorder, tap to select, or tap the bin to clear.' },
+  dirLegend: { label: 'direction: conventional (Shaper Origin)', hint: 'Arrows mark conventional cutting direction along closed shapes so the Origin keeps a clean wall finish.' },
+  reviewCuts: { label: 'Cuts', hint: 'Assigned operations in job order: click one to highlight it and focus its cut depth details.' },
+  reviewThreeD: { label: '3D', hint: 'Show the finished workpiece relief in interactive 3D.' },
+  reviewTwoD: { label: '2D', hint: 'Inspect the flat exported Shaper SVG paths and colour coding.' },
+  reviewReset: { label: 'Reset', hint: 'Return the 3D camera to the default angled overview.' },
+  reviewTop: { label: 'Top', hint: 'Look straight down from above at the workpiece and paths.' },
+  reviewFit: { label: 'Fit', hint: 'Frame the entire board and all cuts inside the view.' },
+  syncFolder: { label: 'Destination Folder', hint: 'Sign in once to browse My Files folders, pick where the file uploads, or add a subfolder. Session stays in tab memory only.' },
+  syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
+  syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
 };
 
 /** The hints of the choices, by parameter then choice id (their labels are their own declarations': CHOICE_SOURCES). */

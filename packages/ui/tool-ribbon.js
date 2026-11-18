@@ -13,7 +13,9 @@ import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
 import { loadSection, saveSection, defaultSection } from '#ui/ribbon-layout.js';
-import { titleWithShortcut, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration (TASK 747: and follows the user's keys)
+import { titleWithShortcut, shortcutHint, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration (TASK 747: and follows the user's keys)
+import { mountTooltip } from '#ui/hint.js';
+import { RIBBON_HINTS } from '#ui/design-hints.js';
 
 // TASK 647: the ribbon never scrolls. Each section shows the tools that are "in the bar" (the user's checkboxes) and fit, then its NAME, a button
 // that opens the section's dropdown (every tool of the section: run it, check it in / out of the bar, hold-drag its grip to reorder). The fit
@@ -326,6 +328,16 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     refresh();
   }
 
+  const tips = [];
+  const attachTip = (btn, key, titleLabel, shortcutId, extraText) => {
+    const desc = extraText || (key && RIBBON_HINTS[key]) || '';
+    if (!desc) return;
+    tips.push(mountTooltip({
+      target: btn,
+      getContent: () => ({ title: titleLabel, key: shortcutId ? shortcutHint(shortcutId) : '', text: desc }),
+    }));
+  };
+
   // Each tool of a section is an ITEM: { id, label, btn (its bar button), tool?, run(anchor) }. The bar button and the dropdown row both call run.
   function toolItem(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
@@ -337,6 +349,8 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (t.tool) b.dataset.tool = t.tool;
     if (t.action) b.dataset.action = t.action;
     if (t.ariaLabel) b.setAttribute('aria-label', t.ariaLabel);
+    const hintKey = t.tool || t.action;
+    attachTip(b, hintKey, t.ariaLabel || t.title || t.label, t.shortcut);
     // Support both symbol-id icons (icon) and raw inline SVG paths (iconSvg) for newer tools
     const icon = t.iconSvg
       ? `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true">${t.iconSvg}</svg>`
@@ -355,7 +369,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     };
     b.addEventListener('click', run);
     if (t.tool) toolBtns.push({ btn: b, tool: t.tool });
-    return { id: b.id, label: t.label, btn: b, tool: t.tool || null, run };
+    return { id: b.id, label: t.label, btn: b, tool: t.tool || null, hintKey, shortcut: t.shortcut || null, run };
   }
   const variantPops = [];
   function variantItem(t) {
@@ -364,6 +378,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     const retitle = () => { b.title = titleWithShortcut(t.label, t.shortcut); }; // TASK 740: "Rect (R)"
     retitle(); retitles.push(retitle);
     if (t.tool) b.id = 'tool-' + t.tool;
+    attachTip(b, t.tool, t.label, t.shortcut);
     const activeMode = (state && state[t.modeKey]) || t.variants[0].mode;
     const initialVariant = t.variants.find(v => v.mode === activeMode) || t.variants[0];
     b.innerHTML = iconSvg(initialVariant.icon) + `<span class="sk-ribbon-lbl">${t.label}</span><span class="sk-ribbon-dd-ind"></span>`;
@@ -399,15 +414,16 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     b.addEventListener('click', (ev) => { ev.stopPropagation(); run(b); });
     menus.push(menu);
     document.body.appendChild(menu);
-    return { id: b.id, label: t.label, btn: b, tool: t.tool, run };
+    return { id: b.id, label: t.label, btn: b, tool: t.tool, hintKey: t.tool, shortcut: t.shortcut || null, run };
   }
   function extraItem(bd, sectionKey, i) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
     b.id = bd.id || ('extra-' + sectionKey + '-' + i); b.title = bd.title || bd.label || '';
+    if (bd.hint || (bd.title && bd.title !== bd.label)) attachTip(b, null, bd.label || '', null, bd.hint || bd.title);
     b.innerHTML = (bd.icon ? iconSvg(bd.icon) : (bd.svg || '')) + `<span class="sk-ribbon-lbl">${bd.label || ''}</span>`;
     const run = () => { try { bd.onClick && bd.onClick(); } catch (_) {} fire('action', { id: bd.id, event: bd.event }); };
     b.addEventListener('click', run);
-    return { id: b.id, label: bd.label || '', btn: b, tool: null, run };
+    return { id: b.id, label: bd.label || '', btn: b, tool: null, hintText: bd.hint || (bd.title && bd.title !== bd.label ? bd.title : null), run };
   }
 
   // TASK 647: the sections, DECLARED (fixed / defaultInBar are data on the section, read by the one layout engine below).
@@ -540,6 +556,8 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     });
     chkWrap.appendChild(chk);
     const runBtn = document.createElement('button'); runBtn.type = 'button'; runBtn.className = 'sk-ribbon-sect-item'; runBtn.dataset.id = it.id;
+    const desc = it.hintText || (it.hintKey && RIBBON_HINTS[it.hintKey]) || '';
+    if (desc) tips.push(mountTooltip({ target: runBtn, getContent: () => ({ title: it.label, key: it.shortcut ? shortcutHint(it.shortcut) : '', text: desc }) }));
     const ic = it.btn.querySelector('svg');
     if (ic) runBtn.appendChild(ic.cloneNode(true)); // the bar button's own icon (the rect button's shows its current variant)
     const name = document.createElement('span'); name.textContent = it.label; runBtn.appendChild(name);
@@ -645,6 +663,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
       offShortcuts();
       if (unlistenHistory) unlistenHistory();
       sectPop.close();
+      tips.forEach((t) => t.destroy());
       document.removeEventListener('pointerup', syncSoon);
       document.removeEventListener('keyup', syncSoon);
       if (fitObserver) fitObserver.disconnect();

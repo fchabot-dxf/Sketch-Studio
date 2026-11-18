@@ -60,6 +60,9 @@ const STATES = [
   ...CUT_TYPES.filter((t) => !t.slopeKind).map((t) => ({ cutType: t.id })),
   ...['freehand', 'linked', 'raster', 'morphed'].flatMap((c) => [{ cutType: 'pocket', clearing: c }, { cutType: 'pocket', clearing: c, loop: true }]),
   ...['off', 'tabs', 'skin'].flatMap((h) => [{ cutType: 'exterior', holdPart: h }, { cutType: 'interior', holdPart: h }]),
+  ...['off', 'tabs', 'skin'].map((h) => ({ cutType: 'online', holdPart: h })), // TASK 775: On line takes the Hold part rows
+  { cutType: 'online', leadIn: true }, { cutType: 'online', leadIn: true, leadInSide: 'inside' }, // TASK 775: the Lead-in rows
+  ...['linked', 'raster', 'morphed'].map((c) => ({ cutType: 'pocket', clearing: c, loop: true, leadIn: true })),
   ...['pocket', 'inside', 'outside'].flatMap((k) => [{ cutType: `stepped-${k}`, slope: slope(k) }, { cutType: `stepped-${k}`, slope: slope(k), adaptiveSteps: true }]),
   { cutType: 'pocket', slope: slope('pocket') }, { cutType: 'interior', slope: slope('inside') }, { cutType: 'exterior', slope: slope('outside') },
 ];
@@ -76,7 +79,7 @@ for (const record of STATES) {
     seen.add(id);
     const labelText = trig.classList.contains('sk-hint-i') ? trig.previousElementSibling.textContent : trig.textContent;
     eq(labelText, hintLabel(id), `${name} ${id}: the label is the table's`);
-    eq(line.firstChild.textContent, hintText(id, { loop: record.loop === true }), `${name} ${id}: the hint is the table's`);
+    eq(line.firstChild.textContent, hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online' }), `${name} ${id}: the hint is the table's`); // TASK 775: Lead-in / Tab width follow the type
     ok(line.hidden && trig.getAttribute('aria-expanded') === 'false' && trig.getAttribute('aria-controls') === line.id, `${name} ${id}: closed at rest, aria-controls its line`);
     for (const f of row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger')) eq(f.getAttribute('aria-describedby'), line.id, `${name} ${id}: ${f.className} is described by the hint`);
     for (const item of line.querySelectorAll('.sk-hint-item')) { seen.add(item.dataset.hint); ok(item.textContent === `${hintLabel(item.dataset.hint)}: ${hintText(item.dataset.hint)}`, `${name}: the item line ${item.dataset.hint}`); }

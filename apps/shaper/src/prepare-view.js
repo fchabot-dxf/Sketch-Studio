@@ -10,7 +10,8 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
-  clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
+  clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
+  lastLeadInLength, rememberLeadInLength, lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
@@ -308,7 +309,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInLength}|${rec.leadInSide}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775: its lead-in
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [] };
@@ -328,6 +329,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // TASK 449: a travel's marks (marching dashes + the reduced-motion arrows); TASK 757: a STEPPED cut's (a terrace's) go to `stepped`, thinned at draw time
     // (renderStepTravel: the outlines closer on screen than TRAVEL_MIN_GAP_PX carry none), every other cut's into the path markup as before
     const stepped = [];
+    // TASK 775: a LEAD-IN: the leg, a filled dot at its tip (the open path's start) and a ring at the junction (its other end, where the path comes back)
+    const addLead = (lead) => {
+      if (!lead || lead.role !== 'leg') return;
+      const [tip, j] = lead.legPoints;
+      path += `<path class="sk-lead-leg" d="M ${tip.x} ${tip.y} L ${j.x} ${j.y}"/><circle class="sk-lead-end" cx="${j.x}" cy="${j.y}" r="1.2"/><circle class="sk-lead-tip" cx="${tip.x}" cy="${tip.y}" r="1.6"/>`;
+    };
     const addTravel = (fp, t) => {
       const markup = `<path class="sk-travel" d="${polyRingD(t.path)}"/><g class="sk-travel-arrows">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
       if (fp.terrace) stepped.push({ ring: t.path, markup }); else path += markup;
@@ -346,8 +353,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         if (CLEAR_PATH_ROLES.has(cl.role)) {
           for (const tp of fp.toolPaths || []) {
             path += `<path class="sk-clear-path${cl.role === 'cleanup' ? ' sk-clear-cleanup' : ''}${cl.role === 'loop' ? ' sk-clear-loop' : ''}" d="${toolPathD(tp)}"/>`;
-            if (cl.role === 'loop' && tp.points.length) path += `<circle class="sk-clear-start" cx="${tp.points[0].x}" cy="${tp.points[0].y}" r="1.6"/>`; // TASK 750: where the loop starts and ends
           }
+          addLead(fp.leadIn); // TASK 775: a closed loop carries no dot (no start point on the Origin); a loop opened by a lead-in shows its leg and its two ends
           if (!chip && fp.anchor) chip = fp.anchor;
           continue;
         }
@@ -371,8 +378,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       toolPaths.push(...(fp.toolPaths || []));
       // TASK 742: a held cut: its tabs marked on the outline (an onion skin: the whole outline), each gap strip drawn as it is exported (its own
       // band shows what the bit removes; no travel marks on the strips, their loops are too small to read)
-      if (fp.hold && fp.hold.role === 'pass') for (const d of fp.hold.marks || []) path += `<path class="${fp.hold.mode === 'skin' ? 'sk-skin-mark' : 'sk-tab-mark'}" d="${d}"/>`;
+      if (fp.hold && (fp.hold.role === 'pass' || fp.hold.role === 'stroke')) for (const d of fp.hold.marks || []) path += `<path class="${fp.hold.mode === 'skin' ? 'sk-skin-mark' : 'sk-tab-mark'}" d="${d}"/>`;
       if (fp.hold && fp.hold.role === 'strip') { path += `<path class="sk-strip" d="${fp.hold.d}"/>`; continue; }
+      if (fp.hold && fp.hold.role === 'stroke') { path += `<path class="sk-stroke" d="${fp.hold.d}"/>`; if (!chip && fp.anchor) chip = fp.anchor; continue; } // TASK 775: an On line cut's tabs: each stroke as exported (the gaps between them are the tabs)
+      addLead(fp.leadIn); // TASK 775: an On line outline's lead-in
       const travel = deriveCutTravel([fp]);
       for (const t of travel) { addTravel(fp, t); hasTravel = true; }
       if (fp.kind === 'pocket') {
@@ -585,7 +594,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     noteFor(t) { // TASK 714: a stepped cut's steps / undercut, for the cut card; TASK 742: its Hold part; TASK 745: its programmed clearing
       if (!t) return [];
       const rec = getCutRecord(targetKey(t));
-      return [...steppedNoteItems(rec), ...holdNoteItems(rec, this.holdFor(t)), ...clearingNoteItems(rec, this.clearingSummaryFor(t))];
+      return [...steppedNoteItems(rec), ...holdNoteItems(rec, this.holdFor(t)), ...clearingNoteItems(rec, this.clearingSummaryFor(t)), ...leadInNoteItems(rec, leadInSummary(targetKey(t), rec, state, loops, loopPolys, ownedNow().set))]; // TASK 775: an On line outline's lead-in
     },
     // Write the cut type onto every selected target + refresh the tool-aware look (panel calls this).
     refreshLook, // TASK 463: repaint after an undo/redo restored the cut plan
@@ -630,6 +639,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (field === 'stepover') value = rememberStepover(value); // TASK 745: the next pocket set to a computed clearing starts from them
       if (field === 'finishAllowance') value = rememberFinishAllowance(value);
       if (field === 'loop') value = rememberLoop(value); // TASK 750
+      if (field === 'leadInLength') value = rememberLeadInLength(value); // TASK 775: the next record turned to Lead-in On starts from the last length / side set
+      if (field === 'leadInSide') value = rememberLeadInSide(value);
       if (field === 'rasterAngle') value = rememberRasterAngle(value);
       let lastRec = null;
       for (const t of selection.values()) {
@@ -642,6 +653,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
           if (!(r.finishAllowance != null && Number(r.finishAllowance) >= 0)) setFieldFor(k, 'finishAllowance', lastFinishAllowance());
           if (typeof r.loop !== 'boolean') setFieldFor(k, 'loop', lastLoop()); // TASK 750: the last Loop set (off until set)
           if (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null) setFieldFor(k, 'rasterAngle', lastRasterAngle());
+        }
+        if (field === 'leadIn' && value === true) { // TASK 775: a record turned to Lead-in On without its own values takes the last ones set (none: one bit diameter, Outside)
+          const r = CUT_PLAN.get(k) || {};
+          if (!(Number(r.leadInLength) > 0) && lastLeadInLength() !== null) setFieldFor(k, 'leadInLength', lastLeadInLength());
+          if (r.leadInSide !== 'outside' && r.leadInSide !== 'inside') setFieldFor(k, 'leadInSide', lastLeadInSide());
         }
         if (field === 'holdPart' && value !== 'off') { // TASK 742: a record turned to Tabs / Onion skin without its own values takes the last ones set (or the unit's defaults)
           const r = CUT_PLAN.get(k) || {};

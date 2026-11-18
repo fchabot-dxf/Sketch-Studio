@@ -18,7 +18,8 @@ import { HOLE_RULE_CASES, holeRuleDoc } from './fixtures/hole-rule-774/docs.js';
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
 const ok = (c, m) => { assert.ok(c, m); checks++; };
-const baseline = (name) => fs.readFileSync(new URL(`./fixtures/hole-rule-774/${name}.svg`, import.meta.url), 'utf8');
+// the exporter writes LF; a Windows checkout (core.autocrlf) gives the fixture CRLF: compared with the exporter's line ends
+const baseline = (name) => fs.readFileSync(new URL(`./fixtures/hole-rule-774/${name}.svg`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 // the export of `state` with the plan in CUT_PLAN (Shaper's shaperSvgOf, docUnit fixed to mm)
 function exportNow(state) {

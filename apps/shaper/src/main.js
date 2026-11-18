@@ -110,7 +110,7 @@ sideHint('stockThickness', document.querySelector('#review-stock > label'), [doc
 sideHint('material', document.querySelector('#review-look > label'), [document.getElementById('review-look-select')]);
 sideHint('export', document.querySelector('#simexport-panel .simexport-actions'), [], { generateSvg: btnGenerateSvg, syncShaperHub: document.getElementById('btn-sync-shaper'), openShaperHub: document.getElementById('link-shaper-hub') });
 mountHint({ id: 'dirLegend', labelEl: document.querySelector('#prepare-dir-legend [data-hint="dirLegend"]'), after: document.querySelector('#prepare-dir-legend .review-label-line') });
-for (const b of document.querySelectorAll('#review-toolbar [data-hint], #sync-browser [data-label][data-hint]')) {
+for (const b of document.querySelectorAll('#review-toolbar [data-hint]')) {
   const id = b.dataset.hint;
   mountTooltip({ target: b, getContent: () => ({ title: hintLabel(id), text: hintText(id) }) });
 }
@@ -172,6 +172,18 @@ const LOGIN_HINT = 'Check the password: your browser may have filled in a saved 
 let sessionToken = null;
 let currentRemotePath = '/';
 let folderState = { loaded: false, path: '/', folders: [], files: [] };
+// TASK 774: the folder the open "already in My Files" question is about ({ path }: the folder the server answered for), or null; Replace it / Keep both
+// go to THAT folder. While a send runs or the question is open, the folder browser does not move (navLocked): every way to another folder is disabled
+// (the rows, the breadcrumbs, Browse / Refresh / New folder) and openRemoteFolder refuses; an answer or Cancel unlocks it.
+let pendingQuestion = null;
+let sendBusy = false;
+const navLocked = () => sendBusy || !!pendingQuestion;
+function applyNavLock() {
+  const locked = navLocked();
+  for (const b of [syncBrowseBtn, syncRefreshBtn, syncNewFolderBtn, syncMkdirOk]) if (b) b.disabled = locked;
+  for (const b of [...(syncBreadcrumbs ? syncBreadcrumbs.querySelectorAll('button[data-path]:not([aria-current])') : []), ...(syncFolderList ? syncFolderList.querySelectorAll('button.sync-entry') : [])]) b.disabled = locked;
+  if (locked && syncMkdirRow) syncMkdirRow.hidden = true;
+}
 
 function applySessionUi() {
   const authed = !!sessionToken;
@@ -196,11 +208,13 @@ function showSyncStatus(tone, ...lines) {
   syncStatus.className = 'sync-status' + (tone ? ' ' + tone : '');
   syncStatus.replaceChildren(...lines.map((t) => { const d = document.createElement('div'); d.textContent = t; return d; }));
 }
-// TASK 767: asking (the three choices shown, the dialog's Cancel / Send hidden) or not
-function showExistsQuestion(on) {
+// TASK 767: asking (the three choices shown, the dialog's Cancel / Send hidden) or not. TASK 774: `path` = the folder the question is about (the server's answer)
+function showExistsQuestion(on, path = '/') {
   syncExists.hidden = !on;
   syncActions.hidden = on;
   for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = false;
+  pendingQuestion = on ? { path } : null;
+  applyNavLock();
 }
 
 const folderPlace = (path) => (!path || path === '/' ? 'My Files' : `My Files${path.slice(0, -1)}`);
@@ -301,12 +315,16 @@ function renderFolderBrowser() {
     rows.push(empty);
   }
   syncFolderList.replaceChildren(...rows);
+  applyNavLock();
 }
 
 // ONE request path for /api/shaper-upload (TASK 758/772): serialises login credentials once here when no sessionToken is cached.
+// TASK 774: a Replace carries the form's login even with a token (shaper-cloud.js THE REPLACE RULE). `sentPassword`: the request carried a password
+// (only then can a 'login' refusal be a wrong password: the LOGIN_HINT).
 async function callShaperHub(payload) {
-  const mail = sessionToken ? undefined : (syncEmail ? syncEmail.value.trim() : '');
-  const pass = sessionToken ? undefined : (syncPassword ? syncPassword.value : '');
+  const withLogin = !sessionToken || payload.mode === 'replace';
+  const mail = withLogin ? (syncEmail ? syncEmail.value.trim() : '') : undefined;
+  const pass = withLogin ? (syncPassword ? syncPassword.value : '') : undefined;
   const res = await fetch('/api/shaper-upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -319,10 +337,11 @@ async function callShaperHub(payload) {
   } else if (data && data.kind === 'login' && sessionToken) {
     clearSession();
   }
-  return { res, data };
+  return { res, data, sentPassword: !!pass };
 }
 
 async function openRemoteFolder(path = currentRemotePath) {
+  if (navLocked()) return; // TASK 774: a send or the "already in My Files" question is about the folder shown
   if (!sessionToken) {
     const e = syncEmail ? syncEmail.value.trim() : '';
     const p = syncPassword ? syncPassword.value : '';
@@ -335,19 +354,19 @@ async function openRemoteFolder(path = currentRemotePath) {
   showSyncStatus('is-loading', `Loading ${folderPlace(path)}...`);
   if (syncBrowseBtn) syncBrowseBtn.disabled = true;
   if (syncRefreshBtn) syncRefreshBtn.disabled = true;
-  let res, data;
+  let res, data, sentPassword;
   try {
-    ({ res, data } = await callShaperHub({ action: 'list', remotePath: path }));
+    ({ res, data, sentPassword } = await callShaperHub({ action: 'list', remotePath: path }));
   } catch (err) {
     showSyncStatus('is-error', 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
     return;
   } finally {
-    if (syncBrowseBtn) syncBrowseBtn.disabled = false;
-    if (syncRefreshBtn) syncRefreshBtn.disabled = false;
+    applyNavLock(); // TASK 774: enabled again unless a send started meanwhile
   }
+  if (navLocked()) return; // TASK 774: a send started while this folder loaded: it is about the folder shown, which stays
   if (!res.ok || data.error) {
     const lines = [`Error: ${data.error || `Could not open folder (${res.status})`}`];
-    if (data.kind === 'login') lines.push(LOGIN_HINT);
+    if (data.kind === 'login' && sentPassword) lines.push(LOGIN_HINT); // TASK 774: an expired session is not a wrong password
     showSyncStatus('is-error', ...lines);
     return;
   }
@@ -360,6 +379,7 @@ async function openRemoteFolder(path = currentRemotePath) {
 }
 
 async function createSubfolder() {
+  if (navLocked()) return; // TASK 774: as openRemoteFolder
   const folderName = syncMkdirName ? syncMkdirName.value.trim() : '';
   if (!folderName) {
     showSyncStatus('is-error', 'Enter a folder name.');
@@ -398,7 +418,7 @@ if (syncMkdirCancel) syncMkdirCancel.addEventListener('click', () => { if (syncM
 if (syncMkdirOk) syncMkdirOk.addEventListener('click', () => { createSubfolder(); });
 if (syncMkdirName) syncMkdirName.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); createSubfolder(); }
-  else if (e.key === 'Escape') { e.stopPropagation(); if (syncMkdirRow) syncMkdirRow.hidden = true; }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (syncMkdirRow) syncMkdirRow.hidden = true; } // TASK 774: preventDefault: the dialog's own Escape (close) does not run
 });
 if (syncEmail) syncEmail.addEventListener('input', () => { if (sessionToken) clearSession(); });
 if (syncPassword) syncPassword.addEventListener('input', () => { if (sessionToken) clearSession(); });
@@ -445,15 +465,19 @@ if (btnSyncShaper) {
   });
 }
 
-// TASK 767 / 772: what the success line says (root preserves exact My Files wording; subfolders name their path)
+// TASK 767 / 772: what the success line says (root preserves exact My Files wording; subfolders name their path). TASK 774: the folder of the server's answer
 const sentLine = (data) => {
-  const place = folderPlace(data.remotePath || currentRemotePath);
+  const place = folderPlace(data.remotePath || '/');
   return (data.status === 'replaced' ? `Replaced ${data.filename} in ${place}`
     : data.filename !== data.requested ? `Sent as ${data.filename}` : `Sent ${data.filename} to ${place}`);
 };
 
 // ONE send, for every press (Send = mode 'new'; the question's Replace it / Keep both = 'replace' / 'keep-both').
+// TASK 774: Send goes to the folder shown; Replace it / Keep both go to the folder the question is about (pendingQuestion.path).
 async function sendToShaperHub(mode) {
+  if (sendBusy) return;
+  const remotePath = mode === 'new' ? currentRemotePath : pendingQuestion ? pendingQuestion.path : null;
+  if (remotePath == null) return;
   const payload = generateShaperSvgPayload();
   if (!payload) {
     showSyncStatus('is-error', 'No cuts assigned in Prepare.');
@@ -471,32 +495,38 @@ async function sendToShaperHub(mode) {
     }
   }
 
-  const targetPlace = folderPlace(currentRemotePath);
+  const targetPlace = folderPlace(remotePath);
   showSyncStatus('is-loading', mode === 'replace' ? `Replacing the file in ${targetPlace}...` : mode === 'keep-both' ? 'Sending a copy under a new name...' : sessionToken ? `Uploading to ${targetPlace}...` : 'Authenticating with Shaper and uploading...');
   if (syncSubmitBtn) syncSubmitBtn.disabled = true;
   for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = true;
 
-  let res, data;
+  let res, data, sentPassword;
+  sendBusy = true;
+  applyNavLock();
   try {
-    ({ res, data } = await callShaperHub({ filename, svg: payload.svg, mode, remotePath: currentRemotePath }));
+    ({ res, data, sentPassword } = await callShaperHub({ filename, svg: payload.svg, mode, remotePath }));
   } catch (err) {
     showExistsQuestion(false);
     showSyncStatus('is-error', 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
     if (syncSubmitBtn) syncSubmitBtn.disabled = false;
     return;
+  } finally {
+    sendBusy = false;
+    applyNavLock();
   }
   if (!res.ok || data.error) {
     showExistsQuestion(false);
     const lines = [`Error: ${data.error || `Upload failed with status ${res.status}`}`];
-    if (data.kind === 'login') lines.push(LOGIN_HINT);
+    if (data.kind === 'login' && sentPassword) lines.push(LOGIN_HINT); // TASK 774: an expired session is not a wrong password
     showSyncStatus('is-error', ...lines);
     if (syncSubmitBtn) syncSubmitBtn.disabled = false;
     return;
   }
   if (data.status === 'exists') { // nothing was uploaded: ask (TASK 767)
-    showSyncStatus('', `${data.filename} is already in ${targetPlace}.`);
-    showExistsQuestion(true);
-    syncReplaceBtn.focus();
+    const askedPath = data.remotePath || '/'; // TASK 774: the folder the server answered for (it names only a subfolder)
+    showSyncStatus('', `${data.filename} is already in ${folderPlace(askedPath)}.`);
+    showExistsQuestion(true, askedPath);
+    syncExistsCancelBtn.focus(); // TASK 774: never the destructive Replace it: a second Enter must not overwrite unread
     return;
   }
 
@@ -739,7 +769,7 @@ export const currentReviewView = () => reviewView;
 
 ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
 // TASK 767: in Fusion mode the design IS the imported selection (TASK 712: it replaces the design), so the design takes the selection's name
-// (fusion-import.js: the Fusion source's name, e.g. "Body1") and the export file names follow (designFileName). A stored design keeps its own name.
+// (fusion-import.js selectionDesignName, TASK 774: the Fusion DOCUMENT's name, e.g. "06-countersink"; the body's, "Body1", only when the payload has none) and the export file names follow (designFileName). A stored design keeps its own name.
 function nameAfterSelection(name) {
   if (docBuffer.isStored()) return;
   docBuffer.rename(name).catch((err) => dbg.warn('shaper', 'naming the design after the Fusion selection failed', err && err.message));

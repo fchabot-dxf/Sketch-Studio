@@ -148,6 +148,16 @@ function sameLoopIdSet(a, b) {
   return b.every((l) => setA.has(l.id));
 }
 
+/** TASK 774 (owner turn 2356): the name the design (and so every export file: export-payload.js exportFileName) takes from a Fusion selection: the
+ *  Fusion DOCUMENT's name (the add-in's selection_data `source.documentName`, Fusion's Document.name, e.g. "06-countersink v3"), without the
+ *  " v<n>" version Fusion appends to it ("06-countersink"); the selection's own name (`source.name`, "Body1") when the payload carries no document
+ *  name; "selection" when it carries neither. */
+export function selectionDesignName(source) {
+  const doc = source && typeof source.documentName === 'string' ? source.documentName.trim().replace(/\s+v\d+$/, '') : '';
+  if (doc) return doc;
+  return (source && source.name && String(source.name).trim()) || 'selection';
+}
+
 /**
  * Import one Fusion `selection_data` payload into the Shaper document in ONE undo step.
  * TASK 712 (owner ruling "Replace"): the selection REPLACES the palette's design: the whole previous document (every sketch, shape,
@@ -352,7 +362,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     chainCount: chains.length,
     cutKeys,
     warnings,
-    name: sourceName, // TASK 767: the design is now this selection: main.js names it so (the export file names follow)
+    name: selectionDesignName(data.source), // TASK 767: the design is now this selection: main.js names it so (the export file names follow); TASK 774: the Fusion DOCUMENT's name
     message: `${replaced ? 'Replaced with' : 'Added'} ${sourceName}: ${counts}`,
   };
 }

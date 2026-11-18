@@ -36,8 +36,8 @@ const OUTSIDE_STEP_OUTLINE = '#9a9a9a';     // their thin light outline (the fil
 const POCKET_OUTLINE = '#222';             // the thin outline every pocket gets (the file's pockets have none)
 const FIT_MARGIN = 0.06;   // empty space round the drawing on each side after fit(), a fraction of its size
 // TASK 757: the preview's one rule for a GUIDE (the Stock loop, a user's Guide): it marks, it never cuts, so it is drawn as its OUTLINE (the file's stroke, no
-// fill) BEHIND every cut. The file writes a guide filled (#0068FF fill + stroke, as Shaper Studio writes its guides) and in the plan's order, so the Stock
-// (the whole board, written after the outside / inside / on-line cuts) would cover the part. Display only: the download keeps the file's fill and order.
+// fill) BEHIND every cut. The file writes a guide filled (#0068FF fill + stroke, as Shaper Studio writes its guides); a user's Guide in the plan's order (TASK 774:
+// the Stock, the whole board, is written FIRST: shaper.js `exportFirst`). Display only: the download keeps the file's fill and order.
 const GUIDE_FILL = 'none';
 
 /** Parse a Shaper SVG string into its root <svg> element (an XML parse: the shaper: namespace is kept). A string that does not parse throws. */

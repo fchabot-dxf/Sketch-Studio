@@ -369,20 +369,26 @@ function sameSketchAs(parentIds, loop, shapeById) {
   return false;
 }
 
+/** TASK 774: the shape index the derived-face rule reads, built ONCE per resolve by the caller and passed down (opts.shapeById); null without shapes. */
+export function shapeIndexOf(state) {
+  return state && Array.isArray(state.shapes) ? new Map(state.shapes.map((s) => [s.id, s])) : null;
+}
+
 /**
  * Find all directly-contained loops (depth-1 holes) inside a parent loop.
  * A loop H is directly contained if:
  * 1. When shape sketch ownership is available via `state`, H shares a sketch with `parentLoop` (two different sketches never auto-nest as holes)
  * 2. parent strictly contains H
  * 3. There is NO intermediate same-sketch loop M such that parent contains M and M contains H.
+ * opts (TASK 774): `shapeById` = shapeIndexOf(state), when the caller resolves many loops (built here otherwise); `holesFromAllSketches: true` = THE
+ * RULE BEFORE commit 27c00a4 (rule 1 off: a loop of any sketch is a hole), read ONLY to keep the geometry a document was saved with (Shaper's
+ * cut-plan.js keepHolesFromOtherSketches, on loading a document saved under that rule).
  */
-export function directlyContainedLoops(parentLoop, allLoops, loopPolys, state) {
+export function directlyContainedLoops(parentLoop, allLoops, loopPolys, state, opts = {}) {
   const parentPoly = getPoly(parentLoop, loopPolys, state);
   if (!parentPoly || parentPoly.length < 3) return [];
 
-  const shapeById = state && Array.isArray(state.shapes)
-    ? new Map(state.shapes.map((s) => [s.id, s]))
-    : null;
+  const shapeById = opts.holesFromAllSketches ? null : (opts.shapeById || shapeIndexOf(state));
   const parentSketches = shapeById ? loopSketchIds(parentLoop, shapeById) : null;
 
   const contained = [];
@@ -419,11 +425,11 @@ export function directlyContainedLoops(parentLoop, allLoops, loopPolys, state) {
 /**
  * Derived face profile for a loop: outer loop minus its directly-contained holes.
  */
-export function derivedProfileForLoop(loopId, loops, loopPolys, state) {
+export function derivedProfileForLoop(loopId, loops, loopPolys, state, opts = {}) {
   const allLoops = loops || (state ? findLoops(state) : []);
   const loop = allLoops.find(l => l.id === loopId);
   if (!loop) return null;
-  const directHoles = directlyContainedLoops(loop, allLoops, loopPolys, state);
+  const directHoles = directlyContainedLoops(loop, allLoops, loopPolys, state, opts);
   return {
     id: `derived-${loop.id}`,
     name: `Face ${loop.id}`,
@@ -439,7 +445,7 @@ export function derivedProfileForLoop(loopId, loops, loopPolys, state) {
  * ONE Unified Resolver for a loop:
  * Combined profile wins if one covers loopId (resolved via resolveProfileViews); otherwise returns the derived face.
  */
-export function resolveProfileForLoop(loopId, state, loops, loopPolys) {
+export function resolveProfileForLoop(loopId, state, loops, loopPolys, opts = {}) {
   const allLoops = loops || (state ? findLoops(state) : []);
   if (state && Array.isArray(state.profiles) && state.profiles.length > 0) {
     const views = resolveProfileViews(state, allLoops, loopPolys);
@@ -456,7 +462,7 @@ export function resolveProfileForLoop(loopId, state, loops, loopPolys) {
       }
     }
   }
-  return derivedProfileForLoop(loopId, allLoops, loopPolys, state);
+  return derivedProfileForLoop(loopId, allLoops, loopPolys, state, opts);
 }
 
 /**
@@ -627,7 +633,7 @@ export function listSketchProfiles(state, loops, loopPolys) {
     if (coveredLoops.has(l.id)) continue;
     const boundary = polys[l.id] || [];
     if (boundary.length < 3) continue;
-    const prof = resolveProfileForLoop(l.id, state, allLoops, polys);
+    const prof = resolveProfileForLoop(l.id, state, allLoops, polys, { shapeById: sb }); // TASK 774: the shape index built once for every loop
     const holeIds = prof ? [...(prof.inners || [])] : [];
     const holePolys = holeIds.map((hid) => polys[hid]).filter((hp) => hp && hp.length >= 3);
     const outerArea = Math.abs(polyArea(boundary));

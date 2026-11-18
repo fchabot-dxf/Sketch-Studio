@@ -144,6 +144,20 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   const chain = findOpenChains(ch, findLoops(ch))[0];
   const chainSvg = (rec) => exportOf(ch, [{ target: { kind: 'chain', id: chain.id }, rec }]);
   eq(chainSvg(ONLINE({ leadIn: true })), chainSvg(ONLINE()), 'an open line: the lead-in adds nothing (it has its ends)');
+  // TASK 775b (merge with 774): a design with a STOCK and an On line lead-in: the Stock is written FIRST (774's exportFirst), the lead-in path is the same
+  // text as without the Stock, and the viewBox still holds the tip
+  {
+    const both = polyState([[[-20, -20], [140, -20], [140, 70], [-20, 70]], RECT]);
+    const lp = polysOf(both), byArea = findLoops(both).sort((a, b) => Math.abs(area(lp[b.id])) - Math.abs(area(lp[a.id])));
+    const [board, part] = byArea;
+    const lead = { target: { kind: 'loop', id: part.id }, rec: ONLINE({ leadIn: true, leadInLength: 25 }) };
+    const stock = { target: { kind: 'loop', id: board.id }, rec: { cutType: 'stock', cutDepth: 19, cutOffset: 0, toolDia: BIT } };
+    const svg = exportOf(both, [lead, stock]), withStock = elementsOf(svg), alone = elementsOf(exportOf(both, [lead]));
+    eq(withStock.map((e) => e.cutType), ['guide', 'online'], 'Stock + lead-in: the Stock (written as a guide) FIRST though it is second in the plan (774), then the lead-in path');
+    eq(withStock[1].d, alone[0].d, 'Stock + lead-in: the lead-in path unchanged');
+    const tip = pathPoints(withStock[1].d).pts[0], vb = /viewBox="([^"]+)"/.exec(svg)[1].split(' ').map(Number);
+    ok(!pathPoints(withStock[1].d).closed && Math.abs(Math.abs(tip.y - 30) - 55) < 1e-9 && tip.y >= vb[1] - 1e-9 && tip.y <= vb[1] + vb[3] + 1e-9, `Stock + lead-in: ONE open path, its tip 25 mm off the part, inside the viewBox ${vb.join(' ')}`);
+  }
   // a profile with a hole: only the record's own outline gets the leg; the hole stays a closed loop
   const plate = polyState([RECT, ISLAND]);
   const pe = elementsOf(one(plate, ONLINE({ leadIn: true })));

@@ -39,7 +39,7 @@ const CONTROLS = [
   { tab: 'units', key: 'LENGTH_FRACTION',         label: 'Length precision',     type: 'select', numeric: true, showWhen: FRACTIONAL,
     options: LENGTH_FRACTIONS.map((d) => ({ value: d, label: `1/${d}"` })) },
   { tab: 'units', key: 'ANGLE_PRECISION',         label: 'Angle precision',      type: 'select', numeric: true, options: precisionOptions(4, '°') },
-  { tab: 'units', key: 'TRAILING_ZEROS',          label: 'Show trailing zeros',  type: 'checkbox', hint: '0.250 instead of 0.25' },
+  { tab: 'units', key: 'TRAILING_ZEROS',          label: 'Show trailing zeros',  type: 'checkbox' }, // TASK 774: its hint is SETTING_HINTS.TRAILING_ZEROS (#ui/design-hints.js), the row's "i"
   { tab: 'grid', key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
   { tab: 'grid', key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
     options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] },
@@ -274,10 +274,11 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     tabBar.appendChild(btn); tabBtns[t.id] = btn; tabPanels[t.id] = panel;
   }
   const doc = typeof document !== 'undefined' ? document : null;
-  function attachSettingHint(key, labelEl, after, field) {
+  // TASK 774: `label` = the row's label, so the "i" is named "About <label>" (not "About control")
+  function attachSettingHint(key, labelEl, after, field, label) {
     const text = SETTING_HINTS[key];
     if (!text || !doc) return;
-    mountHint({ id: key, labelEl, after, fields: field ? [field] : [], text, doc });
+    mountHint({ id: key, label, labelEl, after, fields: field ? [field] : [], text, doc });
   }
   body.appendChild(tabBar);
   for (const spec of CONTROLS) tabPanels[spec.tab].appendChild(buildControl(spec));
@@ -292,7 +293,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   const docUnitSelect = document.createElement('select'); docUnitSelect.className = 'sk-style-input'; docUnitSelect.dataset.key = 'DOC_UNIT';
   for (const u of UNITS) { const o = document.createElement('option'); o.value = u; o.textContent = UNIT_LABELS[u] || u; docUnitSelect.appendChild(o); }
   docUnitSelect.addEventListener('change', () => settings.set('DOC_UNIT', docUnitSelect.value, { persist: 'local' }));
-  unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); attachSettingHint('DOC_UNIT', unitLab, unitTop, docUnitSelect); tabPanels.units.prepend(unitRow); // before the precision rows
+  unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); attachSettingHint('DOC_UNIT', unitLab, unitTop, docUnitSelect, unitLab.textContent); tabPanels.units.prepend(unitRow); // before the precision rows
   const unitsHint = document.createElement('div'); unitsHint.className = 'sk-style-hint'; unitsHint.textContent = "Trailing zeros are hidden unless 'Show trailing zeros' is on.";
   tabPanels.units.appendChild(unitsHint);
 
@@ -377,8 +378,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
       controlEls[spec.key] = { input, slider, row };
       fieldEl = input;
     }
-    attachSettingHint(spec.key, lab, row.lastElementChild, fieldEl);
-    if (spec.hint) { const h = document.createElement('div'); h.className = 'sk-style-hint'; h.textContent = spec.hint; row.appendChild(h); }
+    attachSettingHint(spec.key, lab, row.lastElementChild, fieldEl, spec.label);
     return row;
   }
 

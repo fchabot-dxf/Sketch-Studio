@@ -126,7 +126,10 @@ function datumPolygon(datum) {
 // exportShaperSVG({ state, entries, encoding, docUnit, options, loopPolys }) → an SVG string.
 //   state    — { joints: Map(id→{x,y}), shapes, constraints, profiles? } (loops re-derived via findLoops)
 //   entries  — [{ target:{kind,id}, rec:{cutType, cutDepth, cutOffset, toolDia} }] (the Prepare cut plan: loop / profile / chain)
-//   encoding — [{ id, cutType, fill, stroke }, …] INJECTED       (cutType id → the Shaper machine encoding)
+//   encoding — [{ id, cutType, fill, stroke, exportFirst? }, …] INJECTED       (cutType id → the Shaper machine encoding)
+//              TASK 774 (owner turn 2356): a type that declares `exportFirst: true` (Shaper's Stock: the whole board, a filled guide) is written
+//              FIRST, before every other cut (after the datum when there is one), so anything that paints the file in order (the Origin's screen,
+//              ShaperHub thumbnails) draws it BEHIND the cuts. Only the order moves: every element keeps its bytes, the others their relative order.
 //   docUnit  — 'mm' | 'cm' | 'in' — suffixes the cut PARAMS; the geometry stays mm-canonical.
 //   options  — { datum?, groupByCut? } — DECLARED unsurfaced features, DEFAULT OFF (so callers/oracles are unchanged):
 //                datum: true | {legX,legY}  → emit the red registration triangle FIRST.
@@ -203,6 +206,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
   const extents = []; // TASK 775: points a derived cut writes outside the drawing (a lead-in tip)
+  const firstItems = []; // TASK 774: the elements of the exportFirst types (the Stock)
   const owned = ownedLoopIds(ents, state, loops, ensurePolys()); // TASK 711: a hole with its own entry is cut by that entry only
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
@@ -233,10 +237,11 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       }
       const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
         + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
-      if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
+      if (geom) (c.exportFirst ? firstItems : items).push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
       if (geom && Array.isArray(cut.extent)) extents.push(...cut.extent); // TASK 775
     }
   }
+  items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
 
   const body = [];
   if (options.datum) body.push('  ' + datumPolygon(options.datum));

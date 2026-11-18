@@ -185,7 +185,8 @@ export function mountTooltip({ target, getContent, delayMs = 320, doc = null }) 
     box.className = 'sk-tooltip';
     box.setAttribute('role', 'tooltip');
     box.hidden = true;
-    d.body.appendChild(box);
+    // TASK 774: inside a modal <dialog> (the browser's top layer) the tooltip goes INTO that dialog, else it would paint under it
+    (target.closest('dialog') || d.body).appendChild(box);
     return box;
   }
 

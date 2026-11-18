@@ -267,7 +267,7 @@ const profile = await createProfile();
     // once: the reconciled plan reconciles to itself; a document saved after it opens without a notice
     eq(reconcileCutPlan(app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0 }, '4a: a second reconciliation changes nothing');
     const before = JSON.stringify([...CUT_PLAN]);
-    eq(applyShaperDoc(captureShaperDoc(), app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0 }, '4a: the saved plan opens with nothing to change');
+    eq(applyShaperDoc(captureShaperDoc(), app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0, keptHoles: 0, lostHoles: 0 }, '4a: the saved plan opens with nothing to change (TASK 774: + the hole-rule counts)');
     eq(JSON.stringify([...CUT_PLAN]), before, '4a: and the same plan');
   } finally { CUT_PLAN.clear(); setOpOrder([]); await app.close(); }
 }

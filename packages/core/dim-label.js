@@ -281,9 +281,9 @@ export function updateConstraintOffset(state, c, w) {
         const j1 = sceneJoints(state.joints).get(c.joints[0]);
         const j2 = sceneJoints(state.joints).get(c.joints[1]);
         if (j1 && j2) {
-            // Detect and store dimension mode ONLY during placement
+            // Detect and store dimension mode ONLY during placement (unless a tool operation locks the mode)
             if (c.__placing) {
-                const mode = detectDimMode(j1, j2, w);
+                const mode = c.__lockDimMode || detectDimMode(j1, j2, w);
                 c.dimMode = mode;
                 
                 // Check for an existing same-mode DRIVING dim on THIS edge (same joint-pair).

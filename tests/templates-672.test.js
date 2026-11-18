@@ -216,15 +216,19 @@ const loopOk = (S, m) => { // ONE closed outline: every POINT of the solid piece
     const slatOf = (k) => { const A = sides[2 * k], B = sides[2 * k + 1]; return [dist(A[0], A[1]), dist(B[0], B[1]), dist(A[1], B[1]), dist(A[0], B[0]), dist(A[1], B[0]), dist(A[0], B[1])].map((x) => Math.round(x * 1e5) / 1e5); };
     const s0 = slatOf(0);
     for (let k = 1; k < n; k++) assert.deepStrictEqual(slatOf(k), s0, `${m}: slat ${k} is slat 0`);
+    // order slats counter-clockwise centred on +Y (symmetric Circular Pattern places source slat 0 before instances [-k..+k])
+    const midAngle = ([A, B]) => { const q = [...A, ...B].reduce((acc, p) => ({ x: acc.x + p.x / 4, y: acc.y + p.y / 4 }), { x: 0, y: 0 }); return ((Math.atan2(q.y, q.x) - Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI; };
+    const orderedSides = Array.from({ length: n }, (_, k) => [sides[2 * k], sides[2 * k + 1]]).sort((a, b) => midAngle(a) - midAngle(b)).flat();
     // each gap a parallel strip `gap` wide
     for (let k = 0; k + 1 < n; k++) {
-      const B = sides[2 * k + 1], A = sides[2 * k + 2];
+      const B = orderedSides[2 * k + 1], A = orderedSides[2 * k + 2];
       near(((B[1].x - B[0].x) * (A[1].y - A[0].y) - (B[1].y - B[0].y) * (A[1].x - A[0].x)) / (dist(...B) * dist(...A)), 0, `${m}: gap ${k} sides parallel`);
       near(lineDist(A[0], B[0], B[1]), v.gap, `${m}: gap ${k} is ${v.gap} wide`);
     }
     // the sweep: the angle between the two end sides; the seat symmetric about the Y axis
     const dir = ([a, b]) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
-    near(dir(sides[2 * n - 1]) - dir(sides[0]), v.sweepAngle, `${m}: the sweep between the end sides`);
+    const span = ((dir(orderedSides[2 * n - 1]) - dir(orderedSides[0])) % 360 + 360) % 360 || (v.sweepAngle > 180 ? 360 : 0);
+    near(span, v.sweepAngle, `${m}: the sweep between the end sides`);
     const xs = sides.flat().map((q) => q.x);
     near(Math.max(...xs) + Math.min(...xs), 0, `${m}: symmetric about the Y axis`);
     assert.ok(sides.flat().every((q) => q.y > 0), `${m}: the seat above the centre`);
@@ -232,16 +236,17 @@ const loopOk = (S, m) => { // ONE closed outline: every POINT of the solid piece
     checks++;
   }
 }
-// ---- 5. every dimension reads the user parameters directly
+// ---- 5. every dimension reads the user parameters (and pattern slot params, never another sketch dimension) directly
 for (const t of TEMPLATES) {
   const opts = Object.entries(t.params).filter(([, spec]) => spec.kind === 'choice').flatMap(([k, spec]) => spec.options.map((o) => ({ [k]: o.value })));
   for (const extra of [{}, ...opts]) {
     const g = buildTemplate(t, extra).geometry, params = new Set(g.parameters.map((p) => p.name));
+    const patNames = new Set(g.constraints.flatMap((c) => (c.names ? Object.values(c.names) : [])));
     const dims = g.constraints.filter((c) => (c.type === 'distance' || c.type === 'angle') && !c.isDriven && !c.driven);
     const dimNames = new Set(dims.map((c) => c.name));
     for (const c of dims) {
       const deps = dependencies(parseInput(c.expression, { allowAssign: false }));
-      assert.ok(deps.length > 0 && deps.every((d) => params.has(d) && !dimNames.has(d)), `${t.id} ${JSON.stringify(extra)}: ${c.name} = ${c.expression} reads only user parameters (${[...params]}), no dimension`);
+      assert.ok(deps.length > 0 && deps.every((d) => (params.has(d) || patNames.has(d)) && !dimNames.has(d)), `${t.id} ${JSON.stringify(extra)}: ${c.name} = ${c.expression} reads only user/pattern parameters (${[...params]}), no dimension`);
       checks++;
     }
   }

@@ -92,19 +92,28 @@ for (const t of TEMPLATES) {
       const p = S.state.parameters.find((x) => x.name === paramName(k));
       assert.strictEqual(p.expression, `${defaultParams(t)[k]} ${paramUnit(t.params[k])}`, `${m}: ${p.name} = its default`);
     }
-    // ---- 2. every driving dimension is a formula of the user parameters, canonical and consistent
+    // ---- 2. every driving dimension (and any pattern-value formula) is a formula of the user parameters, canonical and consistent
     const names = new Set(S.state.parameters.map((p) => p.name));
     const read = new Set();
     const dims = drivingDims(S);
     const dimNames = new Map(dims.map((c) => [c.name, c]));
+    const patSlots = new Map();
+    const patFormulas = [];
+    for (const c of S.state.constraints) {
+      if (!c.names) continue;
+      for (const [slot, nm] of Object.entries(c.names)) {
+        patSlots.set(nm, { name: nm, value: slot === 'quantity' ? c.quantity : c.angle, expression: c.expressions && c.expressions[slot] });
+        if (c.expressions && c.expressions[slot]) patFormulas.push({ name: nm, value: c[slot], expression: c.expressions[slot] });
+      }
+    }
     const reads = (c) => dependencies(parseInput(c.expression, { allowAssign: false }));
-    const params = (c, seen = new Set()) => reads(c).flatMap((d) => (names.has(d) ? [d] : seen.has(d) ? [] : (seen.add(d), params(dimNames.get(d), seen)))); // through earlier dimensions
+    const params = (c, seen = new Set()) => reads(c).flatMap((d) => (names.has(d) ? [d] : seen.has(d) ? [] : (seen.add(d), dimNames.has(d) ? params(dimNames.get(d), seen) : []))); // through earlier dimensions
     const nDims = t.dimensions + live.length - Object.values(t.params).filter((spec) => isLiveParam(spec, defaultParams(t))).length; // TASK 674: a param a variant adds (the scalene setback) adds its dimension
     assert.strictEqual(dims.length, nDims, `${m}: ${nDims} driving dimensions`);
-    for (const c of dims) {
+    for (const c of [...dims, ...patFormulas]) {
       assert.ok(typeof c.expression === 'string' && c.expression, `${m}: dimension ${c.name} has a formula`);
       const deps = reads(c);
-      assert.ok(deps.length > 0 && deps.every((d) => names.has(d) || (dimNames.has(d) && d !== c.name)), `${m}: ${c.name} = ${c.expression} reads only user parameters and other driving dimensions`);
+      assert.ok(deps.length > 0 && deps.every((d) => names.has(d) || ((dimNames.has(d) || patSlots.has(d)) && d !== c.name)), `${m}: ${c.name} = ${c.expression} reads only user parameters and other model parameters`);
       const ps = params(c);
       assert.ok(ps.length > 0, `${m}: ${c.name} = ${c.expression} is a formula of the user parameters (directly or through ${deps})`);
       ps.forEach((d) => read.add(d));
@@ -112,7 +121,7 @@ for (const t of TEMPLATES) {
       assert.ok(plan.ok && plan.edits.length === 0, `${m}: ${c.name} = ${c.expression} is canonical and equals its value ${c.value} (${JSON.stringify(plan.edits && plan.edits.map((e) => [e.name, e.value, e.expression]))})`);
       checks++;
     }
-    for (const n of names) assert.ok(read.has(n), `${m}: the user parameter ${n} drives at least one dimension`);
+    for (const n of names) assert.ok(read.has(n), `${m}: the user parameter ${n} drives at least one dimension or pattern value`);
     // ---- 3. the default geometry is the code before task 670 (the new template and the new layout have no "before")
     if (golden[t.id] && !extra.layout && !extra.joint) {
       // TASK 680: drawn with the tools, a point may carry several joints (the Line tool's coincident ends), so the POINTS are compared; the only

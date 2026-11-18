@@ -191,7 +191,7 @@ export function dimension(state, pick, label, text, { unit = 'mm' } = {}) {
   let c;
   if (pick.joints) {
     const [a, b] = pick.joints;
-    c = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [a, b], value: getDist(J.get(a), J.get(b)), dimMode: 'auto' });
+    c = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [a, b], value: getDist(J.get(a), J.get(b)), dimMode: pick.dimMode || 'auto' });
   } else if (pick.point) {
     const ln = S.find((s) => s.id === pick.line), [la, lb] = ln.joints;
     if (la === pick.point || lb === pick.point) throw new Error('dimension: a point against its own line');
@@ -223,7 +223,9 @@ export function dimension(state, pick, label, text, { unit = 'mm' } = {}) {
   if (!c || typeof c !== 'object') throw new Error('dimension refused');
   if (!pick.shape) { // the label follows the pointer while it is placed (dimension-tool.js startPlacing / handleDimensionPointerMove)
     c.__placing = true; c.__newlyPlaced = true;
+    if (pick.dimMode) c.__lockDimMode = pick.dimMode;
     updateConstraintOffset(state, c, label);
+    delete c.__lockDimMode;
   }
   if (c.isDriven || c.driven) throw new Error(`dimension ${c.name}: the tool makes it a reference (${c.drivenReason || 'already determined'})`);
   return typeDimension(state, c, text, { unit });
@@ -245,6 +247,14 @@ export function parameter(state, name, unit, text, comment) {
   if (!plan.ok) throw new Error(`parameter ${name}: ${plan.message}`);
   const res = applyParameterChange(state, plan, 'add parameter', { snapshot: false });
   if (!res.ok) throw new Error(`parameter ${name}: ${res.reason || res.message}`);
+}
+
+/** A dimension or pattern-value expression set by name (the Parameters window's Expression cell): #core/parameters.js planChange setDimension. */
+export function setDimension(state, name, text) {
+  const plan = planChange(state, { type: 'setDimension', name, text });
+  if (!plan.ok) throw new Error(`dimension ${name}: ${plan.message}`);
+  const res = applyParameterChange(state, plan, 'set expression', { snapshot: false });
+  if (!res.ok) throw new Error(`dimension ${name}: ${res.reason || res.message}`);
 }
 
 /** A pattern tool: #core/pattern.js applyPattern on the objects ({ shapes, joints }) with the values. -> the pattern constraint. */

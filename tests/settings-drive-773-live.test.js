@@ -108,6 +108,7 @@ try {
   // ---- Drive unreachable: "Could not reach Google Drive: will retry"; back: "Sync now" ----
   drive.offline = true;
   await B.evalJs(`(() => { const s = document.querySelector('.sk-style-panel select[data-key="ANGLE_PRECISION"]'); s.value = '3'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await B.evalJs(`${SYNC}.then((m) => m.syncSettingsNow())`); // at once (the debounced save would get there 2 s later)
   await waitState(B, 'retry', 'the phone: Drive unreachable', 15000);
   st = await statusOf(B);
   assert.deepStrictEqual(st, { state: 'retry', text: 'Could not reach Google Drive: will retry', syncNow: true }, 'the phone\'s status line, Drive unreachable');
@@ -127,7 +128,7 @@ try {
   assert.deepStrictEqual(st, { state: 'device', text: 'Saved on this device only (sign in to sync)', syncNow: false }, 'the phone\'s status line, signed out');
   const reqs = drive.requests.length;
   await B.evalJs(`(() => { const s = document.querySelector('.sk-style-panel select[data-key="LENGTH_PRECISION"]'); s.value = '5'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-  await sleep(2600);
+  await sleep(2300); // past the 2 s debounce
   assert.strictEqual(drive.requests.length, reqs, 'signed out: a settings change makes no Drive request');
   assert.strictEqual(await B.evalJs(`${S}.then((s) => s.get('LENGTH_PRECISION'))`), 5, 'signed out: the change applies on the phone (localStorage) as before');
   await scrollToSync(); await shotB('phone-signed-out.png');

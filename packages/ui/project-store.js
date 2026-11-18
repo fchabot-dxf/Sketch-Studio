@@ -60,6 +60,7 @@ const OPEN_TABS_BUFFER = 'openTabsBuffer';
 const LEGACY_BUFFER_PREFIX = `${OPEN_TABS_BUFFER}:`; // meta key prefix of TASK 624's per-app buffers (openTabsBuffer:<app>)
 const LEGACY_MIGRATED = 'legacyMigrated';
 const BASE = 'driveBase:';     // meta key: the Drive `version` a design's local edits are based on (what a recovery compares with)
+const SEEN = 'driveSeen:';     // meta key: the fingerprint of the content this device last put on / read from Drive for a design (TASK 766: what tells our own write from another device's)
 const SHADOW = 'driveShadow:'; // meta key of the LOCAL copy of a design that lives on Drive and has a write not yet confirmed (the safety net)
 // Fixed ids: a second tab migrating at the same moment is a no-op (putIfAbsent), never a second copy.
 export const DEFAULT_PROJECT_ID = 'my-designs';
@@ -67,6 +68,16 @@ export const DEFAULT_PROJECT_NAME = 'My Designs'; // neutral and user-facing; "U
 export const LEGACY_DESIGN_ID = 'untitled-legacy';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
+/** TASK 766: the fingerprint of a design's content as Drive stores it (the JSON of its document: a document read back from Drive gives the same text as the one
+ *  written). A 53-bit hash (cyrb53) of it, so the meta stays small. */
+export function contentPrint(document) {
+  const str = JSON.stringify(document === undefined ? null : document);
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
 const designMeta = (d) => ({ id: d.id, projectId: d.projectId, name: d.name, app: d.app, updatedAt: d.updatedAt });
 export const emptyDocument = () => ({ version: DOCUMENT_VERSION, geometry: { joints: [], shapes: [], constraints: [] }, hosts: {} });
 
@@ -285,9 +296,25 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
   const headers = new Map(); // remote design id -> { projectId, name, app, updatedAt }: the sidebar name / status never re-download a file
   const rememberHeader = (d) => { if (d && isRemote(d.id)) headers.set(d.id, { projectId: d.projectId, name: d.name, app: d.app, updatedAt: d.updatedAt }); };
   const bases = new Map();   // remote design id -> the Drive version the local edits are based on
-  const setBase = async (id, version) => { if (version == null) bases.delete(id); else bases.set(id, version); await adapter.setMeta(BASE + id, version == null ? null : version); };
-  /** A design record read from / written to Drive: remember its header and the Drive version it now has. */
-  const adoptRemote = async (d, version = d && d.version) => { if (d && isRemote(d.id)) { rememberHeader(d); await setBase(d.id, version); } };
+  const seen = new Map();    // TASK 766: remote design id -> contentPrint of the content this device last put on / read from Drive (persisted as meta driveSeen:<id>)
+  const setBase = async (id, version, document) => {
+    if (version == null) { bases.delete(id); seen.delete(id); } else { bases.set(id, version); if (document !== undefined) seen.set(id, contentPrint(document)); }
+    await adapter.setMeta(BASE + id, version == null ? null : version);
+    if (version == null || document !== undefined) await adapter.setMeta(SEEN + id, version == null ? null : seen.get(id));
+  };
+  const loadBase = async (id) => { // a base kept by an earlier page (meta): the version and the content print
+    const base = await adapter.getMeta(BASE + id), print = await adapter.getMeta(SEEN + id);
+    if (base != null) bases.set(id, base); else bases.delete(id);
+    if (print != null) seen.set(id, print); else seen.delete(id);
+    return base;
+  };
+  /** TASK 766, THE version rule: Drive's copy `rec` of design `id` is still OURS (no other device changed it) when it has the version our edits are based on, OR
+   *  when its content is exactly the content this device last put there or read from there. The second half: Drive's `version` moves with every request of a
+   *  write (content, then metadata), so a write that failed half way (a 5xx / 429 / expired token / lost answer after the content landed) leaves Drive one
+   *  version ahead of the base with OUR content in it; without it, the retry called our own write "another device's" and reloaded the design. */
+  const driveIsOurs = (id, rec) => rec.version === bases.get(id) || (seen.has(id) && contentPrint(rec.document) === seen.get(id));
+  /** A design record read from / written to Drive: remember its header, the Drive version it now has and its content print. */
+  const adoptRemote = async (d, version = d && d.version) => { if (d && isRemote(d.id)) { rememberHeader(d); await setBase(d.id, version, d.document); } };
   const notices = new Map(); // design id ('' = none open) -> { text }: a one-off explanation the sidebar shows (a conflicted copy, a re-created design)
   const moved = new Map();   // a remote design id that was re-created under a new id -> the new id (a buffer still bound to the old one follows)
   const resolveMoved = (id) => { while (id && moved.has(id)) id = moved.get(id); return id; };
@@ -365,11 +392,11 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       return sd; // the NEWEST local content, not the (possibly older) kept copy
     }
     const content = shadow && { app: shadow.app, document: shadow.document, updatedAt: shadow.updatedAt };
-    const base = await adapter.getMeta(BASE + id);
+    const base = await loadBase(id);
     if (err) { // cannot read Drive (offline, signed out, 5xx): open the local copy if there is one; the version is checked when it is written
       if (!shadow) throw err;
       const sd = { id, projectId: shadow.projectId, name: shadow.name || 'Untitled', app: shadow.app, updatedAt: shadow.updatedAt, document: shadow.document };
-      rememberHeader(sd); if (base != null) bases.set(id, base); else bases.delete(id);
+      rememberHeader(sd);
       await writer.queue(id, content);
       return sd;
     }
@@ -379,7 +406,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       return nd;
     }
     if (!shadow) { await adoptRemote(d); writer.seed(id, d.updatedAt); return d; }
-    if (base != null && base === d.version) { // Drive still has the version the unsaved edit was based on: the edit carries on from the local copy
+    if (base != null && driveIsOurs(id, d)) { // Drive still has what the unsaved edit was based on (THE version rule): the edit carries on from the local copy
       await adoptRemote(d);
       await writer.queue(id, content);
       return { ...d, app: shadow.app, updatedAt: shadow.updatedAt, document: mergeHosts(d.document, shadow.document) }; // TASK 684: the other apps' sidecars on Drive come with it (458)
@@ -432,8 +459,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       const s = await adapter.getMeta(key);
       if (!s) continue;
       headers.set(id, { projectId: s.projectId, name: s.name, app: s.app, updatedAt: s.updatedAt });
-      const base = await adapter.getMeta(BASE + id);
-      if (base != null) bases.set(id, base); else bases.delete(id);
+      await loadBase(id);
       await writer.queue(id, { app: s.app, document: s.document, updatedAt: s.updatedAt });
     }
   }
@@ -476,15 +502,17 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
   }
   /** The write of a design on Drive (what the writer runs): merge into the Drive copy (458: other hosts sidecars pass through). */
   async function writeRemote(id, p, isCancelled = () => false) {
-    const base = bases.get(id);
-    let saved;
+    let saved, sent = null;
     try {
       saved = await adapter.updateDesign(id, (rec) => {
         if (!rec) throw Object.assign(new Error('missing'), { missing: true });
-        if (rec.version !== base) throw Object.assign(new Error('changed'), { changed: rec }); // not the version this edit was based on
-        return { ...rec, app: p.app || rec.app, updatedAt: p.updatedAt, document: mergeHosts(rec.document, p.document) };
+        if (!driveIsOurs(id, rec)) throw Object.assign(new Error('changed'), { changed: rec }); // another device changed it since (THE version rule)
+        const next = { ...rec, app: p.app || rec.app, updatedAt: p.updatedAt, document: mergeHosts(rec.document, p.document) };
+        sent = contentPrint(next.document); // TASK 766: about to be put on Drive: from now on this content is ours, even if the write stops half way
+        return next;
       });
     } catch (e) {
+      if (sent != null) { seen.set(id, sent); await adapter.setMeta(SEEN + id, sent); } // a write that may have landed half way: its content is ours
       if (e.changed) { await keepConflictedCopy(e.changed, p); for (const fn of [...conflictListeners]) fn(id); return; } // the copy IS the write: the local copy may go
       if (e.missing) {
         if (isCancelled()) return; // deleted on purpose while this write was in flight: it must not come back as a new file

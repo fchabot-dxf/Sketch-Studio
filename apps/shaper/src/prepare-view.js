@@ -10,7 +10,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
-  clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastWallAllowance, rememberWallAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
+  clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
@@ -308,7 +308,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.wallAllowance}|${rec.rasterAngle}|${rec.loop}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [] };
@@ -628,7 +628,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (field === 'tabWidth') value = rememberTabWidth(value);
       if (field === 'holdThickness') value = rememberHoldThickness(value);
       if (field === 'stepover') value = rememberStepover(value); // TASK 745: the next pocket set to a computed clearing starts from them
-      if (field === 'wallAllowance') value = rememberWallAllowance(value);
+      if (field === 'finishAllowance') value = rememberFinishAllowance(value);
       if (field === 'loop') value = rememberLoop(value); // TASK 750
       if (field === 'rasterAngle') value = rememberRasterAngle(value);
       let lastRec = null;
@@ -639,7 +639,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
           if (value === 'morphed') { const av = clearingAvailability(k, CUT_PLAN.get(k) || {}, state, loops, loopPolys); if (!av || av.morphed) continue; }
           const r = CUT_PLAN.get(k) || {};
           if (!(Number(r.stepover) > 0)) setFieldFor(k, 'stepover', lastStepover());
-          if (!(r.wallAllowance != null && Number(r.wallAllowance) >= 0)) setFieldFor(k, 'wallAllowance', lastWallAllowance());
+          if (!(r.finishAllowance != null && Number(r.finishAllowance) >= 0)) setFieldFor(k, 'finishAllowance', lastFinishAllowance());
           if (typeof r.loop !== 'boolean') setFieldFor(k, 'loop', lastLoop()); // TASK 750: the last Loop set (off until set)
           if (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null) setFieldFor(k, 'rasterAngle', lastRasterAngle());
         }

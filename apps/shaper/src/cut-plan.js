@@ -115,14 +115,14 @@ export function planHoldNotes(state, plan = CUT_PLAN) {
   return out;
 }
 
-// TASK 745: the PROGRAMMED POCKET. The last stepover / wall allowance / raster angle / Loop (TASK 750) set on any record are the next record's when its
+// TASK 745: the PROGRAMMED POCKET. The last stepover / finish allowance / raster angle / Loop (TASK 750) set on any record are the next record's when its
 // Clearing is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; Loop off).
 // A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
 let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle, lastLoopV = false;
 export const lastStepover = () => lastStepoverV;
 export function rememberStepover(pct) { const n = Number(pct); if (n > 0) lastStepoverV = n; return lastStepoverV; }
-export const lastWallAllowance = () => lastAllowanceV ?? allowanceDefault(docUnit());
-export function rememberWallAllowance(mm) { const n = Number(mm); if (Number.isFinite(n) && n >= 0) lastAllowanceV = n; return lastWallAllowance(); }
+export const lastFinishAllowance = () => lastAllowanceV ?? allowanceDefault(docUnit());
+export function rememberFinishAllowance(mm) { const n = Number(mm); if (Number.isFinite(n) && n >= 0) lastAllowanceV = n; return lastFinishAllowance(); }
 export const lastLoop = () => lastLoopV;
 export function rememberLoop(on) { lastLoopV = on === true; return lastLoopV; }
 export const lastRasterAngle = () => lastRasterAngleV;

@@ -15,7 +15,7 @@ const ALL3 = ['cutDepth', 'cutOffset', 'toolDia'];
 const decl = Object.fromEntries(CUT_TYPES.map((t) => [t.id, t.params]));
 const STEPPED = [...ALL3, 'stepDepth', 'adaptiveSteps', 'stepDeviation']; // TASK 714: a stepped type adds its step depth row (task 715's Min spacing row was removed by 716); TASK 717: the Adaptive stepping checkbox + its Resolution row
 const HOLD = [...ALL3, 'holdPart', 'tabCount', 'tabWidth', 'holdThickness']; // TASK 742: a plain Outside / Inside declares its Hold part rows (never exported as attributes)
-const POCKET = [...ALL3, 'clearing', 'stepover', 'wallAllowance', 'loop', 'rasterAngle']; // TASK 745: the plain Pocket declares its Clearing rows (never exported as attributes); TASK 750: Loop, no depth per pass
+const POCKET = [...ALL3, 'clearing', 'stepover', 'finishAllowance', 'loop', 'rasterAngle']; // TASK 745: the plain Pocket declares its Clearing rows (never exported as attributes); TASK 750: Loop, no depth per pass
 assert.deepStrictEqual(decl, { exterior: HOLD, interior: HOLD, pocket: POCKET, online: ALL3, guide: ALL3, stock: ['cutDepth'], 'stepped-pocket': STEPPED, 'stepped-inside': STEPPED, 'stepped-outside': STEPPED }, 'ONE params declaration per cut type (TASK 472: Stock has only the thickness row)');
 assert.ok(cutTypeHasParam('exterior', 'cutOffset') && cutTypeHasParam('online', 'cutOffset') && cutTypeHasParam('online', 'toolDia') && cutTypeHasParam('guide', 'cutDepth') && cutTypeHasParam('guide', 'cutOffset') && cutTypeHasParam('guide', 'toolDia'), 'guide keeps all three (Studio allows it)');
 assert.ok(cutTypeHasParam(null, 'cutOffset'), 'no type chosen yet: nothing hidden');

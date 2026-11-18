@@ -11,7 +11,7 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { importIntoSketch } from '#ui/sketch-import.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas (the same mount all four apps use)
-import { createDocumentBuffer } from '#ui/document-buffer.js'; // TASK 567: the SAME autosave / project buffer every other app binds its Design canvas to
+import { createDocumentBuffer, SAME_TAB_REASONS } from '#ui/document-buffer.js'; // TASK 567: the SAME autosave / project buffer every other app binds its Design canvas to
 
 
 let designController = null;
@@ -46,7 +46,7 @@ export function mountEdit({ isActive, getHostData, applyHost, session = null }) 
     hostName: 'trace', getHostData, session, // TASK 605: the tab's photo / mask / trace / scale (trace-session.js)
     onRestored: ({ hosts, reason }) => {
       try { designController.engine.solve(500); } catch (e) { console.error('solve after restore failed', e); }
-      if (reason !== 'switch') fitToDrawing(svgEl, designController.state); // TASK 587: a tab switch keeps the tab's own view
+      if (!SAME_TAB_REASONS.has(reason)) fitToDrawing(svgEl, designController.state); // TASK 587 / 766: the same tab shown again keeps its own view
       applyHost(hosts && hosts.trace, reason);
     },
   });

@@ -55,6 +55,10 @@ export const UNTITLED = 'Untitled';
  *  file. A host that declares `showDesign` shows its Design view for these, before onRestored. Not: 'switch' (a tab switch keeps the stage), 'restore' (the
  *  page's own restore keeps the stored stage), 'conflict' (a Drive reload of the same tab). (Moved here from Shaper's modes.js, TASK 705.) */
 export const OPENING_REASONS = Object.freeze(new Set(['new', 'open', 'file']));
+/** TASK 766: the restore reasons that show the SAME tab again: a tab switch ('switch') and the Drive version of the shown design loaded on the user's choice
+ *  ('conflict'). Its own view and stage selection come back with it (the buffer puts state.view and the host's session back), so a host frames the drawing
+ *  only for the other reasons. */
+export const SAME_TAB_REASONS = Object.freeze(new Set(['switch', 'conflict']));
 const TAB_BUFFER_FIELDS = ['doc', 'history', 'redoStack', 'view', 'hostSessions', 'lastSig', 'emptySig', 'hasOwnSidecar', 'content', 'saveOk', 'designId', 'name', 'file'];
 /** Render caches stamped by svg-renderer on live constraints; stripped from change signatures so viewing / zooming / panning never triggers a save (task 687). */
 const RENDER_CONSTRAINT_KEYS = ['glyphPos', '__visible', '__showGlyph'];
@@ -177,6 +181,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let saveOk = true;      // the last autosave of the bound design succeeded
   let bufferOk = true;    // the last local working-buffer write succeeded (beforeunload arms on failure)
   let lastBufSig = null;  // JSON string of last successfully persisted open-tabs buffer
+  let driveChanged = false; // TASK 766: another device changed the bound design on Drive (store conflict): its version waits for the user's choice (loadDriveVersion)
   let intervalId = null;
   let offConflict = () => {};
   let offHistory = () => {};
@@ -310,17 +315,19 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
 
   // ---- the binding: a stored design, or an unsaved Untitled ----------------------------------------------------------------------
-  function bindStored(design) { boundId = design.id; name = design.name; emptySig = null; saveOk = true; fileHome = null; resetHostBaseline(docHasOwnHost(design.document && design.document.hosts)); lastSig = sigNow(); }
-  function bindUntitled() { boundId = null; name = UNTITLED; saveOk = true; fileHome = null; foreign = {}; otherSessions = {}; resetHostBaseline(false); lastSig = sigNow(); emptySig = fullSigNow(); }
+  function bindStored(design) { driveChanged = false; boundId = design.id; name = design.name; emptySig = null; saveOk = true; fileHome = null; resetHostBaseline(docHasOwnHost(design.document && design.document.hosts)); lastSig = sigNow(); }
+  function bindUntitled() { driveChanged = false; boundId = null; name = UNTITLED; saveOk = true; fileHome = null; foreign = {}; otherSessions = {}; resetHostBaseline(false); lastSig = sigNow(); emptySig = fullSigNow(); }
 
   /** Replace the app state with a stored design and tell the host. */
-  function load(design, reason) {
+  function load(design, reason, sameTab = null) {
     const result = deserializeDocument(design.document, state);
     if (!result.ok) return { restored: false, hosts: {}, name: design.name, reason: result.reason }; // e.g. a newer-version document
     foreign = splitHosts(result.hosts);
     if (reason !== 'conflict') otherSessions = {}; // a Drive conflict reloads the SAME tab: the other apps' sessions stay with it
     bindStored(design);
+    if (sameTab && sameTab.view && state.view) Object.assign(state.view, sameTab.view); // TASK 766: the same tab keeps its view (SAME_TAB_REASONS)
     const out = restored({ restored: true, hosts: result.hosts, name: design.name, reason, removedVcarves: result.removedVcarves });
+    if (sameTab && session) session.restore(sameTab.session); // and its stage selection / view (as a tab switch brings them back)
     resetHostBaseline(docHasOwnHost(result.hosts));
     lastSig = sigNow(); // TASK 684: the baseline is taken AFTER the host applied its sidecar (or its defaults when the design has none): showing a design never writes it
     return out;
@@ -425,8 +432,24 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
 
   // The tab going hidden or closing: save what changed since the last tick and write it through to Drive now (a hidden tab may be frozen).
-  // Drive changed this design elsewhere and our edit was kept as a conflicted copy: show Drive's version (never write our older state over it).
-  const onConflict = (id) => { if (id === boundId) store.get(id).then((d) => { if (d) load(d, 'conflict'); }, (e) => console.error('reload after a Drive conflict failed', e)); };
+  // Drive changed this design elsewhere and our edit was kept as a conflicted copy (the store never writes over the other device's version). TASK 766: the
+  // running design is NOT replaced under the user's hands (his edits, the cut plan, the view and the selection stay; the next autosaves go on into the
+  // conflicted copy by the store's version rule): the status line offers Drive's version, loaded only when he chooses it (loadDriveVersion).
+  const onConflict = (id) => { if (id === boundId) { driveChanged = true; notify(saveOk ? 'saved' : 'error'); } };
+  /** TASK 766: load the Drive version of the shown design over it, on the user's choice after another device changed it: what is waiting to be written goes
+   *  first (into the conflicted copy, by the store's version rule), then Drive's version replaces the state in the SAME tab: its view and stage selection
+   *  stay (reason 'conflict', SAME_TAB_REASONS). Resolves the restore result, or null when there is nothing to load. */
+  async function loadDriveVersion() {
+    if (!boundId || !driveChanged) return null;
+    const id = boundId;
+    await flush();
+    if (boundId !== id) return null; // the tab changed while the write ran
+    const d = await store.get(id);
+    if (!d || boundId !== id) return null;
+    const out = load(d, 'conflict', { view: state.view ? { ...state.view } : null, session: session ? session.capture() : undefined });
+    await saveWorkingBuffer();
+    return out;
+  }
   // TASK 587 / 624: a hidden / closing page saves the working buffer + active design AND writes pending Drive writes through.
   const flushAll = async () => { await poll(); await store.flushDrive(); await saveWorkingBuffer(); };
   const onVisibility = () => { if (doc.visibilityState === 'hidden') flushAll(); };
@@ -603,7 +626,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   /** Make record `rec` the active one, loading its document, history, view and THIS app's session of it into the state (`reason` 'switch', or
    *  'restore' for the initial restore: a tab without a session of this app then leaves the fresh page's session as it is). */
   function bringIn(rec, reason = 'switch') {
-    active = rec;
+    active = rec; driveChanged = false;
     const result = deserializeDocument(rec.doc, state);
     foreign = splitHosts(result.hosts);
     const sessions = rec.hostSessions || {};
@@ -739,6 +762,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   return {
     restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, saveToFile, saveHome, rename, openFile, followMoves,
     designId: () => boundId, designName: () => name, isStored: () => !!boundId, needsSavePrompt, discardUnsaved,
+    driveChanged: () => driveChanged, loadDriveVersion, // TASK 766: another device changed the shown design on Drive; load its version on the user's choice
     home: () => homeOf({ designId: boundId, file: fileHome }),
     tabs, openTab, openFileTab, newTab, activate, closeTab, store,
   };

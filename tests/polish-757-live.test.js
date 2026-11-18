@@ -1,11 +1,11 @@
 // tests/polish-757-live.test.js — TASK 757: the promo-screenshot polish of the Shaper app in the real page, DESKTOP 1280 x 800, real mouse clicks
 // (the phone 390 x 844 is tests/polish-757-phone-live.test.js; the node parts are tests/polish-757-node.test.js). A 16 x 8 in tray drawn in the page:
-// the Stock board, the part (Outside with Tabs), a slot (Inside) with a construction centre line, a programmed pocket (wall allowance 0.02 in) and a
+// the Stock board, the part (Outside with Tabs), a slot (Inside) with a construction centre line, a programmed pocket (finish allowance 0.02 in) and a
 // dish (a Stepped pocket over a cove slope, adaptive: 25+ close outlines).
 //  6. an empty design in Export 3D: the Export step's empty-state message in the info, no mesh (it was a wood cube)
 //  2. Prepare draws no edge for the construction line
 //  7. the dish's travel marks are thinned: fewer marked outlines than steps, every two marked ones >= 12 px apart on screen; zoomed in, more are marked
-//  3. Fractional inches: the 0.02 in wall allowance reads 0.020 on the card (not 0); no operation word has 4 decimals in Decimal
+//  3. Fractional inches: the 0.02 in finish allowance reads 0.020 on the card (not 0); no operation word has 4 decimals in Decimal
 //  4. the tab count's longest text "Auto (99)" fits its field beside the Auto button; every Settings select is as wide as its longest option, inside the panel
 //  5. desktop: the 3D info is NOT folded (every line shown)
 //  1. Export 2D: the Stock guide is its outline behind the cuts: a point inside the part hits the part's outside cut, not the guide
@@ -110,10 +110,10 @@ try {
   assert.ok(opWords.every((t) => !/\d\.\d{4}/.test(t)), '3: no operation word shows 4 decimals (the card precision): ' + JSON.stringify(opWords));
   await setting('INCH_DISPLAY', 'fractional');
   await clickWorld(100, 50);
-  await waitFor(`/pocket/i.test(document.querySelector('.cut-type-cur').textContent) && !document.querySelector('.cut-row[data-row="wallAllowance"]').hidden`, 'the pocket card');
-  const wall = await evalJs(`document.querySelector('.cut-row[data-row="wallAllowance"] input').value`);
-  console.log('3 fractional wall allowance: ' + wall);
-  assert.strictEqual(wall, '0.020', '3: Fractional: the 0.02 in wall allowance reads 0.020, not 0');
+  await waitFor(`/pocket/i.test(document.querySelector('.cut-type-cur').textContent) && !document.querySelector('.cut-row[data-row="finishAllowance"]').hidden`, 'the pocket card');
+  const wall = await evalJs(`document.querySelector('.cut-row[data-row="finishAllowance"] input').value`);
+  console.log('3 fractional finish allowance: ' + wall);
+  assert.strictEqual(wall, '0.020', '3: Fractional: the 0.02 in finish allowance reads 0.020, not 0');
   await shot('desktop-3-fractional-card.png', '#prepare-panel .cut-card');
   await setting('INCH_DISPLAY', 'decimal');
 

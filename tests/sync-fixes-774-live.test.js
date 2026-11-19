@@ -105,8 +105,8 @@ try {
   // ── 4d: the New folder tooltip is inside the dialog and on top ──
   const nf = await center('#sync-btn-new-folder');
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: nf.x, y: nf.y, button: 'none' });
-  await waitFor(`!!document.querySelector('.sk-tooltip:not([hidden])')`, 'New folder tooltip');
-  const tip = await evalJs(`(() => { const t = document.querySelector('.sk-tooltip:not([hidden])'); const r = t.getBoundingClientRect(); t.style.pointerEvents = 'auto'; /* elementFromPoint skips pointer-events:none */ const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); t.style.pointerEvents = '';
+  await waitFor(`!!document.querySelector('#sk-cursor-tip:not([hidden])')`, 'New folder tooltip (TASK 805: the cursor tooltip, 400 ms hover)');
+  const tip = await evalJs(`(() => { const t = document.querySelector('#sk-cursor-tip:not([hidden])'); const r = t.getBoundingClientRect(); t.style.pointerEvents = 'auto'; /* elementFromPoint skips pointer-events:none */ const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); t.style.pointerEvents = '';
     return { inDialog: t.parentElement === document.getElementById('shaper-sync-modal'), onTop: !!hit && t.contains(hit), text: t.textContent }; })()`);
   console.log('4d tooltip: ' + JSON.stringify(tip));
   assert.deepStrictEqual([tip.inDialog, tip.onTop], [true, true], '4d: the tooltip is in the dialog and painted on top of it');

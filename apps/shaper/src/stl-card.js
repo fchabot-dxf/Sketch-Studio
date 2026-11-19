@@ -2,12 +2,12 @@
 // shows the file name, the Up side, the Units and the size the part was sliced at; a press on another Up side or unit calls onChange({ up } | { unit })
 // (stl-import.js slices it again and REPLACES the design, one undo step). No STL source: the card is hidden. It follows the source (stl-source.js). It sits above the cut card in Prepare's
 // right column (#prepare-panel) and folds like the Operations sheet (disclosure.js: open on a wide screen, folded on a phone). Built from the cut
-// card's own parts: its row labels (.cut-field-label, in .stl-row rows laid out as its .cut-row), its preset buttons (.cut-presets / .cut-preset), the one hint widget (hint.js)
+// card's own parts: its row labels (.cut-field-label, in .stl-row rows laid out as its .cut-row), its preset buttons (.cut-presets / .cut-preset), the one hint binding (hint.js bindHint: its hints are the cursor tooltip)
 // with the labels and hints of THE table (param-hints.js).
 import { STL_UP_SIDES, STL_UNITS } from '#core/stl-slice.js';
 import SettingsManager, { lengthText, isPrecisionKey } from '#core/settings-manager.js';
 import { getStlSource, onStlSourceChange } from './stl-source.js';
-import { mountHint } from './hint.js';
+import { bindHint } from './hint.js';
 import { hintLabel } from './param-hints.js';
 import { mountDisclosure, CARET_SVG } from './disclosure.js';
 
@@ -30,15 +30,15 @@ export function mountStlCard(hostEl, { onChange = () => {} } = {}) {
   hostEl.prepend(card);
   const head = card.querySelector('.stl-head'), body = card.querySelector('.stl-body');
   card.querySelector('.stl-title').textContent = hintLabel('stlCard');
-  mountHint({ id: 'stlCard', labelEl: head, after: card.querySelector('.stl-head-row'), iconOnly: true });
+  bindHint({ el: head, id: 'stlCard', iconOnly: true }); // TASK 805: its hint is a tooltip at the cursor (hint.js)
   mountDisclosure({ host: card, head, body });
   const ups = card.querySelector('.stl-ups'), units = card.querySelector('.stl-units'), size = card.querySelector('.stl-size');
   for (const t of card.querySelectorAll('.stl-body [data-hint]')) {
     const row = t.closest('.stl-row');
-    const h = mountHint({ id: t.dataset.hint, trigger: t, after: row.lastElementChild, fields: [...row.querySelectorAll('.cut-presets')] });
-    h.trigger.id = `stl-${t.dataset.hint}-label`;
+    bindHint({ el: t });
+    t.id = `stl-${t.dataset.hint}-label`;
     const group = row.querySelector('.cut-presets');
-    if (group) group.setAttribute('aria-labelledby', h.trigger.id);
+    if (group) group.setAttribute('aria-labelledby', t.id);
   }
   // ONE preset row per choice list: a button per choice, the current one active; a press on another one calls onChange
   const presets = (wrap, list, field, current) => {

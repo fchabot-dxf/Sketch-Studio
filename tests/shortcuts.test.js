@@ -99,6 +99,7 @@ const EXEMPT = {
   'packages/ui/document-tabs.js': [5, 'the document tab list: arrows / Home / End move, Delete closes the focused tab'],
   'packages/ui/file-dialog.js': [7, 'TASK 759 / Drive browser: the Save as / Open dialog tabs (arrows / Home / End), Enter in name field, Enter / Esc in New-folder input'],
   'packages/ui/hint.js': [1, 'TASK 772: open info hint: Esc dismisses it'],
+  'packages/ui/cursor-tooltip.js': [1, 'TASK 805: the cursor tooltip: Esc dismisses it (widget-local, like the info hint above)'],
   'packages/ui/input-handlers/fillet-tool.js': [2, 'the fillet radius box: Enter / Esc'],
   'packages/ui/input-handlers/live-dimension-input.js': [5, 'the on-canvas value boxes: Tab / Enter / Esc / Delete (and the legacy box Enter)'],
   'packages/ui/input-handlers/offset-tool.js': [2, 'the offset distance box: Enter / Esc'],

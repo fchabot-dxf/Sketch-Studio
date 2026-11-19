@@ -80,7 +80,7 @@
   ]
  },
  "negative-refused": {
-  "reason": "a negative value: Fusion accepts it (the dimension is signed, the geometry keeps or flips its side); ours refuses it and reverts",
+  "reason": "a negative value: Fusion accepts it (the dimension is signed, the geometry keeps or flips its side; a negative radius: the circle stays as it is); ours refuses it and reverts (a radius or a line length: task 789, a size must be more than 0)",
   "runs": [
    "dim-aligned|LL|0,0#negative",
    "dim-aligned|LL|0,5#negative",
@@ -155,6 +155,8 @@
    "dim-length|C|4#negative",
    "dim-length|S|0#negative",
    "dim-length|R|0#negative",
+   "dim-radius|O|0#negative",
+   "dim-radius|O|c#negative",
    "dim-radius|A|0#negative",
    "dim-radius|A|c#negative",
    "dim-point-line|PL|0,0#negative",
@@ -225,21 +227,13 @@
    "dim-vertical|LL|3,0#zero"
   ]
  },
- "zero-length": {
-  "reason": "a zero value: Fusion cannot solve it (the sketch goes to an error state, the geometry stays); ours accepts 0 for the edited dimension and collapses the length",
+ "zero-refused": {
+  "reason": "a zero distance between two points: Fusion makes them coincide; ours refuses it (it would collapse a line to a point, task 521). A zero radius: this recording (Fusion API) takes it; ours refuses it (task 789: a size must be more than 0, the drawing tools box rule)",
   "runs": [
-   "dim-length|L|0#zero",
-   "dim-length|L|3#zero",
-   "dim-length|L|4#zero",
-   "dim-length|C|0#zero",
-   "dim-length|C|4#zero"
-  ]
- },
- "negative-radius": {
-  "reason": "a negative radius: Fusion keeps the circle as it is (the parameter reads the negative value); ours stores a negative radius on the circle",
-  "runs": [
-   "dim-radius|O|0#negative",
-   "dim-radius|O|c#negative"
+   "dim-radius|O|0#zero",
+   "dim-radius|O|c#zero",
+   "dim-radius|A|0#zero",
+   "dim-radius|A|c#zero"
   ]
  },
  "both-operands": {

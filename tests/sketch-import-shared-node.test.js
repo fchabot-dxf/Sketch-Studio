@@ -17,7 +17,7 @@ const baseline = JSON.parse(fs.readFileSync(FIX('svg', 'import-baseline-shaper.j
 
 const runShared = (text, name, keep) => {
   let n = 0; const saves = [];
-  const state = { ...createSketches(), joints: new Map(), shapes: [], view: { x: 0, y: 0, w: 120, h: 90 }, genJ: () => 'j' + (++n), saveState: (l) => saves.push(l) };
+  const state = { ...createSketches(), joints: new Map(), shapes: [], constraints: [], view: { x: 0, y: 0, w: 120, h: 90 }, genJ: () => 'j' + (++n), saveState: (l) => saves.push(l) };
   const svg = { getBoundingClientRect: () => ({ width: 800, height: 600 }), setAttribute() {} }; // the canvas the importer fits the view on (TASK 570)
   const res = importIntoSketch(text, name, { state, svg }, { keepDescIds: keep });
   const J = (id) => { const j = state.joints.get(id); return [Math.round(j.x * 1e6) / 1e6, Math.round(j.y * 1e6) / 1e6]; };

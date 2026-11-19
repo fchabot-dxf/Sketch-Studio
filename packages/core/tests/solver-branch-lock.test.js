@@ -32,22 +32,32 @@
     assert(params.branch === 'internal', `expected branch='internal', got ${params.branch}`);
   }
 
-  // ─── lockTangentBranch: far from any tangent → DO NOT lock ──────────
-  // Regression test for the "tangent locks everything" report. If the user
-  // adds a tangent constraint with circles nowhere near tangent, locking a
-  // branch forces the geometry into a config they didn't ask for. Leave the
-  // branch unset so the solver picks freely on first solve.
+  // ─── lockTangentBranch: far from any tangent, apart → external (TASK 789: the side is chosen once, from the geometry, like Fusion)
   {
     const state = { joints: new Map(), shapes: [] };
     state.joints.set('c1', { x: 0, y: 0 });
     state.joints.set('r1', { x: 5, y: 0 });    // r1 = 5
-    state.joints.set('c2', { x: 50, y: 30 });  // dist ≈ 58 — not near ext (12) or int (2)
+    state.joints.set('c2', { x: 50, y: 30 });  // dist ≈ 58 — apart
     state.joints.set('r2', { x: 57, y: 30 });  // r2 = 7
     state.shapes.push({ id: 's1', type: 'circle', joints: ['c1', 'r1'] });
     state.shapes.push({ id: 's2', type: 'circle', joints: ['c2', 'r2'] });
     const params = { shapes: ['s1', 's2'] };
     ConstraintManager.lockTangentBranch(state, params);
-    assert(params.branch == null, `far-from-tangent geometry should NOT lock branch, got ${params.branch}`);
+    assert(params.branch === 'external', `circles apart lock external, got ${params.branch}`);
+  }
+
+  // ─── lockTangentBranch: far from any tangent, one inside the other → internal (TASK 789)
+  {
+    const state = { joints: new Map(), shapes: [] };
+    state.joints.set('c1', { x: 0, y: 0 });
+    state.joints.set('r1', { x: 40, y: 0 });   // r1 = 40
+    state.joints.set('c2', { x: 2, y: 1 });    // dist ≈ 2.2, inside, nowhere near |40 - 7| = 33
+    state.joints.set('r2', { x: 9, y: 1 });    // r2 = 7
+    state.shapes.push({ id: 's1', type: 'circle', joints: ['c1', 'r1'] });
+    state.shapes.push({ id: 's2', type: 'circle', joints: ['c2', 'r2'] });
+    const params = { shapes: ['s1', 's2'] };
+    ConstraintManager.lockTangentBranch(state, params);
+    assert(params.branch === 'internal', `a circle inside another locks internal, got ${params.branch}`);
   }
 
   // ─── tangent residual respects branch ───────────────────────────────

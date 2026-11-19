@@ -20,6 +20,7 @@ import { getLineIntersection } from './geometry.js';
 import { removeOrphanJoints } from './joints.js';
 import { inActiveSketch } from './sketch-model.js';
 import { removeGeometry } from './delete-manager.js';
+import { CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from './constants.js';
 
 const EPS = 1e-6; // parameter epsilon (avoid exact endpoints)
 
@@ -94,7 +95,7 @@ export function trimShape(state, shapeId, clickPt) {
     const mId = state.genJ();
     state.joints.set(mId, { x: newPt.x, y: newPt.y });
     target.joints = [mId, bId];
-    removeOrphanJoints(state);
+    keepLineConstraints(state, [aId, bId], [target.joints]);
     added.push(shapeId);
 
   } else if (t1 >= 1 - EPS) {
@@ -103,7 +104,7 @@ export function trimShape(state, shapeId, clickPt) {
     const mId = state.genJ();
     state.joints.set(mId, { x: newPt.x, y: newPt.y });
     target.joints = [aId, mId];
-    removeOrphanJoints(state);
+    keepLineConstraints(state, [aId, bId], [target.joints]);
     added.push(shapeId);
 
   } else {
@@ -126,6 +127,7 @@ export function trimShape(state, shapeId, clickPt) {
 
     // Truncate original to A→M0
     target.joints = [aId, m0Id];
+    keepLineConstraints(state, [aId, bId], [target.joints, [m1Id, bId]]);
     added.push(shapeId);
 
     // The interval [M0→M1] is implicitly gone (we never create it)
@@ -136,6 +138,25 @@ export function trimShape(state, shapeId, clickPt) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * TASK 789: what the trimmed line's constraints become. `pair` = the line's end pair before the trim, `pieces` = the end pairs of the pieces
+ * that stay (the first one is the line itself). The line's ORIENTATION (a horizontal / vertical on exactly its end pair) holds every piece that
+ * stays. An end that no piece and no other curve uses any more goes through THE delete rule (removeGeometry): every constraint and dimension
+ * naming it goes with it (the length dimension that measured the removed part, a coincident on it), so none is left on a deleted point; a
+ * constraint between points that stay (a dimension on the kept part, a corner the next side still uses) is kept. The origin never goes.
+ */
+function keepLineConstraints(state, pair, pieces) {
+  const onPair = (c) => Array.isArray(c.joints) && c.joints.length === 2 && pair.every((j) => c.joints.includes(j));
+  for (const c of state.constraints.filter((x) => x && (x.type === CONSTRAINT_TYPES.HORIZONTAL || x.type === CONSTRAINT_TYPES.VERTICAL) && onPair(x))) {
+    c.joints = pieces[0].slice();
+    for (const piece of pieces.slice(1)) state.constraints.push({ ...c, joints: piece.slice() });
+  }
+  const used = new Set(state.shapes.flatMap((sh) => sh.joints || []));
+  const gone = pair.filter((j) => !used.has(j) && j !== ORIGIN_JOINT_ID);
+  if (gone.length) removeGeometry(state, [], gone);
+  else removeOrphanJoints(state);
+}
 
 /**
  * Segment-segment intersection parameter t on segment AB, clamped-checked against CD.

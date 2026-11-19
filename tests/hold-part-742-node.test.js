@@ -226,7 +226,7 @@ checkTabsExport('circle inside', circleState(), 'c', { ...TABS, cutType: 'interi
   const st = polyState(RECT, { circles: [['h', [100, 50], 15]] }), loop = loopOf(st, 's0'), t = { kind: 'loop', id: loop.id };
   const before = exportOf(st, [{ target: t, rec: { cutType: 'exterior', cutDepth: 18, cutOffset: 0, toolDia: BIT } }]);
   eq(exportOf(st, [{ target: t, rec: { ...TABS, holdPart: 'off' } }]), before, 'Hold part Off (with its fields set): byte-identical to a record without them');
-  for (const ct of ['pocket', 'online', 'guide']) {
+  for (const ct of ['pocket', 'guide']) { // TASK 775: On line takes the Hold part now (its tabs are gaps in the line: tests/leadin-tabs-775-node)
     eq(exportOf(st, [{ target: t, rec: { ...TABS, cutType: ct } }]), exportOf(st, [{ target: t, rec: { cutType: ct, cutDepth: 18, cutOffset: 0, toolDia: BIT } }]), `${ct}: the Hold part fields are ignored (byte-identical)`);
   }
   // onion skin: one pass at depth - skin, no strips, the same element

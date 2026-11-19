@@ -26,10 +26,19 @@
 //  * REFUSED (the cut is exported as without hold, the summary says why): no cut depth; thickness >= depth (nothing to hold); no segment long
 //    enough for a tab; the offset outline of a gap is not one ring (a neck narrower than the strip), or the record's bit + offset does not fit
 //    in a strip (an offset over stripExtraMm / 2).
+//  * TASK 775, ON LINE (the cut type 'online'; the Origin follows the line itself, material both sides): the same Hold part rows (one declaration).
+//    TABS on a CLOSED outline: the line is written as SEPARATE OPEN STROKES, the tabs being the GAPS between them, each exactly the tab width long
+//    along the outline (measured on the line the bit's centre follows): the gaps are simply NOT CUT, to the full depth (no thickness: the row is not
+//    shown, tabsHaveThickness). The Origin splits a path of several strokes into separate objects (verified on the owner's machine 2026-11-17), so
+//    each stroke is its own <path>. The wood left in a gap is the tab width minus the bit diameter (the bit reaches its radius past each stroke's
+//    end): a tab width not over the bit diameter leaves nothing (refused). PLACEMENT: tabLayout with no strips (side 0): a tab inside one
+//    segment, its centre width / 2 + the bit radius from the segment's ends; the strokes between two tabs at least one bit diameter long. Refused
+//    on an OPEN line (a chain: tabs need a closed outline), with no segment long enough, or a tab not wider than the bit. ONION SKIN: the line
+//    (a closed outline or an open line) cut at depth - thickness, as 742's.
 import { arcSweepInfo } from './geometry.js';
-import { num } from './loop-geometry.js';
+import { num, chainToPathD } from './loop-geometry.js';
 import { curvePointsFrom } from './curve-kinds.js'; // TASK 761: a bezier's points (its kind's declaration, at CURVE_TOLERANCE_MM)
-import { offsetPolygonRound } from './plot/clip.js';
+import { offsetPolygonRound, sweepPaths } from './plot/clip.js';
 
 export const HOLD_PART = Object.freeze({
   /** the record field `holdPart`: Off | Tabs | Onion skin */
@@ -51,8 +60,11 @@ export const autoTabCount = (perimeterMm) => Math.max(HOLD_PART.autoMin, Math.ce
 
 const isOutside = (ct) => ct === 'exterior' || ct === 'outside';
 const isInside = (ct) => ct === 'interior' || ct === 'inside';
-/** Can a cut of this type hold its part (a plain Outside / Inside cut)? */
-export const typeHoldsPart = (cutType) => isOutside(cutType) || isInside(cutType);
+const isOnline = (ct) => ct === 'online'; // TASK 775
+/** Can a cut of this type hold its part (a plain Outside / Inside cut; TASK 775: an On line cut)? */
+export const typeHoldsPart = (cutType) => isOutside(cutType) || isInside(cutType) || isOnline(cutType);
+/** TASK 775: do this type's TABS have a thickness (an Outside / Inside cut's tabs are cut down to it; an On line cut's tabs are gaps left uncut)? */
+export const tabsHaveThickness = (cutType) => isOutside(cutType) || isInside(cutType);
 /** The hold mode a record is cut with: 'tabs' | 'skin' | 'off' (any other type, a stepped record, no / another value). */
 export function holdMode(rec) {
   if (!rec || rec.terraceAs || !typeHoldsPart(rec.cutType)) return 'off';
@@ -190,7 +202,16 @@ export function subWalk(w, s0, len) {
   }
   return out;
 }
-const piecesD = (pieces) => pieces.map(segD).join(' ');
+/** Walk pieces (end to end) as SVG path text from the first piece's start (no M). */
+export const piecesD = (pieces) => pieces.map(segD).join(' ');
+/** TASK 775: walk pieces (end to end) as ONE open SVG path text: `M start` then each piece (exact lines / arcs, as the gap strips are written). */
+export const openPiecesD = (pieces) => { const a = segStart(pieces[0]); return `M ${num(a.x)} ${num(a.y)} ${piecesD(pieces)}`; };
+/** TASK 775: walk pieces as one polyline (arcs sampled at HOLD_PART.chordTolMm), the end point included. */
+export function piecesPoints(pieces) {
+  if (!pieces.length) return [];
+  const last = pieces[pieces.length - 1];
+  return [...pieces.flatMap((s) => segSamples(s)), pointAt(last, segLen(last))];
+}
 
 /**
  * tabLayout(walk, { count, width, bitRadius, gap, side }) -> { perimeter, requested, tabs: [{ s, s0, s1 }] } — where the tabs go (THE PLACEMENT
@@ -306,6 +327,7 @@ export function holdStrips(w, layout, side, stripWidth) {
 export function applyHoldPart(cuts, rec, state) {
   const mode = holdMode(rec);
   if (mode === 'off' || !Array.isArray(cuts)) return cuts;
+  if (isOnline(rec.cutType)) return onlineHold(cuts, rec, state, mode); // TASK 775
   const outer = cuts.find((c) => c && !c.isHole && c.kind === 'loop' && c.loop);
   if (!outer) return cuts;
   const D = Number(rec.cutDepth), t = Number(rec.holdThickness), width = Number(rec.tabWidth), toolDia = Number(rec.toolDia) || 0;
@@ -346,4 +368,61 @@ export function applyHoldPart(cuts, rec, state) {
   const out = [];
   for (const c of cuts) { if (c === outer) out.push(pass({ ...sizes, marks }), ...stripCuts); else out.push(c); }
   return out;
+}
+
+/** The area a bit sweeps along tool-centre paths, at any radius (memoised per radius): `centers` = [{ points: [{x,y}], closed }] -> sweep(radius) =
+ *  open rings [{x,y}[]] (outer contours and holes). #core/profile-model deriveCutFootprint draws a cut that carries `sweep` + `centers` with it
+ *  (TASK 745's programmed pocket; TASK 775 moved it here from pocket-clearing.js, unchanged: an On line cut's strokes and lead-in use it too). */
+export function sweeper(centers) {
+  const memo = new Map();
+  return (rr) => {
+    if (!memo.has(rr)) memo.set(rr, sweepPaths(centers.map((c) => ({ points: c.points.map((p) => [p.x, p.y]), closed: c.closed })), rr, HOLD_PART.chordTolMm)
+      .flatMap((g) => [g.outer, ...g.holes].map((ring) => ring.slice(0, -1).map(([x, y]) => P(x, y)))));
+    return memo.get(rr);
+  };
+}
+
+/**
+ * TASK 775: an ON LINE record's Hold part (THE RULES above, ON LINE). Onion skin: the record's own line (the outer loop, or an open line) at depth -
+ * thickness, `hold` role 'pass' as 742's. Tabs: the record's own CLOSED outline as open STROKES (kind 'stroke': `geom` = the exported open path,
+ * exact lines / arcs; `centers` / `sweep` = the bit-centre line and its sweep, for the footprint) at the full depth, each with `hold` = { mode: 'tabs',
+ * role: 'stroke', index, count, depth, d, requested, perimeter, width, toolDia, left (the wood a gap keeps: width - the bit diameter), marks (on the
+ * first stroke: each tab's span on the outline) }. A refused hold leaves the cuts as they are, `hold` = { role: 'refused', error } on the record's own cut.
+ */
+function onlineHold(cuts, rec, state, mode) {
+  const outer = cuts.find((c) => c && !c.isHole && c.kind === 'loop' && c.loop);
+  const own = outer || cuts.find((c) => c && c.kind === 'chain');
+  if (!own) return cuts;
+  const D = Number(rec.cutDepth), t = Number(rec.holdThickness), width = Number(rec.tabWidth), toolDia = Number(rec.toolDia) || 0;
+  const base = { mode, fullDepth: rec.cutDepth, thickness: mode === 'skin' ? t : null, width: mode === 'tabs' ? width : null, online: true };
+  const refuse = (error, extra = {}) => cuts.map((c) => (c === own ? { ...c, hold: { ...base, ...extra, role: 'refused', error } } : c));
+  if (mode === 'skin') {
+    if (rec.cutDepth === 'unset' || rec.cutDepth == null || !(D > 0)) return refuse('no cut depth');
+    if (!(t > 0)) return refuse('no thickness');
+    if (t >= D - 1e-9) return refuse('thickness');
+    const depth = Math.round((D - t) * 1e9) / 1e9;
+    let mark = null;
+    if (outer) { const w = loopWalk(outer.loop, state); if (!w) return refuse('outline'); mark = `${openPiecesD(w.segs)} Z`; }
+    else mark = chainToPathD(own.chain, state);
+    return cuts.map((c) => (c === own ? { ...c, rec: { ...c.rec, cutDepth: depth }, hold: { ...base, role: 'pass', depth, marks: mark ? [mark] : [] } } : c));
+  }
+  if (!outer) return refuse('open chain');
+  if (!(width > 0)) return refuse('no tab width');
+  if (!(width > toolDia + 1e-9)) return refuse('tab narrow', { toolDia });
+  const w = loopWalk(outer.loop, state);
+  if (!w) return refuse('outline');
+  const requested = rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? autoTabCount(w.length) : Math.floor(Number(rec.tabCount));
+  const layout = tabLayout(w, { count: requested, width, bitRadius: toolDia / 2, gap: toolDia, side: 0 });
+  const sizes = { requested, count: layout.tabs.length, perimeter: w.length, toolDia, left: width - toolDia };
+  if (!layout.tabs.length) return refuse('no room', sizes);
+  const marks = layout.tabs.map((tb) => openPiecesD(subWalk(w, tb.s0, width)));
+  const n = layout.tabs.length;
+  const strokes = layout.tabs.map((from, k) => {
+    const to = layout.tabs[(k + 1) % n], len = wrap(w, to.s0 - from.s1); // one tab: the stroke runs round to its other end
+    const pieces = subWalk(w, from.s1, len), d = openPiecesD(pieces), centers = [{ points: piecesPoints(pieces), closed: false }];
+    return { kind: 'stroke', loopId: outer.loopId, cutType: outer.cutType, offsetSide: 0, isHole: false, isCompound: false, centers, sweep: sweeper(centers),
+      rec: { ...outer.rec }, geom: { tag: 'path', a: `d="${d}"` },
+      hold: { ...base, role: 'stroke', index: k, count: n, depth: rec.cutDepth, d, ...sizes, ...(k === 0 ? { marks } : {}) } };
+  });
+  return cuts.flatMap((c) => (c === outer ? strokes : [c]));
 }

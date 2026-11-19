@@ -820,6 +820,9 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoo
  * TASK 745: a programmed pocket's cuts (#core/pocket-clearing applyPocketClearing: the clearing paths, the wall, the islands) carry their tool-centre
  *   paths (`centers`) and `sweep(radius)`, the area the bit sweeps along them (the same sweep the clearing's leftover check uses): the band is that
  *   sweep at this record's radius, the tool paths are the centres; `clearing` rides along.
+ * TASK 775: an On line cut's TABS are open strokes (kind 'stroke', with `centers` / `sweep` as above: `hold` rides along); a lead-in (`leadIn`, #core/lead-in:
+ *   an On line outline's leg, or a programmed pocket loop's) rides along and an outline's leg is swept with the loop (its legPoints, a tool path of its own).
+ *   An On line chain's onion skin carries its `hold` (its depth) as a loop's does.
  */
 export function deriveCutFootprint(cuts, rec, state) {
   const out = [];
@@ -834,7 +837,7 @@ export function deriveCutFootprint(cuts, rec, state) {
       const center = cut.centers.length === 1 && cut.centers[0].closed ? cut.centers[0].points : null;
       const first = cut.centers[0] && cut.centers[0].points;
       const anchor = first && first.length ? { ...first.reduce((best, p) => (p.y < best.y ? p : best), first[0]) } : null;
-      out.push({ kind: 'band', cutType: String(cut.cutType || ''), fillRule: 'nonzero', rings, center, chain: null, anchor, toolPaths, clearing: cut.clearing });
+      out.push({ kind: 'band', cutType: String(cut.cutType || ''), fillRule: 'nonzero', rings, center, chain: null, anchor, toolPaths, clearing: cut.clearing, ...(cut.hold ? { hold: cut.hold } : {}), ...(cut.leadIn ? { leadIn: cut.leadIn } : {}) });
       continue;
     }
     if (cut.isCompound) {
@@ -873,14 +876,16 @@ export function deriveCutFootprint(cuts, rec, state) {
           if (line && line.length >= 2 && line.every(Boolean)) { rings.push(...sweptPath(line, r)); toolPaths.push({ points: line, closed: false }); if (!anchor) anchor = { ...line[Math.floor(line.length / 2)] }; }
         }
       }
-      out.push({ kind: isGuide ? 'guide' : 'chain', cutType: isGuide ? 'guide' : 'online', fillRule: 'nonzero', rings, center: null, chain: cut.chain, anchor, toolPaths: isGuide ? [] : toolPaths });
+      out.push({ kind: isGuide ? 'guide' : 'chain', cutType: isGuide ? 'guide' : 'online', fillRule: 'nonzero', rings, center: null, chain: cut.chain, anchor, toolPaths: isGuide ? [] : toolPaths, ...(cut.hold ? { hold: cut.hold } : {}) });
     } else if (cut.polygon && cut.polygon.length >= 3) {
       const side = cut.offsetSide || 0;
       const center = side === 0 ? cut.polygon : offsetPolygon(cut.polygon, side * (r + off), { join: 'round' });
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
+      const leg = cut.leadIn && cut.leadIn.role === 'leg' ? cut.leadIn.legPoints : null; // TASK 775: an On line outline's lead-in leg, swept and drawn with it
+      if (leg && !isGuide && r > 0) rings.push(...sweptPath(leg, r));
       // TASK 455: the depth chip anchor = the top-most vertex of the bit-centre path
       const anchor = center.length >= 3 ? { ...center.reduce((best, p) => (p.y < best.y ? p : best), center[0]) } : null;
-      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }] : [], ...(cut.terrace ? { terrace: cut.terrace } : {}), ...(cut.hold ? { hold: cut.hold } : {}) });
+      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }, ...(leg ? [{ points: leg, closed: false }] : [])] : [], ...(cut.terrace ? { terrace: cut.terrace } : {}), ...(cut.hold ? { hold: cut.hold } : {}), ...(cut.leadIn ? { leadIn: cut.leadIn } : {}) });
     }
   }
   return out;

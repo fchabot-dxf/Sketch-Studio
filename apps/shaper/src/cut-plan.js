@@ -14,6 +14,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
+import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -71,6 +72,7 @@ export function holdSummary(key, storedRec, state, loops, loopPolys, owned) {
 }
 const HOLD_REFUSED = {
   'no cut depth': 'set a cut depth first',
+  'open chain': 'tabs need a closed outline: this is an open line', // TASK 775: an On line cut's tabs
   'no thickness': 'set a thickness',
   'no tab width': 'set a tab width',
   thickness: 'nothing to hold',
@@ -92,11 +94,18 @@ export function holdNoteItems(storedRec, hold) {
   if (hold.role === 'refused') {
     const why = hold.error === 'thickness' ? `${hold.mode === 'skin' ? 'skin' : 'tab'} thickness ${f(hold.thickness)} ${u} is not less than the cut depth ${f(Number(hold.fullDepth))} ${u}: nothing to hold`
       : hold.error === 'no room' ? `no straight or curved stretch is long enough for a ${f(hold.width)} ${u} tab`
+      : hold.error === 'tab narrow' ? `the tab width ${f(hold.width)} ${u} is not wider than the ${f(hold.toolDia)} ${u} bit: no wood would stay` // TASK 775
       : HOLD_REFUSED[hold.error] || hold.error;
     const text = `${name}: ${what} refused: ${why}; cut without them`;
     return [{ text, warn: text.slice(name.length + 2), title: 'Hold part is not applied to this cut' }];
   }
   if (hold.mode === 'skin') return [{ text: `${name}: onion skin ${f(hold.thickness)} ${u}: 1 pass at ${f(hold.depth)} ${u}` }];
+  if (hold.role === 'stroke') { // TASK 775: an On line cut's tabs: the gaps between its strokes are left uncut (the owner's wording)
+    const n = hold.count, items = [{ text: `Tabs: ${n} gap${n === 1 ? '' : 's'} of ${f(hold.width)} ${u} left uncut; cut them by hand afterwards` }];
+    if (n < hold.requested) { const t = ` (only ${n} of ${hold.requested} tabs fit)`; items[0].text += t; items[0].warn = t; items[0].title = 'the outline has too few stretches long enough for a tab'; }
+    items.push({ text: `Each gap keeps ${f(hold.left)} ${u} of wood with a ${f(hold.toolDia)} ${u} bit (the gap minus the bit)` });
+    return items;
+  }
   const n = hold.count, gaps = `${n} gap${n === 1 ? '' : 's'}`;
   const items = [{ text: `${name}: ${n} tab${n === 1 ? '' : 's'}, ${f(hold.width)} ${u} wide, ${f(hold.thickness)} ${u} thick: 1 pass at ${f(hold.depth)} ${u} + ${gaps} at ${f(Number(hold.fullDepth))} ${u}` }];
   if (n < hold.requested) { const t = ` (only ${n} of ${hold.requested} tabs fit)`; items[0].text += t; items[0].warn = t; items[0].title = 'the outline has too few stretches long enough for a tab'; }
@@ -118,6 +127,60 @@ export function planHoldNotes(state, plan = CUT_PLAN) {
 // TASK 745: the PROGRAMMED POCKET. The last stepover / finish allowance / raster angle / Loop (TASK 750) set on any record are the next record's when its
 // Clearing is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; Loop off).
 // A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
+// TASK 775: the LEAD-IN. The last leg length / side set on any record are the next record's when its Lead-in is first turned On (length null = never set: one
+// bit diameter, #core leadInSettings; side Outside). App state, like the step depth above.
+let lastLeadInLengthV = null, lastLeadInSideV = 'outside';
+export const lastLeadInLength = () => lastLeadInLengthV;
+export function rememberLeadInLength(mm) { const n = Number(mm); if (n > 0) lastLeadInLengthV = n; return lastLeadInLengthV; }
+export const lastLeadInSide = () => lastLeadInSideV;
+export function rememberLeadInSide(v) { if (v === 'outside' || v === 'inside') lastLeadInSideV = v; return lastLeadInSideV; }
+/**
+ * leadInSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 775: what an On line record's lead-in does, read off THE derivation (deriveCuts through the
+ * effective record, as Prepare / Review / the export cut it): the `leadIn` of its outline cut (#core/lead-in applyLeadIn: role 'leg' with tip / junction / length /
+ * side / at, or 'refused' with its error), or null when the record has none. (A programmed pocket's lead-in is in its clearing summary.)
+ */
+export function leadInSummary(key, storedRec, state, loops, loopPolys, owned) {
+  const rec = effectiveCutRecord(storedRec);
+  if (!outlineLeadIn(rec)) return null;
+  const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned) || [];
+  const c = cuts.find((x) => x.leadIn);
+  return c ? { ...c.leadIn, r: leadInSettings(rec).r } : null;
+}
+/** TASK 775: the one line every lead-in note carries (the trade-off, owner's wording). */
+export const LEAD_IN_TRADE_OFF = "Lead-in: you start at the leg's end; AutoPass then reverses at each end, so the cutting direction alternates.";
+const LEAD_REFUSED = {
+  'no length': 'set a bit diameter or a length',
+  outline: 'the outline could not be read',
+  room: 'another part of the outline is in the way of the leg: try the other side or a shorter leg',
+};
+/**
+ * leadInNoteItems(storedRec, lead) — TASK 775: the card note of an On line outline's lead-in (doc unit), from its leadInSummary: "On line: lead-in 3.175 mm
+ * outside, from the middle of the longest straight edge" + the trade-off line; a refused one says why (warning colour; the outline is cut as a closed loop).
+ */
+export function leadInNoteItems(storedRec, lead) {
+  if (!lead || !storedRec) return [];
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, show: 'field' });
+  const name = (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Cut';
+  if (lead.role === 'refused' && lead.error === 'tabs') return [{ text: `${name}: no lead-in with tabs: each stroke has its own ends` }]; // the Lead-in row is hidden with Tabs; the stored choice waits
+  if (lead.role === 'refused') {
+    const why = lead.error === 'short' ? `the leg ${f(lead.length)} ${u} is shorter than the bit radius ${f(lead.r)} ${u}` : LEAD_REFUSED[lead.error] || lead.error;
+    const text = `${name}: lead-in refused: ${why}; cut as a closed loop`;
+    return [{ text, warn: text.slice(name.length + 2), title: 'the line is cut as a closed loop (no start point)' }];
+  }
+  return [{ text: `${name}: lead-in ${f(lead.length)} ${u} ${lead.side}, from the middle of the longest ${lead.at === 'line' ? 'straight edge' : 'segment'}` }, { text: LEAD_IN_TRADE_OFF }];
+}
+/** TASK 775: the lead-in notes of every On line outline with a lead-in (the 3D Review's info; a programmed pocket's are in its clearing notes). */
+export function planLeadInNotes(state, plan = CUT_PLAN) {
+  const out = [];
+  let geo = null;
+  for (const [key, rec] of plan) {
+    if (!rec || !rec.cutType || !outlineLeadIn(effectiveCutRecord(rec))) continue;
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
+    out.push(...leadInNoteItems(rec, leadInSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
+  }
+  return out;
+}
+
 let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle, lastLoopV = false;
 export const lastStepover = () => lastStepoverV;
 export function rememberStepover(pct) { const n = Number(pct); if (n > 0) lastStepoverV = n; return lastStepoverV; }
@@ -159,11 +222,14 @@ export const CLEARING_REFUSED = {
   'bit too big': 'the bit does not fit in the pocket',
   'no bit': 'set a bit diameter',
   outline: 'the outline could not be read',
+  'lead-in short': 'the leg is shorter than the bit radius', // TASK 775: a programmed pocket's lead-in
+  'lead-in room': 'no straight leg of that length fits inside the cleared area: try a shorter leg',
 };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 /** TASK 745: a pocket's clearing in a few words: "spiral, 12 turns in 1 line + wall" (TASK 749; several lines say why: "spiral, 14 turns in 3 lines (the
  *  pocket has islands) + wall"), "raster 0°: 22 passes + 1 ring + wall", "morphed spiral: 13 turns + wall"; TASK 750 Loop on: the turns + wall, then
- *  "one closed loop, ends where it starts" ("3 closed loops (the pocket has islands), each ends where it starts"). */
+ *  "one closed loop" ("3 closed loops (the pocket has islands)"; TASK 775: a closed loop has no start point on the Origin, so nothing says where it
+ *  starts or ends); with a lead-in "one loop with a lead-in" ("3 loops with lead-ins (...)"). */
 const LINES_WHY = { splits: ' (the pocket narrows)', islands: ' (the pocket has islands)' };
 export function clearingWords(sum) {
   if (!sum || sum.refused) return null;
@@ -172,7 +238,8 @@ export function clearingWords(sum) {
     : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.loop ? '' : ` in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`}`;
   if (!sum.loop) return `${what} + wall`;
   const why = sum.linesWhy && sum.loopCount > 1 ? LINES_WHY[sum.linesWhy] : '';
-  return `${what} + wall: ${sum.loopCount === 1 ? 'one closed loop, ends where it starts' : `${sum.loopCount} closed loops${why}, each ends where it starts`}`;
+  if (sum.leadIn) return `${what} + wall: ${sum.loopCount === 1 ? 'one loop with a lead-in' : `${sum.loopCount} loops with lead-ins${why}`}`; // TASK 775
+  return `${what} + wall: ${sum.loopCount === 1 ? 'one closed loop' : `${sum.loopCount} closed loops${why}`}`;
 }
 // an area (mm²) in the document unit's area rule: mm² (under 1 cm²) / cm², or in²; formatted with the ONE length precision rule
 export function areaText(mm2, u) {
@@ -202,6 +269,8 @@ export function clearingNoteItems(storedRec, sum) {
   if (sum.clear.length) items.push({ text: `Drawn for a ${bit} bit: a smaller bit leaves ridges` });
   if (sum.loop) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only` }); // TASK 750: the Origin does not offset an on-line path
   if (sum.loopRefused) { const t = `Loop refused: ${CLEARING_REFUSED[sum.loopRefused] || sum.loopRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut with open paths + the Origin\'s inside cut on the wall' }); }
+  if (sum.leadIn) items.push({ text: `Lead-in: ${sum.loopCount === 1 ? 'a leg' : `${sum.loopCount} legs`} of ${f(st.leadInLength)} ${u} from inside the cleared area to the loop` }, { text: LEAD_IN_TRADE_OFF }); // TASK 775
+  if (sum.leadInRefused) { const t = `Lead-in refused: ${CLEARING_REFUSED[sum.leadInRefused] || sum.leadInRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut as closed loops (no start point)' }); }
   items.push({ text: 'Depth passes: set Pass Depth or AutoPass on the Origin' }); // TASK 750: the clearing is written once, at the full depth
   const lo = sum.leftover;
   if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {

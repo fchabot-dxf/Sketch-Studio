@@ -23,7 +23,8 @@ import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PR
 import { keyOf, loopsWithPolygons, steppedSummary, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH } from '#core/stepped-cut.js';
-import { holdMode } from '#core/hold-part.js';
+import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
+import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in is one of its settings
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
 import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 
@@ -77,10 +78,11 @@ export function settingsOf(rec) {
     s.steps = o.deviation != null ? { deviation: round6(o.deviation) } : { step: round6(Number(o.step) > 0 ? o.step : STEP_DEPTH.defaultMm) };
   }
   const m = holdMode(eff); // TASK 742: a held cut's mode and its values (Off adds nothing)
-  if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), thickness: round6(rec.holdThickness) };
+  if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
   const pat = clearingPattern(eff); // TASK 745: a programmed pocket's clearing and the values it is computed with (Freehand adds nothing: the key is the one before 745)
-  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true } : {}) }; } // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing)
+  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true } : {}), ...(c.leadIn ? { leadIn: Number(eff.leadInLength) > 0 ? round6(eff.leadInLength) : 'bit' } : {}) }; } // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 775: a lead-in adds its length ('bit' = one bit diameter)
+  if (outlineLeadIn(eff)) { const l = leadInSettings(eff); s.leadIn = { length: Number(eff.leadInLength) > 0 ? round6(eff.leadInLength) : 'bit', side: l.side }; } // TASK 775: an On line outline's lead-in (Off adds nothing)
   return s;
 }
 
@@ -135,7 +137,7 @@ const numText = (n) => String(round6(n));
 function assignIds(ops) {
   const base = (op) => { const s = op.settings || {}; return 'op-' + [op.cutType, s.depth !== undefined ? (s.depth === 'unset' ? 'unset' : numText(s.depth) + 'mm') : null,
     s.offset ? `offset-${numText(s.offset)}mm` : null, s.steps ? (s.steps.deviation != null ? `adaptive-${numText(s.steps.deviation)}mm` : `step-${numText(s.steps.step)}mm`) : null,
-    s.hold ? s.hold.mode : null, s.clearing ? s.clearing.pattern : null, op.tool ? `${op.tool.shape}-${numText(op.tool.dia)}mm${op.tool.angle != null ? '-' + op.tool.angle + 'deg' : ''}` : null].filter(Boolean).map(slug).join('-'); };
+    s.hold ? s.hold.mode : null, s.clearing ? s.clearing.pattern : null, s.leadIn || (s.clearing && s.clearing.leadIn) ? 'lead-in' : null, op.tool ? `${op.tool.shape}-${numText(op.tool.dia)}mm${op.tool.angle != null ? '-' + op.tool.angle + 'deg' : ''}` : null].filter(Boolean).map(slug).join('-'); };
   const seen = new Map();
   for (const op of [...ops].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))) {
     const b = base(op), n = (seen.get(b) || 0) + 1;
@@ -164,6 +166,8 @@ function describe(op) {
   if (s.hold) { // a held operation: its pass and its gap strips (summed over its regions), from the derivation
     const holds = op.records.map((r) => (r.cuts.find((c) => c.hold && c.hold.role !== 'strip') || {}).hold).filter(Boolean);
     const pass = holds.find((h) => h.role === 'pass');
+    const stroke = holds.find((h) => h.role === 'stroke'); // TASK 775: an On line cut's tabs (its strokes; the gaps between them left uncut)
+    if (stroke) { const tabs = holds.filter((h) => h.role === 'stroke').reduce((t, h) => t + h.count, 0); detail = `${tabs} tab${tabs === 1 ? '' : 's'} (gaps ${len(stroke.width)} left uncut)`; }
     if (pass) {
       const gaps = op.records.reduce((sum, r) => sum + r.cuts.filter((c) => c.hold && c.hold.role === 'strip').length, 0);
       depthText = pass.mode === 'skin' ? `pass ${len(pass.depth)}` : `pass ${len(pass.depth)} + gaps ${len(Number(pass.fullDepth))}`;
@@ -178,6 +182,11 @@ function describe(op) {
     const words = [...new Set(sums.filter((c) => c.role !== 'refused').map((c) => clearingWords(c.summary)))];
     const refused = sums.filter((c) => c.role === 'refused').length;
     detail = [words.join('; '), refused ? `refused on ${refused}: cut as Freehand` : null].filter(Boolean).join(', ') || null;
+  }
+  if (s.leadIn || (s.clearing && s.clearing.leadIn)) { // TASK 775: the row says "lead-in" (+ how many were refused, from the derivation)
+    const refused = op.records.filter((r) => r.cuts.some((c) => (c.leadIn && c.leadIn.role === 'refused') || (c.clearing && c.clearing.summary && c.clearing.summary.leadInRefused))).length;
+    const words = s.leadIn ? `lead-in ${s.leadIn.side}${refused ? ` (refused on ${refused})` : ''}` : refused ? `lead-in refused on ${refused}` : null; // a pocket's clearing words already say "with a lead-in"
+    if (words) detail = (detail ? detail + ', ' : '') + words;
   }
   if (s.offset) detail = (detail ? detail + ', ' : '') + `offset ${len(s.offset)}`;
   const what = [typeWords, depthText].filter(Boolean).join(' · ');

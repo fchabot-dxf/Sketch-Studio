@@ -64,31 +64,35 @@ function paintOf(el, name) {
   return null;
 }
 
-/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap', k?, n? } | null, op: the operation id (TASK 743, data-op) | null,
- *  clear: TASK 745 { role, k?, n?, pass?, passes? } | null }. */
+/** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap' | 'stroke' (TASK 775: an On line
+ *  cut's tabs), k?, n? } | null, op: the operation id (TASK 743, data-op) | null, clear: TASK 745 { role, k?, n?, pass?, passes? } | null, lead: TASK 775 true when the
+ *  element is written with a lead-in leg (data-lead) }. */
 export function previewItems(root) {
   return [...root.querySelectorAll('*')].filter((el) => SHAPE_TAGS.has(el.localName)).map((el) => {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
-    const h = /^(pass|skin)$|^gap (\d+)\/(\d+)$/.exec(el.getAttribute('data-hold') || ''); // TASK 742
-    const hold = h ? (h[1] ? { kind: h[1] } : { kind: 'gap', k: Number(h[2]), n: Number(h[3]) }) : null;
+    const h = /^(pass|skin)$|^(gap|stroke) (\d+)\/(\d+)$/.exec(el.getAttribute('data-hold') || ''); // TASK 742; TASK 775: stroke k/N
+    const hold = h ? (h[1] ? { kind: h[1] } : { kind: h[2], k: Number(h[3]), n: Number(h[4]) }) : null;
     const c = /^(linked|raster|cleanup|island|wall|morphed|loop)(?: (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745 (749: linked, morphed; 750: loop)
     const clear = c ? { role: c[1], ...(c[2] ? { k: Number(c[2]), n: Number(c[3]) } : {}) } : null;
-    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear };
+    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear, lead: el.getAttribute('data-lead') === 'in' };
   });
 }
 /** TASK 745: a programmed pocket element's words: "spiral line 2 of 3" (TASK 749) | "raster pass 3 of 22" | "clean-up ring" | "morphed spiral" | "closed loop 1 of 2"
- *  (TASK 750) | "wall" | "island 1 of 2"; a list row of them: "spiral lines" | "raster passes" | "clean-up ring" | "morphed spiral" | "closed loops" | "wall" | "islands". */
+ *  (TASK 750; TASK 775: "loop 1 of 2" when a lead-in opens it) | "wall" | "island 1 of 2"; a list row of them: "spiral lines" | "raster passes" | "clean-up ring" |
+ *  "morphed spiral" | "closed loops" (TASK 775: "loops") | "wall" | "islands". */
 const CLEAR_ROW = { linked: 'spiral lines', raster: 'raster passes', cleanup: 'clean-up ring', morphed: 'morphed spiral', loop: 'closed loops', wall: 'wall', island: 'islands' };
 const CLEAR_PATH_ROLES = new Set(['linked', 'raster', 'cleanup', 'morphed', 'loop']);
-function clearText(clear, row = false) {
+function clearText(clear, row = false, lead = false) {
   if (!clear) return null;
-  if (row) return CLEAR_ROW[clear.role];
+  if (row) return clear.role === 'loop' && lead ? 'loops' : CLEAR_ROW[clear.role];
   const what = clear.role === 'linked' ? `spiral line ${clear.k} of ${clear.n}` : clear.role === 'raster' ? `raster pass ${clear.k} of ${clear.n}` : clear.role === 'cleanup' ? 'clean-up ring'
-    : clear.role === 'island' ? `island ${clear.k} of ${clear.n}` : clear.role === 'morphed' ? 'morphed spiral' : clear.role === 'loop' ? `closed loop ${clear.k} of ${clear.n}` : clear.role;
+    : clear.role === 'island' ? `island ${clear.k} of ${clear.n}` : clear.role === 'morphed' ? 'morphed spiral' : clear.role === 'loop' ? `${lead ? '' : 'closed '}loop ${clear.k} of ${clear.n}` : clear.role;
   return what;
 }
-/** TASK 742: a held element's words: "pass (tabs)" | "onion skin" | "gap 2 of 4" (the element), "gaps" (a list row of them). */
-const holdText = (hold, row = false) => (!hold ? null : hold.kind === 'pass' ? 'pass (tabs)' : hold.kind === 'skin' ? 'onion skin' : row ? 'gaps' : `gap ${hold.k} of ${hold.n}`);
+/** TASK 742: a held element's words: "pass (tabs)" | "onion skin" | "gap 2 of 4" (the element), "gaps" (a list row of them); TASK 775: an On line cut's tabs:
+ *  "stroke 2 of 3 (tabs)", "strokes (tabs)". */
+const holdText = (hold, row = false) => (!hold ? null : hold.kind === 'pass' ? 'pass (tabs)' : hold.kind === 'skin' ? 'onion skin'
+  : hold.kind === 'stroke' ? (row ? 'strokes (tabs)' : `stroke ${hold.k} of ${hold.n} (tabs)`) : row ? 'gaps' : `gap ${hold.k} of ${hold.n}`);
 
 /**
  * TASK 719: the PREVIEW's shade of each pocket depth: { shades: Map(depth string -> css colour), lo, hi }. Lightness runs linearly from SHADE_SHALLOW (the
@@ -133,7 +137,7 @@ export const depthText = (depth) => {
   return lengthText(Number(m[1]) * u.f, { unit: u.name, show: m[2] ? 'unit' : 'bare' });
 };
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
-export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear)].filter(Boolean).join(' · ');
+export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear, false, it.lead), it.lead ? 'lead-in' : null].filter(Boolean).join(' · '); // TASK 775: "lead-in"
 
 /**
  * The list: TASK 743: one group per OPERATION of `ops` (operations.js planOperations: their order; { op, count, types, rows }), then one per cut type for the
@@ -150,8 +154,8 @@ export function previewRows(items, ops = []) {
     if (!groups.has(gk)) groups.set(gk, { op: null, cutType: type, count: 0, types: new Set(), rows: new Map() });
     const g = groups.get(gk);
     g.count++; g.types.add(type);
-    const key = `${type}|${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}|${it.clear ? it.clear.role : ''}`; // TASK 742: a held cut's gaps are one row; TASK 745: a programmed pocket's rings at one depth are one row
-    if (!g.rows.has(key)) g.rows.set(key, { cutType: type, depth: it.depth, step: it.step, hold: it.hold, clear: it.clear, items: [] });
+    const key = `${type}|${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}|${it.clear ? it.clear.role : ''}|${it.lead ? 'lead' : ''}`; // TASK 742: a held cut's gaps are one row; TASK 745: a programmed pocket's rings at one depth are one row; TASK 775: a lead-in is its own row
+    if (!g.rows.has(key)) g.rows.set(key, { cutType: type, depth: it.depth, step: it.step, hold: it.hold, clear: it.clear, lead: it.lead, items: [] });
     g.rows.get(key).items.push(it);
   }
   return [...groups.values()].filter((g) => g.count > 0).map((g) => ({ op: g.op, cutType: g.cutType, count: g.count, types: [...g.types], rows: [...g.rows.values()] }));
@@ -261,7 +265,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       }
       for (const row of g.rows) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
-        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true), clearText(row.clear, true)].filter(Boolean).join(' · ');
+        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true), clearText(row.clear, true, row.lead), row.lead ? 'lead-in' : null].filter(Boolean).join(' · '); // TASK 775: a lead-in row says so
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
         const shade = row.cutType === 'pocket' ? shading.shades.get(row.depth) : (row.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (row.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
@@ -366,7 +370,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
   function inspect() {
     return {
       elements: items.length,
-      rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), ...(r.clear ? { clear: r.clear.role } : {}), count: r.items.length })) })),
+      rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), ...(r.clear ? { clear: r.clear.role } : {}), ...(r.lead ? { lead: true } : {}), count: r.items.length })) })),
       picked: picked.length, label: info.textContent, view: viewState.view ? { ...viewState.view } : null,
     };
   }

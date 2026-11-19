@@ -56,8 +56,9 @@ function arcSeg(shape, fromPos, toPos, state) {
 
 
 // Bounding box over the design: joint positions + circle extents (center ± r) + (when present) the datum triangle
-// at the origin. Empty → 0,0,0,0. (Arc bulge beyond its endpoints is approximated by the endpoints — deferred.)
-function boundsOf(state, datumExtent) {
+// at the origin + TASK 775 the points a derived cut writes outside the drawing (`extra`: a lead-in leg's tip). Empty → 0,0,0,0. (Arc bulge beyond its
+// endpoints is approximated by the endpoints — deferred.)
+function boundsOf(state, datumExtent, extra = []) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const ext = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y; if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
   if (state && state.joints && typeof state.joints.values === 'function') {
@@ -70,6 +71,7 @@ function boundsOf(state, datumExtent) {
     }
   }
   if (datumExtent) { ext(0, 0); ext(datumExtent.legX, datumExtent.legY); } // the registration anchor must fit the viewBox
+  for (const p of extra) if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) ext(p.x, p.y); // TASK 775: a lead-in tip must fit the viewBox too
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, w: 0, h: 0 };
   return { minX, minY, w: maxX - minX, h: maxY - minY };
 }
@@ -148,8 +150,11 @@ function holdData(hold) {
   if (!hold) return '';
   if (hold.role === 'pass') return ` data-hold="${hold.mode === 'skin' ? 'skin' : 'pass'}"`;
   if (hold.role === 'strip') return ` data-hold="gap ${hold.index + 1}/${hold.count}"`;
+  if (hold.role === 'stroke') return ` data-hold="stroke ${hold.index + 1}/${hold.count}"`; // TASK 775: an On line cut's tabs: its open strokes
   return '';
 }
+// TASK 775: the PREVIEW copy's data-lead of a cut written with a lead-in leg (#core/lead-in): "in". Never in the downloaded file.
+const leadData = (leadIn) => (leadIn && leadIn.role === 'leg' ? ' data-lead="in"' : '');
 // TASK 745: the PREVIEW copy's data-clear of a programmed pocket's cut (#core/pocket-clearing): "linked k/N" (TASK 749: Spiral line k of N) | "raster k/N" | "cleanup k/N" | "morphed" | "loop k/N" (TASK 750) |
 // "wall" | "island k/N" (TASK 750: no depth passes any more); a refused clearing or none: nothing. Never in the downloaded file.
 function clearData(cl) {
@@ -200,6 +205,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
+  const extents = []; // TASK 775: points a derived cut writes outside the drawing (a lead-in tip)
   const firstItems = []; // TASK 774: the elements of the exportFirst types (the Stock)
   const owned = ownedLoopIds(ents, state, loops, ensurePolys()); // TASK 711: a hole with its own entry is cut by that entry only
   for (const e of ents) {
@@ -229,9 +235,10 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       } else if (cut.loop) {
         geom = loopGeom(cut.loop, state, shapeById);
       }
-      const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) : ''))
+      const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
         + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
       if (geom) (c.exportFirst ? firstItems : items).push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
+      if (geom && Array.isArray(cut.extent)) extents.push(...cut.extent); // TASK 775
     }
   }
   items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
@@ -255,7 +262,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     for (const it of items) body.push(`  <${it.tag} ${it.a}${it.common}/>`);
   }
 
-  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null);
+  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, extents);
   const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;
   return [header, ...body, '</svg>'].join('\n');
 }

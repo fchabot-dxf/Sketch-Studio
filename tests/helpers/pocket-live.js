@@ -22,10 +22,10 @@ const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}
 
 /** A fresh browser on the Shaper page: desktop (mm), phone 390 (touch, inches) or Fusion mode (mm). null when no headless browser is installed.
  *  Returns the page tools; close() closes the browser and its server and removes the download folder. */
-export async function openPocketPage({ tag, phone = false, fusion = false }) {
-  const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/745');
+export async function openPocketPage({ tag, phone = false, fusion = false, evidenceDir = null, args = undefined }) { // TASK 775: evidenceDir / args (the 3D view's swiftshader) for tests/helpers/leadin-live.js
+  const EVIDENCE_DIR = evidenceDir || process.env.EVIDENCE_DIR || path.resolve('.evidence/745');
   fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
-  const cdp = await launchBrowser({ tag, width: 1280, height: 800 });
+  const cdp = await launchBrowser({ tag, width: 1280, height: 800, ...(args ? { args } : {}) });
   if (!cdp) return null;
   const { port, send, evalJs, waitFor, waitForApp, navigate } = cdp;
   const dlDir = fs.mkdtempSync(path.join(os.tmpdir(), `sk-${tag}-dl-`));
@@ -170,7 +170,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false }) {
 
     // ── A / B: the standalone app ──
     const setLoop = async (on) => { if (await evalJs(`document.querySelector('.cut-loop').checked`) !== on) { await clickEl('#prepare-panel .cut-row[data-row="loop"] .cut-check'); await sleep(300); } };
-    const markers = () => evalJs(`document.querySelectorAll('#prepare-toolpath-group .sk-clear-start').length`);
+    const markers = () => evalJs(`document.querySelectorAll('#prepare-toolpath-group .sk-lead-tip, #prepare-toolpath-group .sk-lead-end').length`); // TASK 775: a closed loop has no start point: no dot
     if (phone) {
       await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
       await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
@@ -187,7 +187,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false }) {
       await setUnit(phone ? 'in' : 'mm');
     }
     return { phone, EVIDENCE_DIR, send, evalJs, waitFor, close, shot, shotWorld, press, clickEl, clickWorld, openMode, setUnit, draw, card, look, pickType, typeField,
-      openClearing, pickClearing, rec, download, fileElements, export2d, preview2dElements, setLoop, markers };
+      openClearing, pickClearing, rec, download, fileElements, export2d, preview2dElements, setLoop, markers, dlDir };
   } catch (e) { await close(); throw e; }
 }
 
@@ -284,7 +284,7 @@ async function threePockets(t, label, shots) {
     await pickClearing('linked');
     await setLoop(true);
     const cL = await card();
-    assert.ok(/^Pocket: spiral, \d+ turns \+ wall: one closed loop, ends where it starts,/.test(cL.note[0]) && (await look()).paths === 1 && await markers() === 1, label + ': the L: ONE closed loop: ' + cL.note[0]);
+    assert.ok(/^Pocket: spiral, \d+ turns \+ wall: one closed loop,/.test(cL.note[0]) && (await look()).paths === 1 && await markers() === 0, label + ': the L: ONE closed loop, no dot (TASK 775: no start point): ' + cL.note[0]);
     if (shots) await shotWorld(`${D}-loop-spiral-L.png`, [140, 0, 240, 100]);
     await clickWorld(10, 100);
     await pickType('pocket'); await typeField('.cut-depth', inch ? '0.25' : '6'); await quarter();
@@ -296,8 +296,8 @@ async function threePockets(t, label, shots) {
     const cI = await card();
     console.log(label + ' island note: ' + JSON.stringify(cI.note));
     assert.strictEqual(cI.loop, true, label + ': the island pocket starts with the last Loop set (on)');
-    const islandLoops = Number((/\+ wall: (\d+) closed loops \(the pocket has islands\), each ends where it starts,/.exec(cI.note[0]) || [])[1]);
-    assert.ok(islandLoops > 1 && await markers() === islandLoops, label + ': the island pocket: several closed loops, each with its marker, the note says why: ' + cI.note[0]);
+    const islandLoops = Number((/\+ wall: (\d+) closed loops \(the pocket has islands\),/.exec(cI.note[0]) || [])[1]);
+    assert.ok(islandLoops > 1 && await markers() === 0, label + ': the island pocket: several closed loops, no dot on any (TASK 775), the note says why: ' + cI.note[0]);
     if (shots) await shotWorld(`${D}-loop-island-spiral.png`, [0, 90, 120, 150]);
   return { D, inch, islandLoops };
 }
@@ -312,7 +312,7 @@ export async function listsPhase(t, label) {
     console.log(label + ' ops: ' + JSON.stringify(ops));
     assert.strictEqual(ops.length, 2, label + ': 2 operations: the rectangle (Loop off) and the L + the island (Loop on)');
     assert.ok(ops.some((t) => /^Pocket \(spiral\) · .* \| 1 region · spiral, \d+ turns in 1 line \+ wall$/.test(t)), label + ': the rectangle row');
-    assert.ok(ops.some((t) => new RegExp(`^Pocket \\(spiral\\) · .* \\| 2 regions · spiral, \\d+ turns \\+ wall: one closed loop, ends where it starts; spiral, \\d+ turns \\+ wall: ${islandLoops} closed loops \\(the pocket has islands\\), each ends where it starts$`).test(t)), label + ': the L and the island: ONE row');
+    assert.ok(ops.some((t) => new RegExp(`^Pocket \\(spiral\\) · .* \\| 2 regions · spiral, \\d+ turns \\+ wall: one closed loop; spiral, \\d+ turns \\+ wall: ${islandLoops} closed loops \\(the pocket has islands\\)$`).test(t)), label + ': the L and the island: ONE row');
     await shot(`${D}-ops-list.png`, '#prepare-ops', 2);
     if (phone) await clickEl('#prepare-ops .ops-head');
 }
@@ -362,9 +362,9 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
       await setLoop(true);
       assert.strictEqual((await rec(60, 10)).loop, true, label + ` ${pat}: Loop on stored`);
       const c = await card();
-      assert.ok(c.loop === true && /\+ wall: one closed loop, ends where it starts, stepover/.test(c.note[0]) && c.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`), label + ` ${pat}: the note ${JSON.stringify(c.note)}`);
+      assert.ok(c.loop === true && /\+ wall: one closed loop, stepover/.test(c.note[0]) && c.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`), label + ` ${pat}: the note ${JSON.stringify(c.note)}`);
       const l = await look();
-      assert.ok(l.paths === 1 && await markers() === 1, label + ` ${pat}: ONE closed line drawn, with its start / end marker`);
+      assert.ok(l.paths === 1 && await markers() === 0, label + ` ${pat}: ONE closed line drawn, no dot (TASK 775: a closed loop has no start point)`);
       if (pat === 'linked') await shot(`${D}-card-loop.png`, '#prepare-panel .cut-card', 2);
       await shotWorld(`${D}-loop-${pat}.png`, [0, 0, 120, 70]);
       const file = await download();
@@ -373,7 +373,7 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
       loopRuns[pat] = els.map((e) => [e[2], e[3], /Z$/.test(e[1]) ? 'closed' : 'open']);
       assert.deepStrictEqual(loopRuns[pat], [['online', inch ? '0.250 in' : '6.000 mm', 'closed']], label + ` ${pat}: the download: exactly ONE closed on-line path (once: the Origin's AutoPass steps down), no inside element`);
       const n = els[0][1].replace(/[MLZ]/g, ' ').trim().split(/\s+/);
-      assert.ok(n[0] === n[n.length - 2] && n[1] === n[n.length - 1], label + ` ${pat}: the path ends where it starts`);
+      assert.ok(n[0] === n[n.length - 2] && n[1] === n[n.length - 1], label + ` ${pat}: the path is closed (first point == last point)`);
       await openMode('prepare'); await pickRect();
     }
     console.log(label + ' loop downloads: ' + JSON.stringify(loopRuns));
@@ -402,7 +402,7 @@ export async function fusionPhase(t) {
     await pickClearing(id);
     await setLoop(true);
     const c = await card();
-    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster 0°: \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: one closed loop, ends where it starts`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
+    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster 0°: \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: one closed loop,`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
     const l = await look();
     assert.ok(l.paths >= 1, `Fusion ${id}: drawn`);
     const b = await evalJs(`(() => { const r = [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getBBox()); return [Math.min(...r.map((q) => q.x)) - 8, Math.min(...r.map((q) => q.y)) - 8, Math.max(...r.map((q) => q.x + q.width)) + 8, Math.max(...r.map((q) => q.y + q.height)) + 8]; })()`);

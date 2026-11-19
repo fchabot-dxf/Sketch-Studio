@@ -317,8 +317,12 @@
     /* TASK 745: a programmed pocket in Prepare: its clearing paths as thin tool-path lines (the clean-up ring dashed), the material the bit does not reach filled */
     .sk-clear-path { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; stroke-opacity: 0.9; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
     .sk-clear-path.sk-clear-cleanup { stroke-dasharray: 4 2; }
-    /* TASK 750: a closed loop (Loop on) and where it starts and ends */
-    .sk-clear-start { fill: var(--sk-prep-path); stroke: #000; stroke-width: 1; vector-effect: non-scaling-stroke; }
+    /* TASK 775: a closed loop has no start point on the Origin: no dot on it. A LEAD-IN: its leg (bold) and the dots of the open path's two real ends: the
+       leg's tip (the start: filled) and the junction where the leg meets the loop (the other end: a ring). An On line cut's tabs: its strokes (solid). */
+    .sk-lead-leg { fill: none; stroke: var(--sk-prep-tab); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+    .sk-lead-tip { fill: var(--sk-prep-tab); stroke: #000; stroke-width: 1; vector-effect: non-scaling-stroke; }
+    .sk-lead-end { fill: #fff; stroke: #000; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+    .sk-stroke { fill: none; stroke: var(--sk-prep-path-online); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linecap: butt; stroke-linejoin: round; }
     .sk-leftover { fill: var(--sk-prep-leftover); stroke: var(--sk-prep-leftover); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .sk-chip-bg { fill: var(--sk-prep-chip-bg); }
     .sk-chip-text { fill: var(--sk-prep-chip-text); font-family: system-ui, sans-serif; font-size: 11px; }
@@ -478,6 +482,13 @@
     .cut-row[data-row="holdPart"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    /* TASK 775: Lead-in Off | On and its Side Outside | Inside: the Hold part choice's look; 44 px targets on a phone */
+    .cut-row[data-row="leadIn"] .cut-presets, .cut-row[data-row="leadInSide"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
+    .cut-row[data-row="leadIn"] .cut-presets .cut-preset, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
+    .cut-row[data-row="leadIn"] .cut-presets .cut-preset.is-active, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    @media (max-width: 640px), (pointer: coarse) {
+      .cut-row[data-row="leadIn"] .cut-presets .cut-preset, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset { height: 44px; min-width: 44px; }
+    }
     .cut-presets.cut-in-box { display: flex; margin: 0; height: 100%; flex: 0 0 auto; }
     .cut-presets.cut-in-box .cut-preset { height: 100%; padding: 0 8px; font-size: 12px; border-radius: 0; }
     /* TASK 757: the tab count box (− count Auto +): the count is centred between the steppers with no side padding (a count has no unit), so its longest

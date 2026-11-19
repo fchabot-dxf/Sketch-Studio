@@ -28,7 +28,7 @@
 //    a pocket loop's points). Each cut carries `leadIn` = { role: 'leg', tip, junction, length, side?, legPoints: [tip, junction] } (Prepare draws the
 //    leg and the dots, Export 2D labels it, the footprint sweeps it) and `extent` = [tip] (the exported viewBox must hold the tip outside the drawing);
 //    a refused lead-in leaves the cut closed and carries { role: 'refused', error }.
-import { loopWalk, walkAt, subWalk, walkPoints, piecesD } from './hold-part.js';
+import { loopWalk, walkAt, subWalk, walkPoints, piecesD, piecesPoints } from './hold-part.js';
 import { num } from './loop-geometry.js';
 
 export const LEAD_IN = Object.freeze({
@@ -100,8 +100,9 @@ export function applyLeadIn(cuts, rec, state) {
   const leg = outlineLeg(w, st);
   if (leg.error) return refuse(leg.error);
   const { tip, junction: J } = leg;
-  const d = `M ${num(tip.x)} ${num(tip.y)} L ${num(J.x)} ${num(J.y)} ${piecesD(subWalk(w, leg.s, w.length))}`;
-  const leadIn = { ...base, role: 'leg', at: leg.at, tip, junction: J, legPoints: [tip, J], d: `M ${num(tip.x)} ${num(tip.y)} L ${num(J.x)} ${num(J.y)}` };
+  const loopPieces = subWalk(w, leg.s, w.length);
+  const d = `M ${num(tip.x)} ${num(tip.y)} L ${num(J.x)} ${num(J.y)} ${piecesD(loopPieces)}`;
+  const leadIn = { ...base, role: 'leg', at: leg.at, tip, junction: J, legPoints: [tip, J], loopPoints: piecesPoints(loopPieces), d: `M ${num(tip.x)} ${num(tip.y)} L ${num(J.x)} ${num(J.y)}` };
   return cuts.map((c) => (c === outer ? { ...c, geom: { tag: 'path', a: `d="${d}"` }, leadIn, extent: [tip] } : c));
 }
 

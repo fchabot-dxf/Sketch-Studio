@@ -922,56 +922,147 @@ export function deriveCutFootprintAt(cuts, rec, state, halfWidth) {
 //  * On line (material both sides) and Guide (not a cut): no direction (owner questions).
 // The exported SVG is NOT affected: the Origin picks the direction itself from the cut type; our winding is irrelevant.
 const TRAVEL_BY_ROLE = { outside: 'ccw', inside: 'cw', wall: 'cw', island: 'ccw' };
+const CLEAR_TRAVEL_ROLES = new Set(['linked', 'raster', 'cleanup', 'morphed', 'loop']);
+
+function signedAreaScreen(poly) {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) a += poly[j].x * poly[i].y - poly[i].x * poly[j].y;
+  return a;
+}
 
 // Order `poly` so it travels `direction` ('cw' | 'ccw') AS SEEN ON SCREEN. World y points down, so a positive shoelace
 // area (x_j*y_i - x_i*y_j) is a CLOCKWISE loop on screen.
 export function orientOnScreen(poly, direction) {
-  let a = 0;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) a += poly[j].x * poly[i].y - poly[i].x * poly[j].y;
-  const isCw = a > 0;
+  const isCw = signedAreaScreen(poly) > 0;
   return ((direction === 'cw') === isCw) ? poly.slice() : poly.slice().reverse();
 }
 
-// Evenly spaced arrow marks {x, y, angle} (radians, direction of travel) along a CLOSED path — the static fallback for
-// users who prefer reduced motion.
-export function arrowsAlongClosed(path, count = 6) {
-  const n = path.length, seg = [];
+// Rotate a closed polygon (open ring) to start and end at `junction` (as an open path) when `loopPoints` is not provided.
+function openLoopFromPoint(poly, junction) {
+  if (!poly || poly.length < 3) return [];
+  if (!junction) return [...poly, poly[0]];
+  let best = { i: 0, t: 0, d: Infinity, p: poly[0] };
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const vx = b.x - a.x, vy = b.y - a.y, len2 = vx * vx + vy * vy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((junction.x - a.x) * vx + (junction.y - a.y) * vy) / len2)) : 0;
+    const p = { x: a.x + vx * t, y: a.y + vy * t };
+    const d = Math.hypot(junction.x - p.x, junction.y - p.y);
+    if (d < best.d) best = { i, t, d, p };
+  }
+  const out = [best.p];
+  for (let k = 1; k <= poly.length; k++) out.push(poly[(best.i + k) % poly.length]);
+  out.push(best.p);
+  return out.filter((q, idx) => idx === 0 || Math.hypot(q.x - out[idx - 1].x, q.y - out[idx - 1].y) > 1e-9);
+}
+
+/**
+ * arrowsAlongPath(path, closed, opts) — TASK 777: evenly spaced arrow marks { x, y, angle } (radians, direction of travel)
+ * along an open or closed polyline `path` (world units).
+ *  - `count` > 0: places exactly `count` arrows evenly along the path (used by arrowsAlongClosed).
+ *  - `spacing` > 0: places arrows roughly every `spacing` world units (at least 1 at the midpoint when total >= `minLen`).
+ *  - `phase` in (0, 1): fractional offset inside each spacing bucket (default 0.5).
+ */
+export function arrowsAlongPath(path, closed, { spacing = 0, count = 0, minLen = 0, phase = 0.5 } = {}) {
+  if (!Array.isArray(path) || path.length < (closed ? 3 : 2)) return [];
+  const segCount = closed ? path.length : path.length - 1;
+  const seg = [];
   let total = 0;
-  for (let i = 0; i < n; i++) { const a = path[i], b = path[(i + 1) % n]; const l = Math.hypot(b.x - a.x, b.y - a.y); seg.push(l); total += l; }
+  for (let i = 0; i < segCount; i++) {
+    const a = path[i], b = path[(i + 1) % path.length];
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    seg.push(l);
+    total += l;
+  }
+  if (!(total > 1e-9) || (minLen > 0 && total < minLen)) return [];
+  const n = count > 0 ? count : (spacing > 0 ? Math.max(1, Math.floor(total / spacing)) : 1);
   const out = [];
-  if (!(total > 0)) return out;
-  for (let k = 0; k < count; k++) {
-    let s = ((k + 0.5) / count) * total, i = 0;
-    while (i < n - 1 && s > seg[i]) { s -= seg[i]; i++; }
-    const a = path[i], b = path[(i + 1) % n], t = seg[i] > 0 ? s / seg[i] : 0;
+  for (let k = 0; k < n; k++) {
+    const frac = n === 1 ? 0.5 : (k + phase) / n;
+    if (!closed && (frac <= 0.02 || frac >= 0.98)) continue;
+    let s = frac * total, i = 0;
+    while (i < segCount - 1 && (s > seg[i] || seg[i] <= 1e-12)) { s -= seg[i]; i++; }
+    if (!(seg[i] > 1e-12)) continue;
+    const a = path[i], b = path[(i + 1) % path.length];
+    const t = Math.min(1, Math.max(0, s / seg[i]));
     out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, angle: Math.atan2(b.y - a.y, b.x - a.x) });
   }
   return out;
 }
 
+// Evenly spaced arrow marks {x, y, angle} (radians, direction of travel) along a CLOSED path.
+export function arrowsAlongClosed(path, count = 6) {
+  return arrowsAlongPath(path, true, { count });
+}
+
 /**
- * deriveCutTravel(footprints) — the conventional TRAVEL of every cut that has one, from deriveCutFootprint's output (so the
- * centre path is exactly the line the footprint/preview uses). Returns [{ role, direction, path, arrows }]:
- *   role 'outside'|'inside'  — a band cut's centre path;  'wall'|'island' — a pocket's finish pass;
- *   direction 'cw'|'ccw'     — as seen on screen;  path — the centre polygon ordered in that direction;  arrows — see above.
- * On line, Guide and chains return nothing (no direction).
+ * deriveCutTravel(footprints) — TASK 449 / 777: the TRAVEL direction of every toolpath whose direction is determined by the cut
+ * type or the programmed path, from deriveCutFootprint's output (so every centre path is the exact geometry the footprint/preview uses).
+ * Returns [{ role, direction, path, closed, arrows }]:
+ *   - 'outside'|'inside' — a band cut's centre path (conventional: outside CCW, inside CW; includes stepped terraces and held pass 1);
+ *   - 'wall'|'island'    — a pocket's finish pass (freehand or programmed: wall CW, island CCW, including walls split at a neck);
+ *   - 'linked'|'raster'|'cleanup'|'morphed'|'loop' — a programmed pocket's clearing paths in their cutting order;
+ *   - 'leadin'           — a lead-in leg from its tip to the junction (from `leadIn.legPoints`, whatever shape the derivation builds);
+ *   - 'online'           — an On-line outline opened by a lead-in, from the junction round back to the junction (matching the export walk);
+ *   - 'stroke'           — an On-line cut's tab strokes (each open stroke in its exported order).
+ * Plain On-line cuts (no lead-in, no tabs: material both sides, operator chooses direction on the Origin), held gap strips, and Guide / Stock return nothing.
  */
 export function deriveCutTravel(footprints) {
   const out = [];
-  const push = (role, poly) => {
+  const pushClosed = (role, poly) => {
     if (!poly || poly.length < 3) return;
     const direction = TRAVEL_BY_ROLE[role];
     const path = orientOnScreen(poly, direction);
-    out.push({ role, direction, path, arrows: arrowsAlongClosed(path, 6) });
+    out.push({ role, direction, path, closed: true, arrows: arrowsAlongClosed(path, 6) });
   };
+  const pushPath = (role, points, closed, direction = null) => {
+    if (!Array.isArray(points) || points.length < (closed ? 3 : 2)) return;
+    const dir = direction || (closed ? (signedAreaScreen(points) >= 0 ? 'cw' : 'ccw') : 'forward');
+    out.push({ role, direction: dir, path: points, closed: Boolean(closed), arrows: arrowsAlongPath(points, Boolean(closed), { count: closed ? 6 : 1 }) });
+  };
+  const nearPt = (a, b) => a && b && Math.hypot(a.x - b.x, a.y - b.y) < 1e-4;
   for (const fp of footprints || []) {
+    if (fp.hold && fp.hold.role === 'strip') continue; // TASK 742: gap strips are thin loops too small to read
+    if (fp.hold && fp.hold.role === 'stroke') { // TASK 775 / 777: On-line tab strokes in their exported order
+      for (const tp of fp.toolPaths || []) pushPath('stroke', tp.points, false, 'forward');
+      continue;
+    }
+    if (fp.clearing) {
+      const role = fp.clearing.role;
+      if (role === 'wall' || role === 'island') {
+        const loops = (fp.toolPaths && fp.toolPaths.length) ? fp.toolPaths.filter((tp) => tp.closed).map((tp) => tp.points) : (fp.center ? [fp.center] : []);
+        for (const poly of loops) pushClosed(role, poly);
+        continue;
+      }
+      if (CLEAR_TRAVEL_ROLES.has(role)) {
+        const leg = fp.leadIn && fp.leadIn.role === 'leg' && Array.isArray(fp.leadIn.legPoints) && fp.leadIn.legPoints.length >= 2 ? fp.leadIn : null;
+        for (const tp of fp.toolPaths || []) {
+          if (leg && !tp.closed && tp.points.length >= leg.legPoints.length) {
+            pushPath('leadin', leg.legPoints, false, 'forward');
+            const splitAt = nearPt(tp.points[leg.legPoints.length - 1], leg.junction) ? leg.legPoints.length - 1 : 0;
+            const body = splitAt > 0 ? tp.points.slice(splitAt) : tp.points;
+            pushPath(role, body, false, 'forward');
+          } else {
+            pushPath(role, tp.points, tp.closed);
+          }
+        }
+        continue;
+      }
+    }
     if (fp.kind === 'pocket') {
-      push('wall', fp.wall);
-      for (const isl of fp.islandCenters || []) push('island', isl);
+      pushClosed('wall', fp.wall);
+      for (const isl of fp.islandCenters || []) pushClosed('island', isl);
     } else if (fp.kind === 'band') {
       const t = fp.cutType;
-      if (t === 'exterior' || t === 'outside') push('outside', fp.center);
-      else if (t === 'interior' || t === 'inside') push('inside', fp.center);
+      if (t === 'exterior' || t === 'outside') pushClosed('outside', fp.center);
+      else if (t === 'interior' || t === 'inside') pushClosed('inside', fp.center);
+      else if (t === 'online' && fp.leadIn && fp.leadIn.role === 'leg' && Array.isArray(fp.leadIn.legPoints) && fp.leadIn.legPoints.length >= 2) {
+        pushPath('leadin', fp.leadIn.legPoints, false, 'forward');
+        const loopPts = Array.isArray(fp.leadIn.loopPoints) && fp.leadIn.loopPoints.length >= 2
+          ? fp.leadIn.loopPoints
+          : openLoopFromPoint(orientOnScreen(fp.center || [], 'cw'), fp.leadIn.junction);
+        pushPath('online', loopPts, false, 'cw');
+      }
     }
   }
   return out;

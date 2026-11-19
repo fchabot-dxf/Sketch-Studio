@@ -43,14 +43,14 @@ try {
   const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
   importFusionSelection(JSON.parse(fs.readFileSync(new URL('03-pocket-floor-fillet.json', FIX), 'utf8')), { controller: app.controller, prepare: app.prepare });
   const p = worldToScreen(pc, { x: 60, y: -40 }); app.click(Math.round(p.x), Math.round(p.y), { target: pc });
-  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="stepped-pocket"]');
-  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'stepped-pocket');
+  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]');
+  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'roughing');
   const hist = () => st.history.length;
   const row = (name) => `.cut-row[data-${name.startsWith('cut') || name === 'toolDia' ? 'param' : 'row'}="${name}"]`;
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   eq([...doc.querySelectorAll('.cut-card .cut-step')].map((b) => b.getAttribute('aria-label')),
-    ['Decrease depth', 'Increase depth', 'Decrease stepover', 'Increase stepover', 'Decrease finish allowance', 'Increase finish allowance', 'Decrease lead-in radius', 'Increase lead-in radius', 'Decrease lead-in sweep', 'Increase lead-in sweep', 'Decrease lead-in length', 'Increase lead-in length', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type); TASK 775 / 778: the lead-in radius / sweep / length
+    ['Decrease depth', 'Increase depth', 'Decrease stepover', 'Increase stepover', 'Decrease finish allowance', 'Increase finish allowance', 'Decrease min terrace width', 'Increase min terrace width', 'Decrease lead-in radius', 'Increase lead-in radius', 'Decrease lead-in sweep', 'Increase lead-in sweep', 'Decrease lead-in length', 'Increase lead-in length', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type); TASK 775 / 778: the lead-in radius / sweep / length
       'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution',
       'Decrease tab count', 'Increase tab count', 'Decrease tab width', 'Increase tab width', 'Decrease thickness', 'Increase thickness', // TASK 742: the Hold part rows (hidden for a stepped type)
       'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],

@@ -54,8 +54,14 @@ export function captureShaperDoc() {
 const OLD_CLEARING = Object.freeze({ concentric: 'linked', spiral: 'morphed' });
 // TASK 766 (owner turn 2320): the allowance the clearing leaves on the walls is the FINISH allowance (the machining term); a record stored before 766 holds it
 // as `wallAllowance`: renamed HERE, the one read of a stored Shaper document (the operation key never carried the field's name: operations.js `allowance`).
+// TASK 792 (owner ruling, turn 2512): the STEPPED types are replaced by ROUGHING: a record stored as Stepped pocket / inside / outside opens as Roughing with
+// the same step (`stepDepth`, `adaptiveSteps`, `stepDeviation` kept) and allowance 0 (no `finishAllowance`), which IS the stepped cut (its export is byte for
+// byte the same: #core/stepped-cut.js deriveLevelsCuts, path 2); a stored operation key with the old type id is mapped the same way (opKeyNow). Mapped HERE
+// only, the one read of a stored Shaper document.
+const OLD_STEPPED = Object.freeze(['stepped-pocket', 'stepped-inside', 'stepped-outside']);
 function withClearingNow(rec) {
   if (!rec || typeof rec !== 'object') return rec;
+  if (OLD_STEPPED.includes(rec.cutType)) rec = { ...rec, cutType: 'roughing' }; // TASK 792
   const { passDepth, wallAllowance, ...now } = rec;
   if (wallAllowance !== undefined && now.finishAllowance === undefined) now.finishAllowance = wallAllowance;
   const mapped = Object.hasOwn(OLD_CLEARING, now.clearing) ? { ...now, clearing: OLD_CLEARING[now.clearing] } : now;
@@ -63,6 +69,7 @@ function withClearingNow(rec) {
 }
 const opKeyNow = (k) => (typeof k === 'string'
   ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`)
+    .replace(/"stepped-(pocket|inside|outside)"/, '"roughing"') // TASK 792: the stepped types are Roughing
     .replace(/,"passDepth":(null|-?[\d.eE+-]+)/, '')
     .replace(/,"leadIn":("bit"|-?[\d.eE+-]+)/, '') // TASK 778: pocket clearing no longer has lead-in
     .replace(/"leadIn":\{"length":("bit"|-?[\d.eE+-]+),"side":"(outside|inside)"\}/, (m, len, side) => `"leadIn":{"radius":${len === '"bit"' ? '"calc"' : len},"sweep":"calc","length":"calc","side":"${side}"}`)

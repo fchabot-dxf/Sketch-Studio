@@ -14,7 +14,7 @@ import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
 import { CUT_PLAN, keyOf } from './cut-plan.js';
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
-import { ringWalk } from '#core/stepped-cut.js';
+import { ringWalk, readLevels } from '#core/stepped-cut.js'; // TASK 792: readLevels (a part's material sections, the payload's `levels`)
 import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design's STL source goes with it (an STL import sets its own after)
 import { DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 794: the stock thickness of a design that starts over, when the payload has none
 import { setOpOrder } from './operations.js';
@@ -91,12 +91,13 @@ function dedupTolerance(rawLists) {
   return Math.max(diag * 1e-6, 1e-5);
 }
 
-function buildCutRecord(item, warnings, slope = null) {
+function buildCutRecord(item, warnings, slope = null, levels = null) {
   const rec = defaultCutRecord();
   rec.cutType = mapFusionCutType(item && item.cutType, warnings);
   const depth = item && item.depthMm != null ? Number(item.depthMm) : null;
   rec.cutDepth = depth != null && Number.isFinite(depth) && depth > 0 ? depth : 'unset';
   if (slope) rec.slope = slope; // TASK 714: the wall's rings ride with the record (saved, undone, restored with it); the type stays the plain one
+  if (levels) rec.levels = levels; // TASK 792: a part's material sections (the payload's optional `levels`, #core/stepped-cut.js readLevels), the same way
   return rec;
 }
 
@@ -220,6 +221,12 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
   }));
 
   const tol = dedupTolerance(rawLists);
+  const levelsMemo = new Map(); // TASK 792: one read per levels list (an STL's outlines share one), a warning when it does not read
+  const levelsOf = (reg) => {
+    if (!reg || !Array.isArray(reg.levels)) return null;
+    if (!levelsMemo.has(reg.levels)) { const l = readLevels(reg.levels, { scale, yUp }); if (!l) warnings.push(`${reg.label || 'A region'}: its levels could not be read; imported without them`); levelsMemo.set(reg.levels, l); }
+    return levelsMemo.get(reg.levels);
+  };
   const uniquePrims = [];
   const intern = (list) => list.map((q) => {
     for (let i = 0; i < uniquePrims.length; i++) {
@@ -331,7 +338,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     } else {
       key = keyOf('loop', m.outerLoop.id);
     }
-    plan.set(key, buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings)));
+    plan.set(key, buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings), levelsOf(m.reg)));
     cutKeys.push(key); cutInfo.set(key, m.reg);
   }
 

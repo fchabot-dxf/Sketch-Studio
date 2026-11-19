@@ -68,7 +68,7 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
     importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare });
     const [pk] = recAt('pocket');
     h.clickAt(60, -40);
-    h.pick('stepped-pocket');
+    h.pick('roughing');
     ok(!app.document.querySelector('[data-row="stepSpacing"]') && !app.document.querySelector('.cut-step-spacing'), 'the card has NO Min spacing row');
     ok(h.rows().includes('stepDepth'), 'the Step depth row is there');
     eq(CUT_PLAN.get(pk).stepSpacing, undefined, 'a new stepped record stores no spacing');
@@ -92,13 +92,13 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
     // the R3 floor fillet: a range
     importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
     h.clickAt(60, -40);
-    h.pick('stepped-pocket');
-    const n = steppedNoteItems(recAt('stepped-pocket')[1]);
+    h.pick('roughing');
+    const n = steppedNoteItems(recAt('roughing')[1]);
     console.log('floor fillet note: ' + JSON.stringify(n));
     ok(/outlines \d\.\d+–\d\.\d+ mm apart/.test(n[0].text), 'R3 floor fillet: "min–max" range');
     // inches
     SettingsManager.set('DOC_UNIT', 'in');
-    const ni = steppedNoteItems(recAt('stepped-pocket')[1]);
+    const ni = steppedNoteItems(recAt('roughing')[1]);
     console.log('floor fillet note (in): ' + JSON.stringify(ni));
     ok(/outlines \d\.\d+–\d\.\d+ in apart/.test(ni[0].text), 'inch document: the range in inches');
     SettingsManager.set('DOC_UNIT', 'mm');
@@ -118,12 +118,12 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
       const h = harness(app);
       importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
       h.clickAt(60, -40);
-      h.pick('stepped-pocket');
+      h.pick('roughing');
       planBefore = JSON.stringify([...CUT_PLAN.entries()]);
       svgBefore = exportOf(app);
       eq(pocketDepths(svgBefore).length, 4, 'floor fillet, step 1: 4 pockets (5, 6, 7, 8)');
       const d = await app.storedDoc();
-      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.cutType === 'stepped-pocket' && r.stepSpacing === undefined), 'the autosave stores the stepped record, with no spacing');
+      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.cutType === 'roughing' && r.stepSpacing === undefined), 'the autosave stores the stepped record, with no spacing');
     } finally { await app.close(); }
   }
   CUT_PLAN.clear();

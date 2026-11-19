@@ -20,9 +20,9 @@
 //  that comes before it in the default order (at the top when none does).
 // An operation's regions are listed in the plan's order.
 import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS } from './shaper.js';
-import { keyOf, loopsWithPolygons, steppedSummary, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
+import { keyOf, parseKey, loopsWithPolygons, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
 import { ownedLoopIds } from '#core/profile-model.js';
-import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH } from '#core/stepped-cut.js';
+import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout } from '#core/stepped-cut.js';
 import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in is one of its settings
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
@@ -73,10 +73,13 @@ export function settingsOf(rec) {
   if (cutTypeHasParam(rec.cutType, 'cutDepth')) s.depth = depthOf(rec.cutDepth);
   if (cutTypeHasParam(rec.cutType, 'cutOffset')) s.offset = round6(Number(rec.cutOffset) || 0);
   const eff = effectiveCutRecord(rec);
-  if (eff.terraceAs) { // a stepped type: the step depth, or the adaptive resolution (#core terraceOptions: what the terraces are made with)
+  if (eff.terraceAs) { // a sloped Roughing (TASK 714's stepped cut): the step depth, or the adaptive resolution (#core terraceOptions: what the terraces are made with)
     const o = terraceOptions(eff);
     s.steps = o.deviation != null ? { deviation: round6(o.deviation) } : { step: round6(Number(o.step) > 0 ? o.step : STEP_DEPTH.defaultMm) };
-  }
+  } else if (eff.levelsOp) s.steps = { step: round6(Number(rec.stepDepth) > 0 ? rec.stepDepth : eff.levelsOp === 'contour' ? LEVELS.contourStepMm : STEP_DEPTH.defaultMm) }; // TASK 792: Roughing / Contour
+  if (roughingAllowance(eff) > 0) s.allowance = round6(roughingAllowance(eff));
+  if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'nested') s.layout = 'nested';
+  if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'terraces' && Number(rec.minTerraceWidth) > 0) s.minWidth = round6(rec.minTerraceWidth); // TASK 792: the Min terrace width (0 adds nothing) // TASK 792 (owner turn 2604): the Nested layout (Terraces, the default, adds nothing) // TASK 792: a Roughing's allowance (0 adds nothing: a stepped record's key is the one before 792)
   const m = holdMode(eff); // TASK 742: a held cut's mode and its values (Off adds nothing)
   if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
@@ -92,7 +95,7 @@ export function opKeyOf(rec) {
   return JSON.stringify([tool ? tool.key : null, rec.cutType, settingsOf(rec)]);
 }
 
-const rankOf = (op) => (cutTypeById(op.cutType) || {}).opRank ?? 9;
+const rankOf = (op) => op.rank ?? (cutTypeById(op.cutType) || {}).opRank ?? 9; // TASK 792: a Roughing / Contour operation's rank is derived (planOperations)
 const depthNum = (op) => (op.settings && isSet(op.settings.depth) ? op.settings.depth : Infinity);
 const shapeIndex = (tool) => CUTTER_SHAPES.findIndex((s) => s.id === tool.shape);
 const toolKeyOf = (op) => (op.tool ? op.tool.key : '');
@@ -156,12 +159,13 @@ function describe(op) {
   const regions = `${n} ${chains ? (n === 1 ? 'path' : 'paths') : (n === 1 ? 'region' : 'regions')}`;
   let depthText = s.depth === undefined ? null : s.depth === 'unset' ? 'depth unset' : len(s.depth);
   let detail = null;
-  if (s.steps) { // a stepped operation: its steps (the terraces' depths over its regions) and the step / resolution
-    const sums = op.records.map((r) => steppedSummary(r.rec)).filter((x) => x && !x.error);
-    const counts = sums.map((x) => x.count), depths = sums.flatMap((x) => x.depths);
+  if (type && type.levelsOp) { // TASK 792: a Roughing / Contour operation: its levels (the depths its cuts are made at, from the derivation) and the step / resolution
+    const levelsOf = (r) => [...new Set(r.cuts.map((c) => Number(c.terrace ? c.terrace.depth : c.rec && c.rec.cutDepth)).filter(Number.isFinite))];
+    const counts = op.records.map((r) => levelsOf(r).length), depths = op.records.flatMap(levelsOf);
     if (depths.length) depthText = `${Math.min(...depths) === Math.max(...depths) ? '' : len(Math.min(...depths)).split(' ')[0] + '–'}${len(Math.max(...depths))}`;
     const lo = Math.min(...counts), hi = Math.max(...counts);
-    if (counts.length) detail = `${lo === hi ? lo : `${lo}–${hi}`} step${hi === 1 ? '' : 's'}` + (s.steps.deviation != null ? `, adaptive ${(resolutionLevel(s.steps.deviation) || { label: 'Custom' }).label}` : '');
+    if (counts.length) detail = `${lo === hi ? lo : `${lo}–${hi}`} level${hi === 1 ? '' : 's'}` + (s.steps && s.steps.deviation != null ? `, adaptive ${(resolutionLevel(s.steps.deviation) || { label: 'Custom' }).label}` : '')
+      + (s.allowance ? `, allowance ${len(s.allowance)}` : '') + (s.layout ? ', nested' : '');
   }
   if (s.hold) { // a held operation: its pass and its gap strips (summed over its regions), from the derivation
     const holds = op.records.map((r) => (r.cuts.find((c) => c.hold && c.hold.role !== 'strip') || {}).hold).filter(Boolean);
@@ -216,9 +220,16 @@ export function planOperations(state, entries, keys = order) {
     if (!cuts.length) return;
     const key = opKeyOf(e.rec);
     if (!byKey.has(key)) byKey.set(key, { key, tool: toolOf(e.rec), cutType: e.rec.cutType, settings: settingsOf(e.rec), records: [], first: i });
-    byKey.get(key).records.push({ planKey: keyOf(e.target.kind, e.target.id), target: e.target, rec: e.rec, cuts });
+    const planKey = e.key || keyOf(e.target.kind, e.target.id); // TASK 792: a part's Contour is its own record (cut-plan.js `contour:<key>`), cutting the part's target
+    byKey.get(key).records.push({ planKey, target: e.target, pick: parseKey(planKey), rec: e.rec, cuts });
   });
   const ops = [...byKey.values()];
+  for (const op of ops) { // TASK 792: a Roughing / Contour operation ranks as the plain cuts it makes (pockets 2, inside 3, outside 4: an outline's roughing frees the part); a Contour (the finish) after them
+    const t = cutTypeById(op.cutType);
+    if (!t || !t.levelsOp) continue;
+    const ranks = op.records.flatMap((r) => r.cuts.map((c) => (cutTypeById(c.rec && c.rec.cutType) || {}).opRank)).filter(Number.isFinite);
+    op.rank = Math.max(t.opRank, ...ranks) + (t.levelsOp === 'contour' ? 0.5 : 0);
+  }
   assignIds(ops);
   for (const op of ops) Object.assign(op, describe(op), { heading: toolHeading(op.tool) });
   return orderOps(ops, keys);

@@ -124,7 +124,7 @@ try {
   CUT_PLAN.clear();
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
-  CUT_PLAN.set(pk, { ...rec, cutType: 'stepped-pocket', stepDepth: 1, adaptiveSteps: false });
+  CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: false });
   const base = shaperSvgOf(app.state, cutPlanEntries()), basePv = shaperSvgOf(app.state, cutPlanEntries(), { preview: true });
   ok(/shaper:cutDepth="[0-9.]+ in"/.test(base), 'the file speaks inches');
   for (const den of LENGTH_FRACTIONS) {

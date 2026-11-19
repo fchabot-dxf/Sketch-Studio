@@ -180,7 +180,7 @@ const pocketD = (svg) => { const m = svg.match(/<path d="([^"]+)"[^>]*shaper:cut
     const st = newState();
     const c = build(st);
     const outer = loopOf(st, c.outer);
-    const svg = svgOf(st, [{ target: { kind: 'loop', id: outer.id }, rec: { cutType: 'stepped-pocket', cutDepth: 4, stepDepth: 2, cutOffset: 0, toolDia: 6.35, slope: { kind: 'pocket', label: 'draft', rings } } }], {});
+    const svg = svgOf(st, [{ target: { kind: 'loop', id: outer.id }, rec: { cutType: 'roughing', cutDepth: 4, stepDepth: 2, cutOffset: 0, toolDia: 6.35, slope: { kind: 'pocket', label: 'draft', rings } } }], {});
     const ds = [...svg.matchAll(/<path d="([^"]+)"/g)].map((m) => m[1]);
     ok(ds.length >= 2, `${name}: two terraces or more: ${svg}`);
     for (const d of ds) {
@@ -227,7 +227,7 @@ function assertInsideViewBox(svg, name) {
   // a stepped OUTSIDE cut whose deeper ring is larger than the drawing
   { const st = newState(); const c = circle(st, 50, 50, 20);
     const slope = { kind: 'outside', label: 'chamfer', rings: [{ z: 0, segments: [{ type: 'circle', cx: 50, cy: 50, r: 20 }] }, { z: 5, segments: [{ type: 'circle', cx: 50, cy: 50, r: 30 }] }] };
-    const vb = assertInsideViewBox(svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, c).id }, rec: { cutType: 'stepped-outside', cutDepth: 5, stepDepth: 2.5, cutOffset: 0, toolDia: 6.35, slope } }]), 'stepped outside');
+    const vb = assertInsideViewBox(svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, c).id }, rec: { cutType: 'roughing', cutDepth: 5, stepDepth: 2.5, cutOffset: 0, toolDia: 6.35, slope } }]), 'stepped outside');
     eq([vb.minX, vb.w], [20, 60], 'stepped outside: the viewBox spans the deepest ring (x 20..80)'); }
   // with the datum triangle
   { const st = newState(); const s = slot(st, 30, 100, 50, 20); assertInsideViewBox(svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, s).id }, rec: { ...POCKET, cutType: 'exterior' } }], { datum: true }), 'slot + datum'); }

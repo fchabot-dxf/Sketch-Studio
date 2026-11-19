@@ -36,8 +36,9 @@ export function shaperSvgOf(state, entries, { preview = false, written = null } 
 export function shaperPreviewOf(state, entries) {
   const ops = planOperations(state, entries);
   const ids = opIdsByPlanKey(ops);
+  const keyOf = (e) => e.key || `${e.target.kind}:${e.target.id}`; // TASK 792: a part's Contour is its own record (its own key), cutting the part's target
   const written = []; // TASK 793: the elements' cuts, in the file's order (the Paths view's bit-centre paths)
-  return { svg: shaperSvgOf(state, entries.map((e) => (ids.has(`${e.target.kind}:${e.target.id}`) ? { ...e, op: ids.get(`${e.target.kind}:${e.target.id}`) } : e)), { preview: true, written }), ops, written };
+  return { svg: shaperSvgOf(state, entries.map((e) => (ids.has(keyOf(e)) ? { ...e, op: ids.get(keyOf(e)) } : e)), { preview: true, written }), ops, written };
 }
 
 /** TASK 793: the Export step's Paths view: the bit-centre travel of every element of the file. `written` = shaperPreviewOf's list ({ cut, entry } of each

@@ -34,7 +34,7 @@ try {
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   const hole = [...CUT_PLAN.entries()].find(([, r]) => r.slope);
   for (const [name, patch] of [['Step 1 mm', { stepDepth: 1 }], ['adaptive Fine', { stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.1 }]]) {
-    CUT_PLAN.set(hole[0], { ...hole[1], cutType: 'stepped-inside', ...patch });
+    CUT_PLAN.set(hole[0], { ...hole[1], cutType: 'roughing', ...patch });
     const download = shaperSvgOf(app.state, cutPlanEntries());
     eq(download, plainExport(app.state), name + ': the downloaded file is byte-identical to the pre-719 exporter call');
     ok(!/hsl\(|data-/.test(download), name + ': no preview styling in the file');

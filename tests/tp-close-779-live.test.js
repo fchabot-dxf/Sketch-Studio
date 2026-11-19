@@ -11,7 +11,7 @@ fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 const cdp = await launchBrowser({ tag: '779-tp-close', width: 1440, height: 900 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
-const { port, send, evalJs, waitFor, navigate, close } = cdp;
+const { port, send, evalJs, waitFor, waitForApp, navigate, close } = cdp;
 
 try {
   const shot = async (name) => {
@@ -91,7 +91,8 @@ try {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?analytics=off`, 10000);
-  await waitFor(`!!document.querySelector('.sk-doctab-new')`, 'phone 390x844 ready');
+  await waitForApp('design-canvas');
+  await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 1 && !!document.querySelector('.sk-doctab-new')`, 'phone 390x844 tab strip ready');
 
   // Open from "+" tab
   await tapEl('.sk-doctab-new');

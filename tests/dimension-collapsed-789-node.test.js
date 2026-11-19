@@ -8,7 +8,7 @@ import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { previewDimensionInput, planChange } from '#core/parameters.js';
 import * as seams from '#core/dimension-seams.js';
 const { applyParameterChange, refusalReason } = seams;
-const SIZE_MESSAGE = 'a size must be more than 0'; // the drawing tools' box hint (task 782) 'A size must be more than 0.'
+const SIZE_MESSAGE = 'a length must be more than 0'; // the one length rule (task 789b), also the drawing tools' box hint (task 782) 'A length must be more than 0.'
 
 let checks = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };

@@ -20,20 +20,33 @@
 //  * TASK 757: a GUIDE (the Stock loop, a Guide) is shown as its outline behind every cut (GUIDE_FILL below): the file's filled board would cover the part.
 //  * A tap / click on an element (a press that moves less than 4 px) picks it: a highlight and its label ("pocket · 7.333 mm · step 2 of 4");
 //    a tap on empty space clears it. The list (rows by cut type, then depth and step, each with its element count) picks a row's elements.
+//  * TASK 793: the PATHS mode (the third Export view, the toolbar's "Paths"; setMode('paths')): the SAME parsed file, each element drawn as a plain stroke (no
+//    fill) in its cut type's colour (CSS .rv2d-t-<cutType>, index.html), so every path the file writes shows; over it the BIT-CENTRE path of every cut
+//    (`getPreview().bitPaths`, export-payload.js bitCentrePaths = deriveCutFootprint + deriveCutTravel, the derivation Prepare draws): a thin dashed line for
+//    the cuts whose written path is the wall / outline the bit walks beside (outside, inside, a pocket's wall and islands); a programmed pocket's clearing
+//    lines, a lead-in arc, an On-line outline's loop and tab strokes ARE their own bit path (the file writes the centre), so only their direction marks are
+//    added. Direction marks on every travel path: 777's sparse slow marching dashes (the one TRAVEL_STYLE, prepare-view.js) + static zoom-stable darts.
+//    A tap on a bit-centre line picks its element, as a tap on the element does.
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare). The first build
 //    fits; a rebuild (the plan changed) keeps the view, as the 3D view keeps its camera; fit() frames the drawing again.
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 import { lengthText } from '#core/settings-manager.js';
 import { unitInfo } from '#core/units.js';
+import { arrowsAlongPath } from '#core/profile-model.js';
+import { TRAVEL_STYLE, TRAVEL_ARROW_SPACING_PX, DART_DIMS, dartSeg, applyTravelStyle } from './prepare-view.js'; // TASK 793: the ONE travel declaration + dart geometry
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPE_TAGS = new Set(['path', 'circle', 'polygon', 'polyline', 'rect', 'ellipse', 'line']);
+const PROBE_PX = 7;        // TASK 793: the Paths mode's tap tolerance, screen px
 const TAP_PX = 4;          // a press that moves less than this is a tap (a pick), more is a pan
 const SHADE_SHALLOW = 70, SHADE_DEEP = 30; // TASK 719: the pockets' grey lightness (%) at the shallowest / deepest depth of THIS export
 const SHADE_OUTSIDE_SHALLOW = 25;           // TASK 719: a stepped outside's terraces: dark grey (25%) at the shallowest step down to the file's black at the deepest
 const SHADE_INSIDE_SHALLOW = 90, SHADE_INSIDE_DEEP = 60; // TASK 720: a stepped inside's terraces (the through step stays the file's white)
 const OUTSIDE_STEP_OUTLINE = '#9a9a9a';     // their thin light outline (the file's black outside has none, so the ledges would not show)
 const POCKET_OUTLINE = '#222';             // the thin outline every pocket gets (the file's pockets have none)
+const BIT_ONLY_ROLES = new Set(['outside', 'inside', 'wall', 'island']); // TASK 793: travel roles whose bit-centre path is NOT the written path (the others are written: their marks only)
+const CLEAR_KIND_ROLES = new Set(['linked', 'raster', 'cleanup', 'morphed', 'loop']);  // the dart size kinds of Prepare (prepare-view.js addTravel)
+const dartKind = (role) => (role === 'leadin' || role === 'online' || role === 'stroke' ? 'online' : CLEAR_KIND_ROLES.has(role) ? 'clear' : 'wall');
 const FIT_MARGIN = 0.06;   // empty space round the drawing on each side after fit(), a fraction of its size
 // TASK 757: the preview's one rule for a GUIDE (the Stock loop, a user's Guide): it marks, it never cuts, so it is drawn as its OUTLINE (the file's stroke, no
 // fill) BEHIND every cut. The file writes a guide filled (#0068FF fill + stroke, as Shaper Studio writes its guides); a user's Guide in the plan's order (TASK 774:
@@ -170,6 +183,9 @@ export function previewRows(items, ops = []) {
  */
 export function mountExportPreview({ canvas, list, info, getPreview, emptyText }) {
   const doc = canvas.ownerDocument;
+  let mode = '2d';           // TASK 793: '2d' (the file as the Origin fills it) | 'paths' (every written path as a stroke + the bit-centre paths)
+  let top = null, travels = [], arrowLayer = null, lastK = null; // TASK 793: the group holding layer + overlay, the travel paths to mark, the darts' <g>, the zoom they were drawn at
+  applyTravelStyle(canvas);
   const viewState = { view: null, allowEmptyPan: true, _panZoom: { isPanning: false, lastPanPoint: null, lastTouchDistance: null, touchPoints: new Map(), isPinching: false, lastPinchCenter: null, lastPinchDistance: null } };
   setupPanZoom(canvas, viewState, { attachListeners: true });
   let shading = { shades: new Map(), lo: NaN, hi: NaN }, outsideShading = { shades: new Map() }, insideShading = { shades: new Map() };
@@ -181,28 +197,40 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     if (!layer || !items.length) return;
     if (!sized()) { fitPending = true; return; }  // hidden: framed at the first real size
     fitPending = false;
-    const b = layer.getBBox();
+    const b = top.getBBox();
     const r = canvas.getBoundingClientRect();
     const aspect = r.width / r.height;
     const m = Math.max(b.width, b.height) * FIT_MARGIN;
     const w = Math.max(b.width + 2 * m, (b.height + 2 * m) * aspect, 1);
     viewState.view = { x: b.x + b.width / 2, y: b.y + b.height / 2, w, h: w / aspect };
     updateViewBox(canvas, viewState.view);
+    renderArrows();
   }
   new ResizeObserver(() => {
     if (!sized()) return;
     if (fitPending) fit();
-    else if (viewState.view) updateViewBox(canvas, viewState.view); // keep the scale, follow the new aspect
+    else if (viewState.view) { updateViewBox(canvas, viewState.view); renderArrows(); } // keep the scale, follow the new aspect
   }).observe(canvas);
 
+  let shownLabel = '';
   function showInfo() {
-    if (!items.length) info.textContent = emptyText;
-    else info.textContent = pickedLabel || `${items.length} element${items.length === 1 ? '' : 's'} · tap one to see its cut`;
+    shownLabel = !items.length ? emptyText : pickedLabel || `${items.length} element${items.length === 1 ? '' : 's'} · tap one to see its cut`;
+    if (mode !== 'paths' || !items.length) { info.textContent = shownLabel; return; }
+    // TASK 793: the Paths view's legend (a written path / the bit centre), under the line
+    const label = doc.createElement('div'); label.textContent = shownLabel;
+    const legend = doc.createElement('div'); legend.className = 'rv2d-paths-legend';
+    for (const [cls, text] of [['rv2d-leg-line', 'written path'], ['rv2d-leg-bit', 'bit centre (arrows: travel)']]) {
+      const item = doc.createElement('span'); item.className = 'rv2d-leg-item';
+      const sw = doc.createElement('span'); sw.className = cls;
+      const tx = doc.createElement('span'); tx.textContent = text;
+      item.append(sw, tx); legend.append(item);
+    }
+    info.replaceChildren(label, legend);
   }
   function pick(its, label, rowIndex = -1) {
-    for (const it of picked) it.el.classList.remove('rv2d-picked');
+    for (const it of picked) { it.el.classList.remove('rv2d-picked'); for (const b of it.bits || []) b.classList.remove('rv2d-bit-picked'); }
     picked = its;
-    for (const it of picked) it.el.classList.add('rv2d-picked');
+    for (const it of picked) { it.el.classList.add('rv2d-picked'); for (const b of it.bits || []) b.classList.add('rv2d-bit-picked'); }
     pickedLabel = its.length ? label : null;
     rowButtons.forEach((b, i) => b.setAttribute('aria-pressed', i === rowIndex ? 'true' : 'false'));
     showInfo();
@@ -279,11 +307,61 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     list.replaceChildren(...out);
   }
 
+  const pointsD = (pts, closed) => `M ${pts.map((q) => `${+q.x.toFixed(4)} ${+q.y.toFixed(4)}`).join(' L ')}${closed ? ' Z' : ''}`;
+  /** TASK 793: the Paths mode of the mounted copy: every element a plain stroke (class rv2d-path rv2d-t-<cut type>: CSS, index.html), then the overlay of
+   *  `bitPaths` ([{ index (the element's place in the file), travel }], export-payload.js bitCentrePaths). */
+  function buildPaths(bitPaths) {
+    for (const it of items) it.el.setAttribute('class', `rv2d-path rv2d-t-${it.cutType || 'none'}`);
+    const overlay = doc.createElementNS(SVG_NS, 'g'); overlay.setAttribute('class', 'rv2d-paths-overlay');
+    top.appendChild(overlay);
+    let marchD = '';
+    for (const { index, travel } of bitPaths) {
+      const it = items[index];
+      if (!it) throw new Error(`the Paths view: the file has no element ${index} (it has ${items.length})`);
+      it.bits = [];
+      for (const t of travel) {
+        const d = pointsD(t.path, t.closed);
+        marchD += d + ' ';
+        travels.push({ t, kind: dartKind(t.role) });
+        if (!BIT_ONLY_ROLES.has(t.role)) continue; // the written path is the bit's own: marks only
+        const bit = doc.createElementNS(SVG_NS, 'path'); bit.setAttribute('class', 'rv2d-bit-center'); bit.setAttribute('d', d);
+        overlay.appendChild(bit); it.bits.push(bit); byEl.set(bit, it);
+      }
+    }
+    if (marchD) { const m = doc.createElementNS(SVG_NS, 'path'); m.setAttribute('class', 'sk-travel rv2d-travel'); m.setAttribute('d', marchD); overlay.appendChild(m); }
+    arrowLayer = doc.createElementNS(SVG_NS, 'g'); overlay.appendChild(arrowLayer);
+  }
+  /** The darts (Prepare's: zoom-stable screen size, one <path> per size kind), redrawn when the zoom changed. */
+  function renderArrows(force = false) {
+    if (!arrowLayer || !viewState.view) return;
+    const r = canvas.getBoundingClientRect();
+    if (!(r.width > 0)) return;
+    const k = viewState.view.w / r.width; // world units per screen px
+    if (!force && lastK !== null && Math.abs(k - lastK) < 1e-9 * Math.max(1, k)) return;
+    lastK = k;
+    const spacing = k * TRAVEL_ARROW_SPACING_PX, minLen = k * TRAVEL_STYLE.arrowMinPathPx;
+    const dByKind = { clear: '', wall: '', online: '' };
+    let n = 0;
+    for (const { t, kind } of travels) for (const a of arrowsAlongPath(t.path, t.closed, { spacing, minLen })) { dByKind[kind] += dartSeg(a, DART_DIMS[kind], k); n++; }
+    arrowCount = n;
+    const out = [];
+    for (const kind of ['clear', 'wall', 'online']) {
+      if (!dByKind[kind]) continue;
+      const el = doc.createElementNS(SVG_NS, 'path'); el.setAttribute('class', `sk-travel-arrows${kind === 'clear' ? ' sk-travel-arrows-clear' : kind === 'online' ? ' sk-travel-arrows-online' : ''}`); el.setAttribute('d', dByKind[kind]);
+      out.push(el);
+    }
+    arrowLayer.replaceChildren(...out);
+  }
+  let arrowCount = 0;
+  const onZoom = () => renderArrows();
+  canvas.addEventListener('wheel', onZoom); canvas.addEventListener('pointermove', onZoom);
+
   /** Show the plan's file again unless `sig` (the Review's signature of the plan) is the one shown. Returns inspect(). */
   function refresh(sig) {
     if (sig !== undefined && sig === lastSig) { if (fitPending) fit(); return inspect(); }
     lastSig = sig;
-    if (layer) layer.remove();
+    if (top) top.remove();
+    top = null; travels = []; arrowLayer = null; lastK = null;
     layer = null; items = []; rows = []; shading = { shades: new Map(), lo: NaN, hi: NaN }; outsideShading = { shades: new Map() }; insideShading = { shades: new Map() }; byEl = new Map(); picked = []; pickedLabel = null;
     const preview = getPreview();
     const text = preview && preview.svg;
@@ -291,10 +369,15 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       const root = parseShaperSvg(text, doc);
       layer = doc.createElementNS(SVG_NS, 'g'); layer.setAttribute('class', 'rv2d-doc');
       for (const n of [...root.childNodes]) layer.appendChild(doc.importNode(n, true));
-      canvas.appendChild(layer);
+      top = doc.createElementNS(SVG_NS, 'g'); top.appendChild(layer);
+      canvas.appendChild(top);
       items = previewItems(layer);
       rows = previewRows(items, preview.ops); // TASK 743: the operations, in the user's order
       byEl = new Map(items.map((it) => [it.el, it]));
+    }
+    if (text && mode === 'paths') {
+      buildPaths(preview.bitPaths || []);
+    } else if (text) {
       // TASK 719: the display's own styling, on the mounted copy only: pockets shaded by depth + outlined (attributes, so the picked class still wins)
       shading = pocketShades(items);
       outsideShading = outsideStepShades(items);
@@ -350,14 +433,21 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     renderList();
     showInfo();
     if (items.length && !viewState.view) fit();
+    else renderArrows(true);
     return inspect();
   }
 
+  // TASK 793: a stroke is thin: in the Paths mode a tap that missed every line takes the nearest one within PROBE_PX (four probes round the point)
+  const probe = (x, y) => {
+    if (mode !== 'paths' || !doc.elementFromPoint) return null;
+    for (const [dx, dy] of [[PROBE_PX, 0], [-PROBE_PX, 0], [0, PROBE_PX], [0, -PROBE_PX]]) { const it = byEl.get(doc.elementFromPoint(x + dx, y + dy)); if (it) return it; }
+    return null;
+  };
   // a tap picks the element under it (the target of the press: a pan captures the pointer, so the release lands on the canvas)
   let press = null, pointers = 0;
   canvas.addEventListener('pointerdown', (e) => {
     pointers++;
-    press = pointers === 1 && (e.button == null || e.button === 0) ? { x: e.clientX, y: e.clientY, item: byEl.get(e.target) || null } : null;
+    press = pointers === 1 && (e.button == null || e.button === 0) ? { x: e.clientX, y: e.clientY, item: byEl.get(e.target) || probe(e.clientX, e.clientY) } : null;
   });
   const release = (e) => {
     pointers = Math.max(0, pointers - 1);
@@ -372,8 +462,16 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     return {
       elements: items.length,
       rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), ...(r.clear ? { clear: r.clear.role } : {}), ...(r.lead ? { lead: true } : {}), count: r.items.length })) })),
-      picked: picked.length, label: info.textContent, view: viewState.view ? { ...viewState.view } : null,
+      picked: picked.length, label: mode === 'paths' ? shownLabel : info.textContent, view: viewState.view ? { ...viewState.view } : null,
+      ...(mode === 'paths' ? { mode, bitCentre: top ? top.querySelectorAll('.rv2d-bit-center').length : 0, travelPaths: travels.length, darts: arrowCount } : {}),
     };
   }
-  return { refresh, fit, pickRow, inspect };
+  /** TASK 793: '2d' | 'paths'. A change rebuilds the view at the next refresh (the same file, drawn the other way). */
+  function setMode(next) {
+    if (next !== '2d' && next !== 'paths') throw new Error(`export preview: no mode ${next}`);
+    if (next === mode) return;
+    mode = next; lastSig = undefined;
+    canvas.parentNode.setAttribute('data-mode', mode);
+  }
+  return { refresh, fit, pickRow, inspect, setMode };
 }

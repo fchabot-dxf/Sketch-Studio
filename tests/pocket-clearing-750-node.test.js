@@ -57,7 +57,7 @@ function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.leng
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 const outerLoopOf = (st) => { const loops = findLoops(st), lp = polysOf(st); return loops.reduce((a, l) => (Math.abs(area(lp[l.id])) > Math.abs(area(lp[a.id])) ? l : a), loops[0]); };
 const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, finishAllowance: ALLOW, rasterAngle: 0, ...more });
-const exportOf = (st, rec, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
+const exportOf = (st, rec, options = {}) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 const distSeg = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy; const t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)) : 0; return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
 const distPolyline = (p, pts, closed) => { let m = Infinity; const n = closed ? pts.length : pts.length - 1; for (let i = 0; i < n; i++) m = Math.min(m, distSeg(p, pts[i], pts[(i + 1) % pts.length])); return m; };
 const inPoly = (p, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c; } return c; };
@@ -73,7 +73,7 @@ const elementsOf = (svg) => {
   const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   const out = []; let group = null;
   for (const line of svg.split('\n').map((l) => l.trim())) {
-    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('<g')) throw new Error('TASK 802: the export has a <g>, every element must carry its own cut attributes: ' + line);
     if (line.startsWith('</g')) { group = null; continue; }
     const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
     if (!m) continue;
@@ -185,7 +185,8 @@ console.log('loop: ' + JSON.stringify(measured));
   let n = 0;
   for (const [k, want] of Object.entries(BEFORE.exports)) {
     const [name, , more, okey] = k.split('|');
-    const svg = exportOf(SHAPES[name](), POCKET({ clearing: 'linked', ...JSON.parse(more) }), okey === 'grouped' ? { groupByCut: true } : {});
+    if (okey === 'grouped') continue; // TASK 802: there is no grouped download any more; its flat twin key is the check
+    const svg = exportOf(SHAPES[name](), POCKET({ clearing: 'linked', ...JSON.parse(more) }), {});
     const stripped = stripStartMark(svg);
     eq(stripped.removed.length, 1, `${k}: ONLY 1 guide start-mark element added`);
     eq(md5(stripped.svg), want, `${k}: removing ONLY the guide start mark is byte-identical to before`);

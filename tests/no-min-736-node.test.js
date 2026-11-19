@@ -21,7 +21,7 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 const FIX = new URL('./fixtures/sa7-slope/', import.meta.url);
 const payload = (n) => JSON.parse(fs.readFileSync(new URL(n + '.json', FIX), 'utf8'));
 const slopeOf = (n) => { for (const r of payload(n).regions) { const s = slopeFromRegion(r, { scale: 1, yUp: true }, []); if (s && s.kind === 'pocket') return s; } return null; };
-const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true } });
+const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {} });
 
 // ── 1. core + the step rule ──
 eq(['minMm' in stepped.STEP_DEPTH, 'minMm' in stepped.STEP_RESOLUTION], [false, false], 'no minMm constant remains in the core');

@@ -43,7 +43,7 @@ const T = (name, kind, o = {}) => steppedTerraces(slopeOf(name, kind), { kind, s
 
 // ── 2. the app ──
 SettingsManager.set('DOC_UNIT', 'mm');
-const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: unit, options: { groupByCut: true } });
+const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: unit, options: {} });
 const pocketDepths = (svg) => [...svg.matchAll(/<(?:path|circle) ([^>]*?)\/>/g)].filter((m) => /shaper:cutType="pocket"/.test(m[1])).map((m) => (/shaper:cutDepth="([^"]+)"/.exec(m[1]) || [])[1]);
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);

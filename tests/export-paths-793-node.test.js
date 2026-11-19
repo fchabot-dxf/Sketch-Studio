@@ -53,7 +53,7 @@ function fileElements(svg) {
   const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   const out = []; let group = null;
   for (const line of svg.split('\n').map((l) => l.trim())) {
-    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('<g')) throw new Error('TASK 802: the export has a <g>, every element must carry its own cut attributes: ' + line);
     if (line.startsWith('</g')) { group = null; continue; }
     const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
     if (!m) continue;
@@ -70,7 +70,7 @@ try {
   const exportOf = (st, entries) => {
     const lp = polysOf(st);
     const written = [];
-    const svg = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true, previewData: true, written }, loopPolys: lp });
+    const svg = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options: { previewData: true, written }, loopPolys: lp });
     return { svg, written };
   };
   // THE check 1 for one drawing: the view's list == the file's elements

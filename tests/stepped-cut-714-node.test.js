@@ -114,7 +114,7 @@ eq(SAME_OUTLINE_TOL_MM, 0.01, 'the stated tolerance for identical steps: 0.01 mm
 
 // ── 2. the app ──
 SettingsManager.set('DOC_UNIT', 'mm');
-const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true } });
+const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {} });
 const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) => ({ tag: m[1], type: /shaper:cutType="([^"]+)"/.exec(m[2])[1], depth: (/shaper:cutDepth="([^"]+)"/.exec(m[2]) || [])[1], geom: m[2].replace(/ fill=.*$/, '') }));
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);

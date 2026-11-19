@@ -10,7 +10,7 @@
   "studioSvg": "ef9fa2cc2e4fae82f873db69",
   "studioDxf": "0b99e8b6fbadeec4966155c4",
   "shaperSpiral": "26d2ebd206fc2227c28d27ba",
-  "shaperTabs": "0c90dba74054140aa437e429"
+  "shaperTabs": "2e75d46cb75d5b1bfde83bc4"
  },
  "pattern-params-694-old.document.json": {
   "bezier": false,
@@ -19,11 +19,11 @@
   "loopPaths": "8027197836442bac716a3047",
   "loopPolys": "4d382682f12b72e2194a343c",
   "chainPaths": "4d2d5b6a4e451e33a600bd90",
-  "shaperOutside": "1361fce12f9b1ce64c263640",
+  "shaperOutside": "f95573897ae0df813d328545",
   "studioSvg": "429adc76f906cec7a516dfbb",
   "studioDxf": "5a73fb565f20ef948a5bc1e2",
-  "shaperSpiral": "98b1e071dd828a0b70ae0144",
-  "shaperTabs": "bd58d6dd34fdc1d4b872a537"
+  "shaperSpiral": "3f1a989fd058204610269f8f",
+  "shaperTabs": "216334babd6624cf5d855b68"
  },
  "pre-577-two-sketches.document.json": {
   "bezier": false,
@@ -32,7 +32,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "34bcca0b4e446bf99e9ad449",
-  "shaperOutside": "79f1ff1cb662ec9aa35a4f41",
+  "shaperOutside": "7ee9d3129e0e9d2e2847f600",
   "studioSvg": "d7764e37efe6c2c8ce65baef",
   "studioDxf": "dad185a568c7b64795113b97",
   "shaperSpiral": "48a6d51d3dacf54ec76ace14",
@@ -49,7 +49,7 @@
   "studioSvg": "d4392188f089a75be695f5ef",
   "studioDxf": "acb147530e1efa84544c9350",
   "shaperSpiral": "e85d56441cb2d9d7ab7b574d",
-  "shaperTabs": "4c71c4c7dd0703eb119de3ab"
+  "shaperTabs": "74c45de1e534dbdfada5fbcf"
  },
  "dimension/owner-drag-frozen-589.document.json": {
   "bezier": false,
@@ -58,11 +58,11 @@
   "loopPaths": "bdb6b6371e230905ee7f3584",
   "loopPolys": "2ef36663d022c7feb6bfd124",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "e4b78429884ae6a7f6a17a11",
+  "shaperOutside": "2250855244a030e08c02c949",
   "studioSvg": "53168d744e1a806a55987702",
   "studioDxf": "f89eea93709a3a79b1a62a23",
-  "shaperSpiral": "890a607277bddd5c50652ffd",
-  "shaperTabs": "0d02cdfaec34cb1792d2af0d"
+  "shaperSpiral": "2d59a832be9cca391f493698",
+  "shaperTabs": "bed847279fd9c46ff060e186"
  },
  "dimension/owner-rect-line-line-589.document.json": {
   "bezier": false,
@@ -75,7 +75,7 @@
   "studioSvg": "8704c4b894ed0d19322374f2",
   "studioDxf": "7a325ddbf0419834a5e2be92",
   "shaperSpiral": "82d2ad363c23ba800af317e1",
-  "shaperTabs": "6606d15fb311df18523d41bf"
+  "shaperTabs": "d847f774a3eed851742021f2"
  },
  "drag/owner-two-arcs-575.json": {
   "bezier": false,
@@ -88,7 +88,7 @@
   "studioSvg": "bd07b617dfcfef831aa41032",
   "studioDxf": "00d64b40234324cbeeaa45ea",
   "shaperSpiral": "e1f22ca2f12ae3590f123514",
-  "shaperTabs": "5f18b043d8107b2e6f7291f5"
+  "shaperTabs": "0e67d94db7a9c5224132f9da"
  },
  "report/drag-frozen.json": {
   "bezier": false,
@@ -97,11 +97,11 @@
   "loopPaths": "bdb6b6371e230905ee7f3584",
   "loopPolys": "606cd2593a38f861fea0a661",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "e4b78429884ae6a7f6a17a11",
+  "shaperOutside": "2250855244a030e08c02c949",
   "studioSvg": "53168d744e1a806a55987702",
   "studioDxf": "f89eea93709a3a79b1a62a23",
-  "shaperSpiral": "890a607277bddd5c50652ffd",
-  "shaperTabs": "0d02cdfaec34cb1792d2af0d"
+  "shaperSpiral": "2d59a832be9cca391f493698",
+  "shaperTabs": "bed847279fd9c46ff060e186"
  },
  "report/line-line-driven.json": {
   "bezier": false,
@@ -110,11 +110,11 @@
   "loopPaths": "18d6671fc25aae11bd739053",
   "loopPolys": "ddf10123fea8cb8b23add6d8",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "e4e1aa07d0e47aea0dd973ef",
+  "shaperOutside": "8740e56e8f8dffd3ed71b08b",
   "studioSvg": "6fb5ff161ba2207095dead8f",
   "studioDxf": "28426498479a24a09f07b9e8",
-  "shaperSpiral": "92bfd5e177c925e8ecc28f3e",
-  "shaperTabs": "d452e3f90827a7d23442f624"
+  "shaperSpiral": "a06ec0f098cbdc2d3199c3a8",
+  "shaperTabs": "07d1dae4b3af87b27e6df5ef"
  },
  "report/midpoint-move.json": {
   "bezier": false,
@@ -123,11 +123,11 @@
   "loopPaths": "cd5142fb6d6957dd8d5695df",
   "loopPolys": "c3d8ddd353e5b35e8aa8ed2d",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "3bf73b29184dc6e8b5046753",
+  "shaperOutside": "6078b57af38fe310d8b25fbd",
   "studioSvg": "8bc8cddc87d7f266c1455da2",
   "studioDxf": "db575551fe00e54e5b666598",
-  "shaperSpiral": "de0feffbdfdfaf4ea2cb9d83",
-  "shaperTabs": "5131d079c70c6ad56da67ed9"
+  "shaperSpiral": "78bb1fc2adc5c67ee7661b98",
+  "shaperTabs": "8e3f6e9e1288db669619fdc0"
  },
  "legacy-angles#0 drawing d4-triangle.js": {
   "bezier": false,
@@ -136,7 +136,7 @@
   "loopPaths": "661e4ef69c783bd81ae5633b",
   "loopPolys": "9b5f3324f1075828df5660d4",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "6a29c768a7bc3641ac4fbc9d",
+  "shaperOutside": "c98730b89e60f27dbd6eec56",
   "studioSvg": "995a10622a2029201536c424",
   "studioDxf": "e3c5571d86314cd0b671cdfd"
  },
@@ -158,7 +158,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "a032de9b1896eb180bdfd262",
-  "shaperOutside": "a59160e4a299cedd300b8580",
+  "shaperOutside": "ea49e4f45f53618b4cb67acb",
   "studioSvg": "e56e261b678072c987d571cd",
   "studioDxf": "092e762a85c802da5bfa202b"
  },
@@ -169,7 +169,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "b94a0de401b04d725605ec2d",
-  "shaperOutside": "59c41afd69d9ed5d887a5421",
+  "shaperOutside": "35dc54ca80dd17c19b1530e6",
   "studioSvg": "96d526a006cbf2a756559fc8",
   "studioDxf": "f367730477c7b43bf1a0f804"
  },
@@ -180,7 +180,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "7840b767495c24e558bd95e7",
-  "shaperOutside": "203a4512f1b353a274ae8035",
+  "shaperOutside": "45254232cd1a6fc873b8bb9d",
   "studioSvg": "c42d4f527745d705db4d9b39",
   "studioDxf": "57614c147a307cc86ba1479c"
  },
@@ -191,7 +191,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "a032de9b1896eb180bdfd262",
-  "shaperOutside": "a59160e4a299cedd300b8580",
+  "shaperOutside": "ea49e4f45f53618b4cb67acb",
   "studioSvg": "e56e261b678072c987d571cd",
   "studioDxf": "092e762a85c802da5bfa202b"
  },
@@ -202,7 +202,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "a032de9b1896eb180bdfd262",
-  "shaperOutside": "a59160e4a299cedd300b8580",
+  "shaperOutside": "ea49e4f45f53618b4cb67acb",
   "studioSvg": "e56e261b678072c987d571cd",
   "studioDxf": "092e762a85c802da5bfa202b"
  },
@@ -213,7 +213,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "a032de9b1896eb180bdfd262",
-  "shaperOutside": "a59160e4a299cedd300b8580",
+  "shaperOutside": "ea49e4f45f53618b4cb67acb",
   "studioSvg": "e56e261b678072c987d571cd",
   "studioDxf": "092e762a85c802da5bfa202b"
  },
@@ -224,7 +224,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "a032de9b1896eb180bdfd262",
-  "shaperOutside": "a59160e4a299cedd300b8580",
+  "shaperOutside": "ea49e4f45f53618b4cb67acb",
   "studioSvg": "e56e261b678072c987d571cd",
   "studioDxf": "092e762a85c802da5bfa202b"
  },
@@ -235,7 +235,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "6469b4cfcd71111c7c250ac0",
-  "shaperOutside": "849cee09415320e6ba936155",
+  "shaperOutside": "894dd18a042545f289586a12",
   "studioSvg": "b7a3d19be3ed4c1410bed189",
   "studioDxf": "114b428cb3f57c913b435dbd"
  },
@@ -246,7 +246,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "6469b4cfcd71111c7c250ac0",
-  "shaperOutside": "849cee09415320e6ba936155",
+  "shaperOutside": "894dd18a042545f289586a12",
   "studioSvg": "b7a3d19be3ed4c1410bed189",
   "studioDxf": "114b428cb3f57c913b435dbd"
  },
@@ -257,7 +257,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "6469b4cfcd71111c7c250ac0",
-  "shaperOutside": "849cee09415320e6ba936155",
+  "shaperOutside": "894dd18a042545f289586a12",
   "studioSvg": "b7a3d19be3ed4c1410bed189",
   "studioDxf": "114b428cb3f57c913b435dbd"
  },
@@ -268,7 +268,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "6469b4cfcd71111c7c250ac0",
-  "shaperOutside": "849cee09415320e6ba936155",
+  "shaperOutside": "894dd18a042545f289586a12",
   "studioSvg": "b7a3d19be3ed4c1410bed189",
   "studioDxf": "114b428cb3f57c913b435dbd"
  },
@@ -279,7 +279,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "da425741f9089cb5f6920a89",
-  "shaperOutside": "5546bafcd660bf5e5f5a26a0",
+  "shaperOutside": "4ae6ca5979667abefb384cfe",
   "studioSvg": "e16654126ed836738c4e9a2e",
   "studioDxf": "1cf737b10d309dea715d8702"
  },
@@ -290,7 +290,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "da425741f9089cb5f6920a89",
-  "shaperOutside": "5546bafcd660bf5e5f5a26a0",
+  "shaperOutside": "4ae6ca5979667abefb384cfe",
   "studioSvg": "e16654126ed836738c4e9a2e",
   "studioDxf": "1cf737b10d309dea715d8702"
  },
@@ -301,7 +301,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "da425741f9089cb5f6920a89",
-  "shaperOutside": "5546bafcd660bf5e5f5a26a0",
+  "shaperOutside": "4ae6ca5979667abefb384cfe",
   "studioSvg": "e16654126ed836738c4e9a2e",
   "studioDxf": "1cf737b10d309dea715d8702"
  },
@@ -312,7 +312,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "da425741f9089cb5f6920a89",
-  "shaperOutside": "5546bafcd660bf5e5f5a26a0",
+  "shaperOutside": "4ae6ca5979667abefb384cfe",
   "studioSvg": "e16654126ed836738c4e9a2e",
   "studioDxf": "1cf737b10d309dea715d8702"
  },
@@ -455,7 +455,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "e1b41a1d29856f8f7eaacd1a",
-  "shaperOutside": "dbd517fe28e504acd19d89b1",
+  "shaperOutside": "bfe6487a460f51442584683e",
   "studioSvg": "3e27c14d5d09d5c9347967d2",
   "studioDxf": "4109dc224f48dfe15266c78c"
  },
@@ -466,7 +466,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "e5799887c5670a72b08f6447",
-  "shaperOutside": "2cb8e958776e87b6aa16f678",
+  "shaperOutside": "1125db3668141febaaca5724",
   "studioSvg": "7520bf11f5ed361b6148d4f5",
   "studioDxf": "7db2b0dfd0ede8f1f43cfe15"
  },
@@ -477,7 +477,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "06296cbcf5f29ae218f41dfb",
-  "shaperOutside": "6b30ee199aad84dff8c4ae9d",
+  "shaperOutside": "53d21cf8aa2a924484df8c69",
   "studioSvg": "3bc5dfddf53bffc67f0df0ec",
   "studioDxf": "9f3125d16fb1e09092506d4b"
  },
@@ -488,7 +488,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "e1b41a1d29856f8f7eaacd1a",
-  "shaperOutside": "dbd517fe28e504acd19d89b1",
+  "shaperOutside": "bfe6487a460f51442584683e",
   "studioSvg": "3e27c14d5d09d5c9347967d2",
   "studioDxf": "4109dc224f48dfe15266c78c"
  },
@@ -499,7 +499,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "e1b41a1d29856f8f7eaacd1a",
-  "shaperOutside": "dbd517fe28e504acd19d89b1",
+  "shaperOutside": "bfe6487a460f51442584683e",
   "studioSvg": "3e27c14d5d09d5c9347967d2",
   "studioDxf": "4109dc224f48dfe15266c78c"
  },
@@ -510,7 +510,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "e1b41a1d29856f8f7eaacd1a",
-  "shaperOutside": "dbd517fe28e504acd19d89b1",
+  "shaperOutside": "bfe6487a460f51442584683e",
   "studioSvg": "3e27c14d5d09d5c9347967d2",
   "studioDxf": "4109dc224f48dfe15266c78c"
  },
@@ -521,7 +521,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "e1b41a1d29856f8f7eaacd1a",
-  "shaperOutside": "dbd517fe28e504acd19d89b1",
+  "shaperOutside": "bfe6487a460f51442584683e",
   "studioSvg": "3e27c14d5d09d5c9347967d2",
   "studioDxf": "4109dc224f48dfe15266c78c"
  },
@@ -532,7 +532,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9556e1eb870ce424782a0a40",
-  "shaperOutside": "16e0b092f895ba4412d8854c",
+  "shaperOutside": "8e05ecebf312fdd1aa3bacbb",
   "studioSvg": "c71a93443b06f17e4d70f4e1",
   "studioDxf": "6b2b51817bc42254495c4c31"
  },
@@ -543,7 +543,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9556e1eb870ce424782a0a40",
-  "shaperOutside": "16e0b092f895ba4412d8854c",
+  "shaperOutside": "8e05ecebf312fdd1aa3bacbb",
   "studioSvg": "c71a93443b06f17e4d70f4e1",
   "studioDxf": "6b2b51817bc42254495c4c31"
  },
@@ -554,7 +554,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9556e1eb870ce424782a0a40",
-  "shaperOutside": "16e0b092f895ba4412d8854c",
+  "shaperOutside": "8e05ecebf312fdd1aa3bacbb",
   "studioSvg": "c71a93443b06f17e4d70f4e1",
   "studioDxf": "6b2b51817bc42254495c4c31"
  },
@@ -565,7 +565,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9556e1eb870ce424782a0a40",
-  "shaperOutside": "16e0b092f895ba4412d8854c",
+  "shaperOutside": "8e05ecebf312fdd1aa3bacbb",
   "studioSvg": "c71a93443b06f17e4d70f4e1",
   "studioDxf": "6b2b51817bc42254495c4c31"
  },
@@ -576,7 +576,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "50796f1a80b6f224a7d97ae9",
-  "shaperOutside": "359b9172d1bebfe042f7a3b3",
+  "shaperOutside": "5a1ea9eadaac267f0c99f44c",
   "studioSvg": "b430c787bc0962aa28c25d0c",
   "studioDxf": "91407f027dbc2d707d34211e"
  },
@@ -587,7 +587,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "50796f1a80b6f224a7d97ae9",
-  "shaperOutside": "359b9172d1bebfe042f7a3b3",
+  "shaperOutside": "5a1ea9eadaac267f0c99f44c",
   "studioSvg": "b430c787bc0962aa28c25d0c",
   "studioDxf": "91407f027dbc2d707d34211e"
  },
@@ -598,7 +598,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "50796f1a80b6f224a7d97ae9",
-  "shaperOutside": "359b9172d1bebfe042f7a3b3",
+  "shaperOutside": "5a1ea9eadaac267f0c99f44c",
   "studioSvg": "b430c787bc0962aa28c25d0c",
   "studioDxf": "91407f027dbc2d707d34211e"
  },
@@ -609,7 +609,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "50796f1a80b6f224a7d97ae9",
-  "shaperOutside": "359b9172d1bebfe042f7a3b3",
+  "shaperOutside": "5a1ea9eadaac267f0c99f44c",
   "studioSvg": "b430c787bc0962aa28c25d0c",
   "studioDxf": "91407f027dbc2d707d34211e"
  },
@@ -752,7 +752,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "237061ffd0a06c07d0b0fa37",
-  "shaperOutside": "8dafa61b4082dffcd27b5727",
+  "shaperOutside": "72e0e12d1db1380d8a77c35d",
   "studioSvg": "6ee85c6d93435f829dd5eb7d",
   "studioDxf": "6f3a48896768ea75ae04ef3b"
  },
@@ -763,7 +763,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "3f73f444690f51df3fe7e844",
-  "shaperOutside": "3d34aa03f061de94702f476b",
+  "shaperOutside": "d4fd782c2a754e9b47bc680e",
   "studioSvg": "1daac7bfba71ec58c11943df",
   "studioDxf": "6ff064d45ca3133ad7ba0ae1"
  },
@@ -774,7 +774,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "0a8e9b2c5c54374081952f46",
-  "shaperOutside": "3f2983ba8ad8c796eb3b37ed",
+  "shaperOutside": "4ec339a1d54929b51d922c3d",
   "studioSvg": "ddc33e4d4dd066169da25205",
   "studioDxf": "999c13e9e317d93fa924eaf2"
  },
@@ -785,7 +785,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "237061ffd0a06c07d0b0fa37",
-  "shaperOutside": "8dafa61b4082dffcd27b5727",
+  "shaperOutside": "72e0e12d1db1380d8a77c35d",
   "studioSvg": "6ee85c6d93435f829dd5eb7d",
   "studioDxf": "6f3a48896768ea75ae04ef3b"
  },
@@ -796,7 +796,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "237061ffd0a06c07d0b0fa37",
-  "shaperOutside": "8dafa61b4082dffcd27b5727",
+  "shaperOutside": "72e0e12d1db1380d8a77c35d",
   "studioSvg": "6ee85c6d93435f829dd5eb7d",
   "studioDxf": "6f3a48896768ea75ae04ef3b"
  },
@@ -807,7 +807,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "237061ffd0a06c07d0b0fa37",
-  "shaperOutside": "8dafa61b4082dffcd27b5727",
+  "shaperOutside": "72e0e12d1db1380d8a77c35d",
   "studioSvg": "6ee85c6d93435f829dd5eb7d",
   "studioDxf": "6f3a48896768ea75ae04ef3b"
  },
@@ -818,7 +818,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "237061ffd0a06c07d0b0fa37",
-  "shaperOutside": "8dafa61b4082dffcd27b5727",
+  "shaperOutside": "72e0e12d1db1380d8a77c35d",
   "studioSvg": "6ee85c6d93435f829dd5eb7d",
   "studioDxf": "6f3a48896768ea75ae04ef3b"
  },
@@ -829,7 +829,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "f8eb1907a539c85c2442f72f",
-  "shaperOutside": "4e6c115421a67093bdc2916b",
+  "shaperOutside": "4d0cc2a66e3d7036c793881f",
   "studioSvg": "b90a067c795ce525a5ca2d60",
   "studioDxf": "d147deaad96c8f5fb25ebf39"
  },
@@ -840,7 +840,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "f8eb1907a539c85c2442f72f",
-  "shaperOutside": "4e6c115421a67093bdc2916b",
+  "shaperOutside": "4d0cc2a66e3d7036c793881f",
   "studioSvg": "b90a067c795ce525a5ca2d60",
   "studioDxf": "d147deaad96c8f5fb25ebf39"
  },
@@ -851,7 +851,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "f8eb1907a539c85c2442f72f",
-  "shaperOutside": "4e6c115421a67093bdc2916b",
+  "shaperOutside": "4d0cc2a66e3d7036c793881f",
   "studioSvg": "b90a067c795ce525a5ca2d60",
   "studioDxf": "d147deaad96c8f5fb25ebf39"
  },
@@ -862,7 +862,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "f8eb1907a539c85c2442f72f",
-  "shaperOutside": "4e6c115421a67093bdc2916b",
+  "shaperOutside": "4d0cc2a66e3d7036c793881f",
   "studioSvg": "b90a067c795ce525a5ca2d60",
   "studioDxf": "d147deaad96c8f5fb25ebf39"
  },
@@ -873,7 +873,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "bfb03c457782fa1cc999dbf9",
-  "shaperOutside": "16ec703481c3095b763a16c8",
+  "shaperOutside": "99644f88f1a9e2b49af35484",
   "studioSvg": "623f9b8ad21db6a214d7b8a4",
   "studioDxf": "37e419a0e31144363d8248f1"
  },
@@ -884,7 +884,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "bfb03c457782fa1cc999dbf9",
-  "shaperOutside": "16ec703481c3095b763a16c8",
+  "shaperOutside": "99644f88f1a9e2b49af35484",
   "studioSvg": "623f9b8ad21db6a214d7b8a4",
   "studioDxf": "37e419a0e31144363d8248f1"
  },
@@ -895,7 +895,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "bfb03c457782fa1cc999dbf9",
-  "shaperOutside": "16ec703481c3095b763a16c8",
+  "shaperOutside": "99644f88f1a9e2b49af35484",
   "studioSvg": "623f9b8ad21db6a214d7b8a4",
   "studioDxf": "37e419a0e31144363d8248f1"
  },
@@ -906,7 +906,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "bfb03c457782fa1cc999dbf9",
-  "shaperOutside": "16ec703481c3095b763a16c8",
+  "shaperOutside": "99644f88f1a9e2b49af35484",
   "studioSvg": "623f9b8ad21db6a214d7b8a4",
   "studioDxf": "37e419a0e31144363d8248f1"
  },
@@ -1049,7 +1049,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "c1217bfd6c7e867a39378543",
-  "shaperOutside": "9dda13f4e3adccefe3f1ae59",
+  "shaperOutside": "23b07137ff8ca420ff251f2d",
   "studioSvg": "5c2170f3e4780d7d7b908b32",
   "studioDxf": "4c9f41dd1b7d9458055d88c7"
  },
@@ -1060,7 +1060,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "78d80fc1e0ce347660b1e625",
-  "shaperOutside": "2f6436242344b841ac26a327",
+  "shaperOutside": "03e61a81b0ba89e7c7c65cf6",
   "studioSvg": "394880f3d8993630285db85d",
   "studioDxf": "26a208d5df31182889439738"
  },
@@ -1071,7 +1071,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "c7a8e5fd19b11adfb9493735",
-  "shaperOutside": "44e87e45c57216e3d6bf3610",
+  "shaperOutside": "a17d8db35adebf9fe3c367a8",
   "studioSvg": "e9755ba4d72d3a2ab48dbdf9",
   "studioDxf": "4a86d1362dd15ef2425aab5a"
  },
@@ -1082,7 +1082,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "c1217bfd6c7e867a39378543",
-  "shaperOutside": "9dda13f4e3adccefe3f1ae59",
+  "shaperOutside": "23b07137ff8ca420ff251f2d",
   "studioSvg": "5c2170f3e4780d7d7b908b32",
   "studioDxf": "4c9f41dd1b7d9458055d88c7"
  },
@@ -1093,7 +1093,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "c1217bfd6c7e867a39378543",
-  "shaperOutside": "9dda13f4e3adccefe3f1ae59",
+  "shaperOutside": "23b07137ff8ca420ff251f2d",
   "studioSvg": "5c2170f3e4780d7d7b908b32",
   "studioDxf": "4c9f41dd1b7d9458055d88c7"
  },
@@ -1104,7 +1104,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "c1217bfd6c7e867a39378543",
-  "shaperOutside": "9dda13f4e3adccefe3f1ae59",
+  "shaperOutside": "23b07137ff8ca420ff251f2d",
   "studioSvg": "5c2170f3e4780d7d7b908b32",
   "studioDxf": "4c9f41dd1b7d9458055d88c7"
  },
@@ -1115,7 +1115,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "c1217bfd6c7e867a39378543",
-  "shaperOutside": "9dda13f4e3adccefe3f1ae59",
+  "shaperOutside": "23b07137ff8ca420ff251f2d",
   "studioSvg": "5c2170f3e4780d7d7b908b32",
   "studioDxf": "4c9f41dd1b7d9458055d88c7"
  },
@@ -1126,7 +1126,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "b1d8b0fafbc8cec20ee204ea",
-  "shaperOutside": "897f676ff42e14b802ee4fa6",
+  "shaperOutside": "13f72787d5b99a1e268ac065",
   "studioSvg": "b9645fab3450850679da3a2c",
   "studioDxf": "760b1d7423f0065b6ebd9e57"
  },
@@ -1137,7 +1137,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "b1d8b0fafbc8cec20ee204ea",
-  "shaperOutside": "897f676ff42e14b802ee4fa6",
+  "shaperOutside": "13f72787d5b99a1e268ac065",
   "studioSvg": "b9645fab3450850679da3a2c",
   "studioDxf": "760b1d7423f0065b6ebd9e57"
  },
@@ -1148,7 +1148,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "b1d8b0fafbc8cec20ee204ea",
-  "shaperOutside": "897f676ff42e14b802ee4fa6",
+  "shaperOutside": "13f72787d5b99a1e268ac065",
   "studioSvg": "b9645fab3450850679da3a2c",
   "studioDxf": "760b1d7423f0065b6ebd9e57"
  },
@@ -1159,7 +1159,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "b1d8b0fafbc8cec20ee204ea",
-  "shaperOutside": "897f676ff42e14b802ee4fa6",
+  "shaperOutside": "13f72787d5b99a1e268ac065",
   "studioSvg": "b9645fab3450850679da3a2c",
   "studioDxf": "760b1d7423f0065b6ebd9e57"
  },
@@ -1170,7 +1170,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "236fb0321c2f770e26b493c9",
-  "shaperOutside": "1190cbc11f7eb1d7e699201e",
+  "shaperOutside": "26fa21d2a037dc208a6120e3",
   "studioSvg": "4c01b24be7a4e927fabb117f",
   "studioDxf": "7914934a3fed037179900884"
  },
@@ -1181,7 +1181,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "236fb0321c2f770e26b493c9",
-  "shaperOutside": "1190cbc11f7eb1d7e699201e",
+  "shaperOutside": "26fa21d2a037dc208a6120e3",
   "studioSvg": "4c01b24be7a4e927fabb117f",
   "studioDxf": "7914934a3fed037179900884"
  },
@@ -1192,7 +1192,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "236fb0321c2f770e26b493c9",
-  "shaperOutside": "1190cbc11f7eb1d7e699201e",
+  "shaperOutside": "26fa21d2a037dc208a6120e3",
   "studioSvg": "4c01b24be7a4e927fabb117f",
   "studioDxf": "7914934a3fed037179900884"
  },
@@ -1203,7 +1203,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "236fb0321c2f770e26b493c9",
-  "shaperOutside": "1190cbc11f7eb1d7e699201e",
+  "shaperOutside": "26fa21d2a037dc208a6120e3",
   "studioSvg": "4c01b24be7a4e927fabb117f",
   "studioDxf": "7914934a3fed037179900884"
  },
@@ -1346,7 +1346,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9ae4501775596d990af1ca17",
-  "shaperOutside": "7db41f0d4b6cfc0fd81992c7",
+  "shaperOutside": "e5a1246ef5ee69fad2d3709c",
   "studioSvg": "e4e1f8eb5bf5579976263234",
   "studioDxf": "05cd8397aca21f43f4203113"
  },
@@ -1357,7 +1357,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "e704103cc9219aac276b479b",
-  "shaperOutside": "70267644459cc1a416c16997",
+  "shaperOutside": "c43c4bf909f26655873c3029",
   "studioSvg": "c5d0dbdfdc347cc5c468a157",
   "studioDxf": "38cc2b6cdb51bb57fd4795c8"
  },
@@ -1368,7 +1368,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "ca4af1be151e5800c15e4759",
-  "shaperOutside": "a3669935d8968596c414e4fc",
+  "shaperOutside": "132ec1136265fa5a62538c03",
   "studioSvg": "fd2e16f9d9d1d5977daceb52",
   "studioDxf": "527d47b244f9cc3aa5141f97"
  },
@@ -1379,7 +1379,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9ae4501775596d990af1ca17",
-  "shaperOutside": "7db41f0d4b6cfc0fd81992c7",
+  "shaperOutside": "e5a1246ef5ee69fad2d3709c",
   "studioSvg": "e4e1f8eb5bf5579976263234",
   "studioDxf": "05cd8397aca21f43f4203113"
  },
@@ -1390,7 +1390,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9ae4501775596d990af1ca17",
-  "shaperOutside": "7db41f0d4b6cfc0fd81992c7",
+  "shaperOutside": "e5a1246ef5ee69fad2d3709c",
   "studioSvg": "e4e1f8eb5bf5579976263234",
   "studioDxf": "05cd8397aca21f43f4203113"
  },
@@ -1401,7 +1401,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9ae4501775596d990af1ca17",
-  "shaperOutside": "7db41f0d4b6cfc0fd81992c7",
+  "shaperOutside": "e5a1246ef5ee69fad2d3709c",
   "studioSvg": "e4e1f8eb5bf5579976263234",
   "studioDxf": "05cd8397aca21f43f4203113"
  },
@@ -1412,7 +1412,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "9ae4501775596d990af1ca17",
-  "shaperOutside": "7db41f0d4b6cfc0fd81992c7",
+  "shaperOutside": "e5a1246ef5ee69fad2d3709c",
   "studioSvg": "e4e1f8eb5bf5579976263234",
   "studioDxf": "05cd8397aca21f43f4203113"
  },
@@ -1423,7 +1423,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "fb6b459a63ab44925feb0aa1",
-  "shaperOutside": "d1c20fd0ed972b4279297a86",
+  "shaperOutside": "2d1ce9641a0fe221fa29283f",
   "studioSvg": "bd9448651412e7f988a78f8b",
   "studioDxf": "a51fc7bfff2b0c68177e6aba"
  },
@@ -1434,7 +1434,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "fb6b459a63ab44925feb0aa1",
-  "shaperOutside": "d1c20fd0ed972b4279297a86",
+  "shaperOutside": "2d1ce9641a0fe221fa29283f",
   "studioSvg": "bd9448651412e7f988a78f8b",
   "studioDxf": "a51fc7bfff2b0c68177e6aba"
  },
@@ -1445,7 +1445,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "fb6b459a63ab44925feb0aa1",
-  "shaperOutside": "d1c20fd0ed972b4279297a86",
+  "shaperOutside": "2d1ce9641a0fe221fa29283f",
   "studioSvg": "bd9448651412e7f988a78f8b",
   "studioDxf": "a51fc7bfff2b0c68177e6aba"
  },
@@ -1456,7 +1456,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "fb6b459a63ab44925feb0aa1",
-  "shaperOutside": "d1c20fd0ed972b4279297a86",
+  "shaperOutside": "2d1ce9641a0fe221fa29283f",
   "studioSvg": "bd9448651412e7f988a78f8b",
   "studioDxf": "a51fc7bfff2b0c68177e6aba"
  },
@@ -1467,7 +1467,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "699ccccffe9f0dc3098598e7",
-  "shaperOutside": "72e3e3ceef8454197e06f4c7",
+  "shaperOutside": "0f9ff6422cca643f6ae45b5e",
   "studioSvg": "28352d95dd4a5b4da5a9a7c4",
   "studioDxf": "fad4791dadb0b3c70314eeef"
  },
@@ -1478,7 +1478,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "699ccccffe9f0dc3098598e7",
-  "shaperOutside": "72e3e3ceef8454197e06f4c7",
+  "shaperOutside": "0f9ff6422cca643f6ae45b5e",
   "studioSvg": "28352d95dd4a5b4da5a9a7c4",
   "studioDxf": "fad4791dadb0b3c70314eeef"
  },
@@ -1489,7 +1489,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "699ccccffe9f0dc3098598e7",
-  "shaperOutside": "72e3e3ceef8454197e06f4c7",
+  "shaperOutside": "0f9ff6422cca643f6ae45b5e",
   "studioSvg": "28352d95dd4a5b4da5a9a7c4",
   "studioDxf": "fad4791dadb0b3c70314eeef"
  },
@@ -1500,7 +1500,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "699ccccffe9f0dc3098598e7",
-  "shaperOutside": "72e3e3ceef8454197e06f4c7",
+  "shaperOutside": "0f9ff6422cca643f6ae45b5e",
   "studioSvg": "28352d95dd4a5b4da5a9a7c4",
   "studioDxf": "fad4791dadb0b3c70314eeef"
  },
@@ -1647,7 +1647,7 @@
   "studioSvg": "a6698197de2139c91c76b66b",
   "studioDxf": "fef640de10a4887425fa4274",
   "shaperSpiral": "f12b6e611dc5bab85fa8efd7",
-  "shaperTabs": "87e904a31bc3eafe3b16a8a8"
+  "shaperTabs": "3466b52f025f8510ca735f85"
  },
  "dxf/close-path-760-gap.dxf": {
   "bezier": false,
@@ -1656,7 +1656,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "3f34707112502773de1b9029",
-  "shaperOutside": "12e134914b4cb8ef98e918dc",
+  "shaperOutside": "d3a701371fa43f890482ed46",
   "studioSvg": "c659890834d693cb17f80b9b",
   "studioDxf": "fd772fca0b476808543bbebc",
   "shaperSpiral": "e69569d5abd58d32379131d5",
@@ -1669,11 +1669,11 @@
   "loopPaths": "b2b907e28e279fcdf9d70c41",
   "loopPolys": "55192a089a2c607c57dc6ef1",
   "chainPaths": "119efe67bc5a19e4124e5f66",
-  "shaperOutside": "7ae774240ac4b139d4357e82",
+  "shaperOutside": "2b0ff44c8d83179d9209b5f9",
   "studioSvg": "6b0126f619d7fa61f69781c7",
   "studioDxf": "be9f8c37ba4545421c01c302",
-  "shaperSpiral": "23cea949d4ef004763161fad",
-  "shaperTabs": "d5b57180a30aa27269d2303a"
+  "shaperSpiral": "15d6c4ec3aa24c4b8a1b521a",
+  "shaperTabs": "3416e40fc18125b45e36e5f6"
  },
  "dxf/part-mm.dxf": {
   "bezier": true,
@@ -1681,12 +1681,12 @@
   "chains": "a2f8a3b0fdeb8cbe4c135728",
   "loopPaths": "24a237c00331f9f0f9b5a017",
   "loopPolys": "fe491ad354a44ff3b33dffc7",
-  "chainPaths": "055539df4a0b804c58caf46c",
-  "shaperOutside": "9e52067fed660525667a681a",
-  "studioSvg": "bd2bed961ea237646c5e9d16",
-  "studioDxf": "34220158f96ad0551153c859",
-  "shaperSpiral": "09256c4745fcd270b73a4f86",
-  "shaperTabs": "356dc073926b51dadb89bd86"
+  "chainPaths": "e9c7cb552712989a300feb31",
+  "shaperOutside": "1781c881abb5c43c007c25bf",
+  "studioSvg": "fd82d7ab1ac2a75471e2abe9",
+  "studioDxf": "e9dfa928b3e133478913a6a4",
+  "shaperSpiral": "417c5f1bbde7bad48b015119",
+  "shaperTabs": "9a25a2b90a6da711f7f887f1"
  },
  "fusion/real-solid-plate-711.json": {
   "bezier": false,
@@ -1695,11 +1695,11 @@
   "loopPaths": "dcf44c96a02ff5cf1c4d0796",
   "loopPolys": "547d5f1f00f0bdfe6f2868af",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "2933d6d6b5d77c925d1f3203",
+  "shaperOutside": "b749c2d3874cee7325f2582a",
   "studioSvg": "356ff1e858a3d09593cf886d",
   "studioDxf": "d14c6a700871cc20e42c9581",
   "plan": "7ec265c14897e01b30e52e24",
-  "download": "25ee0ff1847428229fc96c30",
+  "download": "01807e4a35a7f74e1efe5478",
   "relief": "bb9815cf4b45fa2393100b72"
  },
  "fusion/sa7-slope/01-chamfer-outline.json": {
@@ -1723,7 +1723,7 @@
   "loopPaths": "92cbe0ef026c077a79b631be",
   "loopPolys": "c25d70f6aa084ad84e4405bf",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "433518818b38bfe89fc0b0b6",
+  "shaperOutside": "e295467356363fd100a687e5",
   "studioSvg": "b45513385dd9d875a97794f9",
   "studioDxf": "823d732f415e3fc6181f108c",
   "plan": "efcc33b6dc9b80ed797ef7e1",
@@ -1737,7 +1737,7 @@
   "loopPaths": "091b0ff295f9155f71081d25",
   "loopPolys": "e6d80a4fa616983ef8c49311",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "4cf234894a72c439b6ffde71",
+  "shaperOutside": "da43affdc312a30adfe68153",
   "studioSvg": "9f1dbcbc0e3cc992b851e86d",
   "studioDxf": "1d0c20ad62cf7a13fb844fef",
   "plan": "415bc9cf56281964177b8c1d",
@@ -1751,7 +1751,7 @@
   "loopPaths": "b9f42127943f04f154cc7240",
   "loopPolys": "944543e38ef6a2a73c59a1d2",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "24c3b13f6e54784480c438f6",
+  "shaperOutside": "51899d94f61954b084d7736f",
   "studioSvg": "2b8bfc640b18a9f958712399",
   "studioDxf": "9fabd9606957ade44a6d3ade",
   "plan": "beb1dbed0ccd4aa9aa24dd84",
@@ -1765,7 +1765,7 @@
   "loopPaths": "7e9d971753b1cddf2e1e771c",
   "loopPolys": "c17c45467028804268317446",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "3f4842c814ce62e4dfd78c54",
+  "shaperOutside": "ffa0d9d9304d619ad920b8ad",
   "studioSvg": "77e96b479641289e39263b50",
   "studioDxf": "1f5e2d4d94756f2a9f6aa393",
   "plan": "5f16a10e5848c9bc6bb6bde8",
@@ -1779,7 +1779,7 @@
   "loopPaths": "091b0ff295f9155f71081d25",
   "loopPolys": "e6d80a4fa616983ef8c49311",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "4cf234894a72c439b6ffde71",
+  "shaperOutside": "da43affdc312a30adfe68153",
   "studioSvg": "9f1dbcbc0e3cc992b851e86d",
   "studioDxf": "1d0c20ad62cf7a13fb844fef",
   "plan": "d19ac7f93673f356260bdeae",
@@ -1807,7 +1807,7 @@
   "loopPaths": "977d823575ad40bc25f68f17",
   "loopPolys": "cf5281566a7eabcd87b9b6cd",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "ea86039cdbaaa85848f86769",
+  "shaperOutside": "6e75e3a27d853f93e3982488",
   "studioSvg": "2b8bfc640b18a9f958712399",
   "studioDxf": "9fabd9606957ade44a6d3ade",
   "plan": "667d3e57cd2bf2dd563955f0",
@@ -1821,7 +1821,7 @@
   "loopPaths": "ae839f994c58bba63bd09d59",
   "loopPolys": "ae2a2d0dccfee5ec4fceb102",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "046b254ce8e148f77ef85ad7",
+  "shaperOutside": "406200cacdd19566f802fd62",
   "studioSvg": "606cf679427b4b14c521d19b",
   "studioDxf": "d1cc4747afb3a21db959f089",
   "plan": "4f98a7a2ac9487364812a466",

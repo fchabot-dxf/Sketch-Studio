@@ -56,7 +56,7 @@ const LSHAPE = [[0, 0], [100, 0], [100, 40], [40, 40], [40, 100], [0, 100]];
 const area = (p) => { let a = 0; for (let i = 0, j = p.length - 1; i < p.length; j = i++) a += p[j].x * p[i].y - p[i].x * p[j].y; return a / 2; };
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 const outerOf = (st) => { const loops = findLoops(st), lp = polysOf(st); return loops.reduce((a, l) => (Math.abs(area(lp[l.id])) > Math.abs(area(lp[a.id])) ? l : a), loops[0]); };
-const exportOf = (st, entries, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
+const exportOf = (st, entries, options = {}) => exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 const one = (st, rec, options) => exportOf(st, [{ target: { kind: 'loop', id: outerOf(st).id }, rec }], options);
 const cutsOf = (st, rec) => deriveCuts({ kind: 'loop', id: outerOf(st).id }, rec, st, findLoops(st), polysOf(st), new Set());
 const ONLINE = (more = {}) => ({ cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: BIT, ...more });
@@ -64,7 +64,7 @@ function elementsOf(svg) {
   const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   const out = []; let group = null;
   for (const line of svg.split('\n').map((l) => l.trim())) {
-    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('<g')) throw new Error('TASK 802: the export has a <g>, every element must carry its own cut attributes: ' + line);
     if (line.startsWith('</g')) { group = null; continue; }
     const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
     if (!m) continue;
@@ -114,7 +114,7 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
     if (side === 'outside') ok(/viewBox="0 -3\.175 100 63\.175"|viewBox="0 0 100 63\.175"/.test(svg), 'outside: the viewBox holds the tip: ' + svg.split('\n')[0]);
     else ok(svg.split('\n')[0] === plain.split('\n')[0], 'inside: the viewBox is the drawing\'s');
     ok(!/data-/.test(svg), `${side}: the download has no data-* attribute`);
-    eq(elementsOf(one(st, ONLINE({ leadIn: true, leadInSide: side }), { groupByCut: true, previewData: true }))[0].a['data-lead'], 'in', `${side}: the preview copy says data-lead="in"`);
+    eq(elementsOf(one(st, ONLINE({ leadIn: true, leadInSide: side }), { previewData: true }))[0].a['data-lead'], 'in', `${side}: the preview copy says data-lead="in"`);
     // the footprint sweeps the arc (its middle is inside the band) and carries it as a tool path
     const rec = ONLINE({ leadIn: true, leadInSide: side }), fp = deriveCutFootprint(cutsOf(st, rec), rec, st)[0];
     const mid = fp.leadIn.points[Math.floor(fp.leadIn.points.length / 2)];
@@ -193,7 +193,7 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
     });
     near(total + want * 10, 320, 1e-6, `${n}: the strokes + the gaps = the perimeter`);
   }
-  const preview = elementsOf(one(st, TABS(), { groupByCut: true, previewData: true }));
+  const preview = elementsOf(one(st, TABS(), { previewData: true }));
   eq(preview.map((e) => e.a['data-hold']), ['stroke 1/3', 'stroke 2/3', 'stroke 3/3'], 'the preview copy: data-hold="stroke k/N"');
   // the Review: the strokes at the full depth, the tab middles uncut
   const rec = TABS(), cuts = cutsOf(st, rec), fps = deriveCutFootprint(cuts, rec, st);

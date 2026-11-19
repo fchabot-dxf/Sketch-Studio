@@ -12,8 +12,8 @@ import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off
 import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, unitNumber } from '#core/units.js';
-import { mountHint, optionHint } from './hint.js'; // TASK 770: the one hint widget
-import { hintLabel, hintText, choiceId } from './param-hints.js'; // TASK 770: THE table of every row's label and hint
+import { bindHint } from './hint.js'; // TASK 805: a row's label and its tooltip (the cursor tooltip is installed once by main.js)
+import { hintLabel, choiceId } from './param-hints.js'; // TASK 770: THE table of every row's label and hint
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 // TASK 714: each STEPPED type right after its plain type; a stepped type is listed only when the target can take it (its record carries that slope).
@@ -62,16 +62,16 @@ const STEPPERS = {
 const ANGLE_PRESETS = [{ label: '0\u00b0', value: 0 }, { label: '45\u00b0', value: 45 }, { label: '90\u00b0', value: 90 }];
 const CLEARING_CHOICE = (id) => CLEARING_CHOICES.find((c) => c.id === id) || CLEARING_CHOICES[0];
 // TASK 742: the Hold part choice (#core HOLD_PART.modes: Off | Tabs | Onion skin) and the count's Auto, as preset buttons (the ONE preset widget)
-const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ label: hintLabel(choiceId('holdPart', m.id)), value: m.id }));
+const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ hint: choiceId('holdPart', m.id), label: hintLabel(choiceId('holdPart', m.id)), value: m.id }));
 const COUNT_PRESETS = [{ label: 'Auto', value: 'auto' }];
 // TASK 775: the Lead-in choice (#core LEAD_IN.modes: Off | On -> the record's true | false) and the leg's side (Outside | Inside), as preset buttons (the ONE preset widget)
-const LEAD_PRESETS = LEAD_IN.modes.map((m) => ({ label: hintLabel(choiceId('leadIn', m.id)), value: m.id === 'on' }));
-const SIDE_PRESETS = LEAD_IN.sides.map((m) => ({ label: hintLabel(choiceId('leadInSide', m.id)), value: m.id }));
+const LEAD_PRESETS = LEAD_IN.modes.map((m) => ({ hint: choiceId('leadIn', m.id), label: hintLabel(choiceId('leadIn', m.id)), value: m.id === 'on' }));
+const SIDE_PRESETS = LEAD_IN.sides.map((m) => ({ hint: choiceId('leadInSide', m.id), label: hintLabel(choiceId('leadInSide', m.id)), value: m.id }));
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 // TASK 792: the part card's Contour row (Off | On), as preset buttons (the ONE preset widget)
-const CONTOUR_PRESETS = [{ label: hintLabel(choiceId('contour', 'off')), value: false }, { label: hintLabel(choiceId('contour', 'on')), value: true }];
+const CONTOUR_PRESETS = [{ hint: choiceId('contour', 'off'), label: hintLabel(choiceId('contour', 'off')), value: false }, { hint: choiceId('contour', 'on'), label: hintLabel(choiceId('contour', 'on')), value: true }];
 // TASK 792 (owner turn 2604): Roughing's Layout row (#core ROUGH_LAYOUT), as preset buttons (the ONE preset widget)
-const LAYOUT_PRESETS = ROUGH_LAYOUT.layouts.map((l) => ({ label: hintLabel(choiceId('roughLayout', l.id)), value: l.id }));
+const LAYOUT_PRESETS = ROUGH_LAYOUT.layouts.map((l) => ({ hint: choiceId('roughLayout', l.id), label: hintLabel(choiceId('roughLayout', l.id)), value: l.id }));
 
 // a field's text: lengthText (the one length-format decider: Length precision, default 3, trailing zeros dropped unless TRAILING_ZEROS, or an inch fraction); the unit is beside it
 const fieldText = (baseMM) => lengthText(baseMM, { show: 'field' });
@@ -276,7 +276,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
   const contourModesWrap = $('.cut-contour-modes'), contourEditBtn = $('.cut-contour-edit'), layoutModesWrap = $('.cut-layout-modes'), minTerraceInput = $('.cut-min-terrace'); // TASK 792
   minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
-  contourEditBtn.textContent = hintLabel('contourEdit'); contourEditBtn.title = hintText('contourEdit');
+  contourEditBtn.textContent = hintLabel('contourEdit'); contourEditBtn.dataset.hint = 'contourEdit';
   contourEditBtn.addEventListener('click', () => onEditContour());
   const leadModesWrap = $('.cut-lead-modes'), leadRadiusInput = $('.cut-lead-radius'), leadSweepInput = $('.cut-lead-sweep'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'), leadPosState = $('.cut-pos-state'); // TASK 775 / 778
   const calcBars = Object.fromEntries(['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInAt'].map((f) => [f, {
@@ -284,26 +284,22 @@ export function createCutPanel(hostEl, opts = {}) {
     reset: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-reset`),
   }]));
   for (const [f, b] of Object.entries(calcBars)) b.reset.addEventListener('click', () => onSetField(f, null));
-  // TASK 770: every row's label and hint (hint.js; the texts: param-hints.js). A row's label is its trigger; a checkbox row (its label toggles the box) gets a
-  // small "i" beside its text. The hint line goes under the row's field; the row's inputs / dropdown / Hold part choice are described by it (aria-describedby).
+  // TASK 805: every row's label comes from the table (param-hints.js) and its hint shows as a tooltip at the cursor (hint.js; installed once by main.js): the card holds
+  // the label only, no hint text. A row's label is its data-hint element; a choice (a menu row, a Hold part button ...) carries its own data-hint.
   holdModesWrap.setAttribute('role', 'group');
   leadModesWrap.setAttribute('role', 'group'); leadSidesWrap.setAttribute('role', 'group'); // TASK 775
   const hints = {};
-  for (const t of card.querySelectorAll('[data-hint]')) {
-    const row = t.closest('.cut-row, .cut-field'), check = t.closest('.cut-check');
-    hints[t.dataset.hint] = mountHint({ id: t.dataset.hint, trigger: check ? null : t, labelEl: check ? t : null, after: row.lastElementChild,
-      fields: [...row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger, .cut-hold-modes, .cut-lead-modes, .cut-lead-sides, .cut-contour-modes, .cut-layout-modes')] });
-  }
+  for (const t of card.querySelectorAll('[data-hint]')) hints[t.dataset.hint] = bindHint({ el: t });
   hints.holdPart.trigger.id = 'cut-hold-label';
   holdModesWrap.setAttribute('aria-labelledby', 'cut-hold-label');
   hints.leadIn.trigger.id = 'cut-lead-label'; leadModesWrap.setAttribute('aria-labelledby', 'cut-lead-label'); // TASK 775
   contourModesWrap.setAttribute('role', 'group'); hints.contour.trigger.id = 'cut-contour-label'; contourModesWrap.setAttribute('aria-labelledby', 'cut-contour-label'); // TASK 792
   hints.leadInSide.trigger.id = 'cut-lead-side-label'; leadSidesWrap.setAttribute('aria-labelledby', 'cut-lead-side-label');
-  // TASK 770: a menu row = its icon, its name and (a second, smaller line) its hint; the name and the hint from the table
+  // TASK 805: a menu row = its icon and its name (the table's label); its hint is the tooltip (data-hint = the choice's entry)
   const optionBody = (opt, icon, param, id, nameClass = '') => {
-    opt.innerHTML = `${icon}<span class="cut-opt-text"><span class="cut-opt-name ${nameClass}"></span></span>`;
+    opt.innerHTML = `${icon}<span class="cut-opt-name ${nameClass}"></span>`;
     opt.querySelector('.cut-opt-name').textContent = hintLabel(choiceId(param, id));
-    opt.querySelector('.cut-opt-text').appendChild(optionHint(card.ownerDocument, choiceId(param, id)));
+    opt.dataset.hint = choiceId(param, id);
   };
 
   let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, contour: null, record: null, note: [] };
@@ -318,7 +314,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const closePops = (except) => { for (const p of pops) if (p !== except) p.hidden = true; syncOpenState(); };
   const rowsEl = card.querySelector('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll)
   const openPop = (pop, anchor) => { closePops(pop); const row = anchor.closest('.cut-row, .cut-field') || anchor; pop.style.top = (row.offsetTop - (rowsEl.contains(row) ? rowsEl.scrollTop : 0)) + 'px'; pop.hidden = false; keepOnScreen(pop); syncOpenState(); };
-  // TASK 770: a menu taller than the room below its row (its rows carry their hint lines) moves up to end where the card's panel ends (above the phone's
+  // TASK 770 / 805: a menu taller than the room below its row (the cutter shape row is the last of the card) moves up to end where the card's panel ends (above the phone's
   // Operations bar), and scrolls when it is taller than the panel; one that fits stays at its row
   const keepOnScreen = (pop) => {
     const room = hostEl.getBoundingClientRect();
@@ -357,6 +353,7 @@ export function createCutPanel(hostEl, opts = {}) {
       const b = document.createElement('button');
       const same = typeof p.value === 'number' ? Math.abs(p.value - value) < 1e-6 : p.value === value; // TASK 742: a choice preset (a string value) is active when equal
       b.type = 'button'; b.className = 'cut-preset' + (same ? ' is-active' : ''); b.dataset.value = String(p.value); b.textContent = p.label;
+      if (p.hint) b.dataset.hint = p.hint; // TASK 805: a choice with a hint of its own (Hold part modes, Lead-in, Side, Contour, Layout) shows it as a tooltip
       b.addEventListener('click', () => onSetField(field, p.value)); // base mm
       wrap.appendChild(b);
     }
@@ -623,7 +620,7 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); for (const h of Object.values(hints)) h.close(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, contour: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, contour: null, record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745

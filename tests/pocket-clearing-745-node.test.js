@@ -12,6 +12,7 @@
 //  3. the app: the Clearing dropdown (one undo step, the defaults, the rows, the note, the stepper), the spiral greyed with its reason on an island pocket,
 //     the operations list's one row, save + reload byte-identical, inch defaults; the bin of an operation with 2 regions unassigns both in ONE undo step.
 import assert from 'node:assert';
+import { hintFor } from '../apps/shaper/src/hint.js'; // TASK 805: the tooltip's text (hints are no longer laid out in the card)
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -289,7 +290,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     eq([r.clearing, r.stepover, r.finishAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 0, false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster 0 (no depth per pass field)');
     ok(h.shown('stepover') && h.shown('finishAllowance') && h.shown('loop') && !h.shown('rasterAngle') && !h.q('.cut-pass-depth'), 'Spiral: Stepover, Finish allowance, Loop (no Raster angle, no Depth per pass row)');
     eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-finish-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.5', false], 'the fields: 40 % = 2.4 mm, 0.5, depth per pass empty (full depth)');
-    eq(h.q('.cut-row[data-row="finishAllowance"] .sk-hint').textContent, 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.', 'TASK 766: the Finish allowance hint, Loop off');
+    eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.', 'TASK 766: the Finish allowance hint, Loop off');
     eq(h.q('.cut-row[data-row="finishAllowance"] .cut-field-label').textContent, 'Finish allowance', 'TASK 766: the row is Finish allowance');
     const nt = h.note();
     console.log('card note: ' + JSON.stringify(nt));

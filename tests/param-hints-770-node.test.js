@@ -4,15 +4,17 @@
 //     be inches or mm); every declared choice (each cut type, clearing pattern, cutter shape, hold-part mode) has its entry, its label = its declaration's.
 //  2. the cut card (the real createCutPanel in a happy-dom page), in every state that shows a different set of rows (each cut type, Freehand / Spiral / Raster /
 //     Morphed with Loop off and on, Hold part Off / Tabs / Onion skin, a stepped cut fixed and adaptive, a Stock): every row shown has a label trigger whose
-//     text is its entry's label and whose hint line holds its entry's hint (closed at rest: `hidden`), every input of the row is described by that line
-//     (aria-describedby); every menu row (the cut types, the clearing patterns, the cutter shapes) shows its choice's hint as its second line; the Hold part
-//     hint lists the three modes. The markup has no label text of its own (each label is empty until the table fills it).
+//     text is its entry's label and whose tooltip text (hint.js hintFor: the text the cursor tooltip shows) is its entry's hint in the card's context; every menu
+//     row (the cut types, the clearing patterns, the cutter shapes) shows its choice's NAME only and names its entry in data-hint; the choice buttons (Hold part
+//     modes ...) carry their own. TASK 805: NO hint text is laid out in the card (no .sk-hint / .sk-opt-hint / (i) trigger). The markup has no label text of its
+//     own (each label is empty until the table fills it).
 //  3. every entry is rendered somewhere: the card's rows / menus (2), the Export step's cards (index.html data-hint / data-label, filled by main.js) and the
 //     drawer's Download (main.js reads hintLabel('download') / hintText('download')).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { Window } from 'happy-dom';
 import { PARAM_HINTS, hintText, hintLabel, choiceId } from '../apps/shaper/src/param-hints.js';
+import { hintFor } from '../apps/shaper/src/hint.js';
 import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from '../apps/shaper/src/shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
 
@@ -74,19 +76,17 @@ for (const record of STATES) {
   const rows = [...host.querySelectorAll('.cut-field, .cut-row')].filter(visible);
   ok(rows.length >= 1, name + ': rows shown');
   for (const row of rows) {
-    const trig = row.querySelector('.sk-hint-trigger'), line = row.querySelector('.sk-hint');
-    ok(trig && line, `${name} ${row.dataset.row || row.dataset.param || 'type'}: a hint trigger and its line`);
-    const id = line.dataset.hint;
+    const trig = row.querySelector('[data-hint]');
+    ok(trig, `${name} ${row.dataset.row || row.dataset.param || 'type'}: a label with a hint entry`);
+    const id = trig.dataset.hint;
     ok(PARAM_HINTS[id], `${name}: the row's entry ${id}`);
     seen.add(id);
-    const labelText = trig.classList.contains('sk-hint-i') ? trig.previousElementSibling.textContent : trig.textContent;
-    eq(labelText, hintLabel(id), `${name} ${id}: the label is the table's`);
-    eq(line.firstChild.textContent, hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the hint is the table's`); // TASK 775: Lead-in / Tab width follow the type
-    ok(line.hidden && trig.getAttribute('aria-expanded') === 'false' && trig.getAttribute('aria-controls') === line.id, `${name} ${id}: closed at rest, aria-controls its line`);
-    for (const f of row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger')) eq(f.getAttribute('aria-describedby'), line.id, `${name} ${id}: ${f.className} is described by the hint`);
-    for (const item of line.querySelectorAll('.sk-hint-item')) { seen.add(item.dataset.hint); ok(item.textContent === `${hintLabel(item.dataset.hint)}: ${hintText(item.dataset.hint)}`, `${name}: the item line ${item.dataset.hint}`); }
+    eq(trig.textContent, hintLabel(id), `${name} ${id}: the label is the table's`);
+    eq(hintFor(trig), hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the tooltip text is the table's hint in the card's context`);
+    for (const c of row.querySelectorAll('[data-hint]')) { seen.add(c.dataset.hint); eq(c.textContent, hintLabel(c.dataset.hint), `${name}: the element ${c.dataset.hint} shows its name`); if (c !== trig) eq(hintFor(c), hintText(c.dataset.hint), `${name}: its tooltip is its hint`); }
   }
-  // the menus: each row's second line
+  ok(!host.querySelector('.sk-hint, .sk-hint-trigger, .sk-hint-i, .sk-opt-hint'), `${name}: TASK 805: no hint text or (i) is laid out in the card`);
+  // the menus: each row shows its name only (its hint is the tooltip)
   for (const [trigSel, popSel, optSel, param] of [['.cut-type-trigger', '.cut-type-menu', '.cut-type-opt', 'cutType'], ['.cut-shape-trigger', '.cut-shape-pop', '.cut-type-opt', 'cutterShape'], ['.cut-clear-trigger', '.cut-clear-pop', '.cut-clear-opt', 'clearing']]) {
     const t = host.querySelector(trigSel);
     if (!visible(t)) continue;
@@ -94,9 +94,11 @@ for (const record of STATES) {
     const pop = host.querySelector(popSel);
     ok(!pop.hidden, `${name}: ${popSel} opens`);
     for (const opt of pop.querySelectorAll(optSel)) {
-      const hint = opt.querySelector('.sk-opt-hint'), id = hint && hint.dataset.hint;
-      ok(id && id.startsWith(param + ':'), `${name} ${popSel}: a menu row with its hint line (${id})`);
-      eq([opt.querySelector('.cut-opt-name').textContent, hint.textContent], [hintLabel(id), hintText(id)], `${name} ${id}: the menu row's name and hint`);
+      const id = opt.dataset.hint;
+      ok(id && id.startsWith(param + ':'), `${name} ${popSel}: a menu row with its hint entry (${id})`);
+      eq(opt.querySelector('.cut-opt-name').textContent, hintLabel(id), `${name} ${id}: the menu row's name`);
+      ok(!opt.textContent.includes(hintText(id)), `${name} ${id}: the menu row holds no hint text`);
+      eq(hintFor(opt), hintText(id), `${name} ${id}: the menu row's tooltip is its hint`);
       seen.add(id);
     }
     press(t);

@@ -39,7 +39,7 @@ import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
 import { hintLabel, hintText } from './param-hints.js'; // TASK 770: THE table of labels and hints (the Export step's cards, the drawer's Download)
-import { mountHint } from './hint.js'; // TASK 770: the one hint widget
+import { bindHint, installHintTooltip } from './hint.js'; // TASK 805: the one tooltip at the cursor (hint.js); TASK 770: its texts are the table's
 import { mountTooltip } from '#ui/hint.js';
 
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
@@ -112,21 +112,15 @@ function generateShaperSvgPayload({ preview = false } = {}) {
 const designFileName = () => exportFileName(docBuffer ? docBuffer.designName() : null);
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
-// TASK 770: the Export step's side cards take their labels and hints from the table (param-hints.js) through the one hint widget (hint.js): the Stock thickness,
-// the Material, and the Export title, whose hint lists the three ways out (each button is described by its own line)
+// TASK 805: the Export step's side cards take their labels from the table (param-hints.js); each label, and each Export button, shows its hint in the ONE tooltip at the cursor
+// (hint.js installHintTooltip: every element with data-hint). The Export title's hint lists the three ways out; each button carries its own entry.
 for (const e of document.querySelectorAll('#review-side [data-label], #shaper-sync-modal [data-label]')) e.textContent = hintLabel(e.dataset.label);
-const sideHint = (id, after, fields, itemFields) => mountHint({ id, labelEl: document.querySelector(`#review-side [data-hint="${id}"]`), after, fields, itemFields });
-sideHint('reviewCuts', document.getElementById('review-cuts-list'), []);
-sideHint('stockThickness', document.querySelector('#review-stock > label'), [document.getElementById('review-stock-thickness')]);
-sideHint('material', document.querySelector('#review-look > label'), [document.getElementById('review-look-select')]);
-sideHint('export', document.querySelector('#simexport-panel .simexport-actions'), [], { generateSvg: btnGenerateSvg, syncShaperHub: document.getElementById('btn-sync-shaper'), openShaperHub: document.getElementById('link-shaper-hub') });
-mountHint({ id: 'dirLegend', labelEl: document.querySelector('#prepare-dir-legend [data-hint="dirLegend"]'), after: document.querySelector('#prepare-dir-legend .review-label-line') });
+for (const e of document.querySelectorAll('#review-side [data-hint]:not(.simexport-btn):not(.simexport-hub-btn), #prepare-dir-legend [data-hint], #sync-browser [data-hint], #shaper-sync-modal [data-hint]')) { if (!e.hasAttribute('data-label')) bindHint({ el: e }); } // a button's text is its data-label's (the loop above); only the labels are bound here
+installHintTooltip(document);
 for (const b of document.querySelectorAll('#review-toolbar [data-hint]')) {
   const id = b.dataset.hint;
   mountTooltip({ target: b, getContent: () => ({ title: hintLabel(id), text: hintText(id) }) });
 }
-const newFolderBtnEl = document.getElementById('sync-btn-new-folder');
-if (newFolderBtnEl) mountTooltip({ target: newFolderBtnEl, getContent: () => ({ title: hintLabel('syncNewFolder'), text: hintText('syncNewFolder') }) });
 if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
@@ -174,8 +168,6 @@ const syncReplaceBtn = document.getElementById('sync-btn-replace');
 const syncKeepBothBtn = document.getElementById('sync-btn-keep-both');
 const syncExistsCancelBtn = document.getElementById('sync-btn-exists-cancel');
 
-mountHint({ id: 'syncFolder', labelEl: document.querySelector('#sync-browser [data-hint="syncFolder"]'), after: document.querySelector('#sync-browser .sync-browser-head') });
-mountHint({ id: 'syncFilename', labelEl: document.querySelector('#shaper-sync-modal [data-hint="syncFilename"]'), after: document.querySelector('#shaper-sync-modal [data-hint="syncFilename"]')?.parentElement, fields: [syncFilename] });
 
 const LOGIN_HINT = 'Check the password: your browser may have filled in a saved one.'; // TASK 767: under Shaper's own words when it refuses the sign-in
 

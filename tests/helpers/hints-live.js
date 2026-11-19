@@ -1,24 +1,30 @@
-// tests/helpers/hints-live.js — TASK 770: the parameter hints in the real Shaper page (apps/shaper/src/hint.js, the texts apps/shaper/src/param-hints.js), one phase
-// per page: the desktop app (mm, a mouse), the phone 390 (inches, touch) and Fusion mode (?host=fusion, mm, a mouse). Files: tests/param-hints-770-live.test.js
-// (desktop + Fusion mode), tests/param-hints-770-phone-live.test.js (phone). The page tools are tests/helpers/pocket-live.js openPocketPage's.
-//   - at rest every hint is closed (hidden, no height);
-//   - a computer: hovering a row's label shows its hint under the field, leaving hides it; a keyboard Tab onto a label shows it, Esc closes it; a click pins it;
-//     a touch screen: a tap on the label toggles it (open, then closed);
-//   - one at a time: opening another closes the first; a press elsewhere closes it;
-//   - open, it lies inside the card (the card's width unchanged, the line not wider than the card), is not covered (the point at its centre is the hint),
-//     inside the card's visible rows (scrolled into view, never clipped);
-//   - the field is described by it (aria-describedby = the line's id, aria-expanded on the label);
-//   - the cut type, clearing and cutter shape menus show each row's hint as a second line, every row on screen and inside the menu's width;
-//   - the Export step: the Stock thickness, Material and Export "i" buttons open their hints (the Export hint lists the three buttons, each described by its line).
+// tests/helpers/hints-live.js — TASK 805 (replaces task 770's laid-out hints): the parameter hints are a TOOLTIP AT THE CURSOR in the real Shaper page
+// (packages/ui/cursor-tooltip.js through apps/shaper/src/hint.js; the texts: apps/shaper/src/param-hints.js), one phase per page: the desktop app (mm, a real mouse),
+// the phone 390 (inches, real touch) and Fusion mode (?host=fusion, mm, a mouse). Files: tests/param-hints-770-live.test.js (desktop), -fusion-live (Fusion mode),
+// -phone-live (phone). The page tools are tests/helpers/pocket-live.js openPocketPage's; the tooltip tools tests/helpers/tooltip-live.js.
+//   - at rest no tooltip, and no hint text or (i) is laid out in the card, the Operations list, the STL card or the Export cards;
+//   - desktop: a mouse resting on a label / a menu choice shows its hint NEAR THE POINTER (not under it, on screen, a fixed pointer-events-none overlay) after the delay, gone on
+//     leave, on a press, on Esc; a keyboard Tab onto a label shows it beside the control (aria-describedby); phone: a long press shows it above the finger, a tap elsewhere
+//     hides it, the long press on a menu row does not pick it;
+//   - THE OWNER'S GRIPE: the bounding box of every card row, menu option, Operations row and Export card is IDENTICAL (0 px) before and while a tooltip shows;
+//   - the menus are compact: every choice is ONE line (its name), the menu's height is the same with and without a tooltip;
+//   - a hint that depends on the card (Finish allowance follows Loop) is evaluated when the tooltip opens;
+//   - the Export step: Stock thickness, Material, Export and its three buttons show their hints the same way.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { sleep } from './cdp-browser.js';
 import { setupPockets } from './pocket-live.js';
+import { probe, tipProblems } from './tooltip-live.js';
 
 const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
+const HINT = {
+  cutDepth: 'How deep the cut goes from the surface. Leave it empty to set the depth on the Origin.',
+  finishOff: 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.',
+  finishOn: 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.',
+};
 
 export async function hintsPhase(t, { fusion = false } = {}) {
-  const { phone, evalJs, waitFor, send, shot, clickEl, openMode, pickType, setUnit, clickWorld } = t;
+  const { phone, evalJs, waitFor, send, shot, clickEl, openMode, setUnit, clickWorld } = t;
   const D = fusion ? 'fusion' : phone ? 'phone' : 'desktop';
   if (fusion) {
     await setUnit('mm');
@@ -28,126 +34,139 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     await clickWorld(60, -40);
     await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && document.querySelector('.cut-type-cur').textContent === 'Pocket'`, 'Fusion: the imported pocket\'s card');
   } else await setupPockets(t, D);
-  const label = (row) => `#prepare-panel .cut-row[data-${row === 'cutDepth' || row === 'toolDia' || row === 'cutOffset' ? 'param' : 'row'}="${row}"] .sk-hint-trigger`;
-  // the state of every hint of the page + the card's box + the row's hint box, as measured
-  const state = (row) => evalJs(`(() => {
-    const card = document.querySelector('#prepare-panel .cut-card'), rows = card.querySelector('.cut-rows'), c = card.getBoundingClientRect(), rv = rows.getBoundingClientRect();
-    const open = [...document.querySelectorAll('.sk-hint')].filter((h) => !h.hidden).map((h) => h.dataset.hint);
-    const out = { open, cardW: Math.round(c.width), cardLeft: Math.round(c.left), vw: innerWidth };
-    ${row ? `const r = card.querySelector('.cut-row[data-param="${row}"], .cut-row[data-row="${row}"]'), h = r.querySelector('.sk-hint'), trig = r.querySelector('.sk-hint-trigger'), input = r.querySelector('input');
-    out.text = h.textContent; out.expanded = trig.getAttribute('aria-expanded'); out.described = !!input && input.getAttribute('aria-describedby') === h.id && trig.getAttribute('aria-controls') === h.id;
-    if (!h.hidden) {
-      h.scrollIntoView({ block: 'nearest' });
-      const b = h.getBoundingClientRect(), v = rows.getBoundingClientRect(), hit = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + Math.min(b.height / 2, 8)));
-      out.box = { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height) };
-      out.inside = b.left >= c.left - 0.5 && b.right <= c.right + 0.5 && h.scrollWidth <= h.clientWidth + 1 && b.top >= v.top - 0.5 && b.bottom <= v.bottom + 0.5;
-      out.onTop = !!hit && h.contains(hit); out.hit = hit && !h.contains(hit) ? hit.outerHTML.slice(0, 120) : null;
-    }
-    const tb = trig.getBoundingClientRect(); out.trigger = { w: Math.round(tb.width), h: Math.round(tb.height) };` : ''}
-    return out; })()`);
-  const mouse = (type, x, y) => send('Input.dispatchMouseEvent', { type, x, y, button: 'none', buttons: 0, clickCount: 0 });
-  const centreOf = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + Math.min(r.width / 2, 30)), y: Math.round(r.top + r.height / 2) }; })()`);
-  const key = async (k, code, vk, modifiers = 0) => { for (const type of ['rawKeyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk, modifiers }); await sleep(150); };
+  const tp = probe(t);
+  const label = (row) => `#prepare-panel .cut-row[data-${row === 'cutDepth' || row === 'toolDia' || row === 'cutOffset' ? 'param' : 'row'}="${row}"] [data-hint]`;
+  const hintOf = (id) => evalJs(`import('/apps/shaper/src/param-hints.js').then((m) => m.hintText(${JSON.stringify(id)}))`);
+  const key = async (k, code, vk) => { for (const type of ['rawKeyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk }); await sleep(150); };
 
-  const rest = await state(null);
-  assert.deepStrictEqual(rest.open, [], D + ': at rest every hint is closed');
-  const W = rest.cardW;
-  const isOpen = async (row, how) => {
-    const s = await state(row);
-    console.log(`${D} ${row} ${how}: ${JSON.stringify(s)}`);
-    assert.ok(s.open.length === 1 && s.expanded === 'true', `${D} ${row}: ${how}: its hint is open, alone: ${JSON.stringify(s.open)}`);
-    assert.ok(s.inside && s.onTop && s.cardW === W && s.cardLeft + s.cardW <= s.vw, `${D} ${row}: ${how}: inside the card, not covered, the card's width unchanged: ${JSON.stringify(s)}`);
-    assert.ok(s.described, `${D} ${row}: the field is described by the hint (aria-describedby), the label controls it`);
-    return s;
+  // nothing laid out, nothing showing
+  const noLaidOut = async (where) => assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-hint, .sk-hint-trigger, .sk-hint-i, .sk-opt-hint').length - document.querySelectorAll('.sk-style-panel .sk-hint, .sk-style-panel .sk-hint-trigger, .sk-style-panel .sk-hint-i').length`), 0, `${D}: ${where}: no hint text or (i) is laid out in Prepare or Export (the shared Settings panel's own rows, #ui style-panel.js, are not these)`);
+  await noLaidOut('at rest');
+  assert.strictEqual(await tp.tip(), null, D + ': at rest no tooltip');
+  await tp.leave();
+
+  // ONE check for every element: show its tooltip, the layout is unchanged (0 px), the text and place are right, then leave
+  const checkTip = async (sel, text, how, { shotName = null, shotSels = null } = {}) => {
+    await tp.reveal(sel);
+    const before = await tp.snap();
+    const p = await tp.show(sel);
+    const tip = await tp.tip();
+    const during = await tp.snap();
+    console.log(`${D} ${how} ${sel}: ${JSON.stringify(tip)} at ${JSON.stringify(p)}`);
+    assert.deepStrictEqual(tipProblems(tip, p, text, { phone }), [], `${D} ${how}: ${sel}: the tooltip is right`);
+    assert.deepStrictEqual(tp.movedBoxes(before, during), [], `${D} ${how}: ${sel}: THE LAYOUT DID NOT MOVE (0 px: every row, option, list row and card box identical before and while the tooltip shows; ${Object.keys(during).length} boxes)`);
+    if (shotName) await shot(shotName, [...(shotSels || [sel]), '#sk-cursor-tip'], 2); // the crop holds the tooltip too (it is outside the card)
+    if (!phone) {
+      await tp.leave();
+      assert.strictEqual(await tp.tip(), null, `${D} ${how}: ${sel}: gone when the mouse leaves`);
+      assert.deepStrictEqual(tp.movedBoxes(before, await tp.snap()), [], `${D} ${how}: ${sel}: and the layout is as before`);
+    } else await tp.leave();
+    return tip;
   };
-  const isClosed = async (row, how) => { const s = await state(row); assert.ok(s.open.length === 0 && s.expanded === 'false', `${D} ${row}: ${how}: closed: ${JSON.stringify(s.open)}`); return s; };
 
-  if (!phone) {
-    // hover shows, leaving hides
-    const p = await centreOf(label('cutDepth'));
-    await mouse('mouseMoved', p.x, p.y); await sleep(200);
-    const s = await isOpen('cutDepth', 'hover');
-    assert.strictEqual(s.text, 'How deep the cut goes from the surface. Leave it empty to set the depth on the Origin.', D + ': the Depth hint (the table\'s)');
-    await shot(`${D}-hint-hover-depth.png`, ['#prepare-panel .cut-row[data-param="cutDepth"]'], 3);
-    await mouse('mouseMoved', p.x - 260, p.y + 300); await sleep(200);
-    await isClosed('cutDepth', 'the mouse left');
-    // the keyboard: Tab from the cut type field onto the Depth label shows it, Esc closes it
+  const depthText = await hintOf('cutDepth');
+  assert.strictEqual(depthText, HINT.cutDepth, D + ': the Depth hint is the table\'s');
+  const pre = await tp.snap();
+  const depthTip = await checkTip(label('cutDepth'), depthText, phone ? 'long press' : 'hover', { shotName: `${D}-tooltip-depth.png`, shotSels: ['#prepare-panel .cut-card'] });
+  assert.ok(depthTip.parent === 'BODY', D + ': the tooltip lives in <body>, outside every card');
+  assert.deepStrictEqual(tp.movedBoxes(pre, await tp.snap()), [], D + ': the layout is as at the start');
+
+  if (phone) {
+    // the finger lifts: the tooltip stays; the next tap anywhere hides it; a short tap never shows one
+    await tp.show(label('cutDepth'));
+    await tp.release();
+    assert.ok(await tp.tip(), D + ': it stays after the finger lifts');
+    await tp.tapAway();
+    assert.strictEqual(await tp.tip(), null, D + ': the next tap hides it');
+  } else {
+    // Esc dismisses it, a keyboard Tab shows it beside the control, a click dismisses it
+    await tp.show(label('cutDepth'));
+    assert.ok(await tp.tip(), D + ': shown');
+    await key('Escape', 'Escape', 27);
+    assert.strictEqual(await tp.tip(), null, D + ': Esc hides it');
+    await tp.leave();
     await evalJs(`document.querySelector('#prepare-panel .cut-type-trigger').focus()`);
     await key('Tab', 'Tab', 9);
     assert.ok(await evalJs(`document.activeElement === document.querySelector('${label('cutDepth')}')`), D + ': Tab lands on the Depth label');
-    await isOpen('cutDepth', 'keyboard focus');
+    const kb = await tp.tip();
+    assert.ok(kb && kb.text === depthText, D + ': keyboard focus shows the hint: ' + JSON.stringify(kb));
+    assert.ok(await evalJs(`document.querySelector('${label('cutDepth')}').getAttribute('aria-describedby') === 'sk-cursor-tip'`), D + ': the focused label is described by the tooltip (aria-describedby)');
+    const lb = await evalJs(`(() => { const r = document.querySelector('${label('cutDepth')}').getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) }; })()`);
+    assert.ok(kb.top >= lb.bottom || kb.bottom <= lb.top || kb.left >= lb.right || kb.right <= lb.left, D + ': beside the focused control, not over it');
     await key('Escape', 'Escape', 27);
-    await isClosed('cutDepth', 'Esc');
     await evalJs(`document.activeElement.blur()`);
+    await tp.show(label('cutDepth'));
+    await clickEl(label('cutDepth'));
+    assert.strictEqual(await tp.tip(), null, D + ': a click hides it');
+    await tp.leave();
   }
-  // a click / a tap pins it; a second one closes it (a touch screen: the only way, no hover)
-  await clickEl(label('toolDia'));
-  const bit = await isOpen('toolDia', phone ? 'tap' : 'click');
-  if (!phone) { await mouse('mouseMoved', 5, 400); await sleep(200); await isOpen('toolDia', 'pinned: the mouse left'); }
-  await shot(`${D}-hint-open-bit.png`, ['#prepare-panel .cut-row[data-param="toolDia"]'], 3);
-  await shot(`${D}-card-hint-open.png`, ['#prepare-panel .cut-card'], 2);
-  await clickEl(label('toolDia'));
-  await isClosed('toolDia', phone ? 'tapped again' : 'clicked again');
-  // one at a time: opening the Offset hint closes the Bit diameter one; a press elsewhere closes
-  await clickEl(label('toolDia'));
-  await clickEl(label('cutOffset'));
-  const off = await isOpen('cutOffset', 'another label');
-  assert.deepStrictEqual(off.open, ['cutOffset'], D + ': one hint at a time');
-  await clickEl('#prepare-panel .cut-row[data-param="cutDepth"] input');
-  await isClosed('cutOffset', 'a press on another field');
-  // a checkbox row: its "i" (the label still toggles the box); Spiral shows Finish allowance + Loop
-  await t.pickClearing('linked');
-  const loop0 = await evalJs(`document.querySelector('.cut-loop').checked`);
-  await clickEl('#prepare-panel .cut-row[data-row="loop"] .sk-hint-i');
-  const lp = await state('loop');
-  assert.ok(lp.open[0] === 'loop' && /^Joins the clearing and the last wall pass into one closed path/.test(lp.text) && lp.inside && lp.onTop, D + ': the Loop "i" opens its hint inside the card: ' + JSON.stringify(lp));
-  assert.strictEqual(await evalJs(`document.querySelector('.cut-loop').checked`), loop0, D + ': the "i" does not toggle the Loop box');
-  await shot(`${D}-hint-loop.png`, ['#prepare-panel .cut-row[data-row="loop"]'], 3);
-  await key('Escape', 'Escape', 27);
-  await isClosed('loop', 'Esc');
-  console.log(`${D} label target: ${JSON.stringify((await state('cutDepth')).trigger)}, the Loop "i": ${JSON.stringify(await evalJs(`(() => { const b = document.querySelector('.cut-row[data-row="loop"] .sk-hint-i').getBoundingClientRect(); return { w: Math.round(b.width), h: Math.round(b.height) }; })()`))}`);
 
-  // the menus: each row's hint is its second line; every row on screen
-  const menu = async (trigSel, popSel, optSel, name) => {
+  // the rows of the cut card: every label of a Spiral pocket (the Finish allowance hint follows Loop: evaluated when the tooltip opens)
+  await t.pickClearing('linked');
+  await noLaidOut('Spiral card');
+  const rowIds = await evalJs(`[...document.querySelectorAll('#prepare-panel .cut-card [data-hint]')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => e.dataset.hint)`);
+  console.log(`${D} labels shown: ${rowIds.join(', ')}`);
+  assert.ok(rowIds.length >= 6, D + ': the card shows its labels');
+  for (const id of rowIds) if (id !== 'finishAllowance') await checkTip(`#prepare-panel .cut-card [data-hint="${id}"]`, await hintOf(id), 'label');
+  assert.strictEqual(await evalJs(`document.querySelector('.cut-loop').checked`), false, D + ': Loop starts off');
+  await checkTip(label('finishAllowance'), HINT.finishOff, 'Finish allowance, Loop off');
+  await t.setLoop(true);
+  await checkTip(label('finishAllowance'), HINT.finishOn, 'Finish allowance, Loop on (the hint follows the card)', { shotName: `${D}-tooltip-finish-loop-on.png`, shotSels: ['#prepare-panel .cut-card'] });
+  await t.setLoop(false);
+
+  // the menus: compact (one line per choice), the choice's name only, a tooltip per choice, the layout unmoved
+  const menu = async (trigSel, popSel, optSel, name, param) => {
     await clickEl(trigSel);
     await waitFor(`!document.querySelector('${popSel}').hidden`, name + ' open');
-    const m = await evalJs(`(() => { const p = document.querySelector('${popSel}'), pr = p.getBoundingClientRect(), card = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect();
-      const panel = document.getElementById('prepare-panel').getBoundingClientRect(), opts = [...p.querySelectorAll('${optSel}')];
-      const hitOk = (o) => { o.scrollIntoView({ block: 'nearest' }); const b = o.getBoundingClientRect(), e = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2)); return !!e && o.contains(e); };
-      const uncovered = hitOk(opts[opts.length - 1]) && hitOk(opts[0]);
-      return { pop: { left: Math.round(pr.left), right: Math.round(pr.right), top: Math.round(pr.top), bottom: Math.round(pr.bottom) }, panel: { top: Math.round(panel.top), bottom: Math.round(panel.bottom) }, uncovered, cardLeft: Math.round(card.left), vw: innerWidth, vh: innerHeight, scrolls: p.scrollHeight > p.clientHeight + 1,
-        rows: [...p.querySelectorAll('${optSel}')].map((o) => { const h = o.querySelector('.sk-opt-hint'), n = o.querySelector('.cut-opt-name'), hb = h.getBoundingClientRect(), nb = n.getBoundingClientRect();
-          return { id: h.dataset.hint, name: n.textContent, hint: h.textContent, below: hb.top >= nb.bottom - 1, smaller: parseFloat(getComputedStyle(h).fontSize) < parseFloat(getComputedStyle(n).fontSize), fits: hb.left >= pr.left && hb.right <= pr.right + 0.5 && h.scrollWidth <= h.clientWidth + 1 && hb.bottom <= o.getBoundingClientRect().bottom + 0.5, shown: hb.height > 0 }; }) }; })()`);
+    const m = await evalJs(`(() => { const p = document.querySelector('${popSel}'), pr = p.getBoundingClientRect(), opts = [...p.querySelectorAll('${optSel}')];
+      return { h: Math.round(pr.height * 100) / 100, w: Math.round(pr.width), scrolls: p.scrollHeight > p.clientHeight + 1, rows: opts.map((o) => { const b = o.getBoundingClientRect(); return { id: o.dataset.hint, text: o.textContent.trim(), h: Math.round(b.height * 100) / 100, name: (o.querySelector('.cut-opt-name') || {}).textContent }; }) }; })()`);
     console.log(`${D} ${name}: ${JSON.stringify(m)}`);
-    assert.ok(m.rows.length >= 3 && m.rows.every((r) => r.hint.length > 10 && r.below && r.smaller && r.fits && r.shown), `${D} ${name}: every row has its hint as a second, smaller line inside the menu`);
-    assert.ok(m.pop.left >= 0 && m.pop.right <= m.cardLeft && m.pop.top >= m.panel.top - 0.5 && m.pop.bottom <= m.panel.bottom + 0.5, `${D} ${name}: the menu is on screen, left of the card, within the card's panel (above the phone's Operations bar; it scrolls when taller: ${m.scrolls})`);
-    assert.ok(m.uncovered, `${D} ${name}: nothing covers the menu (its first and last rows are hit where they are): ${JSON.stringify(m.uncovered)}`);
+    assert.ok(m.rows.length >= 3 && m.rows.every((r) => r.id && r.id.startsWith(param + ':') && r.text.startsWith(r.name)), `${D} ${name}: every choice shows its NAME (no second line), each carries its entry`);
+    assert.ok(m.rows.every((r) => r.h <= (phone ? 41 : 36)), `${D} ${name}: every row is one compact line (<= ${phone ? 40 : 34} px): ${JSON.stringify(m.rows.map((r) => r.h))}`);
+    assert.ok(!m.scrolls, `${D} ${name}: the menu does not scroll (compact)`);
+    for (const r of m.rows) {
+      const tip = await checkTip(`${popSel} ${optSel}[data-hint="${r.id}"]`, await hintOf(r.id), 'menu choice');
+      assert.ok(tip, `${D} ${name}: ${r.id}: its tooltip`);
+    }
+    const after = await evalJs(`Math.round(document.querySelector('${popSel}').getBoundingClientRect().height * 100) / 100`);
+    assert.strictEqual(after, m.h, `${D} ${name}: the menu's height is the same after all the tooltips (${m.h} px)`);
+    await shot(`${D}-menu-${param}.png`, [popSel, '#prepare-panel .cut-card'], 2);
     return m;
   };
-  const types = await menu('#prepare-panel .cut-type-trigger', '.cut-type-menu', '.cut-type-opt', 'cut type menu');
-  if (fusion) assert.ok(types.rows.some((r) => r.id === 'cutType:roughing'), D + ': the drafted pocket offers Roughing (TASK 792: it replaced the Stepped pocket), with its hint');
-  await shot(`${D}-menu-cut-type.png`, ['.cut-type-menu', '#prepare-panel .cut-card'], 2);
+  const types = await menu('#prepare-panel .cut-type-trigger', '.cut-type-menu', '.cut-type-opt', 'cut type menu', 'cutType');
+  if (fusion) assert.ok(types.rows.some((r) => r.id === 'cutType:roughing'), D + ': the drafted pocket offers Roughing');
+  // a long press on a menu row shows its tooltip and does not pick it (the menu stays open, the cut type is unchanged)
+  if (phone) {
+    const cur = await evalJs(`document.querySelector('.cut-type-cur').textContent`);
+    const last = types.rows[types.rows.length - 1].id;
+    await tp.show(`.cut-type-menu .cut-type-opt[data-hint="${last}"]`);
+    assert.ok(await tp.tip(), D + ': long press on a menu row shows its tooltip');
+    await tp.leave();
+    assert.strictEqual(await evalJs(`document.querySelector('.cut-type-cur').textContent`), cur, D + ': the long press did not pick the row (the cut type is unchanged)');
+  }
   await clickEl('#prepare-panel .cut-type-trigger');
-  await menu('#prepare-panel .cut-clear-trigger', '.cut-clear-pop', '.cut-clear-opt', 'clearing menu');
-  await shot(`${D}-menu-clearing.png`, ['.cut-clear-pop', '#prepare-panel .cut-card'], 2);
+  await menu('#prepare-panel .cut-clear-trigger', '.cut-clear-pop', '.cut-clear-opt', 'clearing menu', 'clearing');
   await clickEl('#prepare-panel .cut-clear-trigger');
-  await menu('#prepare-panel .cut-shape-trigger', '.cut-shape-pop', '.cut-type-opt', 'cutter shape menu');
-  await shot(`${D}-menu-cutter-shape.png`, ['.cut-shape-pop'], 2);
+  await menu('#prepare-panel .cut-shape-trigger', '.cut-shape-pop', '.cut-type-opt', 'cutter shape menu', 'cutterShape');
   await clickEl('#prepare-panel .cut-shape-trigger');
+  await noLaidOut('after the menus');
+
+  // the Operations list (its title), a Hold part choice button
+  await checkTip('#prepare-ops .ops-head', await hintOf('operations'), 'Operations list');
+  if (!fusion) {
+    await t.pickType('exterior');
+    await waitFor(`!!document.querySelector('#prepare-panel .cut-row[data-row="holdPart"] [data-hint="holdPart:tabs"]')`, 'the Hold part choices');
+    await checkTip('#prepare-panel .cut-row[data-row="holdPart"] [data-hint="holdPart:tabs"]', await hintOf('holdPart:tabs'), 'Hold part choice button');
+  }
 
   // the Export step's cards
   await openMode('review');
-  for (const [sel, id] of [['#review-stock .sk-hint-i', 'stockThickness'], ['#review-look .sk-hint-i', 'material'], ['#simexport-panel .sk-hint-i', 'export']]) {
-    await clickEl(sel);
-    const r = await evalJs(`(() => { const t = document.querySelector('${sel}'), h = document.getElementById(t.getAttribute('aria-controls')); h.scrollIntoView({ block: 'nearest' }); const b = h.getBoundingClientRect(), side = document.getElementById('review-side').getBoundingClientRect();
-      const hit = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + 6));
-      return { open: [...document.querySelectorAll('.sk-hint')].filter((x) => !x.hidden).map((x) => x.dataset.hint), lines: h.children.length, text: h.textContent, inside: b.left >= side.left && b.right <= side.right + 0.5, onTop: !!hit && h.contains(hit),
-        described: ${id === 'export'} ? ['btn-generate-svg', 'btn-sync-shaper', 'link-shaper-hub'].every((x) => { const d = document.getElementById(document.getElementById(x).getAttribute('aria-describedby')); return !!d && h.contains(d); }) : document.querySelector('${id === 'material' ? '#review-look-select' : '#review-stock-thickness'}').getAttribute('aria-describedby') === h.id }; })()`);
-    console.log(`${D} export card ${id}: ${JSON.stringify(r)}`);
-    assert.ok(r.open.length === 1 && r.open[0] === id && r.inside && r.onTop && r.described, `${D} export card ${id}: its hint opens alone, inside the side card, described: ${JSON.stringify(r)}`);
-    if (id === 'export') assert.strictEqual(r.lines, 4, D + ': the Export hint = its line + one per button');
-    await shot(`${D}-export-hint-${id}.png`, [`#${id === 'export' ? 'simexport-panel' : id === 'material' ? 'review-look' : 'review-stock'}`], 2);
-    await clickEl(sel);
+  await noLaidOut('the Export step');
+  for (const [sel, id] of [['#review-stock [data-hint="stockThickness"]', 'stockThickness'], ['#review-look [data-hint="material"]', 'material'], ['#simexport-panel [data-hint="export"]', 'export'],
+    ['#btn-generate-svg', 'generateSvg'], ['#btn-sync-shaper', 'syncShaperHub'], ['#link-shaper-hub', 'openShaperHub']]) {
+    await checkTip(sel, await hintOf(id), 'Export card', { shotName: `${D}-tooltip-export-${id}.png`, shotSels: ['#review-side'] });
   }
   assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('#review-side [data-label]')].map((e) => e.textContent)`), ['Generate Shaper SVG', 'Sync to ShaperHub', 'Open ShaperHub (My Files)'], D + ': the Export buttons\' labels (from the table)');
+  assert.strictEqual(await evalJs(`document.getElementById('link-shaper-hub').hasAttribute('title')`), false, D + ': no native title duplicates the tooltip');
+  await noLaidOut('end');
 }

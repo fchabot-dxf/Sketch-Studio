@@ -101,7 +101,7 @@ try {
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card for the outline');
   const outlineMenu = await menuIds();
   assert.ok(!outlineMenu.some((id) => id.startsWith('stepped')), 'no stepped type on the outline (no slope): ' + outlineMenu);
-  assert.strictEqual(await evalJs(`document.querySelector('.cut-type-menu').getBoundingClientRect().width`), 220, 'a menu without a stepped type keeps its 220 px width (TASK 770 hints)');
+  assert.strictEqual(await evalJs(`document.querySelector('.cut-type-menu').getBoundingClientRect().width`), 134, 'a menu without a stepped type keeps its 134 px width (TASK 805: the rows are one line again, the 220 px of the laid-out hints (TASK 770) is gone; .cut-type-menu min-width 134)');
   await clickEl('#prepare-panel .cut-type-trigger'); // close
   await clickWorld(60, -40); // the pocket
   const pocketMenu = await menuIds();

@@ -27,7 +27,8 @@
 //       SPLITS AND ISLANDS: rings form a tree, not a chain. The rings of the deepest level each start a line (at the middle of the ring's longest
 //       edge: a link leaves along the normal, never from a rounded corner); going out, every line ending on a ring of level k + 1 links to its nearest
 //       point on level k. A ring of level k that no line reaches starts a NEW line; a ring that several lines reach is continued by ONE of them (the
-//       one with the most rings so far; a tie: the first found) and every other one ENDS at its own ring (it was cut whole). ORDER: the lines in the
+//       one with the most rings so far; a tie: the first found) and every other one ENDS at its own ring (it was cut whole: TASK 804: so the lines are
+//       the CHAINS of ringChains, one per area, the shared rings in the line of the area with the most rings). ORDER: the lines in the
 //       order they end, deepest first (inside out). The note says how many lines and why ("the pocket narrows" / "the pocket has islands"). Never
 //       refused (a pocket the bit fits always has rings).
 //     - Raster: straight passes one stepover apart at the Raster angle (degrees, counterclockwise ON SCREEN from the sketch's X axis: 0 = left /
@@ -50,7 +51,13 @@
 //       s * sqrt 2 to one stepover at |A - B| = 2 s and staying one stepover beyond (continuous: the turn follows the arm one stepover in). So at phi the
 //       turn is (1 - phi) * s inside ring k and the next turn out phi * s outside it along the same normal: the gap between neighbouring turns is the
 //       stepover. The point lies on the segment from B to A inside ring k's region: the path stays in A0. Turns are simplified to POCKET_CLEARING.pathTolMm.
-//       NOT POSSIBLE (the option is refused with its reason, no silent fallback): a pocket with islands, or one whose rings SPLIT (a neck).
+//       TASK 804, PER AREA: where the rings SPLIT (a neck) the ring tree is cut into SEGMENTS (ringSegments: the shared rings before a split are one,
+//       each branch another) and each segment is its own morphed spiral (the morphed turn of a ring whose next ring out has another area's lobe would
+//       run over that area's rings); cut in the segments' order (the deepest first: the branches, then the shared rings out to the wall). A morphed
+//       turn never walks back over itself (where both rings hold an arc at one phi, the inner arc first, then the outer: see transition).
+//       NOT POSSIBLE (the option is refused with its reason, no silent fallback): a pocket with islands (an area round an island has no middle to
+//       spiral from), or an area whose morphed turns would cross each other (THE HARD RULE, checked with #core/path-crossings: a long thin last ring,
+//       e.g. the blob of tests/helpers/pocket-shapes-804.js or the L with no allowance).
 //  * FINISH PASS (Loop off), last: the pocket's own outer loop as the Origin's INSIDE cut (the wall is exact with whatever bit is in the machine; the
 //    record's offset is its cutOffset), and each island's loop as an OUTSIDE cut. Refused (the pocket is cut Freehand and the note says why) when that
 //    pass would cut an island or the wall (an island closer to the wall or to another island than the bit). The same check holds with Loop on.
@@ -89,6 +96,7 @@
 import { offsetRegions, sweepPaths, clipOpenPaths, regionsArea, regionsFromRings, diffRegions, unionRegions } from './plot/clip.js';
 import { loopWalk, walkPoints, sweeper } from './hold-part.js'; // TASK 775: sweeper moved to hold-part (an On line cut's strokes use it too)
 import { num } from './loop-geometry.js';
+import { pathCrossings } from './path-crossings.js'; // TASK 804: THE crossing check (the hard rule)
 
 export const POCKET_CLEARING = Object.freeze({
   /** the record field `clearing`: Freehand (the Origin clears it: the default) | the patterns the app computes */
@@ -294,6 +302,44 @@ export function linkedSpiral(levels) {
   return lines.map(({ points, rings, links }) => ({ points, rings, links }));
 }
 
+// ── TASK 804: THE CHAINS and THE SEGMENTS (see THE RULES): one path per area ──
+// the ring tree of `L` ([level][regions]): each region of level k + 1 lies in one region of level k (its parent). Nodes { k, g, kids, depth (levels from it
+// down, itself included), area }, the roots (level 0) returned
+function ringTree(L) {
+  const nodes = L.map((E, k) => E.map((g) => ({ k, g, kids: [], depth: 1, area: regionsArea([g]) })));
+  for (let k = 1; k < L.length; k++) for (const n of nodes[k]) {
+    const q = P(n.g.outer[0][0], n.g.outer[0][1]);
+    (nodes[k - 1].find((m) => inRegion(q, m.g)) || nodes[k - 1][0]).kids.push(n);
+  }
+  for (let k = L.length - 1; k >= 0; k--) for (const n of nodes[k]) n.depth = 1 + n.kids.reduce((d, c) => Math.max(d, c.depth), 0);
+  return nodes[0] || [];
+}
+// the runs of the tree in CUTTING ORDER: the runs that start deepest first (the order 749's Spiral lines end in), a tie in the order found; each run
+// [{ k, g }] outermost first. `through`: a run goes on into ONE child (the one with the most levels below it; a tie: the larger area) and every other
+// child starts a run of its own (CHAINS); without it a run stops where the tree branches and every child starts a run (SEGMENTS)
+function ringRuns(L, through) {
+  const runs = [];
+  const walk = (start) => {
+    const run = [];
+    for (let n = start; n;) {
+      run.push(n);
+      const kids = n.kids.slice().sort((x, y) => y.depth - x.depth || y.area - x.area);
+      if (!through && kids.length > 1) { kids.forEach(walk); break; }
+      kids.slice(1).forEach(walk);
+      n = kids[0];
+    }
+    runs.push(run);
+  };
+  ringTree(L).forEach(walk);
+  return runs.map((run, i) => ({ run, i })).sort((x, y) => y.run[0].k - x.run[0].k || x.i - y.i).map((x) => x.run.map(({ k, g }) => ({ k, g })));
+}
+/** The CHAINS of the rings `L` ([level][regions], level 0 the outermost): one per area, a chain going on through a split into the child with the most
+ *  levels below it (TASK 804: the Loop's closed paths). */
+export const ringChains = (L) => ringRuns(L, true);
+/** The SEGMENTS of the rings `L`: the chains cut where the tree branches (the shared rings before a split are a segment of their own; TASK 804: the
+ *  Morphed spiral's paths: a morphed turn never reaches into another area's arm). */
+export const ringSegments = (L) => ringRuns(L, false);
+
 // ── the morphed spiral (see THE RULES) ──
 function densify(pts, h) {
   const out = [];
@@ -345,6 +391,10 @@ function byLength(pts) {
 // Between two inner samples the phi of their nearest points can jump (a convex corner of the inner ring: its nearest point jumps across the outer
 // ring's corner; a part of the outer ring the inner one does not reach): every outer sample whose phi lies in that jump is put on the inner segment
 // at ITS nearest point there (an outer corner's samples all land on the inner corner: the corner HOLDS while phi sweeps the outer corner).
+// TASK 804: phi steps BACK by more than this (a tenth of a turn) only where the inner ring's nearest points jump over an arm it does not reach that covers
+// more than half the outer ring (a split: another area's lobe; measured 0.40 to 0.50 on the bow-tie, the dumbbell, the S, the U), never by rounding (at
+// most 0.008, the circle's smallest ring): such a step is the jump FORWARD over the arm (both rings wind the same way)
+const WRAP_BACK = 0.1;
 function propagate(inner, outer, h, s) {
   const g = segGrid(outer, Math.max(s, h * 4));
   const raw = inner.map((q) => phiAt(outer, nearestOn(g, q)));
@@ -352,6 +402,7 @@ function propagate(inner, outer, h, s) {
   raw.forEach((v, j) => {
     if (!j) { ph.push(v % 1); return; }
     let x = v + Math.round(ph[j - 1] - v); // the unwrapped value nearest the previous one
+    if (x < ph[j - 1] - WRAP_BACK) x += 1;  // TASK 804: see WRAP_BACK
     if (x < ph[j - 1]) x = ph[j - 1];      // never backwards (rounding)
     ph.push(x);
   });
@@ -391,10 +442,13 @@ function propagate(inner, outer, h, s) {
   const out = [s0.pt, ...ext.slice(s0.i + 1, s1.i + 1).filter((x) => x.phi > c && x.phi < c + 1), s1.pt];
   return out.map((x) => ({ p: x.p, phi: x.phi - c }));
 }
-// the point of a sampled ring at phi (piecewise linear between its samples)
-function ringAt(S, phi) {
+// the point of a sampled ring at phi (piecewise linear between its samples). Where several samples share phi (an arc of the ring whose nearest points
+// on the ring inside it all hold one corner) the point is the LAST of them, or with `first` the first of them (TASK 804: the turn walks such an arc
+// once, never back: see transition)
+function ringAt(S, phi, first = false) {
   let lo = 0, hi = S.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].phi <= phi) lo = m; else hi = m; }
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (first ? S[m].phi < phi : S[m].phi <= phi) lo = m; else hi = m; }
+  if (first && S[hi].phi === phi) return S[hi].p;
   const A = S[lo], B = S[hi];
   const t = B.phi > A.phi ? Math.max(0, Math.min(1, (phi - A.phi) / (B.phi - A.phi))) : 0;
   return P(A.p.x + (B.p.x - A.p.x) * t, A.p.y + (B.p.y - A.p.y) * t);
@@ -406,9 +460,12 @@ function ringAt(S, phi) {
 const CAP = Math.SQRT2, ARM = 2;
 const depthOf = (l) => (l <= CAP ? l : l >= ARM ? 1 : CAP - ((CAP - 1) * (l - CAP)) / (ARM - CAP));
 function transition(inner, outer, s) {
+  // at one phi (both rings may hold an arc there) the inner ring's samples come first (a stable sort), each with the FIRST outer point at that phi, then
+  // the outer ring's samples, each with the LAST inner point there: the turn walks the inner arc, then the outer arc, never back (TASK 804: it went back
+  // over the arc it had just walked, a fold that crossed itself on a star's or a blob's hollow corners)
   const ev = [...inner.map((x) => ({ phi: x.phi, A: x.p })), ...outer.map((x) => ({ phi: x.phi, B: x.p }))].sort((a, b) => a.phi - b.phi);
   return ev.map((e) => {
-    const A = e.A || ringAt(inner, e.phi), B = e.B || ringAt(outer, e.phi);
+    const A = e.A || ringAt(inner, e.phi), B = e.B || ringAt(outer, e.phi, true);
     const L = Math.hypot(A.x - B.x, A.y - B.y), k = L <= CAP * s ? 1 - e.phi : ((1 - e.phi) * depthOf(L / s) * s) / L;
     return P(B.x + k * (A.x - B.x), B.y + k * (A.y - B.y));
   });
@@ -584,11 +641,12 @@ function rasterLoops(A0, pieces, finishLoops, a, Rr) {
 function finishTurnLoop(F) { const b = loopBuilder(); b.turn(loopFrom(F, ringStart(F)), 'finish'); return b; }
 /** TASK 750: the Morphed spiral as ONE closed loop: the spiral, then the finish turn (a step of the allowance out from where the closing turn ends and
  *  back), then the RETURN leg down the chain of turn starts to the first point (it crosses each turn once). */
-function morphedLoop(sp, finishLoops, a) {
+function morphedLoop(sp, finishLoops, a, done = new Set()) {
   const b = loopBuilder();
   b.turn(sp.points, a > 0 ? 'morphed' : 'finish'); // with no allowance its closing turn IS the finish turn
   const e = b.last();
-  if (a > 0) { const f = nearestOfLoops(finishLoops, e); b.leg([f.p]); b.turn(loopFrom(finishLoops[f.c], f), 'finish'); b.leg([e]); }
+  const f = a > 0 ? nearestOfLoops(finishLoops, e) : null;
+  if (f && !done.has(f.c)) { done.add(f.c); b.leg([f.p]); b.turn(loopFrom(finishLoops[f.c], f), 'finish'); b.leg([e]); } // TASK 804: each finish turn in one loop
   const back = [];
   for (let j = sp.turns.length - 1; j >= 0; j--) back.push(sp.points[sp.turns[j]]);
   b.leg(back, Math.max(0, sp.turns.length - 2));
@@ -639,7 +697,7 @@ function computePlan({ outer, holes }, st) {
   const needRings = pattern === 'linked' || pattern === 'morphed';
   const L = needRings ? ringLevels(R, d0, s) : [];
   if (needRings) {
-    morphedBlocked = holes.length ? 'islands' : L.some((E) => E.length !== 1 || E[0].holes.length) ? 'splits' : null;
+    morphedBlocked = holes.length ? 'islands' : null; // TASK 804: a pocket whose rings split is morphed per area (one spiral per chain)
     levels = L.length;
     loops = L.reduce((n, E) => n + contoursOf(E).length, 0);
   }
@@ -659,13 +717,18 @@ function computePlan({ outer, holes }, st) {
     if (st.loop) built = clear.map(spiralLoop);
   } else if (pattern === 'morphed') {
     if (morphedBlocked) return { ...base, wall, islands, levels, loops, morphedBlocked, refused: 'morphed ' + morphedBlocked };
-    if (L.length) {
-      const sp = morphedSpiral(L.map((E) => toXY(E[0].outer)), s);
-      if (!sp) return { ...base, wall, islands, levels, loops, morphedBlocked: 'splits', refused: 'morphed splits' };
-      turns = sp.turns.length;
-      clear.push({ points: sp.points, closed: false, role: 'morphed', index: 1, count: 1, turnStarts: sp.turns });
-      if (st.loop) built = [morphedLoop(sp, finishLoops, a)];
+    // TASK 804: one morphed spiral PER SEGMENT (per area; the shared rings before a split are their own), in the segments' cutting order
+    const chains = ringSegments(L), sps = [];
+    for (const ch of chains) {
+      const sp = morphedSpiral(ch.map((n) => toXY(n.g.outer)), s);
+      // an area whose turns would cross each other (THE HARD RULE, #core/path-crossings) is refused, never cut crossing
+      if (!sp || pathCrossings([{ points: sp.points, closed: false }]).count) return { ...base, wall, islands, levels, loops, morphedBlocked: 'area', refused: 'morphed area' };
+      sps.push(sp);
     }
+    lines = sps.length;
+    linesWhy = lines > 1 ? 'splits' : null;
+    sps.forEach((sp, i) => { turns += sp.turns.length; clear.push({ points: sp.points, closed: false, role: 'morphed', index: i + 1, count: sps.length, turnStarts: sp.turns }); });
+    if (st.loop && sps.length) { const done = new Set(); built = sps.map((sp) => morphedLoop(sp, finishLoops, a, done)); }
   } else if (pattern === 'raster') {
     const A0 = offsetRegions(R, -d0, POCKET_CLEARING.chordTolMm);
     const pieces = A0.length ? rasterPasses(A0, s, st.angle) : [];

@@ -91,9 +91,10 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // TASK 472: a transient one-line notice in Prepare (e.g. the Stock role moved to another loop)
   let prepareNoticeTimer = null;
   let pendingRemovedNotice = null; // TASK 741: removedVcarvesNotice(n) of the last restored document (TASK 761: + cutPlanNotice), until Prepare shows it
-  function prepareNotice(msg) {
+  function prepareNotice(msg, isError) { // TASK 790: isError (given) = the red error look, else the look stays as it is
     const el = noticeEl; if (!el) return;
     el.textContent = msg; el.hidden = false;
+    if (isError !== undefined) el.classList.toggle('is-error', Boolean(isError));
     clearTimeout(prepareNoticeTimer); prepareNoticeTimer = setTimeout(() => { el.hidden = true; }, 4500);
   }
 
@@ -172,5 +173,6 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     },
     cutPanel,
     opList,
+    notice: prepareNotice, // TASK 790: Open STL's notice (stl-import.js)
   };
 }

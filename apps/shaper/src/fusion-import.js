@@ -15,6 +15,7 @@ import { CUT_PLAN, keyOf } from './cut-plan.js';
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
 import { ringWalk } from '#core/stepped-cut.js';
+import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design's STL source goes with it (an STL import sets its own after)
 
 const UNIT_SCALE_MM = { mm: 1, cm: 10, in: 25.4, inch: 25.4, inches: 25.4 };
 const edgesKey = (ids) => [...new Set((ids || []).filter(Boolean))].sort().join('|');
@@ -166,7 +167,8 @@ export function selectionDesignName(source) {
  * back with its cut plan (the snapshot is taken before the reset); redo the new one. To combine things the user selects them together
  * in the add-in's dialog: one payload. A payload with nothing importable changes nothing.
  * Deduplicates shared curves across outer regions and hole loops, populates `CUT_PLAN` and `stock.thickness`, fits the view, and
- * refreshes Prepare. Called only by the Fusion palette (main.js, Fusion mode); the normal Import SVG / DXF is #ui/sketch-import.js.
+ * refreshes Prepare. Called by the Fusion palette (main.js, Fusion mode) and, TASK 790, by Open STL (stl-import.js: #core/stl-slice.js makes the same
+ * payload from an STL); the normal Import SVG / DXF is #ui/sketch-import.js.
  */
 export function importFusionSelection(payload, { controller, prepare = null, plan = CUT_PLAN, onImport = null } = {}) {
   let data = payload;
@@ -257,6 +259,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
   const replaced = st.shapes.length > 0 || plan.size > 0;
   deserializeDocument(emptyDocument(), st);
   plan.clear();
+  setStlSource(null); // TASK 790: so is the STL it came from (an STL import, stl-import.js, sets the new one once this returns)
 
   const sketch = addSketch(st, sourceName);
   activateSketch(st, sketch.id);

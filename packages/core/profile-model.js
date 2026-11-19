@@ -831,6 +831,10 @@ export function deriveCutFootprint(cuts, rec, state) {
   const off = Number(rec.cutOffset) || 0;
   const isGuide = rec.cutType === 'guide';
   for (const cut of cuts) {
+    if (cut.kind === 'mark') { // TASK 778: a programmed pocket's start mark (written as a guide: never removes wood, drawn in Prepare / Export 2D / 3D)
+      out.push({ kind: 'guide', cutType: 'guide', fillRule: 'nonzero', rings: [], center: null, chain: null, anchor: null, toolPaths: [], clearing: cut.clearing });
+      continue;
+    }
     if (typeof cut.sweep === 'function' && Array.isArray(cut.centers)) { // TASK 745
       const rings = !isGuide && r > 0 ? cut.sweep(r) : [];
       const toolPaths = cut.centers.map((c) => ({ points: c.points, closed: c.closed }));
@@ -881,7 +885,7 @@ export function deriveCutFootprint(cuts, rec, state) {
       const side = cut.offsetSide || 0;
       const center = side === 0 ? cut.polygon : offsetPolygon(cut.polygon, side * (r + off), { join: 'round' });
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
-      const leg = cut.leadIn && cut.leadIn.role === 'leg' ? cut.leadIn.legPoints : null; // TASK 775: an On line outline's lead-in leg, swept and drawn with it
+      const leg = cut.leadIn && cut.leadIn.role === 'arc' ? cut.leadIn.points : null; // TASK 778: an On line outline's lead-in arc (+ optional straight), swept and drawn with it
       if (leg && !isGuide && r > 0) rings.push(...sweptPath(leg, r));
       // TASK 455: the depth chip anchor = the top-most vertex of the bit-centre path
       const anchor = center.length >= 3 ? { ...center.reduce((best, p) => (p.y < best.y ? p : best), center[0]) } : null;

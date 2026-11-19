@@ -208,8 +208,8 @@ const elementsOf = (svg) => {
   eq(rings.length, plan.lines, `Spiral: its ${plan.lines} lines, once`);
   eq([...new Set(rings.map((e) => e.depth))], ['6.000 mm'], 'the lines at the full depth only');
   ok(rings.every((e) => !/Z$/.test(e.d) && e.tool === '6.000 mm' && e.offset === '0mm'), 'every line is an open on-line path with the card\'s bit (toolDia 6 mm), offset 0');
-  eq(els.slice(-2).map((e) => [e.cutType, e.depth]), [['inside', '6.000 mm'], ['outside', '6.000 mm']], 'last: the wall as an inside cut and the island as an outside cut, at the full depth');
-  eq(els.at(-2).d, elementsOf(exportOf(st, plain))[0].d.split(' M ')[0], 'the wall is the pocket\'s own outer loop, exactly as the file writes it');
+  eq(els.slice(-3).map((e) => [e.cutType, e.depth]), [['inside', '6.000 mm'], ['outside', '6.000 mm'], ['guide', undefined]], 'last: the wall (inside), the island (outside) at full depth, then the pocket start mark (guide)');
+  eq(els.at(-3).d, elementsOf(exportOf(st, plain))[0].d.split(' M ')[0], 'the wall is the pocket\'s own outer loop, exactly as the file writes it');
   // the exported rings are the derivation's: each ring's points = the plan's
   const first = rings.filter((e) => e.depth === '6.000 mm').map((e) => e.d.replace(/[MLZ]/g, ' ').trim().split(/\s+/).map(Number));
   const planPts = plan.clear.map((c) => c.points.flatMap((p) => [Math.round(p.x * 1e4) / 1e4, Math.round(p.y * 1e4) / 1e4]));
@@ -217,17 +217,17 @@ const elementsOf = (svg) => {
   // the preview copy: data-clear on each element; the download has none
   const pv = elementsOf(exportOf(st, rec, { groupByCut: true, previewData: true }));
   eq(pv.filter((e) => e.cutType === 'online').map((e) => e.clear), plan.clear.map((c) => `linked ${c.index}/${plan.lines}`), 'preview: data-clear "linked k/N" (line k of N)');
-  eq(pv.slice(-2).map((e) => e.clear), ['wall', 'island 1/1'], 'preview: "wall", "island 1/1"');
+  eq(pv.slice(-3).map((e) => e.clear), ['wall', 'island 1/1', 'start'], 'preview: "wall", "island 1/1", "start"');
   ok(!/data-/.test(exportOf(st, rec)), 'the download has no data-* attribute');
-  // the 3D Review / Prepare: one footprint per cut, the band = the sweep of the cut's own centre path
+  // the 3D Review / Prepare: one footprint per cut, the band = the sweep of the cut's own centre path (start mark is a guide with no cut rings)
   const cutsP = cutsOf(st, rec), fps = deriveCutFootprint(cutsP, rec, st);
   eq(fps.length, cutsP.length, 'one footprint per cut');
-  ok(fps.every((f) => f.clearing && f.rings.length > 0), 'every footprint carries its clearing role and its swept band');
-  // Raster + spiral export: open paths
+  ok(fps.every((f) => f.clearing && (f.clearing.role === 'start' ? f.kind === 'guide' && f.rings.length === 0 : f.rings.length > 0)), 'every footprint carries its clearing role (cut paths sweep; start mark is a guide)');
+  // Raster + spiral export: open paths + start mark guide
   const ras = elementsOf(exportOf(SHAPES.rectangle(), POCKET({ clearing: 'raster' })));
-  ok(ras.filter((e) => e.cutType === 'online').length === results.rectangle.ras.passes + 1 && ras.filter((e) => e.cutType === 'online' && !/Z$/.test(e.d)).length === results.rectangle.ras.passes, 'Raster: open on-line passes + the closed clean-up ring');
+  ok(ras.filter((e) => e.cutType === 'online').length === results.rectangle.ras.passes + 1 && ras.filter((e) => e.cutType === 'online' && !/Z$/.test(e.d)).length === results.rectangle.ras.passes && ras.at(-1).cutType === 'guide', 'Raster: open on-line passes + closed clean-up ring + start mark guide');
   const spx = elementsOf(exportOf(SHAPES.L(), POCKET({ clearing: 'morphed' })));
-  eq(spx.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', false], ['inside', true]], 'Morphed spiral: ONE open on-line path, then the wall');
+  eq(spx.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', false], ['inside', true], ['guide', false]], 'Morphed spiral: ONE open on-line path, the wall, then the start mark guide');
   const refused = elementsOf(exportOf(SHAPES.island(), POCKET({ clearing: 'morphed' })));
   eq(refused.map((e) => e.cutType), ['pocket'], 'a refused spiral (islands) is cut Freehand (its note says so)');
 }
@@ -297,7 +297,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     ok(/^Leftover: 7\.\d+ mm² not reached by a 6 mm bit \(sharp inside corners, necks narrower than the bit\)$/.test(nt[3]), 'the leftover (the 4 corners): ' + nt[3]);
     ok(h.q('.cut-note .cut-note-warn') && h.q('.cut-note .cut-note-warn').textContent.startsWith('7.'), 'the leftover is in the warning colour');
     const els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
-    eq(els.map((e) => e.cutType), ['online', 'inside'], 'the download: ONE on-line path (the 12 turns) + the wall');
+    eq(els.map((e) => e.cutType), ['online', 'inside', 'guide'], 'the download: ONE on-line path (the 12 turns) + the wall + the pocket start mark (guide)');
     // the stepper: + 5 % -> 45 %, ONE undo step, the rings redraw
     n0 = st.history.length;
     h.step('stepover', 1);

@@ -39,7 +39,7 @@ const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
 const ok = (c, m) => { assert.ok(c, m); checks++; };
 const near = (a, b, tol, m) => { assert.ok(Math.abs(a - b) <= tol, `${m}: ${a} vs ${b} (tol ${tol})`); checks++; };
 const BIT = 3.175, R = BIT / 2;
-const TRADE_OFF = "Lead-in: you start at the leg's end; AutoPass then reverses at each end, so the cutting direction alternates.";
+const TRADE_OFF = "Lead-in: you start at the arc's end; AutoPass then reverses at each end, so the cutting direction alternates.";
 
 function polyState(loops, circles = [], chains = []) {
   const joints = new Map(), shapes = [];
@@ -103,41 +103,42 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
     eq([closed, subpaths], [false, 1], `${side}: OPEN (no Z), one stroke`);
     const tip = pts[0], J = pts[1];
     ok((dist(J, { x: 50, y: 0 }) < 1e-9) || dist(J, { x: 50, y: 60 }) < 1e-9, `${side}: the junction is the middle of a longest (100 mm) straight edge: ${JSON.stringify(J)}`);
+    eq(J.c, 'A', `${side}: the lead-in arrives at the junction via an SVG arc (A)`);
     eq([pts.at(-1).x, pts.at(-1).y], [J.x, J.y], `${side}: the path ends back at the junction (its other end)`);
-    near(dist(tip, J), BIT, 1e-9, `${side}: the leg is one bit diameter (default)`);
-    eq(tip.x, J.x, `${side}: the leg runs along the edge's normal`);
+    near(Math.abs(tip.y - J.y), BIT, 1e-4, `${side}: 90° arc of radius = bit dia: tip is one radius out from the line`);
+    near(Math.abs(tip.x - J.x), BIT, 1e-4, `${side}: 90° arc of radius = bit dia: tip is one radius back along the line`);
     ok(side === 'outside' ? !inPoly(tip, XY(RECT)) : inPoly(tip, XY(RECT)), `${side}: the tip is ${side} the shape`);
     for (const c of RECT) ok(pts.some((p) => p.x === c[0] && p.y === c[1]), `${side}: the loop goes round every corner ${c}`);
     if (side === 'outside') ok(/viewBox="0 -3\.175 100 63\.175"|viewBox="0 0 100 63\.175"/.test(svg), 'outside: the viewBox holds the tip: ' + svg.split('\n')[0]);
     else ok(svg.split('\n')[0] === plain.split('\n')[0], 'inside: the viewBox is the drawing\'s');
     ok(!/data-/.test(svg), `${side}: the download has no data-* attribute`);
     eq(elementsOf(one(st, ONLINE({ leadIn: true, leadInSide: side }), { groupByCut: true, previewData: true }))[0].a['data-lead'], 'in', `${side}: the preview copy says data-lead="in"`);
-    // the footprint sweeps the leg (its middle is inside the band) and carries it as a tool path
+    // the footprint sweeps the arc (its middle is inside the band) and carries it as a tool path
     const rec = ONLINE({ leadIn: true, leadInSide: side }), fp = deriveCutFootprint(cutsOf(st, rec), rec, st)[0];
-    const mid = { x: (tip.x + J.x) / 2, y: (tip.y + J.y) / 2 };
-    ok(fp.leadIn && fp.leadIn.role === 'leg' && fp.toolPaths.some((t) => !t.closed && t.points.length === 2), `${side}: the footprint carries the leg`);
-    ok(fp.rings.some((r) => inPoly(mid, r)), `${side}: the leg's middle is inside the swept band`);
+    const mid = fp.leadIn.points[Math.floor(fp.leadIn.points.length / 2)];
+    ok(fp.leadIn && fp.leadIn.role === 'arc' && fp.toolPaths.some((t) => !t.closed && t.points.length >= 3), `${side}: the footprint carries the arc`);
+    ok(fp.rings.some((r) => inPoly(mid, r)), `${side}: the arc's middle is inside the swept band`);
   }
-  // a longer leg, typed
-  const long = pathPoints(elementsOf(one(st, ONLINE({ leadIn: true, leadInLength: 6.35 })))[0].d).pts;
-  near(dist(long[0], long[1]), 6.35, 1e-9, 'Length 6.35 mm: the leg is 6.35 mm');
+  // a larger radius, typed
+  const long = pathPoints(elementsOf(one(st, ONLINE({ leadIn: true, leadInRadius: 6.35 })))[0].d).pts;
+  near(dist(long[0], long[1]), 6.35 * Math.SQRT2, 1e-3, 'Radius 6.35 mm (90° arc): chord tip..J = R * sqrt(2)');
   // Off / Lead-in fields with leadIn false: byte-identical
-  eq(one(st, ONLINE({ leadIn: false, leadInLength: 9, leadInSide: 'inside' })), plain, 'Lead-in Off (its fields set): byte-identical to a record without them');
+  eq(one(st, ONLINE({ leadIn: false, leadInRadius: 9, leadInLength: 5, leadInSide: 'inside' })), plain, 'Lead-in Off (its fields set): byte-identical to a record without them');
   // refusals: closed loop, as without, with its reason
   const thin = polyState([[[0, 0], [100, 0], [100, 4], [0, 4]]]);
-  const thinCuts = cutsOf(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInLength: 6.35 }));
-  eq(thinCuts.find((c) => c.leadIn).leadIn.role + ':' + thinCuts.find((c) => c.leadIn).leadIn.error, 'refused:room', 'a 4 mm strip, Inside 6.35 mm: refused, the far edge is in the way');
-  eq(one(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInLength: 6.35 })), one(thin, ONLINE()), 'refused: exported as without (closed)');
-  ok(pathPoints(elementsOf(one(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInLength: 1.9 })))[0].d).closed === false, 'the same strip, Inside 1.9 mm: fits');
-  eq(cutsOf(st, ONLINE({ leadIn: true, leadInLength: 1 })).find((c) => c.leadIn).leadIn.error, 'short', 'a 1 mm leg under the 1.5875 mm bit radius: refused');
+  const thinCuts = cutsOf(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInRadius: 6.35, leadInSweep: 90 }));
+  eq(thinCuts.find((c) => c.leadIn).leadIn.role + ':' + thinCuts.find((c) => c.leadIn).leadIn.error, 'refused:room', 'a 4 mm strip, Inside radius 6.35 mm at 90°: refused, the far edge is in the way');
+  eq(one(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInRadius: 6.35, leadInSweep: 90 })), one(thin, ONLINE()), 'refused: exported as without (closed)');
+  ok(pathPoints(elementsOf(one(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInRadius: 1.9, leadInSweep: 90 })))[0].d).closed === false, 'the same strip, Inside radius 1.9 mm at 90°: fits');
+  eq(cutsOf(st, ONLINE({ leadIn: true, leadInRadius: 1 })).find((c) => c.leadIn).leadIn.error, 'short', 'a 1 mm radius under the 1.5875 mm bit radius: refused');
   eq(cutsOf(st, ONLINE({ leadIn: true, holdPart: 'tabs', tabCount: 3, tabWidth: 10 })).find((c) => c.leadIn).leadIn.error, 'tabs', 'with tabs: refused (each stroke has its own ends)');
-  // a circle: the middle of its one segment, the leg along the radius
+  // a circle: the middle of its one segment, tangential arc outside
   const circ = polyState([], [['c', [50, 50], 30]]);
   const cp = pathPoints(elementsOf(one(circ, ONLINE({ leadIn: true })))[0].d);
-  near(dist(cp.pts[0], { x: 50, y: 50 }), 30 + BIT, 1e-9, 'circle, Outside: the tip is r + leg from the centre');
-  near(dist(cp.pts[1], { x: 50, y: 50 }), 30, 1e-9, 'circle: the junction is on the circle');
-  ok(!cp.closed && cp.pts.slice(2).every((p) => p.c === 'A') && dist(cp.pts.at(-1), cp.pts[1]) < 1e-6, 'circle: the leg, then arcs back to the junction, no Z');
-  // onion skin + lead-in: the leg at the skin's depth
+  ok(dist(cp.pts[0], { x: 50, y: 50 }) > 30 + BIT - 0.1, 'circle, Outside: the tip is outside the circle');
+  near(dist(cp.pts[1], { x: 50, y: 50 }), 30, 1e-6, 'circle: the junction is on the circle');
+  ok(!cp.closed && cp.pts[1].c === 'A' && cp.pts.slice(2).every((p) => p.c === 'A') && dist(cp.pts.at(-1), cp.pts[1]) < 1e-6, 'circle: the arc lead-in, then outline arcs back to the junction, no Z');
+  // onion skin + lead-in: the arc at the skin's depth
   eq(elementsOf(one(st, ONLINE({ leadIn: true, holdPart: 'skin', holdThickness: 1 }))).map((e) => [e.depth, pathPoints(e.d).closed]), [['2.000 mm', false]], 'onion skin + lead-in: one open path at depth - skin');
   // an open line: nothing to add
   const ch = polyState([], [], [[[0, 0], [50, 0], [50, 30]]]);
@@ -150,63 +151,25 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
     const both = polyState([[[-20, -20], [140, -20], [140, 70], [-20, 70]], RECT]);
     const lp = polysOf(both), byArea = findLoops(both).sort((a, b) => Math.abs(area(lp[b.id])) - Math.abs(area(lp[a.id])));
     const [board, part] = byArea;
-    const lead = { target: { kind: 'loop', id: part.id }, rec: ONLINE({ leadIn: true, leadInLength: 25 }) };
+    const lead = { target: { kind: 'loop', id: part.id }, rec: ONLINE({ leadIn: true, leadInRadius: 25 }) };
     const stock = { target: { kind: 'loop', id: board.id }, rec: { cutType: 'stock', cutDepth: 19, cutOffset: 0, toolDia: BIT } };
     const svg = exportOf(both, [lead, stock]), withStock = elementsOf(svg), alone = elementsOf(exportOf(both, [lead]));
     eq(withStock.map((e) => e.cutType), ['guide', 'online'], 'Stock + lead-in: the Stock (written as a guide) FIRST though it is second in the plan (774), then the lead-in path');
     eq(withStock[1].d, alone[0].d, 'Stock + lead-in: the lead-in path unchanged');
     const tip = pathPoints(withStock[1].d).pts[0], vb = /viewBox="([^"]+)"/.exec(svg)[1].split(' ').map(Number);
-    ok(!pathPoints(withStock[1].d).closed && Math.abs(Math.abs(tip.y - 30) - 55) < 1e-9 && tip.y >= vb[1] - 1e-9 && tip.y <= vb[1] + vb[3] + 1e-9, `Stock + lead-in: ONE open path, its tip 25 mm off the part, inside the viewBox ${vb.join(' ')}`);
+    ok(!pathPoints(withStock[1].d).closed && Math.abs(Math.abs(tip.y - 30) - 55) < 1e-4 && tip.y >= vb[1] - 1e-9 && tip.y <= vb[1] + vb[3] + 1e-9, `Stock + lead-in: ONE open path, its tip 25 mm off the part, inside the viewBox ${vb.join(' ')}`);
   }
-  // a profile with a hole: only the record's own outline gets the leg; the hole stays a closed loop
+  // a profile with a hole: only the record's own outline gets the arc; the hole stays a closed loop
   const plate = polyState([RECT, ISLAND]);
   const pe = elementsOf(one(plate, ONLINE({ leadIn: true })));
-  eq(pe.map((e) => pathPoints(e.d).closed), [true, false], 'a profile with a hole: the hole closed, the outline opened by the leg');
+  eq(pe.map((e) => pathPoints(e.d).closed), [true, false], 'a profile with a hole: the hole closed, the outline opened by the arc');
 }
 
-// ── 2. LEAD-IN on a programmed pocket with Loop on ──
+// ── 2. (TASK 778: pocket lead-in REMOVED — programmed pockets ignore leadIn and emit a guide start mark; full tests in leadin-arc-778-node.test.js) ──
 {
   const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, stepover: 40, finishAllowance: 0.5, rasterAngle: 0, ...more });
-  const SHAPES = { rectangle: polyState([RECT]), island: polyState([RECT, ISLAND]), L: polyState([LSHAPE]), circle: polyState([], [['c', [50, 50], 30]]) };
-  for (const [name, st] of Object.entries(SHAPES)) {
-    const pocket = deriveProfileCuts({ kind: 'loop', id: outerOf(st).id }, { cutType: 'pocket' }, st, findLoops(st), polysOf(st)).find((c) => c.isCompound);
-    const rings = pocketRings(pocket, st), outer = XY(rings.outer.slice(0, -1)), holes = rings.holes.map((h) => XY(h.slice(0, -1)));
-    for (const pat of ['linked', 'raster', 'morphed']) {
-      const tag = `${name} ${pat}`;
-      const on = planClearing(rings, clearingSettings(POCKET({ clearing: pat, loop: true, leadIn: true })));
-      const closedPlan = planClearing(rings, clearingSettings(POCKET({ clearing: pat, loop: true })));
-      if (name === 'island' && pat === 'morphed') { eq(on.refused, 'morphed islands', `${tag}: still refused with its reason`); continue; }
-      eq([on.leadIn, on.leadInRefused, on.clear.length], [true, null, closedPlan.clear.length], `${tag}: every loop gets its lead-in`);
-      on.clear.forEach((c, i) => {
-        const base = closedPlan.clear[i];
-        eq([c.closed, c.points.length], [false, base.points.length + 1], `${tag} loop ${i + 1}: OPEN, one point more (the tip)`);
-        eq(c.points.slice(1), base.points, `${tag} loop ${i + 1}: then the closed loop itself, from its start back to it`);
-        const tip = c.points[0], J = c.points[1];
-        eq([J, c.points.at(-1)], [c.leadIn.junction, c.leadIn.junction], `${tag} loop ${i + 1}: its two ends are the tip and the junction`);
-        near(dist(tip, J), 6, 1e-9, `${tag} loop ${i + 1}: the leg is one bit diameter`);
-        let worst = Infinity;
-        for (let k = 0; k <= 20; k++) {
-          const p = { x: J.x + ((tip.x - J.x) * k) / 20, y: J.y + ((tip.y - J.y) * k) / 20 };
-          ok(inPoly(p, outer) && !holes.some((h) => inPoly(p, h)), `${tag} loop ${i + 1}: the leg stays inside the pocket, out of every island`);
-          worst = Math.min(worst, distRing(p, outer), ...holes.map((h) => distRing(p, h)));
-        }
-        ok(worst >= 3 - 0.02, `${tag} loop ${i + 1}: the leg stays the bit radius from the wall and the islands (closest ${worst.toFixed(4)} mm): inside the cleared region`);
-      });
-      ok(on.leftover.area <= closedPlan.leftover.area + 1e-6, `${tag}: the leftover is not larger (${on.leftover.area} vs ${closedPlan.leftover.area})`);
-      // the export: one open on-line path per loop
-      const els = elementsOf(one(st, POCKET({ clearing: pat, loop: true, leadIn: true })));
-      eq(els.map((e) => [e.cutType, pathPoints(e.d).closed]), on.clear.map(() => ['online', false]), `${tag}: the download: ${on.clear.length} open on-line path(s), no Z`);
-      // Loop off ignores it
-      eq(one(st, POCKET({ clearing: pat, leadIn: true })), one(st, POCKET({ clearing: pat })), `${tag}: Loop off: the lead-in is ignored (byte-identical)`);
-    }
-  }
-  const st = SHAPES.rectangle;
-  eq(one(st, POCKET({ leadIn: true, loop: true })), one(st, POCKET()), 'Freehand: the lead-in is ignored');
-  const rings = pocketRings(deriveProfileCuts({ kind: 'loop', id: outerOf(st).id }, { cutType: 'pocket' }, st, findLoops(st), polysOf(st)).find((c) => c.isCompound), st);
-  const tooLong = planClearing(rings, clearingSettings(POCKET({ clearing: 'linked', loop: true, leadIn: true, leadInLength: 80 })));
-  eq([tooLong.leadIn, tooLong.leadInRefused, tooLong.clear.every((c) => c.closed)], [false, 'lead-in room', true], 'an 80 mm leg fits nowhere: refused, closed loops');
-  const short = planClearing(rings, clearingSettings(POCKET({ clearing: 'linked', loop: true, leadIn: true, leadInLength: 2 })));
-  eq([short.leadIn, short.leadInRefused], [false, 'lead-in short'], 'a 2 mm leg under the 3 mm bit radius: refused');
+  const st = polyState([RECT]);
+  eq(one(st, POCKET({ clearing: 'linked', loop: true, leadIn: true })), one(st, POCKET({ clearing: 'linked', loop: true })), 'pocket with saved leadIn:true exports byte-identical to without (closed loop + guide start mark)');
 }
 
 // ── 3. TABS on an On line outline ──
@@ -328,55 +291,55 @@ let saved = null;
     // On line on the first rectangle
     h.clickAt(10, 10); h.pick('online'); h.typed('.cut-depth', '3');
     const kA = keyAt(st, 10, 10);
-    ok(h.shown('leadIn') && !h.shown('leadInLength') && !h.shown('leadInSide'), 'On line outline: the Lead-in row, Off: no Length / Side rows');
+    ok(h.shown('leadIn') && !h.shown('leadInRadius') && !h.shown('leadInSweep') && !h.shown('leadInLength') && !h.shown('leadInSide') && !h.shown('leadInAt'), 'On line outline: the Lead-in row, Off: no arc detail rows');
     eq(h.presets('leadIn'), ['Off*', 'On'], 'Lead-in: Off | On, Off active');
     ok(h.shown('holdPart') && !h.shown('tabCount') && !h.shown('holdThickness'), 'On line: the Hold part row (Off)');
     eq(h.count('circle'), 0, 'a closed line: no dot (no start point on the Origin)');
     let n0 = st.history.length;
     h.preset('leadIn', 'true');
-    eq([CUT_PLAN.get(kA).leadIn, CUT_PLAN.get(kA).leadInSide, CUT_PLAN.get(kA).leadInLength ?? null, st.history.length], [true, 'outside', null, n0 + 1], 'Lead-in On: ONE undo step; Outside; the length follows the bit (none stored)');
-    ok(h.shown('leadInLength') && h.shown('leadInSide'), 'On: the Length and Side rows');
-    eq([h.q('.cut-lead-length').value, h.presets('leadInSide')], ['3.175', ['Outside*', 'Inside']], 'Length = one bit diameter, Side Outside');
-    eq([...h.q('.cut-row[data-row="leadInLength"] .cut-field-label').textContent, ''].join(''), 'Length', 'the Length label is the table\'s');
-    eq(h.note(), ['On line: lead-in 3.175 mm outside, from the middle of the longest straight edge', TRADE_OFF], 'the note: the leg and the trade-off');
-    eq([h.count('.sk-lead-leg'), h.count('.sk-lead-tip'), h.count('.sk-lead-end')], [1, 1, 1], 'Prepare: the leg, the tip dot (start) and the junction ring (the other end)');
+    eq([CUT_PLAN.get(kA).leadIn, CUT_PLAN.get(kA).leadInSide, CUT_PLAN.get(kA).leadInRadius ?? null, CUT_PLAN.get(kA).leadInSweep ?? null, CUT_PLAN.get(kA).leadInLength ?? null, CUT_PLAN.get(kA).leadInAt ?? null, st.history.length], [true, 'outside', null, null, null, null, n0 + 1], 'Lead-in On: ONE undo step; Outside; calculated values stored as null');
+    ok(h.shown('leadInRadius') && h.shown('leadInSweep') && h.shown('leadInLength') && h.shown('leadInSide') && h.shown('leadInAt'), 'On: Radius, Sweep, Length, Side, Position rows');
+    eq([h.q('.cut-lead-radius').value, h.q('.cut-lead-sweep').value, h.q('.cut-lead-length').value, h.presets('leadInSide')], ['3.175', '90', '0', ['Outside*', 'Inside']], 'calculated Radius = bit dia, Sweep = 90, Length = 0, Side Outside');
+    eq(h.q('.cut-row[data-row="leadInRadius"] .cut-field-label').textContent, 'Radius', 'the Radius label is the table\'s');
+    eq(h.note(), ['On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge', TRADE_OFF], 'the note: the arc and the trade-off');
+    eq([h.count('.sk-lead-leg'), h.count('.sk-lead-tip'), h.count('.sk-lead-end')], [1, 1, 1], 'Prepare: the arc, the tip dot (start) and the junction ring (the other end)');
     let els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
     eq(els.map((e) => pathPoints(e.d).closed), [false], 'the download: ONE open path');
     const ops = planOperations(st, cutPlanEntries());
-    ok(ops.some((op) => /lead-in outside/.test(op.label)), 'the operations row says lead-in: ' + ops.map((op) => op.label).join(' | '));
-    eq(planLeadInNotes(st, CUT_PLAN), ['On line: lead-in 3.175 mm outside, from the middle of the longest straight edge', TRADE_OFF], 'the 3D Review info: the same note');
+    ok(ops.some((op) => /lead-in arc outside/.test(op.label)), 'the operations row says lead-in arc: ' + ops.map((op) => op.label).join(' | '));
+    eq(planLeadInNotes(st, CUT_PLAN), ['On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge', TRADE_OFF], 'the 3D Review info: the same note');
     n0 = st.history.length;
-    h.step('leadInLength', 1);
-    eq([CUT_PLAN.get(kA).leadInLength, st.history.length], [3.5, n0 + 1], 'Length +: 3.175 snaps up to the next 0.5 mm step, 3.5, ONE undo step');
-    h.typed('.cut-lead-length', '6.35'); eq(CUT_PLAN.get(kA).leadInLength, 6.35, 'typed 6.35');
-    h.typed('.cut-lead-length', '-1'); eq(CUT_PLAN.get(kA).leadInLength, 6.35, 'typed -1: refused');
+    h.step('leadInRadius', 1);
+    eq([CUT_PLAN.get(kA).leadInRadius, st.history.length], [3.5, n0 + 1], 'Radius +: 3.175 snaps up to the next 0.5 mm step, 3.5, ONE undo step');
+    h.typed('.cut-lead-radius', '6.35'); eq(CUT_PLAN.get(kA).leadInRadius, 6.35, 'typed 6.35');
+    h.typed('.cut-lead-radius', '-1'); eq(CUT_PLAN.get(kA).leadInRadius, 6.35, 'typed -1: refused');
     h.preset('leadInSide', 'inside'); eq(CUT_PLAN.get(kA).leadInSide, 'inside', 'Side Inside');
     const tip = pathPoints(elementsOf(shaperSvgOf(st, cutPlanEntries()))[0].d).pts[0];
     ok(inPoly(tip, XY(RECT)), 'Inside: the tip is inside the outline');
-    h.typed('.cut-lead-length', '1');
-    eq(h.note(), ['On line: lead-in refused: the leg 1 mm is shorter than the bit radius 1.587 mm; cut as a closed loop'], 'refused: the note says why');
+    h.typed('.cut-lead-radius', '1');
+    eq(h.note(), ['On line: lead-in arc refused: the radius 1 mm is smaller than the bit radius 1.587 mm; cut as a closed loop'], 'refused: the note says why');
     ok(h.q('.cut-note .cut-note-warn'), 'refused: in the warning colour');
-    h.typed('.cut-lead-length', '6.35');
-    app.undo(); eq(CUT_PLAN.get(kA).leadInLength, 1, 'undo: back one edit');
-    app.redo(); eq(CUT_PLAN.get(kA).leadInLength, 6.35, 'redo');
+    h.typed('.cut-lead-radius', '6.35');
+    app.undo(); eq(CUT_PLAN.get(kA).leadInRadius, 1, 'undo: back one edit');
+    app.redo(); eq(CUT_PLAN.get(kA).leadInRadius, 6.35, 'redo');
     // Tabs on On line: no thickness row, the lead-in row goes, the note in the owner's words
     h.preset('holdPart', 'tabs');
     ok(h.shown('tabCount') && h.shown('tabWidth') && !h.shown('holdThickness'), 'On line Tabs: count and width, NO thickness (the gaps are not cut at all)');
-    ok(!h.shown('leadIn') && !h.shown('leadInLength'), 'with Tabs: no Lead-in row (each stroke has its ends)');
+    ok(!h.shown('leadIn') && !h.shown('leadInRadius'), 'with Tabs: no Lead-in row (each stroke has its ends)');
     eq(h.q('.cut-row[data-row="tabWidth"] .sk-hint').textContent, 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.', 'Tab width on On line: the gap\'s hint (the table\'s)');
     h.typed('.cut-tab-count', '3'); h.typed('.cut-tab-width', '10');
-    eq(h.note(), ['Tabs: 3 gaps of 10 mm left uncut; cut them by hand afterwards', 'Each gap keeps 6.825 mm of wood with a 3.175 mm bit (the gap minus the bit)', 'On line: no lead-in with tabs: each stroke has its own ends'], 'the tabs note (the stored Lead-in On waits: no leg with tabs)');
+    eq(h.note(), ['Tabs: 3 gaps of 10 mm left uncut; cut them by hand afterwards', 'Each gap keeps 6.825 mm of wood with a 3.175 mm bit (the gap minus the bit)', 'On line: no lead-in with tabs: each stroke has its own ends'], 'the tabs note (the stored Lead-in On waits: no arc with tabs)');
     els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
     eq(els.map((e) => [e.cutType, e.depth, pathPoints(e.d).closed]), Array(3).fill(['online', '3.000 mm', false]), 'the download: 3 open strokes at the full depth');
     eq([h.count('.sk-stroke'), h.count('.sk-tab-mark'), h.count('.sk-lead-tip')], [3, 3, 0], 'Prepare: the 3 strokes and the 3 tab marks, no lead-in');
     ok(planOperations(st, cutPlanEntries()).some((op) => /3 tabs \(gaps 10 mm left uncut\)/.test(op.label)), 'the operations row: 3 tabs');
     h.preset('holdPart', 'off');
-    ok(h.shown('leadIn') && h.shown('leadInLength'), 'Tabs off: the Lead-in rows back');
-    // the last values: the next outline turned On takes length 6.35, Inside
+    ok(h.shown('leadIn') && h.shown('leadInRadius'), 'Tabs off: the Lead-in rows back');
+    // calculated defaults: only Side is remembered; Radius / Sweep / Length stay calculated (null)
     h.clickAt(130, 10); h.pick('online'); h.typed('.cut-depth', '3');
     const kB = keyAt(st, 130, 10);
     h.preset('leadIn', 'true');
-    eq([CUT_PLAN.get(kB).leadInLength, CUT_PLAN.get(kB).leadInSide], [6.35, 'inside'], 'the next record turned On takes the last length and side set');
+    eq([CUT_PLAN.get(kB).leadInRadius, CUT_PLAN.get(kB).leadInSweep, CUT_PLAN.get(kB).leadInLength, CUT_PLAN.get(kB).leadInSide], [null, null, null, 'inside'], 'the next record turned On remembers Side only; Radius/Sweep/Length default to calculated (null)');
     // an open line: no Lead-in row; Tabs refused with the reason
     h.clickAt(165, 90);
     const chainSel = [...CUT_PLAN.keys()];
@@ -388,29 +351,21 @@ let saved = null;
     h.preset('holdPart', 'tabs');
     eq(h.note(), ['On line: tabs refused: tabs need a closed outline: this is an open line; cut without them'], 'tabs on an open line: refused, the reason');
     h.preset('holdPart', 'off');
-    // a programmed pocket with Loop on
+    // a programmed pocket with Loop on: NO Lead-in row; shows start mark target (TASK 778)
     h.clickAt(10, 90); h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
     const kP = keyAt(st, 10, 90);
     h.clearing('linked');
     ok(!h.shown('leadIn'), 'Spiral, Loop off: no Lead-in row');
     h.toggleLoop();
-    ok(h.shown('leadIn') && !h.shown('leadInLength'), 'Loop on: the Lead-in row');
-    eq(h.count('circle'), 0, 'Loop on, closed: no dot on the loop (no start point)');
+    ok(!h.shown('leadIn') && !h.shown('leadInRadius'), 'Loop on: still no Lead-in row on pockets (TASK 778)');
+    eq(h.count('circle'), 0, 'Loop on, closed: no dot on the loop');
+    eq(h.count('.sk-pocket-start'), 1, 'Prepare: 1 pocket start mark target');
     ok(/\+ wall: one closed loop, stepover/.test(h.note()[0]), 'the note: one closed loop (nothing about where it starts): ' + h.note()[0]);
-    h.preset('leadIn', 'true');
-    ok(h.shown('leadInLength') && !h.shown('leadInSide'), 'pocket Lead-in On: Length, no Side');
-    eq(CUT_PLAN.get(kP).leadInLength, 6.35, 'the pocket takes the last length set too');
-    const nt = h.note();
-    ok(/\+ wall: one loop with a lead-in, stepover/.test(nt[0]) && nt.includes('Lead-in: a leg of 6.35 mm from inside the cleared area to the loop') && nt.includes(TRADE_OFF), 'the pocket note: ' + JSON.stringify(nt));
-    eq([h.count('.sk-lead-tip'), h.count('.sk-lead-end')], [1, 1], 'Prepare: the pocket loop\'s tip and junction');
     const pocketEls = elementsOf(shaperSvgOf(st, [{ target: { kind: 'loop', id: kP.slice(5) }, rec: CUT_PLAN.get(kP) }]));
-    eq(pocketEls.map((e) => [e.cutType, pathPoints(e.d).closed]), [['online', false]], 'the pocket download: ONE open on-line path');
-    const pv = shaperSvgOf(st, cutPlanEntries(), { preview: true });
-    ok(/data-clear="loop 1\/1" data-lead="in"/.test(pv), 'the preview copy: the pocket loop tagged with its lead-in');
-    ok(planOperations(st, cutPlanEntries()).some((op) => /one loop with a lead-in/.test(op.label)), 'the operations row: one loop with a lead-in');
+    eq(pocketEls.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], 'the pocket download: ONE closed on-line path + 1 guide start mark');
     saved = { plan: JSON.stringify([...CUT_PLAN.entries()]), svg: shaperSvgOf(st, cutPlanEntries()) };
     const d = await app.storedDoc();
-    ok(d.hosts.shaper.cutPlan.some(([, r]) => r.leadIn === true && r.leadInLength === 6.35 && r.leadInSide === 'inside'), 'the autosave stores the lead-in fields');
+    ok(d.hosts.shaper.cutPlan.some(([, r]) => r.leadIn === true && r.leadInRadius === 6.35 && r.leadInSide === 'inside'), 'the autosave stores the lead-in fields');
     h.clickAt(300, 300);
   } finally { await app.close(); }
 }

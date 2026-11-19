@@ -45,11 +45,12 @@ const HOLD_PARAMS = ['holdPart', 'tabCount', 'tabWidth', 'holdThickness'];
 // the finish turn in them; the step-downs are the Origin's Pass Depth / AutoPass) and, for Raster, `rasterAngle`.
 // Never written to the export as attributes (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one
 // derivation (deriveCuts), which writes a programmed pocket as on-line paths + the finish pass (an inside cut, islands as outside cuts).
-const CLEARING_PARAMS = ['clearing', 'stepover', 'finishAllowance', 'loop', 'rasterAngle', 'leadIn', 'leadInLength']; // TASK 750: `loop` = true | false (default off), any programmed pattern; TASK 775: `leadIn` (Loop on)
-// TASK 775: the LEAD-IN (#core/lead-in.js): `leadIn` (Off | On: true | false), `leadInLength` (base mm; none = one bit diameter) and, on an On line outline,
-// `leadInSide` (Outside | Inside: the waste side the leg goes to). On line also takes the HOLD PART rows (742's declaration: its tabs are gaps left uncut,
-// #core/hold-part tabsHaveThickness). Never written to the export as attributes; the exporter cuts the record through the one derivation (deriveCuts).
-const LEAD_IN_PARAMS = ['leadIn', 'leadInLength', 'leadInSide'];
+const CLEARING_PARAMS = ['clearing', 'stepover', 'finishAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern; TASK 778: pockets get a start mark, no lead-in row
+// TASK 775 / 778: the TANGENTIAL ARC LEAD-IN (#core/lead-in.js, On line outlines only): `leadIn` (Off | On: true | false), `leadInRadius` (base mm | null = calculated),
+// `leadInSweep` (degrees 15-180 | null = calculated), `leadInLength` (optional straight part before arc, base mm | null = calculated 0),
+// `leadInSide` (Outside | Inside: the waste side the arc sits on), `leadInAt` (junction position 0..1 | null = calculated). On line also takes the HOLD PART rows (742's declaration:
+// its tabs are gaps left uncut, #core/hold-part tabsHaveThickness). Never written to the export as attributes; the exporter cuts the record through the one derivation (deriveCuts).
+const LEAD_IN_PARAMS = ['leadIn', 'leadInRadius', 'leadInSweep', 'leadInLength', 'leadInSide', 'leadInAt'];
 // TASK 743: `opRank` = where an OPERATION of this type goes in the DEFAULT operation order (apps/shaper/src/operations.js), lowest first: what is not cut
 // (Guide, Stock: 0), then on line (1), pockets (2), inside cuts = the holes (3), and last the outside cuts that free the part (4). A stepped type ranks as
 // its plain type (it is cut as terraces of it). Prepare only: never written to the export.

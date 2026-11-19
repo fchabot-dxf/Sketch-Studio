@@ -13,7 +13,7 @@ import path from 'node:path';
 import { openPocketPage } from './pocket-live.js';
 import { sleep } from './cdp-browser.js';
 
-export const TRADE_OFF = "Lead-in: you start at the leg's end; AutoPass then reverses at each end, so the cutting direction alternates.";
+export const TRADE_OFF = "Lead-in: you start at the arc's end; AutoPass then reverses at each end, so the cutting direction alternates.";
 const IN = 25.4;
 
 /** The page (EVIDENCE_DIR .evidence/775; the 3D view needs swiftshader in headless). */
@@ -84,7 +84,7 @@ export async function linePhase(t, label, { ownerFile = null } = {}) {
   await pickType('online');
   await typeField('.cut-depth', inch ? '0.125' : '3');
   let r = await rows();
-  assert.ok(r.includes('leadIn') && r.includes('holdPart') && !r.includes('leadInLength') && !r.includes('leadInSide') && !r.includes('tabCount'), label + ': On line outline: the Lead-in and Hold part rows, Off: ' + JSON.stringify(r));
+  assert.ok(r.includes('leadIn') && r.includes('holdPart') && !r.includes('leadInRadius') && !r.includes('leadInSweep') && !r.includes('leadInLength') && !r.includes('leadInSide') && !r.includes('tabCount'), label + ': On line outline: the Lead-in and Hold part rows, Off: ' + JSON.stringify(r));
   assert.strictEqual(await count('circle'), 0, label + ': a closed line: no dot (no start point on the Origin)');
   let boxes = await presetBoxes('leadIn');
   console.log(label + ' Lead-in choice: ' + JSON.stringify(boxes));
@@ -92,15 +92,15 @@ export async function linePhase(t, label, { ownerFile = null } = {}) {
   if (t.phone) for (const [n, w, h] of boxes) assert.ok(w >= 44 && h >= 44, `${label}: the ${n} button is ${w} x ${h} (44 px on a phone)`);
   await preset('leadIn', 'true');
   r = await rows();
-  assert.ok(r.includes('leadInLength') && r.includes('leadInSide'), label + ': On: Length + Side');
+  assert.ok(r.includes('leadInRadius') && r.includes('leadInSweep') && r.includes('leadInLength') && r.includes('leadInSide') && r.includes('leadInAt'), label + ': On: Radius + Sweep + Length + Side + Position');
   boxes = await presetBoxes('leadInSide');
   assert.deepStrictEqual(boxes.map((b) => b[0]), ['Outside*', 'Inside'], label + ': Side Outside | Inside');
   if (t.phone) for (const [n, w, h] of boxes) assert.ok(w >= 44 && h >= 44, `${label}: the ${n} button is ${w} x ${h}`);
-  await typeField('.cut-lead-length', inch ? '0.25' : '6');
+  await typeField('.cut-lead-radius', inch ? '0.25' : '6');
   const len = inch ? '0.25' : '6';
-  await waitFor(`[...document.querySelectorAll('.cut-note div')].some((d) => d.textContent.includes('lead-in ${len} ${u}'))`, label + ': the lead-in note');
-  assert.deepStrictEqual(await note(), [`On line: lead-in ${len} ${u} outside, from the middle of the longest straight edge`, TRADE_OFF], label + ': the note: the leg and the trade-off');
-  assert.deepStrictEqual([await count('.sk-lead-leg'), await count('.sk-lead-tip'), await count('.sk-lead-end')], [1, 1, 1], label + ': Prepare: the leg, its tip (the start) and the junction (the other end)');
+  await waitFor(`[...document.querySelectorAll('.cut-note div')].some((d) => d.textContent.includes('lead-in arc, radius ${len} ${u}'))`, label + ': the lead-in note');
+  assert.deepStrictEqual(await note(), [`On line: lead-in arc, radius ${len} ${u}, 90° outside, from the middle of the longest straight edge`, TRADE_OFF], label + ': the note: the arc and the trade-off');
+  assert.deepStrictEqual([await count('.sk-lead-leg'), await count('.sk-lead-tip'), await count('.sk-lead-end')], [1, 1, 1], label + ': Prepare: the arc, its tip (the start) and the junction (the other end)');
   await shotWorld(`${D}-prepare-leadin-outside.png`, [-10, -10, IN + 10, IN + 10], 2);
   await shot(`${D}-card-leadin.png`, '#prepare-panel .cut-card', 2);
   await preset('leadInSide', 'inside');
@@ -123,7 +123,7 @@ export async function linePhase(t, label, { ownerFile = null } = {}) {
   assert.deepStrictEqual([await count('.sk-stroke'), await count('.sk-tab-mark')], [3, 3], label + ': Prepare: 3 strokes, 3 tab marks');
   await shotWorld(`${D}-prepare-tabs.png`, [1.5 * IN - 10, -10, 2.5 * IN + 10, IN + 10], 2);
   await shot(`${D}-card-tabs.png`, '#prepare-panel .cut-card', 2);
-  // Generate: the downloaded file == the page's derivation; A = ONE open path (tip, junction, round, back), B = 3 open strokes
+  // Generate: the downloaded file == the page's derivation; A = ONE open path (M tip A ... junction, round, back), B = 3 open strokes
   const file = await download();
   assert.strictEqual(file, await pageSvg(), label + ': the downloaded file is the one derivation\'s');
   fs.writeFileSync(path.join(t.EVIDENCE_DIR, `${D}-download.svg`), file);
@@ -132,19 +132,19 @@ export async function linePhase(t, label, { ownerFile = null } = {}) {
   const depth = inch ? '0.125 in' : '3.000 mm';
   assert.deepStrictEqual(els.map((e) => [e[2], e[3]]), Array(4).fill(['online', depth]), label + ': 4 on-line paths at ' + depth);
   const a = pathPoints(els[0][1]);
-  assert.ok(!a.closed && a.subpaths === 1 && Math.abs(Math.hypot(a.pts[0].x - a.pts[1].x, a.pts[0].y - a.pts[1].y) - (inch ? 6.35 : 6)) < 1e-6 && a.pts.at(-1).x === a.pts[1].x && a.pts.at(-1).y === a.pts[1].y,
-    label + ': A = ONE open path: M tip L junction, round, back to the junction: ' + els[0][1]);
+  assert.ok(!a.closed && a.subpaths === 1 && els[0][1].includes(' A ') && Math.abs(Math.hypot(a.pts[0].x - a.pts[1].x, a.pts[0].y - a.pts[1].y) - (inch ? 6.35 : 6) * Math.SQRT2) < 1e-3 && a.pts.at(-1).x === a.pts[1].x && a.pts.at(-1).y === a.pts[1].y,
+    label + ': A = ONE open path: M tip A ... junction, round, back to the junction: ' + els[0][1]);
   assert.ok(els.slice(1).every((e) => { const p = pathPoints(e[1]); return !p.closed && p.subpaths === 1; }), label + ': B = 3 open strokes');
   assert.ok(!/data-/.test(file), label + ': no data-* in the file');
   console.log(label + ' download: ' + file);
-  // Export 2D: the labels and rows say lead-in / strokes (tabs); its elements == the file's
+  // Export 2D: the labels and rows say lead-in arc / strokes (tabs); its elements == the file's
   const ex = await t.export2d(label);
   console.log(label + ' 2D rows: ' + JSON.stringify(ex.rows));
   const labels = await evalJs(`import('/apps/shaper/src/export-preview.js').then((m) => m.previewItems(document.querySelector('#review-2d-canvas .rv2d-doc')).map((it) => [m.itemLabel(it), it.el.getAttribute('d')]))`);
   console.log(label + ' 2D labels: ' + JSON.stringify(labels.map((l) => l[0])));
-  assert.ok(labels.some((l) => /lead-in$/.test(l[0])) && labels.filter((l) => /stroke \d of 3 \(tabs\)$/.test(l[0])).length === 3, label + ': 2D labels: lead-in, stroke k of 3 (tabs)');
+  assert.ok(labels.some((l) => /lead-in arc$/.test(l[0])) && labels.filter((l) => /stroke \d of 3 \(tabs\)$/.test(l[0])).length === 3, label + ': 2D labels: lead-in arc, stroke k of 3 (tabs)');
   assert.deepStrictEqual(labels.map((l) => l[1]).sort(), els.map((e) => e[1]).sort(), label + ': the 2D elements are the file\'s (geometry)');
-  assert.ok(ex.rows.some((t0) => /lead-in/.test(t0)) && ex.rows.some((t0) => /strokes \(tabs\)/.test(t0)), label + ': the 2D list rows');
+  assert.ok(ex.rows.some((t0) => /lead-in arc/.test(t0)) && ex.rows.some((t0) => /strokes \(tabs\)/.test(t0)), label + ': the 2D list rows');
   await shot(`${D}-export-2d.png`, t.phone ? null : '#review-stage', t.phone ? 1 : 1.5);
   // Export 3D: the info has the lead-in and the tabs notes; the tabs stand
   await clickEl('#review-view-3d');
@@ -158,11 +158,11 @@ export async function linePhase(t, label, { ownerFile = null } = {}) {
   await openMode('prepare');
 }
 
-/** A programmed pocket with Loop on: no dot on the closed loop; Lead-in On: its leg + 2 dots, one open path; Spiral / Raster / Morphed spiral; an island pocket;
- *  an open line has no Lead-in row. */
+/** TASK 778: A programmed pocket with Loop on has NO Lead-in row and stays closed; it shows 1 pocket start mark target in Prepare and 1 guide start mark in export;
+ *  Spiral / Raster / Morphed spiral; an island pocket; an open line has no Lead-in row. */
 export async function pocketPhase(t, label, { patterns = ['linked', 'raster', 'morphed'], island = true } = {}) {
-  const { evalJs, waitFor, clickEl, pickType, typeField, shot, shotWorld, pickClearing, setLoop, fileElements } = t;
-  const { D, pick, rows, note, count, preset, pageSvg, unit } = tools(t);
+  const { evalJs, pickType, typeField, shot, shotWorld, pickClearing, setLoop, fileElements } = t;
+  const { D, pick, rows, note, count, pageSvg, unit } = tools(t);
   await drawShapes(t, `poly('P', [[0, 0], [100, 0], [100, 60], [0, 60]]); poly('I', [[0, 80], [100, 80], [100, 140], [0, 140]]); poly('Ii', [[40, 100], [60, 100], [60, 120], [40, 120]]);
     poly('C', [[120, 0], [170, 0], [170, 40]], false);`);
   const u = await unit();
@@ -173,23 +173,17 @@ export async function pocketPhase(t, label, { patterns = ['linked', 'raster', 'm
   for (const pat of patterns) {
     await pickClearing(pat);
     await setLoop(true);
-    if (!(await rows()).includes('leadIn')) await setLoop(true);
-    let r = await rows();
-    assert.ok(r.includes('leadIn'), label + ` ${pat}: Loop on: the Lead-in row: ` + JSON.stringify(r));
-    if (await evalJs(`document.querySelector('#prepare-panel .cut-row[data-row="leadIn"] .cut-preset[data-value="true"]').classList.contains('is-active')`)) await preset('leadIn', 'false');
+    const r = await rows();
+    assert.ok(!r.includes('leadIn') && !r.includes('leadInRadius') && !r.includes('leadInLength'), label + ` ${pat}: pocket has NO Lead-in row: ` + JSON.stringify(r));
     assert.strictEqual(await count('circle'), 0, label + ` ${pat}: a closed loop: no dot (no start point)`);
+    assert.strictEqual(await count('.sk-pocket-start'), 1, label + ` ${pat}: 1 pocket start mark target in Prepare`);
     assert.ok(/\+ wall: one closed loop,/.test((await note())[0]), label + ` ${pat}: the note says one closed loop, nothing about where it starts: ` + (await note())[0]);
-    await preset('leadIn', 'true');
-    r = await rows();
-    assert.ok(r.includes('leadInLength') && !r.includes('leadInSide'), label + ` ${pat}: Lead-in On: Length, no Side`);
-    const n = await note();
-    assert.ok(/\+ wall: one loop with a lead-in,/.test(n[0]) && n.some((x) => /^Lead-in: a leg of /.test(x)) && n.includes(TRADE_OFF), label + ` ${pat}: the note ${JSON.stringify(n)}`);
-    assert.deepStrictEqual([await count('.sk-lead-tip'), await count('.sk-lead-end'), await count('.sk-lead-leg')], [1, 1, 1], label + ` ${pat}: Prepare: the leg and its two ends`);
-    const els = fileElements(await pageSvg()).filter((e) => e[2] === 'online');
-    assert.ok(els.length === 1 && !pathPoints(els[0][1]).closed, label + ` ${pat}: ONE open on-line path`);
-    await shotWorld(`${D}-prepare-pocket-${pat}-leadin.png`, [-6, -6, 106, 66], 2);
+    const els = fileElements(await pageSvg());
+    const online = els.filter((e) => e[2] === 'online'), guides = els.filter((e) => e[2] === 'guide');
+    assert.ok(online.length === 1 && /Z$/.test(online[0][1]) && guides.length === 1, label + ` ${pat}: ONE closed on-line loop + 1 guide start mark`);
+    await shotWorld(`${D}-prepare-pocket-${pat}-startmark.png`, [-6, -6, 106, 66], 2);
   }
-  await shot(`${D}-card-pocket-leadin.png`, '#prepare-panel .cut-card', 2);
+  await shot(`${D}-card-pocket-startmark.png`, '#prepare-panel .cut-card', 2);
   if (island) {
     await pick(10, 90);
     await pickType('pocket');
@@ -197,28 +191,22 @@ export async function pocketPhase(t, label, { patterns = ['linked', 'raster', 'm
     await typeField('.cut-bit', u === 'in' ? '0.25' : '6');
     await pickClearing('linked');
     await setLoop(true);
-    if (!await evalJs(`document.querySelector('#prepare-panel .cut-row[data-row="leadIn"] .cut-preset[data-value="true"]').classList.contains('is-active')`)) await preset('leadIn', 'true');
     const n = await note();
-    const loops = Number((/(\d+) loops with lead-ins/.exec(n[0]) || [])[1]);
-    assert.ok(loops > 1 && await count('.sk-lead-tip') === loops, label + `: the island pocket: ${loops} loops, each with its tip: ` + n[0]);
-    await shotWorld(`${D}-prepare-pocket-island-leadin.png`, [-6, 74, 106, 146], 2);
+    const loops = Number((/(\d+) closed loops/.exec(n[0]) || [])[1]);
+    assert.ok(loops > 1 && await count('.sk-pocket-start') === 1, label + `: the island pocket: ${loops} closed loops, 1 start mark on the selected pocket: ` + n[0]);
+    await shotWorld(`${D}-prepare-pocket-island-startmark.png`, [-6, 74, 106, 146], 2);
   }
   // an open line: it has its ends: no Lead-in row
   await pick(145, 0, 120);
   await pickType('online');
   const r = await rows();
   assert.ok(!r.includes('leadIn') && r.includes('holdPart'), label + ': an open line: no Lead-in row, the Hold part row: ' + JSON.stringify(r));
-  // the operations list says lead-in
-  const ops = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row, #prepare-ops [data-id]')].map((e) => e.textContent).join(' | ')`);
-  console.log(label + ' operations: ' + ops);
-  assert.ok(/with a lead-in|with lead-ins/.test(ops), label + ': the operations list says the lead-in');
-  await shot(`${D}-ops-list.png`, '#prepare-ops', 2);
 }
 
-/** Fusion mode: the drafted-pocket payload; the pocket with Spiral + Loop + Lead-in, the outline On line with a lead-in; the download. */
+/** Fusion mode: the drafted-pocket payload; the pocket with Spiral + Loop (no Lead-in row, 1 start mark), the outline On line with a lead-in arc; the download. */
 export async function fusionPhase(t) {
   const { evalJs, waitFor, setUnit, clickWorld, pickClearing, setLoop, pickType, shotWorld, shot, fileElements } = t;
-  const { count, preset, note, rows, pageSvg } = tools(t);
+  const { count, preset, rows, pageSvg } = tools(t);
   await setUnit('mm');
   await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fs.readFileSync(new URL('../fixtures/sa7-slope/02-drafted-pocket.json', import.meta.url), 'utf8'))})`);
@@ -227,21 +215,23 @@ export async function fusionPhase(t) {
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && document.querySelector('.cut-type-cur').textContent === 'Pocket'`, 'Fusion: the pocket\'s card');
   await pickClearing('linked');
   await setLoop(true);
+  assert.ok(!(await rows()).includes('leadIn'), 'Fusion: pocket has NO Lead-in row');
   assert.strictEqual(await count('circle'), 0, 'Fusion: a closed loop: no dot');
-  await preset('leadIn', 'true');
-  assert.ok((await note()).includes(TRADE_OFF) && await count('.sk-lead-tip') === 1, 'Fusion: the pocket\'s lead-in: ' + JSON.stringify(await note()));
-  await shotWorld('fusion-prepare-pocket-leadin.png', [24, -66, 96, -14], 2);
+  assert.strictEqual(await count('.sk-pocket-start'), 1, 'Fusion: 1 pocket start mark');
+  await shotWorld('fusion-prepare-pocket-startmark.png', [24, -66, 96, -14], 2);
   await clickWorld(10, -10); // the outline region
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && document.querySelector('.cut-type-cur').textContent === 'Outside'`, 'Fusion: the outline\'s card');
   await pickType('online');
   assert.ok((await rows()).includes('leadIn'), 'Fusion: On line outline: the Lead-in row');
   await preset('leadIn', 'true');
-  assert.deepStrictEqual([await count('.sk-lead-tip'), await count('.sk-lead-leg')], [1, 1], 'Fusion: the outline\'s leg and tip');
+  assert.deepStrictEqual([await count('.sk-lead-tip'), await count('.sk-lead-leg')], [1, 1], 'Fusion: the outline\'s arc and tip');
   await shot('fusion-card-leadin.png', '#prepare-panel .cut-card', 2);
   await shotWorld('fusion-prepare-outline-leadin.png', [-12, -92, 132, 12], 2);
-  const els = fileElements(await pageSvg()).filter((e) => e[2] === 'online');
-  console.log('Fusion download (on line paths): ' + JSON.stringify(els.map((e) => e[1].slice(0, 60))));
-  assert.ok(els.length === 2 && els.every((e) => !pathPoints(e[1]).closed), 'Fusion: the pocket loop and the outline: 2 OPEN on-line paths');
+  const all = fileElements(await pageSvg());
+  const online = all.filter((e) => e[2] === 'online'), guides = all.filter((e) => e[2] === 'guide');
+  console.log('Fusion download (on line paths): ' + JSON.stringify(online.map((e) => e[1].slice(0, 60))));
+  assert.ok(online.length === 2 && online.filter((e) => /Z$/.test(e[1])).length === 1 && online.filter((e) => !/Z$/.test(e[1]) && e[1].includes(' A ')).length === 1 && guides.length === 1,
+    'Fusion: 1 closed pocket loop + 1 open outline lead-in arc + 1 guide start mark');
 }
 
 /** TASK 775 (added): the card's note (and the operations row) follow a document-unit change made in the Settings panel, without reselecting. */

@@ -28,10 +28,13 @@ const PARAMS = {
   finishAllowance: { label: 'Finish allowance', hint: ({ loop } = {}) => `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.` },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },
-  // TASK 775: the LEAD-IN rows (an On line outline; a programmed pocket with Loop on: ctx.pocket)
-  leadIn: { label: 'Lead-in', hint: ({ pocket } = {}) => `Starts the ${pocket ? 'loop at the end of a short leg inside the pocket' : 'closed line at the end of a short straight leg in the waste'}, so you plunge there. The path is then open: AutoPass runs back along it, so the cutting direction alternates.`, items: LEAD_IN.modes.map((m) => `leadIn:${m.id}`) },
-  leadInLength: { label: 'Length', hint: 'How long the leg is: one bit diameter unless you set it, and at least the bit radius.' },
-  leadInSide: { label: 'Side', hint: 'Which side of the line the leg goes to: pick the waste side. It meets the line at the middle of its longest straight edge.', items: LEAD_IN.sides.map((m) => `leadInSide:${m.id}`) },
+  // TASK 775 / 778: the TANGENTIAL ARC LEAD-IN rows (On line outlines only)
+  leadIn: { label: 'Lead-in', hint: 'Starts the closed line at the end of a tangential arc in the waste, so you plunge there. The path is then open: AutoPass runs back along it, so the cutting direction alternates.', items: LEAD_IN.modes.map((m) => `leadIn:${m.id}`) },
+  leadInRadius: { label: 'Radius', hint: 'The lead-in curves onto the line along this radius, so the bit joins the cut smoothly instead of turning a corner. Defaults to one bit diameter, reduced to fit (at least the bit radius).' },
+  leadInSweep: { label: 'Sweep', hint: 'How far the lead-in arc curves before meeting the line, in degrees (15° to 180°). Defaults to 90°, reduced if needed to fit.' },
+  leadInLength: { label: 'Length', hint: 'An optional straight line before the lead-in arc, tangent to its start. Defaults to 0 (arc only).' },
+  leadInSide: { label: 'Side', hint: 'Which side of the line the lead-in arc sits on: pick the waste side.', items: LEAD_IN.sides.map((m) => `leadInSide:${m.id}`) },
+  leadInAt: { label: 'Position', hint: 'Where the lead-in meets the line: defaults to the middle of the longest straight edge, or drag the handle on the outline to move it.' },
   rasterAngle: { label: 'Raster angle', hint: 'The direction of the back-and-forth passes: 0° runs left to right, 90° up and down.' },
   adaptiveSteps: { label: 'Adaptive stepping', hint: 'Places the steps by how far they may stray from the slope: more steps where it is nearly flat, fewer where it is steep.' },
   stepDepth: { label: 'Step depth', hint: 'How much deeper each step goes. Smaller steps follow the slope more closely but take more cuts.' },
@@ -90,13 +93,13 @@ const CHOICE_HINTS = {
     ballnose: 'Rounded tip: rounded grooves and soft floor edges.',
     vbit: 'Pointed tip, for V-grooves and chamfers. Pick its angle under it.',
   },
-  leadIn: { // TASK 775
+  leadIn: { // TASK 775 / 778
     off: 'A closed path: it has no start point, plunge anywhere on it.',
-    on: 'The path starts at the leg’s end, in the waste.',
+    on: 'The path starts at the end of the lead-in arc, in the waste.',
   },
   leadInSide: {
-    outside: 'The leg goes out, away from the shape.',
-    inside: 'The leg goes into the shape.',
+    outside: 'The lead-in arc curves in from outside the shape.',
+    inside: 'The lead-in arc curves in from inside the shape.',
   },
   holdPart: {
     off: 'Nothing holds it: the part comes free when the cut goes through.',

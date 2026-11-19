@@ -43,7 +43,9 @@ export function attachStepper(input, spec, { unit, toDoc, read, commit }, { labe
     const step = stepIn(spec, unit());
     // spec.positive: no app minimum, the value only stays > 0: the smallest allowed value is the smallest positive multiple of the step, and a − at or below it stays
     if (spec.positive && cur != null && dir < 0 && cur <= step + EPS) return;
-    const next = nextValue(cur, dir, step, spec.min != null ? toDoc(spec.min) : spec.positive ? step : -Infinity, spec.max == null ? Infinity : toDoc(spec.max));
+    const rawMin = typeof spec.min === 'function' ? spec.min() : spec.min;
+    const rawMax = typeof spec.max === 'function' ? spec.max() : spec.max;
+    const next = nextValue(cur, dir, step, rawMin != null ? toDoc(rawMin) : spec.positive ? step : -Infinity, rawMax == null ? Infinity : toDoc(rawMax));
     if (cur == null || Math.abs(next - cur) > EPS) commit(next);
   };
 

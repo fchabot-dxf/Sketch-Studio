@@ -24,8 +24,29 @@ const stateOf = (g) => ({
   constraints: (g.constraints || []).map((c) => ({ ...c })),
   profiles: (g.profiles || []).map((p) => ({ ...p })),
 });
-// the 3D Review's geometry of each footprint (what it draws: its kind, type, depth, swept rings and tool paths)
-const reliefOf = (st) => planReliefItems(st).map((i) => [i.key, i.cutType, i.cutDepth, i.footprints.map((fp) => [fp.kind, fp.cutType, fp.fillRule, fp.rings, fp.toolPaths, fp.center])]);
+// the 3D Review's geometry of each footprint (what it draws: its kind, type, depth, swept rings and tool paths).
+// TASK 778: programmed pockets add a guide start-mark footprint (kind 'guide', empty rings/toolPaths) which does not cut wood.
+const isStartMarkFp = (fp) => fp.kind === 'guide' && fp.cutType === 'guide' && fp.rings.length === 0 && fp.toolPaths.length === 0 && fp.clearing?.role === 'start';
+const reliefOf = (st, stripMarks = false) => planReliefItems(st).filter((i) => !(stripMarks && i.footprints.length === 1 && isStartMarkFp(i.footprints[0]))).map((i) => [i.key, i.cutType, i.cutDepth, i.footprints.map((fp) => [fp.kind, fp.cutType, fp.fillRule, fp.rings, fp.toolPaths, fp.center])]);
+// TASK 778: for programmed pockets (HEAVY_RECS), remove ONLY the added pocket start-mark guide element(s) so the test proves everything else is byte-identical
+const START_MARK_D = /d="M [^"]+ A [^"]+ A [^"]+ M [^"]+ L [^"]+ M [^"]+ L [^"]+"/;
+function stripStartMarkSvg(svg) {
+  const lines = svg.split('\n'), out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^  <path /.test(l) && START_MARK_D.test(l) && l.includes('shaper:cutType="guide"')) continue;
+    if (/^  <g [^>]*shaper:cutType="guide"[^>]*>$/.test(l)) {
+      let j = i + 1, allMarks = true;
+      while (j < lines.length && lines[j] !== '  </g>') {
+        if (!(/^    <path /.test(lines[j]) && START_MARK_D.test(lines[j]))) allMarks = false;
+        j++;
+      }
+      if (allMarks && j < lines.length && lines[j] === '  </g>') { i = j; continue; }
+    }
+    out.push(l);
+  }
+  return out.join('\n');
+}
 // the operations' words; TASK 775 removed ", ends where it starts" / ", each ends where it starts" from a Loop's words (a closed loop has no start point on the
 // Origin: owner ruling), so the words are compared without it (applied to both sides: a match means that phrase is the ONLY change)
 const opsWords = (st, entries) => planOperations(st, entries).map((op) => [op.label, op.rowText, op.heading].map((t) => String(t).replace(/,? (each )?ends where it starts/g, '')));
@@ -40,20 +61,27 @@ const HEAVY_RECS = {
   rasterLoop: rec('pocket', { clearing: 'raster', toolDia: 25.4, stepover: 40, finishAllowance: 0.5, loop: true, rasterAngle: 0 }),
   morphedLoop: rec('pocket', { clearing: 'morphed', toolDia: 25.4, stepover: 40, finishAllowance: 0.5, loop: true }),
 };
-function facets(st, entries) {
+function facets(st, entries, stripMarks = false) {
   const pv = shaperPreviewOf(st, entries);
   CUT_PLAN.clear();
   for (const e of entries) CUT_PLAN.set(`${e.target.kind}:${e.target.id}`, { ...e.rec });
-  const relief = reliefOf(st);
+  const relief = reliefOf(st, stripMarks);
   CUT_PLAN.clear();
-  return { download: hash(shaperSvgOf(st, entries)), preview: hash(pv.svg), ops: hash(opsWords(st, entries)), relief: hash(relief) };
+  const dl = shaperSvgOf(st, entries);
+  return {
+    download: hash(stripMarks ? stripStartMarkSvg(dl) : dl),
+    preview: hash(stripMarks ? stripStartMarkSvg(pv.svg) : pv.svg),
+    ops: hash(opsWords(st, entries)),
+    relief: hash(relief),
+  };
 }
 function digestOf(st, { heavy = false } = {}) {
   const loops = findLoops(st), chains = findOpenChains(st, loops);
   const out = {};
   const recs = heavy ? { ...LOOP_RECS, ...HEAVY_RECS } : LOOP_RECS;
   for (const [name, r] of Object.entries(recs)) {
-    out[name] = facets(st, [...loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: r })), ...chains.map((c) => ({ target: { kind: 'chain', id: c.id }, rec: rec(name === 'pocket' ? 'guide' : 'online') }))]);
+    const stripMarks = Object.hasOwn(HEAVY_RECS, name);
+    out[name] = facets(st, [...loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: r })), ...chains.map((c) => ({ target: { kind: 'chain', id: c.id }, rec: rec(name === 'pocket' ? 'guide' : 'online') }))], stripMarks);
   }
   return out;
 }

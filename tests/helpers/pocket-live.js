@@ -324,7 +324,7 @@ export async function exportPhase(t, label) {
     // Export 2D == the download, element by element
     const e2 = await export2d(label);
     console.log(label + ' 2D rows: ' + JSON.stringify(e2.rows));
-    assert.ok(e2.rows.some((t) => /· spiral lines \(1\)$/.test(t)) && e2.rows.some((t) => /· wall \(1\)$/.test(t)) && e2.rows.some((t) => new RegExp(`· closed loops \\(${1 + islandLoops}\\)$`).test(t)) && !e2.rows.some((t) => /· islands \(/.test(t)), label + ': 2D lists the spiral line, its wall, the closed loops');
+    assert.ok(e2.rows.some((t) => /· spiral lines \(1\)$/.test(t)) && e2.rows.some((t) => /· wall \(1\)$/.test(t)) && e2.rows.some((t) => new RegExp(`· closed loops \\(${1 + islandLoops}\\)$`).test(t)) && e2.rows.some((t) => /· start mark/.test(t)) && !e2.rows.some((t) => /· islands \(/.test(t)), label + ': 2D lists the spiral line, its wall, the closed loops, and the start marks');
     await clickEl('#review-cuts-list .rv2d-row');
     const lab = await evalJs(`document.getElementById('review-2d-info').textContent`);
     console.log(label + ' 2D label: ' + lab);
@@ -336,7 +336,7 @@ export async function exportPhase(t, label) {
     assert.strictEqual(e2.count, fileElements(file).length, label + ': every element of the file is on the 2D canvas');
     assert.ok(!/data-/.test(file), label + ': no data-* in the download');
     const kinds = fileElements(file).map((e) => [e[2], /Z$/.test(e[1])]);
-    assert.deepStrictEqual(kinds.filter((k) => k[0] !== 'online' || !k[1]), [['online', false], ['inside', true]], label + ': the download: the rectangle\'s open line + its inside cut; no outside / pocket element');
+    assert.deepStrictEqual(kinds.filter((k) => k[0] !== 'online' || !k[1]), [['online', false], ['inside', true], ['guide', false], ['guide', false], ['guide', false]], label + ': the download: the rectangle\'s open line + its inside cut + 3 guide start marks; no outside / pocket element');
     assert.strictEqual(kinds.filter((k) => k[0] === 'online' && k[1]).length, 1 + islandLoops, label + `: and ${1 + islandLoops} closed on-line loops (the L, the island pocket)`);
     // Export 3D: built, the cleared pockets
     if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-3d');
@@ -371,18 +371,18 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
       fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-loop-${pat}-download.svg`), file);
       const els = fileElements(file);
       loopRuns[pat] = els.map((e) => [e[2], e[3], /Z$/.test(e[1]) ? 'closed' : 'open']);
-      assert.deepStrictEqual(loopRuns[pat], [['online', inch ? '0.250 in' : '6.000 mm', 'closed']], label + ` ${pat}: the download: exactly ONE closed on-line path (once: the Origin's AutoPass steps down), no inside element`);
+      assert.deepStrictEqual(loopRuns[pat], [['online', inch ? '0.250 in' : '6.000 mm', 'closed'], ['guide', undefined, 'open']], label + ` ${pat}: the download: ONE closed on-line path + 1 guide start mark (once: the Origin's AutoPass steps down), no inside element`);
       const n = els[0][1].replace(/[MLZ]/g, ' ').trim().split(/\s+/);
       assert.ok(n[0] === n[n.length - 2] && n[1] === n[n.length - 1], label + ` ${pat}: the path is closed (first point == last point)`);
       await openMode('prepare'); await pickRect();
     }
     console.log(label + ' loop downloads: ' + JSON.stringify(loopRuns));
     if (!off) return;
-    // back to Spiral with Loop off: the open line + the inside cut
+    // back to Spiral with Loop off: the open line + the inside cut + 1 guide start mark
     await pickClearing('linked');
     await setLoop(false);
     const fileOff = fileElements(await download());
-    assert.deepStrictEqual(fileOff.map((e) => [e[2], /Z$/.test(e[1])]), [['online', false], ['inside', true]], label + ': Loop off: the open line + the Origin\'s inside cut');
+    assert.deepStrictEqual(fileOff.map((e) => [e[2], /Z$/.test(e[1])]), [['online', false], ['inside', true], ['guide', false]], label + ': Loop off: the open line + the Origin\'s inside cut + 1 guide start mark');
     await openMode('prepare'); await pickRect();
     await shotWorld(`${D}-loop-off-spiral.png`, [0, 0, 120, 70]);
 }
@@ -410,7 +410,7 @@ export async function fusionPhase(t) {
     const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => m.shaperSvgOf(window.__designController.state, C.cutPlanEntries())))`);
     const els = fileElements(svg).map((e) => e[2]);
     fusion[id] = els.reduce((o, k) => ({ ...o, [k]: (o[k] || 0) + 1 }), {});
-    assert.ok(els.filter((k) => k === 'online').length === 1 && !els.includes('inside') && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is ONE closed on-line path (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
+    assert.ok(els.filter((k) => k === 'online').length === 1 && els.filter((k) => k === 'guide').length === 1 && !els.includes('inside') && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is ONE closed on-line path + 1 guide start mark (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
     await clickWorld(60, -40);
   }
   console.log('Fusion exports: ' + JSON.stringify(fusion));

@@ -127,17 +127,15 @@ export function planHoldNotes(state, plan = CUT_PLAN) {
 // TASK 745: the PROGRAMMED POCKET. The last stepover / finish allowance / raster angle / Loop (TASK 750) set on any record are the next record's when its
 // Clearing is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; Loop off).
 // A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
-// TASK 775: the LEAD-IN. The last leg length / side set on any record are the next record's when its Lead-in is first turned On (length null = never set: one
-// bit diameter, #core leadInSettings; side Outside). App state, like the step depth above.
-let lastLeadInLengthV = null, lastLeadInSideV = 'outside';
-export const lastLeadInLength = () => lastLeadInLengthV;
-export function rememberLeadInLength(mm) { const n = Number(mm); if (n > 0) lastLeadInLengthV = n; return lastLeadInLengthV; }
+// TASK 775 / 778: the LEAD-IN. Radius / Sweep / Length default to CALCULATED from bit and outline (never remembered across records);
+// only Side is remembered (Outside until changed). App state, like the step depth above.
+let lastLeadInSideV = 'outside';
 export const lastLeadInSide = () => lastLeadInSideV;
 export function rememberLeadInSide(v) { if (v === 'outside' || v === 'inside') lastLeadInSideV = v; return lastLeadInSideV; }
 /**
- * leadInSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 775: what an On line record's lead-in does, read off THE derivation (deriveCuts through the
- * effective record, as Prepare / Review / the export cut it): the `leadIn` of its outline cut (#core/lead-in applyLeadIn: role 'leg' with tip / junction / length /
- * side / at, or 'refused' with its error), or null when the record has none. (A programmed pocket's lead-in is in its clearing summary.)
+ * leadInSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 775 / 778: what an On line record's lead-in does, read off THE derivation
+ * (deriveCuts through the effective record, as Prepare / Review / the export cut it): the `leadIn` of its outline cut (#core/lead-in applyLeadIn:
+ * role 'arc' with tip / junction / radius / sweep / length / side / at / atFrac / isCalc, or 'refused' with its error), or null when the record has none.
  */
 export function leadInSummary(key, storedRec, state, loops, loopPolys, owned) {
   const rec = effectiveCutRecord(storedRec);
@@ -146,16 +144,19 @@ export function leadInSummary(key, storedRec, state, loops, loopPolys, owned) {
   const c = cuts.find((x) => x.leadIn);
   return c ? { ...c.leadIn, r: leadInSettings(rec).r } : null;
 }
-/** TASK 775: the one line every lead-in note carries (the trade-off, owner's wording). */
-export const LEAD_IN_TRADE_OFF = "Lead-in: you start at the leg's end; AutoPass then reverses at each end, so the cutting direction alternates.";
+/** TASK 775 / 778: the one line every lead-in note carries (the trade-off, owner's wording). */
+export const LEAD_IN_TRADE_OFF = "Lead-in: you start at the arc's end; AutoPass then reverses at each end, so the cutting direction alternates.";
 const LEAD_REFUSED = {
-  'no length': 'set a bit diameter or a length',
+  'no length': 'set a bit diameter or a radius',
+  sweep: 'sweep must be between 15° and 180°',
+  length: 'straight length cannot be negative',
   outline: 'the outline could not be read',
-  room: 'another part of the outline is in the way of the leg: try the other side or a shorter leg',
+  room: 'another part of the outline is in the way of the arc: try the other side or a smaller radius',
 };
 /**
- * leadInNoteItems(storedRec, lead) — TASK 775: the card note of an On line outline's lead-in (doc unit), from its leadInSummary: "On line: lead-in 3.175 mm
- * outside, from the middle of the longest straight edge" + the trade-off line; a refused one says why (warning colour; the outline is cut as a closed loop).
+ * leadInNoteItems(storedRec, lead) — TASK 775 / 778: the card note of an On line outline's lead-in arc (doc unit), from its leadInSummary:
+ * "On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge" + the trade-off line; a refused one says why
+ * (warning colour; the outline is cut as a closed loop).
  */
 export function leadInNoteItems(storedRec, lead) {
   if (!lead || !storedRec) return [];
@@ -163,11 +164,13 @@ export function leadInNoteItems(storedRec, lead) {
   const name = (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Cut';
   if (lead.role === 'refused' && lead.error === 'tabs') return [{ text: `${name}: no lead-in with tabs: each stroke has its own ends` }]; // the Lead-in row is hidden with Tabs; the stored choice waits
   if (lead.role === 'refused') {
-    const why = lead.error === 'short' ? `the leg ${f(lead.length)} ${u} is shorter than the bit radius ${f(lead.r)} ${u}` : LEAD_REFUSED[lead.error] || lead.error;
-    const text = `${name}: lead-in refused: ${why}; cut as a closed loop`;
+    const why = lead.error === 'short' ? `the radius ${f(lead.radius)} ${u} is smaller than the bit radius ${f(lead.r)} ${u}` : LEAD_REFUSED[lead.error] || lead.error;
+    const text = `${name}: lead-in arc refused: ${why}; cut as a closed loop`;
     return [{ text, warn: text.slice(name.length + 2), title: 'the line is cut as a closed loop (no start point)' }];
   }
-  return [{ text: `${name}: lead-in ${f(lead.length)} ${u} ${lead.side}, from the middle of the longest ${lead.at === 'line' ? 'straight edge' : 'segment'}` }, { text: LEAD_IN_TRADE_OFF }];
+  const straight = lead.length > 1e-9 ? ` + ${f(lead.length)} ${u} straight` : '';
+  const where = lead.isCalc && !lead.isCalc.at ? 'from a moved position' : `from the middle of the longest ${lead.at === 'line' ? 'straight edge' : 'segment'}`;
+  return [{ text: `${name}: lead-in arc, radius ${f(lead.radius)} ${u}, ${angleText(lead.sweep, { show: 'deg' })}${straight} ${lead.side}, ${where}` }, { text: LEAD_IN_TRADE_OFF }];
 }
 /** TASK 775: the lead-in notes of every On line outline with a lead-in (the 3D Review's info; a programmed pocket's are in its clearing notes). */
 export function planLeadInNotes(state, plan = CUT_PLAN) {
@@ -222,14 +225,12 @@ export const CLEARING_REFUSED = {
   'bit too big': 'the bit does not fit in the pocket',
   'no bit': 'set a bit diameter',
   outline: 'the outline could not be read',
-  'lead-in short': 'the leg is shorter than the bit radius', // TASK 775: a programmed pocket's lead-in
-  'lead-in room': 'no straight leg of that length fits inside the cleared area: try a shorter leg',
 };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 /** TASK 745: a pocket's clearing in a few words: "spiral, 12 turns in 1 line + wall" (TASK 749; several lines say why: "spiral, 14 turns in 3 lines (the
  *  pocket has islands) + wall"), "raster 0°: 22 passes + 1 ring + wall", "morphed spiral: 13 turns + wall"; TASK 750 Loop on: the turns + wall, then
  *  "one closed loop" ("3 closed loops (the pocket has islands)"; TASK 775: a closed loop has no start point on the Origin, so nothing says where it
- *  starts or ends); with a lead-in "one loop with a lead-in" ("3 loops with lead-ins (...)"). */
+ *  starts or ends). */
 const LINES_WHY = { splits: ' (the pocket narrows)', islands: ' (the pocket has islands)' };
 export function clearingWords(sum) {
   if (!sum || sum.refused) return null;
@@ -238,7 +239,6 @@ export function clearingWords(sum) {
     : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.loop ? '' : ` in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`}`;
   if (!sum.loop) return `${what} + wall`;
   const why = sum.linesWhy && sum.loopCount > 1 ? LINES_WHY[sum.linesWhy] : '';
-  if (sum.leadIn) return `${what} + wall: ${sum.loopCount === 1 ? 'one loop with a lead-in' : `${sum.loopCount} loops with lead-ins${why}`}`; // TASK 775
   return `${what} + wall: ${sum.loopCount === 1 ? 'one closed loop' : `${sum.loopCount} closed loops${why}`}`;
 }
 // an area (mm²) in the document unit's area rule: mm² (under 1 cm²) / cm², or in²; formatted with the ONE length precision rule
@@ -269,8 +269,6 @@ export function clearingNoteItems(storedRec, sum) {
   if (sum.clear.length) items.push({ text: `Drawn for a ${bit} bit: a smaller bit leaves ridges` });
   if (sum.loop) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only` }); // TASK 750: the Origin does not offset an on-line path
   if (sum.loopRefused) { const t = `Loop refused: ${CLEARING_REFUSED[sum.loopRefused] || sum.loopRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut with open paths + the Origin\'s inside cut on the wall' }); }
-  if (sum.leadIn) items.push({ text: `Lead-in: ${sum.loopCount === 1 ? 'a leg' : `${sum.loopCount} legs`} of ${f(st.leadInLength)} ${u} from inside the cleared area to the loop` }, { text: LEAD_IN_TRADE_OFF }); // TASK 775
-  if (sum.leadInRefused) { const t = `Lead-in refused: ${CLEARING_REFUSED[sum.leadInRefused] || sum.leadInRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut as closed loops (no start point)' }); }
   items.push({ text: 'Depth passes: set Pass Depth or AutoPass on the Origin' }); // TASK 750: the clearing is written once, at the full depth
   const lo = sum.leftover;
   if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {

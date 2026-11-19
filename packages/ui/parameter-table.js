@@ -22,6 +22,7 @@ import { evaluateAll, isReferenceDimension, quantityText, planChange, previewDim
 import { patternSlot } from '#core/pattern-values.js';
 import { parseInput } from '#core/expression.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
+import { measureDimension } from '#core/constraint-verifier.js';
 import { labelGeometry, constraintGeometryText } from '#ui/geometry-labels.js';
 import { toggleConstraintSelection } from '#ui/design-info-panel.js';
 import { applyParameterChange, dimensionInputLabel, patternPlanRefusal, refusalReason } from '#core/dimension-seams.js';
@@ -38,9 +39,9 @@ const kindLabelOf = (c) => (isAngle(c) ? 'Angle' : (c.isDiameter || c.dimMode ==
 const PATTERN_KIND_LABEL = Object.freeze({ count: 'Count', length: 'Length', angle: 'Angle' });
 const PATTERN_TITLE = Object.freeze({ [CONSTRAINT_TYPES.CIRCULAR_PATTERN]: 'Circular pattern', [CONSTRAINT_TYPES.RECTANGULAR_PATTERN]: 'Rectangular pattern' });
 
-// the value text of an entry: a count as a whole number, an angle in degrees, a length in the document unit
-const entryValueText = (e, unit) => {
-  const k = entryKind(e), v = entryValue(e);
+// the value text of an entry (`v`, default its stored value): a count as a whole number, an angle in degrees, a length in the document unit
+const entryValueText = (e, unit, v = entryValue(e)) => {
+  const k = entryKind(e);
   return k === 'count' ? String(v) : k === 'angle' ? angleText(v) : lengthText(v, { unit, show: 'field' }); // the Unit column says the unit
 };
 
@@ -75,7 +76,10 @@ export function buildParameterRows(state, { unit = 'mm', filter = '' } = {}) {
   const dimensions = dims.map((e, i) => {
     const c = e.c, name = entryName(e) || '';
     const reference = !e.slot && isReferenceDimension(c);
-    const text = entryValueText(e, unit);
+    // TASK 789: a reference shows what it measures NOW (#core/constraint-verifier.js measureDimension, as its canvas label): its stored value is
+    // only what it measured when it was made, and the window refreshes every frame, so a drag shows here too. Unmeasurable (parallel lines): stored.
+    const now = reference && state.joints ? measureDimension(c, state.joints, state.shapes || []) : null;
+    const text = entryValueText(e, unit, now == null ? entryValue(e) : now);
     const expression = entryExpression(e);
     const hasExpression = !reference && typeof expression === 'string' && expression !== '';
     const err = !reference && name ? errors.get(name) : null;

@@ -1,10 +1,73 @@
-import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPointLineDistance } from './geometry.js';
+import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPointLineDistance, getLineIntersection } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-lines.js';
-import { angleSectorOf, angleSectorTarget } from './angle-sector.js';
+import { angleSectorOf, angleSectorTarget, angleSectorUnderLabel, angleLabelAngle } from './angle-sector.js';
 import { symmetricResidual } from './symmetric.js';
 import { offsetResidual } from './offset.js';
 import { patternResidual } from './pattern.js';
+
+// What a DISTANCE dimension measures in the geometry now (the same convention as its solver row): a radius / diameter, a point-to-line or a
+// line-to-line distance, a joint pair's aligned / horizontal / vertical distance. 0 when its geometry is missing.
+function distanceNow(c, joints, shapes) {
+    let currentDist = 0;
+    if (c.isRadius && c.shape) {
+        const s = shapes.find(sh => sh.id === c.shape);
+        if (s) {
+            if (typeof s.radius === 'number') currentDist = s.radius;
+            else if (s.joints && s.joints.length >= 2) {
+                const center = joints.get(s.joints[0]);
+                const rim = joints.get(s.joints[1]);
+                if (center && rim) currentDist = getDist(center, rim);
+            }
+            if (c.isDiameter) currentDist *= 2;
+        }
+    } else if (isPointLineDistance(c)) {
+        // Point-to-line: the same convention as the solver row (distance.__lineLine) -- |perpendicular distance| from P to line AB.
+        const pt = joints.get(c.joints[0]), a = joints.get(c.joints[1]), b = joints.get(c.joints[2]);
+        if (pt && a && b) currentDist = Math.abs(perpendicularDistance(pt, a, b));
+    } else if (c.shapes && c.shapes.length === 2 && !(c.joints && c.joints.length >= 2)) {
+        // Line-to-line distance: SAME convention as the solver row (solver/engine.js line-line synthesis,
+        // definitions.js distance.__lineLine) -- perpendicular distance from line 2's FIRST endpoint to the
+        // infinite line 1 -- so verifier and solver can never disagree. (Was unmeasured -> currentDist 0 ->
+        // residual == value -> converged=false and the dimension demoted to reference.)
+        const s1 = shapes.find(sh => sh.id === c.shapes[0]);
+        const s2 = shapes.find(sh => sh.id === c.shapes[1]);
+        if (s1 && s2 && s1.joints && s1.joints.length >= 2 && s2.joints && s2.joints.length >= 1) {
+            const a = joints.get(s1.joints[0]), b = joints.get(s1.joints[1]), pt = joints.get(s2.joints[0]);
+            if (a && b && pt) currentDist = Math.abs(perpendicularDistance(pt, a, b));
+        }
+    } else if (c.joints && c.joints.length >= 2) {
+        const j1 = joints.get(c.joints[0]);
+        const j2 = joints.get(c.joints[1]);
+        if (j1 && j2) {
+            if (c.dimMode === 'horizontal') currentDist = Math.abs(j2.x - j1.x);
+            else if (c.dimMode === 'vertical') currentDist = Math.abs(j2.y - j1.y);
+            else currentDist = getDist(j1, j2);
+        }
+    }
+    return currentDist;
+}
+
+/**
+ * TASK 789: the value a dimension shows NOW, read from the geometry (what its canvas label shows while it is a reference): a DISTANCE its
+ * measurement (distanceNow), an ANGLE between two lines the sector of at most 180 degrees under its label (#core/angle-sector.js, the reference
+ * rule). null when it cannot be measured (parallel lines, missing geometry, another type). The Parameters table reads it for a reference row
+ * after every solve, so a drag shows there as on the canvas.
+ */
+export function measureDimension(c, joints, shapes) {
+    if (!c) return null;
+    if (constraintReferencesAxis(c)) { joints = sceneJoints(joints); shapes = sceneShapes(shapes); }
+    if (c.type === CONSTRAINT_TYPES.DISTANCE) return distanceNow(c, joints, shapes);
+    if (c.type !== CONSTRAINT_TYPES.ANGLE || !Array.isArray(c.shapes) || c.shapes.length !== 2) return null;
+    const [s1, s2] = c.shapes.map((id) => shapes.find((sh) => sh.id === id));
+    if (!s1 || !s2 || !s1.joints || !s2.joints) return null;
+    const [a, b, p, q] = [s1.joints[0], s1.joints[1], s2.joints[0], s2.joints[1]].map((id) => joints.get(id));
+    if (!a || !b || !p || !q) return null;
+    const int = getLineIntersection(a, b, p, q);
+    if (!int) return null;
+    const d1 = Math.atan2(b.y - a.y, b.x - a.x), d2 = Math.atan2(q.y - p.y, q.x - p.x);
+    return angleSectorUnderLabel(d1, d2, angleLabelAngle(c, int, d1, d2)).value;
+}
 
 export function measureResidual(c, joints, shapes) {
     if (!c) return 0;
@@ -18,45 +81,8 @@ export function measureResidual(c, joints, shapes) {
             return getDist(pts[0], pts[1]);
         }
 
-        case CONSTRAINT_TYPES.DISTANCE: {
-            let currentDist = 0;
-            if (c.isRadius && c.shape) {
-                const s = shapes.find(sh => sh.id === c.shape);
-                if (s) {
-                    if (typeof s.radius === 'number') currentDist = s.radius;
-                    else if (s.joints && s.joints.length >= 2) {
-                        const center = joints.get(s.joints[0]);
-                        const rim = joints.get(s.joints[1]);
-                        if (center && rim) currentDist = getDist(center, rim);
-                    }
-                    if (c.isDiameter) currentDist *= 2;
-                }
-            } else if (isPointLineDistance(c)) {
-                // Point-to-line: the same convention as the solver row (distance.__lineLine) -- |perpendicular distance| from P to line AB.
-                const pt = joints.get(c.joints[0]), a = joints.get(c.joints[1]), b = joints.get(c.joints[2]);
-                if (pt && a && b) currentDist = Math.abs(perpendicularDistance(pt, a, b));
-            } else if (c.shapes && c.shapes.length === 2 && !(c.joints && c.joints.length >= 2)) {
-                // Line-to-line distance: SAME convention as the solver row (solver/engine.js line-line synthesis,
-                // definitions.js distance.__lineLine) -- perpendicular distance from line 2's FIRST endpoint to the
-                // infinite line 1 -- so verifier and solver can never disagree. (Was unmeasured -> currentDist 0 ->
-                // residual == value -> converged=false and the dimension demoted to reference.)
-                const s1 = shapes.find(sh => sh.id === c.shapes[0]);
-                const s2 = shapes.find(sh => sh.id === c.shapes[1]);
-                if (s1 && s2 && s1.joints && s1.joints.length >= 2 && s2.joints && s2.joints.length >= 1) {
-                    const a = joints.get(s1.joints[0]), b = joints.get(s1.joints[1]), pt = joints.get(s2.joints[0]);
-                    if (a && b && pt) currentDist = Math.abs(perpendicularDistance(pt, a, b));
-                }
-            } else if (c.joints && c.joints.length >= 2) {
-                const j1 = joints.get(c.joints[0]);
-                const j2 = joints.get(c.joints[1]);
-                if (j1 && j2) {
-                    if (c.dimMode === 'horizontal') currentDist = Math.abs(j2.x - j1.x);
-                    else if (c.dimMode === 'vertical') currentDist = Math.abs(j2.y - j1.y);
-                    else currentDist = getDist(j1, j2);
-                }
-            }
-            return Math.abs(currentDist - (c.value || 0));
-        }
+        case CONSTRAINT_TYPES.DISTANCE:
+            return Math.abs(distanceNow(c, joints, shapes) - (c.value || 0));
 
         case CONSTRAINT_TYPES.HORIZONTAL: {
             const pts = resolveJoints(joints, c.joints);

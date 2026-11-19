@@ -4,7 +4,7 @@
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#core/dimension-seams.js';
+import { applyParameterChange, dimensionInputLabel, isDimensionDetermined, sizeRefusal, SIZE_REFUSAL } from '#core/dimension-seams.js';
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { basePer, parse as parseLength } from '#core/units.js';
 import { previewDimensionInput, quantityText } from '#core/parameters.js';
@@ -747,14 +747,15 @@ function readLiveField(index) {
 // diameter, a slot's span / width, an arc's radius, a polygon's R) that reads 0 or less is not a size. The refusal is the dimension edit box's own: the field
 // is aria-invalid (red) and the hint line under the box says why; Enter and a click place nothing until the text is fixed or cleared (Ctrl+Z / Esc).
 // An angle may be 0 or negative and a count is clamped by its tool, so only lengths are checked.
-export const SIZE_REFUSAL_HINT = 'A size must be more than 0.';
+// (TASK 789: the rule and its message are #core/dimension-seams.js sizeRefusal, the one every dimension edit is refused by too.)
+export const SIZE_REFUSAL_HINT = SIZE_REFUSAL[0].toUpperCase() + SIZE_REFUSAL.slice(1) + '.';
 function liveRefusal() {
     if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single')) return -1;
     const n = uiState.mode === 'live-dual' ? 2 : 1;
     for (let i = 0; i < n; i++) {
         if (!uiState.typed[i] || uiState.quantities[i] !== 'length') continue;
         const v = parseBoxValue(liveField(i).value, 'length');
-        if (Number.isFinite(v) && v <= 0) return i;
+        if (Number.isFinite(v) && sizeRefusal(v)) return i;
     }
     return -1;
 }

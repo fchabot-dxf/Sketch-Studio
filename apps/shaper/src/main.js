@@ -14,6 +14,7 @@ import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's 
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 795: the selection list's X and Clear all
 import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + CUT_PLAN + stock
 import { dbg } from '#core/debug.js';
 import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
@@ -22,7 +23,7 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes, planLeadInNotes, planLevelsNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes; TASK 775: planLeadInNotes
-import { shaperSvgOf, shaperPreviewOf, exportFileName } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name
+import { shaperSvgOf, shaperPreviewOf, bitCentrePaths, exportFileName } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name
 import { opOrder } from './operations.js';            // TASK 743: the operation order (the 2D view rebuilds when it changes)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
@@ -102,7 +103,7 @@ function generateShaperSvgPayload({ preview = false } = {}) {
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, entries, state: st }; }
+  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, written: p.written, entries, state: st }; }
   return { svg: shaperSvgOf(st, entries), entries, state: st };
 }
 
@@ -705,20 +706,22 @@ const reviewInputs = (st) => {
 };
 const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder(),
   SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
-// TASK 718: the Export step's view: '3d' (the board above) or '2d' (the exported file, export-preview.js), remembered per app like the stage (MODE_KEY)
+// TASK 718: the Export step's view: '3d' (the board above), '2d' (the exported file, export-preview.js) or (TASK 793) 'paths' (every path written + the bit-centre
+// paths, the same module), remembered per app like the stage (MODE_KEY)
 const REVIEW_VIEW_KEY = 'shaper-review-view';
 let reviewViewMode = '3d';
-try { if (localStorage.getItem(REVIEW_VIEW_KEY) === '2d') reviewViewMode = '2d'; } catch (err) { dbg.warn('shaper', 'REVIEW_VIEW_KEY read failed', err && err.message); }
+try { const v = localStorage.getItem(REVIEW_VIEW_KEY); if (v === '2d' || v === 'paths') reviewViewMode = v; } catch (err) { dbg.warn('shaper', 'REVIEW_VIEW_KEY read failed', err && err.message); }
 // TASK 729: the 3D board's look (review-view.js LOOKS + each colour-taking look's own colour), remembered per app the same way
 const REVIEW_LOOK_KEY = 'shaper-review-look';
 let reviewLook = normaliseLook(null);
 try { const s = localStorage.getItem(REVIEW_LOOK_KEY); if (s) reviewLook = normaliseLook(JSON.parse(s)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY read failed', err && err.message); }
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
-  getPreview: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? { svg: p.svg, ops: p.ops } : null; }, // TASK 743: + the operations (display only)
+  getPreview: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? { svg: p.svg, ops: p.ops, bitPaths: bitCentrePaths(p.state, p.written) } : null; }, // TASK 743: + the operations (display only); TASK 793: + the bit-centre paths (the Paths view)
 });
 function showReviewViewMode() {
-  const is2d = reviewViewMode === '2d';
+  const is2d = reviewViewMode !== '3d'; // TASK 793: 2D and Paths are the one flat view (export-preview.js), drawn two ways
+  exportPreview.setMode(reviewViewMode === 'paths' ? 'paths' : '2d');
   for (const id of ['review-canvas-host', 'review-info', 'review-reset', 'review-top', 'review-look']) document.getElementById(id).hidden = is2d; // the 3D view's own parts
   for (const id of ['review-2d', 'review-cuts']) document.getElementById(id).hidden = !is2d;
   for (const b of document.querySelectorAll('#review-view-switch button')) b.setAttribute('aria-pressed', b.dataset.view === reviewViewMode ? 'true' : 'false');
@@ -734,7 +737,7 @@ for (const b of document.querySelectorAll('#review-view-switch button')) {
   });
 }
 async function enterReview(st) {
-  if (reviewViewMode === '2d') { showStockThickness(); exportPreview.refresh(reviewSig(st)); return; } // TASK 718: the same trigger rebuilds the 2D view
+  if (reviewViewMode !== '3d') { showStockThickness(); exportPreview.refresh(reviewSig(st)); return; } // TASK 718: the same trigger rebuilds the 2D view
   const info = document.getElementById('review-info');
   try {
     if (!reviewView) {
@@ -747,12 +750,12 @@ async function enterReview(st) {
 }
 {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,
-    onChange: () => { if (reviewViewMode === '2d') exportPreview.refresh(reviewSig(designController.state)); else if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card
+    onChange: () => { if (reviewViewMode !== '3d') exportPreview.refresh(reviewSig(designController.state)); else if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card
   showStockThickness = stockCard.show;
   SettingsManager.subscribe((key) => { if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && modes.current() === 'review' && designController) enterReview(designController.state); });
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
-  document.getElementById('review-fit').addEventListener('click', () => (reviewViewMode === '2d' ? exportPreview.fit() : reviewView && reviewView.fit())); // TASK 718: Fit frames the view shown
+  document.getElementById('review-fit').addEventListener('click', () => (reviewViewMode !== '3d' ? exportPreview.fit() : reviewView && reviewView.fit())); // TASK 718: Fit frames the view shown
 }
 // TASK 729: the Look card: the Material select (one option per LOOKS row) and, for a look that takes a colour, its preset swatches (+ the
 // native colour picker when the look allows any colour). A pick swaps the 3D view's materials only; the 2D view and the export never read it.
@@ -804,6 +807,8 @@ if (fusionMode) {
       if (res.ok && res.imported) { track('import:fusion'); nameAfterSelection(res.name); } // TASK 738; TASK 767
       return res;
     },
+    onRemoveSelection: (id) => removeSelection(designController, id, { prepare, onDone: afterSelectionImport }), // TASK 795
+    onClearSelections: () => clearSelections(designController, { prepare, onDone: afterSelectionImport }),
   });
   showMode(initMode);
   fusionUi.bootPing();

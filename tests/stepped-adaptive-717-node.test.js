@@ -119,7 +119,7 @@ const devs = (s, kind, ds) => ds.map((d, i) => stepDeviation(s, { kind, from: i 
 
 // ── 2. the app ──
 SettingsManager.set('DOC_UNIT', 'mm');
-const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: unit, options: { groupByCut: true } });
+const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: unit, options: {} });
 const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) => ({ type: /shaper:cutType="([^"]+)"/.exec(m[2])[1], depth: (/shaper:cutDepth="([^"]+)"/.exec(m[2]) || [])[1] }));
 const typeDepths = (svg, type) => elems(svg).filter((e) => e.type === type).map((e) => e.depth);
 const harness = (app) => {

@@ -114,7 +114,7 @@ eq(exportFileName(selectionDesignName({ name: 'Body1', documentName: 'Étagère 
   const enc = exportEncoding();
   ok(enc.find((t) => t.id === 'stock').exportFirst === true && enc.filter((t) => t.exportFirst).length === 1, '5: only the Stock declares exportFirst');
   const planOrder = enc.map(({ exportFirst, ...t }) => t); // the same encoding without the declaration = the plan's order (the file before 774)
-  for (const options of [{ groupByCut: true }, {}]) {
+  for (const options of [{}]) {
     const now = exportShaperSVG({ state: st, entries, encoding: enc, docUnit: 'in', options }).split('\n');
     const before = exportShaperSVG({ state: st, entries, encoding: planOrder, docUnit: 'in', options }).split('\n');
     const isStock = (line) => /M -20 -20/.test(line);

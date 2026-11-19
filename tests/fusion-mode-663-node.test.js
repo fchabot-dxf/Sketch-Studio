@@ -17,6 +17,8 @@ deepEq(FUSION_ACTIONS, {
   ERROR: 'error',
   ADD_SELECTION: 'add_selection',
   SELECTION_DATA: 'selection_data',
+  HIGHLIGHT_SELECTION: 'highlight_selection',
+  CLEAR_SELECTION: 'clear_selection',
 }, 'declared Fusion action names match protocol');
 
 // 2. Mode detection via ?host=fusion ONLY (one place, never sniffing window.adsk)

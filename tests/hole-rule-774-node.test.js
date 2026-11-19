@@ -26,7 +26,7 @@ function exportNow(state) {
   const loops = findLoops(state);
   const sById = new Map(state.shapes.map((s) => [s.id, s]));
   const loopPolys = {}; for (const l of loops) loopPolys[l.id] = loopPolygon(l, state, sById);
-  return exportShaperSVG({ state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys });
+  return exportShaperSVG({ state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys });
 }
 // the stored Shaper sidecar of a case, saved before the rule (version 1), and its loop ids
 function savedDoc(name, version = 1) {

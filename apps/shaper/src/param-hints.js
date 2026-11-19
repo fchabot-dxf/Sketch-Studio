@@ -63,6 +63,7 @@ const PARAMS = {
   reviewCuts: { label: 'Cuts', hint: 'Assigned operations in job order: click one to highlight it and focus its cut depth details.' },
   reviewThreeD: { label: '3D', hint: 'Show the finished workpiece relief in interactive 3D.' },
   reviewTwoD: { label: '2D', hint: 'Inspect the flat exported Shaper SVG paths and colour coding.' },
+  reviewPaths: { label: 'Paths', hint: 'Show every path written to the exported SVG as a stroke with each cut’s dashed bit-centre path and cutting direction marks.' },
   reviewReset: { label: 'Reset', hint: 'Return the 3D camera to the default angled overview.' },
   reviewTop: { label: 'Top', hint: 'Look straight down from above at the workpiece and paths.' },
   reviewFit: { label: 'Fit', hint: 'Frame the entire board and all cuts inside the view.' },

@@ -47,7 +47,7 @@ function bezierBox(st, x, y, w, h, bulge) { // three lines + one cubic whose con
   st.shapes.push(...ss); return ss.map((s) => s.id);
 }
 const loopOf = (st, shapeIds) => findLoops(st).find((l) => l.edges.length === shapeIds.length && shapeIds.every((s) => l.edges.includes(s)));
-const svgOf = (st, entries, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options });
+const svgOf = (st, entries, options = {}) => exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options });
 const POCKET = { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 6.35 };
 
 // ── an INDEPENDENT reader of the written path data (absolute M L A C Z): sub-paths as dense polygons ──
@@ -230,7 +230,7 @@ function assertInsideViewBox(svg, name) {
     const vb = assertInsideViewBox(svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, c).id }, rec: { cutType: 'roughing', cutDepth: 5, stepDepth: 2.5, cutOffset: 0, toolDia: 6.35, slope } }]), 'stepped outside');
     eq([vb.minX, vb.w], [20, 60], 'stepped outside: the viewBox spans the deepest ring (x 20..80)'); }
   // with the datum triangle
-  { const st = newState(); const s = slot(st, 30, 100, 50, 20); assertInsideViewBox(svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, s).id }, rec: { ...POCKET, cutType: 'exterior' } }], { groupByCut: true, datum: true }), 'slot + datum'); }
+  { const st = newState(); const s = slot(st, 30, 100, 50, 20); assertInsideViewBox(svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, s).id }, rec: { ...POCKET, cutType: 'exterior' } }], { datum: true }), 'slot + datum'); }
 
   // byte-identical headers where every element already lay inside the drawing's joints / circles (written by origin/main 7a217cb)
   const same = [
@@ -238,7 +238,7 @@ function assertInsideViewBox(svg, name) {
     ['circle pocket', (st) => circle(st, 10, 20, 7.5), POCKET, {}, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="15mm" height="15mm" viewBox="2.5 12.5 15 15">'],
     ['rect pocket with a circle island', (st) => { const r = rect(st, 0, 0, 100, 80); circle(st, 50, 40, 20); return r; }, POCKET, {}, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="100mm" height="80mm" viewBox="0 0 100 80">'],
     ['rect outline + datum', (st) => rect(st, 5, 5, 60, 40), { ...POCKET, cutType: 'exterior' }, { datum: true }, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="65mm" height="45mm" viewBox="0 0 65 45">'],
-    ['rect programmed pocket (Spiral, Loop on: the start mark well inside)', (st) => rect(st, 0, 0, 60, 40), { ...POCKET, clearing: 'linked', loop: true, stepover: 40, finishAllowance: 0.5 }, { groupByCut: true }, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="40mm" viewBox="0 0 60 40">'],
+    ['rect programmed pocket (Spiral, Loop on: the start mark well inside)', (st) => rect(st, 0, 0, 60, 40), { ...POCKET, clearing: 'linked', loop: true, stepover: 40, finishAllowance: 0.5 }, {}, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="40mm" viewBox="0 0 60 40">'],
   ];
   for (const [name, build, rec, options, header] of same) {
     const st = newState(); const ids = build(st);
@@ -255,11 +255,11 @@ function assertInsideViewBox(svg, name) {
   const elements = (svg) => svg.split('\n').filter((l) => /^\s*<(path|circle)\b/.test(l));
   const groupOf = (svg, el) => { const L = svg.split('\n'); const i = L.indexOf(el); const open = L.slice(0, i).reverse().find((l) => /^\s*<\/?g\b/.test(l)); return open && /^\s*<g\b/.test(open) ? open : null; };
   for (const [name, rec] of [['Spiral, Loop off', { ...PROG, loop: false }], ['Spiral, Loop on', { ...PROG, loop: true }], ['Raster', { ...PROG, clearing: 'raster' }]]) {
-    for (const options of [{}, { groupByCut: true }]) {
+    for (const options of [{}]) {
       const st = newState(); const r = rect(st, 0, 0, 60, 40);
       const stock = rect(st, -10, -10, 80, 60);
       const svg = svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, stock).id }, rec: { cutType: 'stock', cutOffset: 0, toolDia: 6.35 } }, { target: { kind: 'loop', id: loopOf(st, r).id }, rec }], options);
-      const tag = `${name}, ${options.groupByCut ? 'grouped (the download)' : 'ungrouped'}`;
+      const tag = `${name}, flat`;
       const els = elements(svg);
       const marks = els.filter(isMark);
       eq(marks.length, 1, `${tag}: one start mark:\n${svg}`);
@@ -269,7 +269,7 @@ function assertInsideViewBox(svg, name) {
       ok(!/0068FF/.test(groupOf(svg, mark) || ''), `${tag}: the start mark is not hoisted into the Stock's guide group:\n${svg}`);
     }
   }
-  // two programmed pockets (the same bit, Loop off): each mark comes after ITS pocket's wall, grouped (the download)
+  // two programmed pockets (the same bit, Loop off): each mark comes after ITS pocket's wall
   {
     const st = newState(); const a = rect(st, 0, 0, 60, 40), b = rect(st, 100, 0, 60, 40);
     const svg = svgOf(st, [{ target: { kind: 'loop', id: loopOf(st, a).id }, rec: { ...PROG, loop: false } }, { target: { kind: 'loop', id: loopOf(st, b).id }, rec: { ...PROG, loop: false } }]);

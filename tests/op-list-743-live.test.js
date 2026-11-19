@@ -274,7 +274,7 @@ try {
     await shot(`${D}-ops-after-delete.png`, '#prepare-ops', phone ? 1 : 2);
     const file2 = await download();
     // the file's elements with their resolved cut attributes (a <g> hoists the shared ones)
-    const els = (f) => { const out = []; let g = ''; for (const l of f.split(String.fromCharCode(10)).map((x) => x.trim())) { if (l.startsWith('<g')) g = l.slice(3, -1); else if (l.startsWith('</g')) g = ''; else if (/^<(path|circle)/.test(l)) out.push(l.replace('/>', ' ' + g).trim()); } return out; };
+    const els = (f) => { const out = []; let g = ''; for (const l of f.split(String.fromCharCode(10)).map((x) => x.trim())) { if (l.startsWith('<g')) throw new Error('TASK 802: the export has a <g>'); else if (/^<(path|circle)/.test(l)) out.push(l.replace('/>', ' ' + g).trim()); } return out; };
     const gone = els(file1).filter((l) => !els(file2).includes(l)), added = els(file2).filter((l) => !els(file1).includes(l));
     console.log(label + ' delete: the export lost ' + JSON.stringify(gone) + ', gained ' + JSON.stringify(added));
     assert.deepStrictEqual(gone.map((l) => [l.split(' ')[0], /toolDia="0\.125 in"|toolDia="3\.175 mm"/.test(l)]), [['<circle', true], ['<circle', true]], label + ': the export loses exactly the two holes’ own cuts (1/8 in bit)');

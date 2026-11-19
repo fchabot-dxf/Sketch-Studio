@@ -6,7 +6,7 @@
 //     inside, outside, shallow before deep); a stored order is kept and a NEW operation slots in by the default rule (with its tool's operations when the
 //     order has some, else after its default-order predecessor);
 //  2. a stepped operation (the SA-7 R3 floor fillet as a Stepped pocket, adaptive Coarse) shows its steps;
-//  3. the DOWNLOAD is byte-identical to the pre-743 export (the exporter called as export-payload.js called it on main 10b923f: plan entries, groupByCut) on
+//  3. the DOWNLOAD is byte-identical to the pre-743 export (the exporter called as export-payload.js called it on main 10b923f: plan entries; TASK 802: flat, no grouping) on
 //     the mixed plate, the real Fusion solid (711), the R3 stepped pocket and a tabbed plate, before AND after a reorder; the PREVIEW copy (the 2D view's)
 //     is the pre-743 preview copy plus data-op="<operation id>" on each element, and maps every element to its operation (previewRows with the operations);
 //  5. the app: the list (tool headings, rows), a tap selects the operation's regions, ↓ reorders as ONE undo step (Ctrl+Z / Ctrl+Y), the autosave stores the
@@ -63,10 +63,10 @@ function plan(K) {
   CUT_PLAN.set(K.slot, rec('online', 1.5875, 6.35, { cutterShape: 'vbit', cutterAngle: 60 }));
 }
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
-// the export written as before task 743: the plan's entries in plan order, groupByCut (the page's call, export-payload.js before this task)
-const before743 = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: { groupByCut: true }, loopPolys: polysOf(st) });
+// the export written as before task 743: the plan's entries in plan order (the page's call, export-payload.js before this task; TASK 802: flat, no grouping)
+const before743 = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: {}, loopPolys: polysOf(st) });
 // the pre-743 PREVIEW copy (TASK 718's call with preview: true)
-const before743Preview = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: { groupByCut: true, previewData: true }, loopPolys: polysOf(st) });
+const before743Preview = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: { previewData: true }, loopPolys: polysOf(st) });
 const stripOp = (svg) => svg.replace(/ data-op="[^"]*"/g, '');
 // the download and the preview copy against the pre-743 calls, before and after reversing the operation order; the preview's elements map to the operations
 function checkFiles(name, st, documentForParse) {

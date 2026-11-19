@@ -218,7 +218,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
     ok(mark, `${clearing}, Loop on: the start mark is written`);
     const p = mark.clearing.point, ring = loopsCut[0].centers[0].points;
     ok(ring.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < 1e-9), `${clearing}, Loop on: the start mark is on the loop`);
-    const svg = exportShaperSVG({ state: st, entries: [{ target, rec: { ...defaultCutRecord(), ...TIGHT, clearing, loop: true } }], encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys });
+    const svg = exportShaperSVG({ state: st, entries: [{ target, rec: { ...defaultCutRecord(), ...TIGHT, clearing, loop: true } }], encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys });
     ok(/shaper:cutType="guide"/.test(svg) && /shaper:cutType="online"/.test(svg) && !/shaper:cutType="inside"/.test(svg), `${clearing}, Loop on: the file has the loop (on line) and the start mark (guide), no Inside wall`);
     // Loop off: unchanged (the wall as an Inside cut; nothing to clear, so no route and no start mark)
     const off = cutsFor({ clearing, loop: false });

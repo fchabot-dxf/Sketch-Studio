@@ -29,7 +29,7 @@ function exportElements(svg) {
   const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   const out = []; let group = null;
   for (const line of svg.split('\n').map((l) => l.trim())) {
-    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('<g')) throw new Error('TASK 802: the export has a <g>, every element must carry its own cut attributes: ' + line);
     if (line.startsWith('</g')) { group = null; continue; }
     const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
     if (!m) continue;
@@ -42,7 +42,7 @@ function exportElements(svg) {
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
 };
 const stripPreview = (s) => s.replace(/ data-step="\d+\/\d+"/g, '');
 

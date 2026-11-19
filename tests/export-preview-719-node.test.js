@@ -24,7 +24,7 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
 };
 
 const L = (shade) => parseFloat(/hsl\(0, 0%, ([\d.]+)%\)/.exec(shade)[1]);

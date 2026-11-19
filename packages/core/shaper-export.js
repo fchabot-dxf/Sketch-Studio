@@ -93,9 +93,8 @@ function colorAttrs(enc) {
 }
 // TASK 786: a MARK (a derived cut of kind 'mark': a programmed pocket's start mark, #core/pocket-clearing, a circle + cross) is a guide drawn as
 // its OUTLINE: written with its type's encoding (the guide's cutType, blue stroke and params, as the Stock guide of TASK 774) but fill="none"
-// (as Prepare and Export 2D show it; a filled circle hid the target and a fill has no meaning on the cross's open strokes), and IN PLACE: right
-// after its pocket's elements, never hoisted into a <g> (groupByCut) that a first element of the same attrs (another pocket's mark) placed
-// earlier in the file, behind a later pocket's white wall.
+// (as Prepare and Export 2D show it; a filled circle hid the target and a fill has no meaning on the cross's open strokes), written right after
+// its pocket's elements (TASK 802: every element is written flat, in order, with its own attributes).
 const isMark = (cut) => cut.kind === 'mark';
 // attribute-first shaper:* in Shaper Studio's order — cutType, cutDepth (only when set), cutOffset (ALWAYS: "0in" when zero),
 // toolDia (ALWAYS) — written through the ONE formatter (units.js formatShaperParam: "0.100 in" / "-2.000 in" / "0.125 in";
@@ -112,8 +111,7 @@ function shaperAttrs(rec, enc, docUnit) {
   return s;
 }
 
-// Element builders return the GEOMETRY only ({ tag, a }) so the cut attrs can be carried per-element OR hoisted to a
-// <g> (options.groupByCut). circle = a single-circle loop or a circle edge.
+// Element builders return the GEOMETRY only ({ tag, a }) (the cut attrs are written on each element, TASK 802). circle = a single-circle loop or a circle edge.
 function circleGeom(s, state) {
   const c = state.joints.get(s.joints[0]); const r = Number(s.radius) || 0;
   return (c && r > 0) ? { tag: 'circle', a: `cx="${num(c.x)}" cy="${num(c.y)}" r="${num(r)}"` } : null;
@@ -146,15 +144,12 @@ function datumPolygon(datum) {
 //              FIRST, before every other cut (after the datum when there is one), so anything that paints the file in order (the Origin's screen,
 //              ShaperHub thumbnails) draws it BEHIND the cuts. Only the order moves: every element keeps its bytes, the others their relative order.
 //   docUnit  — 'mm' | 'cm' | 'in' — suffixes the cut PARAMS; the geometry stays mm-canonical.
-//   options  — { datum?, groupByCut? } — DECLARED unsurfaced features, DEFAULT OFF (so callers/oracles are unchanged):
+//   options  — { datum? } — DECLARED unsurfaced features, DEFAULT OFF (so callers/oracles are unchanged):
 //                datum: true | {legX,legY}  → emit the red registration triangle FIRST.
-//                groupByCut: true           → wrap elements sharing IDENTICAL cut attrs in one <g> (attrs hoisted off
-//                                             the children, which inherit); unique-attr elements stay ungrouped.
 //                previewData: true          → TASK 718: the PREVIEW copy (Shaper's Export step, 2D view) — each element of a stepped cut
 //                                             carries data-step="k/N" (its terrace, from deriveCuts: what the file alone cannot say, since
 //                                             two cuts' steps at the same depth are written alike). Never in the downloaded file: with it
-//                                             off (the default) the string is byte-identical; the attribute is on the element only, so the
-//                                             <g> grouping is the same either way. TASK 742: a held cut's element carries data-hold
+//                                             off (the default) the string is byte-identical. TASK 742: a held cut's element carries data-hold
 //                                             ("pass" | "skin" | "gap k/N", holdData) the same way. TASK 743: an entry may carry `op` (the id of
 //                                             the app's OPERATION it belongs to, a display grouping); its elements carry data-op="<id>" the
 //                                             same way (the Export step's operations list finds them by it). The file never changes.
@@ -253,34 +248,19 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
         + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
       const paint = isMark(cut) ? colorAttrs({ ...c, fill: 'none' }) : colorAttrs(c); // TASK 786: a mark is stroke-only
-      if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, inPlace: isMark(cut) });
+      if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, meta: { cut, entry: e } });
     }
   }
   items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
 
   const body = [];
+  const wrote = (it) => { if (options.written) options.written.push(it.meta); }; // TASK 793: `written` (an array the caller gives) receives { cut, entry } of every element in the FILE's order (the Export step's Paths view draws each element's bit-centre path from it)
   if (options.datum) body.push('  ' + datumPolygon(options.datum));
 
-  if (options.groupByCut) {
-    // each group is written where its first element was (deterministic); TASK 786: an in-place element (a mark) is written alone, where it is
-    const groups = new Map(), slots = []; // common → items; slots = the file order of the groups and the in-place elements
-    for (const it of items) {
-      if (it.inPlace) { slots.push({ common: it.common, group: [it] }); continue; }
-      if (!groups.has(it.common)) { groups.set(it.common, []); slots.push({ common: it.common, group: groups.get(it.common) }); }
-      groups.get(it.common).push(it);
-    }
-    for (const { common, group } of slots) {
-      if (group.length >= 2) { // hoist the shared cut attrs to a <g>; the children inherit (drop their attrs)
-        body.push(`  <g${common}>`);
-        for (const it of group) body.push(`    <${it.tag} ${it.a}/>`);
-        body.push('  </g>');
-      } else {
-        body.push(`  <${group[0].tag} ${group[0].a}${common}/>`);
-      }
-    }
-  } else {
-    for (const it of items) body.push(`  <${it.tag} ${it.a}${it.common}/>`);
-  }
+  // TASK 802: ONE way to write an element: fill, stroke and every shaper:* attribute ON EACH element, in the cutting order (the plan's order, an
+  // operation's elements in their derivation order; the exportFirst types before them). No <g> carries a cut attribute: the ShaperOrigin reads
+  // them from each element, never from a parent group (measured at the Origin, a Spiral pocket's grouped on-line paths came up "unset").
+  for (const it of items) { body.push(`  <${it.tag} ${it.a}${it.common}/>`); wrote(it); }
 
   const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, items); // TASK 786: every written element (items holds the Stock too)
   const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;

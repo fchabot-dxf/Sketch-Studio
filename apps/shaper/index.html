@@ -129,14 +129,32 @@
     /* TASK 718: the Export step's 3D | 2D switch (the toolbar's own buttons, the pressed one marked like a hovered one) and the 2D view of the
        exported file: its elements keep the file's colours; strokes are drawn 1 px at any zoom (the file sets no stroke width), the picked element(s) outlined. */
     #review-view-switch { display: flex; }
+    #review-view-switch button { border-radius: 0; }
     #review-view-switch button:first-child { border-radius: 6px 0 0 6px; }
-    #review-view-switch button:last-child { border-radius: 0 6px 6px 0; border-left-width: 0; }
+    #review-view-switch button:last-child { border-radius: 0 6px 6px 0; }
+    #review-view-switch button + button { border-left-width: 0; }
     #review-toolbar button[aria-pressed="true"] { border-color: var(--sk-selection, #4c9aff); color: #fff; background: #24304a; }
-    #review-2d { position: absolute; inset: 0; background: #c9ced6; }
+    #review-2d { position: absolute; inset: 0; background: #c9ced6; --rv-bit-center: #0f766e; --sk-prep-path: var(--rv-bit-center); --sk-prep-path-online: var(--rv-bit-center); }
+    #review-2d[data-mode="paths"] { background: var(--shaper-cream, #F4EFE1); }
     #review-2d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
-    #review-2d-canvas .rv2d-doc * { vector-effect: non-scaling-stroke; }
-    #review-2d-canvas .rv2d-picked { stroke: #ff2d95; stroke-width: 3px; }
+    #review-2d-canvas .rv2d-doc *, #review-2d-canvas .rv2d-paths-overlay * { vector-effect: non-scaling-stroke; }
+    /* TASK 793: the Paths view: each written element a plain stroke in its cut type's colour. outside / pocket / guide are the export's own declared colours
+       (shaper.js CUT_TYPES fill / stroke); inside and online have the same black / grey as them in the file, so each gets its own preview colour here. */
+    #review-2d-canvas .rv2d-doc .rv2d-path { fill: none; stroke-width: 1.6px; stroke-linecap: round; stroke-linejoin: round; stroke: #000; }
+    #review-2d-canvas .rv2d-doc .rv2d-t-outside { stroke: #000000; }
+    #review-2d-canvas .rv2d-doc .rv2d-t-inside { stroke: #c2410c; }
+    #review-2d-canvas .rv2d-doc .rv2d-t-pocket { stroke: #7F7F7F; }
+    #review-2d-canvas .rv2d-doc .rv2d-t-online { stroke: #7c3aed; }
+    #review-2d-canvas .rv2d-doc .rv2d-t-guide { stroke: #0068FF; }
+    #review-2d-canvas .rv2d-travel { pointer-events: none; stroke-width: 2px; }
+    #review-2d-canvas .rv2d-bit-center { fill: none; stroke: var(--rv-bit-center); stroke-width: 1.25px; stroke-dasharray: 4 3; stroke-opacity: 0.6; stroke-linecap: round; stroke-linejoin: round; }
+    #review-2d-canvas .rv2d-doc .rv2d-picked, #review-2d-canvas .rv2d-picked { stroke: #ff2d95; stroke-width: 3px; }
+    #review-2d-canvas .rv2d-bit-picked { stroke: #ff2d95; stroke-width: 2.25px; stroke-opacity: 1; }
     #review-2d-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; max-width: calc(100% - 20px); font: 13px system-ui, sans-serif; line-height: 1.4; }
+    .rv2d-paths-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 3px; color: #9aa0a6; font-size: 11px; }
+    .rv2d-leg-item { display: inline-flex; align-items: center; gap: 5px; }
+    .rv2d-leg-line { display: inline-block; width: 18px; height: 0; border-top: 2px solid #e6e6e6; }
+    .rv2d-leg-bit { display: inline-block; width: 18px; height: 0; border-top: 2px dashed #2dd4bf; }
     .review-cuts-list { display: flex; flex-direction: column; gap: 2px; }
     .rv2d-type { display: flex; justify-content: space-between; margin-top: 6px; color: #e6e6e6; font-weight: 600; text-transform: capitalize; }
     /* TASK 743: the 2D list is the operations list: a tool heading per run of one bit, an operation header (a tap picks all its elements), then its rows */
@@ -292,8 +310,18 @@
     .shaper-fusion-status[data-state="connecting"] { color: #cbd5e1; }
     .shaper-fusion-status[data-state="unavailable"] { color: #fcd34d; }
     .shaper-fusion-status[data-state="error"] { color: #fca5a5; }
-    #view-prepare.is-fusion #prepare-notice { top: 56px; pointer-events: auto; }
-    #view-prepare.is-fusion #prepare-panel { top: 56px; }
+    /* TASK 795: the selection list under Add selection: one row per selection (its words + an X), Clear all from two on. */
+    .shaper-fusion-list { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+    .shaper-fusion-list[hidden] { display: none; }
+    .shaper-fusion-sel { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 30px; padding: 0 4px 0 10px; border: 1px solid #464950; border-radius: 6px; background: #26292f; color: #e5e7eb; font-size: 12px; }
+    .shaper-fusion-sel:hover, .shaper-fusion-sel:focus-within { border-color: #1be09e; }
+    .shaper-fusion-sel-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .shaper-fusion-sel-x, .shaper-fusion-clear { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: #cbd5e1; font: 12px system-ui, sans-serif; cursor: pointer; }
+    .shaper-fusion-sel-x:hover, .shaper-fusion-clear:hover { background: #3b3f47; color: #fff; }
+    .shaper-fusion-clear { border: 1px solid #464950; height: 30px; }
+    @media (max-width: 640px), (pointer: coarse) { .shaper-fusion-sel-x, .shaper-fusion-clear { min-width: 36px; height: 36px; } .shaper-fusion-sel { min-height: 38px; } }
+    #view-prepare.is-fusion #prepare-notice { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); pointer-events: auto; }
+    #view-prepare.is-fusion #prepare-panel { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); z-index: 8; } /* TASK 795: below the bar, whatever height the selection list gives it (fusion-bridge.js sets the variable); above the notice (z 6, wider than the room beside the card) so an open cut-type menu is never covered by it */
     @media (max-width: 640px) {
       #view-prepare.is-fusion #prepare-notice { left: 12px; transform: none; max-width: calc(100% - 236px); }
     }
@@ -466,7 +494,7 @@
        a mouse drags the grip, a finger holds then drags the row (the list keeps native scrolling: no touch-action none), the keyboard moves a focused grip. */
     #prepare-ops { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
       background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
-    #view-prepare.is-fusion #prepare-ops { top: 56px; max-height: calc(100% - 96px); }
+    #view-prepare.is-fusion #prepare-ops { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); max-height: calc(100% - var(--sk-fusion-bar-h, 44px) - 52px); }
     .ops-header { display: flex; align-items: center; flex: 0 0 auto; }
     .ops-head { all: unset; box-sizing: border-box; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
     .ops-header > .sk-hint-i { margin-right: 12px; }
@@ -603,7 +631,7 @@
     <div id="review-stage">
       <div id="review-canvas-host"></div>
       <div id="review-2d" hidden><svg id="review-2d-canvas" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="The exported Shaper SVG"></svg><div id="review-2d-info"></div></div>
-      <div id="review-toolbar"><div id="review-view-switch" role="group" aria-label="View"><button id="review-view-3d" type="button" data-view="3d" data-hint="reviewThreeD" aria-pressed="true">3D</button><button id="review-view-2d" type="button" data-view="2d" data-hint="reviewTwoD" aria-pressed="false">2D</button></div><button id="review-reset" type="button" data-hint="reviewReset">Reset</button><button id="review-top" type="button" data-hint="reviewTop">Top</button><button id="review-fit" type="button" data-hint="reviewFit">Fit</button></div>
+      <div id="review-toolbar"><div id="review-view-switch" role="group" aria-label="View"><button id="review-view-3d" type="button" data-view="3d" data-hint="reviewThreeD" aria-pressed="true">3D</button><button id="review-view-2d" type="button" data-view="2d" data-hint="reviewTwoD" aria-pressed="false">2D</button><button id="review-view-paths" type="button" data-view="paths" data-hint="reviewPaths" aria-pressed="false">Paths</button></div><button id="review-reset" type="button" data-hint="reviewReset">Reset</button><button id="review-top" type="button" data-hint="reviewTop">Top</button><button id="review-fit" type="button" data-hint="reviewFit">Fit</button></div>
       <div id="review-info"></div>
     </div>
     <aside id="review-side">

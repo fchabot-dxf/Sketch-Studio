@@ -13,8 +13,8 @@ import { mountDisclosure, CARET_SVG } from './disclosure.js';
 
 const UP_LABEL = (id) => id.replace('-', '−'); // the sign as a real minus
 
-/** mountStlCard(hostEl, { onChange }) -> { refresh(), el }. The card is put FIRST in hostEl. */
-export function mountStlCard(hostEl, { onChange = () => {} } = {}) {
+/** mountStlCard(hostEl, { onChange, onOrient }) -> { refresh(), el }. The card is put FIRST in hostEl. */
+export function mountStlCard(hostEl, { onChange = () => {}, onOrient = () => {} } = {}) {
   if (!hostEl) return { refresh() {}, el: null };
   const doc = hostEl.ownerDocument;
   const card = doc.createElement('div');
@@ -24,6 +24,7 @@ export function mountStlCard(hostEl, { onChange = () => {} } = {}) {
     <div class="stl-head-row"><button type="button" class="stl-head"><span class="stl-title"></span><span class="stl-name"></span>${CARET_SVG}</button></div>
     <div class="stl-body">
       <div class="stl-row" data-row="stlUp"><button type="button" class="cut-field-label" data-hint="stlUp"></button><div class="cut-presets stl-ups" role="group"></div></div>
+      <div class="stl-row" data-row="stlOrient"><button type="button" class="stl-orient" data-hint="stlOrient"></button></div>
       <div class="stl-row" data-row="stlUnits"><button type="button" class="cut-field-label" data-hint="stlUnits"></button><div class="cut-presets stl-units" role="group"></div></div>
       <div class="stl-row" data-row="stlSize"><button type="button" class="cut-field-label" data-hint="stlSize"></button><div class="stl-size"></div></div>
     </div>`;
@@ -32,10 +33,13 @@ export function mountStlCard(hostEl, { onChange = () => {} } = {}) {
   card.querySelector('.stl-title').textContent = hintLabel('stlCard');
   bindHint({ el: head, id: 'stlCard', iconOnly: true }); // TASK 805: its hint is a tooltip at the cursor (hint.js)
   mountDisclosure({ host: card, head, body });
+  const orientBtn = card.querySelector('.stl-orient');
+  orientBtn.addEventListener('click', () => onOrient());
   const ups = card.querySelector('.stl-ups'), units = card.querySelector('.stl-units'), size = card.querySelector('.stl-size');
   for (const t of card.querySelectorAll('.stl-body [data-hint]')) {
     const row = t.closest('.stl-row');
     bindHint({ el: t });
+    if (t === orientBtn) continue; // a button of its own, not a row label
     t.id = `stl-${t.dataset.hint}-label`;
     const group = row.querySelector('.cut-presets');
     if (group) group.setAttribute('aria-labelledby', t.id);

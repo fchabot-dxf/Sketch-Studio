@@ -52,6 +52,14 @@
 //   d (an L's fillet R 8 -> 4 under a 5 mm inside offset) gave an offset arc of R |4 - 5| = 1 on the wrong side, accepted. Every offset arc now
 //   has a row of its OWN that holds an end on its side of the centre (N = |Q - C| - R - sides * d, or T on the ray), so an edit that needs a
 //   negative offset radius has no solution and is refused like any edit the solver cannot satisfy (Fusion: the offset radius is R -/+ d).
+//   TASK 781: in a CLOSED chain whose every join is TANGENT (a rounded rectangle, a slot, arcs only) no row above reads d: the rows at each
+//   vertex are an end row (a line's ray row, an arc's structural equal: both carry the offset distance from one end of the piece to the other)
+//   and a T row, so they only pass the distance round the loop and the copy was held up to one uniform distance (dof 1: editing the dimension
+//   did not move it, a drag of the copy changed the gap). One vertex, the ANCHOR, takes the N row of the piece BEFORE it in place of that
+//   piece's end row: the first vertex whose piece before is a LINE (its ray row becomes the line's N row: the same row count, and the line
+//   cannot reverse anyway, both its ends are on its source normals), else vertex 0 (arcs only: the arc's N row |Q - C| - R - sides * d is
+//   ADDED; its structural equal stays, so that one row is redundant at a solution: the arcs' equals already pass the distance round the loop and
+//   n vertices need their n T rows, so no set of n offset rows reaches full rank; the solver's least squares takes a consistent redundant row).
 // Undo is the caller's (the tool wraps applyOffset in recordConstraintStep: ONE undo step). Refusals are data: { ok: false, reason }.
 import { CONSTRAINT_TYPES } from './constants.js';
 import { arcSweepInfo } from './geometry.js';
@@ -493,14 +501,20 @@ export function offsetOperands(c, shapes) {
   // its offset start along its source direction (task 656: the offset line keeps its direction, a reversed one is no solution)
   const Nend = (p, q) => (p.off.type === 'arc' ? [] : [{ k: 'rl', q, p: offStart(p), a: srcPoint(p, 0), b: srcPoint(p, 1) }]);
   const nv = closed ? n : n + 1;
+  const tangentAt = (k) => (c.joins && c.joins[closed ? k : k - 1]) === 'tangent';
+  // TASK 781: the ANCHOR vertex of a closed chain whose every join is tangent (the module header), -1 for any other chain
+  let anchor = -1;
+  if (closed && Array.from({ length: n }, (_, k) => tangentAt(k)).every(Boolean)) {
+    anchor = Array.from({ length: n }, (_, k) => k).find((k) => ps[(k - 1 + n) % n].off.type === 'line') ?? 0;
+  }
   for (let k = 0; k < nv; k++) {
     if (!closed && k === 0) { const p = ps[0], q = offStart(p); rows.push(N(p, q), T(p, q, srcPoint(p, 0))); continue; }
     if (!closed && k === n) { const p = ps[n - 1], q = offEnd(p); rows.push(...Nend(p, q), T(p, q, srcPoint(p, 1))); continue; }
     const before = ps[(k - 1 + n) % n], after = ps[k], q = offStart(after);
-    const tangent = (c.joins && c.joins[closed ? k : k - 1]) === 'tangent';
+    const tangent = tangentAt(k);
     // a tangent join: Q on the source normal through the joint, read from the ARC after it when there is one (its own side of its centre)
     const t = tangent && (after.src.type === 'arc' ? T(after, q, srcPoint(after, 0)) : T(before, q, srcPoint(before, 1)));
-    rows.push(...Nend(before, q), tangent ? t : N(after, q));
+    rows.push(...(k === anchor ? [N(before, q)] : Nend(before, q)), tangent ? t : N(after, q));
   }
   return rows;
 }

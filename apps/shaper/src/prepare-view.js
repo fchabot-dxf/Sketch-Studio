@@ -14,6 +14,8 @@ import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprin
   lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary,
   CONTOUR_KIND, contourKeyOf, contourOf, isContourKey, partKeyOf, setContour, rememberContour, levelsSummary, levelsNoteItems } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour
 import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in junction (ONE pure derivation)
+import { hasLevels } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels
+import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height map, drawn under the cut lines
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
@@ -238,6 +240,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     `<line x1="1.8" y1="10.2" x2="4.2" y2="7.8"/><line x1="10.2" y1="10.2" x2="7.8" y2="7.8"/></g></pattern>`;
   svgEl.appendChild(defs);
   // z-order (later = on top): cut TINT (behind) < edges < toolpath (tool-aware look) < selected < hover. Joints hidden.
+  // TASK 792: a part's HEIGHT MAP (#core/height-map.js, from its levels) UNDER everything: the cut tint, the edges, the tool paths and chips stay on top
+  const heightG = mkGroup('prepare-heightmap-group');  svgEl.appendChild(heightG);
   const cutG = mkGroup('prepare-cut-group');           svgEl.appendChild(cutG);
   renderPrepareGeometry(state, svgEl);                 // edges — above the cut tint
   const selectG = mkGroup('prepare-select-group');     svgEl.appendChild(selectG);
@@ -632,7 +636,19 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   // ONE reactive refresh: repaint the look layers (getLook recomputes only the changed target — its sig changed). Wired
   // to every cut-field change AND to hover / selection changes so the look follows the state.
+  // TASK 792 (owner turns 2484-2485): every record that carries a part's LEVELS (an STL's outline, a Fusion part that sends them) shows its height map,
+  // always (no toggle), never for a drawn design (no record has levels). Rebuilt only when the set of levels lists changes (each map is memoised).
+  let heightLists = [];
+  const renderHeightMap = () => {
+    const lists = [];
+    for (const rec of CUT_PLAN.values()) if (rec && hasLevels(rec) && !lists.includes(rec.levels)) lists.push(rec.levels);
+    if (lists.length === heightLists.length && lists.every((l, i) => l === heightLists[i])) return;
+    heightLists = lists;
+    heightG.innerHTML = lists.map((l) => levelsHeightMap(l)).filter(Boolean)
+      .map((m) => `<image class="sk-heightmap" href="${m.href}" x="${m.x0}" y="${m.y0}" width="${m.width}" height="${m.height}" preserveAspectRatio="none" pointer-events="none"/>`).join('');
+  };
   const refreshLook = () => {
+    renderHeightMap();
     renderCuts(); renderToolpaths(); renderChips(); renderHandles(); refreshEdgeClasses();
     // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');

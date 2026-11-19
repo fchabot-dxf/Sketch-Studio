@@ -24,6 +24,7 @@ import { parseStl, sliceStl } from '#core/stl-slice.js';
 import { readLevels, levelsRoughing, levelsContour, deriveCuts, LEVELS, steppedTerraces, sameOutline } from '#core/stepped-cut.js';
 import { regionsFromRings, offsetRegions, diffRegions, regionsArea } from '#core/plot/clip.js';
 import { buildRelief } from '#core/relief-model.js';
+import { levelsHeightMap, HEIGHT_MAP } from '#core/height-map.js';
 import { CUT_PLAN, cutPlanEntries, planReliefItems, contourKeyOf, contourOf, setContour, resolveEntry } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
@@ -107,6 +108,26 @@ const twoSquaresPayload = () => ({
   const R = levelsRoughing(L, { outer: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: -40 }, { x: 0, y: -40 }], step: 1, depth: 10, toolDia: 6.35, allowance: 0 });
   eq(R.steps.map((s) => [s.depth, s.islands]), [[4, 1], [10, 1]], 'the boss plate: ONE level at 4 mm round the boss (1..4 the same material), ONE at 10 round the plate (5..10 the same; the plate its island)');
   eq(box(R.steps[0].regions[0].holes[0].slice(0, -1).map(([x, y]) => ({ x, y }))), [20, -30, 40, -10], 'the boss is the island of the 4 mm pocket');
+}
+
+{
+  // G. the HEIGHT MAP (#core/height-map.js) of the boss plate's levels: the boss lighter than the plate, outside the part transparent, one PNG
+  const L = readLevels(sliced(bossPlate(), 'boss.stl').regions.find((r) => r.levels).levels, { scale: 1, yUp: true });
+  const m = levelsHeightMap(L);
+  eq([m.cols, m.rows, +m.px.toFixed(4), m.x0, m.y0], [600, 400, 0.1, 0, -40], 'the boss plate: 600 x 400 px (HEIGHT_MAP.maxPx along the longer side), 0.1 mm a pixel, over the part\'s box');
+  ok(levelsHeightMap(L) === m, 'memoised per levels list');
+  const png = Buffer.from(m.href.split(',')[1], 'base64');
+  eq([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'a PNG');
+  eq([png.readUInt32BE(16), png.readUInt32BE(20), png[24], png[25]], [600, 400, 8, 4], 'its header: 600 x 400, 8 bits, grey + alpha');
+  // read the pixels back (the IDAT is stored deflate blocks: the raw rows follow each 5-byte block header)
+  const idat = png.indexOf('IDAT'), len = png.readUInt32BE(idat - 4), z = png.subarray(idat + 4 + 2, idat + 4 + len - 4);
+  const raw = []; for (let o = 0; o < z.length;) { const n = z[o + 1] | (z[o + 2] << 8); raw.push(...z.subarray(o + 5, o + 5 + n)); o += 5 + n; }
+  const at = (x, y) => { const c = Math.floor((x - m.x0) / m.px), r = Math.floor((y - m.y0) / m.px), o = r * (1 + 2 * m.cols) + 1 + 2 * c; return [raw[o], raw[o + 1]]; };
+  const boss = at(30, -20), plate = at(5, -5);
+  eq([boss[1], plate[1]], [255, 255], 'the boss and the plate are opaque');
+  ok(boss[0] > plate[0], `lighter = higher: the boss (grey ${boss[0]}) is lighter than the plate (grey ${plate[0]})`);
+  ok(boss[0] <= HEIGHT_MAP.greyTop && plate[0] >= HEIGHT_MAP.greyDeep, 'within the declared grey range');
+  eq(levelsHeightMap([{ z: 1, loops: [] }]), null, 'no material: no map');
 }
 
 // ── 4 + 5: the app ──

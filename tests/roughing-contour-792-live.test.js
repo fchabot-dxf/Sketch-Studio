@@ -6,6 +6,7 @@
 //   bit) -> the bit 1/4 in -> Contour On (allowance 0.5, "Edit contour") -> the Operations list (two operations under two bit headings, the Contour
 //   after the Roughing) -> Edit contour: the Contour card (step 0.25, 1/8 in, ball nose) -> the 3D Review (levels, zoomed top + angled screenshots)
 //   -> Generate Shaper SVG (the roughing pockets at their levels with the 1/4 in bit, the contour passes with the 1/8 in bit).
+//  G (both): Prepare draws the part's HEIGHT MAP (#core/height-map.js: one PNG image) under every cut layer, no pointer events; a drawn design has none.
 //  PHONE 390 x 844 (touch): the same up to the Operations list and the Review.
 // No console error / page exception. Screenshots (.evidence/792/<name>-*.png).
 import assert from 'node:assert';
@@ -135,6 +136,14 @@ async function phase(what) {
   timings[what] = {};
   timings[what].open = await openStl(what);
   assert.ok((await plan()).includes('exterior'), what + ': the STL\'s outline is an Outside cut');
+  // G: the HEIGHT MAP under the cut lines (always shown for a part with levels): one image, the first layer of the canvas, never taking a press
+  const hm = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'), g = svg.querySelector('#prepare-heightmap-group'), im = g && g.querySelector('image');
+    const kids = [...svg.children].map((c) => c.id || c.tagName); return { images: g ? g.querySelectorAll('image').length : 0, under: kids.indexOf('prepare-heightmap-group') < kids.indexOf('prepare-world-group') && kids.indexOf('prepare-heightmap-group') < kids.indexOf('prepare-cut-group'),
+      png: !!im && im.getAttribute('href').startsWith('data:image/png;base64,'), pe: im && im.getAttribute('pointer-events') }; })()`);
+  console.log(`${what}: height map ${JSON.stringify(hm)}`);
+  assert.deepStrictEqual(hm, { images: 1, under: true, png: true, pe: 'none' }, what + ': the height map: one PNG under the edges and the cut layers, no pointer events');
+  await waitFor(`document.getElementById('prepare-notice').hidden`, what + ': the import notice gone', 10000); // (it covers the canvas on a phone)
+  await shot(`${what}-heightmap.png`, '#prepare-canvas');
   await pressOutline();
   await clickEl('#prepare-panel .cut-type-trigger');
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, what + ': the menu');
@@ -157,6 +166,7 @@ async function phase(what) {
   console.log(`${what}: Roughing note ${JSON.stringify(note)}`);
   assert.ok(note.some((n) => /^Roughing: \d+ levels?, /.test(n)) && note.includes('Roughing: 0.5 mm left on every wall for the Contour'), what + ': the note: levels and allowance');
   await shot(`${what}-roughing-card.png`, '#prepare-panel .cut-card');
+  await shot(`${what}-heightmap-selected.png`, '#prepare-canvas'); // the outline selected over the height map: its band, edges and chip on top
   const list = await ops();
   console.log(`${what}: Operations ${JSON.stringify(list)}`);
   const iR = list.findIndex((x) => x.startsWith('Roughing')), iC = list.findIndex((x) => x.startsWith('Contour'));
@@ -185,6 +195,9 @@ try {
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000);
   await waitForApp('design-canvas'); await sleep(600);
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
+  // a drawn design has no height map
+  await openStage('prepare');
+  assert.strictEqual(await evalJs(`document.querySelectorAll('#prepare-heightmap-group image').length`), 0, 'a drawn (empty) design: no height map');
   await phase('desktop');
   // Generate Shaper SVG: the roughing pockets (1/4 in) and the contour passes (1/8 in)
   const t0 = Date.now();

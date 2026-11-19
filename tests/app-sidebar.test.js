@@ -35,7 +35,7 @@ await (async () => {
     const stageTab = (name) => clickEl(`.sk-header-tab[data-tab="${name}"]`);
 
     const hosts = [
-      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'fusion-addin', 'settings', 'log'] }, // TASK 706: Explore's Open SVG / Export are gone; TASK 733: the Fusion add-in download (Shaper only)
+      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'open-stl', 'download', 'fusion-addin', 'settings', 'log'] }, // TASK 706: Explore's Open SVG / Export are gone; TASK 733: the Fusion add-in download (Shaper only); TASK 790: Open STL (Shaper only)
       { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'log'] },
       { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'export', 'download-svg', 'download-dxf', 'style', 'log', 'debug', 'tune'] },
       { id: 'trace', path: '/apps/trace/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download-svg', 'download-dxf', 'log'] },

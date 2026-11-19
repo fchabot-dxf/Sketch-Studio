@@ -67,7 +67,7 @@ const chrome = mountAppChrome({
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
   hostActions: [
-    { id: 'open-stl', label: hintLabel('openStl'), icon: STL_ICON, tooltip: hintText('openStl'), keepOpen: true, onClick: async () => { // TASK 790: Shaper only
+    ...(fusionMode ? [] : [{ id: 'open-stl', label: hintLabel('openStl'), icon: STL_ICON, tooltip: hintText('openStl'), keepOpen: true, onClick: async () => { // TASK 790: Shaper only, not in the Fusion palette (its design comes from Fusion)
       try {
         const res = await stlImporter.pickAndOpen();
         if (!res) return; // the chooser was cancelled
@@ -75,7 +75,7 @@ const chrome = mountAppChrome({
         chrome.sidebar.close();
         if (res.imported) nameAfterSelection(res.name); // the design takes the file's name, as a Fusion selection's (TASK 767)
       } catch (e) { chrome.sidebar.notify(e.message || String(e), 'error'); }
-    } },
+    } }]),
     { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: () => { // TASK 770: from the table (the shared drawer shows a tooltip)
       const payload = generateShaperSvgPayload();
       if (!payload) { groupStatus(NO_CUTS); return; }

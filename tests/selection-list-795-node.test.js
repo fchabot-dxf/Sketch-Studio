@@ -178,8 +178,8 @@ try {
   setSelections([]);
   ok(!('selections' in captureShaperDoc()), 'a design without selections writes no list (the same bytes as before)');
 
-  // ── 8. The stepped cut type mapping is unchanged by the list ──
-  eq([mapFusionCutType('stepped-pocket'), mapFusionCutType('pocket'), mapFusionCutType('outside')], ['stepped-pocket', 'pocket', 'exterior'], 'cutType mapping');
+  // ── 8. The cut type mapping is unchanged by the list (TASK 792: there is no stepped type any more: an unknown type is left unset) ──
+  eq([mapFusionCutType('stepped-pocket'), mapFusionCutType('pocket'), mapFusionCutType('outside')], [null, 'pocket', 'exterior'], 'cutType mapping');
 
   // ── 9. The rows of the Prepare bar: fake window.adsk.fusionSendData records what goes to Fusion ──
   setSelections([]); CUT_PLAN.clear();

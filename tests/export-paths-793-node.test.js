@@ -184,7 +184,7 @@ try {
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   {
     const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
-    CUT_PLAN.set(pk, { ...rec, cutType: 'stepped-pocket', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
+    CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 }); // TASK 792: Roughing replaced the Stepped pocket (allowance 0: the same terraces)
     const p = shaperPreviewOf(app.state, cutPlanEntries());
     const items = previewItems(parseShaperSvg(p.svg, app.document));
     eq(p.written.length, items.length, 'stepped pocket: one written entry per element');

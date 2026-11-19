@@ -9,6 +9,7 @@
 
 import { parse as parseUnit } from '#core/units.js';
 import { POCKET_CLEARING } from '#core/pocket-clearing.js'; // TASK 745: the Clearing choices of the Pocket card
+import { levelsCutAs, hasLevels } from '#core/stepped-cut.js'; // TASK 792: the plain type a Roughing / Contour level is cut as
 
 const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 
@@ -55,9 +56,9 @@ const LEAD_IN_PARAMS = ['leadIn', 'leadInRadius', 'leadInSweep', 'leadInLength',
 // (Guide, Stock: 0), then on line (1), pockets (2), inside cuts = the holes (3), and last the outside cuts that free the part (4). A stepped type ranks as
 // its plain type (it is cut as terraces of it). Prepare only: never written to the export.
 export const CUT_TYPES = [
-  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><rect x='5' y='5' width='8' height='8' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", opRank: 4, params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
-  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><rect x='5.5' y='5.5' width='7' height='7' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='9' r='1.4' fill='currentColor'/>", opRank: 3, params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
-  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 4.5l9 9M13.5 4.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='1.5 1.5'/>", opRank: 2, params: ['cutDepth', 'cutOffset', 'toolDia', ...CLEARING_PARAMS], autoOffsetFraction: 0.25 },
+  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><rect x='5' y='5' width='8' height='8' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", opRank: 4, contourOn: 'sloped', params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
+  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><rect x='5.5' y='5.5' width='7' height='7' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='9' r='1.4' fill='currentColor'/>", opRank: 3, contourOn: 'sloped', params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
+  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 4.5l9 9M13.5 4.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='1.5 1.5'/>", opRank: 2, contourOn: 'sloped', params: ['cutDepth', 'cutOffset', 'toolDia', ...CLEARING_PARAMS], autoOffsetFraction: 0.25 },
   { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.4' stroke-dasharray='1.8 1.6'/><circle cx='16' cy='11' r='1.6' fill='currentColor'/>", opRank: 1, params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS, ...LEAD_IN_PARAMS], offsetMovesCut: false },
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide', icon: "<path d='M8 2h8v8M2 8v8h8' fill='none' stroke='currentColor' stroke-width='1.6'/>", opRank: 0, params: ['cutDepth', 'cutOffset', 'toolDia'] },
   // TASK 472: STOCK = the board itself, drawn as a closed profile in Design and marked here. NOT a cut: the Review extrudes it to its
@@ -68,17 +69,20 @@ export const CUT_TYPES = [
   // three), `params` = the rows the Prepare card shows. Declared AFTER the guide so classify() (import) reads blue as a GUIDE:
   // re-importing gives a Guide the owner can re-mark Stock.
   { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthParam: 'stockDepth', exportFirst: true, icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
-  // TASK 714: the STEPPED types (owner turns 1939-1948): a wall that is not vertical (drafted, chamfered, filleted, countersunk), cut with a
-  // straight end mill as a stair of PLAIN cuts. Generated in the app (#core/stepped-cut.js steppedTerraces, through deriveProfileCuts), so
-  // the Origin sees plain cuts; distinct here. `terraceAs` = the plain type each terrace is cut as (its encoding is what the
-  // export writes, at the terrace's own depth); `slopeKind` = the slope a target must carry to be offered this type (the Fusion region's
-  // cutType: a pocket, a through hole = inside, the outline = outside; cut-plan record field `slope`, stored by fusion-import.js);
-  // `stepDepth` = the step row of the card (#core STEP_DEPTH); TASK 717: `adaptiveSteps` = the Adaptive stepping checkbox, `stepDeviation` = its
-  // Resolution row (#core STEP_RESOLUTION), shown in place of the step row when the checkbox is on. fill / stroke = the plain type's, and
-  // declared AFTER it, so classify() (import) never reads a stepped type. No autoOffsetFraction: a stepped pocket's terraces take the pocket's own (effectiveCutRecord).
-  { id: 'stepped-pocket',  label: 'Stepped pocket',  cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'A sloped pocket as a stair of pockets, one per step depth', targetKind: 'region', menuLabel: 'Stepped pocket', terraceAs: 'pocket', slopeKind: 'pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 13.5V10.5h3v-3h3v-3h3' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linejoin='round'/>", opRank: 2, params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation'] },
-  { id: 'stepped-inside',  label: 'Stepped inside',  cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'A hole with a sloped / rounded edge as a stair of inside cuts', targetKind: 'region', menuLabel: 'Stepped inside', terraceAs: 'interior', slopeKind: 'inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13V10h3V7h3V5' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='12' r='1.4' fill='currentColor'/>", opRank: 3, params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation'] },
-  { id: 'stepped-outside', label: 'Stepped outside', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'An outline with a sloped / rounded edge as a stair of outside cuts', targetKind: 'region', menuLabel: 'Stepped outside', terraceAs: 'exterior', slopeKind: 'outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><path d='M5 13V10h3.5V7H12V5' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", opRank: 4, params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation'] },
+  // TASK 792 (owner turns 2474-2512): ROUGHING and CONTOUR, two OPERATIONS for any part with depth information (an STL's sections, a Fusion region's
+  // slope rings, a drawn region: #core/stepped-cut.js, its TASK 792 header). Generated in the app as PLAIN cuts at fixed depths (the Origin sees plain
+  // pockets / inside / outside cuts); `levelsOp` = which one (#core deriveCuts; injected into the record by effectiveCutRecord and the exporter).
+  //  * Roughing REPLACES the stepped types of TASK 714 (Stepped pocket / inside / outside; owner turn 2512): a stepped record opens as Roughing with
+  //    allowance 0 (shaper-doc.js applyShaperDoc), which IS the stepped cut. Offered on every closed region (a drawn pocket = one level); its rows: the
+  //    depth, `stepDepth` (#core STEP_DEPTH) or ADAPTIVE stepping (TASK 717: `adaptiveSteps` + `stepDeviation`, a sloped region only), `finishAllowance`
+  //    (the allowance left on every wall: 0 while the part has no Contour), `contour` (Off | On: adds / removes the part's Contour record), the bit;
+  //    `roughLayout` (owner turn 2604: Terraces | Nested, #core ROUGH_LAYOUT; a part with levels only).
+  //  * Contour is never picked from the menu of a region: the Contour row of the part's card adds it as its OWN record (cut-plan.js `contour:<key>`, its
+  //    own operation and bit group); its card has the fine step (`stepDepth`, #core LEVELS.contourStepMm by default), the bit and the cutter shape.
+  // fill / stroke = the pocket's / the outside cut's and declared AFTER them, so classify() (import) never reads them. `opRank`: Roughing ranks as a
+  // pocket, Contour after (operations.js ranks a levels operation by the cuts it makes, its finish after).
+  { id: 'roughing', label: 'Roughing', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none', desc: 'Clear the part level by level, leaving an allowance on the walls', targetKind: 'region', menuLabel: 'Roughing', levelsOp: 'roughing', contourOn: 'always', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 13.5V10.5h3v-3h3v-3h3' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linejoin='round'/>", opRank: 2, params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'contour', 'roughLayout', 'minTerraceWidth'] },
+  { id: 'contour', label: 'Contour', cutType: 'outside', fill: '#000000', stroke: 'none', desc: 'Finish the sloped walls at a fine step, along the walls', targetKind: 'finish', menuLabel: 'Contour', levelsOp: 'contour', icon: "<path d='M2.5 15.5h3.2c1.2-3.6 2.4-6.2 3.3-8.2c0.9-2 2.1-4 3.4-4.8h3.1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M5.2 12.5h1.6M6.4 9.5h1.6M7.9 6.5h1.6' fill='none' stroke='currentColor' stroke-width='1.2'/>", opRank: 3, params: ['toolDia', 'stepDepth'] },
 ];
 
 // TASK 745: the Clearing choices of the Pocket card (#core POCKET_CLEARING.patterns, in its order) with the icon of each pattern (18x18 inner markup in
@@ -126,8 +130,11 @@ export function effectiveCutRecord(rec) {
   if (cutTypeById(rec.cutType) && cutTypeById(rec.cutType).offsetMovesCut === false) out.cutOffset = 0; // preview only: the cut stays centred
   if (!cutTypeHasParam(rec.cutType, 'toolDia')) out.toolDia = 0;
   const t = cutTypeById(rec.cutType);
-  if (t && t.terraceAs) out.terraceAs = t.terraceAs; // TASK 714: the derivation cuts a stepped type as terraces of this plain type
-  const own = t && t.terraceAs ? cutTypeById(t.terraceAs) : t; // a stepped pocket's terraces are pockets: the pocket's automatic offset
+  if (t && t.levelsOp) { // TASK 792: Roughing / Contour: the derivation cuts every level as a plain type (#core levelsCutAs); a sloped region's as its terraces (TASK 714)
+    out.levelsOp = t.levelsOp;
+    if (rec.slope && !hasLevels(rec)) out.terraceAs = levelsCutAs(out);
+  }
+  const own = t && t.levelsOp ? cutTypeById(levelsCutAs(out)) : t; // a Roughing's pockets take the pocket's automatic offset (a stepped pocket's terraces did)
   out.autoOffset = (own && own.autoOffsetFraction) ? (Number(out.toolDia) || 0) * own.autoOffsetFraction : 0; // TASK 452: the Origin's automatic pocket offset
   return out;
 }
@@ -163,12 +170,19 @@ export const OFFSET_PRESETS = [
 
 // Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'profile' | 'chain').
 // A LOOP or PROFILE is both a closed region AND a closed path → all 5. A CHAIN is an open path → only the 'path' types.
-// TASK 714: a STEPPED type (declared `slopeKind`) only on a target whose record carries a slope of that kind (`record.slope`, from a Fusion
-// region with sloped walls); without the record it is never offered.
+// TASK 792: Roughing (a region type) on every closed region; the stepped types of TASK 714 (offered only with a slope) are gone. A CONTOUR target
+// (kind 'contour': a part's Contour record, cut-plan.js) takes the 'finish' type only, and no other target ever does.
 export function availableTypes(selectedKind, record = null) {
-  return CUT_TYPES.filter((t) => (t.targetKind === 'path' || selectedKind === 'loop' || selectedKind === 'profile') && (!t.slopeKind || hasSlopeOf(record, t.slopeKind)));
+  if (selectedKind === 'contour') return CUT_TYPES.filter((t) => t.targetKind === 'finish');
+  return CUT_TYPES.filter((t) => t.targetKind !== 'finish' && (t.targetKind === 'path' || selectedKind === 'loop' || selectedKind === 'profile'));
 }
-export const hasSlopeOf = (record, kind) => Boolean(record && record.slope && record.slope.kind === kind && Array.isArray(record.slope.rings) && record.slope.rings.length >= 2);
+// TASK 792: where a part's card offers a CONTOUR (the finish): a type's `contourOn`: 'always' (Roughing) | 'sloped' (a plain Pocket / Inside / Outside cut,
+// only when its record has sloped walls: a Fusion `slope` or an STL's `levels`; a vertical wall needs none).
+export function contourAllowed(rec) {
+  const t = rec && cutTypeById(rec.cutType);
+  if (!t || !t.contourOn) return false;
+  return t.contourOn === 'always' || Boolean(rec.slope || hasLevels(rec));
+}
 
 const NAMED = {
   black: '#000000', white: '#ffffff', gray: '#808080', grey: '#808080',

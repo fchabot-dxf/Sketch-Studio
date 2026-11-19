@@ -125,7 +125,7 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     return m;
   };
   const types = await menu('#prepare-panel .cut-type-trigger', '.cut-type-menu', '.cut-type-opt', 'cut type menu');
-  if (fusion) assert.ok(types.rows.some((r) => r.id === 'cutType:stepped-pocket'), D + ': the drafted pocket offers the Stepped pocket, with its hint');
+  if (fusion) assert.ok(types.rows.some((r) => r.id === 'cutType:roughing'), D + ': the drafted pocket offers Roughing (TASK 792: it replaced the Stepped pocket), with its hint');
   await shot(`${D}-menu-cut-type.png`, ['.cut-type-menu', '#prepare-panel .cut-card'], 2);
   await clickEl('#prepare-panel .cut-type-trigger');
   await menu('#prepare-panel .cut-clear-trigger', '.cut-clear-pop', '.cut-clear-opt', 'clearing menu');

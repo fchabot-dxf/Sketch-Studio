@@ -82,7 +82,7 @@ try {
   {
     const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
     ok(rec.slope, 'the imported pocket has its slope');
-    CUT_PLAN.set(pk, { ...rec, cutType: 'stepped-pocket', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
+    CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
     const download = shaperSvgOf(app.state, cutPlanEntries());
     const copy = shaperSvgOf(app.state, cutPlanEntries(), { preview: true });
     eq(download, plainExport(app.state), 'R3 fillet: the downloaded file is byte-identical to the exporter\'s output before task 718');

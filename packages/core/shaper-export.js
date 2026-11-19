@@ -219,10 +219,11 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   const owned = ownedLoopIds(ents, state, loops, ensurePolys()); // TASK 711: a hole with its own entry is cut by that entry only
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
-    // TASK 714: a STEPPED type's encoding declares `terraceAs` (the plain type each terrace is cut as): deriveCuts then returns one
-    // plain cut per terrace, each written with ITS type's encoding at its own depth, and its own outline (`geom`). The Origin sees plain cuts.
+    // TASK 714 / 792: a ROUGHING / CONTOUR type's encoding declares `levelsOp` (TASK 792 replaced the stepped types' `terraceAs`): deriveCuts then
+    // returns one plain cut per level (#core/stepped-cut.js: pockets, inside / outside cuts), each written with ITS type's encoding at its own depth,
+    // and its own outline (`geom`). The Origin sees plain cuts.
     const typeEnc = encOf(e.rec.cutType);
-    const rec = typeEnc && typeEnc.terraceAs ? { ...e.rec, terraceAs: typeEnc.terraceAs } : e.rec;
+    const rec = typeEnc && typeEnc.levelsOp ? { ...e.rec, levelsOp: typeEnc.levelsOp } : e.rec;
     const cuts = deriveCuts(e.target, rec, state, loops, ensurePolys(), owned);
     for (const cut of cuts) {
       const c = encOf(cut.rec.cutType);

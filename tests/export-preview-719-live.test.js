@@ -135,7 +135,7 @@ try {
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/03-pocket-floor-fillet'))})`);
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'R3 imported');
   await clickWorld(60, -40);
-  await setPlan('stepped-pocket');
+  await setPlan('roughing');
   await clickEl('.cut-adaptive');
   await waitFor(`document.querySelector('.cut-adaptive').checked`, 'Adaptive on');
   for (const [dev, n, name] of [['0.5', 4, 'coarse'], ['0.1', null, 'fine']]) {
@@ -182,12 +182,12 @@ try {
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/x2-outline-chamfer-top-bottom'))})`);
   await waitFor(`/Replaced with Body1: 1 regions/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
-  await setPlan('stepped-outside');
+  await setPlan('roughing');
   // the card remembers the last Adaptive / Resolution from the R3 steps above (the 17 terraces of the first run): set the record to Step depth 1 mm, Adaptive off
   console.log('x2 card as inherited: ' + JSON.stringify(await evalJs(`({ adaptive: document.querySelector('.cut-adaptive').checked, step: document.querySelector('.cut-step-depth').value })`)));
   if (await evalJs(`document.querySelector('.cut-adaptive').checked`)) await clickEl('.cut-adaptive');
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '1'; i.dispatchEvent(new Event('change')); })()`);
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-outside' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'x2: Step depth 1 mm, Adaptive off');
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'x2: Step depth 1 mm, Adaptive off');
   const out = await zoomShot('desktop-2d-x2-stepped-outside-corner.png', 5, { x: 0, y: -80 });
   checkDownload(await dl(), 'x2 stepped outside');
   assert.strictEqual(out.n, 2, 'x2: 2 terraces at step 1 mm');
@@ -203,7 +203,7 @@ try {
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);
   await waitFor(`/Replaced with Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, '06 imported');
   await clickWorld(60, -40);
-  await setPlan('stepped-inside');
+  await setPlan('roughing');
   const inn = await zoomShot('desktop-2d-06-stepped-inside-zoomed.png', 4, null);
   checkDownload(await dl(), '06 stepped inside');
   assert.ok(inn.look.every((f) => f.endsWith('/#000000')) && inn.look[inn.look.length - 1] === 'inside #FFFFFF/#000000', 'stepped inside keeps the file black stroke and its through step stays white (task 720 greys the other steps): ' + inn.look);

@@ -32,7 +32,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // changes (every cut-plan edit, an undo / redo, a selection change, a re-mount), so it is refreshed here too.
   const refreshCutPanel = () => {
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t), leadIn: prepareView.leadInFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take; TASK 778: leadIn = calculated / resolved arc summary
+    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t), leadIn: prepareView.leadInFor(t), contour: prepareView.contourFor(t) } : null); // TASK 792: contour = the part has a Contour ({ allowed, on }) // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take; TASK 778: leadIn = calculated / resolved arc summary
     opList.refresh();
   };
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
@@ -56,6 +56,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onPickType: (id) => cutEdit(() => { if (prepareView) prepareView.applyCutTypeToSelected(id); }),
     onSetField: (field, value) => cutEdit(() => { if (prepareView) prepareView.setFieldOnSelected(field, value); }),
     onSetFields: (o) => cutEdit(() => { if (prepareView) for (const [k, v] of Object.entries(o)) prepareView.setFieldOnSelected(k, v); }),
+    onEditContour: () => { if (prepareView) prepareView.selectContour(); }, // TASK 792: the part card's "Edit contour" shows the Contour's own card
   });
   // TASK 743: the operations of the plan (derived: operations.js) in the document's order; a reorder is ONE undo step (cutEdit: the snapshot carries the order);
   // a tap on an operation selects its regions (the card then edits them all, as a shift-selection does)
@@ -64,7 +65,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   const opList = createOpList(opsEl, {
     getOps: opsOf,
     onMove: (keys) => cutEdit(() => setOpOrder(keys)),
-    onPick: (op) => { if (prepareView) prepareView.setSelection(op.records.map((r) => r.target)); },
+    onPick: (op) => { if (prepareView) prepareView.setSelection(op.records.map((r) => r.pick || r.target)); }, // TASK 792: a Contour operation selects its own records (`contour:<key>`)
     isPicked,
     // TASK 745: the bin of an operation UNASSIGNS every region / path of it: each record's cut type is cleared (cut-plan.js setFieldFor(key, 'cutType', null),
     // the path the Stock move already takes to unassign a loop), ONE undo step for the whole operation (cutEdit: the snapshot carries the plan and the order,

@@ -7,12 +7,15 @@
 
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { cutTypeById, availableTypes, hasSlopeOf, STOCK_TYPE_ID, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations + gating
+import { cutTypeById, availableTypes, STOCK_TYPE_ID, effectiveCutRecord, contourAllowed } from './shaper.js'; // SP1f: cut-type declarations + gating; TASK 792: where a Contour may be added
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
-  lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket
+  lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary,
+  CONTOUR_KIND, contourKeyOf, contourOf, isContourKey, partKeyOf, setContour, rememberContour, levelsSummary, levelsNoteItems } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour
 import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in junction (ONE pure derivation)
+import { hasLevels } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels
+import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height map, drawn under the cut lines
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
@@ -241,6 +244,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     `<line x1="1.8" y1="10.2" x2="4.2" y2="7.8"/><line x1="10.2" y1="10.2" x2="7.8" y2="7.8"/></g></pattern>`;
   svgEl.appendChild(defs);
   // z-order (later = on top): cut TINT (behind) < edges < toolpath (tool-aware look) < selected < hover. Joints hidden.
+  // TASK 792: a part's HEIGHT MAP (#core/height-map.js, from its levels) UNDER everything: the cut tint, the edges, the tool paths and chips stay on top
+  const heightG = mkGroup('prepare-heightmap-group');  svgEl.appendChild(heightG);
   const cutG = mkGroup('prepare-cut-group');           svgEl.appendChild(cutG);
   renderPrepareGeometry(state, svgEl);                 // edges — above the cut tint
   const selectG = mkGroup('prepare-select-group');     svgEl.appendChild(selectG);
@@ -335,6 +340,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   //   - kind 'chain' -> edgeStrokeMarkup for each member shape.
   const targetMarkup = (t, cls) => {
     if (!t) return '';
+    if (t.kind === CONTOUR_KIND) return targetMarkup(parseKey(t.id), cls); // TASK 792: a part's Contour highlights the part
     if (t.kind === 'loop') {
       const outerLoop = loopById.get(t.id);
       if (!outerLoop) return '';
@@ -365,7 +371,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [], leadHandles: [] };
@@ -481,7 +487,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
   };
-  const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
+  const getLook = (key, rec) => { const sig = sigOf(rec) + (isContourKey(key) ? '#' + sigOf(CUT_PLAN.get(partKeyOf(key)) || {}) : ''); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
   // TASK 455: the SAME state model for every cut type — idle: only the svg line; hover: dark band + bold white boundary +
   // dashed tool path + depth chip; selected: teal band + bold mint boundary + the same path/chip; selected+hover: selected with
@@ -634,7 +640,19 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   // ONE reactive refresh: repaint the look layers (getLook recomputes only the changed target — its sig changed). Wired
   // to every cut-field change AND to hover / selection changes so the look follows the state.
+  // TASK 792 (owner turns 2484-2485): every record that carries a part's LEVELS (an STL's outline, a Fusion part that sends them) shows its height map,
+  // always (no toggle), never for a drawn design (no record has levels). Rebuilt only when the set of levels lists changes (each map is memoised).
+  let heightLists = [];
+  const renderHeightMap = () => {
+    const lists = [];
+    for (const rec of CUT_PLAN.values()) if (rec && hasLevels(rec) && !lists.includes(rec.levels)) lists.push(rec.levels);
+    if (lists.length === heightLists.length && lists.every((l, i) => l === heightLists[i])) return;
+    heightLists = lists;
+    heightG.innerHTML = lists.map((l) => levelsHeightMap(l)).filter(Boolean)
+      .map((m) => `<image class="sk-heightmap" href="${m.href}" x="${m.x0}" y="${m.y0}" width="${m.width}" height="${m.height}" preserveAspectRatio="none" pointer-events="none"/>`).join('');
+  };
   const refreshLook = () => {
+    renderHeightMap();
     renderCuts(); renderToolpaths(); renderChips(); renderHandles(); refreshEdgeClasses();
     // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');
@@ -790,10 +808,16 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     clearingFor: (t) => (t ? clearingAvailability(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys) : null), // TASK 745: which Clearing choices it can take
     clearingSummaryFor: (t) => (t ? clearingSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 745: what its clearing is (the derivation's)
     leadInFor: (t) => (t ? leadInSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 778: the calculated / resolved arc summary
+    contourFor: (t) => (t && t.kind !== CONTOUR_KIND ? { allowed: contourAllowed(getCutRecord(targetKey(t))), on: Boolean(contourOf(targetKey(t))) } : null), // TASK 792: the part card's Contour row
+    selectContour() { // TASK 792: "Edit contour": the selected part's Contour record (its own card)
+      const t = selectedTarget();
+      if (t && t.kind !== CONTOUR_KIND && contourOf(targetKey(t))) this.setSelection([{ kind: CONTOUR_KIND, id: targetKey(t) }]);
+    },
     noteFor(t) { // TASK 714: a stepped cut's steps / undercut, for the cut card; TASK 742: its Hold part; TASK 745: its programmed clearing
       if (!t) return [];
       const rec = getCutRecord(targetKey(t));
-      return [...steppedNoteItems(rec), ...holdNoteItems(rec, this.holdFor(t)), ...clearingNoteItems(rec, this.clearingSummaryFor(t)), ...leadInNoteItems(rec, this.leadInFor(t))]; // TASK 775 / 778: an On line outline's lead-in arc
+      return [...steppedNoteItems(rec), ...levelsNoteItems(rec, levelsSummary(targetKey(t), rec, state, loops, loopPolys, ownedNow().set)), // TASK 792: Roughing / Contour
+        ...holdNoteItems(rec, this.holdFor(t)), ...clearingNoteItems(rec, this.clearingSummaryFor(t)), ...leadInNoteItems(rec, this.leadInFor(t))]; // TASK 775 / 778: an On line outline's lead-in arc
     },
     // Write the cut type onto every selected target + refresh the tool-aware look (panel calls this).
     refreshLook, // TASK 463: repaint after an undo/redo restored the cut plan
@@ -815,13 +839,16 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       for (const t of selection.values()) {
         if (t.kind === 'chain' && ct && ct.targetKind !== 'path') continue;
         const k = targetKey(t);
-        if (ct && ct.slopeKind) { // TASK 714: a stepped type only where the record carries its slope; a record with no step depth yet takes the last one used
-          if (!hasSlopeOf(CUT_PLAN.get(k), ct.slopeKind)) continue;
-          if (!(Number(CUT_PLAN.get(k).stepDepth) > 0)) setFieldFor(k, 'stepDepth', lastStepDepth());
-          if (typeof CUT_PLAN.get(k).adaptiveSteps !== 'boolean') setFieldFor(k, 'adaptiveSteps', lastAdaptiveSteps()); // TASK 717: the last adaptive choice and resolution
+        if (t.kind === CONTOUR_KIND && !(ct && ct.targetKind === 'finish')) continue; // TASK 792: a part's Contour record stays a Contour
+        if (ct && ct.levelsOp === 'roughing') { // TASK 714 / 792: a record with no step depth yet takes the last one used (and the last adaptive choice and resolution, TASK 717);
+          // the allowance is 0 while the part has no Contour, else the declared finish allowance (owner ruling, turn 2512)
+          if (!(Number(CUT_PLAN.get(k) && CUT_PLAN.get(k).stepDepth) > 0)) setFieldFor(k, 'stepDepth', lastStepDepth());
+          if (typeof CUT_PLAN.get(k).adaptiveSteps !== 'boolean') setFieldFor(k, 'adaptiveSteps', lastAdaptiveSteps());
           if (!(Number(CUT_PLAN.get(k).stepDeviation) > 0)) setFieldFor(k, 'stepDeviation', lastStepDeviation());
+          setFieldFor(k, 'finishAllowance', contourOf(k) ? lastFinishAllowance() : 0);
         }
         lastRec = setFieldFor(k, 'cutType', cutType);
+        if (contourOf(k) && !contourAllowed(CUT_PLAN.get(k))) setContour(k, false); // TASK 792: a part whose new type takes no Contour loses it
       }
       refreshLook();
       return lastRec;
@@ -829,7 +856,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) onto every selected target + refresh LIVE.
     setFieldOnSelected(field, value) {
       if (selection.size === 0) return null;
-      if (field === 'stepDepth') value = rememberStepDepth(value); // TASK 714: the next cut switched to a stepped type starts from it
+      if (field === 'stepDepth' && ![...selection.keys()].every(isContourKey)) value = rememberStepDepth(value); // TASK 714: the next cut switched to a stepped type (TASK 792: Roughing) starts from it; a Contour's fine step is its own (rememberContour)
       if (field === 'adaptiveSteps') value = rememberAdaptiveSteps(value); // TASK 717: same for adaptive stepping and its resolution
       if (field === 'stepDeviation') value = rememberStepDeviation(value);
       if (field === 'tabCount') value = rememberTabCount(value); // TASK 742: the next record turned to Tabs / Onion skin starts from them
@@ -843,6 +870,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       let lastRec = null;
       for (const t of selection.values()) {
         const k = targetKey(t);
+        if (field === 'contour') { if (!isContourKey(k) && contourAllowed(CUT_PLAN.get(k))) lastRec = setContour(k, value === true); continue; } // TASK 792: add / remove the part's Contour (its own record)
+        if (isContourKey(k)) rememberContour(field, value); // TASK 792: the next Contour starts from this one's bit / shape / step
         if (field === 'clearing' && value !== 'freehand') { // TASK 745: the Morphed spiral only where it is possible (never a silent fallback); a pocket set to a computed
           // clearing without its own values takes the last ones set (or the declared defaults)
           if (value === 'morphed') { const av = clearingAvailability(k, CUT_PLAN.get(k) || {}, state, loops, loopPolys); if (!av || av.morphed) continue; }

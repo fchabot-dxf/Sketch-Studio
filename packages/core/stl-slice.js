@@ -28,6 +28,11 @@
 //     { zFromTopMm, segments }; a straight stretch is its first and last ring). Its `outer` (the plain cut) is its STRAIGHT WALL (the loop it keeps over
 //     the greatest depth); a wall that is nowhere straight is cut straight at its widest loop (a drafted pocket: its top opening, the add-in's own
 //     rule, with its warning). An undercut (#core/stepped-cut.js steppedTerraces, the ONE place it is decided) gets the add-in's warning wording.
+//   * LEVELS (TASK 792, the contract's ONE optional field for a part's depth information, beside `slope`): an OUTLINE region carries `levels` =
+//     [{ zFromTopMm, loops: [{ closed: true, segments }] }], the body's MATERIAL SECTIONS from the top down (every section above: z = depth from the
+//     part's top, mm; loops in the payload's frame like `outer`; material = inside an ODD number of a section's loops, so loops nest: a hole in
+//     material, an island in the hole...). Roughing and Contour cut a part from them (#core/stepped-cut.js levelsRoughing / levelsContour). The
+//     Fusion add-in may send the same field later; a region without it cuts from its regions + `slope` rings as before.
 import { steppedTerraces, sameOutline, SAME_OUTLINE_TOL_MM } from './stepped-cut.js';
 import { regionsFromRings, intersectRegions, regionsArea } from './plot/clip.js';
 
@@ -571,6 +576,10 @@ export function sliceStl(tris, { up = STL_DEFAULTS.up, unit = STL_DEFAULTS.unit,
 
   const regions = [];
   const ringsOf = (c) => c.rings.map((r) => ({ z: depthOf(r.k), loop: r.loop }));
+  // TASK 792: the body's MATERIAL SECTIONS (the payload's optional `levels` field of an outline region, see the header): every section, its loops as
+  // the slicer reads them (nested: material = inside an odd number of them). Built once; every outline of the body carries the same array.
+  let levelsMemo = null;
+  const materialLevels = () => (levelsMemo || (levelsMemo = levels.map((lv) => ({ zFromTopMm: r6(lv.depth), loops: lv.loops.map((L) => ({ closed: true, segments: segmentsOf(L) })) }))));
 
   // OUTLINES
   const { chains: outlines, shoulders } = trackOutlines(levels, { shoulderAt });
@@ -588,7 +597,7 @@ export function sliceStl(tris, { up = STL_DEFAULTS.up, unit = STL_DEFAULTS.unit,
     if (!w.straight && w.slope) warn(`${label}: sloped walls cut straight at the widest outline`);
     const under = [w.undercut, c.undercutAt != null ? depthOf(c.undercutAt) : null].filter((v) => v !== null);
     if (under.length) warn(`${label}: undercut below ${fmtMm(Math.min(...under))} mm cut straight`);
-    regions.push({ label, cutType: 'outside', depthMm: r6(H), through: true, outer: { closed: true, segments: segmentsOf(w.outer) }, holes: [], ...(w.slope ? { slope: w.slope } : {}) });
+    regions.push({ label, cutType: 'outside', depthMm: r6(H), through: true, outer: { closed: true, segments: segmentsOf(w.outer) }, holes: [], ...(w.slope ? { slope: w.slope } : {}), levels: materialLevels() });
   });
 
   // POCKETS and THROUGH HOLES

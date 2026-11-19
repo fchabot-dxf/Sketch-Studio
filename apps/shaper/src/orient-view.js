@@ -71,7 +71,7 @@ export async function openOrientView({ tris, unit, rotation = null, up = null, o
   controls.addEventListener('change', render);
   function place(ext) {
     const c = new THREE.Vector3(ext.dx / 2, ext.dz / 2, -ext.dy / 2);
-    const R = Math.hypot(ext.dx, ext.dy, ext.dz) / 2, dist = (R / Math.sin((camera.fov * Math.PI) / 360)) * 1.1;
+    const R = Math.hypot(ext.dx, ext.dy, ext.dz) / 2, dist = (R / Math.sin((camera.fov * Math.PI) / 360)) * 1.1 * Math.max(1, 1 / camera.aspect); // a narrow (phone) screen: the width limits
     controls.target.copy(c);
     camera.position.copy(c).add(new THREE.Vector3(0.55, 0.85, 0.9).normalize().multiplyScalar(dist));
     camera.far = dist * 20; camera.updateProjectionMatrix();

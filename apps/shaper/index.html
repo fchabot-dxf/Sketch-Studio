@@ -292,8 +292,18 @@
     .shaper-fusion-status[data-state="connecting"] { color: #cbd5e1; }
     .shaper-fusion-status[data-state="unavailable"] { color: #fcd34d; }
     .shaper-fusion-status[data-state="error"] { color: #fca5a5; }
-    #view-prepare.is-fusion #prepare-notice { top: 56px; pointer-events: auto; }
-    #view-prepare.is-fusion #prepare-panel { top: 56px; }
+    /* TASK 795: the selection list under Add selection: one row per selection (its words + an X), Clear all from two on. */
+    .shaper-fusion-list { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+    .shaper-fusion-list[hidden] { display: none; }
+    .shaper-fusion-sel { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 30px; padding: 0 4px 0 10px; border: 1px solid #464950; border-radius: 6px; background: #26292f; color: #e5e7eb; font-size: 12px; }
+    .shaper-fusion-sel:hover, .shaper-fusion-sel:focus-within { border-color: #1be09e; }
+    .shaper-fusion-sel-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .shaper-fusion-sel-x, .shaper-fusion-clear { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: #cbd5e1; font: 12px system-ui, sans-serif; cursor: pointer; }
+    .shaper-fusion-sel-x:hover, .shaper-fusion-clear:hover { background: #3b3f47; color: #fff; }
+    .shaper-fusion-clear { border: 1px solid #464950; height: 30px; }
+    @media (max-width: 640px), (pointer: coarse) { .shaper-fusion-sel-x, .shaper-fusion-clear { min-width: 36px; height: 36px; } .shaper-fusion-sel { min-height: 38px; } }
+    #view-prepare.is-fusion #prepare-notice { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); pointer-events: auto; }
+    #view-prepare.is-fusion #prepare-panel { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); } /* TASK 795: below the bar, whatever height the selection list gives it (fusion-bridge.js sets the variable) */
     @media (max-width: 640px) {
       #view-prepare.is-fusion #prepare-notice { left: 12px; transform: none; max-width: calc(100% - 236px); }
     }
@@ -466,7 +476,7 @@
        a mouse drags the grip, a finger holds then drags the row (the list keeps native scrolling: no touch-action none), the keyboard moves a focused grip. */
     #prepare-ops { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
       background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
-    #view-prepare.is-fusion #prepare-ops { top: 56px; max-height: calc(100% - 96px); }
+    #view-prepare.is-fusion #prepare-ops { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); max-height: calc(100% - var(--sk-fusion-bar-h, 44px) - 52px); }
     .ops-header { display: flex; align-items: center; flex: 0 0 auto; }
     .ops-head { all: unset; box-sizing: border-box; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
     .ops-header > .sk-hint-i { margin-right: 12px; }

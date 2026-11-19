@@ -406,7 +406,7 @@ async function createSubfolder() {
   await openRemoteFolder(data.path || currentRemotePath);
 }
 
-if (syncSwitchBtn) syncSwitchBtn.addEventListener('click', () => { clearSession(); showSyncStatus('', ''); if (syncEmail) syncEmail.focus(); });
+if (syncSwitchBtn) syncSwitchBtn.addEventListener('click', () => { clearSession(); showExistsQuestion(false); showSyncStatus('', ''); if (syncSubmitBtn) syncSubmitBtn.disabled = false; if (syncEmail) syncEmail.focus(); }); // TASK 788: an open "already in My Files" question is about the account being left: it closes (Send, Browse usable again)
 if (syncBrowseBtn) syncBrowseBtn.addEventListener('click', () => { openRemoteFolder(currentRemotePath); });
 if (syncRefreshBtn) syncRefreshBtn.addEventListener('click', () => { openRemoteFolder(currentRemotePath); });
 if (syncNewFolderBtn) syncNewFolderBtn.addEventListener('click', () => {
@@ -435,10 +435,12 @@ syncFilename.addEventListener('input', () => {
   if (!syncExists.hidden) { showExistsQuestion(false); showSyncStatus(''); } // the question was about the name before the edit
 });
 
+let syncCloseTimer = null;
 function closeSyncModal() {
   if (syncModal && syncModal.open) syncModal.close();
 }
 
+if (syncModal) syncModal.addEventListener('close', () => clearTimeout(syncCloseTimer)); // TASK 788: any close (button, Escape, the timer itself) ends the timer of that opening
 if (syncCloseBtn) syncCloseBtn.addEventListener('click', closeSyncModal);
 if (syncCancelBtn) syncCancelBtn.addEventListener('click', closeSyncModal);
 
@@ -538,9 +540,7 @@ async function sendToShaperHub(mode) {
   if (expStatus) expStatus.textContent = `✓ ${line}. It will now appear on your Origin over Wi-Fi.`;
   // TASK 758: the login is NOT kept by the app. Closing the dialog hides the form after the successful fetch: that is what tells the browser's
   // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared).
-  setTimeout(() => {
-    closeSyncModal();
-  }, 1200);
+  syncCloseTimer = setTimeout(closeSyncModal, 1200); // TASK 788: ended when the dialog closes (below), so it only ever closes the opening it was started for
 }
 
 syncForm.addEventListener('submit', (e) => {

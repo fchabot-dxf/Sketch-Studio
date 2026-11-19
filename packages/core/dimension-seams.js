@@ -27,7 +27,7 @@ const ITER = () => SolverConfig.ITERATIONS || 500;
 // TASK 782 / 789 / 789b: THE length rule. A length (a size a drawing tool's box is typed; the value of ANY distance dimension, from any path: typed,
 // a formula, a parameter re-evaluating it; a radius / diameter, a line's length, a distance between two shapes' points, aligned / horizontal / vertical,
 // point-to-line, line-to-line) must be more than 0: 0 collapses a line / circle or puts two points on each other (owner ruling, turn 2465: points that
-// meet are the Coincident constraint's job) and a negative one is no length. ONE message, shown by the drawing tools' box (numeric-input-manager.js
+// meet are the Coincident constraint's job; Fusion's dimension BOX refuses 0 and -5 too, task 789b) and a negative one is no length. ONE message, shown by the drawing tools' box (numeric-input-manager.js
 // SIZE_REFUSAL_HINT) and by every dimension edit's refusal (commitDimensionEdits). An OFFSET (#core/offset.js) and an ANGLE have their own rules.
 export const SIZE_REFUSAL = 'a length must be more than 0';
 /** null, or SIZE_REFUSAL when `v` (a number, base unit) is 0 or less. */

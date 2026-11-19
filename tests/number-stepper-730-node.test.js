@@ -43,8 +43,8 @@ try {
   const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
   importFusionSelection(JSON.parse(fs.readFileSync(new URL('03-pocket-floor-fillet.json', FIX), 'utf8')), { controller: app.controller, prepare: app.prepare });
   const p = worldToScreen(pc, { x: 60, y: -40 }); app.click(Math.round(p.x), Math.round(p.y), { target: pc });
-  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="stepped-pocket"]');
-  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'stepped-pocket');
+  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]');
+  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'roughing');
   const hist = () => st.history.length;
   const row = (name) => `.cut-row[data-${name.startsWith('cut') || name === 'toolDia' ? 'param' : 'row'}="${name}"]`;
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);

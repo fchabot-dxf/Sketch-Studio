@@ -14,7 +14,6 @@ import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choices (Off | On) and sides (Outside | Inside)
 
-const STEPPED = 'For a sloped wall from Fusion: cut as several depths that follow the slope.';
 
 /** The parameters: the cut card's rows (Prepare) and the Export step's cards. */
 const PARAMS = {
@@ -25,7 +24,10 @@ const PARAMS = {
   clearing: { label: 'Clearing', hint: 'How the inside of the pocket is removed.' },
   stepover: { label: 'Stepover', hint: 'How far the bit moves sideways between passes, as a share of its diameter. Smaller is smoother and slower.' },
   // TASK 766: the last pass that takes the allowance off is the Origin's own inside cut with Loop off, the loop's turn along the wall with Loop on (pocket-clearing.js)
-  finishAllowance: { label: 'Finish allowance', hint: ({ loop } = {}) => `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.` },
+  finishAllowance: { label: 'Finish allowance', hint: ({ loop, roughing } = {}) => (roughing ? 'Left on every wall by the roughing levels; the Contour takes it off. 0 = none (the part has no Contour).' : `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.`) }, // TASK 792: Roughing's allowance
+  // TASK 792: a part's Contour (the finish of its sloped walls), added from the part's card
+  contour: { label: 'Contour', hint: 'Adds a finishing pass along the sloped walls at a fine step, with its own bit. It is its own operation in the list.', items: ['contour:off', 'contour:on', 'contourEdit'] },
+  contourEdit: { label: 'Edit contour', hint: 'Shows the Contour’s own settings: its step and its bit.' },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },
   // TASK 775 / 778: the TANGENTIAL ARC LEAD-IN rows (On line outlines only)
@@ -37,7 +39,7 @@ const PARAMS = {
   leadInAt: { label: 'Position', hint: 'Where the lead-in meets the line: defaults to the middle of the longest straight edge, or drag the handle on the outline to move it.' },
   rasterAngle: { label: 'Raster angle', hint: 'The direction of the back-and-forth passes: 0° runs left to right, 90° up and down.' },
   adaptiveSteps: { label: 'Adaptive stepping', hint: 'Places the steps by how far they may stray from the slope: more steps where it is nearly flat, fewer where it is steep.' },
-  stepDepth: { label: 'Step depth', hint: 'How much deeper each step goes. Smaller steps follow the slope more closely but take more cuts.' },
+  stepDepth: { label: 'Step depth', hint: ({ contour } = {}) => (contour ? 'How much deeper each contour pass goes. Smaller passes follow the slope more closely but take more cuts.' : 'How much deeper each step goes. Smaller steps follow the slope more closely but take more cuts.') }, // TASK 792: a Contour's fine step
   stepDeviation: { label: 'Resolution', hint: 'The most the steps may stray from the true slope. Finer gives more steps.' },
   holdPart: { label: 'Hold part', hint: 'Keeps a cut-out part (or the waste of a hole) from coming loose when the cut goes through.', items: HOLD_PART.modes.map((m) => `holdPart:${m.id}`) },
   tabCount: { label: 'Tab count', hint: 'How many tabs. Auto spaces them along the outline by its length.' },
@@ -81,12 +83,15 @@ const CHOICE_HINTS = {
     online: 'The centre of the bit follows the line. For grooves and engraving, on open lines too.',
     guide: 'Not cut. Shown on the Origin as a reference.',
     interior: 'Cuts just inside a closed shape, for holes and openings. The Origin keeps the bit inside the line.',
-    'stepped-inside': STEPPED,
     pocket: 'Clears the whole inside of a closed shape down to the depth.',
-    'stepped-pocket': STEPPED,
+    roughing: 'Clears the part level by level down to its depth, leaving an allowance on the walls for a Contour. For any closed shape: an STL part, a sloped wall from Fusion, a drawn pocket.', // TASK 792: replaced the stepped types
     exterior: 'Cuts just outside a closed shape, for parts you keep. The Origin keeps the bit outside the line.',
-    'stepped-outside': STEPPED,
     stock: 'The outline of your board. Not cut: it sets the board in the 3D preview and goes in the file as a guide.',
+    contour: 'Finishes the sloped walls: a pass along them at every fine step, no clearing.', // TASK 792
+  },
+  contour: { // TASK 792
+    off: 'No finishing pass.',
+    on: 'A finishing pass along the walls at a fine step (its own operation and bit).',
   },
   clearing: {
     freehand: 'You clear it by hand on the Origin, inside the outline.',
@@ -121,6 +126,7 @@ const CHOICE_SOURCES = {
   holdPart: HOLD_PART.modes.map((m) => ({ id: m.id, label: m.label })),
   leadIn: LEAD_IN.modes.map((m) => ({ id: m.id, label: m.label })), // TASK 775
   leadInSide: LEAD_IN.sides.map((m) => ({ id: m.id, label: m.label })),
+  contour: [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }], // TASK 792: the Contour row of a part's card
 };
 
 /** The id of a choice's entry: `<parameter>:<choice id>`. */

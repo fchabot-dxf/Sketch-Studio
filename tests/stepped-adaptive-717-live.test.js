@@ -88,8 +88,8 @@ try {
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the R3 floor fillet pocket imported');
   await clickWorld(60, -40);
   await clickEl('#prepare-panel .cut-type-trigger');
-  await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-pocket'))`, 'Stepped pocket set');
+  await clickEl('.cut-type-opt[data-id="roughing"]');
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
   // OFF: the 716 card
   let c = await cardState();
   console.log('OFF: ' + JSON.stringify(c));

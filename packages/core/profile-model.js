@@ -842,7 +842,7 @@ export function deriveCutFootprint(cuts, rec, state) {
       const center = cut.centers.length === 1 && cut.centers[0].closed ? cut.centers[0].points : null;
       const first = cut.centers[0] && cut.centers[0].points;
       const anchor = first && first.length ? { ...first.reduce((best, p) => (p.y < best.y ? p : best), first[0]) } : null;
-      out.push({ kind: 'band', cutType: String(cut.cutType || ''), fillRule: 'nonzero', rings, center, chain: null, anchor, toolPaths, clearing: cut.clearing, ...(cut.hold ? { hold: cut.hold } : {}), ...(cut.leadIn ? { leadIn: cut.leadIn } : {}) });
+      out.push({ kind: 'band', cutType: String(cut.cutType || ''), fillRule: 'nonzero', rings, center, chain: null, anchor, toolPaths, clearing: cut.clearing, ...(cut.hold ? { hold: cut.hold } : {}), ...(cut.leadIn ? { leadIn: cut.leadIn } : {}), ...(cut.terrace ? { terrace: cut.terrace } : {}) }); // TASK 792: a Roughing / Contour level (#core/stepped-cut levelPocketCut / levelContourCut) carries its level
       continue;
     }
     if (cut.isCompound) {

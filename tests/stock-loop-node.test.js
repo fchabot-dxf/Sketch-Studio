@@ -36,7 +36,7 @@ try {
   assert(doc.querySelectorAll('.cut-type-opt').length > 0, 'cut type menu open');
   const opts = [...doc.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.disabled ? ':off' : '') + (o.querySelector('svg') ? ':icon' : ''));
   console.log('menu:', JSON.stringify(opts));
-  assert.deepStrictEqual(opts, ['online:icon', 'guide:icon', 'interior:icon', 'pocket:icon', 'exterior:icon', 'stock:icon'], 'Stock sits beside the other types with its icon');
+  assert.deepStrictEqual(opts, ['online:icon', 'guide:icon', 'interior:icon', 'pocket:icon', 'roughing:icon', 'exterior:icon', 'stock:icon'], 'Stock sits beside the other types with its icon (TASK 792: Roughing on every closed region)');
   pressEl('.cut-type-opt[data-id="stock"]');
   assert(!!stockKey(), 'the L loop becomes the Stock');
   const keyA = stockKey();

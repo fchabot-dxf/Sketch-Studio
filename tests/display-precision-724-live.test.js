@@ -78,7 +78,7 @@ try {
   await clickWorld(60, -40); // the pocket
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card');
   await clickEl('#prepare-panel .cut-type-trigger');
-  await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
+  await clickEl('.cut-type-opt[data-id="roughing"]');
   const card = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, depth: document.querySelector('.cut-depth').value, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
 
   // 1. Defaults: Length 3, Angle 1, Show trailing zeros OFF
@@ -130,7 +130,7 @@ try {
   // typing still takes any number of decimals: 1.23456789 is stored whole
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '1.23456789'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
   await sleep(250);
-  assert.strictEqual(await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((r) => r.cutType === 'stepped-pocket').stepDepth)`), 1.23456789, 'typed decimals are stored whole (display only)');
+  assert.strictEqual(await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((r) => r.cutType === 'roughing').stepDepth)`), 1.23456789, 'typed decimals are stored whole (display only)');
 
   // 3. Design: a distance label, the Parameters value cell, an angle label (Length 3, Angle 0)
   await openStyle(); await setPrecision('LENGTH_PRECISION', 3); await setPrecision('ANGLE_PRECISION', 0);

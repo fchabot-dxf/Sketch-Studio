@@ -121,10 +121,10 @@ try {
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);
   await waitFor(`/Body1: 2 regions|Replaced with Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, '06 imported');
   await clickWorld(60, -40);
-  await setPlan('stepped-inside');
+  await setPlan('roughing');
   if (await evalJs(`document.querySelector('.cut-adaptive').checked`)) await clickEl('.cut-adaptive');
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '1'; i.dispatchEvent(new Event('change')); })()`);
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-inside' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'Step depth 1 mm, Adaptive off');
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'Step depth 1 mm, Adaptive off');
   await shootRings('desktop-2d-06-inside-step1mm.png', 2);
   await openStage('prepare');
   await clickWorld(60, -40);

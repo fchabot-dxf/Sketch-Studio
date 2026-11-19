@@ -34,5 +34,6 @@ export function shaperSvgOf(state, entries, { preview = false } = {}) {
 export function shaperPreviewOf(state, entries) {
   const ops = planOperations(state, entries);
   const ids = opIdsByPlanKey(ops);
-  return { svg: shaperSvgOf(state, entries.map((e) => (ids.has(`${e.target.kind}:${e.target.id}`) ? { ...e, op: ids.get(`${e.target.kind}:${e.target.id}`) } : e)), { preview: true }), ops };
+  const keyOf = (e) => e.key || `${e.target.kind}:${e.target.id}`; // TASK 792: a part's Contour is its own record (its own key), cutting the part's target
+  return { svg: shaperSvgOf(state, entries.map((e) => (ids.has(keyOf(e)) ? { ...e, op: ids.get(keyOf(e)) } : e)), { preview: true }), ops };
 }

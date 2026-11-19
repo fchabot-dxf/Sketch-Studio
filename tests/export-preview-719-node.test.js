@@ -52,7 +52,7 @@ try {
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   {
     const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
-    CUT_PLAN.set(pk, { ...rec, cutType: 'stepped-pocket', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
+    CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
     const download = shaperSvgOf(app.state, cutPlanEntries());
     eq(download, plainExport(app.state), 'R3 fillet: the downloaded file is byte-identical to the exporter output before 719');
     ok(!/hsl\(|stroke="#222"|data-/.test(download), 'R3 fillet: no preview styling or data-* in the file');
@@ -72,7 +72,7 @@ try {
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/x2-outline-chamfer-top-bottom.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   {
     const [pk, rec] = [...CUT_PLAN.entries()][0];
-    CUT_PLAN.set(pk, { ...rec, cutType: 'stepped-outside', stepDepth: 1 });
+    CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1 });
     const download = shaperSvgOf(app.state, cutPlanEntries());
     eq(download, plainExport(app.state), 'x2 stepped outside: the downloaded file is byte-identical to the pre-719 exporter call');
     ok(!/hsl\(|stroke="#9a9a9a"|data-/.test(download), 'x2: no preview styling in the file');

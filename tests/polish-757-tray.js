@@ -29,7 +29,7 @@ export async function drawTray() {
   CUT_PLAN.set(loopOf(part[0]), { ...base, cutType: 'exterior', cutDepth: 19.05, holdPart: 'tabs', tabCount: 'auto', tabWidth: 9.525, holdThickness: 1.5875 });
   CUT_PLAN.set(loopOf(slot[0]), { ...base, cutType: 'interior', cutDepth: 19.05 });
   CUT_PLAN.set(loopOf(pocket[0]), { ...base, cutType: 'pocket', cutDepth: 9.525, clearing: 'raster', stepover: POCKET_CLEARING.stepoverPct.default, finishAllowance: 0.508, rasterAngle: 0 });
-  CUT_PLAN.set(keyOf('loop', loops.find((l) => l.edges.includes('dish')).id), { ...base, cutType: 'stepped-pocket', cutDepth: depth, stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.25, slope: { kind: 'pocket', label: 'Dish', rings } });
+  CUT_PLAN.set(keyOf('loop', loops.find((l) => l.edges.includes('dish')).id), { ...base, cutType: 'roughing', cutDepth: depth, stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.25, slope: { kind: 'pocket', label: 'Dish', rings } });
   return [...CUT_PLAN.values()].map((r) => r.cutType);
 }
 

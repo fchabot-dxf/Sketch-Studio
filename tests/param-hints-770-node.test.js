@@ -53,7 +53,7 @@ const markup = fs.readFileSync(new URL('../apps/shaper/src/cut-panel.js', import
 for (const e of Object.values(PARAM_HINTS)) ok(!markup.includes(`>${e.label}<`), `no label text "${e.label}" in the card's markup (the table is its one source)`);
 const panel = createCutPanel(host, {});
 const seen = new Set();
-const slope = (kind) => ({ kind, rings: [{}, {}] }); // hasSlopeOf: a slope of that kind with 2 rings (the card only reads that it exists)
+const slope = (kind) => ({ kind, rings: [{}, {}] }); // (TASK 792: hasSlopeOf removed; Roughing's Contour row reads a slope)  a slope of that kind with 2 rings (the card only reads that it exists)
 const press = (el) => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
 const visible = (el) => { for (let e = el; e && e !== host; e = e.parentElement) if (e.hidden || e.style.display === 'none') return false; return true; };
 const STATES = [
@@ -63,12 +63,13 @@ const STATES = [
   ...['off', 'tabs', 'skin'].map((h) => ({ cutType: 'online', holdPart: h })), // TASK 775: On line takes the Hold part rows
   { cutType: 'online', leadIn: true }, { cutType: 'online', leadIn: true, leadInSide: 'inside' }, // TASK 775: the Lead-in rows
   ...['linked', 'raster', 'morphed'].map((c) => ({ cutType: 'pocket', clearing: c, loop: true, leadIn: true })),
-  ...['pocket', 'inside', 'outside'].flatMap((k) => [{ cutType: `stepped-${k}`, slope: slope(k) }, { cutType: `stepped-${k}`, slope: slope(k), adaptiveSteps: true }]),
+  ...['pocket', 'inside', 'outside'].flatMap((k) => [{ cutType: 'roughing', slope: slope(k) }, { cutType: 'roughing', slope: slope(k), adaptiveSteps: true }]), // TASK 792: Roughing replaced the stepped types
   { cutType: 'pocket', slope: slope('pocket') }, { cutType: 'interior', slope: slope('inside') }, { cutType: 'exterior', slope: slope('outside') },
+  { cutType: 'roughing' }, { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose' }, // TASK 792: a drawn region's Roughing, a part's Contour card
 ];
 for (const record of STATES) {
   const name = JSON.stringify(record);
-  panel.update({ kind: 'loop', record: { cutDepth: 6, cutOffset: 0, toolDia: 6, ...record } });
+  panel.update({ kind: record.cutType === 'contour' ? 'contour' : 'loop', contour: record.cutType === 'roughing' ? { allowed: true, on: true } : null, record: { cutDepth: 6, cutOffset: 0, toolDia: 6, ...record } }); // TASK 792: a Roughing card shows its Contour row; a Contour is its own card (kind 'contour')
   const rows = [...host.querySelectorAll('.cut-field, .cut-row')].filter(visible);
   ok(rows.length >= 1, name + ': rows shown');
   for (const row of rows) {
@@ -79,7 +80,7 @@ for (const record of STATES) {
     seen.add(id);
     const labelText = trig.classList.contains('sk-hint-i') ? trig.previousElementSibling.textContent : trig.textContent;
     eq(labelText, hintLabel(id), `${name} ${id}: the label is the table's`);
-    eq(line.firstChild.textContent, hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online' }), `${name} ${id}: the hint is the table's`); // TASK 775: Lead-in / Tab width follow the type
+    eq(line.firstChild.textContent, hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the hint is the table's`); // TASK 775: Lead-in / Tab width follow the type
     ok(line.hidden && trig.getAttribute('aria-expanded') === 'false' && trig.getAttribute('aria-controls') === line.id, `${name} ${id}: closed at rest, aria-controls its line`);
     for (const f of row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger')) eq(f.getAttribute('aria-describedby'), line.id, `${name} ${id}: ${f.className} is described by the hint`);
     for (const item of line.querySelectorAll('.sk-hint-item')) { seen.add(item.dataset.hint); ok(item.textContent === `${hintLabel(item.dataset.hint)}: ${hintText(item.dataset.hint)}`, `${name}: the item line ${item.dataset.hint}`); }

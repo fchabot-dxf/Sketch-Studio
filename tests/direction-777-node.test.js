@@ -101,7 +101,7 @@ const travelFor = (g, loopIdx, rawRec) => {
   // Stepped pocket (no island): every terrace carries conventional CW wall travel
   const gStep = makeState([[0, 0, 80, 50]]);
   const rings = [0, 2, 4, 6].map((z) => ({ z, segments: [{ type: 'circle', cx: 40, cy: 25, r: 20 - z * 0.5 }] }));
-  const stepped = travelFor(gStep, 0, { cutType: 'stepped-pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, stepDepth: 2, slope: { kind: 'pocket', label: 'Dish', rings } });
+  const stepped = travelFor(gStep, 0, { cutType: 'roughing', cutDepth: 6, cutOffset: 0, toolDia: 6, stepDepth: 2, slope: { kind: 'pocket', label: 'Dish', rings } });
   ok(stepped.travel.length >= 3, '2: stepped pocket produces terrace travel entries: ' + stepped.travel.length);
   ok(stepped.travel.every((t) => t.role === 'wall' && t.direction === 'cw' && screenDir(t.path) === 'cw'), '2: every stepped terrace is CW wall');
 }

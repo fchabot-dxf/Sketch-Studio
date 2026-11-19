@@ -105,13 +105,13 @@ try {
   await clickEl('#prepare-panel .cut-type-trigger'); // close
   await clickWorld(60, -40); // the pocket
   const pocketMenu = await menuIds();
-  assert.deepStrictEqual(pocketMenu, ['online', 'guide', 'interior', 'pocket', 'stepped-pocket', 'exterior', 'stock'], 'the sloped pocket: Stepped pocket after Pocket');
+  assert.deepStrictEqual(pocketMenu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], 'the sloped pocket: Stepped pocket after Pocket');
   await shot('prepare-stepped-menu.png', ['#prepare-panel .cut-card', '.cut-type-menu']);
-  const wide = await evalJs(`(() => { const m = document.querySelector('.cut-type-menu').getBoundingClientRect(), o = document.querySelector('.cut-type-opt[data-id="stepped-pocket"] .cut-opt-name'); return { menu: m.width, oneLine: o.getBoundingClientRect().height <= 22 }; })()`);
+  const wide = await evalJs(`(() => { const m = document.querySelector('.cut-type-menu').getBoundingClientRect(), o = document.querySelector('.cut-type-opt[data-id="roughing"] .cut-opt-name'); return { menu: m.width, oneLine: o.getBoundingClientRect().height <= 22 }; })()`);
   console.log('menu with Stepped pocket: ' + JSON.stringify(wide));
   assert.ok(wide.menu >= 134 && wide.oneLine, 'the menu grows to keep "stepped pocket" on one line');
-  await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-pocket'))`, 'Stepped pocket set');
+  await clickEl('.cut-type-opt[data-id="roughing"]');
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
   const card = await evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, step: document.querySelector('.cut-step-depth').value,
     stepShown: getComputedStyle(document.querySelector('.cut-row[data-row="stepDepth"]')).display !== 'none', note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
   console.log('card: ' + JSON.stringify(card));
@@ -142,9 +142,9 @@ try {
   await waitFor(`/Replaced with Body1: 1 regions/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
   const x2Menu = await menuIds();
-  assert.ok(x2Menu.includes('stepped-outside') && !x2Menu.includes('stepped-pocket') && !x2Menu.includes('stepped-inside'), 'x2 outline: Stepped outside only: ' + x2Menu);
-  await clickEl('.cut-type-opt[data-id="stepped-outside"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-outside'))`, 'Stepped outside set');
+  assert.ok(x2Menu.includes('roughing') && !x2Menu.includes('roughing') && !x2Menu.includes('roughing'), 'x2 outline: Stepped outside only: ' + x2Menu);
+  await clickEl('.cut-type-opt[data-id="roughing"]');
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped outside set');
   const x2Info = await review(2);
   console.log('Review (x2 stepped outside): ' + JSON.stringify(x2Info));
   assert.ok(x2Info.includes('Outline: 2 steps, 1 to 19 mm \u00b7 outlines 1 mm apart') && x2Info.includes('Outline: undercut below 17 mm cut straight'), 'the Review says the steps and the undercut');

@@ -67,8 +67,8 @@ try {
   const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
   importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
   const p = worldToScreen(pc, { x: 60, y: -40 }); app.click(Math.round(p.x), Math.round(p.y), { target: pc });
-  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="stepped-pocket"]');
-  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'stepped-pocket');
+  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]');
+  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'roughing');
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   const cb = q('.cut-adaptive'); cb.checked = true; cb.dispatchEvent(new app.window.Event('change'));
   for (const [cls, field, label, v] of [['.cut-bit', 'toolDia', 'bit', 0.05], ['.cut-step-depth', 'stepDepth', 'step depth', 0.01], ['.cut-step-deviation', 'stepDeviation', 'resolution', 0.001]]) {

@@ -25,7 +25,7 @@
 //    here reads it, so it is ignored (it cuts the same as before 715).
 //  * An outline that equals one ring (read or interpolated) keeps that ring's exact walk (lines / arcs / circles) for the export; an outline
 //    the boolean actually made (an undercut, rings that cross) is the Clipper polygon (#core/plot/clip.js, 1e-3 mm grid).
-import { regionsFromRings, intersectRegions, unionRegions } from './plot/clip.js';
+import { regionsFromRings, intersectRegions, unionRegions, diffRegions, offsetRegions, offsetPolygonRound, sweepPaths } from './plot/clip.js';
 import { num, polyToPathD, compoundPathD } from './loop-geometry.js';
 import { deriveProfileCuts } from './profile-model.js';
 import { applyHoldPart } from './hold-part.js'; // TASK 742: tabs / onion skin on a plain Outside / Inside cut
@@ -171,10 +171,48 @@ function distToSeg(p, a, b) {
   t = t < 0 ? 0 : t > 1 ? 1 : t;
   return Math.hypot(p.x - (a.x + t * vx), p.y - (a.y + t * vy));
 }
+// TASK 792 (performance): every vertex of A within `tol` of B's boundary. B's edges are binned once in a uniform grid (each edge in every cell its
+// box grown by tol touches), so a vertex is tested only against the edges of its own cell: an edge outside that cell is farther than tol from the
+// vertex, so the answer is exactly the all-pairs one (the same distToSeg test, the same <= tol), in about O(n) instead of O(n x m). Small rings
+// keep the plain loop. The 790 rose's 2,700-point outlines took ~0.1 s per comparison all-pairs.
+const GRID_MIN = 64;
+const EDGE_GRID = new WeakMap(); // B -> Map(tol -> grid)
+function edgeGrid(B, tol) {
+  let byTol = EDGE_GRID.get(B);
+  if (!byTol) { byTol = new Map(); EDGE_GRID.set(B, byTol); }
+  let g = byTol.get(tol);
+  if (g) return g;
+  const bx = boxOf(B), n = B.length;
+  const w = Math.max(bx[2] - bx[0], bx[3] - bx[1], tol);
+  const h = Math.max(tol * 2, w / Math.max(1, Math.sqrt(n)));
+  const cols = Math.max(1, Math.ceil((bx[2] - bx[0] + 2 * tol) / h) + 1), rows = Math.max(1, Math.ceil((bx[3] - bx[1] + 2 * tol) / h) + 1);
+  const x0 = bx[0] - tol, y0 = bx[1] - tol;
+  const cells = new Map();
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const a = B[j], b = B[i];
+    const c0 = Math.floor((Math.min(a.x, b.x) - tol - x0) / h), c1 = Math.floor((Math.max(a.x, b.x) + tol - x0) / h);
+    const r0 = Math.floor((Math.min(a.y, b.y) - tol - y0) / h), r1 = Math.floor((Math.max(a.y, b.y) + tol - y0) / h);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) { const k = r * cols + c; let l = cells.get(k); if (!l) cells.set(k, (l = [])); l.push(j); }
+  }
+  g = { x0, y0, h, cols, rows, cells };
+  byTol.set(tol, g);
+  return g;
+}
 function allWithin(A, B, tol) {
+  if (A.length * B.length < GRID_MIN * GRID_MIN) {
+    for (const p of A) {
+      let ok = false;
+      for (let i = 0, j = B.length - 1; i < B.length && !ok; j = i++) if (distToSeg(p, B[j], B[i]) <= tol) ok = true;
+      if (!ok) return false;
+    }
+    return true;
+  }
+  const g = edgeGrid(B, tol), n = B.length;
   for (const p of A) {
+    const c = Math.floor((p.x - g.x0) / g.h), r = Math.floor((p.y - g.y0) / g.h);
+    const list = c >= 0 && r >= 0 && c < g.cols && r < g.rows ? g.cells.get(r * g.cols + c) : null;
     let ok = false;
-    for (let i = 0, j = B.length - 1; i < B.length && !ok; j = i++) if (distToSeg(p, B[j], B[i]) <= tol) ok = true;
+    if (list) for (let k = 0; k < list.length && !ok; k++) { const j = list[k]; if (distToSeg(p, B[j], B[(j + 1) % n]) <= tol) ok = true; }
     if (!ok) return false;
   }
   return true;
@@ -360,7 +398,7 @@ const sameOutlines = (A, B) => A.length === B.length && A.every((o, i) => sameOu
 /** TASK 717: a stepped cut record -> its steppedTerraces options (the ONE mapping, for the derivation and the card note): the step depth, the
  *  cut depth, and when the record has `adaptiveSteps` ON its `stepDeviation` (base mm; STEP_RESOLUTION.defaultMm when it has none). */
 export function terraceOptions(rec) {
-  const o = { kind: terraceKind(rec.terraceAs), step: rec.stepDepth, depth: rec.cutDepth };
+  const o = { kind: terraceKind(rec.terraceAs), step: rec.stepDepth, depth: rec.levelsOp === 'contour' ? rec.baseDepth : rec.cutDepth }; // TASK 792: a Contour runs to its part's depth
   if (rec.adaptiveSteps === true) o.deviation = Number(rec.stepDeviation) > 0 ? Number(rec.stepDeviation) : STEP_RESOLUTION.defaultMm;
   return o;
 }
@@ -426,6 +464,7 @@ export function steppedTerraces(slope, { kind = 'pocket', step, depth, deviation
  * lead-in legs are made by its clearing plan (Loop on).
  */
 export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
+  if (rec && rec.levelsOp) return deriveLevelsCuts(target, rec, state, loops, loopPolys, ownedLoops); // TASK 792: Roughing / Contour
   if (!rec || !rec.terraceAs) return applyLeadIn(applyPocketClearing(applyHoldPart(deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoops), rec, state), rec, state), rec, state); // TASK 742 / 745 / 775: unchanged unless the record holds its part / programs its pocket / has a lead-in
   const { terraceAs, slope, ...rest } = rec;
   if (!slope) return [];
@@ -454,4 +493,282 @@ export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
     }
   });
   return [...plain.filter((c) => c !== outer), ...terraced];
+}
+
+// ═══ TASK 792: ROUGHING and CONTOUR (owner turns 2474-2512) ═══════════════════════════════════════════════════════════════════════════════════════
+// Two OPERATIONS for any part with depth information, each a set of plain XY cuts at fixed depths (the Origin cuts every path at ONE depth). The app
+// declares them on its cut types (`levelsOp`, injected into the record as `terraceAs` was): deriveCuts above sends such a record here.
+//  * ROUGHING ('roughing'; it REPLACES the stepped types of TASK 714: a stepped record opens as Roughing with allowance 0, which IS the stepped cut):
+//    clear what lies above each level of the rough step (`stepDepth`), leaving `finishAllowance` on every wall for the Contour.
+//  * CONTOUR ('contour'): the FINISH: an XY pass ALONG the walls at each level of the fine step (its own `stepDepth`, LEVELS.contourStepMm by
+//    default), offset by the bit radius on the waste side (the Origin's Outside / Inside cut: material inside the loop = Outside cut, a hole in the
+//    material = Inside cut), no clearing, its own bit (a ball nose is modelled by the 3D Review: relief-model's shaped-cutter terraces). The app keeps
+//    it as its own record next to the part's (cut-plan.js: key `contour:<the part's key>`) and hands it the part's `slope` / `levels` / depth as
+//    `baseDepth` / `baseType`.
+// WHERE THE LEVELS COME FROM (both operations read them the same way):
+//  1. `rec.levels` (readLevels: the payload's optional `levels` field, an STL's sections: #core/stl-slice.js): the part's MATERIAL SECTIONS by depth.
+//     "The material at d" = the UNION of every section from the top down to d (the bottom-of-step rule of steppedTerraces applied to material: a cut
+//     at d never touches what any section above d keeps; an undercut is cut straight). Roughing at d = ONE POCKET over the WORK AREA W minus that
+//     material grown by the allowance, every material island a hole (each connected area is one pocket element: its outer + its holes). W = the part's
+//     outline (the target's outer loop) grown by the allowance + LEVELS.workMarginBits bit diameters: the bit itself + the Origin's automatic pocket
+//     offset (a quarter bit, apps/shaper shaper.js autoOffsetFraction) on each side take 1.5 bits; the half bit more lets the bit TRAVEL round the part at
+//     its deepest level (at 1.5 the band only just holds the bit: the Origin could not move it, and the drawn footprint is empty).
+//     Not the Stock outline: an STL has none, and wood farther out than one bit from the part is not in the part's way. Contour at d = an Outside cut
+//     along each outer loop of that material and an Inside cut along each of its holes.
+//  2. else `rec.slope` (a Fusion region's rings, SA-7): THE stepped engine above, unchanged: steppedTerraces at the step, every level cut as the
+//     region's own plain type (levelsCutAs: pocket / inside / outside); Roughing's allowance goes into the cut OFFSET (the Origin leaves it on every
+//     wall), so allowance 0 is byte for byte the stepped cut of TASKS 714-717. Contour = the same terraces at its fine step as Inside cuts (a pocket,
+//     a hole) or Outside cuts (an outline); next to a plain Outside / Inside cut (which cuts its own wall) the level whose outline IS that wall is
+//     not cut again. A plain Pocket does not finish its wall (the Origin keeps it back by its automatic offset): the Contour does.
+//  3. else the drawn region is ONE level at its depth: Roughing = the pocket with the allowance (offset), Contour = its wall (an Inside cut along the
+//     outer, an Outside cut round each island).
+// Consecutive identical levels are ONE cut at the deeper depth (a vertical wall is cut once), as in steppedTerraces.
+// drawTolMm: the round joins of the DRAWN footprints (Prepare, the 3D Review) are within this of the true arc (a display tolerance: a part's levels are
+// thousands of points, and the 0.005 mm of the exported shapes' sampling made each Review build of the rose take minutes; the export never reads it).
+export const LEVELS = Object.freeze({ contourStepMm: 0.25, workMarginBits: 2, drawTolMm: 0.05 });
+
+const r6 = (v) => Math.round(v * 1e6) / 1e6;
+// one loop of the payload (its segments, in the payload frame) -> its polygon as a flat [x0, y0, x1, y1, ...] in WORLD mm (the same transform as
+// fusion-import.js slopeFromRegion: x * scale, y * scale negated for a Y-up payload, an arc's direction flipped with it), or null when it does not close
+function loopFlat(segments, scale, ys) {
+  const raw = (Array.isArray(segments) ? segments : []).map((q) => {
+    const t = String((q && q.type) || '').toLowerCase(), n = (k) => Number(q[k]) * scale, y = (k) => ys * Number(q[k]) * scale;
+    if (t === 'line') return { type: 'line', x1: n('x1'), y1: y('y1'), x2: n('x2'), y2: y('y2') };
+    if (t === 'arc') return { type: 'arc', cx: n('cx'), cy: y('cy'), r: n('r'), x1: n('x1'), y1: y('y1'), x2: n('x2'), y2: y('y2'), ccw: ys < 0 ? !q.ccw : Boolean(q.ccw) };
+    if (t === 'circle') return { type: 'circle', cx: n('cx'), cy: y('cy'), r: n('r') };
+    return { type: t };
+  });
+  const segs = raw.map(directed);
+  if (!segs.length || segs.some((s) => !s)) return null;
+  const inOrder = segs.length > 1 && !segs.some((s) => s.type === 'circle') && segs.every((s, i) => near(s.a, segs[(i + segs.length - 1) % segs.length].b, JOIN_TOL_MM));
+  const walk = segs.length === 1 && segs[0].type === 'circle' ? segs : inOrder ? segs : ringWalk(raw); // the slicer writes a loop end to end: no search
+  if (!walk) return null;
+  const out = [];
+  for (const p of walkPolygon(walk)) out.push(r6(p.x), r6(p.y));
+  return out.length >= 6 ? out : null;
+}
+/** The payload's `levels` (TASK 792: [{ zFromTopMm, loops: [{ segments }] }], see #core/stl-slice.js) -> the cut record's `levels` = [{ z, loops: [flat
+ *  polygon [x0, y0, ...] in world mm] }] shallow to deep (plain JSON: saved and undone with the record), or null when there are none or a loop does not
+ *  close (the importer warns and imports the region without them). */
+export function readLevels(raw, { scale = 1, yUp = true } = {}) {
+  if (!Array.isArray(raw) || !raw.length) return null;
+  const ys = yUp ? -1 : 1, out = [];
+  for (const lv of raw) {
+    const z = Number(lv && lv.zFromTopMm);
+    if (!Number.isFinite(z)) return null;
+    const loops = [];
+    for (const L of (Array.isArray(lv.loops) ? lv.loops : [])) { const f = loopFlat(L && L.segments, scale, ys); if (!f) return null; loops.push(f); }
+    out.push({ z, loops });
+  }
+  return out.sort((a, b) => a.z - b.z);
+}
+export const hasLevels = (rec) => Boolean(rec && Array.isArray(rec.levels) && rec.levels.length);
+
+/** The plain type each level of a Roughing / Contour record is cut as: 'pocket' | 'interior' | 'exterior' (a levels Contour mixes Outside and Inside
+ *  cuts: 'exterior' is returned for it, its holes are Inside cuts). */
+export function levelsCutAs(rec) {
+  if (!rec) return 'pocket';
+  const kind = rec.slope && rec.slope.kind;
+  if (rec.levelsOp === 'contour') {
+    if (hasLevels(rec)) return 'exterior';
+    const k = kind || (rec.baseType === 'exterior' ? 'outside' : 'pocket');
+    return k === 'outside' ? 'exterior' : 'interior';
+  }
+  if (hasLevels(rec)) return 'pocket';
+  return kind === 'outside' ? 'exterior' : kind === 'inside' ? 'interior' : 'pocket';
+}
+/** A Roughing record's allowance (base mm, >= 0; 0 for any other record). */
+export const roughingAllowance = (rec) => (rec && rec.levelsOp === 'roughing' ? Math.max(0, Number(rec.finishAllowance) || 0) : 0);
+/** The record a Roughing / Contour record's cuts are made AND drawn with: a Roughing record without `levels` takes its allowance as cut offset (path 2 / 3
+ *  of the header). Every other record is returned as it is. */
+export function levelsWorkRecord(rec) {
+  const a = roughingAllowance(rec);
+  return a > 0 && !hasLevels(rec) ? { ...rec, cutOffset: (Number(rec.cutOffset) || 0) + a } : rec;
+}
+
+// ── the section STACK of a levels list: per section its depth and the CUMULATIVE material (the union of every section from the top down to it) ──
+const flatRing = (f) => { const r = []; for (let i = 0; i + 1 < f.length; i += 2) r.push([f[i], f[i + 1]]); if (r.length) r.push(r[0].slice()); return r; };
+const STACKS = new WeakMap(); // levels array (never mutated) -> stack
+function levelStack(levels) {
+  let s = STACKS.get(levels);
+  if (s) return s;
+  const zs = [], cumulative = [];
+  let C = [];
+  for (const lv of levels) {
+    const M = lv.loops.length ? regionsFromRings(lv.loops.map(flatRing), 'evenodd') : [];
+    C = !C.length ? M : M.length ? unionRegions(C, M) : C;
+    zs.push(lv.z); cumulative.push(C);
+  }
+  s = { zs, cumulative, memo: new Map() };
+  STACKS.set(levels, s);
+  return s;
+}
+// the section a cut at depth d reads: the first at or below d (its cumulative material holds everything above d: conservative), else the deepest
+const sectionAt = (st, d) => { for (let i = 0; i < st.zs.length; i++) if (st.zs[i] >= d - Z_EPS) return i; return st.zs.length - 1; };
+const ptsOf = (ring) => ring.slice(0, -1).map((q) => P(q[0], q[1]));
+const POLYS = new WeakMap(); // regions -> [{ polygon, outer }] (one per ring; the polygons are reused, so their boxes / edge grids are built once)
+function regionLoops(regions) {
+  let l = POLYS.get(regions);
+  if (!l) { l = regions.flatMap((g) => [{ polygon: ptsOf(g.outer), outer: true }, ...g.holes.map((h) => ({ polygon: ptsOf(h), outer: false }))]); POLYS.set(regions, l); }
+  return l;
+}
+function sameRegionSets(A, B) {
+  if (A === B) return true;
+  const a = regionLoops(A), b = regionLoops(B);
+  if (a.length !== b.length) return false;
+  const used = new Uint8Array(b.length);
+  for (const p of a) {
+    let hit = -1;
+    for (let i = 0; i < b.length && hit < 0; i++) if (!used[i] && b[i].outer === p.outer && sameOutline(p.polygon, b[i].polygon)) hit = i;
+    if (hit < 0) return false;
+    used[hit] = 1;
+  }
+  return true;
+}
+function depthList(step, D) {
+  const s = Number(step) > 0 ? Number(step) : STEP_DEPTH.defaultMm, out = [];
+  for (let i = 1; i * s < D - Z_EPS; i++) out.push(Math.round(i * s * 1e9) / 1e9);
+  out.push(D);
+  return out;
+}
+const narrowerThan = (ring, dia) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const q of ring) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); } return Math.min(x1 - x0, y1 - y0) < dia; };
+
+/**
+ * levelsRoughing(levels, { outer, step, depth, toolDia, allowance }) -> { steps: [{ depth, regions, islands, small }], zMax, error } — Roughing from a
+ * levels list (header, path 1): a level every `step` (base mm, STEP_DEPTH.defaultMm when missing) down to `depth` (the part's depth; missing = the
+ * deepest section); `regions` = the area to clear at that depth ({ outer, holes } rings, Clipper's 1e-3 mm grid), `islands` = its holes (material
+ * left standing), `small` = how many of them are narrower than the bit (left standing, the Contour finishes them). `outer` = the part's outline
+ * polygon [{x,y}]. Identical consecutive levels (the same cumulative material within SAME_OUTLINE_TOL_MM) are ONE level at the deeper depth.
+ */
+export function levelsRoughing(levels, { outer, step, depth, toolDia, allowance = 0 } = {}) {
+  if (!Array.isArray(levels) || !levels.length) return { steps: [], zMax: null, error: 'no levels' };
+  if (!Array.isArray(outer) || outer.length < 3) return { steps: [], zMax: null, error: 'no outline' };
+  const st = levelStack(levels), zMax = st.zs[st.zs.length - 1];
+  const D = Number(depth) > 0 && depth !== true ? Number(depth) : zMax;
+  const dia = Math.max(0, Number(toolDia) || 0), a = Math.max(0, Number(allowance) || 0);
+  const key = ['R', step, D, dia, a, outer.length, ...boxOf(outer)].join('|');
+  if (st.memo.has(key)) return st.memo.get(key);
+  const W = offsetRegions(regionsFromRings([ringOf(outer)], 'nonzero'), a + LEVELS.workMarginBits * dia);
+  const runs = [];
+  let ref = -1;
+  for (const d of depthList(step, D)) {
+    const i = sectionAt(st, Math.min(d, zMax));
+    if (runs.length && sameRegionSets(st.cumulative[ref], st.cumulative[i])) runs[runs.length - 1] = { depth: d, section: i }; // compared with the run's FIRST level
+    else { runs.push({ depth: d, section: i }); ref = i; }
+  }
+  const steps = runs.map(({ depth: d, section }) => {
+    const C = st.cumulative[section];
+    const M = a > 0 && C.length ? offsetRegions(C, a) : C;
+    const regions = M.length ? diffRegions(W, M) : W;
+    const holes = regions.flatMap((g) => g.holes);
+    return { depth: d, regions, islands: holes.length, small: holes.filter((h) => narrowerThan(h, dia)).length };
+  });
+  const out = { steps, zMax, error: null };
+  st.memo.set(key, out);
+  return out;
+}
+
+/**
+ * levelsContour(levels, { step, depth }) -> { steps: [{ depth, loops: [{ polygon:[{x,y}], outer }] }], zMax, error } — Contour from a levels list
+ * (header, path 1): a level every `step` (LEVELS.contourStepMm when missing) down to `depth`; its loops = the boundary of the cumulative material there
+ * (outer = an outer loop: Outside cut; else a hole in the material: Inside cut). A loop the next deeper level has too (within SAME_OUTLINE_TOL_MM) is
+ * cut there, not here (a vertical wall once, at its bottom); a level left with no loop is no level.
+ */
+export function levelsContour(levels, { step, depth } = {}) {
+  if (!Array.isArray(levels) || !levels.length) return { steps: [], zMax: null, error: 'no levels' };
+  const st = levelStack(levels), zMax = st.zs[st.zs.length - 1];
+  const D = Number(depth) > 0 && depth !== true ? Number(depth) : zMax;
+  const s = Number(step) > 0 ? Number(step) : LEVELS.contourStepMm;
+  const key = ['C', s, D].join('|');
+  if (st.memo.has(key)) return st.memo.get(key);
+  const depths = depthList(s, D), per = depths.map((d) => sectionAt(st, Math.min(d, zMax)));
+  const loopsAt = per.map((i) => regionLoops(st.cumulative[i]));
+  const steps = [];
+  depths.forEach((d, k) => {
+    const next = k + 1 < depths.length ? loopsAt[k + 1] : null;
+    const loops = !next ? loopsAt[k] : per[k] === per[k + 1] ? [] : loopsAt[k].filter((l) => !next.some((m) => m.outer === l.outer && sameOutline(l.polygon, m.polygon)));
+    if (loops.length) steps.push({ depth: d, loops });
+  });
+  const out = { steps, zMax, error: null };
+  st.memo.set(key, out);
+  return out;
+}
+
+// ── the CUTS (deriveCuts' result for a Roughing / Contour record): what the export writes (`geom`), what Prepare and the 3D Review draw (the footprint
+// comes from `centers` / `sweep`, #core/profile-model deriveCutFootprint: Clipper offsets, so a wavy part outline or an island narrower than the bit is
+// drawn too, where the simple-loop #core/polygon-offset returns nothing); `terrace` = its level { index, count, depth, label } as a stepped cut's ──
+const lazy = (o, name, make) => { let v; Object.defineProperty(o, name, { enumerable: true, configurable: true, get: () => (v === undefined ? (v = make()) : v) }); return o; };
+function levelPocketCut(reg, rec, terrace) {
+  const outerPoly = ptsOf(reg.outer), holePolys = reg.holes.map(ptsOf);
+  const d = [outerPoly, ...holePolys].map(polyToPathD).join(' '); // Clipper winds a hole opposite to its outer (TASK 786's rule holds)
+  const r = (Number(rec.toolDia) || 0) / 2, margin = (Number(rec.cutOffset) || 0) + (Number(rec.autoOffset) || 0); // the pocket footprint's rule (TASK 452)
+  const cut = { kind: 'profile', cutType: 'pocket', isCompound: true, isHole: false, outerPoly, holePolys, outerOffsetSide: -1, holeOffsetSide: 1,
+    rec: { ...rec, cutType: 'pocket', cutDepth: terrace.depth }, d, geom: { tag: 'path', a: `d="${d}"` }, terrace };
+  let centre = null;
+  const centreOf = () => centre || (centre = r > 0 ? offsetRegions([reg], -(r + margin), LEVELS.drawTolMm) : []);
+  const memo = new Map();
+  lazy(cut, 'centers', () => centreOf().flatMap((g) => [g.outer, ...g.holes]).map((ring) => ({ points: ptsOf(ring), closed: true })));
+  cut.sweep = (w) => { if (!memo.has(w)) memo.set(w, w > 0 ? offsetRegions(centreOf(), w, LEVELS.drawTolMm).flatMap((g) => [g.outer, ...g.holes]).map(ptsOf) : []); return memo.get(w); };
+  return cut;
+}
+// a closed ring [[x,y],...] (closing point repeated) reduced to the fewest points within `tol` of it (Douglas-Peucker, split at its point farthest from the
+// first): the DRAWN centre path of a contour (LEVELS.drawTolMm; sweeping a 2,700-point loop for each slice of a ball nose made the rose's Review take a minute)
+function reduceRing(ring, tol) {
+  const pts = ring.slice(0, -1), n = pts.length;
+  if (n <= 8) return ring;
+  const seg = (p, a, b) => distToSeg(P(p[0], p[1]), P(a[0], a[1]), P(b[0], b[1]));
+  let far = 0, fd = -1;
+  for (let k = 1; k < n; k++) { const d = Math.hypot(pts[k][0] - pts[0][0], pts[k][1] - pts[0][1]); if (d > fd) { fd = d; far = k; } }
+  const keep = new Uint8Array(n); keep[0] = 1; keep[far] = 1;
+  const stack = [[0, far], [far, n]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    let worst = -1, at = -1;
+    for (let k = a + 1; k < b; k++) { const d = seg(pts[k], pts[a], pts[b % n]); if (d > worst) { worst = d; at = k; } }
+    if (worst > tol) { keep[at] = 1; stack.push([a, at], [at, b]); }
+  }
+  const out = pts.filter((_, k) => keep[k]);
+  return out.length >= 3 ? [...out, out[0]] : ring;
+}
+function levelContourCut(polygon, outer, rec, terrace) {
+  const cutType = outer ? 'exterior' : 'interior', side = outer ? 1 : -1;
+  const r = (Number(rec.toolDia) || 0) / 2, off = Number(rec.cutOffset) || 0;
+  const cut = { kind: 'loop', polygon, cutType, offsetSide: side, isHole: !outer, isCompound: false, rec: { ...rec, cutType, cutDepth: terrace.depth },
+    geom: { tag: 'path', a: `d="${polyToPathD(polygon)}"` }, terrace };
+  const memo = new Map();
+  lazy(cut, 'centers', () => (r > 0 ? offsetPolygonRound(polygon.map((p) => [p.x, p.y]), side * (r + off), LEVELS.drawTolMm).map((ring) => ({ points: ptsOf(reduceRing(ring, LEVELS.drawTolMm)), closed: true })) : []));
+  cut.sweep = (w) => { // the band the bit sweeps along its centre path (hold-part sweeper's rule, at the drawing tolerance)
+    if (!memo.has(w)) memo.set(w, w > 0 ? sweepPaths(cut.centers.map((c) => ({ points: c.points.map((p) => [p.x, p.y]), closed: true })), w, LEVELS.drawTolMm).flatMap((g) => [g.outer, ...g.holes]).map(ptsOf) : []);
+    return memo.get(w);
+  };
+  return cut;
+}
+
+// deriveCuts for a record with `levelsOp` (header). The record carries `levels` and / or `slope` (a Contour: its part's, with `baseDepth` / `baseType`).
+function deriveLevelsCuts(target, rec, state, loops, loopPolys, ownedLoops) {
+  const op = rec.levelsOp;
+  const depth = op === 'contour' ? rec.baseDepth : rec.cutDepth;
+  const label = (rec.slope && rec.slope.label) || null;
+  const work = { ...levelsWorkRecord(rec), cutDepth: depth };
+  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance']) delete work[k]; // `slope` stays: the stepped engine reads it
+  if (hasLevels(rec)) { // path 1
+    const plain = deriveProfileCuts(target, { ...work, cutType: 'pocket' }, state, loops, loopPolys, ownedLoops).find((c) => c.isCompound);
+    if (!plain) return [];
+    delete work.slope;
+    if (op === 'contour') {
+      const T = levelsContour(rec.levels, { step: rec.stepDepth, depth });
+      return T.steps.flatMap((st, index) => st.loops.map((l) => levelContourCut(l.polygon, l.outer, work, { index, count: T.steps.length, depth: st.depth, undercutBelow: null, label })));
+    }
+    const R = levelsRoughing(rec.levels, { outer: plain.outerPoly, step: rec.stepDepth, depth, toolDia: rec.toolDia, allowance: roughingAllowance(rec) });
+    return R.steps.flatMap((st, index) => st.regions.map((reg) => levelPocketCut(reg, work, { index, count: R.steps.length, depth: st.depth, undercutBelow: null, label, islands: st.islands, small: st.small })));
+  }
+  const as = levelsCutAs(rec);
+  if (rec.slope) { // path 2: THE stepped engine (allowance 0: the stepped cut of 714 byte for byte)
+    const cuts = deriveCuts(target, { ...work, terraceAs: as }, state, loops, loopPolys, ownedLoops);
+    if (op !== 'contour' || (rec.baseType !== 'exterior' && rec.baseType !== 'interior')) return cuts;
+    const own = deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops).find((c) => !c.isHole && c.kind !== 'chain');
+    const wall = own && (own.isCompound ? own.outerPoly : own.polygon);
+    return wall ? cuts.filter((c) => !c.terrace || !sameOutline(c.isCompound ? c.outerPoly : c.polygon, wall)) : cuts;
+  }
+  return deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops); // path 3: one level, the drawn region at its depth
 }

@@ -145,8 +145,8 @@ try {
   await clickWorld(60, -40);
   await clickEl('#prepare-panel .cut-type-trigger');
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, '2: the menu');
-  await clickEl('.cut-type-opt[data-id="stepped-pocket"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-pocket'))`, '2: Stepped pocket');
+  await clickEl('.cut-type-opt[data-id="roughing"]');
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, '2: Stepped pocket');
   await review(9);
   await zoomReview(false);
   await shot('2-review-drafted-stepped.png', '#review-canvas-host');
@@ -167,8 +167,8 @@ try {
   await clickWorld(30, -30);
   await clickEl('#prepare-panel .cut-type-trigger');
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, '3: the menu');
-  await clickEl('.cut-type-opt[data-id="stepped-outside"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'stepped-outside'))`, '3: Stepped outside');
+  await clickEl('.cut-type-opt[data-id="roughing"]');
+  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, '3: Stepped outside');
   await review(30);
   const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutDepth))`);
   assert.deepStrictEqual(levels, Array.from({ length: 30 }, (_, i) => i + 1), '3: 30 terraces, 1..30 mm');

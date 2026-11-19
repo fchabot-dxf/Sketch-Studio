@@ -8,7 +8,7 @@
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
-import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel } from '#core/stepped-cut.js';
+import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance } from '#core/stepped-cut.js';
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
@@ -23,6 +23,47 @@ export const CUT_PLAN = new Map(); // key → cut record
 
 export function getCutRecord(key) { return CUT_PLAN.get(key) || defaultCutRecord(); }
 export function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec[field] = value; CUT_PLAN.set(key, rec); return rec; }
+
+// ── TASK 792: a part's CONTOUR (the finish of its sloped walls: #core/stepped-cut.js, its TASK 792 header) is its OWN record, keyed `contour:<the part's
+// key>` (e.g. 'contour:loop:loop_a-b'): its own cut type ('contour'), fine step, bit and cutter shape, so it is its own operation and bit group, and it
+// is saved, undone and reordered like any record. It cuts the PART's geometry: resolveEntry hands it the part's target, depth, `slope` / `levels` and
+// cut type (the part record stays the one place those live). A contour record whose part has no cut type derives to nothing. ──
+export const CONTOUR_KIND = 'contour';
+export const contourKeyOf = (key) => keyOf(CONTOUR_KIND, key);
+export const isContourKey = (key) => typeof key === 'string' && key.startsWith(CONTOUR_KIND + ':');
+export const partKeyOf = (key) => (isContourKey(key) ? key.slice(CONTOUR_KIND.length + 1) : key);
+/** The part record's Contour record (with a cut type), or null. */
+export const contourOf = (key, plan = CUT_PLAN) => { const r = plan.get(contourKeyOf(key)); return r && r.cutType ? r : null; };
+/** A plan entry as the derivation takes it: { key, target, rec }. A contour record gets its PART's target, and its record the part's depth (`baseDepth`),
+ *  cut type (`baseType`), `slope` and `levels`; null when its part has no cut type. Every other record: its own key's target, its record as stored. */
+export function resolveEntry(key, rec, plan = CUT_PLAN) {
+  if (!isContourKey(key)) return { key, target: parseKey(key), rec };
+  const pk = partKeyOf(key), part = plan.get(pk);
+  if (!rec || !part || !part.cutType) return null;
+  return { key, target: parseKey(pk), rec: { ...rec, baseDepth: part.cutDepth, baseType: part.cutType, ...(part.slope ? { slope: part.slope } : {}), ...(part.levels ? { levels: part.levels } : {}) } };
+}
+// The Contour defaults: the last bit / cutter shape / step set on any Contour (owner's example: a 1/8 in ball nose at 0.25 mm). App state, like the step depth.
+let lastContourV = { toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90, stepDepth: LEVELS.contourStepMm };
+export const lastContour = () => ({ ...lastContourV });
+export function rememberContour(field, value) { if (field in lastContourV && value != null) lastContourV = { ...lastContourV, [field]: value }; return lastContour(); }
+/**
+ * setContour(key, on, plan) — TASK 792: add (on) or remove (off) the Contour of the part record `key`. Adding makes its record (the last Contour settings)
+ * and, on a Roughing part, sets its allowance to the declared finish allowance (the last one set: lastFinishAllowance; owner ruling: the allowance is 0
+ * while the part has no Contour); removing deletes it and puts a Roughing part's allowance back to 0. Returns the part record.
+ */
+export function setContour(key, on, plan = CUT_PLAN) {
+  const part = plan.get(key);
+  if (!part || !part.cutType || isContourKey(key)) return part || null;
+  const rough = (cutTypeById(part.cutType) || {}).levelsOp === 'roughing';
+  if (on) {
+    if (!contourOf(key, plan)) plan.set(contourKeyOf(key), { ...defaultCutRecord(), ...lastContour(), cutType: 'contour' });
+    if (rough) part.finishAllowance = lastFinishAllowance();
+  } else {
+    plan.delete(contourKeyOf(key));
+    if (rough) part.finishAllowance = 0;
+  }
+  return part;
+}
 
 // TASK 714: the STEP DEPTH a target switched to a stepped type gets when its record has none: the last step depth the user set on any stepped
 // cut (owner turn 1947), STEP_DEPTH.defaultMm (#core/stepped-cut.js) until one is set. Base mm. App state, like CUT_PLAN.
@@ -337,12 +378,63 @@ export function planSteppedNotes(plan = CUT_PLAN) {
   return out;
 }
 
-// All ASSIGNED entries (a cutType is set) → [{ target:{kind,id}, rec }] for the exporter. Loop targets are resolved
-// against the live design at export time (findLoops), so a stale id simply yields nothing.
+// All ASSIGNED entries (a cutType is set) → [{ key, target:{kind,id}, rec }] for the exporter (TASK 792: resolveEntry: a part's Contour cuts the part's
+// target). Loop targets are resolved against the live design at export time (findLoops), so a stale id simply yields nothing.
 export function cutPlanEntries(plan = CUT_PLAN) {
   const out = [];
   for (const [key, rec] of plan) {
-    if (rec && rec.cutType) { const { kind, id } = parseKey(key); out.push({ target: { kind, id }, rec }); }
+    if (rec && rec.cutType) { const e = resolveEntry(key, rec, plan); if (e) out.push(e); }
+  }
+  return out;
+}
+
+/**
+ * levelsSummary(key, storedRec, state, loops, loopPolys, owned, plan) — TASK 792: what a Roughing / Contour record cuts, read off THE derivation (deriveCuts
+ * through the effective record, as Prepare / Review / the export cut it): { op, source ('levels' | 'slope' | 'drawn'), depths (base mm, shallow to deep),
+ * passes (cuts written), allowance, islands / small (Roughing from levels: the most material islands left standing on one level, and those narrower than
+ * the bit), toolDia }, or null for any other record (or a Contour whose part has no cut type).
+ */
+export function levelsSummary(key, storedRec, state, loops, loopPolys, owned, plan = CUT_PLAN) {
+  const e = storedRec && storedRec.cutType ? resolveEntry(key, storedRec, plan) : null;
+  const rec = e ? effectiveCutRecord(e.rec) : null;
+  if (!rec || !rec.levelsOp) return null;
+  const cuts = deriveCuts(e.target, rec, state, loops, loopPolys, owned) || [];
+  const depthOf = (c) => Number(c.terrace ? c.terrace.depth : c.rec && c.rec.cutDepth);
+  const depths = [...new Set(cuts.map(depthOf).filter(Number.isFinite))].sort((a, b) => a - b);
+  const perLevel = new Map();
+  for (const c of cuts) if (c.terrace && c.terrace.islands != null) perLevel.set(c.terrace.depth, { islands: c.terrace.islands, small: c.terrace.small });
+  const worst = [...perLevel.values()].reduce((m, v) => (v.islands > m.islands ? v : m), { islands: 0, small: 0 });
+  return { op: rec.levelsOp, source: hasLevels(rec) ? 'levels' : rec.slope ? 'slope' : 'drawn', depths, passes: cuts.length, allowance: roughingAllowance(rec), islands: worst.islands, small: worst.small, toolDia: Number(rec.toolDia) || 0 };
+}
+/**
+ * levelsNoteItems(storedRec, sum) — TASK 792: the card note of a Roughing / Contour record (doc unit), from its levelsSummary: "Roughing: 4 levels, 1 to
+ * 7.05 mm" (a sloped region's Roughing keeps the stepped note of TASKS 714-717, steppedNoteItems), "Roughing: 0.5 mm left on every wall for the Contour",
+ * "Roughing: up to 36 islands left standing (12 narrower than the 6.35 mm bit)", "Contour: 24 levels, 0.25 to 7.05 mm: 61 passes along the walls". An
+ * empty derivation says so in the warning colour.
+ */
+export function levelsNoteItems(storedRec, sum) {
+  if (!sum || !storedRec) return [];
+  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, show: 'field' });
+  const name = sum.op === 'contour' ? 'Contour' : 'Roughing';
+  if (!sum.depths.length) { const t = `${name}: nothing to cut (no level, or the part has no depth)`; return [{ text: t, warn: t.slice(name.length + 2), title: 'set the part\u2019s depth' }]; }
+  const items = [];
+  const n = sum.depths.length, span = `${n > 1 ? `${f(sum.depths[0])} to ` : ''}${f(sum.depths[n - 1])} ${u}`;
+  if (sum.op === 'contour') items.push({ text: `Contour: ${n} level${n === 1 ? '' : 's'}, ${span}: ${sum.passes} pass${sum.passes === 1 ? '' : 'es'} along the walls` });
+  else {
+    if (sum.source !== 'slope') items.push({ text: `Roughing: ${n} level${n === 1 ? '' : 's'}, ${span}` });
+    if (sum.allowance > 0) items.push({ text: `Roughing: ${f(sum.allowance)} ${u} left on every wall for the Contour` });
+    if (sum.source === 'levels' && sum.islands > 0) items.push({ text: `Roughing: up to ${sum.islands} island${sum.islands === 1 ? '' : 's'} left standing${sum.small ? ` (${sum.small} narrower than the ${f(sum.toolDia)} ${u} bit)` : ''}` });
+  }
+  return items;
+}
+/** TASK 792: the notes of every Roughing / Contour record of the plan (the 3D Review's info; a sloped Roughing's stepped note is in planSteppedNotes). */
+export function planLevelsNotes(state, plan = CUT_PLAN) {
+  const out = [];
+  let geo = null;
+  for (const [key, rec] of plan) {
+    if (!rec || !(cutTypeById(rec.cutType) || {}).levelsOp) continue;
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
+    out.push(...levelsNoteItems(rec, levelsSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned, plan)).map((i) => i.text));
   }
   return out;
 }
@@ -523,11 +615,14 @@ export function cutPlanNotice(r) {
  * `loops` must carry the host-side `polygon` (see loopsWithPolygons); `loopPolys` = { [loop id]: polygon }; `owned` = the loops with
  * their own record in the plan (planOwnedLoops), never cut again as a hole of this target (TASK 711, as the exporter does).
  */
-export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) {
-  const rec = effectiveCutRecord(storedRec); // TASK 450: On line / Guide take no offset: a stored one is ignored
-  const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned); // TASK 714: a stepped record derives to its terraces (the exporter's derivation too)
+export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned, plan = CUT_PLAN) {
+  const e = resolveEntry(key, storedRec, plan); // TASK 792: a part's Contour cuts the part
+  if (!e) return null;
+  const rec = effectiveCutRecord(e.rec); // TASK 450: On line / Guide take no offset: a stored one is ignored
+  const cuts = deriveCuts(e.target, rec, state, loops, loopPolys, owned); // TASK 714: a stepped record derives to its terraces (the exporter's derivation too)
   if (!cuts || !cuts.length) return null;
-  return { rec, cuts, footprints: deriveCutFootprint(cuts, rec, state) };
+  const work = levelsWorkRecord(rec); // TASK 792: a Roughing's allowance is drawn with its cuts (#core levelsWorkRecord: the record they are made with)
+  return { rec: work, cuts, footprints: deriveCutFootprint(cuts, work, state) };
 }
 
 /** TASK 711: the loops that have their own record in `plan` (#core ownedLoopIds over the plan's assigned entries, the set the exporter
@@ -550,6 +645,8 @@ function sigHash(value) {
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
   return h.toString(36) + '.' + str.length.toString(36);
 }
+const LEVELS_SIG = new WeakMap(); // TASK 792: a levels list (never mutated) -> its content hash, made once
+const levelsSig = (levels) => { let h = LEVELS_SIG.get(levels); if (!h) { h = sigHash(levels); LEVELS_SIG.set(levels, h); } return h; };
 const cutsSig = (cuts, state) => cuts.map((c) => [c.kind, c.cutType, c.offsetSide, c.isCompound, c.polygon || null, c.outerPoly || null, c.holePolys || null,
   c.chain ? (c.chain.shapes || []).map((sh) => [sh, (sh.joints || []).map((id) => { const j = state.joints.get(id); return j ? [j.x, j.y] : null; })]) : null]);
 
@@ -565,13 +662,14 @@ export function planReliefItems(state, plan = CUT_PLAN) {
 
   for (const [key, stored] of plan) {
     if (!stored || !stored.cutType || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
-    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned);
+    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned, plan);
     if (!d) continue;
     const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
     const atW = (w) => { if (!at.has(w)) at.set(w, deriveCutFootprintAt(d.cuts, d.rec, state, w)); return at.get(w); };
-    const geo = cutsSig(d.cuts, state);
-    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, d.rec, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : fp.hold && fp.hold.depth != null ? fp.hold.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth; TASK 742: a held cut's pass / gap strip at its own
+    const geo = d.rec.levelsOp ? sigHash(cutsSig(d.cuts, state)) : cutsSig(d.cuts, state); // TASK 792: a Roughing / Contour hashes its geometry ONCE (254 contour passes re-stringified it per item); every other record's signature is the one before 792
+    const recSig = d.rec.levelsOp ? sigHash(d.rec.levels ? { ...d.rec, levels: levelsSig(d.rec.levels) } : d.rec) : d.rec; // TASK 792: the same for its record (its part's sections by their own hash, made once per list)
+    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, recSig, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : fp.hold && fp.hold.depth != null ? fp.hold.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth; TASK 742: a held cut's pass / gap strip at its own
   }
   return items;
 }

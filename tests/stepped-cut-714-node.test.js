@@ -140,8 +140,8 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     importFusionSelection(payload('08-spline'), { controller: app.controller, prepare: app.prepare });
     ok(!recAt('pocket')[1].slope, '08-spline: the pocket carries no slope');
     h.clickAt(60, -40);
-    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'exterior', 'stock'], 'a vertical pocket: the menu is exactly the plain types (no stepped type)');
-    eq(availableTypes('loop').map((t) => t.id), ['exterior', 'interior', 'pocket', 'online', 'guide', 'stock'], 'availableTypes without a record: never a stepped type');
+    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], 'a vertical pocket: the plain types + Roughing (TASK 792: Roughing, which replaced the stepped types, is offered on every closed region)');
+    eq(availableTypes('loop').map((t) => t.id), ['exterior', 'interior', 'pocket', 'online', 'guide', 'stock', 'roughing'], 'availableTypes without a record: Roughing, never the Contour (TASK 792)');
 
     // the drafted pocket (02): Stepped pocket offered on the pocket only
     importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare });
@@ -155,15 +155,15 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     }
     eq(elems(plainSvg).map((e) => e.type + '@' + e.depth), ['outside@19.000 mm', 'pocket@8.000 mm'], 'plain: the outline + ONE pocket at 8 mm');
     h.clickAt(10, -10); // the outline (no slope)
-    eq(h.menu().filter((id) => id.startsWith('stepped')), [], 'the outline of 02 has no slope: no stepped type');
+    eq(h.menu().filter((id) => id.startsWith('stepped')), [], 'TASK 792: no stepped type is offered anywhere any more');
     h.clickAt(60, -40); // the pocket
-    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'stepped-pocket', 'exterior', 'stock'], 'the sloped pocket: Stepped pocket, right after Pocket (never Stepped inside / outside)');
+    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], 'the sloped pocket: Roughing, right after Pocket (TASK 792: it replaced the Stepped pocket)');
     ok(!h.stepRowShown(), 'a Pocket has no step row');
 
-    h.pick('stepped-pocket');
-    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth, CUT_PLAN.get(pk).cutDepth], ['stepped-pocket', 1, 8], 'picked: Stepped pocket, step depth 1 mm (the default), depth 8 kept');
+    h.pick('roughing');
+    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth, CUT_PLAN.get(pk).cutDepth], ['roughing', 1, 8], 'picked: Stepped pocket, step depth 1 mm (the default), depth 8 kept');
     ok(h.stepRowShown() && h.q('.cut-step-depth').value === '1', 'the card shows the Step depth row: 1');
-    eq(h.q('.cut-type-cur').textContent, 'Stepped pocket', 'the card names the type');
+    eq(h.q('.cut-type-cur').textContent, 'Roughing', 'the card names the type');
     ok(h.q('.cut-ic-slot svg') && h.q('.cut-ic-slot svg').innerHTML.includes('M4.5 13.5V10.5h3v-3h3v-3h3'), 'with its own icon (a stair)');
     eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.176 mm apart'], 'the card note: the steps');
     const stepped = elems(exportOf(app));
@@ -186,21 +186,21 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     app.key('z', { ctrl: true });
     eq(CUT_PLAN.get(pk).stepDepth, 2, 'Ctrl+Z: step 2 again');
     app.key('z', { ctrl: true });
-    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth], ['stepped-pocket', 1], 'Ctrl+Z: step 1');
+    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth], ['roughing', 1], 'Ctrl+Z: step 1');
     app.key('z', { ctrl: true });
     eq([CUT_PLAN.get(pk).cutType, Boolean(CUT_PLAN.get(pk).slope)], ['pocket', true], 'Ctrl+Z: Pocket again, the slope kept');
     eq(exportOf(app), plainSvg, 'and the export is the plain one again');
     app.key('y', { ctrl: true });
-    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth], ['stepped-pocket', 1], 'Ctrl+Y: Stepped pocket, step 1');
+    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth], ['roughing', 1], 'Ctrl+Y: Stepped pocket, step 1');
     app.key('y', { ctrl: true });
     eq(CUT_PLAN.get(pk).stepDepth, 2, 'Ctrl+Y: step 2');
 
     // the countersunk hole (06): Stepped inside only, with the last step used as its step
     importFusionSelection(payload('06-countersink'), { controller: app.controller, prepare: app.prepare });
     h.clickAt(60, -40);
-    eq(h.menu().filter((id) => id.startsWith('stepped')), ['stepped-inside'], 'a countersunk hole: Stepped inside only');
-    h.pick('stepped-inside');
-    const [hk] = recAt('stepped-inside');
+    eq(h.menu().filter((id) => id === 'roughing'), ['roughing'], 'a countersunk hole: Roughing (TASK 792: in place of Stepped inside)');
+    h.pick('roughing');
+    const [hk] = recAt('roughing');
     eq(CUT_PLAN.get(hk).stepDepth, 0.01, 'the next cut switched to a stepped type starts with the last step used (0.01 mm, set above)');
     h.setStep('1');
     eq(elems(exportOf(app)).filter((e) => e.type === 'inside').map((e) => `${e.tag} ${e.geom} @${e.depth}`), ['circle cx="60" cy="-40" r="4" @1.000 mm', 'circle cx="60" cy="-40" r="3" @19.000 mm'], 'export: an inside circle r 4 at 1 mm, then ONE inside circle r 3 at 19 mm');
@@ -208,8 +208,8 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     // the outline chamfered top and bottom (x2): Stepped outside, the undercut is cut straight and said
     importFusionSelection(payload('x2-outline-chamfer-top-bottom'), { controller: app.controller, prepare: app.prepare });
     h.clickAt(60, -40);
-    eq(h.menu().filter((id) => id.startsWith('stepped')), ['stepped-outside'], 'the chamfered outline: Stepped outside only');
-    h.pick('stepped-outside');
+    eq(h.menu().filter((id) => id === 'roughing'), ['roughing'], 'the chamfered outline: Roughing (TASK 792: in place of Stepped outside)');
+    h.pick('roughing');
     eq(h.note(), ['Outline: 2 steps, 1 to 19 mm \u00b7 outlines 1 mm apart', 'Outline: undercut below 17 mm cut straight'], 'the card note: the steps and the undercut warning');
     const out = elems(exportOf(app));
     eq(out.map((e) => e.type + '@' + e.depth), ['outside@1.000 mm', 'outside@19.000 mm'], 'export: 2 PLAIN outside cuts');
@@ -233,13 +233,13 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
       const h = harness(app);
       importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
       h.clickAt(60, -40);
-      h.pick('stepped-pocket');
+      h.pick('roughing');
       h.setStep('0.5');
       planBefore = JSON.stringify([...CUT_PLAN.entries()]);
       svgBefore = exportOf(app);
       eq(elems(svgBefore).filter((e) => e.type === 'pocket').map((e) => e.depth), ['5.000 mm', '5.500 mm', '6.000 mm', '6.500 mm', '7.000 mm', '7.500 mm', '8.000 mm'], 'floor fillet at step 0.5: one pocket to 5 mm, then the fillet steps');
       const d = await app.storedDoc();
-      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.cutType === 'stepped-pocket' && r.stepDepth === 0.5 && r.slope && r.slope.rings.length === 14), 'the autosave stores the stepped record with its step and slope');
+      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.cutType === 'roughing' && r.stepDepth === 0.5 && r.slope && r.slope.rings.length === 14), 'the autosave stores the stepped record with its step and slope');
     } finally { await app.close(); }
   }
   CUT_PLAN.clear();

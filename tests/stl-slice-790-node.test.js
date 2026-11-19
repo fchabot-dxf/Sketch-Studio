@@ -248,13 +248,13 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
     st.undo();
     eq(h.card() && h.card().name, 'block.stl', 'undo: the STL design and its card');
 
-    // the dome, Stepped outside: the 3D Review has a level per terrace
+    // the dome, Roughing (TASK 792: it replaced Stepped outside; an STL outline carries its levels: a pocket round the part at each level): the 3D Review has a level per step
     app.stl.openFile(M.asciiStl(M.dome(30), 'dome'), 'dome.stl');
     eq(plan(), ['exterior@30'], 'the dome: one outline');
     h.clickAt(30, -30);
-    h.pick('stepped-outside');
+    h.pick('roughing');
     const items = planReliefItems(st);
-    eq(items.length, 30, 'Stepped outside at the default 1 mm step: 30 terrace cuts');
+    eq(items.length, 30, 'Roughing at the default 1 mm step: 30 level pockets');
     const levels = buildRelief({ stock: { thickness: getStock().thickness }, items }).levels.map((l) => l.depth);
     eq(levels, Array.from({ length: 30 }, (_, i) => i + 1), 'the 3D Review: a level at every 1 mm, 1..30');
   } finally { await app.close(); }

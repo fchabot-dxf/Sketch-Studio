@@ -111,14 +111,26 @@ function pocketLabelPoint(clearedOuter, clearedHoles) {
 }
 // TASK 455: the depth chip — a rounded dark rect with white text "↓ 0.300 in" (arrow, BOLD value, lighter unit); "↓ unset" when unset.
 const CHIP_H_PX = 16;
-const depthChip = (x, y, cutDepth, k) => {
+const chipParts = (cutDepth) => {
   const v = Number(cutDepth);
   const set = cutDepth != null && cutDepth !== 'unset' && Number.isFinite(v);
   let val = 'unset', unit = '';
   if (set) { val = lengthText(v, { show: 'field' }); unit = ' ' + docUnit(); } // TASK 728 / 770: the value's text is the one length-format decider's
+  return { val, unit, w: (2 + val.length + unit.length) * 6.3 + 10 };
+};
+// TASK 780: a chip that would cover the cut's pocket START MARK (a world-size square of half-width mark.arm) moves straight up, in screen px, until its box clears the mark's.
+const CHIP_MARK_GAP_PX = 2;
+const clearOfStartMark = (pos, mark, w, k) => {
+  if (!mark) return pos;
+  const armPx = mark.arm / k, dx = Math.abs(pos.x - mark.point.x) / k, dy = (pos.y - mark.point.y) / k;
+  if (dx >= w / 2 + armPx || Math.abs(dy) >= CHIP_H_PX / 2 + armPx) return pos;
+  return { x: pos.x, y: mark.point.y - (armPx + CHIP_H_PX / 2 + CHIP_MARK_GAP_PX) * k };
+};
+const depthChip = (x, y, cutDepth, k) => {
+  const { val, unit, w } = chipParts(cutDepth);
   // TASK 731: CONSTANT SCREEN SIZE. The chip is laid out in screen px (font 11 = the dimension labels', height 16, 6.3 px per glyph + 10 padding)
   // inside a <g> scaled by k = world units per screen px (worldTolerance(svg, 1), the one zoom-stable conversion), so it never grows with zoom or a small design.
-  const w = (2 + val.length + unit.length) * 6.3 + 10, h = CHIP_H_PX;
+  const h = CHIP_H_PX;
   return `<g class="sk-chip" transform="translate(${x} ${y}) scale(${k})"><rect class="sk-chip-bg" x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="4"/>` +
     `<text class="sk-chip-text" x="0" y="0" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
 };
@@ -358,7 +370,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
     const isOnline = ct.id === 'online';
     const tpClass = isOnline ? 'sk-tp sk-tp-online' : 'sk-tp';
-    let region = '', path = '', hasTravel = false, chip = null;
+    let region = '', path = '', hasTravel = false, chip = null, startMark = null;
     const toolPaths = [];
     const leadHandles = []; // TASK 778: draggable handles at On line lead-in junctions
     // TASK 449 / 777: travel marks (sparse slow marching dashes + zoom-stable screen-sized dart arrowheads); TASK 757: a STEPPED cut's (a terrace's)
@@ -398,6 +410,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         const cl = fp.clearing;
         if (cl.role === 'start') { // TASK 778: pocket start mark (circle + cross, declared once)
           path += `<path class="sk-pocket-start" d="${cl.d}"/>`;
+          startMark = { point: cl.point, arm: cl.dia / 2 };
           continue;
         }
         toolPaths.push(...(fp.toolPaths || []));
@@ -456,7 +469,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       addLeadDots(fp.leadIn); // TASK 775 / 778: tip dot, junction ring, and draggable handle on top of travel marks
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, path, hasTravel, toolPaths, anchor: chip, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
+    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
@@ -571,7 +584,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const pos = near || lastChip.get(key) || look.anchor;
       if (!pos) continue;
       lastChip.set(key, pos);
-      out += depthChip(pos.x, pos.y, look.depth, worldTolerance(svgEl, 1));
+      const ck = worldTolerance(svgEl, 1);
+      const at = clearOfStartMark(pos, look.startMark, chipParts(look.depth).w, ck);
+      out += depthChip(at.x, at.y, look.depth, ck);
     }
     // TASK 472: the Stock loop always carries its label (it is the board): "STOCK <thickness>" just above the loop's top-left corner
     const sk = stockKeyOf(CUT_PLAN);

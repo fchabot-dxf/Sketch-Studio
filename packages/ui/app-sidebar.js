@@ -146,7 +146,8 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   el.innerHTML = `<span class="sk-sidebar-burger" aria-hidden="true">&#9776;</span><span class="sk-sidebar-name">${cur ? cur.name : 'App'}</span>`;
 
   const backdrop = document.createElement('div'); backdrop.className = 'sk-sidebar-backdrop'; backdrop.hidden = true;
-  const drawer = document.createElement('aside'); drawer.className = 'sk-sidebar'; drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true'); drawer.setAttribute('aria-label', 'App menu');
+  const drawer = document.createElement('aside'); drawer.className = 'sk-sidebar'; drawer.setAttribute('role', 'dialog'); // aria-modal only while open (TASK 783): the peeking handle inside it keeps the focus when it closes, and is not an overlay then
+  drawer.setAttribute('aria-label', 'App menu');
   const content = document.createElement('div'); content.className = 'sk-sidebar-content';
   const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'sk-sidebar-handle'; handle.setAttribute('aria-label', 'Open menu'); handle.setAttribute('aria-expanded', 'false'); handle.title = 'Menu';
   handle.innerHTML = '<span class="sk-sidebar-grip" aria-hidden="true"></span>';
@@ -334,7 +335,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   function open() {
     if (isOpenFlag) return;
     isOpenFlag = true; viewId = 'main'; message = null; render();
-    backdrop.hidden = false; drawer.classList.add('open'); el.setAttribute('aria-expanded', 'true');
+    backdrop.hidden = false; drawer.classList.add('open'); drawer.setAttribute('aria-modal', 'true'); el.setAttribute('aria-expanded', 'true');
     handle.setAttribute('aria-expanded', 'true'); handle.setAttribute('aria-label', 'Close menu');
     document.addEventListener('keydown', onKey, true);
     firstFocus();
@@ -344,7 +345,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     if (!isOpenFlag) return;
     isOpenFlag = false;
     if (askSettle) askSettle(null); // closing the drawer cancels an open question
-    drawer.classList.remove('open'); el.setAttribute('aria-expanded', 'false');
+    drawer.classList.remove('open'); drawer.removeAttribute('aria-modal'); el.setAttribute('aria-expanded', 'false');
     handle.setAttribute('aria-expanded', 'false'); handle.setAttribute('aria-label', 'Open menu');
     document.removeEventListener('keydown', onKey, true);
     try { if (typeof getComputedStyle === 'function' && getComputedStyle(handle).display !== 'none') handle.focus(); else el.focus(); } catch (_) {}

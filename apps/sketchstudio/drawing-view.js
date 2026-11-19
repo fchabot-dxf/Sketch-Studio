@@ -180,9 +180,11 @@ export function mountDrawingView({ state, getName = () => '', footer = null }) {
     if (pendingFit && !printing && fit()) pendingFit = false;
     drawDrawing({ state, svg, world });
   };
-  // the footer's height is the drawing's bottom margin (a footer that floats over the page, a phone in landscape, reserves none)
+  // TASK 783: the drawing ends where the footer begins. A footer in the page flow (under the drawing) reserves its own height; one that floats over the page (a phone in landscape,
+  // position: fixed) reserves everything from its top edge down to the page bottom, so Fit and the drawing never run under it.
   const reserveFooter = () => {
-    const room = shown && footer && footer.getClientRects().length && getComputedStyle(footer).position !== 'fixed' ? footer.offsetHeight : 0;
+    const live = shown && footer && footer.getClientRects().length;
+    const room = !live ? 0 : getComputedStyle(footer).position === 'fixed' ? Math.max(0, Math.round(window.innerHeight - footer.getBoundingClientRect().top)) : footer.offsetHeight;
     el.style.bottom = room ? room + 'px' : '';
   };
   if (footer && typeof ResizeObserver !== 'undefined') new ResizeObserver(reserveFooter).observe(footer);

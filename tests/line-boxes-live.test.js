@@ -52,7 +52,7 @@ await (async () => {
       if (!st) return null;
       const l = st.shapes.filter((s) => s.type === 'line' && !s.isConstruction)[0]; if (!l) return { lines: 0 };
       const a = st.joints.get(l.joints[0]), b = st.joints.get(l.joints[1]);
-      return { lines: st.shapes.filter((s) => s.type === 'line' && !s.isConstruction).length, len: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI };
+      return { lines: st.shapes.filter((s) => s.type === 'line' && !s.isConstruction).length, len: Math.hypot(b.x - a.x, b.y - a.y), ang: -Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI };   // TASK 782: counter-clockwise: the angle box and a typed angle count up-right as positive
     })()`);
     assert(seg, 'the page exposes its state');
     assert.strictEqual(seg.lines, 1, 'one segment placed');

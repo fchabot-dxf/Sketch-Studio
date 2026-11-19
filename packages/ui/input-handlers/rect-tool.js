@@ -9,7 +9,7 @@ import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };
@@ -17,10 +17,45 @@ const localState = { isDragging: false, dragStartScreen: null, boxes: false, cur
 // TASK 596: after the first click of a two-point rectangle the W x H boxes show at once (base-tool's shared creation-box path); the sides follow the cursor until typed
 const BOX = { dual: { kind: 'rect', labels: ['W', 'H'], separator: '×', quantities: ['length', 'length'] } };
 
-/** The second corner: the cursor, but a typed width / height holds its side (the other still follows the cursor). */
-function lockedCorner(c1, pt) {
+const rectModeOf = (state) => state.rectMode || RECT_MODES.TWO_POINT;
+/** TASK 782: the two modes that show the W x H boxes from the first click (the 3-point rectangle has its own base / height boxes). */
+const sizedMode = (mode) => mode === RECT_MODES.TWO_POINT || mode === RECT_MODES.CENTER;
+
+/** The corner: the cursor, but a typed width / height holds its side (the other still follows the cursor). The first click is the corner's opposite in the
+ *  two-point mode and the CENTRE in the centre mode, where each side runs both ways from it: a typed side is twice the corner's distance from the centre. */
+function lockedCorner(c1, pt, centre = false) {
+    const half = centre ? 0.5 : 1;
     const signX = pt.x - c1.x >= 0 ? 1 : -1, signY = pt.y - c1.y >= 0 ? 1 : -1;
-    return { x: c1.x + (rectState.lockedWidth ? rectState.lockedWidth * signX : pt.x - c1.x), y: c1.y + (rectState.lockedHeight ? rectState.lockedHeight * signY : pt.y - c1.y) };
+    return { x: c1.x + (rectState.lockedWidth ? rectState.lockedWidth * half * signX : pt.x - c1.x), y: c1.y + (rectState.lockedHeight ? rectState.lockedHeight * half * signY : pt.y - c1.y) };
+}
+/** The two side lengths the rectangle has with `corner` as its second corner (the boxes show them, and the minimum-size rule reads them). */
+const sideSizes = (c1, corner, centre) => [Math.abs(corner.x - c1.x) * (centre ? 2 : 1), Math.abs(corner.y - c1.y) * (centre ? 2 : 1)];
+/** Where Enter places the corner: the last cursor point (else the preview's), with the typed sides held. */
+function enterCorner(state) {
+    const rectMode = rectModeOf(state);
+    const c1 = state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null));
+    const raw = localState.cursor || (state.active && state.active.preview && state.active.preview.pt) || null;
+    if (!c1 || !raw) return null;
+    return { c1, corner: lockedCorner(c1, raw, rectMode === RECT_MODES.CENTER) };
+}
+
+/** TASK 782: the typed sides become the rectangle's dimensions, ONCE each (one width on a horizontal side, one height on a vertical side: a rectangle's
+ *  four sides used to carry four, two of them reference), by the click AND by Enter, in the two-point and the centre mode. A centre rectangle's
+ *  construction diagonals are not axis-aligned, so they are never picked. */
+function addTypedSideDimensions(state, rectResult) {
+    if (!rectState.lockedWidth && !rectState.lockedHeight) return;
+    const lines = rectResult && rectResult.shapes ? rectResult.shapes : [];
+    const TOL = 1e-6;
+    const side = (horizontal) => lines.find((l) => {
+        if (l.type !== 'line') return false;
+        const a = state.joints.get(l.joints[0]), b = state.joints.get(l.joints[1]);
+        if (!a || !b) return false;
+        const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+        return horizontal ? dy < TOL && dx > TOL : dx < TOL && dy > TOL;
+    });
+    const w = rectState.lockedWidth && side(true), h = rectState.lockedHeight && side(false);
+    if (w) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [w.joints[0], w.joints[1]], value: rectState.lockedWidth }, { source: 'rect' });
+    if (h) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [h.joints[0], h.joints[1]], value: rectState.lockedHeight }, { source: 'rect' });
 }
 
 export function setupRectTool(svg, state){
@@ -32,6 +67,8 @@ export function setupRectTool(svg, state){
             dbg.log('rect-tool', '[DEBUG RECT] liveDimensionApplied event:', { tool: state.currentTool, hasActive: !!state.active, detail });
             // a typed side is locked already (onPreview); Enter places the rectangle at the preview: typed sides exact, the others at the cursor
             if (detail.confirmedBy === 'enter') {
+                const sized = sizedMode(rectModeOf(state)) ? enterCorner(state) : null;
+                if (sized && tooSmall(...sideSizes(sized.c1, sized.corner, rectModeOf(state) === RECT_MODES.CENTER))) { detail.keepOpen = true; return; }   // no size yet (cursor still on the first click, none typed): the boxes stay open
                 try{ finalizeRectFromActive(svg, state); }catch(_){ }
             }
         },
@@ -42,8 +79,9 @@ export function setupRectTool(svg, state){
             if (detail.reset && detail.reset[1]) rectState.lockedHeight = null;
             else if (detail.typed[1]) rectState.lockedHeight = detail.height > 0 ? detail.height : null;
             const c1 = state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null));
-            if (c1 && (state.rectMode || RECT_MODES.TWO_POINT) === RECT_MODES.TWO_POINT) {
-                safeUpdatePreview(state, 'rect', [state.active.start], lockedCorner(c1, localState.cursor || c1), { mode: RECT_MODES.TWO_POINT });
+            if (c1 && sizedMode(rectModeOf(state))) {
+                const centre = rectModeOf(state) === RECT_MODES.CENTER;
+                safeUpdatePreview(state, 'rect', [state.active.start], lockedCorner(c1, localState.cursor || c1, centre), { mode: centre ? 'center' : RECT_MODES.TWO_POINT });
             }
         },
         onCancel: () => { rectState.lockedWidth = null; rectState.lockedHeight = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
@@ -60,8 +98,10 @@ export function finalizeRectFromActive(svg, state){
 
     try{
         state.saveState();
-        const previewPt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : (state.active.secondPt ? (state.joints.get(state.active.secondPt) || null) : null);
+        const sized = sizedMode(rectMode) ? enterCorner(state) : null;   // TASK 782: the typed sides hold at Enter whatever the mouse did since
+        const previewPt = sized ? sized.corner : (state.active.preview && state.active.preview.pt ? state.active.preview.pt : (state.active.secondPt ? (state.joints.get(state.active.secondPt) || null) : null));
         if(!previewPt) return false;
+        if(sized && tooSmall(...sideSizes(sized.c1, sized.corner, rectMode === RECT_MODES.CENTER))) return false;
         const endId = state.genJ();
         state.joints.set(endId, { x: previewPt.x, y: previewPt.y, fixed:false });
 
@@ -89,6 +129,7 @@ export function finalizeRectFromActive(svg, state){
                     for(const cid of allCornerIds){ const jpt = state.joints.get(cid); if(!jpt) continue; const screen = worldToScreen(svg, jpt); const snap = findSnap(state.joints, state.shapes, svg, screen, allCornerIds); if(snap){ applySnapConstraint(state, cid, snap, { excludeJoints: allCornerIds }); } }
                 }catch(_){ }
             }catch(_){ }
+            addTypedSideDimensions(state, rectResult);
         } else {
 			const rectResult = makeRectFromTwoJoints(state.joints, state.active.start, endId, state.genJ, state.isConstructionMode || false);
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>state.shapes.push(s));
@@ -101,22 +142,7 @@ export function finalizeRectFromActive(svg, state){
                     for(const cid of allCornerIds){ const jpt = state.joints.get(cid); if(!jpt) continue; const screen = worldToScreen(svg, jpt); const snap = findSnap(state.joints, state.shapes, svg, screen, allCornerIds); if(snap){ applySnapConstraint(state, cid, snap, { excludeJoints: allCornerIds }); } }
                 }catch(_){ }
             }catch(_){ }
-            if (rectState.lockedWidth || rectState.lockedHeight) {
-                const lines = rectResult && rectResult.shapes ? rectResult.shapes : [];
-                for (const line of lines) {
-                    const j1 = state.joints.get(line.joints[0]);
-                    const j2 = state.joints.get(line.joints[1]);
-                    if (!j1 || !j2) continue;
-                    const dx = Math.abs(j2.x - j1.x);
-                    const dy = Math.abs(j2.y - j1.y);
-					if (dx > dy && rectState.lockedWidth) {
-						ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [line.joints[0], line.joints[1]], value: rectState.lockedWidth }, { source: 'rect' });
-					} else if (dy > dx && rectState.lockedHeight) {
-						ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [line.joints[0], line.joints[1]], value: rectState.lockedHeight }, { source: 'rect' });
-					}
-                }
-                rectState.lockedWidth = null; rectState.lockedHeight = null; try{ hideInput(); }catch(_){ }
-            }
+            addTypedSideDimensions(state, rectResult);
         }
         closeRectBoxes();
         state.endUndoGroup(); state.active = null; return true;
@@ -158,19 +184,18 @@ export function handleRectPointerMove(e, svg, state, w){
 	const previewPt = state.snapTarget ? state.snapTarget.pt : w;
 	localState.cursor = previewPt;
 	if (isInputActive() && !localState.boxes) { followCreationBoxes(e, []); return true; }   // a box opened by a typed digit in the other rect modes: the preview waits for Enter
-	const rectMode = state.rectMode || RECT_MODES.TWO_POINT;
-	if (rectMode === RECT_MODES.CENTER) {
-		safeUpdatePreview(state, 'rect', [state.active.start], previewPt, { mode: 'center' });
-	} else if (rectMode === RECT_MODES.THREE_POINT) {
+	const rectMode = rectModeOf(state);
+	if (rectMode === RECT_MODES.THREE_POINT) {
 		safeUpdatePreview(state, 'rect', [state.active.start], previewPt, { mode: 'three-point' });
 	} else {
+		const centre = rectMode === RECT_MODES.CENTER;
 		const c1 = state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null);
 		let corner2 = previewPt;
 		if (c1) {
-			corner2 = lockedCorner(c1, previewPt);
-			if (localState.boxes) followCreationBoxes(e, [Math.abs(previewPt.x - c1.x), Math.abs(previewPt.y - c1.y)]);
+			corner2 = lockedCorner(c1, previewPt, centre);
+			if (localState.boxes) followCreationBoxes(e, sideSizes(c1, previewPt, centre));
 		}
-		safeUpdatePreview(state, 'rect', [state.active.start], corner2, { mode: 'two-point', lockedWidth: rectState.lockedWidth || undefined, lockedHeight: rectState.lockedHeight || undefined });
+		safeUpdatePreview(state, 'rect', [state.active.start], corner2, centre ? { mode: 'center' } : { mode: 'two-point', lockedWidth: rectState.lockedWidth || undefined, lockedHeight: rectState.lockedHeight || undefined });
 	}
 	return true;
 }
@@ -180,18 +205,25 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 	const rectMode = state.rectMode || RECT_MODES.TWO_POINT;
 	const isDragging = localState.isDragging;
 	// For THREE_POINT, CENTER, or TWO_POINT modes: on the very first click create a waiting state so the flow is click -> click
-	if ((rectMode === RECT_MODES.THREE_POINT || rectMode === RECT_MODES.CENTER || rectMode === RECT_MODES.TWO_POINT) && !isDragging && state.active && state.active._tempStart && !state.active.waitingForSecondClick && !state.active.secondPt) {
+	if ((rectMode === RECT_MODES.THREE_POINT || sizedMode(rectMode)) && !isDragging && state.active && state.active._tempStart && !state.active.waitingForSecondClick && !state.active.secondPt) {
 		state.active.waitingForSecondClick = true;
 		localState.dragStartScreen = null;
 		localState.isDragging = false;
-		if (rectMode === RECT_MODES.TWO_POINT) { localState.boxes = true; localState.cursor = null; openCreationBoxes(e, BOX, [0, 0]); } // TASK 596: W and H show now, not after a typed digit
+		if (sizedMode(rectMode)) { localState.boxes = true; localState.cursor = null; openCreationBoxes(e, BOX, [0, 0]); } // TASK 596: W and H show now, not after a typed digit (TASK 782: in the centre mode too)
 		return true;
 	}
 
 	dbg.log('rect-tool', '[rect-tool] pointerUp entry', { snap: state.activeSnap || hitSnap, wasDragging });
 	const snap = state.activeSnap || hitSnap;
 	let endPt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
-	if (rectMode === RECT_MODES.TWO_POINT && state.active.startPt) endPt = lockedCorner(state.active.startPt, endPt); // a typed side holds at the click too
+	if (sizedMode(rectMode) && state.active.startPt) {
+		endPt = lockedCorner(state.active.startPt, endPt, rectMode === RECT_MODES.CENTER); // a typed side holds at the click too
+		if (tooSmall(...sideSizes(state.active.startPt, endPt, rectMode === RECT_MODES.CENTER))) return true;   // TASK 782: a click on the first point (or on its row / column) places nothing
+	}
+	if (rectMode === RECT_MODES.THREE_POINT) {   // TASK 782: the base needs a length, then the rectangle a height
+		const b0 = state.active.startPt, b1 = state.active.secondPt ? state.joints.get(state.active.secondPt) : null;
+		if (!b1 ? tooSmall(Math.hypot(endPt.x - b0.x, endPt.y - b0.y)) : tooSmall(Math.abs((b1.x - b0.x) * (endPt.y - b1.y) - (b1.y - b0.y) * (endPt.x - b1.x)) / Math.hypot(b1.x - b0.x, b1.y - b0.y))) return true;
+	}
 	const endId = state.genJ();
 	state.joints.set(endId, { x:endPt.x, y:endPt.y, fixed:false });
 	dbg.log('rect-tool', '[rect-tool] created corner', { endId, endPt });
@@ -211,7 +243,7 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); });
 			for(const cid of allCornerIds){ const jpt = state.joints.get(cid); if(!jpt) continue; const nearby = findNearbyJoint(state.joints, jpt, cid, 0.01); if(nearby && nearby !== cid) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [cid, nearby] }, { source: 'rect' }); }
 		}catch(_){ }
-		applyLockedDims(state, rectResult, rectMode);
+		applyLockedDims(state, rectResult);
 		state.endUndoGroup(); state.active=null; localState.isDragging = false; localState.dragStartScreen = null; return true;
 	} else if(rectMode === RECT_MODES.CENTER){
 		state.saveState();
@@ -226,7 +258,7 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); });
 			for(const cid of allCornerIds){ const jpt = state.joints.get(cid); if(!jpt) continue; const nearby = findNearbyJoint(state.joints, jpt, cid, 0.01); if(nearby && nearby !== cid) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [cid, nearby] }, { source: 'rect' }); }
 		}catch(_){ }
-		applyLockedDims(state, rectResult, rectMode);
+		applyLockedDims(state, rectResult);
 		state.endUndoGroup(); state.active=null; localState.isDragging = false; localState.dragStartScreen = null; return true;
 	} else {
 		state.saveState();
@@ -241,46 +273,14 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); });
 			for(const cid of allCornerIds){ const jpt = state.joints.get(cid); if(!jpt) continue; const nearby = findNearbyJoint(state.joints, jpt, cid, 0.01); if(nearby && nearby !== cid) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [cid, nearby] }, { source: 'rect' }); }
 		}catch(_){ }
-		applyLockedDims(state, rectResult, rectMode);
+		applyLockedDims(state, rectResult);
 		state.endUndoGroup(); state.active=null; localState.isDragging = false; localState.dragStartScreen = null; return true;
 	}
 }
 
-// Extracted: apply locked width/height as distance constraints
-function applyLockedDims(state, rectResult, rectMode) {
-	if (!rectState.lockedWidth && !rectState.lockedHeight) { closeRectBoxes(); return; }
-	const lines = rectResult && rectResult.shapes ? rectResult.shapes : [];
-	if (rectMode === RECT_MODES.THREE_POINT || rectMode === RECT_MODES.CENTER) {
-		if (rectState.lockedWidth) {
-			const bottomLine = lines.find(l => {
-				const j1 = state.joints.get(l.joints[0]);
-				const j2 = state.joints.get(l.joints[1]);
-				return j1 && j2 && Math.abs(j1.y - j2.y) < 0.01;
-			});
-			if (bottomLine) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: bottomLine.joints, value: rectState.lockedWidth }, { source: 'rect' });
-		}
-		if (rectState.lockedHeight) {
-			const leftLine = lines.find(l => {
-				const j1 = state.joints.get(l.joints[0]);
-				const j2 = state.joints.get(l.joints[1]);
-				return j1 && j2 && Math.abs(j1.x - j2.x) < 0.01;
-			});
-			if (leftLine) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: leftLine.joints, value: rectState.lockedHeight }, { source: 'rect' });
-		}
-	} else {
-		for (const line of lines) {
-			const j1 = state.joints.get(line.joints[0]);
-			const j2 = state.joints.get(line.joints[1]);
-			if (!j1 || !j2) continue;
-			const dx = Math.abs(j2.x - j1.x);
-			const dy = Math.abs(j2.y - j1.y);
-			if (dx > dy && rectState.lockedWidth) {
-				ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [line.joints[0], line.joints[1]], value: rectState.lockedWidth }, { source: 'rect' });
-			} else if (dy > dx && rectState.lockedHeight) {
-				ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [line.joints[0], line.joints[1]], value: rectState.lockedHeight }, { source: 'rect' });
-			}
-		}
-	}
+// The typed sides become dimensions once the rectangle is placed by a click (Enter does the same in finalizeRectFromActive); the boxes go
+function applyLockedDims(state, rectResult) {
+	addTypedSideDimensions(state, rectResult);
 	closeRectBoxes();
 }
 

@@ -11,12 +11,12 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { hideInput } from '#ui/numeric-input-manager.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 // The live box: `sides` / `lockedRadius` are what the user typed in it (null = not typed: the cursor sets the size, state.polygonSides the sides).
 const live = { boxOpen: false, sides: null, lockedRadius: null, cursor: null };
-const MIN_RADIUS = 1e-6;
+const MIN_RADIUS = MIN_SHAPE_SIZE;   // TASK 782: the one minimum size (base-tool.js)
 const SIDES_KEY = 'sk-polygon-sides';
 const BOX = { dual: { kind: 'polygon', labels: ['R', 'N'], separator: 'sides', quantities: ['length', 'count'] } };
 

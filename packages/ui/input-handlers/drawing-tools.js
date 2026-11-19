@@ -15,6 +15,7 @@ import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, hand
 import { setupPolygonTool, handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, resetPolygonState } from '#ui/input-handlers/polygon-tool.js'; // TASK 483
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
+import { refuseLiveInputClick } from '#ui/numeric-input-manager.js';
 import { newShapeId } from '#core/shape-id.js';
 
 // Local state for drawing tools
@@ -155,6 +156,7 @@ export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
         return false;
     }
     try{ dbg.log('drawing', '[drawing-tools] pointerUp', { tool: state.currentTool, hitSnap, activeSnap: state.activeSnap, w, wasDragging }); }catch(_){ }
+    if (refuseLiveInputClick()) return true;   // TASK 782: a typed size the box refuses (0 or less) is fixed or cleared first: no click places anything meanwhile
 
     // Handle based on tool
     switch (state.currentTool) {

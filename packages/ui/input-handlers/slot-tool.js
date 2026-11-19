@@ -1,6 +1,7 @@
 // Slot tool (TASK 673) — supports Fusion 360's five slot types using real lines, makeArc, and a diameter width dim.
-import { TOOL_MODES, SLOT_MODES } from '#core/constants.js';
+import { TOOL_MODES, SLOT_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
 import {
     circumcenter3Pt,
     arcSweepFor3Pt,
@@ -60,14 +61,21 @@ function snapPoint(snap, fallback) {
     return (snap && snap.isLocked && snap.pt) ? { x: snap.pt.x, y: snap.pt.y } : { x: fallback.x, y: fallback.y };
 }
 
-function resolveSpanEnd(p1, pt) {
+// TASK 782: the span box is the slot's FULL centre-to-centre length in every straight mode. The centre-point slot's first click is the middle of the
+// slot and the second click one end's centre, so its length is twice the click-to-click distance: `spanFactor` is that 2 (1 elsewhere), and the box, a typed
+// length and the dimension a typed length keeps all go through it.
+const spanFactor = (mode) => (mode === SLOT_MODES.CENTER_POINT ? 2 : 1);
+const spanLength = (mode, p1, pt) => Math.hypot(pt.x - p1.x, pt.y - p1.y) * spanFactor(mode);
+
+function resolveSpanEnd(p1, pt, mode) {
     if (!p1 || !pt) return pt;
     if (!(localState.lockedSpan > MIN_SPAN)) return pt;
+    const reach = localState.lockedSpan / spanFactor(mode);
     const dx = pt.x - p1.x, dy = pt.y - p1.y;
     const d = Math.hypot(dx, dy);
     const ux = d > 1e-6 ? dx / d : 1;
     const uy = d > 1e-6 ? dy / d : 0;
-    return { x: p1.x + ux * localState.lockedSpan, y: p1.y + uy * localState.lockedSpan };
+    return { x: p1.x + ux * reach, y: p1.y + uy * reach };
 }
 
 function defaultWidthForSpan(span) {
@@ -180,7 +188,7 @@ function redrawPreview(state, cursorPt) {
     if (!p1) return;
 
     if (active.phase === 'span' || active.phase === 'span2') {
-        const p2 = resolveSpanEnd(p1, cursorPt || p1);
+        const p2 = resolveSpanEnd(p1, cursorPt || p1, mode);
         let cl1 = p1, cl2 = p2;
         if (mode === SLOT_MODES.CENTER_POINT) {
             cl1 = { x: 2 * p1.x - p2.x, y: 2 * p1.y - p2.y };
@@ -313,6 +321,10 @@ function commitSlot(svg, state, cursorPt) {
     for (const s of built.shapes) state.shapes.push(s);
     for (const c of built.constraints) addConstraint(state, c.type, c);
     for (const [jid, snap] of snapsToApply) applyOptionalSnap(state, jid, snap);
+    // TASK 782: a typed length of the centre-point slot is kept as a dimension between its two end centres (the full length the box shows)
+    if (mode === SLOT_MODES.CENTER_POINT && active.typedSpan > 0 && built.meta && built.meta.c1Id && built.meta.c2Id) {
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [built.meta.c1Id, built.meta.c2Id], value: active.typedSpan }, { source: 'slot' });
+    }
 
     closeSlotBoxes();
     localState.isDragging = false;
@@ -330,6 +342,7 @@ function commitSlot(svg, state, cursorPt) {
 function advanceFromSpan(e, svg, state, endPt, snap) {
     const active = state.active;
     active.picks[1] = { pt: { x: endPt.x, y: endPt.y }, snap: snap || null };
+    active.typedSpan = localState.lockedSpan;   // what was typed in the length box (null: the clicks set it): the dimension the slot keeps
     localState.lockedSpan = null;
     localState.dragStartScreen = null;
     localState.isDragging = false;
@@ -345,7 +358,7 @@ function advanceFromSpan(e, svg, state, endPt, snap) {
     } else {
         active.phase = 'width';
         redrawPreview(state, cursor);
-        const span = Math.hypot(endPt.x - active.picks[0].pt.x, endPt.y - active.picks[0].pt.y);
+        const span = spanLength(active.slotMode, active.picks[0].pt, endPt);
         const initW = defaultWidthForSpan(span);
         openStepBox(e || cursor, svg, state, FIELD_WIDTH, initW);
     }
@@ -393,9 +406,9 @@ export function setupSlotTool(svg, state) {
             if (!active) return;
             const v = detail.value;
             if (active.phase === 'span' || active.phase === 'span2') {
-                if (v > MIN_SPAN) localState.lockedSpan = v;
+                if (detail.typed[0] && v > MIN_SPAN) localState.lockedSpan = v;   // TASK 782: only a TYPED length locks the span (and becomes a dimension), never the displayed rounding
                 const p1 = active.picks[0].pt;
-                const endPt = resolveSpanEnd(p1, localState.cursor || { x: p1.x + (localState.lockedSpan || 0), y: p1.y });
+                const endPt = resolveSpanEnd(p1, localState.cursor || { x: p1.x + (localState.lockedSpan || 0) / spanFactor(active.slotMode), y: p1.y }, active.slotMode);
                 if (!(Math.hypot(endPt.x - p1.x, endPt.y - p1.y) > MIN_SPAN)) {
                     detail.keepOpen = true;
                     return;
@@ -496,8 +509,8 @@ export function handleSlotPointerMove(e, svg, state, w) {
         const p1 = active.picks[0] && active.picks[0].pt;
         const p2 = active.picks[1] && active.picks[1].pt;
         if ((active.phase === 'span' || active.phase === 'span2') && p1) {
-            const effP2 = resolveSpanEnd(p1, pt);
-            followCreationBoxes(e, [Math.hypot(effP2.x - p1.x, effP2.y - p1.y)]);
+            const effP2 = resolveSpanEnd(p1, pt, active.slotMode);
+            followCreationBoxes(e, [spanLength(active.slotMode, p1, effP2)]);
         } else if (active.phase === 'arc3') {
             const arc = currentArcParams(active, pt);
             if (arc && Number.isFinite(arc.radius)) followCreationBoxes(e, [arc.radius]);
@@ -528,11 +541,11 @@ export function handleSlotPointerUp(e, svg, state, hitSnap, w) {
             active.waitingNextClick = true;
             localState.dragStartScreen = null;
             const p1 = active.picks[0].pt;
-            openStepBox(e, svg, state, FIELD_SPAN, Math.hypot(rawPt.x - p1.x, rawPt.y - p1.y));
+            openStepBox(e, svg, state, FIELD_SPAN, spanLength(active.slotMode, p1, rawPt));
             return true;
         }
         const p1 = active.picks[0].pt;
-        const endPt = resolveSpanEnd(p1, rawPt);
+        const endPt = resolveSpanEnd(p1, rawPt, active.slotMode);
         if (!(Math.hypot(endPt.x - p1.x, endPt.y - p1.y) > MIN_SPAN)) {
             return true;
         }
@@ -559,7 +572,7 @@ export function handleSlotKeyDown(e, svg, state) {
         const cursor = localState.cursor || active.picks[0].pt;
         const p1 = active.picks[0].pt;
         if (active.phase === 'span' || active.phase === 'span2') {
-            openStepBox(cursor, svg, state, FIELD_SPAN, Math.hypot(cursor.x - p1.x, cursor.y - p1.y), { initialKey: e.key });
+            openStepBox(cursor, svg, state, FIELD_SPAN, spanLength(active.slotMode, p1, cursor), { initialKey: e.key });
         } else if (active.phase === 'arc3') {
             const arc = currentArcParams(active, cursor);
             openStepBox(cursor, svg, state, FIELD_ARC, (arc && arc.radius) || 10, { initialKey: e.key });

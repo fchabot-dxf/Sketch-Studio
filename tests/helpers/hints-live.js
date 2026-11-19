@@ -55,7 +55,7 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     console.log(`${D} ${how} ${sel}: ${JSON.stringify(tip)} at ${JSON.stringify(p)}`);
     assert.deepStrictEqual(tipProblems(tip, p, text, { phone }), [], `${D} ${how}: ${sel}: the tooltip is right`);
     assert.deepStrictEqual(tp.movedBoxes(before, during), [], `${D} ${how}: ${sel}: THE LAYOUT DID NOT MOVE (0 px: every row, option, list row and card box identical before and while the tooltip shows; ${Object.keys(during).length} boxes)`);
-    if (shotName) await shot(shotName, shotSels || [sel], 3);
+    if (shotName) await shot(shotName, [...(shotSels || [sel]), '#sk-cursor-tip'], 2); // the crop holds the tooltip too (it is outside the card)
     if (!phone) {
       await tp.leave();
       assert.strictEqual(await tp.tip(), null, `${D} ${how}: ${sel}: gone when the mouse leaves`);

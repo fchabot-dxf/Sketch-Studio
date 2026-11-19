@@ -321,7 +321,7 @@
     .shaper-fusion-clear { border: 1px solid #464950; height: 30px; }
     @media (max-width: 640px), (pointer: coarse) { .shaper-fusion-sel-x, .shaper-fusion-clear { min-width: 36px; height: 36px; } .shaper-fusion-sel { min-height: 38px; } }
     #view-prepare.is-fusion #prepare-notice { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); pointer-events: auto; }
-    #view-prepare.is-fusion #prepare-panel { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); } /* TASK 795: below the bar, whatever height the selection list gives it (fusion-bridge.js sets the variable) */
+    #view-prepare.is-fusion #prepare-panel { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); z-index: 8; } /* TASK 795: below the bar, whatever height the selection list gives it (fusion-bridge.js sets the variable); above the notice (z 6, wider than the room beside the card) so an open cut-type menu is never covered by it */
     @media (max-width: 640px) {
       #view-prepare.is-fusion #prepare-notice { left: 12px; transform: none; max-width: calc(100% - 236px); }
     }

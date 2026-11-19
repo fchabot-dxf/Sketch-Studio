@@ -7,7 +7,8 @@
 //     within the stated bound (s - 0.02 <= |link| <= s + 0.02 mm); the swept area == the separate rings' swept area (+ the finish pass); the leftover ==
 //     origin/main's Concentric leftover on the same fixture (tests/fixtures/pocket-clearing-749-main.json); the coverage on a 0.5 mm grid.
 //  2. (moved to pocket-clearing-750-node: the Loop.) The export: the lines once at the full depth, then the wall / island cuts as 745.
-//  3. Freehand / Raster / Morphed spiral downloads byte-identical to origin/main's (md5 of 120 downloads in the fixture, from main's own exporter); TASK 750:
+//  3. Freehand / Raster / Morphed spiral downloads byte-identical to origin/main's (md5 of 120 downloads in the fixture, from main's own exporter; TASK 778:
+//     plus the start mark; TASK 786: and the page grown by exactly the start mark's box where it reaches past the drawing); TASK 750:
 //     a record that still says passDepth 2.5 exports as main's one-pass download (no depth per pass: the clearing once, at the full depth).
 //  4. an old document ('concentric' / 'spiral' and the stored operation order) opens as 'linked' / 'morphed' (apps/shaper/src/shaper-doc.js, the one read),
 //     its operation order kept, its export == the same document authored with the new values.
@@ -16,6 +17,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
+import { pathBounds } from '#core/path-d.js'; // TASK 786: the start mark's true box (the page holds it)
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { deserializeDocument } from '#core/document.js';
@@ -165,7 +167,7 @@ console.log('spiral: ' + JSON.stringify(measured));
     }
     return { svg: kept.join('\n'), removed };
   };
-  let n = 0, exact = 0, withMark = 0;
+  let n = 0, exact = 0, withMark = 0, grown = 0;
   for (const [key, want] of Object.entries(MAIN.exports)) {
     const [name, pat, more, okey] = key.split('|');
     const m = JSON.parse(more);
@@ -178,12 +180,22 @@ console.log('spiral: ' + JSON.stringify(measured));
     } else {
       const stripped = stripStartMark(svg);
       eq(stripped.removed.length, 1, `${key}: ONLY 1 guide start-mark element added`);
-      eq(md5(stripped.svg), targetMd5, `${key}: removing ONLY the guide start mark is byte-identical to origin/main`);
+      // TASK 786: the page (viewBox) holds every written element, so where the start mark reaches past the drawing the page grows to hold it, and only
+      // then: the header is the Freehand download's (the drawing's page, main's header) grown by the mark's true box, exactly
+      const options = okey === 'grouped' ? { groupByCut: true } : {};
+      const page = exportOf(SHAPES[name](), POCKET({ clearing: 'freehand' }), options).split('\n')[0];
+      const header = svg.split('\n')[0];
+      const vb = (h) => { const [x, y, w, hh] = h.match(/viewBox="([^"]+)"/)[1].split(' ').map(Number); return [x, y, x + w, y + hh]; };
+      const mb = pathBounds(stripped.removed[0].match(/ d="([^"]+)"/)[1]), p0 = vb(page);
+      const want = [Math.min(p0[0], mb.minX), Math.min(p0[1], mb.minY), Math.max(p0[2], mb.maxX), Math.max(p0[3], mb.maxY)];
+      ok(vb(header).every((v, i) => Math.abs(v - want[i]) < 1e-3), `${key}: the page is the drawing's grown by the start mark (${want}): ${header}`);
+      if (header !== page) grown++;
+      eq(md5([page, ...stripped.svg.split('\n').slice(1)].join('\n')), targetMd5, `${key}: removing ONLY the guide start mark (and the page grown to hold it) is byte-identical to origin/main`);
       withMark++;
     }
     n++;
   }
-  console.log(`byte-identical to origin/main ${MAIN.from}: ${n} downloads (${exact} exact, ${withMark} with ONLY 1 guide start-mark element added)`);
+  console.log(`byte-identical to origin/main ${MAIN.from}: ${n} downloads (${exact} exact, ${withMark} with ONLY 1 guide start-mark element added, ${grown} of them with the page grown to hold it)`);
 }
 
 // ── 4. an old document opens with today's values ──

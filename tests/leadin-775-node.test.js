@@ -13,7 +13,9 @@
 //     the full depth; the Review leaves the tabs standing; onion skin = the whole line at depth - skin (an open line too); refused (as without) on an open
 //     line, a tab not wider than the bit, no room; a profile's hole loops stay closed.
 //  4. LOOP WORDING: no "ends where it starts" left in apps/shaper or packages/core; Prepare draws no dot on a closed loop.
-//  5. BYTE-IDENTICAL without the new options: tests/fixtures/leadin-775-before.json (written by origin/main 5e79336's own code, tests/helpers/leadin-775-digest.js).
+//  5. BYTE-IDENTICAL without the new options: tests/fixtures/leadin-775-before.json (written by origin/main 5e79336's own code, tests/helpers/leadin-775-digest.js;
+//     TASK 786: the download / preview facets re-written by the 786 exporter, every change explained in WORK-LOG TURN 786: the page grown to hold every written
+//     element, the start mark stroke-only, a mixed-kind hole wound opposite; operations and 3D footprints unchanged).
 //  6. The app (node kit): the cut card rows (Lead-in Off | On, Length, Side; On line's Hold part with no Tab thickness), ONE undo step each, the notes, the
 //     last values remembered, Prepare's leg and dots, the operations row, save + reload.
 import assert from 'node:assert';
@@ -244,7 +246,7 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   const now = await leadinDigest();
   eq(Object.keys(now).sort(), Object.keys(base).sort(), 'the same drawings as the base digest');
   let n = 0;
-  for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) { eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336`); n += Object.keys(facets).length; }
+  for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) { eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length; }
   console.log(`byte-identical: ${Object.keys(base).length} drawings, ${n} facets`);
 }
 

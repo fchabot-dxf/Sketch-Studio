@@ -55,15 +55,15 @@ try {
     near(Math.min(...made.map(lenOf)), L(1), `${tag} rect 2pt typed bare 1: the height`);
     reset();
 
-    // Rectangle, centre: labels; a digit typed on the canvas opens its box (the keyboard path), a bare 2 Enter
+    // Rectangle, centre: labels; TASK 782: the W x H boxes show from the first click (as in the 2-point mode), so a typed digit goes in the focused width box
     app.tool('rect'); st.rectMode = RECT_MODES.CENTER;
     const c = S(150, -30), d = S(180, -50);
     app.click(c.x, c.y); app.move(d.x, d.y);
     w = 2 * Math.abs(st.active.preview.pt.x - st.joints.get(st.active.start).x); h = 2 * Math.abs(st.active.preview.pt.y - st.joints.get(st.active.start).y);
     eq(liveLabels(), [want(w), want(h)], `${tag} rect centre: the on-canvas labels`);
     n0 = st.shapes.length;
-    app.key('2');
-    eq(boxes()[0], '2', `${tag} rect centre: the digit opened the width box`);
+    app.type('2');
+    eq(boxes()[0], '2', `${tag} rect centre: the digit went in the width box`);
     w = 2 * Math.abs(st.active.preview.pt.x - st.joints.get(st.active.start).x);
     near(w, L(2), `${tag} rect centre: the typed bare 2 holds the width`);
     reset();
@@ -73,7 +73,7 @@ try {
     const p = S(20, 60), q = S(60, 80);
     app.click(p.x, p.y); app.move(q.x, q.y);
     const sp = st.joints.get(st.active.start), ep = st.active.preview.pt;
-    const len = Math.hypot(ep.x - sp.x, ep.y - sp.y), ang = Math.atan2(ep.y - sp.y, ep.x - sp.x) * 180 / Math.PI;
+    const len = Math.hypot(ep.x - sp.x, ep.y - sp.y), ang = -Math.atan2(ep.y - sp.y, ep.x - sp.x) * 180 / Math.PI;   // TASK 782: the angle box counts counter-clockwise (the world's y points down)
     eq(boxes(), [want(len), angleText(ang, { show: 'bare' })], `${tag} line: the box L / angle`);
     n0 = st.shapes.length;
     app.type('2'); doc.querySelector('#dualInput input:last-of-type').focus(); app.type('30'); app.enter();

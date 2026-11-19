@@ -136,6 +136,10 @@ const NUMERIC_INPUT_CSS = `
     padding: 4px;
     font-size: 12px;
 }
+.sk-dual-input input[aria-invalid="true"] {
+    border-color: var(--sk-error, #ef4444);
+    outline: 1px solid var(--sk-error, #ef4444);
+}
 .sk-dual-input-sep {
     color: #888;
     font-weight: bold;
@@ -192,6 +196,7 @@ let uiState = {
     values: [null, null], // TASK 769: the live value each field shows (base units), and `parsed` what each typed field reads as: a unit change shows them again
     parsed: [NaN, NaN],
     openValues: [null, null], // TASK 769: the values the box opened with (its Ctrl+Z default text, shown again on a unit change)
+    refusing: false, // TASK 782: a typed size is 0 or less: the box shows it as invalid, Enter and a click place nothing
     typed: [false, false], // TASK 596: which field the user has typed in (a field showing the live value is NOT typed; only a typed one locks a size)
     defaults: ['', ''], // TASK 675 C: opening default strings so Ctrl/Cmd+Z restores the default in one step
     undoneToDefault: false, // TASK 675 C: a second Ctrl/Cmd+Z right after reverting a typed creation box does nothing
@@ -528,6 +533,7 @@ export function updateInputPosition(x, y) {
 
     if (uiState.mode === 'live-single') placeLiveBox(uiState.singleInput, ox, oy);
     else if (uiState.mode === 'live-dual') placeLiveBox(uiState.dualContainer, ox, oy);
+    if (uiState.refusing) placeAssist();
 }
 
 /** TASK 602: where a creation box that TAKES the pointer goes: docked at the canvas's top centre, this far below the canvas's top edge (clear of the
@@ -652,6 +658,8 @@ function handleCommit() {
         target.__editing = false;
         hideInput();
     } else {
+        // TASK 782: a typed size of 0 or less is refused HERE, once for every tool: the box keeps it highlighted with the hint, nothing is drawn
+        if (liveRefusal() !== -1) { showLiveRefusal(); return; }
         // Dispatch event for Tool to handle
         const detail = { mode: uiState.mode === 'live-dual' ? 'dual' : 'single', confirmedBy: 'enter' };
         detail.typed = uiState.typed.slice();   // which fields the user typed in: only those are the user's numbers, the rest shows the live preview
@@ -702,6 +710,7 @@ function handleOutsidePress(e) {
 
 function handlePreview(resetIdx = -1) {
     if (!uiState.active || uiState.mode === 'edit') return;
+    showLiveRefusal();
     
     const detail = { mode: uiState.mode === 'live-dual' ? 'dual' : 'single' };
     if (uiState.mode === 'live-dual') {
@@ -734,6 +743,42 @@ function readLiveField(index) {
     if (uiState.typed[index]) uiState.parsed[index] = v;
     return v;
 }
+// TASK 782: THE refusal of a typed size, one check for every drawing tool's box: a TYPED 'length' field (a rectangle's W / H, a line's L, a circle's
+// diameter, a slot's span / width, an arc's radius, a polygon's R) that reads 0 or less is not a size. The refusal is the dimension edit box's own: the field
+// is aria-invalid (red) and the hint line under the box says why; Enter and a click place nothing until the text is fixed or cleared (Ctrl+Z / Esc).
+// An angle may be 0 or negative and a count is clamped by its tool, so only lengths are checked.
+export const SIZE_REFUSAL_HINT = 'A size must be more than 0.';
+function liveRefusal() {
+    if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single')) return -1;
+    const n = uiState.mode === 'live-dual' ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+        if (!uiState.typed[i] || uiState.quantities[i] !== 'length') continue;
+        const v = parseBoxValue(liveField(i).value, 'length');
+        if (Number.isFinite(v) && v <= 0) return i;
+    }
+    return -1;
+}
+/** The drawing tools' pointer-up gate: true while the open creation box holds a refused typed size, so the click places nothing. The click took the focus
+ *  from the box (a press on the canvas focuses the canvas): it goes back to the refused field, selected, so the next keys fix it. */
+export function refuseLiveInputClick() {
+    if (!uiState.refusing) return false;
+    const bad = liveRefusal();
+    if (bad !== -1) { const el = liveField(bad); el.focus(); if (typeof el.select === 'function') el.select(); }
+    return true;
+}
+function showLiveRefusal() {
+    const bad = liveRefusal();
+    uiState.refusing = bad !== -1;
+    const n = uiState.mode === 'live-dual' ? 2 : 1;
+    for (let i = 0; i < n; i++) liveField(i).setAttribute('aria-invalid', i === bad ? 'true' : 'false');
+    if (!uiState.hintEl) return;
+    if (bad === -1) { hideNumericInputEl(uiState.hintEl); return; }
+    uiState.hintEl.textContent = SIZE_REFUSAL_HINT;
+    uiState.hintEl.classList.add('err');
+    showNumericInputEl(uiState.hintEl);
+    placeAssist();
+}
+
 // TASK 769: the document unit or a display setting (precision, Decimal / Fractional) changed while a creation box is open: every field is shown again
 // through boxValueText (a typed one as the length it was typed as, the others as their live value). The canvas labels re-render on the next frame.
 function showLiveBoxAgain() {
@@ -817,7 +862,7 @@ function hideAssist() {
 // hint = what Enter will do (value preview, the O4 change list) or why it will not; list = names under the caret
 function updateAssist({ complete = true } = {}) {
     if (!uiState.hintEl) return;
-    if (uiState.mode !== 'edit' || !uiState.target) { hideAssist(); return; }
+    if (uiState.mode !== 'edit' || !uiState.target) { if (!uiState.refusing) hideAssist(); return; }   // TASK 782: a live box's refusal hint stays
     const input = uiState.singleInput;
     const state = uiState.appState;
     const unit = docUnit();
@@ -837,7 +882,7 @@ function updateAssist({ complete = true } = {}) {
 
 // the list sits right under the box, the hint under the list; when the bottom of the screen is too near both go above the box. Kept inside the viewport.
 function placeAssist() {
-    const input = uiState.singleInput;
+    const input = uiState.mode === 'live-dual' ? uiState.dualContainer : uiState.singleInput;   // TASK 782: the refusal hint sits under the live box it belongs to
     if (!uiState.hintEl || !input || typeof input.getBoundingClientRect !== 'function') return;
     const els = [uiState.listEl, uiState.hintEl].filter((el) => el && !el.classList.contains('hidden'));
     if (!els.length) return;
@@ -867,6 +912,10 @@ function resetState() {
     uiState.mode = null;
     uiState.target = null;
     uiState.field = null;
+    if (uiState.refusing) {   // TASK 782: the refused-size marks go with the box
+        uiState.refusing = false;
+        for (const el of [uiState.singleInput, uiState.dualInputW, uiState.dualInputH]) if (el && el.setAttribute) el.setAttribute('aria-invalid', 'false');
+    }
     uiState.defaults = ['', ''];
     uiState.exactText = null;
     uiState.undoneToDefault = false;

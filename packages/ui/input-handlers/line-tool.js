@@ -14,7 +14,7 @@ import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { hideInput, setupNumericInput } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -25,7 +25,11 @@ let lineState = { lockedLength: null, lockedAngle: null };
 // the boxes shown since the segment's first click (base-tool's shared creation-box path); `cursor` = the last world point, `screen` = the last pointer
 const live = { boxOpen: false, cursor: null, screen: null };
 const BOX = { dual: { kind: 'line', labels: ['L', '°'], separator: '∠', quantities: ['length', 'angle'] } };
-const MIN_LEN = 1e-4;
+const MIN_LEN = MIN_SHAPE_SIZE;   // TASK 782: the one minimum size (base-tool.js)
+// TASK 782: the angle box counts COUNTER-CLOCKWISE from the +x axis (up-right on the screen is +45, like Fusion). The world's y points DOWN, so the box angle is the
+// negated atan2: ONE pair of conversions for what the box shows (cursorBoxAngle) and what a typed angle means (worldAngleOf).
+const cursorBoxAngle = (dx, dy) => { const a = -Math.atan2(dy, dx) * 180 / Math.PI; return a === 0 ? 0 : a; };   // no -0 in the box
+const worldAngleOf = (deg) => -deg * Math.PI / 180;
 
 const startOf = (state) => (state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null))) || null;
 const hasLock = () => lineState.lockedLength !== null || lineState.lockedAngle !== null;
@@ -34,7 +38,7 @@ function lockedEnd(spt, pt) {
     if (!hasLock()) return pt;
     const dx = pt.x - spt.x, dy = pt.y - spt.y;
     const len = lineState.lockedLength !== null ? lineState.lockedLength : Math.hypot(dx, dy);
-    const ang = lineState.lockedAngle !== null ? lineState.lockedAngle * Math.PI / 180 : Math.atan2(dy, dx);
+    const ang = lineState.lockedAngle !== null ? worldAngleOf(lineState.lockedAngle) : Math.atan2(dy, dx);
     return { x: spt.x + Math.cos(ang) * len, y: spt.y + Math.sin(ang) * len };
 }
 function openLineBoxes(e) {   // e: the click (or { clientX, clientY } where the last pointer was)
@@ -322,7 +326,7 @@ export function handleLinePointerMove(e, svg, state, w) {
         safeUpdatePreview(state, 'line', [state.active.start], previewPt, { lockedLength: lineState.lockedLength || undefined });
         if (live.boxOpen) {   // the boxes follow the cursor and show the length / angle it would have (until typed)
             const spt = startOf(state);
-            if (spt) followCreationBoxes(e, [Math.hypot(previewPt.x - spt.x, previewPt.y - spt.y), Math.atan2(previewPt.y - spt.y, previewPt.x - spt.x) * 180 / Math.PI]);
+            if (spt) followCreationBoxes(e, [Math.hypot(previewPt.x - spt.x, previewPt.y - spt.y), cursorBoxAngle(previewPt.x - spt.x, previewPt.y - spt.y)]);
         }
     }
     return true;
@@ -411,7 +415,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     // Abort zero-length segments (prevents tiny stub at start when click jitter occurs)
     const startPt = state.active.startPt || state.joints.get(startId) || { x: 0, y: 0 };
     const segLen = Math.hypot((endPt.x - startPt.x), (endPt.y - startPt.y));
-    if (segLen < 1e-4) {
+    if (segLen < MIN_LEN) {
         state.joints.delete(endId);
         abortLine(state);
         justCreatedActive = false;
@@ -561,7 +565,7 @@ export function finalizeLineFromActive(svg, state) {
     // Abort zero-length segments (prevents tiny stub when finalize is triggered without movement)
     const spt = state.joints.get(startId) || { x: 0, y: 0 };
     const segLen = Math.hypot((endPt.x - spt.x), (endPt.y - spt.y));
-    if (segLen < 1e-4) {
+    if (segLen < MIN_LEN) {
         if (!nearbyId && endId) state.joints.delete(endId);
         abortLine(state);
         justCreatedActive = false;

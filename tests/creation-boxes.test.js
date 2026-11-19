@@ -167,7 +167,7 @@ try {
 
   // ───────────────────────────── line (task 597)
   const lineSegs = () => st.shapes.filter((s) => s.type === 'line' && !s.isConstruction);
-  const deg = (a, b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+  const deg = (a, b) => -Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;   // TASK 782: the line's angle box counts counter-clockwise (the world's y points down): up-right is +
   app.esc(); app.tool('line');
   assert(idleBoxes(), 'line: nothing before the first click');
   clickAt(P(0, 0));
@@ -292,11 +292,11 @@ try {
     app.tool('rect'); clickAt(P(0, 0)); app.type('40'); app.key('Tab'); app.type('40'); app.move(P(100, 100).x, P(100, 100).y);
     if (how === 'enter') app.enter(); else app.click(P(100, 100).x, P(100, 100).y);
     assert.strictEqual(edges().length, 4, 'square (' + how + '): placed');
-    assert.deepStrictEqual(edgeDims(40), [1, 1, 1, 1], 'square (' + how + '): every side carries its 40 size constraint');
+    assert.strictEqual(edgeDims(40).reduce((a, b) => a + b), 2, 'square (' + how + '): ONE width and ONE height (TASK 782: not one per side, two of them reference)');
     app.undo(); assert.strictEqual(hist(), base, 'square (' + how + '): one undo');
     app.tool('rect'); clickAt(P(0, 0)); app.type('40'); app.key('Tab'); app.type('30'); app.move(P(100, 100).x, P(100, 100).y);
     if (how === 'enter') app.enter(); else app.click(P(100, 100).x, P(100, 100).y);
-    assert.strictEqual(edgeDims(40).reduce((a, b) => a + b) + edgeDims(30).reduce((a, b) => a + b), 4, 'rect 40 x 30 (' + how + '): the same four size constraints as the square');
+    assert.strictEqual(edgeDims(40).reduce((a, b) => a + b) + edgeDims(30).reduce((a, b) => a + b), 2, 'rect 40 x 30 (' + how + '): one width and one height');
     app.undo(); assert.strictEqual(hist(), base);
   }
   console.log('square: ok');

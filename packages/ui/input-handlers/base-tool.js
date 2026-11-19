@@ -6,6 +6,14 @@ import { updatePreview } from '#ui/preview-manager.js';
 import { showDualInput, showSingleInput, setLiveInputValue, updateInputPosition } from '#ui/numeric-input-manager.js';
 
 /**
+ * TASK 782: THE minimum size of a shape a click (or Enter) may place, in the document base unit: a double click on one spot, or a click on the
+ * base line of a 3-point rectangle, would make a shape nobody can see or select. Every creation tool asks `tooSmall` with the sizes that must be
+ * above it (a rectangle's two sides, a circle's or arc's radius, a polygon's radius, a line's length) and, when it says true, ignores the click.
+ */
+export const MIN_SHAPE_SIZE = 1e-4;
+export const tooSmall = (...sizes) => sizes.some((s) => !(s > MIN_SHAPE_SIZE));
+
+/**
  * Check if pointer movement exceeds drag threshold.
  * @param {PointerEvent} e - Current pointer event
  * @param {{x:number, y:number}|null} dragStart - Screen position at pointer down

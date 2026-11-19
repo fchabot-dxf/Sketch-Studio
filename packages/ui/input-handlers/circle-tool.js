@@ -6,7 +6,7 @@ import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -24,7 +24,9 @@ export function setupCircleTool(svg, state){
             if (detail.mode === 'single' && detail.field === 'diameter') {
                 if (detail.typed[0] && detail.value > 0) circleState.lockedRadius = detail.value / 2; // only a typed diameter locks (the box otherwise shows the live one, rounded)
                 if (detail.confirmedBy === 'enter') {
-                    try { finalizeCircleFromActive(svg, state); } catch (_) { }
+                    let placed = false;
+                    try { placed = finalizeCircleFromActive(svg, state); } catch (_) { }
+                    if (!placed && state.active) detail.keepOpen = true;   // TASK 782: no radius yet (the cursor is still on the centre, none typed): the box stays open
                 }
             }
         },
@@ -106,6 +108,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     const dx = endPt.x - center.x, dy = endPt.y - center.y;
     let r = Math.hypot(dx, dy);
     if (circleState.lockedRadius) r = circleState.lockedRadius;
+    if (tooSmall(r)) return true;   // TASK 782: a click on the centre places no circle (the draw keeps waiting for a real second click)
 
     state.saveState();
     const shapeId = newShapeId('s');
@@ -143,6 +146,7 @@ export function finalizeCircleFromActive(svg, state){
         if(!previewPt) return false;
         let r = Math.hypot(previewPt.x - center.x, previewPt.y - center.y);
         if (circleState.lockedRadius) r = circleState.lockedRadius;
+        if (tooSmall(r)) return false;   // TASK 782: see handleCirclePointerUp
         state.saveState();
         const shapeId = newShapeId('s');
         state.shapes.push({ id: shapeId, type: 'circle', joints: [state.active.start], radius: r, isConstruction: !!state.isConstructionMode });

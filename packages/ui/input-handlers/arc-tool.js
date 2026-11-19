@@ -7,7 +7,7 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { hideInput, setupNumericInput } from '#ui/numeric-input-manager.js';
 import { angleBetween } from '#core/geometry.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE, tooSmall } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 
@@ -42,7 +42,7 @@ export const ARC_MODES = {
 let arcState = { lockedRadius: null, lockedSweep: null, field: null, cursor: null, screen: null };
 const BOX_RADIUS = { single: { field: 'radius' } };
 const BOX_SWEEP = { single: { field: 'sweep', quantity: 'angle' } }; // TASK 769: degrees (the radius box is a length)
-const MIN_R = 1e-6;
+const MIN_R = MIN_SHAPE_SIZE;   // TASK 782: the one minimum size (base-tool.js)
 
 function openArcBox(pos, field) {
   arcState.field = field; arcState.cursor = null;
@@ -265,6 +265,7 @@ function handleCenterArc(state, snap, pt, w, pos) {
   if (state.active.phase === 'center') {
     const center0 = state.joints.get(state.active.center);
     if (center0 && arcState.lockedRadius !== null) { pt = startPointFor(center0, pt); snap = null; }   // a typed radius holds the start point (a snap cannot move it)
+    if (center0 && tooSmall(Math.hypot(pt.x - center0.x, pt.y - center0.y))) return true;   // TASK 782: a start click on the centre makes no arc (the draw keeps waiting for a real start point)
     const startId = state.genJ();
     state.joints.set(startId, { x: pt.x, y: pt.y, fixed: false });
     state.active.start = startId;

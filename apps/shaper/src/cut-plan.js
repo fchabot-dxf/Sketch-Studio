@@ -148,6 +148,8 @@ export function leadInSummary(key, storedRec, state, loops, loopPolys, owned) {
 }
 /** TASK 775: the one line every lead-in note carries (the trade-off, owner's wording). */
 export const LEAD_IN_TRADE_OFF = "Lead-in: you start at the leg's end; AutoPass then reverses at each end, so the cutting direction alternates.";
+/** TASK 777: the short note line for an open toolpath (e.g. Loop-off programmed clearing) that does not already carry LEAD_IN_TRADE_OFF. */
+export const OPEN_PATH_AUTOPASS_NOTE = 'AutoPass runs back along it on the next pass';
 const LEAD_REFUSED = {
   'no length': 'set a bit diameter or a length',
   outline: 'the outline could not be read',
@@ -272,6 +274,7 @@ export function clearingNoteItems(storedRec, sum) {
   if (sum.leadIn) items.push({ text: `Lead-in: ${sum.loopCount === 1 ? 'a leg' : `${sum.loopCount} legs`} of ${f(st.leadInLength)} ${u} from inside the cleared area to the loop` }, { text: LEAD_IN_TRADE_OFF }); // TASK 775
   if (sum.leadInRefused) { const t = `Lead-in refused: ${CLEARING_REFUSED[sum.leadInRefused] || sum.leadInRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut as closed loops (no start point)' }); }
   items.push({ text: 'Depth passes: set Pass Depth or AutoPass on the Origin' }); // TASK 750: the clearing is written once, at the full depth
+  if (!sum.loop && !sum.leadIn && Array.isArray(sum.clear) && sum.clear.some((c) => !c.closed)) items.push({ text: OPEN_PATH_AUTOPASS_NOTE }); // TASK 777: open clearing paths reverse on AutoPass
   const lo = sum.leftover;
   if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {
     let t = `${areaText(lo.area, u)} not reached by a ${bit} bit`;

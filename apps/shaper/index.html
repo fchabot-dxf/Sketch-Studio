@@ -314,27 +314,34 @@
     .sk-tab-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linecap: butt; }
     .sk-skin-mark { fill: none; stroke: var(--sk-prep-tab); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 2 4; }
     .sk-strip { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-    /* TASK 745: a programmed pocket in Prepare: its clearing paths as thin tool-path lines (the clean-up ring dashed), the material the bit does not reach filled */
-    .sk-clear-path { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; stroke-opacity: 0.9; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+    /* TASK 745 / 777: a programmed pocket in Prepare: thin continuous guide under the clearing travel marks (clean-up ring dashed), leftover filled */
+    .sk-clear-path { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; stroke-opacity: 0.35; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
     .sk-clear-path.sk-clear-cleanup { stroke-dasharray: 4 2; }
     /* TASK 775: a closed loop has no start point on the Origin: no dot on it. A LEAD-IN: its leg (bold) and the dots of the open path's two real ends: the
-       leg's tip (the start: filled) and the junction where the leg meets the loop (the other end: a ring). An On line cut's tabs: its strokes (solid). */
+       leg's tip (the start: filled) and the junction where the leg meets the loop (the other end: a ring). An On line cut's tabs: its strokes (subtle base under travel marks). */
     .sk-lead-leg { fill: none; stroke: var(--sk-prep-tab); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-linecap: round; }
     .sk-lead-tip { fill: var(--sk-prep-tab); stroke: #000; stroke-width: 1; vector-effect: non-scaling-stroke; }
     .sk-lead-end { fill: #fff; stroke: #000; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-    .sk-stroke { fill: none; stroke: var(--sk-prep-path-online); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linecap: butt; stroke-linejoin: round; }
+    .sk-stroke { fill: none; stroke: var(--sk-prep-path-online); stroke-width: 1.5; stroke-opacity: 0.35; vector-effect: non-scaling-stroke; stroke-linecap: butt; stroke-linejoin: round; }
     .sk-leftover { fill: var(--sk-prep-leftover); stroke: var(--sk-prep-leftover); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .sk-chip-bg { fill: var(--sk-prep-chip-bg); }
     .sk-chip-text { fill: var(--sk-prep-chip-text); font-family: system-ui, sans-serif; font-size: 11px; }
     .sk-chip-val { font-weight: 700; }
     .sk-chip-unit { fill: var(--sk-prep-chip-unit); }
     /* SP1f: the cut-settings card — a floating panel, top-right of the Prepare view (shown when a target is selected). */
-    /* TASK 449: conventional travel — marching dashes along the bit-centre path (CSS animation, no RAF loop). stroke-dashoffset
-       DEcreasing moves the dashes FORWARD along the path (the path is already ordered in the travel direction). */
-    .sk-travel { fill: none; stroke: var(--sk-prep-path); stroke-width: 2; stroke-opacity: 0.95; vector-effect: non-scaling-stroke; stroke-dasharray: 6 6; stroke-linecap: butt; animation: sk-march 0.9s linear infinite; }
-    @keyframes sk-march { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -12; } }
-    .sk-travel-arrows { display: none; fill: var(--sk-prep-path); }
-    @media (prefers-reduced-motion: reduce) { .sk-travel { animation: none; } .sk-travel-arrows { display: inline; } }
+    /* TASK 449 / 777: travel direction — sparse slow marching dashes + always-visible screen-sized dart arrowheads (CSS animation, no RAF loop).
+       Dash / gap / period / duration come ONCE from TRAVEL_STYLE (prepare-view.js -> --sk-travel-* on #prepare-canvas).
+       stroke-dashoffset DEcreasing moves the dashes FORWARD along the path (the path is ordered in the travel direction).
+       Motion is opt-in under prefers-reduced-motion: no-preference so reduced-motion users keep the still dashes + arrowheads. */
+    .sk-travel { fill: none; stroke: var(--sk-prep-path); stroke-width: 2; stroke-opacity: 0.95; vector-effect: non-scaling-stroke; stroke-dasharray: calc(var(--sk-travel-dash) * 1px) calc(var(--sk-travel-gap) * 1px); stroke-linecap: butt; }
+    .sk-travel-clear { stroke-width: 1.5; stroke-opacity: 0.9; }
+    .sk-travel-online, .sk-travel-lead { stroke: var(--sk-prep-path-online); }
+    .sk-travel-lead { stroke-width: 1.8; }
+    @media (prefers-reduced-motion: no-preference) { .sk-travel { animation: sk-march var(--sk-travel-duration) linear infinite; } }
+    @keyframes sk-march { from { stroke-dashoffset: 0; } to { stroke-dashoffset: calc(var(--sk-travel-period) * -1px); } }
+    .sk-travel-arrows { fill: var(--sk-prep-path); stroke: none; pointer-events: none; }
+    .sk-travel-arrows-clear { fill-opacity: 0.9; }
+    .sk-travel-arrows-online { fill: var(--sk-prep-path-online); }
     #prepare-dir-legend { position: absolute; left: 12px; bottom: 10px; z-index: 6; max-width: calc(100% - 240px); color: #9aa0a6; font: 12px system-ui, sans-serif; pointer-events: none; }
     #prepare-dir-legend .sk-hint-trigger, #prepare-dir-legend .sk-hint { pointer-events: auto; }
     #prepare-dir-legend .sk-hint:not([hidden]) { background: rgba(10,10,11,0.92); border: 1px solid #2a2d31; border-radius: 6px; padding: 5px 8px; margin-top: 4px; max-width: 300px; }

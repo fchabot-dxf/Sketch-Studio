@@ -49,27 +49,31 @@ function arcGap(P, i, j) {
 // arc-length distance between two segments of one path (0 when they share a vertex)
 function segGap(P, i, j) { return Math.min(arcGap(P, i, j), arcGap(P, (i + 1) % P.pts.length, j)); }
 
-// a uniform grid of every segment's box (grown by tol)
+// a uniform grid of every segment's box (grown by tol): cells keyed by number, each a list of segment ids (path k, segment i -> id via `ids`)
 function buildGrid(paths, tol) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, nSeg = 0, len = 0;
   for (const P of paths) { for (const p of P.pts) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); } nSeg += P.n; len += P.total; }
   const cell = Math.max(nSeg ? (len / nSeg) * 2 : 1, Math.hypot(maxX - minX, maxY - minY) / 2048, tol * 4, 1e-6);
-  const map = new Map(), key = (i, j) => `${i},${j}`;
+  const map = new Map(), key = (i, j) => i * 1000003 + j, segs = [];
   paths.forEach((P, k) => {
     for (let i = 0; i < P.n; i++) {
-      const [a, b] = segEnds(P, i);
+      const id = segs.length, [a, b] = segEnds(P, i);
+      segs.push([k, i]);
       const x0 = Math.floor((Math.min(a.x, b.x) - tol) / cell), x1 = Math.floor((Math.max(a.x, b.x) + tol) / cell);
       const y0 = Math.floor((Math.min(a.y, b.y) - tol) / cell), y1 = Math.floor((Math.max(a.y, b.y) + tol) / cell);
-      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const kk = key(x, y); let c = map.get(kk); if (!c) { c = []; map.set(kk, c); } c.push([k, i]); }
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const kk = key(x, y); let c = map.get(kk); if (!c) { c = []; map.set(kk, c); } c.push(id); }
     }
   });
-  return { cell, map, key };
+  return { cell, map, key, segs, seen: new Int32Array(segs.length), stamp: 0 };
 }
 // every segment [k, i] whose grown box may hold a point within r of p
 function near(grid, p, r) {
-  const out = [], seen = new Set();
+  const out = [], st = ++grid.stamp;
   const x0 = Math.floor((p.x - r) / grid.cell), x1 = Math.floor((p.x + r) / grid.cell), y0 = Math.floor((p.y - r) / grid.cell), y1 = Math.floor((p.y + r) / grid.cell);
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (const s of grid.map.get(grid.key(x, y)) || []) { const id = s[0] + ':' + s[1]; if (!seen.has(id)) { seen.add(id); out.push(s); } }
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+    const c = grid.map.get(grid.key(x, y));
+    if (c) for (const id of c) if (grid.seen[id] !== st) { grid.seen[id] = st; out.push(grid.segs[id]); }
+  }
   return out;
 }
 

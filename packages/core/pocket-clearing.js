@@ -654,7 +654,7 @@ function cuttingOffsets(clear, s, pitch) {
  * chain of nearest points from the middle of the centre's longest edge out, `seam` picks another edge), where the steps between levels run SIDE BY
  * SIDE: out from a_i to b_(i+2) (cutting), in from b_j to a_(j-2) (return), all parallel; no step passes over a level.
  */
-function gradualLoop(seq, R, s, pitch, seam = 0, lambdaScale = 1) {
+function gradualLoop(seq, R, s, pitch, seam = 0, lambdaScale = 1, along = false) {
   const fin = seq[0].finish ? seq[0] : null, clear = fin ? seq.slice(1) : seq;
   if (!clear.length) return finishTurnLoop(positive(fin.pts));
   const { cutD, step } = cuttingOffsets(clear, s, pitch);
@@ -674,8 +674,9 @@ function gradualLoop(seq, R, s, pitch, seam = 0, lambdaScale = 1) {
   const lambda = Math.min(step || s, edge / 4) * lambdaScale;
   // the window's other side: lambda on along the centre ring, then the nearest point of each level out (two chains of nearest points: the window is
   // the band between two normals, as wide in angle on a small ring as on a big one, so its steps stay parallel)
+  // (`along`: else lambda on along every level, the window as long on each: where two normals of a hollow corner meet, the other way holds)
   const B = [aheadOn(c0, A[0], lambda)];
-  for (let i = 1; i < levels.length; i++) { const f = nearestOnLoop(levels[i], B[i - 1].p); B.push({ i: f.i, t: f.t, p: f.p }); }
+  for (let i = 1; i < levels.length; i++) { const f = along ? aheadOn(levels[i], A[i], lambda) : nearestOnLoop(levels[i], B[i - 1].p); B.push({ i: f.i, t: f.t, p: f.p }); }
   const M = levels.length - 1, b = loopBuilder();
   for (let i = 0; i < M; i += 2) { b.turn(walkLoop(levels[i], B[i], A[i], 1), 'ring'); b.leg([B[i + 2].p]); } // out: each cutting level, then the step out
   b.turn([...walkLoop(levels[M], B[M], A[M], 1), B[M].p], fin ? 'finish' : 'ring'); // the outer turnaround, whole
@@ -756,15 +757,15 @@ function bridgeLoops(b1, b2, s) {
   }
   return null;
 }
-// THE GRADUAL LOOP of every chain, each checked against itself and the ones before (THE HARD RULE): a chain whose seam crosses tries the next seam (the
-// centre's next longest edge, or half the window); null when none is crossing-free
+// THE GRADUAL LOOP of every chain, each checked against itself and the ones before (THE HARD RULE): a chain whose window crosses tries it measured the
+// other way, then half as long, then the next seam (the centre's next longest edge); null when none is crossing-free
 function gradualLoops(seqs, alone, R, s, pitch, bridges = []) {
   const done = [];
   const paths = () => done.map((b) => ({ points: b.pts, closed: true }));
   for (const seq of seqs) {
     let got = null;
-    for (let seam = 0; seam < 8 && !got; seam++) for (const sc of [1, 0.5]) {
-      const b = gradualLoop(seq, R, s, pitch, seam, sc);
+    for (let seam = 0; seam < 8 && !got; seam++) for (const [sc, along] of [[1, false], [1, true], [0.5, false], [0.5, true]]) {
+      const b = gradualLoop(seq, R, s, pitch, seam, sc, along);
       if (b && !pathCrossings([{ points: b.pts, closed: true }, ...paths()]).count) { got = b; break; }
     }
     if (!got) return null;

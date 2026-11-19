@@ -245,6 +245,7 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   const base = JSON.parse(fs.readFileSync(new URL('./fixtures/leadin-775-before.json', import.meta.url), 'utf8'));
   const now = await leadinDigest();
   eq(Object.keys(now).sort(), Object.keys(base).sort(), 'the same drawings as the base digest');
+  // TASK 804: the base's spiralLoop / morphedLoop facets are no longer computed (the gradual Loop changed them on purpose; tests/pocket-nocross-804-node)
   let n = 0;
   // TASK 804: the Spiral's and the Morphed spiral's Loop are now the gradual double spiral (zero crossings; the old interleave replaced): changed on
   // purpose, checked in tests/pocket-nocross-804-node.test.js

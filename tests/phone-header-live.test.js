@@ -42,7 +42,7 @@ await (async () => {
         if (!phone) {
           assert(m.hdrRight <= m.vw + 0.5 && m.hdrLeft >= -0.5, tag + 'the header is inside the viewport: ' + JSON.stringify([m.hdrLeft, m.hdrRight, m.vw]));
           assert.strictEqual(Math.round(m.hdrH), 44, tag + 'unified desktop header height is 44: ' + m.hdrH);
-          assert.strictEqual(m.controls.filter((c) => !c.id.includes('sk-sidebar-btn') && !c.id.includes('sk-header-tab') && c.id !== 'sk-save').length, 0, tag + 'header has ONLY ☰ + stage tabs + (TASK 768) the Save button: ' + JSON.stringify(m.controls));
+          assert.strictEqual(m.controls.filter((c) => !c.id.includes('sk-sidebar-btn') && !c.id.includes('sk-header-tab')).length, 0, tag + 'header has ONLY ☰ + stage tabs (TASK 776: the Save button is in the footer): ' + JSON.stringify(m.controls));
         } else {
           assert.strictEqual(m.hdrDisplay, 'none', tag + 'phone has NO header bar');
           assert.strictEqual(m.hdrH, 0, tag + 'phone header height is 0');

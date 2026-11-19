@@ -202,8 +202,7 @@ async function phase(what) {
   await zoomReview(true);
   await shot(`${what}-nested-review-top.png`, '#review-canvas-host');
   await zoomReview(false);
-  await shot(`${what}-nested-review-angled.png`, '#review-canvas-host');
-  await openStage('prepare');
+  await shot(`${what}-nested-review-angled.png`, '#review-canvas-host'); // (the export below is the Nested layout's)
 }
 
 try {

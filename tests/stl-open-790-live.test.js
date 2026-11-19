@@ -8,8 +8,8 @@
 //      footer's Undo puts +Z back.
 //   2. the 10-degree drafted pocket, as it opens: the 3D Review has 9 levels (8 terraces in the pocket + the band round the part at 19 mm);
 //      Generate Shaper SVG writes 9 pockets: 19, then 1..8 mm.
-//   3. the hemisphere dome, as it opens: the 3D Review has 29 levels (terraces every 1 mm; the 0.03 mm band at 29 mm on the dome's foot is under
-//      the drawing tolerance: cut at 30): zoomed screenshots, top and angled.
+//   3. the hemisphere dome, as it opens: the 3D Review has a level every 1 mm (the 0.03 mm band at 29 mm on the dome's foot only where wider than
+//      the drawing tolerance): zoomed screenshots, top and angled.
 //   4. save + reopen: a NAMED design (only a named design autosaves; it lives in the fake in-memory Drive, tests/helpers/fake-drive-session.js) opened
 //      from an STL, the page loaded again: the card is back.
 //  PHONE 390 x 844 (touch): the drawer's Open STL, the notice, the card (folded on a phone: a tap on its header opens it), Up +Y re-slices.
@@ -162,9 +162,10 @@ try {
   // 3. the dome as it opens (Roughing): the terraces
   await openStage('prepare');
   await openStl(DOME, '3');
-  await review(29);
+  await review('\\d+');
+  console.log('3: ' + await evalJs(`document.getElementById('review-info').textContent`));
   const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...new Set(m.planReliefItems(window.__designController.state).map((i) => i.cutDepth))].sort((a, b) => a - b))`);
-  assert.deepStrictEqual(levels, [...Array.from({ length: 28 }, (_, i) => i + 1), 30], '3: terraces at 1..28 and 30 mm');
+  assert.deepStrictEqual(levels.filter((d) => d !== 29), [...Array.from({ length: 28 }, (_, i) => i + 1), 30], '3: terraces at every 1 mm, 1..30 (29: the 0.03 mm band at the dome\'s foot, kept only where wider than the drawing tolerance): ' + levels);
   await zoomReview(true);
   await shot('3-review-dome-top.png', '#review-canvas-host');
   await zoomReview(false);

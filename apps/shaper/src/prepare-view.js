@@ -26,6 +26,11 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_CLASS = 'sk-edge'; // idle: ONLY the thin white svg line (guide targets add sk-edge-guide)
 
 // ── Edge render (SP1a) ───────────────────────────────────────────────────────
+// TASK 788: a bezier edge's path (M a, its kind's cubic C): ONE builder for the idle edge and for the highlight / centreline strokes
+function bezierPathD(s, state) {
+  const k = curveKind(s), [ja, jb] = k ? k.ends(s.joints) : [], a = ja && state.joints.get(ja), b = jb && state.joints.get(jb);
+  return (a && b) ? `M ${a.x} ${a.y} ${k.pathSeg(s, state, a, b)}` : '';
+}
 function edgesMarkup(state) {
   const J = state.joints, out = [];
   for (const s of (state.shapes || [])) {
@@ -40,8 +45,8 @@ function edgesMarkup(state) {
       const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id));
       if (p1 && p2 && p3) out.push(`<path data-shape-id="${s.id}" d="${calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep })}" class="${EDGE_CLASS}"/>`);
     } else if (s.type === 'bezier') { // TASK 761: a bezier edge, its kind's path (#core/curve-kinds: a cubic C); Prepare did not draw it before
-      const k = curveKind(s), [ja, jb] = k ? k.ends(s.joints) : [], a = ja && J.get(ja), b = jb && J.get(jb);
-      if (a && b) out.push(`<path data-shape-id="${s.id}" d="M ${a.x} ${a.y} ${k.pathSeg(s, state, a, b)}" class="${EDGE_CLASS}"/>`);
+      const d = bezierPathD(s, state);
+      if (d) out.push(`<path data-shape-id="${s.id}" d="${d}" class="${EDGE_CLASS}"/>`);
     }
   }
   return out.join('');
@@ -185,6 +190,7 @@ function edgeStrokeMarkup(s, state, cls) {
   if (s.type === 'line') { const a = J.get(s.joints[0]), b = J.get(s.joints[1]); return (a && b) ? `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="${cls}"/>` : ''; }
   if (s.type === 'circle') { const c = J.get(s.joints[0]); const r = (s.radius > 0) ? s.radius : 0; return (c && r) ? `<circle cx="${c.x}" cy="${c.y}" r="${r}" class="${cls}"/>` : ''; }
   if (s.type === 'arc') { const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id)); return (p1 && p2 && p3) ? `<path d="${calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep })}" class="${cls}"/>` : ''; }
+  if (s.type === 'bezier') { const d = bezierPathD(s, state); return d ? `<path d="${d}" class="${cls}"/>` : ''; } // TASK 788: an open bezier chain's highlight / centreline
   return '';
 }
 

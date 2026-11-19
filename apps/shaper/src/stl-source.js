@@ -5,6 +5,8 @@
 //     in memory under its key for the session, so a snapshot is small and JSON-safe;
 //   • the DOCUMENT (shaper-doc.js captureShaperDoc) carries it WITH the mesh as text (#core/stl-slice.js meshToBase64, encoded once per mesh), so a
 //     saved design opened again keeps its card and can still be sliced again. A document without an STL writes nothing here (its bytes are unchanged).
+//   • TASK 807: the document's part says `relief: true` (the design is the STL's relief); one saved before 807 (its design was the per-feature import)
+//     opens with the source marked `old`, and the importer slices it again as a relief (stl-import.js reimportOld).
 import { meshToBase64, meshFromBase64, STL_UP_SIDES, STL_UNITS } from '#core/stl-slice.js';
 import { dbg } from '#core/debug.js';
 
@@ -29,7 +31,7 @@ const LISTENERS = new Set();
 export function onStlSourceChange(fn) { LISTENERS.add(fn); return () => LISTENERS.delete(fn); }
 /** Set (a source whose mesh is known) or clear (null) the STL source. */
 export function setStlSource(s) {
-  SOURCE = s && MESHES.has(s.key) ? { name: String(s.name), up: s.up, unit: s.unit, triangles: s.triangles, sizeMm: { ...s.sizeMm }, key: s.key } : null;
+  SOURCE = s && MESHES.has(s.key) ? { name: String(s.name), up: s.up, unit: s.unit, triangles: s.triangles, sizeMm: { ...s.sizeMm }, key: s.key, ...(s.old ? { old: true } : {}) } : null;
   for (const fn of LISTENERS) fn();
   return getStlSource();
 }
@@ -43,8 +45,8 @@ export function captureStlDoc() {
   if (!SOURCE) return undefined;
   let text = TEXT.get(SOURCE.key);
   if (!text) { text = meshToBase64(MESHES.get(SOURCE.key)); TEXT.set(SOURCE.key, text); }
-  const { key, ...meta } = getStlSource();
-  return { ...meta, mesh: text };
+  const { key, old, ...meta } = getStlSource();
+  return { ...meta, mesh: text, ...(old ? {} : { relief: true }) };
 }
 /** Restore the document's part (missing or unreadable: no STL source). */
 export function applyStlDoc(d) {
@@ -55,5 +57,5 @@ export function applyStlDoc(d) {
     dbg.warn('shaper', 'the stored STL could not be read: the design opens without its STL card', { up: d.up, unit: d.unit });
     return setStlSource(null);
   }
-  return setStlSource({ name: d.name, up: d.up, unit: d.unit, triangles: tris.length / 9, sizeMm: d.sizeMm || { x: 0, y: 0, z: 0 }, key: rememberMesh(tris, d.mesh) });
+  return setStlSource({ name: d.name, up: d.up, unit: d.unit, triangles: tris.length / 9, sizeMm: d.sizeMm || { x: 0, y: 0, z: 0 }, key: rememberMesh(tris, d.mesh), old: d.relief !== true });
 }

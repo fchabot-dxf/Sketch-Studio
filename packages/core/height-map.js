@@ -86,6 +86,121 @@ export function levelsHeightMap(levels, { maxPx = HEIGHT_MAP.maxPx } = {}) {
   return out;
 }
 
+// ═══ TASK 807 (owner turn 2640: "is there a reliable method to slice them"): a MESH's height map, the grid an STL relief's levels are read from ═════
+// (#core/stl-slice.js sliceStl). Top-down machining sees a part as its height field: the highest surface over every point. Reading the levels from that
+// field, instead of cutting the mesh with planes and chaining the cut segments end to end, makes them closed and clean BY CONSTRUCTION whatever the
+// mesh's defects (duplicate points, gaps, slivers, faces inside the part, a face flat only to its float noise): no end point is matched anywhere.
+// The Prepare picture above is drawn from the levels, so the picture and the levels come from this ONE grid.
+//  * meshHeightGrid(P, { width, depth }): a Z-BUFFER from above: every triangle (x, y, z per point, the part placed with its lowest x / y at 0) is
+//    rasterised onto NODES at the centres of square cells of MESH_GRID.cellMm (larger when the part would need more than MESH_GRID.maxCells nodes: the
+//    cell grows to keep that count), each node keeping the HIGHEST z of the triangles over it (`h`; a node no triangle covers is EMPTY, -Infinity:
+//    no part there), and, to tell what the top cannot see, the LOWEST (`lo`) and whether its vertical line crosses the mesh at a THIRD height
+//    (`mid`: 1; heights within 1e-6 mm are one: a node on an edge two triangles share): a solid with nothing hidden is crossed twice, its top and
+//    its back. One empty node all round (so every contour closes).
+//  * gridContoursAt(grid, isos, { cliff }) / gridContours(grid, iso, { cliff }): the boundary of { nodes higher than iso } by MARCHING SQUARES, linear interpolation along the cell edges, but
+//    HALF WAY on an edge to an empty node or one whose two heights differ by more than `cliff` (a wall steeper than cliff per cell: the grid cannot say
+//    where in the cell such a wall stands, and interpolating would move a vertical wall by up to a cell from one level to the next); a saddle
+//    cell is decided by its centre (the mean of its 4 nodes). Every crossed edge belongs to exactly two cells, so the pieces follow each other by EDGE NUMBER into closed loops; the material is on the left (Y up: an outer loop runs counter-clockwise, a hole
+//    clockwise); loops never cross, so material = inside an odd number of them. Loops: [[x, y], ...] in mm, the first point not repeated at the end.
+export const MESH_GRID = Object.freeze({ cellMm: 0.1, maxCells: 4000000 });
+
+export function meshHeightGrid(P, { width, depth, cellMm = MESH_GRID.cellMm, maxCells = MESH_GRID.maxCells } = {}) {
+  const c = Math.max(cellMm, Math.sqrt((width * depth) / maxCells));
+  const nx = Math.max(1, Math.ceil(width / c)), ny = Math.max(1, Math.ceil(depth / c));
+  const W = nx + 2, H = ny + 2; // + the empty node all round
+  const h = new Float64Array(W * H).fill(-Infinity), lo = new Float64Array(W * H).fill(Infinity), mid = new Uint8Array(W * H), same = 1e-6;
+  for (let o = 0; o + 8 < P.length; o += 9) { // node (i, j) sits at x = (i - 0.5) c, y = (j - 0.5) c
+    const x0 = P[o], y0 = P[o + 1], z0 = P[o + 2], x1 = P[o + 3], y1 = P[o + 4], z1 = P[o + 5], x2 = P[o + 6], y2 = P[o + 7], z2 = P[o + 8];
+    const a2 = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    if (Math.abs(a2) < 1e-12) continue; // seen edge-on from above: its neighbours cover its line
+    const i0 = Math.max(1, Math.ceil(Math.min(x0, x1, x2) / c + 0.5)), i1 = Math.min(W - 2, Math.floor(Math.max(x0, x1, x2) / c + 0.5));
+    const j0 = Math.max(1, Math.ceil(Math.min(y0, y1, y2) / c + 0.5)), j1 = Math.min(H - 2, Math.floor(Math.max(y0, y1, y2) / c + 0.5));
+    const tol = -1e-9;
+    for (let j = j0; j <= j1; j++) {
+      const y = (j - 0.5) * c;
+      for (let i = i0; i <= i1; i++) {
+        const x = (i - 0.5) * c;
+        const l1 = ((x - x0) * (y2 - y0) - (x2 - x0) * (y - y0)) / a2, l2 = ((x1 - x0) * (y - y0) - (x - x0) * (y1 - y0)) / a2;
+        if (l1 < tol || l2 < tol || 1 - l1 - l2 < tol) continue; // the node is not under the triangle (its edges count: shared, never missed)
+        const z = z0 + l1 * (z1 - z0) + l2 * (z2 - z0), k = j * W + i;
+        if (h[k] === -Infinity) { h[k] = z; lo[k] = z; continue; }
+        if (z > h[k] + same) { if (h[k] > lo[k] + same) mid[k] = 1; h[k] = z; }
+        else if (z < lo[k] - same) { if (h[k] > lo[k] + same) mid[k] = 1; lo[k] = z; }
+        else if (z > lo[k] + same && z < h[k] - same) mid[k] = 1;
+      }
+    }
+  }
+  return { cell: c, W, H, cols: nx, rows: ny, h, lo, mid };
+}
+
+// The loops of one level from the cells its contour crosses (`cells`: their numbers, any order): see gridContoursAt.
+function contoursOfCells(grid, iso, cells, count, cliff) {
+  const { W, h, cell: c } = grid;
+  const next = new Map(); // a crossed edge -> the edge its piece goes on to (in the cell on its left)
+  // edge numbers: 2 (j W + i) = from node (i, j) to (i + 1, j); 2 (j W + i) + 1 = from (i, j) to (i, j + 1)
+  const ins = [false, false, false, false], crossed = [0, 0, 0, 0], exits = [false, false, false, false];
+  for (let q = 0; q < count; q++) {
+    const k = cells[q];
+    const vbl = h[k], vbr = h[k + 1], vtr = h[k + W + 1], vtl = h[k + W];
+    ins[0] = vbl > iso; ins[1] = vbr > iso; ins[2] = vtr > iso; ins[3] = vtl > iso;
+    // the cell's edges counter-clockwise: bottom (bl -> br), right (br -> tr), top (tr -> tl), left (tl -> bl); leaving the material = an exit
+    const edges = [2 * k, 2 * (k + 1) + 1, 2 * (k + W), 2 * k + 1];
+    let n = 0;
+    for (let e = 0; e < 4; e++) { const a = ins[e]; if (a !== ins[(e + 1) % 4]) { crossed[n] = edges[e]; exits[n] = a; n++; } }
+    if (n === 2) { if (exits[0]) next.set(crossed[0], crossed[1]); else next.set(crossed[1], crossed[0]); continue; }
+    if (n !== 4) continue;
+    const joined = (vbl + vbr + vtr + vtl) / 4 > iso; // a saddle: its two material corners meet through the centre, or not
+    for (let p = 0; p < 4; p++) if (exits[p]) next.set(crossed[p], crossed[joined ? (p + 1) % 4 : (p + 3) % 4]);
+  }
+  const point = (e) => {
+    const k = e >> 1, i = k % W, j = (k - i) / W, k2 = e & 1 ? k + W : k + 1;
+    const ha = h[k], hb = h[k2];
+    const t = ha === -Infinity || hb === -Infinity || Math.abs(hb - ha) > cliff ? 0.5 : (iso - ha) / (hb - ha);
+    return e & 1 ? [(i - 0.5) * c, (j - 0.5 + t) * c] : [(i - 0.5 + t) * c, (j - 0.5) * c];
+  };
+  const loops = [];
+  for (const start of next.keys()) {
+    if (!next.has(start)) continue;
+    const pts = [];
+    for (let e = start; next.has(e);) { pts.push(point(e)); const f = next.get(e); next.delete(e); e = f; }
+    if (pts.length >= 3) loops.push(pts);
+  }
+  return loops;
+}
+
+/** gridContoursAt(grid, isos, { cliff }) -> one loops list per iso (header). The cells each level crosses are found ONCE for all the levels (a cell
+ *  between its lowest and highest node is crossed by the levels in between: two binary searches in the sorted isos), so the work follows the contours'
+ *  length, not the grid's size times the number of levels (a 482 mm tall part sliced every 0.25 mm: 1930 levels). */
+export function gridContoursAt(grid, isos, { cliff = Infinity } = {}) {
+  const { W, H, h } = grid;
+  const L = isos.length, order = isos.map((v, k) => k).sort((a, b) => isos[a] - isos[b]), sorted = order.map((k) => isos[k]);
+  const first = (v) => { let a = 0, b = L; while (a < b) { const m = (a + b) >> 1; if (sorted[m] < v) a = m + 1; else b = m; } return a; }; // the first iso >= v
+  const span = (k) => { // the sorted levels [a, b) crossing cell k: min <= iso < max
+    const v0 = h[k], v1 = h[k + 1], v2 = h[k + W + 1], v3 = h[k + W];
+    const mx = Math.max(v0, v1, v2, v3);
+    if (mx === -Infinity) return 0;
+    const a = first(Math.min(v0, v1, v2, v3)), b = first(mx);
+    return a < b ? a * (L + 1) + b : 0;
+  };
+  const cellsN = (W - 1) * (H - 1), count = new Int32Array(L + 1);
+  const spans = new Int32Array(cellsN); // a * (L + 1) + b, or 0
+  for (let j = 0, q = 0; j + 1 < H; j++) for (let i = 0; i + 1 < W; i++, q++) { const s = span(j * W + i); spans[q] = s; if (s) { const a = (s / (L + 1)) | 0, b = s % (L + 1); count[a]++; count[b]--; } }
+  const per = new Int32Array(L); let run = 0;
+  for (let t = 0; t < L; t++) { run += count[t]; per[t] = run; }
+  const lists = Array.from({ length: L }, (_, t) => new Int32Array(per[t])), fill = new Int32Array(L);
+  for (let j = 0, q = 0; j + 1 < H; j++) for (let i = 0; i + 1 < W; i++, q++) {
+    const s = spans[q];
+    if (!s) continue;
+    const a = (s / (L + 1)) | 0, b = s % (L + 1), k = j * W + i;
+    for (let t = a; t < b; t++) lists[t][fill[t]++] = k;
+  }
+  const out = new Array(L);
+  for (let t = 0; t < L; t++) out[order[t]] = contoursOfCells(grid, sorted[t], lists[t], per[t], cliff);
+  return out;
+}
+/** gridContours(grid, iso, { cliff }) -> the loops of one level (gridContoursAt for one iso). */
+export const gridContours = (grid, iso, opts = {}) => gridContoursAt(grid, [iso], opts)[0];
+
 // ── a minimal PNG writer: colour type 4 (grey + alpha), 8 bits, the image data in STORED deflate blocks (zlib, no compression) ──
 const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(bytes, start, end) { let c = 0xffffffff; for (let i = start; i < end; i++) c = CRC[(c ^ bytes[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }

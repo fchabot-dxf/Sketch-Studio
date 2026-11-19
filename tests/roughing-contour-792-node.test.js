@@ -1,5 +1,5 @@
 // tests/roughing-contour-792-node.test.js — TASK 792: ROUGHING and CONTOUR for any part with depth information (#core/stepped-cut.js, its TASK 792 header).
-//  1. LEVELS: an STL's material sections (#core/stl-slice.js `levels` on the outline region, synthetic meshes of tests/helpers/stl-mesh.js: a boss on a
+//  1. LEVELS: an STL's material sections (#core/stl-slice.js `levels` on the relief region (TASK 807), synthetic meshes of tests/helpers/stl-mesh.js: a boss on a
 //     plate, a dome) read into the record (fusion-import.js -> #core readLevels), and a Fusion-style payload that sends `levels` itself (two raised squares
 //     on a plate); a Fusion part without them cuts from its regions + slope rings (02-drafted-pocket).
 //  2. ROUGHING from levels: one pocket per level (count, depth), the work area = the outline + 2 bits, every material island a hole, the allowance
@@ -140,8 +140,8 @@ const twoSquaresPayload = () => ({
 {
   // STL sections: the boss on a plate (the slicer's sections every 0.25 mm) -> the outline record's levels
   const P = sliced(bossPlate(), 'boss.stl');
-  const out = P.regions.find((r) => r.cutType === 'outside');
-  ok(Array.isArray(out.levels) && out.levels.length >= 40, `the STL outline carries its sections as levels (${out.levels.length})`);
+  const out = P.regions[0]; // TASK 807: the relief
+  ok(Array.isArray(out.levels) && out.levels.length >= 40, `the STL relief carries its sections as levels (${out.levels.length})`);
   const L = readLevels(out.levels, { scale: 1, yUp: true });
   const at = (z) => L.find((l) => Math.abs(l.z - z) < 1e-6);
   eq([at(2).loops.length, at(5).loops.length, at(8).loops.length], [1, 1, 1], 'the boss alone above 4 mm, the plate below');
@@ -326,11 +326,13 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     // 1 + 2 + 3 in the app: an STL part (the boss plate) and a payload with its own levels
     app.stl.openFile(M.binaryStl(bossPlate()), 'boss.stl');
     const [ok1, orec] = recAt((r) => r.levels);
-    ok(orec && orec.cutType === 'exterior' && orec.levels.length >= 40, 'Open STL: the outline record carries the levels');
+    ok(orec && orec.cutType === 'roughing' && orec.levels.length >= 40, 'Open STL (TASK 807: a relief): the part is ONE Roughing record carrying the levels');
+    eq(CUT_PLAN.size, 1, 'the relief: one record (no per-feature pockets)');
+    orec.cutType = 'exterior';
     const before = exportOf(app);
     { const lv = orec.levels; delete orec.levels; eq(exportOf(app), before, 'an Outside cut exports the same with or without levels'); orec.levels = lv; }
     orec.cutType = 'roughing'; orec.stepDepth = 1; orec.toolDia = 6.35;
-    const rough = elems(exportOf(app)).filter((e) => e.type === 'pocket' && e.dia === '6.350 mm'); // (the STL's own shoulder pocket round the boss is another record)
+    const rough = elems(exportOf(app)).filter((e) => e.type === 'pocket' && e.dia === '6.350 mm');
     eq(rough.map((e) => e.depth), ['4.000 mm', '10.000 mm'], 'Roughing the boss plate: two level pockets (4 and 10 mm)');
     ok(/M [^M]+Z M [^M]+Z/.test(rough[0].attrs), 'the 4 mm pocket is ONE element with the boss as its hole');
     const items = planReliefItems(st);

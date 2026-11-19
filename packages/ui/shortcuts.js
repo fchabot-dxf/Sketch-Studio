@@ -16,6 +16,8 @@
 //          Ctrl+D, Ctrl+R, Ctrl+L ... are the browser's) and ignore Shift, except where a Shift+letter is its own shortcut (then the plain
 //          letter forbids Shift too). notIn: a CSS selector; a key aimed at an element inside it is not this shortcut (it belongs to that element).
 //   note   a few grey words, only where the row would otherwise mislead.
+//   inOverlay true  TASK 783: the key also works while the keyboard focus is inside an open overlay (OVERLAY_SELECTOR). Absent = it does NOT: a key pressed on a
+//          button of the account menu, the drawer, Settings or a dialog belongs to that overlay, never to the drawing behind it (Delete, a tool letter, Ctrl+Z ...).
 //   listed false = bound but not shown in the list (with the reason beside it).
 //   fixed  TASK 747: why the user cannot change this one's key (Settings > Shortcuts shows it); absent = the user can.
 //
@@ -30,6 +32,9 @@ import SettingsManager from '#core/settings-manager.js';
 export const APP_HOSTS = Object.freeze(['sketchstudio', 'shaper', 'penplotter', 'trace']);
 const ALL = APP_HOSTS;
 
+/** TASK 783: what an open overlay is: a modal dialog / drawer (aria-modal), a menu (role=menu), and the popovers that mark themselves data-sk-overlay (account menu, Settings).
+ *  A closed one cannot hold the focus (hidden / display none / visibility hidden), so focus inside it means open. ONE rule for every shortcut. */
+export const OVERLAY_SELECTOR = '[aria-modal="true"], [role="menu"], [data-sk-overlay]';
 const DOC_TAB = '.sk-doctab-main'; // document-tabs.js: a focused document tab owns Delete (it closes that tab)
 const letter = (ch) => ({ key: ch });
 const plain = (k) => ({ key: k });
@@ -82,9 +87,9 @@ export const SHORTCUTS = Object.freeze([
   // Esc is ONE meaning, Cancel: every open layer handles it (the drawing tool, a pending constraint, the Solver Tuning panel, Pen Plotter's
   // interaction or selection), each in its own handler, all asking for this id.
   // TASK 747: fixed: Esc is also what cancels a key change in Settings > Shortcuts, so it cannot be captured.
-  { id: 'edit.cancel', label: 'Cancel', group: 'Edit', hosts: ALL, scope: 'canvas', keys: [plain('Escape')],
+  { id: 'edit.cancel', label: 'Cancel', group: 'Edit', hosts: ALL, scope: 'canvas', keys: [plain('Escape')], inOverlay: true,
     fixed: 'Esc is the one Cancel everywhere (it also cancels a key change here)' },
-  { id: 'file.save', label: 'Save', group: 'Edit', hosts: ALL, scope: 'app', keys: [{ key: 's', mod: true, shift: false, alt: false }] }, // sidebar-projects.js
+  { id: 'file.save', label: 'Save', group: 'Edit', hosts: ALL, scope: 'app', keys: [{ key: 's', mod: true, shift: false, alt: false }], inOverlay: true }, // sidebar-projects.js
   // ── Sketch ──
   { id: 'sketch.construction', label: 'Construction on / off', group: 'Sketch', hosts: ALL, scope: 'app', keys: [{ key: 'k', mod: false, alt: false }] }, // design-browser.js
   // TASK 756: every app (user groups are part of the shared Design tab): input-manager.js runs #ui/group-actions.js
@@ -207,10 +212,14 @@ let capturing = false;
 /** Settings > Shortcuts only: true while it waits for a key (then no shortcut matches anything), false after. */
 export function setShortcutCapture(on) { capturing = !!on; }
 
+/** TASK 783: is the key aimed at an element inside an overlay? */
+function inOverlay(e) { return !!(e && e.target && typeof e.target.closest === 'function' && e.target.closest(OVERLAY_SELECTOR)); }
+
 /** Is `e` the shortcut `id`? */
 export function matchesShortcut(e, id) {
   const s = shortcutById(id);
-  return !capturing && s.keys.some((c) => comboMatches(c, e));
+  if (capturing || (!s.inOverlay && inOverlay(e))) return false;
+  return s.keys.some((c) => comboMatches(c, e));
 }
 
 /** The first of `ids` that `e` is, or null. */

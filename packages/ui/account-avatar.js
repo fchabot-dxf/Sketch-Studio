@@ -105,11 +105,12 @@ export function createAccountAvatar({ account, check = null, doc = globalThis.do
   injectStyles(doc);
   const el = doc.createElement('button'); el.type = 'button'; el.className = 'sk-account'; el.dataset.account = 'avatar';
   el.setAttribute('aria-haspopup', 'dialog'); el.setAttribute('aria-expanded', 'false');
-  const menu = doc.createElement('div'); menu.className = 'sk-account-menu'; menu.dataset.section = 'account'; menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-label', 'Account'); menu.tabIndex = -1; menu.hidden = true;
+  const menu = doc.createElement('div'); menu.className = 'sk-account-menu'; menu.dataset.section = 'account'; menu.setAttribute('role', 'dialog'); menu.setAttribute('data-sk-overlay', ''); menu.setAttribute('aria-label', 'Account'); menu.tabIndex = -1; menu.hidden = true;
   doc.body.appendChild(menu);
 
   let info = null;            // account.userInfo() of the signed-in user (cached by the account itself)
   let infoRequested = false;
+  let checking = false, stepsList = null, checkBtn = null; // TASK 783: a running check outlives a redraw of the menu (the redraw hands it the new button and list)
   let steps = null;           // the last "Check Google Drive connection" result, shown in the menu
   let errorText = '';
   let model = null;
@@ -160,7 +161,9 @@ export function createAccountAvatar({ account, check = null, doc = globalThis.do
 
   function drawMenu() {
     const m = model;
-    menu.textContent = '';
+    // TASK 783: the menu is rebuilt on every status change while open: the focused control stays focused (by its data-account), a running check stays running
+    const hadFocus = menu.contains(doc.activeElement), focusedId = hadFocus ? doc.activeElement.dataset.account : null;
+    menu.textContent = ''; stepsList = null; checkBtn = null;
     menu.dataset.state = m.mode;
     if (m.mode === 'signed-in') {
       const who = doc.createElement('div'); who.className = 'sk-account-who'; who.dataset.account = 'who';
@@ -182,16 +185,21 @@ export function createAccountAvatar({ account, check = null, doc = globalThis.do
       else if (id === 'sign-out') menu.append(btn('sign-out', ACCOUNT_TEXT.signOut, run(() => { close(); return account.signOut(); })));
       else if (id === 'check-drive') {
         const b = btn('check-drive', ACCOUNT_TEXT.check, () => {
-          if (b.disabled) return;
-          b.disabled = true;
-          Promise.resolve(check((s) => { steps = s; if (list.isConnected) drawSteps(list); })).catch(fail).finally(() => { b.disabled = false; });
+          if (checking) return;
+          checking = true; checkBtn.disabled = true; menu.focus(); // a disabled button drops the focus to <body>: it stays in the menu
+          Promise.resolve(check((s) => { steps = s; if (stepsList) drawSteps(stepsList); })).catch(fail).finally(() => { checking = false; if (checkBtn) checkBtn.disabled = false; });
         });
-        const list = doc.createElement('ul'); list.className = 'sk-account-steps'; list.dataset.account = 'check-result';
+        b.disabled = checking; checkBtn = b;
+        const list = doc.createElement('ul'); list.className = 'sk-account-steps'; list.dataset.account = 'check-result'; stepsList = list;
         drawSteps(list);
         menu.append(b, list);
       }
     }
     if (errorText) { const e = doc.createElement('p'); e.className = 'sk-account-err'; e.dataset.account = 'error'; e.setAttribute('role', 'alert'); e.textContent = errorText; menu.append(e); }
+    if (hadFocus) {
+      const same = focusedId && menu.querySelector(`[data-account="${focusedId}"]`);
+      if (same && !same.disabled) same.focus(); else menu.focus();
+    }
   }
   function drawSteps(list) {
     list.textContent = ''; list.hidden = !steps;

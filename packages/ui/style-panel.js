@@ -99,6 +99,7 @@ function injectStyles() {
   border: 1px solid var(--sk-style-sep, #cbd5e1); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
   font: 12px system-ui, sans-serif; }
 .sk-style-panel.sk-hidden { display: none; }
+.sk-style-panel:focus { outline: none; }
 .sk-style-panel * { box-sizing: border-box; }
 .sk-style-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .sk-style-title { color: var(--sk-selection, #3B82F6); font-size: 13px; font-weight: 600; text-transform: uppercase; }
@@ -159,10 +160,10 @@ select.sk-style-input { max-width: 100%; }
 export function createStylePanel({ settings = SettingsManager, onNotify = null, title = 'Settings', hostId = 'default' } = {}) {
   injectStyles();
   const controlEls = {}; // key -> { input, slider? }
-  let isOpen = false, escHandler = null, stopOutside = null;
+  let isOpen = false, escHandler = null, stopOutside = null, opener = null;
   const notify = (m, level) => { if (typeof onNotify === 'function') onNotify(m, level); };
 
-  const el = document.createElement('div'); el.className = 'sk-style-panel sk-hidden';
+  const el = document.createElement('div'); el.className = 'sk-style-panel sk-hidden'; el.setAttribute('data-sk-overlay', ''); el.tabIndex = -1;
 
   // Header
   const head = document.createElement('div'); head.className = 'sk-style-head';
@@ -410,6 +411,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   function open() {
     if (isOpen) return;
     isOpen = true; el.classList.remove('sk-hidden'); populate();
+    opener = document.activeElement; el.focus(); // TASK 783: the keyboard focus goes INTO the panel (a key then belongs to it, not to the drawing behind it)
     track('settings'); // TASK 738
     escHandler = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', escHandler);
@@ -418,6 +420,8 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   function close() {
     if (!isOpen) return;
     isOpen = false; el.classList.add('sk-hidden');
+    if (opener && opener.isConnected && (el.contains(document.activeElement) || document.activeElement === document.body)) opener.focus(); // the focus goes back where it was
+    opener = null;
     if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
     if (stopOutside) { stopOutside(); stopOutside = null; }
   }

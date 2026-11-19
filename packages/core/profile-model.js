@@ -796,6 +796,7 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoo
     isHole: false,
     isCompound: false,
     rec: { ...rec, cutType: outerCutType },
+    partHoleLoops: holeLoops, // TASK 787: EVERY hole loop of the part (one with its own record too): what an On line outline's lead-in keeps clear of (#core/lead-in)
   });
 
   return cuts;

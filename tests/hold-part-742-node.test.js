@@ -198,10 +198,13 @@ checkTabsExport('circle inside', circleState(), 'c', { ...TABS, cutType: 'interi
   ok(wide.every((e) => commandsOf(e.d).filter((c) => c.c !== 'Z').some((c) => Math.abs(distPoly(c.p, rectPoly) - 7.35) <= 0.01)), 'a 1/4 in bit: the strips are 7.35 mm wide');
 }
 {
-  // the record's offset is written as the cuts' attribute (the Origin applies it), never applied to a path here: the strips' paths are the same with or without it
+  // the record's offset is written as the cuts' attribute (the Origin applies it), never applied to the pass here. TASK 787: the Origin offsets each
+  // gap strip all round, its end caps too, so the strips are laid out round tabs of the tab width - 2 x the offset (the tab cut stays the tab width:
+  // tests/cam-paths-787-node.test.js measures it): at 0.3 mm each strip's ends move 0.3 mm in along the outline, nothing else changes
   const st = polyState(LSHAPE), t = { kind: 'loop', id: loopOf(st, 's0').id };
   const a = elementsOf(exportOf(st, [{ target: t, rec: TABS }])), b = elementsOf(exportOf(st, [{ target: t, rec: { ...TABS, cutOffset: 0.3 } }]));
-  eq(b.map((e) => e.d), a.map((e) => e.d), 'offset 0.3 mm: every path identical to offset 0 (no offset computed here)');
+  eq([b.length, b[0].d], [a.length, a[0].d], 'offset 0.3 mm: the pass identical to offset 0 (no offset computed on it), as many strips');
+  eq(b[1].d.split(' ').slice(0, 3), ['M', '104.7', '0'], 'offset 0.3 mm: the first strip begins at 104.7, 0.3 mm into the 10 mm tab centred at 100, so the Origin, offsetting by +0.3 mm, ends its cut at 105');
   ok(b.every((e) => e.a['shaper:cutOffset'] === '0.300 mm'), 'and every element carries shaper:cutOffset 0.300 mm');
   ok(cutsOf(st, 's0', { ...TABS, cutOffset: 0.6 }).find((c) => c.hold).hold.error === 'strip', 'an offset over 0.5 mm leaves no room for the bit in a strip (bit + 1 mm wide): refused');
 }

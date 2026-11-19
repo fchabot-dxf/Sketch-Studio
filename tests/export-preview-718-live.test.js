@@ -121,7 +121,7 @@ try {
   const first = await evalJs(`({ pressed: [...document.querySelectorAll('#review-view-switch button')].map((b) => b.textContent + ':' + b.getAttribute('aria-pressed')),
     twoD: !document.getElementById('review-2d').hidden, threeD: !document.getElementById('review-canvas-host').hidden, stored: localStorage.getItem('shaper-review-view') })`);
   console.log('Export step, first open: ' + JSON.stringify(first));
-  assert.deepStrictEqual(first, { pressed: ['3D:true', '2D:false'], twoD: false, threeD: true, stored: null }, 'the Export step opens on 3D (the default)');
+  assert.deepStrictEqual(first, { pressed: ['3D:true', '2D:false', 'Paths:false'], twoD: false, threeD: true, stored: null }, 'the Export step opens on 3D (the default)');
   await clickEl('#review-view-2d');
   await waitFor(`!document.getElementById('review-2d').hidden`, 'the 2D view');
   const empty = await evalJs(`({ label: document.getElementById('review-2d-info').textContent, rows: document.querySelectorAll('#review-cuts-list .rv2d-row').length, list: !document.getElementById('review-cuts').hidden,

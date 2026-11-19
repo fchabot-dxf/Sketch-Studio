@@ -153,21 +153,37 @@ for (const [name, mk] of Object.entries(SHAPES)) {
 }
 console.log('spiral: ' + JSON.stringify(measured));
 
-// ── 3. Freehand / Raster / Morphed spiral: byte-identical to origin/main ──
+// ── 3. Freehand / Raster / Morphed spiral: byte-identical to origin/main (TASK 778: programmed pockets add ONLY their 1 guide start-mark element) ──
 {
   const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
-  let n = 0;
+  const stripStartMark = (svg) => {
+    const lines = svg.split('\n');
+    const kept = [], removed = [];
+    for (const l of lines) {
+      if (/^  <path d="M [^"]+ A [^"]+ A [^"]+ M [^"]+ L [^"]+ M [^"]+ L [^"]+"[^>]*shaper:cutType="guide"[^>]*\/>$/.test(l)) removed.push(l);
+      else kept.push(l);
+    }
+    return { svg: kept.join('\n'), removed };
+  };
+  let n = 0, exact = 0, withMark = 0;
   for (const [key, want] of Object.entries(MAIN.exports)) {
     const [name, pat, more, okey] = key.split('|');
     const m = JSON.parse(more);
     const svg = exportOf(SHAPES[name](), POCKET({ clearing: pat, ...m }), okey === 'grouped' ? { groupByCut: true } : {});
-    if (m.passDepth > 0) { // TASK 750: no depth per pass: the record's passDepth is ignored, the download = main's ONE-pass download of the same record
-      const one = MAIN.exports[[name, pat, JSON.stringify({ ...m, passDepth: null }), okey].join('|')];
-      eq(md5(svg), one, `${key}: = main's one-pass download (no stacked copies)`);
-    } else eq(md5(svg), want, `${key}: byte-identical to origin/main`);
+    const targetMd5 = m.passDepth > 0 ? MAIN.exports[[name, pat, JSON.stringify({ ...m, passDepth: null }), okey].join('|')] : want;
+    const isProgrammed = pat !== 'freehand' && !(pat === 'morphed' && (name === 'island' || name === 'dumbbell'));
+    if (!isProgrammed) {
+      eq(md5(svg), targetMd5, `${key}: byte-identical to origin/main (no start mark)`);
+      exact++;
+    } else {
+      const stripped = stripStartMark(svg);
+      eq(stripped.removed.length, 1, `${key}: ONLY 1 guide start-mark element added`);
+      eq(md5(stripped.svg), targetMd5, `${key}: removing ONLY the guide start mark is byte-identical to origin/main`);
+      withMark++;
+    }
     n++;
   }
-  console.log(`byte-identical to origin/main ${MAIN.from}: ${n} downloads (Freehand, Raster 0/45/90/30, Morphed spiral; 5 fixtures; 1 or 3 depth passes)`);
+  console.log(`byte-identical to origin/main ${MAIN.from}: ${n} downloads (${exact} exact, ${withMark} with ONLY 1 guide start-mark element added)`);
 }
 
 // ── 4. an old document opens with today's values ──

@@ -8,6 +8,7 @@
 // Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
 
 import { CUT_PLAN, reconcileCutPlan, keepHolesFromOtherSketches } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once; TASK 774
+import { migrateLeadInRecord } from '#core/lead-in.js'; // TASK 778: 775 straight-leg record -> arc of Radius = old length, Length = 0
 import { opOrder, setOpOrder } from './operations.js'; // TASK 743: the user's operation order
 import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 459): {thickness, width, height, margin}, base mm
 
@@ -49,9 +50,15 @@ function withClearingNow(rec) {
   if (!rec || typeof rec !== 'object') return rec;
   const { passDepth, wallAllowance, ...now } = rec;
   if (wallAllowance !== undefined && now.finishAllowance === undefined) now.finishAllowance = wallAllowance;
-  return Object.hasOwn(OLD_CLEARING, now.clearing) ? { ...now, clearing: OLD_CLEARING[now.clearing] } : now;
+  const mapped = Object.hasOwn(OLD_CLEARING, now.clearing) ? { ...now, clearing: OLD_CLEARING[now.clearing] } : now;
+  return migrateLeadInRecord(mapped);
 }
-const opKeyNow = (k) => (typeof k === 'string' ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`).replace(/,"passDepth":(null|-?[\d.eE+-]+)/, '') : k);
+const opKeyNow = (k) => (typeof k === 'string'
+  ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`)
+    .replace(/,"passDepth":(null|-?[\d.eE+-]+)/, '')
+    .replace(/,"leadIn":("bit"|-?[\d.eE+-]+)/, '') // TASK 778: pocket clearing no longer has lead-in
+    .replace(/"leadIn":\{"length":("bit"|-?[\d.eE+-]+),"side":"(outside|inside)"\}/, (m, len, side) => `"leadIn":{"radius":${len === '"bit"' ? '"calc"' : len},"sweep":"calc","length":"calc","side":"${side}"}`)
+  : k);
 
 /** Restore a persisted Shaper document. Missing parts keep their defaults (an old buffer carries none of this; no opOrder = the default order).
  *  TASK 761: with the restored sketch `state`, the plan is reconciled with its regions HERE, the one read of a stored Shaper document, before any

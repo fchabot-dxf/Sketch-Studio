@@ -32,7 +32,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // changes (every cut-plan edit, an undo / redo, a selection change, a re-mount), so it is refreshed here too.
   const refreshCutPanel = () => {
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take
+    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t), leadIn: prepareView.leadInFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take; TASK 778: leadIn = calculated / resolved arc summary
     opList.refresh();
   };
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
@@ -133,7 +133,10 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     try { designController.engine.solve(500); } catch (_) {}
     if (prepareView) prepareView.destroy();
     const st = designController.state; // TASK 761: the stored plan's legacy edge records are reconciled where the document is read (shaper-doc.js applyShaperDoc), not here
-    prepareView = mountPrepareView(st, canvasEl, { onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset() });
+    prepareView = mountPrepareView(st, canvasEl, {
+      onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(),
+      onCommitField: (key, field, value) => cutEdit(() => { setFieldFor(key, field, value); if (prepareView) prepareView.refreshLook(); }), // TASK 778: dragging the lead-in handle commits ONE undo step
+    });
     if (pendingRemovedNotice) { prepareNotice(pendingRemovedNotice); pendingRemovedNotice = null; } // TASK 741: once, on the first mount after the restore
     prepareSig = geomSig(st);
     applyPendingSession();

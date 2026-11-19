@@ -250,6 +250,11 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   const b = bounds ? { ...bounds } : { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
   const pending = [];
   for (const it of items) {
+    const sm = (it.footprints || []).find((fp) => fp && fp.clearing && fp.clearing.role === 'start' && fp.clearing.point);
+    if (sm) { // TASK 778: a programmed pocket's start mark (guide: never cuts wood; drawn as a 3D target at the derived point)
+      marks.push({ key: it.key, kind: 'pocket-start', point: [sm.clearing.point.x, sm.clearing.point.y], dia: sm.clearing.dia });
+      continue;
+    }
     const rule = reliefDepth(it.cutType, it.cutDepth, T);
     if (rule.kind === 'skip') { skipped.push({ key: it.key, cutType: it.cutType, reason: rule.reason }); continue; }
     const ik = C ? `${it.sig}|${rule.through ? 'T' : 'N'}${rule.depthUnset ? 'u' : ''}|${rule.through ? '' : rule.depth}` : '';

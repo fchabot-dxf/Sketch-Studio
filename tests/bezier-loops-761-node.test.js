@@ -61,7 +61,23 @@ function digestOf(st, { heavy = false } = {}) {
     studioSvg: hash(buildSVG(st) || ''), studioDxf: hash(buildDXF(st) || ''),
   };
   if (heavy) {
-    out.shaperSpiral = hash(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('pocket', { clearing: 'linked', toolDia: 25.4 }) }))));
+    // TASK 778: programmed pockets add ONLY their guide start-mark element(s); strip ONLY those guide elements to prove everything else is bit-identical
+    const START_MARK_D = /d="M [^"]+ A [^"]+ A [^"]+ M [^"]+ L [^"]+ M [^"]+ L [^"]+"/;
+    const stripStartMarks = (svg) => {
+      const lines = svg.split('\n'), kept = [];
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        if (/^  <path /.test(l) && START_MARK_D.test(l) && l.includes('shaper:cutType="guide"')) continue;
+        if (/^  <g [^>]*shaper:cutType="guide"[^>]*>$/.test(l)) {
+          let j = i + 1, allMarks = true;
+          while (j < lines.length && lines[j] !== '  </g>') { if (!(/^    <path /.test(lines[j]) && START_MARK_D.test(lines[j]))) allMarks = false; j++; }
+          if (allMarks && j < lines.length && lines[j] === '  </g>') { i = j; continue; }
+        }
+        kept.push(l);
+      }
+      return kept.join('\n');
+    };
+    out.shaperSpiral = hash(stripStartMarks(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('pocket', { clearing: 'linked', toolDia: 25.4 }) })))));
     out.shaperTabs = hash(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior', { holdPart: 'tabs', holdThickness: 1, tabWidth: 6, tabCount: 'auto' }) }))));
   }
   return out;

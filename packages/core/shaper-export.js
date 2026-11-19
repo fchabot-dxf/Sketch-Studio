@@ -153,13 +153,13 @@ function holdData(hold) {
   if (hold.role === 'stroke') return ` data-hold="stroke ${hold.index + 1}/${hold.count}"`; // TASK 775: an On line cut's tabs: its open strokes
   return '';
 }
-// TASK 775: the PREVIEW copy's data-lead of a cut written with a lead-in leg (#core/lead-in): "in". Never in the downloaded file.
-const leadData = (leadIn) => (leadIn && leadIn.role === 'leg' ? ' data-lead="in"' : '');
+// TASK 778: the PREVIEW copy's data-lead of a cut written with a lead-in arc (#core/lead-in): "in". Never in the downloaded file.
+const leadData = (leadIn) => (leadIn && leadIn.role === 'arc' ? ' data-lead="in"' : '');
 // TASK 745: the PREVIEW copy's data-clear of a programmed pocket's cut (#core/pocket-clearing): "linked k/N" (TASK 749: Spiral line k of N) | "raster k/N" | "cleanup k/N" | "morphed" | "loop k/N" (TASK 750) |
-// "wall" | "island k/N" (TASK 750: no depth passes any more); a refused clearing or none: nothing. Never in the downloaded file.
+// "wall" | "island k/N" | "start" (TASK 778: the pocket start mark guide); a refused clearing or none: nothing. Never in the downloaded file.
 function clearData(cl) {
   if (!cl || cl.role === 'refused') return '';
-  const what = cl.role === 'wall' || cl.role === 'morphed' ? cl.role : `${cl.role} ${cl.index}/${cl.count}`;
+  const what = cl.role === 'wall' || cl.role === 'morphed' || cl.role === 'start' ? cl.role : `${cl.role} ${cl.index}/${cl.count}`;
   return ` data-clear="${what}"`;
 }
 

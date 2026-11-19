@@ -160,11 +160,12 @@ for (const [name, mk] of Object.entries(SHAPES)) {
       const ringsOff0 = pattern === 'linked' ? off0.loops : pattern === 'raster' ? off0.cleanup : 1;
       eq(ringsOn0, ringsOff0, `${tag}: allowance 0: ${ringsOff0} turn(s), none written twice (the last ring IS the finish turn)`);
     }
-    // the export: closed on-line paths only, one per loop, at the full depth
+    // the export: closed on-line paths (one per loop, at the full depth) + 1 guide start mark (TASK 778)
     const els = elementsOf(exportOf(st, POCKET({ clearing: pattern, loop: true })));
-    eq(els.map((e) => e.cutType), Array(on.loopCount).fill('online'), `${tag}: the download: ${on.loopCount} on-line path(s), no inside / outside element`);
-    ok(els.every((e) => /Z$/.test(e.d) && e.depth === '6.000 mm' && e.tool === '6.000 mm'), `${tag}: each closed (Z), at the full depth, the card's bit`);
-    ok(els.every((e) => { const n = e.d.replace(/[MLZ]/g, ' ').trim().split(/\s+/); return n[0] === n[n.length - 2] && n[1] === n[n.length - 1]; }), `${tag}: each path's first point == its last`);
+    const loopsOut = els.filter((e) => e.cutType !== 'guide');
+    eq(els.map((e) => e.cutType), [...Array(on.loopCount).fill('online'), 'guide'], `${tag}: the download: ${on.loopCount} on-line path(s) + 1 guide start mark, no inside / outside element`);
+    ok(loopsOut.every((e) => /Z$/.test(e.d) && e.depth === '6.000 mm' && e.tool === '6.000 mm'), `${tag}: each closed (Z), at the full depth, the card's bit`);
+    ok(loopsOut.every((e) => { const n = e.d.replace(/[MLZ]/g, ' ').trim().split(/\s+/); return n[0] === n[n.length - 2] && n[1] === n[n.length - 1]; }), `${tag}: each path's first point == its last`);
     eq(new Set(els.map((e) => e.d)).size, els.length, `${tag}: no stacked copies`);
     const offEls = elementsOf(exportOf(st, POCKET({ clearing: pattern })));
     eq(new Set(offEls.map((e) => e.d)).size, offEls.length, `${tag}: Loop off: no stacked copies either`);
@@ -172,14 +173,25 @@ for (const [name, mk] of Object.entries(SHAPES)) {
   }
 }
 console.log('loop: ' + JSON.stringify(measured));
-{ // Loop OFF: the Spiral byte-identical to 749's head (the separate wall), Raster / Morphed / Freehand: pocket-clearing-749-node (main's fixture)
+{ // Loop OFF: the Spiral adds ONLY 1 guide start-mark element vs 749's head (everything else byte-identical)
+  const stripStartMark = (svg) => {
+    const kept = [], removed = [];
+    for (const l of svg.split('\n')) {
+      if (/^  <path d="M [^"]+ A [^"]+ A [^"]+ M [^"]+ L [^"]+ M [^"]+ L [^"]+"[^>]*shaper:cutType="guide"[^>]*\/>$/.test(l)) removed.push(l);
+      else kept.push(l);
+    }
+    return { svg: kept.join('\n'), removed };
+  };
   let n = 0;
   for (const [k, want] of Object.entries(BEFORE.exports)) {
     const [name, , more, okey] = k.split('|');
-    eq(md5(exportOf(SHAPES[name](), POCKET({ clearing: 'linked', ...JSON.parse(more) }), okey === 'grouped' ? { groupByCut: true } : {})), want, `${k}: Spiral Loop off byte-identical to before`);
+    const svg = exportOf(SHAPES[name](), POCKET({ clearing: 'linked', ...JSON.parse(more) }), okey === 'grouped' ? { groupByCut: true } : {});
+    const stripped = stripStartMark(svg);
+    eq(stripped.removed.length, 1, `${k}: ONLY 1 guide start-mark element added`);
+    eq(md5(stripped.svg), want, `${k}: removing ONLY the guide start mark is byte-identical to before`);
     n++;
   }
-  console.log(`Spiral Loop off byte-identical to ${BEFORE.from}: ${n} downloads`);
+  console.log(`Spiral Loop off byte-identical to ${BEFORE.from} (except +1 guide start mark): ${n} downloads`);
 }
 
 // ── 3. the app ──
@@ -231,12 +243,13 @@ let saved = null;
       const nt = h.note();
       ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`); // TASK 775: a closed loop has no start point (no "ends where it starts")
       ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);
-      eq(elementsOf(shaperSvgOf(st, cutPlanEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true]], `${pat}: the download: ONE closed on-line path, no inside cut`);
+      eq(elementsOf(shaperSvgOf(st, cutPlanEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], `${pat}: the download: ONE closed on-line path + 1 guide start mark, no inside cut`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-lead-tip, #prepare-toolpath-group .sk-lead-end, #prepare-toolpath-group circle').length, 0, `${pat}: TASK 775: no dot on a closed loop (it has no start point on the Origin)`);
+      eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-pocket-start').length, 1, `${pat}: TASK 778: 1 pocket start mark target in Prepare`);
       app.undo();
       eq([CUT_PLAN.get(kA).loop, h.q('.cut-loop').checked], [false, false], `${pat}: undo: Loop off again`);
       const offEls = elementsOf(shaperSvgOf(st, cutPlanEntries()));
-      ok(offEls.length >= 2 && offEls.at(-1).cutType === 'inside' && offEls.slice(0, -1).every((e) => e.cutType === 'online'), `${pat}: Loop off: on-line paths + the inside cut`);
+      ok(offEls.length >= 3 && offEls.at(-1).cutType === 'guide' && offEls.at(-2).cutType === 'inside' && offEls.slice(0, -2).every((e) => e.cutType === 'online'), `${pat}: Loop off: on-line paths + the inside cut + 1 guide start mark`);
       app.redo();
       eq(CUT_PLAN.get(kA).loop, true, `${pat}: redo: Loop on`);
       h.toggleLoop();
@@ -293,7 +306,7 @@ CUT_PLAN.clear(); setOpOrder([]);
   eq(seen.old.svg, seen.without.svg, 'its export == the same document without passDepth (byte for byte): one copy at the full depth');
   const els = elementsOf(seen.old.svg);
   eq(new Set(els.map((e) => e.d)).size, els.length, 'no stacked duplicate paths');
-  eq([...new Set(els.map((e) => e.depth))], ['6.000 mm'], 'everything at the full depth');
+  eq([...new Set(els.filter((e) => e.cutType !== 'guide').map((e) => e.depth))], ['6.000 mm'], 'every cut at the full depth (start marks are guides)');
   CUT_PLAN.clear(); setOpOrder([]);
 }
 console.log(`pocket-clearing-750-node.test.js: ok (${checks} checks)`);

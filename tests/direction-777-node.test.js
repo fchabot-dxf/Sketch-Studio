@@ -164,14 +164,10 @@ const travelFor = (g, loopIdx, rawRec) => {
   eq(lp.travel.map((t) => [t.role, t.closed]), [['loop', true]], '3 loop ON (no lead-in): closed loop travel');
   assertArrowsOnPath(lp.travel[0], 'pocket loop');
 
-  // Loop ON + Lead-in ON: lead-in leg from tip to junction + open loop body starting at junction
+  // Loop ON + saved leadIn: true (TASK 778: pocket lead-in removed; pocket ignores leadIn, stays a closed loop + guide start mark)
   const lpLead = travelFor(g, 0, { ...base, clearing: 'linked', loop: true, leadIn: true, leadInLength: 6 });
-  eq(lpLead.travel.map((t) => [t.role, t.closed]), [['leadin', false], ['loop', false]], '3 loop ON + lead-in: leg then loop body');
-  const clearFp = lpLead.fps.find((f) => f.leadIn && f.leadIn.role === 'leg');
-  ok(nearPt(lpLead.travel[0].path[0], clearFp.leadIn.tip) && nearPt(lpLead.travel[0].path.at(-1), clearFp.leadIn.junction), '3 pocket lead-in: runs tip -> junction');
-  ok(nearPt(lpLead.travel[1].path[0], clearFp.leadIn.junction), '3 pocket loop body: starts at junction');
-  assertArrowsOnPath(lpLead.travel[0], 'pocket lead-in leg');
-  assertArrowsOnPath(lpLead.travel[1], 'pocket loop body');
+  eq(lpLead.travel.map((t) => [t.role, t.closed]), [['loop', true]], '3 loop ON + saved leadIn:true: stays closed loop (no pocket lead-in leg)');
+  assertArrowsOnPath(lpLead.travel[0], 'pocket loop');
 }
 
 // ── 4. On-line Lead-in (straight 775 + curved arc readiness 778) ──
@@ -246,8 +242,7 @@ const travelFor = (g, loopIdx, rawRec) => {
 
     const recLead = { ...recOff, loop: true, leadIn: true, leadInLength: 6 };
     const notesLead = clearingNoteItems(recLead, clearingSummary(k, recLead, g.state, g.loops, g.loopPolys, owned)).map((i) => i.text);
-    ok(notesLead.includes(LEAD_IN_TRADE_OFF), `7 ${pat} Loop+Lead-in: carries 775 trade-off line`);
-    eq(notesLead.filter((t) => t === OPEN_PATH_AUTOPASS_NOTE).length, 0, `7 ${pat} Loop+Lead-in: no duplicate AutoPass line`);
+    eq(notesLead.filter((t) => t === OPEN_PATH_AUTOPASS_NOTE).length, 0, `7 ${pat} Loop+saved leadIn: closed loop, no open-path AutoPass line`);
   }
   const recOL = { cutType: 'online', cutDepth: 6, toolDia: 4, leadIn: true, leadInLength: 6, leadInSide: 'outside' };
   const notesOL = leadInNoteItems(recOL, leadInSummary(k, recOL, g.state, g.loops, g.loopPolys, owned)).map((i) => i.text);

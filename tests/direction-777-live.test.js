@@ -163,14 +163,13 @@ try {
   assert.ok(sSpir.note.includes('AutoPass runs back along it on the next pass'), 'spiral Loop off: AutoPass reverse line in card note');
   await shot('desktop-spiral-pocket.png', await canvasClip());
 
-  // Pocket Loop ON + Lead-in ON
+  // Pocket Loop ON (TASK 778: pocket lead-in removed; closed loop travel + start mark, no open-path AutoPass line)
   await setZoom(30, 92.5, 110); await sleep(120);
   await clickWorld(30, 92.5); await move(away.x, away.y);
   const sLoopLead = await inspect();
-  assert.strictEqual(sLoopLead.travelLead, 1, 'pocket Loop+Lead-in: 1 lead-in leg travel');
-  assert.strictEqual(sLoopLead.travelClear, 1, 'pocket Loop+Lead-in: 1 loop body travel');
-  assert.ok(!sLoopLead.note.includes('AutoPass runs back along it on the next pass'), 'pocket Loop+Lead-in: no duplicate AutoPass line (775 trade-off already shown)');
-  assert.ok(sLoopLead.note.some((l) => /AutoPass then reverses/.test(l)), 'pocket Loop+Lead-in: 775 trade-off line present');
+  assert.strictEqual(sLoopLead.travelLead, 0, 'pocket Loop ON: no pocket lead-in leg travel (TASK 778)');
+  assert.strictEqual(sLoopLead.travelClear, 1, 'pocket Loop ON: 1 closed loop travel');
+  assert.ok(!sLoopLead.note.includes('AutoPass runs back along it on the next pass'), 'pocket Loop ON: closed loop has no open-path AutoPass line');
 
   // On-line outline with Lead-in — zoomed screenshot (full leg tip + junction + outline in frame) + 4-frame motion sequence
   await setZoom(105, 86, 115); await sleep(120);

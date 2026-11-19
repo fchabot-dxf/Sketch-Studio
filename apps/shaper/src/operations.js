@@ -81,8 +81,8 @@ export function settingsOf(rec) {
   if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
   const pat = clearingPattern(eff); // TASK 745: a programmed pocket's clearing and the values it is computed with (Freehand adds nothing: the key is the one before 745)
-  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true } : {}), ...(c.leadIn ? { leadIn: Number(eff.leadInLength) > 0 ? round6(eff.leadInLength) : 'bit' } : {}) }; } // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 775: a lead-in adds its length ('bit' = one bit diameter)
-  if (outlineLeadIn(eff)) { const l = leadInSettings(eff); s.leadIn = { length: Number(eff.leadInLength) > 0 ? round6(eff.leadInLength) : 'bit', side: l.side }; } // TASK 775: an On line outline's lead-in (Off adds nothing)
+  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true } : {}) }; } // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 778: pockets have no lead-in
+  if (outlineLeadIn(eff)) { const l = leadInSettings(eff); s.leadIn = { radius: l.radius != null ? round6(l.radius) : 'calc', sweep: l.sweep != null ? round6(l.sweep) : 'calc', length: l.length != null ? round6(l.length) : 'calc', side: l.side, ...(l.at != null ? { at: round6(l.at) } : {}) }; } // TASK 778: an On line outline's tangential arc lead-in (Off adds nothing)
   return s;
 }
 
@@ -137,7 +137,7 @@ const numText = (n) => String(round6(n));
 function assignIds(ops) {
   const base = (op) => { const s = op.settings || {}; return 'op-' + [op.cutType, s.depth !== undefined ? (s.depth === 'unset' ? 'unset' : numText(s.depth) + 'mm') : null,
     s.offset ? `offset-${numText(s.offset)}mm` : null, s.steps ? (s.steps.deviation != null ? `adaptive-${numText(s.steps.deviation)}mm` : `step-${numText(s.steps.step)}mm`) : null,
-    s.hold ? s.hold.mode : null, s.clearing ? s.clearing.pattern : null, s.leadIn || (s.clearing && s.clearing.leadIn) ? 'lead-in' : null, op.tool ? `${op.tool.shape}-${numText(op.tool.dia)}mm${op.tool.angle != null ? '-' + op.tool.angle + 'deg' : ''}` : null].filter(Boolean).map(slug).join('-'); };
+    s.hold ? s.hold.mode : null, s.clearing ? s.clearing.pattern : null, s.leadIn ? 'lead-in' : null, op.tool ? `${op.tool.shape}-${numText(op.tool.dia)}mm${op.tool.angle != null ? '-' + op.tool.angle + 'deg' : ''}` : null].filter(Boolean).map(slug).join('-'); };
   const seen = new Map();
   for (const op of [...ops].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))) {
     const b = base(op), n = (seen.get(b) || 0) + 1;
@@ -183,10 +183,10 @@ function describe(op) {
     const refused = sums.filter((c) => c.role === 'refused').length;
     detail = [words.join('; '), refused ? `refused on ${refused}: cut as Freehand` : null].filter(Boolean).join(', ') || null;
   }
-  if (s.leadIn || (s.clearing && s.clearing.leadIn)) { // TASK 775: the row says "lead-in" (+ how many were refused, from the derivation)
-    const refused = op.records.filter((r) => r.cuts.some((c) => (c.leadIn && c.leadIn.role === 'refused') || (c.clearing && c.clearing.summary && c.clearing.summary.leadInRefused))).length;
-    const words = s.leadIn ? `lead-in ${s.leadIn.side}${refused ? ` (refused on ${refused})` : ''}` : refused ? `lead-in refused on ${refused}` : null; // a pocket's clearing words already say "with a lead-in"
-    if (words) detail = (detail ? detail + ', ' : '') + words;
+  if (s.leadIn) { // TASK 775 / 778: the row says "lead-in arc" (+ how many were refused, from the derivation)
+    const refused = op.records.filter((r) => r.cuts.some((c) => c.leadIn && c.leadIn.role === 'refused')).length;
+    const words = `lead-in arc ${s.leadIn.side}${refused ? ` (refused on ${refused})` : ''}`;
+    detail = (detail ? detail + ', ' : '') + words;
   }
   if (s.offset) detail = (detail ? detail + ', ' : '') + `offset ${len(s.offset)}`;
   const what = [typeWords, depthText].filter(Boolean).join(' · ');

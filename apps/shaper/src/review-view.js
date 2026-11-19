@@ -4,6 +4,7 @@
 // downloads only when the Review tab first opens (it is vendored under packages/ui/vendor/three, pinned 0.170.0).
 // Render ON DEMAND (controls 'change' / rebuild / resize): no idle animation loop.
 import { buildRelief, createReliefCache } from '#core/relief-model.js';
+import { POCKET_CLEARING } from '#core/pocket-clearing.js'; // TASK 778: pocket start mark circle ratio (declared once)
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { reviewGridSpec, designCanvasColors, gridMaterialSource, GRID_FADE } from './review-grid.js';
 import { mountDisclosure, isPhone, CARET_SVG } from './disclosure.js'; // TASK 757: the info folds on a phone (the Operations sheet's fold)
@@ -291,9 +292,27 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     return sp;
   }
 
+  // TASK 778: a programmed pocket's start mark target (circle + cross, same derivation as SVG / Prepare / Export 2D) drawn in blue at top surface y = 0.05
+  function startMarkObject(mark) {
+    const arm = (Number(mark.dia) || 6) / 2, cr = arm * POCKET_CLEARING.startMarkCircleRatio, y = 0.05;
+    const [cx, cz] = mark.point;
+    const segs = 32, pos = [];
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+      pos.push(cx + cr * Math.cos(a0), y, cz + cr * Math.sin(a0), cx + cr * Math.cos(a1), y, cz + cr * Math.sin(a1));
+    }
+    pos.push(cx - arm, y, cz, cx + arm, y, cz, cx, y, cz - arm, cx, y, cz + arm);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const mat = new THREE.LineBasicMaterial({ color: 0x0068ff, depthTest: false });
+    const lines = new THREE.LineSegments(geo, mat);
+    lines.renderOrder = 10; lines.userData.mark = mark.kind; lines.userData.point = mark.point;
+    return lines;
+  }
+
   function disposeGroup() {
     if (!group) return;
-    group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isSprite) o.material.dispose(); });
+    group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isSprite || o.isLine || o.isLineSegments) o.material.dispose(); });
     scene.remove(group); group = null;
   }
 
@@ -345,7 +364,7 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
       mesh.name = name;
       group.add(mesh);
     }
-    for (const mk of rel.marks) group.add(markSprite(mk));
+    for (const mk of rel.marks) group.add(mk.kind === 'pocket-start' ? startMarkObject(mk) : markSprite(mk));
     scene.add(group);
     const firstBuild = !box;
     box = rel.stockBox;
@@ -410,6 +429,7 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
       look, face: mat(faceMaterial), edge: mat(edgeMaterial),
       mapLoaded: !!textures.get(WOOD_URL), edgeLoaded: !!textures.get(EDGE_URL), textures: textures.size,
       meshes: group ? group.children.filter((o) => o.isMesh).map((o) => ({ name: o.name, geometry: o.geometry.uuid, material: o.material === faceMaterial ? 'face' : o.material === edgeMaterial ? 'edge' : 'other' })) : [],
+      marks: group ? group.children.filter((o) => o.userData && o.userData.mark).map((o) => ({ kind: o.userData.mark, point: o.userData.point || null })) : [],
       top: p && u ? { x: p.getX(0), z: p.getZ(0), u: u.getX(0), v: u.getY(0) } : null,
       target: controls.target.toArray(), camera: camera.position.toArray(),
       background: '#' + scene.background.getHexString(),

@@ -72,21 +72,21 @@ export function previewItems(root) {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
     const h = /^(pass|skin)$|^(gap|stroke) (\d+)\/(\d+)$/.exec(el.getAttribute('data-hold') || ''); // TASK 742; TASK 775: stroke k/N
     const hold = h ? (h[1] ? { kind: h[1] } : { kind: h[2], k: Number(h[3]), n: Number(h[4]) }) : null;
-    const c = /^(linked|raster|cleanup|island|wall|morphed|loop)(?: (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745 (749: linked, morphed; 750: loop)
+    const c = /^(linked|raster|cleanup|island|wall|morphed|loop|start)(?: (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745 (749: linked, morphed; 750: loop; 778: start mark)
     const clear = c ? { role: c[1], ...(c[2] ? { k: Number(c[2]), n: Number(c[3]) } : {}) } : null;
     return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear, lead: el.getAttribute('data-lead') === 'in' };
   });
 }
 /** TASK 745: a programmed pocket element's words: "spiral line 2 of 3" (TASK 749) | "raster pass 3 of 22" | "clean-up ring" | "morphed spiral" | "closed loop 1 of 2"
- *  (TASK 750; TASK 775: "loop 1 of 2" when a lead-in opens it) | "wall" | "island 1 of 2"; a list row of them: "spiral lines" | "raster passes" | "clean-up ring" |
- *  "morphed spiral" | "closed loops" (TASK 775: "loops") | "wall" | "islands". */
-const CLEAR_ROW = { linked: 'spiral lines', raster: 'raster passes', cleanup: 'clean-up ring', morphed: 'morphed spiral', loop: 'closed loops', wall: 'wall', island: 'islands' };
+ *  (TASK 750) | "wall" | "island 1 of 2" | "start mark" (TASK 778); a list row of them: "spiral lines" | "raster passes" | "clean-up ring" |
+ *  "morphed spiral" | "closed loops" | "wall" | "islands" | "start mark". */
+const CLEAR_ROW = { linked: 'spiral lines', raster: 'raster passes', cleanup: 'clean-up ring', morphed: 'morphed spiral', loop: 'closed loops', wall: 'wall', island: 'islands', start: 'start mark' };
 const CLEAR_PATH_ROLES = new Set(['linked', 'raster', 'cleanup', 'morphed', 'loop']);
-function clearText(clear, row = false, lead = false) {
+function clearText(clear, row = false) {
   if (!clear) return null;
-  if (row) return clear.role === 'loop' && lead ? 'loops' : CLEAR_ROW[clear.role];
+  if (row) return CLEAR_ROW[clear.role];
   const what = clear.role === 'linked' ? `spiral line ${clear.k} of ${clear.n}` : clear.role === 'raster' ? `raster pass ${clear.k} of ${clear.n}` : clear.role === 'cleanup' ? 'clean-up ring'
-    : clear.role === 'island' ? `island ${clear.k} of ${clear.n}` : clear.role === 'morphed' ? 'morphed spiral' : clear.role === 'loop' ? `${lead ? '' : 'closed '}loop ${clear.k} of ${clear.n}` : clear.role;
+    : clear.role === 'island' ? `island ${clear.k} of ${clear.n}` : clear.role === 'morphed' ? 'morphed spiral' : clear.role === 'loop' ? `closed loop ${clear.k} of ${clear.n}` : clear.role === 'start' ? 'start mark' : clear.role;
   return what;
 }
 /** TASK 742: a held element's words: "pass (tabs)" | "onion skin" | "gap 2 of 4" (the element), "gaps" (a list row of them); TASK 775: an On line cut's tabs:
@@ -137,7 +137,7 @@ export const depthText = (depth) => {
   return lengthText(Number(m[1]) * u.f, { unit: u.name, show: m[2] ? 'unit' : 'bare' });
 };
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
-export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear, false, it.lead), it.lead ? 'lead-in' : null].filter(Boolean).join(' · '); // TASK 775: "lead-in"
+export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear, false), it.lead ? 'lead-in arc' : null].filter(Boolean).join(' · '); // TASK 778: "lead-in arc"
 
 /**
  * The list: TASK 743: one group per OPERATION of `ops` (operations.js planOperations: their order; { op, count, types, rows }), then one per cut type for the
@@ -265,7 +265,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       }
       for (const row of g.rows) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
-        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true), clearText(row.clear, true, row.lead), row.lead ? 'lead-in' : null].filter(Boolean).join(' · '); // TASK 775: a lead-in row says so
+        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true), clearText(row.clear, true), row.lead ? 'lead-in arc' : null].filter(Boolean).join(' · '); // TASK 778: a lead-in arc row says so
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
         const shade = row.cutType === 'pocket' ? shading.shades.get(row.depth) : (row.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (row.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
@@ -322,7 +322,8 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
         }
       }
       // TASK 757: every GUIDE as its outline (GUIDE_FILL), behind everything: its group goes first, under the outsides' back group above
-      const guides = items.filter((it) => it.cutType === 'guide');
+      // TASK 778: a pocket start mark (data-clear="start") is a guide painted in FRONT of the pocket's wall fill so the blue target stays visible
+      const guides = items.filter((it) => it.cutType === 'guide' && !(it.clear && it.clear.role === 'start'));
       if (guides.length) {
         const gl = doc.createElementNS(SVG_NS, 'g'); gl.setAttribute('class', 'rv2d-guides');
         layer.insertBefore(gl, layer.firstChild);
@@ -335,13 +336,14 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       }
       // TASK 745: a programmed pocket's islands (outside cuts, black) and then its clearing paths in FRONT of everything (its wall is an inside cut with the
       // file's white fill: the paths written before it and the islands moved back by the rule above would be hidden); display only, the element keeps the
-      // paint it inherited (copied from its <g>)
-      const front = [...items.filter((it) => it.clear && it.clear.role === 'island'), ...items.filter((it) => it.clear && CLEAR_PATH_ROLES.has(it.clear.role))];
+      // paint it inherited (copied from its <g>). TASK 778: the pocket start mark sits on top with fill="none" so the crosshair target reads crisply.
+      const front = [...items.filter((it) => it.clear && it.clear.role === 'island'), ...items.filter((it) => it.clear && CLEAR_PATH_ROLES.has(it.clear.role)), ...items.filter((it) => it.clear && it.clear.role === 'start')];
       if (front.length) {
         const top = doc.createElementNS(SVG_NS, 'g'); top.setAttribute('class', 'rv2d-front');
         layer.appendChild(top);
         for (const it of front) {
           for (const name of ['fill', 'stroke']) { const v = paintOf(it.el, name); if (v !== null && !it.el.hasAttribute(name)) it.el.setAttribute(name, v); }
+          if (it.clear && it.clear.role === 'start') it.el.setAttribute('fill', GUIDE_FILL);
           top.appendChild(it.el);
         }
       }

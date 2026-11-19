@@ -153,7 +153,7 @@ async function phase(what) {
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': Roughing set', 60000);
   timings[what].roughing = Date.now() - t0;
-  assert.deepStrictEqual(await rows(), ['cutDepth', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card');
+  assert.deepStrictEqual(await rows(), ['cutDepth', 'finishAllowance', 'contour', 'roughLayout', 'minTerraceWidth', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width; no adaptive stepping)');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0 (no Contour yet)');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-contour-modes .is-active').textContent`), 'Off', what + ': Contour Off');
   await clickEl('.cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]');

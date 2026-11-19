@@ -8,7 +8,7 @@
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
-import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance } from '#core/stepped-cut.js';
+import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughing } from '#core/stepped-cut.js';
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
@@ -404,7 +404,9 @@ export function levelsSummary(key, storedRec, state, loops, loopPolys, owned, pl
   const perLevel = new Map();
   for (const c of cuts) if (c.terrace && c.terrace.islands != null) perLevel.set(c.terrace.depth, { islands: c.terrace.islands, small: c.terrace.small });
   const worst = [...perLevel.values()].reduce((m, v) => (v.islands > m.islands ? v : m), { islands: 0, small: 0 });
-  return { op: rec.levelsOp, source: hasLevels(rec) ? 'levels' : rec.slope ? 'slope' : 'drawn', depths, passes: cuts.length, allowance: roughingAllowance(rec), islands: worst.islands, small: worst.small, toolDia: Number(rec.toolDia) || 0 };
+  const thin = hasLevels(rec) && rec.levelsOp === 'roughing' && roughLayout(rec) === 'terraces' && Number(rec.minTerraceWidth) > 0 // TASK 792: the bands the Min terrace width leaves
+    ? levelsRoughing(rec.levels, { outer: (deriveProfileCuts(e.target, { ...rec, cutType: 'pocket' }, state, loops, loopPolys, owned).find((c) => c.isCompound) || {}).outerPoly, step: rec.stepDepth, depth: rec.cutDepth, toolDia: rec.toolDia, allowance: roughingAllowance(rec), layout: 'terraces', minWidth: rec.minTerraceWidth }).steps.reduce((n, s) => n + (s.thin || 0), 0) : 0;
+  return { op: rec.levelsOp, layout: roughLayout(rec), source: hasLevels(rec) ? 'levels' : rec.slope ? 'slope' : 'drawn', depths, passes: cuts.length, allowance: roughingAllowance(rec), islands: worst.islands, small: worst.small, thin, minWidth: Number(rec.minTerraceWidth) || 0, toolDia: Number(rec.toolDia) || 0 };
 }
 /**
  * levelsNoteItems(storedRec, sum) — TASK 792: the card note of a Roughing / Contour record (doc unit), from its levelsSummary: "Roughing: 4 levels, 1 to
@@ -421,8 +423,9 @@ export function levelsNoteItems(storedRec, sum) {
   const n = sum.depths.length, span = `${n > 1 ? `${f(sum.depths[0])} to ` : ''}${f(sum.depths[n - 1])} ${u}`;
   if (sum.op === 'contour') items.push({ text: `Contour: ${n} level${n === 1 ? '' : 's'}, ${span}: ${sum.passes} pass${sum.passes === 1 ? '' : 'es'} along the walls` });
   else {
-    if (sum.source !== 'slope') items.push({ text: `Roughing: ${n} level${n === 1 ? '' : 's'}, ${span}` });
+    if (sum.source !== 'slope') items.push({ text: `Roughing: ${n} level${n === 1 ? '' : 's'}, ${span}${sum.source === 'levels' ? `, ${sum.layout === 'nested' ? 'nested' : 'terraces'}: ${sum.passes} path${sum.passes === 1 ? '' : 's'}` : ''}` }); // TASK 792: the layout and its paths
     if (sum.allowance > 0) items.push({ text: `Roughing: ${f(sum.allowance)} ${u} left on every wall for the Contour` });
+    if (sum.thin > 0) items.push({ text: `Roughing: ${sum.thin} band${sum.thin === 1 ? '' : 's'} narrower than ${f(sum.minWidth)} ${u} left uncut` }); // TASK 792: the Min terrace width
     if (sum.source === 'levels' && sum.islands > 1) items.push({ text: `Roughing: up to ${sum.islands} raised areas left standing on a level${sum.small ? ` (${sum.small} narrower than the ${f(sum.toolDia)} ${u} bit)` : ''}` }); // one = the part itself
   }
   return items;

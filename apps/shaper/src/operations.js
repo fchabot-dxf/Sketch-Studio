@@ -22,7 +22,7 @@
 import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS } from './shaper.js';
 import { keyOf, parseKey, loopsWithPolygons, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
 import { ownedLoopIds } from '#core/profile-model.js';
-import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance } from '#core/stepped-cut.js';
+import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout } from '#core/stepped-cut.js';
 import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in is one of its settings
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
@@ -77,7 +77,9 @@ export function settingsOf(rec) {
     const o = terraceOptions(eff);
     s.steps = o.deviation != null ? { deviation: round6(o.deviation) } : { step: round6(Number(o.step) > 0 ? o.step : STEP_DEPTH.defaultMm) };
   } else if (eff.levelsOp) s.steps = { step: round6(Number(rec.stepDepth) > 0 ? rec.stepDepth : eff.levelsOp === 'contour' ? LEVELS.contourStepMm : STEP_DEPTH.defaultMm) }; // TASK 792: Roughing / Contour
-  if (roughingAllowance(eff) > 0) s.allowance = round6(roughingAllowance(eff)); // TASK 792: a Roughing's allowance (0 adds nothing: a stepped record's key is the one before 792)
+  if (roughingAllowance(eff) > 0) s.allowance = round6(roughingAllowance(eff));
+  if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'nested') s.layout = 'nested';
+  if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'terraces' && Number(rec.minTerraceWidth) > 0) s.minWidth = round6(rec.minTerraceWidth); // TASK 792: the Min terrace width (0 adds nothing) // TASK 792 (owner turn 2604): the Nested layout (Terraces, the default, adds nothing) // TASK 792: a Roughing's allowance (0 adds nothing: a stepped record's key is the one before 792)
   const m = holdMode(eff); // TASK 742: a held cut's mode and its values (Off adds nothing)
   if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
@@ -163,7 +165,7 @@ function describe(op) {
     if (depths.length) depthText = `${Math.min(...depths) === Math.max(...depths) ? '' : len(Math.min(...depths)).split(' ')[0] + '–'}${len(Math.max(...depths))}`;
     const lo = Math.min(...counts), hi = Math.max(...counts);
     if (counts.length) detail = `${lo === hi ? lo : `${lo}–${hi}`} level${hi === 1 ? '' : 's'}` + (s.steps && s.steps.deviation != null ? `, adaptive ${(resolutionLevel(s.steps.deviation) || { label: 'Custom' }).label}` : '')
-      + (s.allowance ? `, allowance ${len(s.allowance)}` : '');
+      + (s.allowance ? `, allowance ${len(s.allowance)}` : '') + (s.layout ? ', nested' : '');
   }
   if (s.hold) { // a held operation: its pass and its gap strips (summed over its regions), from the derivation
     const holds = op.records.map((r) => (r.cuts.find((c) => c.hold && c.hold.role !== 'strip') || {}).hold).filter(Boolean);

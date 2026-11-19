@@ -13,6 +13,7 @@
 import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choices (Off | On) and sides (Outside | Inside)
+import { ROUGH_LAYOUT } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts
 
 
 /** The parameters: the cut card's rows (Prepare) and the Export step's cards. */
@@ -28,6 +29,9 @@ const PARAMS = {
   // TASK 792: a part's Contour (the finish of its sloped walls), added from the part's card
   contour: { label: 'Contour', hint: 'Adds a finishing pass along the sloped walls at a fine step, with its own bit. It is its own operation in the list.', items: ['contour:off', 'contour:on', 'contourEdit'] },
   contourEdit: { label: 'Edit contour', hint: 'Shows the Contour’s own settings: its step and its bit.' },
+  // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
+  minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
+  roughLayout: { label: 'Layout', hint: 'How the levels are cut. The Origin cuts every path from the surface down.', items: ['roughLayout:terraces', 'roughLayout:nested'] },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },
   // TASK 775 / 778: the TANGENTIAL ARC LEAD-IN rows (On line outlines only)
@@ -90,6 +94,10 @@ const CHOICE_HINTS = {
     stock: 'The outline of your board. Not cut: it sets the board in the 3D preview and goes in the file as a guide.',
     contour: 'Finishes the sloped walls: a pass along them at every fine step, no clearing.', // TASK 792
   },
+  roughLayout: { // TASK 792 (owner turn 2604)
+    terraces: 'Each spot cut once, to its own depth: no passes through air. Best on deep or gentle reliefs.',
+    nested: 'One pocket per level over everything that goes at least that deep: fewer, bigger paths. Best on steep or blocky parts.',
+  },
   contour: { // TASK 792
     off: 'No finishing pass.',
     on: 'A finishing pass along the walls at a fine step (its own operation and bit).',
@@ -128,6 +136,7 @@ const CHOICE_SOURCES = {
   leadIn: LEAD_IN.modes.map((m) => ({ id: m.id, label: m.label })), // TASK 775
   leadInSide: LEAD_IN.sides.map((m) => ({ id: m.id, label: m.label })),
   contour: [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }], // TASK 792: the Contour row of a part's card
+  roughLayout: ROUGH_LAYOUT.layouts.map((l) => ({ id: l.id, label: l.label })), // TASK 792: Roughing's layout
 };
 
 /** The id of a choice's entry: `<parameter>:<choice id>`. */

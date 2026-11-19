@@ -6,7 +6,7 @@
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED } from './cut-plan.js';
-import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
+import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT } from '#core/stepped-cut.js';
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off | On) and its sides
 import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from '#core/settings-manager.js';
@@ -51,6 +51,7 @@ const STEPPERS = {
   // degrees (0 to 180: a pass has no direction). TASK 750: no step-downs here (the Origin's Pass Depth / AutoPass)
   stepover:      { step: { mm: 5, in: 5 }, min: POCKET_CLEARING.stepoverPct.min, max: POCKET_CLEARING.stepoverPct.max },
   finishAllowance: { step: { mm: 0.1, in: 0.005 }, min: 0 },
+  minTerraceWidth: { step: { mm: 0.5, in: 1 / 32 }, min: 0 }, // TASK 792: Roughing's Min terrace width (0 = rough every band)
   rasterAngle:   { step: { mm: 15, in: 15 }, min: 0, max: 180 },
   // TASK 775 / 778: the tangential arc lead-in: radius (min = bit radius), sweep (15-180 deg, step 15), optional straight length (min 0)
   leadInRadius:  { step: { mm: 0.5, in: 1 / 32 }, positive: true },
@@ -69,6 +70,8 @@ const SIDE_PRESETS = LEAD_IN.sides.map((m) => ({ label: hintLabel(choiceId('lead
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 // TASK 792: the part card's Contour row (Off | On), as preset buttons (the ONE preset widget)
 const CONTOUR_PRESETS = [{ label: hintLabel(choiceId('contour', 'off')), value: false }, { label: hintLabel(choiceId('contour', 'on')), value: true }];
+// TASK 792 (owner turn 2604): Roughing's Layout row (#core ROUGH_LAYOUT), as preset buttons (the ONE preset widget)
+const LAYOUT_PRESETS = ROUGH_LAYOUT.layouts.map((l) => ({ label: hintLabel(choiceId('roughLayout', l.id)), value: l.id }));
 
 // a field's text: lengthText (the one length-format decider: Length precision, default 3, trailing zeros dropped unless TRAILING_ZEROS, or an inch fraction); the unit is beside it
 const fieldText = (baseMM) => lengthText(baseMM, { show: 'field' });
@@ -129,6 +132,17 @@ export function createCutPanel(hostEl, opts = {}) {
         <button type="button" class="cut-field-label" data-hint="contour"></button>
         <div class="cut-presets cut-contour-modes"></div>
         <button type="button" class="cut-calc-reset cut-contour-edit" hidden></button>
+      </div>
+      <div class="cut-row" data-row="roughLayout">
+        <button type="button" class="cut-field-label" data-hint="roughLayout"></button>
+        <div class="cut-presets cut-layout-modes"></div>
+      </div>
+      <div class="cut-row" data-row="minTerraceWidth">
+        <button type="button" class="cut-field-label" data-hint="minTerraceWidth"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-min-terrace" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
       </div>
       <div class="cut-row" data-row="loop">
         <label class="cut-check"><input type="checkbox" class="cut-loop"><span data-hint="loop"></span></label>
@@ -260,7 +274,8 @@ export function createCutPanel(hostEl, opts = {}) {
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
   const clearTrigger = $('.cut-clear-trigger'), clearPop = $('.cut-clear-pop'), clearIc = $('.cut-clear-ic'), clearCur = $('.cut-clear-cur'); // TASK 745
   const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
-  const contourModesWrap = $('.cut-contour-modes'), contourEditBtn = $('.cut-contour-edit'); // TASK 792
+  const contourModesWrap = $('.cut-contour-modes'), contourEditBtn = $('.cut-contour-edit'), layoutModesWrap = $('.cut-layout-modes'), minTerraceInput = $('.cut-min-terrace'); // TASK 792
+  minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
   contourEditBtn.textContent = hintLabel('contourEdit'); contourEditBtn.title = hintText('contourEdit');
   contourEditBtn.addEventListener('click', () => onEditContour());
   const leadModesWrap = $('.cut-lead-modes'), leadRadiusInput = $('.cut-lead-radius'), leadSweepInput = $('.cut-lead-sweep'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'), leadPosState = $('.cut-pos-state'); // TASK 775 / 778
@@ -277,7 +292,7 @@ export function createCutPanel(hostEl, opts = {}) {
   for (const t of card.querySelectorAll('[data-hint]')) {
     const row = t.closest('.cut-row, .cut-field'), check = t.closest('.cut-check');
     hints[t.dataset.hint] = mountHint({ id: t.dataset.hint, trigger: check ? null : t, labelEl: check ? t : null, after: row.lastElementChild,
-      fields: [...row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger, .cut-hold-modes, .cut-lead-modes, .cut-lead-sides, .cut-contour-modes')] });
+      fields: [...row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger, .cut-hold-modes, .cut-lead-modes, .cut-lead-sides, .cut-contour-modes, .cut-layout-modes')] });
   }
   hints.holdPart.trigger.id = 'cut-hold-label';
   holdModesWrap.setAttribute('aria-labelledby', 'cut-hold-label');
@@ -358,6 +373,7 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'tabWidth' ? (Number(current.tabWidth) > 0 ? Number(current.tabWidth) : holdDefaults(docUnit()).tabWidth)
     : field === 'holdThickness' ? (Number(current.holdThickness) > 0 ? Number(current.holdThickness) : holdDefaults(docUnit()).thickness)
     : field === 'finishAllowance' ? (current.finishAllowance != null && Number(current.finishAllowance) >= 0 ? Number(current.finishAllowance) : declaresOf(current.cutType, 'clearing') ? allowanceDefault(docUnit()) : 0) // TASK 745; TASK 792: a Roughing without one has 0
+    : field === 'minTerraceWidth' ? (Number(current.record && current.record.minTerraceWidth) > 0 ? Number(current.record.minTerraceWidth) : 0) // TASK 792
     : field === 'leadInRadius' ? (current.leadInRadius != null && Number(current.leadInRadius) > 0 ? Number(current.leadInRadius) : (current.leadInInfo && Number(current.leadInInfo.radius) > 0 ? Number(current.leadInInfo.radius) : Number(current.toolDia) || 0)) // TASK 778: null = calculated by derivation
     : field === 'leadInLength' ? (current.leadInLength != null && Number(current.leadInLength) >= 0 ? Number(current.leadInLength) : (current.leadInInfo && Number(current.leadInInfo.length) >= 0 ? Number(current.leadInInfo.length) : 0)) // TASK 778: null = calculated (0)
     : (Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm);
@@ -458,6 +474,7 @@ export function createCutPanel(hostEl, opts = {}) {
   unitless('stepover', stepoverInput, 'stepover');
   unitless('rasterAngle', angleInput, 'raster angle');
   stepperFor('finishAllowance', allowanceInput, 'finish allowance', { box: allowanceInput.closest('.cut-box') });
+  stepperFor('minTerraceWidth', minTerraceInput, 'min terrace width', { box: minTerraceInput.closest('.cut-box') }); // TASK 792
   // TASK 778: the tangential arc lead-in fields: Radius (doc unit, min bit radius on stepper, empty resets to calculated), Sweep (15-180 deg, step 15), Length (>= 0, straight part before arc)
   leadRadiusInput.addEventListener('change', () => {
     const raw = leadRadiusInput.value.trim();
@@ -499,8 +516,9 @@ export function createCutPanel(hostEl, opts = {}) {
     // TASK 714: the step row only for a type that DECLARES it (a stepped type), and the stepped cut's note (its steps, an undercut)
     const curDecl = current.cutType ? cutTypeById(current.cutType) : null;
     const declares = (p) => Boolean(curDecl && (curDecl.params || []).includes(p));
-    const adaptive = declares('adaptiveSteps') && current.adaptiveSteps === true; // TASK 717: the Resolution row replaces the Step depth row
-    card.querySelector('.cut-row[data-row="adaptiveSteps"]').style.display = declares('adaptiveSteps') ? '' : 'none';
+    const partLevels = Boolean(current.record && Array.isArray(current.record.levels) && current.record.levels.length); // TASK 792: a part with levels: Roughing steps every Step depth (adaptive stepping reads a slope's rings)
+    const adaptive = declares('adaptiveSteps') && !partLevels && current.adaptiveSteps === true; // TASK 717: the Resolution row replaces the Step depth row
+    card.querySelector('.cut-row[data-row="adaptiveSteps"]').style.display = declares('adaptiveSteps') && !partLevels ? '' : 'none';
     card.querySelector('.cut-row[data-row="stepDepth"]').style.display = declares('stepDepth') && !adaptive ? '' : 'none';
     card.querySelector('.cut-row[data-row="stepDeviation"]').style.display = declares('stepDeviation') && adaptive ? '' : 'none';
     adaptiveInput.checked = adaptive;
@@ -534,6 +552,12 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets(contourModesWrap, contourRow ? CONTOUR_PRESETS : [], 'contour', Boolean(current.contour && current.contour.on));
     contourEditBtn.hidden = !(contourRow && current.contour.on);
     hints.stepDepth.refresh({ contour: current.kind === 'contour' });
+    // TASK 792 (owner turn 2604): Roughing's Layout (Terraces | Nested), for a part with levels (a sloped region's Roughing is the stepped cut)
+    const layoutRow = declares('roughLayout') && Boolean(current.record && Array.isArray(current.record.levels) && current.record.levels.length);
+    card.querySelector('.cut-row[data-row="roughLayout"]').style.display = layoutRow ? '' : 'none';
+    renderPresets(layoutModesWrap, layoutRow ? LAYOUT_PRESETS : [], 'roughLayout', current.record && current.record.roughLayout === 'nested' ? 'nested' : 'terraces');
+    card.querySelector('.cut-row[data-row="minTerraceWidth"]').style.display = layoutRow && !(current.record && current.record.roughLayout === 'nested') ? '' : 'none'; // the Terraces layout's row
+    minTerraceInput.value = fieldText(fieldBase('minTerraceWidth'));
     card.querySelector('.cut-row[data-row="rasterAngle"]').style.display = clearing === 'raster' ? '' : 'none';
     const choice = CLEARING_CHOICE(clearing || 'freehand');
     clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));

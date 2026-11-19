@@ -22,7 +22,7 @@ import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
 import { parseStl, sliceStl } from '#core/stl-slice.js';
 import { readLevels, levelsRoughing, levelsContour, deriveCuts, LEVELS, steppedTerraces, sameOutline } from '#core/stepped-cut.js';
-import { regionsFromRings, offsetRegions, diffRegions, regionsArea } from '#core/plot/clip.js';
+import { regionsFromRings, offsetRegions, diffRegions, regionsArea, unionRegions, intersectRegions } from '#core/plot/clip.js';
 import { buildRelief } from '#core/relief-model.js';
 import { levelsHeightMap, HEIGHT_MAP } from '#core/height-map.js';
 import { CUT_PLAN, cutPlanEntries, planReliefItems, contourKeyOf, contourOf, setContour, resolveEntry } from '../apps/shaper/src/cut-plan.js';
@@ -57,7 +57,7 @@ const twoSquaresPayload = () => ({
     levels: [
       { zFromTopMm: 1, loops: [sq(10, 10, 20, 20), sq(50, 10, 52, 40)] },   // two raised parts: a 10 x 10 square and a 2 mm wide rib (narrower than the bit)
       { zFromTopMm: 2, loops: [sq(10, 10, 20, 20), sq(50, 10, 52, 40)] },   // the same (merged into the deeper level)
-      { zFromTopMm: 3, loops: [sq(0, 0, 80, 50), sq(30, 15, 40, 35)] },     // the plate with a pocket in it (a hole in the material)
+      { zFromTopMm: 3, loops: [sq(0, 0, 80, 50), sq(25, 15, 45, 35)] },     // the plate with a 20 x 20 pocket in it (a hole in the material)
       { zFromTopMm: 6, loops: [sq(0, 0, 80, 50)] },                         // the pocket's floor at 3..6: the plate
     ] }],
   chains: [], warnings: [],
@@ -72,30 +72,70 @@ const twoSquaresPayload = () => ({
   eq(readLevels([{ zFromTopMm: 1, loops: [{ segments: [{ type: 'line', x1: 0, y1: 0, x2: 5, y2: 0 }] }] }]), null, 'a loop that does not close: no levels (the importer warns)');
   eq(readLevels(null), null, 'no levels field: null');
 
-  // ROUGHING from levels: the outline 0..80 x -50..0, the 1/4 in bit, allowance 0.5
+  // ROUGHING from levels: the outline 0..80 x -50..0, the 1/4 in bit, allowance 0.5; the material at each level (the union of the sections down to it)
   const outer = [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: -50 }, { x: 0, y: -50 }];
-  const R = levelsRoughing(L, { outer, step: 1, depth: 6, toolDia: 6.35, allowance: 0.5 });
-  eq(R.steps.map((s) => s.depth), [2, 3, 6], 'step 1 to 6 mm: levels 1 and 2 are the same material (one level at 2), then 3, and 6 (4, 5 and 6 read the 6 mm section: one level at 6)');
-  eq(R.steps.map((s) => [s.regions.length, s.islands, s.small]), [[1, 2, 1], [2, 1, 0], [1, 1, 0]], 'level 2: ONE pocket with the 2 raised parts as holes (the 2 mm rib narrower than the bit); level 3: the band round the plate (the plate its hole) + the pocket in it; level 6: the band');
+  const flatRing = (f) => { const r = []; for (let i = 0; i < f.length; i += 2) r.push([f[i], f[i + 1]]); r.push(r[0]); return r; };
+  const materialAt = (d) => unionRegions(...L.filter((l) => l.z <= d + 1e-9 || l === L.find((q) => q.z >= d - 1e-9)).map((l) => regionsFromRings(l.loops.map(flatRing), 'evenodd')));
   const W = offsetRegions(regionsFromRings([ring(outer)]), 0.5 + LEVELS.workMarginBits * 6.35);
-  near(regionsArea(R.steps[2].regions), regionsArea(W) - 80 * 50 - (2 * 80 + 2 * 50) * 0.5 - Math.PI * 0.25, 0.5, 'the deepest level: the work area (outline + allowance + 2 bits) minus the plate grown by the allowance');
-  // the allowance, measured: every vertex of an island hole is 0.5 mm from the material (the round corners too)
-  const holes = R.steps[0].regions[0].holes.map((h) => h.slice(0, -1).map(([x, y]) => ({ x, y })));
-  const mats = L[1].loops.map((f) => { const p = []; for (let i = 0; i < f.length; i += 2) p.push({ x: f[i], y: f[i + 1] }); return p; });
-  for (const h of holes) {
-    const m = mats.find((q) => box(q)[0] < box(h)[0] + 1 && box(q)[2] > box(h)[2] - 1);
-    const d = h.map((p) => distToPoly(p, m));
-    near(Math.min(...d), 0.5, 0.01, `an island hole: its nearest vertex 0.5 mm from the material`); near(Math.max(...d), 0.5, 0.01, 'and its farthest');
+  const r = 6.35 / 2, m = 6.35 * LEVELS.pocketKeepBackBits;
+  const clears = (regs) => offsetRegions(offsetRegions(regs, -(r + m), LEVELS.drawTolMm), r, LEVELS.drawTolMm);
+  const areaOf = (regs) => regionsArea(regs);
+  for (const layout of ['nested', 'terraces']) {
+    const R = levelsRoughing(L, { outer, step: 1, depth: 6, toolDia: 6.35, allowance: 0.5, layout });
+    eq([R.layout, R.steps.map((s) => s.depth)], [layout, [2, 3, 6]], `${layout}: step 1 to 6 mm: levels 1 and 2 are the same material (one level at 2), then 3, and 6 (4, 5, 6 read the 6 mm section)`);
+    eq(R.steps.map((s) => [s.islands, s.small]), [[2, 1], [1, 0], [1, 0]], `${layout}: the material standing at each level (the 2 mm rib narrower than the bit)`);
+    // RULE 2: depth-first per area: inside an area the levels never go back up
+    const areaLevels = []; R.paths.forEach((p, i) => { if (i && p.level < R.paths[i - 1].level) areaLevels.push('new area'); });
+    ok(R.paths.every((p, i) => i === 0 || p.level >= R.paths[i - 1].level || areaLevels.length), `${layout}: paths depth-first per area`);
+    // never past the design + allowance at its depth, and (terraces) never over a shallower terrace
+    for (const p of R.paths) {
+      const design = offsetRegions(materialAt(p.depth), 0.5 - 0.01);
+      ok(areaOf(intersectRegions(p.regions, design)) < 0.05, `${layout}: the ${p.depth} mm path stays off the design + allowance`);
+      ok(areaOf(diffRegions(p.regions, W)) < 0.05, `${layout}: inside the work area`);
+      // (terraces: the two checks above ARE the no-gouge rule: a path stays inside R_k, the area allowed at its depth. A terrace's spill may cover the m-wide strip a shallower terrace keeps along this level's wall: no pocket could cut that strip to its own depth, cutting it here never passes the design + allowance)
+    }
+    // COVERAGE: no missed band: each level's own area (nested: R_k less the Origin's m on its walls; terraces: its terrace) is cleared by its paths, but
+    // for the sharp inside corners a round bit never reaches
+    for (const k of [0, 1, 2]) {
+      const ps = R.paths.filter((p) => p.level === k);
+      const own = unionRegions(...ps.map((p) => [p.region]));
+      const need = layout === 'nested' ? offsetRegions(own, -(m + 0.2), LEVELS.drawTolMm) : own;
+      const missed = diffRegions(need, unionRegions(...ps.map((p) => clears(p.regions))));
+      ok(areaOf(missed) < 15, `${layout} level ${R.steps[k].depth}: missed only in sharp corners (${areaOf(missed).toFixed(2)} mm2)`);
+    }
+    if (layout === 'nested') {
+      eq(R.paths.map((p) => [p.depth, p.regions.length]), [[2, 1], [3, 1], [6, 1]], 'nested: level 2 ONE pocket (2 islands); level 3 only the pocket in the plate (RULE 1: the band round the plate is the same outline at 3 and 6: ONE path, at 6); level 6 the band');
+      near(areaOf(R.paths[2].regions), areaOf(W) - 80 * 50 - (2 * 80 + 2 * 50) * 0.5 - Math.PI * 0.25, 0.5, 'nested: the deepest level = the work area (outline + allowance + 2 bits) minus the plate grown by the allowance');
+      // the allowance, measured: every vertex of an island hole is 0.5 mm from the material (the round corners too)
+      const holes = R.paths[0].regions[0].holes.map((h) => h.slice(0, -1).map(([x, y]) => ({ x, y })));
+      const mats = L[1].loops.map((f) => { const p = []; for (let i = 0; i < f.length; i += 2) p.push({ x: f[i], y: f[i + 1] }); return p; });
+      eq(holes.length, 2, 'nested: the 2 islands are holes of the 2 mm pocket');
+      for (const h of holes) {
+        const q = mats.find((x) => box(x)[0] < box(h)[0] + 1 && box(x)[2] > box(h)[2] - 1);
+        const d = h.map((p) => distToPoly(p, q));
+        near(Math.min(...d), 0.5, 0.01, 'an island hole: its nearest vertex 0.5 mm from the material'); near(Math.max(...d), 0.5, 0.01, 'and its farthest');
+      }
+    } else {
+      // terraces: every spot cut once: the terraces do not overlap and together are what nested level 1 clears
+      const T = R.paths.map((p) => [p.region]);
+      for (let i = 0; i < T.length; i++) for (let j = i + 1; j < T.length; j++) ok(areaOf(intersectRegions(T[i], T[j])) < 0.05, `terraces ${i} and ${j} do not overlap`);
+      const nested1 = levelsRoughing(L, { outer, step: 1, depth: 6, toolDia: 6.35, allowance: 0.5, layout: 'nested' }).paths.filter((p) => p.level === 0).flatMap((p) => p.regions);
+      near(areaOf(unionRegions(...T)), areaOf(offsetRegions(nested1, -m, LEVELS.drawTolMm)), 1, 'terraces: together they are level 1\'s area less the Origin\'s offset on its walls');
+      const cut = R.paths.reduce((s, p) => s + areaOf(p.regions), 0), nestedCut = levelsRoughing(L, { outer, step: 1, depth: 6, toolDia: 6.35, allowance: 0.5, layout: 'nested' }).paths.reduce((s, p) => s + areaOf(p.regions), 0);
+      console.log(`two squares: terraces ${R.paths.length} paths, cut ${cut.toFixed(0)} mm2 (overlap ${(cut - areaOf(unionRegions(...T))).toFixed(0)}); nested cut ${nestedCut.toFixed(0)} mm2`);
+      ok(cut < nestedCut, 'terraces cut less area than nested (no air passes)');
+    }
   }
-  eq(levelsRoughing(L, { outer, step: 1, depth: 6, toolDia: 6.35, allowance: 0 }).steps[0].regions[0].holes.map((h) => box(h.slice(0, -1).map(([x, y]) => ({ x, y })))).sort((a, b) => a[0] - b[0]), [[10, -20, 20, -10], [50, -40, 52, -10]], 'allowance 0: the islands ARE the material loops');
+  eq(levelsRoughing(L, { outer, step: 1, depth: 6, toolDia: 6.35, allowance: 0, layout: 'nested' }).paths[0].regions[0].holes.map((h) => box(h.slice(0, -1).map(([x, y]) => ({ x, y })))).sort((a, b) => a[0] - b[0]), [[10, -20, 20, -10], [50, -40, 52, -10]], 'allowance 0: the islands ARE the material loops');
 
   // CONTOUR from levels, step 0.5 to 6 mm: Outside cuts along the material's outer loops, an Inside cut along the pocket (a hole in the material)
   const C = levelsContour(L, { step: 0.5, depth: 6 });
   eq(C.steps.map((s) => [s.depth, s.loops.map((l) => (l.outer ? 'O' : 'I') + box(l.polygon).join(','))]), [
     [2, ['O10,-20,20,-10', 'O50,-40,52,-10']],
-    [3, ['I30,-35,40,-15']],
+    [3, ['I25,-35,45,-15']],
     [6, ['O0,-50,80,0']],
   ], 'contour: the raised parts at 2 mm (their walls 0..2 cut once, at the bottom), the pocket wall at 3, the plate at 6 (the plate\'s level 3 loop is the same as at 6: cut there)');
+  eq(C.paths.map((p) => p.depth), [2, 2, 3, 6], 'contour paths depth-first in the one area (the plate)');
 }
 {
   // STL sections: the boss on a plate (the slicer's sections every 0.25 mm) -> the outline record's levels
@@ -105,11 +145,53 @@ const twoSquaresPayload = () => ({
   const L = readLevels(out.levels, { scale: 1, yUp: true });
   const at = (z) => L.find((l) => Math.abs(l.z - z) < 1e-6);
   eq([at(2).loops.length, at(5).loops.length, at(8).loops.length], [1, 1, 1], 'the boss alone above 4 mm, the plate below');
-  const R = levelsRoughing(L, { outer: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: -40 }, { x: 0, y: -40 }], step: 1, depth: 10, toolDia: 6.35, allowance: 0 });
-  eq(R.steps.map((s) => [s.depth, s.islands]), [[4, 1], [10, 1]], 'the boss plate: ONE level at 4 mm round the boss (1..4 the same material), ONE at 10 round the plate (5..10 the same; the plate its island)');
-  eq(box(R.steps[0].regions[0].holes[0].slice(0, -1).map(([x, y]) => ({ x, y }))), [20, -30, 40, -10], 'the boss is the island of the 4 mm pocket');
+  for (const layout of ['nested', 'terraces']) {
+    const R = levelsRoughing(L, { outer: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: -40 }, { x: 0, y: -40 }], step: 1, depth: 10, toolDia: 6.35, allowance: 0, layout });
+    eq(R.paths.map((p) => p.depth), [4, 10], `${layout}: the boss plate: ONE path at 4 mm round the boss (1..4 the same material), ONE at 10 round the plate (5..10 the same)`);
+    const hb = box(R.paths[0].region.holes[0].slice(0, -1).map(([x, y]) => ({ x, y }))), g = layout === 'nested' ? 0 : 6.35 * LEVELS.pocketKeepBackBits;
+    [20 - g, -30 - g, 40 + g, -10 + g].forEach((v, i) => near(hb[i], v, 0.01, `${layout}: the boss is the hole of the 4 mm path${g ? ' (its terrace stops the Origin offset m off the boss)' : ''}`));
+  }
 }
-
+{
+  // MIN TERRACE WIDTH (owner turns 2605-2607) on the 45-degree drafted pocket (1 mm steps give ~1 mm bands on its walls): at the bit diameter the thin
+  // bands are left uncut (no path, no spill), at 0 every band is roughed; Nested has no such row (its paths are the levels' whole areas)
+  const P = sliced(M.draftedPocket(45), 'd45.stl');
+  const reg = P.regions.find((g) => g.levels);
+  const L = readLevels(reg.levels, { scale: 1, yUp: true });
+  const f = readLevels([{ zFromTopMm: 0, loops: [reg.outer] }], { scale: 1, yUp: true })[0].loops[0], outer = [];
+  for (let i = 0; i < f.length; i += 2) outer.push({ x: f[i], y: f[i + 1] });
+  const run = (minWidth) => levelsRoughing(L, { outer, step: 1, toolDia: 6.35, allowance: 0, layout: 'terraces', minWidth });
+  const all = run(0), wide = run(6.35);
+  const thin = wide.steps.reduce((n, s) => n + s.thin, 0);
+  console.log(`45-degree pocket: min width 0: ${all.paths.length} paths, thin ${all.steps.reduce((n, s) => n + s.thin, 0)}; min width 6.35: ${wide.paths.length} paths, ${thin} bands left`);
+  eq(all.steps.reduce((n, s) => n + s.thin, 0), 0, 'min width 0: no band left');
+  ok(thin >= 5 && wide.paths.length === all.paths.length - thin, `min width = the bit: the ${thin} thin wall bands are left, every other path kept`);
+  ok(wide.paths.every((p) => all.paths.some((q) => q.depth === p.depth && regionsArea([q.region]) === regionsArea([p.region]))), 'the kept paths are the same terraces');
+  eq(levelsRoughing(L, { outer, step: 1, toolDia: 6.35, layout: 'nested', minWidth: 6.35 }).paths.length, levelsRoughing(L, { outer, step: 1, toolDia: 6.35, layout: 'nested' }).paths.length, 'Nested ignores it');
+}
+{
+  // NO MISSED BAND (owner turn 2602): the 45-degree drafted pocket and the dome, both layouts, steps 1 and 2: at every level the area that must reach it
+  // (Terraces: its terrace; Nested: its removal less the Origin's offset m on its walls) is cleared by its paths (the pocket rule: kept back r + m,
+  // opened by r), but for the sharp inside corners a round bit cannot reach: at most 4 corners x (r + m)^2 (1 - pi / 4) per level
+  const r = 6.35 / 2, m = 6.35 * LEVELS.pocketKeepBackBits, corner = 4 * (r + m) ** 2 * (1 - Math.PI / 4) + 0.5;
+  const clears = (regs) => offsetRegions(offsetRegions(regs, -(r + m), LEVELS.drawTolMm), r, LEVELS.drawTolMm);
+  for (const [name, tris] of [['45-degree pocket', M.draftedPocket(45)], ['dome', M.dome(30, 48, 64)]]) {
+    const reg = sliced(tris, 'p.stl').regions.find((g) => g.levels);
+    const L = readLevels(reg.levels, { scale: 1, yUp: true });
+    const f = readLevels([{ zFromTopMm: 0, loops: [reg.outer] }], { scale: 1, yUp: true })[0].loops[0], outer = [];
+    for (let i = 0; i < f.length; i += 2) outer.push({ x: f[i], y: f[i + 1] });
+    for (const layout of ['terraces', 'nested']) for (const step of [1, 2]) {
+      const R = levelsRoughing(L, { outer, step, toolDia: 6.35, allowance: 0.5, layout });
+      let worst = 0;
+      for (const k of new Set(R.paths.map((p) => p.level))) {
+        const ps = R.paths.filter((p) => p.level === k), own = unionRegions(...ps.map((p) => [p.region]));
+        const need = layout === 'nested' ? offsetRegions(own, -(m + 0.2), LEVELS.drawTolMm) : own;
+        worst = Math.max(worst, regionsArea(diffRegions(need, unionRegions(...ps.map((p) => clears(p.regions))))));
+      }
+      ok(worst <= corner, `${name}, ${layout}, step ${step}: no missed band (worst level ${worst.toFixed(2)} mm2 <= the corners ${corner.toFixed(1)})`);
+    }
+  }
+}
 {
   // G. the HEIGHT MAP (#core/height-map.js) of the boss plate's levels: the boss lighter than the plate, outside the part transparent, one PNG
   const L = readLevels(sliced(bossPlate(), 'boss.stl').regions.find((r) => r.levels).levels, { scale: 1, yUp: true });
@@ -265,8 +347,21 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq(trec.levels.length, 4, 'a Fusion payload with `levels`: kept on the outline record');
     trec.cutType = 'roughing'; trec.stepDepth = 1; trec.toolDia = 6.35; trec.finishAllowance = 0.5;
     h.clickAt(5, -45);
-    eq(h.note(), ['Roughing: 3 levels, 2 to 6 mm', 'Roughing: 0.5 mm left on every wall for the Contour', 'Roughing: up to 2 raised areas left standing on a level (1 narrower than the 6.35 mm bit)'], 'the Roughing card note: its levels, the allowance, the islands');
-    eq(elems(exportOf(app)).map((e) => `${e.type}@${e.depth}`), ['pocket@2.000 mm', 'pocket@3.000 mm', 'pocket@3.000 mm', 'pocket@6.000 mm'], 'its export: level 2 (one pocket, 2 islands), level 3 (the band + the pocket in the plate), level 6 (the band)');
+    eq(h.note(), ['Roughing: 3 levels, 2 to 6 mm, terraces: 3 paths', 'Roughing: 0.5 mm left on every wall for the Contour', 'Roughing: up to 2 raised areas left standing on a level (1 narrower than the 6.35 mm bit)'], 'the Roughing card note: its levels, the allowance, the islands');
+    eq(elems(exportOf(app)).map((e) => `${e.type}@${e.depth}`), ['pocket@2.000 mm', 'pocket@3.000 mm', 'pocket@6.000 mm'], 'its export (Terraces, the default): the 2 mm terrace, the 3 mm terrace (the pocket in the plate), the 6 mm terrace (the band); depth-first in the one area');
+    // the Layout row (owner turn 2604) and the Min terrace width row (turns 2605-2607): shown for a part with levels, ONE undo step each, saved
+    eq(['roughLayout', 'minTerraceWidth', 'adaptiveSteps'].map((r) => h.rows().includes(r)), [true, true, false], 'a part with levels: the Layout and Min terrace width rows (no adaptive stepping: it reads a slope\'s rings)');
+    eq([h.q('.cut-layout-modes .is-active').textContent, h.q('.cut-min-terrace').value], ['Terraces', '0'], 'the defaults: Terraces, 0');
+    const n0 = st.history.length;
+    h.pressEl('.cut-layout-modes .cut-preset[data-value="nested"]');
+    eq([CUT_PLAN.get(tk).roughLayout, st.history.length, h.rows().includes('minTerraceWidth')], ['nested', n0 + 1, false], 'Nested: stored, one undo step, no Min terrace width row');
+    eq(elems(exportOf(app)).map((e) => `${e.type}@${e.depth}`), ['pocket@2.000 mm', 'pocket@3.000 mm', 'pocket@6.000 mm'], 'Nested: the 2 mm level, the pocket in the plate at 3 (the band the same at 3 and 6: one path, at 6), the band at 6');
+    st.undo();
+    eq(CUT_PLAN.get(tk).roughLayout, undefined, 'undo: Terraces again');
+    h.setField('.cut-min-terrace', '20');
+    eq(CUT_PLAN.get(tk).minTerraceWidth, 20, 'Min terrace width 20 mm stored');
+    ok(h.note().some((t) => /^Roughing: \d+ bands? narrower than 20 mm left uncut$/.test(t)), 'the note says the bands left: ' + JSON.stringify(h.note()));
+    h.setField('.cut-min-terrace', '0');
 
     // save + reload: the Roughing, its levels and its Contour
     setContour(tk, true);

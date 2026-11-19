@@ -26,6 +26,9 @@
 //  * ROOM: every lead-in point (excluding J) must lie strictly on the chosen side of the outline, no lead-in segment may cross the outline, and no OTHER
 //    part of the outline (segments other than the junction's own stretch; on a single-segment closed loop like a circle, the far half beyond +-90 deg) may
 //    be closer to any lead-in point P than P's perpendicular distance h(P) = (P - J) . n from the junction's tangent line (tolerance 0.01 mm).
+//    TASK 787: the same rule holds for EVERY hole loop of the part (the outline cut's `partHoleLoops`: each inner loop, one with its own record too): no
+//    lead-in point inside a hole, no lead-in segment crossing a hole, and no hole closer to a lead-in point P than h(P) (0.01 mm), so a calculated
+//    Radius / Sweep is reduced, or the lead-in refused 'room', when a hole is in the way. A part without holes: unchanged.
 //  * WRITTEN: ONE OPEN on-line path, no Z: `M tip [L S] A R R 0 0 sweep J` followed by the loop's exact lines / arcs from J back to J.
 //    Each cut carries `leadIn` = { role: 'arc', radius, sweep, length, side, r, at, atFrac, isCalc, tip, arcStart, junction, center, tangent, normal,
 //    svgSweep, points, legPoints, loopPoints, d } and `extent` = points (so the exported viewBox holds the arc and tip outside the drawing); a refused lead-in leaves the cut
@@ -206,7 +209,7 @@ function buildLeadGeometry(w, junc, { radius, sweep, length = 0, side = 'outside
 }
 
 // Precompute ROOM-check structures once per (walk, junction) so binary search for calculated defaults is fast.
-function roomContext(w, junc) {
+function roomContext(w, junc, holes = []) {
   const ring = walkPoints(w);
   const circle = w.closed && w.segs.length === 1 && w.segs[0].type === 'arc' ? w.segs[0] : null;
   let otherPolys;
@@ -217,11 +220,11 @@ function roomContext(w, junc) {
     // Single closed segment (circle or single closed curve): the far half beyond +-90 deg along the perimeter
     otherPolys = [piecesPoints(subWalk(w, junc.s + w.length / 4, w.length / 2))];
   }
-  return { ring, circle, otherPolys, ownSeg: w.segs[junc.segIndex] };
+  return { ring, circle, otherPolys, ownSeg: w.segs[junc.segIndex], holes, holePolys: holes.map((h) => [...h, h[0]]) }; // TASK 787: the part's hole rings (open) and closed
 }
 
 function fitsRoom(ctx, geom) {
-  const { ring, circle, otherPolys, ownSeg } = ctx;
+  const { ring, circle, otherPolys, ownSeg, holes, holePolys } = ctx;
   const { points, junction: J, normal: n, radius, side } = geom;
   const wantInside = side === 'inside';
   // If the junction lies on an arc segment and the lead-in curves onto its concave side, the lead-in arc must be tighter than the segment's radius
@@ -240,20 +243,23 @@ function fitsRoom(ctx, geom) {
       if (inPoly(p, ring) !== wantInside) return false;
     }
     if (otherPolys.length && distToPolys(p, otherPolys) < h - LEAD_IN.roomTolMm) return false;
+    if (holes.length && (holes.some((hr) => inPoly(p, hr)) || distToPolys(p, holePolys) < h - LEAD_IN.roomTolMm)) return false; // TASK 787: every hole, the same rule
   }
   if (!circle && polylineCrossesRing(points, ring)) return false;
+  if (holes.some((hr) => polylineCrossesRing(points, hr))) return false;
   return true;
 }
 
 /**
  * outlineArc(w, opts) -> the resolved tangential arc lead-in on walk `w`:
  *   { s, frac, segIndex, at, isCalc, radius, sweep, length, side, r, junction, tangent, normal, center, arcStart, tip, points, svgSweep, d, error? }
- * Calculates any null (un-typed) Radius / Sweep / Length from the bit and the outline (THE RULES, CALCULATED DEFAULTS).
+ * Calculates any null (un-typed) Radius / Sweep / Length from the bit and the outline (THE RULES, CALCULATED DEFAULTS). `holes` (TASK 787) = the part's
+ * hole rings ({x,y}[] each, open), kept clear by the ROOM rule like the outline.
  * Pure, no DOM: the ONE calculation used by export, Prepare, Export 2D/3D, and the cut card.
  */
-export function outlineArc(w, { radius = null, sweep = null, length = null, at = null, side = 'outside', r = 0, toolDia = 0 } = {}) {
+export function outlineArc(w, { radius = null, sweep = null, length = null, at = null, side = 'outside', r = 0, toolDia = 0, holes = [] } = {}) {
   const junc = outlineJunction(w, at);
-  const ctx = roomContext(w, junc);
+  const ctx = roomContext(w, junc, holes);
   const isCalc = { radius: radius == null, sweep: sweep == null, length: length == null, at: at == null };
   const L = length != null ? length : 0;
   const rMin = r > 0 ? r : toolDia / 2;
@@ -327,7 +333,9 @@ export function applyLeadIn(cuts, rec, state) {
   if (strokes) return refuse('tabs');
   const w = loopWalk(outer.loop, state);
   if (!w) return refuse('outline');
-  const res = outlineArc(w, st);
+  const holeWalks = (outer.partHoleLoops || []).map((hl) => loopWalk(hl, state)); // TASK 787: every hole of the part (the ROOM rule keeps them clear)
+  if (holeWalks.some((hw) => !hw)) return refuse('outline');
+  const res = outlineArc(w, { ...st, holes: holeWalks.map(walkPoints) });
   const info = {
     radius: res.radius, sweep: res.sweep, length: res.length, side: res.side, r: res.r,
     at: res.at, atFrac: res.frac, isCalc: res.isCalc,
@@ -343,13 +351,14 @@ export function applyLeadIn(cuts, rec, state) {
 
 /**
  * TASK 778: evaluate dragging the junction handle to world point `worldPt` on `outerLoop` for record `rec` (ONE derivation; Prepare never computes
- * outline geometry itself). Returns { atFrac, leadIn } or null when the walk cannot be read.
+ * outline geometry itself). `holeLoops` (TASK 787) = the part's hole loops, kept clear as in the export. Returns { atFrac, leadIn } or null when the walk
+ * cannot be read.
  */
-export function leadInDragAt(outerLoop, rec, state, worldPt) {
+export function leadInDragAt(outerLoop, rec, state, worldPt, holeLoops = []) {
   const w = loopWalk(outerLoop, state);
   if (!w) return null;
   const hit = nearestWalkFrac(w, worldPt);
-  const derived = applyLeadIn([{ kind: 'loop', loop: outerLoop, isHole: false, rec }], { ...rec, leadIn: true, leadInAt: hit.frac }, state);
+  const derived = applyLeadIn([{ kind: 'loop', loop: outerLoop, isHole: false, rec, partHoleLoops: holeLoops }], { ...rec, leadIn: true, leadInAt: hit.frac }, state);
   const leadIn = derived && derived[0] ? derived[0].leadIn : null;
   return leadIn ? { atFrac: hit.frac, leadIn } : null;
 }

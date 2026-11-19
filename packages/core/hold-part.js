@@ -15,6 +15,10 @@
 //    offset outline comes closer, at a concave corner). A strip is written as an INSIDE cut: the Origin offsets it inward by the REAL bit's
 //    radius, so its part-side leg cuts exactly where pass 1 ran (the bit's edge on the part's edge) whatever bit is used, up to the strip width.
 //    Every end cap is exactly the strip width long (else another part of the outline's offset is in the way: refused).
+//    TASK 787, THE OFFSET: the Origin offsets the strip by the bit radius + the record's cut offset ALL ROUND, its end caps too, so a cap written at
+//    a tab's end would move the tab's end by the offset (a negative offset ate 2 x |offset| of every tab). The strips are therefore laid out round
+//    tabs of the WRITTEN width = the tab width - 2 x the offset (tabLayout's placement and spacing apply to it): the tab the Origin leaves is the
+//    tab width for any offset the strip takes. The tab marks and the card show the tab itself (the tab width, centred on the tab).
 //    The return leg runs in waste (optional). The strip WIDTH is the only number computed from the bit.
 //  * COUNT: Auto = one tab per HOLD_PART.autoPerMm of perimeter (rounded up), at least HOLD_PART.autoMin; or the record's number.
 //  * PLACEMENT: a tab lies inside ONE segment of the outline (a line, an arc or a bezier; a circle is one closed segment with no ends) with its centre at
@@ -25,7 +29,8 @@
 //    needs) is dropped, and the count is first lowered until the even spacing leaves that gap. Fewer than asked: the summary says how many fit.
 //  * REFUSED (the cut is exported as without hold, the summary says why): no cut depth; thickness >= depth (nothing to hold); no segment long
 //    enough for a tab; the offset outline of a gap is not one ring (a neck narrower than the strip), or the record's bit + offset does not fit
-//    in a strip (an offset over stripExtraMm / 2).
+//    in a strip (an offset over stripExtraMm / 2); TASK 787 'offset': the tabs fit at the tab width but not at the written width (the offset needs
+//    more outline than there is), or the offset leaves no written tab at all.
 //  * TASK 775, ON LINE (the cut type 'online'; the Origin follows the line itself, material both sides): the same Hold part rows (one declaration).
 //    TABS on a CLOSED outline: the line is written as SEPARATE OPEN STROKES, the tabs being the GAPS between them, each exactly the tab width long
 //    along the outline (measured on the line the bit's centre follows): the gaps are simply NOT CUT, to the full depth (no thickness: the row is not
@@ -346,17 +351,20 @@ export function applyHoldPart(cuts, rec, state) {
   const stripWidth = toolDia + HOLD_PART.stripExtraMm;
   const requested = rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? autoTabCount(w.length) : Math.floor(Number(rec.tabCount));
   const side = isOutside(rec.cutType) ? 1 : -1;
-  const layout = tabLayout(w, { count: requested, width, bitRadius: toolDia / 2, gap: stripWidth, side });
-  const sizes = { requested, count: layout.tabs.length, perimeter: w.length, stripWidth };
-  if (!layout.tabs.length) return refuse('no room', sizes);
+  const offset = Number(rec.cutOffset) || 0;
+  const written = width - 2 * offset; // TASK 787 (THE OFFSET): the strips' caps sit round tabs this wide, so the Origin's offset leaves the tab width
+  if (!(written > 0)) return refuse('offset', { requested, count: 0, perimeter: w.length, stripWidth, offset, written });
+  const layout = tabLayout(w, { count: requested, width: written, bitRadius: toolDia / 2, gap: stripWidth, side });
+  const sizes = { requested, count: layout.tabs.length, perimeter: w.length, stripWidth, offset, written };
+  if (!layout.tabs.length) return refuse(written > width && tabLayout(w, { count: requested, width, bitRadius: toolDia / 2, gap: stripWidth, side }).tabs.length ? 'offset' : 'no room', sizes);
   const strips = holdStrips(w, layout, side, stripWidth);
   if (!strips) return refuse('strip', sizes);
-  const marks = layout.tabs.map((tb) => { const pc = subWalk(w, tb.s0, width), a = segStart(pc[0]); return `M ${num(a.x)} ${num(a.y)} ${piecesD(pc)}`; });
+  const marks = layout.tabs.map((tb) => { const pc = subWalk(w, tb.s - width / 2, width), a = segStart(pc[0]); return `M ${num(a.x)} ${num(a.y)} ${piecesD(pc)}`; });
   const stripType = rec.cutType === 'outside' || rec.cutType === 'inside' ? 'inside' : 'interior';
   // the bit-CENTRE path of each strip cut by the record's bit (the strip shrunk by its radius + the record's offset, round joins: the ROBUST offset,
   // a strip is a thin loop with corners): the cut's `polygon` with offsetSide 0, so the footprint (#core/profile-model deriveCutFootprint) sweeps
   // exactly it. The export writes the strip itself (`geom`); the Origin does this offset with the real bit.
-  const inset = toolDia / 2 + (Number(rec.cutOffset) || 0);
+  const inset = toolDia / 2 + offset;
   const ring = (pts) => [...pts.map((q) => [q.x, q.y]), [pts[0].x, pts[0].y]]; // closed, as offsetPolygonRound returns its rings
   const centres = strips.map((st) => (inset !== 0 ? offsetPolygonRound(ring(st.polygon), -inset, HOLD_PART.chordTolMm) : [ring(st.polygon)]));
   if (centres.some((c) => c.length !== 1)) return refuse('strip', sizes);

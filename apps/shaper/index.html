@@ -486,7 +486,7 @@
       .ops-grip { flex-basis: 44px; }
       .ops-del { flex-basis: 44px; font-size: 17px; }
       #prepare-panel { bottom: 68px; }        /* the cut card ends above the folded bar (12 + 44 + 12) */
-      #prepare-dir-legend { bottom: 66px; }
+      #prepare-dir-legend { bottom: 66px; max-width: calc(100% - 262px); } /* TASK 788: ends left of the phone card (12 + 236 + 12 + 2 px gap), not under its corner */
     }
     .cut-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
     .cut-presets .cut-preset { all: unset; box-sizing: border-box; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; }
@@ -555,6 +555,7 @@
     .cut-type-opt.is-disabled { color: var(--sk-prep-disabled); cursor: not-allowed; }
     .cut-type-opt.is-disabled .cut-ic { color: var(--sk-prep-disabled); }
     .cut-offset-pop { width: 156px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    @media (max-width: 640px), (pointer: coarse) { .cut-offset-pop { width: min(156px, calc(100vw - 262px)); } } /* TASK 788: the SAME room left of the phone card as the type / shape / clearing popovers (after the rule above: same specificity) */
     .cut-pop-title { font-size: 14px; font-weight: 600; }
     .cut-pop-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .cut-pop-grid .cut-preset { all: unset; box-sizing: border-box; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: var(--sk-prep-field-bg); font-size: 13px; color: var(--sk-prep-chip-text); cursor: pointer; }

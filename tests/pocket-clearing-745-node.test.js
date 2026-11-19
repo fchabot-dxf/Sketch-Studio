@@ -140,7 +140,9 @@ for (const [name, mk] of Object.entries(SHAPES)) {
   const sp = planClearing(reg.rings, settings('morphed'));
   results[name].sp = sp;
   if (name === 'island') { eq([sp.refused, sp.morphedBlocked, sp.clear.length], ['morphed islands', 'islands', 0], 'island: the morphed spiral is refused: has islands'); continue; }
-  if (name === 'dumbbell') { eq([sp.refused, sp.morphedBlocked, sp.clear.length], ['morphed splits', 'splits', 0], 'dumbbell: the morphed spiral is refused: the rings split at the neck'); continue; }
+  // TASK 804: a pocket whose rings split is no longer refused: one morphed spiral per area (the two bells + the rings they share), checked in
+  // tests/pocket-nocross-804-node.test.js
+  if (name === 'dumbbell') { eq([sp.refused, sp.morphedBlocked, sp.clear.length, sp.linesWhy], [null, null, 2, 'splits'], 'dumbbell: one morphed spiral per bell (TASK 804: its neck is narrower than the bit, so the rings are two areas from the first)'); continue; }
   eq([sp.refused, sp.clear.length, sp.clear[0].role, sp.clear[0].closed], [null, 1, 'morphed', false], `${name}: the morphed spiral is ONE open path`);
   const pts = sp.clear[0].points, starts = sp.clear[0].turnStarts;
   eq(starts.length, conc.levels + 1, `${name}: ${starts.length} turns = the central loop + one per ring out + the closing turn`);

@@ -171,6 +171,9 @@ console.log('spiral: ' + JSON.stringify(measured));
   for (const [key, want] of Object.entries(MAIN.exports)) {
     const [name, pat, more, okey] = key.split('|');
     if (okey === 'grouped') continue; // TASK 802: there is no grouped download any more; its flat twin key is the check
+    // TASK 804: the L's Morphed spiral walks each hollow-corner arc once (no fold back over it: the same path within 0.01 mm, checked against main's
+    // points in tests/pocket-nocross-804-node.test.js) and the dumbbell is morphed per area (no longer refused): both changed on purpose
+    if (pat === 'morphed' && (name === 'L' || name === 'dumbbell')) continue;
     const m = JSON.parse(more);
     const svg = exportOf(SHAPES[name](), POCKET({ clearing: pat, ...m }), {});
     const targetMd5 = m.passDepth > 0 ? MAIN.exports[[name, pat, JSON.stringify({ ...m, passDepth: null }), okey].join('|')] : want;

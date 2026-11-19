@@ -1,11 +1,10 @@
 // packages/ui/save-button.js — TASK 768 (owner turn 2314: "maybe add a save button in the header, and a spinning wheel for load state"): THE Save button of the
 // shared app chrome, one component for the four hosts. It runs THE Save command (sidebar-projects.js saveNow, the same function as Ctrl+S and the menu's Save:
 // to the design's home, document-home.js) and SHOWS the save state of the design shown, from save-state.js (the same source the document tab's dot reads).
-// Mounted by sidebar-projects.js with the document tab strip, so a host without the project layer (Shaper in Fusion mode, `projects: false`) has none.
+// Mounted by sidebar-projects.js, so a host without the project layer (Shaper in Fusion mode, `projects: false`) has none.
 //
-// WHERE (placeIn): in the desktop header (app-header.js), directly after the leading menu button and BEFORE the stage buttons (.sk-header-tabs),
-// as a compact icon-only 30 px square button matching the header control height; same button moves to the right end of the document tab strip where
-// the header is hidden (a phone, a phone in landscape: app-header.js HEADER_HIDDEN_QUERY), 44 px wide x strip row height, sticky.
+// WHERE (placeIn, TASK 776, owner turn 2368): the right end of the shared app footer (footer-slot.js; app-footer.js sizes it: 32 px, 44 px high on touch), after
+// the Settings gear and before the account avatar, in EVERY layout (desktop, phone, phone landscape): one place, never in the header or the tab strip.
 // FIXED FOOTPRINT: every state has the same icon slot (16 px: the save glyph, or the spinner): a state change never shifts the stage buttons.
 // States (save-state.js): saved = dimmed; new = plain; unsaved = accent outline + an accent dot on the glyph; saving / loading = the spinner (spinner.js) in the
 // glyph's place, a press does nothing; failed = filled red, a press tries again; signin = filled amber (the menu's status text).
@@ -14,7 +13,6 @@
 import { SIDEBAR_ICONS } from './app-sidebar.js';
 import { createSpinner } from './spinner.js';
 import { titleWithShortcut, shortcutHint } from './shortcuts.js';
-import { HEADER_HIDDEN_QUERY } from './app-header.js';
 import { SAVE_STATES } from './save-state.js';
 import { mountTooltip } from './hint.js';
 import { CHROME_HINTS } from './design-hints.js';
@@ -42,18 +40,15 @@ function injectStyles(doc) {
 .sk-save[data-state="loading"] .sk-save-label { opacity: 0.55; }
 .sk-save[data-state="failed"] { background: #dc2626; border-color: #dc2626; color: #fff; }
 .sk-save[data-state="signin"] { background: #b45309; border-color: #b45309; color: #fff; }
-/* where the header is hidden: the end of the document tab strip, icon only, as large as the strip's "+" / close x, pinned while the tabs scroll */
-.sk-doctabs > .sk-save { position: sticky; right: 0; z-index: 2; margin-left: 0; width: 44px; height: var(--sk-doctabs-h, 30px); padding: 0; border: 0; border-radius: 6px 6px 0 0; gap: 0; }
-.sk-doctabs > .sk-save:not([data-state="failed"]):not([data-state="signin"]) { background: var(--sk-doctab-strip, transparent); }
-/* the tabs and the "+" scroll into view CLEAR of it (scrollIntoView, and the strip's own active-tab scroll, document-tabs.js, read this padding) */
-.sk-doctabs:has(> .sk-save) { scroll-padding-inline-end: 52px; }
+/* in the footer's end (footer-slot.js): the footer's button size (app-footer.js), no frame unless a state asks for one */
+.sk-footer-end > .sk-save:not([data-state="unsaved"]):not([data-state="failed"]):not([data-state="signin"]) { border-color: transparent; }
 `;
   doc.head.appendChild(s);
   stylesInjected = true;
 }
 
-/** createSaveButton({ getState, onPress, doc }) -> { el, refresh, placeIn, destroy }. getState() -> { state, text } (save-state.js); onPress() runs THE Save command. */
-export function createSaveButton({ getState, onPress, doc = globalThis.document, win = globalThis.window }) {
+/** createSaveButton({ getState, onPress, doc }) -> { el, refresh, placeIn(slot), destroy }. getState() -> { state, text } (save-state.js); onPress() runs THE Save command. */
+export function createSaveButton({ getState, onPress, doc = globalThis.document }) {
   injectStyles(doc);
   const el = doc.createElement('button');
   el.type = 'button'; el.className = 'sk-save';
@@ -89,22 +84,8 @@ export function createSaveButton({ getState, onPress, doc = globalThis.document,
     onPress();
   });
 
-  // the header (wide) or the document tab strip (where the header is hidden): ONE element, moved when the viewport crosses the header's breakpoint
-  let mq = null, onMq = null;
-  function placeIn({ header, strip }) {
-    if (mq) mq.removeEventListener('change', onMq);
-    mq = win.matchMedia(HEADER_HIDDEN_QUERY);
-    onMq = () => {
-      if (mq.matches) {
-        if (el.parentNode !== strip || strip.lastElementChild !== el) strip.appendChild(el);
-      } else {
-        const tabs = header.querySelector('.sk-header-tabs');
-        if (el.parentNode !== header || el.nextElementSibling !== tabs) header.insertBefore(el, tabs);
-      }
-    };
-    mq.addEventListener('change', onMq);
-    onMq();
-  }
+  // the footer's right end (footer-slot.js): ONE place in every layout; the account avatar goes in after it
+  const placeIn = (slot) => { slot.appendChild(el); };
 
   const tip = mountTooltip({
     target: el,
@@ -116,5 +97,5 @@ export function createSaveButton({ getState, onPress, doc = globalThis.document,
   });
 
   refresh();
-  return { el, refresh, placeIn, destroy() { tip.destroy(); if (mq) mq.removeEventListener('change', onMq); el.remove(); } };
+  return { el, refresh, placeIn, destroy() { tip.destroy(); el.remove(); } };
 }

@@ -14,9 +14,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 
 const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><script type="importmap">{"imports":{"#core/":"/packages/core/","#ui/":"/packages/ui/"}}</script></head>
-<body style="background:#2b2f36;font:14px system-ui"><div id="host" style="padding:8px"></div>
+<body style="background:#2b2f36;font:14px system-ui"><header id="host" class="sk-header" style="padding:8px"></header>
 <script type="module">
 import { createAppSidebar } from '/packages/ui/app-sidebar.js';
+import { createAccountAvatar } from '/packages/ui/account-avatar.js';
 import { mountProjectSidebar } from '/packages/ui/sidebar-projects.js';
 import { createGoogleAccount } from '/packages/ui/cloud/google-account.js';
 import { createAuthStore } from '/packages/ui/cloud/auth-state.js';
@@ -50,12 +51,12 @@ function fakeStore() {
 }
 
 window.T = {
-  mountRow(st, info, extra = {}) {
-    if (window.sb) window.sb.destroy(); document.getElementById('host').innerHTML = '';
+  mountRow(st, info) {
+    if (window.av) window.av.destroy(); document.getElementById('host').innerHTML = '';
     const account = fakeAccount(st, info);
-    const sb = createAppSidebar({ current: 'shaper', docName: 'Door A', actions: [], account, ...extra });
-    document.getElementById('host').appendChild(sb.el); sb.open();
-    window.sb = sb; window.acct = account; return true;
+    const av = createAccountAvatar({ account, check: null });
+    document.getElementById('host').appendChild(av.el);
+    window.av = av; window.acct = account; av.open(); return true;
   },
   mountProjects(st) {
     document.querySelectorAll('[data-pm=close]').forEach((b) => b.click());
@@ -83,9 +84,10 @@ window.T = {
     });
     window.real = { account, gisCalls, popups };
     if (window.sb) window.sb.destroy(); document.getElementById('host').innerHTML = '';
-    const sb = createAppSidebar({ current: 'shaper', docName: 'Door A', actions: [], account });
-    document.getElementById('host').appendChild(sb.el);
-    window.sb = sb; account.init(); return new Promise((r) => setTimeout(() => r(true), 400));
+    if (window.av) window.av.destroy();
+    const av = createAccountAvatar({ account, check: null });
+    document.getElementById('host').appendChild(av.el);
+    window.av = av; window.acct = account; account.init(); av.open(); return new Promise((r) => setTimeout(() => r(true), 400));
   },
 };
 window.READY = true;
@@ -122,7 +124,7 @@ await (async () => {
     // 2. signed in: initials when the photo errors, name + email, Sign out
     await ev(`T.mountRow({ signedIn: true, lapsed: false }, { name: 'Ada Lovelace', email: 'ada@example.com', picture: '/__broken.png', initials: 'AL' })`);
     await sleep(600);
-    const inn = await ev(`(() => { const r = document.querySelector('[data-section=account]'); return { state: r.dataset.state, av: r.querySelector('[data-account=avatar]').textContent, img: !!r.querySelector('.sk-avatar img'),
+    const inn = await ev(`(() => { const r = document.querySelector('[data-section=account]'); return { state: r.dataset.state, av: document.querySelector('.sk-account[data-account=avatar]').textContent, img: !!document.querySelector('.sk-account .sk-account-circle img'),
       who: r.querySelector('[data-account=who]').textContent, out: !!r.querySelector('[data-account=sign-out]'), rowText: r.textContent }; })()`);
     assert.strictEqual(inn.state, 'signed-in'); assert.strictEqual(inn.av, 'AL', 'a broken image falls back to the initials'); assert(!inn.img);
     assert(/Ada Lovelace/.test(inn.who) && /ada@example\.com/.test(inn.who)); assert(inn.out); assert(!/sync/i.test(inn.rowText));
@@ -132,11 +134,11 @@ await (async () => {
     const px = 'data:image/gif;base64,R0lGODlhAQABAIAAAKqqqv///yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
     await ev(`T.mountRow({ signedIn: true, lapsed: false }, { name: 'Ada Lovelace', email: 'ada@example.com', picture: '${px}', initials: 'AL' })`);
     await sleep(500);
-    assert.strictEqual(await ev(`!!document.querySelector('.sk-avatar img')`), true, 'the photo shows when it loads');
+    assert.strictEqual(await ev(`!!document.querySelector('.sk-account .sk-account-circle img')`), true, 'the photo shows when it loads');
     // 2c. no name: the email is the label
     await ev(`T.mountRow({ signedIn: true, lapsed: false }, { name: '', email: 'ada@example.com', picture: '', initials: 'AD' })`);
     await sleep(300);
-    assert.strictEqual(await ev(`document.querySelector('[data-account=avatar]').textContent`), 'AD');
+    assert.strictEqual(await ev(`document.querySelector('.sk-account').textContent`), 'AD');
 
     // 3. sign out: the controller is called, the row goes back to signed out
     await ev(`T.mountRow({ signedIn: true, lapsed: false }, { name: 'Ada', email: 'a@x.org', picture: '', initials: 'AD' })`);
@@ -144,7 +146,7 @@ await (async () => {
     await ev(`document.querySelector('[data-account=sign-out]').click()`);
     await sleep(200);
     assert.deepStrictEqual(await ev(`acct.calls`), ['signOut']);
-    assert.strictEqual(await ev(`document.querySelector('[data-section=account]').dataset.state`), 'signed-out');
+    assert.strictEqual(await ev(`document.querySelector('.sk-account').dataset.state`), 'signed-out');
 
     // 4. lapsed: "Reconnect" (signIn again), never "signed out"
     await ev(`T.mountRow({ signedIn: false, lapsed: true }, null)`);
@@ -153,22 +155,21 @@ await (async () => {
     assert.strictEqual(lap.state, 'lapsed'); assert.strictEqual(lap.text, 'Reconnect'); assert.strictEqual(lap.called, 1); assert(!/sync/i.test(lap.rowText));
     await shot('3-lapsed-reconnect');
 
-    // 5. the account row is the LAST row of the drawer (TASK 696: no GO TO block above it any more), and a host without `account` shows no row (Pen Plotter etc. all pass it; no stray rows)
-    await ev(`T.mountRow({ signedIn: false, lapsed: false }, null)`);
-    assert.deepStrictEqual(await ev(`(() => { const r = document.querySelector('[data-section=account]'); return [r.parentElement.className, r.parentElement.lastElementChild === r, document.querySelectorAll('[data-section=goto]').length]; })()`), ['sk-sidebar-content', true, 0], 'account is the last row of the drawer, no GO TO block');
+    // 5. the account is NOT in the drawer (TASK 776): a drawer built with the project layer has no account row; the avatar is the one account UI
+    await ev(`T.mountProjects({ signedIn: false, lapsed: false })`);
+    assert.deepStrictEqual(await ev(`[document.querySelectorAll('.sk-sidebar [data-section=account], .sk-sidebar [data-account]').length, document.querySelectorAll('.sk-sidebar-account').length]`), [0, 0], 'no account row in the drawer');
+    await ev(`document.querySelectorAll('[data-pm=close]').forEach((b) => b.click())`);
 
     // 6. the REAL controller with the server routes answering 404 (unconfigured / localhost): the row works through the GIS popup
     assert.strictEqual(await ev(`T.mountReal('absent')`), true);
-    await ev(`sb.open()`);
     const gis = await ev(`(() => { const b = document.querySelector('[data-account=sign-in]'); const n = real.gisCalls.length; b.click(); return { sync: real.gisCalls.length - n, popups: real.popups.length, serverAvailable: real.account.state().serverAvailable }; })()`);
     assert.strictEqual(gis.sync, 1, 'unconfigured server: the GIS token request is made synchronously in the click');
     assert.strictEqual(gis.popups, 0, 'no server popup when the routes 404'); assert.strictEqual(gis.serverAvailable, false);
     await sleep(500);
-    assert.strictEqual(await ev(`document.querySelector('[data-section=account]').dataset.state`), 'signed-in', 'the row follows the controller after the GIS grant');
+    assert.strictEqual(await ev(`document.querySelector('.sk-account').dataset.state`), 'signed-in', 'the avatar follows the controller after the GIS grant');
     assert(await ev(`real.account.state().signedIn`));
     // and the server path: routes exist (401 no-session), the click opens the server popup synchronously
     assert.strictEqual(await ev(`T.mountReal('nosession')`), true);
-    await ev(`sb.open()`);
     const srv = await ev(`(() => { const b = document.querySelector('[data-account=sign-in]'); const n = real.popups.length; b.click(); return { popups: real.popups.length - n, gis: real.gisCalls.length }; })()`);
     assert.strictEqual(srv.popups, 1, 'server configured: the sign-in popup opens synchronously'); assert.strictEqual(srv.gis, 0);
 

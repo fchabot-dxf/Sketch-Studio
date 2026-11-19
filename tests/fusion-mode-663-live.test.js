@@ -46,7 +46,7 @@ try {
     sidebarActions: [...document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action),
     sidebarDocCount: document.querySelectorAll('.sk-sidebar-doc').length,
     sidebarStatusCount: document.querySelectorAll('.sk-sidebar [data-section="status"]').length,
-    sidebarAccountCount: document.querySelectorAll('.sk-sidebar [data-section="account"]').length,
+    sidebarAccountCount: document.querySelectorAll('.sk-sidebar [data-section="account"], .sk-account, .sk-account-menu').length,
     sidebarGotoCount: document.querySelectorAll('.sk-sidebar [data-section="goto"]').length,
     docTabsCount: document.querySelectorAll('.sk-doctabs').length,
     addBtnText: document.getElementById('btn-fusion-add-selection').textContent,
@@ -64,7 +64,7 @@ try {
   assert.deepStrictEqual(bootState.sidebarActions, ['download', 'settings', 'log'], 'Fusion mode hides Open/New/Save/Projects file actions, keeps host actions');
   assert.strictEqual(bootState.sidebarDocCount, 0, 'Fusion mode hides document title/rename header');
   assert.strictEqual(bootState.sidebarStatusCount, 0, 'Fusion mode hides Drive/save status line');
-  assert.strictEqual(bootState.sidebarAccountCount, 0, 'Fusion mode hides Google account / Drive controls');
+  assert.strictEqual(bootState.sidebarAccountCount, 0, 'Fusion mode has no Google account / Drive controls (no avatar either)');
   assert.strictEqual(bootState.sidebarGotoCount, 0, 'Fusion mode hides GO TO section');
   assert.strictEqual(bootState.docTabsCount, 0, 'Fusion mode hides document tab strip');
   assert.strictEqual(bootState.addBtnText, 'Add selection', 'Add selection button label present');
@@ -161,7 +161,8 @@ try {
   assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'fusion-addin', 'settings', 'log'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export; TASK 733: + the Fusion add-in download, hidden in Fusion mode)');
   assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
   assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
-  assert.strictEqual(normalSidebar.hasAccount, true, 'normal Shaper keeps Google account / Drive section');
+  assert.strictEqual(normalSidebar.hasAccount, false, 'normal Shaper: the drawer has no account row (TASK 776: the account is the avatar in the footer)');
+  assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-footer-end > .sk-account').length`), 1, 'normal Shaper: ONE account avatar, in the footer');
   assert.strictEqual(normalSidebar.hasGoto, false, 'normal Shaper has no GO TO section either (TASK 696: each app is its own website)');
   assert.strictEqual(normalSidebar.hasDocTabs, true, 'normal Shaper keeps document tab strip');
   // Switching to Prepare in normal mode also has no Add selection button

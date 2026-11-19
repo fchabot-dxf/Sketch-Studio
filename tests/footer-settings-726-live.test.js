@@ -2,6 +2,7 @@
 // It is the footer's far-right button (after Recenter), fits inside the screen with the other footer buttons (44 px high on touch), a real click / tap opens the shared
 // Style panel (.sk-style-panel), aria-pressed follows it, a second press closes it. The header gets no extra button (TASK 619). SketchStudio / Shaper: the drawer's
 // Style / Settings item toggles the very same panel element. Screenshots: .evidence/726.
+import { FOOTER_PHONE_MIN_W } from '../packages/ui/footer-slot.js'; // TASK 776: THE phone footer width floor
 import assert from 'node:assert';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import fs from 'node:fs';
@@ -51,9 +52,11 @@ await (async () => {
         assert.strictEqual(g.title, 'Settings'); assert.strictEqual(g.aria, 'Settings'); assert(!g.headerBtn, name + ': not in the header');
         assert(g.left > g.recRight - 0.5, name + ': after Recenter ' + JSON.stringify([g.left, g.recRight]));
         assert(g.right <= g.vw + 0.5 && g.minLeft >= -0.5 && g.pageSW <= g.vw + 0.5, `${tag} ${name}: fits on screen ` + JSON.stringify(g));
-        assert(g.right >= g.fRight - 20, `${tag} ${name}: at the footer's right end ` + JSON.stringify(g));
+        // TASK 776: the gear is no longer the very last button: THE Save button and the account avatar follow it, the avatar at the footer's far right
+        const tail = await evalJs(`(() => { const b = document.getElementById('btn-settings'), f = b.closest('footer').getBoundingClientRect(), s = b.nextElementSibling, a = s && s.nextElementSibling; return { save: !!s && s.classList.contains('sk-save'), avatar: !!a && a.classList.contains('sk-account') && a.nextElementSibling === null, aRight: a ? a.getBoundingClientRect().right : 0, fRight: f.right }; })()`);
+        assert(tail.save && tail.avatar && tail.aRight >= tail.fRight - 20, `${tag} ${name}: the gear is followed by Save and the account avatar, at the footer's right end ` + JSON.stringify(tail));
         assert(!g.overlap, `${tag} ${name}: no footer buttons overlap`);
-        assert(g.h >= (tag === 'phone390' ? 44 : 30) - 0.5 && g.w >= (tag === 'phone390' ? 44 : 30) - 0.5, `${tag} ${name}: target size ` + [g.w, g.h]);
+        assert(g.h >= (tag === 'phone390' ? 44 : 30) - 0.5 && g.w >= (tag === 'phone390' ? FOOTER_PHONE_MIN_W : 30) - 0.5, `${tag} ${name}: target size ` + [g.w, g.h]);
         assert.strictEqual(await panelOpen(), false); assert.strictEqual(g.pressed, 'false');
         await press('#btn-settings'); assert.strictEqual(await panelOpen(), true, `${tag} ${name}: press opens the Style panel`);
         assert.strictEqual((await gear()).pressed, 'true', 'pressed while open');

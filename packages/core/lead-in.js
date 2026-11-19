@@ -28,7 +28,7 @@
 //    be closer to any lead-in point P than P's perpendicular distance h(P) = (P - J) . n from the junction's tangent line (tolerance 0.01 mm).
 //  * WRITTEN: ONE OPEN on-line path, no Z: `M tip [L S] A R R 0 0 sweep J` followed by the loop's exact lines / arcs from J back to J.
 //    Each cut carries `leadIn` = { role: 'arc', radius, sweep, length, side, r, at, atFrac, isCalc, tip, arcStart, junction, center, tangent, normal,
-//    svgSweep, points, d } and `extent` = points (so the exported viewBox holds the arc and tip outside the drawing); a refused lead-in leaves the cut
+//    svgSweep, points, legPoints, loopPoints, d } and `extent` = points (so the exported viewBox holds the arc and tip outside the drawing); a refused lead-in leaves the cut
 //    closed (byte-identical to without) and carries { role: 'refused', error, ... }.
 import { loopWalk, walkAt, subWalk, walkPoints, piecesD, piecesPoints } from './hold-part.js';
 import { num } from './loop-geometry.js';

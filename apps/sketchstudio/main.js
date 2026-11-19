@@ -159,7 +159,7 @@ function initApp(){
     if (ribbonEl) ribbonEl.style.display = design ? '' : 'none';
     if (mainEl) mainEl.style.display = design ? '' : 'none';
     if (sidePanel) { sidePanel.close(); sidePanel.toggleEl.style.display = design ? '' : 'none'; }
-    if (footerEl) footerEl.style.display = design ? '' : 'none';
+    if (footerEl) footerEl.style.display = design || mode === 'drawing' ? '' : 'none'; // TASK 776: Drawing shows the footer too (Save, Settings, the account)
     if (exportPanelEl) exportPanelEl.classList.toggle('hidden', mode !== 'export'); // Export view = the existing export form
     if (drawingView) drawingView.setShown(mode === 'drawing'); // TASK 725: the Drawing step (its own view; Design's view is left as it was)
     if (isStage(mode)) { try { localStorage.setItem(STAGE_KEY, mode); } catch (_) { /* storage blocked: the step is not remembered */ } }
@@ -192,11 +192,11 @@ function initApp(){
       { id: 'tune', label: 'Tune solver', icon: SIDEBAR_ICONS.gear, visible: () => shouldLoadTuning, onClick: () => toggleTune && toggleTune() },
     ],
   });
-  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), footer: document.querySelector('footer.sk-statusbar'), settings: stylePanel }); // TASK 726: the gear at the footer's right end = the drawer's Style panel
+  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => (viewMode === 'drawing' ? null : { svg, state }), footer: document.querySelector('footer.sk-statusbar'), settings: stylePanel }); // TASK 726: the gear at the footer's right end = the drawer's Style panel
   // TASK 618/619: Undo / Redo / Delete / Clear (left), Recenter (right); Construction lives in .sk-canvas-corner (design-browser.js)
   // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer
   sidePanel = mountStudioBrowser({ svg, state, engine }); // design-canvas.js
-  drawingView = mountDrawingView({ state, getName: () => (docBuffer ? docBuffer.designName() : '') }); // TASK 725: the Drawing step (drawing-view.js)
+  drawingView = mountDrawingView({ state, getName: () => (docBuffer ? docBuffer.designName() : ''), footer: footerEl }); // TASK 725: the Drawing step (drawing-view.js)
   showView(firstStage);
 
   // TASK 602 (owner): no "Saved" text in the header: the document tab's dot shows unsaved / saving / failed (document-tabs.js)

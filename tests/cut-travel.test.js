@@ -72,15 +72,21 @@ assert.deepStrictEqual(travelOf([loopCut(rect(0, 0, 60, 40), 'interior', -1)], {
   }
   assert.deepStrictEqual(arrowsAlongClosed([], 6), []);
 }
-// reduced-motion fallback: the dashes animate with a CSS animation (no RAF) and prefers-reduced-motion turns it OFF and shows
-// the static arrows instead (arrows are hidden otherwise). Computed styles are checked live in headless Edge (evidence).
+// TASK 777: sparse slow dashes declared ONCE in TRAVEL_STYLE (prepare-view.js -> --sk-travel-* on #prepare-canvas),
+// animation opt-in under prefers-reduced-motion: no-preference (so reduced motion keeps the still dashes + always-visible arrowheads).
 {
   const { readFileSync } = await import('node:fs');
+  const { TRAVEL_STYLE, TRAVEL_MIN_GAP_PX } = await import('../apps/shaper/src/prepare-view.js');
+  assert.strictEqual(TRAVEL_MIN_GAP_PX, 2 * TRAVEL_STYLE.dashPx, 'TRAVEL_MIN_GAP_PX follows TRAVEL_STYLE.dashPx (one declaration)');
+  const period = TRAVEL_STYLE.dashPx + TRAVEL_STYLE.gapPx;
+  const speed = period / TRAVEL_STYLE.durationSec;
+  assert.ok(TRAVEL_STYLE.dashPx >= 8 && TRAVEL_STYLE.dashPx <= 10, 'short dash 8-10 px: ' + TRAVEL_STYLE.dashPx);
+  assert.ok(TRAVEL_STYLE.gapPx >= 28 && TRAVEL_STYLE.gapPx <= 36, 'sparse gap 28-36 px: ' + TRAVEL_STYLE.gapPx);
+  assert.ok(speed >= 6 && speed <= 8, 'slow speed 6-8 px/s: ' + speed);
   const html = readFileSync(new URL('../apps/shaper/index.html', import.meta.url), 'utf8');
-  assert.ok(/\.sk-travel\s*\{[^}]*animation:\s*sk-march/.test(html), 'dashes animate via a CSS animation');
-  assert.ok(/@keyframes sk-march \{ from \{ stroke-dashoffset: 0; \} to \{ stroke-dashoffset: -12; \} \}/.test(html), 'forward-marching keyframes (offset decreases)');
-  assert.ok(/\.sk-travel-arrows\s*\{\s*display:\s*none/.test(html), 'arrows hidden by default');
-  assert.ok(/@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.sk-travel\s*\{\s*animation:\s*none[^}]*\}[^}]*\.sk-travel-arrows\s*\{\s*display:\s*inline/.test(html), 'reduced motion: no animation, static arrows');
+  assert.ok(/@media \(prefers-reduced-motion: no-preference\)\s*\{\s*\.sk-travel\s*\{\s*animation:\s*sk-march var\(--sk-travel-duration\) linear infinite;/.test(html), 'motion opts in under prefers-reduced-motion: no-preference (still under reduce)');
+  assert.ok(/@keyframes sk-march \{ from \{ stroke-dashoffset: 0; \} to \{ stroke-dashoffset: calc\(var\(--sk-travel-period\) \* -1px\); \} \}/.test(html), 'forward-marching keyframes driven by --sk-travel-period');
+  assert.ok(/\.sk-travel-arrows\s*\{[^}]*fill:\s*var\(--sk-prep-path\)/.test(html) && !/\.sk-travel-arrows\s*\{[^}]*display:\s*none/.test(html), 'arrowheads always shown (not hidden by default)');
   const view = readFileSync(new URL('../apps/shaper/src/prepare-view.js', import.meta.url), 'utf8');
   assert.ok(!/requestAnimationFrame/.test(view), 'no RAF loop in the Prepare view');
   // no climb/conventional switch anywhere: no field or control named climb

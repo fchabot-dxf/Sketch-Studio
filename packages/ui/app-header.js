@@ -1,14 +1,12 @@
 // packages/ui/app-header.js — the ONE shared, declared app header across all four hosts.
-// Desktop holds: the ☰ app-menu button + (TASK 768) the Save icon button (save-button.js, placed there by sidebar-projects.js; none without
-// the project layer, e.g. Shaper in Fusion mode) + the host's stage buttons. Same layout, order, sizes and spacing everywhere;
+// Desktop holds: the ☰ app-menu button + the host's stage buttons. (TASK 776: THE Save button and THE account avatar are in the footer's right end, footer-slot.js.) Same layout, order, sizes and spacing everywhere;
 // each app themes it via --sk-header-* / --sk-selection tokens. Scrolls sideways when narrow. Hidden at the phone breakpoint
 // and in short landscape (SHORT_VIEWPORT_QUERY), where stage buttons and the peeking drawer handle live in app-sidebar.js.
 
 import { SHORT_VIEWPORT_QUERY } from './short-viewport.js';
 
-/** TASK 768: where the header bar is hidden (a phone, a phone in landscape), declared once: the header's CSS below, and the Save button, which moves to
- *  the document tab strip there (save-button.js). */
-export const HEADER_HIDDEN_QUERY = `(max-width: 640px), ${SHORT_VIEWPORT_QUERY}`;
+/** Where the header bar is hidden (a phone, a phone in landscape), declared once. */
+const HEADER_HIDDEN_QUERY = `(max-width: 640px), ${SHORT_VIEWPORT_QUERY}`;
 
 let stylesInjected = false;
 function injectStyles() {

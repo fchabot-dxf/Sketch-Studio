@@ -3,7 +3,8 @@
 // reference length) is stored and reloaded. Then, at 1280 x 800 with the mouse:
 //  1. Design | Drawing is the step bar; Drawing (a real click on its step button) shows ONLY the drawing: the 5 solid curves, the 4 dimension labels with
 //     the same texts as Design's (unit + display precision), and zero constraint glyphs / point dots / construction / axes / grid; the ribbon, the
-//     Sketches browser, the footer and the drawer handle are not rendered; nothing covers the drawing but the Fit and Print buttons.
+//     Sketches browser and the drawer handle are not rendered; nothing covers the drawing but the Fit and Print buttons. (TASK 776, owner turn 2368: the FOOTER shows in
+//     Drawing, under the drawing: only Settings, Save and the account avatar; Undo / Redo / Delete / Clear / Parameters / Recenter are not shown; the drawing ends at the footer's top.)
 //  2. Read-only: real clicks / a double click on a curve and a label, a drag, and keys (Delete, Backspace, Ctrl+Z, Ctrl+A, l, d, k, 5, Enter, Escape)
 //     change nothing: the stored document and Design's history are unchanged.
 //  3. Wheel zoom and drag pan move Drawing's view only; Fit frames the drawing with its labels.
@@ -88,7 +89,7 @@ const drawingInfo = () => evalJs(`(() => {
     axes: w.querySelectorAll('[stroke="#ef4444"], [stroke="#22c55e"], [data-ref-axis]').length,
     grid: svg.querySelectorAll('#infinite-grid, pattern, defs').length,
     joints: w.querySelectorAll('.joint-handle').length,
-    ribbon: rendered('#toolsRibbon'), browser: rendered('.sk-browser') || rendered('.sk-browser-corner-btn'), footer: rendered('footer.sk-statusbar') || rendered('#btn-undo'),
+    ribbon: rendered('#toolsRibbon'), browser: rendered('.sk-browser') || rendered('.sk-browser-corner-btn'), footer: rendered('footer.sk-statusbar'),
     handle: rendered('.sk-sidebar-handle'), header: rendered('.sk-header'), doctabs: [...document.querySelectorAll('.sk-doctabs')].some((e) => { const r = e.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + 5, r.top + r.height / 2); return r.height > 0 && hit && e.contains(hit); }),
     buttons: [...v.querySelectorAll('button')].filter((b) => b.getClientRects().length).map((b) => b.id),
     over: [...over].sort(),
@@ -96,6 +97,14 @@ const drawingInfo = () => evalJs(`(() => {
     designViewBox: document.getElementById('svgCanvas').getAttribute('viewBox'),
     stepBar: [...document.querySelectorAll('.sk-header-tab')].map((t) => t.textContent.trim() + (t.classList.contains('active') ? '*' : '')),
   };
+})()`);
+// TASK 776: the footer while Drawing shows: which of its buttons are visible, that the drawing ends where the footer starts, and that nothing covers them
+const footerInDrawing = () => evalJs(`(() => {
+  const f = document.querySelector('footer.sk-statusbar'), fr = f.getBoundingClientRect(), vr = document.getElementById('drawing-view').getBoundingClientRect();
+  const vis = [...f.querySelectorAll('button')].filter((b) => b.getClientRects().length > 0 && getComputedStyle(b).visibility !== 'hidden');
+  const hit = (b) => { const r = b.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && (h === b || b.contains(h)); };
+  return { ids: vis.map((b) => b.id || b.className.split(' ')[0]), covered: vis.filter((b) => !hit(b)).map((b) => b.id || b.className), drawingBottom: Math.round(vr.bottom), footerTop: Math.round(fr.top), footerBottom: Math.round(fr.bottom), vh: innerHeight,
+    save: document.querySelectorAll('.sk-save').length, avatars: document.querySelectorAll('.sk-account').length };
 })()`);
 const designInfo = () => evalJs(`(() => { const s = document.getElementById('svgCanvas'); return {
   shapes: [...s.querySelectorAll('.shape-elem')].map((e) => e.dataset.shapeId).sort(), labels: [...s.querySelectorAll('.dim-label')].map((g) => g.textContent.trim()).sort(),
@@ -136,7 +145,12 @@ try {
   assert.strictEqual(b1.labels.length, 4, '4 labels');
   assert.ok(b1.labelsInside, 'every label is inside the drawing after the entry fit');
   assert.deepStrictEqual({ glyphs: b1.glyphs, dots: b1.dots, construction: b1.construction, axes: b1.axes, grid: b1.grid, joints: b1.joints }, { glyphs: 0, dots: 0, construction: 0, axes: 0, grid: 0, joints: 0 }, 'no glyph, point, construction, axis or grid');
-  assert.deepStrictEqual({ ribbon: b1.ribbon, browser: b1.browser, footer: b1.footer, handle: b1.handle, doctabs: b1.doctabs }, { ribbon: false, browser: false, footer: false, handle: false, doctabs: false }, 'no ribbon, Sketches browser, footer, drawer handle or document tabs');
+  assert.deepStrictEqual({ ribbon: b1.ribbon, browser: b1.browser, footer: b1.footer, handle: b1.handle, doctabs: b1.doctabs }, { ribbon: false, browser: false, footer: true, handle: false, doctabs: false }, 'no ribbon, Sketches browser, drawer handle or document tabs; the footer shows (TASK 776)');
+  const fd = await footerInDrawing();
+  assert.deepStrictEqual(fd.ids, ['btn-settings', 'sk-save', 'sk-account'], 'Drawing footer: only Settings, Save and the account avatar (no Undo / Redo / Delete / Clear / Parameters / Recenter): ' + JSON.stringify(fd));
+  assert.deepStrictEqual([fd.covered, fd.save, fd.avatars], [[], 1, 1], 'Drawing footer: nothing covers its buttons; one Save, one avatar');
+  assert.ok(fd.drawingBottom <= fd.footerTop + 0.5 && fd.footerBottom >= fd.vh - 0.5, 'the drawing ends at the footer, the footer is at the bottom of the page: ' + JSON.stringify(fd));
+  await shot('drawing-desktop-footer.png', { x: 0, y: Math.max(0, fd.footerTop - 6), width: 1280, height: fd.footerBottom - fd.footerTop + 6, scale: 2 });
   assert.deepStrictEqual(b1.buttons, ['btn-drawing-fit', 'btn-drawing-print'], 'Drawing has only Fit and Print');
   assert.ok(b1.over.every((o) => o === 'btn-drawing-fit' || o === 'btn-drawing-print'), 'nothing but Fit / Print over the drawing: ' + JSON.stringify(b1.over));
   assert.strictEqual(b1.designViewBox, d0.viewBox, 'Design\'s view is not touched');
@@ -283,7 +297,12 @@ try {
   assert.deepStrictEqual(bp.shapes, ['C', 'E1', 'E2', 'E3', 'E4'], 'phone Drawing: the 5 solid curves');
   assert.deepStrictEqual(bp.labels, b1.labels, 'phone Drawing: the same 4 labels');
   assert.ok(bp.labelsInside, 'phone Drawing: framed with its labels');
-  assert.deepStrictEqual({ glyphs: bp.glyphs, dots: bp.dots, construction: bp.construction, axes: bp.axes, grid: bp.grid, ribbon: bp.ribbon, browser: bp.browser, footer: bp.footer }, { glyphs: 0, dots: 0, construction: 0, axes: 0, grid: 0, ribbon: false, browser: false, footer: false }, 'phone Drawing: nothing but the drawing');
+  assert.deepStrictEqual({ glyphs: bp.glyphs, dots: bp.dots, construction: bp.construction, axes: bp.axes, grid: bp.grid, ribbon: bp.ribbon, browser: bp.browser, footer: bp.footer }, { glyphs: 0, dots: 0, construction: 0, axes: 0, grid: 0, ribbon: false, browser: false, footer: true }, 'phone Drawing: nothing but the drawing (and the footer, TASK 776)');
+  const fdp = await footerInDrawing();
+  assert.deepStrictEqual(fdp.ids, ['btn-settings', 'sk-save', 'sk-account'], 'phone Drawing footer: only Settings, Save and the account avatar: ' + JSON.stringify(fdp));
+  assert.deepStrictEqual([fdp.covered, fdp.save, fdp.avatars], [[], 1, 1], 'phone Drawing footer: nothing covers its buttons');
+  assert.ok(fdp.drawingBottom <= fdp.footerTop + 0.5, 'phone: the drawing ends at the footer: ' + JSON.stringify(fdp));
+  await shot('drawing-phone-footer.png', { x: 0, y: fdp.footerTop - 6, width: 390, height: fdp.footerBottom - fdp.footerTop + 6, scale: 2 });
   assert.ok(bp.over.every((o) => o === 'btn-drawing-fit' || o === 'btn-drawing-print'), 'phone: nothing but Fit / Print over the drawing: ' + JSON.stringify(bp.over));
   assert.strictEqual(await evalJs(`document.getElementById('btn-drawing-fit').getBoundingClientRect().width`), 44, 'phone: the Fit button is a 44 px finger target');
   await shot('drawing-phone.png');

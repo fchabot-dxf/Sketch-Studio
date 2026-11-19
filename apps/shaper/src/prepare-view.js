@@ -16,7 +16,7 @@ import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in 
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, arrowsAlongPath, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 import { updateViewBox } from '#ui/input-manager.js'; // TASK 605: put a document tab's own Prepare view back
@@ -123,7 +123,30 @@ const depthChip = (x, y, cutDepth, k) => {
     `<text class="sk-chip-text" x="0" y="0" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
 };
 const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
-const TRAVEL_MIN_GAP_PX = 12; // TASK 757: a stepped cut's marked outlines are at least this far apart on SCREEN (renderStepTravel: two dash lengths of .sk-travel)
+// TASK 777: ONE declaration of the travel direction mark pattern (screen px + period duration).
+// mountPrepareView pushes --sk-travel-* onto svgEl so .sk-travel and @keyframes sk-march read the SAME constants;
+// TRAVEL_MIN_GAP_PX (TASK 757) and arrowhead spacing derive from it — no second number anywhere.
+export const TRAVEL_STYLE = Object.freeze({
+  dashPx: 8,            // short dash length on screen (px)
+  gapPx: 28,            // sparse gap between dashes on screen (px)
+  durationSec: 5,       // one period (36 px) per 5 s -> 7.2 px/s
+  arrowEveryPeriods: 2, // one dart arrowhead every 2 dash periods (72 px on screen)
+  arrowMinPathPx: 10,   // paths shorter than this on screen get no arrowhead
+});
+const TRAVEL_PERIOD_PX = TRAVEL_STYLE.dashPx + TRAVEL_STYLE.gapPx; // 36 px
+export const TRAVEL_MIN_GAP_PX = 2 * TRAVEL_STYLE.dashPx; // TASK 757 / 777: two dash lengths of .sk-travel (16 px)
+const TRAVEL_ARROW_SPACING_PX = TRAVEL_STYLE.arrowEveryPeriods * TRAVEL_PERIOD_PX; // 72 px
+// Screen-px dart arrowhead geometry per travel kind: tip forward (+x), swept tail wings, notched rear
+const DART_DIMS = Object.freeze({
+  wall:   Object.freeze({ tip: 3.8, tail: -2.85, halfW: 2.6, notch: -1.5 }),
+  clear:  Object.freeze({ tip: 3.0, tail: -2.25, halfW: 2.1, notch: -1.1 }),
+  online: Object.freeze({ tip: 3.6, tail: -2.7,  halfW: 2.5, notch: -1.4 }),
+});
+const dartSeg = (a, dims, k) => {
+  const c = Math.cos(a.angle), s = Math.sin(a.angle);
+  const tx = (x, y) => `${(a.x + (x * c - y * s) * k).toFixed(3)} ${(a.y + (x * s + y * c) * k).toFixed(3)}`;
+  return `M ${tx(dims.tip, 0)} L ${tx(dims.tail, dims.halfW)} L ${tx(dims.notch, 0)} L ${tx(dims.tail, -dims.halfW)} Z `;
+};
 
 // World-space tolerance from screen px, derived from the live CTM scale (zoom-stable).
 function worldTolerance(svgEl, screenPx) {
@@ -163,6 +186,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const onNotice = opts.onNotice || (() => {}); // TASK 472: a transient one-line notice (the Stock role moved)
   const onCommitField = opts.onCommitField || ((key, field, value) => { setFieldFor(key, field, value); refreshLook(); }); // TASK 778: dragging the lead-in handle commits ONE undo step via prepare-stage
   svgEl.innerHTML = ''; // clean re-mount
+  // TASK 777: push ONE declaration of the travel dash pattern to CSS custom properties on svgEl so .sk-travel and @keyframes sk-march share TRAVEL_STYLE
+  if (svgEl.style && typeof svgEl.style.setProperty === 'function') {
+    svgEl.style.setProperty('--sk-travel-dash', String(TRAVEL_STYLE.dashPx));
+    svgEl.style.setProperty('--sk-travel-gap', String(TRAVEL_STYLE.gapPx));
+    svgEl.style.setProperty('--sk-travel-period', String(TRAVEL_PERIOD_PX));
+    svgEl.style.setProperty('--sk-travel-duration', `${TRAVEL_STYLE.durationSec}s`);
+  }
 
   // Local view state for Prepare canvas, initialized by fitting to sketch extents
   const view = { x: 0, y: 0, w: 120, h: 90 };
@@ -331,23 +361,39 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     let region = '', path = '', hasTravel = false, chip = null;
     const toolPaths = [];
     const leadHandles = []; // TASK 778: draggable handles at On line lead-in junctions
-    // TASK 449: a travel's marks (marching dashes + the reduced-motion arrows); TASK 757: a STEPPED cut's (a terrace's) go to `stepped`, thinned at draw time
-    // (renderStepTravel: the outlines closer on screen than TRAVEL_MIN_GAP_PX carry none), every other cut's into the path markup as before
+    // TASK 449 / 777: travel marks (sparse slow marching dashes + zoom-stable screen-sized dart arrowheads); TASK 757: a STEPPED cut's (a terrace's)
+    // go to `stepped`, thinned at draw time (renderStepAndArrows: outlines closer on screen than TRAVEL_MIN_GAP_PX carry none).
     const stepped = [];
-    // TASK 775 / 778: a LEAD-IN ARC (from the one derivation): its path `lead.d`, a filled dot at its tip (start), a ring at the junction (and its draggable handle)
-    const addLead = (lead) => {
-      if (!lead || lead.role !== 'arc') return;
-      path += `<path class="sk-lead-leg" d="${lead.d}"/><circle class="sk-lead-end" cx="${lead.junction.x}" cy="${lead.junction.y}" r="1.2"/><circle class="sk-lead-tip" cx="${lead.tip.x}" cy="${lead.tip.y}" r="1.6"/>`;
-      leadHandles.push({ key, junction: lead.junction });
+    const travels = [];
+    let rasterIdx = 0;
+    // TASK 775 / 777 / 778: a LEAD-IN ARC (from the one derivation): its path `lead.d`, a filled dot at its tip, a ring at the junction, and its draggable handle
+    const isActiveLead = (lead) => Boolean(lead && (lead.role === 'arc' || lead.role === 'leg') && Array.isArray(lead.legPoints) && lead.legPoints.length >= 2);
+    const addLeadLeg = (lead) => {
+      if (!isActiveLead(lead)) return;
+      const d = lead.d || toolPathD({ points: lead.legPoints, closed: false });
+      if (d) path += `<path class="sk-lead-leg" d="${d}"/>`;
+    };
+    const addLeadDots = (lead) => {
+      if (!isActiveLead(lead)) return;
+      const tip = lead.tip || lead.legPoints[0];
+      const j = lead.junction || lead.legPoints[lead.legPoints.length - 1];
+      path += `<circle class="sk-lead-end" cx="${j.x}" cy="${j.y}" r="1.2"/><circle class="sk-lead-tip" cx="${tip.x}" cy="${tip.y}" r="1.6"/>`;
+      if (lead.role === 'arc') leadHandles.push({ key, junction: j });
     };
     const addTravel = (fp, t) => {
-      const markup = `<path class="sk-travel" d="${polyRingD(t.path)}"/><g class="sk-travel-arrows">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
-      if (fp.terrace) stepped.push({ ring: t.path, markup }); else path += markup;
+      const d = toolPathD({ points: t.path, closed: t.closed });
+      if (!d) return;
+      const kind = t.role === 'leadin' || t.role === 'online' || t.role === 'stroke' ? 'online'
+        : CLEAR_PATH_ROLES.has(t.role) ? 'clear' : 'wall';
+      const cls = t.role === 'leadin' ? 'sk-travel sk-travel-lead'
+        : (t.role === 'online' || t.role === 'stroke') ? 'sk-travel sk-travel-online'
+        : CLEAR_PATH_ROLES.has(t.role) ? 'sk-travel sk-travel-clear' : 'sk-travel';
+      const markup = `<path class="${cls}" d="${d}"/>`;
+      if (fp.terrace) stepped.push({ ring: t.path, markup, t, kind });
+      else { path += markup; travels.push({ t, kind, rasterIdx: t.role === 'raster' ? rasterIdx++ : -1 }); }
     };
     for (const fp of footprints) {
-      // TASK 745: a programmed pocket: the clearing paths as thin tool-path lines (the deepest depth pass only: the shallower passes run the same paths), the
-      // area the bit sweeps (clearing + finish pass) as ONE band from its wall cut's plan, and the material the bit does not reach (the leftover) in the
-      // warning colour; the wall / islands keep their travel marks; TASK 778: its start mark target (circle + cross) from the same derivation
+      // TASK 745 / 777 / 778: a programmed pocket: clearing paths (thin continuous guide + sparse slow travel dashes & darts), swept band, leftover, walls / islands, and start mark target
       if (fp.clearing) {
         const cl = fp.clearing;
         if (cl.role === 'start') { // TASK 778: pocket start mark (circle + cross, declared once)
@@ -363,12 +409,14 @@ export function mountPrepareView(state, svgEl, opts = {}) {
           for (const tp of fp.toolPaths || []) {
             path += `<path class="sk-clear-path${cl.role === 'cleanup' ? ' sk-clear-cleanup' : ''}${cl.role === 'loop' ? ' sk-clear-loop' : ''}" d="${toolPathD(tp)}"/>`;
           }
+          const travel = deriveCutTravel([fp]);
+          for (const t of travel) { addTravel(fp, t); hasTravel = true; }
           if (!chip && fp.anchor) chip = fp.anchor;
           continue;
         }
         const travel = deriveCutTravel([fp]);
         for (const t of travel) { addTravel(fp, t); hasTravel = true; }
-        if (!travel.length) for (const tp of fp.toolPaths || []) path += `<path class="${tpClass}" d="${toolPathD(tp)}"/>`; // a wall that splits into several loops (a neck): their centre lines
+        if (!travel.length) for (const tp of fp.toolPaths || []) path += `<path class="${tpClass}" d="${toolPathD(tp)}"/>`;
         if (!chip && fp.anchor) chip = fp.anchor;
         continue;
       }
@@ -381,14 +429,20 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-band"/>`;
         if (fp.kind === 'pocket') region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-pocket-marks" fill="url(#prepare-pocket-marks)"/>`;
       }
-      // TASK 449: conventional TRAVEL (one core derivation): marching dashes along the bit-centre path in the travel
-      // direction (CSS animation, no RAF); static arrows for prefers-reduced-motion. On line has none.
+      // TASK 449 / 777: travel marks (one core derivation): sparse slow marching dashes + zoom-stable dart arrowheads (CSS animation, no RAF).
       toolPaths.push(...(fp.toolPaths || []));
       // TASK 742: a held cut: its tabs marked on the outline (an onion skin: the whole outline), each gap strip drawn as it is exported (its own
       // band shows what the bit removes; no travel marks on the strips, their loops are too small to read)
       if (fp.hold && (fp.hold.role === 'pass' || fp.hold.role === 'stroke')) for (const d of fp.hold.marks || []) path += `<path class="${fp.hold.mode === 'skin' ? 'sk-skin-mark' : 'sk-tab-mark'}" d="${d}"/>`;
       if (fp.hold && fp.hold.role === 'strip') { path += `<path class="sk-strip" d="${fp.hold.d}"/>`; continue; }
-      if (fp.hold && fp.hold.role === 'stroke') { path += `<path class="sk-stroke" d="${fp.hold.d}"/>`; if (!chip && fp.anchor) chip = fp.anchor; continue; } // TASK 775: an On line cut's tabs: each stroke as exported (the gaps between them are the tabs)
+      if (fp.hold && fp.hold.role === 'stroke') { // TASK 775 / 777: an On line cut's tabs: each stroke as exported, with its travel marks
+        path += `<path class="sk-stroke" d="${fp.hold.d}"/>`;
+        const travel = deriveCutTravel([fp]);
+        for (const t of travel) { addTravel(fp, t); hasTravel = true; }
+        if (!chip && fp.anchor) chip = fp.anchor;
+        continue;
+      }
+      addLeadLeg(fp.leadIn); // TASK 775 / 778: an On line outline's lead-in arc (base curve under 777's travel dashes)
       const travel = deriveCutTravel([fp]);
       for (const t of travel) { addTravel(fp, t); hasTravel = true; }
       if (fp.kind === 'pocket') {
@@ -399,10 +453,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       } else if (fp.center && !travel.length) {
         path += polyMarkup(fp.center, tpClass);
       }
-      addLead(fp.leadIn); // TASK 775 / 778: an On line outline's lead-in arc (drawn ON TOP of the outline toolpath so inside arcs stay clearly visible)
+      addLeadDots(fp.leadIn); // TASK 775 / 778: tip dot, junction ring, and draggable handle on top of travel marks
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, path, hasTravel, toolPaths, anchor: chip, depth: rec.cutDepth, stepped, steppedGaps: new Map(), leadHandles };
+    return { region, path, hasTravel, toolPaths, anchor: chip, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
@@ -410,6 +464,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // dashed tool path + depth chip; selected: teal band + bold mint boundary + the same path/chip; selected+hover: selected with
   // a slightly brighter band. The colours are the --sk-prep-* tokens (apps/shaper/index.html).
   let hovered = null; // current hovered target { kind, id } | null
+  let lastZoomK = null; // TASK 777: skip zoom-dependent DOM rebuilds during a pure pan (k unchanged)
   const stateOf = (key) => {
     const sel = selection.has(key), hov = !!hovered && targetKey(hovered) === key;
     return sel ? (hov ? 'hot' : 'sel') : (hov ? 'hover' : null);
@@ -422,22 +477,47 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const renderToolpaths = () => {
     let out = '';
     for (const [key, rec] of CUT_PLAN) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
-    toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g>';
-    renderStepTravel();
+    toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g><g class="sk-travel-arrows-layer"></g>';
+    lastZoomK = null;
+    renderStepAndArrows();
   };
-  // TASK 757: a stepped cut's travel marks, THINNED (#core thinTravel): on its outermost outline, then on each outline at least TRAVEL_MIN_GAP_PX on screen from
-  // every outline already marked, so many close terraces (a dished floor) read as terraces, not a swirl of dashes. Zoom-dependent: redrawn with the chips.
-  const renderStepTravel = () => {
-    const layer = toolpathG.querySelector('.sk-travel-steps');
-    if (!layer) return;
-    const minGap = worldTolerance(svgEl, TRAVEL_MIN_GAP_PX);
-    let out = '';
+  // TASK 757 / 777: stepped travel marks thinned by TRAVEL_MIN_GAP_PX (#core thinTravel) + zoom-stable dart arrowheads (#core arrowsAlongPath)
+  // batched into one <path> per style kind so panning and dense clearing pockets stay smooth.
+  const renderStepAndArrows = () => {
+    const stepLayer = toolpathG.querySelector('.sk-travel-steps');
+    const arrowLayer = toolpathG.querySelector('.sk-travel-arrows-layer');
+    if (!stepLayer && !arrowLayer) return;
+    const k = worldTolerance(svgEl, 1);
+    const minGap = k * TRAVEL_MIN_GAP_PX;
+    const spacing = k * TRAVEL_ARROW_SPACING_PX;
+    const minLen = k * TRAVEL_STYLE.arrowMinPathPx;
+    let stepOut = '';
+    const dByKind = { clear: '', wall: '', online: '' };
+    const pushArrows = (entry) => {
+      const dims = DART_DIMS[entry.kind] || DART_DIMS.wall;
+      const phase = entry.rasterIdx >= 0 && entry.rasterIdx % 2 === 1 ? 0.72 : 0.5;
+      for (const a of arrowsAlongPath(entry.t.path, entry.t.closed, { spacing, minLen, phase })) dByKind[entry.kind] += dartSeg(a, dims, k);
+    };
     for (const [key, rec] of CUT_PLAN) {
       if (!(rec && rec.cutType && stateOf(key))) continue;
       const look = getLook(key, rec);
-      if (look.stepped && look.stepped.length) for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) out += look.stepped[i].markup;
+      if (look.travels) for (const entry of look.travels) pushArrows(entry);
+      if (look.stepped && look.stepped.length) {
+        for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) {
+          stepOut += look.stepped[i].markup;
+          pushArrows(look.stepped[i]);
+        }
+      }
     }
-    layer.innerHTML = out;
+    if (stepLayer) stepLayer.innerHTML = stepOut;
+    if (arrowLayer) {
+      let arrowsOut = '';
+      if (dByKind.clear) arrowsOut += `<path class="sk-travel-arrows sk-travel-arrows-clear" d="${dByKind.clear}"/>`;
+      if (dByKind.wall) arrowsOut += `<path class="sk-travel-arrows" d="${dByKind.wall}"/>`;
+      if (dByKind.online) arrowsOut += `<path class="sk-travel-arrows sk-travel-arrows-online" d="${dByKind.online}"/>`;
+      arrowLayer.innerHTML = arrowsOut;
+    }
+    lastZoomK = k;
   };
   let leadDrag = null; // TASK 778: active junction handle drag { pointerId, key, loop, startAt, lastGood, startJunction, previewLead, refused }
   const renderHandles = () => {
@@ -471,7 +551,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     dragG.innerHTML = out;
     renderHandles();
   };
-  const renderZoomed = () => { renderStepTravel(); renderChips(); renderHandles(); }; // what a zoom changes: the thinned travel marks (TASK 757), the chips' screen size (TASK 731), the lead-in handle size (TASK 778)
+  const renderZoomed = () => { // what a zoom/resize changes (skipped on pure pan when k is unchanged): thinned stepped marks, dart arrowheads, chips, lead-in handle size
+    const k = worldTolerance(svgEl, 1);
+    if (lastZoomK === null || Math.abs(k - lastZoomK) > 1e-9) { renderStepAndArrows(); renderChips(); renderHandles(); }
+  };
   // TASK 455: the depth chip sits ON the tool path (centred on the dashed line) at the point NEAREST THE CURSOR and follows the cursor
   // along it while hovering; selected-but-not-hovered it STAYS at its last spot (a target's first appearance uses the stable
   // default anchor the footprint derivation provides).

@@ -566,8 +566,8 @@ const ENC5 = [
     // Apply Outside cut with 3.175mm tool
     view.applyCutTypeToSelected('exterior');
     const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
-    const polyMatches = toolpathG.innerHTML.match(/points="([^"]+)"/g) || [];
-    assert(polyMatches.length >= 2, `P9: outside cut on frame must render toolpaths for both boundaries, got ${polyMatches.length}`);
+    const pathMatches = toolpathG.innerHTML.match(/<path class="sk-travel"[^>]*d="([^"]+)"/g) || [];
+    assert(pathMatches.length >= 2, `P9: outside cut on frame must render toolpaths for both boundaries, got ${pathMatches.length}`);
 
     // Verify outer toolpath expands outward (-1.5875) and hole toolpath shrinks inward into hole void (16.5875)
     assert(toolpathG.innerHTML.includes('-1.5875'), 'P9: outer toolpath expands outward by +toolDia/2');
@@ -588,8 +588,8 @@ const ENC5 = [
     // Apply Inside cut with 3.175mm tool
     view.applyCutTypeToSelected('interior');
     const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
-    const polyMatches = toolpathG.innerHTML.match(/points="([^"]+)"/g) || [];
-    assert(polyMatches.length >= 2, `P10: inside cut on frame must render toolpaths for both boundaries, got ${polyMatches.length}`);
+    const pathMatches = toolpathG.innerHTML.match(/<path class="sk-travel"[^>]*d="([^"]+)"/g) || [];
+    assert(pathMatches.length >= 2, `P10: inside cut on frame must render toolpaths for both boundaries, got ${pathMatches.length}`);
 
     // Verify outer toolpath shrinks inward into face (1.5875) and hole toolpath expands outward into face (13.4125)
     assert(toolpathG.innerHTML.includes('1.5875'), 'P10: outer toolpath shrinks inward into face by -toolDia/2');

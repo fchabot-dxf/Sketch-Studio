@@ -402,6 +402,17 @@
     .stl-card .cut-presets { margin-top: 0; }
     .stl-card .stl-ups { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .stl-card .stl-units { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stl-card .stl-orient { all: unset; box-sizing: border-box; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; background: var(--sk-prep-selected-fill); }
+    /* TASK 808: the STL Orient view (src/orient-view.js): the whole page, the 3D stage under a one-line bar */
+    .orient-view { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: #0b1020; color: var(--sk-prep-chip-text, #e8eaed); font: 14px system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    .orient-bar { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; background: var(--sk-prep-card-bg, #1a2038); }
+    .orient-title { font-weight: 600; }
+    .orient-help { flex: 1 1 200px; min-width: 0; }
+    .orient-info { font-size: 12px; opacity: 0.8; }
+    .orient-btn { all: unset; box-sizing: border-box; min-width: 72px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; background: var(--sk-prep-selected-fill, #3a4a7a); }
+    .orient-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+    .orient-host { position: relative; flex: 1 1 auto; min-height: 0; touch-action: none; }
+    .orient-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
     .stl-size { font-size: 14px; font-weight: 600; padding-left: 12px; }
     /* TASK 455: the cut card, built to the owner-approved mock-up (values only): 200px card, #0A0A0B, 14px radius; 34px fields on
        #2A2B2D with 6px radius; labels 11px; values 15px/600 with a 11px lighter unit; popovers open to the LEFT with the blue

@@ -120,6 +120,7 @@ const EXEMPT = {
   'apps/penplotter/src/ui-dialog.js': [4, 'the plotter dialogs: Enter / Esc'],
   'apps/shaper/src/main.js': [3, 'TASK 772: Sync New-folder input: Enter / Esc (+ SettingsManager key === \'DOC_UNIT\')'],
   'apps/shaper/src/op-list.js': [2, 'TASK 745: the operations list: Arrow Up / Down on a focused drag grip move its row (no arrow buttons)'],
+  'apps/shaper/src/orient-view.js': [1, 'TASK 808: the Orient view is a modal dialog: Escape cancels it (the card button Cancel), whatever the canvas shortcut table says'],
 };
 const found = {};
 for (const f of SRC) {

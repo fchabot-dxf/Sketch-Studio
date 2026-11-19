@@ -78,6 +78,7 @@ const PARAMS = {
   openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807
   stlCard: { label: 'STL', hint: 'The 3D part this design was sliced from. Changing Up or Units slices it again and replaces the design; Undo brings the previous one back.' },
   stlUp: { label: 'Up', hint: 'Which side of the part faces up, toward the bit. Only what can be reached from that side is cut.' },
+  stlOrient: { label: 'Orient…', hint: 'Shows the part in 3D: click the face that sits on the bed (any face, any angle) and the part turns to rest on it. Done slices it again; Cancel leaves it as it was.' }, // TASK 808
   stlUnits: { label: 'Units', hint: 'What one unit in the STL file is: STL files do not say.' },
   stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. The height is the board thickness too.' },
 };

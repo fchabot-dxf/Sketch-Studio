@@ -27,7 +27,7 @@ for (const rel of ['apps/shaper/src', 'packages/core', 'apps/penplotter/src', 'a
   if (!fs.existsSync(dir)) continue;
   const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'vendor' || e.name === 'node_modules' ? [] : walk(path.join(d, e.name))) : [path.join(d, e.name)]));
   for (const f of walk(dir).filter((x) => x.endsWith('.js'))) {
-    if (f.endsWith('review-view.js')) continue;
+    if (f.endsWith('review-view.js') || f.endsWith('orient-view.js')) continue; // TASK 808: the STL Orient view loads three the same way, when it opens
     assert.doesNotMatch(fs.readFileSync(f, 'utf8'), /from 'three|import\('three/, path.relative(root, f) + ' must not import three');
   }
 }

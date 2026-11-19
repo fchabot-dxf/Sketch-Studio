@@ -523,9 +523,10 @@ export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
 //  3. else the drawn region is ONE level at its depth: Roughing = the pocket with the allowance (offset), Contour = its wall (an Inside cut along the
 //     outer, an Outside cut round each island).
 // Consecutive identical levels are ONE cut at the deeper depth (a vertical wall is cut once), as in steppedTerraces.
-// drawTolMm: the round joins of the DRAWN footprints (Prepare, the 3D Review) are within this of the true arc (a display tolerance: a part's levels are
-// thousands of points, and the 0.005 mm of the exported shapes' sampling made each Review build of the rose take minutes; the export never reads it).
-export const LEVELS = Object.freeze({ contourStepMm: 0.25, workMarginBits: 2, drawTolMm: 0.05 });
+// drawTolMm: the round joins of the DRAWN footprints (Prepare, the 3D Review) are within this of the true arc, and a contour's drawn centre path within
+// this of its offset (a display tolerance: a part's levels are thousands of points; at the 0.005 mm of the exported shapes' sampling the rose's first Review
+// build took 90 s, at 0.05 mm 14 s, at 0.1 mm 8 s; the export never reads it).
+export const LEVELS = Object.freeze({ contourStepMm: 0.25, workMarginBits: 2, drawTolMm: 0.1 });
 
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 // one loop of the payload (its segments, in the payload frame) -> its polygon as a flat [x0, y0, x1, y1, ...] in WORLD mm (the same transform as

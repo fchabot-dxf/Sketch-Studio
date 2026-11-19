@@ -33,6 +33,7 @@ import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: pro
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
+import { createStlImporter, STL_ICON } from './stl-import.js'; // TASK 790: Open STL (sliced into the Fusion selection payload) + the STL card in Prepare
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
@@ -66,6 +67,15 @@ const chrome = mountAppChrome({
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
   hostActions: [
+    ...(fusionMode ? [] : [{ id: 'open-stl', label: hintLabel('openStl'), icon: STL_ICON, tooltip: hintText('openStl'), keepOpen: true, onClick: async () => { // TASK 790: Shaper only, not in the Fusion palette (its design comes from Fusion)
+      try {
+        const res = await stlImporter.pickAndOpen();
+        if (!res) return; // the chooser was cancelled
+        if (!res.ok) { chrome.sidebar.notify(res.message, 'error'); return; } // not a readable STL: the design is unchanged
+        chrome.sidebar.close();
+        if (res.imported) nameAfterSelection(res.name); // the design takes the file's name, as a Fusion selection's (TASK 767)
+      } catch (e) { chrome.sidebar.notify(e.message || String(e), 'error'); }
+    } }]),
     { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: () => { // TASK 770: from the table (the shared drawer shows a tooltip)
       const payload = generateShaperSvgPayload();
       if (!payload) { groupStatus(NO_CUTS); return; }
@@ -580,6 +590,16 @@ const prepare = createPrepareStage({
   panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), // TASK 743: the operations list
   ensureSketch, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
 });
+// TASK 664 / 790: what the page refreshes after a selection replaced the design (a Fusion selection, an STL): the Review card's thickness, the panels, the history buttons, the Review
+const afterSelectionImport = () => {
+  showStockThickness();
+  if (infoPanel) infoPanel.refresh();
+  history.refresh();
+  if (modes.current() === 'review') enterReview(designController.state);
+};
+// TASK 790: Open STL (the drawer entry above) and the STL card at the top of Prepare's right column (stl-import.js, declared once: the node test kit calls it too)
+const stlImporter = createStlImporter({ ensureSketch, getController: () => designController, prepare, panelEl: document.getElementById('prepare-panel'),
+  showPrepare: () => modes.showMode('prepare'), afterImport: afterSelectionImport, notice: (text, isError) => prepare.notice(text, isError) });
 
 applyShaperUnitDefault(); // U3b (design-canvas.js, declared once: the node test kit calls it too)
 
@@ -770,7 +790,7 @@ document.getElementById('review-look-colors').addEventListener('input', (e) => {
 export const currentReviewView = () => reviewView;
 
 ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
-// TASK 767: in Fusion mode the design IS the imported selection (TASK 712: it replaces the design), so the design takes the selection's name
+// TASK 767: in Fusion mode the design IS the imported selection (TASK 712: it replaces the design), so the design takes the selection's name (TASK 790: an opened STL's too: the file name without .stl)
 // (fusion-import.js selectionDesignName, TASK 774: the Fusion DOCUMENT's name, e.g. "06-countersink"; the body's, "Body1", only when the payload has none) and the export file names follow (designFileName). A stored design keeps its own name.
 function nameAfterSelection(name) {
   if (docBuffer.isStored()) return;
@@ -782,16 +802,7 @@ if (fusionMode) {
     noticeEl: document.getElementById('prepare-notice'),
     onSelectionData: (payload) => {
       ensureSketch();
-      const res = importFusionSelection(payload, {
-        controller: designController,
-        prepare,
-        onImport: () => {
-          showStockThickness();
-          if (infoPanel) infoPanel.refresh();
-          history.refresh();
-          if (modes.current() === 'review') enterReview(designController.state);
-        },
-      });
+      const res = importFusionSelection(payload, { controller: designController, prepare, onImport: afterSelectionImport });
       if (res.ok && res.imported) { track('import:fusion'); nameAfterSelection(res.name); } // TASK 738; TASK 767
       return res;
     },

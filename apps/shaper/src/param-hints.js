@@ -68,6 +68,12 @@ const PARAMS = {
   syncFolder: { label: 'Destination Folder', hint: 'Sign in once to browse My Files folders, pick where the file uploads, or add a subfolder. Session stays in tab memory only.' },
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
+  // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
+  openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) to cut from the top: its outline, pockets and holes with their depths, and the board thickness. It replaces the design.' },
+  stlCard: { label: 'STL', hint: 'The 3D part this design was sliced from. Changing Up or Units slices it again and replaces the design; Undo brings the previous one back.' },
+  stlUp: { label: 'Up', hint: 'Which side of the part faces up, toward the bit. Only what can be reached from that side is cut.' },
+  stlUnits: { label: 'Units', hint: 'What one unit in the STL file is: STL files do not say.' },
+  stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. The height is the board thickness too.' },
 };
 
 /** The hints of the choices, by parameter then choice id (their labels are their own declarations': CHOICE_SOURCES). */

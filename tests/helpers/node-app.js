@@ -199,10 +199,10 @@ const HOSTS = {
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer; the mode router
   // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Review view is not mounted.
   async shaper({ win, store, designBrowser }) {
-    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }, { createShaperImporter }, { createGroupStatus }] = await Promise.all([
+    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }, { createShaperImporter }, { createGroupStatus }, { createStlImporter }] = await Promise.all([
       import('#ui/sketch-canvas.js'), import('#ui/tool-ribbon.js'), import('#ui/document-buffer.js'), import('../../apps/shaper/src/design-canvas.js'),
       import('../../apps/shaper/src/modes.js'), import('../../apps/shaper/src/prepare-stage.js'), import('../../apps/shaper/src/stock-card.js'), import('../../apps/shaper/src/shaper-session.js'),
-      import('../../apps/shaper/src/cut-import.js'), import('../../apps/shaper/src/group-status.js')]);
+      import('../../apps/shaper/src/cut-import.js'), import('../../apps/shaper/src/group-status.js'), import('../../apps/shaper/src/stl-import.js')]);
     const doc = win.document;
     layoutById(win, { [D.DESIGN_CANVAS_ID]: MEASURED_CANVAS_RECT.shaper, 'prepare-canvas': PREPARE_CANVAS_RECT });
     const svg = doc.getElementById(D.DESIGN_CANVAS_ID);
@@ -211,6 +211,9 @@ const HOSTS = {
     const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(), history,
       panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice'), opsEl: doc.getElementById('prepare-ops') }); // TASK 743: the operations list, as the page passes it
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
+    // main.js (TASK 790): Open STL + the STL card at the top of Prepare's right column; afterImport = the page's afterSelectionImport without the Review (not mounted here)
+    const stl = createStlImporter({ ensureSketch: () => ensureSketch(), getController: () => controller, prepare, panelEl: doc.getElementById('prepare-panel'),
+      showPrepare: () => modes.showMode('prepare'), afterImport: () => { stockCard.show(); if (browser) browser.panel.refresh(); history.refresh(); }, notice: (text, isError) => prepare.notice(text, isError) });
     // main.js ensureSketch, run by the mode router on the first entry into Design, with the Design view already showing: the sketch, the ribbon, the buffer
     // (its restore is not awaited, as on the page), the autosave
     const ensureSketch = () => {
@@ -235,7 +238,7 @@ const HOSTS = {
     const views = M.findViews(doc);
     const importer = createShaperImporter({ ensureSketch, getController: () => controller, getInfoPanel: () => browser && browser.panel, notify: createGroupStatus(() => views.design), getDropHost: () => doc.body, showDesign: () => modes.showDesign() }); // as main.js (TASK 706: Design first; a drop anywhere on the page)
     importer.mountDrop(); // main.js: the drop on the page (the menu entry is the sidebar's)
-    return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, modes, prepare, frame: () => { if (browser) browser.tick(); runFrames(1); }, importFile: importer.importFile, browser };
+    return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, modes, prepare, frame: () => { if (browser) browser.tick(); runFrames(1); }, importFile: importer.importFile, browser, stl };
   },
   // apps/penplotter/src/main.js: the stage pipeline = mountStages() (apps/penplotter/src/stages.js, which the page calls too): the nav, the stage
   // bodies, the router, the Design stage (mountSketchStage: the sketcher, the ribbon, the buffer, the plotter sidecar) and the hidden Draw host. The
@@ -324,7 +327,7 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   };
 
   const app = {
-    host, state, engine: m.engine, svg, document: doc, clipboard: profile.clipboard, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc, plotter: m.plotter, modes: m.modes, router: m.router, browser: m.browser, importFile: m.importFile, prepare: m.prepare, controller: m.controller,
+    host, state, engine: m.engine, svg, document: doc, clipboard: profile.clipboard, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc, plotter: m.plotter, modes: m.modes, router: m.router, browser: m.browser, importFile: m.importFile, prepare: m.prepare, controller: m.controller, stl: m.stl,
     frames,
     /** world -> screen through the app's own transform (#ui/coords.js worldToScreen, the svg's live viewBox) */
     toScreen: (wx, wy) => { const p = worldToScreen(svg, { x: wx, y: wy }); return { x: Math.round(p.x), y: Math.round(p.y) }; },

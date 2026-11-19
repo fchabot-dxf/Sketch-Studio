@@ -51,7 +51,8 @@ export function projectFileName(name) {
 }
 
 // ---- the real browser seam -------------------------------------------------------------------------------------------
-// What a picker offers: { description, mime, exts }. The project file is the default; Import SVG / DXF (project-actions.js) passes its own.
+// What a picker offers: { description, mime, exts, binary? }. The project file is the default; Import SVG / DXF (project-actions.js) passes its own.
+// TASK 790: `binary: true` = the file is read as bytes (an ArrayBuffer, `bytes`) instead of text (Shaper's Open STL declares its own pick).
 export const PROJECT_FILE_PICK = { description: 'Sketch Studio project', mime: 'application/json', exts: [PROJECT_FILE_EXT, '.json'] };
 export const IMPORT_FILE_PICK = { description: 'SVG or DXF drawing', mime: 'image/svg+xml', exts: ['.svg', '.dxf'] };
 const pickerTypes = (spec) => [{ description: spec.description, accept: { [spec.mime]: spec.exts } }];
@@ -98,14 +99,15 @@ export const browserFileSeam = {
     await writeHandle(handle, text);
     return { name: handle.name, handle };
   },
-  /** Pick and read a file. Resolves { name, text, handle } (handle: the picked file, or null from an <input type=file>) or null when the user cancelled. */
+  /** Pick and read a file. Resolves { name, text, handle } (handle: the picked file, or null from an <input type=file>) or null when the user cancelled.
+   *  A `binary` spec (TASK 790) resolves { name, bytes, handle } instead (bytes: the file's ArrayBuffer). */
   async open(spec = PROJECT_FILE_PICK) {
     if (fileAccess().openPicker) {
       let handles;
       try { handles = await window.showOpenFilePicker({ types: pickerTypes(spec), multiple: false }); }
       catch (e) { if (pickerCancelled(e)) return null; throw e; }
       const file = await handles[0].getFile();
-      return { name: file.name, text: await file.text(), handle: handles[0] };
+      return { name: file.name, ...(await readPicked(file, spec)), handle: handles[0] };
     }
     return new Promise((resolve, reject) => {
       const input = document.createElement('input');
@@ -116,13 +118,14 @@ export const browserFileSeam = {
       const settle = (done, value) => { input.remove(); done(value); };
       input.onchange = async () => {
         const f = input.files && input.files[0];
-        try { settle(resolve, f ? { name: f.name, text: await f.text(), handle: null } : null); } catch (e) { settle(reject, e); }
+        try { settle(resolve, f ? { name: f.name, ...(await readPicked(f, spec)), handle: null } : null); } catch (e) { settle(reject, e); }
       };
       input.oncancel = () => settle(resolve, null);
       input.click();
     });
   },
 };
+const readPicked = async (file, spec) => (spec.binary ? { bytes: await file.arrayBuffer() } : { text: await file.text() });
 async function writeHandle(handle, text) {
   const w = await handle.createWritable();
   await w.write(text);

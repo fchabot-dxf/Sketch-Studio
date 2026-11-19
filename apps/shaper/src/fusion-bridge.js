@@ -81,6 +81,9 @@ function parsePayload(rawData) {
   }
 }
 
+/** The notice of an imported selection: its message, then its warnings in brackets (TASK 790: Open STL shows its slice the same way). */
+export const selectionNotice = (message, warnings = []) => (warnings.length ? `${message} (${warnings.join('; ')})` : message);
+
 /**
  * Create the Fusion palette message bridge.
  * Registers `globalTarget.fusionJavaScriptHandler = { handle }` when `globalTarget` is supplied.
@@ -195,7 +198,7 @@ export function createFusionBridge({
       const warnings = (res && Array.isArray(res.warnings)) ? res.warnings
         : (Array.isArray(data.warnings) ? data.warnings.filter(Boolean).map(String) : []);
       const baseMsg = (res && res.message) || `Added ${srcName}: ${regionCount} regions, ${chainCount} chains`;
-      const msg = warnings.length ? `${baseMsg} (${warnings.join('; ')})` : baseMsg;
+      const msg = selectionNotice(baseMsg, warnings);
       dbg.log('fusion', msg, { regions: regionCount, chains: chainCount, warnings });
       onNotice(msg, data);
       return 'OK';

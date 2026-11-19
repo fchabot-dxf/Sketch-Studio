@@ -227,6 +227,7 @@ export const CLEARING_REFUSED = {
   'morphed islands': 'has islands: use Spiral or Raster',
   'morphed area': 'the morphed turns of one area would cross each other: use Spiral or Raster',
   'raster join': 'a raster pass cannot be joined to the next inside the pocket; cut as open passes + the wall',
+  'loop cross': 'its way back would cross the turns on this shape; cut as open paths + the wall', // TASK 804: never a crossing loop
   'islands close': 'an island is closer to the wall or to another island than the bit: the finish pass would cut it',
   'bit too big': 'the bit does not fit in the pocket',
   'no bit': 'set a bit diameter',

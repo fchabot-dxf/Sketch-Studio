@@ -97,6 +97,9 @@ for (const [name, mk] of Object.entries(SHAPES)) {
       eq(elementsOf(exportOf(st, POCKET({ clearing: pattern, loop: true }))).map((e) => e.cutType), ['pocket'], `${tag}: cut Freehand (the note says why)`);
       continue;
     }
+    // TASK 804: the Spiral's and the Morphed spiral's Loop are the GRADUAL double spiral (zero crossings, the old interleave replaced): checked in
+    // tests/pocket-nocross-804-node.test.js; Raster keeps 750's checks here
+    if (pattern !== 'raster') continue;
     eq([on.refused, on.loopRefused, on.loop, off.loop], [null, null, true, false], `${tag}: Loop on is programmed`);
     eq(on.loopCount, LOOPS[pattern][name], `${tag}: ${LOOPS[pattern][name]} closed loop(s), one per chain`);
     ok(on.clear.every((c) => c.role === 'loop' && c.closed && key(c.points[0]) === key(c.points.at(-1))), `${tag}: every loop is closed (first point == last point)`);

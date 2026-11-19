@@ -106,6 +106,9 @@ export const POCKET_CLEARING = Object.freeze({
     Object.freeze({ id: 'raster', label: 'Raster' }),
     Object.freeze({ id: 'morphed', label: 'Morphed spiral' }),
   ]),
+  /** TASK 804: the Loop's cutting-arm PITCH, a multiple of the stepover (record field `loopPitch`): 1 = every ring cut on the way out, the return
+   *  arm in the middle of the cut band (air); 2 = the classic Fermat (both arms cut, each every other ring); between: a blend */
+  loopPitch: Object.freeze({ default: 1, min: 1, max: 2 }),
   /** stepover, % of the bit diameter (record field `stepover`) */
   stepoverPct: Object.freeze({ default: 40, min: 1, max: 100 }),
   /** finish allowance left for the finish pass, base mm by document unit family (record field `finishAllowance`): 0.5 mm / 0.02 in */
@@ -152,8 +155,9 @@ export function clearingSettings(rec) {
   const pct = Number(rec && rec.stepover) > 0 ? Math.min(S.max, Math.max(S.min, Number(rec.stepover))) : S.default;
   const allowance = rec && rec.finishAllowance != null && Number.isFinite(Number(rec.finishAllowance)) && Number(rec.finishAllowance) >= 0 ? Number(rec.finishAllowance) : POCKET_CLEARING.finishAllowance.mm;
   const angle = rec && Number.isFinite(Number(rec.rasterAngle)) && rec.rasterAngle !== null && rec.rasterAngle !== '' ? Number(rec.rasterAngle) : POCKET_CLEARING.rasterAngle;
+  const LP = POCKET_CLEARING.loopPitch, lp = Number(rec && rec.loopPitch);
   return { pattern: clearingPattern(rec), toolDia, r: toolDia / 2, stepoverPct: pct, stepover: (pct / 100) * toolDia, allowance, offset: Number(rec && rec.cutOffset) || 0, angle,
-    loop: Boolean(rec && rec.loop === true) };
+    loop: Boolean(rec && rec.loop === true), pitch: lp > 0 ? Math.min(LP.max, Math.max(LP.min, lp)) : LP.default };
 }
 
 // ── geometry helpers ([x, y] points inside, { x, y } at the edges) ──
@@ -464,11 +468,13 @@ function transition(inner, outer, s) {
   // the outer ring's samples, each with the LAST inner point there: the turn walks the inner arc, then the outer arc, never back (TASK 804: it went back
   // over the arc it had just walked, a fold that crossed itself on a star's or a blob's hollow corners)
   const ev = [...inner.map((x) => ({ phi: x.phi, A: x.p })), ...outer.map((x) => ({ phi: x.phi, B: x.p }))].sort((a, b) => a.phi - b.phi);
-  return ev.map((e) => {
+  const out = ev.map((e) => {
     const A = e.A || ringAt(inner, e.phi), B = e.B || ringAt(outer, e.phi, true);
     const L = Math.hypot(A.x - B.x, A.y - B.y), k = L <= CAP * s ? 1 - e.phi : ((1 - e.phi) * depthOf(L / s) * s) / L;
     return P(B.x + k * (A.x - B.x), B.y + k * (A.y - B.y));
   });
+  out.phis = ev.map((e) => e.phi); // TASK 804: each point's phi
+  return out;
 }
 /** The morphed spiral through `rings` (outermost first, one closed loop each, open {x,y}[]) for a stepover s: { points, turns: [start index of each
  *  turn in points] } (an open path: the central loop, a turn per ring out, the closing turn along rings[0]), or null. */
@@ -498,16 +504,47 @@ export function morphedSpiral(rings, s) {
     sampled.push(S);
   }
   const K = sampled.length - 1, tol = POCKET_CLEARING.pathTolMm;
-  const turns = [sampled[K].map((x) => x.p)];
-  for (let k = K - 1; k >= 0; k--) turns.push(transition(sampled[k + 1], sampled[k], s));
-  if (K > 0) turns.push(sampled[0].map((x) => x.p));
+  const turns = [sampled[K].map((x) => x.p)], phis = [sampled[K].map((x) => x.phi)];
+  for (let k = K - 1; k >= 0; k--) { const t = transition(sampled[k + 1], sampled[k], s); turns.push(t); phis.push(t.phis); }
+  if (K > 0) { turns.push(sampled[0].map((x) => x.p)); phis.push(sampled[0].map((x) => x.phi)); }
   const points = [], starts = [];
   for (const t of turns) {
     const sp = simplifyPath(t, tol);
     starts.push(points.length ? points.length - 1 : 0);
     for (const p of points.length ? sp.slice(1) : sp) points.push(p);
   }
-  return { points, turns: starts };
+  return { points, turns: starts, dense: turns.map((t, j) => ({ pts: t, phi: phis[j] })) }; // TASK 804: each turn's points with their phi (the Loop's return arm)
+}
+/** TASK 804: the Morphed spiral's GRADUAL LOOP of one segment: the morphed spiral through `rings` (outermost first: the finish turn, or the segment's own
+ *  outermost ring; the cutting levels pitch' x s apart) out to its closing turn, then the RETURN arm back in: at each phi the point half way between a
+ *  turn and the next one out (the middle of the band they cut), from the outermost back to the middle, ending where the spiral began. A loopBuilder, or
+ *  null (no spiral, or its turns would cross: the caller refuses the Loop). */
+function morphedGradualLoop(rings, s, finish) {
+  const sp = morphedSpiral(rings, s);
+  if (!sp) return null;
+  const T = sp.dense;
+  if (T.length < 2) { const b = loopBuilder(); b.turn(sp.points, 'morphed'); if (!same(b.last(), b.pts[0])) b.leg([b.pts[0]]); return b; } // one ring: its own loop
+  const at = (t, phi) => { // the turn's point at phi (the first of several at one phi)
+    let lo = 0, hi = t.phi.length - 1;
+    if (phi <= t.phi[0]) return t.pts[0];
+    if (phi >= t.phi[hi]) return t.pts[hi];
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (t.phi[m] < phi) lo = m; else hi = m; }
+    const f = t.phi[hi] > t.phi[lo] ? (phi - t.phi[lo]) / (t.phi[hi] - t.phi[lo]) : 1;
+    return P(t.pts[lo].x + (t.pts[hi].x - t.pts[lo].x) * f, t.pts[lo].y + (t.pts[hi].y - t.pts[lo].y) * f);
+  };
+  const back = [];
+  for (let j = T.length - 2; j >= 0; j--) { // between turn j and turn j + 1, phi from 1 down to 0
+    const ph = [...new Set([...T[j].phi, ...T[j + 1].phi])].filter((v) => v >= 0 && v <= 1).sort((x, y) => y - x);
+    const mid = ph.map((v) => { const p = at(T[j], v), q = at(T[j + 1], v); return P((p.x + q.x) / 2, (p.y + q.y) / 2); });
+    back.push(...(back.length ? mid.slice(1) : mid));
+  }
+  const b = loopBuilder(), last = sp.turns[sp.turns.length - 1];
+  b.turn(sp.points.slice(0, last + 1), 'morphed');
+  b.turn(sp.points.slice(last), finish ? 'finish' : 'ring'); // its closing turn: the finish turn when the segment reaches the wall
+  b.turn(simplifyPath(back, POCKET_CLEARING.pathTolMm), 'return');
+  if (!same(b.last(), b.pts[0])) b.leg([b.pts[0]]);
+  b.cutStep = s;
+  return b;
 }
 
 // ── TASK 750: the LOOP (see THE RULES): closed paths (first point == last point) ──
@@ -560,25 +597,193 @@ function crossingsOf(a, b, paths) {
   }
   return n;
 }
-/** TASK 750: a Spiral line (749: rings inner -> outer, each a full loop from its anchor) as ONE closed loop: start at X1's anchor (X0 = its last turn, the
- *  outermost), IN on X1, X3, ..., OUT on the rings between, then X0, then close to X1's anchor; a step from Xi to Xj runs through the anchors between. */
-export function spiralLoop(line) {
-  const G = line.rings.slice().reverse(), X = G.map((g) => line.points.slice(g.start, g.end + 1));
-  const A = X.map((pts) => pts[0]), kind = (i) => (G[i].finish ? 'finish' : 'ring');
-  const b = loopBuilder();
-  if (X.length === 1) { b.turn(X[0], kind(0)); return b; }
-  const n = X.length - 1, order = [];
-  for (let i = 1; i <= n; i += 2) order.push(i);
-  for (let i = n % 2 === 0 ? n : n - 1; i >= 2; i -= 2) order.push(i);
-  order.push(0);
-  let cur = null;
-  for (const i of order) {
-    if (cur !== null) { const dir = i > cur ? 1 : -1, via = []; for (let j = cur + dir; j !== i; j += dir) via.push(A[j]); b.leg([...via, A[i]], via.length); }
-    b.turn(X[i], kind(i)); cur = i;
+// ── TASK 804: THE GRADUAL LOOP (see THE RULES): per chain, a double spiral of exact offset levels with its transitions side by side ──
+// a point ON a closed loop (open {x,y}[]): { i, t, p } on its segment i -> i + 1
+const onLoop = (pts, i, t) => { const a = pts[i], b = pts[(i + 1) % pts.length]; return { i, t, p: P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) }; };
+// the point `len` further along a closed loop from `at` (its own direction)
+function aheadOn(pts, at, len) {
+  let i = at.i, t = at.t, left = len;
+  for (let n = 0; n <= pts.length + 1; n++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], L = Math.hypot(b.x - a.x, b.y - a.y), rest = (1 - t) * L;
+    if (rest >= left && L > 0) return onLoop(pts, i, t + left / L);
+    left -= rest; i = (i + 1) % pts.length; t = 0;
   }
-  b.leg([A[1]]); // close: X0's anchor -> X1's anchor
+  return onLoop(pts, i, 0);
+}
+// a closed loop walked from `from` to `to` (points on it) FORWARD (dir 1, the loop's own direction) or BACKWARD (dir -1), never through `to` before the end
+function walkLoop(pts, from, to, dir) {
+  const n = pts.length, out = [from.p];
+  if (dir > 0) {
+    if (!(from.i === to.i && to.t > from.t)) for (let j = (from.i + 1) % n; ; j = (j + 1) % n) { out.push(pts[j]); if (j === to.i) break; }
+  } else if (!(from.i === to.i && to.t < from.t)) for (let j = from.i; ; j = (j - 1 + n) % n) { out.push(pts[j]); if (j === (to.i + 1) % n) break; }
+  out.push(to.p);
+  return out.filter((q, j) => j === 0 || !same(q, out[j - 1]));
+}
+const containsPt = (loop, q) => inRing(q, loop);
+// C lies BETWEEN loops A and B (one inside the other): A inside C inside B, or B inside C inside A
+const between = (C, A, B) => (containsPt(C, A[0]) && containsPt(B, C[0])) || (containsPt(C, B[0]) && containsPt(A, C[0]));
+// the loops of a chain at the offsets D (positive): a loop of the chain itself where D is its offset, else the contour of R at that offset that lies between
+// the chain's two loops round it; null when there is none
+function levelLoops(seq, D, R) {
+  const known = seq.slice().sort((x, y) => y.delta - x.delta); // by delta, the centre first
+  const levels = [];
+  for (const d of D) {
+    const hit = known.find((q) => Math.abs(q.delta - d) < 1e-9);
+    if (hit) { levels.push(positive(hit.pts)); continue; }
+    const inner = known.filter((q) => q.delta > d).pop(), outer = known.find((q) => q.delta < d);
+    const C = inner && outer ? contoursOf(offsetRegions(R, -d, POCKET_CLEARING.chordTolMm)).find((c) => between(c, inner.pts, outer.pts)) : null;
+    if (!C) return null;
+    levels.push(positive(C));
+  }
+  return levels;
+}
+// the CUTTING offsets of a chain: from its centre out every pitch' x s (pitch' <= pitch, equal steps) to its outermost clearing ring: { cutD (centre
+// first), step }
+function cuttingOffsets(clear, s, pitch) {
+  const centre = clear[clear.length - 1], top = clear[0];
+  const span = centre.delta - top.delta, N = span > 1e-9 ? Math.ceil(span / (pitch * s) - 1e-9) : 0, step = N ? span / N : 0;
+  return { cutD: Array.from({ length: N + 1 }, (_, i) => centre.delta - i * step), step };
+}
+/**
+ * gradualLoop(seq, R, s, pitch) -> a closed loop (loopBuilder) or null: THE GRADUAL LOOP of one chain. `seq` = its loops from the outer turnaround (the
+ * finish turn, or a branch's own outermost ring) to the CENTRE: [{ pts (closed loop, open {x,y}[]), delta (its offset from R's edge), finish }], each
+ * inside the previous (or, round an island, each round the previous). The CUTTING levels: from the centre out every pitch' x s (pitch' <= pitch: the
+ * same steps from the centre to the outermost clearing ring), then the finish turn; the RETURN levels: half way between two cutting levels (exact
+ * offsets of R, the one between its neighbours). The path: the centre ring, then out ring by ring to the finish turn (whole), then back in on the
+ * return levels the other way round, then one step to the start. Every level is walked whole but for a short WINDOW (lambda along it from the SEAM: a
+ * chain of nearest points from the middle of the centre's longest edge out, `seam` picks another edge), where the steps between levels run SIDE BY
+ * SIDE: out from a_i to b_(i+2) (cutting), in from b_j to a_(j-2) (return), all parallel; no step passes over a level.
+ */
+function gradualLoop(seq, R, s, pitch, seam = 0, lambdaScale = 1) {
+  const fin = seq[0].finish ? seq[0] : null, clear = fin ? seq.slice(1) : seq;
+  if (!clear.length) return finishTurnLoop(positive(fin.pts));
+  const { cutD, step } = cuttingOffsets(clear, s, pitch);
+  if (fin) cutD.push(fin.delta);
+  const D = []; // the levels from the centre out: cutting, return, cutting, ..., the outermost cutting level
+  cutD.forEach((d, i) => { if (i) D.push((cutD[i - 1] + d) / 2); D.push(d); });
+  const levels = levelLoops(seq, D, R);
+  if (!levels) return null;
+  if (levels.length === 1) { const b = loopBuilder(); b.turn(loopFrom(levels[0], ringStart(levels[0])), fin ? 'finish' : 'ring'); return b; }
+  // the seam: from the middle of the centre's (seam + 1)-th longest edge, the nearest point of each level out
+  const c0 = levels[0], order = c0.map((_, i) => i).sort((x, y) => Math.hypot(c0[(y + 1) % c0.length].x - c0[y].x, c0[(y + 1) % c0.length].y - c0[y].y) - Math.hypot(c0[(x + 1) % c0.length].x - c0[x].x, c0[(x + 1) % c0.length].y - c0[x].y));
+  if (seam >= order.length) return null;
+  // seam 0: the middle of the centre ring's longest edge as 749's line starts there (ringStart on the ring as offset gives it: the same start mark)
+  const A = [seam === 0 ? (() => { const f = nearestOnLoop(c0, ringStart(clear[clear.length - 1].pts).p); return { i: f.i, t: f.t, p: f.p }; })() : onLoop(c0, order[seam], 0.5)];
+  for (let i = 1; i < levels.length; i++) { const f = nearestOnLoop(levels[i], A[i - 1].p); A.push({ i: f.i, t: f.t, p: f.p }); }
+  const edge = Math.hypot(c0[(order[seam] + 1) % c0.length].x - c0[order[seam]].x, c0[(order[seam] + 1) % c0.length].y - c0[order[seam]].y);
+  const lambda = Math.min(step || s, edge / 4) * lambdaScale;
+  // the window's other side: lambda on along the centre ring, then the nearest point of each level out (two chains of nearest points: the window is
+  // the band between two normals, as wide in angle on a small ring as on a big one, so its steps stay parallel)
+  const B = [aheadOn(c0, A[0], lambda)];
+  for (let i = 1; i < levels.length; i++) { const f = nearestOnLoop(levels[i], B[i - 1].p); B.push({ i: f.i, t: f.t, p: f.p }); }
+  const M = levels.length - 1, b = loopBuilder();
+  for (let i = 0; i < M; i += 2) { b.turn(walkLoop(levels[i], B[i], A[i], 1), 'ring'); b.leg([B[i + 2].p]); } // out: each cutting level, then the step out
+  b.turn([...walkLoop(levels[M], B[M], A[M], 1), B[M].p], fin ? 'finish' : 'ring'); // the outer turnaround, whole
+  for (let j = M - 1; j >= 1; j -= 2) { b.leg([A[j].p]); b.turn(walkLoop(levels[j], A[j], B[j], -1), 'return'); } // in: each return level the other way
+  b.leg([B[0].p]); // the step to the start
+  b.cutStep = step || null;
+  b.centre = { pts: levels[0], A: A[0], B: B[0], ahead: lambda }; // the centre ring, walked first from B to A (a bridge to another loop starts there)
   return b;
 }
+
+/** TASK 804: the Spiral's Loop CHAINS ([seq] for gradualLoop): per chain of the ring tree (ringChains) its rings' outer contours, after the wall's finish
+ *  turn when it reaches the wall; per island its rings round it (the holes of the rings, each family going on into the hole round it), after the island's
+ *  finish turn. With no allowance ring 0 IS the finish turn. A finish turn no chain reaches is its own loop (`alone`). */
+function spiralLoopChains(L, finishLoops, r, a, s) {
+  const d = (k) => r + a + k * s, used = new Set(), seqs = [], bridges = [];
+  const finishFor = (pts, hole) => { // the finish turn round this ring 0 contour (the wall's: around it; an island's: inside it)
+    const c = finishLoops.findIndex((F, c) => !used.has(c) && (hole ? containsPt(pts, F[0]) && !containsPt(F, pts[0]) : containsPt(F, pts[0])));
+    if (c < 0) return null;
+    used.add(c);
+    return { pts: finishLoops[c], delta: r, finish: true };
+  };
+  const withFinish = (seq, hole) => {
+    if (a > 0) { const f = finishFor(seq[0].pts, hole); return f ? [f, ...seq] : seq; }
+    seq[0] = { ...seq[0], finish: true }; return seq;
+  };
+  const deepHoles = []; // per seq: the hole contours of its deepest region (a chain that stays round an island to its end), to bridge to
+  for (const ch of ringChains(L)) {
+    const seq = ch.map(({ k, g }) => ({ pts: toXY(g.outer), delta: d(k) }));
+    seqs.push(ch[0].k === 0 ? withFinish(seq, false) : seq);
+    deepHoles.push(ch[ch.length - 1].g.holes.map((h) => h[0]));
+  }
+  // the islands' families: from each hole of ring 0 out, the hole of the next ring round it (one family goes on where two meet: the first found)
+  const holes = L.map((E) => E.flatMap((g) => g.holes.map(toXY)).filter((h) => h.length >= 3));
+  const taken = holes.map((H) => H.map(() => false));
+  (holes[0] || []).forEach((h0, c0) => {
+    taken[0][c0] = true;
+    const seq = [{ pts: h0, delta: d(0) }];
+    for (let k = 1, cur = h0; k < holes.length; k++) {
+      const c = holes[k].findIndex((h, c) => !taken[k][c] && containsPt(h, cur[0]));
+      if (c < 0) break;
+      taken[k][c] = true; cur = holes[k][c]; seq.push({ pts: cur, delta: d(k) });
+    }
+    const into = deepHoles.findIndex((hs) => hs.some((q) => same(P(q[0], q[1]), seq[seq.length - 1].pts[0])));
+    if (into >= 0 && !bridges.some(([o]) => o === into)) bridges.push([into, seqs.length]); // its family ends on a hole of that chain's deepest region
+    seqs.push(withFinish(seq, true));
+  });
+  const alone = finishLoops.filter((_, c) => !used.has(c));
+  return { seqs, alone, bridges };
+}
+/** TASK 804: two gradual loops whose centre rings face each other across a strip no path runs in (the wall's chain and an island's, where the rings round
+ *  the island never split) joined into ONE closed loop by two parallel BRIDGES: from p1 on the first centre ring to its nearest point q1 on the second,
+ *  round the second loop (the other way) to q2, the nearest point of p2 (a stepover on from p1), back to p2. p1 is half way round the first centre ring
+ *  from its seam (away from both windows). */
+function bridgeLoops(b1, b2, s) {
+  const c1 = b1.centre, c2 = b2.centre, L1 = pathLength(c1.pts, true), L2 = pathLength(c2.pts, true);
+  const t0 = b1.turns[0];
+  const posOn = (c, q) => pathLength(walkLoop(c.pts, c.B, q, 1), false); // how far along the centre walk (from B) a point of the centre ring is
+  for (const f of [0.5, 0.25, 0.75]) { // p1: half way round the first centre walk (else a quarter): q1, q2 must lie on the second's walk, in order
+    const p1 = aheadOn(c1.pts, c1.B, (L1 - c1.ahead) * f), p2 = aheadOn(c1.pts, p1, s);
+    const n1 = nearestOnLoop(c2.pts, p1.p), n2 = nearestOnLoop(c2.pts, p2.p);
+    const q1 = { i: n1.i, t: n1.t, p: n1.p }, q2 = { i: n2.i, t: n2.t, p: n2.p };
+    const a1 = posOn(c2, q1), a2 = posOn(c2, q2);
+    if (!(a1 > 1e-6 && a2 > a1 + 1e-6 && a2 < L2 - c2.ahead - 1e-6)) continue;
+    // the second loop as a cycle from q2 round to q1 (the arc q1 -> q2 of its centre ring left out), walked backwards: q1 ... q2
+    const cyc = [...walkLoop(c2.pts, q2, c2.A, 1), ...b2.pts.slice(b2.turns[0].end + 1), ...walkLoop(c2.pts, c2.B, q1, 1)];
+    const out = loopBuilder();
+    out.turn(walkLoop(c1.pts, c1.B, p1, 1), 'ring');
+    out.leg([q1.p]);
+    out.turn(cyc.reverse(), 'bridged');
+    out.leg([p2.p]);
+    out.turn(walkLoop(c1.pts, p2, c1.A, 1), 'ring');
+    const shift = out.pts.length - 1 - t0.end; // b1.pts[t0.end] is A, the last point so far
+    for (const t of b1.turns.slice(1)) out.turns.push({ start: t.start + shift, end: t.end + shift, kind: t.kind });
+    out.pts.push(...b1.pts.slice(t0.end + 1));
+    out.legs += b1.legs + b2.legs;
+    out.cutStep = Math.max(b1.cutStep || 0, b2.cutStep || 0);
+    return out;
+  }
+  return null;
+}
+// THE GRADUAL LOOP of every chain, each checked against itself and the ones before (THE HARD RULE): a chain whose seam crosses tries the next seam (the
+// centre's next longest edge, or half the window); null when none is crossing-free
+function gradualLoops(seqs, alone, R, s, pitch, bridges = []) {
+  const done = [];
+  const paths = () => done.map((b) => ({ points: b.pts, closed: true }));
+  for (const seq of seqs) {
+    let got = null;
+    for (let seam = 0; seam < 8 && !got; seam++) for (const sc of [1, 0.5]) {
+      const b = gradualLoop(seq, R, s, pitch, seam, sc);
+      if (b && !pathCrossings([{ points: b.pts, closed: true }, ...paths()]).count) { got = b; break; }
+    }
+    if (!got) return null;
+    done.push(got);
+  }
+  // the bridges (an island's family into the wall's chain): one closed loop where the joined loop crosses nothing, else the two stay apart
+  const gone = new Set();
+  for (const [o, h] of bridges) {
+    const m = bridgeLoops(done[o], done[h], s);
+    if (!m) continue;
+    const others = done.filter((_, i) => i !== o && i !== h && !gone.has(i)).map((b) => ({ points: b.pts, closed: true }));
+    if (pathCrossings([{ points: m.pts, closed: true }, ...others]).count) continue;
+    done[o] = m; gone.add(h);
+  }
+  const out = done.filter((_, i) => !gone.has(i));
+  for (const F of alone) out.push(finishTurnLoop(F));
+  return out;
+}
+
 /** TASK 750: the Raster's closed loops: per area of A0 its passes (zigzag) joined along A0's contours, each contour's clean-up ring + its finish turn, the
  *  start contour last, then the shortest closing leg; a finish turn no area reaches is a loop of its own. { loops: [builder], refused: null | 'raster join' } */
 function rasterLoops(A0, pieces, finishLoops, a, Rr) {
@@ -639,19 +844,6 @@ function rasterLoops(A0, pieces, finishLoops, a, Rr) {
 }
 /** A finish turn no clearing reaches, as a closed loop of its own (Raster's rule above; TASK 787: every pattern's, when there is nothing to clear). */
 function finishTurnLoop(F) { const b = loopBuilder(); b.turn(loopFrom(F, ringStart(F)), 'finish'); return b; }
-/** TASK 750: the Morphed spiral as ONE closed loop: the spiral, then the finish turn (a step of the allowance out from where the closing turn ends and
- *  back), then the RETURN leg down the chain of turn starts to the first point (it crosses each turn once). */
-function morphedLoop(sp, finishLoops, a, done = new Set()) {
-  const b = loopBuilder();
-  b.turn(sp.points, a > 0 ? 'morphed' : 'finish'); // with no allowance its closing turn IS the finish turn
-  const e = b.last();
-  const f = a > 0 ? nearestOfLoops(finishLoops, e) : null;
-  if (f && !done.has(f.c)) { done.add(f.c); b.leg([f.p]); b.turn(loopFrom(finishLoops[f.c], f), 'finish'); b.leg([e]); } // TASK 804: each finish turn in one loop
-  const back = [];
-  for (let j = sp.turns.length - 1; j >= 0; j--) back.push(sp.points[sp.turns[j]]);
-  b.leg(back, Math.max(0, sp.turns.length - 2));
-  return b;
-}
 
 // ── the plan of one pocket (memoised: the same loops + settings give the same plan) ──
 const MEMO = new Map(), MEMO_MAX = 48;
@@ -669,7 +861,7 @@ const MEMO = new Map(), MEMO_MAX = 48;
  * outer / holes = closed [[x,y],...] rings (base mm).
  */
 export function planClearing(rings, st) {
-  const key = JSON.stringify([rings, st.pattern, st.r, st.stepover, st.allowance, st.offset, st.pattern === 'raster' ? st.angle : null, st.loop]);
+  const key = JSON.stringify([rings, st.pattern, st.r, st.stepover, st.allowance, st.offset, st.pattern === 'raster' ? st.angle : null, st.loop, st.loop ? st.pitch : null]);
   if (MEMO.has(key)) return MEMO.get(key);
   const plan = computePlan(rings, st);
   MEMO.set(key, plan);
@@ -714,7 +906,12 @@ function computePlan({ outer, holes }, st) {
     linesWhy = lines > 1 ? (holes.length ? 'islands' : 'splits') : null;
     ls.forEach((ln, i) => clear.push({ points: ln.points, closed: false, role: 'linked', index: i + 1, count: ls.length,
       rings: ln.rings.map((g) => ({ ...g, level: g.level - shift, finish: st.loop && g.level === 0 })), links: ln.links }));
-    if (st.loop) built = clear.map(spiralLoop);
+    if (st.loop) { // TASK 804: THE GRADUAL LOOP per chain (zero crossings), or refused (cut as the lines + the wall; the note says so)
+      const { seqs, alone, bridges } = spiralLoopChains(L, finishLoops, r, a, s);
+      built = gradualLoops(seqs, alone, R, s, st.pitch, bridges);
+      if (!built) loopRefused = 'loop cross';
+      else linesWhy = built.length > 1 ? (holes.length ? 'islands' : 'splits') : null;
+    }
   } else if (pattern === 'morphed') {
     if (morphedBlocked) return { ...base, wall, islands, levels, loops, morphedBlocked, refused: 'morphed ' + morphedBlocked };
     // TASK 804: one morphed spiral PER SEGMENT (per area; the shared rings before a split are their own), in the segments' cutting order
@@ -728,7 +925,22 @@ function computePlan({ outer, holes }, st) {
     lines = sps.length;
     linesWhy = lines > 1 ? 'splits' : null;
     sps.forEach((sp, i) => { turns += sp.turns.length; clear.push({ points: sp.points, closed: false, role: 'morphed', index: i + 1, count: sps.length, turnStarts: sp.turns }); });
-    if (st.loop && sps.length) { const done = new Set(); built = sps.map((sp) => morphedLoop(sp, finishLoops, a, done)); }
+    if (st.loop && sps.length) { // TASK 804: THE GRADUAL LOOP per segment (the morphed spiral out, the return arm in the middle of its bands), crossing-free or refused
+      const used = new Set(), done = [];
+      for (const ch of chains) {
+        const seq = ch.map(({ k, g }) => ({ pts: toXY(g.outer), delta: d0 + k * s }));
+        const { cutD, step } = cuttingOffsets(seq, s, st.pitch);
+        let rings = levelLoops(seq, cutD, R), fin = ch[0].k === 0 && !(a > 0); // with no allowance ring 0 IS the finish turn
+        if (rings && ch[0].k === 0 && a > 0) { // the segment that reaches the wall ends on the wall's finish turn
+          const c = finishLoops.findIndex((F, c) => !used.has(c) && containsPt(F, seq[0].pts[0]));
+          if (c >= 0) { used.add(c); rings = [...rings, positive(finishLoops[c])]; fin = true; }
+        }
+        const b = rings ? morphedGradualLoop(rings.slice().reverse(), step || s, fin) : null;
+        if (!b || pathCrossings([{ points: b.pts, closed: true }, ...done.map((x) => ({ points: x.pts, closed: true }))]).count) { loopRefused = 'loop cross'; break; }
+        done.push(b);
+      }
+      if (!loopRefused) built = [...done, ...finishLoops.filter((_, c) => !used.has(c)).map(finishTurnLoop)];
+    }
   } else if (pattern === 'raster') {
     const A0 = offsetRegions(R, -d0, POCKET_CLEARING.chordTolMm);
     const pieces = A0.length ? rasterPasses(A0, s, st.angle) : [];
@@ -750,14 +962,17 @@ function computePlan({ outer, holes }, st) {
   // longest edge (first point of the first line/spiral, which stays on the loop when Loop is on); Raster = start of the first pass.
   const innerStart = pattern === 'linked' || pattern === 'morphed' ? (clear.length && clear[0].points.length ? clear[0].points[0] : null) : null;
   const loop = Boolean(built && built.length);
-  let loopCrossings = 0, loopExtra = 0;
+  let loopCrossings = 0, loopExtra = 0, loopStep = 0;
   if (loop) {
-    loopCrossings = built.reduce((t, b) => t + b.crossings, 0);
+    loopStep = built.reduce((m, b) => Math.max(m, b.cutStep || 0), 0); // TASK 804: the cutting arm's widest step (mm): pitch' x stepover
+    loopCrossings = pathCrossings(built.map((b) => ({ points: b.pts, closed: true }))).count; // TASK 804: THE crossing check (0: the hard rule)
     loopExtra = built.reduce((t, b) => t + b.legs, 0);
     clear = built.map((b, i) => ({ points: b.pts, closed: true, role: 'loop', index: i + 1, count: built.length, turns: b.turns }));
     if (pattern !== 'linked') linesWhy = clear.length > 1 ? linesWhy : null;
   }
-  const startPoint = innerStart || (clear.length && clear[0].points.length ? clear[0].points[0] : null);
+  // TASK 804: the Spiral's gradual Loop: the start mark at its first loop's seam on the centre ring (the middle of that ring's longest edge: ON the route)
+  const seamStart = loop && pattern === 'linked' && built[0].centre ? built[0].centre.A.p : null;
+  const startPoint = seamStart || innerStart || (clear.length && clear[0].points.length ? clear[0].points[0] : null);
   // what the bit sweeps (the clearing + the finish pass) and what it leaves
   const all = [...clear.map((c) => ({ points: c.points.map((p) => [p.x, p.y]), closed: c.closed })), ...(loop ? [] : finish)]; // Loop on: the finish turns are in the loops
   const swept = sweepPaths(all, r, POCKET_CLEARING.chordTolMm);
@@ -768,7 +983,7 @@ function computePlan({ outer, holes }, st) {
   const length = clear.reduce((t, c) => t + pathLength(c.points, c.closed), 0);
   const finishLength = loop ? 0 : [...wall, ...islands.flat()].reduce((t, pts) => t + pathLength(pts, true), 0);
   return { pattern, clear, levels, loops, passes, cleanup, turns, wall, islands, swept, leftover: { area, unreachable, missed: Math.max(0, area - unreachable), regions: leftR }, length, finishLength, lines, linesWhy,
-    loop, loopCount: loop ? clear.length : 0, loopCrossings, loopExtra, loopRefused, startPoint, morphedBlocked, refused: null };
+    loop, loopCount: loop ? clear.length : 0, loopCrossings, loopExtra, loopStep, loopRefused, startPoint, morphedBlocked, refused: null };
 }
 
 /** A pocket cut's region rings ({ outer, holes }: closed [[x,y],...], arcs exact to chordTolMm) from its loops (#core/hold-part loopWalk), or null. */

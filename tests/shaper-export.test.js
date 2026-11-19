@@ -157,7 +157,7 @@ import { format } from '#core/units.js';
     eq(svg, want, 'options.datum → red triangle first');
   }
 
-  // 12. options.groupByCut → two same-attr cuts in ONE <g> (attrs hoisted off the children); a unique cut ungrouped
+  // 12. TASK 802: two same-attr cuts are NOT grouped: every element carries its own fill / shaper:* attrs, no <g> (the Origin reads them from the element)
   {
     const state = {
       joints: new Map([
@@ -180,15 +180,10 @@ import { format } from '#core/units.js';
       { target: { kind: 'loop', id: rects[1].id }, rec: { cutType: 'exterior' } },
       { target: { kind: 'loop', id: circle.id }, rec: { cutType: 'pocket' } },
     ];
-    const grouped = exportShaperSVG({ state, entries, encoding: ENC5, docUnit: 'mm', options: { groupByCut: true } });
-    assert(grouped.includes('<g fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm">'), 'group: <g> with hoisted attrs');
-    assert((grouped.match(/<g /g) || []).length === 1 && grouped.includes('</g>'), 'group: exactly one <g>…</g>');
-    assert((grouped.match(/<path d="[^"]*"\/>/g) || []).length === 2, 'group: 2 children with NO cut attrs (inherited)');
-    assert(/<circle cx="50" cy="60" r="10" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutOffset="0mm"\/>/.test(grouped), 'group: the unique pocket stays ungrouped (keeps its attrs)');
-
-    const ungrouped = exportShaperSVG({ state, entries, encoding: ENC5, docUnit: 'mm' }); // default OFF
-    assert(!ungrouped.includes('<g '), 'default: no grouping');
-    assert((ungrouped.match(/<path d="[^"]*" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"\/>/g) || []).length === 2, 'default: each rect keeps its own attrs');
+    const svg = exportShaperSVG({ state, entries, encoding: ENC5, docUnit: 'mm', options: {} });
+    assert(!svg.includes('<g ') && !svg.includes('</g>'), 'no <g> (the Origin does not read a cut from a parent group)');
+    assert((svg.match(/<path d="[^"]*" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"\/>/g) || []).length === 2, 'each of the two same-attr rects keeps its own attrs');
+    assert(/<circle cx="50" cy="60" r="10" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutOffset="0mm"\/>/.test(svg), 'the pocket keeps its attrs');
   }
 
   // 13. options OFF (default) → no datum polygon, no <g> (the j1/j2 cases above already pin the exact strings)

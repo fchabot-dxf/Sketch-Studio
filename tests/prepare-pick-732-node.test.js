@@ -60,7 +60,7 @@ eq(derivedProfileForLoop(bottom.outer, loops, polys, st).inners, [], '2. the bot
 // 3. a pocket on the bottom board exports only the bottom board's outline
 CUT_PLAN.clear();
 CUT_PLAN.set(keyOf('loop', bottom.outer), { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 3.175 });
-const svg = exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys: polys });
+const svg = exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: polys });
 const paths = [...svg.matchAll(/<path\s[^>]*\bd="([^"]*)"/g)].map((m) => m[1]);
 eq(paths.length, 1, '3. one element in the export:\n' + svg);
 eq((paths[0].match(/M/g) || []).length, 1, '3. one subpath (no neighbour board written as a hole): ' + paths[0]);

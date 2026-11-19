@@ -7,7 +7,7 @@
 //      its `showDesign` option first, and nothing when it is not given.
 //   C. Shaper (node kit: the page's own modes.js / cut-import.js / design-canvas.js): an import, a new design and a new tab started on Prepare
 //      or Review show Design; a tab switch keeps the stage. Pen Plotter (its own stages.js / sketch-stage.js): the same from Toolpath and Export.
-//   D. GAP 4: a Shaper SVG whose cut attributes sit on a <g> (Shaper's own export, groupByCut) keeps every cut on import: export -> import -> the same
+//   D. GAP 4: a Shaper SVG whose cut attributes sit on a <g> (the grouped form Shaper's export wrote before TASK 802) keeps every cut on import: export -> import -> the same
 //      records (type, depth, offset, bit); an element's own attribute wins over its group's; the root <svg>'s paint is not a cut.
 //   E. the tab session: a session stored before TASK 706 (with its `explore` part) still restores Prepare's selection; a new capture has no `explore`.
 import assert from 'node:assert';
@@ -126,7 +126,7 @@ const record = (r) => [r.cutType, Math.round(Number(r.cutDepth) * 1000) / 1000, 
 {
   const sh = await open({ host: 'shaper' });
   try {
-    // a design with four separate cuts: two identical pockets (the export groups them under ONE <g>), an outside, an on-line chain with its own bit + offset
+    // a design with four separate cuts: two identical pockets (TASK 802: each is written with its own attributes), an outside, an on-line chain with its own bit + offset
     const src = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="200mm" height="100mm" viewBox="0 0 200 100">' +
       '<rect x="10" y="10" width="30" height="20" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6 mm" shaper:toolDia="6.35 mm"/>' +
       '<rect x="60" y="10" width="30" height="20" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6 mm" shaper:toolDia="6.35 mm"/>' +
@@ -137,14 +137,14 @@ const record = (r) => [r.cutType, Math.round(Number(r.cutDepth) * 1000) / 1000, 
     const keysA = [...CUT_PLAN.keys()].filter((k) => !before.has(k));
     const original = keysA.map((k) => record(CUT_PLAN.get(k))).sort();
     eq(original, [['exterior', 12, 0.5, 3.175], ['online', 1, 0, 3], ['pocket', 6, 0, 6.35], ['pocket', 6, 0, 6.35]], 'the source design: 4 cuts');
-    // the Shaper export, with the inputs main.js generateShaperSvgPayload gives it (groupByCut: true)
+    // the Shaper export, with the inputs main.js generateShaperSvgPayload gives it
     const st = sh.state;
     const sById = new Map(st.shapes.map((s) => [s.id, s]));
     const loopPolys = {}; for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
     const entries = cutPlanEntries().filter((e) => keysA.includes(e.target.kind + ':' + e.target.id));
-    const exported = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys });
-    const groups = [...exported.matchAll(/<g [^>]*shaper:cutType="([^"]+)"[^>]*>/g)].map((m) => m[1]);
-    eq(groups, ['pocket'], 'the export carries the two pockets\' cut on ONE <g> (the case that lost its cuts)');
+    const exported = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys });
+    eq(/<g[ >]/.test(exported), false, 'TASK 802: the export has no <g>: each element carries its own cut');
+    eq([...exported.matchAll(/<(?:path|circle)[^>]*>/g)].every((m) => /shaper:cutType="/.test(m[0])), true, 'every element carries its own shaper:cutType');
     const before2 = new Set(CUT_PLAN.keys());
     sh.importFile(exported, 'cuts-export.svg');
     const keysB = [...CUT_PLAN.keys()].filter((k) => !before2.has(k));

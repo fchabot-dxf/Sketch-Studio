@@ -10,8 +10,8 @@ import { CUT_PLAN, assignImportedCuts } from './cut-plan.js';
 
 /**
  * TASK 706: an element's cut attributes as Shaper reads them: per attribute, the element's OWN value, else the nearest ancestor <g>'s (not the root <svg>).
- * Shaper's own export groups the elements that share a cut under one <g> carrying the fill / stroke / shaper:* (shaper-export.js groupByCut), as SVG
- * paint inherits; reading only the element lost those cuts on import. The reader has the two methods extractCutRecord reads (getAttribute, getAttributeNS).
+ * Shaper's own export USED TO group the elements that share a cut under one <g> carrying the fill / stroke / shaper:* (removed in TASK 802: the
+ * Origin reads the cut from each element); files exported before that still import, so a parent <g>'s attribute is inherited. The reader has the two methods extractCutRecord reads (getAttribute, getAttributeNS).
  */
 export function inheritedCutAttributes(el) {
   const nearest = (read) => {

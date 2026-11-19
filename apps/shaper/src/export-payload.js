@@ -1,7 +1,7 @@
 // apps/shaper/src/export-payload.js — TASK 718: Shaper's ONE call of the exporter (#core/shaper-export exportShaperSVG), declared once: the page's
 // Generate Shaper SVG / Download / Sync (main.js generateShaperSvgPayload), the Export step's 2D preview (export-preview.js) and the node tests
 // all serialize the cut plan through shaperSvgOf. Moved out of main.js unchanged (the loop polygons the host computes, the injected encoding, the
-// doc unit, groupByCut); `preview: true` asks the exporter for the PREVIEW copy (its data-step attributes, never in the downloaded file).
+// doc unit); `preview: true` asks the exporter for the PREVIEW copy (its data-step attributes, never in the downloaded file).
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { deriveCutFootprint, deriveCutTravel } from '#core/profile-model.js'; // TASK 793: the bit-centre paths, the derivation Prepare draws
@@ -25,7 +25,7 @@ export function shaperSvgOf(state, entries, { preview = false, written = null } 
   const sById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(state)) loopPolys[l.id] = loopPolygon(l, state, sById);
-  const options = preview ? { groupByCut: true, previewData: true } : { groupByCut: true };
+  const options = preview ? { previewData: true } : {};
   if (written) options.written = written; // TASK 793: receives { cut, entry } of each element in the file's order (the Export step's Paths view)
   return exportShaperSVG({ state, entries, encoding: exportEncoding(), docUnit: docUnit(), options, loopPolys });
 }

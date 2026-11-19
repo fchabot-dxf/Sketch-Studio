@@ -25,7 +25,7 @@ function elementsOf(svg) {
   const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   const out = []; let group = null;
   for (const line of svg.split('\n').map((l) => l.trim())) {
-    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('<g')) throw new Error('TASK 802: the export has a <g>, every element must carry its own cut attributes: ' + line);
     if (line.startsWith('</g')) { group = null; continue; }
     const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
     if (!m) continue;

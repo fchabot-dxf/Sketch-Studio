@@ -57,7 +57,7 @@ const outerLoopOf = (st) => { const loops = findLoops(st); return loops.reduce((
 function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y; return a / 2; }
 const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, finishAllowance: ALLOW, rasterAngle: 0, ...more });
 const cutsOf = (st, rec) => { const loops = findLoops(st); return deriveCuts({ kind: 'loop', id: outerLoopOf(st).id }, rec, st, loops, polysOf(st), new Set()); };
-const exportOf = (st, rec, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
+const exportOf = (st, rec, options = {}) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: outerLoopOf(st).id }, rec }], encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 
 // geometry checks against the pocket's EXACT boundary (its loops' walks: arcs to 0.005 mm)
 const distSeg = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy; const t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)) : 0; return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
@@ -183,7 +183,7 @@ const elementsOf = (svg) => {
   const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   const out = []; let group = null;
   for (const line of svg.split('\n').map((l) => l.trim())) {
-    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('<g')) throw new Error('TASK 802: the export has a <g>, every element must carry its own cut attributes: ' + line);
     if (line.startsWith('</g')) { group = null; continue; }
     const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
     if (!m) continue;
@@ -215,7 +215,7 @@ const elementsOf = (svg) => {
   const planPts = plan.clear.map((c) => c.points.flatMap((p) => [Math.round(p.x * 1e4) / 1e4, Math.round(p.y * 1e4) / 1e4]));
   eq(first, planPts, 'the file\'s lines are the derivation\'s lines, point for point (inside out)');
   // the preview copy: data-clear on each element; the download has none
-  const pv = elementsOf(exportOf(st, rec, { groupByCut: true, previewData: true }));
+  const pv = elementsOf(exportOf(st, rec, { previewData: true }));
   eq(pv.filter((e) => e.cutType === 'online').map((e) => e.clear), plan.clear.map((c) => `linked ${c.index}/${plan.lines}`), 'preview: data-clear "linked k/N" (line k of N)');
   eq(pv.slice(-3).map((e) => e.clear), ['wall', 'island 1/1', 'start'], 'preview: "wall", "island 1/1", "start"');
   ok(!/data-/.test(exportOf(st, rec)), 'the download has no data-* attribute');

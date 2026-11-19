@@ -39,7 +39,7 @@ const LSHAPE = [[0, 0], [200, 0], [200, 60], [80, 60], [80, 150], [0, 150]];
 const circleState = () => ({ joints: new Map([['o', { x: 50, y: 50 }]]), shapes: [{ id: 'c', type: 'circle', joints: ['o'], radius: 40 }], constraints: [], groups: [], profiles: [] });
 const loopOf = (st, edge) => findLoops(st).find((l) => l.edges.includes(edge));
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
-const exportOf = (st, entries, options = { groupByCut: true }) => exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
+const exportOf = (st, entries, options = {}) => exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options, loopPolys: polysOf(st) });
 const TABS = { cutType: 'exterior', cutDepth: 18, cutOffset: 0, toolDia: BIT, holdPart: 'tabs', tabCount: 'auto', tabWidth: 10, holdThickness: 2 };
 const cutsOf = (st, edge, rec) => { const loops = findLoops(st); return deriveCuts({ kind: 'loop', id: loopOf(st, edge).id }, rec, st, loops, polysOf(st), new Set()); };
 
@@ -48,7 +48,7 @@ function elementsOf(svg) {
   const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   const out = []; let group = null;
   for (const line of svg.split('\n').map((l) => l.trim())) {
-    if (line.startsWith('<g')) { group = attrs(line); continue; }
+    if (line.startsWith('<g')) throw new Error('TASK 802: the export has a <g>, every element must carry its own cut attributes: ' + line);
     if (line.startsWith('</g')) { group = null; continue; }
     const m = /^<(path|circle|polygon)\s(.*)\/>$/.exec(line);
     if (!m) continue;
@@ -245,10 +245,10 @@ checkTabsExport('circle inside', circleState(), 'c', { ...TABS, cutType: 'interi
   const small = polyState([[0, 0], [12, 0], [12, 12], [0, 12]]);
   eq(cutsOf(small, 's0', TABS).find((c) => c.hold).hold.error, 'no room', 'a 12 mm square: no side long enough for a 10 mm tab: refused');
   // the PREVIEW copy marks the pass and the gaps; the downloaded file never
-  const prev = elementsOf(exportOf(st, [{ target: t, rec: TABS }], { groupByCut: true, previewData: true }));
-  eq(prev.map((e) => e.hold), [null, 'gap 1/4', 'gap 2/4', 'gap 3/4', 'gap 4/4', 'pass'], 'preview copy: data-hold on each gap and the pass (the strips share the hole <g>: same cut attributes)');
+  const prev = elementsOf(exportOf(st, [{ target: t, rec: TABS }], { previewData: true }));
+  eq(prev.map((e) => e.hold), [null, 'pass', 'gap 1/4', 'gap 2/4', 'gap 3/4', 'gap 4/4'], 'preview copy: data-hold on the pass and each gap (TASK 802: flat, in derivation order: the hole, the pass, then the gaps)');
   ok(!/data-/.test(exportOf(st, [{ target: t, rec: TABS }])), 'the downloaded file has no data-* attribute');
-  eq(elementsOf(exportOf(st, [{ target: t, rec: { ...TABS, holdPart: 'skin' } }], { groupByCut: true, previewData: true })).map((e) => e.hold), [null, 'skin'], 'preview copy: data-hold="skin"');
+  eq(elementsOf(exportOf(st, [{ target: t, rec: { ...TABS, holdPart: 'skin' } }], { previewData: true })).map((e) => e.hold), [null, 'skin'], 'preview copy: data-hold="skin"');
 }
 
 {
@@ -312,7 +312,7 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
     eq([h.q('.cut-tab-count').value, h.q('.cut-tab-count').placeholder, h.q('.cut-tab-width').value, h.q('.cut-hold-thickness').value], ['', 'Auto (4)', '10', '2'], 'the fields: count empty with Auto (4), 10, 2');
     eq(h.note(), ['Outside: 4 tabs, 10 mm wide, 2 mm thick: 1 pass at 16 mm + 4 gaps at 18 mm', 'Gaps: cut the side against the part; the return leg is optional'], 'the card note');
     const els = elementsOf(exportOf(st, cutPlanEntries()));
-    eq(els.map((e) => [e.cutType, e.depth]), [...Array(5).fill(['inside', '18.000 mm']), ['outside', '16.000 mm']], 'the export: the hole + 4 strips (one <g>: the same cut attributes), the pass');
+    eq(els.map((e) => [e.cutType, e.depth]), [['inside', '18.000 mm'], ['outside', '16.000 mm'], ...Array(4).fill(['inside', '18.000 mm'])], 'the export (TASK 802, flat, derivation order): the hole, the pass, then the 4 strips');
     // the Review: the pass at 16, each strip at 18, the hole at 18
     const items = planReliefItems(st);
     eq(items.map((i) => [i.cutType, i.cutDepth]).sort(), [['exterior', 16], ['interior', 18], ['interior', 18], ['interior', 18], ['interior', 18], ['interior', 18]], 'Review: the pass at 16 mm, the 4 strips and the hole at 18 mm');

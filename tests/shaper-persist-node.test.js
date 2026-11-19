@@ -16,7 +16,7 @@ const stockJson = () => JSON.stringify(getStock());
 const exportStr = (app) => {
   const st = app.state; const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: CUT_TYPES, docUnit: 'in', options: { groupByCut: true }, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: CUT_TYPES, docUnit: 'in', options: {}, loopPolys: lp });
 };
 const openMode = (app, mode) => { app.press(app.document.querySelector(`.sk-header-tab[data-tab="${mode}"]`)); assert.strictEqual(app.document.querySelector('.sk-header-tab.active').dataset.tab, mode, 'the ' + mode + ' tab opens'); };
 const edges = (app) => app.document.querySelectorAll('#prepare-canvas .sk-edge').length;

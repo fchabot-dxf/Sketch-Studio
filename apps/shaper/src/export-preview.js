@@ -2,8 +2,8 @@
 // string the page's generateShaperSvgPayload builds (export-payload.js shaperSvgOf, the preview copy) is parsed and its elements are put on a
 // pan / zoom canvas unchanged (their fill / stroke / shaper:* attributes are the file's: outside black fill, inside white fill + black stroke,
 // pocket grey, online / guide strokes). There is no second renderer of cuts: what a cut looks like here is what the file says.
-//  * Each element's cut type and depth are read from its shaper:* attributes, or from the <g> that carries them (the exporter hoists the
-//    attributes shared by several elements to a <g>). A stepped cut's "step k of N" cannot be read from the file (two cuts' steps at the same
+//  * Each element's cut type and depth are read from its OWN shaper:* attributes (TASK 802: the exporter writes every attribute on each
+//    element, never on a <g>: the Origin reads them from the element). A stepped cut's "step k of N" cannot be read from the file (two cuts' steps at the same
 //    depth are written alike), so the PREVIEW copy carries it: data-step="k/N" on the element (#core/shaper-export `previewData`, from the
 //    terrace deriveCuts made); the downloaded file never has it.
 //  * TASK 742: a held cut (tabs / onion skin) is plain cuts in the file too (the pass is an outside / inside cut, each gap strip an inside cut);
@@ -61,20 +61,15 @@ export function parseShaperSvg(text, doc = document) {
   return root;
 }
 
-// a cut attribute of the element, or of the nearest ancestor that carries it (a <g> the exporter hoisted it to); read by its qualified name as the
-// exporter writes it (shaper:cutType ...), which the browser and the node tests' DOM (happy-dom: no attribute namespaces) both match
+// a cut attribute of the element (TASK 802: always its own, never a parent <g>'s); read by its qualified name as the exporter writes it
+// (shaper:cutType ...), which the browser and the node tests' DOM (happy-dom: no attribute namespaces) both match
 function cutAttr(el, name) {
-  for (let e = el; e && e.nodeType === 1; e = e.parentNode) {
-    const v = e.getAttribute('shaper:' + name);
-    if (v) return v;
-  }
-  return null;
+  return el.getAttribute('shaper:' + name) || null;
 }
 
-// TASK 743: a paint attribute (fill / stroke) of the element, or of the nearest ancestor that carries it (the <g> the exporter hoisted it to), or null
+// TASK 743: a paint attribute (fill / stroke) of the element (TASK 802: its own), or null
 function paintOf(el, name) {
-  for (let e = el; e && e.nodeType === 1 && e.localName !== 'svg'; e = e.parentNode) if (e.hasAttribute(name)) return e.getAttribute(name);
-  return null;
+  return el.hasAttribute(name) ? el.getAttribute(name) : null;
 }
 
 /** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap' | 'stroke' (TASK 775: an On line
@@ -393,7 +388,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       // TASK 743: every OUTSIDE element is painted at the BACK, deepest first. The file keeps the plan's order, so an outside cut that comes after the
       // pockets / holes inside it (a plate assigned last, or a plate's own holes hoisted into a <g> written before it: 742's found (1)) would cover them
       // with its black fill; a stepped outside's terraces are nested outlines (a shallow step INSIDE a deeper one, written first: TASK 719), so deepest
-      // first shows every ledge. Display only, on the mounted copy: the element keeps the paint it had (copied from the <g> it inherited it from); the
+      // first shows every ledge. Display only, on the mounted copy: the element keeps the paint it had (its own); the
       // picks and the list read `items` (file order), not the DOM order.
       const outs = items.filter((it) => it.cutType === 'outside' && !(it.clear && it.clear.role === 'island')); // TASK 745: a programmed pocket's island goes in front (below)
       if (outs.length) {
@@ -411,7 +406,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
         const gl = doc.createElementNS(SVG_NS, 'g'); gl.setAttribute('class', 'rv2d-guides');
         layer.insertBefore(gl, layer.firstChild);
         for (const it of guides) {
-          const stroke = paintOf(it.el, 'stroke'); // the stroke it inherited (copied from its <g>), as the rules above and below keep it
+          const stroke = paintOf(it.el, 'stroke'); // its stroke, as the rules above and below keep it
           if (stroke !== null && !it.el.hasAttribute('stroke')) it.el.setAttribute('stroke', stroke);
           it.el.setAttribute('fill', GUIDE_FILL);
           gl.appendChild(it.el);
@@ -419,7 +414,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       }
       // TASK 745: a programmed pocket's islands (outside cuts, black) and then its clearing paths in FRONT of everything (its wall is an inside cut with the
       // file's white fill: the paths written before it and the islands moved back by the rule above would be hidden); display only, the element keeps the
-      // paint it inherited (copied from its <g>). TASK 778: the pocket start mark sits on top (TASK 786: the file itself writes it fill="none", stroke-only).
+      // paint it has. TASK 778: the pocket start mark sits on top (TASK 786: the file itself writes it fill="none", stroke-only).
       const front = [...items.filter((it) => it.clear && it.clear.role === 'island'), ...items.filter((it) => it.clear && CLEAR_PATH_ROLES.has(it.clear.role)), ...items.filter((it) => it.clear && it.clear.role === 'start')];
       if (front.length) {
         const top = doc.createElementNS(SVG_NS, 'g'); top.setAttribute('class', 'rv2d-front');

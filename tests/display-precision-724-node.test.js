@@ -87,7 +87,7 @@ setP(3, 1, false);
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: { groupByCut: true }, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
 };
 SettingsManager.set('DOC_UNIT', 'mm', { persist: false });
 const app = await open({ host: 'shaper' });

@@ -128,7 +128,7 @@ for (const host of ['sketchstudio', 'shaper']) {
       entries: [{ target: { kind: 'loop', id: loops[0].id }, rec: { cutType: 'exterior', cutDepth: 5, cutOffset: 0, toolDia: 3.175 } }],
       encoding: exportEncoding(),
       docUnit: 'mm',
-      options: { groupByCut: true },
+      options: {},
       loopPolys,
     });
     const pathMatches = svg.match(/<path\b/g) || [];

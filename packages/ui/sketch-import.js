@@ -32,6 +32,7 @@ import { importDxf, looksLikeDxf } from '#core/dxf-import.js';
 import { addSketch, activateSketch } from '#core/sketch-model.js';
 import { groupImported } from '#core/group-model.js'; // TASK 751 / 756: the import lands grouped, in every app
 import { newShapeId } from '#core/shape-id.js';
+import { arcStructuralConstraints } from '#core/shapes.js'; // TASK 789: an imported arc gets the structural constraints a drawn arc gets
 import { fitToDrawing } from './input-handlers/pan-zoom.js';
 import { browserFileSeam, IMPORT_FILE_PICK, PROJECT_FILE_EXT } from './project-file.js';
 import { track } from './analytics.js'; // TASK 738: an SVG / DXF imported
@@ -158,6 +159,9 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
   activateSketch(st, sketch.id);
   for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
   for (const s of shapes) st.shapes.push(s);
+  // TASK 789: an imported arc keeps its two ends on one circle like a drawn one (THE arc structural constraints, #core/shapes.js), so a radius edit
+  // after an ungroup moves both ends
+  for (const s of shapes) if (s.type === 'arc') st.constraints.push(...arcStructuralConstraints(s));
   // TASK 751 / 756: every app has user groups: the import lands grouped in the app (#core/group-model.js groupImported): each profile (an
   // outline with its holes) / open chain one group, the whole file one group around them; the same undo step as the import
   groupImported(st, shapes, { fileName: sketch.name, nameOf: elementNamer(descs, shapes) });

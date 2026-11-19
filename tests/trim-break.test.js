@@ -59,6 +59,7 @@ console.log('Testing Trim Tool - X Crossing...');
   const state = {
     joints,
     shapes,
+    constraints: [], // a sketch state's constraint list (task 789: Trim keeps or drops the trimmed line's constraints)
     genJ: () => 'j_trim_' + (genCount++)
   };
 
@@ -102,6 +103,7 @@ console.log('Testing Trim Tool - 2 Intersecting Lines (Interior Trim)...');
   const state = {
     joints,
     shapes,
+    constraints: [], // a sketch state's constraint list (task 789: Trim keeps or drops the trimmed line's constraints)
     genJ: () => 'j_itrim_' + (genCount++)
   };
 

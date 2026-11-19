@@ -191,6 +191,9 @@ function patternJacobian(params, positions, outRows) {
   }
 }
 
+// TASK 789: the direction a distance between two joints ON each other is differentiated along (see distance computeJacobian): a 3-4-5 unit vector.
+const COLLAPSED_DIRECTION = { x: 0.6, y: 0.8 };
+
 export const Definitions = {
   // Distance constraint:
   //   joint-pair  (joints=[a,b], value):                  |a−b| − value
@@ -258,7 +261,13 @@ export const Definitions = {
       if (params.dimMode === 'horizontal') { const sg = params.dimSign || 1; addGrad(outRow, ia, -sg, 0); addGrad(outRow, ib, sg, 0); return; }
       if (params.dimMode === 'vertical') { const sg = params.dimSign || 1; addGrad(outRow, ia, 0, -sg); addGrad(outRow, ib, 0, sg); return; }
       const dx = ax - bx, dy = ay - by;
-      const r = Math.hypot(dx, dy) || 1e-12;
+      const r = Math.hypot(dx, dy);
+      // TASK 789: two joints ON each other (a collapsed line, e.g. saved by an older version that took a 0 length) have no direction: any unit
+      // vector is a gradient of |a - b| there. A zero row made the distance count as already determined (the rank test) and the solve could never
+      // move the joints apart, so the line could not be repaired by a valid value. COLLAPSED_DIRECTION is on no axis and no diagonal, so it is
+      // independent of the horizontal / vertical / perpendicular rows that hold one coordinate of a joint (an axis direction would be dependent on
+      // them, and the solve would stay on that axis): the first step leaves the collapse and the true direction takes over.
+      if (r === 0) { addGrad(outRow, ia, COLLAPSED_DIRECTION.x, COLLAPSED_DIRECTION.y); addGrad(outRow, ib, -COLLAPSED_DIRECTION.x, -COLLAPSED_DIRECTION.y); return; }
       addGrad(outRow, ia, dx / r, dy / r);
       addGrad(outRow, ib, -dx / r, -dy / r);
     }

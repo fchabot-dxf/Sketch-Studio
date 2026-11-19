@@ -281,13 +281,19 @@ export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=fal
         groupId
     };
     if (isConstruction) shape.isConstruction = true;
-    // Structural: keep the two rim points (p2 start, p3 end) equidistant from the center (p1) ALWAYS
-    // -- not just at creation. Without this, dragging p3 alone (or editing a radius dimension, which
-    // only wires in p2) silently stops the arc being circular. Reuses the EXISTING `equal` definition
-    // (len(a,b) == len(c,d)) via its joints-based input mode -- no new solver math, mirrors how
-    // makeRectFromTwoJoints already bakes in H/V so a rectangle stays a rectangle.
-    const constraints = [{ type: 'equal', joints: [p1, p2, p1, p3] }];
-    return { shapes: [shape], constraints };
+    return { shapes: [shape], constraints: arcStructuralConstraints(shape) };
+}
+
+/**
+ * THE structural constraints of an arc (joints [centre, start, end]), whatever made it: the Arc tool and every other maker through makeArc, an
+ * imported arc (DXF / SVG) through the import's landing (#ui/sketch-import.js, TASK 789). Keeps the two rim points (start, end) equidistant
+ * from the centre ALWAYS -- not just at creation. Without this, dragging the end alone (or editing a radius dimension, which only wires in the
+ * start, engine.js _radiusOperand) silently stops the arc being circular. Reuses the EXISTING `equal` definition (len(a,b) == len(c,d)) via its
+ * joints-based input mode -- no new solver math, mirrors how makeRectFromTwoJoints already bakes in H/V so a rectangle stays a rectangle.
+ */
+export function arcStructuralConstraints(arc) {
+    const [c, s, e] = arc.joints;
+    return [{ type: 'equal', joints: [c, s, c, e] }];
 }
 
 /**

@@ -201,13 +201,12 @@ export class ConstraintManager {
             this.lockPerpendicularBranch(state, normalized);
         }
 
-        // Tangent branch auto-detect is intentionally OFF for now. Even with the
-        // proximity gate, locking 'external' vs 'internal' at creation time can
-        // surprise users — the solver gets pinned to a target distance the user
-        // didn't explicitly choose. The lockTangentBranch helper is preserved
-        // below so callers can opt in by passing `branch: 'external' | 'internal'`
-        // explicitly. Re-enable here once we can detect the user's intent more
-        // reliably (e.g. lock AFTER first convergence, not at creation).
+        // Branch lock: a TANGENT between two circles / arcs keeps the side they are on (Fusion): chosen ONCE here from the current geometry
+        // (lockTangentBranch: one inside the other = 'internal', else 'external') and stored on the constraint, so it is saved, loaded and undone
+        // with it. A tangent without the field (a file saved before task 789) solves external, as it always did (definitions.js tangent).
+        if (type === CONSTRAINT_TYPES.TANGENT && normalized.shapes && normalized.shapes.length === 2 && normalized.branch == null) {
+            this.lockTangentBranch(state, normalized);
+        }
 
         // Check duplicates
         if (constraints.hasConstraint(state.constraints, type, normalized)) {
@@ -1080,58 +1079,28 @@ export class ConstraintManager {
         }
     }
 
-    // Auto-detect external vs internal tangent for circle-circle from current geometry.
-    //
-    // Branch-lock only fires when the sketch is ALREADY near a tangent
-    // configuration — i.e. the user has positioned the circles to be roughly
-    // tangent and is adding the constraint to formalize what's there. We then
-    // pin the branch they're already on so a later drag can't flip it.
-    //
-    // If the geometry is far from any tangent configuration (residual >
-    // ~25% of the larger radius for both targets), we DON'T lock. The solver
-    // picks the closer target naturally on the first solve. Forcing a branch
-    // in that case can drive the geometry into a configuration the user never
-    // wanted, which feels like the constraint is "locking everything."
+    // The side of a circle / arc - circle / arc tangent, from the current geometry (TASK 789, Fusion): 'internal' when one is inside the other (the
+    // smaller one's centre is inside the larger circle: |C1C2| < max(r1, r2), exactly where the internal target |r1 - r2| is nearer than the external
+    // r1 + r2), else 'external'. Two circles of equal radius cannot be one inside the other (internal would make them one circle): external.
+    // An arc counts as its whole circle. Writes normalized.branch; a pair that is not two circles / arcs is left without one.
     static lockTangentBranch(state, normalized) {
-        try {
-            const s1 = state.shapes.find(s => s.id === normalized.shapes[0]);
-            const s2 = state.shapes.find(s => s.id === normalized.shapes[1]);
-            if (!s1 || !s2) return;
-            const isCircular = (s) => s.type === 'circle' || s.type === 'arc';
-            if (!isCircular(s1) || !isCircular(s2)) return; // only circle-circle has the internal/external choice
-            const radiusOf = (s) => {
-                if (typeof s.radius === 'number') return s.radius;
-                if (s.joints && s.joints.length >= 2) {
-                    const c = state.joints.get(s.joints[0]);
-                    const r = state.joints.get(s.joints[1]);
-                    if (c && r) return Math.hypot(r.x - c.x, r.y - c.y);
-                }
-                return 0;
-            };
-            const c1 = state.joints.get(s1.joints && s1.joints[0]);
-            const c2 = state.joints.get(s2.joints && s2.joints[0]);
-            if (!c1 || !c2) return;
-            const r1 = radiusOf(s1), r2 = radiusOf(s2);
-            if (r1 < 1e-9 || r2 < 1e-9) return;
-            const dist = Math.hypot(c2.x - c1.x, c2.y - c1.y);
-            const tExt = r1 + r2;
-            const tInt = Math.abs(r1 - r2);
-            const resExt = Math.abs(dist - tExt);
-            const resInt = Math.abs(dist - tInt);
-            const chosenRes = Math.min(resExt, resInt);
-            // Only lock when the chosen branch's residual is small relative to
-            // the radius scale — i.e. the user's circles are already roughly
-            // tangent. Otherwise leave the field unset so the solver picks
-            // freely on its first run.
-            const proximityThreshold = 0.25 * Math.max(r1, r2);
-            if (chosenRes > proximityThreshold) return;
-            // Equal radii → tInt = 0 (concentric); always pick external.
-            if (tInt < 1e-9) { normalized.branch = 'external'; return; }
-            normalized.branch = resInt < resExt ? 'internal' : 'external';
-            dbg.log('constraints', '[ConstraintManager] tangent branch locked:', normalized.branch);
-        } catch (e) {
-            dbg.warn('constraints', '[ConstraintManager] lockTangentBranch error:', e);
-        }
+        const s1 = state.shapes.find(s => s.id === normalized.shapes[0]);
+        const s2 = state.shapes.find(s => s.id === normalized.shapes[1]);
+        const isCircular = (s) => !!s && (s.type === 'circle' || s.type === 'arc');
+        if (!isCircular(s1) || !isCircular(s2)) return;
+        const c1 = state.joints.get(s1.joints && s1.joints[0]);
+        const c2 = state.joints.get(s2.joints && s2.joints[0]);
+        if (!c1 || !c2) return;
+        const radiusOf = (s, c) => {
+            if (typeof s.radius === 'number') return s.radius;
+            const rim = s.joints.length >= 2 ? state.joints.get(s.joints[1]) : null;
+            return rim ? Math.hypot(rim.x - c.x, rim.y - c.y) : 0;
+        };
+        const r1 = radiusOf(s1, c1), r2 = radiusOf(s2, c2);
+        const dist = Math.hypot(c2.x - c1.x, c2.y - c1.y);
+        const inside = Math.abs(r1 - r2) > 1e-9 && dist < Math.max(r1, r2);
+        normalized.branch = inside ? 'internal' : 'external';
+        dbg.log('constraints', '[ConstraintManager] tangent branch locked:', normalized.branch);
     }
 
     // CREATION placement, the one place (task 525): which operand gives way and where it goes, read from the declared who-moves table

@@ -580,8 +580,9 @@ export function levelsCutAs(rec) {
 /** A Roughing record's allowance (base mm, >= 0; 0 for any other record). */
 export const roughingAllowance = (rec) => (rec && rec.levelsOp === 'roughing' ? Math.max(0, Number(rec.finishAllowance) || 0) : 0);
 /** The record a Roughing / Contour record's cuts are made AND drawn with: a Roughing record without `levels` takes its allowance as cut offset (path 2 / 3
- *  of the header). Every other record is returned as it is. */
+ *  of the header); a Contour (its card has no depth row) its part's depth (`baseDepth`: the depth Prepare's chip shows). Every other record as it is. */
 export function levelsWorkRecord(rec) {
+  if (rec && rec.levelsOp === 'contour') return { ...rec, cutDepth: rec.baseDepth };
   const a = roughingAllowance(rec);
   return a > 0 && !hasLevels(rec) ? { ...rec, cutOffset: (Number(rec.cutOffset) || 0) + a } : rec;
 }

@@ -423,7 +423,7 @@ export function levelsNoteItems(storedRec, sum) {
   else {
     if (sum.source !== 'slope') items.push({ text: `Roughing: ${n} level${n === 1 ? '' : 's'}, ${span}` });
     if (sum.allowance > 0) items.push({ text: `Roughing: ${f(sum.allowance)} ${u} left on every wall for the Contour` });
-    if (sum.source === 'levels' && sum.islands > 0) items.push({ text: `Roughing: up to ${sum.islands} island${sum.islands === 1 ? '' : 's'} left standing${sum.small ? ` (${sum.small} narrower than the ${f(sum.toolDia)} ${u} bit)` : ''}` });
+    if (sum.source === 'levels' && sum.islands > 1) items.push({ text: `Roughing: up to ${sum.islands} raised areas left standing on a level${sum.small ? ` (${sum.small} narrower than the ${f(sum.toolDia)} ${u} bit)` : ''}` }); // one = the part itself
   }
   return items;
 }

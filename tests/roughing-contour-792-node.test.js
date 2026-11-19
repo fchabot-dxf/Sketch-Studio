@@ -244,7 +244,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq(trec.levels.length, 4, 'a Fusion payload with `levels`: kept on the outline record');
     trec.cutType = 'roughing'; trec.stepDepth = 1; trec.toolDia = 6.35; trec.finishAllowance = 0.5;
     h.clickAt(5, -45);
-    eq(h.note(), ['Roughing: 3 levels, 2 to 6 mm', 'Roughing: 0.5 mm left on every wall for the Contour', 'Roughing: up to 2 islands left standing (1 narrower than the 6.35 mm bit)'], 'the Roughing card note: its levels, the allowance, the islands');
+    eq(h.note(), ['Roughing: 3 levels, 2 to 6 mm', 'Roughing: 0.5 mm left on every wall for the Contour', 'Roughing: up to 2 raised areas left standing on a level (1 narrower than the 6.35 mm bit)'], 'the Roughing card note: its levels, the allowance, the islands');
     eq(elems(exportOf(app)).map((e) => `${e.type}@${e.depth}`), ['pocket@2.000 mm', 'pocket@3.000 mm', 'pocket@3.000 mm', 'pocket@6.000 mm'], 'its export: level 2 (one pocket, 2 islands), level 3 (the band + the pocket in the plate), level 6 (the band)');
 
     // save + reload: the Roughing, its levels and its Contour

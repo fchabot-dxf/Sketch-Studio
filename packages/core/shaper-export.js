@@ -18,6 +18,7 @@ import { formatShaperParam } from './units.js';
 import { loopPolygon, loopToPathD, compoundPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
 import { resolveProfileViews, resolveProfileForLoop, ownedLoopIds } from './profile-model.js';
 import { deriveCuts } from './stepped-cut.js'; // TASK 714: deriveProfileCuts + a stepped cut's terraces
+import { pathBounds } from './path-d.js'; // TASK 786: the true extent of a written path (arcs / cubics by their extremes)
 export { loopToPathD, polyToPathD };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -55,10 +56,11 @@ function arcSeg(shape, fromPos, toPos, state) {
 
 
 
-// Bounding box over the design: joint positions + circle extents (center ± r) + (when present) the datum triangle
-// at the origin + TASK 775 the points a derived cut writes outside the drawing (`extra`: a lead-in leg's tip). Empty → 0,0,0,0. (Arc bulge beyond its
-// endpoints is approximated by the endpoints — deferred.)
-function boundsOf(state, datumExtent, extra = []) {
+// Bounding box of the page: the drawing (joint positions + circle extents (center ± r)), the datum triangle at the origin when there is one,
+// and TASK 786 EVERY WRITTEN ELEMENT by the geometry it draws (elementBox): a cut's derived geometry outside the drawing (tabs' gap strips,
+// a pocket's start mark, a stepped cut's larger rings, a lead-in arc and its tip) and arc / cubic bulges by their true extremes (#core/path-d).
+// The drawing's own extent is kept so a file whose elements already lay inside it keeps its viewBox. Empty → 0,0,0,0.
+function boundsOf(state, datumExtent, written = []) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const ext = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y; if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
   if (state && state.joints && typeof state.joints.values === 'function') {
@@ -71,9 +73,16 @@ function boundsOf(state, datumExtent, extra = []) {
     }
   }
   if (datumExtent) { ext(0, 0); ext(datumExtent.legX, datumExtent.legY); } // the registration anchor must fit the viewBox
-  for (const p of extra) if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) ext(p.x, p.y); // TASK 775: a lead-in tip must fit the viewBox too
+  for (const it of written) { const b = elementBox(it); if (b) { ext(b.minX, b.minY); ext(b.maxX, b.maxY); } }
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, w: 0, h: 0 };
   return { minX, minY, w: maxX - minX, h: maxY - minY };
+}
+// TASK 786: the box of one written element ({ tag, a }: the attributes exactly as written): a <circle> by cx / cy / r, a <path> by its "d".
+function elementBox({ tag, a }) {
+  const attr = (k) => { const m = a.match(new RegExp(`(?:^|\\s)${k}="([^"]*)"`)); return m ? m[1] : null; };
+  if (tag === 'circle') { const cx = Number(attr('cx')), cy = Number(attr('cy')), r = Number(attr('r')); return { minX: cx - r, minY: cy - r, maxX: cx + r, maxY: cy + r }; }
+  if (tag === 'path') return pathBounds(attr('d'));
+  throw new Error(`shaper-export: no box for a written <${tag}>`);
 }
 
 // fill (always) + stroke (omit when 'none'), from the injected encoding.
@@ -82,6 +91,12 @@ function colorAttrs(enc) {
   if (enc.stroke && enc.stroke !== 'none') s += ` stroke="${enc.stroke}"`;
   return s;
 }
+// TASK 786: a MARK (a derived cut of kind 'mark': a programmed pocket's start mark, #core/pocket-clearing, a circle + cross) is a guide drawn as
+// its OUTLINE: written with its type's encoding (the guide's cutType, blue stroke and params, as the Stock guide of TASK 774) but fill="none"
+// (as Prepare and Export 2D show it; a filled circle hid the target and a fill has no meaning on the cross's open strokes), and IN PLACE: right
+// after its pocket's elements, never hoisted into a <g> (groupByCut) that a first element of the same attrs (another pocket's mark) placed
+// earlier in the file, behind a later pocket's white wall.
+const isMark = (cut) => cut.kind === 'mark';
 // attribute-first shaper:* in Shaper Studio's order — cutType, cutDepth (only when set), cutOffset (ALWAYS: "0in" when zero),
 // toolDia (ALWAYS) — written through the ONE formatter (units.js formatShaperParam: "0.100 in" / "-2.000 in" / "0.125 in";
 // TASK 456, from four real Studio exports), and ONLY the params the INJECTED encoding declares in `params` (an encoding
@@ -205,7 +220,6 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
-  const extents = []; // TASK 775: points a derived cut writes outside the drawing (a lead-in tip)
   const firstItems = []; // TASK 774: the elements of the exportFirst types (the Stock)
   const owned = ownedLoopIds(ents, state, loops, ensurePolys()); // TASK 711: a hole with its own entry is cut by that entry only
   for (const e of ents) {
@@ -237,8 +251,8 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       }
       const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
         + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
-      if (geom) (c.exportFirst ? firstItems : items).push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data });
-      if (geom && Array.isArray(cut.extent)) extents.push(...cut.extent); // TASK 775
+      const paint = isMark(cut) ? colorAttrs({ ...c, fill: 'none' }) : colorAttrs(c); // TASK 786: a mark is stroke-only
+      if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, inPlace: isMark(cut) });
     }
   }
   items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
@@ -247,9 +261,14 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   if (options.datum) body.push('  ' + datumPolygon(options.datum));
 
   if (options.groupByCut) {
-    const groups = new Map(); // common → items (Map preserves first-seen order → deterministic)
-    for (const it of items) { if (!groups.has(it.common)) groups.set(it.common, []); groups.get(it.common).push(it); }
-    for (const [common, group] of groups) {
+    // each group is written where its first element was (deterministic); TASK 786: an in-place element (a mark) is written alone, where it is
+    const groups = new Map(), slots = []; // common → items; slots = the file order of the groups and the in-place elements
+    for (const it of items) {
+      if (it.inPlace) { slots.push({ common: it.common, group: [it] }); continue; }
+      if (!groups.has(it.common)) { groups.set(it.common, []); slots.push({ common: it.common, group: groups.get(it.common) }); }
+      groups.get(it.common).push(it);
+    }
+    for (const { common, group } of slots) {
       if (group.length >= 2) { // hoist the shared cut attrs to a <g>; the children inherit (drop their attrs)
         body.push(`  <g${common}>`);
         for (const it of group) body.push(`    <${it.tag} ${it.a}/>`);
@@ -262,7 +281,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     for (const it of items) body.push(`  <${it.tag} ${it.a}${it.common}/>`);
   }
 
-  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, extents);
+  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, items); // TASK 786: every written element (items holds the Stock too)
   const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;
   return [header, ...body, '</svg>'].join('\n');
 }

@@ -98,7 +98,7 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     }
     eq([on.refused, on.loopRefused, on.loop, off.loop], [null, null, true, false], `${tag}: Loop on is programmed`);
     eq(on.loopCount, LOOPS[pattern][name], `${tag}: ${LOOPS[pattern][name]} closed loop(s), one per chain`);
-    ok(on.clear.every((c) => c.role === 'loop' && c.closed && key(c.points[0]) === key(c.points.at(-1))), `${tag}: every loop is closed: it ends where it starts`);
+    ok(on.clear.every((c) => c.role === 'loop' && c.closed && key(c.points[0]) === key(c.points.at(-1))), `${tag}: every loop is closed (first point == last point)`);
     // the last turn of every loop is a finish turn exactly r from the wall / island
     let worstF = 0;
     const noFinish = [];
@@ -229,10 +229,10 @@ let saved = null;
       eq([CUT_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
       eq(h.q('.cut-row[data-row="finishAllowance"] .sk-hint').textContent, 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
       const nt = h.note();
-      ok(/\+ wall: one closed loop, ends where it starts, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`);
+      ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`); // TASK 775: a closed loop has no start point (no "ends where it starts")
       ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);
       eq(elementsOf(shaperSvgOf(st, cutPlanEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true]], `${pat}: the download: ONE closed on-line path, no inside cut`);
-      eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-clear-start').length, 1, `${pat}: Prepare marks where the loop starts and ends`);
+      eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-lead-tip, #prepare-toolpath-group .sk-lead-end, #prepare-toolpath-group circle').length, 0, `${pat}: TASK 775: no dot on a closed loop (it has no start point on the Origin)`);
       app.undo();
       eq([CUT_PLAN.get(kA).loop, h.q('.cut-loop').checked], [false, false], `${pat}: undo: Loop off again`);
       const offEls = elementsOf(shaperSvgOf(st, cutPlanEntries()));
@@ -249,7 +249,7 @@ let saved = null;
     eq([CUT_PLAN.get(keyAt(st, 130, 10)).loop, h.q('.cut-loop').checked], [true, true], 'the last Loop set (on) is the next pocket\'s');
     const ops = [...app.document.querySelectorAll('#prepare-ops .ops-row')].map((r) => `${r.querySelector('.ops-name').textContent} | ${r.querySelector('.ops-sub').textContent}`);
     console.log('ops: ' + JSON.stringify(ops));
-    ok(ops.some((t) => /^Pocket \(morphed spiral\) · 6 mm \| 1 region · morphed spiral: \d+ turns \+ wall: one closed loop, ends where it starts$/.test(t)) && ops.some((t) => /^Pocket \(spiral\) · 6 mm \| 1 region · spiral, \d+ turns \+ wall: one closed loop, ends where it starts$/.test(t)), 'the operations list says the loop');
+    ok(ops.some((t) => /^Pocket \(morphed spiral\) · 6 mm \| 1 region · morphed spiral: \d+ turns \+ wall: one closed loop$/.test(t)) && ops.some((t) => /^Pocket \(spiral\) · 6 mm \| 1 region · spiral, \d+ turns \+ wall: one closed loop$/.test(t)), 'the operations list says the loop');
     saved = { plan: JSON.stringify([...CUT_PLAN]), svg: shaperSvgOf(st, cutPlanEntries()) };
     const d = await app.storedDoc();
     ok(JSON.stringify(d.hosts.shaper.cutPlan).includes('"loop":true') && !JSON.stringify(d.hosts.shaper).includes('passDepth'), 'the autosave stores loop, and no passDepth');

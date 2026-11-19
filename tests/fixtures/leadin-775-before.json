@@ -1,0 +1,1310 @@
+{
+ "owner-trapezoid.document.json": {
+  "outside": {
+   "download": "0a430d86c4e1aae76daddc0b",
+   "preview": "4e44ef8961c1d103e23749c1",
+   "ops": "e907b2053c835eef5ba1461b",
+   "relief": "f920313f43e525a96a7e808e"
+  },
+  "inside": {
+   "download": "f4a04aa986965c554446f27a",
+   "preview": "d975ffd8548a6d5914861aa2",
+   "ops": "38fbfc264fa37bb2978b4297",
+   "relief": "1b98ea1857b5de17299c8226"
+  },
+  "online": {
+   "download": "368a6b0bc7b3578bdeb7c589",
+   "preview": "8ba3d4d3da328e3e479a1701",
+   "ops": "33565c26c74cb93267e4d19d",
+   "relief": "86fbb72fc1134d757e045147"
+  },
+  "pocket": {
+   "download": "11f5672d8cc44ee7bf8cbbea",
+   "preview": "d9305abd7f6d21280f413703",
+   "ops": "5a381c47c1706a319567c593",
+   "relief": "c91f4c39eae2e580d947f50a"
+  },
+  "tabs": {
+   "download": "6343aa94ac12b60394a2cb6f",
+   "preview": "408634c002283118db770223",
+   "ops": "93a5ee60266d824160f14831",
+   "relief": "a92fae8f145482fbafa63166"
+  },
+  "skin": {
+   "download": "2fa801bb270f82fe44064bfa",
+   "preview": "2db3d37d0c93a23e549277e4",
+   "ops": "b3faf61d450d84be556e3a26",
+   "relief": "b8f7062ad35bcf90b03b1c27"
+  },
+  "spiral": {
+   "download": "26d2ebd206fc2227c28d27ba",
+   "preview": "1be33ad0c342f4d2c0d3152b",
+   "ops": "dc6fac335904100d8352eea2",
+   "relief": "e208d69a4db372364fde9707"
+  },
+  "spiralLoop": {
+   "download": "466807052537d6ec0f4b0f94",
+   "preview": "ca4eee26475138a8fb14c79c",
+   "ops": "98c81e5f6f6e65769303e384",
+   "relief": "35d69cbb6306afa80f58f9c8"
+  },
+  "rasterLoop": {
+   "download": "219228e49b6f0a00a2cfa3c7",
+   "preview": "1d0b073e858223d01dd1d2a0",
+   "ops": "1bdaedfcdb90a05ad0acb595",
+   "relief": "2c4a3281a4f18a6003dd549a"
+  },
+  "morphedLoop": {
+   "download": "b3cd942f4ac0b6ea43eda39a",
+   "preview": "6284f0efa1d04caddf6db4e8",
+   "ops": "dae7751e5995d18428715e55",
+   "relief": "d1dd62c968cae2745d90d428"
+  }
+ },
+ "pattern-params-694-old.document.json": {
+  "outside": {
+   "download": "1361fce12f9b1ce64c263640",
+   "preview": "47673813b8524e3d7d9b3bfa",
+   "ops": "a4a9878b2091f0ec15367d48",
+   "relief": "8930e08b514b7e8a8f7df75a"
+  },
+  "inside": {
+   "download": "0fd1768ca0fc6b3a9ff7a765",
+   "preview": "1522c6297b9cc6dbc8cdb068",
+   "ops": "1fe94766b9d277b80cf958f1",
+   "relief": "0e07b9540e9247204bca9f35"
+  },
+  "online": {
+   "download": "2b688a43ec3b951dbd72a34e",
+   "preview": "ad0898933fb4146a480bd09b",
+   "ops": "e0c107d6bb51e40431dc82a2",
+   "relief": "c810d36236e502953e0f297d"
+  },
+  "pocket": {
+   "download": "8f21c31aaa4e0bbaa177f00d",
+   "preview": "393e91f1511098b7f05a0de9",
+   "ops": "267277552263e8aa04059c12",
+   "relief": "6b5e0256e210137b59146d2e"
+  },
+  "tabs": {
+   "download": "da35a66415a1caad317c5549",
+   "preview": "9c400875e41c0d08a353acb3",
+   "ops": "ac4521c61c2b3c3c84a0762b",
+   "relief": "9fa2f5e1f7254d52fbd9b55d"
+  },
+  "skin": {
+   "download": "44f47cc7725b8fd9c0c270e1",
+   "preview": "56c54f4bc40075d8abe353be",
+   "ops": "8eac092b85293cb522de39a5",
+   "relief": "b2d12d9226bbdf58c78ec5cd"
+  },
+  "spiral": {
+   "download": "d10309d87b960fbccef890e4",
+   "preview": "855af569359145a577ea9fcf",
+   "ops": "49ce62792e832956f62ea736",
+   "relief": "112cfdd329ec679b6bcbc1e9"
+  },
+  "spiralLoop": {
+   "download": "d10309d87b960fbccef890e4",
+   "preview": "855af569359145a577ea9fcf",
+   "ops": "49ce62792e832956f62ea736",
+   "relief": "112cfdd329ec679b6bcbc1e9"
+  },
+  "rasterLoop": {
+   "download": "d10309d87b960fbccef890e4",
+   "preview": "796e915417d4356e1bed9af6",
+   "ops": "6cb05ba33b01463b99e0b4c5",
+   "relief": "112cfdd329ec679b6bcbc1e9"
+  },
+  "morphedLoop": {
+   "download": "d10309d87b960fbccef890e4",
+   "preview": "f3e8786269302b1d5b5fdb3d",
+   "ops": "9b4d3928d7fe0793ab94412b",
+   "relief": "112cfdd329ec679b6bcbc1e9"
+  }
+ },
+ "pre-577-two-sketches.document.json": {
+  "outside": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "inside": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "online": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "pocket": {
+   "download": "be057211c66a4467151ceb52",
+   "preview": "a2fafa9e84bba6d884ba5524",
+   "ops": "23a6c876055b45377da44135",
+   "relief": "aaf2dcb35d59376e6c2eba2c"
+  },
+  "tabs": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "skin": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "spiral": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "spiralLoop": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "rasterLoop": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  },
+  "morphedLoop": {
+   "download": "79f1ff1cb662ec9aa35a4f41",
+   "preview": "f8b5fc6a68c77f40cb5075a3",
+   "ops": "e9e97eaaaf96f024aa27b421",
+   "relief": "1be7ab37c88fedb3a79749d0"
+  }
+ },
+ "angle-dimension/owner-trapezoid-angle.json": {
+  "outside": {
+   "download": "6ee1218ad5081733fffe6341",
+   "preview": "f5056fdac3a120d10ca4feee",
+   "ops": "e907b2053c835eef5ba1461b",
+   "relief": "5c21643177694c01eeda14b1"
+  },
+  "inside": {
+   "download": "f16f4ca4c43d31dde9ab7a26",
+   "preview": "c6635c134f8fa31916ae6cb7",
+   "ops": "38fbfc264fa37bb2978b4297",
+   "relief": "9a101039f82d09799291f116"
+  },
+  "online": {
+   "download": "9652c14053f88ca12c1d2dfb",
+   "preview": "f9225ae5aaf3b212d6da30c2",
+   "ops": "33565c26c74cb93267e4d19d",
+   "relief": "ba63ba61858379c5bc6a4380"
+  },
+  "pocket": {
+   "download": "4e5d13c8d81f288e5161f08b",
+   "preview": "bc119d71ff69db317bb037fe",
+   "ops": "5a381c47c1706a319567c593",
+   "relief": "f6e87d059b34034e2f6c70e6"
+  },
+  "tabs": {
+   "download": "2b43dcb3f4c1e97d6c272b6c",
+   "preview": "e9466d641a5306c3e0d420de",
+   "ops": "0ac20459dc4440bb8c03b9d8",
+   "relief": "c65331cebfaefc50554db5b5"
+  },
+  "skin": {
+   "download": "22d13dfe5b6dc8384d645bdb",
+   "preview": "914c238833baa03f431a945e",
+   "ops": "b3faf61d450d84be556e3a26",
+   "relief": "376ed813470d8b99720df212"
+  },
+  "spiral": {
+   "download": "e85d56441cb2d9d7ab7b574d",
+   "preview": "a4f0a4632f71fd301fc55da7",
+   "ops": "019809576941ccfe46b00c53",
+   "relief": "2e77d345e0e6052f594a3255"
+  },
+  "spiralLoop": {
+   "download": "9bc5021df11120ed185b733a",
+   "preview": "4671dfa6e6f1210994a2e51c",
+   "ops": "a68ce1fa032a72506902b4c8",
+   "relief": "061b63a6fe5ab947fc0c217c"
+  },
+  "rasterLoop": {
+   "download": "8eb06cf8697dfdce1a83eb7e",
+   "preview": "0be6bffb8a290b958ee619e5",
+   "ops": "a463a19c3077c64df3f81cdb",
+   "relief": "3b0b1256e12866b00f097dd9"
+  },
+  "morphedLoop": {
+   "download": "334b5ed581e86f705bd893d7",
+   "preview": "aefa7a989d354ee1f04157b8",
+   "ops": "18ea205cd6a05b77b97703ac",
+   "relief": "f8f628ebf056175b20ef2eef"
+  }
+ },
+ "dimension/owner-drag-frozen-589.document.json": {
+  "outside": {
+   "download": "e4b78429884ae6a7f6a17a11",
+   "preview": "15dcf53e6a4e7b3790a3afa5",
+   "ops": "fb7a97291a13dbfae11ed00b",
+   "relief": "280bf5d91293b2ae303390ce"
+  },
+  "inside": {
+   "download": "f68632007b5c889d18a15544",
+   "preview": "6b6b64c7f6a7fa60c2c8ecea",
+   "ops": "b179a2e96004ea6b480e37b0",
+   "relief": "4e53cde0167ca14111f6c860"
+  },
+  "online": {
+   "download": "e28780c2dd4f5599a1d67288",
+   "preview": "3dc8d841a36df5ad65ec697e",
+   "ops": "822bca948449d601fe98a1d4",
+   "relief": "981950d6b84bbe8dfbd6ea73"
+  },
+  "pocket": {
+   "download": "da636e0573328f592da97b74",
+   "preview": "e838dffce49c55c760776596",
+   "ops": "068dba818ebf477943af37bb",
+   "relief": "14c10e750c2146e569f59fbb"
+  },
+  "tabs": {
+   "download": "2e2348649333fa7dd0cd2467",
+   "preview": "6a859086817a714929617701",
+   "ops": "b07041b4a18e73c3873b9799",
+   "relief": "5d9275f7a148fc8091956d89"
+  },
+  "skin": {
+   "download": "70a16151deeafef311ad4e5d",
+   "preview": "11635efab389daadc37f65cf",
+   "ops": "89b6646aea6e13523b251de1",
+   "relief": "4549bb42adedf96970c71a76"
+  },
+  "spiral": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "ee34a53976da3ea9d2f0bbcd",
+   "ops": "e86f84d27539fd927602dfff",
+   "relief": "845a1bd679fb2f85363ac48f"
+  },
+  "spiralLoop": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "ee34a53976da3ea9d2f0bbcd",
+   "ops": "e86f84d27539fd927602dfff",
+   "relief": "845a1bd679fb2f85363ac48f"
+  },
+  "rasterLoop": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "0c775ff1a02b6defa7a098d1",
+   "ops": "73577da23ae93888b7b3f153",
+   "relief": "845a1bd679fb2f85363ac48f"
+  },
+  "morphedLoop": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "4b33b9e2bc8e55113066e62b",
+   "ops": "d0c6ab1c6886a6c0f119cd8a",
+   "relief": "845a1bd679fb2f85363ac48f"
+  }
+ },
+ "dimension/owner-rect-line-line-589.document.json": {
+  "outside": {
+   "download": "7b88b5eeb00cd3e41fd107bb",
+   "preview": "c125d66834ad0a77dd275ac8",
+   "ops": "e907b2053c835eef5ba1461b",
+   "relief": "b454a6216d56e5df6222c2f5"
+  },
+  "inside": {
+   "download": "49548a64125f9adf371855f6",
+   "preview": "e9e4b10dfdd3bffda2b74d14",
+   "ops": "38fbfc264fa37bb2978b4297",
+   "relief": "bf153b4877ff77c34e4c6e0d"
+  },
+  "online": {
+   "download": "abb5fafe507ec8fbacf8c9f3",
+   "preview": "76bd56021dff81ffe0132d5e",
+   "ops": "33565c26c74cb93267e4d19d",
+   "relief": "af455a7d00889caafdd3c21b"
+  },
+  "pocket": {
+   "download": "eff8a6a85fcdb69cc09f04e0",
+   "preview": "03a231b08333efedfd9948fc",
+   "ops": "5a381c47c1706a319567c593",
+   "relief": "a8ae472f5c0436db8394803f"
+  },
+  "tabs": {
+   "download": "ea996f3bab7ecc99ec2c47d0",
+   "preview": "930962730d8522ba529842dc",
+   "ops": "93a5ee60266d824160f14831",
+   "relief": "11b377b2780259ce7a465561"
+  },
+  "skin": {
+   "download": "bc717c3e2146232fa59491aa",
+   "preview": "a0d5e53eb45a93d4708fba17",
+   "ops": "b3faf61d450d84be556e3a26",
+   "relief": "a6c226866fca1c98a004d5c4"
+  },
+  "spiral": {
+   "download": "82d2ad363c23ba800af317e1",
+   "preview": "84fa82cd4fb5e3a60279b70e",
+   "ops": "3f2d65b0ae4cae76e70f3aec",
+   "relief": "f49f59d909facb64ab53958c"
+  },
+  "spiralLoop": {
+   "download": "82d2ad363c23ba800af317e1",
+   "preview": "84fa82cd4fb5e3a60279b70e",
+   "ops": "3f2d65b0ae4cae76e70f3aec",
+   "relief": "f49f59d909facb64ab53958c"
+  },
+  "rasterLoop": {
+   "download": "82d2ad363c23ba800af317e1",
+   "preview": "8ca8a6c44f770b867a12f5ed",
+   "ops": "929b1ad8ebb76bc8aa13e08c",
+   "relief": "f49f59d909facb64ab53958c"
+  },
+  "morphedLoop": {
+   "download": "82d2ad363c23ba800af317e1",
+   "preview": "cc1489abbe03f3272f434f51",
+   "ops": "18ea205cd6a05b77b97703ac",
+   "relief": "f49f59d909facb64ab53958c"
+  }
+ },
+ "drag/owner-two-arcs-575.json": {
+  "outside": {
+   "download": "4f4347569011ecee8a59b6b6",
+   "preview": "e99891ab83e7137a314b0d95",
+   "ops": "e907b2053c835eef5ba1461b",
+   "relief": "4d2488011369fd6fca1887a6"
+  },
+  "inside": {
+   "download": "ccb7d346b9367bfcfd1e912d",
+   "preview": "dbc1985d73d9acb953b090ed",
+   "ops": "38fbfc264fa37bb2978b4297",
+   "relief": "2403e377702de7d5f27bfcab"
+  },
+  "online": {
+   "download": "daf7d408bf0b36a5ca8db759",
+   "preview": "2f5fe282840b478fe34eecf0",
+   "ops": "33565c26c74cb93267e4d19d",
+   "relief": "b4df6b841108c760f8701023"
+  },
+  "pocket": {
+   "download": "6c5096b86d3a950badf8380b",
+   "preview": "fd2d54dc7743d5e1bb1dc733",
+   "ops": "5a381c47c1706a319567c593",
+   "relief": "01bb73943682dd1e72367ca6"
+  },
+  "tabs": {
+   "download": "65c6a0d599f3aa67d0fc57fe",
+   "preview": "1fa15d89a2aef3d78b2ffe56",
+   "ops": "dcef322cf4179b1d957f7392",
+   "relief": "8e54866d10cd3e25d0fa85bb"
+  },
+  "skin": {
+   "download": "df2d656431047007066053cb",
+   "preview": "2adaf16d09ed1ce4bcddb15c",
+   "ops": "b3faf61d450d84be556e3a26",
+   "relief": "b13d1455bce0b63e8a557234"
+  },
+  "spiral": {
+   "download": "7e52f8a8e08fb8525dc2ab01",
+   "preview": "8df557c93cbab10a4045fb9d",
+   "ops": "601917f1abc6164921034d5c",
+   "relief": "1497bb43373b373bf2b166b2"
+  },
+  "spiralLoop": {
+   "download": "8ce11873cb624f8419096345",
+   "preview": "5372fd4f283c99835a98d040",
+   "ops": "821d9dd87a2d85f4e093cd71",
+   "relief": "f7977ec7ad6fea55a37cff4c"
+  },
+  "rasterLoop": {
+   "download": "e1c77b1116fb69c233532bd9",
+   "preview": "5596ea4f4b4c36e62ee9f49f",
+   "ops": "0e6aeeb2e56af19ae5921231",
+   "relief": "aa583f1ad11ae97d87f03454"
+  },
+  "morphedLoop": {
+   "download": "7b36a0ba6c90b33e2fd2b510",
+   "preview": "e77550342bbc50abfbc60b09",
+   "ops": "759423bd227600ac7f9a0a74",
+   "relief": "feec7cb29e6c4c9278ee91c0"
+  }
+ },
+ "report/drag-frozen.json": {
+  "outside": {
+   "download": "e4b78429884ae6a7f6a17a11",
+   "preview": "15dcf53e6a4e7b3790a3afa5",
+   "ops": "fb7a97291a13dbfae11ed00b",
+   "relief": "1ef4af1d9f7709028f07faeb"
+  },
+  "inside": {
+   "download": "f68632007b5c889d18a15544",
+   "preview": "6b6b64c7f6a7fa60c2c8ecea",
+   "ops": "b179a2e96004ea6b480e37b0",
+   "relief": "6e239ea0a8d96d868c5ea2f2"
+  },
+  "online": {
+   "download": "e28780c2dd4f5599a1d67288",
+   "preview": "3dc8d841a36df5ad65ec697e",
+   "ops": "822bca948449d601fe98a1d4",
+   "relief": "48675f2dc6ae6740e8c5d275"
+  },
+  "pocket": {
+   "download": "da636e0573328f592da97b74",
+   "preview": "e838dffce49c55c760776596",
+   "ops": "068dba818ebf477943af37bb",
+   "relief": "56dcc32cb7e5c9fca18b2653"
+  },
+  "tabs": {
+   "download": "2e2348649333fa7dd0cd2467",
+   "preview": "6a859086817a714929617701",
+   "ops": "b07041b4a18e73c3873b9799",
+   "relief": "7f158034b6039fd55f969d02"
+  },
+  "skin": {
+   "download": "70a16151deeafef311ad4e5d",
+   "preview": "11635efab389daadc37f65cf",
+   "ops": "89b6646aea6e13523b251de1",
+   "relief": "a9802f6435fcf124dd8a8f10"
+  },
+  "spiral": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "ee34a53976da3ea9d2f0bbcd",
+   "ops": "e86f84d27539fd927602dfff",
+   "relief": "39844b9df608262df138a3d1"
+  },
+  "spiralLoop": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "ee34a53976da3ea9d2f0bbcd",
+   "ops": "e86f84d27539fd927602dfff",
+   "relief": "39844b9df608262df138a3d1"
+  },
+  "rasterLoop": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "0c775ff1a02b6defa7a098d1",
+   "ops": "73577da23ae93888b7b3f153",
+   "relief": "39844b9df608262df138a3d1"
+  },
+  "morphedLoop": {
+   "download": "890a607277bddd5c50652ffd",
+   "preview": "4b33b9e2bc8e55113066e62b",
+   "ops": "d0c6ab1c6886a6c0f119cd8a",
+   "relief": "39844b9df608262df138a3d1"
+  }
+ },
+ "report/line-line-driven.json": {
+  "outside": {
+   "download": "e4e1aa07d0e47aea0dd973ef",
+   "preview": "e335c3cf44a7e0d2f58cddf9",
+   "ops": "fb7a97291a13dbfae11ed00b",
+   "relief": "a82e38128f337bb44f9e117f"
+  },
+  "inside": {
+   "download": "791d851fbfe2a5bc514a4bee",
+   "preview": "ad79662ea781893312ae592b",
+   "ops": "b179a2e96004ea6b480e37b0",
+   "relief": "7c458373201c943b686cb26d"
+  },
+  "online": {
+   "download": "9c38cf196ec85034553559e2",
+   "preview": "b962df1e93a255ea9cbaa44d",
+   "ops": "822bca948449d601fe98a1d4",
+   "relief": "61e5f4e04184a90188fad1d1"
+  },
+  "pocket": {
+   "download": "8c2db3999d5e2012c780b0f9",
+   "preview": "52ac7818dc314ebb7715fd3d",
+   "ops": "068dba818ebf477943af37bb",
+   "relief": "cd9fce6ab01c3b68a3f63fba"
+  },
+  "tabs": {
+   "download": "92598f0ca5fccd84b566e138",
+   "preview": "ece1547e4a339609990d6350",
+   "ops": "b07041b4a18e73c3873b9799",
+   "relief": "63e09de1349d493c05c15e9f"
+  },
+  "skin": {
+   "download": "771ba91bcd93a14fb245eb06",
+   "preview": "6b9390e0ad1b9aa06dd44a8d",
+   "ops": "89b6646aea6e13523b251de1",
+   "relief": "7ad4c7ac30e7da8b175069b7"
+  },
+  "spiral": {
+   "download": "92bfd5e177c925e8ecc28f3e",
+   "preview": "acdf98da74fa3c2a26df9a12",
+   "ops": "e86f84d27539fd927602dfff",
+   "relief": "ff12a56bc7b9f0662bee4994"
+  },
+  "spiralLoop": {
+   "download": "92bfd5e177c925e8ecc28f3e",
+   "preview": "acdf98da74fa3c2a26df9a12",
+   "ops": "e86f84d27539fd927602dfff",
+   "relief": "ff12a56bc7b9f0662bee4994"
+  },
+  "rasterLoop": {
+   "download": "92bfd5e177c925e8ecc28f3e",
+   "preview": "ca941a54a1a3e6b9f0c6f219",
+   "ops": "73577da23ae93888b7b3f153",
+   "relief": "ff12a56bc7b9f0662bee4994"
+  },
+  "morphedLoop": {
+   "download": "92bfd5e177c925e8ecc28f3e",
+   "preview": "4d694a01e263dc04dac173c5",
+   "ops": "d0c6ab1c6886a6c0f119cd8a",
+   "relief": "ff12a56bc7b9f0662bee4994"
+  }
+ },
+ "report/midpoint-move.json": {
+  "outside": {
+   "download": "3bf73b29184dc6e8b5046753",
+   "preview": "0ae0fbfec8745f2d5406828e",
+   "ops": "fb7a97291a13dbfae11ed00b",
+   "relief": "ffbd793864dc92ca1dada285"
+  },
+  "inside": {
+   "download": "36935a281d60d52043fa7832",
+   "preview": "bfdc65f907f3ad89ad9514d6",
+   "ops": "b179a2e96004ea6b480e37b0",
+   "relief": "89bb518a1e770652a237b81f"
+  },
+  "online": {
+   "download": "e79dbf0df7444ea66b9e72ca",
+   "preview": "48cf03115551fbe7bc5aa599",
+   "ops": "822bca948449d601fe98a1d4",
+   "relief": "aa4c05a7f6fe92d7b6a4260d"
+  },
+  "pocket": {
+   "download": "2e796a6af3c35f3e07fd26f2",
+   "preview": "834bb2719875c4fecc89d108",
+   "ops": "068dba818ebf477943af37bb",
+   "relief": "4bb3d2626afe1b3b4ddc99f1"
+  },
+  "tabs": {
+   "download": "bd6cbe7128eefb4727901465",
+   "preview": "ea4c8da72358fbdee4560bb4",
+   "ops": "b07041b4a18e73c3873b9799",
+   "relief": "b706d0aa246be6011feecc1e"
+  },
+  "skin": {
+   "download": "38714085e51465a06dffd154",
+   "preview": "e145a03179944fafc886e4ed",
+   "ops": "89b6646aea6e13523b251de1",
+   "relief": "a72325ecf7651ffdc5ca4d47"
+  },
+  "spiral": {
+   "download": "20cf919ffcf29173aa21f56a",
+   "preview": "38b7bc2c2590067684a5d25f",
+   "ops": "1ed43fd0cea457ca14ba6caa",
+   "relief": "fdd188446c3dca2960da7d91"
+  },
+  "spiralLoop": {
+   "download": "09e5169abc64ff521b2962da",
+   "preview": "b0da01d8b5d84567dc7b79c7",
+   "ops": "8b63e56a0455a20eaeb7a88a",
+   "relief": "1553dcbf959a7150c2246427"
+  },
+  "rasterLoop": {
+   "download": "f663f0f6868b2d83f82ce7ce",
+   "preview": "185f0551286c4423e29e7d9c",
+   "ops": "9d3801895facade1798ea004",
+   "relief": "e68a41da99d462c2516c29f6"
+  },
+  "morphedLoop": {
+   "download": "cdb5ea3bf66550c93e284667",
+   "preview": "6acd624263d19589c86f20bd",
+   "ops": "07774a60fffc481a95262361",
+   "relief": "a259ecca853e83e18eba5620"
+  }
+ },
+ "dxf/bulge-loop-in.dxf": {
+  "outside": {
+   "download": "134a22bcc109e85a0918b10b",
+   "preview": "a9e86e017d7140fbee7d19ca",
+   "ops": "e907b2053c835eef5ba1461b",
+   "relief": "0ed58dd6eeeeb447dfb86dd4"
+  },
+  "inside": {
+   "download": "23d74f272a268ea5b0b56cad",
+   "preview": "72786811b623fbe17d83909f",
+   "ops": "38fbfc264fa37bb2978b4297",
+   "relief": "a516a8a98331e06d997e172b"
+  },
+  "online": {
+   "download": "8d3e55a3672f274eb6348d31",
+   "preview": "ec4b95489110c6c61f719091",
+   "ops": "33565c26c74cb93267e4d19d",
+   "relief": "a970d43f1235580aaec8d45e"
+  },
+  "pocket": {
+   "download": "b9524d26e4b5096a4a9cdefd",
+   "preview": "7ca454811467d720744efc3c",
+   "ops": "5a381c47c1706a319567c593",
+   "relief": "609741b2e21db6cd205d835b"
+  },
+  "tabs": {
+   "download": "bde206d23bb8ec02c75f33ae",
+   "preview": "24c8ff77cae942e5982e1223",
+   "ops": "4e9fde2c0054c3ae85705157",
+   "relief": "2eaef3477e6d3ae12a221ac8"
+  },
+  "skin": {
+   "download": "917316a24222b6085ba49d96",
+   "preview": "410df8e6f432887da090cc6f",
+   "ops": "b3faf61d450d84be556e3a26",
+   "relief": "29787a04d67b91252dd14d24"
+  },
+  "spiral": {
+   "download": "4765beebe821463b6601a172",
+   "preview": "06b664b69fd95ca2acc2612e",
+   "ops": "60e254d8b230a0ec2e3400b1",
+   "relief": "fe92ff821923161254598160"
+  },
+  "spiralLoop": {
+   "download": "03282e1c480aea7d6a99c2f4",
+   "preview": "6c3de71c5bb44234eb9130e9",
+   "ops": "959a5ccb054fcd1fd014fbb8",
+   "relief": "6720beea4bbe11418aa3af15"
+  },
+  "rasterLoop": {
+   "download": "7a4eda0d0b8feb1e3e9e1c89",
+   "preview": "0f72b1975856982efb656f36",
+   "ops": "6341dc31ef9c7c8b2cc50962",
+   "relief": "2e5b417fa57d6f44af097776"
+  },
+  "morphedLoop": {
+   "download": "db0602d4d830faf4f23a1f6c",
+   "preview": "5843bfa7912f32f805e02fb0",
+   "ops": "56c1cf10b32b79fa7e2986e9",
+   "relief": "9adfacdeb8101a8523d48c55"
+  }
+ },
+ "dxf/close-path-760-gap.dxf": {
+  "outside": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "inside": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "online": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "pocket": {
+   "download": "4b52ed290ce7a9f9460dfa79",
+   "preview": "941d6f646bc386a44add3b34",
+   "ops": "05a979d1b9e2d83607e3ec03",
+   "relief": "6740b80769246f2e34e7d988"
+  },
+  "tabs": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "skin": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "spiral": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "spiralLoop": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "rasterLoop": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  },
+  "morphedLoop": {
+   "download": "acde39105f0ac9bde49cd56f",
+   "preview": "a7dd098f5999a8ec63475d7d",
+   "ops": "72288647dd8d2a49dd0c0fb2",
+   "relief": "f67f06833d98b133a6cba290"
+  }
+ },
+ "dxf/fusion-sketch4.dxf": {
+  "outside": {
+   "download": "7ae774240ac4b139d4357e82",
+   "preview": "319f697d1b9d3e0d29621b15",
+   "ops": "a26dd89f667fe92c21fc1611",
+   "relief": "b2be1705cfdc50cee732c2fa"
+  },
+  "inside": {
+   "download": "ab35892e2984dc3454340f9b",
+   "preview": "7cf6bf793adee0aec96e4f2b",
+   "ops": "af8c749640cf9b3d7f41d8d8",
+   "relief": "b7295934958f8ce21eadbc1d"
+  },
+  "online": {
+   "download": "3e29727c7a6f8ee9b4c4f0b3",
+   "preview": "acddd9bd0d0157503726fbd6",
+   "ops": "23b1cf835d6f19c589de2ed6",
+   "relief": "472ed393374a1ac72c5b9ebb"
+  },
+  "pocket": {
+   "download": "7092e7724d13cb5e2ba479ed",
+   "preview": "43a18e911f6d4fbd50b63350",
+   "ops": "41c29c0dbbcf00481e4fab50",
+   "relief": "8c496067a5631d279bc181d6"
+  },
+  "tabs": {
+   "download": "608579d4dc61ce705bbcc226",
+   "preview": "78b042b63b65964e623ea109",
+   "ops": "6c2de8b973e14c6debb69371",
+   "relief": "99c759a789e39f540ed09853"
+  },
+  "skin": {
+   "download": "42e9c813f2ba1e673463d262",
+   "preview": "b2b4ec10f71fa009ce9119b8",
+   "ops": "b78b3675d011bb64dad3c376",
+   "relief": "3a7ac4cecaa8924cb94fe433"
+  },
+  "spiral": {
+   "download": "3e5b4af957d746ea0a270679",
+   "preview": "e958824232b6889ce2f630ff",
+   "ops": "2b8cf6b61a396026a1a28c5a",
+   "relief": "29dfc086bab2a08537786fbc"
+  },
+  "spiralLoop": {
+   "download": "3e5b4af957d746ea0a270679",
+   "preview": "e958824232b6889ce2f630ff",
+   "ops": "2b8cf6b61a396026a1a28c5a",
+   "relief": "29dfc086bab2a08537786fbc"
+  },
+  "rasterLoop": {
+   "download": "3e5b4af957d746ea0a270679",
+   "preview": "164e8b2f34e0a08e3c18460d",
+   "ops": "6cfe47e0bf02043e1f71ae7d",
+   "relief": "29dfc086bab2a08537786fbc"
+  },
+  "morphedLoop": {
+   "download": "3e5b4af957d746ea0a270679",
+   "preview": "39388713701bc25fd14a1ec6",
+   "ops": "786cf91398c9ddb08fc08e05",
+   "relief": "29dfc086bab2a08537786fbc"
+  }
+ },
+ "dxf/part-mm.dxf": {
+  "outside": {
+   "download": "039ea05a4aafcab679b8e0de",
+   "preview": "64a63463d42b70c149b3e296",
+   "ops": "d5c0f745ef9fe7637213c837",
+   "relief": "4a3fa294921573211607e851"
+  },
+  "inside": {
+   "download": "67914610e1f8766f077a4d98",
+   "preview": "2f1ee23964c23f4201cd2c3b",
+   "ops": "558b9a3ab0f5c927cd26ec0d",
+   "relief": "5c19d019847adf2ae8e1d485"
+  },
+  "online": {
+   "download": "06321d4d410a7dae47d7f5f7",
+   "preview": "a47fc4f440127b86c7e08d82",
+   "ops": "9289407aa108c614ed607494",
+   "relief": "cf640ca99177fd1407733421"
+  },
+  "pocket": {
+   "download": "ab40e676a05cc37d46be21eb",
+   "preview": "322ea03f8fcd85da5eeacfac",
+   "ops": "95af03083c5bd871b2600e9f",
+   "relief": "da50f9cdc01e7b5d0551b41c"
+  },
+  "tabs": {
+   "download": "e0768270a957c3cee518ad02",
+   "preview": "a74b7fe95d881373c6cd6185",
+   "ops": "027613638d0f955883102881",
+   "relief": "0175c156d6c1eb99730f2df2"
+  },
+  "skin": {
+   "download": "629ec9710ecf2efb9b775ec8",
+   "preview": "24ef2d8647c126664ac49fba",
+   "ops": "5cec11ee6ef94514a1b61129",
+   "relief": "32c73d2f3715c6a6d5d21fa8"
+  },
+  "spiral": {
+   "download": "c6c28c3c1b6ca17587955055",
+   "preview": "5f22a0376f5fd16587f49d48",
+   "ops": "de623c204d916d071c49f53d",
+   "relief": "92f6448a77c65d6b6fdca2dc"
+  },
+  "spiralLoop": {
+   "download": "c6c28c3c1b6ca17587955055",
+   "preview": "5f22a0376f5fd16587f49d48",
+   "ops": "de623c204d916d071c49f53d",
+   "relief": "92f6448a77c65d6b6fdca2dc"
+  },
+  "rasterLoop": {
+   "download": "c6c28c3c1b6ca17587955055",
+   "preview": "71385174ac83aaf5437c56d8",
+   "ops": "12f75a103f40fee628cd16f2",
+   "relief": "92f6448a77c65d6b6fdca2dc"
+  },
+  "morphedLoop": {
+   "download": "c6c28c3c1b6ca17587955055",
+   "preview": "f97fb4bc48c843b71dd88b93",
+   "ops": "9c80bc8f088e8bd7a2fbe9cf",
+   "relief": "92f6448a77c65d6b6fdca2dc"
+  }
+ },
+ "fusion/real-solid-plate-711.json": {
+  "plan": {
+   "download": "25ee0ff1847428229fc96c30",
+   "preview": "20a25bbc0f98708e127d67cb",
+   "ops": "d408928111d8bb211da96aa1",
+   "relief": "52619003ab6e25b590440288"
+  },
+  "outside": {
+   "download": "2933d6d6b5d77c925d1f3203",
+   "preview": "e31b4333f99032eac063a3eb",
+   "ops": "dd572ee02f9de137aa298485",
+   "relief": "417873b6d0ecf6f55ecd1ab4"
+  },
+  "inside": {
+   "download": "58a2a2850e9a7b9da9511eb3",
+   "preview": "6daac35ab6192b54daa78e1c",
+   "ops": "3205ec8a6fc8f91331ce9783",
+   "relief": "1014e9c1c87e9240a7a26a51"
+  },
+  "online": {
+   "download": "4eb53290524d4916da4b2a34",
+   "preview": "e8c0f25171968c5fae908bf1",
+   "ops": "6e4b884f8eee0bb281fc32f3",
+   "relief": "4a0d2ff50b890ffcab8e5838"
+  },
+  "pocket": {
+   "download": "e947c1938d26359b925d5d6b",
+   "preview": "9833eebf6e636b9bc9a6d8b9",
+   "ops": "bf1e1b477a2b176de0b7ba0e",
+   "relief": "6b7f95ea98a86b1c4cc73ef8"
+  },
+  "tabs": {
+   "download": "6dd240ef948a5280e56b8fcd",
+   "preview": "14470a6fe3711b4c537b1545",
+   "ops": "4a5e94389bc32db66779e3d1",
+   "relief": "9e12679e7c743e9e72a8b4b1"
+  },
+  "skin": {
+   "download": "84d0e5af3a83e1bb2b50676c",
+   "preview": "172f1ce9752af8a16e773abc",
+   "ops": "0be69a8b81fdd7854fde72f4",
+   "relief": "b2f5bc694b3b6ac0b3068bca"
+  }
+ },
+ "fusion/sa7-slope/01-chamfer-outline.json": {
+  "plan": {
+   "download": "16b6f18ea687a400ee00b434",
+   "preview": "217c1f92ba1f17719c04e503",
+   "ops": "a015f8b1239f103012c9e621",
+   "relief": "980b26c8533b6fb62a68eb4b"
+  },
+  "outside": {
+   "download": "1cc991d23752e0cc75ed6fe7",
+   "preview": "651054596d69291bc9449eb5",
+   "ops": "e907b2053c835eef5ba1461b",
+   "relief": "cc19d41f35e9f601102b07c0"
+  },
+  "inside": {
+   "download": "3ac843d0fdf34048a1b8ad98",
+   "preview": "5906a72617de61440ec4f441",
+   "ops": "38fbfc264fa37bb2978b4297",
+   "relief": "b6c2d7511e9885f9f29667c2"
+  },
+  "online": {
+   "download": "ecf5075519e0bfc8ce49549b",
+   "preview": "3a729fd463e397332e93bdf7",
+   "ops": "33565c26c74cb93267e4d19d",
+   "relief": "9317f6f1ef18995eb895b9a0"
+  },
+  "pocket": {
+   "download": "12fb2f23eaa7c631d4786bc6",
+   "preview": "8e80a0d486b199c0ec85a86c",
+   "ops": "5a381c47c1706a319567c593",
+   "relief": "def7389057406168f56734a8"
+  },
+  "tabs": {
+   "download": "6363b97b5d62e9ee86959573",
+   "preview": "725f18579aae63cd8a71d6a2",
+   "ops": "b484aab319411e23687792e2",
+   "relief": "890ebeb24acb8c08c8932a79"
+  },
+  "skin": {
+   "download": "2616ab07d28e28bbe86c5657",
+   "preview": "46b4261f8132d79c8cdbe0b4",
+   "ops": "b3faf61d450d84be556e3a26",
+   "relief": "3609dd1cb17dcc7588872033"
+  }
+ },
+ "fusion/sa7-slope/02-drafted-pocket.json": {
+  "plan": {
+   "download": "6bbeb7af44e76bec65531fad",
+   "preview": "f2075dc31e3a278afbce3231",
+   "ops": "a8fb79b24a32fc82fa74e4bc",
+   "relief": "0cd00aa11457b8224a88f348"
+  },
+  "outside": {
+   "download": "433518818b38bfe89fc0b0b6",
+   "preview": "d5574dde138eb35d64ce4671",
+   "ops": "3727efd4afe916f6582e3487",
+   "relief": "4b6a9f20d95f625d310b20ec"
+  },
+  "inside": {
+   "download": "3f28fe5774b7adb8023606f3",
+   "preview": "fc9b0e804b43de428748cea0",
+   "ops": "71e746e283f2423628019788",
+   "relief": "4712d57ab97ce3b8ae957299"
+  },
+  "online": {
+   "download": "fc63246c8163f2eb88e6d023",
+   "preview": "aa3133660d49f9b753675261",
+   "ops": "15bdcedb4dd63131f7c8ffc9",
+   "relief": "15386957385aa2033716bd2e"
+  },
+  "pocket": {
+   "download": "a0786ce1ec41c15b408b5562",
+   "preview": "ff59316869fc9a5d81785267",
+   "ops": "400d36522fa4ed9f23efa7f6",
+   "relief": "3e2644dd7d7ad0089f73e6f8"
+  },
+  "tabs": {
+   "download": "0bd196581482dc6b5a57861c",
+   "preview": "c87ac12e6a8894d7eed864fa",
+   "ops": "c2e472a540ade3d29d130e40",
+   "relief": "7b295971d9fc5c687fddd780"
+  },
+  "skin": {
+   "download": "b311792015bc1cf1d16bb26b",
+   "preview": "28e7adbd4ca630bfe500a6a2",
+   "ops": "1c1423bd1a593bc7f6677d52",
+   "relief": "36db870c07e35be78c2e5016"
+  }
+ },
+ "fusion/sa7-slope/03-pocket-floor-fillet.json": {
+  "plan": {
+   "download": "7855ee6e57f9cf314e0ac9d4",
+   "preview": "86e8fa83d17896d73ca89c4e",
+   "ops": "a8fb79b24a32fc82fa74e4bc",
+   "relief": "8910c50af4c81a14fd74c868"
+  },
+  "outside": {
+   "download": "4cf234894a72c439b6ffde71",
+   "preview": "3f646e6d6aea5aa30e37e0e5",
+   "ops": "3727efd4afe916f6582e3487",
+   "relief": "5f40c4e5a53cd22b03752ea9"
+  },
+  "inside": {
+   "download": "fd4151b12e26c49ff0c993ab",
+   "preview": "04c271a40db2f33dddee4858",
+   "ops": "71e746e283f2423628019788",
+   "relief": "0ad1e1aed9af0e6a3ace8e01"
+  },
+  "online": {
+   "download": "c3d138179cc69f4961a78b95",
+   "preview": "c79d8ea231c48c6214c0bc95",
+   "ops": "15bdcedb4dd63131f7c8ffc9",
+   "relief": "6f7ace4449ecba2e89041485"
+  },
+  "pocket": {
+   "download": "9f6b3d0a9300c23c0391b1a9",
+   "preview": "e8cc84bb0edfadacfd3712d2",
+   "ops": "400d36522fa4ed9f23efa7f6",
+   "relief": "de70577d2c1c431c8fab2c5b"
+  },
+  "tabs": {
+   "download": "d0db9550a96f98e48a27aaae",
+   "preview": "1ff811a9a7ba1edfb01df10b",
+   "ops": "c2e472a540ade3d29d130e40",
+   "relief": "4ad2035fc07bb7bbc1e485a0"
+  },
+  "skin": {
+   "download": "ff6fbb8590295d4824a7812e",
+   "preview": "807050bda998d91b5c7f5658",
+   "ops": "1c1423bd1a593bc7f6677d52",
+   "relief": "3ed535e6b460ab2d7e73c8d1"
+  }
+ },
+ "fusion/sa7-slope/06-countersink.json": {
+  "plan": {
+   "download": "27f8f29ef7e838670f6989d3",
+   "preview": "8d8eb12ee52ae1c32294e58f",
+   "ops": "f686d1406197cddd1f70e47e",
+   "relief": "52b1e48e0de1fe8bdbe1a48d"
+  },
+  "outside": {
+   "download": "24c3b13f6e54784480c438f6",
+   "preview": "d231c7d12ad2b5502fbe8be7",
+   "ops": "3727efd4afe916f6582e3487",
+   "relief": "9b683a6bd46f46a4bfe2c548"
+  },
+  "inside": {
+   "download": "7a1cc405eca7986792e170d1",
+   "preview": "1fea8409862dd4bd9c806797",
+   "ops": "71e746e283f2423628019788",
+   "relief": "d9bc90e68106b55092e6f7c3"
+  },
+  "online": {
+   "download": "d586bd7015d89500ec821719",
+   "preview": "87c614a62f12f4dfc408d495",
+   "ops": "15bdcedb4dd63131f7c8ffc9",
+   "relief": "5840738012e86c6f631b73dc"
+  },
+  "pocket": {
+   "download": "3d20757a85181dade80b8080",
+   "preview": "b694bc97e1d66d5b98f9b435",
+   "ops": "400d36522fa4ed9f23efa7f6",
+   "relief": "25ce6641dac0ddbc571adc20"
+  },
+  "tabs": {
+   "download": "c90597cf284a79da7da762c6",
+   "preview": "76e9439144eadd7522519dcf",
+   "ops": "da4f448b3e561530e64c81c4",
+   "relief": "97c9ce3ce18a429b1e269479"
+  },
+  "skin": {
+   "download": "cf0cb1d3d10650d13e14d40c",
+   "preview": "049969df57c35ff8f9050e0a",
+   "ops": "1c1423bd1a593bc7f6677d52",
+   "relief": "9f045e65efb2bf32922a9bd4"
+  }
+ },
+ "fusion/sa7-slope/08-spline.json": {
+  "plan": {
+   "download": "10ff88769945a9a888658516",
+   "preview": "52517acbfaa7a46684aa3b48",
+   "ops": "cdcf01cca2c7982319d892e3",
+   "relief": "0168f6af31b07f8074fac40f"
+  },
+  "outside": {
+   "download": "fdd670239a76399199200136",
+   "preview": "37ab53979068d37a78784a5c",
+   "ops": "3727efd4afe916f6582e3487",
+   "relief": "18ab326029989db13eee6682"
+  },
+  "inside": {
+   "download": "cacff4ab11a76295e901ebde",
+   "preview": "ff7cd14084f7c5b45308f2b3",
+   "ops": "71e746e283f2423628019788",
+   "relief": "dd575366f0885704ea1ef56f"
+  },
+  "online": {
+   "download": "a7192143a7b4ff6f503cb526",
+   "preview": "1d93a300a2c70741a2b13c7d",
+   "ops": "15bdcedb4dd63131f7c8ffc9",
+   "relief": "45c9a4dac70545b348967fa8"
+  },
+  "pocket": {
+   "download": "e105084bc248e72186508749",
+   "preview": "0971bdc0acc692109e170335",
+   "ops": "400d36522fa4ed9f23efa7f6",
+   "relief": "4771c7edcc05b5bf7d627e57"
+  },
+  "tabs": {
+   "download": "8cd6c3c963569bd570c64013",
+   "preview": "955d2369c8b4157fe8583343",
+   "ops": "d47dd4fcd93f58262104cdf5",
+   "relief": "f206a521670d27f604212f42"
+  },
+  "skin": {
+   "download": "3cb9b36533314e68d0218edd",
+   "preview": "1e6864f086b7a6cb4a2afb3d",
+   "ops": "1c1423bd1a593bc7f6677d52",
+   "relief": "777e61af255daf3a8f5d81d0"
+  }
+ },
+ "fusion/sa7-slope/x1-pocket-chamfer-top-fillet-floor.json": {
+  "plan": {
+   "download": "7855ee6e57f9cf314e0ac9d4",
+   "preview": "86e8fa83d17896d73ca89c4e",
+   "ops": "a8fb79b24a32fc82fa74e4bc",
+   "relief": "33488baa042a76c277c65930"
+  },
+  "outside": {
+   "download": "4cf234894a72c439b6ffde71",
+   "preview": "3f646e6d6aea5aa30e37e0e5",
+   "ops": "3727efd4afe916f6582e3487",
+   "relief": "2aba707153c2abc45921e7fb"
+  },
+  "inside": {
+   "download": "fd4151b12e26c49ff0c993ab",
+   "preview": "04c271a40db2f33dddee4858",
+   "ops": "71e746e283f2423628019788",
+   "relief": "b550347fc470896a31815095"
+  },
+  "online": {
+   "download": "c3d138179cc69f4961a78b95",
+   "preview": "c79d8ea231c48c6214c0bc95",
+   "ops": "15bdcedb4dd63131f7c8ffc9",
+   "relief": "ccfd3783aa01711595daacb1"
+  },
+  "pocket": {
+   "download": "9f6b3d0a9300c23c0391b1a9",
+   "preview": "e8cc84bb0edfadacfd3712d2",
+   "ops": "400d36522fa4ed9f23efa7f6",
+   "relief": "1cd49a484f6059e7bf44830a"
+  },
+  "tabs": {
+   "download": "d0db9550a96f98e48a27aaae",
+   "preview": "1ff811a9a7ba1edfb01df10b",
+   "ops": "c2e472a540ade3d29d130e40",
+   "relief": "d3c1925bf9f9f3cff8bf384a"
+  },
+  "skin": {
+   "download": "ff6fbb8590295d4824a7812e",
+   "preview": "807050bda998d91b5c7f5658",
+   "ops": "1c1423bd1a593bc7f6677d52",
+   "relief": "941328c14a861f952f659ba9"
+  }
+ },
+ "fusion/sa7-slope/x2-outline-chamfer-top-bottom.json": {
+  "plan": {
+   "download": "8b8eeb2b5123754f88f65ccc",
+   "preview": "b09da9532eab5040640d438e",
+   "ops": "a015f8b1239f103012c9e621",
+   "relief": "7e5070264efe7939685fc834"
+  },
+  "outside": {
+   "download": "663147baf5a8d3a220a295d5",
+   "preview": "7b510a0df9b7c9469465c925",
+   "ops": "e907b2053c835eef5ba1461b",
+   "relief": "3b455590ab730b2503acb586"
+  },
+  "inside": {
+   "download": "b0dfceeed047b6fa95ec576f",
+   "preview": "57843b2c73a4d6f0381f8eb8",
+   "ops": "38fbfc264fa37bb2978b4297",
+   "relief": "24f5c902daf81bf119109b42"
+  },
+  "online": {
+   "download": "d83817d3c48cb1059a168a31",
+   "preview": "9857661e65aa18ea126ffa5f",
+   "ops": "33565c26c74cb93267e4d19d",
+   "relief": "ae981c61ae3513176888a2b1"
+  },
+  "pocket": {
+   "download": "e30927a7feac254097fd21e3",
+   "preview": "f968f0e0a98f5b86107b853f",
+   "ops": "5a381c47c1706a319567c593",
+   "relief": "57d2b367c392833abead7587"
+  },
+  "tabs": {
+   "download": "0672d4d098fff5ce483a3b79",
+   "preview": "71244961ca970d99f739dcb8",
+   "ops": "b484aab319411e23687792e2",
+   "relief": "dab5f9aac686e2c439cc6d79"
+  },
+  "skin": {
+   "download": "bf106b6732006efeb697ce52",
+   "preview": "143bde0b5f04153f92f213b4",
+   "ops": "b3faf61d450d84be556e3a26",
+   "relief": "4fca61462c54ddc53f3c16c3"
+  }
+ },
+ "fusion/sa7-slope/x3-hole-filleted-top.json": {
+  "plan": {
+   "download": "1638c12fc1944d5331a86bd5",
+   "preview": "ad04a3b3c277373eaf3b1d82",
+   "ops": "f686d1406197cddd1f70e47e",
+   "relief": "35d2b49768ea534d9e340b90"
+  },
+  "outside": {
+   "download": "ea86039cdbaaa85848f86769",
+   "preview": "95519dc45a63e039dd411085",
+   "ops": "3727efd4afe916f6582e3487",
+   "relief": "937d1bdbfbe786bc0bc410a4"
+  },
+  "inside": {
+   "download": "eb0a8ebed160fb28bf74774d",
+   "preview": "6a2029e727b41622ba223589",
+   "ops": "71e746e283f2423628019788",
+   "relief": "9fde5baf4ba77761563a45b9"
+  },
+  "online": {
+   "download": "ed4080b49c077bef6182567b",
+   "preview": "763ec160d000b035b7800b02",
+   "ops": "15bdcedb4dd63131f7c8ffc9",
+   "relief": "f2850afdb7eefbbd745d0737"
+  },
+  "pocket": {
+   "download": "4e6a822ce15b868b60a5d104",
+   "preview": "91561bef21cb630e53029dd3",
+   "ops": "400d36522fa4ed9f23efa7f6",
+   "relief": "9934b820d23966a9df4fd9bf"
+  },
+  "tabs": {
+   "download": "7febda54d1b3528080f1d095",
+   "preview": "119be18a83214458c1e1e425",
+   "ops": "c2e472a540ade3d29d130e40",
+   "relief": "9dd337d973b8342a070d27d3"
+  },
+  "skin": {
+   "download": "28b7b1ad9f71f638ee5485aa",
+   "preview": "fe960548c7189d6db6ba8446",
+   "ops": "1c1423bd1a593bc7f6677d52",
+   "relief": "7a63f2e33f19aa0caa1a6452"
+  }
+ },
+ "fusion/sa7-slope/x4-pocket-rounded-corners-floor-fillet.json": {
+  "plan": {
+   "download": "de6393d996c25401891969ec",
+   "preview": "223baef66271e41118fb6cd4",
+   "ops": "a8fb79b24a32fc82fa74e4bc",
+   "relief": "23b09f29e0a0fa1025bc4f1d"
+  },
+  "outside": {
+   "download": "046b254ce8e148f77ef85ad7",
+   "preview": "64448edd6a44bf6e3d949417",
+   "ops": "3727efd4afe916f6582e3487",
+   "relief": "e40ec7de017535261fed360d"
+  },
+  "inside": {
+   "download": "0e73b18efb9c4437369331ca",
+   "preview": "f665e858bf3026c585420d63",
+   "ops": "71e746e283f2423628019788",
+   "relief": "4e084f2922c55bedf42990ca"
+  },
+  "online": {
+   "download": "c5e1ccd5ccb50c20509ef5c5",
+   "preview": "9247966d1096b6b7b6a0fca5",
+   "ops": "15bdcedb4dd63131f7c8ffc9",
+   "relief": "eaa4a6977303360a7113222a"
+  },
+  "pocket": {
+   "download": "4576e14562c63dc49d9b892d",
+   "preview": "cf9ee01daf174e55fba39759",
+   "ops": "400d36522fa4ed9f23efa7f6",
+   "relief": "f2fd65c817289d2354887419"
+  },
+  "tabs": {
+   "download": "7fd3410f29fcb17d03bcfcb0",
+   "preview": "db6786c489d6b809095676fd",
+   "ops": "c2e472a540ade3d29d130e40",
+   "relief": "2ce21939cc221bd303378ea3"
+  },
+  "skin": {
+   "download": "c3aadccd72c966049fefc45e",
+   "preview": "a23365f3f83ee27a0c95a363",
+   "ops": "1c1423bd1a593bc7f6677d52",
+   "relief": "e1d45aa83263b95fd88c332a"
+  }
+ }
+}

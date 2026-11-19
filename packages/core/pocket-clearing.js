@@ -56,8 +56,8 @@
 //    pass would cut an island or the wall (an island closer to the wall or to another island than the bit). The same check holds with Loop on.
 //  * LOOP (TASK 750, record field `loop`: true | false, default off, any programmed pattern): everything the record cuts (its clearing, Raster's clean-up
 //    ring, AND the FINISH TURNS = the contours of R inset by EXACTLY r: a clean copy of the wall's shape, taking only the allowance skin, and each
-//    island's turn at r outside it) is joined into CLOSED on-line paths (first point == last point, d ends with Z) that end where they start; no
-//    separate inside / outside cut is written. The wall is then exact for the card's bit only (the Origin does not offset an on-line path): the note
+//    island's turn at r outside it) is joined into CLOSED on-line paths (first point == last point, d ends with Z); no separate inside / outside cut
+//    is written. A closed loop has NO start point on the Origin (the operator plunges anywhere) and AutoPass cuts it the same direction every pass. The wall is then exact for the card's bit only (the Origin does not offset an on-line path): the note
 //    says so. With no allowance ring 0 already IS the finish turn (not written twice). Every link and return leg is a chain of straight steps between
 //    points of turns that are cut anyway, each step inside the region of the outer of its two turns (the 749 nearest-point argument), so inside the
 //    region the bit may sweep (R inset by r): it never crosses the wall or an island. Such a leg crosses the turns between its ends: harmless for an
@@ -80,9 +80,15 @@
 //  * LEFTOVER (never hidden): the part of R the bit does not sweep (the swept area of every clearing path at the record's bit radius + the finish
 //    pass), ignoring slivers thinner than 2 x sliverMm (the offsets' rounding); reported when over leftoverTolMm2, with how much of it the bit cannot
 //    reach at all (sharp inside corners, necks narrower than the bit: R minus R opened by r) and how much the pattern missed (a stepover too big).
+//  * LEAD-IN (TASK 775, record field `leadIn` true, Loop on only): every closed loop gets a straight LEG from a point inside the cleared region to its
+//    start (#core/lead-in pocketLeg: toward the pocket's innermost rings, inside R inset by r: never across the wall or an island), and is written as
+//    ONE OPEN path: the leg tip, the loop's start, round, back to its start (no Z). The operator plunges at the tip; AutoPass then reverses at each end,
+//    so the cutting direction alternates (the trade-off, in the note). A leg that fits nowhere refuses the lead-in for the pocket (closed loops, the
+//    note says why).
 //  * The clearing paths depend on the record's bit diameter (written as toolDia on every path); the finish pass does not.
 import { offsetRegions, sweepPaths, clipOpenPaths, regionsArea, regionsFromRings, diffRegions, unionRegions } from './plot/clip.js';
-import { loopWalk, walkPoints } from './hold-part.js';
+import { loopWalk, walkPoints, sweeper } from './hold-part.js'; // TASK 775: sweeper moved to hold-part (an On line cut's strokes use it too)
+import { pocketLeg } from './lead-in.js'; // TASK 775: the Loop's lead-in legs
 import { num } from './loop-geometry.js';
 
 export const POCKET_CLEARING = Object.freeze({
@@ -121,7 +127,8 @@ export function clearingPattern(rec) {
 /** The finish allowance default (base mm) for a document unit. */
 export const allowanceDefault = (unit) => (unit === 'in' ? POCKET_CLEARING.finishAllowance.in : POCKET_CLEARING.finishAllowance.mm);
 
-/** A record's clearing settings: { pattern, toolDia, r, stepoverPct, stepover (mm), allowance, offset, angle (deg), loop (TASK 750: true | false) }. */
+/** A record's clearing settings: { pattern, toolDia, r, stepoverPct, stepover (mm), allowance, offset, angle (deg), loop (TASK 750: true | false), leadIn (TASK 775:
+ *  true | false, Loop on only), leadInLength (mm: the record's, or one bit diameter) }. */
 export function clearingSettings(rec) {
   const S = POCKET_CLEARING.stepoverPct;
   const toolDia = Number(rec && rec.toolDia) > 0 ? Number(rec.toolDia) : 0;
@@ -129,7 +136,7 @@ export function clearingSettings(rec) {
   const allowance = rec && rec.finishAllowance != null && Number.isFinite(Number(rec.finishAllowance)) && Number(rec.finishAllowance) >= 0 ? Number(rec.finishAllowance) : POCKET_CLEARING.finishAllowance.mm;
   const angle = rec && Number.isFinite(Number(rec.rasterAngle)) && rec.rasterAngle !== null && rec.rasterAngle !== '' ? Number(rec.rasterAngle) : POCKET_CLEARING.rasterAngle;
   return { pattern: clearingPattern(rec), toolDia, r: toolDia / 2, stepoverPct: pct, stepover: (pct / 100) * toolDia, allowance, offset: Number(rec && rec.cutOffset) || 0, angle,
-    loop: Boolean(rec && rec.loop === true) };
+    loop: Boolean(rec && rec.loop === true), leadIn: Boolean(rec && rec.loop === true && rec.leadIn === true), leadInLength: Number(rec && rec.leadInLength) > 0 ? Number(rec.leadInLength) : toolDia };
 }
 
 // ── geometry helpers ([x, y] points inside, { x, y } at the edges) ──
@@ -437,7 +444,7 @@ export function morphedSpiral(rings, s) {
   return { points, turns: starts };
 }
 
-// ── TASK 750: the LOOP (see THE RULES): closed paths that end where they start ──
+// ── TASK 750: the LOOP (see THE RULES): closed paths (first point == last point) ──
 const same = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-9;
 // a loop being built: its points, its turns ([{ start, end, kind }]: pts[start..end] is a turn / pass / ring: 'ring' | 'finish' | 'pass' | 'cleanup' |
 // 'morphed'), the length of its legs (links, steps, returns: the rest) and the turns its legs cross
@@ -593,7 +600,7 @@ const MEMO = new Map(), MEMO_MAX = 48;
  * outer / holes = closed [[x,y],...] rings (base mm).
  */
 export function planClearing(rings, st) {
-  const key = JSON.stringify([rings, st.pattern, st.r, st.stepover, st.allowance, st.offset, st.pattern === 'raster' ? st.angle : null, st.loop]);
+  const key = JSON.stringify([rings, st.pattern, st.r, st.stepover, st.allowance, st.offset, st.pattern === 'raster' ? st.angle : null, st.loop, st.leadIn ? st.leadInLength : null]);
   if (MEMO.has(key)) return MEMO.get(key);
   const plan = computePlan(rings, st);
   MEMO.set(key, plan);
@@ -602,7 +609,7 @@ export function planClearing(rings, st) {
 }
 function computePlan({ outer, holes }, st) {
   const { pattern, r, stepover: s, allowance: a, offset: off } = st;
-  const base = { pattern, clear: [], levels: 0, loops: 0, passes: 0, cleanup: 0, turns: 0, wall: [], islands: [], swept: [], leftover: { area: 0, unreachable: 0, missed: 0, regions: [] }, length: 0, lines: 0, linesWhy: null, loop: false, loopCount: 0, loopCrossings: 0, loopExtra: 0, loopRefused: null, morphedBlocked: null, refused: null };
+  const base = { pattern, clear: [], levels: 0, loops: 0, passes: 0, cleanup: 0, turns: 0, wall: [], islands: [], swept: [], leftover: { area: 0, unreachable: 0, missed: 0, regions: [] }, length: 0, lines: 0, linesWhy: null, loop: false, loopCount: 0, loopCrossings: 0, loopExtra: 0, loopRefused: null, leadIn: false, leadInRefused: null, morphedBlocked: null, refused: null };
   if (!(r > 0)) return { ...base, refused: 'no bit' };
   const R0 = regionsFromRings([outer, ...holes], 'evenodd');
   const R = off ? offsetRegions(R0, -off, POCKET_CLEARING.chordTolMm) : R0;
@@ -670,6 +677,21 @@ function computePlan({ outer, holes }, st) {
     clear = built.map((b, i) => ({ points: b.pts, closed: true, role: 'loop', index: i + 1, count: built.length, turns: b.turns }));
     if (pattern !== 'linked') linesWhy = clear.length > 1 ? linesWhy : null;
   }
+  // TASK 775: the LEAD-IN legs (Loop on): each loop opened by a leg from inside the cleared region to its start, or none (refused, with its reason)
+  let leadIn = false, leadInRefused = null;
+  if (loop && st.leadIn) {
+    const inner = (L.length ? L : ringLevels(R, d0, s)).at(-1);
+    const grownRr = offsetRegions(Rr, 0.01);
+    const legs = !(st.leadInLength >= r - 1e-9) ? null : clear.map((c) => pocketLeg(c.points[0], inner ? contoursOf(inner) : [], st.leadInLength, (a, b) => segmentInside(a, b, grownRr)));
+    if (!legs) leadInRefused = 'lead-in short';
+    else if (legs.some((g) => !g)) leadInRefused = 'lead-in room';
+    else {
+      leadIn = true;
+      loopExtra += legs.reduce((t, g) => t + Math.hypot(g.tip.x - g.junction.x, g.tip.y - g.junction.y), 0);
+      clear = clear.map((c, i) => ({ ...c, points: [legs[i].tip, ...c.points], closed: false, leadIn: { role: 'leg', tip: legs[i].tip, junction: legs[i].junction, legPoints: legs[i].legPoints, length: st.leadInLength },
+        turns: c.turns.map((t) => ({ ...t, start: t.start + 1, end: t.end + 1 })) }));
+    }
+  }
   // what the bit sweeps (the clearing + the finish pass) and what it leaves
   const all = [...clear.map((c) => ({ points: c.points.map((p) => [p.x, p.y]), closed: c.closed })), ...(loop ? [] : finish)]; // Loop on: the finish turns are in the loops
   const swept = sweepPaths(all, r, POCKET_CLEARING.chordTolMm);
@@ -680,7 +702,7 @@ function computePlan({ outer, holes }, st) {
   const length = clear.reduce((t, c) => t + pathLength(c.points, c.closed), 0);
   const finishLength = loop ? 0 : [...wall, ...islands.flat()].reduce((t, pts) => t + pathLength(pts, true), 0);
   return { pattern, clear, levels, loops, passes, cleanup, turns, wall, islands, swept, leftover: { area, unreachable, missed: Math.max(0, area - unreachable), regions: leftR }, length, finishLength, lines, linesWhy,
-    loop, loopCount: loop ? clear.length : 0, loopCrossings, loopExtra, loopRefused, morphedBlocked, refused: null };
+    loop, loopCount: loop ? clear.length : 0, loopCrossings, loopExtra, loopRefused, leadIn, leadInRefused, morphedBlocked, refused: null };
 }
 
 /** A pocket cut's region rings ({ outer, holes }: closed [[x,y],...], arcs exact to chordTolMm) from its loops (#core/hold-part loopWalk), or null. */
@@ -699,16 +721,6 @@ export function morphedBlocker(cut, rec, state) {
   if (rings.holes.length) return 'islands';
   const plan = planClearing(rings, { ...clearingSettings(rec), pattern: 'morphed' });
   return plan.morphedBlocked || plan.refused || null;
-}
-
-// the sweep of a cut's centre paths at a bit radius (deriveCutFootprint calls it with the record's radius, or a shaped cutter's half-width)
-function sweeper(centers) {
-  const memo = new Map();
-  return (rr) => {
-    if (!memo.has(rr)) memo.set(rr, sweepPaths(centers.map((c) => ({ points: c.points.map((p) => [p.x, p.y]), closed: c.closed })), rr, POCKET_CLEARING.chordTolMm)
-      .flatMap((g) => [g.outer, ...g.holes].map((ring) => ring.slice(0, -1).map(([x, y]) => P(x, y)))));
-    return memo.get(rr);
-  };
 }
 
 /**
@@ -735,7 +747,8 @@ export function applyPocketClearing(cuts, rec, state) {
     const carries = plan.loop && i === plan.clear.length - 1; // TASK 750: no wall cut: the last loop carries the summary
     return { kind: 'clearing', cutType: 'online', offsetSide: 0, isHole: false, isCompound: false, centers, sweep: sweeper(centers),
       rec: { ...pocket.rec, cutType: 'online', cutDepth: depth, cutOffset: 0 }, geom: { tag: 'path', a: `d="${pathD(c.points, c.closed)}"` },
-      clearing: { role: c.role, index: c.index, count: c.count, level: c.level ?? null, depth, ...(c.turnStarts ? { turnStarts: c.turnStarts } : {}), ...(carries ? { summary } : {}) } };
+      clearing: { role: c.role, index: c.index, count: c.count, level: c.level ?? null, depth, ...(c.turnStarts ? { turnStarts: c.turnStarts } : {}), ...(carries ? { summary } : {}) },
+      ...(c.leadIn ? { leadIn: c.leadIn } : {}) }; // TASK 775: an open loop with its lead-in leg
   });
   if (plan.loop) return cuts.flatMap((c) => (c === pocket ? out : [c])); // TASK 750: the wall's and the islands' finish turns are in the closed loops
   const wallCenters = plan.wall.map((pts) => ({ points: pts, closed: true }));

@@ -7,7 +7,8 @@ import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRE
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED } from './cut-plan.js';
 import { STEP_DEPTH, STEP_RESOLUTION } from '#core/stepped-cut.js';
-import { HOLD_PART, holdDefaults } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults
+import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
+import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off | On) and its sides
 import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, unitNumber } from '#core/units.js';
@@ -46,6 +47,8 @@ const STEPPERS = {
   stepover:      { step: { mm: 5, in: 5 }, min: POCKET_CLEARING.stepoverPct.min, max: POCKET_CLEARING.stepoverPct.max },
   finishAllowance: { step: { mm: 0.1, in: 0.005 }, min: 0 },
   rasterAngle:   { step: { mm: 15, in: 15 }, min: 0, max: 180 },
+  // TASK 775: the lead-in leg's length is a size (positive; the derivation refuses one under the bit radius, the note says so)
+  leadInLength:  { step: { mm: 0.5, in: 1 / 32 }, positive: true },
 };
 // TASK 745: the Raster angle presets (degrees)
 const ANGLE_PRESETS = [{ label: '0\u00b0', value: 0 }, { label: '45\u00b0', value: 45 }, { label: '90\u00b0', value: 90 }];
@@ -53,6 +56,9 @@ const CLEARING_CHOICE = (id) => CLEARING_CHOICES.find((c) => c.id === id) || CLE
 // TASK 742: the Hold part choice (#core HOLD_PART.modes: Off | Tabs | Onion skin) and the count's Auto, as preset buttons (the ONE preset widget)
 const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ label: hintLabel(choiceId('holdPart', m.id)), value: m.id }));
 const COUNT_PRESETS = [{ label: 'Auto', value: 'auto' }];
+// TASK 775: the Lead-in choice (#core LEAD_IN.modes: Off | On -> the record's true | false) and the leg's side (Outside | Inside), as preset buttons (the ONE preset widget)
+const LEAD_PRESETS = LEAD_IN.modes.map((m) => ({ label: hintLabel(choiceId('leadIn', m.id)), value: m.id === 'on' }));
+const SIDE_PRESETS = LEAD_IN.sides.map((m) => ({ label: hintLabel(choiceId('leadInSide', m.id)), value: m.id }));
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
 // a field's text: lengthText (the one length-format decider: Length precision, default 3, trailing zeros dropped unless TRAILING_ZEROS, or an inch fraction); the unit is beside it
@@ -110,6 +116,21 @@ export function createCutPanel(hostEl, opts = {}) {
       </div>
       <div class="cut-row" data-row="loop">
         <label class="cut-check"><input type="checkbox" class="cut-loop"><span data-hint="loop"></span></label>
+      </div>
+      <div class="cut-row" data-row="leadIn">
+        <button type="button" class="cut-field-label" data-hint="leadIn"></button>
+        <div class="cut-presets cut-lead-modes"></div>
+      </div>
+      <div class="cut-row" data-row="leadInLength">
+        <button type="button" class="cut-field-label" data-hint="leadInLength"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-lead-length" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+      </div>
+      <div class="cut-row" data-row="leadInSide">
+        <button type="button" class="cut-field-label" data-hint="leadInSide"></button>
+        <div class="cut-presets cut-lead-sides"></div>
       </div>
       <div class="cut-row" data-row="rasterAngle">
         <button type="button" class="cut-field-label" data-hint="rasterAngle"></button>
@@ -202,17 +223,21 @@ export function createCutPanel(hostEl, opts = {}) {
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
   const clearTrigger = $('.cut-clear-trigger'), clearPop = $('.cut-clear-pop'), clearIc = $('.cut-clear-ic'), clearCur = $('.cut-clear-cur'); // TASK 745
   const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
+  const leadModesWrap = $('.cut-lead-modes'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'); // TASK 775
   // TASK 770: every row's label and hint (hint.js; the texts: param-hints.js). A row's label is its trigger; a checkbox row (its label toggles the box) gets a
   // small "i" beside its text. The hint line goes under the row's field; the row's inputs / dropdown / Hold part choice are described by it (aria-describedby).
   holdModesWrap.setAttribute('role', 'group');
+  leadModesWrap.setAttribute('role', 'group'); leadSidesWrap.setAttribute('role', 'group'); // TASK 775
   const hints = {};
   for (const t of card.querySelectorAll('[data-hint]')) {
     const row = t.closest('.cut-row, .cut-field'), check = t.closest('.cut-check');
     hints[t.dataset.hint] = mountHint({ id: t.dataset.hint, trigger: check ? null : t, labelEl: check ? t : null, after: row.lastElementChild,
-      fields: [...row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger, .cut-hold-modes')] });
+      fields: [...row.querySelectorAll('input, .cut-type-trigger, .cut-clear-trigger, .cut-shape-trigger, .cut-hold-modes, .cut-lead-modes, .cut-lead-sides')] });
   }
   hints.holdPart.trigger.id = 'cut-hold-label';
   holdModesWrap.setAttribute('aria-labelledby', 'cut-hold-label');
+  hints.leadIn.trigger.id = 'cut-lead-label'; leadModesWrap.setAttribute('aria-labelledby', 'cut-lead-label'); // TASK 775
+  hints.leadInSide.trigger.id = 'cut-lead-side-label'; leadSidesWrap.setAttribute('aria-labelledby', 'cut-lead-side-label');
   // TASK 770: a menu row = its icon, its name and (a second, smaller line) its hint; the name and the hint from the table
   const optionBody = (opt, icon, param, id, nameClass = '') => {
     opt.innerHTML = `${icon}<span class="cut-opt-text"><span class="cut-opt-name ${nameClass}"></span></span>`;
@@ -220,7 +245,7 @@ export function createCutPanel(hostEl, opts = {}) {
     opt.querySelector('.cut-opt-text').appendChild(optionHint(card.ownerDocument, choiceId(param, id)));
   };
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, record: null, note: [] };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInLength: null, leadInSide: 'outside', record: null, note: [] };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop, clearPop];
@@ -287,6 +312,7 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'tabWidth' ? (Number(current.tabWidth) > 0 ? Number(current.tabWidth) : holdDefaults(docUnit()).tabWidth)
     : field === 'holdThickness' ? (Number(current.holdThickness) > 0 ? Number(current.holdThickness) : holdDefaults(docUnit()).thickness)
     : field === 'finishAllowance' ? (current.finishAllowance != null && Number(current.finishAllowance) >= 0 ? Number(current.finishAllowance) : allowanceDefault(docUnit())) // TASK 745
+    : field === 'leadInLength' ? (Number(current.leadInLength) > 0 ? Number(current.leadInLength) : Number(current.toolDia) || 0) // TASK 775: none set = one bit diameter (#core leadInSettings)
     : (Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm);
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
   // TASK 714: the STEP DEPTH of a stepped cut (doc unit in, base mm stored)
@@ -385,6 +411,9 @@ export function createCutPanel(hostEl, opts = {}) {
   unitless('stepover', stepoverInput, 'stepover');
   unitless('rasterAngle', angleInput, 'raster angle');
   stepperFor('finishAllowance', allowanceInput, 'finish allowance', { box: allowanceInput.closest('.cut-box') });
+  // TASK 775: the lead-in leg's length (doc unit in, base mm stored; > 0 only, as the other sizes)
+  leadLengthInput.addEventListener('change', () => { const n = parseUnit(leadLengthInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('leadInLength', n); else renderFields(); });
+  stepperFor('leadInLength', leadLengthInput, 'lead-in length', { box: leadLengthInput.closest('.cut-box') });
 
   // Re-format the displayed values (BASE mm → doc unit). Called on selection change AND on DOC_UNIT change (re-label).
   const renderFields = () => {
@@ -409,7 +438,8 @@ export function createCutPanel(hostEl, opts = {}) {
     card.querySelector('.cut-row[data-row="holdPart"]').style.display = hold ? '' : 'none';
     card.querySelector('.cut-row[data-row="tabCount"]').style.display = hold === 'tabs' ? '' : 'none';
     card.querySelector('.cut-row[data-row="tabWidth"]').style.display = hold === 'tabs' ? '' : 'none';
-    card.querySelector('.cut-row[data-row="holdThickness"]').style.display = hold === 'tabs' || hold === 'skin' ? '' : 'none';
+    card.querySelector('.cut-row[data-row="holdThickness"]').style.display = (hold === 'tabs' && tabsHaveThickness(current.cutType)) || hold === 'skin' ? '' : 'none'; // TASK 775: an On line cut's tabs are uncut gaps (no thickness)
+    hints.tabWidth.refresh({ online: Boolean(hold) && !tabsHaveThickness(current.cutType) });
     hints.holdThickness.setId(hold === 'skin' ? 'skinThickness' : 'holdThickness'); // TASK 770: the row is the skin's thickness with Onion skin
     renderPresets(holdModesWrap, hold ? HOLD_PRESETS : [], 'holdPart', hold); // hidden rows keep no preset buttons
     renderPresets(countPresetsWrap, hold === 'tabs' ? COUNT_PRESETS : [], 'tabCount', Number(current.tabCount) >= 1 ? Number(current.tabCount) : 'auto');
@@ -431,6 +461,18 @@ export function createCutPanel(hostEl, opts = {}) {
     allowanceInput.value = fieldText(fieldBase('finishAllowance'));
     loopInput.checked = computed && current.loop === true;
     hints.finishAllowance.refresh({ loop: current.loop === true }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js)
+    // TASK 775: the Lead-in row on an On line OUTLINE (a closed loop, not an open line; not with Tabs: the strokes have their own ends) and on a programmed pocket
+    // with Loop on; On: its Length row (+ Side on an On line outline)
+    const isPocket = Boolean(curDecl && curDecl.id === 'pocket');
+    const leadRow = declares('leadIn') && (isPocket ? computed && current.loop === true : current.kind !== 'chain' && hold !== 'tabs');
+    const leadOn = leadRow && current.leadIn === true;
+    card.querySelector('.cut-row[data-row="leadIn"]').style.display = leadRow ? '' : 'none';
+    card.querySelector('.cut-row[data-row="leadInLength"]').style.display = leadOn ? '' : 'none';
+    card.querySelector('.cut-row[data-row="leadInSide"]').style.display = leadOn && declares('leadInSide') ? '' : 'none';
+    renderPresets(leadModesWrap, leadRow ? LEAD_PRESETS : [], 'leadIn', current.leadIn === true);
+    renderPresets(leadSidesWrap, leadOn && declares('leadInSide') ? SIDE_PRESETS : [], 'leadInSide', current.leadInSide);
+    leadLengthInput.value = fieldText(fieldBase('leadInLength'));
+    hints.leadIn.refresh({ pocket: isPocket });
     const angle = Number.isFinite(Number(current.rasterAngle)) && current.rasterAngle !== null ? Number(current.rasterAngle) : POCKET_CLEARING.rasterAngle;
     angleInput.value = String(Math.round(angle * 100) / 100);
     renderPresets(anglePresetsWrap, clearing === 'raster' ? ANGLE_PRESETS : [], 'rasterAngle', angle);
@@ -465,10 +507,11 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); for (const h of Object.values(hints)) h.close(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); for (const h of Object.values(hints)) h.close(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInLength: null, leadInSide: 'outside', record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
+      leadIn: rec.leadIn === true, leadInLength: rec.leadInLength ?? null, leadInSide: rec.leadInSide === 'inside' ? 'inside' : 'outside', // TASK 775
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;

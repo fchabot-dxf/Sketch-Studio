@@ -35,8 +35,10 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t) } : null); // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take
     opList.refresh();
   };
-  // TASK 724: the card's stepped note is text built from the display precision when the card is updated: a precision change rebuilds it (the stage lives as long as the page)
-  SettingsManager.subscribe((setting) => { if (isPrecisionKey(setting)) refreshCutPanel(); else if (setting === 'DOC_UNIT') opList.refresh(); }); // TASK 743: the list's lengths are in the doc unit
+  // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
+  // precision, TASK 775: the DOCUMENT UNIT, and a key-less change: settings loaded / reset / arriving from another device) rebuilds the card with its notes and
+  // the operations list (refreshCutPanel refreshes both), exactly when the card's fields re-label (the stage lives as long as the page)
+  SettingsManager.subscribe((setting) => { if (setting === null || setting === 'DOC_UNIT' || isPrecisionKey(setting)) refreshCutPanel(); });
   // TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second
   // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset).

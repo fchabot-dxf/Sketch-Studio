@@ -57,9 +57,9 @@ const LOOP_RECS = {
 };
 const HEAVY_RECS = {
   spiral: rec('pocket', { clearing: 'linked', toolDia: 25.4, stepover: 40, finishAllowance: 0.5 }),
-  spiralLoop: rec('pocket', { clearing: 'linked', toolDia: 25.4, stepover: 40, finishAllowance: 0.5, loop: true }),
   rasterLoop: rec('pocket', { clearing: 'raster', toolDia: 25.4, stepover: 40, finishAllowance: 0.5, loop: true, rasterAngle: 0 }),
-  morphedLoop: rec('pocket', { clearing: 'morphed', toolDia: 25.4, stepover: 40, finishAllowance: 0.5, loop: true }),
+  // TASK 804: no spiralLoop / morphedLoop: the Spiral's and the Morphed spiral's Loop are the gradual double spiral now (changed on purpose; checked in
+  // tests/pocket-nocross-804-node.test.js), so their base facets no longer apply
 };
 function facets(st, entries, stripMarks = false) {
   const pv = shaperPreviewOf(st, entries);

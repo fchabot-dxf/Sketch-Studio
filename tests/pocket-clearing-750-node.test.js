@@ -91,11 +91,15 @@ for (const [name, mk] of Object.entries(SHAPES)) {
   const st = mk(), reg = regionOf(st);
   for (const pattern of ['linked', 'raster', 'morphed']) {
     const off = plan(reg, pattern), on = plan(reg, pattern, { loop: true }), tag = `${name} ${pattern}`;
-    if (pattern === 'morphed' && (name === 'island' || name === 'dumbbell')) {
-      eq([on.refused, off.refused], [off.refused, name === 'island' ? 'morphed islands' : 'morphed splits'], `${tag}: still refused with its reason, Loop or not`);
+    if (pattern === 'morphed' && name === 'dumbbell') continue; // TASK 804: morphed per area, its Loop checked in tests/pocket-nocross-804-node.test.js
+    if (pattern === 'morphed' && name === 'island') {
+      eq([on.refused, off.refused], [off.refused, 'morphed islands'], `${tag}: still refused with its reason, Loop or not`);
       eq(elementsOf(exportOf(st, POCKET({ clearing: pattern, loop: true }))).map((e) => e.cutType), ['pocket'], `${tag}: cut Freehand (the note says why)`);
       continue;
     }
+    // TASK 804: the Spiral's and the Morphed spiral's Loop are the GRADUAL double spiral (zero crossings, the old interleave replaced): checked in
+    // tests/pocket-nocross-804-node.test.js; Raster keeps 750's checks here
+    if (pattern !== 'raster') continue;
     eq([on.refused, on.loopRefused, on.loop, off.loop], [null, null, true, false], `${tag}: Loop on is programmed`);
     eq(on.loopCount, LOOPS[pattern][name], `${tag}: ${LOOPS[pattern][name]} closed loop(s), one per chain`);
     ok(on.clear.every((c) => c.role === 'loop' && c.closed && key(c.points[0]) === key(c.points.at(-1))), `${tag}: every loop is closed (first point == last point)`);
@@ -156,9 +160,13 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     // allowance 0: no turn written twice
     {
       const on0 = plan(reg, pattern, { loop: true, finishAllowance: 0 }), off0 = plan(reg, pattern, { finishAllowance: 0 });
+      // TASK 804: with no allowance the L's innermost ring is a sliver whose morphed turn crossed itself at its tip (0.008 mm): refused, never cut crossing
+      if (off0.refused === 'morphed area') { eq([on0.refused, name, pattern], ['morphed area', 'L', 'morphed'], `${tag}: allowance 0: refused (its turns would cross)`); }
+      else {
       const ringsOn0 = on0.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind !== 'pass').length, 0);
       const ringsOff0 = pattern === 'linked' ? off0.loops : pattern === 'raster' ? off0.cleanup : 1;
       eq(ringsOn0, ringsOff0, `${tag}: allowance 0: ${ringsOff0} turn(s), none written twice (the last ring IS the finish turn)`);
+      }
     }
     // the export: closed on-line paths (one per loop, at the full depth) + 1 guide start mark (TASK 778)
     const els = elementsOf(exportOf(st, POCKET({ clearing: pattern, loop: true })));

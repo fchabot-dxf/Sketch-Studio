@@ -263,10 +263,12 @@ export function clearingAvailability(key, storedRec, state, loops, loopPolys) {
 /** TASK 745: the words of a refusal / a disabled choice. */
 export const CLEARING_REFUSED = {
   islands: 'has islands: use Spiral or Raster',
-  splits: 'splits at a neck narrower than the bit: use Spiral or Raster',
+  // TASK 804: a pocket whose rings split is no longer refused (one morphed spiral per area); what remains refused says what really happens
+  area: 'the morphed turns of one area would cross each other: use Spiral or Raster',
   'morphed islands': 'has islands: use Spiral or Raster',
-  'morphed splits': 'splits at a neck narrower than the bit: use Spiral or Raster',
+  'morphed area': 'the morphed turns of one area would cross each other: use Spiral or Raster',
   'raster join': 'a raster pass cannot be joined to the next inside the pocket; cut as open passes + the wall',
+  'loop cross': 'its way back would cross the turns on this shape; cut as open paths + the wall', // TASK 804: never a crossing loop
   'islands close': 'an island is closer to the wall or to another island than the bit: the finish pass would cut it',
   'bit too big': 'the bit does not fit in the pocket',
   'no bit': 'set a bit diameter',
@@ -277,11 +279,11 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  *  pocket has islands) + wall"), "raster 0°: 22 passes + 1 ring + wall", "morphed spiral: 13 turns + wall"; TASK 750 Loop on: the turns + wall, then
  *  "one closed loop" ("3 closed loops (the pocket has islands)"; TASK 775: a closed loop has no start point on the Origin, so nothing says where it
  *  starts or ends). */
-const LINES_WHY = { splits: ' (the pocket narrows)', islands: ' (the pocket has islands)' };
+const LINES_WHY = { splits: ' (the pocket narrows: one per area)', islands: ' (the pocket has islands)' }; // TASK 804: "one per area"
 export function clearingWords(sum) {
   if (!sum || sum.refused) return null;
   const what = sum.pattern === 'raster' ? `raster ${angleText(Number(sum.settings.angle), { show: 'deg' })}: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
-    : sum.pattern === 'morphed' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}`
+    : sum.pattern === 'morphed' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}${!sum.loop && sum.lines > 1 ? ` in ${sum.lines} paths${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}` : ''}` // TASK 804: one per area
     : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.loop ? '' : ` in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`}`;
   if (!sum.loop) return `${what} + wall`;
   const why = sum.linesWhy && sum.loopCount > 1 ? LINES_WHY[sum.linesWhy] : '';

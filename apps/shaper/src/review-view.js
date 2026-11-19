@@ -8,6 +8,7 @@ import { POCKET_CLEARING } from '#core/pocket-clearing.js'; // TASK 778: pocket 
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { reviewGridSpec, designCanvasColors, gridMaterialSource, GRID_FADE } from './review-grid.js';
 import { mountDisclosure, isPhone, CARET_SVG } from './disclosure.js'; // TASK 757: the info folds on a phone (the Operations sheet's fold)
+import { createOrbitStage } from './orbit-stage.js'; // TASK 808: the one three.js stage (renderer, lights, camera, orbit navigation) the Review and the STL Orient view share
 
 export const TILE_MM = 400;        // one repeat of the birch image covers 400 x 400 mm of board (a plausible plywood grain scale)
 export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).href;
@@ -139,23 +140,8 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  host.appendChild(renderer.domElement);
-  const scene = new THREE.Scene();
+  const { renderer, scene, sun, camera, controls, size } = createOrbitStage(THREE, OrbitControls, host); // TASK 808: the stage the STL Orient view shares (orbit-stage.js)
   scene.background = new THREE.Color(); // TASK 754: the Design canvas's paper (applyGridLook)
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x6b6258, 1.1));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.4);
-  scene.add(sun, sun.target);
-  const camera = new THREE.PerspectiveCamera(35, 1, 1, 100000);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = false; // on-demand rendering: no animation loop to drive damping
-  // TASK 729: Fusion-like navigation, declared here once: left drag = orbit (Shift / Ctrl + left = pan, OrbitControls' own modifier rule),
-  // MIDDLE drag = pan (Fusion), right drag = pan; the wheel zooms toward the cursor; touch: one finger orbits, two fingers pan + pinch-zoom.
-  // OrbitControls already cancels the canvas context menu, so a right drag pans.
-  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
-  controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
-  controls.zoomToCursor = true;
 
   // vertex colours are the grey DEPTH multiplier; material.color is the tint (the flat colour, white under a texture). TASK 729: the two
   // materials are made once and only their parameters change with the look (applyLook), so a switch never touches the geometry.
@@ -314,12 +300,6 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     if (!group) return;
     group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isSprite || o.isLine || o.isLineSegments) o.material.dispose(); });
     scene.remove(group); group = null;
-  }
-
-  function size() {
-    const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.updateProjectionMatrix();
   }
 
   function place(dir, up) {

@@ -4,7 +4,8 @@
 //     (both ways), loop polygons, chain paths, Shaper downloads (every loop Outside + every chain On line; every loop a Spiral pocket; every loop Outside
 //     with tabs; the Fusion import's own plan), 3D Review footprints and SketchStudio SVG / DXF as the digest written on origin/main 97a5dba (before this
 //     task) in tests/fixtures/bezier-loops-761/no-bezier-digest.json. `node tests/bezier-loops-761-node.test.js --write-digest` rewrites that file (only
-//     ever run on the base commit).
+//     ever run on the base commit). TASK 786: its Shaper download facets (shaperOutside / shaperSpiral / shaperTabs / download) re-written by the 786 exporter,
+//     every change explained (WORK-LOG TURN 786): the page grown to hold every written element, the start mark stroke-only, a mixed-kind hole wound opposite.
 //  2. findLoops: a bezier is an EDGE; the angular sort at a node uses each curve's TANGENT there, the bounded test the curve's real area: line + bezier,
 //     bezier + bezier, arc + its chord, a lens of two arcs, bezier + line two-edge loops, a bezier outline with a hole, nesting; areas and orientation.
 //  3. ONE geometry per curve kind (#core/curve-kinds.js): containment / interior point on curved loops, the export's cubic `C` (round trip within 1e-6),
@@ -124,7 +125,7 @@ if (WRITE) {
   let n = 0;
   for (const [name, d] of Object.entries(base)) {
     if (d.bezier) continue; // a drawing with a bezier is what this task changes
-    eq(digest[name], d, `${name}: no bezier -> every facet bit-identical to origin/main 97a5dba`);
+    eq(digest[name], d, `${name}: no bezier -> every facet bit-identical to origin/main 97a5dba (TASK 786: its downloads to the 786 exporter)`);
     n++;
   }
   console.log(`no-bezier drawings bit-identical: ${n} (with a bezier, expected to change: ${Object.values(base).filter((d) => d.bezier).length})`);

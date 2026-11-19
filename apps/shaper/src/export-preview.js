@@ -336,14 +336,13 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       }
       // TASK 745: a programmed pocket's islands (outside cuts, black) and then its clearing paths in FRONT of everything (its wall is an inside cut with the
       // file's white fill: the paths written before it and the islands moved back by the rule above would be hidden); display only, the element keeps the
-      // paint it inherited (copied from its <g>). TASK 778: the pocket start mark sits on top with fill="none" so the crosshair target reads crisply.
+      // paint it inherited (copied from its <g>). TASK 778: the pocket start mark sits on top (TASK 786: the file itself writes it fill="none", stroke-only).
       const front = [...items.filter((it) => it.clear && it.clear.role === 'island'), ...items.filter((it) => it.clear && CLEAR_PATH_ROLES.has(it.clear.role)), ...items.filter((it) => it.clear && it.clear.role === 'start')];
       if (front.length) {
         const top = doc.createElementNS(SVG_NS, 'g'); top.setAttribute('class', 'rv2d-front');
         layer.appendChild(top);
         for (const it of front) {
           for (const name of ['fill', 'stroke']) { const v = paintOf(it.el, name); if (v !== null && !it.el.hasAttribute(name)) it.el.setAttribute(name, v); }
-          if (it.clear && it.clear.role === 'start') it.el.setAttribute('fill', GUIDE_FILL);
           top.appendChild(it.el);
         }
       }

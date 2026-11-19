@@ -8,6 +8,7 @@
 
 import { buildNodeMap } from './loop-finder.js';
 import { curveKind, curvePointsFrom, num, sampleArc } from './curve-kinds.js'; // TASK 761: each curve kind's geometry, declared once
+import { pathSignedArea } from './path-d.js'; // TASK 786: the signed area of a WRITTEN path (the hole winding rule)
 
 export { num, sampleArc }; // TASK 761: moved to #core/curve-kinds.js (the per-kind declaration); re-exported for their callers
 
@@ -142,14 +143,21 @@ export function loopToPathD(loop, state, { reverse = false } = {}) {
   return d + ' Z';
 }
 
-// compoundPathD(outerLoop, holeLoops, state) — TASK 456: THE one place a compound path "d" is built (combined profiles, pockets
-// with islands, outside/inside profiles with holes): the outer loop plus each hole wound the OPPOSITE way, exactly like Shaper
-// Studio, so it fills correctly under BOTH nonzero (the default, so no fill-rule attribute is needed) and evenodd. '' when the
-// outer is missing.
-export function compoundPathD(outerLoop, holeLoops, state) {
-  const outerD = loopToPathD(outerLoop, state);
+// compoundPathD(outerLoop, holeLoops, state, { outerD }) — TASK 456: THE one place a compound path "d" is built (combined profiles, pockets
+// with islands, outside/inside profiles with holes, TASK 786: a stepped pocket's terraces, whose outer is the terrace's own outline `outerD`): the
+// outer loop plus each hole wound the OPPOSITE way, exactly like Shaper Studio, so it fills correctly under BOTH nonzero (the default, so no
+// fill-rule attribute is needed) and evenodd. TASK 786: the direction is decided HERE from the actual signed area of each WRITTEN sub-path
+// (#core/path-d): a hole is written as walked when its area's sign is already opposite to the outer's, else walked the other way. The loops' own
+// directions differ by kind (a face of lines / arcs / beziers is wound one way, a circle loop the other: #core/loop-finder, loopToPathD), so a
+// blind reversal filled a circle island in a rect pocket (and a rect island in a circle pocket). '' when the outer is missing.
+export function compoundPathD(outerLoop, holeLoops, state, { outerD = loopToPathD(outerLoop, state) } = {}) {
   if (!outerD) return '';
-  return [outerD, ...(holeLoops || []).map((hl) => loopToPathD(hl, state, { reverse: true })).filter(Boolean)].join(' ');
+  const outerSign = Math.sign(pathSignedArea(outerD));
+  const holeD = (hl) => {
+    const d = loopToPathD(hl, state);
+    return d && Math.sign(pathSignedArea(d)) === outerSign ? loopToPathD(hl, state, { reverse: true }) : d;
+  };
+  return [outerD, ...(holeLoops || []).map(holeD).filter(Boolean)].join(' ');
 }
 
 // chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines / arcs / beziers).

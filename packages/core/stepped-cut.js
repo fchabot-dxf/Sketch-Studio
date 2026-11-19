@@ -26,7 +26,7 @@
 //  * An outline that equals one ring (read or interpolated) keeps that ring's exact walk (lines / arcs / circles) for the export; an outline
 //    the boolean actually made (an undercut, rings that cross) is the Clipper polygon (#core/plot/clip.js, 1e-3 mm grid).
 import { regionsFromRings, intersectRegions, unionRegions } from './plot/clip.js';
-import { num, polyToPathD, loopToPathD } from './loop-geometry.js';
+import { num, polyToPathD, compoundPathD } from './loop-geometry.js';
 import { deriveProfileCuts } from './profile-model.js';
 import { applyHoldPart } from './hold-part.js'; // TASK 742: tabs / onion skin on a plain Outside / Inside cut
 import { applyPocketClearing } from './pocket-clearing.js'; // TASK 745: a plain Pocket's programmed clearing (Spiral / Raster / Morphed spiral)
@@ -444,8 +444,7 @@ export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
       const terrace = { index, count: T.steps.length, depth: st.depth, undercutBelow: T.undercutBelow, label: slope.label || null };
       const r = { ...outer.rec, cutDepth: st.depth };
       if (outer.isCompound) {
-        const holesD = (outer.holeLoops || []).map((hl) => loopToPathD(hl, state, { reverse: true })).filter(Boolean);
-        const full = [d, ...holesD].join(' ');
+        const full = compoundPathD(outer.outerLoop, outer.holeLoops, state, { outerD: d }); // TASK 786: each island wound opposite to THIS terrace's outline
         terraced.push({ ...outer, outerPoly: polygon, d: full, geom: { tag: 'path', a: `d="${full}"` }, rec: r, terrace });
       } else {
         const c = o.walk && o.walk.length === 1 && o.walk[0].type === 'circle' ? o.walk[0] : null;

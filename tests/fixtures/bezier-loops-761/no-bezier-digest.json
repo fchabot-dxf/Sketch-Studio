@@ -10,7 +10,7 @@
   "studioSvg": "ef9fa2cc2e4fae82f873db69",
   "studioDxf": "0b99e8b6fbadeec4966155c4",
   "shaperSpiral": "26d2ebd206fc2227c28d27ba",
-  "shaperTabs": "6343aa94ac12b60394a2cb6f"
+  "shaperTabs": "0c90dba74054140aa437e429"
  },
  "pattern-params-694-old.document.json": {
   "bezier": false,
@@ -23,7 +23,7 @@
   "studioSvg": "429adc76f906cec7a516dfbb",
   "studioDxf": "5a73fb565f20ef948a5bc1e2",
   "shaperSpiral": "98b1e071dd828a0b70ae0144",
-  "shaperTabs": "371d6f67fb6434c93a9e1120"
+  "shaperTabs": "bd58d6dd34fdc1d4b872a537"
  },
  "pre-577-two-sketches.document.json": {
   "bezier": false,
@@ -49,7 +49,7 @@
   "studioSvg": "d4392188f089a75be695f5ef",
   "studioDxf": "acb147530e1efa84544c9350",
   "shaperSpiral": "e85d56441cb2d9d7ab7b574d",
-  "shaperTabs": "2b43dcb3f4c1e97d6c272b6c"
+  "shaperTabs": "4c71c4c7dd0703eb119de3ab"
  },
  "dimension/owner-drag-frozen-589.document.json": {
   "bezier": false,
@@ -62,7 +62,7 @@
   "studioSvg": "53168d744e1a806a55987702",
   "studioDxf": "f89eea93709a3a79b1a62a23",
   "shaperSpiral": "890a607277bddd5c50652ffd",
-  "shaperTabs": "2e2348649333fa7dd0cd2467"
+  "shaperTabs": "0d02cdfaec34cb1792d2af0d"
  },
  "dimension/owner-rect-line-line-589.document.json": {
   "bezier": false,
@@ -75,7 +75,7 @@
   "studioSvg": "8704c4b894ed0d19322374f2",
   "studioDxf": "7a325ddbf0419834a5e2be92",
   "shaperSpiral": "82d2ad363c23ba800af317e1",
-  "shaperTabs": "ea996f3bab7ecc99ec2c47d0"
+  "shaperTabs": "6606d15fb311df18523d41bf"
  },
  "drag/owner-two-arcs-575.json": {
   "bezier": false,
@@ -84,11 +84,11 @@
   "loopPaths": "4f832ccbae45221f8d54ef92",
   "loopPolys": "ffe96a12d599069371d480be",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "4f4347569011ecee8a59b6b6",
+  "shaperOutside": "92624b03ea123308c1646465",
   "studioSvg": "bd07b617dfcfef831aa41032",
   "studioDxf": "00d64b40234324cbeeaa45ea",
-  "shaperSpiral": "7e52f8a8e08fb8525dc2ab01",
-  "shaperTabs": "65c6a0d599f3aa67d0fc57fe"
+  "shaperSpiral": "e1f22ca2f12ae3590f123514",
+  "shaperTabs": "5f18b043d8107b2e6f7291f5"
  },
  "report/drag-frozen.json": {
   "bezier": false,
@@ -101,7 +101,7 @@
   "studioSvg": "53168d744e1a806a55987702",
   "studioDxf": "f89eea93709a3a79b1a62a23",
   "shaperSpiral": "890a607277bddd5c50652ffd",
-  "shaperTabs": "2e2348649333fa7dd0cd2467"
+  "shaperTabs": "0d02cdfaec34cb1792d2af0d"
  },
  "report/line-line-driven.json": {
   "bezier": false,
@@ -114,7 +114,7 @@
   "studioSvg": "6fb5ff161ba2207095dead8f",
   "studioDxf": "28426498479a24a09f07b9e8",
   "shaperSpiral": "92bfd5e177c925e8ecc28f3e",
-  "shaperTabs": "92598f0ca5fccd84b566e138"
+  "shaperTabs": "d452e3f90827a7d23442f624"
  },
  "report/midpoint-move.json": {
   "bezier": false,
@@ -126,8 +126,8 @@
   "shaperOutside": "3bf73b29184dc6e8b5046753",
   "studioSvg": "8bc8cddc87d7f266c1455da2",
   "studioDxf": "db575551fe00e54e5b666598",
-  "shaperSpiral": "20cf919ffcf29173aa21f56a",
-  "shaperTabs": "bd6cbe7128eefb4727901465"
+  "shaperSpiral": "de0feffbdfdfaf4ea2cb9d83",
+  "shaperTabs": "5131d079c70c6ad56da67ed9"
  },
  "legacy-angles#0 drawing d4-triangle.js": {
   "bezier": false,
@@ -1643,11 +1643,11 @@
   "loopPaths": "765f887935a8202ba633c0d3",
   "loopPolys": "69a1266f2e200494df548f0b",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "134a22bcc109e85a0918b10b",
+  "shaperOutside": "3f55b5efd5291cb5f9bd19f4",
   "studioSvg": "a6698197de2139c91c76b66b",
   "studioDxf": "fef640de10a4887425fa4274",
-  "shaperSpiral": "4765beebe821463b6601a172",
-  "shaperTabs": "bde206d23bb8ec02c75f33ae"
+  "shaperSpiral": "f12b6e611dc5bab85fa8efd7",
+  "shaperTabs": "87e904a31bc3eafe3b16a8a8"
  },
  "dxf/close-path-760-gap.dxf": {
   "bezier": false,
@@ -1656,7 +1656,7 @@
   "loopPaths": "4f53cda18c2baa0c0354bb5f",
   "loopPolys": "4f53cda18c2baa0c0354bb5f",
   "chainPaths": "3f34707112502773de1b9029",
-  "shaperOutside": "acde39105f0ac9bde49cd56f",
+  "shaperOutside": "12e134914b4cb8ef98e918dc",
   "studioSvg": "c659890834d693cb17f80b9b",
   "studioDxf": "fd772fca0b476808543bbebc",
   "shaperSpiral": "e69569d5abd58d32379131d5",
@@ -1673,7 +1673,7 @@
   "studioSvg": "6b0126f619d7fa61f69781c7",
   "studioDxf": "be9f8c37ba4545421c01c302",
   "shaperSpiral": "23cea949d4ef004763161fad",
-  "shaperTabs": "2a2b21bb76f51af24a141f03"
+  "shaperTabs": "d5b57180a30aa27269d2303a"
  },
  "dxf/part-mm.dxf": {
   "bezier": true,
@@ -1765,11 +1765,11 @@
   "loopPaths": "7e9d971753b1cddf2e1e771c",
   "loopPolys": "c17c45467028804268317446",
   "chainPaths": "4f53cda18c2baa0c0354bb5f",
-  "shaperOutside": "fdd670239a76399199200136",
+  "shaperOutside": "3f4842c814ce62e4dfd78c54",
   "studioSvg": "77e96b479641289e39263b50",
   "studioDxf": "1f5e2d4d94756f2a9f6aa393",
   "plan": "5f16a10e5848c9bc6bb6bde8",
-  "download": "10ff88769945a9a888658516",
+  "download": "9e60399ac7c15e576885901a",
   "relief": "a11e322fee0c84d2a99e0a94"
  },
  "fusion/sa7-slope/x1-pocket-chamfer-top-fillet-floor.json": {

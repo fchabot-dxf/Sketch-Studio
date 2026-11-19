@@ -24,20 +24,14 @@ import { docUnit } from '#core/settings-manager.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 
-// TASK 782 / 789: THE size rule. A size (a length a drawing tool's box is typed; the value of a dimension that is a shape's size, from any path:
-// typed, a formula, a parameter re-evaluating it) must be more than 0: 0 collapses the line / circle and a negative one is no size. ONE message,
-// shown by the drawing tools' box (numeric-input-manager.js SIZE_REFUSAL_HINT) and by every dimension edit's refusal (commitDimensionEdits).
-export const SIZE_REFUSAL = 'a size must be more than 0';
+// TASK 782 / 789 / 789b: THE length rule. A length (a size a drawing tool's box is typed; the value of ANY distance dimension, from any path: typed,
+// a formula, a parameter re-evaluating it; a radius / diameter, a line's length, a distance between two shapes' points, aligned / horizontal / vertical,
+// point-to-line, line-to-line) must be more than 0: 0 collapses a line / circle or puts two points on each other (owner ruling, turn 2465: points that
+// meet are the Coincident constraint's job) and a negative one is no length. ONE message, shown by the drawing tools' box (numeric-input-manager.js
+// SIZE_REFUSAL_HINT) and by every dimension edit's refusal (commitDimensionEdits). An OFFSET (#core/offset.js) and an ANGLE have their own rules.
+export const SIZE_REFUSAL = 'a length must be more than 0';
 /** null, or SIZE_REFUSAL when `v` (a number, base unit) is 0 or less. */
 export const sizeRefusal = (v) => (Number(v) <= 0 ? SIZE_REFUSAL : null);
-// A dimension that IS a size of one shape: a radius / diameter, or a line's length (an aligned distance between the line's own two ends). A distance
-// between points of different shapes is no size: 0 makes the points meet (Fusion, recorded in tests/fixtures/fusion-oracle/fusion-dim-edit.json).
-function isSizeDimension(state, c) {
-  if (c.type !== CONSTRAINT_TYPES.DISTANCE) return false;
-  if (c.isRadius) return true;
-  if (!Array.isArray(c.joints) || c.joints.length !== 2 || (c.dimMode && c.dimMode !== 'aligned')) return false;
-  return ((state && state.shapes) || []).some((s) => s && s.type === 'line' && Array.isArray(s.joints) && c.joints.every((j) => s.joints.includes(j)));
-}
 const STEP_FRACTION = 0.1;
 const MAX_EDIT_STEPS = 40;
 
@@ -91,13 +85,13 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   // values are refused, 190 / 270 / 360 accepted: the stored sector keeps opening the same way round as the value grows, past 180, see the
   // walk below). Refused before anything changes.
   // TASK 690: an OFFSET dimension takes any value but 0, a negative one putting the offset on the other side (#core/offset.js offsetValueRefusal).
-  // TASK 789: a dimension that is a shape's size (a radius / diameter, a line's length: isSizeDimension) takes the size rule (sizeRefusal).
+  // TASK 789b: every DISTANCE dimension takes the length rule (sizeRefusal): 0 and negative values are refused (owner ruling, turn 2465).
   for (let i = 0; i < edits.length; i++) {
     const e = edits[i];
     let why = null;
     if (e.c.type === CONSTRAINT_TYPES.ANGLE) why = !(Number(e.value) > 0) ? 'an angle must be more than 0 degrees' : !(Number(e.value) <= 360) ? 'an angle must be at most 360 degrees' : null;
     else if (e.c.type === CONSTRAINT_TYPES.OFFSET && !(Number(e.value) !== 0)) why = OFFSET_ZERO_REASON;
-    else if (isSizeDimension(state, e.c)) why = sizeRefusal(e.value);
+    else if (e.c.type === CONSTRAINT_TYPES.DISTANCE) why = sizeRefusal(e.value);
     if (why) return { reverted: true, clash: '', reason: why, culprit: { index: i, name: labelOf(e, i), reason: why } };
   }
   if (opts.refuseReference) {

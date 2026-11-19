@@ -1,7 +1,7 @@
 // TASK 789 bug 2 (hunt 784 #2): a dimension that is a shape's SIZE (a radius / diameter, a line's own length) never takes a value of 0 or less,
 // from ANY path: typed in the canvas box, a formula (fx) typed into it, or a parameter whose change re-evaluates its formula. The ONE size rule of
 // the drawing tools' boxes (task 782, #core/dimension-seams.js sizeRefusal) refuses it with the same message; nothing changes (values, formulas,
-// parameters, geometry, the undo history). A distance between points of two different shapes is no size: 0 still makes them meet, as in Fusion.
+// parameters, geometry, the undo history). Task 789b: every distance takes it (dimension-distance-789b-node.test.js).
 // Bug 3 (a saved collapsed dimension is repaired): dimension-collapsed-789-node.test.js. Node kit (SketchStudio, the real document load) + the
 // box's and the Parameters table's own commit path (previewDimensionInput / planChange -> applyParameterChange).
 import assert from 'node:assert';
@@ -9,7 +9,7 @@ import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { previewDimensionInput, planChange } from '#core/parameters.js';
 import * as seams from '#core/dimension-seams.js';
 const { applyParameterChange, refusalReason } = seams;
-const SIZE_MESSAGE = 'a size must be more than 0'; // the drawing tools' box hint (task 782) 'A size must be more than 0.'
+const SIZE_MESSAGE = 'a length must be more than 0'; // the one length rule (task 789b), also the drawing tools' box hint (task 782) 'A length must be more than 0.'
 
 let checks = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
@@ -81,18 +81,12 @@ try {
   ok(typeInto('d1', '12').ok, 'typing 12 is taken');
   near(circle().radius, 12, 'the circle takes 12');
 
-  // ---- a distance between points of two DIFFERENT lines is no size: 0 still makes the points meet (Fusion, the recorded oracle tests/fusion-dim-edit.test.js)
-  await openDoc(docOf([['a', { x: 0, y: 0, fixed: true }], ['b', { x: 30, y: 0, fixed: true }], ['p', { x: 40, y: 10 }], ['q', { x: 60, y: 30 }]],
-    [{ id: 'l1', type: 'line', joints: ['a', 'b'] }, { id: 'l2', type: 'line', joints: ['p', 'q'] }],
-    [{ type: 'distance', joints: ['b', 'p'], value: Math.hypot(10, 10), name: 'd1' }]));
-  const meet = typeInto('d1', '0');
-  ok(meet.ok, `a 0 distance between two lines' ends is taken (${JSON.stringify(meet)})`);
-  near(Math.hypot(J('p').x - J('b').x, J('p').y - J('b').y), 0, 'the points meet');
+  // (a distance between points of two DIFFERENT shapes takes the same rule since task 789b: dimension-distance-789b-node.test.js)
 
   // the ONE rule and message: the seam's and the drawing tools' box hint
   ok(seams.SIZE_REFUSAL === SIZE_MESSAGE, `the seam exports the one size message (${seams.SIZE_REFUSAL})`);
   const { SIZE_REFUSAL_HINT } = await import('#ui/numeric-input-manager.js');
-  ok(SIZE_REFUSAL_HINT === 'A size must be more than 0.', `the box hint is the same message (${SIZE_REFUSAL_HINT})`);
+  ok(SIZE_REFUSAL_HINT === 'A length must be more than 0.', `the box hint is the same message (${SIZE_REFUSAL_HINT})`);
 
   console.log(`PASS dimension-size-789: ${checks} checks`);
 } finally {

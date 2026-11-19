@@ -362,6 +362,20 @@
     #prepare-panel { bottom: 12px; display: flex; flex-direction: column; align-items: stretch; }
     #prepare-panel .cut-card { max-height: 100%; min-height: 0; }
     #prepare-panel .cut-rows { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: none; } /* no scrollbar: it would narrow every row; the wheel / a finger / the focus scroll it */
+    /* TASK 790: the STL card (src/stl-card.js): the cut card's look, FIRST in Prepare's right column while the design came from an STL (the cut card
+       shrinks under it); its header folds it (src/disclosure.js: open on a wide screen, folded on a phone) */
+    #prepare-panel .stl-card { position: relative; pointer-events: auto; box-sizing: border-box; flex: 0 0 auto; margin-bottom: 12px; background: var(--sk-prep-card-bg); border-radius: 14px; padding: 4px 14px 14px; color: var(--sk-prep-chip-text); font: 15px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; box-shadow: 0 8px 28px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 6px; }
+    #prepare-panel .stl-card[hidden], .stl-body[hidden] { display: none; }
+    #prepare-panel .stl-card[data-open="false"] { padding-bottom: 4px; }
+    .stl-head-row { display: flex; align-items: center; gap: 4px; }
+    .stl-head { all: unset; box-sizing: border-box; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 40px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .stl-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; color: var(--sk-prep-unit); }
+    .stl-body { display: flex; flex-direction: column; gap: 10px; }
+    .stl-row { display: flex; flex-direction: column; } /* laid out as the cut card's .cut-row (its own class: the cut card's rows stay the cut card's) */
+    .stl-card .cut-presets { margin-top: 0; }
+    .stl-card .stl-ups { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .stl-card .stl-units { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stl-size { font-size: 14px; font-weight: 600; padding-left: 12px; }
     /* TASK 455: the cut card, built to the owner-approved mock-up (values only): 200px card, #0A0A0B, 14px radius; 34px fields on
        #2A2B2D with 6px radius; labels 11px; values 15px/600 with a 11px lighter unit; popovers open to the LEFT with the blue
        focus border. The mock-up's font is IBM Plex Sans; the app loads no web font, so the closest system stack is used. */

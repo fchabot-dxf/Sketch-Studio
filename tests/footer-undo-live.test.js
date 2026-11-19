@@ -3,6 +3,7 @@
 // enabled and a real click brings it back; both disabled when there is nothing to do; titles / aria-labels; the ribbon has no Undo / Redo. Layouts: desktop
 // (30 px buttons), phone portrait 390 and 360 (44 px, inside the screen, the header scrolls sideways when too long, a real swipe moves it, every control can be
 // brought on screen, the app menu opens fully inside the screen), phone landscape 844x390 (header one row, buttons 44 px). Header screenshots: .evidence/618.
+import { FOOTER_PHONE_MIN_W } from '../packages/ui/footer-slot.js'; // TASK 776: THE phone footer width floor
 import assert from 'node:assert';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import fs from 'node:fs';
@@ -100,7 +101,7 @@ await (async () => {
           return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), footerConstruct: !!f.querySelector('#btn-construct-toggle'),
             cornerConstruct: cbr ? { w: cbr.width, h: cbr.height, l: cbr.left, r: cbr.right, t: cbr.top } : null, canvasH: cv.height,
             sk: cb ? { w: cb.width, h: cb.height, l: cb.left, r: cb.right, t: cb.top, vis: getComputedStyle(corner).display !== 'none', aria: corner.getAttribute('aria-label') } : null }; })()`);
-        for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= 35 && ft[k].h >= 43.5, tag + k + ' is a 44x44 (TASK 726: 56 wide before, narrowed so the Settings gear fits) touch target in the footer: ' + JSON.stringify(ft[k]));
+        for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= FOOTER_PHONE_MIN_W - 0.5 && ft[k].h >= 43.5, tag + k + ' is a 44x44 (TASK 726: 56 wide before, narrowed so the Settings gear fits) touch target in the footer: ' + JSON.stringify(ft[k]));
         assert.strictEqual(ft.footerConstruct, false, tag + 'Construction is NOT in the footer');
         assert(ft.cornerConstruct && ft.cornerConstruct.w >= 43.5 && ft.cornerConstruct.h >= 43.5, tag + 'Construction in .sk-canvas-corner is 44x44: ' + JSON.stringify(ft.cornerConstruct));
         assert(ft.fr.left >= -0.5 && ft.fr.right <= ft.vw + 0.5 && ft.fr.bottom <= ft.vh + 0.5, tag + 'the footer is inside the screen: ' + JSON.stringify(ft.fr));

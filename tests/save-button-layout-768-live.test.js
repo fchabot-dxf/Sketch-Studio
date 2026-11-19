@@ -9,6 +9,7 @@
 //   C. SketchStudio in depth (desktop): new -> an edit -> "not saved"; a press opens THE Save as dialog; Local -> "Saved to <file>"; an edit + a press writes it
 //      back -> saved; the stage buttons and the footer's buttons never move. Phone 390 (touch): an edit -> not saved; a TAP on the footer's button writes the file back -> saved; with 5 tabs the active
 //      tab and the "+" scrolled into view are reachable (the strip has no pinned button any more). THE spinner: role=status + text; with prefers-reduced-motion it does not turn.
+import { FOOTER_PHONE_MIN_W } from '../packages/ui/footer-slot.js'; // TASK 776: THE phone footer width floor
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -94,7 +95,7 @@ await (async () => {
         assert.ok(m.footer.r <= m.vw + 0.5, tag + 'the footer is inside the screen');
         // the browser keeps reporting the touch pointer after a touch layout until it reloads: the size rule follows the pointer the page reports
         if (!m.coarse) assert.deepStrictEqual([Math.round(m.save.w), Math.round(m.save.h), Math.round(m.av.w), Math.round(m.av.h)], [32, 32, 32, 32], tag + 'desktop: footer-sized 32 px');
-        else assert.ok(m.save.h >= 43.5 && m.av.h >= 43.5 && m.save.w >= 35 && m.av.w >= 35, tag + 'touch: 44 px high, at least 35 px wide ' + JSON.stringify([m.save, m.av]));
+        else assert.ok(m.save.h >= 43.5 && m.av.h >= 43.5 && m.save.w >= FOOTER_PHONE_MIN_W - 0.5 && m.av.w >= FOOTER_PHONE_MIN_W - 0.5, tag + 'touch: 44 px high, at least FOOTER_PHONE_MIN_W wide ' + JSON.stringify([m.save, m.av]));
         if (s.name === 'desktop-1440') await shot(`layout-${app.id}-desktop.png`, { x: 0, y: m.footer.t - 4, width: 1440, height: m.footer.b - m.footer.t + 8 });
         if (s.name === 'phone-360' || s.name === 'phone-390' || s.name.startsWith('landscape')) await shot(`layout-${app.id}-${s.name}.png`, { x: 0, y: m.footer.t - 4, width: s.w, height: m.footer.b - m.footer.t + 8 });
       }

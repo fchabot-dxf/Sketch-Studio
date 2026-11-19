@@ -3,6 +3,7 @@
 //  and beside the finger, the magnifier is on under a drawing finger, "Done" ends a Line chain (undo then removes the segment), the
 //  one touch snap boost, the phone layout, and the desktop (1400 px, mouse) staying as it was.
 import assert from 'node:assert';
+import { FOOTER_PHONE_MIN_W } from '../packages/ui/footer-slot.js'; // TASK 776: THE phone footer width floor
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
@@ -76,7 +77,8 @@ try {
       ribbonScroll: [document.querySelector('.sk-ribbon').scrollWidth, document.querySelector('.sk-ribbon').clientWidth] }; })()`);
   console.log('phone 390:', JSON.stringify(ph));
   assert.strictEqual(ph.coarse, true, 'the emulated phone is a coarse pointer');
-  for (const k of ['ribbonBtn', 'construct', 'recenter']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
+  for (const k of ['ribbonBtn', 'construct']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
+  assert.ok(ph.recenter[0] >= FOOTER_PHONE_MIN_W - 0.5 && ph.recenter[1] >= 44, `recenter (a footer button, TASK 776: nine share the row) is >= ${FOOTER_PHONE_MIN_W} wide and 44 high on a phone: ${ph.recenter}`);
   assert.ok(ph.handle && ph.handle[1] >= 44, `peeking drawer handle >= 44 px tall: ${ph.handle}`);
   assert.ok(parseFloat(ph.groupLbl[2]) >= 12 && ph.groupLbl[0] >= 44 && ph.groupLbl[1] >= 44, `the section name (the dropdown button) is >= 44x44 with >= 12 px text: ${ph.groupLbl}`);
   assert.ok(ph.ribbonLbl[0] <= 1 && ph.ribbonLbl[1] <= 1, `TASK 647: phone tool buttons are icon only (the label is visually hidden, still the accessible name): ${ph.ribbonLbl}`);

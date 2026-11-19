@@ -8,3 +8,8 @@ export const FOOTER_END_CLASS = 'sk-footer-end';
 export function findFooterEnd(doc = globalThis.document) {
   return doc ? doc.querySelector('.' + FOOTER_END_CLASS) : null;
 }
+
+/** The narrowest a footer button gets on a phone (px; its height stays 44). Nine buttons share one row there (undo, redo, delete, clear, fx, recenter, settings, save, account):
+ *  app-footer.js lets them shrink from 44 px down to this at 360 px wide, and in landscape uses it as THE width (so the cluster ends before a host's right-hand panel).
+ *  Tests assert against this number, never a copy of it. */
+export const FOOTER_PHONE_MIN_W = 35;

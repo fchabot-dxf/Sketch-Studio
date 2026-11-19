@@ -11,6 +11,7 @@
 //  - the page does not scroll; the SKETCHES box starts collapsed, a tap expands it inside the canvas, a tap collapses it;
 //  - SketchStudio: the status bar keeps only its icon buttons (Undo, Redo, Construction, Recenter, TASK 618), floating over the canvas's bottom edge; Log, Tune and the mag lens are folded away; Log is in the menu and opens the log; Export is in the menu, opens the
 //    Export view, and the header's Design button comes back.
+import { FOOTER_PHONE_MIN_W } from '../../packages/ui/footer-slot.js'; // TASK 776: THE phone footer width floor
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './cdp-browser.js';
 
@@ -118,7 +119,7 @@ export async function runPhoneLandscape(hostName) {
         if (await evalJs(`!!document.getElementById('btn-parameters')`)) {
             const pSel = `document.getElementById('btn-parameters')`;
             const pb = await rectOf(pSel);
-            assert(pb && pb.w >= 37.5 && pb.h >= 44 && (await hits(pSel, pb)), tag + 'the footer Parameters button: 44 px high (38 wide, TASK 776), not covered: ' + JSON.stringify(pb));
+            assert(pb && pb.w >= FOOTER_PHONE_MIN_W - 0.5 && pb.h >= 44 && (await hits(pSel, pb)), tag + 'the footer Parameters button: 44 px high (FOOTER_PHONE_MIN_W wide, TASK 776), not covered: ' + JSON.stringify(pb));
             await tap(pb);
             const win = await rectOf(`document.querySelector('.sk-pwin')`);
             assert.strictEqual(await evalJs(`${pSel}.getAttribute('aria-expanded')`), 'true', tag + 'a tap opens the Parameters window');
@@ -157,7 +158,7 @@ export async function runPhoneLandscape(hostName) {
           assert(c.left >= -0.5 && c.top >= -0.5 && c.right <= size.w + 0.5 && c.bottom <= size.h + 0.5, t + ' is inside the viewport: ' + JSON.stringify(c));
           const isHandle = /sk-sidebar-handle/.test(c.id);
           const strip = /sk-doctab/.test(c.id) || c.inStrip; // TASK 768: a control IN the strip (the Save button where the header is hidden) is a strip control. TASK 608 (owner ruling, relaxes 562): the tab strip is a thin 31 px row: every tab / x / + is at least 24 x 24 (WCAG 2.2 AA) and fills the row
-          const minW = isHandle ? 14 : (strip ? 24 : (c.inFooter ? 37.5 : 43.5)); // TASK 776: the footer's nine buttons (Save and the account too) are 38 px wide, 44 px high, so the cluster ends before a host's right-hand panel
+          const minW = isHandle ? 14 : (strip ? 24 : (c.inFooter ? FOOTER_PHONE_MIN_W - 0.5 : 43.5)); // TASK 776: the footer's nine buttons (Save and the account too) are FOOTER_PHONE_MIN_W wide, 44 px high, so the cluster ends before a host's right-hand panel
           const minH = strip ? 24 : 43.5;
           assert(c.w >= minW && c.h >= minH, t + ` target size (${Math.round(c.w)} x ${Math.round(c.h)})`);
           assert(c.free, t + ' is not covered by anything');

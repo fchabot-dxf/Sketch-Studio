@@ -1,5 +1,6 @@
 // tests/canvas-icon-buttons-live.test.js — TASK 615 / 618 / 619: Construction lives in .sk-canvas-corner beside Sketches (32 px mouse / 44 px coarse phone), Recenter stays in the app footer (32 px mouse / 56x44 phone); icon buttons only (no text), ON state shows, no overlap with .sk-browser.
 import assert from 'node:assert';
+import { FOOTER_PHONE_MIN_W } from '../packages/ui/footer-slot.js'; // TASK 776: THE phone footer width floor
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 const cdp = await launchBrowser({ tag: '615t', width: 1400, height: 900 });
@@ -53,7 +54,7 @@ try {
   assert.deepStrictEqual([c.w, c.h], [44, 44], 'a finger: Construction in canvas corner matches Sketches (44x44)');
   assert.deepStrictEqual([sk.w, sk.h], [44, 44], 'a finger: Sketches corner button is 44x44');
   assert.ok(c.r <= sk.l && Math.abs(c.t - sk.t) <= 1, 'Construction sits beside Sketches in .sk-canvas-corner: ' + JSON.stringify({ c, sk }));
-  assert.deepStrictEqual([r.w, r.h], [44, 44], 'a finger: Recenter in footer is 44 x 44 (TASK 726)');
+  assert.ok(r.w >= FOOTER_PHONE_MIN_W - 0.5 && r.h === 44, `a finger: Recenter in footer is 44 high, >= ${FOOTER_PHONE_MIN_W} wide (TASK 726; TASK 776: nine footer buttons share the row): ${r.w} x ${r.h}`);
   assert.ok(c.glyph >= 26 && r.glyph >= 26, `TASK 616: a finger: the glyph is >= 26 px of 44: ${c.glyph} / ${r.glyph}`);
   const clearP = await evalJs(`(() => { const box = document.querySelector('.sk-browser'); if (!box) return true; const b = box.getBoundingClientRect(); if (!b.width) return true; return ['btn-construct-toggle', 'btn-recenter-view'].every((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom; }); })()`);
   assert.ok(clearP, 'phone: no overlap with the SKETCHES box');

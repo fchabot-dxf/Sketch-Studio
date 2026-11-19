@@ -6,6 +6,7 @@
 //   - a real click / tap opens the window (aria-expanded="true", aria-haspopup="dialog"), a second one closes it (aria-expanded="false");
 //   - the ribbon has no Parameters button and no Inspect dropdown row for it (it lives in ONE place).
 // Trace: no Parameters button in its footer or ribbon. EVIDENCE_DIR (optional): cropped footer screenshots.
+import { FOOTER_PHONE_MIN_W } from '../packages/ui/footer-slot.js'; // TASK 776: THE phone footer width floor
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,7 +61,7 @@ await (async () => {
         const b = await info();
         assert.ok(b && b.footer && b.inView && b.free, `${t}: the Parameters button is in the footer, on screen and uncovered, no menu opened: ${JSON.stringify(b)}`);
         assert.strictEqual(b.after, 'btn-clear-sketch', `${t}: right after Clear sketch`);
-        assert.ok(b.h === form.size && b.w >= (form.touch ? 35 : form.size) && b.w === b.prevSize[0] && b.h === b.prevSize[1], `${t}: ${form.size} px tall, the size of its neighbour Clear sketch (${b.w} x ${b.h} vs ${b.prevSize})`);
+        assert.ok(b.h === form.size && b.w >= (form.touch ? FOOTER_PHONE_MIN_W - 0.5 : form.size) && b.w === b.prevSize[0] && b.h === b.prevSize[1], `${t}: ${form.size} px tall, the size of its neighbour Clear sketch (${b.w} x ${b.h} vs ${b.prevSize})`);
         assert.deepStrictEqual([b.label, b.popup, b.expanded], ['Parameters', 'dialog', 'false'], `${t}: aria-label, aria-haspopup, aria-expanded`);
         // the ribbon has no Parameters button, nor an Inspect dropdown row for it
         assert.strictEqual(await evalJs(`!document.querySelector('.sk-ribbon #btn-parameters, .sk-ribbon-sect-menu [data-id="btn-parameters"]')`), true, `${t}: not in the ribbon / Inspect`);

@@ -395,6 +395,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     warnings,
     name: selectionDesignName(data.source), // TASK 767: the design is now this selection: main.js names it so (the export file names follow); TASK 774: the Fusion DOCUMENT's name
     selectionId: entry.id,
+    replaced, // TASK 807: the design was replaced (Open STL words its own notice)
     message: `${replaced ? 'Replaced with' : prior ? 'Updated' : 'Added'} ${sourceName}: ${counts}`,
   };
 }

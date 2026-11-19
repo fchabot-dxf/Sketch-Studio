@@ -75,7 +75,7 @@ const PARAMS = {
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
   // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
-  openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) to cut from the top: its outline, pockets and holes with their depths, and the board thickness. It replaces the design.' },
+  openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807
   stlCard: { label: 'STL', hint: 'The 3D part this design was sliced from. Changing Up or Units slices it again and replaces the design; Undo brings the previous one back.' },
   stlUp: { label: 'Up', hint: 'Which side of the part faces up, toward the bit. Only what can be reached from that side is cut.' },
   stlUnits: { label: 'Units', hint: 'What one unit in the STL file is: STL files do not say.' },

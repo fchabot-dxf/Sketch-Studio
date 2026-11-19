@@ -2,12 +2,14 @@
 // through the drawer's "Open STL…" and the real file chooser (<input type=file>: Page.setInterceptFileChooserDialog + DOM.setFileInputFiles), real
 // mouse clicks / touches:
 //  DESKTOP 1280 x 800
-//   1. the block (60 x 40 x 8 pocket, d12 through hole): the notice "Added block.stl: 3 regions, 0 chains", Prepare shows the STL card (file, Up +Z,
-//      Units mm, size 120 x 80 x 19 mm) above the cut card; Up -Z re-slices (notice "Replaced with ...", the pocket gone, the card -Z); the footer's
-//      Undo puts +Z back.
-//   2. the 10-degree drafted pocket: Stepped pocket on the pocket -> the 3D Review has 9 levels (8 terraces + the through outline); Generate Shaper
-//      SVG writes the outline + 8 plain pockets at 1..8 mm.
-//   3. the hemisphere dome: Stepped outside on its outline -> the 3D Review has 30 levels (terraces every 1 mm): zoomed screenshots, top and angled.
+//   TASK 807: an STL opens as a RELIEF: ONE Roughing (Terraces) with its levels, ready to cut.
+//   1. the block (60 x 40 x 8 pocket, d12 through hole): the notice "Added block.stl: a relief, N levels", ONE Roughing to 19 mm, Prepare shows the
+//      STL card (file, Up +Z, Units mm, size 120 x 80 x 19 mm) above the cut card; Up -Z re-slices (notice "Replaced with ...", the card -Z); the
+//      footer's Undo puts +Z back.
+//   2. the 10-degree drafted pocket, as it opens: the 3D Review has 9 levels (8 terraces in the pocket + the band round the part at 19 mm);
+//      Generate Shaper SVG writes 9 pockets: 19, then 1..8 mm.
+//   3. the hemisphere dome, as it opens: the 3D Review has 29 levels (terraces every 1 mm; the 0.03 mm band at 29 mm on the dome's foot is under
+//      the drawing tolerance: cut at 30): zoomed screenshots, top and angled.
 //   4. save + reopen: a NAMED design (only a named design autosaves; it lives in the fake in-memory Drive, tests/helpers/fake-drive-session.js) opened
 //      from an STL, the page loaded again: the card is back.
 //  PHONE 390 x 844 (touch): the drawer's Open STL, the notice, the card (folded on a phone: a tap on its header opens it), Up +Y re-slices.
@@ -97,7 +99,7 @@ const openStl = async (stl, what) => {
   assert.ok(ch, what + ': the file chooser opened');
   await send('DOM.setFileInputFiles', { files: [stl], backendNodeId: ch.backendNodeId });
   const said = `${path.basename(stl)}: `;
-  await waitFor(`!document.getElementById('view-prepare').hidden && document.getElementById('prepare-notice').textContent.includes(${JSON.stringify(said)}) && document.getElementById('prepare-notice').textContent.includes(' regions')`, what + ': the import notice');
+  await waitFor(`!document.getElementById('view-prepare').hidden && document.getElementById('prepare-notice').textContent.includes(${JSON.stringify(said)}) && document.getElementById('prepare-notice').textContent.includes(': a relief, ')`, what + ': the import notice');
   await sleep(400);
 };
 const review = async (levels) => {
@@ -123,30 +125,26 @@ try {
 
   // 1. the block
   await openStl(BLOCK, '1');
-  assert.strictEqual(await notice(), 'Added block.stl: 3 regions, 0 chains', '1: the notice');
-  assert.deepStrictEqual(await plan(), ['exterior@19', 'pocket@8', 'interior@19'], '1: the cuts');
+  assert.ok(/^Added block\.stl: a relief, \d+ levels$/.test(await notice()), '1: the notice: ' + await notice());
+  assert.deepStrictEqual(await plan(), ['roughing@19'], '1: ONE Roughing to the full height');
   assert.deepStrictEqual(await card(), { name: 'block.stl', up: '+Z', unit: 'mm', size: '120 × 80 × 19 mm', open: 'true' }, '1: the STL card');
   assert.strictEqual(await evalJs(`(() => { const s = document.querySelector('#review-stock-thickness'); return s.value; })()`), '19', '1: the stock thickness = the height');
-  await clickWorld(60, -40); // the pocket: the cut card shows under the STL card
+  await clickWorld(60, -40); // the relief: the cut card shows under the STL card
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, '1: the cut card');
   const stack = await evalJs(`(() => { const a = document.querySelector('#prepare-panel .stl-card').getBoundingClientRect(), b = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect(); return { stlBottom: Math.round(a.bottom), cutTop: Math.round(b.top), sameColumn: Math.abs(a.left - b.left) < 1 }; })()`);
   assert.ok(stack.sameColumn && stack.cutTop >= stack.stlBottom, '1: the cut card sits under the STL card: ' + JSON.stringify(stack));
   await shot('1-desktop-card.png', ['#prepare-panel .stl-card', '#prepare-panel .cut-card']);
   await clickEl('.stl-ups .cut-preset[data-value="-Z"]');
-  await waitFor(`/^Replaced with block\\.stl: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, '1: -Z re-sliced');
-  assert.deepStrictEqual([await plan(), (await card()).up], [['exterior@19', 'interior@19'], '−Z'], '1: upside down: the pocket is under the part');
+  await waitFor(`/^Replaced with block\\.stl: a relief/.test(document.getElementById('prepare-notice').textContent)`, '1: -Z re-sliced');
+  assert.deepStrictEqual([await plan(), (await card()).up], [['roughing@19'], '−Z'], '1: upside down: the relief, -Z');
   await clickEl('#btn-undo');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.size === 3)`, '1: undo');
+  await waitFor(`document.querySelector('.stl-ups .is-active').textContent === '+Z'`, '1: undo');
   assert.strictEqual((await card()).up, '+Z', '1: undo puts +Z back');
 
-  // 2. the drafted pocket, Stepped pocket, the Review, the export
+  // 2. the drafted pocket as it opens (Roughing), the Review, the export
   await openStl(DRAFTED, '2');
-  assert.ok(/^Replaced with drafted\.stl: 2 regions, 0 chains \(Pocket 1: drafted walls cut straight at the top opening\)$/.test(await notice()), '2: the notice with the warning: ' + await notice());
-  await clickWorld(60, -40);
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, '2: the menu');
-  await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, '2: Stepped pocket');
+  assert.ok(/^Replaced with drafted\.stl: a relief, \d+ levels$/.test(await notice()), '2: the notice: ' + await notice());
+  assert.deepStrictEqual(await plan(), ['roughing@19'], '2: Roughing');
   await review(9);
   await zoomReview(false);
   await shot('2-review-drafted-stepped.png', '#review-canvas-host');
@@ -158,20 +156,15 @@ try {
   fs.writeFileSync(path.join(EVIDENCE_DIR, '2-export-drafted-stepped.svg'), svg);
   const els = [...svg.matchAll(/<(path|circle) [^>]*shaper:cutType="([^"]+)"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => `${m[2]} ${m[3]}`);
   console.log('EXPORT ' + JSON.stringify(els) + ' file ' + path.basename(svgFile));
-  assert.deepStrictEqual(els, ['outside 19.000 mm', ...[1, 2, 3, 4, 5, 6, 7, 8].map((k) => `pocket ${k}.000 mm`)], '2: the export: the outline + 8 plain pockets');
+  assert.deepStrictEqual(els, ['pocket 19.000 mm', ...[1, 2, 3, 4, 5, 6, 7, 8].map((k) => `pocket ${k}.000 mm`)], '2: the export: the band round the part + the 8 pocket terraces');
   assert.strictEqual(path.basename(svgFile), 'drafted.svg', '2: the file takes the STL\'s name');
 
-  // 3. the dome, Stepped outside: the terraces
+  // 3. the dome as it opens (Roughing): the terraces
   await openStage('prepare');
   await openStl(DOME, '3');
-  await clickWorld(30, -30);
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, '3: the menu');
-  await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, '3: Stepped outside');
-  await review(30);
-  const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutDepth))`);
-  assert.deepStrictEqual(levels, Array.from({ length: 30 }, (_, i) => i + 1), '3: 30 terraces, 1..30 mm');
+  await review(29);
+  const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...new Set(m.planReliefItems(window.__designController.state).map((i) => i.cutDepth))].sort((a, b) => a - b))`);
+  assert.deepStrictEqual(levels, [...Array.from({ length: 28 }, (_, i) => i + 1), 30], '3: terraces at 1..28 and 30 mm');
   await zoomReview(true);
   await shot('3-review-dome-top.png', '#review-canvas-host');
   await zoomReview(false);
@@ -197,7 +190,7 @@ try {
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000); await waitForApp('design-canvas'); await sleep(800);
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
   await openStl(BLOCK, 'phone');
-  assert.strictEqual(await notice(), 'Added block.stl: 3 regions, 0 chains', 'phone: the notice');
+  assert.ok(/^Added block\.stl: a relief, \d+ levels$/.test(await notice()), 'phone: the notice: ' + await notice());
   assert.deepStrictEqual(await card(), { name: 'block.stl', up: null, unit: null, size: null, open: 'false' }, 'phone: the card, folded');
   await clickEl('#prepare-panel .stl-head');
   assert.deepStrictEqual(await card(), { name: 'block.stl', up: '+Z', unit: 'mm', size: '120 × 80 × 19 mm', open: 'true' }, 'phone: a tap opens it');

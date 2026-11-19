@@ -675,6 +675,11 @@ export const ROUGH_LAYOUT = Object.freeze({ layouts: Object.freeze([Object.freez
 export const roughLayout = (rec) => (rec && rec.roughLayout === 'nested' ? 'nested' : 'terraces');
 // what the Origin's pocket clears inside a region (TASK 452's footprint rule: the bit kept back from the boundary by its radius + the automatic offset,
 // opened by its radius): erode by r + m, grow by r
+// TASK 807: a TERRACE piece narrower than the drawing tolerance (LEVELS.drawTolMm: nothing left once shrunk by half of it) is the offsets' own noise,
+// not a band to cut: E_k and E_k+1 are offsets whose round joins are only within drawTolMm of the true arcs, so where two levels' walls are closer
+// than that (a near-vertical wall; levels read off a grid, an STL's: the owner's rose made 1449 terrace paths, 127 without them) their difference is
+// a string of slivers. Such a piece lies within the Origin's offset m of the wall at its depth, where no pocket cuts to that depth anyway.
+const thinnerThanTol = (g) => !offsetRegions([g], -LEVELS.drawTolMm / 2, LEVELS.drawTolMm).length;
 const pocketClears = (regions, r, m) => (r > 0 ? offsetRegions(offsetRegions(regions, -(r + m), LEVELS.drawTolMm), r, LEVELS.drawTolMm) : regions);
 
 /**
@@ -722,7 +727,7 @@ export function levelsRoughing(levels, { outer, step, depth, toolDia, allowance 
   const steps = [], items = [];
   runs.forEach(({ depth: d }, k) => {
     const pieces = (nested ? R[k].filter((g) => !(k + 1 < runs.length && R[k + 1].some((h) => sameRegionSets([g], [h]))))
-      : (k + 1 < runs.length ? diffRegions(E[k], E[k + 1]) : E[k])).filter((g) => regionsArea([g]) > LEVELS.sliverMm2);
+      : (k + 1 < runs.length ? diffRegions(E[k], E[k + 1]) : E[k])).filter((g) => regionsArea([g]) > LEVELS.sliverMm2 && (nested || !thinnerThanTol(g)));
     let cut = 0, thin = 0;
     for (const piece of pieces) {
       if (minW > 0 && !offsetRegions([piece], -minW / 2, LEVELS.drawTolMm).length) { thin++; continue; } // (owner turns 2605-2607) narrower than the Min terrace width: not roughed

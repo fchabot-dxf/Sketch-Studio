@@ -2,7 +2,9 @@
 // The part (built here, tests/helpers/stl-mesh.js): a RELIEF, a dome (R 20 mm, 20 mm high) on a sloped skirt (R 20 -> 30 mm over the last 4 mm): its
 // levels change at every step (no flat shoulder, so the STL gives ONE region: the outline). `node tests/roughing-contour-792-live.test.js <file.stl>` runs the same steps on another STL (the owner's rose, local evidence only: its
 // numbers are printed, the relief's own counts are not asserted).
-//  DESKTOP 1280 x 800: the drawer's Open STL -> the outline -> the cut menu's Roughing -> its card (Depth, Finish allowance 0, Contour Off, Step depth,
+//  TASK 807: an STL opens as a RELIEF: ONE Roughing (Terraces) on its work area, ready; the run also switches the Layout to Nested and reviews it
+//  (screenshots <name>-nested-review-*.png) and prints the Operations count. `node tests/roughing-contour-792-live.test.js <file.stl> [name]`.
+//  DESKTOP 1280 x 800: the drawer's Open STL -> the part (already Roughing) -> the cut menu's Roughing -> its card (Depth, Finish allowance 0, Contour Off, Step depth,
 //   bit) -> the bit 1/4 in -> Contour On (allowance 0.5, "Edit contour") -> the Operations list (two operations under two bit headings, the Contour
 //   after the Roughing) -> Edit contour: the Contour card (step 0.25, 1/8 in, ball nose) -> the 3D Review (levels, zoomed top + angled screenshots)
 //   -> Generate Shaper SVG (the roughing pockets at their levels with the 1/4 in bit, the contour passes with the 1/8 in bit).
@@ -90,7 +92,7 @@ const openStl = async (what) => {
   assert.ok(ch, what + ': the file chooser opened');
   const t0 = Date.now();
   await send('DOM.setFileInputFiles', { files: [STL], backendNodeId: ch.backendNodeId });
-  await waitFor(`!document.getElementById('view-prepare').hidden && document.getElementById('prepare-notice').textContent.includes(' regions')`, what + ': the import notice', 120000);
+  await waitFor(`!document.getElementById('view-prepare').hidden && document.getElementById('prepare-notice').textContent.includes(': a relief, ')`, what + ': the import notice', 120000);
   const ms = Date.now() - t0;
   console.log(`${what}: open STL -> notice ${ms} ms: ${await evalJs(`document.getElementById('prepare-notice').textContent`)}`);
   await sleep(400);
@@ -135,7 +137,7 @@ const timings = {};
 async function phase(what) {
   timings[what] = {};
   timings[what].open = await openStl(what);
-  assert.ok((await plan()).includes('exterior'), what + ': the STL\'s outline is an Outside cut');
+  assert.deepStrictEqual(await plan(), ['roughing'], what + ': the STL opens as ONE Roughing (TASK 807: a relief)');
   // G: the HEIGHT MAP under the cut lines (always shown for a part with levels): one image, the first layer of the canvas, never taking a press
   const hm = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'), g = svg.querySelector('#prepare-heightmap-group'), im = g && g.querySelector('image');
     const kids = [...svg.children].map((c) => c.id || c.tagName); return { images: g ? g.querySelectorAll('image').length : 0, under: kids.indexOf('prepare-heightmap-group') < kids.indexOf('prepare-world-group') && kids.indexOf('prepare-heightmap-group') < kids.indexOf('prepare-cut-group'),
@@ -187,6 +189,21 @@ async function phase(what) {
   await shot(`${what}-review-top.png`, '#review-canvas-host');
   await zoomReview(false);
   await shot(`${what}-review-angled.png`, '#review-canvas-host');
+  // TASK 807: the Nested layout, reviewed too
+  await openStage('prepare');
+  await pressOutline();
+  await clickEl('.cut-layout-modes .cut-preset[data-value="nested"]');
+  await waitFor(`document.querySelector('.cut-layout-modes .is-active').textContent === 'Nested'`, what + ': Nested', 60000);
+  const listN = await ops();
+  console.log(`${what}: Operations (Nested) ${JSON.stringify(listN)}`);
+  timings[what].operations = list.filter((x) => !x.startsWith('# ')).length;
+  const rn = await review(what + ' nested');
+  timings[what].reviewNested = rn.ms;
+  await zoomReview(true);
+  await shot(`${what}-nested-review-top.png`, '#review-canvas-host');
+  await zoomReview(false);
+  await shot(`${what}-nested-review-angled.png`, '#review-canvas-host');
+  await openStage('prepare');
 }
 
 try {

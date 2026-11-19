@@ -667,6 +667,7 @@ function ensureSketch() {
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
     afterSidecar: (restore) => {
       prepare.afterRestore(restore); // TASK 741: + the one-time notice of a document that had V-carve regions
+      stlImporter.reimportOld(); // TASK 807: a design saved with an STL before 807 is sliced again as a relief
       showStockThickness();
       if (modes.current() === 'review') enterReview(designController.state);
     },

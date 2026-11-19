@@ -1,10 +1,12 @@
 // apps/shaper/src/stl-import.js — TASK 790: Shaper's OPEN STL, DECLARED in one importable place (like cut-import.js): the page (main.js) and the node
 // test kit both call createStlImporter(). An STL is one more SOURCE of the Fusion add-in's `selection_data` payload: #core/stl-slice.js reads and slices
 // it, and the design is REPLACED through the ONE import path a Fusion selection takes (fusion-import.js importFusionSelection: the sketch, the cut plan,
-// the stock thickness = the part's height, in ONE undo step, the same notice "Added <file>: N regions ..." / "Replaced with ..."). The STL it came from is
-// then the design's STL source (stl-source.js: saved with the document), shown by the STL card in Prepare (stl-card.js), whose Up / Units slice it again
-// and replace the design the same way (one undo step each). Shaper only: the other apps' file picks never offer STL (their shared IMPORT_FILE_PICK is
-// SVG / DXF); this file declares Shaper's own.
+// the stock thickness = the part's height, in ONE undo step). The STL it came from is then the design's STL source (stl-source.js: saved with the
+// document), shown by the STL card in Prepare (stl-card.js), whose Up / Units slice it again and replace the design the same way (one undo step each).
+// Shaper only: the other apps' file picks never offer STL (their shared IMPORT_FILE_PICK is SVG / DXF); this file declares Shaper's own.
+// TASK 807 (owner turns 2638-2640): an STL is a RELIEF, always: ONE part (its work area) whose record is a Roughing (Terraces) with the part's levels,
+// ready to cut. The notice: "Added <file>: a relief, N levels" / "Replaced with <file>: ..." (+ the slicer's warning). A design saved with an STL before
+// 807 (its regions were the per-feature import's) is sliced again as a relief when it is opened (reimportOld: the page calls it after a restore).
 import { browserFileSeam } from '#ui/project-file.js';
 import { parseStl, sliceStl, STL_DEFAULTS } from '#core/stl-slice.js';
 import { importFusionSelection } from './fusion-import.js';
@@ -20,13 +22,13 @@ export const STL_FILE_PICK = Object.freeze({ description: 'STL 3D part', mime: '
 
 /**
  * createStlImporter({ ensureSketch, getController, prepare, panelEl, showPrepare, afterImport, notice })
- *   -> { openFile(bytes, name), reslice({ up } | { unit }), pickAndOpen() }
+ *   -> { openFile(bytes, name), reslice({ up } | { unit }), reimportOld(), pickAndOpen() }
  *   ensureSketch(): mounts the sketcher. getController(): the sketcher. prepare: the Prepare stage (prepare-stage.js; the import re-mounts it).
  *   panelEl: Prepare's right column (#prepare-panel): the STL card goes first in it. showPrepare(): the mode router's (the result is shown in Prepare,
  *   where its cuts and its card are). afterImport(): the page's refresh after any selection import (the Review card's thickness, the history buttons).
  *   notice(text, isError): Prepare's one-line notice.
- *   Every call returns the import's result ({ ok, message, warnings, regionCount, ..., info: the slice's size / time }) or { ok: false, message } (a file
- *   that is not a readable STL, nothing to cut): the design is then unchanged.
+ *   Every call returns the import's result ({ ok, message, warnings, regionCount, ..., info: the slice's size / levels / time }) or { ok: false, message }
+ *   (a file that is not a readable STL, nothing to cut): the design is then unchanged.
  */
 export function createStlImporter({ ensureSketch, getController, prepare, panelEl, showPrepare = () => {}, afterImport = () => {}, notice = () => {} }) {
   const card = mountStlCard(panelEl, { onChange: (next) => { const res = reslice(next); if (res && !res.ok) notice(res.message, true); } });
@@ -39,7 +41,8 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
     const res = importFusionSelection(sliced.payload, { controller: getController(), prepare, onImport: afterImport });
     if (!res.ok) return res;
     if (res.imported) setStlSource({ name, up, unit, triangles: sliced.info.triangles, sizeMm: sliced.info.sizeMm, key }); // the card follows (stl-card.js)
-    const message = selectionNotice(res.message, res.warnings);
+    const n = sliced.info.sections;
+    const message = selectionNotice(`${res.replaced ? 'Replaced with' : 'Added'} ${name}: a relief, ${n} level${n === 1 ? '' : 's'}`, res.warnings);
     notice(message, false);
     return { ...res, message, info: sliced.info };
   };
@@ -55,10 +58,15 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
     if (!s) return null;
     return land(meshOf(s.key), s.key, { name: s.name, up: next.up || s.up, unit: next.unit || s.unit });
   };
+  /** TASK 807: a design opened with an STL sliced before 807 (stl-source.js `old`) is sliced again as a relief (its Up and Units kept); null otherwise. */
+  const reimportOld = () => {
+    const s = getStlSource();
+    return s && s.old ? reslice({}) : null;
+  };
   /** The file chooser (Shaper's STL pick); resolves null when it was cancelled. */
   const pickAndOpen = async () => {
     const picked = await browserFileSeam.open(STL_FILE_PICK);
     return picked ? openFile(picked.bytes, picked.name) : null;
   };
-  return { openFile, reslice, pickAndOpen };
+  return { openFile, reslice, reimportOld, pickAndOpen };
 }

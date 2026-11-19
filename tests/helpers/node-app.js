@@ -224,7 +224,7 @@ const HOSTS = {
       ribbon = createToolRibbon({ state: controller.state, ...D.RIBBON_OPTIONS });
       ribbon.render(doc.getElementById('design-ribbon'));
       // afterSidecar: what the page does with Prepare and the Review card once the cut plan is back (it also re-enters Review, which needs three.js: not here)
-      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: (restore) => { prepare.afterRestore(restore); stockCard.show(); }, showDesign: () => modes.showDesign() }), store, doc, win }); // TASK 605: the tab's stage state, as on the page; TASK 706: an opened design shows Design
+      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: (restore) => { prepare.afterRestore(restore); stl.reimportOld(); stockCard.show(); }, showDesign: () => modes.showDesign() }), store, doc, win }); // TASK 605: the tab's stage state, as on the page; TASK 706: an opened design shows Design
       buffer.restore(); buffer.start();
     };
     const { createAppHeader } = await import('#ui/app-header.js');

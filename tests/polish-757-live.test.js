@@ -86,7 +86,7 @@ try {
   // ── 7. the dish's travel marks thinned ──
   await evalJs(`window.__prepareView.setView({ x: 200, y: 100, w: 560 })`); await sleep(200);
   await clickWorld(300, 100);
-  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && /stepped/i.test(document.querySelector('.cut-type-cur').textContent)`, 'the dish card');
+  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && /roughing/i.test(document.querySelector('.cut-type-cur').textContent)`, 'the dish card'); // TASK 792: Roughing replaced the stepped types
   const travel = () => evalJs(`(() => { const s = document.getElementById('prepare-canvas'), k = Math.hypot(s.getScreenCTM().a, s.getScreenCTM().b);
     const rs = [...document.querySelectorAll('#prepare-canvas .sk-travel-steps .sk-travel')].map((p) => p.getBBox().width / 2 * k).sort((a, b) => b - a);
     return { marked: rs.length, minGapPx: rs.length > 1 ? Math.min(...rs.slice(1).map((r, i) => rs[i] - r)) : null }; })()`);

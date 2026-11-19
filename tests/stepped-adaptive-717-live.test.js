@@ -93,7 +93,7 @@ try {
   // OFF: the 716 card
   let c = await cardState();
   console.log('OFF: ' + JSON.stringify(c));
-  assert.deepStrictEqual([c.checked, c.rows.slice(0, 3)], [false, ['cutDepth', 'adaptiveSteps', 'stepDepth']], 'OFF: the checkbox (unchecked), then the Step depth row');
+  assert.deepStrictEqual([c.checked, c.rows.slice(0, 5)], [false, ['cutDepth', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDepth']], 'OFF: the checkbox (unchecked), then the Step depth row (TASK 792: Roughing\'s allowance and Contour rows first)');
   assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.172–2.236 mm apart'], 'OFF: the 716 note');
   await shot('card-off.png', '#prepare-panel .cut-card');
   // ON (a real click on the checkbox): Medium
@@ -101,7 +101,7 @@ try {
   await waitFor(`document.querySelector('.cut-adaptive').checked && getComputedStyle(document.querySelector('.cut-row[data-row="stepDeviation"]')).display !== 'none'`, 'the Resolution row');
   c = await cardState();
   console.log('ON: ' + JSON.stringify(c));
-  assert.deepStrictEqual([c.rows.slice(0, 3), c.resolution, c.presets], [['cutDepth', 'adaptiveSteps', 'stepDeviation'], '0.25', ['Coarse', 'Medium*', 'Fine']], 'ON: Resolution 0.25 mm, Medium active, no Step depth row');
+  assert.deepStrictEqual([c.rows.slice(0, 5), c.resolution, c.presets], [['cutDepth', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDeviation'], '0.25', ['Coarse', 'Medium*', 'Fine']], 'ON: Resolution 0.25 mm, Medium active, no Step depth row');
   assert.deepStrictEqual(c.note, ['Pocket 1 (8mm): adaptive, Medium (0.25 mm): 7 steps at 6.193 · 6.69 · 7.071 · 7.386 · 7.67 · 7.925 · 8 mm · outlines 0.275–0.986 mm apart'], 'the Medium note');
   await shot('card-medium.png', '#prepare-panel .cut-card');
   // Coarse: card, Review, export

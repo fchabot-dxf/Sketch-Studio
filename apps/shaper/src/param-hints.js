@@ -84,7 +84,7 @@ const CHOICE_HINTS = {
     guide: 'Not cut. Shown on the Origin as a reference.',
     interior: 'Cuts just inside a closed shape, for holes and openings. The Origin keeps the bit inside the line.',
     pocket: 'Clears the whole inside of a closed shape down to the depth.',
-    roughing: 'Clears the part level by level down to its depth, leaving an allowance on the walls for a Contour. For any closed shape: an STL part, a sloped wall from Fusion, a drawn pocket.', // TASK 792: replaced the stepped types
+    roughing: 'Clears the part level by level, leaving an allowance on the walls for a Contour.', // TASK 792: replaced the stepped types
     exterior: 'Cuts just outside a closed shape, for parts you keep. The Origin keeps the bit outside the line.',
     stock: 'The outline of your board. Not cut: it sets the board in the 3D preview and goes in the file as a guide.',
     contour: 'Finishes the sloped walls: a pass along them at every fine step, no clearing.', // TASK 792

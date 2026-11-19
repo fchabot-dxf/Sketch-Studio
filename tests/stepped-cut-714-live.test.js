@@ -115,7 +115,7 @@ try {
   const card = await evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, step: document.querySelector('.cut-step-depth').value,
     stepShown: getComputedStyle(document.querySelector('.cut-row[data-row="stepDepth"]')).display !== 'none', note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
   console.log('card: ' + JSON.stringify(card));
-  assert.deepStrictEqual(card, { type: 'Stepped pocket', step: '1', stepShown: true, note: ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.176 mm apart'] }, 'the card: Stepped pocket, Step depth 1, the note');
+  assert.deepStrictEqual(card, { type: 'Roughing', step: '1', stepShown: true, note: ['Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.176 mm apart'] }, 'the card: Stepped pocket, Step depth 1, the note');
   await shot('prepare-stepped-card.png');
   const steppedInfo = await review(9);
   console.log('Review (stepped): ' + JSON.stringify(steppedInfo));
@@ -142,7 +142,7 @@ try {
   await waitFor(`/Replaced with Body1: 1 regions/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
   const x2Menu = await menuIds();
-  assert.ok(x2Menu.includes('roughing') && !x2Menu.includes('roughing') && !x2Menu.includes('roughing'), 'x2 outline: Stepped outside only: ' + x2Menu);
+  assert.ok(x2Menu.includes('roughing') && !x2Menu.some((id) => id.startsWith('stepped')), 'x2 outline: Roughing (TASK 792: in place of Stepped outside): ' + x2Menu);
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped outside set');
   const x2Info = await review(2);

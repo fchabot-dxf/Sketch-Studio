@@ -252,12 +252,13 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
         + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
       const paint = isMark(cut) ? colorAttrs({ ...c, fill: 'none' }) : colorAttrs(c); // TASK 786: a mark is stroke-only
-      if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, inPlace: isMark(cut) });
+      if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, inPlace: isMark(cut), meta: { cut, entry: e } });
     }
   }
   items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
 
   const body = [];
+  const wrote = (it) => { if (options.written) options.written.push(it.meta); }; // TASK 793: `written` (an array the caller gives) receives { cut, entry } of every element in the FILE's order (the Export step's Paths view draws each element's bit-centre path from it)
   if (options.datum) body.push('  ' + datumPolygon(options.datum));
 
   if (options.groupByCut) {
@@ -271,14 +272,14 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     for (const { common, group } of slots) {
       if (group.length >= 2) { // hoist the shared cut attrs to a <g>; the children inherit (drop their attrs)
         body.push(`  <g${common}>`);
-        for (const it of group) body.push(`    <${it.tag} ${it.a}/>`);
+        for (const it of group) { body.push(`    <${it.tag} ${it.a}/>`); wrote(it); }
         body.push('  </g>');
       } else {
-        body.push(`  <${group[0].tag} ${group[0].a}${common}/>`);
+        body.push(`  <${group[0].tag} ${group[0].a}${common}/>`); wrote(group[0]);
       }
     }
   } else {
-    for (const it of items) body.push(`  <${it.tag} ${it.a}${it.common}/>`);
+    for (const it of items) { body.push(`  <${it.tag} ${it.a}${it.common}/>`); wrote(it); }
   }
 
   const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, items); // TASK 786: every written element (items holds the Stock too)

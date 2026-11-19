@@ -150,16 +150,25 @@ export const TRAVEL_STYLE = Object.freeze({
   arrowEveryPeriods: 2, // one dart arrowhead every 2 dash periods (72 px on screen)
   arrowMinPathPx: 10,   // paths shorter than this on screen get no arrowhead
 });
-const TRAVEL_PERIOD_PX = TRAVEL_STYLE.dashPx + TRAVEL_STYLE.gapPx; // 36 px
+export const TRAVEL_PERIOD_PX = TRAVEL_STYLE.dashPx + TRAVEL_STYLE.gapPx; // 36 px
 export const TRAVEL_MIN_GAP_PX = 2 * TRAVEL_STYLE.dashPx; // TASK 757 / 777: two dash lengths of .sk-travel (16 px)
-const TRAVEL_ARROW_SPACING_PX = TRAVEL_STYLE.arrowEveryPeriods * TRAVEL_PERIOD_PX; // 72 px
+export const TRAVEL_ARROW_SPACING_PX = TRAVEL_STYLE.arrowEveryPeriods * TRAVEL_PERIOD_PX; // 72 px
+/** TASK 793: push the ONE travel declaration (TRAVEL_STYLE) onto an <svg> as the --sk-travel-* custom properties .sk-travel / @keyframes sk-march read:
+ *  Prepare's canvas and the Export step's Paths view both call it. */
+export function applyTravelStyle(svgEl) {
+  if (!svgEl.style || typeof svgEl.style.setProperty !== 'function') return;
+  svgEl.style.setProperty('--sk-travel-dash', String(TRAVEL_STYLE.dashPx));
+  svgEl.style.setProperty('--sk-travel-gap', String(TRAVEL_STYLE.gapPx));
+  svgEl.style.setProperty('--sk-travel-period', String(TRAVEL_PERIOD_PX));
+  svgEl.style.setProperty('--sk-travel-duration', `${TRAVEL_STYLE.durationSec}s`);
+}
 // Screen-px dart arrowhead geometry per travel kind: tip forward (+x), swept tail wings, notched rear
-const DART_DIMS = Object.freeze({
+export const DART_DIMS = Object.freeze({
   wall:   Object.freeze({ tip: 3.8, tail: -2.85, halfW: 2.6, notch: -1.5 }),
   clear:  Object.freeze({ tip: 3.0, tail: -2.25, halfW: 2.1, notch: -1.1 }),
   online: Object.freeze({ tip: 3.6, tail: -2.7,  halfW: 2.5, notch: -1.4 }),
 });
-const dartSeg = (a, dims, k) => {
+export const dartSeg = (a, dims, k) => {
   const c = Math.cos(a.angle), s = Math.sin(a.angle);
   const tx = (x, y) => `${(a.x + (x * c - y * s) * k).toFixed(3)} ${(a.y + (x * s + y * c) * k).toFixed(3)}`;
   return `M ${tx(dims.tip, 0)} L ${tx(dims.tail, dims.halfW)} L ${tx(dims.notch, 0)} L ${tx(dims.tail, -dims.halfW)} Z `;
@@ -205,12 +214,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const onCommitField = opts.onCommitField || ((key, field, value) => { setFieldFor(key, field, value); refreshLook(); }); // TASK 778: dragging the lead-in handle commits ONE undo step via prepare-stage
   svgEl.innerHTML = ''; // clean re-mount
   // TASK 777: push ONE declaration of the travel dash pattern to CSS custom properties on svgEl so .sk-travel and @keyframes sk-march share TRAVEL_STYLE
-  if (svgEl.style && typeof svgEl.style.setProperty === 'function') {
-    svgEl.style.setProperty('--sk-travel-dash', String(TRAVEL_STYLE.dashPx));
-    svgEl.style.setProperty('--sk-travel-gap', String(TRAVEL_STYLE.gapPx));
-    svgEl.style.setProperty('--sk-travel-period', String(TRAVEL_PERIOD_PX));
-    svgEl.style.setProperty('--sk-travel-duration', `${TRAVEL_STYLE.durationSec}s`);
-  }
+  applyTravelStyle(svgEl);
 
   // Local view state for Prepare canvas, initialized by fitting to sketch extents
   const view = { x: 0, y: 0, w: 120, h: 90 };

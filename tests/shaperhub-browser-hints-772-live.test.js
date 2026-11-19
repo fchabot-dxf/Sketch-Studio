@@ -173,8 +173,8 @@ try {
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'cut type menu open');
   await clickEl('.cut-type-opt[data-id="pocket"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => m.cutPlanEntries().length > 0)`, 'Pocket planned');
-  await clickEl('#prepare-dir-legend .sk-hint-i');
-  await waitFor(`(() => { const h = document.querySelector('#prepare-dir-legend .sk-hint:not([hidden])'); return !!h && h.textContent.length > 10; })()`, 'Prepare dirLegend hint opens');
+  await hoverEl('#prepare-dir-legend [data-hint="dirLegend"]'); // TASK 805: Shaper's hints are a tooltip at the cursor, not text laid out in the legend
+  await waitFor(`(() => { const h = document.getElementById('sk-cursor-tip'); return !!h && !h.hidden && h.textContent.length > 10; })()`, 'Prepare dirLegend tooltip shows');
 
   // Check Export (review) tab toolbar tooltips & Sync modal
   await clickEl('.sk-header-tab[data-tab="review"]');

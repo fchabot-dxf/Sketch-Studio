@@ -13,6 +13,7 @@
 //     save + reload; no Depth per pass row; an old document whose records / operation order say passDepth opens without it and exports as the same
 //     document without it (one copy at the full depth), its operation order kept.
 import assert from 'node:assert';
+import { hintFor } from '../apps/shaper/src/hint.js'; // TASK 805: the tooltip's text (hints are no longer laid out in the card)
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
@@ -240,7 +241,7 @@ let saved = null;
       const n0 = st.history.length;
       h.toggleLoop();
       eq([CUT_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
-      eq(h.q('.cut-row[data-row="finishAllowance"] .sk-hint').textContent, 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
+      eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
       const nt = h.note();
       ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`); // TASK 775: a closed loop has no start point (no "ends where it starts")
       ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);

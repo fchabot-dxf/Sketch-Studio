@@ -12,7 +12,7 @@
 //  * Keyboard: the grip is focusable; ArrowUp / ArrowDown on it move the row (the grip keeps the focus).
 // DELETE (owner turn 2174): the bin calls onDelete(op) (the stage unassigns every region / path of the operation in ONE undo step).
 import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 757: the fold (open on a wide screen, folded on a phone)
-import { mountHint } from './hint.js';
+import { bindHint } from './hint.js';
 const DRAG_START_PX = 4;    // a grip press (mouse / pen) that moves less than this is not a drag
 export const HOLD_MS = 350; // a touch held this long without moving lifts the row
 const SCROLL_SLOP_PX = 8;   // a touch that moves more than this before the hold is a scroll
@@ -42,7 +42,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
   const body = doc.createElement('div');
   body.className = 'ops-body';
   hostEl.append(headerRow, body);
-  mountHint({ id: 'operations', labelEl: head, after: headerRow, iconOnly: true });
+  bindHint({ el: head, id: 'operations', iconOnly: true }); // TASK 805: its hint is a tooltip at the cursor (hint.js)
   const fold = mountDisclosure({ host: hostEl, head, body }); // TASK 757: the fold, declared once (disclosure.js), reused by the Export step's 3D info
   const setOpen = (v) => fold.setOpen(v);
 

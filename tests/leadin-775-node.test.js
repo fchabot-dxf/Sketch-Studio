@@ -19,6 +19,7 @@
 //  6. The app (node kit): the cut card rows (Lead-in Off | On, Length, Side; On line's Hold part with no Tab thickness), ONE undo step each, the notes, the
 //     last values remembered, Prepare's leg and dots, the operations row, save + reload.
 import assert from 'node:assert';
+import { hintFor } from '../apps/shaper/src/hint.js'; // TASK 805: the tooltip's text (hints are no longer laid out in the card)
 import fs from 'node:fs';
 import path from 'node:path';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
@@ -328,7 +329,7 @@ let saved = null;
     h.preset('holdPart', 'tabs');
     ok(h.shown('tabCount') && h.shown('tabWidth') && !h.shown('holdThickness'), 'On line Tabs: count and width, NO thickness (the gaps are not cut at all)');
     ok(!h.shown('leadIn') && !h.shown('leadInRadius'), 'with Tabs: no Lead-in row (each stroke has its ends)');
-    eq(h.q('.cut-row[data-row="tabWidth"] .sk-hint').textContent, 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.', 'Tab width on On line: the gap\'s hint (the table\'s)');
+    eq(hintFor(h.q('.cut-row[data-row="tabWidth"] [data-hint]')), 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.', 'Tab width on On line: the gap\'s hint (the table\'s)');
     h.typed('.cut-tab-count', '3'); h.typed('.cut-tab-width', '10');
     eq(h.note(), ['Tabs: 3 gaps of 10 mm left uncut; cut them by hand afterwards', 'Each gap keeps 6.825 mm of wood with a 3.175 mm bit (the gap minus the bit)', 'On line: no lead-in with tabs: each stroke has its own ends'], 'the tabs note (the stored Lead-in On waits: no arc with tabs)');
     els = elementsOf(shaperSvgOf(st, cutPlanEntries()));

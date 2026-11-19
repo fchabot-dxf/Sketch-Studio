@@ -1,6 +1,6 @@
 // apps/shaper/src/param-hints.js — TASK 770 (owner turns 2320-2321: "Add tool tip / hint for all param"): THE table of the Shaper Prepare cut card's and the
-// Export step's parameters: id -> { label, hint, items? }. ONE declaration: the cut card (cut-panel.js) and the Export side cards (main.js through hint.js
-// mountHint) read every label AND every hint from here; no label text that this table has is left in the markup.
+// Export step's parameters: id -> { label, hint, items? }. ONE declaration: the cut card (cut-panel.js) and the Export side cards (main.js through
+// bindHint in hint.js) read every label AND every hint from here (TASK 805: a hint shows as a tooltip at the cursor, never as text in the card); no label text that this table has is left in the markup.
 //   label  the name shown on the card (a parameter) or in the menu row (a choice)
 //   hint   one or two short sentences in plain words: what it does and, where it matters, what the Origin does with it. A string, or a function of the
 //          card's context ({ loop, pocket, online }) when the sentence depends on another setting (Finish allowance follows the Loop box; TASK 775: Lead-in

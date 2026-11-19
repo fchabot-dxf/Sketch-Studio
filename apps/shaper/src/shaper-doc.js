@@ -12,6 +12,7 @@ import { migrateLeadInRecord } from '#core/lead-in.js'; // TASK 778: 775 straigh
 import { opOrder, setOpOrder } from './operations.js'; // TASK 743: the user's operation order
 import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 459): {thickness, width, height, margin}, base mm
 import { captureStl, applyStl, captureStlDoc, applyStlDoc } from './stl-source.js'; // TASK 790: the STL the design came from (or none)
+import { captureSelections, applySelections, getSelections } from './selection-list.js'; // TASK 795: the selection list
 
 // TASK 774: 2 = written under the SAME-SKETCH hole rule of derived faces (commit 27c00a4); a document below 2 (or a sidecar without a version) was
 // saved under the old rule: applyShaperDoc keeps its cuts' holes from other sketches (cut-plan.js keepHolesFromOtherSketches).
@@ -27,17 +28,20 @@ export function applyCutPlan(entries) {
 
 /** TASK 743: what one step of the shared undo history keeps of Prepare (prepare-stage.js hostSnapshot): the cut plan and the operation order.
  *  TASK 790: + the STL source (stl-source.js, without its mesh): undoing an STL import / a new Up or Units gives the previous one back (or none). */
-export const capturePrepare = () => ({ cutPlan: captureCutPlan(), opOrder: opOrder(), stl: captureStl() });
+export const capturePrepare = () => ({ cutPlan: captureCutPlan(), opOrder: opOrder(), stl: captureStl(), selections: captureSelections(), stockThickness: getStock().thickness });
 export function applyPrepare(p) {
   applyCutPlan(p && p.cutPlan);
   setOpOrder(p && p.opOrder);
   applyStl(p && p.stl);
+  applySelections(p && p.selections); // TASK 795: the selection list, and the stock thickness an add set (TASK 794)
+  if (p && Number.isFinite(p.stockThickness)) setStock({ ...getStock(), thickness: p.stockThickness });
 }
 
 /** The persisted Shaper document (what createDocumentBuffer's getHostData returns). TASK 790: `stl` only when the design came from an STL. */
 export function captureShaperDoc() {
   const stl = captureStlDoc();
-  return { version: DOC_VERSION, cutPlan: captureCutPlan(), stock: getStock(), opOrder: opOrder(), ...(stl ? { stl } : {}) };
+  const selections = getSelections(); // TASK 795: only when there are some (a design without selections writes the same bytes as before)
+  return { version: DOC_VERSION, cutPlan: captureCutPlan(), stock: getStock(), opOrder: opOrder(), ...(stl ? { stl } : {}), ...(selections.length ? { selections } : {}) };
 }
 
 // TASK 749: a programmed pocket's `clearing` before 749 -> today's value: 'concentric' (the separate rings, replaced by the rings joined) -> 'linked' (Spiral),
@@ -75,6 +79,7 @@ export function applyShaperDoc(d, state = null) {
   setStock(d && d.stock);
   setOpOrder(d && Array.isArray(d.opOrder) ? d.opOrder.map(opKeyNow) : d && d.opOrder);
   applyStlDoc(d && d.stl); // TASK 790: the STL card's source (none for a design that did not come from an STL)
+  applySelections(d && d.selections); // TASK 795: the selection list (none for a design that was not built from selections)
   if (!state) return null;
   const counts = reconcileCutPlan(state);
   const old = d && Array.isArray(d.cutPlan) && !(Number(d.version) >= SAME_SKETCH_HOLES_VERSION);

@@ -12,6 +12,7 @@
 import { dbg } from '#core/debug.js';
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
+import { getSelections, onSelectionsChange } from './selection-list.js'; // TASK 795: the selection list the Prepare bar shows
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
@@ -44,6 +45,8 @@ export const FUSION_ACTIONS = Object.freeze({
   ERROR: 'error',
   ADD_SELECTION: 'add_selection',
   SELECTION_DATA: 'selection_data',
+  HIGHLIGHT_SELECTION: 'highlight_selection', // TASK 795 (SA-12): { selectionId | null } brightens one selection's overlay in Fusion (null: all back to their cut-type colours)
+  CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12): { selectionId | 'all' } deletes that selection's overlay (or every one)
 });
 
 const KNOWN_ACTIONS = new Set(Object.values(FUSION_ACTIONS));
@@ -235,6 +238,8 @@ export function mountFusionPrepareBar({
   viewPrepareEl,
   noticeEl,
   onSelectionData = () => {},
+  onRemoveSelection = () => {}, // TASK 795: (id) the row's X
+  onClearSelections = () => {}, // TASK 795: Clear all
   globalTarget = (typeof window !== 'undefined' ? window : null),
   pollIntervalMs = DEFAULT_ADSK_POLL_MS,
   waitTimeoutMs = DEFAULT_ADSK_WAIT_TIMEOUT_MS,
@@ -257,8 +262,16 @@ export function mountFusionPrepareBar({
   statusEl.setAttribute('role', 'status');
   statusEl.setAttribute('aria-live', 'polite');
 
-  bar.append(addBtn, statusEl);
+  // TASK 795: the SELECTION LIST: one row per selection in the design (its words, an X), Clear all from 2 on. A row hovered or focused is highlighted in Fusion.
+  const listEl = document.createElement('div');
+  listEl.id = 'shaper-fusion-selections';
+  listEl.className = 'shaper-fusion-list';
+  listEl.hidden = true;
+
+  bar.append(addBtn, statusEl, listEl);
   viewPrepareEl.insertBefore(bar, viewPrepareEl.firstChild);
+  // TASK 795: the cards under the bar (the notice, the cut card, the operations list) sit below it whatever height the selection list gives it (index.html reads the variable)
+  new document.defaultView.ResizeObserver(() => viewPrepareEl.style.setProperty('--sk-fusion-bar-h', `${bar.offsetHeight}px`)).observe(bar);
 
   const showNotice = (text, isError) => {
     if (!noticeEl) return;
@@ -294,6 +307,8 @@ export function mountFusionPrepareBar({
   };
 
   let onIncomingAction = () => {};
+  let highlighted = null; // the selection id last sent in highlight_selection (null: none)
+
 
   const bridge = createFusionBridge({
     globalTarget,
@@ -312,6 +327,62 @@ export function mountFusionPrepareBar({
     onSelectionData,
     onMessage: (action) => { onIncomingAction(action); },
   });
+
+  // TASK 795 (SA-12): only a selection the add-in sent (entry.fusion) has an overlay in Fusion; an STL's row or an old add-in's is the palette's alone.
+  const sendHighlight = (id) => {
+    if (highlighted === id) return;
+    highlighted = id;
+    if (bridge.canSend()) bridge.send(FUSION_ACTIONS.HIGHLIGHT_SELECTION, { selectionId: id });
+  };
+  const renderList = () => {
+    const rows = getSelections();
+    listEl.hidden = rows.length === 0;
+    const frag = document.createDocumentFragment();
+    for (const e of rows) {
+      const row = document.createElement('div');
+      row.className = 'shaper-fusion-sel';
+      row.dataset.selectionId = e.id;
+      row.tabIndex = 0;
+      const text = document.createElement('span');
+      text.className = 'shaper-fusion-sel-text';
+      text.textContent = e.text;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'shaper-fusion-sel-x';
+      x.textContent = '✕';
+      x.title = `Remove ${e.text}`;
+      x.setAttribute('aria-label', `Remove ${e.text}`);
+      x.addEventListener('click', (ev) => { ev.stopPropagation(); onRemoveSelection(e.id); });
+      row.append(text, x);
+      if (e.fusion) {
+        row.addEventListener('mouseenter', () => sendHighlight(e.id));
+        row.addEventListener('mouseleave', () => sendHighlight(null));
+        row.addEventListener('focusin', () => sendHighlight(e.id));
+        row.addEventListener('focusout', () => sendHighlight(null));
+      }
+      frag.append(row);
+    }
+    if (rows.length >= 2) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.id = 'btn-fusion-clear-selections';
+      clear.className = 'shaper-fusion-clear';
+      clear.textContent = 'Clear all';
+      clear.addEventListener('click', () => onClearSelections());
+      frag.append(clear);
+    }
+    listEl.replaceChildren(frag);
+    if (highlighted && !rows.some((e) => e.id === highlighted)) sendHighlight(null); // the highlighted row left the list: no mouseleave will come
+  };
+  const stopList = onSelectionsChange(({ removed, all }) => {
+    const gone = removed.filter((e) => e.fusion);
+    if (gone.length && bridge.canSend()) {
+      if (all) bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, { selectionId: 'all' }); // Clear all
+      else for (const e of gone) bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, { selectionId: e.id }); // an X, an Undo / Redo of an add, a replace
+    }
+    renderList();
+  });
+  renderList();
 
   const syncAvailability = () => {
     const ready = bridge.canSend();
@@ -396,7 +467,9 @@ export function mountFusionPrepareBar({
     bridge,
     syncAvailability,
     bootPing: () => sendBootPingOnce(),
+    listEl,
     destroy: () => {
+      stopList();
       stopWaiting();
       bridge.destroy();
     },

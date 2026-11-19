@@ -14,6 +14,7 @@ import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's 
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 795: the selection list's X and Clear all
 import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + CUT_PLAN + stock
 import { dbg } from '#core/debug.js';
 import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
@@ -806,6 +807,8 @@ if (fusionMode) {
       if (res.ok && res.imported) { track('import:fusion'); nameAfterSelection(res.name); } // TASK 738; TASK 767
       return res;
     },
+    onRemoveSelection: (id) => removeSelection(designController, id, { prepare, onDone: afterSelectionImport }), // TASK 795
+    onClearSelections: () => clearSelections(designController, { prepare, onDone: afterSelectionImport }),
   });
   showMode(initMode);
   fusionUi.bootPing();

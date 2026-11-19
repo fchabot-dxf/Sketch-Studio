@@ -16,6 +16,12 @@ import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
 import { ringWalk } from '#core/stepped-cut.js';
 import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design's STL source goes with it (an STL import sets its own after)
+import { DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 794: the stock thickness of a design that starts over, when the payload has none
+import { setOpOrder } from './operations.js';
+import { getSelections, setSelections } from './selection-list.js'; // TASK 795: the selection list
+import { buildEntry, keepSettings, priorRecords, dropSelectionGeometry } from './selection-edit.js';
+
+const upsert = (list, entry) => (list.some((e) => e.id === entry.id) ? list.map((e) => (e.id === entry.id ? entry : e)) : [...list, entry]);
 
 const UNIT_SCALE_MM = { mm: 1, cm: 10, in: 25.4, inch: 25.4, inches: 25.4 };
 const edgesKey = (ids) => [...new Set((ids || []).filter(Boolean))].sort().join('|');
@@ -255,11 +261,20 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
   // ONE undo step capturing pre-import sketch geometry + host cut plan snapshot.
   if (typeof st.saveState === 'function') st.saveState('import ' + sourceName, { host: true });
 
+  // TASK 795: a payload WITH a selectionId (the add-in's Add selection) is ADDED to the design (its entry in selection-list.js); the same id again updates that
+  // selection in place; a payload without one (Open STL, an old add-in) REPLACES the design as before. `fresh` = the design starts over (a replace, or an add to an
+  // empty design): the stock thickness and the operation order are this part's own (TASK 794).
+  const selectionId = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : null;
+  const prior = selectionId ? getSelections().find((e) => e.id === selectionId) || null : null;
+  const priorRecs = priorRecords(prior, plan);
+  const fresh = !selectionId || (!prior && st.shapes.length === 0 && plan.size === 0);
   // TASK 712: the selection replaces the design (see the doc comment): the empty document, and no cut-plan record.
-  const replaced = st.shapes.length > 0 || plan.size > 0;
-  deserializeDocument(emptyDocument(), st);
-  plan.clear();
-  setStlSource(null); // TASK 790: so is the STL it came from (an STL import, stl-import.js, sets the new one once this returns)
+  const replaced = !selectionId && (st.shapes.length > 0 || plan.size > 0);
+  if (!selectionId) {
+    deserializeDocument(emptyDocument(), st);
+    plan.clear();
+    setStlSource(null); // TASK 790: so is the STL it came from (an STL import, stl-import.js, sets the new one once this returns)
+  } else if (prior) dropSelectionGeometry(st, prior, plan);
 
   const sketch = addSketch(st, sourceName);
   activateSketch(st, sketch.id);
@@ -300,7 +315,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
   // If Fusion emitted a hole loop as its own standalone region (like a circle disk inside a rectangle in sketch mode),
   // keep the outer region as a derived `loop:<id>` rather than locking the hole inside `makeProfile`, so BOTH stay selectable in Prepare.
   const standaloneOuterIds = new Set(matchedRegions.map((m) => m.outerLoop && m.outerLoop.id).filter(Boolean));
-  const cutKeys = [];
+  const cutKeys = [], cutInfo = new Map(); // TASK 795: cutInfo: plan key -> the payload's region / chain it came from
 
   for (const m of matchedRegions) {
     if (!m.outerLoop) {
@@ -317,7 +332,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
       key = keyOf('loop', m.outerLoop.id);
     }
     plan.set(key, buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings)));
-    cutKeys.push(key);
+    cutKeys.push(key); cutInfo.set(key, m.reg);
   }
 
   // Open non-construction chains become `chain:<id>` targets; construction segments stay `isConstruction: true` only
@@ -339,18 +354,24 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     const key = keyOf('chain', matchedChain.id);
     if (!plan.has(key)) {
       plan.set(key, buildCutRecord(cr.chain, warnings));
-      cutKeys.push(key);
+      cutKeys.push(key); cutInfo.set(key, cr.chain);
     }
   }
 
-  // Update stock thickness when provided.
+  // TASK 795: the selection's entry in the list (an update keeps the settings of the regions still there)
   const stockThickness = data.stock && data.stock.thicknessMm != null ? Number(data.stock.thicknessMm) : null;
-  if (stockThickness != null && Number.isFinite(stockThickness) && stockThickness > 0) {
-    setStock({ ...getStock(), thickness: stockThickness });
-  }
+  const thicknessMm = stockThickness != null && Number.isFinite(stockThickness) && stockThickness > 0 ? stockThickness : null;
+  const entry = buildEntry({ data, sourceName, regionCount: regions.length, sketch, shapes: built.shapes, cutKeys, cutInfo, plan, thicknessMm });
+  keepSettings(entry, priorRecs, plan);
+  setSelections(selectionId ? upsert(getSelections(), entry) : [entry]);
+
+  // Stock thickness (TASK 794): a fresh start takes this part's (the app's default when the payload has none) and its own operation order; an add to a design that has
+  // parts keeps the order and the stock never gets thinner than the thickest part (or than the user set it).
+  if (fresh) { setStock({ ...getStock(), thickness: thicknessMm != null ? thicknessMm : DEFAULT_STOCK.thickness }); setOpOrder([]); }
+  else if (thicknessMm != null) setStock({ ...getStock(), thickness: Math.max(getStock().thickness, thicknessMm) });
 
   if (controller.svg) {
-    fitToDrawing(controller.svg, Object.create(st, { shapes: { value: built.shapes } }));
+    fitToDrawing(controller.svg, Object.create(st, { shapes: { value: selectionId ? st.shapes : built.shapes } })); // an added selection: the view frames the whole design
   }
   if (prepare && typeof prepare.afterRestore === 'function') prepare.afterRestore();
   if (typeof onImport === 'function') onImport({ sketch, shapes: built.shapes, joints: built.joints, payload: data, warnings });
@@ -366,6 +387,7 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     cutKeys,
     warnings,
     name: selectionDesignName(data.source), // TASK 767: the design is now this selection: main.js names it so (the export file names follow); TASK 774: the Fusion DOCUMENT's name
-    message: `${replaced ? 'Replaced with' : 'Added'} ${sourceName}: ${counts}`,
+    selectionId: entry.id,
+    message: `${replaced ? 'Replaced with' : prior ? 'Updated' : 'Added'} ${sourceName}: ${counts}`,
   };
 }

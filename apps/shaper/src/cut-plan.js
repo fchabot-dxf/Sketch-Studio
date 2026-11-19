@@ -95,6 +95,9 @@ export function holdNoteItems(storedRec, hold) {
     const why = hold.error === 'thickness' ? `${hold.mode === 'skin' ? 'skin' : 'tab'} thickness ${f(hold.thickness)} ${u} is not less than the cut depth ${f(Number(hold.fullDepth))} ${u}: nothing to hold`
       : hold.error === 'no room' ? `no straight or curved stretch is long enough for a ${f(hold.width)} ${u} tab`
       : hold.error === 'tab narrow' ? `the tab width ${f(hold.width)} ${u} is not wider than the ${f(hold.toolDia)} ${u} bit: no wood would stay` // TASK 775
+      : hold.error === 'offset' ? (hold.written > 0 // TASK 787: the Origin offsets every gap's ends by the cut offset: the gaps are laid out round tabs of the tab width - 2 x the offset
+        ? `with the ${f(hold.offset)} ${u} offset each tab needs ${f(hold.written)} ${u} of outline (the tab width - 2 x the offset) and they do not fit`
+        : `the ${f(hold.offset)} ${u} offset is half the ${f(hold.width)} ${u} tab width or more: no tab would stay`)
       : HOLD_REFUSED[hold.error] || hold.error;
     const text = `${name}: ${what} refused: ${why}; cut without them`;
     return [{ text, warn: text.slice(name.length + 2), title: 'Hold part is not applied to this cut' }];

@@ -255,7 +255,10 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
       marks.push({ key: it.key, kind: 'pocket-start', point: [sm.clearing.point.x, sm.clearing.point.y], dia: sm.clearing.dia });
       continue;
     }
-    const rule = reliefDepth(it.cutType, it.cutDepth, T);
+    // TASK 787: every piece of a PROGRAMMED pocket (its clearing paths, and with Loop off its wall as an Inside cut and its islands as Outside cuts: their
+    // footprints carry the pocket's `clearing`) takes the POCKET's depth rule: a depth-unset pocket is never guessed (not shown), never cut through
+    const programmed = (it.footprints || []).some((fp) => fp && fp.clearing);
+    const rule = reliefDepth(programmed ? 'pocket' : it.cutType, it.cutDepth, T);
     if (rule.kind === 'skip') { skipped.push({ key: it.key, cutType: it.cutType, reason: rule.reason }); continue; }
     const ik = C ? `${it.sig}|${rule.through ? 'T' : 'N'}${rule.depthUnset ? 'u' : ''}|${rule.through ? '' : rule.depth}` : '';
     const r = memoC('item', ik, () => itemPieces(it, rule));
@@ -264,7 +267,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
     if (r.markPoint && !unsetThrough.includes(it.key)) { // one mark per cut (a profile's holes share its key), ON the cut
       unsetThrough.push(it.key);
       const pt = r.markPoint;
-      const near = marks.find((m) => Math.hypot(m.point[0] - pt[0], m.point[1] - pt[1]) < MARK_MERGE_MM); // one label per SPOT (an Outside + an Inside on one hole)
+      const near = marks.find((m) => m.kind === 'depth-unset' && Math.hypot(m.point[0] - pt[0], m.point[1] - pt[1]) < MARK_MERGE_MM); // one label per SPOT (an Outside + an Inside on one hole); TASK 787: only another depth-unset label (a pocket's start mark is not one)
       if (near) near.keys.push(it.key); else marks.push({ key: it.key, keys: [it.key], kind: 'depth-unset', point: pt });
     }
     r.pieces.forEach((pc, j) => pending.push({ key: it.key, id: `${ik}#${j}`, depth: pc.depth === null ? rule.depth : pc.depth, regions: pc.regions }));

@@ -532,7 +532,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     lastZoomK = k;
   };
-  let leadDrag = null; // TASK 778: active junction handle drag { pointerId, key, loop, startAt, lastGood, startJunction, previewLead, refused }
+  let leadDrag = null; // TASK 778: active junction handle drag { pointerId, key, loop, holes (TASK 787), startAt, lastGood, startJunction, previewLead, refused }
   const renderHandles = () => {
     const k = worldTolerance(svgEl, 1);
     if (leadDrag) {
@@ -669,7 +669,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const wp = screenToWorld(svgEl, e.clientX, e.clientY);
       if (!wp) return;
       const rec = CUT_PLAN.get(leadDrag.key);
-      const res = rec ? leadInDragAt(leadDrag.loop, effectiveCutRecord(rec), state, wp) : null;
+      const res = rec ? leadInDragAt(leadDrag.loop, effectiveCutRecord(rec), state, wp, leadDrag.holes) : null; // TASK 787: the part's holes kept clear, as in the export
       if (res && res.leadIn) {
         leadDrag.previewLead = res.leadIn;
         if (res.leadIn.role === 'arc') { leadDrag.lastGood = res.atFrac; leadDrag.refused = false; }
@@ -698,7 +698,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}
         const startLead = leadInSummary(key, rec, state, loops, loopPolys, ownedNow().set);
         leadDrag = {
-          pointerId: e.pointerId, key, loop: pl.outer,
+          pointerId: e.pointerId, key, loop: pl.outer, holes: pl.holes,
           startAt: rec.leadInAt ?? null, lastGood: rec.leadInAt ?? null,
           startJunction: startLead ? startLead.junction : null, previewLead: startLead, refused: false,
         };

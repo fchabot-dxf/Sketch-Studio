@@ -57,7 +57,7 @@
 //  * LOOP (TASK 750, record field `loop`: true | false, default off, any programmed pattern): everything the record cuts (its clearing, Raster's clean-up
 //    ring, AND the FINISH TURNS = the contours of R inset by EXACTLY r: a clean copy of the wall's shape, taking only the allowance skin, and each
 //    island's turn at r outside it) is joined into CLOSED on-line paths (first point == last point, d ends with Z); no separate inside / outside cut
-//    is written. A closed loop has NO start point on the Origin (the operator plunges anywhere) and AutoPass cuts it the same direction every pass. The wall is then exact for the card's bit only (the Origin does not offset an on-line path): the note
+//    is written (TASK 787: with nothing to clear inside the allowance, any pattern's loops are the finish turns alone). A closed loop has NO start point on the Origin (the operator plunges anywhere) and AutoPass cuts it the same direction every pass. The wall is then exact for the card's bit only (the Origin does not offset an on-line path): the note
 //    says so. With no allowance ring 0 already IS the finish turn (not written twice). Every link and return leg is a chain of straight steps between
 //    points of turns that are cut anyway, each step inside the region of the outer of its two turns (the 749 nearest-point argument), so inside the
 //    region the bit may sweep (R inset by r): it never crosses the wall or an island. Such a leg crosses the turns between its ends: harmless for an
@@ -577,9 +577,11 @@ function rasterLoops(A0, pieces, finishLoops, a, Rr) {
     else b.leg([...arc, first]);
     loops.push(b);
   }
-  finishLoops.forEach((F, c) => { if (a > 0 && !done.has(c)) { const b = loopBuilder(); b.turn(loopFrom(F, ringStart(F)), 'finish'); loops.push(b); } });
+  finishLoops.forEach((F, c) => { if (a > 0 && !done.has(c)) loops.push(finishTurnLoop(F)); });
   return { loops, refused: null };
 }
+/** A finish turn no clearing reaches, as a closed loop of its own (Raster's rule above; TASK 787: every pattern's, when there is nothing to clear). */
+function finishTurnLoop(F) { const b = loopBuilder(); b.turn(loopFrom(F, ringStart(F)), 'finish'); return b; }
 /** TASK 750: the Morphed spiral as ONE closed loop: the spiral, then the finish turn (a step of the allowance out from where the closing turn ends and
  *  back), then the RETURN leg down the chain of turn starts to the first point (it crosses each turn once). */
 function morphedLoop(sp, finishLoops, a) {
@@ -678,6 +680,9 @@ function computePlan({ outer, holes }, st) {
       linesWhy = holes.length ? 'islands' : A0.length > 1 ? 'splits' : null;
     }
   }
+  // TASK 787: Loop on with NOTHING to clear (A0 empty: the bit + the allowance fill the pocket, only the finish turns fit): the loops are the finish turns
+  // alone, each a loop of its own, as the Spiral's lines and Raster's rule already give: the Loop and its start mark are kept, never dropped silently
+  if (st.loop && !built && !loopRefused && !clear.length && finishLoops.length) built = finishLoops.map(finishTurnLoop);
   // TASK 778: the pocket START MARK point (always ON the clearing route, never on an island): Spiral / Morphed = middle of the innermost ring's
   // longest edge (first point of the first line/spiral, which stays on the loop when Loop is on); Raster = start of the first pass.
   const innerStart = pattern === 'linked' || pattern === 'morphed' ? (clear.length && clear[0].points.length ? clear[0].points[0] : null) : null;

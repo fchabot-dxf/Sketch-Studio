@@ -1,0 +1,493 @@
+# Operations model: operation first, and an Operations palette (task 811)
+
+DESIGN ONLY, for the owner's approval before any building. Owner turns 2673-2675: "what is possible if we make every op
+addable before geometry is assigned to it?", then "Lets make a pallette of ops". Every statement about today's code cites
+`file:line` at commit `18d6e14` (task 809's head). Nothing under `apps/` or `packages/` changes with this note.
+
+---
+
+## 0. For the owner (one page, plain words)
+
+**What you will see change**
+
+- **Operations come first.** You can add an operation (say "Pocket") before it has any shape. It shows in the
+  Operations list as *empty* ("no shapes yet: click shapes to add"). Then you click shapes on the drawing to put them in
+  it, and click again to take them out. Later, in Fusion mode, "Select in Fusion" on that operation does the same from
+  the model (task 806).
+- **One shape can be in several operations.** Roughing, Contour and later a rest pass can all use the same part.
+- **Contour is an operation of its own.** It is no longer a switch in the Roughing card, and adding or removing it no
+  longer changes Roughing's wall allowance behind your back: the allowance is a plain Roughing setting.
+- **An operations palette** sits at the top of the Operations card: one button per operation type. Click a button:
+  an empty operation of that type appears, selected, ready for shapes. Drag a button onto a shape: the operation
+  appears with that shape in it.
+- **My lineups:** set up a few operations once (for example a 1/4 in Roughing + a 1/8 in ball-nose Contour + an
+  Outside cut with tabs), save them as a lineup, and later apply the whole lineup to any part in one click. Your lineups
+  follow you to your other devices through Google Drive, like your other settings.
+- **Today's quick way still works:** click a shape, pick a cut type in the card. The shape goes into an operation of
+  that type.
+- **Editing an operation edits all its shapes.** The card says so ("Pocket 2 · 3 shapes: a change applies to all 3")
+  and has a "Make its own operation" button for when one shape must differ. Today a changed depth quietly makes a new
+  row; with this, the row stays where you put it in the list.
+- **Your saved designs open unchanged:** the same operations in the same order, and the exported SVG byte for byte the
+  same as before (this is tested on every kind of design before anything ships).
+- **A shape in two operations = two identical paths in the file**, one per operation, each with its own depth, type
+  and bit, never merged. Your test on the Origin (the overlapping squares and circles) decides one thing: if the Origin
+  lets you reach and cut every copy, nothing more is needed; if it hides or merges copies, Export will say which ticked
+  operations share shapes so you export them one at a time (section 8).
+
+**What it looks like** (desktop: the Operations card top left, as today; phone: the same card in the bottom sheet)
+
+```
+ ┌ Operations (3) ────────────────────── ▾ ┐
+ │ 2D  [▢ Outside][▣ Inside][▦ Pocket]      │   <- the palette: never moves,
+ │     [╱ On line][┐ Guide]                 │      buttons grey out (with the reason
+ │ 3D  [≋ Roughing][∿ Contour]  [My lineups▾]│      in a tooltip), never disappear
+ ├──────────────────────────────────────────┤
+ │ CHANGE TO 1/4″ END MILL                  │
+ │ ☑ 1  Roughing · 0–19 mm · 1 mm step   🗑 │
+ │       Relief · 1 shape                   │
+ │ CHANGE TO 1/8″ BALL NOSE                 │
+ │ ☑ 2  Contour · 0.25 mm step           🗑 │
+ │       Relief · 1 shape                   │
+ │ NO BIT YET                               │
+ │ ☑ 3  Pocket · depth unset             🗑 │
+ │       no shapes yet: click shapes to add │   <- an empty operation, selected
+ └──────────────────────────────────────────┘
+```
+
+**Two questions for you** (everything else has a default I chose that is easy to change later; section 7 lists them)
+
+1. **Quick way, which operation?** You click a shape and pick "Pocket". Should it join the Pocket operation you used
+   last (it then takes that operation's depth and bit; the card says which one it joined), or should it always start a
+   new Pocket operation? *My suggestion: join the last one used; "Make its own operation" is one click away.*
+2. **Lineup on several parts:** you apply your lineup to part A, then to part B. Should part B join the operations
+   the lineup made for part A (one Roughing for both parts: fewer bit changes), or get its own copy of each operation
+   (one Roughing per part: each part cut start to finish)? *My suggestion: join, with "as new operations" in the
+   lineup's menu for the other case.*
+
+---
+
+## 1. The data model
+
+### 1.1 Today (what is stored, what is derived)
+
+- The stored fact is a **record per geometry**: `CUT_PLAN = new Map()`, key `loop:<id>` / `profile:<id>` / `chain:<id>`
+  (`apps/shaper/src/cut-plan.js:22`, keys explained at `:1-5`); a record holds the cut type, every setting AND the
+  geometry's own data (`slope`, `levels`: `apps/shaper/src/fusion-import.js:94-101`).
+- A part's Contour is a second record keyed `contour:<the part's key>` (`cut-plan.js:27-36`) that borrows the part
+  record's depth, type, slope and levels at derivation time (`resolveEntry`, `cut-plan.js:39-44`). Turning it on sets the
+  part's Roughing allowance; turning it off puts it back to 0 (`setContour`, `cut-plan.js:54-66`, lines 60 and 63): one
+  setting silently changes another.
+- **Operations are derived** every time: records with the same tool + cut type + settings are one operation
+  (`apps/shaper/src/operations.js:1-8`, `opKeyOf` `:95-98`, `settingsOf` `:70-92`, `planOperations` `:214-238`). The only
+  stored operation fact is the ORDER, a list of operation keys (`operations.js:33-37`), saved and undone with the plan
+  (`apps/shaper/src/shaper-doc.js:31`, `:44`).
+- Consequences: an operation cannot exist without a shape (empty = gone); one geometry key holds one record, so a shape
+  can be in only one operation (plus the special Contour); editing a depth makes a NEW operation that loses its place in
+  the list (WORK-LOG TURN 743, FOUND (1)); a tick or a "Select in Fusion" per operation has nothing stable to hang on.
+- The exporter takes `entries` = `[{ target, rec }]` in PLAN order (the Map's insertion order: `cutPlanEntries`,
+  `cut-plan.js:385-391`) and writes the elements in that order (`packages/core/shaper-export.js:176`, loop at `:220`);
+  operations never change the file (TURN 743 send-back: "display groups only").
+
+### 1.2 Proposed: three stores
+
+| Store | Lives in | Holds |
+|---|---|---|
+| **operations** | the document (Shaper sidecar `doc.hosts.shaper`, version 3) | the user's operations, in list order |
+| **regions** | the document (same sidecar) | the data that belongs to a GEOMETRY whatever operations use it |
+| **lineups** | the user's settings (synced to Drive per lineup) | saved sets of configured operations, no geometry |
+
+```jsonc
+// doc.hosts.shaper, version 3 (stock / stl / selections unchanged)
+{
+  "version": 3,
+  "operations": [                         // array order = the Operations list order (no separate opOrder)
+    {
+      "id": "op-7",                       // stable for life: ticks (798), Select in Fusion (806), the preview's data-op
+      "type": "roughing",                 // a CUT_TYPES id
+      "on": true,                         // the tick (task 798); true for every migrated / new operation
+      "settings": {                       // ONLY this type's declared fields (1.5), base mm, exactly today's field names
+        "cutDepth": "model", "toolDia": 6.35, "cutterShape": "endmill", "stepDepth": 1, "finishAllowance": 0.5,
+        "roughLayout": "terraces", "smoothing": 0.1
+      },
+      "geometry": [                       // the shapes it cuts
+        { "key": "loop:loop_a-b-c", "seq": 1 }   // seq = the file order (1.6); "at" = a dragged lead-in position (1.4)
+      ],
+      "lineup": { "id": "lu-3", "slot": 0 }      // optional: made by a lineup (section 4.5)
+    }
+  ],
+  "regions": {                            // per geometry key; written only when there is something to keep
+    "loop:loop_a-b-c": {
+      "levels": [ /* the STL / payload sections, as today's record.levels */ ],
+      "slope": null,                      // a Fusion region's rings, as today's record.slope
+      "source": { "cutType": "roughing", "cutDepth": 19.05 }   // what the import said (today: selection entry `base`)
+    }
+  },
+  "nextSeq": 2,
+  "stock": { }, "selections": [ ], "stl": { }
+}
+```
+
+### 1.3 Where each field of today's record goes
+
+| Today's record field (cited where it is read) | Goes to | Why |
+|---|---|---|
+| `cutType` | operation `type` | the operation IS a type |
+| `cutDepth`, `cutOffset`, `toolDia`, `cutterShape`, `cutterAngle` | operation `settings` | machining settings |
+| `stepDepth`, `adaptiveSteps`, `stepDeviation`, `finishAllowance`, `roughLayout`, `minTerraceWidth`, `smoothing` (`operations.js:77-84`) | operation `settings` | |
+| `holdPart`, `tabCount`, `tabWidth`, `holdThickness` (`operations.js:85-87`) | operation `settings` | |
+| `clearing`, `stepover`, `rasterAngle`, `loop`, `loopPitch` (`operations.js:88-89`, `packages/core/pocket-clearing.js:152-161`) | operation `settings` | |
+| `leadIn`, `leadInSide`, `leadInRadius`, `leadInSweep`, `leadInLength` (`operations.js:90`) | operation `settings` | |
+| `leadInAt` (a fraction along ONE outline, `packages/core/lead-in.js:20-21`, `:113-119`) | the geometry ref (`at`) | a position on that shape's own outline (1.4) |
+| `slope` (`fusion-import.js:99`), `levels` (`:100`) | `regions[key]` | the shape's own geometry by height; every operation on it reads the same |
+| Fusion's `cutType` / `cutDepth` as the payload gave them (selection entry `base`, `apps/shaper/src/selection-edit.js:43-47`) | `regions[key].source` | lets "Depth: from model" follow a Fusion edit (1.4) |
+| `contour:<key>` record (`cut-plan.js:27-36`) | an ordinary `contour` operation whose geometry is the part's key | Contour is its own operation (owner decision c) |
+| the Contour's borrowed `baseDepth` / `baseType` (`cut-plan.js:43`, read at `packages/core/stepped-cut.js:402`, `:578`, `:588-589`, `:888`, `:908`) | Contour settings `cutDepth` (`"model"` or a value), `wallSide`, `walls` | explicit settings instead of reading another record (owner decision c, 1.4) |
+| `opOrder` (`operations.js:33-37`) | the array order of `operations` | |
+
+### 1.4 Shapes whose settings differ inside one operation: the proposal
+
+**Proposal: no hidden per-shape overrides.** An operation's card shows its settings and they ARE what every one of its
+shapes is cut with. Where shapes really need different values there are exactly three honest mechanisms:
+
+1. **"From model" for the depth** (Fusion regions and STL reliefs). `cutDepth` may be the value `"model"`: each shape is
+   cut to its own imported depth (`regions[key].source.cutDepth`). The card's Depth row reads "From model: 3 depths,
+   4–8 mm" and offers a typed value instead. This is how CAM programs do it (Fusion CAM's "bottom: selected contour"),
+   it follows a Fusion edit by itself (today that needs the `base` bookkeeping in `selection-edit.js:58-69`), and a shape
+   without a model depth (drawn by hand) shows as "no model depth: type one" in the operation's note: a fact, not a
+   guess. Contour's depth works the same way and replaces the borrowed `baseDepth`.
+2. **Per-shape placement** that only means something on one outline: the dragged lead-in position (`leadInAt`). It is
+   stored on the geometry ref and drawn as the handle on that shape, so it is visible where it applies; it is not a
+   machining setting. (Today it is part of the operation key, so every dragged handle makes its own operation:
+   `operations.js:90`; probe below.)
+3. **"Make its own operation"**: the shape leaves the operation into a new one with the same settings, then the user
+   changes what differs. Two rows, two honest cards.
+
+Why not overrides: an override makes the card lie ("6 mm" while one shape is cut at 8 mm), every derivation and every
+queued task (798 ticks, 801 simulation, 806 Select in Fusion) would have to merge two layers of settings, and the owner's
+rule is plain settings, honest hints, no guessing.
+
+**Contour, explicit instead of borrowed.** Today the Contour reads its part record's type to decide which side its walls
+are and whether to skip the full-depth wall that a plain Outside / Inside cut already makes (`stepped-cut.js:573-581`,
+`:906-911`). In this model those are two Contour settings: `wallSide` (Inside the shape: a pocket's wall | Outside the
+shape: a part's outline; used only when the region's own `slope.kind` or `levels` do not already say it, as today) and
+`walls` (All levels | Sloped only = skip the level whose outline IS the shape's own wall, exactly today's
+`sameOutline` filter at `stepped-cut.js:909-911`). Task 810's planned "which walls: All | Sloped only" row is this same
+setting (section 5).
+
+### 1.5 One declaration: each cut type's settings fields
+
+Which fields belong to which type is today spread over `settingsOf` (`operations.js:70-92`), the card's row rules
+(`apps/shaper/src/cut-panel.js:21`, `declaresOf` at `:82`) and the cut types' `params` (`apps/shaper/src/shaper.js:119-124`).
+The model needs it in ONE place: `CUT_TYPES[i].fields` (shaper.js), read by the card (which rows), by the operation
+settings (what is stored), by the migration (what must be equal for two records to share an operation) and by
+lineups (what is saved). DECLARE over hand-roll.
+
+It closes a real gap: `loopPitch` changes a pocket's cuts (`pocket-clearing.js:158-160`) but is not in today's operation
+key. Probe (`.evidence/811/probe-opkey.mjs`, output verbatim):
+
+```
+loopPitch 1 vs 2 (Loop-on Spiral pocket): same operation key = true
+cutDepth 6 vs 8: same operation key = false
+slope present vs absent: same operation key = true
+leadInAt 0.1 vs 0.6 (On line, lead-in on): same operation key = false
+```
+
+No card row sets `loopPitch` today (`grep loopPitch apps/shaper/src` finds nothing), so no user meets it yet; task 810
+adds a "Loop pitch" row (its PASSES tab), which would make two different pockets one row. With the declared table
+the field is in the operation's settings by construction.
+
+### 1.6 Invariants
+
+- An operation may have no geometry (empty). It derives no cuts, is skipped by the export, the 3D Review, Paths and the
+  simulation, and is listed with "no shapes yet".
+- A geometry key appears at most once in one operation; it may appear in any number of operations.
+- **File order** = the geometry refs of every operation sorted by `seq` (one counter per document, `nextSeq`). A NEW
+  membership takes the next number (today: a new record is appended to the Map); a membership that MOVES (type
+  change, "Make its own operation", the stage-1 regrouping in section 6) keeps its number (today: editing a record keeps
+  its place in the Map). The file never follows the list order (TURN 743 ruling kept).
+- `regions` entries are never mutated, only replaced (they hold the large `levels`: undo snapshots share them by
+  reference, as records share them today: `shaper-doc.js:23`).
+- Renaming a geometry key (the bezier chain-to-loop move `cut-plan.js:527-551`, the old-hole-rule profile move
+  `:568-598`) renames it in `regions` and in every operation's refs and in any setting that holds a key (task 810's
+  "Boundary: Shape"): one function, `renameGeometry(old, new)`.
+- One Stock per document stays (today `stockKeyOf`, `cut-plan.js:685-688`): a `stock` operation with exactly one shape,
+  listed under "Not cut" as today.
+
+---
+
+## 2. Every derivation reads operations, not geometry records
+
+THE one reader: `planEntries({ ticked })` replaces `cutPlanEntries` (`cut-plan.js:385-391`) and `resolveEntry`
+(`:39-44`). It walks the operations, makes one entry per geometry ref, sorts them by `seq`, and returns today's entry
+shape plus the operation id:
+
+```
+{ key: '<op id>|<geometry key>', opId, target: parseKey(geometry key), rec: recordOf(op, ref) }
+recordOf(op, ref) = { cutType: op.type, ...op.settings, ...regionData(ref.key), leadInAt: ref.at,
+                      cutDepth resolved ("model" -> regions[key].source.cutDepth), Contour: baseDepth / baseType from its settings }
+```
+
+`recordOf` rebuilds exactly the record today's derivation receives, so `#core` keeps its interfaces: `deriveCuts`
+(`stepped-cut.js:467`), `exportShaperSVG` (`shaper-export.js:176`) and `ownedLoopIds` (`packages/core/profile-model.js:669`,
+"a hole with its own entry is cut by that entry only") take the same entries as today.
+
+| Module | Today | Change |
+|---|---|---|
+| `apps/shaper/src/cut-plan.js` | `CUT_PLAN` Map (`:22`), `getCutRecord` / `setFieldFor` (`:24-25`), Contour helpers (`:27-66`), `cutPlanEntries` (`:385`), the plan-wide notes `planHoldNotes` / `planLeadInNotes` / `planClearingNotes` / `planSteppedNotes` / `planLevelsNotes` (`:160`, `:222`, `:331`, `:377`, `:436`), `deriveKeyFootprints` (`:623`), `planOwnedLoops` (`:635`), `planReliefItems` (`:663`), `stockKeyOf` / `planStockProfile` (`:685`, `:696`), `assignImportedCuts` (`:723`) | the store becomes `OPERATIONS` + `REGIONS` (a new `operations-store.js`, the one writer: `addOperation`, `removeOperation`, `setOpField`, `addShapes`, `removeShapes`, `moveShapes`, `renameGeometry`); every `plan`-walking function iterates `planEntries()` instead of the Map (same per-entry calls); the Contour key helpers (`contourKeyOf`, `isContourKey`, `partKeyOf`, `contourOf`, `setContour`, `resolveEntry`) go; `stockKeyOf` = the Stock operation's shape; `assignImportedCuts` makes operations grouped as today's derivation groups records |
+| `cut-plan.js` reconciliation (`:454-598`) | renames / drops keys in the Map | renames through `renameGeometry`; `migrateEdgeRecords` runs inside the v2 migration only |
+| `apps/shaper/src/operations.js` | groups records into operations (`planOperations` `:214`), order by keys (`:33-37`, `orderOps` `:121`) | `planOperations` becomes `describeOperations(state)`: the STORED operations, in array order, each with its entries' cuts and today's words (`describe`, `:155-203`, unchanged); `opKeyOf` / `settingsOf` / `orderOps` stay for the migration and for placing a NEW operation in the list (the 743 default-order rule, `:10-20`, applied once at creation); `assignIds` (`:142`) is replaced by the stored id; `opIdsByPlanKey` (`:241`) = `entry.opId` |
+| `apps/shaper/src/op-list.js` | rows of derived operations, bin = unassign the regions (`:13`, `:161-163`) | rows of stored operations; an empty row ("no shapes yet: click shapes to add"); the palette strip in the header (section 4); bin = delete the operation (its shapes stay in their other operations); drag reorders the array (one undo step, as `prepare-stage.js:67`) |
+| `apps/shaper/src/prepare-stage.js` | card edits go to the selected records (`:56-58`), a row tap selects its regions (`:68`), the bin unassigns (`:73-77`) | the ACTIVE operation (one at a time) is the card's subject; a row tap makes it active and selects its shapes; the bin deletes the operation; `cutEdit` (`:45-54`) unchanged (one undo step) but compares the operations store only, not the large `regions` (today it stringifies the whole plan, levels included, twice per edit: `:48`, `:52`) |
+| `apps/shaper/src/prepare-view.js` | selection = plan keys incl. `contour:` targets (`:276`, `:813-816`); `applyCutTypeToSelected` (`:825-856`), `setFieldOnSelected` (`:858-903`) write records; the look walks `CUT_PLAN` (`:503`, `:508`, `:530`, `:562`, `:594`, `:624`) | selection = geometry keys only; "Add shapes" mode for the active operation (a click toggles a shape in / out of it); the quick flow (4.4) replaces `applyCutTypeToSelected`; `setFieldOnSelected` becomes `setOpField(activeOp, ...)` with today's remembered-defaults rules (`:860-898`) kept; the look walks `planEntries()`; the Roughing allowance write on Contour (`:849`) goes |
+| `apps/shaper/src/cut-panel.js` | one card for the selected records; the Contour row + "Edit contour" (`:133-137`, `:559-563`) | the card edits the active operation's settings; a header line "Pocket 2 · 3 shapes" and a Geometry row (Add / Remove shapes, Make its own operation); the shape card (4.3) when a shape is clicked with no operation active; the Contour row goes (Contour is a palette / menu type) |
+| `apps/shaper/src/shaper-doc.js` | captures `cutPlan` + `opOrder` (`:23`, `:31`, `:44`), maps old values on read (`:54-76`), reconciles (`:84-94`) | captures `operations` + `regions` + `nextSeq`; `applyShaperDoc` runs the v2 to v3 migration (section 3) after today's value mapping (`withClearingNow`, `opKeyNow` are reused unchanged) |
+| `apps/shaper/src/fusion-import.js` | `plan.set(key, buildCutRecord(...))` per region / chain (`:341`, `:363`), operation order reset on a fresh start (`:377`) | region data to `REGIONS` (`slope`, `levels`, `source`); regions with a payload cut type go into operations made by this import (grouped as today's derivation groups them, Depth "From model"); a fresh start empties the operations store instead of resetting the order |
+| `apps/shaper/src/selection-edit.js` / `selection-list.js` | `priorRecords` / `keepSettings` keep a matching region's record (`selection-edit.js:30-69`), `dropSelectionGeometry` deletes its plan keys (`:74-79`) | an update keeps a matching region's MEMBERSHIPS (same signature = same shape: its refs are renamed to the new key); a removed region leaves every operation (operations stay, possibly empty: SA-15); `cutKeys` keeps naming geometry keys |
+| `apps/shaper/src/export-payload.js` | `shaperSvgOf(state, entries)` (`:168`), `shaperPreviewOf` tags entries with derived op ids (`:180-186`) | unchanged interface; the preview's `data-op` = `entry.opId` |
+| `apps/shaper/src/main.js` | `cutPlanEntries()` (`:101`, `:454`), `planReliefItems` + `reviewSig` with `opOrder()` (`:698-700`) | `planEntries({ ticked: true })` (798); `reviewSig` uses the operations store |
+| `apps/shaper/src/export-preview.js` | groups the preview's elements by `data-op` in the derived operations' order (TURN 743) | same, with stored operations |
+| `apps/shaper/src/stock.js` / `stock-card.js` | `resolveStock(state, CUT_PLAN)` (`stock.js:29`, `stock-card.js:19`) | `resolveStock(state)` reads the Stock operation |
+| `apps/shaper/src/cut-import.js` | `assignImportedCuts(state, ..., CUT_PLAN)` (`:44`) | through the store |
+| `packages/core/stepped-cut.js` | Contour infers its side and the own-wall skip from `baseType` (`:578`, `:908`) | reads `wallSide` and `walls` (explicit; 1.4); `baseDepth` stays (filled by `recordOf` from the Contour's Depth). The only `#core` change, byte-identical by the migration test |
+| `packages/core/shaper-export.js`, `profile-model.js`, `relief-model.js`, `hold-part.js`, `pocket-clearing.js`, `lead-in.js`, `level-smooth.js` | read entries / records / footprints | unchanged |
+
+---
+
+## 3. Migration of saved documents (v2 records to v3 operations)
+
+Where: `applyShaperDoc` (`shaper-doc.js:84`), the one read of a stored Shaper document, after today's value mapping
+(`withClearingNow` `:62-69`, `opKeyNow` `:70-76`) and the reconciliation (`:91-93`). The file changes only when the user
+next saves (as today).
+
+**Steps**
+
+1. Today's reconciled Map, in its order: index `i` of each record = its `seq` (so the file order is kept exactly).
+2. Region data out of each record: `slope`, `levels` to `regions[key]`; `source` from the selection entry's `base[key]`
+   when there is one.
+3. Group the records by today's operation key `opKeyOf` (`operations.js:95`): the operations the user sees today.
+   A `contour:<key>` record joins a Contour operation whose ref is `<key>`, with `cutDepth` = the part's depth at the
+   moment of migration (`"model"` when it equals the region's source depth), `wallSide` / `walls` from the part's type as
+   `stepped-cut.js:578` / `:908` read it today.
+4. Inside a group, compare each record's DECLARED fields (1.5). Records equal in all of them share one operation;
+   a record that differs in a declared field (today only possible through `loopPitch`, 1.5) becomes its own operation
+   right after it: lossless by construction, and counted in the migration report (expected 0 on every real document).
+5. `leadInAt` moves to the ref; Depth becomes `"model"` where the record's depth equals `base.cutDepth` (Fusion /
+   STL regions the user did not retype), else stays the typed value.
+6. List order = `orderOps(derived, storedOrder)` (`operations.js:121`) on today's operations: the exact list the
+   user had (a stored order of old keys is first mapped by `opKeyNow`, as today).
+7. Ids `op-1 ... op-n` in list order; `on: true`; `version: 3`.
+
+Unassigned records (cut type null: left by a bin or a Stock move, `prepare-stage.js:75`, `prepare-view.js:834`) are not
+migrated: they derive nothing today and a geometry needs no record to exist.
+
+**Test plan (all must pass before stage 1 ships)**
+
+- *Baseline corpus, frozen from `origin/main` before stage 1* (as TURN 792 froze the stepped cases with
+  `.evidence/792/stepped-md5.mjs`): a v2 sidecar per case + the md5 of (a) the downloaded SVG, (b) the 2D preview copy
+  minus `data-op`, (c) the Paths view's `written` list (`export-payload.js:173`), (d) `planReliefItems` signatures,
+  (e) the Operations list's `inspect()` items (`op-list.js:172-176`). Committed as `tests/fixtures/opfirst/` (sidecars +
+  `baseline.json`). Cases:
+  - every design the node tests build today with a plan (about 100 test files touch it: `grep -l "CUT_PLAN\|cutPlan\|setFieldFor\|contour:\|opOrder" tests` = 100), saved through `captureShaperDoc`;
+  - the fixtures `real-solid-plate-711`, `hole-rule-774`, `bezier-loops-761`, `sa7-slope/*`, `leadin-775-before`,
+    `pocket-clearing-749-main`, `pocket-clearing-750-before`, `pocket-804-morphed-main`;
+  - the owner's STLs (rose, Green Man, floral) as reliefs: Roughing Terraces and Nested, + Contour 1/8 in ball, smoothing
+    default and 0;
+  - a generated matrix: every cut type x every settings branch (tabs, onion skin, refused hold; each clearing pattern,
+    Loop on / off; lead-in calculated / dragged; adaptive steps; allowance; Stock loop; combined profile; chain; guide)
+    x Contour on / off, two shapes per operation, plus a stored reordered `opOrder` and an old-value document (stepped
+    types, `wallAllowance`, `passDepth`, `concentric`).
+- *Assertions on the branch:* for every case, `applyShaperDoc(v2)` then (a)-(e) have the baseline md5s; the migration
+  report has 0 splits (the designed `loopPitch` case: exactly 1, and its export still equal); v3 saved, reloaded = the
+  same v3 JSON; Undo right after loading is a no-op; the selection list's rows unchanged.
+- *Live:* open a migrated rose document on desktop and phone 390: the same list, the same 3D Review, the same download
+  (md5).
+- *Old app safety:* stage 0 (section 6) ships first, so an app that does not know version 3 refuses to save over it.
+
+---
+
+## 4. The UI
+
+### 4.1 Where the palette lives (desktop and phone)
+
+- **Desktop:** in the Operations card (top left, 288 px: `apps/shaper/index.html:482`), a fixed strip between the header
+  and the rows. Two labelled rows of buttons, 32 px tall, icon (the cut types' own `CUT_TYPES.icon`) + short name:
+  `2D: Outside, Inside, Pocket, On line, Guide`, `3D: Roughing, Contour` (later `Rest`, `Drill`: a slot each is kept
+  in the strip now so adding them moves nothing), and a `My lineups ▾` button at the end of the 3D row. The strip stays
+  visible when the list is folded (it belongs to the header, not the fold's body: `op-list.js:41-47`).
+- **Phone (390 px):** the Operations card is the bottom sheet (folded 44 px bar, opens to 55 %: `index.html:510`,
+  `:515`). The palette is the sheet's first block when open: buttons 44 px tall (5 per row at 366 px = 73 px each), it
+  does not scroll with the rows. The folded bar gets one `+` button that opens the sheet at the palette.
+- **Layout never shifts:** the strip's height is fixed; a type that the current context cannot take is greyed with its
+  reason as a tooltip (TASK 805's cursor tooltip; long press on a phone), never hidden; the lineups menu is a popover
+  (`position: fixed`), never pushing rows; a new or emptied operation changes only the rows below. The 805 layout probe
+  (`tests/helpers/hints-live.js`) gets the strip and asserts 0 px shift when opening a menu, selecting, adding.
+
+### 4.2 Click and drag
+
+- **Click a palette button** = an empty operation of that type appears, placed by the 743 default-order rule
+  (`operations.js:10-20`), selected (active), its card open, in **Add shapes** mode: its row says "click shapes to add ·
+  Done"; a click on a shape adds it, a click on a shape already in it takes it out; Done or Esc ends the mode. With
+  shapes already selected when the button is clicked, they are its shapes at once (no Add mode). Settings start from the
+  remembered last values, as today (`cut-plan.js:45-48`, `:68-100`, `:233-241`).
+- **Drag a palette button onto a shape** = the operation is created with that shape (and with every selected shape when
+  the drop lands on one of them). Mouse / pen: the drag starts after 4 px (op-list's `DRAG_START_PX`); touch: press and
+  hold `HOLD_MS` = 350 ms, then drag (op-list's rule, so a swipe still scrolls). While dragging, a ghost icon follows the
+  pointer (`position: fixed`), the shape under it gets Prepare's hover highlight, a shape that cannot take the type shows
+  "not allowed" (an open chain under a region type: `shaper.js:177-178`). A drop on no shape creates nothing.
+- **Keyboard:** the buttons are focusable; Enter / Space = click.
+- **Later geometry from Fusion:** "Select in Fusion" on the operation row (task 806, Fusion mode only).
+
+### 4.3 The cards
+
+- **Operation card** (an operation is active): the same cut card as today (task 810's tabs when they land), its subject
+  the operation: header "Pocket 2 · 3 shapes: a change applies to all 3", the type's rows, and a Geometry row with
+  Add shapes / Remove / Make its own operation. Changing the type is allowed when every shape can take the new type
+  (greyed with the reason otherwise).
+- **Shape card** (a shape clicked, no operation active): a row of chips, one per operation the shape is in
+  ("1 Roughing", "2 Contour"): a chip makes that operation active; below them the quick flow's "Add a cut" type menu.
+  With no operation yet, the card looks like today's (type menu first).
+
+### 4.4 The quick flow (today's way, kept)
+
+Click a shape (or several), pick a type in the card's menu = the shapes go into an operation of that type: **the type's
+last-used operation** (owner question 1; the alternative is always a new one). The card then shows that operation and
+says "Added to Pocket 2". If the shape is already in an operation of that type, picking the type does nothing new. A
+Stock pick keeps today's one-Stock move (`prepare-view.js:829-838`).
+
+### 4.5 My lineups
+
+- **Store: per user**, synced to Drive like the other settings (task 773: `packages/ui/cloud/settings-sync.js:1-20`),
+  as a key synced BY PART, one part per lineup (`SHAPER_LINEUPS:<lineup id>`, the mechanism the ribbon layout uses:
+  `packages/core/settings-manager.js:151`), so editing lineup A on the laptop and lineup B on the phone never lose one.
+  Not per document: the owner's words are "apply it to any part". A lineup = `{ id, name, ops: [{ type, settings }] }`,
+  settings base mm, declared fields only (1.5), no geometry. A setting that names geometry (task 810's Boundary = Shape)
+  is saved as "Shape (pick when applied)": the applied operation shows its existing refusal note until a shape is picked.
+- **Save:** in the Operations list, select the rows (or none = all), `My lineups ▾ > Save these as a lineup…`, a name.
+- **Apply:** select the shape(s), `My lineups ▾ > <name>`: one operation per slot, in the lineup's order, each with
+  the selected shapes, placed by the default-order rule. With no shape selected: the operations appear empty. A second
+  apply to another part joins the operations that same lineup made in this document (matched by the stored
+  `lineup: { id, slot }` link, never by comparing settings), owner question 2; `as new operations` in the menu does the
+  other. Applying a lineup is ONE undo step.
+- **Manage:** rename, delete, re-save (overwrite) in the same menu. No other settings screen.
+
+---
+
+## 5. How it serves the queued tasks (and what their briefs must change)
+
+| Task | What the model gives it | Brief change needed |
+|---|---|---|
+| **810** tabbed Roughing / Contour cards, machining boundary | its new fields are operation settings (record fields today, same names); the tabs are the operation card's | (1) Contour's "which walls: All / Sloped only" IS `walls` (1.4): "Sloped only" must be exactly today's own-wall skip (`stepped-cut.js:909-911`) so the migration maps to it; (2) its "Bottom: Part depth" for the Contour = Depth "From model"; (3) "Boundary: Shape" stores a geometry key: it must go through `renameGeometry`; (4) its new "Loop pitch" row must be in `settingsOf` (`operations.js:89`) or the declared table (1.5), else two different pockets show as one row. 810 can run BEFORE stage 1 (independent of storage), but conflicts with stage 2 in `cut-panel.js`: run 810 first, or after stage 2, never in parallel |
+| **798** operation checkboxes | the tick is `op.on`, stable through any settings edit; group tick = the operations of one bit run; `planEntries({ ticked: true })` is the one filter for Prepare, 3D, Paths, 2D and the export | "saved with the document; part of undo" = the `on` field; run 798 AFTER stage 1 (before it, a tick keyed by today's operation key would be lost whenever a setting changes) |
+| **806** Select in Fusion per operation | an operation exists with no shapes and has a stable id; its shapes -> regions -> tokens (`regions[key].sources`) | `opKey` in the contract becomes `opId`; `assign: { opId, tokens }` adds / removes refs of that operation only; regions named by an `assign` go nowhere else; "an operation whose entities all disappeared empties" is native. Run after stages 1-2 and SA-15 |
+| **801** simulation | the list order and ticks are stored; "Preview selected" = the active operation; empty operations are skipped | none, beyond reading `describeOperations` (stored) instead of `planOperations` (derived) |
+| **SA-15** persistent selection (palette follow-up) | removing entities removes their regions from EVERY operation (operations stay, possibly empty); Undo restores the refs (the operations store is in the undo snapshot) | (1) "re-added regions arrive unassigned with default settings": make precise as: never put back into an existing operation; a region new to the document that carries a payload cut type goes into a NEW operation made by that import (as a first import does), one without a cut type stays in none; (2) the 795 gap remains: a palette Undo after an X restores the regions but the add-in's remembered set is not told (`WORK-LOG TURN 795`, "Contract gap"): the follow-up contract needs a `restore_selection { selectionId, tokens }` event |
+
+---
+
+## 6. Build plan (each stage shippable on its own, tested, gate green)
+
+| Stage | What | Tests | Size |
+|---|---|---|---|
+| **S0** | (a) the version guard: an app that reads a Shaper sidecar with a `version` above its own opens it but never saves over it, with one notice ("made by a newer version of the app: reload to edit"); (b) the declared settings table `CUT_TYPES[].fields` (1.5), read by `settingsOf` and the card (`loopPitch` joins the key: no user-visible change today, no card row sets it) | node: a v3 sidecar is not overwritten by autosave / save; settingsOf = the table; every existing test unchanged | S: ~150 lines, 2 test files; deploy at least a few days before S1 |
+| **S1** | the operations + regions store, the migration, `planEntries` and every reader of section 2 switched; the UI behaves EXACTLY as today: a field edit on selected shapes moves them into the operation with the resulting settings (found or new, keeping their `seq`), so the list and the files are today's | the migration corpus of section 3 (byte-identical (a)-(e)); every existing test passes, adjusted only where it pokes `CUT_PLAN` directly (they load a v2 sidecar through `applyShaperDoc` instead: the real migration path, no test-only code) | L: ~1,000 lines app, ~60 test files adjusted, 1 new corpus test |
+| **S2** | operation first: empty operations, the active operation, Add shapes mode, the operation card (edits all its shapes) and the shape card (chips, Make its own operation), multi-membership, Contour as its own type in the menus (the Contour row and the allowance coupling removed), the quick flow (4.4), the bin deletes the operation | node + live (desktop 1280, phone 390): add empty, add / remove shapes, a shape in Roughing + Contour, edit = all shapes, make its own, undo / redo of each, save + reload | L: ~700 lines, 2 new test files |
+| **S3** | the palette (4.1, 4.2): click, drag (mouse, touch hold), keyboard, greyed with reasons, phone sheet `+` | live desktop + phone: click = empty selected, drag onto a shape, drop on nothing = nothing, 0 px layout shift (805 probe), 44 px targets | M: ~400 lines, 1 live test |
+| **S4** | My lineups (4.5): store synced by part, save / apply / join / as new / rename / delete | node: save, apply to 1 and 2 parts, join by link, units, sync merge per lineup; live: menu on desktop + phone | M: ~400 lines, 2 test files |
+
+Order with the queue: S0 now (small); 810 when dispatched (before S2); S1; 798; S2; S3; S4; then 801 and 806 / SA-15
+follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live tests; the advisor's merge gate).
+
+**Behaviour changes for existing users** (each stage's REPORT repeats its own)
+
+- S0: none visible (a newer document is protected from an older app).
+- S1: none (byte-identical files and lists, asserted).
+- S2: editing an operation's setting changes ALL its shapes (today: only the selected shapes, which then regroup); an
+  edited operation keeps its place in the list (today it moves); the bin deletes the operation, and its shapes stay in
+  their other operations (today: unassigns the regions); Contour is a type in the menus, the Roughing card loses its
+  Contour row and "Edit contour"; adding / removing a Contour no longer sets Roughing's allowance; a shape removed from an
+  operation and added again moves to the end of the FILE order (today a record kept its place even unassigned; the
+  elements are the same).
+- S3: the palette strip in the Operations card (the card is ~80 px taller on desktop; on a phone the sheet shows it first).
+- S4: the lineups menu; a new synced settings key.
+
+---
+
+## 7. Risks, decided defaults, open questions
+
+**Risks**
+
+1. *An older app overwriting a version 3 document* (an old tab still open, or another device not yet reloaded): its
+   save would write a sidecar without `operations`, losing the plan. Mitigation: S0's guard ships first; the window left
+   is a tab opened before S0 and still open after S1.
+2. *Test churn:* about 100 test files touch the plan (count in section 3). S1 keeps the entry interface and moves tests
+   to the real migration path; still the largest stage.
+3. *A Guide on a hole counts as "its own entry"* (`ownedLoopIds`, `profile-model.js:669-677`, includes every entry with a
+   cut type), so an Outside plate then stops cutting that hole. True today; multi-membership makes "Guide on everything"
+   more likely. Not changed by this design (byte identity); flagged for its own task.
+4. *810 and S2 both rewrite `cut-panel.js`:* never in parallel (section 5).
+5. *Undo snapshot cost:* the snapshots already hold the plan; moving `levels` into `regions` (shared, never mutated) and
+   comparing only the operations store in `cutEdit` removes today's double stringify of the rose's ~1.6 MB levels per edit.
+6. *Identical paths on the Origin:* how the machine treats exact copies is not known yet; section 8 gives the design
+   for each outcome of the owner's test.
+
+**Decided defaults (reversible; tell me if any is wrong)**
+
+- No per-shape overrides; Depth "From model"; dragged lead-in on the shape; "Make its own operation" (1.4).
+- File order = the order memberships were made; the list order never changes the file (TURN 743 ruling).
+- Lineups per user, synced to Drive per lineup; not per document (4.5).
+- A Fusion import groups its regions into operations as today's derivation does, with Depth "From model"; an update
+  never puts a region back into an existing operation (SA-15).
+- Stock stays a one-shape "Not cut" operation, reachable from the card's type menu, not in the palette (the owner's
+  palette list has no Stock).
+
+**Open questions for the owner** (the two at the top of this note)
+
+1. Quick flow: join the type's last-used operation, or always a new one?
+2. Lineup applied to a second part: join the operations it made for the first part, or a new copy per part?
+
+---
+
+## 8. Identical paths in one file (owner turn 2678)
+
+With operations first, two operations can hold the SAME shape, so the file can hold IDENTICAL paths (the same `d`)
+with a different depth, type or bit. Today this already happens for one pair only: a part and its Contour (both cut the
+part's target: `cut-plan.js:43`). The owner is testing the machine with exactly overlapping paths (3 identical squares:
+On line 1 mm, On line 2 mm, Inside 3 mm; 2 identical circles: On line 1.5 mm, Pocket 4 mm): does Switch reach every
+copy, does the Origin merge or hide any, does cutting one leave the others cuttable.
+
+**How the model writes them**
+
+- **Never merged.** One element per operation per shape, each with its own fill / stroke and every `shaper:*` attribute
+  ON the element (the exporter's one way to write an element since TASK 802: `packages/core/shaper-export.js:260-263`);
+  the exporter has no de-duplication of equal geometry (its loop writes every derived cut: `:220-251`), and this design
+  adds none. Silently dropping a copy would drop a depth: not an option.
+- **Order of the copies:** in the FILE order of 1.6 (the order the memberships were made, `seq`), not the Operations list
+  order. The advisor's note asked for the operation order; the reason it is not: the file order follows the list nowhere
+  else (TURN 743 send-back: "the file never changes"), and the migration's byte identity needs today's order. If the
+  machine test shows that the ORDER of copies matters (for example Switch offers the last-written copy first), the change
+  is one sort in `planEntries` (operations' list position, then `seq`) and its own decision, because it changes the files
+  of existing designs whose list was reordered.
+- With 798's ticks, an unticked operation's copy is simply not in the file.
+
+**What the app shows when operations share a shape**
+
+- *Prepare:* each operation draws its own tool path (as a part and its Contour do today); the depth chips of one shape
+  (today one chip per record: `apps/shaper/src/prepare-view.js:120-143`) are combined into ONE chip listing the depths
+  in list order, "↓ 1 · 2 · 3 mm", so chips never stack on top of each other; the shape card's chips (4.3) name the
+  operations ("1 On line", "2 On line", "3 Inside").
+- *Operations list:* each row's sub-line counts its shapes as today; a row whose shapes are also in another TICKED
+  operation adds "shares 1 shape with 2, 3" (a fact; it is what the machine will see as overlapping paths).
+- *Export Paths / 2D:* one row per element as today (the copies are separate rows under their own operation, TURN 743
+  grouping); picking a row highlights that element only; overlapping elements are drawn in file order, so the last one is
+  on top (the same rule the machine screen will follow, to be checked by the test).
+
+**The decision that depends on the owner's machine result**
+
+| Outcome on the Origin | What the design does |
+|---|---|
+| **A. Every copy is reachable and cuttable on its own** (Switch cycles through the overlapping paths, cutting one leaves the others) | Nothing more: the file has one copy per operation, the list's "shares a shape" line stays as information, no warning in Export. |
+| **B. The Origin merges, hides or marks copies as cut** (only one copy reachable, or cutting one counts for all) | Still never merged by the app (a merge would lose a depth). Export shows ONE line when ticked operations share a shape: "On line 1 mm, On line 2 mm and Inside 3 mm share 1 shape: the Origin shows only one copy. Untick all but one and export them one at a time (same anchor)." The owner's 798 rule stays (one SVG = the ticked operations, no per-operation file option); unticking is the user's action. If the machine shows exactly which copy it keeps (first or last written), the line names that one. |
+
+Until the result is known, stages S0-S1 are unaffected (S1 writes exactly today's files); the Export line of outcome B,
+if needed, belongs to stage S2 (where shapes can first be in several operations) and needs 798's ticks.

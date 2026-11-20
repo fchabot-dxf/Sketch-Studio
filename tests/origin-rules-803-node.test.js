@@ -57,7 +57,7 @@ eq(getTargetCaps('studio').autoPass, false, 'a capability a target does not decl
 
 // ── 2. the generated index is current and holds no statement ──
 const index = await buildIndex();
-eq(read(INDEX_FILE), index, `${INDEX_FILE} is stale: run node scripts/gen-origin-rules-index.mjs`);
+eq(read(INDEX_FILE).split('\r\n').join('\n'), index, `${INDEX_FILE} is stale: run node scripts/gen-origin-rules-index.mjs`);
 ok(!index.includes('NOT FOUND') && !index.includes('#Lnull'), 'every evidence and entry link resolves');
 for (const r of ORIGIN_RULES) { ok(index.includes('`' + r.id + '`'), `index lists ${r.id}`); ok(!index.includes(r.statement), `${r.id}: the index holds no copy of the statement`); }
 ok(index.includes('## How to add a rule'), 'the index header says how to add a rule');

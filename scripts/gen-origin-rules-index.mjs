@@ -56,7 +56,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const text = await buildIndex();
   const file = path.join(ROOT, INDEX_FILE);
   if (process.argv.includes('--check')) {
-    if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text) { console.error(`${INDEX_FILE} is stale: run node scripts/gen-origin-rules-index.mjs`); process.exit(1); }
+    if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8').split('\r\n').join('\n') !== text) { console.error(`${INDEX_FILE} is stale: run node scripts/gen-origin-rules-index.mjs`); process.exit(1); }
     console.log(`${INDEX_FILE} is current`);
   } else { fs.writeFileSync(file, text); console.log(`wrote ${INDEX_FILE}`); }
 }

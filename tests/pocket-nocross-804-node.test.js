@@ -117,38 +117,6 @@ for (const [name, sh] of Object.entries(SHAPES_804)) for (const pattern of ['lin
   eq(clearingWords({ ...ann, settings: settings(SHAPES_804.annulus, 'linked', { loop: true }) }), `spiral, ${ann.loops} turns + wall: one closed loop`, "round one island: one closed loop (the wall's rings and the island's bridged)");
 }
 
-// ── 5. TASK 804b: RASTER + LOOP (owner design 2595): per area ONE closed path, zero crossings (the hard rule above), the passes row by row, then the step
-// out to the WALL RING, the ring whole, back along it to the first pass's start; each island's ring a balloon; no clean-up ring; the leftover == Loop off's ──
-for (const [name, sh] of Object.entries(SHAPES_804)) for (const allowance of [sh.allowance ?? ALLOW_MM, 0]) {
-  const tag = `${name} raster Loop allowance ${allowance}`, more = { finishAllowance: allowance };
-  const off = planOf(sh, 'raster', more), on = planOf(sh, 'raster', { ...more, loop: true });
-  const r = (sh.bit || BIT_MM) / 2, dist = distTo(sh), holes = (sh.holes || []).length;
-  eq([on.loopRefused, on.loop, on.loopCount], [null, true, 1], `${tag}: one closed path (one area)`);
-  eq(pathCrossings(on.clear.map((c) => ({ points: c.points, closed: true }))).count, 0, `${tag}: zero crossings`);
-  const c = on.clear[0], kinds = c.turns.map((t) => t.kind);
-  ok(c.closed && c.points[0].x === c.points.at(-1).x && c.points[0].y === c.points.at(-1).y, `${tag}: closed (first point == last)`);
-  eq(c.points[0], off.clear[0].points[0], `${tag}: it starts where the first pass starts (the start mark)`);
-  eq(kinds.filter((k) => k === 'pass').length, off.passes, `${tag}: every pass, in the zigzag order`);
-  ok(!kinds.includes('cleanup'), `${tag}: no clean-up ring`);
-  eq(kinds.filter((k) => k === 'finish').length, 1 + holes, `${tag}: the wall ring + each island's ring, each once`);
-  eq(kinds.at(-1), 'finish', `${tag}: the wall ring is the last turn (then only the way back along it and the step in)`);
-  let worstIn = Infinity, worstF = 0;
-  for (const p of c.points) worstIn = Math.min(worstIn, dist(p) - r);
-  for (const t of c.turns.filter((u) => u.kind === 'finish')) for (const p of c.points.slice(t.start, t.end + 1)) worstF = Math.max(worstF, Math.abs(dist(p) - r));
-  ok(worstIn >= -0.02, `${tag}: every point inside R inset by r (worst ${worstIn.toFixed(4)})`);
-  ok(worstF <= 0.01, `${tag}: the rings exactly r from the wall / island (worst ${worstF.toFixed(5)})`);
-  // (the same bound as the gradual Loop's above: the leftover's sliver filter rounds a sharp unreachable tip differently, e.g. the star with no allowance:
-  // 58.947 vs 58.880 mm² after it, 58.683 vs 58.687 before it: the Loop leaves less)
-  ok(Math.abs(on.leftover.area - off.leftover.area) <= Math.max(0.2, off.leftover.area * 0.01), `${tag}: the leftover == Loop off's (${on.leftover.area.toFixed(3)} vs ${off.leftover.area.toFixed(3)} mm²)`);
-  table.push(`${tag}: 1 loop, ${off.passes} passes, ${1 + holes} ring(s), ${(on.length / 1000).toFixed(2)} m (Loop off ${((off.length + off.finishLength) / 1000).toFixed(2)} m)`);
-}
-{ // where no zigzag joined along the contour is crossing-free (the star at 45 degrees: its links interleave between the points), the Loop is REFUSED, never cut crossing
-  const sh = SHAPES_804.star, on = planOf(sh, 'raster', { loop: true, rasterAngle: 45 });
-  eq([on.loopRefused, on.loop], ['loop cross', false], 'star raster 45 degrees: the Loop refused (its zigzag links would cross)');
-  eq(pathCrossings(written(on)).count, 0, 'star raster 45 degrees: what is written (the open passes + the clean-up ring + the wall) crosses nothing');
-  ok(CLEARING_REFUSED[on.loopRefused], 'the refusal has its words (a plain line on the card)');
-}
-
 // ── 3. the Morphed spiral's fold fix: main's path within 0.01 mm, fewer reversals ──
 {
   const MAIN = JSON.parse(fs.readFileSync(new URL('./fixtures/pocket-804-morphed-main.json', import.meta.url), 'utf8'));

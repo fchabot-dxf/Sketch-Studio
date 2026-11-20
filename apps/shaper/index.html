@@ -629,6 +629,11 @@
     /* TASK 813: the card's notes (turns, leftover, warnings) are an AREA OF THEIR OWN at the foot of the card, three lines high always, scrolling inside when longer: a note
        appearing or going never moves a row. A row that does not apply to the settings stays in its place, greyed and inert (cut-panel.js place); its label's tooltip says why. */
     .cut-note { box-sizing: content-box; flex: 0 0 auto; height: 4.2em; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; font-size: 11px; line-height: 1.4; color: var(--sk-prep-unit); padding: 0 12px; }
+    /* TASK 825 (V1): the warnings are the note's first lines; when more lines lie below the three, a fade and a small chevron (a button: real phones hide scrollbars) say so */
+    .cut-note-wrap { position: relative; flex: 0 0 auto; }
+    .cut-note-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; pointer-events: none; background: linear-gradient(to bottom, transparent, var(--sk-prep-card-bg)); }
+    .cut-note-more { all: unset; box-sizing: border-box; position: absolute; right: 12px; bottom: 0; width: 28px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--sk-prep-chip-text); cursor: pointer; }
+    .cut-note-fade[hidden], .cut-note-more[hidden] { display: none; }
     .cut-row.is-off > :not(.cut-field-label), .cut-row.is-off .cut-check { opacity: 0.4; }
     .cut-row.is-off .cut-field-label { opacity: 0.7; cursor: not-allowed; }
     .cut-note-warn { color: var(--sk-warning, #f59e0b); }

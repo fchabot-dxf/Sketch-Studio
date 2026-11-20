@@ -359,7 +359,7 @@ export function createCutPanel(hostEl, opts = {}) {
         </button>
       </div>
     </div>
-    <div class="cut-note"></div>
+    <div class="cut-note-wrap"><div class="cut-note"></div><span class="cut-note-fade" aria-hidden="true"></span><button type="button" class="cut-note-more" aria-label="More below: scroll the notes" title="More below" hidden><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
     <div class="cut-actions" hidden><button type="button" class="cut-cancel" data-hint="opCancel"></button><button type="button" class="cut-ok" data-hint="opOk"></button></div>
     <div class="cut-pop cut-type-menu" role="listbox" hidden></div>
     <div class="cut-pop cut-offset-pop" hidden></div>
@@ -370,7 +370,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const $ = (sel) => card.querySelector(sel);
   const rowsEl = $('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll); TASK 810: the tabs' panel
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
-  const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets');
+  const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), noteMore = $('.cut-note-more'), noteFade = $('.cut-note-fade'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets');
   const adaptiveInput = $('.cut-adaptive'), deviationInput = $('.cut-step-deviation'), deviationPresetsWrap = $('.cut-row[data-row="stepDeviation"] .cut-presets'); // TASK 717
   const holdModesWrap = $('.cut-hold-modes'), countInput = $('.cut-tab-count'), countPresetsWrap = $('.cut-row[data-row="tabCount"] .cut-presets') /* the Auto button, inside the count box (a row of its own would push the card past a phone's screen) */, tabWidthInput = $('.cut-tab-width'), holdThicknessInput = $('.cut-hold-thickness'); // TASK 742
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
@@ -657,6 +657,14 @@ export function createCutPanel(hostEl, opts = {}) {
   });
   stepperFor('leadInLength', leadLengthInput, 'lead-in length', { box: leadLengthInput.closest('.cut-box') });
 
+  // TASK 825 (V1): when the note area holds more than its three lines, a fade + a small chevron at its foot say so (a phone's overlay scrollbar shows only while scrolling); the chevron scrolls it
+  const syncNoteMore = () => {
+    const more = noteEl.scrollHeight - noteEl.clientHeight > 1 && noteEl.scrollTop + noteEl.clientHeight < noteEl.scrollHeight - 1;
+    noteMore.hidden = !more; noteFade.hidden = !more;
+  };
+  noteEl.addEventListener('scroll', syncNoteMore);
+  noteMore.addEventListener('click', () => { noteEl.scrollTo({ top: noteEl.scrollTop + noteEl.clientHeight * 0.8, behavior: 'smooth' }); });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(syncNoteMore).observe(noteEl); // the card shown / a width change re-wraps the lines
   // TASK 813: a row's state on this card: false = the card has no such row (another operation / target); true = shown; a string = shown IN ITS PLACE but greyed and inert (it
   // does not apply to the current settings), the string its reason: the start of its label's tooltip. So changing a setting never moves the rows below it.
   const place = (name, state) => {
@@ -816,14 +824,17 @@ export function createCutPanel(hostEl, opts = {}) {
     angleInput.value = String(Math.round(angle * 100) / 100);
     renderPresets(anglePresetsWrap, clearing ? ANGLE_PRESETS : [], 'rasterAngle', angle);
     noteEl.innerHTML = '';
-    for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
-      const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');
+    // TASK 825 (V1): the WARNING lines come first (the area is three lines high, always: a warning at the foot was hidden below the fold), then the facts
+    const noteItems = current.note.map((line) => (typeof line === 'string' ? { text: line } : line));
+    for (const item of [...noteItems.filter((i) => i.warn), ...noteItems.filter((i) => !i.warn)]) { // an item is { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
+      const d = document.createElement('div');
       if (item.warn && item.text.endsWith(item.warn)) {
         d.append(item.text.slice(0, item.text.length - item.warn.length));
         const w = document.createElement('span'); w.className = 'cut-note-warn'; w.textContent = item.warn; w.title = item.title || ''; d.appendChild(w);
       } else d.textContent = item.text;
       noteEl.appendChild(d);
     }
+    syncNoteMore();
     const curType = current.cutType ? cutTypeById(current.cutType) : null;
     hints.cutDepth.setId((curType && curType.depthParam) || 'cutDepth'); // TASK 472 / 770: a Stock's depth row is its Thickness (its own table entry)
     const off = Number(current.cutOffset) || 0;

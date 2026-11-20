@@ -24,15 +24,16 @@ const target = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0
 const app = await open({ host: 'shaper' });
 try {
   const st = app.state;
-  rect(st, 'SB', 0, 0, 200, 120); rect(st, 'G1', 10, 10, 40, 40); rect(st, 'G2', 50, 10, 80, 40); rect(st, 'P1', 10, 60, 60, 100); rect(st, 'P2', 80, 60, 130, 100);
+  rect(st, 'SB', 0, 0, 200, 120); rect(st, 'G1', 10, 10, 40, 40); rect(st, 'G2', 50, 10, 80, 40); rect(st, 'P1', 10, 60, 60, 100); rect(st, 'P2', 80, 60, 130, 100); rect(st, 'G3', 90, 10, 120, 40);
   const loops = findLoops(st);
-  const K = Object.fromEntries(['SB', 'G1', 'G2', 'P1', 'P2'].map((n) => [n, keyOf('loop', loops.find((l) => l.edges.includes(`${n}s0`)).id)]));
+  const K = Object.fromEntries(['SB', 'G1', 'G2', 'G3', 'P1', 'P2'].map((n) => [n, keyOf('loop', loops.find((l) => l.edges.includes(`${n}s0`)).id)]));
   app.modes.showMode('prepare');
   const pv = app.prepare.view();
   const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? app.prepare.pickType(v) : pv.setOpField(f, v)); app.prepare.ok(); };
   edit('SB', { cutType: 'stock' });
   edit('G1', { cutType: 'guide', cutDepth: 0 });
   edit('G2', { cutType: 'guide', cutDepth: 1.5, cutOffset: 1 });
+  edit('G3', { cutType: 'guide', cutDepth: 1.5, cutOffset: 1, toolDia: 6.35 });
   edit('P1', { cutType: 'pocket', toolDia: 6.35, cutDepth: 6 });
   edit('P2', { cutType: 'pocket', toolDia: 6.35, cutDepth: 6, clearing: 'linked', stepover: 40, loop: false });
   pv.setSelection([]);
@@ -42,16 +43,23 @@ try {
   const rowBox = (id) => [...app.document.querySelectorAll('#prepare-ops .ops-row')].find((r) => r.dataset.id === id).querySelector('.ops-tick input');
   const headBox = (h) => [...app.document.querySelectorAll('#prepare-ops .ops-tool')].find((e) => e.textContent === h).querySelector('.ops-tick input');
   const idOf = (type, at = 0) => storeOps().filter((o) => o.type === type)[at].id;
-  eq(ops().map((o) => o.rowText), ['Stock', 'Guide', 'Guide', 'Pocket · 6 mm', 'Pocket (spiral) · 6 mm'], 'setup: the list rows');
+  eq(ops().map((o) => o.rowText), ['Stock', 'Guide · 0 mm', 'Guide · 1.5 mm', 'Guide · 1.5 mm', 'Pocket · 6 mm', 'Pocket (spiral) · 6 mm'], 'setup: the list rows (V4: the two Guides tell their depths)');
 
   // V8: the Not cut heading
   eq(list.inspectTicks().groups[0], { heading: 'Not cut', state: 'all', disabled: false }, 'V8: Stock + 2 Guides ticked: the heading is all');
   app.press(headBox('Not cut'));
-  eq(storeOps().filter((o) => o.type === 'guide').map((o) => o.on), [false, false], 'V8: the heading unticks its two Guides');
+  eq(storeOps().filter((o) => o.type === 'guide').map((o) => o.on), [false, false, false], 'V8: the heading unticks its Guides');
   eq(list.inspectTicks().groups[0].state, 'some', 'V8: the Stock under it is still ticked: the heading is mixed, not none');
   app.press(headBox('Not cut'));
   eq(list.inspectTicks().groups[0].state, 'all', 'V8: a tap on the mixed heading ticks them again: all');
 
+  // V4: the Guides' rows
+  const guides = ops().filter((o) => o.typeLabel === 'Guide');
+  eq(guides.map((o) => o.rowText), ['Guide · 0 mm', 'Guide · 1.5 mm', 'Guide · 1.5 mm'], 'V4: the Guides\' rows show their depths');
+  eq(guides.map((o) => o.detail), [null, 'offset 1 mm', 'offset 1 mm, bit 6.35 mm'], 'V4: and the offset, and a bit that is not the default, when there is one');
+  eq(new Set(guides.map((o) => o.label)).size, 3, 'V4: the three Guides are told apart (their row words and labels)');
+  eq(ops()[0].rowText, 'Stock', 'V4: the Stock keeps its plain row');
+  eq(storeOps().filter((o) => o.type === 'guide').length, 3, 'setup: three Guides');
   void idOf; void rowBox;
 } finally { await app.close(); }
 console.log(`visfix-825-node: ${checks} checks passed`);

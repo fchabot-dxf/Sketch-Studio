@@ -231,7 +231,7 @@ const HOSTS = {
     const header = createAppHeader({ tabs: M.SHAPER_STAGES, activeTab: 'design', onTabChange: (id) => modes.showMode(id) });
     doc.body.insertBefore(header.el, doc.body.firstChild);
     modes = M.createModeRouter({ views: M.findViews(doc), onActiveChange: (id) => header.setActiveTab(id),
-      getController: () => controller, ensureSketch, enter: { prepare: prepare.enter }, afterShow: () => history.refresh() });
+      getController: () => controller, ensureSketch, enter: { prepare: prepare.enter }, afterShow: (mode) => { if (mode !== 'prepare') prepare.leave(); history.refresh(); } }); // TASK S2: as main.js (leaving Prepare = OK on the open operation)
     (await import('#ui/app-footer.js')).mountAppFooter({ router: history, view: () => (controller && modes.current() === 'design' ? { svg, state: controller.state } : null) }); // main.js: the footer (TASK 618/619)
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;

@@ -20,6 +20,7 @@ import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { PARAM_HINTS } from '../apps/shaper/src/param-hints.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 
 let checks = 0;
@@ -328,9 +329,12 @@ SettingsManager.set('LENGTH_PRECISION', null);
   const app = await open({ host: 'shaper', profile });
   try {
     const doc = app.document, q = (s) => doc.querySelector(s), st = app.state;
-    const pressEl = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
-    const clickAt = (x, y) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
-    const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+    const pressElRaw = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
+    const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
+    const clickRaw = (x, y) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
+    const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+    const typed = (cls, v) => editStep(app, () => typedRaw(cls, v)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     pressEl('.sk-header-tab[data-tab="design"]');
     for (const k of [...st.joints.keys()]) st.joints.delete(k);
     st.shapes.length = 0; st.constraints.length = 0;

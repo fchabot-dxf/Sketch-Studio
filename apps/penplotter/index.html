@@ -233,6 +233,9 @@
     .wiz-head .preset-close:hover { color: #fff; }
     .wiz-box .field { display: grid; grid-template-columns: 1fr 120px; gap: 8px; align-items: center; }
     .wiz-box .field label { font-size: 11px; color: #8a8067; text-transform: uppercase; font-weight: bold; }
+    #docModal { z-index: 9600; } /* TASK 827: above the phone's slide-over Design drawer (z 9500), which is where the Document button is: Done / Cancel were under it */
+    #docModal .field.paper-field { grid-template-columns: 1fr; gap: 4px; } /* TASK 827: the long option text needs the full row */
+    @media (pointer: coarse) { #docModal .field select, #docModal .field input { min-height: 44px; } #docModal .wiz-btn, #docModal .preset-close { min-height: 44px; min-width: 44px; } }
     .wiz-box .field input, .wiz-box .field select { background: #fff; border: 1px solid #d8cbb2; border-radius: 3px; padding: 4px 6px; width: 100%; box-sizing: border-box; color: #3a352b; }
     .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
     .setting-row > span { font-size: 13px; }
@@ -258,6 +261,8 @@
       <div class="wiz-head" style="display:flex; justify-content:space-between; align-items:center; font-weight:600;">
         <span>Document</span><button class="preset-close" id="docModalClose" title="Close">&#10005;</button>
       </div>
+      <div class="field paper-field"><label data-hint="paper">Paper</label><select id="docPaper"></select></div>
+      <div class="field"><label data-hint="orientation">Orientation</label><select id="docOrient"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></div>
       <div class="field"><label>Units</label><select id="docUnit"><option value="mm">mm</option><option value="in">inches</option></select></div>
       <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input type="number" id="docW" min="10" max="2000" step="1"></div>
       <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input type="number" id="docH" min="10" max="2000" step="1"></div>

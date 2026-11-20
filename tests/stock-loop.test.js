@@ -7,7 +7,8 @@ import { buildRelief, DEFAULT_STOCK } from '#core/relief-model.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { makeProfile } from '#core/profile-model.js';
-import { CUT_TYPES, STOCK_TYPE_ID, exportEncoding, classify, extractCutRecord, effectiveCutRecord, availableTypes } from '../apps/shaper/src/shaper.js';
+import { CUT_TYPES, STOCK_TYPE_ID, exportEncoding, classify, extractCutRecord, effectiveCutRecord } from '../apps/shaper/src/shaper.js';
+import { typeRefusal } from '../apps/shaper/src/cut-plan.js';
 import { PARAM_HINTS } from '../apps/shaper/src/param-hints.js'; // TASK 770
 import { planReliefItems, planStockProfile, stockKeyOf, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { resolveStock } from '../apps/shaper/src/stock.js';
@@ -36,8 +37,8 @@ const loopAt = (st, x, y) => findLoops(st).find((l) => l.edges.some((e) => { con
   assert.ok(t, 'Stock is a declared cut type');
   assert.deepStrictEqual(t.params, ['cutDepth'], 'its one field is the depth row (thickness): no offset / bit rows');
   assert.strictEqual(t.depthParam, 'stockDepth'); assert.strictEqual(PARAM_HINTS.stockDepth.label, 'Thickness', 'TASK 770: its depth row is the Thickness (param-hints.js)'); assert.strictEqual(t.targetKind, 'region', 'closed loops only');
-  assert.ok(availableTypes('loop').some((c) => c.id === 'stock') && availableTypes('profile').some((c) => c.id === 'stock'));
-  assert.ok(!availableTypes('chain').some((c) => c.id === 'stock'), 'an open chain cannot be the stock');
+  assert.ok(typeRefusal('stock', ['loop:a']) === null && typeRefusal('stock', ['profile:p']) === null, 'a closed shape can be the stock'); // TASK S2: the one compatibility rule (cut-plan.js typeRefusal)
+  assert.ok(typeRefusal('stock', ['chain:c']) !== null, 'an open chain cannot be the stock');
   assert.strictEqual(t.cutType, 'guide', 'its export encoding is the Guide'); assert.strictEqual(t.fill, '#0068FF');
   assert.ok(CUT_TYPES.findIndex((c) => c.id === 'stock') > CUT_TYPES.findIndex((c) => c.id === 'guide'), 'declared after the guide');
   assert.strictEqual(effectiveCutRecord({ cutType: 'stock', cutDepth: 19, cutOffset: 3, toolDia: 6 }).cutOffset, 0, 'the preview ignores an offset on a Stock');

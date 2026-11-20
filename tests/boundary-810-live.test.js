@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = path.resolve('.evidence/810');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -53,7 +54,7 @@ const press = async (x, y) => {
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
   await sleep(150);
 };
-const clickEl = async (sel) => {
+const clickElRaw = async (sel) => {
   await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (e && e.scrollIntoView) e.scrollIntoView({ block: 'nearest' }); })()`);
   await sleep(60);
   const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect();
@@ -62,6 +63,10 @@ const clickEl = async (sel) => {
   assert.ok(p && p.onTop, `${device}: ${sel} is on screen and not covered: ${JSON.stringify(p)}`);
   await press(p.x, p.y);
 };
+// TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+// operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
+const s2Steps = { get phone() { return touch; }, evalJs, waitFor, clickEl: clickElRaw };
+const clickEl = (sel) => stepLive(s2Steps, () => clickElRaw(sel));
 // a world point of the Prepare canvas that is on screen and not covered (the first of `pts`, world mm, y down)
 const pressWorld = async (pts, what) => {
   const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'), M = svg.getScreenCTM();
@@ -71,6 +76,7 @@ const pressWorld = async (pts, what) => {
   assert.ok(p, `${device}: ${what}: a point on the canvas`);
   await press(p.x, p.y);
 };
+const openWorld = (pts, what) => clickOpenLive(s2Steps, () => pressWorld(pts, what)); // TASK S2: OK, the click, the clicked shape's operation opened (a Pick's click stays a plain press)
 const PART_PTS = [[5, -5], [75, -5], [5, -45], [75, -45], [10, -25], [70, -25], [3, -30], [77, -30], [12, -3], [12, -47]];
 const WINDOW_PTS = [[22, -25], [25, -10], [25, -40], [55, -10], [55, -40], [58, -25], [40, -8], [40, -42], [22, -8], [22, -42]];
 const openStage = async (id) => {
@@ -102,7 +108,7 @@ async function phase() {
   await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()].find((x) => x.levels); Object.assign(r, { cutType: 'roughing', toolDia: 6.35, stepDepth: 1, roughLayout: 'nested', smoothing: 0 }); })`);
   await openStage('design'); await openStage('prepare'); // Prepare mounts the imported design
   await waitFor(`document.getElementById('prepare-notice').hidden`, 'the notice gone', 10000);
-  await pressWorld(PART_PTS, 'the part');
+  await openWorld(PART_PTS, 'the part');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, `${device}: the Roughing card`);
   const tabsShown = await evalJs(`[...document.querySelectorAll('.cut-tab')].filter((b) => !b.hidden).map((b) => b.textContent)`);
   assert.deepStrictEqual(tabsShown, ['Tool', 'Geometry', 'Heights', 'Passes'], `${device}: the four tabs`);
@@ -136,7 +142,7 @@ async function phase() {
   await clickEl('#review-view-3d');
   // Shape: Pick, then a click on the window
   await openStage('prepare');
-  await pressWorld(PART_PTS, 'the part');
+  await openWorld(PART_PTS, 'the part');
   await tab('geometry');
   await clickEl('.cut-boundary-kinds .cut-preset[data-value="shape"]');
   await waitFor(`!!document.querySelector('.cut-row[data-row="boundaryShape"]') && !('off' in document.querySelector('.cut-row[data-row="boundaryShape"]').dataset)`, `${device}: the Boundary shape row`);

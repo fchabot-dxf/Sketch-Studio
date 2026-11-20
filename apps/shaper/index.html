@@ -355,6 +355,7 @@
     .sk-lead-tip.is-refused { fill: var(--sk-prep-leftover); }
     .sk-lead-end.is-refused { stroke: var(--sk-prep-leftover); }
     #prepare-toolpath-group.is-lead-dragging .sk-lead-leg, #prepare-toolpath-group.is-lead-dragging .sk-lead-tip, #prepare-toolpath-group.is-lead-dragging .sk-lead-end { opacity: 0.25; }
+    #prepare-toolpath-group.is-tab-dragging .sk-tab-mark, #prepare-toolpath-group.is-tab-dragging .sk-strip { opacity: 0.25; } /* TASK 822: a tab handle's drag: the tabs as they were, faded under the dragged layout */
     .sk-lead-handle { cursor: grab; pointer-events: all; touch-action: none; }
     .sk-lead-handle.is-dragging { cursor: grabbing; }
     .sk-lead-hit { fill: transparent; stroke: none; pointer-events: all; touch-action: none; }
@@ -441,12 +442,35 @@
     .cut-row[data-row="boundary"] .cut-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .cut-row[data-row="boundaryTool"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .cut-row[data-row="walls"] .cut-presets { grid-template-columns: auto 1fr; }
-    .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset { font-size: 12px; padding: 0 8px; white-space: nowrap; background: var(--sk-prep-field-bg); }
-    .cut-row[data-row="boundary"] .cut-preset.is-active, .cut-row[data-row="boundaryTool"] .cut-preset.is-active, .cut-row[data-row="walls"] .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    .cut-row[data-row="wallSide"] .cut-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); } /* TASK S2: a Contour's Wall side (Inside, Outside) */
+    .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset, .cut-row[data-row="wallSide"] .cut-preset { font-size: 12px; padding: 0 8px; white-space: nowrap; background: var(--sk-prep-field-bg); }
+    .cut-row[data-row="boundary"] .cut-preset.is-active, .cut-row[data-row="boundaryTool"] .cut-preset.is-active, .cut-row[data-row="walls"] .cut-preset.is-active, .cut-row[data-row="wallSide"] .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
     .cut-preset.is-disabled { color: var(--sk-prep-disabled); cursor: not-allowed; }
+    /* TASK S2: the OPEN operation's card: its header (its name and shapes; Duplicate), its Shapes (one row per shape with an X that takes it out; the list scrolls
+       past 5 rows) and OK / Cancel; 44 px targets on a phone */
+    .cut-op-headrow { display: flex; align-items: flex-start; gap: 6px; }
+    .cut-op-head { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.3; }
+    .cut-op-headrow[hidden], .cut-geo[hidden] { display: none; }
+    .cut-geo { display: flex; flex-direction: column; }
+    .cut-op-dup { all: unset; box-sizing: border-box; height: 30px; display: flex; align-items: center; justify-content: center; padding: 0 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; color: var(--sk-prep-chip-text); cursor: pointer; background: var(--sk-prep-field-bg); }
+    .cut-op-dup { flex: 0 0 auto; height: 26px; }
+    .cut-geo-list { display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow-y: auto; margin-bottom: 6px; }
+    .cut-geo-shape { display: flex; align-items: center; gap: 4px; min-height: 30px; padding-left: 12px; border-radius: 6px; background: var(--sk-prep-field-bg); font-size: 12px; }
+    .cut-geo-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cut-geo-x { all: unset; box-sizing: border-box; flex: 0 0 auto; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--sk-prep-unit); cursor: pointer; }
+    .cut-geo-x:hover, .cut-op-dup:hover { color: var(--sk-prep-chip-text); }
+    .cut-geo-x:focus-visible, .cut-op-dup:focus-visible { outline: 2px solid var(--sk-prep-focus); outline-offset: -2px; }
+    .cut-actions { display: flex; gap: 6px; }
+    .cut-actions[hidden] { display: none; }
+    .cut-actions button { all: unset; box-sizing: border-box; flex: 1 1 0; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; background: var(--sk-prep-field-bg); color: var(--sk-prep-chip-text); }
+    .cut-actions .cut-ok { background: var(--sk-prep-focus); }
+    .cut-actions button:focus-visible { outline: 2px solid var(--sk-prep-chip-text); outline-offset: -2px; }
+    .cut-rows[hidden] { display: none; } /* TASK S2: shapes selected, no operation open: the type menu only */
+    @media (max-width: 640px), (pointer: coarse) { .cut-op-dup, .cut-geo-x, .cut-actions button { height: 44px; } .cut-geo-x { width: 44px; } .cut-geo-shape { min-height: 44px; } }
     .cut-boundary-pick[aria-pressed="true"] { color: var(--sk-prep-focus); }
     #prepare-canvas.is-picking { cursor: crosshair; }
-    @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset { height: 44px; } }
+    #prepare-canvas.is-adding { cursor: copy; } /* TASK S2: Add shapes mode (a click puts a shape in / takes it out) */
+    @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset, .cut-row[data-row="wallSide"] .cut-preset { height: 44px; } }
     .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
     .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-type-cur { text-transform: lowercase; }
@@ -514,15 +538,17 @@
     .ops-tool { margin: 8px 6px 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sk-prep-unit); }
     .ops-row { display: flex; align-items: stretch; gap: 0; min-height: 44px; margin-bottom: 4px; background: var(--sk-prep-field-bg); border: 2px solid transparent; border-radius: 6px; box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
     .ops-row.is-picked { border-color: var(--sk-prep-geo-selected); }
+    .ops-row.is-open { background: var(--sk-prep-selected-fill); } /* TASK S2: the operation open in the card */
     .ops-grip { flex: 0 0 24px; display: flex; align-items: center; justify-content: center; color: var(--sk-prep-unit); cursor: grab; border-radius: 4px; }
     .ops-grip:focus-visible { outline: 2px solid var(--sk-prep-focus); outline-offset: -2px; }
     .ops-pick { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 4px; cursor: pointer; }
     .ops-num { flex: 0 0 20px; height: 20px; border-radius: 50%; background: var(--sk-prep-card-bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
     .ops-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-    .ops-name { font-size: 13px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
-    .ops-sub { font-size: 11px; line-height: 1.3; color: var(--sk-prep-unit); overflow-wrap: anywhere; }
-    .ops-del { all: unset; box-sizing: border-box; flex: 0 0 30px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; opacity: 0.75; touch-action: manipulation; }
-    .ops-del:hover, .ops-del:focus-visible { opacity: 1; background: var(--sk-prep-list-hover); }
+    /* TASK S2: one line each (the full words are the row's tooltip): the selected row's actions appearing beside the text never change its height */
+    .ops-name { font-size: 13px; font-weight: 600; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ops-sub { font-size: 11px; line-height: 1.3; color: var(--sk-prep-unit); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ops-act { all: unset; box-sizing: border-box; flex: 0 0 30px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--sk-prep-chip-text); cursor: pointer; opacity: 0.75; touch-action: manipulation; }
+    .ops-act:hover, .ops-act:focus-visible { opacity: 1; background: var(--sk-prep-list-hover); }
     .ops-row.ops-lifted { border-color: var(--sk-prep-focus); box-shadow: 0 6px 18px rgba(0,0,0,0.65); transform: scale(1.02); }
     .ops-row.ops-dragging { opacity: 0.5; }
     .ops-row.ops-drop-before { box-shadow: 0 -3px 0 var(--sk-prep-focus); }
@@ -540,7 +566,7 @@
       .ops-head { height: 44px; }
       .ops-row { min-height: 48px; }
       .ops-grip { flex-basis: 44px; }
-      .ops-del { flex-basis: 44px; font-size: 17px; }
+      .ops-act { flex-basis: 44px; font-size: 17px; } /* TASK S2: the selected row's actions, 44 px targets */
       .ops-tick { flex-basis: 44px; min-height: 44px; }   /* TASK 798: 44 px touch targets (row and heading) */
       .ops-tick input { width: 20px; height: 20px; }
       #prepare-panel { bottom: 68px; }        /* the cut card ends above the folded bar (12 + 44 + 12) */

@@ -578,7 +578,9 @@ export function levelsCutAs(rec) {
   const kind = rec.slope && rec.slope.kind;
   if (rec.levelsOp === 'contour') {
     if (hasLevels(rec)) return 'exterior';
-    const k = kind || (rec.baseType === 'exterior' ? 'outside' : 'pocket');
+    // TASK S2 (docs/OPERATIONS-MODEL.md 1.4): a Contour's own WALL SIDE (`wallSide`: 'outside' | 'inside') where the region's slope / levels do not say it (a drawn
+    // shape); `baseType` = the part's cut type, the v2 migration's reading of a stored part (cut-plan.js v2PlanEntries) only
+    const k = kind || (rec.wallSide === 'outside' || rec.wallSide === 'inside' ? rec.wallSide : rec.baseType === 'exterior' ? 'outside' : 'pocket');
     return k === 'outside' ? 'exterior' : 'interior';
   }
   if (hasLevels(rec)) return 'pocket';
@@ -751,6 +753,9 @@ export function levelsBand(rec, partDepth) {
 // None stored = TODAY'S choice (wallsDefault): Sloped only for the Contour of a plain Outside / Inside cut on a sloped region (its slope rings, no levels), All
 // otherwise; so a Contour cuts byte for byte what it cut before until the user picks.
 export const CONTOUR_WALLS = Object.freeze({ choices: Object.freeze([Object.freeze({ id: 'all', label: 'All' }), Object.freeze({ id: 'sloped', label: 'Sloped only' })]) });
+/** TASK S2 (owner turn 2713): a Contour's own WALL SIDE, record field `wallSide` (levelsCutAs): the side of the shape its walls are cut on where the shape's model does not
+ *  say it (a drawn shape: no slope, no levels). None stored = Inside (what a drawn shape's Contour cut before S2: its part could only be a Roughing). */
+export const CONTOUR_WALL_SIDES = Object.freeze([Object.freeze({ id: 'inside', label: 'Inside' }), Object.freeze({ id: 'outside', label: 'Outside' })]);
 export const wallsDefault = (rec) => (rec && rec.slope && !hasLevels(rec) && (rec.baseType === 'exterior' || rec.baseType === 'interior') ? 'sloped' : 'all');
 export const wallsOf = (rec) => (rec && (rec.walls === 'all' || rec.walls === 'sloped') ? rec.walls : wallsDefault(rec));
 /** The depth a cut of a Roughing / Contour is made at (its level's, else its record's). */

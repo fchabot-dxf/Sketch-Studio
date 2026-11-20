@@ -37,6 +37,7 @@ import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -252,7 +253,18 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   // TASK 804: the Spiral's and the Morphed spiral's Loop are now the gradual double spiral (zero crossings; the old interleave replaced): changed on
   // purpose, checked in tests/pocket-nocross-804-node.test.js
   const changed804 = new Set(['spiralLoop', 'morphedLoop']);
-  for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) { if (changed804.has(set)) continue; eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length; }
+  // TASK 804b: Raster + Loop is the zero-crossing loop now (the wall ring whole, no clean-up ring): its download, preview and 3D footprints changed on
+  // purpose (checked in tests/pocket-nocross-804-node.test.js); its Operations list did not
+  const changed804b = new Set(['rasterLoop']);
+  // TASK 822: report/midpoint-move.json's 3077.8 mm Outside outline: its tabs were REFUSED (a tab of the even spread landed where its gap strip did not fit) and
+  // are PLACED now (kept off the narrow stretches, tests/hold-part-822-node.test.js): its download, preview, Operations row and 3D changed on purpose
+  const changed822 = (name, set) => name === 'report/midpoint-move.json' && set === 'tabs';
+  for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) {
+    if (changed804.has(set)) continue;
+    if (changed822(name, set)) { ok(now[name][set].download !== facets.download, `${name} ${set}: its refused tabs are placed now (TASK 822)`); n++; continue; }
+    if (changed804b.has(set)) { eq(now[name][set].ops, facets.ops, `${name} ${set}: the operations identical to origin/main 5e79336`); n++; continue; }
+    eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length;
+  }
   console.log(`byte-identical: ${Object.keys(base).length} drawings, ${n} facets`);
 }
 
@@ -268,17 +280,20 @@ const drawInto = (app, src) => {
 };
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
-  const pressEl = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
-  const clickAt = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const pressElRaw = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
+  const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
+  const clickRaw = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const clickAt = (x, y, o) => clickOpen(app, () => clickRaw(x, y, o)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
-  const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typed = (cls, v) => editStep(app, () => typedRaw(cls, v)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const shown = (row) => { const r = q(`.cut-row[data-row="${row}"]`); return r.style.display !== 'none' && !('off' in r.dataset); }; // TASK 813: a row that does not apply stays in place, greyed (data-off): not shown as an applicable row
   const preset = (row, v) => pressEl(`.cut-row[data-row="${row}"] .cut-preset[data-value="${v}"]`);
   const presets = (row) => [...q(`.cut-row[data-row="${row}"]`).querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : ''));
   const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);
-  const toggleLoop = () => { const i = q('.cut-loop'); i.checked = !i.checked; i.dispatchEvent(new app.window.Event('change')); };
+  const toggleLoop = () => editStep(app, () => { const i = q('.cut-loop'); i.checked = !i.checked; i.dispatchEvent(new app.window.Event('change')); }); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const tg = () => doc.querySelector('#prepare-toolpath-group');
   const count = (sel) => tg().querySelectorAll(sel).length;
   return { q, pressEl, clickAt, pick, clearing, note, typed, shown, preset, presets, step, toggleLoop, count };

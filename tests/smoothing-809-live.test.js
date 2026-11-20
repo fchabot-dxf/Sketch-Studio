@@ -13,6 +13,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import * as M from './helpers/stl-mesh.js';
+import { openOpLive, okLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = path.resolve('.evidence/809');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -92,6 +93,13 @@ const pressOutline = async () => {
   await press(p.x, p.y);
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the relief\'s card');
 };
+// TASK S2 (docs/OPERATIONS-MODEL.md 9.1): a press on the outline only selects it; the relief's Roughing operation is OPENED (its list row, then Edit) to show its card
+const t = { evalJs, waitFor, clickEl };
+const openRoughing = async () => {
+  await okLive(t);
+  await pressOutline();
+  await openOpLive(t, await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().find((o) => o.type === 'roughing').id)`));
+};
 const passesTab = async () => { await clickEl('.cut-tab[data-tab="passes"]'); await waitFor(`document.querySelector('.cut-tab[data-tab="passes"]').classList.contains('is-active')`, 'the Passes tab'); }; // TASK 810: Smoothing is in the Passes tab
 const rowShown = (name) => evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-row[data-row="${name}"]'); return !!r && r.style.display !== 'none'; })()`);
 const smoothingValue = () => evalJs(`document.querySelector('#prepare-panel .cut-smoothing').value`);
@@ -124,7 +132,7 @@ try {
 
   // DESKTOP
   await openStl('desktop');
-  await pressOutline();
+  await openRoughing();
   assert.strictEqual(await evalJs(`document.querySelector('.cut-type-cur').textContent`), 'Roughing', 'desktop: the relief is a Roughing');
   assert.ok(await rowShown('smoothing'), 'desktop: the Smoothing row');
   assert.deepStrictEqual([await evalJs(`document.querySelector('#prepare-panel .cut-row[data-row="smoothing"] .cut-field-label').textContent`), await smoothingValue(), await record()],
@@ -142,7 +150,7 @@ try {
   const vbAfter = await evalJs(`document.getElementById('review-2d-canvas').getAttribute('viewBox')`);
   // Smoothing 0: typed in the card (one undo step)
   await openStage('prepare');
-  await pressOutline();
+  await openRoughing();
   const hist = await evalJs(`window.__designController.state.history.length`);
   await passesTab();
   await clickEl('#prepare-panel .cut-smoothing');
@@ -165,13 +173,13 @@ try {
   await openStage('prepare');
   await clickEl('#btn-undo');
   await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].find((x) => x.levels).smoothing === undefined)`, 'desktop: undo', 30000);
-  // the part's Contour: its own Smoothing (0.05: TASK 810, owner turn 2688)
+  // the part's Contour: its own Smoothing (0.05: TASK 810, owner turn 2688); TASK S2: the outline selected, Contour in the type menu = a NEW operation, open
   await pressOutline();
+  await clickEl('#prepare-panel .cut-type-trigger');
+  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'desktop: the type menu');
+  await clickEl('.cut-type-opt[data-id="contour"]');
+  await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour' && !document.querySelector('#prepare-panel .cut-actions').hidden`, 'desktop: the Contour card', 60000);
   await passesTab();
-  await clickEl('.cut-contour-modes .cut-preset[data-value="true"]');
-  await waitFor(`!document.querySelector('.cut-contour-edit').hidden`, 'desktop: Contour On', 60000);
-  await clickEl('.cut-contour-edit');
-  await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour'`, 'desktop: the Contour card');
   assert.deepStrictEqual([await rowShown('smoothing'), await smoothingValue()], [true, '0.05'], 'desktop: the Contour card: Smoothing 0.05 (its default)');
   await shot('desktop-contour-card.png', ['#prepare-panel .cut-row[data-row="smoothing"]', '#prepare-panel .cut-row[data-row="stepDepth"]']);
 
@@ -183,7 +191,7 @@ try {
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000); await waitForApp('design-canvas'); await sleep(800);
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
   await openStl('phone');
-  await pressOutline();
+  await openRoughing();
   assert.ok(await rowShown('smoothing'), 'phone: the Smoothing row');
   await passesTab();
   await evalJs(`document.querySelector('#prepare-panel .cut-row[data-row="smoothing"]').scrollIntoView({ block: 'nearest' })`); await sleep(300);

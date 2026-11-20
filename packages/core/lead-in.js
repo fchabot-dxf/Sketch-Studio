@@ -33,7 +33,7 @@
 //    Each cut carries `leadIn` = { role: 'arc', radius, sweep, length, side, r, at, atFrac, isCalc, tip, arcStart, junction, center, tangent, normal,
 //    svgSweep, points, legPoints, loopPoints, d } and `extent` = points (so the exported viewBox holds the arc and tip outside the drawing); a refused lead-in leaves the cut
 //    closed (byte-identical to without) and carries { role: 'refused', error, ... }.
-import { loopWalk, walkAt, subWalk, walkPoints, piecesD, piecesPoints } from './hold-part.js';
+import { loopWalk, walkAt, subWalk, walkPoints, piecesD, piecesPoints, nearestWalkFrac } from './hold-part.js'; // TASK 822: nearestWalkFrac moved to the walk's module (a tab handle uses it too)
 import { num } from './loop-geometry.js';
 
 export const LEAD_IN = Object.freeze({
@@ -142,40 +142,6 @@ export function outlineJunction(w, atFrac = null) {
   if (i < 0) i = pick(() => true);
   const s = w.starts[i] + segL(i) / 2;
   return { s, frac: w.length > 0 ? s / w.length : 0, segIndex: i, at: w.segs[i].type, calculated: true };
-}
-
-/** Nearest point on walk `w` to world point `pt`: { frac (0..1), s, point, dist }. Used when dragging the junction handle in Prepare. */
-export function nearestWalkFrac(w, pt) {
-  let best = null;
-  const offer = (i, u, q) => {
-    const d = Math.hypot(pt.x - q.x, pt.y - q.y);
-    if (!best || d < best.dist) best = { i, u, point: q, dist: d };
-  };
-  w.segs.forEach((sg, i) => {
-    if (sg.type === 'line') {
-      const vx = sg.b.x - sg.a.x, vy = sg.b.y - sg.a.y, len2 = vx * vx + vy * vy;
-      const t = len2 > 0 ? Math.max(0, Math.min(1, ((pt.x - sg.a.x) * vx + (pt.y - sg.a.y) * vy) / len2)) : 0;
-      offer(i, t * Math.sqrt(len2), P(sg.a.x + t * vx, sg.a.y + t * vy));
-    } else if (sg.type === 'arc') {
-      const dir = Math.sign(sg.sw) || 1, span = Math.abs(sg.sw);
-      const ang = Math.atan2(pt.y - sg.c.y, pt.x - sg.c.x);
-      let rel = (ang - sg.t0) * dir;
-      while (rel < 0) rel += TAU;
-      while (rel >= TAU) rel -= TAU;
-      const atA = (a) => P(sg.c.x + sg.r * Math.cos(sg.t0 + dir * a), sg.c.y + sg.r * Math.sin(sg.t0 + dir * a));
-      if (rel <= span) offer(i, rel * sg.r, atA(rel));
-      else { offer(i, 0, atA(0)); offer(i, span * sg.r, atA(span)); }
-    } else if (sg.type === 'poly') {
-      for (let k = 0; k + 1 < sg.pts.length; k++) {
-        const a = sg.pts[k], b = sg.pts[k + 1], vx = b.x - a.x, vy = b.y - a.y, len2 = vx * vx + vy * vy;
-        const t = len2 > 0 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / len2)) : 0;
-        offer(i, sg.cum[k] + t * (sg.cum[k + 1] - sg.cum[k]), P(a.x + t * vx, a.y + t * vy));
-      }
-    }
-  });
-  const s = best ? w.starts[best.i] + best.u : 0;
-  const frac = w.length > 0 ? (((s / w.length) % 1) + 1) % 1 : 0;
-  return { frac, s, point: best ? best.point : P(0, 0), dist: best ? best.dist : Infinity };
 }
 
 // Build the tangential arc (+ optional straight segment before it) at junction `junc` on walk `w`.

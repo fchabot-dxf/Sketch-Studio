@@ -11,6 +11,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { drawTray, selectWidths, PHONE } from './polish-757-tray.js';
+import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/757/live');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -28,12 +29,16 @@ try {
   };
   const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
   const press = async (x, y) => { await T('touchStart', [{ x, y }]); await sleep(40); await T('touchEnd', []); await sleep(250); };
-  const clickEl = async (sel) => {
+  const clickElRaw = async (sel) => {
     const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect();
       const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y); return { x, y, onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
     assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
     await press(p.x, p.y);
   };
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+  // operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
+  const s2Steps = { get phone() { return false; }, evalJs, waitFor, clickEl: clickElRaw };
+  const clickEl = (sel) => stepLive(s2Steps, () => clickElRaw(sel));
   const activeStage = () => evalJs(`(() => { const e = document.querySelector('.sk-sidebar-stage.active') || document.querySelector('.sk-header-tab.active'); return e ? e.dataset.tab : null; })()`);
   const openMode = async (mode) => {
     for (let i = 0; i < 5; i++) {
@@ -73,7 +78,7 @@ try {
   await openMode('prepare');
   await waitFor(`!!document.querySelector('#prepare-canvas .sk-edge') && !!document.getElementById('prepare-canvas').getScreenCTM()`, 'prepare view drawn');
   await evalJs(`window.__prepareView.setView({ x: 60, y: 20, w: 140 })`); await sleep(200); // zoomed so a finger's tap is clearly on the part (between the slot and the pocket)
-  { const p = await toScreen(60, 20); await press(p.x, p.y); }
+  await clickOpenLive(s2Steps, async () => { const p = await toScreen(60, 20); await press(p.x, p.y); }); // TASK S2: the tap selects the part; its operation opened (list row, Edit)
   await waitFor(`!document.querySelector('.cut-row[data-row="tabCount"]').hidden && document.querySelector('.cut-row[data-row="tabCount"]').style.display !== 'none' && !('off' in document.querySelector('.cut-row[data-row="tabCount"]').dataset)`, 'the tab count row (phone)');
   const fit = await evalJs(`(() => { const i = document.querySelector('.cut-tab-count'), cs = getComputedStyle(i), c = document.createElement('canvas').getContext('2d');
     c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily; const box = i.closest('.cut-box'), card = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect();

@@ -26,6 +26,7 @@ import { planEntries, keyOf, planReliefItems } from '../apps/shaper/src/cut-plan
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 
 let checks = 0;
@@ -248,12 +249,15 @@ const drawInto = (app, st0) => {
 };
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
-  const pressEl = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
-  const clickAt = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const pressElRaw = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
+  const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
+  const clickRaw = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const clickAt = (x, y, o) => clickOpen(app, () => clickRaw(x, y, o)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
-  const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typed = (cls, v) => editStep(app, () => typedRaw(cls, v)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const shown = (row) => { const r = q(`.cut-row[data-row="${row}"]`); return r.style.display !== 'none' && !('off' in r.dataset); }; // TASK 813: a row that does not apply stays in place, greyed (data-off): not shown as an applicable row
   const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);
   const ops = () => [...doc.querySelectorAll('#prepare-ops .ops-row')].map((r) => `${r.querySelector('.ops-name').textContent} | ${r.querySelector('.ops-sub').textContent}`);
@@ -372,8 +376,8 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
     h.pressEl(rows[0].querySelector('.ops-pick'));
     eq(app.prepare.view().selection.size, 2, 'the pockets\' operation is picked');
     const before = shaperSvgOf(st, planEntries()), elsBefore = elementsOf(before), plan0 = JSON.stringify([...V2_PLAN]), order0 = V2_PLAN.order();
-    const bin = rows[0].querySelector('.ops-del');
-    eq([bin.textContent, bin.getAttribute('aria-label')], ['\u{1F5D1}', 'Delete operation 1: unassign its 2 regions'], 'the row\'s bin (the Parameters table\'s glyph)');
+    const bin = app.document.querySelector(`#prepare-ops .ops-row[data-id="${rows[0].dataset.id}"] .ops-del`); // TASK S2: the selected row's X (its actions show on the selected row only)
+    eq([bin.textContent, bin.getAttribute('aria-label')], ['\u2715', 'Delete operation 1 (its shapes stay in their other operations)'], 'the selected row\'s X');
     const n0 = st.history.length;
     h.pressEl(bin);
     eq(st.history.length, n0 + 1, 'the delete is ONE undo step');

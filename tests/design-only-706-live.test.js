@@ -141,8 +141,12 @@ await (async () => {
       assert(/3 cuts kept/.test(b.status), 'B: the status line says the 3 cuts were kept: ' + b.status);
       await press('.sk-header-tab[data-tab="prepare"]', 'B: the Prepare tab'); await sleep(800);
       await waitFor(`window.__prepareView && window.__prepareView.loops.length === 3`, 'B: Prepare found the 3 loops');
-      const cards = await evalJs(`(() => { const v = window.__prepareView; const out = []; for (const l of v.loops) { v.setSelection([{ kind: 'loop', id: l.id }]);
-        out.push({ type: document.querySelector('.cut-type-cur').textContent, depth: document.querySelector('.cut-depth').value, bit: document.querySelector('.cut-bit').value }); } return out; })()`);
+      // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): a click on a shape only selects it; its operation's card shows when the operation is opened (its list row, then Edit), and OK closes it
+      const cards = await evalJs(`import('/apps/shaper/src/operations-store.js').then((S) => { const v = window.__prepareView; const out = []; for (const l of v.loops) {
+        const m = S.membersOf('loop:' + l.id)[0]; if (!m) { out.push(null); continue; }
+        document.querySelector('#prepare-ops .ops-row[data-id="' + m.op.id + '"] .ops-pick').click(); document.querySelector('#prepare-ops .ops-row[data-id="' + m.op.id + '"] .ops-edit').click();
+        out.push({ type: document.querySelector('.cut-type-cur').textContent, depth: document.querySelector('.cut-depth').value, bit: document.querySelector('.cut-bit').value });
+        document.querySelector('#prepare-panel .cut-ok').click(); } return out; })`);
       console.log('B Prepare cut cards ' + JSON.stringify(cards));
       await shot('B-shaper-prepare-cut-card.png', { x: 0, y: 0, width: 1280, height: 600 });
       assert.deepStrictEqual(cards.map((c) => c.type).sort(), ['Outside', 'Pocket', 'Pocket'], "B: Prepare's cut card shows the grouped squares' Pocket and the Outside");

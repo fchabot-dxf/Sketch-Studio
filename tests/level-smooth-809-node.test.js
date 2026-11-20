@@ -31,6 +31,7 @@ import { planEntries, contourKeyOf, deriveKeyFootprints, loopsWithPolygons, plan
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -186,10 +187,13 @@ for (const [name, tris, tol] of [['the dome', M.dome(30), 0.02], ['the dome', M.
   const app = await open({ host: 'shaper', profile });
   try {
     const doc = app.document, q = (s) => doc.querySelector(s), st = app.state;
-    const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+    const pressElRaw = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+    const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     const pc = doc.getElementById('prepare-canvas');
-    const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
-    const setField = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+    const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
+    const setFieldRaw = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+    const setField = (sel, text) => editStep(app, () => setFieldRaw(sel, text)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     const rowShown = (name) => { const r = q(`.cut-row[data-row="${name}"]`); return Boolean(r) && r.style.display !== 'none'; };
     const res = app.stl.openFile(M.binaryStl(M.dome(30)), 'dome.stl');
     ok(res.ok, 'Open STL: the dome');
@@ -220,10 +224,10 @@ for (const [name, tris, tol] of [['the dome', M.dome(30), 0.02], ['the dome', M.
     doc.getElementById('btn-undo').click();
     eq(V2_PLAN.get(key).smoothing, undefined, 'undo: the default again');
     ok(cubicsIn(svgOf()) > 0, 'undo: cubics again');
-    // the part's Contour: its own Smoothing (0.05 by default: TASK 810, owner turn 2688)
-    pressEl('.cut-row[data-row="contour"] .cut-preset[data-value="true"]');
-    pressEl('.cut-contour-edit');
-    eq(q('.cut-type-cur').textContent, 'Contour', 'Edit contour: the Contour card');
+    // the part's Contour: its own Smoothing (0.05 by default: TASK 810, owner turn 2688). TASK S2: a Contour operation of its own: the shape picked, Contour in the type menu
+    app.prepare.ok(); clickRaw(30, -30);
+    pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="contour"]');
+    eq(q('.cut-type-cur').textContent, 'Contour', 'the Contour card (a new Contour operation, open)');
     ok(rowShown('smoothing'), 'the Contour card: its Smoothing row (its part has levels)');
     eq(q('.cut-smoothing').value, '0.05', 'the Contour: 0.05 (its default)');
     const crec = V2_PLAN.get(contourKeyOf(key));

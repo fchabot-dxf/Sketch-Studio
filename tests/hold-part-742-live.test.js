@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/742');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -60,7 +61,7 @@ try {
     }
     await sleep(250);
   };
-  const clickEl = async (sel) => {
+  const clickElRaw = async (sel) => {
     await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (e) e.scrollIntoView({ block: 'nearest' }); })()`);
     const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect();
       const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
@@ -82,11 +83,16 @@ try {
     }
     assert.fail('could not open the ' + mode + ' stage');
   };
-  const clickWorld = async (x, y) => {
+  const clickWorldRaw = async (x, y) => {
     const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y};
       const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
     await press(p.x, p.y);
   };
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+  // operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
+  const s2Steps = { get phone() { return phone; }, evalJs, waitFor, clickEl: clickElRaw };
+  const clickEl = (sel) => stepLive(s2Steps, () => clickElRaw(sel));
+  const clickWorld = (x, y) => clickOpenLive(s2Steps, () => clickWorldRaw(x, y));
   const typeInto = async (sel, text) => { // a real focus by click, select all, typed text, Enter (the field's change)
     await clickEl(sel);
     await send('Input.dispatchKeyEvent', { type: 'keyDown', modifiers: 2, key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, commands: ['selectAll'] });

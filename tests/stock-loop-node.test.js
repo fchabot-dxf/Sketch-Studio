@@ -8,12 +8,14 @@ import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import { stockKeyOf } from '../apps/shaper/src/cut-plan.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 const app = await open({ host: 'shaper' });
 try {
   const doc = app.document;
   const q = (sel) => doc.querySelector(sel);
-  const pressEl = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
+  const pressElRaw = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
+  const pressEl = (sel) => editStep(app, () => pressElRaw(sel)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   pressEl('.sk-header-tab[data-tab="design"]');
   // seed: A = an L-shaped outline (the board), B = a 20x20 loop drawn INSIDE it (a part, NOT a hole), C = a separate rectangle
   const st = app.state;
@@ -26,7 +28,8 @@ try {
   pressEl('.sk-header-tab[data-tab="prepare"]');
   const pc = doc.getElementById('prepare-canvas');
   assert(pc.children.length > 0, 'prepare canvas ready');
-  const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const pickType = (tid) => { pressEl('.cut-type-trigger'); assert(q(`.cut-type-opt[data-id="${tid}"]`), 'cut type menu open'); pressEl(`.cut-type-opt[data-id="${tid}"]`); };
   const stockKey = () => stockKeyOf(V2_PLAN);
   const notice = () => { const e = doc.getElementById('prepare-notice'); return e && !e.hidden ? e.textContent : ''; };
@@ -37,7 +40,7 @@ try {
   assert(doc.querySelectorAll('.cut-type-opt').length > 0, 'cut type menu open');
   const opts = [...doc.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.disabled ? ':off' : '') + (o.querySelector('svg') ? ':icon' : ''));
   console.log('menu:', JSON.stringify(opts));
-  assert.deepStrictEqual(opts, ['online:icon', 'guide:icon', 'interior:icon', 'pocket:icon', 'roughing:icon', 'exterior:icon', 'stock:icon'], 'Stock sits beside the other types with its icon (TASK 792: Roughing on every closed region)');
+  assert.deepStrictEqual(opts, ['online:icon', 'guide:icon', 'interior:icon', 'pocket:icon', 'roughing:icon', 'contour:icon', 'exterior:icon', 'stock:icon'], 'Stock sits beside the other types with its icon (TASK 792: Roughing on every closed region; TASK S2: the Contour in the menus)');
   pressEl('.cut-type-opt[data-id="stock"]');
   assert(!!stockKey(), 'the L loop becomes the Stock');
   const keyA = stockKey();

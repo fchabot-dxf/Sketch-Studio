@@ -2,7 +2,7 @@
 // of the corpus (tests/fixtures/opfirst/: the synthetic dome relief, Roughing Nested + its Contour with its own heights / walls / ball nose: frozen on origin/main
 // c5d4bb1) is stored as a named design and opened (the page's own restore: applyShaperDoc migrates it), on DESKTOP 1280 x 800 and PHONE 390 x 844:
 //   the Operations list rows, the 3D Review's items and the download are the baseline's (eNoId, dContent, a md5s, tests/helpers/opfirst-measure.js);
-//   the saved document is version 3 (the autosave) and opens again the same. No console error / page exception.
+//   the saved document is version 4 (TASK S2: the Contour's own values, one Depth) (the autosave) and opens again the same. No console error / page exception.
 // Screenshots (.evidence/S1/): live-desktop-ops.png, live-desktop-review.png, live-phone-ops.png, live-phone-review.png.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -85,11 +85,11 @@ try {
   const stored = await evalJs(`Promise.all([import('/packages/ui/project-store.js'), import('/apps/shaper/src/shaper-doc.js')]).then(async ([m, D]) => { const store = m.getProjectStore();
     const doc = (await store.get(${JSON.stringify(id)})).document; doc.hosts.shaper = JSON.parse(JSON.stringify(D.captureShaperDoc())); await store.save(doc, { app: 'shaper', id: ${JSON.stringify(id)} });
     return (await store.get(${JSON.stringify(id)})).document.hosts.shaper; })`);
-  assert.strictEqual(stored.version, 3, 'the page writes the design as version 3');
+  assert.strictEqual(stored.version, 4, 'the page writes the design as version 4 (TASK S2, docs/OPERATIONS-MODEL.md 9.5)');
   assert.ok(Array.isArray(stored.operations) && !('cutPlan' in stored), 'with its operations (no cutPlan)');
   await open();
   const again = await measureNow();
-  assert.deepStrictEqual([again.eNoId, again.dContent, again.a], [base.eNoId, base.dContent, base.a], 'the version 3 design opened again: the same list, Review and download');
+  assert.deepStrictEqual([again.eNoId, again.dContent, again.a], [base.eNoId, base.dContent, base.a], 'the version 4 design opened again: the same list, Review and download');
   assert.deepStrictEqual(problems, [], 'no console error / page exception');
   console.log('opfirst-relief-live: ok');
 } finally { await close(); }

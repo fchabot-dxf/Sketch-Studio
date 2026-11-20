@@ -220,7 +220,10 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
       app.press(rowOf(/^Inside/).querySelector('.ops-pick'));
       eq([...app.prepare.view().selection.keys()].sort(), [K.ha, K.hb].sort(), 'a tap selects the operation\'s regions');
       ok(rowOf(/^Inside/).classList.contains('is-picked'), 'its row is marked');
-      eq(app.document.querySelector('.cut-type-cur').textContent, 'Inside', 'the card shows them');
+      eq([app.document.querySelector('.cut-type-cur').textContent, app.document.querySelector('.cut-rows').hidden], ['Select type', true], 'TASK S2: a tap only selects: the card is the type menu of the quick flow (the Edit button of the row opens the operation)');
+      app.press(rowOf(/^Inside/).querySelector('.ops-edit'));
+      eq(app.document.querySelector('.cut-type-cur').textContent, 'Inside', 'its Edit opens the operation: its card');
+      app.prepare.cancel();
       // ArrowDown on the first row's grip (TASK 745: no arrow buttons; the focused grip moves its row): ONE undo step; Ctrl+Z / Ctrl+Y
       const gripKey = (grip, key) => { grip.focus(); grip.dispatchEvent(new app.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); };
       eq(app.document.querySelectorAll('#prepare-ops .ops-up, #prepare-ops .ops-down, #prepare-ops .ops-move').length, 0, 'TASK 745: no arrow buttons');

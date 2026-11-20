@@ -6,7 +6,7 @@
 // Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter). This is app STATE (not #core).
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
-import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById, CUT_TYPES } from './shaper.js';
+import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById, cutTypeHasParam, CUT_TYPES } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
 import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughingFor, boundaryOf, levelsBand } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; the heights' band
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
@@ -15,7 +15,7 @@ import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
-import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, setOpSettings, setRefAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
+import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefAt, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpIndex, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 
 export const keyOf = (kind, id) => kind + ':' + id;
@@ -23,10 +23,10 @@ export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: ke
 
 // TASK S1 (docs/OPERATIONS-MODEL.md section 2): the plan lives in the OPERATIONS + REGIONS store (operations-store.js); a shape's RECORD (what every derivation
 // takes) is rebuilt from its operation and its region: recordOf(op, ref) = { cutType: the operation's type, ...its settings, ...the region's slope / levels,
-// leadInAt: the ref's dragged position }, cutDepth 'model' -> the shape's imported depth. The per-shape names of today's Prepare (S1 behaves as before) stay:
+// leadInAt: the ref's dragged position, tabsAt (TASK 822): the ref's dragged tabs }, cutDepth 'model' -> the shape's imported depth. The per-shape names of today's Prepare (S1 behaves as before) stay:
 // a geometry key ('loop:<id>' ...) for its operation, `contour:<key>` for its part's Contour.
-const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'leadInAt']);
-/** The settings part of a record (everything but the cut type, the region data and the dragged lead-in position). */
+const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'leadInAt', 'tabsAt']);
+/** The settings part of a record (everything but the cut type, the region data, the dragged lead-in position and the dragged tabs). */
 export const settingsPart = (rec) => Object.fromEntries(Object.entries(rec || {}).filter(([k]) => !SHAPE_FIELDS.has(k)));
 const sourceDepth = (key) => { const s = (regionOf(key) || {}).source; return s && s.cutDepth != null ? s.cutDepth : undefined; };
 /** The record of a membership (see above). */
@@ -35,6 +35,7 @@ export function recordOf(op, ref) {
   if (r.cutDepth === 'model') r.cutDepth = sourceDepth(ref.key) ?? 'unset';
   if (op.type !== CONTOUR_TYPE) { const reg = regionOf(ref.key); if (reg) { if (reg.slope) r.slope = reg.slope; if (reg.levels) r.levels = reg.levels; } }
   if (Object.hasOwn(ref, 'at')) r.leadInAt = ref.at;
+  if (Array.isArray(ref.tabsAt)) r.tabsAt = [...ref.tabsAt]; // TASK 822: the shape's dragged tabs (#core/hold-part tabsAtOf)
   return r;
 }
 /** The record of a plan key (a geometry key: its operation's; `contour:<key>`: its Contour's), or null when it is in no operation. */
@@ -42,8 +43,11 @@ export function getPlanRecord(planKey) { const m = memberOf(planKey); return m ?
 /** The record Prepare shows / edits for a plan key: its operation's, else a fresh default record carrying the geometry's region data and its imported depth (a shape
  *  in no operation: an imported region without a cut type keeps the depth the import gave it, as its record did before task S1). */
 export function getCutRecord(key) {
-  const r = getPlanRecord(key);
-  if (r) return r;
+  return getPlanRecord(key) || freshRecord(key);
+}
+/** TASK S2: the record a shape in no operation has, and the one a NEW operation starts from (the quick flow, 4.4): a fresh default record carrying the geometry's
+ *  region data and its imported depth. */
+export function freshRecord(key) {
   const out = defaultCutRecord(), reg = isContourKey(key) ? null : regionOf(key);
   if (reg) { if (reg.source && reg.source.cutDepth != null) out.cutDepth = reg.source.cutDepth; if (reg.slope) out.slope = reg.slope; if (reg.levels) out.levels = reg.levels; }
   return out;
@@ -58,6 +62,9 @@ export const isTicked = (op) => op.type === STOCK_TYPE_ID || op.on !== false;
 const planMembers = ({ ticked = false } = {}) => (ticked ? membersInFileOrder().filter(({ op }) => isTicked(op)) : membersInFileOrder());
 /** The plan as [planKey, record] in FILE order (every membership, or with `ticked: true` the ticked operations' only; a Contour's record as stored, not resolved). */
 export const planRecords = (opts) => planMembers(opts).map(({ op, ref }) => [planKeyOf(op, ref), recordOf(op, ref)]);
+/** TASK S2: the memberships as Prepare's look draws them (a shape in two operations is drawn once per operation), in FILE order: [{ id: '<op id>|<geometry key>',
+ *  opId, key (the geometry key), planKey, rec }] (`opts` = planRecords'). */
+export const planMemberItems = (opts) => planMembers(opts).map(({ op, ref }) => ({ id: `${op.id}|${ref.key}`, opId: op.id, key: ref.key, planKey: planKeyOf(op, ref), rec: recordOf(op, ref) }));
 /**
  * planEntries({ ticked }) — THE one reader (docs/OPERATIONS-MODEL.md section 2; it replaces cutPlanEntries): one entry per membership, in FILE order (seq), as the derivation
  * takes it: { key: '<op id>|<geometry key>', opId, planKey, target, rec } (resolveEntry: a Contour cuts its part's target with its part's depth / type / slope /
@@ -73,24 +80,25 @@ export function planEntries(opts) {
   return out;
 }
 
-// ── TASK 792: a part's CONTOUR (the finish of its sloped walls: #core/stepped-cut.js, its TASK 792 header) is its OWN operation (type 'contour'), whose shapes are
-// the PARTS' keys; Prepare names its membership `contour:<the part's key>` (e.g. 'contour:loop:loop_a-b'). It cuts the PART's geometry: resolveEntry hands it the
-// part's target, depth, `slope` / `levels` and cut type, read LIVE from the part's operation at derive time (advisor ruling, task S1: a part edit moves its Contour
-// exactly as before). A Contour whose part is in no operation derives to nothing. ──
+// ── TASK 792: a part's CONTOUR (the finish of its sloped walls: #core/stepped-cut.js, its TASK 792 header) is its OWN operation (type 'contour'); Prepare names its
+// membership `contour:<the shape's key>` (e.g. 'contour:loop:loop_a-b'). TASK S2 (owner ruling turn 2713): a plain operation with its OWN settings, linked to no other
+// operation: its Depth (typed, or 'model' = each shape's imported depth, as any Depth), its Walls (810) and its Wall side (`wallSide`, a drawn shape: #core
+// levelsCutAs); resolveEntry hands the derivation the shape's target, its Depth as `baseDepth` and the shape's `slope` / `levels`. (S1 read them LIVE from the
+// part's operation; a document saved before S2 gets explicit values equal to that reading: shaper-doc.js migrateV3.) ──
 export const CONTOUR_KIND = 'contour';
 export const contourKeyOf = (key) => keyOf(CONTOUR_KIND, key);
 export const isContourKey = (key) => typeof key === 'string' && key.startsWith(CONTOUR_KIND + ':');
 export const partKeyOf = (key) => (isContourKey(key) ? key.slice(CONTOUR_KIND.length + 1) : key);
 /** The part's Contour record (with a cut type), or null. */
 export const contourOf = (key) => getPlanRecord(contourKeyOf(key));
-/** A plan entry as the derivation takes it: { key, target, rec }. A contour record gets its PART's target, and its record the part's depth (`baseDepth`),
- *  cut type (`baseType`), `slope` and `levels`; null when its part has no cut type. Every other record: its own key's target, its record as stored (TASK 810: a
+/** A plan entry as the derivation takes it: { key, target, rec }. A Contour record gets its shape's target, and its record its own depth as `baseDepth` (TASK S2)
+ *  and the shape's `slope` and `levels`. Every other record: its own key's target, its record as stored (TASK 810: a
  *  Roughing whose boundary is the Stock or a picked shape gets that shape's target as `boundaryTarget`: withBoundaryTarget). */
 export function resolveEntry(key, rec) {
   if (!isContourKey(key)) return { key, target: parseKey(key), rec: withBoundaryTarget(rec) };
-  const pk = partKeyOf(key), part = getPlanRecord(pk);
-  if (!rec || !part || !part.cutType) return null;
-  return { key, target: parseKey(pk), rec: { ...rec, baseDepth: part.cutDepth, baseType: part.cutType, ...(part.slope ? { slope: part.slope } : {}), ...(part.levels ? { levels: part.levels } : {}) } };
+  if (!rec) return null;
+  const pk = partKeyOf(key), reg = regionOf(pk) || {};
+  return { key, target: parseKey(pk), rec: { ...rec, baseDepth: rec.cutDepth, ...(reg.slope ? { slope: reg.slope } : {}), ...(reg.levels ? { levels: reg.levels } : {}) } };
 }
 /** TASK 810: a Roughing record whose boundary (#core boundaryOf) is the Stock or a picked Shape, with that shape's target `boundaryTarget` ({ kind, id }: the Stock
  *  of the plan, stockKeyOf; the picked `boundaryShape` key); without one (no Stock, nothing picked) the record as stored: the derivation then refuses with its reason.
@@ -107,7 +115,7 @@ export const ROUGHING_REFUSED = {
   'no-shape': 'no boundary shape yet: press Pick, then click a closed shape',
   'shape-gone': 'the boundary shape is no longer in the design',
   'no-room': 'the boundary leaves no room for the bit',
-  band: 'no level between the Top and the Bottom (less the floor allowance)', // the Heights (Roughing and Contour)
+  band: 'no level between the Top and the Depth (less the floor allowance)', // the Heights (Roughing and Contour); TASK S2: the Depth (810's Bottom row is gone)
 };
 /** TASK 810: rename the keys of a STORED v2 plan map (`rename`: old key -> new key) and drop some (`remove`), in place, the map's order kept: the records AND every
  *  reference to a key a record holds (`boundaryShape`). The v2 migration's (shaper-doc.js); the store renames through renameGeometry. */
@@ -129,12 +137,12 @@ export function renamePlanKeys(rename, remove, plan) {
 //  * else it leaves its operation (removed when empty) and joins the first operation whose shapes have that key (taking its settings), or a NEW operation placed by
 //    the default-order rule (operations.js newOpIndex: the 743 rule applied once at creation); it keeps its file place (`seq`) when it had one, else takes the next;
 //  * no cut type (the bin, a Stock moved away): it leaves its operation and keeps no place (advisor ruling 2, task S1: assigned again, it goes to the end of the file).
-// A part's Contour membership is filed again after its part changes (its key reads the part: resolveEntry). cutDepth is stored 'model' while every shape of the
+// cutDepth is stored 'model' while every shape of the
 // operation has an imported depth equal to it (normalizeDepth). Returns the shape's record now (null when it left every operation). `state` = the solved sketch
 // (a new operation's place reads the derived cuts' ranks).
 const memberKey = (planKey, rec) => { const e = resolveEntry(planKey, rec); return opKeyOf(e ? e.rec : rec); };
 function normalizeDepth(op) {
-  if (op.type === CONTOUR_TYPE || !op.geometry.length || op.settings.cutDepth === undefined) return;
+  if (!op.geometry.length || op.settings.cutDepth === undefined) return;
   const d = recordOf(op, op.geometry[0]).cutDepth;
   const model = d !== 'unset' && Number.isFinite(Number(d)) && op.geometry.every((r) => { const s = sourceDepth(r.key); return s !== undefined && Number(s) === Number(d); });
   const next = model ? 'model' : d;
@@ -162,9 +170,10 @@ function fileShapeOnly(planKey, rec, state) {
   const contour = isContourKey(planKey), key = partKeyOf(planKey);
   if (!contour && rec) writeRegionData(key, rec);
   const cur = memberOf(planKey);
-  if (!rec || !rec.cutType) { if (cur) removeRef(cur.op, cur.ref); refileContour(planKey, state); return null; }
+  if (!rec || !rec.cutType) { if (cur) leaveOp(cur.op, cur.ref); return null; }
   const settings = settingsPart(rec);
   const at = !contour && Object.hasOwn(rec, 'leadInAt') ? rec.leadInAt : undefined;
+  const tabsAt = !contour && Array.isArray(rec.tabsAt) ? rec.tabsAt : undefined; // TASK 822: the shape's dragged tabs stay with it
   const newKey = memberKey(planKey, rec);
   let seq;
   if (cur) {
@@ -173,26 +182,21 @@ function fileShapeOnly(planKey, rec, state) {
     if (cur.op.type === rec.cutType && opKeyNow === newKey) {
       setOpSettings(cur.op, cur.op.settings.cutDepth === 'model' && settings.cutDepth === recordOf(cur.op, cur.ref).cutDepth ? { ...settings, cutDepth: 'model' } : settings);
       setRefAt(cur.ref, at);
+      setRefTabsAt(cur.ref, tabsAt);
       normalizeDepth(cur.op);
-      refileContour(planKey, state);
       return getPlanRecord(planKey);
     }
     seq = cur.ref.seq;
-    removeRef(cur.op, cur.ref);
+    leaveOp(cur.op, cur.ref);
   } else seq = takeSeq();
-  const ref = { key, seq, ...(at !== undefined ? { at } : {}) };
+  const ref = { key, seq, ...(at !== undefined ? { at } : {}), ...(tabsAt !== undefined ? { tabsAt: [...tabsAt] } : {}) };
   const target = storeOps().find((op) => op.type === rec.cutType && op.geometry.length && !op.geometry.some((r) => r.key === key) && memberKey(planKeyOf(op, op.geometry[0]), recordOf(op, op.geometry[0])) === newKey);
   if (target) { addRef(target, ref); normalizeDepth(target); }
   else { const draft = { type: rec.cutType, settings, geometry: [ref] }; normalizeDepth(insertOp(newOpIndex(state, draft), draft)); }
-  refileContour(planKey, state);
   return getPlanRecord(planKey);
 }
-// a part changed: its Contour's key may read it (the walls' default, the heights): the Contour membership is filed again with its own record
-function refileContour(planKey, state) {
-  if (isContourKey(planKey)) return;
-  const ck = contourKeyOf(planKey), c = getPlanRecord(ck);
-  if (c) fileShapeOnly(ck, c, state);
-}
+// fileShape MOVES a shape: the operation it leaves goes when it is left empty (as before task S2; an EMPTY operation made by the user stays: TASK S2)
+function leaveOp(op, ref) { removeRef(op, ref); if (!op.geometry.length) deleteOp(op); }
 /** Set one field of a shape's record (Prepare's card edits, its lead-in drag): fileShape with the resulting record. */
 export function setFieldFor(key, field, value, state = null) { return fileShape(key, { ...getCutRecord(key), [field]: value }, state); }
 
@@ -201,23 +205,131 @@ export const CONTOUR_DEFAULTS = Object.freeze({ toolDia: 3.175, cutterShape: 'ba
 let lastContourV = { ...CONTOUR_DEFAULTS };
 export const lastContour = () => ({ ...lastContourV });
 export function rememberContour(field, value) { if (field in lastContourV && value != null) lastContourV = { ...lastContourV, [field]: value }; return lastContour(); }
-/**
- * setContour(key, on, state) — TASK 792: add (on) or remove (off) the Contour of the part `key`. Adding files its Contour membership (the last Contour settings)
- * and, on a Roughing part, sets its allowance to the declared finish allowance (the last one set: lastFinishAllowance; owner ruling: the allowance is 0
- * while the part has no Contour); removing takes it out and puts a Roughing part's allowance back to 0. Returns the part record. (TASK S1: through fileShape.)
- */
-export function setContour(key, on, state = null) {
-  const part = getPlanRecord(key);
-  if (!part || !part.cutType || isContourKey(key)) return part || null;
-  const rough = (cutTypeById(part.cutType) || {}).levelsOp === 'roughing';
-  if (on) {
-    if (!contourOf(key)) fileShape(contourKeyOf(key), { ...defaultCutRecord(), ...lastContour(), cutType: 'contour' }, state);
-    if (rough) fileShape(key, { ...getPlanRecord(key), finishAllowance: lastFinishAllowance() }, state);
-  } else {
-    fileShape(contourKeyOf(key), null, state);
-    if (rough) fileShape(key, { ...getPlanRecord(key), finishAllowance: 0 }, state);
+// ── TASK S2 (docs/OPERATIONS-MODEL.md 4.2-4.4, section 6 S2): the OPERATION-FIRST writers. Prepare edits OPERATIONS: the active operation's settings are every one
+// of its shapes' (no per-shape regrouping any more: an edited operation keeps its id, tick and place), shapes are added to / taken out of an operation, a shape in
+// several operations has one membership per operation, the quick flow (a type picked for selected shapes) ALWAYS makes a NEW operation, the bin deletes the
+// operation. Each writer is one step of the caller's undo (prepare-stage.js cutEdit). While the list keeps the default order (listOrder 'default') it is re-sorted
+// after every change (settleOrder, as since S1). fileShape above stays the import's writer (it regroups imported shapes by their settings). ──
+const closedOnly = (t) => Boolean(t) && t.targetKind !== 'path'; // a region type (and the Contour: a part's walls) needs a closed shape
+/** TASK S2: why the shapes `keys` (geometry keys) cannot be an operation of `type`, or null when they can: THE one rule (the type's declared targetKind); its words are
+ *  the one plain line the card shows when such a pick is refused (owner ruling turn 2716: never greyed). An empty list can take any type. */
+export function typeRefusal(type, keys) {
+  const t = cutTypeById(type);
+  if (!t) return 'unknown type';
+  const open = keys.filter((k) => parseKey(k).kind === 'chain').length, an = /^[aeiou]/i.test(t.menuLabel) ? 'an' : 'a', needs = `${an} ${t.menuLabel.toLowerCase()} needs a closed shape`;
+  if (closedOnly(t) && open) return keys.length === 1 ? `This open line can’t be ${an} ${t.menuLabel}: ${needs}` : `${open === keys.length ? `These ${open} open lines` : `${open} of the ${keys.length} shapes are open lines and`} can’t be ${an} ${t.menuLabel}: ${needs}`; // owner turn 2716's wording
+  if (type === STOCK_TYPE_ID && keys.length > 1) return `The Stock is one shape, not ${keys.length}`;
+  return null;
+}
+// what a record of `type` starts with, as a type pick set it before task S2: a Roughing takes the last step depth / adaptive choice / resolution used and the
+// allowance of a part with no Contour (0; the Contour no longer sets it: owner rule "no setting silently changes another"); a Contour the last Contour's bit /
+// cutter shape / step (lastContour) and the depth `rec` has (the shape's imported depth, or the operation's on a type change)
+function startRecord(type, rec) {
+  if (type === CONTOUR_TYPE) return { ...defaultCutRecord(), cutDepth: rec.cutDepth ?? 'unset', ...lastContour(), cutType: type };
+  const r = { ...rec, cutType: type };
+  if ((cutTypeById(type) || {}).levelsOp === 'roughing') {
+    if (!(Number(r.stepDepth) > 0)) r.stepDepth = lastStepDepth();
+    if (typeof r.adaptiveSteps !== 'boolean') r.adaptiveSteps = lastAdaptiveSteps();
+    if (!(Number(r.stepDeviation) > 0)) r.stepDeviation = lastStepDeviation();
+    r.finishAllowance = 0;
   }
-  return getPlanRecord(key);
+  return r;
+}
+/**
+ * newOperation(type, keys, state) — TASK S2, the QUICK FLOW (4.4, owner turns 2682-2684): a NEW operation of `type` holding the shapes `keys` (none = an empty one),
+ * its settings from the first shape's fresh record (freshRecord + the remembered defaults, startRecord); Depth "From model" ('model') when every shape has an
+ * imported depth (each is cut to its own, as each kept its own before). Its memberships take the next file places; it goes into the list by the default rule
+ * (newOpIndex). Returns the operation. The Stock is never made here (setStock: one per document).
+ */
+export function newOperation(type, keys, state = null) {
+  const rec = startRecord(type, keys.length ? freshRecord(keys[0]) : defaultCutRecord());
+  const settings = settingsPart(rec);
+  if (cutTypeHasParam(type, 'cutDepth') && keys.length && keys.every((k) => sourceDepth(k) !== undefined)) settings.cutDepth = 'model';
+  const draft = { type, settings, geometry: keys.map((key) => ({ key, seq: takeSeq() })) };
+  const op = insertOp(newOpIndex(state, draft), draft);
+  settleOrder(state);
+  return op;
+}
+/** TASK S2: the STOCK pick keeps the one-Stock move of before (task 472): the Stock operation holds the shape `key` alone (a previous Stock operation goes; the shape's
+ *  other operations are untouched). Returns { op, moved } (moved = another shape was the Stock); the Stock as it is when `key` already is it. */
+export function setStock(key, state = null) {
+  const prev = storeOps().find((op) => op.type === STOCK_TYPE_ID) || null;
+  if (prev && prev.geometry.length === 1 && prev.geometry[0].key === key) return { op: prev, moved: false };
+  const moved = Boolean(prev && prev.geometry.length);
+  if (prev) deleteOp(prev);
+  const draft = { type: STOCK_TYPE_ID, settings: settingsPart({ ...freshRecord(key), cutType: STOCK_TYPE_ID }), geometry: [{ key, seq: takeSeq() }] };
+  const op = insertOp(newOpIndex(state, draft), draft);
+  settleOrder(state);
+  return { op, moved };
+}
+/** TASK S2: change an operation's type (allowed when every shape can take it: typeRefusal; the card greys it otherwise). Its id, tick, place and shapes are kept, its
+ *  settings too, plus what the type starts with (startRecord; a Contour starts from the last Contour's). To the Stock: it becomes the one Stock (another goes). */
+export function changeOpType(op, type, state = null) {
+  if (op.type === type) return op;
+  if (type === STOCK_TYPE_ID) for (const o of storeOps().filter((x) => x !== op && x.type === STOCK_TYPE_ID)) deleteOp(o);
+  const rec = startRecord(type, { cutType: op.type, ...op.settings });
+  setOpType(op, type);
+  setOpSettings(op, settingsPart(rec));
+  settleOrder(state);
+  return op;
+}
+/** TASK S2: set an operation's settings (`patch`: field -> value, base mm): they apply to ALL its shapes. `leadInAt` is each shape's own (its dragged lead-in position):
+ *  it is set on every membership. A typed depth equal to every shape's imported depth is stored 'model' (as since S1). TASK 822: a tab count set (a number or Auto)
+ *  lays the tabs out again: every shape's dragged tabs (`tabsAt`) are dropped. */
+export function setOpFields(op, patch, state = null) {
+  const { leadInAt, ...rest } = patch;
+  // TASK S2 (owner turns 2730-2731): a Depth set back to the model (null: a Roughing's / Contour's Bottom emptied or Reset) = 'model' where every shape has an imported
+  // depth, else unset (a part's own levels / slope depth)
+  if (Object.hasOwn(rest, 'cutDepth') && rest.cutDepth === null) rest.cutDepth = op.geometry.length && op.geometry.every((r) => sourceDepth(r.key) !== undefined) ? 'model' : 'unset';
+  if (Object.keys(rest).length) setOpSettings(op, { ...op.settings, ...rest });
+  if (Object.hasOwn(patch, 'leadInAt')) for (const ref of op.geometry) setRefAt(ref, leadInAt);
+  if (Object.hasOwn(rest, 'tabCount')) for (const ref of op.geometry) if (Object.hasOwn(ref, 'tabsAt')) setRefTabsAt(ref, undefined); // TASK 822
+  if (Object.hasOwn(rest, 'cutDepth')) normalizeDepth(op);
+  settleOrder(state);
+  return op;
+}
+/** TASK S2: the dragged lead-in position of ONE membership (the handle on that shape). */
+export function setShapeLeadInAt(op, key, at, state = null) {
+  const ref = op.geometry.find((r) => r.key === key);
+  if (ref) setRefAt(ref, at);
+  settleOrder(state);
+}
+/** TASK 822: the dragged tabs of ONE membership (its tab handles): every tab's centre as a perimeter fraction of its outline (#core/hold-part holdTabDragAt `at`). */
+export function setShapeTabsAt(op, key, tabsAt, state = null) {
+  const ref = op.geometry.find((r) => r.key === key);
+  if (ref) setRefTabsAt(ref, tabsAt);
+  settleOrder(state);
+}
+/** TASK S2: put the shape `key` into the operation (a new membership: the next file place); false when it is already in it. */
+export function addShapeToOp(op, key, state = null) {
+  if (op.geometry.some((r) => r.key === key)) return false;
+  addRef(op, { key, seq: takeSeq() });
+  settleOrder(state);
+  return true;
+}
+/** TASK S2: take the shape `key` out of the operation (the operation stays, possibly empty; the shape stays in its other operations). */
+export function removeShapeFromOp(op, key, state = null) {
+  const ref = op.geometry.find((r) => r.key === key);
+  if (!ref) return false;
+  removeRef(op, ref);
+  settleOrder(state);
+  return true;
+}
+/** TASK S2 (owner turns 2710-2712, "I usually copy a toolpath and differentiate them separately", as Fusion's Duplicate): a NEW operation with the same type, settings,
+ *  tick and shapes (each a new membership: the next file place, its dragged lead-in position and tabs kept), placed right after the original while the list order is the
+ *  user's ('stored'), else by the default rule. Returns the copy. */
+export function duplicateOperation(op, state = null) {
+  const draft = { type: op.type, settings: { ...op.settings }, geometry: op.geometry.map((r) => ({ key: r.key, seq: takeSeq(), ...(Object.hasOwn(r, 'at') ? { at: r.at } : {}), ...(Array.isArray(r.tabsAt) ? { tabsAt: [...r.tabsAt] } : {}) })) };
+  const at = listOrder() === 'stored' ? storeOps().indexOf(op) + 1 : newOpIndex(state, draft);
+  const copy = insertOp(at, draft);
+  if (op.on === false) setOpsOn([copy.id], false);
+  settleOrder(state);
+  return copy;
+}
+/** TASK S2: the bin: delete the operation (its shapes stay in their other operations). */
+export function deleteOperation(op, state = null) {
+  deleteOp(op);
+  settleOrder(state);
 }
 
 // TASK 714: the STEP DEPTH a target switched to a stepped type gets when its record has none: the last step depth the user set on any stepped
@@ -278,7 +390,9 @@ const HOLD_REFUSED = {
 /**
  * holdNoteItems(storedRec, hold) — TASK 742: the card note of a held record (doc unit), from its holdSummary: "Outside: 4 tabs, 10 mm wide, 2 mm thick:
  * 1 pass at 16 mm + 4 gaps at 18 mm", then "Gaps: cut the side against the part; the return leg is optional"; an onion skin "Outside: onion skin 2 mm:
- * 1 pass at 16 mm"; fewer tabs than asked: "only 2 of 4 tabs fit" (warning colour); a refused hold says why (warning colour; the cut is made without it).
+ * 1 pass at 16 mm"; fewer tabs than asked: "only 2 of 4 tabs fit" (warning colour); a refused hold says why (warning colour; the cut is made without it). TASK 822:
+ * tabs kept off the stretches where a gap strip does not fit (hold.narrow) say so (warning colour): "only 4 of 5 tabs fit: part of the outline is too narrow for
+ * a gap strip", or with every tab placed "placed where a gap strip fits: part of the outline is too narrow for one".
  */
 export function holdNoteItems(storedRec, hold) {
   if (!hold || !storedRec) return [];
@@ -307,7 +421,10 @@ export function holdNoteItems(storedRec, hold) {
   }
   const n = hold.count, gaps = `${n} gap${n === 1 ? '' : 's'}`;
   const items = [{ text: `${name}: ${n} tab${n === 1 ? '' : 's'}, ${f(hold.width)} ${u} wide, ${f(hold.thickness)} ${u} thick: 1 pass at ${f(hold.depth)} ${u} + ${gaps} at ${f(Number(hold.fullDepth))} ${u}` }];
-  if (n < hold.requested) { const t = ` (only ${n} of ${hold.requested} tabs fit)`; items[0].text += t; items[0].warn = t; items[0].title = 'the outline has too few stretches long enough for a tab'; }
+  if (hold.narrow) { // TASK 822: tabs kept off the stretches too narrow for a gap strip (a stem, a neck)
+    const t = n < hold.requested ? ` (only ${n} of ${hold.requested} tabs fit: part of the outline is too narrow for a gap strip)` : ' (placed where a gap strip fits: part of the outline is too narrow for one)';
+    items[0].text += t; items[0].warn = t; items[0].title = 'a gap strip needs the strip width clear beside the outline';
+  } else if (n < hold.requested) { const t = ` (only ${n} of ${hold.requested} tabs fit)`; items[0].text += t; items[0].warn = t; items[0].title = 'the outline has too few stretches long enough for a tab'; }
   items.push({ text: `Gaps: cut the side against the part; the return leg is optional` });
   return items;
 }

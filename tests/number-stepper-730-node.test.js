@@ -12,6 +12,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { nextValue, stepIn, HOLD_DELAY_MS, HOLD_REPEAT_MS } from '../apps/shaper/src/number-stepper.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: a change of the open operation = its own step
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -41,23 +42,27 @@ try {
   app.modes.showMode('prepare');
   const doc = app.document, q = (s) => doc.querySelector(s), st = app.state;
   const pc = doc.getElementById('prepare-canvas');
-  const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+  const pressElRaw = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+  const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   importFusionSelection(JSON.parse(fs.readFileSync(new URL('03-pocket-floor-fillet.json', FIX), 'utf8')), { controller: app.controller, prepare: app.prepare });
-  const p = worldToScreen(pc, { x: 60, y: -40 }); app.click(Math.round(p.x), Math.round(p.y), { target: pc });
+  const p = worldToScreen(pc, { x: 60, y: -40 }); clickOpen(app, () => app.click(Math.round(p.x), Math.round(p.y), { target: pc })); // TASK S2: the imported Pocket opened (its type then changed to Roughing)
   pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]');
-  const rec = () => [...V2_PLAN.values()].find((r) => r.cutType === 'roughing');
+  const rec = () => [...V2_PLAN.values()].find((r) => r.cutType === 'roughing' || r.cutType === 'pocket'); // (TASK S2: a Pocket for the Depth presses)
   const hist = () => st.history.length;
   const row = (name) => `.cut-row[data-${name.startsWith('cut') || name === 'toolDia' ? 'param' : 'row'}="${name}"]`;
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);
-  const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typed = (cls, v) => editStep(app, () => typedRaw(cls, v)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   eq([...doc.querySelectorAll('.cut-card .cut-step')].map((b) => b.getAttribute('aria-label')),
-    ['Decrease depth', 'Increase depth', 'Decrease top', 'Increase top', 'Decrease bottom', 'Increase bottom', 'Decrease floor allowance', 'Increase floor allowance', 'Decrease stepover', 'Increase stepover', 'Decrease finish allowance', 'Increase finish allowance', 'Decrease boundary offset', 'Increase boundary offset', 'Decrease min terrace width', 'Increase min terrace width', 'Decrease smoothing', 'Increase smoothing', 'Decrease lead-in radius', 'Increase lead-in radius', 'Decrease lead-in sweep', 'Increase lead-in sweep', 'Decrease lead-in length', 'Increase lead-in length', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type); TASK 775 / 778: the lead-in radius / sweep / length
+    ['Decrease depth', 'Increase depth', 'Decrease top', 'Increase top', 'Decrease floor allowance', 'Increase floor allowance', 'Decrease stepover', 'Increase stepover', 'Decrease finish allowance', 'Increase finish allowance', 'Decrease boundary offset', 'Increase boundary offset', 'Decrease min terrace width', 'Increase min terrace width', 'Decrease smoothing', 'Increase smoothing', 'Decrease lead-in radius', 'Increase lead-in radius', 'Decrease lead-in sweep', 'Increase lead-in sweep', 'Decrease lead-in length', 'Increase lead-in length', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type); TASK 775 / 778: the lead-in radius / sweep / length
       'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution',
       'Decrease tab count', 'Increase tab count', 'Decrease tab width', 'Increase tab width', 'Decrease thickness', 'Increase thickness', // TASK 742: the Hold part rows (hidden for a stepped type)
       'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
     'a − / + pair on depth, step depth, resolution, the Hold part rows, offset and bit diameter');
 
-  // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps
+  // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps. TASK S2: on a flat type (a Roughing's Depth emptied is From model, not unset): the operation made a
+  // Pocket for these presses, then a Roughing again
+  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="pocket"]');
   typed('.cut-depth', ''); // a stepped pocket arrives with its slope's depth: clear it to unset
   eq(rec().cutDepth, 'unset', 'depth cleared');
   let h0 = hist();
@@ -75,6 +80,7 @@ try {
   near(rec().cutDepth, 6.5, 'typed 6.3 then + -> 6.5');
   typed('.cut-depth', '6.3'); step('cutDepth', -1);
   near(rec().cutDepth, 6, 'typed 6.3 then - -> 6.0');
+  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]'); // (TASK S2: back to the Roughing)
 
   step('cutOffset', 1); near(rec().cutOffset, 0.25, 'offset + -> 0.25');
   step('cutOffset', -1); step('cutOffset', -1); near(rec().cutOffset, -0.25, 'offset goes negative (as typing does)');
@@ -82,7 +88,7 @@ try {
   typed('.cut-bit', '0.3'); step('toolDia', -1); near(rec().toolDia, 0.3, 'bit 0.3 - 0.5 would be 0: a size stays where it is (TASK 736: no minimum)');
   step('stepDepth', 1); near(rec().stepDepth, 1.5, 'step depth 1 + -> 1.5');
   typed('.cut-step-depth', '0.3'); step('stepDepth', -1); near(rec().stepDepth, 0.3, 'step depth 0.3 - 0.5 would be 0: stays (no minimum)');
-  const cb = q('.cut-adaptive'); cb.checked = true; cb.dispatchEvent(new app.window.Event('change'));
+  const cb = q('.cut-adaptive'); editStep(app, () => { cb.checked = true; cb.dispatchEvent(new app.window.Event('change')); }); // TASK S2: its own step
   step('stepDeviation', 1); near(rec().stepDeviation, 0.3, 'resolution 0.25 + -> 0.3');
   typed('.cut-step-deviation', '0.02'); step('stepDeviation', -1); near(rec().stepDeviation, 0.02, 'resolution 0.02 - 0.05 would be 0: stays (no minimum)');
 
@@ -94,9 +100,10 @@ try {
   near(rec().cutDepth, before + 0.5, 'hold: the press steps at once');
   await sleep(HOLD_DELAY_MS + 4 * HOLD_REPEAT_MS + 40);
   doc.dispatchEvent(new app.window.PointerEvent('pointerup', { bubbles: true, button: 0 }));
-  const after = rec().cutDepth, n = hist() - h0;
+  const after = rec().cutDepth, n = Math.round((after - before) / 0.5);
   assert.ok(n >= 4 && n <= 8, 'hold repeated: ' + n + ' steps'); checks++;
-  near(after, before + 0.5 * n, 'each repeat is one step of 0.5 (one undo step each)');
+  near(after, before + 0.5 * n, 'each repeat is one step of 0.5');
+  eq(hist() - h0, 1, 'TASK S2: the whole hold, in the open operation: ONE undo step (its edit session)');
   await sleep(3 * HOLD_REPEAT_MS);
   eq(rec().cutDepth, after, 'releasing stops the repeat');
 

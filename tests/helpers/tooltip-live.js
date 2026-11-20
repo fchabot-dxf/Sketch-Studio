@@ -35,7 +35,7 @@ export function probe(t) {
     async release() { if (phone && down) { await T('touchEnd', []); down = null; await sleep(60); } }, // the finger lifts: a long-pressed tooltip stays (until the next tap / Esc)
     async tapAway() { await api.release(); await T('touchStart', [{ x: 386, y: 4 }]); await sleep(40); await T('touchEnd', []); await sleep(120); }, // phone: the next tap anywhere on empty canvas (TASK 819: not the left corner (4, 4): the drawer chevron is next to it)
     async leave() { // desktop: the mouse moves away; phone: the finger lifts and Esc (a tap would close an open menu)
-      if (phone) { await api.release(); await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); }
+      if (phone) { await api.release(); if (await api.tip()) { await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); } } // TASK S2: Esc only while a tooltip shows (an Esc with none would Cancel the open operation)
       else await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 3, y: 3, button: 'none', buttons: 0 });
       await sleep(120);
     },

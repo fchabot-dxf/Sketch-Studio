@@ -13,22 +13,28 @@
 import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choices (Off | On) and sides (Outside | Inside)
-import { ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule, a Contour's walls
+import { ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule, a Contour's walls
 
 
 /** The parameters: the cut card's rows (Prepare) and the Export step's cards. */
 const PARAMS = {
   // ── the cut card (Prepare) ──
   cutType: { label: 'Cut type', hint: 'How the Origin cuts this shape.' },
-  cutDepth: { label: 'Depth', hint: 'How deep the cut goes from the surface. Leave it empty to set the depth on the Origin.' },
+  cutDepth: { label: 'Depth', hint: 'One flat depth for every shape. From model: each shape’s own model depth (the deepest point of a sloped shape).' }, // TASK S2 (owner turn 2733): a flat type's Depth
+  // TASK S2 (owner turn 2740): a Roughing's / Contour's Depth row (CUT_TYPES depthParam): its ONE depth (810's Bottom row is gone)
+  levelsDepth: { label: 'Depth', hint: 'From model: each shape to its own model depth. A typed depth: the cut follows the model’s slope and stops flat at that depth.' },
   stockDepth: { label: 'Thickness', hint: 'The thickness of your board, shown in the 3D preview. Not cut.' }, // the depth row of a Stock loop (CUT_TYPES stock.depthParam)
   clearing: { label: 'Clearing', hint: 'How the inside of the pocket is removed.' },
   stepover: { label: 'Stepover', hint: 'How far the bit moves sideways between passes, as a share of its diameter. Smaller is smoother and slower.' },
   // TASK 766: the last pass that takes the allowance off is the Origin's own inside cut with Loop off, the loop's turn along the wall with Loop on (pocket-clearing.js)
-  finishAllowance: { label: 'Finish allowance', hint: ({ loop, roughing } = {}) => (roughing ? 'Left on every wall by the roughing levels; the Contour takes it off. 0 = none (the part has no Contour).' : `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.`) }, // TASK 792: Roughing's allowance
-  // TASK 792: a part's Contour (the finish of its sloped walls), added from the part's card
-  contour: { label: 'Contour', hint: 'Adds a finishing pass along the sloped walls at a fine step, with its own bit. It is its own operation in the list.', items: ['contour:off', 'contour:on', 'contourEdit'] },
-  contourEdit: { label: 'Edit contour', hint: 'Shows the Contour’s own settings: its step and its bit.' },
+  finishAllowance: { label: 'Finish allowance', hint: ({ loop, roughing } = {}) => (roughing ? 'Left on every wall by the roughing levels, for a finishing pass (a Contour) to take off. 0 = none.' : `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.`) }, // TASK 792: Roughing's allowance
+  // TASK S2 (docs/OPERATIONS-MODEL.md 4.3, owner rulings turns 2710-2716): the OPEN operation's card: its Shapes (an X each), Duplicate, OK, Cancel. TASK 792's
+  // Contour row and Edit contour are gone: the Contour is an operation type of its own (the type menu).
+  opShapes: { label: 'Shapes', hint: 'The shapes this operation cuts. Click a shape on the drawing to add it, or click it again to take it out.', items: ['opRemoveShape'] },
+  opRemoveShape: { label: 'Take out', hint: 'Takes this shape out of the operation. It stays in its other operations.' },
+  opDuplicate: { label: 'Duplicate', hint: 'A copy of this operation, with the same type, settings and shapes, to change separately.' },
+  opOk: { label: 'OK', hint: 'Keeps the changes: one step of Undo.' },
+  opCancel: { label: 'Cancel', hint: 'Puts the operation back as it was when you opened it (Esc does the same).' },
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
   // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab
@@ -48,9 +54,9 @@ const PARAMS = {
   boundaryOffset: { label: 'Boundary offset', hint: 'Moves the boundary out (positive) or in (negative) before the tool rule. Empty = calculated: the wall allowance plus three quarters of the bit, which with Outside clears a band two bits wide round the part.' },
   // TASK 810: the HEIGHTS of a Roughing / Contour: only a band of depths is cut
   topDepth: { label: 'Top', hint: 'Where the cutting starts, as a depth below the surface: the levels at or above it are not cut (for example, already cleared by another operation). Empty = the surface.' },
-  bottomDepth: { label: 'Bottom', hint: 'The depth the cutting stops at: no level goes deeper. Empty = the part’s depth (from the model for a part from Fusion or an STL).' },
-  floorAllowance: { label: 'Floor allowance', hint: 'Left above the bottom: the deepest level stops this much higher, for a later pass to finish. Separate from the wall allowance. 0 = none.' },
-  walls: { label: 'Walls', hint: 'Which walls the Contour finishes. Sloped only skips the pass whose outline is the shape’s own outline (the straight wall an Outside or Inside cut already makes). Until you pick, it is Sloped only next to an Outside or Inside cut on a sloped shape, All otherwise.', items: CONTOUR_WALLS.choices.map((w) => `walls:${w.id}`) }, // TASK 810
+  floorAllowance: { label: 'Floor allowance', hint: 'Left above the Depth: the deepest level stops this much higher, for a later pass to finish. Separate from the wall allowance. 0 = none.' },
+  wallSide: { label: 'Wall side', hint: 'Which side of the shape the walls are cut on, for a shape whose model does not say it (a drawn shape). Inside: the walls of a hollow; Outside: the outline of a part.', items: ['wallSide:inside', 'wallSide:outside'] }, // TASK S2
+  walls: { label: 'Walls', hint: 'Which walls the Contour finishes. Sloped only skips the pass whose outline is the shape’s own outline (the straight wall an Outside or Inside cut already makes). Until you pick, it is All.', items: CONTOUR_WALLS.choices.map((w) => `walls:${w.id}`) }, // TASK 810
   roughLayout: { label: 'Layout', hint: 'How the levels are cut. The Origin cuts every path from the surface down.', items: ['roughLayout:terraces', 'roughLayout:nested'] },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },
@@ -66,7 +72,7 @@ const PARAMS = {
   stepDepth: { label: 'Step depth', hint: ({ contour } = {}) => (contour ? 'How much deeper each contour pass goes. Smaller passes follow the slope more closely but take more cuts.' : 'How much deeper each step goes. Smaller steps follow the slope more closely but take more cuts.') }, // TASK 792: a Contour's fine step
   stepDeviation: { label: 'Resolution', hint: 'The most the steps may stray from the true slope. Finer gives more steps.' },
   holdPart: { label: 'Hold part', hint: 'Keeps a cut-out part (or the waste of a hole) from coming loose when the cut goes through.', items: HOLD_PART.modes.map((m) => `holdPart:${m.id}`) },
-  tabCount: { label: 'Tab count', hint: 'How many tabs. Auto spaces them along the outline by its length.' },
+  tabCount: { label: 'Tab count', hint: 'How many tabs. Auto spaces them along the outline by its length. Drag a tab on the outline to move it (the operation open): its shape then keeps its tabs where they are, and the count stays fixed until you pick Auto or type a count.' },
   tabWidth: { label: 'Tab width', hint: ({ online } = {}) => (online ? 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.' : 'How long each tab is, along the outline.') }, // TASK 775: an On line cut's tabs are gaps in the line
   holdThickness: { label: 'Tab thickness', hint: 'How much wood each tab keeps, up from the bottom of the cut.' },
   skinThickness: { label: 'Skin thickness', hint: 'How thick the layer left at the bottom is.' }, // the holdThickness row with Onion skin
@@ -130,13 +136,13 @@ const CHOICE_HINTS = {
     all: 'A pass at every level, the straight walls too.',
     sloped: 'Skips the pass along the shape’s own outline: the sloped walls only.',
   },
+  wallSide: { // TASK S2
+    inside: 'The walls inside the shape: a hollow, a pocket.',
+    outside: 'The walls outside the shape: the outline of a part.',
+  },
   roughLayout: { // TASK 792 (owner turn 2604)
     terraces: 'Each spot cut once, to its own depth: no passes through air. Best on deep or gentle reliefs.',
     nested: 'One pocket per level over everything that goes at least that deep: fewer, bigger paths. Best on steep or blocky parts.',
-  },
-  contour: { // TASK 792
-    off: 'No finishing pass.',
-    on: 'A finishing pass along the walls at a fine step (its own operation and bit).',
   },
   clearing: {
     freehand: 'You clear it by hand on the Origin, inside the outline.',
@@ -171,11 +177,11 @@ const CHOICE_SOURCES = {
   holdPart: HOLD_PART.modes.map((m) => ({ id: m.id, label: m.label })),
   leadIn: LEAD_IN.modes.map((m) => ({ id: m.id, label: m.label })), // TASK 775
   leadInSide: LEAD_IN.sides.map((m) => ({ id: m.id, label: m.label })),
-  contour: [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }], // TASK 792: the Contour row of a part's card
   roughLayout: ROUGH_LAYOUT.layouts.map((l) => ({ id: l.id, label: l.label })), // TASK 792: Roughing's layout
   boundary: ROUGH_BOUNDARY.kinds.map((k) => ({ id: k.id, label: k.label })), // TASK 810: Roughing's boundary
   boundaryTool: ROUGH_BOUNDARY.tools.map((t) => ({ id: t.id, label: t.label })), // TASK 810: its tool rule
   walls: CONTOUR_WALLS.choices.map((w) => ({ id: w.id, label: w.label })), // TASK 810: a Contour's which walls
+  wallSide: CONTOUR_WALL_SIDES.map((w) => ({ id: w.id, label: w.label })), // TASK S2: a Contour's own wall side
 };
 
 /** The id of a choice's entry: `<parameter>:<choice id>`. */

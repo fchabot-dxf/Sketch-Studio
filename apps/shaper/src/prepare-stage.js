@@ -7,9 +7,10 @@ import { capturePrepare, applyPrepare, comparablePrepare } from './shaper-doc.js
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { setFieldFor, cutPlanNotice, stockKeyOf } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice
+import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeLeadInAt, setShapeTabsAt } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
 import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
-import { reorderOps, setOpsOn } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
+import { reorderOps, setOpsOn, opById, regionOf, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
+import { cutTypeById, STOCK_TYPE_ID } from './shaper.js'; // TASK S2: a type's name; the Stock
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 
 /**
@@ -18,7 +19,7 @@ import { createOpList } from './op-list.js';                   // TASK 743: Prep
  *   history: the Undo / Redo router (modes.js createShaperHistory); its runKey serves Ctrl+Z / Ctrl+Y while Prepare shows.
  *   panelEl / canvasEl / noticeEl: the cut card's host, the Prepare svg, the one-line notice. opsEl: TASK 743, the operations list's host (op-list.js). ensureSketch(): mounts the sketch (the page mounts it lazily).
  *   onViewChange(view): told when the Prepare view is (re)mounted (the page's dev / test seam). (TASK 761: no `notify` any more: the cut plan's notice is the one-time Prepare notice.)
- * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel, opList }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
+ * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel, opList, pickType (TASK S2: the card's type pick) }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
  * mount() = (re)mount the Prepare view; enter(enteringMode) = the mode router's hook for entering Prepare (modes.js); view() = the mounted view or null;
  * afterRestore(restore) = what a document restore does with Prepare (restore = the document buffer's onRestored payload: TASK 741, its removedVcarves).
  */
@@ -34,10 +35,43 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
   // changes (every cut-plan edit, an undo / redo, a selection change, a re-mount), so it is refreshed here too.
+  // TASK S2 (docs/OPERATIONS-MODEL.md 4.2-4.4, owner rulings turns 2716-2718): EDITING IS DELIBERATE. An operation is OPENED (the Operations list's Edit button, the
+  // quick flow, Duplicate), edited in its card while every change PREVIEWS live (Prepare, the 3D Review, the file), then CONFIRMED: OK = the whole session is ONE
+  // undo step; Cancel / Esc = the operation exactly as it was when opened, nothing in the undo stack. One operation is open at a time; anything else in the list
+  // (another row's Edit, a row tap, a tick, a reorder, another row's bin) and leaving Prepare = OK first; the open operation's bin = Cancel, then the delete; Undo
+  // while it is open = Cancel (the session's undo point is undone). A click on a shape only SELECTS it: its operations' rows are highlighted in the list and the
+  // card shows only the quick flow's type menu. An incompatible pick is TOLD in one plain line in the card's note area (cut-plan.js typeRefusal), never greyed.
+  let opsNow = null;
+  const opsOf = () => opsNow || (getController() ? describeOperations(getController().state) : []);
+  const numberOf = (ops, id) => ops.findIndex((o) => o.id === id) + 1;
+  const typeName = (id) => (cutTypeById(id) || {}).menuLabel || id;
+  const pickedKeys = () => (prepareView ? prepareView.selectedTargets().map((t) => keyOf(t.kind, t.id)) : []);
+  let line = null; // the card's one plain line (a refusal), shown at the top of its note area until the next action
+  const say = (text) => { line = text; };
+  function cardModel(ops) {
+    const pv = prepareView;
+    if (!pv) return null;
+    const lineItems = line ? [{ text: line, warn: line }] : [];
+    const op = pv.activeOp();
+    if (op) {
+      const keys = op.geometry.map((r) => r.key), n = keys.length;
+      const f = pv.factsOf(op, keys[0] || null);
+      // TASK S2 (owner turn 2713): a Contour's own Wall side matters on a shape whose model does not say it (no slope, no levels: a drawn shape)
+      const wallSideFree = op.type === CONTOUR_TYPE && (!n || keys.some((k) => { const r = regionOf(k) || {}; return !r.slope && !(Array.isArray(r.levels) && r.levels.length); }));
+      const depthFromModel = !(Number(op.settings.cutDepth) > 0); // TASK S2: the Depth from the model ('model' / unset) or a typed value (a Roughing's / Contour's Bottom)
+      return { mode: 'op', ...f, note: [...lineItems, ...f.note], boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, opId: op.id, wallSideFree, depthFromModel,
+        title: `${typeName(op.type)} ${numberOf(ops, op.id)} \u00b7 ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes`}`,
+        shapes: keys.map((key) => ({ key, label: pv.shapeLabel(key) })) };
+    }
+    const t = pv.selectedTarget();
+    return t ? { mode: 'shape', kind: t.kind, record: { cutType: null }, note: lineItems } : null; // the quick flow's type menu only (owner turn 2717)
+  }
   const refreshCutPanel = () => {
-    const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t), leadIn: prepareView.leadInFor(t), contour: prepareView.contourFor(t), levels: prepareView.levelsFor(t), boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, partDepth: prepareView.partDepthFor(t), walls: prepareView.wallsFor(t) } : null); // TASK 810: boundary = the Boundary rows' context, partDepth = the Bottom's default // TASK 809: levels = it cuts a part's levels (the Smoothing row) // TASK 792: contour = the part has a Contour ({ allowed, on }) // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take; TASK 778: leadIn = calculated / resolved arc summary
+    opsNow = getController() ? describeOperations(getController().state) : [];
+    cutPanel.update(cardModel(opsNow));
     opList.refresh();
+    opList.reveal(); // TASK S2 (owner turn 2718): the first highlighted row in view (the list open), never opened
+    opsNow = null;
   };
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
   // precision, TASK 775: the DOCUMENT UNIT, and a key-less change: settings loaded / reset / arriving from another device) rebuilds the card with its notes and
@@ -47,6 +81,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second
   // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset). TASK S1: compared without the
   // regions (shaper-doc.js comparablePrepare: an edit never changes them; the rose's levels are ~1.6 MB of text).
+  // TASK S2: the instant edits (a tick, a reorder, the bin) go through cutEdit; an open operation's edits are a SESSION (below), ONE step when confirmed.
   function cutEdit(apply) {
     const designController = getController();
     const st = designController && designController.state;
@@ -57,45 +92,120 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (st && comparablePrepare(capturePrepare()) === before) st.discardSnapshotAt(n);
     refreshCutPanel();
   }
+  const sketchState = () => (getController() ? getController().state : null);
+  // TASK S2: the EDIT SESSION of the open operation: the state before it is kept (`pre`); its first change takes the undo point of that state (the same pre-edit
+  // snapshot as cutEdit: changed()), its changes then go to the store with no history (they preview live); OK keeps the undo point (dropped when nothing changed in
+  // the end), Cancel puts the state back and drops it. Opening and cancelling with no change touch no history (Redo is kept).
+  let session = null; // { opId, pre (capturePrepare), before (comparable), n (the history length after its undo point; null before its first change) }
+  function beginSession() {
+    const pre = capturePrepare();
+    session = { opId: null, pre, before: comparablePrepare(pre), n: null };
+  }
+  function changed() { // before a change of the session: its undo point, once
+    const st = sketchState();
+    if (!session || session.n !== null || !st) return;
+    st.saveState('cut plan edit');
+    session.n = st.history.length;
+  }
+  let rowId = null; // TASK S2 (owner turn 2719): the SELECTED (tapped) row of the list: it alone shows Edit, Duplicate, X
+  // Duplicate (the selected row's, the open card's): OK on the open operation first, then the copy is created OPEN (Cancel removes it)
+  function duplicateAndOpen(opId) { commitSession(); const op = opById(opId); if (!op || !prepareView) return; beginSession(); changed(); const copy = duplicateOperation(op, sketchState()); rowId = copy.id; openSession(copy.id); }
+  // the list's Edit: open the operation (OK on another open one first); nothing when it is the open one
+  function openForEdit(opId) { if (!prepareView || (session && session.opId === opId)) return; commitSession(); if (!opById(opId)) return; beginSession(); openSession(opId); }
+  function openSession(opId) { session.opId = opId; line = null; prepareView.openOp(opId); prepareView.refreshLook(); refreshCutPanel(); }
+  function sessionEdit(apply) {
+    if (!session || !prepareView) return;
+    line = null;
+    changed();
+    apply();
+    prepareView.syncActive(); prepareView.refreshLook();
+    refreshCutPanel();
+  }
+  function endSession(keep) {
+    if (!session) return;
+    const st = sketchState(), s0 = session;
+    session = null;
+    if (!keep) applyPrepare(s0.pre);
+    if (st && s0.n !== null && (!keep || comparablePrepare(capturePrepare()) === s0.before)) st.discardSnapshotAt(s0.n);
+    line = null;
+    if (prepareView) { prepareView.closeOp(); prepareView.setSelection([]); prepareView.refreshLook(); } // the card closes
+    refreshCutPanel();
+  }
+  const commitSession = () => endSession(true);
+  const cancelSession = () => endSession(false);
+  // a type picked in the card: on the OPEN operation it changes its type (refused with its line when one of its shapes cannot take it); with shapes selected it is the
+  // QUICK FLOW (4.4): ALWAYS a NEW operation holding the picked shapes that can take the type, created OPEN (Cancel removes it); none can: nothing is created, the
+  // line says why; some cannot: they are left out and the line says so. The Stock keeps the one-Stock move (task 472: the last closed shape picked).
+  function pickType(id) {
+    const pv = prepareView, st = sketchState();
+    if (!pv) return;
+    const prevStock = stockKeyOf();
+    const stockNotice = (key) => { if (prevStock && prevStock !== key) prepareNotice('Stock moved to this loop (there is one Stock per document)'); else if (!prevStock) prepareNotice('This closed loop is now the Stock: the board in Export'); };
+    const op = session && pv.activeOp();
+    if (op) {
+      const why = typeRefusal(id, op.geometry.map((r) => r.key));
+      if (why) { say(why); refreshCutPanel(); return; }
+      sessionEdit(() => { if (id === STOCK_TYPE_ID && op.geometry.length) stockNotice(op.geometry[0].key); changeOpType(op, id, st); });
+      return;
+    }
+    const picked = pickedKeys();
+    const fit = picked.filter((k) => !typeRefusal(id, [k])), out = picked.filter((k) => !fit.includes(k));
+    const keys = id === STOCK_TYPE_ID ? fit.slice(-1) : fit;
+    if (!keys.length) { say(typeRefusal(id, picked)); refreshCutPanel(); return; }
+    beginSession(); changed();
+    let made;
+    if (id === STOCK_TYPE_ID) { stockNotice(keys[0]); made = setStock(keys[0], st).op; } else made = newOperation(id, keys, st);
+    openSession(made.id);
+    if (out.length) { say(`${typeRefusal(id, out)} (left out)`); refreshCutPanel(); }
+  }
   const cutPanel = createCutPanel(panelEl, {
-    onPickType: (id) => cutEdit(() => { if (prepareView) prepareView.applyCutTypeToSelected(id); }),
-    onSetField: (field, value) => cutEdit(() => { if (prepareView) prepareView.setFieldOnSelected(field, value); }),
-    onSetFields: (o) => cutEdit(() => { if (prepareView) for (const [k, v] of Object.entries(o)) prepareView.setFieldOnSelected(k, v); }),
-    onEditContour: () => { if (prepareView) prepareView.selectContour(); }, // TASK 792: the part card's "Edit contour" shows the Contour's own card
-    // TASK 810: Roughing's boundary Pick: the next click on a closed shape in Prepare sets the selected Roughing's `boundaryShape` (ONE undo step); pressed again, a
-    // click on nothing / an open path, or Esc: cancelled, nothing changes
+    onPickType: (id) => pickType(id),
+    onSetField: (field, value) => sessionEdit(() => prepareView.setOpField(field, value)), // TASK S2: the open operation, every one of its shapes (previewed; OK confirms)
+    onSetFields: (o) => sessionEdit(() => { for (const [k, v] of Object.entries(o)) prepareView.setOpField(k, v); }),
+    // TASK S2: the open operation's card: an X per shape (that shape leaves it), Duplicate (OK on it, then its copy is opened: Cancel removes the copy), OK, Cancel; a
+    // shape row under the pointer shows its shape on the canvas
+    onRemoveShape: (key) => sessionEdit(() => removeShapeFromOp(prepareView.activeOp(), key, sketchState())),
+    onDuplicate: () => { if (session) duplicateAndOpen(session.opId); },
+    onOk: () => commitSession(),
+    onCancel: () => cancelSession(),
+    onHoverShape: (key) => { if (prepareView) prepareView.hoverKey(key); },
+    // TASK 810: Roughing's boundary Pick: the next click on a closed shape in Prepare sets the open Roughing's `boundaryShape` (TASK S2: an edit of its session); pressed
+    // again, a click on nothing, or Esc: cancelled, nothing changes; a click on an open line: the line says why
     onPickBoundary: () => {
-      if (!prepareView) return;
+      if (!prepareView || !session) return;
       if (boundaryPicking) { prepareView.stopBoundaryPick(); return; }
       boundaryPicking = true;
       prepareView.startBoundaryPick({
-        onPick: (key) => cutEdit(() => { prepareView.setFieldOnSelected('boundaryShape', key); }),
+        onPick: (key) => sessionEdit(() => prepareView.setOpField('boundaryShape', key)),
+        onRefuse: () => say('This open line can\u2019t be a boundary: a boundary needs a closed shape'),
         onEnd: () => { boundaryPicking = false; refreshCutPanel(); },
       });
       refreshCutPanel();
     },
   });
   // TASK 743: the operations (TASK S1: stored, operations.js describeOperations) in the document's order; a reorder is ONE undo step (cutEdit: the snapshot carries
-  // the store); a tap on an operation selects its regions (the card then edits them all, as a shift-selection does)
-  const opsOf = () => { const c = getController(); return c ? describeOperations(c.state) : []; };
-  const isPicked = (op) => Boolean(prepareView) && prepareView.selection.size === op.records.length && op.records.every((r) => prepareView.selection.has(r.planKey));
+  // the store). TASK S2: a row tap SELECTS the operation's shapes (nothing opens); its Edit button OPENS it; the rows of every operation a selected shape is in are
+  // highlighted (the list's selected row style, owner turn 2718)
+  const isPicked = (op) => Boolean(prepareView) && Array.isArray(op.shapes) && op.shapes.some((k) => prepareView.selection.has(k));
   const opList = createOpList(opsEl, {
     getOps: opsOf,
-    onMove: (keys) => cutEdit(() => reorderOps(keys)),
-    onPick: (op) => { if (prepareView) prepareView.setSelection(op.records.map((r) => r.pick || r.target)); }, // TASK 792: a Contour operation selects its own records (`contour:<key>`)
+    onMove: (keys) => { commitSession(); cutEdit(() => reorderOps(keys)); },
+    onPick: (op) => { commitSession(); line = null; if (prepareView) prepareView.setSelection(op.shapes.map((k) => { const i = k.indexOf(':'); return { kind: k.slice(0, i), id: k.slice(i + 1) }; })); rowId = op.id; opList.refresh(); },
+    onEdit: (op) => { rowId = op.id; openForEdit(op.id); },
+    onDuplicate: (op) => duplicateAndOpen(op.id),
     isPicked,
-    // TASK 745: the bin of an operation UNASSIGNS every region / path of it: each record's cut type is cleared (cut-plan.js setFieldFor(key, 'cutType', null),
-    // the path the Stock move already takes to unassign a loop: TASK S1, the shapes leave the operation, which goes), ONE undo step for the whole operation
-    // (cutEdit: the snapshot carries the store, so Undo brings it back in its place); the selection clears when it was that operation. The sketch is never touched.
-    onDelete: (op) => cutEdit(() => {
-      const picked = isPicked(op);
-      const st = getController() && getController().state;
-      for (const r of op.records) setFieldFor(r.planKey, 'cutType', null, st);
-      if (prepareView) { if (picked) prepareView.setSelection([]); prepareView.refreshLook(); }
-    }),
+    isSelected: (op) => op.id === rowId,
+    isOpen: (op) => Boolean(session && session.opId === op.id),
+    // TASK S2: the bin DELETES the operation (its shapes stay in their other operations), ONE undo step (cutEdit: Undo brings it back in its place); the open operation's
+    // bin = Cancel, then the delete (an operation the session created is gone with the Cancel). The sketch is never touched.
+    onDelete: (op) => {
+      if (session && session.opId === op.id) cancelSession(); else commitSession();
+      const stored = opById(op.id);
+      if (stored) cutEdit(() => { deleteOperation(stored, sketchState()); if (prepareView) { prepareView.setSelection([]); prepareView.refreshLook(); } });
+    },
     // TASK 798: a row's / a heading's checkbox ticks or unticks its operations: ONE undo step (the snapshot carries the store and its `on`); Prepare's look shows the
     // ticked operations only (prepare-view.js), the selection and the card stay as they are
-    onTick: (ids, on) => cutEdit(() => { setOpsOn(ids, on); if (prepareView) prepareView.refreshLook(); }),
+    onTick: (ids, on) => { commitSession(); cutEdit(() => { setOpsOn(ids, on); if (prepareView) prepareView.refreshLook(); }); },
   });
 
   // The geometry signature the mounted Prepare view was built from: an undo that changed only the cut plan just repaints it
@@ -104,9 +214,13 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   const geomSig = (st) => JSON.stringify([[...st.joints.entries()].map(([k, j]) => [k, j.x, j.y]), st.shapes.map((x) => [x.id, x.type, x.joints, x.radius])]);
   function restoreCutPlanFromHistory(snapshot) {
     applyPrepare(snapshot);
+    // TASK S2: Undo while an operation is open: with changes, it undoes the session's own undo point (= Cancel: the operation as opened, closed); with none, it is the
+    // plain Undo of the step before, and the operation stays open (its card shows the restored values; gone: closed)
+    if (session && session.n !== null) { session = null; line = null; if (prepareView) prepareView.closeOp(); }
+    else if (session && !opById(session.opId)) { session = null; if (prepareView) prepareView.closeOp(); }
     const designController = getController();
     if (getMode() !== 'prepare' || !designController) return;
-    if (prepareView && geomSig(designController.state) === prepareSig) { prepareView.refreshLook(); refreshCutPanel(); }
+    if (prepareView && geomSig(designController.state) === prepareSig) { prepareView.syncActive(); prepareView.refreshLook(); refreshCutPanel(); }
     else mountPrepare();
   }
 
@@ -128,13 +242,16 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (!s || !prepareView) return;
     pendingSession = null;
     if (s.view) prepareView.setView(s.view);
-    prepareView.setSelection(s.selection);
+    // TASK S2: the operation that was open is open again (its card, as 766 keeps the open card), with a session of its own (the restored document is the one
+    // Cancel returns to); gone from the restored document: only the selection comes back
+    if (s.open && opById(s.open)) { session = null; beginSession(); openSession(s.open); }
+    else prepareView.setSelection(s.selection);
   }
   const captureSession = () => (prepareView
-    ? { selection: prepareView.selectedTargets().map((t) => ({ kind: t.kind, id: t.id })), view: { ...prepareView.view } }
+    ? { selection: prepareView.selectedTargets().map((t) => ({ kind: t.kind, id: t.id })), view: { ...prepareView.view }, open: session && session.opId ? session.opId : null }
     : pendingSession); // not mounted (the tab was left before Prepare was entered again): what it already carries
   function restoreSession(s) {
-    pendingSession = s && (s.selection.length || s.view) ? s : null;
+    pendingSession = s && (s.selection.length || s.view || s.open) ? s : null;
     if (prepareView && getMode() === 'prepare') applyPendingSession();
   }
 
@@ -157,8 +274,19 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (prepareView) prepareView.destroy();
     const st = designController.state; // TASK 761: the stored plan's legacy edge records are reconciled where the document is read (shaper-doc.js applyShaperDoc), not here
     prepareView = mountPrepareView(st, canvasEl, {
-      onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(),
-      onCommitField: (key, field, value) => cutEdit(() => { setFieldFor(key, field, value, st); if (prepareView) prepareView.refreshLook(); }), // TASK 778: dragging the lead-in handle commits ONE undo step
+      onSelectionChange: () => { line = null; rowId = null; refreshCutPanel(); }, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(), // TASK S2: a canvas selection: no row is the selected one
+      onCommitLeadIn: (opId, key, at) => sessionEdit(() => { const op = opById(opId); if (op) setShapeLeadInAt(op, key, at, st); }), // TASK 778: dragging the open operation's lead-in handle (TASK S2: an edit of its session, that membership's)
+      onCommitTabs: (opId, key, tabsAt) => sessionEdit(() => { const op = opById(opId); if (op) setShapeTabsAt(op, key, tabsAt, st); }), // TASK 822: dragging one of its tabs (that membership's tabsAt)
+      // TASK S2: while an operation is open, a click on a shape puts it in, or takes it out when it is in it (an edit of its session); a shape the type cannot take is
+      // not added: the card's line says why (cut-plan.js typeRefusal); Esc = Cancel
+      onToggleShape: (opId, t) => {
+        const op = opById(opId), key = keyOf(t.kind, t.id);
+        if (!op) return;
+        if (op.geometry.some((r) => r.key === key)) { sessionEdit(() => removeShapeFromOp(op, key, st)); return; }
+        const why = typeRefusal(op.type, [key]) || typeRefusal(op.type, [...op.geometry.map((r) => r.key), key]);
+        if (why) { say(why); refreshCutPanel(); } else sessionEdit(() => addShapeToOp(op, key, st));
+      },
+      onEscape: () => cancelSession(),
     });
     if (pendingRemovedNotice) { prepareNotice(pendingRemovedNotice); pendingRemovedNotice = null; } // TASK 741: once, on the first mount after the restore
     prepareSig = geomSig(st);
@@ -181,7 +309,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   return {
     hostSnapshot: { capture: capturePrepare, restore: restoreCutPlanFromHistory }, // TASK 463: the cut plan rides in the shared undo snapshots (TASK 743: + the operation order)
     mount: mountPrepare,
-    enter: (enteringMode) => { if (enteringMode || !prepareView) mountPrepare(); }, // the mode router's hook: entering Prepare mounts it afresh
+    enter: (enteringMode) => { if (enteringMode || !prepareView) { commitSession(); mountPrepare(); } }, // the mode router's hook: entering Prepare mounts it afresh
+    leave: () => commitSession(), // TASK S2: leaving Prepare (the mode router's afterShow, another mode) = OK on the open operation
     view: () => prepareView,
     captureSession, restoreSession, // TASK 605: the tab's Prepare selection + view (shaper-session.js)
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
@@ -190,11 +319,16 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       // applyShaperDoc): the same one-time notice, the next time Prepare mounts (now, when Prepare shows)
       const notes = [restore && restore.newer ? NEWER_VERSION_NOTICE : null, restore && restore.removedVcarves > 0 ? removedVcarvesNotice(restore.removedVcarves) : null, cutPlanNotice(restore && restore.cutPlan)].filter(Boolean);
       pendingRemovedNotice = notes.length ? notes.join(' · ') : null;
+      session = null; line = null; // TASK S2: another document: no operation stays open (its undo point went with the history of the document left)
       if (getMode() === 'prepare') mountPrepare();
       else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
     },
     cutPanel,
     opList,
+    pickType, // TASK S2: the card's type pick (the quick flow with shapes selected: a new operation, OPEN; a type change of the open operation)
+    // TASK S2: the edit session (the list's Edit, OK, Cancel; the test kit drives the same calls the buttons make)
+    edit: openForEdit,
+    ok: () => commitSession(), cancel: () => cancelSession(), openId: () => (session ? session.opId : null),
     notice: prepareNotice, // TASK 790: Open STL's notice (stl-import.js)
   };
 }

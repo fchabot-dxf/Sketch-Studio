@@ -31,7 +31,7 @@ const LOOP_REFUSED = { 'morphed|L': 'loop cross', 'morphed|U': 'loop cross', 'mo
 // ── 1. THE HARD RULE ──
 const table = [];
 for (const [name, sh] of Object.entries(SHAPES_804)) {
-  for (const pattern of ['linked', 'raster', 'morphed']) for (const loop of pattern === 'raster' ? [false] : [false, true]) { // Raster Loop on: part 4
+  for (const pattern of ['linked', 'raster', 'morphed']) for (const loop of [false, true]) { // TASK 804b: Raster Loop on included (part 4)
     const plan = planOf(sh, pattern, { loop });
     const tag = `${name} ${pattern} Loop ${loop ? 'on' : 'off'}`;
     const want = REFUSED[`${pattern}|${name}`] || null;

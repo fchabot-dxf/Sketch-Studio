@@ -32,6 +32,7 @@ import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { opKeyOf } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -118,9 +119,10 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     }
     eq(noFinish.length, name === 'island' && pattern === 'linked' ? 1 : 0, `${tag}: every loop ends with a finish turn but the chain that ends deeper (${JSON.stringify(noFinish)})`);
     ok(worstF <= 0.01, `${tag}: every finish turn is the region inset by exactly the bit radius (worst ${worstF.toFixed(5)} mm)`);
-    // every turn / pass / clean-up ring of the Loop-OFF derivation is in a loop, vertex for vertex
+    // every turn / pass of the Loop-OFF derivation is in a loop, vertex for vertex (TASK 804b: Raster's Loop has no clean-up ring: the wall ring's sweep
+    // covers it, the leftover below is Loop off's)
     const all = new Set(on.clear.flatMap((c) => c.points.map(key)));
-    const offPaths = off.clear.map((c) => c.points);
+    const offPaths = off.clear.filter((c) => c.role !== 'cleanup').map((c) => c.points);
     const missing = offPaths.reduce((n, pts) => n + pts.filter((p) => !all.has(key(p))).length, 0);
     eq(missing, 0, `${tag}: every vertex of the Loop-OFF clearing (${offPaths.length} paths) is in the loops`);
     // the finish turns: the wall's and each island's turns at r (the same centre lines the separate inside / outside cuts follow)
@@ -217,14 +219,17 @@ const drawInto = (app, st0) => {
 };
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
-  const pressEl = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
-  const clickAt = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const pressElRaw = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
+  const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
+  const clickRaw = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const clickAt = (x, y, o) => clickOpen(app, () => clickRaw(x, y, o)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
-  const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typed = (cls, v) => editStep(app, () => typedRaw(cls, v)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const shown = (row) => { const r = q(`.cut-row[data-row="${row}"]`); return r.style.display !== 'none' && !('off' in r.dataset); }; // TASK 813: a row that does not apply stays in place, greyed (data-off): not shown as an applicable row
-  const toggleLoop = () => { const i = q('.cut-loop'); i.checked = !i.checked; i.dispatchEvent(new app.window.Event('change')); };
+  const toggleLoop = () => editStep(app, () => { const i = q('.cut-loop'); i.checked = !i.checked; i.dispatchEvent(new app.window.Event('change')); }); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   return { q, pressEl, clickAt, pick, clearing, note, typed, shown, toggleLoop };
 };
 const keyAt = (st, x, y) => { const loops = findLoops(st), lp = polysOf(st); const l = loops.filter((x0) => inPoly({ x, y }, lp[x0.id])).sort((a, b) => Math.abs(area(lp[a.id])) - Math.abs(area(lp[b.id])))[0]; return keyOf('loop', l.id); };

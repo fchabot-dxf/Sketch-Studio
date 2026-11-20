@@ -130,7 +130,13 @@ for (const t of CUT_TYPES) ok(seen.has(choiceId('cutType', t.id)), `the cut type
     eq(hintFor(el), hintText(id), `${id}: its tooltip is its hint`);
     if (id !== 'opRemoveShape') eq(el.textContent, hintLabel(id), `${id}: its name is the table's`); // the X shows its glyph (its name is its aria-label)
     seen.add(id);
-  }
+  }  // TASK S2 (owner turns 2730-2734): its Depth row, greyed in place (its depth is the Heights' Bottom): the owner's sentence; the Bottom's hint, the same rule
+  press(host.querySelector('.cut-tab[data-tab="heights"]'));
+  const depthLabel = host.querySelector('.cut-row[data-param="cutDepth"] [data-hint]');
+  eq([depthLabel.dataset.hint, 'off' in depthLabel.closest('.cut-row').dataset, hintFor(depthLabel)], ['levelsDepth', true, 'This operation’s depth is set in the Heights tab (Bottom). From model: each shape to its own model depth. A typed depth: the cut follows the model’s slope and stops flat at that depth.'], 'a Contour’s Depth row: greyed, its tooltip the owner’s words');
+  eq(hintText('bottomDepth'), 'From model: each shape to its own model depth. A typed depth: the cut follows the model’s slope and stops flat at that depth. This is the operation’s depth.', 'the Bottom: the same rule');
+  eq(hintText('cutDepth'), 'One flat depth for every shape. From model: each shape’s own model depth (the deepest point of a sloped shape).', 'a flat type’s Depth');
+  seen.add('levelsDepth');
 }
 
 // ── 3. every entry is rendered somewhere ──

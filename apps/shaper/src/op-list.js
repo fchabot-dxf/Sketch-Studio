@@ -34,7 +34,7 @@ const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their l
 ];
 
 /**
- * createOpList(hostEl, { getOps, onMove, onPick, isPicked, isSelected, isOpen, onEdit, onDuplicate, onDelete, onTick }) -> { refresh(), reveal(), inspect(), inspectTicks(), setOpen(open) }
+ * createOpList(hostEl, { getOps, onMove, onPick, isPicked, isSelected, isOpen, onEdit, onDuplicate, onDelete, onTick }) -> { refresh(), reveal(), inspect(), inspectActions(), inspectTicks(), setOpen(open) }
  *   getOps()       the operations, in order (operations.js describeOperations)
  *   onMove(keys)   a reorder: the operation keys in their new order
  *   onPick(op)     a tap on an operation (TASK S2: it selects it)
@@ -45,7 +45,7 @@ const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their l
  *   onTick(ids, on) TASK 798: a row's or a heading's checkbox (the operation ids, ticked or not)
  */
 export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, isSelected = () => false, isOpen = () => false, onEdit = () => {}, onDuplicate = () => {}, onDelete = () => {}, onTick = () => {} }) {
-  if (!hostEl) return { refresh() {}, reveal() {}, inspect: () => null, inspectTicks: () => null };
+  if (!hostEl) return { refresh() {}, reveal() {}, inspect: () => null, inspectActions: () => null, inspectTicks: () => null };
   const calls = { onEdit, onDuplicate, onDelete };
   const doc = hostEl.ownerDocument;
   const win = doc.defaultView;
@@ -225,16 +225,18 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
     const r = row.getBoundingClientRect(), b = body.getBoundingClientRect();
     if (r.top < b.top || r.bottom > b.bottom) row.scrollIntoView({ block: 'nearest' });
   }
-  /** What the list shows: { open, items: [{ heading } | { id, text, sub, picked, actions } | { empty }] } (tests). */
+  /** What the list shows: { open, items: [{ heading } | { id, text, sub, picked } | { empty }] } (tests). */
   const inspect = () => ({
     open: fold.open,
     items: [...body.children].map((el) => (el.classList.contains('ops-tool') ? { heading: el.textContent }
-      : el.classList.contains('ops-row') ? { id: el.dataset.id, text: el.querySelector('.ops-name').textContent, sub: el.querySelector('.ops-sub').textContent, picked: el.classList.contains('is-picked'), actions: [...el.querySelectorAll('.ops-act')].map((b) => b.classList[1]) } : { empty: el.textContent })),
+      : el.classList.contains('ops-row') ? { id: el.dataset.id, text: el.querySelector('.ops-name').textContent, sub: el.querySelector('.ops-sub').textContent, picked: el.classList.contains('is-picked') } : { empty: el.textContent })),
   });
+  /** TASK S2: each row's actions (the selected row's Edit, Duplicate, X): [{ id, actions: ['ops-edit', ...] }] (tests). */
+  const inspectActions = () => [...body.querySelectorAll('.ops-row')].map((el) => ({ id: el.dataset.id, actions: [...el.querySelectorAll('.ops-act')].map((b) => b.classList[1]) }));
   /** TASK 798: the checkboxes: { rows: [{ id, on, disabled }], groups: [{ heading, state: 'all' | 'some' | 'none', disabled }] } (tests). */
   const inspectTicks = () => ({
     rows: [...body.querySelectorAll('.ops-row')].map((el) => { const b = el.querySelector('.ops-tick input'); return { id: el.dataset.id, on: b.checked, disabled: b.disabled, off: el.classList.contains('is-off') }; }),
     groups: [...body.querySelectorAll('.ops-tool')].map((el) => { const b = el.querySelector('.ops-tick input'); return { heading: el.textContent, state: b.indeterminate ? 'some' : b.checked ? 'all' : 'none', disabled: b.disabled }; }),
   });
-  return { refresh, reveal, inspect, inspectTicks, setOpen };
+  return { refresh, reveal, inspect, inspectActions, inspectTicks, setOpen };
 }

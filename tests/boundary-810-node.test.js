@@ -287,7 +287,7 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     const all = els('pocket');
     clickAt(30, -30);
     pressEl('.cut-tab[data-tab="heights"]');
-    eq(rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'], 'the Heights tab: Depth, Top, Bottom, Floor allowance');
+    eq(rows(), ['topDepth', 'bottomDepth', 'floorAllowance'], 'the Heights tab: Top, Bottom, Floor allowance (TASK S2: the Depth row greyed: it is the Bottom)');
     eq([q('.cut-top-depth').value, q('.cut-top-depth').placeholder, q('.cut-bottom-depth').value, q('.cut-bottom-depth').placeholder, q('.cut-floor-allowance').value], ['', '0', '', String(+D.toFixed(3)), '0'], 'the defaults: the surface, the depth of the part (greyed), no floor allowance');
     const keyBefore = opKeyOf(rec);
     const n0 = st.history.length;

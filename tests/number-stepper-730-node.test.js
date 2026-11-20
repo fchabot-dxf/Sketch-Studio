@@ -47,7 +47,7 @@ try {
   importFusionSelection(JSON.parse(fs.readFileSync(new URL('03-pocket-floor-fillet.json', FIX), 'utf8')), { controller: app.controller, prepare: app.prepare });
   const p = worldToScreen(pc, { x: 60, y: -40 }); clickOpen(app, () => app.click(Math.round(p.x), Math.round(p.y), { target: pc })); // TASK S2: the imported Pocket opened (its type then changed to Roughing)
   pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]');
-  const rec = () => [...V2_PLAN.values()].find((r) => r.cutType === 'roughing');
+  const rec = () => [...V2_PLAN.values()].find((r) => r.cutType === 'roughing' || r.cutType === 'pocket'); // (TASK S2: a Pocket for the Depth presses)
   const hist = () => st.history.length;
   const row = (name) => `.cut-row[data-${name.startsWith('cut') || name === 'toolDia' ? 'param' : 'row'}="${name}"]`;
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);
@@ -60,7 +60,9 @@ try {
       'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
     'a − / + pair on depth, step depth, resolution, the Hold part rows, offset and bit diameter');
 
-  // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps
+  // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps. TASK S2: on a flat type (a Roughing's Depth is its Heights' Bottom, its Depth row greyed): the
+  // operation made a Pocket for these presses, then a Roughing again
+  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="pocket"]');
   typed('.cut-depth', ''); // a stepped pocket arrives with its slope's depth: clear it to unset
   eq(rec().cutDepth, 'unset', 'depth cleared');
   let h0 = hist();
@@ -78,6 +80,7 @@ try {
   near(rec().cutDepth, 6.5, 'typed 6.3 then + -> 6.5');
   typed('.cut-depth', '6.3'); step('cutDepth', -1);
   near(rec().cutDepth, 6, 'typed 6.3 then - -> 6.0');
+  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]'); // (TASK S2: back to the Roughing)
 
   step('cutOffset', 1); near(rec().cutOffset, 0.25, 'offset + -> 0.25');
   step('cutOffset', -1); step('cutOffset', -1); near(rec().cutOffset, -0.25, 'offset goes negative (as typing does)');

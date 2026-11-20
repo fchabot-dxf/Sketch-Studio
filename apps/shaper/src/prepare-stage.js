@@ -58,7 +58,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       const f = pv.factsOf(op, keys[0] || null);
       // TASK S2 (owner turn 2713): a Contour's own Wall side matters on a shape whose model does not say it (no slope, no levels: a drawn shape)
       const wallSideFree = op.type === CONTOUR_TYPE && (!n || keys.some((k) => { const r = regionOf(k) || {}; return !r.slope && !(Array.isArray(r.levels) && r.levels.length); }));
-      return { mode: 'op', ...f, note: [...lineItems, ...f.note], boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, opId: op.id, wallSideFree,
+      const depthFromModel = !(Number(op.settings.cutDepth) > 0); // TASK S2: the Depth from the model ('model' / unset) or a typed value (a Roughing's / Contour's Bottom)
+      return { mode: 'op', ...f, note: [...lineItems, ...f.note], boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, opId: op.id, wallSideFree, depthFromModel,
         title: `${typeName(op.type)} ${numberOf(ops, op.id)} \u00b7 ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes`}`,
         shapes: keys.map((key) => ({ key, label: pv.shapeLabel(key) })) };
     }

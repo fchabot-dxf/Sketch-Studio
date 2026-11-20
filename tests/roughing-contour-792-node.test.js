@@ -302,7 +302,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     ok(E.filter((e) => e.type === 'inside').every((e) => e.dia === '3.175 mm'), 'with the Contour\'s bit');
     // the Contour operation's own card (TASK S2: its own Depth; its Wall side greyed: the slope says the side)
     h.openContour(pk2);
-    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (TASK 810: its Heights, its Walls, then its step, bit, cutter shape)');
+    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (TASK 810: its Heights, its Walls, then its step, bit, cutter shape)');
     eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'], 'its menu offers every type (TASK S2: a type change of the operation)');
     h.setField('.cut-step-depth', '1');
     eq([V2_PLAN.get(ck).stepDepth, planEntries().filter((e) => e.planKey === ck).length], [1, 1], 'its step is its own (1 mm)');
@@ -318,7 +318,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     h.clickAt(60, -40);
     h.pick('roughing');
     eq([V2_PLAN.get(pk2).cutType, V2_PLAN.get(pk2).finishAllowance], ['roughing', 0], 'Roughing on a part that has a Contour: allowance 0, its own default (the Contour sets nothing)');
-    eq(h.rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'the Roughing card: depth, TASK 810 its Heights (Top, Bottom, Floor allowance), allowance, Contour, adaptive, step, offset, bit, shape');
+    eq(h.rows(), ['topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'the Roughing card: depth, TASK 810 its Heights (Top, Bottom, Floor allowance), allowance, Contour, adaptive, step, offset, bit, shape');
     h.setField('.cut-finish-allowance', '0.5');
     h.contour(false);
     eq([contourOf(pk2), V2_PLAN.get(pk2).finishAllowance], [null, 0.5], 'the Contour removed: the allowance stays 0.5 (TASK S2)');

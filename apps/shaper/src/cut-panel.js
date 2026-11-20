@@ -109,7 +109,7 @@ const CHANGED = {
   walls: (rec, op, c) => Boolean(c.walls) && c.walls.value !== c.walls.defaultId,
   wallSide: (rec, op, c) => c.wallSideFree && rec.wallSide === 'outside', // TASK S2: Inside is what a Contour starts with; it applies only where the model does not say the side
   topDepth: (rec) => Number(rec.topDepth) > 0,
-  bottomDepth: (rec) => rec.bottomDepth != null && Number(rec.bottomDepth) > 0,
+  bottomDepth: (rec, op, c) => !c.depthFromModel, // TASK S2: a typed Depth (the cut stops there)
   floorAllowance: (rec) => Number(rec.floorAllowance) > 0,
   roughLayout: (rec) => rec.roughLayout === 'nested',
   stepDepth: (rec, op) => Number(rec.stepDepth) > 0 && !near6(rec.stepDepth, op === 'contour' ? CONTOUR_DEFAULTS.stepDepth : STEP_DEPTH.defaultMm),
@@ -178,7 +178,7 @@ export function createCutPanel(hostEl, opts = {}) {
           <input type="text" class="cut-num cut-bottom-depth" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
-        <div class="cut-calc-bar"><span class="cut-calc-tag">part depth</span><button type="button" class="cut-calc-reset" data-reset="bottomDepth" hidden>Reset to part depth</button></div>
+        <div class="cut-calc-bar"><span class="cut-calc-tag">from model</span><button type="button" class="cut-calc-reset" data-reset="bottomDepth" hidden>Reset to the model</button></div>
       </div>
       <div class="cut-row" data-row="floorAllowance">
         <button type="button" class="cut-field-label" data-hint="floorAllowance"></button>
@@ -411,18 +411,20 @@ export function createCutPanel(hostEl, opts = {}) {
   });
   // TASK 810: the Heights rows: Top (empty / Reset = the surface), Bottom (empty / Reset = the part's depth), Floor allowance (>= 0)
   const topInput = $('.cut-top-depth'), bottomInput = $('.cut-bottom-depth'), floorInput = $('.cut-floor-allowance');
+  // TASK S2 (owner turns 2730-2732): a Roughing's / Contour's Bottom IS its Depth: the row writes `cutDepth` (null = from the model); the Depth row shows it, greyed
+  const fieldOfRow = (f) => (f === 'bottomDepth' ? 'cutDepth' : f);
   for (const [input, field] of [[topInput, 'topDepth'], [bottomInput, 'bottomDepth']]) input.addEventListener('change', () => {
     const raw = input.value.trim();
-    if (raw === '') { onSetField(field, null); return; }
+    if (raw === '') { onSetField(fieldOfRow(field), null); return; }
     const n = parseUnit(raw, docUnit());
-    if (n != null && Number.isFinite(n) && n >= 0) onSetField(field, n > 0 ? n : null); else renderFields(); // 0 = the surface / no limit: the default
+    if (n != null && Number.isFinite(n) && n >= 0) onSetField(fieldOfRow(field), n > 0 ? n : null); else renderFields(); // 0 = the surface / the model: the default
   });
   floorInput.addEventListener('change', () => { const n = parseUnit(floorInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('floorAllowance', n); else renderFields(); });
   const calcBars = Object.fromEntries(['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInAt', 'boundaryOffset', 'topDepth', 'bottomDepth'].map((f) => [f, {
     tag: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-tag`),
     reset: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-reset`),
   }]));
-  for (const [f, b] of Object.entries(calcBars)) b.reset.addEventListener('click', () => onSetField(f, null));
+  for (const [f, b] of Object.entries(calcBars)) b.reset.addEventListener('click', () => onSetField(fieldOfRow(f), null));
   // TASK 810: the tab bar of a Roughing / Contour card (CARD_TABS): a tab = its name (the table's label; its hint the tooltip) and a dot when one of its rows holds a changed value
   const tabsEl = $('.cut-tabs');
   let activeTab = CARD_TABS[0].id; // the tab shown; kept while the page lives (another Roughing / Contour card opens on the same tab)
@@ -518,7 +520,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const stepperFor = (field, input, label, opts) => attachStepper(input, STEPPERS[field], {
     unit: docUnit, toDoc: toDocNum,
     read: () => (field === 'cutDepth' ? (isUnset(current.cutDepth) ? null : toDocNum(Number(current.cutDepth))) : toDocNum(fieldBase(field))),
-    commit: (docNum) => onSetField(field, parseUnit(String(docNum), docUnit())), // -> base mm
+    commit: (docNum) => onSetField(fieldOfRow(field), parseUnit(String(docNum), docUnit())), // -> base mm
   }, { label, ...opts });
   const fieldBase = (field) => field === 'cutOffset' ? Number(current.cutOffset) || 0
     : field === 'toolDia' ? Number(current.toolDia) || 0
@@ -529,7 +531,7 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'minTerraceWidth' ? (Number(current.record && current.record.minTerraceWidth) > 0 ? Number(current.record.minTerraceWidth) : 0) // TASK 792
     : field === 'boundaryOffset' ? boundaryOffsetBase() // TASK 810: unset = the calculated offset
     : field === 'topDepth' ? (Number(current.record && current.record.topDepth) > 0 ? Number(current.record.topDepth) : 0) // TASK 810: unset = the surface
-    : field === 'bottomDepth' ? (Number(current.record && current.record.bottomDepth) > 0 ? Number(current.record.bottomDepth) : (Number(current.partDepth) > 0 ? Number(current.partDepth) : 0)) // unset = the part's depth
+    : field === 'bottomDepth' ? (Number(current.partDepth) > 0 ? Number(current.partDepth) : 0) // TASK S2: the Depth the cuts are made to (typed, or the model's)
     : field === 'floorAllowance' ? (Number(current.record && current.record.floorAllowance) > 0 ? Number(current.record.floorAllowance) : 0)
     : field === 'smoothing' ? smoothingOf((cutTypeById(current.cutType) || {}).levelsOp, current.record ? current.record.smoothing : undefined) // TASK 809: unset = the operation's default
     : field === 'leadInRadius' ? (current.leadInRadius != null && Number(current.leadInRadius) > 0 ? Number(current.leadInRadius) : (current.leadInInfo && Number(current.leadInInfo.radius) > 0 ? Number(current.leadInInfo.radius) : Number(current.toolDia) || 0)) // TASK 778: null = calculated by derivation
@@ -672,7 +674,7 @@ export function createCutPanel(hostEl, opts = {}) {
   // TASK 813: a row's state on this card: false = the card has no such row (another operation / target); true = shown; a string = shown IN ITS PLACE but greyed and inert (it
   // does not apply to the current settings), the string its reason: the start of its label's tooltip. So changing a setting never moves the rows below it.
   const place = (name, state) => {
-    const row = card.querySelector(`.cut-row[data-row="${name}"]`), off = typeof state === 'string' ? state : null;
+    const row = card.querySelector(`.cut-row[data-row="${name}"], .cut-row[data-param="${name}"]`), off = typeof state === 'string' ? state : null; // TASK S2: + the Depth row (data-param)
     row.style.display = state === false ? 'none' : '';
     row.classList.toggle('is-off', Boolean(off));
     if (off) { row.dataset.off = ''; row.setAttribute('aria-disabled', 'true'); } else { delete row.dataset.off; row.removeAttribute('aria-disabled'); }
@@ -781,7 +783,7 @@ export function createCutPanel(hostEl, opts = {}) {
     const heights = tabbedType(current.cutType), hr = current.record || {};
     for (const row of ['topDepth', 'bottomDepth', 'floorAllowance']) place(row, heights);
     topInput.value = Number(hr.topDepth) > 0 ? fieldText(Number(hr.topDepth)) : ''; topInput.placeholder = fieldText(0);
-    bottomInput.value = Number(hr.bottomDepth) > 0 ? fieldText(Number(hr.bottomDepth)) : ''; bottomInput.placeholder = Number(current.partDepth) > 0 ? fieldText(Number(current.partDepth)) : '';
+    bottomInput.value = heights && !current.depthFromModel && Number(current.cutDepth) > 0 ? fieldText(Number(current.cutDepth)) : ''; bottomInput.placeholder = Number(current.partDepth) > 0 ? fieldText(Number(current.partDepth)) : ''; // TASK S2: the Depth itself
     floorInput.value = fieldText(fieldBase('floorAllowance'));
     syncCalcBar('topDepth', !(Number(hr.topDepth) > 0));
     // TASK 810: a Contour's which walls, where its part's walls come from levels or slope rings (a drawn region's Contour is its one wall); the choice in effect shown
@@ -791,7 +793,10 @@ export function createCutPanel(hostEl, opts = {}) {
     // TASK S2 (owner turn 2713): a Contour's own Wall side, in its place on every Contour card; greyed where the model of its shapes says the side (a slope, levels)
     place('wallSide', isContour ? current.wallSideFree || 'Its shapes\u2019 model says which side: a slope or the STL\u2019s levels.' : false);
     renderPresets($('.cut-wall-side'), isContour ? WALL_SIDE_PRESETS : [], 'wallSide', current.record && current.record.wallSide === 'outside' ? 'outside' : 'inside');
-    syncCalcBar('bottomDepth', !(Number(hr.bottomDepth) > 0));
+    syncCalcBar('bottomDepth', current.depthFromModel);
+    // TASK S2 (owner turn 2732): on a Roughing / Contour the Depth row stays in its place, greyed, showing the Bottom ("From model" / "stops at 6"): one setting, set there
+    if (heights) { place('cutDepth', 'This operation’s depth is set in the Heights tab (Bottom)'); depthInput.value = current.depthFromModel ? 'From model' : `stops at ${fieldText(Number(current.cutDepth))}`; }
+    else if (cutTypeHasParam(current.cutType, 'cutDepth')) place('cutDepth', true);
     place('smoothing', declares('smoothing') && Boolean(current.levels)); // TASK 809: an operation on a part with levels (an STL)
     smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.05 mm = 0.002 in: a tolerance, always decimals
     place('rasterAngle', clearing ? clearing === 'raster' || 'Only Raster has an angle: choose Raster in Clearing to set this.' : false);
@@ -885,6 +890,7 @@ export function createCutPanel(hostEl, opts = {}) {
       leadIn: rec.leadIn === true, leadInRadius: rec.leadInRadius ?? null, leadInSweep: rec.leadInSweep ?? null, leadInLength: rec.leadInLength ?? null, leadInSide: rec.leadInSide === 'inside' ? 'inside' : 'outside', leadInAt: rec.leadInAt ?? null, leadInInfo: model.leadIn || null, // TASK 775 / 778
       mode: model.mode || null, // TASK S2: 'op' (an open operation) | 'shape' (shapes selected: the type menu only)
       wallSideFree: model.wallSideFree === true, // TASK S2: a Contour's Wall side applies (a shape whose model does not say it)
+      depthFromModel: model.depthFromModel !== false, // TASK S2: the Depth from the model (a Roughing's / Contour's Bottom empty) or typed
       levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)
       boundaryCtx: { hasStock: Boolean(model.boundary && model.boundary.hasStock), picking: Boolean(model.boundary && model.boundary.picking) }, // TASK 810: does the design have a Stock; is a boundary Pick on
       partDepth: Number(model.partDepth) > 0 ? Number(model.partDepth) : null, // TASK 810: the part's depth (the Bottom's default; a Contour's is its part's)

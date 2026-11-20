@@ -10,7 +10,7 @@ import { reconcileCutPlan, reconcileStore, keepHolesFromOtherSketches, v2PlanEnt
 import { migrateLeadInRecord } from '#core/lead-in.js'; // TASK 778: 775 straight-leg record -> arc of Radius = old length, Length = 0
 import { opKeyOf, settingsOf, migrationOrder } from './operations.js'; // TASK S1: the v2 records grouped into operations as the list showed them
 import { captureStore, applyStore, storeOps, membersOf, regionOf, removeRef, insertOp, setOpSettings, setOpsOn, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the operations + regions store; TASK S2: the Contours' own values (migrateContours)
-import { wallsOf } from '#core/stepped-cut.js'; // TASK S2: a Contour's walls in effect
+import { wallsOf, levelsBand } from '#core/stepped-cut.js'; // TASK S2: a Contour's walls in effect; the band a Roughing / Contour is cut down to
 import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 459): {thickness, width, height, margin}, base mm
 import { captureStl, applyStl, captureStlDoc, applyStlDoc } from './stl-source.js'; // TASK 790: the STL the design came from (or none)
 import { captureSelections, applySelections, getSelections } from './selection-list.js'; // TASK 795: the selection list
@@ -19,9 +19,9 @@ import { captureSelections, applySelections, getSelections } from './selection-l
 // saved under the old rule: applyShaperDoc keeps its cuts' holes from other sketches (cut-plan.js keepHolesFromOtherSketches).
 // TASK 812: exported: the document buffer opens a document of a HIGHER version but never writes over it (design-canvas.js hostVersion).
 // TASK S1: 3 = the operations + regions store (docs/OPERATIONS-MODEL.md 1.2); a version 2 document is migrated on reading (migrateV2), written as 3 on the next save.
-// TASK S2 (owner ruling turn 2713): 4 = a Contour operation carries its OWN Depth, Walls and Wall side (a version 3 app would read its depth and walls LIVE from the
-// shape's other operation, so it must not write over a version 4 document: task 812's guard); a version 3 (or older) document's Contours get explicit values equal
-// to that live reading on reading (migrateContours), written as 4 on the next save.
+// TASK S2 (owner rulings turns 2713, 2730-2731): 4 = a Contour operation carries its OWN Depth, Walls and Wall side (a version 3 app would read its depth and walls
+// LIVE from the shape's other operation, so it must not write over a version 4 document: task 812's guard), and a Roughing's / Contour's Depth IS the Heights' Bottom
+// (one setting: `bottomDepth` is gone); a version 3 (or older) document is read into that form (migrateContours, then migrateHeights), written as 4 on the next save.
 export const DOC_VERSION = 4;
 const SAME_SKETCH_HOLES_VERSION = 2;
 const OPERATIONS_VERSION = 3;
@@ -188,6 +188,43 @@ export function migrateContours() {
   return report;
 }
 
+/**
+ * migrateHeights() — TASK S2 (owner rulings turns 2730-2731, docs/OPERATIONS-MODEL.md 1.4): a Roughing's / Contour's Depth IS its Heights' Bottom, ONE setting (cutDepth:
+ * 'model' / unset = the model's depth, a value = the cut stops at that depth). Up to version 3 they were two (cutDepth, and 810's `bottomDepth`, the lower limit); the
+ * cuts were made down to their band's depth (#core levelsBand: min(depth, bottom), less the floor allowance), so a stored bottom becomes the Depth of that band
+ * (levelsBand with that bottom: exactly the number the cuts were made to) and `bottomDepth` goes: the same cuts, byte for byte. Where the bottom was not above the
+ * depth it changed nothing and the Depth is kept as stored ('model' stays 'model'). One settings set per operation: shapes that end at different depths are split
+ * into a NEW operation each, right after it (`splits`, 0 on the 909-case corpus). Returns { merged, splits }.
+ */
+export function migrateHeights() {
+  const report = { merged: 0, splits: 0 };
+  for (const op of storeOps().filter((o) => (o.type === 'roughing' || o.type === CONTOUR_TYPE) && o.settings.bottomDepth != null)) {
+    const bottom = Number(op.settings.bottomDepth) > 0 ? Number(op.settings.bottomDepth) : null;
+    const { bottomDepth, ...rest } = op.settings;
+    report.merged++;
+    if (bottom === null) { setOpSettings(op, rest); continue; }
+    const groups = new Map(); // the depth as JSON -> { depth, refs }
+    for (const ref of op.geometry) {
+      const rec = recordOf(op, ref), reg = regionOf(ref.key) || {};
+      const stop = levelsBand({ bottomDepth: bottom, ...(reg.levels ? { levels: reg.levels } : {}), ...(reg.slope ? { slope: reg.slope } : {}) }, rec.cutDepth).depth;
+      const depth = Number(rec.cutDepth) > 0 && Number(rec.cutDepth) === stop ? rest.cutDepth : stop; // the bottom changed nothing: the Depth as stored
+      const k = JSON.stringify(depth);
+      if (!groups.has(k)) groups.set(k, { depth, refs: [] });
+      groups.get(k).refs.push(ref);
+    }
+    const [first, ...others] = [...groups.values()];
+    setOpSettings(op, { ...rest, cutDepth: first ? first.depth : Math.min(Number(rest.cutDepth) > 0 ? Number(rest.cutDepth) : bottom, bottom) });
+    let at = storeOps().indexOf(op) + 1;
+    for (const g of others) {
+      for (const ref of g.refs) removeRef(op, ref);
+      const copy = insertOp(at++, { type: op.type, settings: { ...rest, cutDepth: g.depth }, geometry: g.refs });
+      if (op.on === false) setOpsOn([copy.id], false);
+      report.splits++;
+    }
+  }
+  return report;
+}
+
 /** Restore a persisted Shaper document. Missing parts keep their defaults (an old buffer carries none of this).
  *  TASK S1: a version 3 document's operations store as stored; a version 2 one (or older) MIGRATED (migrateV2) after today's value mapping (withClearingNow,
  *  opKeyNow) and the reconciliation below; its report rides in the result (`migration`). The stored file changes only when the user next saves.
@@ -204,7 +241,8 @@ export function applyShaperDoc(d, state = null) {
     applySelections(d && d.selections); // TASK 795: the selection list (none for a design that was not built from selections)
     const counts = state ? { ...reconcileStore(state), keptHoles: 0, lostHoles: 0 } : null;
     const contours = Number(d.version) < OWN_CONTOUR_VERSION ? migrateContours() : null; // TASK S2: version 3: the Contours' own values
-    return counts ? { ...counts, ...(contours ? { contours } : {}) } : null;
+    const heights = Number(d.version) < OWN_CONTOUR_VERSION ? migrateHeights() : null; // TASK S2: version 3: a Roughing's / Contour's Depth = its Bottom
+    return counts ? { ...counts, ...(contours ? { contours, heights } : {}) } : null;
   }
   const plan = new Map((d && Array.isArray(d.cutPlan) ? d.cutPlan : []).filter((e) => Array.isArray(e) && typeof e[0] === 'string').map(([key, rec]) => [key, rec && typeof rec === 'object' ? withClearingNow({ ...rec }) : rec]));
   let counts = null;
@@ -213,7 +251,8 @@ export function applyShaperDoc(d, state = null) {
     counts = { ...reconcileCutPlan(state, plan), ...(old ? keepHolesFromOtherSketches(state, plan) : { keptHoles: 0, lostHoles: 0 }) };
   }
   const migration = migrateV2(plan, d && Array.isArray(d.opOrder) ? d.opOrder.filter((k) => typeof k === 'string').map(opKeyNow) : [], state, d && d.selections);
-  migration.contours = migrateContours(); // TASK S2: then version 3 -> 4 (the Contours' own values)
+  migration.contours = migrateContours(); // TASK S2: then version 3 -> 4 (the Contours' own values; a Roughing's / Contour's Depth = its Bottom)
+  migration.heights = migrateHeights();
   applySelections(d && d.selections); // TASK 795: the selection list (none for a design that was not built from selections)
   return state ? { ...counts, migration } : null;
 }

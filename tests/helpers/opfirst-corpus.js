@@ -61,6 +61,7 @@ export async function runCorpus(part, parts) {
     // TASK S2: then version 3 -> 4: each Contour gets its own values (what S1 read live from its part); no Contour is split, none loses a shape
     ok(m.contours && m.contours.splits === 0 && m.contours.noPart === 0, `${c.name}: the Contours' own values: no split, no shape without a part (${JSON.stringify(m.contours)})`);
     report.contours += m.contours.contours; report.contourSplits += m.contours.splits; report.contourNoPart += m.contours.noPart;
+    ok(m.heights && m.heights.splits === 0, `${c.name}: a Roughing's / Contour's Depth = its Bottom: no split (${JSON.stringify(m.heights)})`); report.heightsMerged = (report.heightsMerged || 0) + m.heights.merged;
     const now = measureNow(state), base = baseline[c.name];
     for (const k of ASSERTED) {
       if (k === 'eNoId' && GUIDE_ROWS.has(c.name)) { ok(now[k] !== base[k], `${c.name}: Guides with different values list one operation each (advisor ruling 1)`); continue; }
@@ -70,7 +71,7 @@ export async function runCorpus(part, parts) {
     // the version 4 document (TASK S2; `v3` below = the current version's document): saved, reloaded = the same JSON and the same measurements
     const v3 = JSON.parse(JSON.stringify(captureShaperDoc()));
     ok(v3.version === 4 && Array.isArray(v3.operations) && !('cutPlan' in v3) && !('opOrder' in v3), `${c.name}: saved as version 4`);
-    if (v3.operations.some((o) => o.type === 'contour')) { // TASK S2: the same document stored as version 3 (its Contours as S1 stored them: depth 'unset', no wall side; the walls in effect kept) reads back to the same version 4 document
+    if (v3.operations.some((o) => o.type === 'contour') && !m.heights.merged) { // (a merged Bottom cannot be told back from the version 4 document) // TASK S2: the same document stored as version 3 (its Contours as S1 stored them: depth 'unset', no wall side; the walls in effect kept) reads back to the same version 4 document
       const asV3 = { ...JSON.parse(JSON.stringify(v3)), version: 3, operations: v3.operations.map((o) => (o.type === 'contour' ? { ...o, settings: { ...Object.fromEntries(Object.entries(o.settings).filter(([k]) => k !== 'wallSide')), cutDepth: 'unset' } } : o)) };
       const state3 = loadCase({ ...x, geometry: serializeDocument(state).geometry });
       applyShaperDoc(asV3, state3);

@@ -565,7 +565,7 @@ const ENC5 = [
     svgEl.dispatchEvent({ type: 'pointerdown', clientX: pt.clientX, clientY: pt.clientY, button: 0 });
 
     // Apply Outside cut with 3.175mm tool
-    { const sel = view.selectedTarget(); view.activate(newOperation('exterior', [keyOf(sel.kind, sel.id)], state).id); } // TASK S2: the quick flow's writer (a new operation, made active)
+    { const sel = view.selectedTarget(); newOperation('exterior', [keyOf(sel.kind, sel.id)], state); view.refreshLook(); } // TASK S2: the quick flow's writer (a new operation holding the selected shape)
     const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
     const pathMatches = toolpathG.innerHTML.match(/<path class="sk-travel"[^>]*d="([^"]+)"/g) || [];
     assert(pathMatches.length >= 2, `P9: outside cut on frame must render toolpaths for both boundaries, got ${pathMatches.length}`);
@@ -587,7 +587,7 @@ const ENC5 = [
     svgEl.dispatchEvent({ type: 'pointerdown', clientX: pt.clientX, clientY: pt.clientY, button: 0 });
 
     // Apply Inside cut with 3.175mm tool
-    { const sel = view.selectedTarget(); view.activate(newOperation('interior', [keyOf(sel.kind, sel.id)], state).id); } // TASK S2: the quick flow's writer (a new operation, made active)
+    { const sel = view.selectedTarget(); newOperation('interior', [keyOf(sel.kind, sel.id)], state); view.refreshLook(); } // TASK S2: the quick flow's writer (a new operation holding the selected shape)
     const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
     const pathMatches = toolpathG.innerHTML.match(/<path class="sk-travel"[^>]*d="([^"]+)"/g) || [];
     assert(pathMatches.length >= 2, `P10: inside cut on frame must render toolpaths for both boundaries, got ${pathMatches.length}`);

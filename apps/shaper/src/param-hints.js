@@ -20,7 +20,9 @@ import { ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES } from 
 const PARAMS = {
   // ── the cut card (Prepare) ──
   cutType: { label: 'Cut type', hint: 'How the Origin cuts this shape.' },
-  cutDepth: { label: 'Depth', hint: 'How deep the cut goes from the surface. Leave it empty to set the depth on the Origin.' },
+  cutDepth: { label: 'Depth', hint: 'One flat depth for every shape. From model: each shape’s own model depth (the deepest point of a sloped shape).' }, // TASK S2 (owner turn 2733): a flat type's Depth
+  // TASK S2 (owner turns 2730-2733): a Roughing's / Contour's Depth row (CUT_TYPES depthParam), greyed: its depth is the Heights' Bottom (the greyed row's reason, cut-panel.js, is the first sentence)
+  levelsDepth: { label: 'Depth', hint: 'From model: each shape to its own model depth. A typed depth: the cut follows the model’s slope and stops flat at that depth.' },
   stockDepth: { label: 'Thickness', hint: 'The thickness of your board, shown in the 3D preview. Not cut.' }, // the depth row of a Stock loop (CUT_TYPES stock.depthParam)
   clearing: { label: 'Clearing', hint: 'How the inside of the pocket is removed.' },
   stepover: { label: 'Stepover', hint: 'How far the bit moves sideways between passes, as a share of its diameter. Smaller is smoother and slower.' },
@@ -52,7 +54,7 @@ const PARAMS = {
   boundaryOffset: { label: 'Boundary offset', hint: 'Moves the boundary out (positive) or in (negative) before the tool rule. Empty = calculated: the wall allowance plus three quarters of the bit, which with Outside clears a band two bits wide round the part.' },
   // TASK 810: the HEIGHTS of a Roughing / Contour: only a band of depths is cut
   topDepth: { label: 'Top', hint: 'Where the cutting starts, as a depth below the surface: the levels at or above it are not cut (for example, already cleared by another operation). Empty = the surface.' },
-  bottomDepth: { label: 'Bottom', hint: 'The depth the cutting stops at: no level goes deeper. Empty = the part’s depth (from the model for a part from Fusion or an STL).' },
+  bottomDepth: { label: 'Bottom', hint: 'From model: each shape to its own model depth. A typed depth: the cut follows the model’s slope and stops flat at that depth. This is the operation’s depth.' }, // TASK S2 (owner turns 2730-2733): a Roughing's / Contour's Depth IS its Bottom
   floorAllowance: { label: 'Floor allowance', hint: 'Left above the bottom: the deepest level stops this much higher, for a later pass to finish. Separate from the wall allowance. 0 = none.' },
   wallSide: { label: 'Wall side', hint: 'Which side of the shape the walls are cut on, for a shape whose model does not say it (a drawn shape). Inside: the walls of a hollow; Outside: the outline of a part.', items: ['wallSide:inside', 'wallSide:outside'] }, // TASK S2
   walls: { label: 'Walls', hint: 'Which walls the Contour finishes. Sloped only skips the pass whose outline is the shape’s own outline (the straight wall an Outside or Inside cut already makes). Until you pick, it is All.', items: CONTOUR_WALLS.choices.map((w) => `walls:${w.id}`) }, // TASK 810

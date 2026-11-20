@@ -156,7 +156,7 @@ async function phase(what) {
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': Roughing set', 60000);
   timings[what].roughing = Date.now() - t0;
-  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing, TASK 810 the Heights and the boundary; no adaptive stepping)');
+  assert.deepStrictEqual(await rows(), ['topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing, TASK 810 the Heights and the boundary; no adaptive stepping)');
   await tab('tool');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0 (no Contour yet)');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-contour-modes .is-active').textContent`), 'Off', what + ': Contour Off');

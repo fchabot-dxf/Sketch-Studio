@@ -274,6 +274,9 @@ export function changeOpType(op, type, state = null) {
  *  it is set on every membership. A typed depth equal to every shape's imported depth is stored 'model' (as since S1). */
 export function setOpFields(op, patch, state = null) {
   const { leadInAt, ...rest } = patch;
+  // TASK S2 (owner turns 2730-2731): a Depth set back to the model (null: a Roughing's / Contour's Bottom emptied or Reset) = 'model' where every shape has an imported
+  // depth, else unset (a part's own levels / slope depth)
+  if (Object.hasOwn(rest, 'cutDepth') && rest.cutDepth === null) rest.cutDepth = op.geometry.length && op.geometry.every((r) => sourceDepth(r.key) !== undefined) ? 'model' : 'unset';
   if (Object.keys(rest).length) setOpSettings(op, { ...op.settings, ...rest });
   if (Object.hasOwn(patch, 'leadInAt')) for (const ref of op.geometry) setRefAt(ref, leadInAt);
   if (Object.hasOwn(rest, 'cutDepth')) normalizeDepth(op);

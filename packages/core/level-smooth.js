@@ -164,7 +164,12 @@ function fitRun(Q, tL, tR, ftol, out) {
     return e <= ftol ? { bz, r } : null;
   };
   while (a < last) {
-    if (last - a < 3) { for (let k = a + 1; k <= last; k++) { out.push(lineSeg(cur, Q[k])); cur = Q[k]; } break; } // the run's last traced segments
+    if (last - a < 3) { // the run's last traced segments: one cubic to its end if it fits (G1 into the corner or the seam), else the segments themselves
+      const f = tryFit(last);
+      if (f) out.push({ p0: f.bz[0], c1: f.bz[1], c2: f.bz[2], p3: f.bz[3] });
+      else for (let k = a + 1; k <= last; k++) { out.push(lineSeg(cur, Q[k])); cur = Q[k]; }
+      break;
+    }
     let best = null, bestB = -1, fail = -1;
     for (let step = 3; ; step *= 2) { // doubling
       const b = Math.min(last, a + step), f = tryFit(b);

@@ -65,7 +65,7 @@ function segsCross(p1, p2, p3, p4) {
 // TASK 732: a point STRICTLY INSIDE a simple polygon (never on its boundary): at its lexicographically lowest vertex v (a convex corner)
 // with neighbours a and b, the centroid of the triangle a v b, unless other vertices fall inside that triangle: then the midpoint of v and
 // the one of them farthest from the line a b (the classic interior-point construction; O'Rourke, Computational Geometry in C, 1.6).
-function interiorPoint(poly) {
+export function interiorPoint(poly) {
   const n = poly.length;
   let i = 0;
   for (let k = 1; k < n; k++) if (poly[k].x < poly[i].x || (poly[k].x === poly[i].x && poly[k].y < poly[i].y)) i = k;
@@ -263,4 +263,57 @@ export function polyToPathD(pts) {
     d += ` L ${num(pts[i].x)} ${num(pts[i].y)}`;
   }
   return d + ' Z';
+}
+
+/**
+ * loopSuccessors(oldId, state, loops) -> [loop id] — TASK 832 (owner turns 2955-2965): the loops that ARE, after a Design edit, the closed shape a
+ * loop id named before it. A loop's id is its edge set ('loop_' + its shape ids sorted, #core/loop-finder.js makeLoop): an edit that adds an
+ * edge to the outline (a fillet's arc, a point added on a side by Break, a shape pinned inside it at a corner) or takes one away (the shared
+ * side of two faces deleted: the faces merge) gives the same shape a new id, and a split (a divider drawn across it) gives it pieces. The rule,
+ * on the shapes alone (a pure function of the old id and the sketch now, so it gives the same answer after an undo, a redo or a reload):
+ *  - the old outline's SURVIVING edges = the shapes its id names that still exist and are not construction;
+ *  - its old REGION = those edges chained end to end, a gap (a part trimmed or deleted) closed by a straight line;
+ *  - a successor = a loop now that holds at least one surviving edge and lies inside that region, or holds it (a sample point strictly inside
+ *    the one is inside the other): the filleted outline, the outline with the pinned shape, the merged face, each piece of a split. A face
+ *    beside it (it shares a side, its region is outside) is none.
+ * `loops` = findLoops(state) with `polygon` (loopPolygon) on each. [] when the id is a loop now (nothing to follow), when nothing of it
+ * survives (deleted) or when its surviving edges are in no loop (it was opened: a side deleted, trimmed or made construction): the shape is
+ * not there to cut, and the id is kept as it was (made whole again, e.g. construction turned off, it is found again under it).
+ */
+export function loopSuccessors(oldId, state, loops) {
+  if (typeof oldId !== 'string' || !oldId.startsWith('loop_') || loops.some((l) => l.id === oldId)) return [];
+  const named = '-' + oldId.slice(5) + '-';
+  const surviving = (state.shapes || []).filter((s) => s && !s.isConstruction && named.includes('-' + s.id + '-') && curveKind(s));
+  if (!surviving.length) return [];
+  const ids = new Set(surviving.map((s) => s.id));
+  const candidates = loops.filter((l) => l.edges.some((e) => ids.has(e)) && Array.isArray(l.polygon) && l.polygon.length >= 3);
+  if (!candidates.length) return [];
+  const region = chainedOutline(surviving, state);
+  if (region.length < 3 || polyArea(region) <= EPS) return [];
+  const inRegion = interiorPoint(region);
+  return candidates.filter((l) => pointInPolygon(region, interiorPoint(l.polygon)) || pointInPolygon(l.polygon, inRegion)).map((l) => l.id);
+}
+
+// The outline of curves chained end to end from the first: each next curve is the one whose end is nearest the chain's end (walked from that
+// end), a gap between them closed by the straight line the polygon makes. [{x, y}] (the last point joins the first).
+function chainedOutline(curves, state) {
+  const pts = [], left = curves.slice();
+  let at = null;
+  while (left.length) {
+    let best = 0, bestD = Infinity, bestPts = null;
+    for (let i = 0; i < left.length; i++) {
+      const p = curvePointsFrom(left[i], state, at);
+      if (p.length < 2) continue;
+      const d = at ? (p[0].x - at.x) ** 2 + (p[0].y - at.y) ** 2 : 0;
+      if (d < bestD) { best = i; bestD = d; bestPts = p; }
+      if (!at) break;
+    }
+    const [c] = left.splice(best, 1);
+    if (!bestPts) continue;
+    if (c && pts.length && (pts[pts.length - 1].x === bestPts[0].x && pts[pts.length - 1].y === bestPts[0].y)) pts.pop();
+    pts.push(...bestPts);
+    at = bestPts[bestPts.length - 1];
+  }
+  if (pts.length > 1 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y) pts.pop();
+  return pts;
 }

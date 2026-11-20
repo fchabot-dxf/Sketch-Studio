@@ -7,7 +7,7 @@ import { capturePrepare, applyPrepare, comparablePrepare } from './shaper-doc.js
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeLeadInAt, setShapeTabsAt, planMemberItems, pathsSigOf, pathsInputOf, settleWaiting, orderWaiting } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
+import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeLeadInAt, setShapeTabsAt, followDesign, planMemberItems, pathsSigOf, pathsInputOf, settleWaiting, orderWaiting } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
 import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
 import { reorderOps, setOpsOn, opById, regionOf, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
 import { cutTypeById, STOCK_TYPE_ID } from './shaper.js'; // TASK S2: a type's name; the Stock
@@ -282,6 +282,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   const geomSig = (st) => JSON.stringify([[...st.joints.entries()].map(([k, j]) => [k, j.x, j.y]), st.shapes.map((x) => [x.id, x.type, x.joints, x.radius])]);
   function restoreCutPlanFromHistory(snapshot) {
     applyPrepare(snapshot);
+    const restored = getController();
+    if (restored) followDesign(restored.state); // TASK 832: the restored step's operations on its sketch (a step saved before they were followed)
     // TASK S2: Undo while an operation is open: with changes, it undoes the session's own undo point (= Cancel: the operation as opened, closed); with none, it is the
     // plain Undo of the step before, and the operation stays open (its card shows the restored values; gone: closed)
     if (session && session.n !== null) { setSession(null); line = null; if (prepareView) prepareView.closeOp(); }
@@ -341,6 +343,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     try { designController.engine.solve(500); } catch (_) {}
     if (prepareView) prepareView.destroy();
     const st = designController.state; // TASK 761: the stored plan's legacy edge records are reconciled where the document is read (shaper-doc.js applyShaperDoc), not here
+    followDesign(st); // TASK 832: the operations follow the Design edits made since (a shape filleted, snapped, split: its operations cut it as it is now)
     prepareView = mountPrepareView(st, canvasEl, {
       onSelectionChange: () => { line = null; rowId = null; refreshCutPanel(); }, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(), // TASK S2: a canvas selection: no row is the selected one
       onCommitLeadIn: (opId, key, at) => sessionEdit(() => { const op = opById(opId); if (op) setShapeLeadInAt(op, key, at, st); }), // TASK 778: dragging the open operation's lead-in handle (TASK S2: an edit of its session, that membership's)

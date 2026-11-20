@@ -23,7 +23,9 @@ const HINT = {
   finishOn: 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.',
 };
 
-export async function hintsPhase(t, { fusion = false } = {}) {
+// TASK 831: part = 'all' (default: desktop and Fusion run it whole) or one of 'depth' | 'rows' | 'menus' | 'menus2' | 'export' (the phone runs the five in five files, each under the gate's time limit); every part sets the page up itself
+export async function hintsPhase(t, { fusion = false, part = 'all' } = {}) {
+  const on = (p) => part === 'all' || part === p;
   const { phone, evalJs, waitFor, send, shot, clickEl, openMode, setUnit, clickWorld } = t;
   const D = fusion ? 'fusion' : phone ? 'phone' : 'desktop';
   if (fusion) {
@@ -41,10 +43,6 @@ export async function hintsPhase(t, { fusion = false } = {}) {
 
   // nothing laid out, nothing showing
   const noLaidOut = async (where) => assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-hint, .sk-hint-trigger, .sk-hint-i, .sk-opt-hint').length - document.querySelectorAll('.sk-style-panel .sk-hint, .sk-style-panel .sk-hint-trigger, .sk-style-panel .sk-hint-i').length`), 0, `${D}: ${where}: no hint text or (i) is laid out in Prepare or Export (the shared Settings panel's own rows, #ui style-panel.js, are not these)`);
-  await noLaidOut('at rest');
-  assert.strictEqual(await tp.tip(), null, D + ': at rest no tooltip');
-  await tp.leave();
-
   // ONE check for every element: show its tooltip, the layout is unchanged (0 px), the text and place are right, then leave
   const checkTip = async (sel, text, how, { shotName = null, shotSels = null } = {}) => {
     await tp.reveal(sel);
@@ -64,6 +62,10 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     return tip;
   };
 
+  if (on('depth')) {
+  await noLaidOut('at rest');
+  assert.strictEqual(await tp.tip(), null, D + ': at rest no tooltip');
+  await tp.leave();
   const depthText = await hintOf('cutDepth');
   assert.strictEqual(depthText, HINT.cutDepth, D + ': the Depth hint is the table\'s');
   const pre = await tp.snap();
@@ -102,6 +104,9 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     await tp.leave();
   }
 
+  }
+
+  if (on('rows')) {
   // the rows of the cut card: every label of a Spiral pocket (the Finish allowance hint follows Loop: evaluated when the tooltip opens)
   await t.pickClearing('linked');
   await noLaidOut('Spiral card');
@@ -114,7 +119,10 @@ export async function hintsPhase(t, { fusion = false } = {}) {
   await t.setLoop(true);
   await checkTip(label('finishAllowance'), HINT.finishOn, 'Finish allowance, Loop on (the hint follows the card)', { shotName: `${D}-tooltip-finish-loop-on.png`, shotSels: ['#prepare-panel .cut-card'] });
   await t.setLoop(false);
+  }
 
+  if (on('menus') || on('menus2')) {
+  if (part === 'menus' || part === 'menus2') await t.pickClearing('linked'); // the state the rows part leaves
   // the menus: compact (one line per choice), the choice's name only, a tooltip per choice, the layout unmoved
   const menu = async (trigSel, popSel, optSel, name, param) => {
     await clickEl(trigSel);
@@ -134,7 +142,9 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     await shot(`${D}-menu-${param}.png`, [popSel, '#prepare-panel .cut-card'], 2);
     return m;
   };
-  const types = await menu('#prepare-panel .cut-type-trigger', '.cut-type-menu', '.cut-type-opt', 'cut type menu', 'cutType');
+  let types;
+  if (on('menus')) {
+  types = await menu('#prepare-panel .cut-type-trigger', '.cut-type-menu', '.cut-type-opt', 'cut type menu', 'cutType');
   if (fusion) assert.ok(types.rows.some((r) => r.id === 'cutType:roughing'), D + ': the drafted pocket offers Roughing');
   // a long press on a menu row shows its tooltip and does not pick it (the menu stays open, the cut type is unchanged)
   if (phone) {
@@ -146,12 +156,17 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     assert.strictEqual(await evalJs(`document.querySelector('.cut-type-cur').textContent`), cur, D + ': the long press did not pick the row (the cut type is unchanged)');
   }
   await clickEl('#prepare-panel .cut-type-trigger');
+  }
+  if (on('menus2')) {
   await menu('#prepare-panel .cut-clear-trigger', '.cut-clear-pop', '.cut-clear-opt', 'clearing menu', 'clearing');
   await clickEl('#prepare-panel .cut-clear-trigger');
   await menu('#prepare-panel .cut-shape-trigger', '.cut-shape-pop', '.cut-type-opt', 'cutter shape menu', 'cutterShape');
   await clickEl('#prepare-panel .cut-shape-trigger');
-  await noLaidOut('after the menus');
+  if (part !== 'menus') await noLaidOut('after the menus');
+  }
+  }
 
+  if (on('export')) {
   // the Operations list (its title), a Hold part choice button
   await checkTip('#prepare-ops .ops-head', await hintOf('operations'), 'Operations list');
   if (!fusion) {
@@ -170,4 +185,5 @@ export async function hintsPhase(t, { fusion = false } = {}) {
   assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('#review-side [data-label]')].map((e) => e.textContent)`), ['Generate Shaper SVG', 'Sync to ShaperHub', 'Open ShaperHub (My Files)'], D + ': the Export buttons\' labels (from the table)');
   assert.strictEqual(await evalJs(`document.getElementById('link-shaper-hub').hasAttribute('title')`), false, D + ': no native title duplicates the tooltip');
   await noLaidOut('end');
+  }
 }

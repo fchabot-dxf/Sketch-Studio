@@ -72,7 +72,7 @@ const PARAMS = {
   stepDepth: { label: 'Step depth', hint: ({ contour } = {}) => (contour ? 'How much deeper each contour pass goes. Smaller passes follow the slope more closely but take more cuts.' : 'How much deeper each step goes. Smaller steps follow the slope more closely but take more cuts.') }, // TASK 792: a Contour's fine step
   stepDeviation: { label: 'Resolution', hint: 'The most the steps may stray from the true slope. Finer gives more steps.' },
   holdPart: { label: 'Hold part', hint: 'Keeps a cut-out part (or the waste of a hole) from coming loose when the cut goes through.', items: HOLD_PART.modes.map((m) => `holdPart:${m.id}`) },
-  tabCount: { label: 'Tab count', hint: 'How many tabs. Auto spaces them along the outline by its length.' },
+  tabCount: { label: 'Tab count', hint: 'How many tabs. Auto spaces them along the outline by its length. Drag a tab on the outline to move it (the operation open): its shape then keeps its tabs where they are, and the count stays fixed until you pick Auto or type a count.' },
   tabWidth: { label: 'Tab width', hint: ({ online } = {}) => (online ? 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.' : 'How long each tab is, along the outline.') }, // TASK 775: an On line cut's tabs are gaps in the line
   holdThickness: { label: 'Tab thickness', hint: 'How much wood each tab keeps, up from the bottom of the cut.' },
   skinThickness: { label: 'Skin thickness', hint: 'How thick the layer left at the bottom is.' }, // the holdThickness row with Onion skin

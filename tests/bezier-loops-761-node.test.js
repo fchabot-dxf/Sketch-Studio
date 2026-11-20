@@ -126,6 +126,9 @@ if (WRITE) {
   let n = 0;
   for (const [name, d] of Object.entries(base)) {
     if (d.bezier) continue; // a drawing with a bezier is what this task changes
+    // TASK 822: report/midpoint-move.json's 3077.8 mm outline: its Outside tabs were REFUSED (a tab of the even spread landed where its gap strip did not fit) and are
+    // PLACED now (tests/hold-part-822-node.test.js): its shaperTabs facet changed on purpose, every other facet is as it was
+    if (name === 'report/midpoint-move.json') { ok(digest[name].shaperTabs !== d.shaperTabs, `${name}: its refused tabs are placed now (TASK 822)`); eq({ ...digest[name], shaperTabs: null }, { ...d, shaperTabs: null }, `${name}: every other facet bit-identical`); n++; continue; }
     eq(digest[name], d, `${name}: no bezier -> every facet bit-identical to origin/main 97a5dba (TASK 786: its downloads to the 786 exporter)`);
     n++;
   }

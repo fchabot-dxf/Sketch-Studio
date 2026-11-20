@@ -2,6 +2,7 @@
 // (tests/helpers/node-app.js). A Stock board, two Guides whose values differ (depth 0; depth 1.5 + offset 1), a plain Pocket and a Spiral Pocket (both 6 mm, ¼ in bit):
 //  V8: the "Not cut" heading's box is computed from ALL the rows under it (the Stock counts, ticked and untickable) like every other heading;
 //  V2: the Export step's "unticked:" line names an operation by its row's words and number in the list (a Spiral pocket is told from a plain one);
+//  V3: after Settings > Reset (a unit change sent as key null) Prepare's depth chip is redrawn in the new unit;
 //  V4: two Guides that differ show what makes them different on their row (depth, offset), as the other types show their depth.
 import assert from 'node:assert/strict';
 import { open } from './helpers/node-app.js';
@@ -66,5 +67,14 @@ try {
   app.press(rowBox(idOf('guide', 2))); app.press(rowBox(idOf('pocket', 1)));
   eq(exportTickLine(ops()), 'Exporting 3 of 5 operations (unticked: 4. Guide · 1.5 mm, 6. Pocket (spiral) · 6 mm (¼″ end mill)). Place it with the same anchor as the earlier file.', 'V2: the unticked ones are named as the list names them, with their numbers: the Spiral pocket is not "Pocket 6 mm"');
   void idOf; void rowBox;
+
+  // V3: Settings > Reset (key null) while Prepare shows a depth chip in inches
+  SettingsManager.set('DOC_UNIT', 'in', { persist: false });
+  pv.setSelection([target(K.P1)]); pv.refreshLook();
+  const chips = () => [...app.document.querySelectorAll('#prepare-canvas .sk-chip-text')].map((t) => t.textContent);
+  eq(chips(), ['↓ 0.236 in'], 'V3: setup: the depth chip of the selected Pocket in inches');
+  SettingsManager.resetToDefaults();
+  eq(SettingsManager.get('DOC_UNIT'), 'mm', 'V3: the reset puts the document unit back to mm');
+  eq(chips(), ['↓ 6 mm'], 'V3: the chip follows the reset: it says mm, as the card and the list do');
 } finally { await app.close(); }
 console.log(`visfix-825-node: ${checks} checks passed`);

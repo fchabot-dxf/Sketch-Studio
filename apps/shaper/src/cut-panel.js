@@ -6,7 +6,7 @@
 import { cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED, CONTOUR_DEFAULTS } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots)
-import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
+import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off | On) and its sides
@@ -82,12 +82,14 @@ const boundaryPresets = (hasStock) => ROUGH_BOUNDARY.kinds.map((k) => (k.id === 
   : { hint: choiceId('boundary', k.id), label: hintLabel(choiceId('boundary', k.id)), value: k.id }));
 const BOUNDARY_TOOL_PRESETS = ROUGH_BOUNDARY.tools.map((t) => ({ hint: choiceId('boundaryTool', t.id), label: hintLabel(choiceId('boundaryTool', t.id)), value: t.id }));
 const WALLS_PRESETS = CONTOUR_WALLS.choices.map((w) => ({ hint: choiceId('walls', w.id), label: hintLabel(choiceId('walls', w.id)), value: w.id })); // TASK 810: a Contour's which walls
+// TASK S2 (owner turn 2713): a Contour's own WALL SIDE (#core levelsCutAs `wallSide`), where its shape's model does not say it (a drawn shape)
+const WALL_SIDE_PRESETS = CONTOUR_WALL_SIDES.map((w) => ({ hint: choiceId('wallSide', w.id), label: hintLabel(choiceId('wallSide', w.id)), value: w.id }));
 // TASK 810 (owner turns 2657-2658): the ROUGHING and CONTOUR cards are organised in TABS, as Fusion CAM's operation dialogs: the ONE table of which row lives in which tab
 // (a row is its data-row or data-param). Each tab is a FIXED panel: the rows area keeps the height of the tallest tab (applyTabs), so switching tabs moves nothing outside
 // the card; a tab none of whose rows shows on this card is not offered. Every other cut type keeps its single card (no tab bar, every row in its place).
 const CARD_TABS = [
   { id: 'tool', hint: 'tabTool', rows: ['toolDia', 'cutterShape'] },
-  { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth', 'walls'] },
+  { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth', 'walls', 'wallSide'] }, // TASK S2: a Contour's Wall side
   { id: 'heights', hint: 'tabHeights', rows: ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'] },
   { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'smoothing'] }, // TASK S2: the Contour row is gone (Contour is an operation type)
 ];
@@ -105,6 +107,7 @@ const CHANGED = {
   boundaryTool: (rec) => boundaryOf(rec).tool !== ROUGH_BOUNDARY.defaultTool,
   boundaryOffset: (rec) => boundaryOf(rec).offset != null,
   walls: (rec, op, c) => Boolean(c.walls) && c.walls.value !== c.walls.defaultId,
+  wallSide: (rec) => rec.wallSide === 'outside', // TASK S2: Inside is what a Contour starts with
   topDepth: (rec) => Number(rec.topDepth) > 0,
   bottomDepth: (rec) => rec.bottomDepth != null && Number(rec.bottomDepth) > 0,
   floorAllowance: (rec) => Number(rec.floorAllowance) > 0,
@@ -129,8 +132,9 @@ export function createCutPanel(hostEl, opts = {}) {
   // TASK S2: the shape card's chips and the operation card's Geometry row (prepare-stage.js)
   const onChip = opts.onChip || (() => {});
   const onAddShapes = opts.onAddShapes || (() => {});
-  const onRemoveShape = opts.onRemoveShape || (() => {});
-  const onMakeOwn = opts.onMakeOwn || (() => {});
+  const onRemoveShape = opts.onRemoveShape || (() => {}); // (geometry key): the X of a shape row
+  const onDuplicate = opts.onDuplicate || (() => {});
+  const onHoverShape = opts.onHoverShape || (() => {}); // (geometry key | null): a shape row under the pointer
   const onPickBoundary = opts.onPickBoundary || (() => {}); // TASK 810: Roughing's boundary "Pick" (then a click on a closed shape in Prepare); pressed again while picking: cancel
   hostEl.innerHTML = '';
 
@@ -139,7 +143,7 @@ export function createCutPanel(hostEl, opts = {}) {
   card.hidden = true;
   card.innerHTML = `
     <div class="cut-card-title">Cut</div>
-    <div class="cut-op-head" hidden></div>
+    <div class="cut-op-headrow" hidden><div class="cut-op-head"></div><button type="button" class="cut-op-dup" data-hint="opDuplicate"></button></div>
     <div class="cut-chips" hidden><button type="button" class="cut-field-label" data-hint="opChips"></button><div class="cut-chip-list"></div></div>
     <div class="cut-field">
       <button type="button" class="cut-field-label" data-hint="cutType"></button>
@@ -151,8 +155,8 @@ export function createCutPanel(hostEl, opts = {}) {
     </div>
     <div class="cut-geo" hidden>
       <button type="button" class="cut-field-label" data-hint="opShapes"></button>
-      <div class="cut-geo-btns"><button type="button" class="cut-preset cut-geo-add" data-hint="opAddShapes" aria-pressed="false"></button><button type="button" class="cut-preset cut-geo-remove" data-hint="opRemoveShape"></button><button type="button" class="cut-preset cut-geo-own" data-hint="opMakeOwn"></button></div>
-      <div class="cut-geo-part" hidden></div>
+      <div class="cut-geo-list"></div>
+      <div class="cut-geo-btns"><button type="button" class="cut-preset cut-geo-add" data-hint="opAddShapes" aria-pressed="false"></button></div>
     </div>
     <div class="cut-tabs" role="tablist" hidden></div>
     <div class="cut-rows">
@@ -233,6 +237,10 @@ export function createCutPanel(hostEl, opts = {}) {
       <div class="cut-row" data-row="walls">
         <button type="button" class="cut-field-label" data-hint="walls"></button>
         <div class="cut-presets cut-walls"></div>
+      </div>
+      <div class="cut-row" data-row="wallSide">
+        <button type="button" class="cut-field-label" data-hint="wallSide"></button>
+        <div class="cut-presets cut-wall-side"></div>
       </div>
       <div class="cut-row" data-row="minTerraceWidth">
         <button type="button" class="cut-field-label" data-hint="minTerraceWidth"></button>
@@ -385,10 +393,11 @@ export function createCutPanel(hostEl, opts = {}) {
   smoothingInput.addEventListener('change', () => { const n = parseUnit(smoothingInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('smoothing', n); else renderFields(); });
   // TASK S2: the operation card's header ("Pocket 2 · 3 shapes: a change applies to all 3"), the shape card's chips, the Geometry row (Add shapes | Done, Remove, Make
   // its own operation: greyed with their reason, 813's pattern) and a Contour's part line ("Depth and walls: from part (1 Roughing)")
-  const opHead = $('.cut-op-head'), chipsEl = $('.cut-chips'), chipList = $('.cut-chip-list'), geoEl = $('.cut-geo'), geoPart = $('.cut-geo-part');
-  const geoAdd = $('.cut-geo-add'), geoRemove = $('.cut-geo-remove'), geoOwn = $('.cut-geo-own');
-  const geoButton = (btn, act) => btn.addEventListener('click', () => { if (btn.getAttribute('aria-disabled') !== 'true') act(); }); // a greyed one does nothing (its tooltip says why)
-  geoButton(geoAdd, () => onAddShapes()); geoButton(geoRemove, () => onRemoveShape()); geoButton(geoOwn, () => onMakeOwn());
+  const headRow = $('.cut-op-headrow'), opHead = $('.cut-op-head'), dupBtn = $('.cut-op-dup'), chipsEl = $('.cut-chips'), chipList = $('.cut-chip-list'), geoEl = $('.cut-geo'), geoList = $('.cut-geo-list');
+  const geoAdd = $('.cut-geo-add');
+  geoAdd.addEventListener('click', () => { if (geoAdd.getAttribute('aria-disabled') !== 'true') onAddShapes(); }); // greyed (the Stock): its tooltip says why
+  dupBtn.addEventListener('click', () => onDuplicate());
+  geoList.addEventListener('pointerleave', () => onHoverShape(null));
   const setGeoOff = (btn, why) => { btn.classList.toggle('is-disabled', Boolean(why)); if (why) btn.setAttribute('aria-disabled', 'true'); else btn.removeAttribute('aria-disabled'); setOffReason(btn, why || null); };
   const leadModesWrap = $('.cut-lead-modes'), leadRadiusInput = $('.cut-lead-radius'), leadSweepInput = $('.cut-lead-sweep'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'), leadPosState = $('.cut-pos-state'); // TASK 775 / 778
   // TASK 810: Roughing's machining boundary rows: the Boundary and Tool choices, the picked shape (Pick), the Offset (empty / Reset = calculated)
@@ -782,6 +791,9 @@ export function createCutPanel(hostEl, opts = {}) {
     const wallsRow = isContour && Boolean(current.walls && current.walls.shown);
     place('walls', wallsRow);
     renderPresets($('.cut-walls'), wallsRow ? WALLS_PRESETS : [], 'walls', wallsRow ? current.walls.value : null);
+    // TASK S2 (owner turn 2713): a Contour's own Wall side, in its place on every Contour card; greyed where the model of its shapes says the side (a slope, levels)
+    place('wallSide', isContour ? current.wallSideFree || 'Its shapes\u2019 model says which side: a slope or the STL\u2019s levels.' : false);
+    renderPresets($('.cut-wall-side'), isContour ? WALL_SIDE_PRESETS : [], 'wallSide', current.record && current.record.wallSide === 'outside' ? 'outside' : 'inside');
     syncCalcBar('bottomDepth', !(Number(hr.bottomDepth) > 0));
     place('smoothing', declares('smoothing') && Boolean(current.levels)); // TASK 809: an operation on a part with levels (an STL)
     smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.05 mm = 0.002 in: a tolerance, always decimals
@@ -861,7 +873,7 @@ export function createCutPanel(hostEl, opts = {}) {
   // TASK S2: the header, the chips, the Geometry row and a Contour's part line of the card in hand (see above)
   function renderOpParts(model) {
     const op = model.mode === 'op';
-    opHead.hidden = !op; opHead.textContent = op ? model.title : '';
+    headRow.hidden = !op; opHead.textContent = op ? model.title : '';
     const chips = model.mode === 'shape' && Array.isArray(model.chips) && model.chips.length ? model.chips : [];
     chipsEl.hidden = !chips.length;
     chipList.replaceChildren(...chips.map((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'cut-preset cut-chip'; b.dataset.op = c.opId; b.textContent = c.label; b.addEventListener('click', () => onChip(c.opId)); return b; }));
@@ -869,8 +881,17 @@ export function createCutPanel(hostEl, opts = {}) {
     const g = (op && model.geometry) || {};
     hints.opAddShapes.setId(g.adding ? 'opDone' : 'opAddShapes'); // its label and tooltip: Add shapes | Done
     geoAdd.classList.toggle('is-active', Boolean(g.adding)); geoAdd.setAttribute('aria-pressed', String(Boolean(g.adding)));
-    setGeoOff(geoAdd, g.addWhy); setGeoOff(geoRemove, g.removeWhy); setGeoOff(geoOwn, g.ownWhy);
-    geoPart.hidden = !(op && model.part); geoPart.textContent = op && model.part ? model.part : '';
+    setGeoOff(geoAdd, g.addWhy);
+    geoList.replaceChildren(...(g.shapes || []).map(({ key, label }) => { // one row per shape: its words and an X that takes it out of the operation
+      const row = document.createElement('div'); row.className = 'cut-geo-shape'; row.dataset.key = key;
+      const name = document.createElement('span'); name.className = 'cut-geo-name'; name.textContent = label;
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'cut-geo-x'; x.dataset.hint = 'opRemoveShape'; x.textContent = '\u2715'; x.setAttribute('aria-label', `Take ${label} out of this operation`);
+      bindHint({ el: x, iconOnly: true });
+      x.addEventListener('click', () => onRemoveShape(key));
+      row.addEventListener('pointerenter', () => onHoverShape(key));
+      row.append(name, x);
+      return row;
+    }));
   }
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
@@ -881,6 +902,7 @@ export function createCutPanel(hostEl, opts = {}) {
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
       leadIn: rec.leadIn === true, leadInRadius: rec.leadInRadius ?? null, leadInSweep: rec.leadInSweep ?? null, leadInLength: rec.leadInLength ?? null, leadInSide: rec.leadInSide === 'inside' ? 'inside' : 'outside', leadInAt: rec.leadInAt ?? null, leadInInfo: model.leadIn || null, // TASK 775 / 778
       mode: model.mode || null, typeWhy: typeof model.typeWhy === 'function' ? model.typeWhy : null, // TASK S2: 'op' | 'shape'; why a type is greyed in the menu
+      wallSideFree: model.wallSideFree === true, // TASK S2: a Contour's Wall side applies (a shape whose model does not say it)
       levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)
       boundaryCtx: { hasStock: Boolean(model.boundary && model.boundary.hasStock), picking: Boolean(model.boundary && model.boundary.picking) }, // TASK 810: does the design have a Stock; is a boundary Pick on
       partDepth: Number(model.partDepth) > 0 ? Number(model.partDepth) : null, // TASK 810: the part's depth (the Bottom's default; a Contour's is its part's)

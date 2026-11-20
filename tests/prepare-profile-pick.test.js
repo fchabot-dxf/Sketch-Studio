@@ -4,7 +4,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, polyArea, sampleArc } from '#core/loop-geometry.js';
 import { makeProfile, resolveProfileViews, resolveProfileForLoop, derivedProfileForLoop, resolveTargetKey, listSketchProfiles } from '#core/profile-model.js';
 import { mountPrepareView } from '../apps/shaper/src/prepare-view.js';
-import { keyOf, parseKey, migrateEdgeRecords } from '../apps/shaper/src/cut-plan.js';
+import { keyOf, parseKey, migrateEdgeRecords, newOperation } from '../apps/shaper/src/cut-plan.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
@@ -565,7 +565,7 @@ const ENC5 = [
     svgEl.dispatchEvent({ type: 'pointerdown', clientX: pt.clientX, clientY: pt.clientY, button: 0 });
 
     // Apply Outside cut with 3.175mm tool
-    view.applyCutTypeToSelected('exterior');
+    { const sel = view.selectedTarget(); view.activate(newOperation('exterior', [keyOf(sel.kind, sel.id)], state).id); } // TASK S2: the quick flow's writer (a new operation, made active)
     const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
     const pathMatches = toolpathG.innerHTML.match(/<path class="sk-travel"[^>]*d="([^"]+)"/g) || [];
     assert(pathMatches.length >= 2, `P9: outside cut on frame must render toolpaths for both boundaries, got ${pathMatches.length}`);
@@ -587,7 +587,7 @@ const ENC5 = [
     svgEl.dispatchEvent({ type: 'pointerdown', clientX: pt.clientX, clientY: pt.clientY, button: 0 });
 
     // Apply Inside cut with 3.175mm tool
-    view.applyCutTypeToSelected('interior');
+    { const sel = view.selectedTarget(); view.activate(newOperation('interior', [keyOf(sel.kind, sel.id)], state).id); } // TASK S2: the quick flow's writer (a new operation, made active)
     const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
     const pathMatches = toolpathG.innerHTML.match(/<path class="sk-travel"[^>]*d="([^"]+)"/g) || [];
     assert(pathMatches.length >= 2, `P10: inside cut on frame must render toolpaths for both boundaries, got ${pathMatches.length}`);

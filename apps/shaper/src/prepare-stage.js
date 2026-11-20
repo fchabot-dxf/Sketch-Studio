@@ -7,9 +7,9 @@ import { capturePrepare, applyPrepare, comparablePrepare } from './shaper-doc.js
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { cutPlanNotice, stockKeyOf, keyOf, freshRecord, contourPartOf, typeRefusal, CONTOUR_NEEDS_PART, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, makeOwnOperation, deleteOperation, setShapeLeadInAt } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
+import { cutPlanNotice, stockKeyOf, keyOf, freshRecord, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeLeadInAt } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
 import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
-import { reorderOps, setOpsOn, opById, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
+import { reorderOps, setOpsOn, opById, regionOf, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
 import { cutTypeById, STOCK_TYPE_ID } from './shaper.js'; // TASK S2: a type's name; the Stock
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 
@@ -53,18 +53,13 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const boundary = { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }; // TASK 810: the Boundary rows' context
     const op = pv.activeOp();
     if (op) {
-      const keys = op.geometry.map((r) => r.key), hand = pv.shapeInHand(), n = keys.length, stock = op.type === STOCK_TYPE_ID;
-      const f = pv.factsOf(op, hand || keys[0] || null);
-      const title = `${typeName(op.type)} ${numberOf(ops, op.id)} · ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes: a change applies to all ${n}`}`;
-      let part = null; // TASK S2 (advisor ruling turn 2709): a Contour says where its depth and walls come from
-      if (op.type === CONTOUR_TYPE) {
-        const k = hand || keys[0], p = k ? contourPartOf(k, { cutType: op.type, ...op.settings }) : null;
-        part = !k ? 'Depth and walls: from each shape’s part' : p ? `Depth and walls: from part (${numberOf(ops, p.op.id)} ${typeName(p.op.type)})` : `Depth and walls: no part. ${CONTOUR_NEEDS_PART}`;
-      }
-      const noHand = 'Click one of its shapes first';
-      return { mode: 'op', ...f, boundary, opId: op.id, title, part, typeWhy: (id) => typeRefusal(id, keys),
-        geometry: { adding: pv.isAdding(), hand, addWhy: stock ? 'The Stock is one shape' : null, removeWhy: hand ? null : noHand,
-          ownWhy: !hand ? noHand : stock ? 'The Stock is one shape' : n < 2 ? 'It is the only shape of this operation' : null } };
+      const keys = op.geometry.map((r) => r.key), n = keys.length;
+      const f = pv.factsOf(op, keys[0] || null);
+      const title = `${typeName(op.type)} ${numberOf(ops, op.id)} \u00b7 ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes: a change applies to all ${n}`}`;
+      // TASK S2 (owner turn 2713): a Contour's own Wall side matters on a shape whose model does not say it (no slope, no levels: a drawn shape)
+      const wallSideFree = op.type === CONTOUR_TYPE && (!n || keys.some((k) => { const r = regionOf(k) || {}; return !r.slope && !(Array.isArray(r.levels) && r.levels.length); }));
+      return { mode: 'op', ...f, boundary, opId: op.id, title, wallSideFree, typeWhy: (id) => typeRefusal(id, keys),
+        geometry: { adding: pv.isAdding(), addWhy: op.type === STOCK_TYPE_ID && n ? 'The Stock is one shape' : null, shapes: keys.map((key) => ({ key, label: pv.shapeLabel(key) })) } };
     }
     const t = pv.selectedTarget();
     if (!t) return null;
@@ -115,7 +110,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     }
     const keys = quickKeys(id, pickedKeys());
     if (!keys.length) return;
-    if (id === STOCK_TYPE_ID) { stockNotice(keys[0]); const { op: stock } = setStock(keys[0], st); pv.activate(stock.id, { hand: keys[0] }); }
+    if (id === STOCK_TYPE_ID) { stockNotice(keys[0]); const { op: stock } = setStock(keys[0], st); pv.activate(stock.id); }
     else pv.activate(newOperation(id, keys, st).id, { add: true });
     pv.refreshLook();
   }
@@ -123,12 +118,14 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onPickType: (id) => cutEdit(() => pickType(id)),
     onSetField: (field, value) => cutEdit(() => { if (prepareView) { prepareView.setOpField(field, value); prepareView.syncActive(); } }), // TASK S2: the active operation, every one of its shapes
     onSetFields: (o) => cutEdit(() => { if (prepareView) { for (const [k, v] of Object.entries(o)) prepareView.setOpField(k, v); prepareView.syncActive(); } }),
-    // TASK S2: the shape card's chips (a chip activates its operation, the clicked shape in hand) and the operation card's Geometry row: Add shapes (the mode; Done
-    // ends it), Remove / Make its own operation (the shape in hand: advisor ruling turn 2709), each a store edit of ONE undo step
-    onChip: (opId) => { if (!prepareView) return; const op = opById(opId), keys = pickedKeys(); const hand = op ? [...keys].reverse().find((k) => op.geometry.some((r) => r.key === k)) || null : null; prepareView.activate(opId, { hand }); },
+    // TASK S2: the shape card's chips (a chip activates its operation) and the operation card's Shapes (owner turns 2710-2712): Add shapes (the mode; Done ends it), an X
+    // per shape (that shape leaves the operation), Duplicate (a copy of the operation, made active): each store edit ONE undo step; a shape row under the pointer shows
+    // its shape on the canvas
+    onChip: (opId) => { if (prepareView) prepareView.activate(opId); },
     onAddShapes: () => { if (prepareView) prepareView.setAddMode(!prepareView.isAdding()); },
-    onRemoveShape: () => cutEdit(() => { const pv = prepareView, op = pv && pv.activeOp(), hand = pv && pv.shapeInHand(); if (op && hand) { removeShapeFromOp(op, hand, sketchState()); pv.syncActive(); pv.refreshLook(); } }),
-    onMakeOwn: () => cutEdit(() => { const pv = prepareView, op = pv && pv.activeOp(), hand = pv && pv.shapeInHand(); if (op && hand && op.geometry.length > 1) { const mine = makeOwnOperation(op, hand, sketchState()); if (mine) pv.activate(mine.id, { hand }); pv.refreshLook(); } }),
+    onRemoveShape: (key) => cutEdit(() => { const pv = prepareView, op = pv && pv.activeOp(); if (op) { removeShapeFromOp(op, key, sketchState()); pv.syncActive(); pv.refreshLook(); } }),
+    onDuplicate: () => cutEdit(() => { const pv = prepareView, op = pv && pv.activeOp(); if (op) { pv.activate(duplicateOperation(op, sketchState()).id); pv.refreshLook(); } }),
+    onHoverShape: (key) => { if (prepareView) prepareView.hoverKey(key); },
     // TASK 810: Roughing's boundary Pick: the next click on a closed shape in Prepare sets the selected Roughing's `boundaryShape` (ONE undo step); pressed again, a
     // click on nothing / an open path, or Esc: cancelled, nothing changes
     onPickBoundary: () => {

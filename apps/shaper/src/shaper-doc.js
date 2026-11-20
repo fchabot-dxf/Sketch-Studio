@@ -6,10 +6,11 @@
 //   • the STOCK the 3D Review reads (apps/shaper/src/stock.js, the one declaration; defaults 3/4 in thick, 1/2 in margin);
 // Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
 
-import { reconcileCutPlan, reconcileStore, keepHolesFromOtherSketches, v2PlanEntries, isContourKey, partKeyOf, settingsPart } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once; TASK 774; TASK S1
+import { reconcileCutPlan, reconcileStore, keepHolesFromOtherSketches, v2PlanEntries, isContourKey, partKeyOf, settingsPart, recordOf } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once; TASK 774; TASK S1
 import { migrateLeadInRecord } from '#core/lead-in.js'; // TASK 778: 775 straight-leg record -> arc of Radius = old length, Length = 0
 import { opKeyOf, settingsOf, migrationOrder } from './operations.js'; // TASK S1: the v2 records grouped into operations as the list showed them
-import { captureStore, applyStore } from './operations-store.js'; // TASK S1: the operations + regions store
+import { captureStore, applyStore, storeOps, membersOf, regionOf, removeRef, insertOp, setOpSettings, setOpsOn, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the operations + regions store; TASK S2: the Contours' own values (migrateContours)
+import { wallsOf } from '#core/stepped-cut.js'; // TASK S2: a Contour's walls in effect
 import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 459): {thickness, width, height, margin}, base mm
 import { captureStl, applyStl, captureStlDoc, applyStlDoc } from './stl-source.js'; // TASK 790: the STL the design came from (or none)
 import { captureSelections, applySelections, getSelections } from './selection-list.js'; // TASK 795: the selection list
@@ -18,9 +19,13 @@ import { captureSelections, applySelections, getSelections } from './selection-l
 // saved under the old rule: applyShaperDoc keeps its cuts' holes from other sketches (cut-plan.js keepHolesFromOtherSketches).
 // TASK 812: exported: the document buffer opens a document of a HIGHER version but never writes over it (design-canvas.js hostVersion).
 // TASK S1: 3 = the operations + regions store (docs/OPERATIONS-MODEL.md 1.2); a version 2 document is migrated on reading (migrateV2), written as 3 on the next save.
-export const DOC_VERSION = 3;
+// TASK S2 (owner ruling turn 2713): 4 = a Contour operation carries its OWN Depth, Walls and Wall side (a version 3 app would read its depth and walls LIVE from the
+// shape's other operation, so it must not write over a version 4 document: task 812's guard); a version 3 (or older) document's Contours get explicit values equal
+// to that live reading on reading (migrateContours), written as 4 on the next save.
+export const DOC_VERSION = 4;
 const SAME_SKETCH_HOLES_VERSION = 2;
 const OPERATIONS_VERSION = 3;
+const OWN_CONTOUR_VERSION = 4; // TASK S2
 
 /** TASK 743: what one step of the shared undo history keeps of Prepare (prepare-stage.js hostSnapshot). TASK S1: the operations store (its regions shared by
  *  reference: never mutated). TASK 790: + the STL source (stl-source.js, without its mesh): undoing an STL import / a new Up or Units gives the previous one back (or none). */
@@ -141,6 +146,48 @@ export function migrateV2(plan, storedOrder, state, selections) {
   return report;
 }
 
+/**
+ * migrateContours() — TASK S2 (owner ruling turn 2713, docs/OPERATIONS-MODEL.md 1.4 / 3): a version 3 store (or a version 2 one just migrated) to version 4. Up to
+ * version 3 a Contour read its depth, its wall side and its walls' default LIVE from its shape's other operation (S1: the shape's one operation besides its Contour);
+ * since S2 it is a plain operation with its OWN settings. Each Contour membership gets the values that reading gave at load, so every file stays byte for byte:
+ *   cutDepth  'model' where the other operation's Depth is 'model' (it then follows the imported depth, as it did), else that operation's depth;
+ *   walls     the choice in effect (#core wallsOf: its own, else the default its part's type gave);
+ *   wallSide  'outside' where the part was an Outside cut, else 'inside' (#core levelsCutAs: read only for a shape whose slope / levels do not say it).
+ * The values are one settings set per operation: a Contour whose shapes read different values is split, the shapes with other values going to a NEW Contour right
+ * after it (keeping their file places; `splits`, 0 on the 909-case corpus). A membership with no other operation (it derived nothing) leaves the Contour (`noPart`;
+ * its file is unchanged; an operation left empty stays, listed "no shapes yet"). Returns { contours, splits, noPart }.
+ */
+export function migrateContours() {
+  const report = { contours: 0, splits: 0, noPart: 0 };
+  for (const op of storeOps().filter((o) => o.type === CONTOUR_TYPE)) {
+    report.contours++;
+    const groups = new Map(); // the values as JSON -> { values, refs }
+    for (const ref of [...op.geometry]) {
+      const part = membersOf(ref.key).find((m) => m.op.type !== CONTOUR_TYPE); // S1's part (memberOf: the shape's one other operation)
+      if (!part) { removeRef(op, ref); report.noPart++; continue; }
+      const prec = recordOf(part.op, part.ref), reg = regionOf(ref.key) || {};
+      const values = {
+        cutDepth: part.op.settings.cutDepth === 'model' ? 'model' : prec.cutDepth,
+        walls: wallsOf({ ...op.settings, levelsOp: 'contour', baseType: prec.cutType, ...(reg.slope ? { slope: reg.slope } : {}), ...(reg.levels ? { levels: reg.levels } : {}) }),
+        wallSide: prec.cutType === 'exterior' ? 'outside' : 'inside',
+      };
+      const k = JSON.stringify(values);
+      if (!groups.has(k)) groups.set(k, { values, refs: [] });
+      groups.get(k).refs.push(ref);
+    }
+    const [first, ...rest] = [...groups.values()];
+    if (first) setOpSettings(op, { ...op.settings, ...first.values });
+    let at = storeOps().indexOf(op) + 1;
+    for (const g of rest) {
+      for (const ref of g.refs) removeRef(op, ref);
+      const copy = insertOp(at++, { type: CONTOUR_TYPE, settings: { ...op.settings, ...g.values }, geometry: g.refs });
+      if (op.on === false) setOpsOn([copy.id], false);
+      report.splits++;
+    }
+  }
+  return report;
+}
+
 /** Restore a persisted Shaper document. Missing parts keep their defaults (an old buffer carries none of this).
  *  TASK S1: a version 3 document's operations store as stored; a version 2 one (or older) MIGRATED (migrateV2) after today's value mapping (withClearingNow,
  *  opKeyNow) and the reconciliation below; its report rides in the result (`migration`). The stored file changes only when the user next saves.
@@ -155,7 +202,9 @@ export function applyShaperDoc(d, state = null) {
   if (d && Number(d.version) >= OPERATIONS_VERSION) {
     applyStore(d);
     applySelections(d && d.selections); // TASK 795: the selection list (none for a design that was not built from selections)
-    return state ? { ...reconcileStore(state), keptHoles: 0, lostHoles: 0 } : null;
+    const counts = state ? { ...reconcileStore(state), keptHoles: 0, lostHoles: 0 } : null;
+    const contours = Number(d.version) < OWN_CONTOUR_VERSION ? migrateContours() : null; // TASK S2: version 3: the Contours' own values
+    return counts ? { ...counts, ...(contours ? { contours } : {}) } : null;
   }
   const plan = new Map((d && Array.isArray(d.cutPlan) ? d.cutPlan : []).filter((e) => Array.isArray(e) && typeof e[0] === 'string').map(([key, rec]) => [key, rec && typeof rec === 'object' ? withClearingNow({ ...rec }) : rec]));
   let counts = null;
@@ -164,6 +213,7 @@ export function applyShaperDoc(d, state = null) {
     counts = { ...reconcileCutPlan(state, plan), ...(old ? keepHolesFromOtherSketches(state, plan) : { keptHoles: 0, lostHoles: 0 }) };
   }
   const migration = migrateV2(plan, d && Array.isArray(d.opOrder) ? d.opOrder.filter((k) => typeof k === 'string').map(opKeyNow) : [], state, d && d.selections);
+  migration.contours = migrateContours(); // TASK S2: then version 3 -> 4 (the Contours' own values)
   applySelections(d && d.selections); // TASK 795: the selection list (none for a design that was not built from selections)
   return state ? { ...counts, migration } : null;
 }

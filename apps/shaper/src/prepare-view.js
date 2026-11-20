@@ -12,7 +12,7 @@ import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, pl
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
   lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary,
-  CONTOUR_KIND, contourPartOf, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
+  CONTOUR_KIND, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
 import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in junction (ONE pure derivation)
 import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
@@ -279,10 +279,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   //   • open chain → `chain:<chainId>`
   // Shift+click (e.shiftKey) toggles targets in `selection`; plain click selects one (or clears on empty space).
   // TASK S2 (docs/OPERATIONS-MODEL.md 4.2-4.4): the selection holds GEOMETRY keys only (a Contour is an operation of its own, never a selected target). The ACTIVE
-  // operation (`active`: { opId, add, hand }) is what the card edits: its shapes are the selection; `add` = Add shapes mode (a click on a shape puts it in / takes it
-  // out: opts.onToggleShape, one undo step; Done / Esc end it; a press on empty canvas pans and the mode stays); `hand` = the shape in hand (advisor ruling turn 2709:
-  // the shape the card was opened from by its chip, or the one of its shapes clicked next outside Add mode): what Remove / Make its own operation act on. Outside Add
-  // mode a click on another shape (or on nothing) leaves the operation: the shape card (or no card).
+  // operation (`active`: { opId, add }) is what the card edits: its shapes are the selection; `add` = Add shapes mode (a click on a shape puts it in / takes it out:
+  // opts.onToggleShape, one undo step; Done / Esc end it; a press on empty canvas pans and the mode stays). Outside Add mode a click on a shape (or on nothing)
+  // leaves the operation: the shape card (or no card).
   const selection = new Map(); // key -> { kind, id }
   const targetKey = (t) => keyOf(t.kind, t.id);
   let active = null;
@@ -383,7 +382,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${rec.smoothing}|${rec.boundary}|${rec.boundaryShape}|${rec.boundaryTool}|${rec.boundaryOffset}|${rec.topDepth}|${rec.bottomDepth}|${rec.floorAllowance}|${rec.walls}|${docUnit()}|${ownedNow().keys}`; // TASK 810: its boundary, heights and walls; TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${rec.smoothing}|${rec.boundary}|${rec.boundaryShape}|${rec.boundaryTool}|${rec.boundaryOffset}|${rec.topDepth}|${rec.bottomDepth}|${rec.floorAllowance}|${rec.walls}|${rec.wallSide}|${docUnit()}|${ownedNow().keys}`; // TASK 810: its boundary, heights and walls; TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
   const computeLook = (it) => { // TASK S2: one look per membership (planMemberItems: a shape in two operations has two)
     const key = it.planKey, storedRec = it.rec;
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
@@ -500,7 +499,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
   };
-  const getLook = (it) => { const part = it.planKey !== it.key ? contourPartOf(it.key, it.rec) : null; const sig = sigOf(it.rec) + (it.planKey !== it.key ? '#' + sigOf((part && part.rec) || {}) : ''); const hit = lookCache.get(it.id); if (hit && hit.sig === sig) return hit; const look = computeLook(it); look.sig = sig; lookCache.set(it.id, look); return look; }; // TASK S2: cached per membership; a Contour's follows its part (contourPartOf)
+  const getLook = (it) => { const sig = sigOf(it.rec); const hit = lookCache.get(it.id); if (hit && hit.sig === sig) return hit; const look = computeLook(it); look.sig = sig; lookCache.set(it.id, look); return look; }; // TASK S2: cached per membership (a Contour reads its own settings only)
 
   // TASK 455: the SAME state model for every cut type — idle: only the svg line; hover: dark band + bold white boundary +
   // dashed tool path + depth chip; selected: teal band + bold mint boundary + the same path/chip; selected+hover: selected with
@@ -684,7 +683,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
 
   const renderSelection = () => {
     let out = '';
-    for (const t of selection.values()) out += targetMarkup(t, 'sk-hl sk-hl-select' + (active && active.hand === targetKey(t) ? ' sk-hl-hand' : '')); // TASK S2: the shape in hand stands out
+    for (const t of selection.values()) out += targetMarkup(t, 'sk-hl sk-hl-select');
     selectG.innerHTML = out;
   };
   const renderHover = () => {
@@ -795,8 +794,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (t) onToggleShape(op.id, t); else handlePanZoomPointerDown(e, svgEl, viewState);
       return;
     }
-    if (op && t && !e.shiftKey && op.geometry.some((r) => r.key === targetKey(t))) { active.hand = targetKey(t); renderSelection(); onSelectionChange(t); return; } // one of its shapes: in hand
-    if (op) { active = null; svgEl.classList.remove('is-adding'); } // anything else leaves the operation
+    if (op) leaveOp(); // anything else leaves the operation
     if (e.shiftKey) {
       if (t) {
         const k = targetKey(t);
@@ -838,32 +836,51 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const selectedTargets = () => [...selection.values()];
   // TASK 605: a document tab keeps its Prepare selection and view aside while another tab shows (prepare-session.js); these put them back on a fresh mount.
   const setSelection = (targets) => {
-    if (active) { active = null; svgEl.classList.remove('is-adding'); } // TASK S2: picked shapes = no active operation (the shape card)
+    if (active) leaveOp(); // TASK S2: picked shapes = no active operation (the shape card)
     selection.clear();
     for (const t of targets) selection.set(targetKey(t), t);
     renderSelection(); renderHover();
     onSelectionChange(selectedTarget());
   };
   const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); renderZoomed(); };
+  // TASK S2: Add shapes mode shows on the canvas (its cursor) and listens for Esc (= Done) while it is on
+  let escOn = false;
+  const onAddKey = (e) => { if (e.key === 'Escape' && active && active.add) { e.preventDefault(); setAddMode(false); } };
+  function showAdding(on) {
+    if (on === escOn) return;
+    escOn = on;
+    svgEl.classList.toggle('is-adding', on);
+    if (on) document.addEventListener('keydown', onAddKey, true); else document.removeEventListener('keydown', onAddKey, true);
+  }
+  function leaveOp() { active = null; showAdding(false); }
   // TASK S2: the ACTIVE operation (see `active` above): its shapes are the selection; syncActive() after any store change (an edit, an undo) re-reads it (gone: none)
   const syncActive = () => {
     const op = activeOp();
     if (op) {
       selection.clear();
       for (const r of op.geometry) selection.set(r.key, parseKey(r.key));
-      if (active.hand && !op.geometry.some((r) => r.key === active.hand)) active.hand = null;
     }
-    svgEl.classList.toggle('is-adding', Boolean(op && active.add));
+    showAdding(Boolean(op && active.add));
     renderSelection(); renderHover();
   };
-  const activate = (opId, { add = false, hand = null } = {}) => {
-    active = opById(opId) ? { opId, add: Boolean(add), hand } : null;
+  const activate = (opId, { add = false } = {}) => {
+    active = opById(opId) ? { opId, add: Boolean(add) } : null;
     syncActive();
     onSelectionChange(selectedTarget());
   };
   const setAddMode = (on) => { if (!activeOp()) return; active.add = Boolean(on); syncActive(); onSelectionChange(selectedTarget()); };
-  const onAddKey = (e) => { if (e.key === 'Escape' && active && active.add) { e.preventDefault(); setAddMode(false); } }; // Esc = Done
-  document.addEventListener('keydown', onAddKey, true);
+
+  // TASK S2: a shape's words in the operation card's list: what it is and its size in the document unit ("Shape 40 × 40 mm", "Open line 160 × 0 mm")
+  const KIND_WORDS = { loop: 'Shape', profile: 'Combined shape', chain: 'Open line' };
+  function shapeLabel(key) {
+    const t = parseKey(key), word = KIND_WORDS[t.kind] || 'Shape';
+    let pts = null;
+    if (t.kind === 'chain') { const c = chainById.get(t.id); if (c) { const ids = new Set((c.shapes || []).map((sh) => sh.id)); pts = edgeHits.filter((h) => ids.has(h.id)).flatMap((h) => (h.kind === 'seg' ? [h.a, h.b] : h.kind === 'circle' ? [{ x: h.c.x - h.r, y: h.c.y - h.r }, { x: h.c.x + h.r, y: h.c.y + h.r }] : h.samples)); } }
+    else { const pl = profileLoopsForTarget(t); pts = pl ? pl.outer.polygon : null; }
+    if (!pts || !pts.length) return `${word} (no longer in the design)`;
+    const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y), f = (mm) => lengthText(mm, { show: 'field' });
+    return `${word} ${f(Math.max(...xs) - Math.min(...xs))} \u00d7 ${f(Math.max(...ys) - Math.min(...ys))} ${docUnit()}`;
+  }
   // the facts the card shows of one membership (`key` in `op`; no key: the operation's own settings, an empty operation)
   const factsOf = (op, key) => {
     const ref = key ? op.geometry.find((r) => r.key === key) : null;
@@ -889,11 +906,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     loops, selection, resolveTarget, selectedTarget, selectedTargets, profileLoopsForTarget, setSelection, setView,
     view, viewState,
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null), // a shape's record in its first operation (else a fresh one)
-    // TASK S2: the active operation and its Add shapes mode / shape in hand; the facts the card shows
+    // TASK S2: the active operation and its Add shapes mode; the facts and the shapes' words the card shows
     activeOp, activate, setAddMode, syncActive,
     isAdding: () => Boolean(activeOp() && active.add),
-    shapeInHand: () => (activeOp() ? active.hand : null),
-    factsOf,
+    factsOf, shapeLabel,
+    hoverKey: (key) => { hoverPt = null; setHover(key ? parseKey(key) : null); }, // TASK S2: the card's shape row under the pointer shows its shape on the canvas
     startBoundaryPick({ onPick, onEnd = () => {} }) { // TASK 810: see boundaryPick above
       endBoundaryPick();
       boundaryPick = { onPick, onEnd };
@@ -946,7 +963,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     },
     destroy() {
       endBoundaryPick(); // TASK 810: a pick does not outlive its view
-      document.removeEventListener('keydown', onAddKey, true); // TASK S2
+      showAdding(false); // TASK S2: its Esc listener
       if (unsubDocUnit) unsubDocUnit();
       if (chipResizeObs) chipResizeObs.disconnect();
       svgEl.removeEventListener('wheel', onWheel);

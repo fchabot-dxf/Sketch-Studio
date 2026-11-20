@@ -208,6 +208,9 @@ function edgeStrokeMarkup(s, state, cls) {
 
 // ── Cut plan (SP1f; extracted to ./cut-plan.js in SP1j-4): the per-target store + its keyOf/getCutRecord/setFieldFor
 // now live in a shared module read by BOTH this look AND the SVG exporter. Behaviour unchanged — same Map. ──
+// TASK 798: the look (bands, tool paths, chips, lead-in handles, guide / Stock edges, height maps, the direction legend) shows the TICKED operations only
+// (cut-plan.js planRecords' ticked filter, the one the export and the 3D Review read); an unticked operation's shapes are still picked and edited as before.
+const TICKED = Object.freeze({ ticked: true });
 
 // ── Mount: render edges + compute loops + wire kind-aware hover + click-to-select + cut-plan preview ──
 export function mountPrepareView(state, svgEl, opts = {}) {
@@ -367,7 +370,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // derived once per change of that key list, and part of every look's signature (assigning a hole's cut changes its plate's look).
   let owned = { keys: null, set: null };
   const ownedNow = () => {
-    const keys = planRecords().filter(([, r]) => r && r.cutType).map(([k]) => k).sort().join(' ');
+    const keys = planRecords().filter(([, r]) => r && r.cutType).map(([k]) => k).sort().join(' '); // TASK 798: every operation's, ticked or not (the hole ownership is the whole plan's)
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
@@ -500,12 +503,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const renderCuts = () => {
     let out = '';
-    for (const [key, rec] of planRecords()) { if (!(rec && rec.cutType)) continue; const st = stateOf(key); if (st) out += `<g class="sk-st-${st}">${getLook(key, rec).region}</g>`; }
+    for (const [key, rec] of planRecords(TICKED)) { if (!(rec && rec.cutType)) continue; const st = stateOf(key); if (st) out += `<g class="sk-st-${st}">${getLook(key, rec).region}</g>`; }
     cutG.innerHTML = out;
   };
   const renderToolpaths = () => {
     let out = '';
-    for (const [key, rec] of planRecords()) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
+    for (const [key, rec] of planRecords(TICKED)) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
     toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g><g class="sk-travel-arrows-layer"></g>';
     lastZoomK = null;
     renderStepAndArrows();
@@ -527,7 +530,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const phase = entry.rasterIdx >= 0 && entry.rasterIdx % 2 === 1 ? 0.72 : 0.5;
       for (const a of arrowsAlongPath(entry.t.path, entry.t.closed, { spacing, minLen, phase })) dByKind[entry.kind] += dartSeg(a, dims, k);
     };
-    for (const [key, rec] of planRecords()) {
+    for (const [key, rec] of planRecords(TICKED)) {
       if (!(rec && rec.cutType && stateOf(key))) continue;
       const look = getLook(key, rec);
       if (look.travels) for (const entry of look.travels) pushArrows(entry);
@@ -559,7 +562,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       return;
     }
     let out = '';
-    for (const [key, rec] of planRecords()) {
+    for (const [key, rec] of planRecords(TICKED)) {
       if (!(rec && rec.cutType && selection.has(key))) continue;
       const look = getLook(key, rec);
       for (const h of look.leadHandles || []) {
@@ -591,7 +594,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const lastChip = new Map();
   const renderChips = () => {
     let out = '';
-    for (const [key, rec] of planRecords()) {
+    for (const [key, rec] of planRecords(TICKED)) {
       if (!(rec && rec.cutType && stateOf(key))) continue;
       const look = getLook(key, rec);
       if (!look.anchor && !(look.toolPaths && look.toolPaths.length)) continue;
@@ -621,7 +624,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // idle guide lines are the one coloured exception: thin blue
   const shapeIdsOfType = (cutType) => {
     const ids = new Set();
-    for (const [key, rec] of planRecords()) {
+    for (const [key, rec] of planRecords(TICKED)) {
       if (!(rec && rec.cutType === cutType)) continue;
       const { kind, id } = parseKey(key);
       const addLoop = (lid) => { const l = loopById.get(lid); if (l) for (const e of (l.edges || [])) ids.add(e); };
@@ -645,7 +648,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   let heightLists = [];
   const renderHeightMap = () => {
     const lists = [];
-    for (const [, rec] of planRecords()) if (rec && hasLevels(rec) && !lists.includes(rec.levels)) lists.push(rec.levels);
+    for (const [, rec] of planRecords(TICKED)) if (rec && hasLevels(rec) && !lists.includes(rec.levels)) lists.push(rec.levels);
     if (lists.length === heightLists.length && lists.every((l, i) => l === heightLists[i])) return;
     heightLists = lists;
     heightG.innerHTML = lists.map((l) => levelsHeightMap(l)).filter(Boolean)
@@ -656,7 +659,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     renderCuts(); renderToolpaths(); renderChips(); renderHandles(); refreshEdgeClasses();
     // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');
-    if (legend) { let any = false; for (const [key, rec] of planRecords()) if (rec && rec.cutType && stateOf(key) && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
+    if (legend) { let any = false; for (const [key, rec] of planRecords(TICKED)) if (rec && rec.cutType && stateOf(key) && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
   };
 
   const renderSelection = () => {

@@ -23,8 +23,9 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { planEntries, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes, planLeadInNotes, planLevelsNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes; TASK 775: planLeadInNotes
-import { shaperSvgOf, shaperPreviewOf, bitCentrePaths, exportFileName } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name
+import { bitCentrePaths, exportFileName, exportTickLine, exportFileOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
+import { describeOperations } from './operations.js'; // TASK 798: the Export step's line about unticked operations
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
@@ -79,7 +80,7 @@ const chrome = mountAppChrome({
     } }]),
     { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: () => { // TASK 770: from the table (the shared drawer shows a tooltip)
       const payload = generateShaperSvgPayload();
-      if (!payload) { groupStatus(NO_CUTS); return; }
+      if (!payload) { groupStatus(emptyExportText()); return; }
       download(designFileName(), payload.svg);
     } },
     fusionAddinAction({ fusion: fusionMode, open: () => chrome.sidebar.showView(ADDIN_VIEW_ID) }),
@@ -92,19 +93,24 @@ const chrome = mountAppChrome({
 chrome.sidebar.registerView(ADDIN_VIEW_ID, fusionAddinView()); // TASK 733: the drawer view the Fusion add-in entry opens
 
 const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // the Export step's message with an empty plan (Generate, Download, the 2D view)
+// TASK 798: the message when the plan has operations but none is ticked (Generate, Download, Send to ShaperHub)
+const NOTHING_TICKED = "Every operation is unticked: tick one in Prepare's Operations list to export it.";
+const emptyExportText = () => (planEntries().length ? NOTHING_TICKED : NO_CUTS);
+const TICKED = Object.freeze({ ticked: true }); // TASK 798: the ticked operations (cut-plan.js planEntries' one filter)
 
 // SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
 // download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
 
 // TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes) and (TASK 743) the operations it lists
+// TASK 798: the file holds the TICKED operations (planEntries({ ticked: true })), on the WHOLE design's page and with its hole ownership (`frame`: every operation):
+// every export lines up on the Origin (one SVG = the ticked operations; owner ruling turn 2537)
 function generateShaperSvgPayload({ preview = false } = {}) {
-  const entries = planEntries();
-  if (!entries.length) return null;
+  if (!planEntries(TICKED).length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  if (preview) { const p = shaperPreviewOf(st, entries); return { svg: p.svg, ops: p.ops, written: p.written, entries, state: st }; }
-  return { svg: shaperSvgOf(st, entries), entries, state: st };
+  const p = exportFileOf(st, { preview }); // TASK 798: the ticked operations on the whole design's frame (export-payload.js, declared once)
+  return p ? { ...p, state: st } : null;
 }
 
 // TASK 767: the name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync dialog's file name): the design's name
@@ -125,7 +131,7 @@ if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
     const payload = generateShaperSvgPayload();
-    if (!payload) { if (status) status.textContent = NO_CUTS; return; }
+    if (!payload) { if (status) status.textContent = emptyExportText(); return; }
     const name = designFileName();
     download(name, payload.svg);
     const n = payload.entries.length;
@@ -451,9 +457,9 @@ const btnSyncShaper = document.getElementById('btn-sync-shaper');
 if (btnSyncShaper) {
   btnSyncShaper.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
-    const entries = planEntries();
+    const entries = planEntries(TICKED); // TASK 798: what the file will hold
     if (!entries.length) {
-      if (status) status.textContent = NO_CUTS;
+      if (status) status.textContent = emptyExportText();
       return;
     }
     const key = designKey();
@@ -695,7 +701,7 @@ const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
   // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
-  return { stock: resolveStock(st).stock, items: planReliefItems(st), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(), ...planHoldNotes(st), ...planClearingNotes(st), ...planLeadInNotes(st), ...planLevelsNotes(st)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
+  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(TICKED), ...planHoldNotes(st, TICKED), ...planClearingNotes(st, TICKED), ...planLeadInNotes(st, TICKED), ...planLevelsNotes(st, TICKED)] }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
 };
 const reviewSig = (st) => JSON.stringify([storeSignature(), getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
   SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
@@ -729,7 +735,15 @@ for (const b of document.querySelectorAll('#review-view-switch button')) {
     enterReview(designController.state);
   });
 }
+// TASK 798: the Export step's one line while an operation is unticked (export-payload.js exportTickLine; empty and hidden when everything is ticked)
+function showTickLine(st) {
+  const el = document.getElementById('simexport-ticked');
+  if (!el) return;
+  el.textContent = exportTickLine(describeOperations(st));
+  el.hidden = !el.textContent;
+}
 async function enterReview(st) {
+  showTickLine(st);
   if (reviewViewMode !== '3d') { showStockThickness(); exportPreview.refresh(reviewSig(st)); return; } // TASK 718: the same trigger rebuilds the 2D view
   const info = document.getElementById('review-info');
   try {

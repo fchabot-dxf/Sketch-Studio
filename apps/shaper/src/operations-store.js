@@ -3,6 +3,7 @@
 // shaper-doc.js) and in the shared undo snapshots:
 //   operations: [{ id, type, on, settings, geometry: [{ key, seq, at? }] }]   array order = the Operations list order (no separate opOrder)
 //     id        'op-<n>', stable for life (the preview's data-op, the list rows)
+//     on        TASK 798: the Operations list's tick (true for every new / migrated operation; false = left out of the views and the file: setOpsOn)
 //     type      a CUT_TYPES id ('contour' = a part's Contour: its refs are the PARTS' keys, cut-plan.js resolveEntry gives it its part's depth, type, slope, levels)
 //     settings  the operation's settings, base mm, today's record field names (no cutType, no region data, no leadInAt); cutDepth 'model' = each shape's
 //               own imported depth (regions[key].source.cutDepth)
@@ -77,6 +78,13 @@ export function addRef(op, ref) {
 export function removeRef(op, ref) {
   op.geometry = op.geometry.filter((r) => r !== ref);
   if (!op.geometry.length) S.ops = S.ops.filter((o) => o !== op);
+  bump();
+}
+/** TASK 798: tick / untick operations (the Operations list's checkboxes: `on` false = left out of Prepare's look, the 3D Review, Paths / 2D and the exported file;
+ *  cut-plan.js planEntries({ ticked: true }) is the one filter). `ids` = the operation ids; an unknown id is ignored. Saved and undone with the store (captureStore). */
+export function setOpsOn(ids, on) {
+  const want = new Set(ids);
+  for (const op of S.ops) if (want.has(op.id)) op.on = Boolean(on);
   bump();
 }
 /** Replace an operation's settings. */

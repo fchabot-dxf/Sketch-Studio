@@ -330,7 +330,7 @@ export async function exportPhase(t, label) {
     // Export 2D == the download, element by element
     const e2 = await export2d(label);
     console.log(label + ' 2D rows: ' + JSON.stringify(e2.rows));
-    assert.ok(e2.rows.some((t) => /· spiral lines \(1\)$/.test(t)) && e2.rows.some((t) => /· wall \(1\)$/.test(t)) && e2.rows.some((t) => new RegExp(`· closed loops \\(${1 + islandLoops}\\)$`).test(t)) && e2.rows.some((t) => /· start mark/.test(t)) && !e2.rows.some((t) => /· islands \(/.test(t)), label + ': 2D lists the spiral line, its wall, the closed loops, and the start marks');
+    assert.ok(e2.rows.some((t) => /· spiral lines \(1\)$/.test(t)) && e2.rows.some((t) => /· wall \(1\)$/.test(t)) && e2.rows.reduce((n, t) => n + Number((/· closed loops \((\d+)\)$/.exec(t) || [0, 0])[1]), 0) === 1 + islandLoops /* TASK S2: the quick flow makes a NEW operation per pocket: their closed loops on two rows */ && e2.rows.some((t) => /· start mark/.test(t)) && !e2.rows.some((t) => /· islands \(/.test(t)), label + ': 2D lists the spiral line, its wall, the closed loops, and the start marks');
     await clickEl('#review-cuts-list .rv2d-row');
     const lab = await evalJs(`document.getElementById('review-2d-info').textContent`);
     console.log(label + ' 2D label: ' + lab);

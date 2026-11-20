@@ -623,3 +623,27 @@ An empty operation is saved and read back as it is; renameGeometry drops only an
 14. A document tab put aside and shown again (and Drive's version loaded, TASK 766) opens again the operation that was open in it.
 15. Esc: with a hint tooltip showing, Esc only hides the tooltip; otherwise, with an operation open, Esc is Cancel.
 16. A Fusion import while an operation is open confirms it first (OK, its own undo step); the import is its own step.
+
+## 10. Task 817: toolpaths are generated on OK, in the background (owner turns 2745-2748)
+
+"In fusion a toolpath generate is on ok and allow to work still, spin wheel on item only" / "i guess we can adjust lead in only before and show path on ok" /
+"Or with toolpath open add a refresh button so we voluntarily calculate it?" / "Button in the op edit panel". Code: `apps/shaper/src/op-derive.js` (THE
+derivation of an operation's paths and of the file, worker-safe), `paths-worker.js` (the module worker), `op-paths.js` (the generated results on the main
+thread), `prepare-stage.js` (the session, the Preview, the row spinner), `prepare-view.js` (the open operation's look), `export-payload.js` (the export waits).
+
+- **One derivation, two places.** The main thread and the worker import the same module (op-derive.js: deriveFootprints / deriveItem, svgOf, bitCentrePaths;
+  #core by relative path, no DOM). The node tests run it in-process (op-paths.js localPort: the worker's server on structured copies) and in a real worker
+  thread (tests/helpers/node-paths-worker.js runs paths-worker.js). The page's arcs are sampled with its SVG DOM (#core curve-kinds sampleArc); a worker has
+  none, so a job carries the page's samples (arcSamplesOf) and the worker derives with exactly those (withArcSamples).
+- **Content-addressed.** A result is filed under the signature of everything it reads (target, effective record with its levels / slope by content hash,
+  owned loops, sketch geometry). A view reads the signature of its inputs NOW, so a stale result is never shown; an Undo back to earlier inputs finds their
+  result at once. A newer edit drops the queued jobs of older inputs (retain); a job already running finishes and is filed by its own inputs.
+- **The open operation** asks for nothing while it is open: its paths as opened are drawn FAINT (no arrows, no depth chip), its lead-in handle where the
+  current settings put it (cut-plan.js leadInSummary, light). The card's levels / clearing notes show for the settings as opened, or after a Preview of the
+  current ones. OK = the session's one undo step, then the generation; the row spins after 150 ms (a quick derivation never flickers).
+- **Preview** (the card's action bar: Preview, Cancel, OK) asks for the open operation's paths with the card's settings now (the same job OK makes: OK
+  then generates nothing new). A later change fades them and the button says Preview again. Never in the file, never in Undo; Cancel drops it.
+- **Export and the 3D Review wait** ("Waiting for 2 operations to finish"), then read finished paths; the page's file is made in the worker (svgOf).
+- **The default order** ranks a Roughing / Contour by its generated cuts: while they are generating (or it is open) it keeps the rank its last cuts gave and
+  is sorted again when they arrive; a new operation of unknown rank in a user-ordered list is placed again by the rule once, if nothing moved meanwhile. A
+  version 2 document being read is still ordered at once (derived on the main thread).

@@ -15,21 +15,17 @@
 
 import { findLoops, findOpenChains } from './loop-finder.js';
 import { formatShaperParam } from './units.js';
-import { loopPolygon, loopToPathD, compoundPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
+import { loopPolygon, loopToPathD, compoundPathD, polyToPathD, chainToPathD, num } from './loop-geometry.js'; // TASK 803: the ONE number format (#core/curve-kinds num, from the Origin rules' geomDecimals)
+import { exportForm } from './origin-rules.js'; // TASK 803: THE Origin / Studio rules: what the file's elements, attributes, paint, datum and page are written as
 import { resolveProfileViews, resolveProfileForLoop, ownedLoopIds } from './profile-model.js';
 import { deriveCuts } from './stepped-cut.js'; // TASK 714: deriveProfileCuts + a stepped cut's terraces
 import { pathBounds } from './path-d.js'; // TASK 786: the true extent of a written path (arcs / cubics by their extremes)
 export { loopToPathD, polyToPathD };
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
-
-// number → compact string (≤ 4 dp, trailing zeros trimmed, no "-0"). World units = base mm.
-function num(n) {
-  let r = Math.round(Number(n) * 1e4) / 1e4;
-  if (Object.is(r, -0)) r = 0;
-  return String(r);
-}
+// TASK 803: what the file is written as is READ from the Origin / Studio rules (#core/origin-rules.js: the target registry's forms, each with its evidence),
+// not repeated here: the namespaces, the attribute placement, the shaper:* attribute order and presence, the paint, a guide's outline, the datum triangle, the page unit.
+const NAMESPACES = exportForm('namespaces');
+const ATTR_PREFIX = exportForm('attrPrefix');
 
 // Fallback SVG sweep flag (when an arc shape doesn't carry one): the sign of the signed angle start→end about center.
 function angleSweep(center, start, end) {
@@ -96,10 +92,12 @@ function extentOf(written) {
   return box;
 }
 
-// fill (always) + stroke (omit when 'none'), from the injected encoding.
+// fill (always) + stroke (omitted when it is the declared "none"): the colours are the injected encoding's, whether the stroke is left out is the paint form's (Studio's).
 function colorAttrs(enc) {
-  let s = ` fill="${enc.fill}"`;
-  if (enc.stroke && enc.stroke !== 'none') s += ` stroke="${enc.stroke}"`;
+  const paint = exportForm('paint');
+  let s = '';
+  if (paint.fillAlways || enc.fill) s += ` fill="${enc.fill}"`;
+  if (enc.stroke && enc.stroke !== paint.strokeOmit) s += ` stroke="${enc.stroke}"`;
   return s;
 }
 // TASK 786: a MARK (a derived cut of kind 'mark': a programmed pocket's start mark, #core/pocket-clearing, a circle + cross) is a guide drawn as
@@ -107,18 +105,27 @@ function colorAttrs(enc) {
 // (as Prepare and Export 2D show it; a filled circle hid the target and a fill has no meaning on the cross's open strokes), written right after
 // its pocket's elements (TASK 802: every element is written flat, in order, with its own attributes).
 const isMark = (cut) => cut.kind === 'mark';
-// attribute-first shaper:* in Shaper Studio's order — cutType, cutDepth (only when set), cutOffset (ALWAYS: "0in" when zero),
-// toolDia (ALWAYS) — written through the ONE formatter (units.js formatShaperParam: "0.100 in" / "-2.000 in" / "0.125 in";
-// TASK 456, from four real Studio exports), and ONLY the params the INJECTED encoding declares in `params` (an encoding
-// without `params`, i.e. the stub encodings in tests, writes all).
+// TASK 803: the shaper:* attributes of an element, in the order and with the presence the Origin rules declare (attrOrder / attrSpec: Shaper Studio's, TASK 456: cutType,
+// cutDepth only when set, cutOffset ALWAYS ("0in" when zero), toolDia when the record has one), each length through the ONE formatter (units.js formatShaperParam,
+// paramFormat: "0.100 in" / "-2.000 in" / "0.125 in"), and ONLY the params the INJECTED encoding declares in `params` (an encoding without `params`, i.e. the stub
+// encodings in tests, writes all).
 function shaperAttrs(rec, enc, docUnit) {
-  let s = ` shaper:cutType="${enc.cutType}"`;
-  const has = (k) => !Array.isArray(enc.params) || enc.params.includes(k);
-  const dep = Number(rec.cutDepth);
-  if (has('cutDepth') && rec.cutDepth != null && rec.cutDepth !== 'unset' && Number.isFinite(dep)) s += ` shaper:cutDepth="${formatShaperParam(dep, docUnit)}"`;
-  if (has('cutOffset')) s += ` shaper:cutOffset="${formatShaperParam(Number.isFinite(Number(rec.cutOffset)) ? Number(rec.cutOffset) : 0, docUnit, { zeroBare: true })}"`;
-  const tool = Number(rec.toolDia);
-  if (has('toolDia') && rec.toolDia != null && Number.isFinite(tool)) s += ` shaper:toolDia="${formatShaperParam(tool, docUnit)}"`;
+  const spec = exportForm('attrSpec'), has = (k) => !Array.isArray(enc.params) || enc.params.includes(k);
+  let s = '';
+  for (const key of exportForm('attrOrder')) {
+    const sp = spec[key];
+    let text;
+    if (sp.from === 'encoding') text = enc[key];
+    else {
+      if (!has(key)) continue;
+      const raw = rec[key], v = Number(raw);
+      const missing = raw == null || !Number.isFinite(v);
+      if ((sp.omit || []).includes('missing') && missing) continue;
+      if ((sp.omit || []).includes('unset') && raw === 'unset') continue;
+      text = formatShaperParam(missing ? sp.missing : v, docUnit, sp.zeroBare ? { zeroBare: true } : undefined);
+    }
+    s += ` ${ATTR_PREFIX}${key}="${text}"`;
+  }
   return s;
 }
 
@@ -139,12 +146,12 @@ function loopGeom(loop, state, shapeById) {
 // SP1j-3a: the red DATUM registration triangle — a right triangle at the 0,0 origin, legs on X/Y, fill #FF0000, no
 // stroke. The Origin snaps (0,0) to the 90° vertex (short leg = X, long leg = Y). Spec example = 20×10 mm (the default).
 function datumDims(datum) {
-  const o = (datum && typeof datum === 'object') ? datum : {};
-  return { legX: Number(o.legX) > 0 ? Number(o.legX) : 20, legY: Number(o.legY) > 0 ? Number(o.legY) : 10 };
+  const o = (datum && typeof datum === 'object') ? datum : {}, D = exportForm('datum'); // TASK 803: the default legs are the rules' datum form's
+  return { legX: Number(o.legX) > 0 ? Number(o.legX) : D.legX, legY: Number(o.legY) > 0 ? Number(o.legY) : D.legY };
 }
 function datumPolygon(datum) {
-  const { legX, legY } = datumDims(datum);
-  return `<polygon points="0,0 ${num(legX)},0 0,${num(legY)}" fill="#FF0000" stroke="none"/>`;
+  const { legX, legY } = datumDims(datum), D = exportForm('datum');
+  return `<${D.tag} points="0,0 ${num(legX)},0 0,${num(legY)}" fill="${D.fill}" stroke="${D.stroke}"/>`;
 }
 
 // exportShaperSVG({ state, entries, encoding, docUnit, options, loopPolys }) → an SVG string.
@@ -271,7 +278,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
         }
         const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
           + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
-        const paint = isMark(cut) ? colorAttrs({ ...c, fill: 'none' }) : colorAttrs(c); // TASK 786: a mark is stroke-only
+        const paint = isMark(cut) ? colorAttrs({ ...c, fill: exportForm('guide').markFill }) : colorAttrs(c); // TASK 786: a mark is the guide drawn as its outline (the rules' guide.markFill)
         if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, meta: { cut, entry: e }, first: Boolean(c.exportFirst) });
       }
     }
@@ -297,6 +304,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   for (const it of items) { body.push(`  <${it.tag} ${it.a}${it.common}/>`); wrote(it); }
 
   const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, frameItems); // TASK 786: every written element (items holds the Stock too); TASK 798: every element the whole plan writes
-  const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;
+  const unit = exportForm('page').unit; // TASK 803: the page's unit (the geometry is mm-canonical: the rules' page form)
+  const header = `<svg xmlns="${NAMESPACES.svg}" xmlns:${ATTR_PREFIX.replace(/:$/, '')}="${NAMESPACES.shaper}" width="${num(b.w)}${unit}" height="${num(b.h)}${unit}" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;
   return [header, ...body, '</svg>'].join('\n');
 }

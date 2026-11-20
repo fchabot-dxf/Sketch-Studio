@@ -15,6 +15,7 @@ import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, pl
   CONTOUR_KIND, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
 import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in junction (ONE pure derivation)
+import { holdMode, tabHandles, holdTabDragAt } from '#core/hold-part.js'; // TASK 822: draggable tabs (the hold's own layout, ONE pure derivation)
 import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
 import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height map, drawn under the cut lines
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
@@ -219,6 +220,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const onSelectionChange = opts.onSelectionChange || (() => {});
   const onNotice = opts.onNotice || (() => {}); // TASK 472: a transient one-line notice (the Stock role moved)
   const onCommitLeadIn = opts.onCommitLeadIn || (() => {}); // TASK 778: dragging the lead-in handle commits ONE undo step via prepare-stage (TASK S2: (opId, geometry key, at))
+  const onCommitTabs = opts.onCommitTabs || (() => {}); // TASK 822: dragging a tab handle: an edit of the open operation's session (opId, geometry key, tabsAt)
   const onToggleShape = opts.onToggleShape || (() => {}); // TASK S2: Add shapes mode: a click on a shape (opId, target); the stage puts it in / takes it out (one undo step)
   svgEl.innerHTML = ''; // clean re-mount
   // TASK 777: push ONE declaration of the travel dash pattern to CSS custom properties on svgEl so .sk-travel and @keyframes sk-march share TRAVEL_STYLE
@@ -381,7 +383,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${rec.smoothing}|${rec.boundary}|${rec.boundaryShape}|${rec.boundaryTool}|${rec.boundaryOffset}|${rec.topDepth}|${rec.bottomDepth}|${rec.floorAllowance}|${rec.walls}|${rec.wallSide}|${docUnit()}|${ownedNow().keys}`; // TASK 810: its boundary, heights and walls; TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${rec.tabsAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${rec.smoothing}|${rec.boundary}|${rec.boundaryShape}|${rec.boundaryTool}|${rec.boundaryOffset}|${rec.topDepth}|${rec.bottomDepth}|${rec.floorAllowance}|${rec.walls}|${rec.wallSide}|${docUnit()}|${ownedNow().keys}`; // TASK 810: its boundary, heights and walls; TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
   const computeLook = (it) => { // TASK S2: one look per membership (planMemberItems: a shape in two operations has two)
     const key = it.planKey, storedRec = it.rec;
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
@@ -570,29 +572,50 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     lastZoomK = k;
   };
-  let leadDrag = null; // TASK 778: active junction handle drag { pointerId, key, loop, holes (TASK 787), startAt, lastGood, startJunction, previewLead, refused }
+  // TASK 778: active handle drag { pointerId, key, loop, holes (TASK 787), startAt, lastGood, startJunction, previewLead, refused }; TASK 822: a TAB handle's drag is the
+  // same drag ({ tab: true, fromAt (the tab's centre when the drag began), point (the handle), previewCuts (the hold with the tab there), lastGood (every tab's centre) })
+  let leadDrag = null;
+  const handleMarkup = (id, p, k, extra = '', tabAt = null) => `<g class="sk-lead-handle${tabAt != null ? ' sk-tab-handle' : ''}${extra}" data-lead-key="${id}"${tabAt != null ? ` data-tab-at="${tabAt}"` : ''} transform="translate(${p.x} ${p.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`;
+  // TASK 822: a membership's tab handles (where the hold's layout put its tabs), computed once per look (the look is re-made when its record changes)
+  const tabHandlesOf = (it, look) => {
+    if (!look.tabHandles) {
+      const rec = effectiveCutRecord(it.rec), pl = holdMode(rec) === 'tabs' ? profileLoopsForTarget(parseKey(it.key)) : null;
+      look.tabHandles = pl && pl.outer ? tabHandles(pl.outer, rec, state) : [];
+    }
+    return look.tabHandles;
+  };
   const renderHandles = () => {
     const k = worldTolerance(svgEl, 1);
     if (leadDrag) {
-      const j = leadDrag.previewLead && leadDrag.previewLead.junction ? leadDrag.previewLead.junction : leadDrag.startJunction;
-      handleG.innerHTML = j
-        ? `<g class="sk-lead-handle is-dragging${leadDrag.refused ? ' is-refused' : ''}" data-lead-key="${leadDrag.id}" transform="translate(${j.x} ${j.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`
-        : '';
+      const j = leadDrag.tab ? leadDrag.point : leadDrag.previewLead && leadDrag.previewLead.junction ? leadDrag.previewLead.junction : leadDrag.startJunction;
+      handleG.innerHTML = j ? handleMarkup(leadDrag.id, j, k, ` is-dragging${leadDrag.refused ? ' is-refused' : ''}`, leadDrag.tab ? leadDrag.fromAt : null) : '';
       return;
     }
     let out = '';
-    const open = activeOp(); // TASK S2: a lead-in handle is dragged in its operation's edit session only
+    const open = activeOp(); // TASK S2: a lead-in handle (TASK 822: a tab handle) is dragged in its operation's edit session only
     for (const { it } of drawnItems()) {
       if (!open || it.opId !== open.id || !selection.has(it.key)) continue;
       const look = getLook(it);
-      for (const h of look.leadHandles || []) {
-        out += `<g class="sk-lead-handle" data-lead-key="${h.id}" transform="translate(${h.junction.x} ${h.junction.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`;
-      }
+      for (const h of look.leadHandles || []) out += handleMarkup(h.id, h.junction, k);
+      for (const h of tabHandlesOf(it, look)) out += handleMarkup(it.id, h.point, k, '', h.at);
     }
     handleG.innerHTML = out;
   };
   const renderDragPreview = () => {
-    toolpathG.classList.toggle('is-lead-dragging', Boolean(leadDrag));
+    toolpathG.classList.toggle('is-lead-dragging', Boolean(leadDrag && !leadDrag.tab));
+    toolpathG.classList.toggle('is-tab-dragging', Boolean(leadDrag && leadDrag.tab)); // TASK 822: the tabs and strips as they are fade; the dragged layout is drawn on top
+    if (leadDrag && leadDrag.tab) {
+      let out = '';
+      for (const c of leadDrag.previewCuts || []) {
+        if (!c.hold) continue;
+        if (c.hold.role === 'pass' || c.hold.role === 'stroke') for (const d of c.hold.marks || []) out += `<path class="sk-tab-mark" d="${d}"/>`;
+        if (c.hold.role === 'strip') out += `<path class="sk-strip" d="${c.hold.d}"/>`;
+        if (c.hold.role === 'stroke') out += `<path class="sk-stroke" d="${c.hold.d}"/>`;
+      }
+      dragG.innerHTML = out;
+      renderHandles();
+      return;
+    }
     if (!leadDrag || !leadDrag.previewLead) { dragG.innerHTML = ''; renderHandles(); return; }
     const ld = leadDrag.previewLead;
     const cls = leadDrag.refused ? ' is-refused' : '';
@@ -708,6 +731,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     leadDrag = null;
     try { if (e && svgEl.hasPointerCapture && svgEl.hasPointerCapture(e.pointerId)) svgEl.releasePointerCapture(e.pointerId); } catch (_) {}
     renderDragPreview();
+    if (d.tab) { if (commit && d.lastGood) onCommitTabs(d.opId, d.key, d.lastGood); return true; } // TASK 822: the last place the tab fitted (a refused spot never moves it)
     if (commit && !d.refused && d.lastGood !== d.startAt && (d.lastGood != null) && (d.startAt == null || Math.abs(d.lastGood - d.startAt) > 1e-6)) {
       onCommitLeadIn(d.opId, d.key, d.lastGood); // TASK S2: that membership's own position
     }
@@ -719,6 +743,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const wp = screenToWorld(svgEl, e.clientX, e.clientY);
       if (!wp) return;
       const rec = leadDrag.rec;
+      if (leadDrag.tab) { // TASK 822: the tab goes to the outline's point nearest the pointer where its gap strips fit; elsewhere the handle shows refused and the tab stays
+        const res = holdTabDragAt(leadDrag.loop, effectiveCutRecord(rec), state, leadDrag.fromAt, wp);
+        if (res && res.ok) { leadDrag.lastGood = res.at; leadDrag.point = res.point; leadDrag.previewCuts = res.cuts; leadDrag.refused = false; }
+        else if (res) { leadDrag.point = res.point; leadDrag.refused = true; }
+        renderDragPreview();
+        return;
+      }
       const res = rec ? leadInDragAt(leadDrag.loop, effectiveCutRecord(rec), state, wp, leadDrag.holes) : null; // TASK 787: the part's holes kept clear, as in the export
       if (res && res.leadIn) {
         leadDrag.previewLead = res.leadIn;
@@ -767,6 +798,16 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const op = opId ? opById(opId) : null, ref = op ? op.geometry.find((r) => r.key === key) : null;
       const pl = ref ? profileLoopsForTarget(parseKey(key)) : null;
       const rec = ref ? recordOf(op, ref) : null;
+      const tabAt = handleEl.getAttribute('data-tab-at'); // TASK 822: a tab's handle (its centre, a perimeter fraction)
+      if (pl && pl.outer && rec && tabAt != null) {
+        e.stopPropagation(); e.preventDefault();
+        try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}
+        const h = tabHandles(pl.outer, effectiveCutRecord(rec), state).find((x) => String(x.at) === tabAt);
+        const here = h ? holdTabDragAt(pl.outer, effectiveCutRecord(rec), state, Number(tabAt), h.point) : null; // the layout as it is: drawn until the tab is moved (a refused spot keeps showing it)
+        leadDrag = { tab: true, pointerId: e.pointerId, id, opId, key, rec, loop: pl.outer, fromAt: Number(tabAt), point: h ? h.point : screenToWorld(svgEl, e.clientX, e.clientY), lastGood: null, previewCuts: here ? here.cuts : null, refused: false };
+        renderDragPreview();
+        return;
+      }
       if (pl && pl.outer && rec) {
         e.stopPropagation(); e.preventDefault();
         try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}

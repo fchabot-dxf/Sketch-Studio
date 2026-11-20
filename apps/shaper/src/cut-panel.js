@@ -566,10 +566,12 @@ export function createCutPanel(hostEl, opts = {}) {
   stepperFor('toolDia', bitInput, 'bit diameter', { box: bitInput.closest('.cut-box'), before: bitInput.closest('.cut-box').querySelector('.cut-dia-prefix') });
   stepperFor('tabWidth', tabWidthInput, 'tab width', { box: tabWidthInput.closest('.cut-box') });
   stepperFor('holdThickness', holdThicknessInput, 'thickness', { box: holdThicknessInput.closest('.cut-box') });
+  // TASK 822: the count the row shows: the shape's dragged tabs fix it (their number, not Auto), else the record's number, else null (Auto)
+  const tabCountShown = () => (current.record && Array.isArray(current.record.tabsAt) && current.record.tabsAt.length ? current.record.tabsAt.length : Number(current.tabCount) >= 1 ? Math.floor(Number(current.tabCount)) : null);
   // the count is a number, not a length: the same stepper with no unit conversion; from Auto it steps from the count Auto gave (the derivation's, model.hold)
   attachStepper(countInput, STEPPERS.tabCount, {
     unit: () => 'mm', toDoc: (n) => n,
-    read: () => (Number(current.tabCount) >= 1 ? Number(current.tabCount) : current.hold && current.hold.requested >= 1 ? current.hold.requested : null),
+    read: () => (tabCountShown() ?? (current.hold && current.hold.requested >= 1 ? current.hold.requested : null)),
     commit: (n) => onSetField('tabCount', Math.max(1, Math.round(n))),
   }, { label: 'tab count', box: countInput.closest('.cut-box') });
 
@@ -740,9 +742,9 @@ export function createCutPanel(hostEl, opts = {}) {
     hints.tabWidth.refresh({ online: Boolean(hold) && !tabsHaveThickness(current.cutType) });
     hints.holdThickness.setId(hold === 'skin' ? 'skinThickness' : 'holdThickness'); // TASK 770: the row is the skin's thickness with Onion skin
     renderPresets(holdModesWrap, hold ? HOLD_PRESETS : [], 'holdPart', hold); // hidden rows keep no preset buttons
-    renderPresets(countPresetsWrap, hold ? COUNT_PRESETS : [], 'tabCount', Number(current.tabCount) >= 1 ? Number(current.tabCount) : 'auto');
-    countInput.value = Number(current.tabCount) >= 1 ? String(Math.floor(Number(current.tabCount))) : '';
-    countInput.placeholder = current.hold && current.hold.requested >= 1 && !(Number(current.tabCount) >= 1) ? `Auto (${current.hold.requested})` : 'Auto';
+    renderPresets(countPresetsWrap, hold ? COUNT_PRESETS : [], 'tabCount', tabCountShown() ?? 'auto'); // TASK 822: Auto (also with Auto set) lays dragged tabs out again
+    countInput.value = tabCountShown() != null ? String(tabCountShown()) : '';
+    countInput.placeholder = current.hold && current.hold.requested >= 1 && tabCountShown() == null ? `Auto (${current.hold.requested})` : 'Auto';
     tabWidthInput.value = fieldText(fieldBase('tabWidth'));
     holdThicknessInput.value = fieldText(fieldBase('holdThickness'));
     // TASK 745: the Clearing choice of a type that declares it (the plain Pocket), then the rows of a computed pattern (Raster: + its angle)

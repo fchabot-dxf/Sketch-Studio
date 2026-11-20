@@ -52,6 +52,10 @@ const GUIDE_DEPTH_WORDS = new Set([
   'boundary-810-node__0043__6cce202e', 'boundary-810-node__0046__099653c8', 'leadin-775-node__0012__2fe3fbe6',
   'leadin-775-node__0018__6738e5e1', 'leadin-775-node__0084__4fa2df27', 'leadin-775-node__0096__f564d9ec',
 ]);
+// TASK 822: tabs are kept off the stretches where a gap strip does not fit (#core/hold-part tabLayout `fit`) instead of refusing the whole hold: the cases whose
+// Outside tabs were REFUSED ('strip': a tab of the even spread landed where its strip did not fit) and are now PLACED (the drawing tests/fixtures/report/
+// midpoint-move.json, its 3077.8 mm outline: 21 tabs). Their file, preview, Paths, 3D and Operations row change on purpose; every other case is unchanged
+const TABS_PLACED_822 = new Set(['bezier-loops-761-node__0028__64ea064e', 'leadin-775-node__0071__64ea064e']);
 const ASSERTED = ['a', 'b', 'c', 'dContent', 'eNoId', 'f'];
 
 export async function runCorpus(part, parts) {
@@ -79,6 +83,7 @@ export async function runCorpus(part, parts) {
     for (const k of ASSERTED) {
       if (k === 'eNoId' && GUIDE_ROWS.has(c.name)) { ok(now[k] !== base[k], `${c.name}: Guides with different values list one operation each (advisor ruling 1)`); continue; }
       if (k === 'eNoId' && GUIDE_DEPTH_WORDS.has(c.name)) { ok(now[k] !== base[k] && describeOperations(state, planEntries()).some((o) => /^Guide · /.test(o.rowText)), `${c.name}: its Guide's row shows its depth (TASK 825 V4)`); continue; }
+      if (TABS_PLACED_822.has(c.name) && k !== 'f') { ok(now[k] !== base[k] && planReliefItems(state).some((i) => i.footprints.some((fp) => fp.hold && fp.hold.role === 'pass' && fp.hold.narrow === true && fp.hold.count === 21)), `${c.name}.${k}: its refused tabs are placed now: 21 tabs kept off the stretches too narrow for a gap strip (TASK 822)`); continue; }
       if (k === 'eNoId' && CUT_NOTHING_ROWS.has(c.name)) { ok(now[k] !== base[k] && describeOperations(state, planEntries()).some((o) => /: nothing to cut$/.test(o.regions)), `${c.name}: its Roughing that cuts nothing is listed (TASK S2)`); continue; }
       if (now[k] !== base[k]) differ.push(`${c.name}.${k}`);
       checks++;

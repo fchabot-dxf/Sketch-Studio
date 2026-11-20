@@ -15,7 +15,7 @@ import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
-import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
+import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefAt, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpIndex, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 
 export const keyOf = (kind, id) => kind + ':' + id;
@@ -23,10 +23,10 @@ export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: ke
 
 // TASK S1 (docs/OPERATIONS-MODEL.md section 2): the plan lives in the OPERATIONS + REGIONS store (operations-store.js); a shape's RECORD (what every derivation
 // takes) is rebuilt from its operation and its region: recordOf(op, ref) = { cutType: the operation's type, ...its settings, ...the region's slope / levels,
-// leadInAt: the ref's dragged position }, cutDepth 'model' -> the shape's imported depth. The per-shape names of today's Prepare (S1 behaves as before) stay:
+// leadInAt: the ref's dragged position, tabsAt (TASK 822): the ref's dragged tabs }, cutDepth 'model' -> the shape's imported depth. The per-shape names of today's Prepare (S1 behaves as before) stay:
 // a geometry key ('loop:<id>' ...) for its operation, `contour:<key>` for its part's Contour.
-const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'leadInAt']);
-/** The settings part of a record (everything but the cut type, the region data and the dragged lead-in position). */
+const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'leadInAt', 'tabsAt']);
+/** The settings part of a record (everything but the cut type, the region data, the dragged lead-in position and the dragged tabs). */
 export const settingsPart = (rec) => Object.fromEntries(Object.entries(rec || {}).filter(([k]) => !SHAPE_FIELDS.has(k)));
 const sourceDepth = (key) => { const s = (regionOf(key) || {}).source; return s && s.cutDepth != null ? s.cutDepth : undefined; };
 /** The record of a membership (see above). */
@@ -35,6 +35,7 @@ export function recordOf(op, ref) {
   if (r.cutDepth === 'model') r.cutDepth = sourceDepth(ref.key) ?? 'unset';
   if (op.type !== CONTOUR_TYPE) { const reg = regionOf(ref.key); if (reg) { if (reg.slope) r.slope = reg.slope; if (reg.levels) r.levels = reg.levels; } }
   if (Object.hasOwn(ref, 'at')) r.leadInAt = ref.at;
+  if (Array.isArray(ref.tabsAt)) r.tabsAt = [...ref.tabsAt]; // TASK 822: the shape's dragged tabs (#core/hold-part tabsAtOf)
   return r;
 }
 /** The record of a plan key (a geometry key: its operation's; `contour:<key>`: its Contour's), or null when it is in no operation. */
@@ -172,6 +173,7 @@ function fileShapeOnly(planKey, rec, state) {
   if (!rec || !rec.cutType) { if (cur) leaveOp(cur.op, cur.ref); return null; }
   const settings = settingsPart(rec);
   const at = !contour && Object.hasOwn(rec, 'leadInAt') ? rec.leadInAt : undefined;
+  const tabsAt = !contour && Array.isArray(rec.tabsAt) ? rec.tabsAt : undefined; // TASK 822: the shape's dragged tabs stay with it
   const newKey = memberKey(planKey, rec);
   let seq;
   if (cur) {
@@ -180,13 +182,14 @@ function fileShapeOnly(planKey, rec, state) {
     if (cur.op.type === rec.cutType && opKeyNow === newKey) {
       setOpSettings(cur.op, cur.op.settings.cutDepth === 'model' && settings.cutDepth === recordOf(cur.op, cur.ref).cutDepth ? { ...settings, cutDepth: 'model' } : settings);
       setRefAt(cur.ref, at);
+      setRefTabsAt(cur.ref, tabsAt);
       normalizeDepth(cur.op);
       return getPlanRecord(planKey);
     }
     seq = cur.ref.seq;
     leaveOp(cur.op, cur.ref);
   } else seq = takeSeq();
-  const ref = { key, seq, ...(at !== undefined ? { at } : {}) };
+  const ref = { key, seq, ...(at !== undefined ? { at } : {}), ...(tabsAt !== undefined ? { tabsAt: [...tabsAt] } : {}) };
   const target = storeOps().find((op) => op.type === rec.cutType && op.geometry.length && !op.geometry.some((r) => r.key === key) && memberKey(planKeyOf(op, op.geometry[0]), recordOf(op, op.geometry[0])) === newKey);
   if (target) { addRef(target, ref); normalizeDepth(target); }
   else { const draft = { type: rec.cutType, settings, geometry: [ref] }; normalizeDepth(insertOp(newOpIndex(state, draft), draft)); }
@@ -271,7 +274,8 @@ export function changeOpType(op, type, state = null) {
   return op;
 }
 /** TASK S2: set an operation's settings (`patch`: field -> value, base mm): they apply to ALL its shapes. `leadInAt` is each shape's own (its dragged lead-in position):
- *  it is set on every membership. A typed depth equal to every shape's imported depth is stored 'model' (as since S1). */
+ *  it is set on every membership. A typed depth equal to every shape's imported depth is stored 'model' (as since S1). TASK 822: a tab count set (a number or Auto)
+ *  lays the tabs out again: every shape's dragged tabs (`tabsAt`) are dropped. */
 export function setOpFields(op, patch, state = null) {
   const { leadInAt, ...rest } = patch;
   // TASK S2 (owner turns 2730-2731): a Depth set back to the model (null: a Roughing's / Contour's Bottom emptied or Reset) = 'model' where every shape has an imported
@@ -279,6 +283,7 @@ export function setOpFields(op, patch, state = null) {
   if (Object.hasOwn(rest, 'cutDepth') && rest.cutDepth === null) rest.cutDepth = op.geometry.length && op.geometry.every((r) => sourceDepth(r.key) !== undefined) ? 'model' : 'unset';
   if (Object.keys(rest).length) setOpSettings(op, { ...op.settings, ...rest });
   if (Object.hasOwn(patch, 'leadInAt')) for (const ref of op.geometry) setRefAt(ref, leadInAt);
+  if (Object.hasOwn(rest, 'tabCount')) for (const ref of op.geometry) if (Object.hasOwn(ref, 'tabsAt')) setRefTabsAt(ref, undefined); // TASK 822
   if (Object.hasOwn(rest, 'cutDepth')) normalizeDepth(op);
   settleOrder(state);
   return op;
@@ -287,6 +292,12 @@ export function setOpFields(op, patch, state = null) {
 export function setShapeLeadInAt(op, key, at, state = null) {
   const ref = op.geometry.find((r) => r.key === key);
   if (ref) setRefAt(ref, at);
+  settleOrder(state);
+}
+/** TASK 822: the dragged tabs of ONE membership (its tab handles): every tab's centre as a perimeter fraction of its outline (#core/hold-part holdTabDragAt `at`). */
+export function setShapeTabsAt(op, key, tabsAt, state = null) {
+  const ref = op.geometry.find((r) => r.key === key);
+  if (ref) setRefTabsAt(ref, tabsAt);
   settleOrder(state);
 }
 /** TASK S2: put the shape `key` into the operation (a new membership: the next file place); false when it is already in it. */
@@ -305,10 +316,10 @@ export function removeShapeFromOp(op, key, state = null) {
   return true;
 }
 /** TASK S2 (owner turns 2710-2712, "I usually copy a toolpath and differentiate them separately", as Fusion's Duplicate): a NEW operation with the same type, settings,
- *  tick and shapes (each a new membership: the next file place, its dragged lead-in position kept), placed right after the original while the list order is the
+ *  tick and shapes (each a new membership: the next file place, its dragged lead-in position and tabs kept), placed right after the original while the list order is the
  *  user's ('stored'), else by the default rule. Returns the copy. */
 export function duplicateOperation(op, state = null) {
-  const draft = { type: op.type, settings: { ...op.settings }, geometry: op.geometry.map((r) => ({ key: r.key, seq: takeSeq(), ...(Object.hasOwn(r, 'at') ? { at: r.at } : {}) })) };
+  const draft = { type: op.type, settings: { ...op.settings }, geometry: op.geometry.map((r) => ({ key: r.key, seq: takeSeq(), ...(Object.hasOwn(r, 'at') ? { at: r.at } : {}), ...(Array.isArray(r.tabsAt) ? { tabsAt: [...r.tabsAt] } : {}) })) };
   const at = listOrder() === 'stored' ? storeOps().indexOf(op) + 1 : newOpIndex(state, draft);
   const copy = insertOp(at, draft);
   if (op.on === false) setOpsOn([copy.id], false);
@@ -379,7 +390,9 @@ const HOLD_REFUSED = {
 /**
  * holdNoteItems(storedRec, hold) — TASK 742: the card note of a held record (doc unit), from its holdSummary: "Outside: 4 tabs, 10 mm wide, 2 mm thick:
  * 1 pass at 16 mm + 4 gaps at 18 mm", then "Gaps: cut the side against the part; the return leg is optional"; an onion skin "Outside: onion skin 2 mm:
- * 1 pass at 16 mm"; fewer tabs than asked: "only 2 of 4 tabs fit" (warning colour); a refused hold says why (warning colour; the cut is made without it).
+ * 1 pass at 16 mm"; fewer tabs than asked: "only 2 of 4 tabs fit" (warning colour); a refused hold says why (warning colour; the cut is made without it). TASK 822:
+ * tabs kept off the stretches where a gap strip does not fit (hold.narrow) say so (warning colour): "only 4 of 5 tabs fit: part of the outline is too narrow for
+ * a gap strip", or with every tab placed "placed where a gap strip fits: part of the outline is too narrow for one".
  */
 export function holdNoteItems(storedRec, hold) {
   if (!hold || !storedRec) return [];
@@ -408,7 +421,10 @@ export function holdNoteItems(storedRec, hold) {
   }
   const n = hold.count, gaps = `${n} gap${n === 1 ? '' : 's'}`;
   const items = [{ text: `${name}: ${n} tab${n === 1 ? '' : 's'}, ${f(hold.width)} ${u} wide, ${f(hold.thickness)} ${u} thick: 1 pass at ${f(hold.depth)} ${u} + ${gaps} at ${f(Number(hold.fullDepth))} ${u}` }];
-  if (n < hold.requested) { const t = `Only ${n} of ${hold.requested} tabs fit`; items.push({ text: t, warn: t, title: 'the outline has too few stretches long enough for a tab' }); } // TASK 825 (V1): its own warning line (the card lists warnings first), not the tail of the long first line
+  if (hold.narrow) { // TASK 822: tabs kept off the stretches too narrow for a gap strip (a stem, a neck); TASK 825: its words are a warning line of their own (the card lists warnings first)
+    const t = n < hold.requested ? `Only ${n} of ${hold.requested} tabs fit: part of the outline is too narrow for a gap strip` : 'Placed where a gap strip fits: part of the outline is too narrow for one';
+    items.push({ text: t, warn: t, title: 'a gap strip needs the strip width clear beside the outline' });
+  } else if (n < hold.requested) { const t = `Only ${n} of ${hold.requested} tabs fit`; items.push({ text: t, warn: t, title: 'the outline has too few stretches long enough for a tab' }); } // TASK 825 (V1): its own warning line (the card lists warnings first), not the tail of the long first line
   items.push({ text: `Gaps: cut the side against the part; the return leg is optional` });
   return items;
 }

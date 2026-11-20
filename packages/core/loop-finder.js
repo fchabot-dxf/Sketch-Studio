@@ -60,7 +60,81 @@ const byLeaving = (a, b) => {
 };
 
 // Planar face traversal over the edges (each a curve of a declared kind, walked from its start `a` to its end `b`) → the bounded (inner) faces.
+// TASK 832: the traversal is only meaningful on a PLANAR embedding (curves meet at nodes only). Closed shapes that OVERLAP and share a node
+// (three identical squares stacked exactly, one corner of each made coincident: the owner's snap) give a node whose leaving directions
+// INTERLEAVE the shapes, and the walk then threads them into faces of no area: no loop was found at all, and every operation on them had
+// "nothing to cut". Such an embedding is not planar, which Euler's formula tells per connected component (V - E + F = 2 counting every
+// face cycle, the outer one included, holds for a planar one only). A component that fails it is traversed per BLOCK (its biconnected
+// components: shapes joined at single nodes come apart at those nodes), so each closed shape is its own loop, as it is when it touches
+// nothing. A component that passes (every drawing whose curves meet at nodes only) keeps exactly the faces of before.
 function findFaces(edges, posOf, J) {
+  const { cycles, faces } = traverseFaces(edges, posOf, J);
+  if (!faces.length && !cycles.length) return faces;
+  const comp = edgeComponents(edges);
+  const stats = new Map(); // component -> { nodes: Set, e, f }
+  for (const e of edges) { const c = comp.get(e); if (!stats.has(c)) stats.set(c, { nodes: new Set(), e: 0, f: 0 }); const s = stats.get(c); s.nodes.add(e.a); s.nodes.add(e.b); s.e++; }
+  for (const cy of cycles) stats.get(comp.get(cy.edge)).f++;
+  const bad = new Set([...stats].filter(([, s]) => s.nodes.size - s.e + s.f !== 2).map(([c]) => c));
+  if (!bad.size) return faces;
+  const out = faces.filter((f) => !bad.has(comp.get(f.firstEdge)));
+  for (const c of bad) {
+    const blocks = edgeBlocks(edges.filter((e) => comp.get(e) === c));
+    if (blocks.length < 2) { out.push(...faces.filter((f) => comp.get(f.firstEdge) === c)); continue; } // one block: nothing comes apart (as before)
+    for (const b of blocks) out.push(...findFaces(b, posOf, J));
+  }
+  return out;
+}
+
+// The connected components of the edges (through their end nodes): Map(edge -> component number).
+function edgeComponents(edges) {
+  const parent = new Map();
+  const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+  for (const e of edges) { if (!parent.has(e.a)) parent.set(e.a, e.a); if (!parent.has(e.b)) parent.set(e.b, e.b); const ra = find(e.a), rb = find(e.b); if (ra !== rb) parent.set(ra, rb); }
+  const num = new Map(), out = new Map();
+  for (const e of edges) { const r = find(e.a); if (!num.has(r)) num.set(r, num.size); out.set(e, num.get(r)); }
+  return out;
+}
+
+// The BLOCKS (biconnected components) of a connected set of edges: [[edge...]], each edge in exactly one (Tarjan's, iterative: an import's
+// long chains never deepen the stack). Two edges between the same two nodes are two edges (a lens is one block).
+function edgeBlocks(edges) {
+  const adj = new Map();
+  edges.forEach((e, i) => { for (const [u, v] of [[e.a, e.b], [e.b, e.a]]) { if (!adj.has(u)) adj.set(u, []); adj.get(u).push({ to: v, i }); } });
+  const disc = new Map(), low = new Map(), blocks = [], stack = [];
+  let time = 0;
+  for (const root of adj.keys()) {
+    if (disc.has(root)) continue;
+    disc.set(root, time); low.set(root, time); time++;
+    const frames = [{ node: root, via: -1, k: 0 }];
+    while (frames.length) {
+      const f = frames[frames.length - 1], nbrs = adj.get(f.node);
+      if (f.k < nbrs.length) {
+        const { to, i } = nbrs[f.k++];
+        if (i === f.via) continue;
+        if (!disc.has(to)) {
+          stack.push(i); disc.set(to, time); low.set(to, time); time++;
+          frames.push({ node: to, via: i, k: 0 });
+        } else if (disc.get(to) < disc.get(f.node)) { stack.push(i); low.set(f.node, Math.min(low.get(f.node), disc.get(to))); }
+        continue;
+      }
+      frames.pop();
+      if (!frames.length) break;
+      const p = frames[frames.length - 1];
+      low.set(p.node, Math.min(low.get(p.node), low.get(f.node)));
+      if (low.get(f.node) >= disc.get(p.node)) { // p is an articulation (or the root): the edges above f.via form one block
+        const block = [];
+        let j;
+        do { j = stack.pop(); block.push(edges[j]); } while (j !== f.via);
+        blocks.push(block);
+      }
+    }
+  }
+  return blocks;
+}
+
+// The face cycles of the edges' rotation system: { cycles: [{ edge (its first half-edge's edge) }] every closed cycle, faces: the bounded
+// (counter-clockwise, positive area) ones as loops, each with `firstEdge` (not enumerable: the loop object is otherwise as before) }.
+function traverseFaces(edges, posOf, J) {
   const half = [];
   for (const e of edges) {
     half.push({ from: e.a, to: e.b, shapeId: e.shapeId, edge: e, forward: true });
@@ -88,7 +162,7 @@ function findFaces(edges, posOf, J) {
   };
 
   const used = new Set();
-  const faces = [];
+  const faces = [], cycles = [];
   for (const start of half) {
     if (used.has(start)) continue;
     const cycle = [];
@@ -99,6 +173,7 @@ function findFaces(edges, posOf, J) {
       h = next(h);
     } while (h && h !== start && guard++ < 100000);
     if (!ok || h !== start || cycle.length < 2) continue; // open / malformed → skip
+    cycles.push({ edge: start.edge });
 
     let area = 0, bad = false;
     for (const e of cycle) {
@@ -109,9 +184,9 @@ function findFaces(edges, posOf, J) {
     }
     if (bad) continue;
     area /= 2;
-    if (area > 1e-9) faces.push(makeLoop(cycle.map((e) => e.from), cycle.map((e) => e.shapeId))); // bounded (CCW)
+    if (area > 1e-9) { const loop = makeLoop(cycle.map((e) => e.from), cycle.map((e) => e.shapeId)); Object.defineProperty(loop, 'firstEdge', { value: start.edge }); faces.push(loop); } // bounded (CCW)
   }
-  return faces;
+  return { cycles, faces };
 }
 
 /**

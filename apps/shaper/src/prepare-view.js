@@ -717,7 +717,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     renderCuts(); renderToolpaths(); renderChips(); renderHandles(); refreshEdgeClasses();
     // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');
-    if (legend) legend.hidden = !drawnItems().some(({ look, faint }) => !faint && look.hasTravel);
+    if (legend) legend.hidden = !drawnItems().some(({ look }) => look.hasTravel); // TASK 817: a faint look's dashes march too (faintly): the legend explains them
   };
 
   const renderSelection = () => {

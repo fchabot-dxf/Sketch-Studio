@@ -116,17 +116,28 @@ try {
     await waitFor(`document.querySelector('#prepare-panel .cut-preview').dataset.state === 'fresh'`, D + ': the preview generated', 120000);
     assert.ok(await solid() > 0, D + ': the preview is drawn (the card\'s settings now)');
     assert.deepStrictEqual(await barBoxes(), bar, D + ': the bar still in place (fresh)');
-    await typeField('.cut-step-depth', '0.25');
+    await typeField('.cut-step-depth', '0.4');
     assert.deepStrictEqual([await evalJs(`document.querySelector('#prepare-panel .cut-preview').dataset.state`), await evalJs(`document.querySelector('#prepare-panel .cut-preview').textContent`), await solid(), (await faint()) > 0], ['stale', 'Preview', 0, true], D + ': a later change: the preview faded (stale), the button "Preview" again');
     // ── 3. OK: the row spins, the page stays usable, the long tasks, the paths appear ──
     await evalJs(`(() => { window.__lt = []; window.__inp = []; if (!window.__ltObs) { window.__ltObs = new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push([Math.round(e.startTime), Math.round(e.duration)]); }); window.__ltObs.observe({ type: 'longtask' });
       for (const ty of ['pointerdown', 'wheel', 'touchstart', 'click']) document.addEventListener(ty, (e) => window.__inp.push([ty, Math.round(performance.now() - e.timeStamp)]), { capture: true, passive: true }); } })()`);
     // desktop: the list open beside the card (the row in view when OK is pressed); a phone: the open card covers the list sheet, so the sheet is opened after OK
     if (!phone) await listOpen(true);
+    // (a free point of the canvas: nothing else over it, no shape under it, room for the pan below it)
+    const c = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'), r = svg.getBoundingClientRect();
+      for (let y = r.top + 40; y < r.bottom - 140; y += 20) for (let x = r.left + 20; x < r.right - 220; x += 20) { const ok = [[0, 0], [0, 40], [0, 100], [60, 100], [200, 200]].every(([dx, dy]) => { const h = document.elementFromPoint(x + dx, y + dy); return h === svg; }); if (ok) return { x: Math.round(x), y: Math.round(y) }; }
+      return null; })()`);
+    assert.ok(c, D + ': a free point of the canvas');
     const okAt = await evalJs('performance.now()');
     await clickEl('#prepare-panel .cut-ok');
-    const snapA = phone ? null : await probe(t).snap();
+    const snapA = phone ? null : await probe(t).snap(); // (before the spinner: it shows after 150 ms)
     if (phone) await listOpen(true);
+    // the page stays usable while it generates: at once after OK, a click on empty canvas and a pan (wheel on a desktop, a two-finger pan on a phone)
+    await press(c.x, c.y);
+    if (phone) { await T('touchStart', [{ x: c.x, y: c.y + 40 }, { x: c.x, y: c.y + 100 }]); for (let k = 1; k <= 6; k++) { await T('touchMove', [{ x: c.x + k * 10, y: c.y + 40 }, { x: c.x + k * 10, y: c.y + 100 }]); await sleep(16); } await T('touchEnd', []); }
+    else for (let k = 0; k < 3; k++) { await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: c.x + 200, y: c.y + 200, deltaX: 0, deltaY: k % 2 ? -80 : 80 }); await sleep(60); }
+    const stillGenerating = await generating();
+    if (phone) await listOpen(true); // (a tap on the canvas folds the phone's sheet)
     const ref = await outside();
     await waitFor(`!!document.querySelector('${rowSel(rough)}.is-generating .ops-spin')`, D + ': the row spins', 5000);
     const spinAt = await evalJs('performance.now()');
@@ -135,16 +146,6 @@ try {
     const snapSpin = await probe(t).snap();
     if (snapA) assert.deepStrictEqual(probe(t).movedBoxes(snapA, snapSpin), [], D + ': 805 probe: nothing moved when the spinner appeared (0 px)');
     await shot('3-row-spinning.png', [rowSel(rough)], 4);
-    // the page stays usable while it generates: a click on empty canvas, a pan (wheel on a desktop, a two-finger pan on a phone), a tap on the row
-    // (a free point of the canvas: nothing else over it, no shape under it, room for the pan below it)
-    const c = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'), r = svg.getBoundingClientRect();
-      for (let y = r.top + 40; y < r.bottom - 140; y += 20) for (let x = r.left + 20; x < r.right - 220; x += 20) { const ok = [[0, 0], [0, 40], [0, 100], [60, 100], [200, 200]].every(([dx, dy]) => { const h = document.elementFromPoint(x + dx, y + dy); return h === svg; }); if (ok) return { x: Math.round(x), y: Math.round(y) }; }
-      return null; })()`);
-    assert.ok(c, D + ': a free point of the canvas');
-    await press(c.x, c.y);
-    if (phone) { await T('touchStart', [{ x: c.x, y: c.y + 40 }, { x: c.x, y: c.y + 100 }]); for (let k = 1; k <= 6; k++) { await T('touchMove', [{ x: c.x + k * 10, y: c.y + 40 }, { x: c.x + k * 10, y: c.y + 100 }]); await sleep(16); } await T('touchEnd', []); }
-    else for (let k = 0; k < 3; k++) { await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: c.x + 200, y: c.y + 200, deltaX: 0, deltaY: k % 2 ? -80 : 80 }); await sleep(60); }
-    const stillGenerating = await generating();
     await waitFor(`import('/apps/shaper/src/op-paths.js').then((m) => m.generatingCount() === 0)`, D + ': the generation finished', 120000);
     const doneAt = await evalJs('performance.now()');
     R.generationMs = Math.round(doneAt - okAt);

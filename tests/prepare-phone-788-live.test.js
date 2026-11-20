@@ -58,6 +58,9 @@ try {
   await waitFor(`!document.getElementById('view-prepare').hidden && !!window.__prepareView`, 'prepare ready');
   // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the pocket's operation OPENED (its list row, then Edit) shows its card
   await openOpLive({ evalJs, waitFor, clickEl }, await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps()[0].id)`));
+  // TASK 817: an open operation's paths are drawn (with their travel arrows and the direction legend) once previewed: the card's Preview, generated in the background
+  const preview = async () => { await clickEl('#prepare-panel .cut-preview'); await waitFor(`document.querySelector('#prepare-panel .cut-preview').dataset.state === 'fresh'`, 'the preview drawn'); };
+  await preview();
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && !document.getElementById('prepare-dir-legend').hidden`, 'card and legend visible');
   await sleep(300);
 
@@ -77,6 +80,7 @@ try {
   await clickEl('.cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="online"]');
   await clickEl('.cut-row[data-row="leadIn"] .cut-preset[data-value="true"]');
+  await preview(); // TASK 817: the On line's paths drawn (its legend)
   await sleep(300);
   const card = await box('#prepare-panel .cut-card');
   const legend = await box('#prepare-dir-legend');

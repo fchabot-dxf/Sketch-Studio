@@ -1,7 +1,7 @@
 // tests/helpers/prepare-open-live.js — TASK S2 (docs/OPERATIONS-MODEL.md 9.1, owner rulings turns 2716-2720): editing is deliberate in the real Shaper page. An operation
 // is OPENED (the Operations list: its row tapped, then its Edit), edited and confirmed (the card's OK); a click on the canvas only selects. The live tests written before
 // S2 clicked a shape to see and edit its settings; these helpers stand for the user's steps today, through the page's own buttons (real mouse / touch, t.clickEl):
-//   okLive(t)               the card's OK, when an operation is open
+//   okLive(t)               the card's OK, when an operation is open; TASK 817: then waits until its paths are generated (in the background) as before they were at once
 //   openOpLive(t, opId)     its list row tapped (selected), then its Edit (a folded list, the phone's closed sheet, is opened for it, then folded again)
 //   clickOpenLive(t, click) OK, the click (t.clickWorld ...), and when it picked exactly ONE shape that is already in an operation, that operation opened (its first in
 //                           the list); a shape in no operation, several, or nothing: only selected (the quick flow's type menu)
@@ -11,7 +11,10 @@ import { sleep } from './cdp-browser.js';
 const openId = (t) => t.evalJs(`(() => { const op = window.__prepareView && window.__prepareView.activeOp(); return op ? op.id : null; })()`); // the operation open now (null: none)
 
 export async function okLive(t) {
-  if (await openId(t)) { await t.clickEl('#prepare-panel .cut-ok'); await sleep(200); }
+  if (await openId(t)) {
+    await t.clickEl('#prepare-panel .cut-ok'); await sleep(200);
+    await t.waitFor(`import('/apps/shaper/src/op-paths.js').then((m) => m.generatingCount() === 0)`, 'the paths of OK generated (TASK 817: in the background)', 120000);
+  }
 }
 
 export async function openOpLive(t, opId) {

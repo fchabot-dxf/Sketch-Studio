@@ -169,6 +169,9 @@ async function phase(what) {
   assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0');
   await clickEl('.cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]');
   await waitFor(`document.querySelector('.cut-bit').value === '6.35'`, what + ': the 1/4 in bit');
+  // TASK 817: the open operation's new paths (and the levels note they carry) are made on request: the card's Preview, in the background
+  await clickEl('#prepare-panel .cut-preview');
+  await waitFor(`document.querySelector('#prepare-panel .cut-preview').dataset.state === 'fresh'`, what + ': the preview of the 1/4 in bit', 120000);
   await tab('passes');
   const note = await evalJs(`[...document.querySelectorAll('.cut-note div')].map((d) => d.textContent)`);
   console.log(`${what}: Roughing note ${JSON.stringify(note)}`);

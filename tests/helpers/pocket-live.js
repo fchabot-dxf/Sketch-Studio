@@ -123,7 +123,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
     const card = () => evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, clearing: document.querySelector('.cut-clear-cur').textContent,
       rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="finishAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row),
       loop: document.querySelector('.cut-loop').checked,
-      stepover: document.querySelector('.cut-stepover').value, len: document.querySelector('.cut-stepover-len').textContent, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
+      stepover: document.querySelector('.cut-stepover').value, len: document.querySelector('.cut-stepover-len').textContent, note: [...document.querySelectorAll('.cut-note div')].sort((a, b) => !!a.querySelector('.cut-note-warn') - !!b.querySelector('.cut-note-warn')).map((d) => d.textContent) })`); // TASK 825: the card lists its warning lines FIRST; this reads the facts first and the warnings after (a stable sort), as these tests were written
     const look = () => evalJs(`({ paths: document.querySelectorAll('#prepare-toolpath-group .sk-clear-path').length, cleanup: document.querySelectorAll('#prepare-toolpath-group .sk-clear-cleanup').length,
       leftover: document.querySelectorAll('#prepare-cut-group .sk-leftover').length, band: document.querySelectorAll('#prepare-cut-group .sk-band').length,
       d: [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getAttribute('d').length).reduce((a, b) => a + b, 0) })`);

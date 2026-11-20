@@ -25,7 +25,7 @@ const DOC = { version: 3, hosts: {}, geometry: {
   constraints: [{ type: 'horizontal', joints: ['r1', 'r2'] }, { type: 'vertical', joints: ['r2', 'r3'] }, { type: 'horizontal', joints: ['r3', 'r4'] }, { type: 'vertical', joints: ['r4', 'r1'] }],
   sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [], parameters: [] } };
 const EDGES = ['rE1', 'rE2', 'rE3', 'rE4'];
-const BOUND = ['rE1', 'rE2', 'rE3']; // the lines with an end on r2 / r3, which the V constraint binds (geometry-labels constraintTargets)
+const BOUND = ['rE2']; // the line r2-r3 the V constraint binds (geometry-labels constraintTargets: the shape holding ALL its joints, task 820)
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '588g' });

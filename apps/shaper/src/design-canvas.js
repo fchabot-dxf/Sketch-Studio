@@ -5,7 +5,7 @@
 
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { SAME_TAB_REASONS } from '#ui/document-buffer.js'; // TASK 766: the same tab shown again keeps its view
-import { captureShaperDoc, applyShaperDoc } from './shaper-doc.js';
+import { captureShaperDoc, applyShaperDoc, DOC_VERSION } from './shaper-doc.js';
 import SettingsManager from '#core/settings-manager.js';
 import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 
@@ -45,7 +45,7 @@ export function shaperBufferOptions({ controller, canvas, session = null, refres
       const cutPlan = applyShaperDoc(hosts && hosts.shaper, controller.state);
       afterSidecar({ ...restore, cutPlan });
     },
-    hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
+    hostName: 'shaper', getHostData: captureShaperDoc, hostVersion: DOC_VERSION, // TASK 812 (a sidecar of a higher version is opened, never written over: document-buffer.js); TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
     session, // TASK 605: the tab's in-memory stage state (shaper-session.js); the save state is the tab dot (document-tabs.js) + the canvas's data-save-state
   };
 }

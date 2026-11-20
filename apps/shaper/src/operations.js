@@ -252,18 +252,20 @@ function entryCutsByOp(state, entries, geo = null) {
 }
 
 /**
- * describeOperations(state, entries = planEntries()) → the STORED operations (operations-store.js, in list order) with their cuts and words on the solved sketch
+ * describeOperations(state, entries = planEntries(), frame = null, { every = true } = {}) → the STORED operations (operations-store.js, in list order) with their cuts and words on the solved sketch
  * `state`: [{ key (= id), id, tool, cutType, settings, records: [{ planKey, target, rec, cuts }], first, label, rowText, depthText, detail, regions, heading }]
  * (the words in the doc unit at the Length precision setting). A shape that derives to no cut (a stale target) is in no row; an operation none of whose shapes
- * derives a cut is not listed (S1: the list as before). TASK 798: + `on` (its tick, cut-plan.js isTicked) and `tickable` (false for the Stock: always exported, the
+ * derives a cut is not listed (S1: the list as before) unless `every` (TASK S2, the default: Prepare's list shows every stored operation, an empty one, one that cuts
+ * nothing; the export's list of its ticked entries passes every: false, only the operations with cuts in them). TASK 798: + `on` (its tick, cut-plan.js isTicked) and `tickable` (false for the Stock: always exported, the
  * board every file is placed by); `frame` = the whole plan's entries when `entries` are the ticked ones (the hole ownership stays the whole plan's, as the export).
  */
-export function describeOperations(state, entries = planEntries(), frame = null) {
+export function describeOperations(state, entries = planEntries(), frame = null, { every = true } = {}) {
   const ents = (entries || []).filter((e) => e && e.target && e.rec && e.rec.cutType);
   const byOp = entryCutsByOp(state, entries, frame && frame.length > ents.length ? plannedGeometry(state, frame.filter((e) => e && e.target && e.rec && e.rec.cutType)) : null); // TASK 798: the whole plan's hole ownership
   const ops = [];
   for (const stored of storeOps()) {
     const records = (byOp.get(stored.id) || []).map(({ i, ...r }) => r);
+    if (!records.length && !every) continue; // TASK S2: an export's list (every: false): only what it cuts
     const rec = records.length ? records[0].rec : { cutType: stored.type, ...stored.settings }; // TASK S2: EVERY operation is listed (an empty one, one that cuts nothing), with its own settings
     const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, shapes: stored.geometry.map((r) => r.key), first: records.length ? byOp.get(stored.id)[0].i : Infinity, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable); TASK S2: `shapes` = its geometry keys
     op.rank = levelsRank(op);

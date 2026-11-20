@@ -52,7 +52,7 @@ export function exportFileOf(state, { preview = false } = {}) {
  *  document's order (operations.js describeOperations, the same list Prepare shows). Operations are a display grouping: the downloaded file never changes.
  *  TASK S1: an element's operation is its entry's stored operation (`opId`). TASK 798: `entries` = the ticked operations', `frame` = the whole plan's (see shaperSvgOf). */
 export function shaperPreviewOf(state, entries, frame = null) {
-  const ops = describeOperations(state, entries, frame); // TASK 798: the ticked operations (`entries`), derived with the whole plan's hole ownership (`frame`)
+  const ops = describeOperations(state, entries, frame, { every: false }); // TASK 798: the ticked operations (`entries`), derived with the whole plan's hole ownership (`frame`); TASK S2: only the ones that cut
   const listed = new Set(ops.map((op) => op.id));
   const written = []; // TASK 793: the elements' cuts, in the file's order (the Paths view's bit-centre paths)
   return { svg: shaperSvgOf(state, entries.map((e) => (listed.has(e.opId) ? { ...e, op: e.opId } : e)), { preview: true, written, frame }), ops, written };

@@ -289,7 +289,7 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     pressEl('.cut-tab[data-tab="heights"]');
     eq(rows(), ['cutDepth', 'topDepth', 'floorAllowance'], 'the Heights tab: Depth, Top, Floor allowance (TASK S2, owner turn 2740: no Bottom row: the Depth is the one depth)');
     eq([q('.cut-top-depth').value, q('.cut-top-depth').placeholder, q('.cut-floor-allowance').value], ['', '0', '0'], 'the defaults: the surface, no floor allowance');
-    ok(q('.cut-depth').value === '' ? q('.cut-depth').placeholder === 'From model' : q('.cut-depth').value === String(+D.toFixed(3)), 'the Depth: From model (or the part\u2019s depth): ' + q('.cut-depth').value);
+    ok(q('.cut-depth').value === '' ? /^From model( \(\d+(\.\d+)?\))?$/.test(q('.cut-depth').placeholder) /* TASK S2: From model (the part's depth) */ : q('.cut-depth').value === String(+D.toFixed(3)), 'the Depth: From model (or the part\u2019s depth): ' + q('.cut-depth').value);
     const keyBefore = opKeyOf(rec);
     const n0 = st.history.length;
     setField('.cut-top-depth', '3');

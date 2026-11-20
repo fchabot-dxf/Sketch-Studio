@@ -140,7 +140,7 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
-  const { renderer, scene, sun, camera, controls, size } = createOrbitStage(THREE, OrbitControls, host); // TASK 808: the stage the STL Orient view shares (orbit-stage.js)
+  const { renderer, scene, sun, camera, controls, size, pivot } = createOrbitStage(THREE, OrbitControls, host); // TASK 808: the stage the STL Orient view shares (orbit-stage.js)
   scene.background = new THREE.Color(); // TASK 754: the Design canvas's paper (applyGridLook)
 
   // vertex colours are the grey DEPTH multiplier; material.color is the tint (the flat colour, white under a texture). TASK 729: the two
@@ -411,7 +411,7 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
       meshes: group ? group.children.filter((o) => o.isMesh).map((o) => ({ name: o.name, geometry: o.geometry.uuid, material: o.material === faceMaterial ? 'face' : o.material === edgeMaterial ? 'edge' : 'other' })) : [],
       marks: group ? group.children.filter((o) => o.userData && o.userData.mark).map((o) => ({ kind: o.userData.mark, point: o.userData.point || null })) : [],
       top: p && u ? { x: p.getX(0), z: p.getZ(0), u: u.getX(0), v: u.getY(0) } : null,
-      target: controls.target.toArray(), camera: camera.position.toArray(),
+      target: controls.target.toArray(), camera: camera.position.toArray(), pivot: pivot() && pivot().toArray(), // pivot = the point an orbit in progress turns round (TASK 823)
       background: '#' + scene.background.getHexString(),
       box: box && { minX: box.minX, maxX: box.maxX, minZ: box.minY, maxZ: box.maxY, y: -box.thickness }, // the board in scene axes (y = its underside)
       grid: gridSpec && { ...gridSpec, shown: gridMesh.visible, y: gridMesh.position.y, minorColor: '#' + gridUniforms.uMinorColor.value.getHexString(), majorColor: '#' + gridUniforms.uMajorColor.value.getHexString() },

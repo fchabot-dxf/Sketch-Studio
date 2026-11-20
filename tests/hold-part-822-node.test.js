@@ -139,7 +139,7 @@ const harness = (app) => {
   const clickAt = (x, y) => { const p = worldToScreen(pc(), { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc() }); };
   const typed = (cls, v) => editStep(app, () => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); });
   const handles = () => qa('#prepare-canvas .sk-tab-handle').map((g) => { const m = /translate\(([-\d.e]+) ([-\d.e]+)\)/.exec(g.getAttribute('transform')); return { g, x: Number(m[1]), y: Number(m[2]), at: Number(g.getAttribute('data-tab-at')) }; });
-  // a pointer drag from a handle to world point `to` (the lead-in handle's drag of task 778, with the pointer)
+  // a pointer drag from a handle to world point `to` (the handle drag of task 778 / 822, with the pointer)
   const drag = (h, to, { moves = [to] } = {}) => {
     const p0 = worldToScreen(pc(), { x: h.x, y: h.y });
     h.g.dispatchEvent(new app.window.PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, button: 0, isPrimary: true, clientX: p0.x, clientY: p0.y }));

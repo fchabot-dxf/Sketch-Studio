@@ -1,14 +1,14 @@
 // tests/direction-777-live.test.js — TASK 777: clearer cutting direction marks in Shaper Prepare (DESKTOP 1280x800).
 // Checks:
 //  1. Every determined toolpath kind carries sparse slow dashes (8px 28px, 5s = 7.2 px/s), NO arrowheads (TASK 821):
-//     Outside, Inside, Raster pocket (passes + cleanup + wall), Spiral pocket (linked + wall), Pocket Loop + Lead-in,
-//     On-line Lead-in (leg + outline), On-line Tabs (3 strokes). Plain On-line (no lead-in/tabs) keeps static .sk-tp-online.
+//     Outside, Inside, Raster pocket (passes + cleanup + wall), Spiral pocket (linked + wall), Pocket Loop,
+//     On-line Tabs (3 strokes). Plain On-line (no tabs) keeps static .sk-tp-online. (TASK 836: the On-line Lead-in case removed with the lead-in.)
 //  2. Selected / hovered ONLY: unselected cuts carry no travel marks; deselecting clears all .sk-travel / .sk-travel-arrows.
-//  3. Open-path AutoPass note on Loop-off programmed clearing; no duplication where 775 LEAD_IN_TRADE_OFF already appears.
+//  3. Open-path AutoPass note on Loop-off programmed clearing.
 //  4. 4 frames 1 s apart showing slow forward motion (~7.2 px/s) saved to .evidence/777/motion-frame-{0..3}.png.
 //  5. prefers-reduced-motion: reduce -> animationName 'none', static dashes, no arrowheads.
 //  6. Pan smoothness measured on a 50+ ring Spiral AND a dense (~60 pass) Raster pocket.
-//  7. Zoomed screenshots (raster pocket, spiral pocket, lead-in, tabs, reduced motion) saved to .evidence/777/.
+//  7. Zoomed screenshots (raster pocket, spiral pocket, tabs, reduced motion) saved to .evidence/777/.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -70,7 +70,6 @@ try {
     const eRast = rect(140, 0, 60, 45);
     const eSpir = rect(220, 0, 60, 45);
     const eLoopLead = rect(0, 70, 60, 45);
-    const eLeadIn = rect(80, 70, 50, 40);
     const eTabs = rect(150, 70, 60, 45);
     const ePlainOnline = rect(230, 70, 50, 40);
     st.saveState('seed777');
@@ -81,8 +80,7 @@ try {
     V2_PLAN.set(kOf(eIn), { ...base, cutType: 'interior' });
     V2_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
     V2_PLAN.set(kOf(eSpir), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: false });
-    V2_PLAN.set(kOf(eLoopLead), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: true, leadIn: true, leadInLength: 8 });
-    V2_PLAN.set(kOf(eLeadIn), { ...base, cutType: 'online', toolDia: 3.175, leadIn: true, leadInLength: 8, leadInSide: 'outside' });
+    V2_PLAN.set(kOf(eLoopLead), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: true });
     V2_PLAN.set(kOf(eTabs), { ...base, cutType: 'online', toolDia: 3.175, holdPart: 'tabs', tabCount: 3, tabWidth: 10 });
     V2_PLAN.set(kOf(ePlainOnline), { ...base, cutType: 'online', toolDia: 3.175 });
   })()`);
@@ -105,7 +103,6 @@ try {
       travel: q('.sk-travel'),
       travelClear: q('.sk-travel-clear'),
       travelOnline: q('.sk-travel-online'),
-      travelLead: q('.sk-travel-lead'),
       arrows: q('.sk-travel-arrows'),
       arrowLayerKids: q('.sk-travel-arrows-layer > *'),
       arrowBBox: a ? { w: Math.round(a.getBBox().width * 10) / 10, h: Math.round(a.getBBox().height * 10) / 10 } : null,
@@ -169,23 +166,20 @@ try {
   assert.ok(sSpir.note.includes('AutoPass runs back along it on the next pass'), 'spiral Loop off: AutoPass reverse line in card note');
   await shot('desktop-spiral-pocket.png', await canvasClip());
 
-  // Pocket Loop ON (TASK 778: pocket lead-in removed; closed loop travel + start mark, no open-path AutoPass line)
+  // Pocket Loop ON: closed loop travel + start mark, no open-path AutoPass line
   await setZoom(30, 92.5, 110); await sleep(120);
   await clickWorld(30, 92.5); await move(away.x, away.y);
   const sLoopLead = await inspect();
-  assert.strictEqual(sLoopLead.travelLead, 0, 'pocket Loop ON: no pocket lead-in leg travel (TASK 778)');
   assert.strictEqual(sLoopLead.travelClear, 1, 'pocket Loop ON: 1 closed loop travel');
   assert.ok(!sLoopLead.note.includes('AutoPass runs back along it on the next pass'), 'pocket Loop ON: closed loop has no open-path AutoPass line');
 
-  // On-line outline with Lead-in — zoomed screenshot (full leg tip + junction + outline in frame) + 4-frame motion sequence
-  await setZoom(105, 86, 115); await sleep(120);
-  await clickWorld(105, 90); await move(away.x, away.y);
-  const sLead = await inspect();
-  assert.strictEqual(sLead.travelLead, 1, 'on-line Lead-in: 1 leg travel');
-  assert.strictEqual(sLead.travelOnline, 1, 'on-line Lead-in: 1 open outline travel');
-  assert.strictEqual(sLead.arrows, 0, 'on-line Lead-in: no arrowheads');
-  assert.ok(!sLead.note.includes('AutoPass runs back along it on the next pass'), 'on-line Lead-in: no duplicate AutoPass line');
-  await shot('desktop-leadin.png', await canvasClip());
+  // On-line Tabs (3 strokes) — zoomed screenshot; its strokes carry the motion frames below (TASK 836: the lead-in cut did)
+  await setZoom(180, 92.5, 115); await sleep(120);
+  await clickWorld(180, 92.5); await move(away.x, away.y);
+  const sTabs = await inspect();
+  assert.strictEqual(sTabs.travelOnline, 3, 'on-line Tabs: 3 tab strokes carry travel marks');
+  assert.strictEqual(sTabs.arrows, 0, 'on-line Tabs: no arrowheads');
+  await shot('desktop-tabs.png', await canvasClip());
 
   // ── 4. 4 frames 1 s apart showing slow motion (~7.2 px/s) ──
   const offsets = [];
@@ -204,15 +198,7 @@ try {
     assert.ok(delta < -3.5 && delta > -12, `frame ${f - 1}->${f} moves forward slowly (${delta.toFixed(2)} px/s)`);
   }
 
-  // On-line Tabs (3 strokes) — zoomed screenshot
-  await setZoom(180, 92.5, 115); await sleep(120);
-  await clickWorld(180, 92.5); await move(away.x, away.y);
-  const sTabs = await inspect();
-  assert.strictEqual(sTabs.travelOnline, 3, 'on-line Tabs: 3 tab strokes carry travel marks');
-  assert.strictEqual(sTabs.arrows, 0, 'on-line Tabs: no arrowheads');
-  await shot('desktop-tabs.png', await canvasClip());
-
-  // Plain On-line (no lead-in, no tabs): no travel marks (operator chooses on Origin)
+  // Plain On-line (no tabs): no travel marks (operator chooses on Origin)
   await setZoom(255, 90, 115); await sleep(120);
   await clickWorld(255, 90); await move(away.x, away.y);
   const sPlain = await inspect();

@@ -805,7 +805,6 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoo
     isHole: false,
     isCompound: false,
     rec: { ...rec, cutType: outerCutType },
-    partHoleLoops: holeLoops, // TASK 787: EVERY hole loop of the part (one with its own record too): what an On line outline's lead-in keeps clear of (#core/lead-in)
   });
 
   return cuts;
@@ -830,8 +829,7 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoo
  * TASK 745: a programmed pocket's cuts (#core/pocket-clearing applyPocketClearing: the clearing paths, the wall, the islands) carry their tool-centre
  *   paths (`centers`) and `sweep(radius)`, the area the bit sweeps along them (the same sweep the clearing's leftover check uses): the band is that
  *   sweep at this record's radius, the tool paths are the centres; `clearing` rides along.
- * TASK 775: an On line cut's TABS are open strokes (kind 'stroke', with `centers` / `sweep` as above: `hold` rides along); a lead-in (`leadIn`, #core/lead-in:
- *   an On line outline's leg, or a programmed pocket loop's) rides along and an outline's leg is swept with the loop (its legPoints, a tool path of its own).
+ * TASK 775: an On line cut's TABS are open strokes (kind 'stroke', with `centers` / `sweep` as above: `hold` rides along).
  *   An On line chain's onion skin carries its `hold` (its depth) as a loop's does.
  */
 export function deriveCutFootprint(cuts, rec, state) {
@@ -851,7 +849,7 @@ export function deriveCutFootprint(cuts, rec, state) {
       const center = cut.centers.length === 1 && cut.centers[0].closed ? cut.centers[0].points : null;
       const first = cut.centers[0] && cut.centers[0].points;
       const anchor = first && first.length ? { ...first.reduce((best, p) => (p.y < best.y ? p : best), first[0]) } : null;
-      out.push({ kind: 'band', cutType: String(cut.cutType || ''), fillRule: 'nonzero', rings, center, chain: null, anchor, toolPaths, clearing: cut.clearing, ...(cut.hold ? { hold: cut.hold } : {}), ...(cut.leadIn ? { leadIn: cut.leadIn } : {}), ...(cut.terrace ? { terrace: cut.terrace } : {}) }); // TASK 792: a Roughing / Contour level (#core/stepped-cut levelPocketCut / levelContourCut) carries its level
+      out.push({ kind: 'band', cutType: String(cut.cutType || ''), fillRule: 'nonzero', rings, center, chain: null, anchor, toolPaths, clearing: cut.clearing, ...(cut.hold ? { hold: cut.hold } : {}), ...(cut.terrace ? { terrace: cut.terrace } : {}) }); // TASK 792: a Roughing / Contour level (#core/stepped-cut levelPocketCut / levelContourCut) carries its level
       continue;
     }
     if (cut.isCompound) {
@@ -895,11 +893,9 @@ export function deriveCutFootprint(cuts, rec, state) {
       const side = cut.offsetSide || 0;
       const center = side === 0 ? cut.polygon : offsetPolygon(cut.polygon, side * (r + off), { join: 'round' });
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
-      const leg = cut.leadIn && cut.leadIn.role === 'arc' ? cut.leadIn.points : null; // TASK 778: an On line outline's lead-in arc (+ optional straight), swept and drawn with it
-      if (leg && !isGuide && r > 0) rings.push(...sweptPath(leg, r));
       // TASK 455: the depth chip anchor = the top-most vertex of the bit-centre path
       const anchor = center.length >= 3 ? { ...center.reduce((best, p) => (p.y < best.y ? p : best), center[0]) } : null;
-      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }, ...(leg ? [{ points: leg, closed: false }] : [])] : [], ...(cut.terrace ? { terrace: cut.terrace } : {}), ...(cut.hold ? { hold: cut.hold } : {}), ...(cut.leadIn ? { leadIn: cut.leadIn } : {}) });
+      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }] : [], ...(cut.terrace ? { terrace: cut.terrace } : {}), ...(cut.hold ? { hold: cut.hold } : {}) });
     }
   }
   return out;
@@ -951,25 +947,6 @@ export function orientOnScreen(poly, direction) {
   return ((direction === 'cw') === isCw) ? poly.slice() : poly.slice().reverse();
 }
 
-// Rotate a closed polygon (open ring) to start and end at `junction` (as an open path) when `loopPoints` is not provided.
-function openLoopFromPoint(poly, junction) {
-  if (!poly || poly.length < 3) return [];
-  if (!junction) return [...poly, poly[0]];
-  let best = { i: 0, t: 0, d: Infinity, p: poly[0] };
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i], b = poly[(i + 1) % poly.length];
-    const vx = b.x - a.x, vy = b.y - a.y, len2 = vx * vx + vy * vy;
-    const t = len2 > 0 ? Math.max(0, Math.min(1, ((junction.x - a.x) * vx + (junction.y - a.y) * vy) / len2)) : 0;
-    const p = { x: a.x + vx * t, y: a.y + vy * t };
-    const d = Math.hypot(junction.x - p.x, junction.y - p.y);
-    if (d < best.d) best = { i, t, d, p };
-  }
-  const out = [best.p];
-  for (let k = 1; k <= poly.length; k++) out.push(poly[(best.i + k) % poly.length]);
-  out.push(best.p);
-  return out.filter((q, idx) => idx === 0 || Math.hypot(q.x - out[idx - 1].x, q.y - out[idx - 1].y) > 1e-9);
-}
-
 /**
  * arrowsAlongPath(path, closed, opts) — TASK 777: evenly spaced arrow marks { x, y, angle } (radians, direction of travel)
  * along an open or closed polyline `path` (world units).
@@ -1016,10 +993,8 @@ export function arrowsAlongClosed(path, count = 6) {
  *   - 'outside'|'inside' — a band cut's centre path (conventional: outside CCW, inside CW; includes stepped terraces and held pass 1);
  *   - 'wall'|'island'    — a pocket's finish pass (freehand or programmed: wall CW, island CCW, including walls split at a neck);
  *   - 'linked'|'raster'|'cleanup'|'morphed'|'loop' — a programmed pocket's clearing paths in their cutting order;
- *   - 'leadin'           — a lead-in leg from its tip to the junction (from `leadIn.legPoints`, whatever shape the derivation builds);
- *   - 'online'           — an On-line outline opened by a lead-in, from the junction round back to the junction (matching the export walk);
  *   - 'stroke'           — an On-line cut's tab strokes (each open stroke in its exported order).
- * Plain On-line cuts (no lead-in, no tabs: material both sides, operator chooses direction on the Origin), held gap strips, and Guide / Stock return nothing.
+ * Plain On-line cuts (no tabs: material both sides, operator chooses direction on the Origin), held gap strips, and Guide / Stock return nothing.
  */
 export function deriveCutTravel(footprints) {
   const out = [];
@@ -1034,7 +1009,6 @@ export function deriveCutTravel(footprints) {
     const dir = direction || (closed ? (signedAreaScreen(points) >= 0 ? 'cw' : 'ccw') : 'forward');
     out.push({ role, direction: dir, path: points, closed: Boolean(closed), arrows: arrowsAlongPath(points, Boolean(closed), { count: closed ? 6 : 1 }) });
   };
-  const nearPt = (a, b) => a && b && Math.hypot(a.x - b.x, a.y - b.y) < 1e-4;
   for (const fp of footprints || []) {
     if (fp.hold && fp.hold.role === 'strip') continue; // TASK 742: gap strips are thin loops too small to read
     if (fp.hold && fp.hold.role === 'stroke') { // TASK 775 / 777: On-line tab strokes in their exported order
@@ -1049,17 +1023,7 @@ export function deriveCutTravel(footprints) {
         continue;
       }
       if (CLEAR_TRAVEL_ROLES.has(role)) {
-        const leg = fp.leadIn && (fp.leadIn.role === 'arc' || fp.leadIn.role === 'leg') && Array.isArray(fp.leadIn.legPoints) && fp.leadIn.legPoints.length >= 2 ? fp.leadIn : null;
-        for (const tp of fp.toolPaths || []) {
-          if (leg && !tp.closed && tp.points.length >= leg.legPoints.length) {
-            pushPath('leadin', leg.legPoints, false, 'forward');
-            const splitAt = nearPt(tp.points[leg.legPoints.length - 1], leg.junction) ? leg.legPoints.length - 1 : 0;
-            const body = splitAt > 0 ? tp.points.slice(splitAt) : tp.points;
-            pushPath(role, body, false, 'forward');
-          } else {
-            pushPath(role, tp.points, tp.closed);
-          }
-        }
+        for (const tp of fp.toolPaths || []) pushPath(role, tp.points, tp.closed);
         continue;
       }
     }
@@ -1070,13 +1034,6 @@ export function deriveCutTravel(footprints) {
       const t = fp.cutType;
       if (t === 'exterior' || t === 'outside') pushClosed('outside', fp.center);
       else if (t === 'interior' || t === 'inside') pushClosed('inside', fp.center);
-      else if (t === 'online' && fp.leadIn && (fp.leadIn.role === 'arc' || fp.leadIn.role === 'leg') && Array.isArray(fp.leadIn.legPoints) && fp.leadIn.legPoints.length >= 2) {
-        pushPath('leadin', fp.leadIn.legPoints, false, 'forward');
-        const loopPts = Array.isArray(fp.leadIn.loopPoints) && fp.leadIn.loopPoints.length >= 2
-          ? fp.leadIn.loopPoints
-          : openLoopFromPoint(orientOnScreen(fp.center || [], 'cw'), fp.leadIn.junction);
-        pushPath('online', loopPts, false, 'cw');
-      }
     }
   }
   return out;

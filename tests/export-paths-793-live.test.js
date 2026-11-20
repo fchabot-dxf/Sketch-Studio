@@ -1,11 +1,11 @@
 // tests/export-paths-793-live.test.js — TASK 793: the Export step's third view, "Paths", in the real Shaper page (desktop 1280 x 800 mouse; phone 390 x 844 touch).
 //   argv: nothing = desktop, "phone" = phone. A drawing with every path kind: a plate (Outside, tabs) with a hole (Inside), a Spiral pocket (Loop on), a Raster pocket
-//   (Loop off), an On line square with a lead-in arc, and a Guide.
+//   (Loop off), a plain On line square (TASK 836: its lead-in removed with the lead-in), and a Guide.
 //   1. the toggle 3D | 2D | Paths (one pressed; remembered: localStorage shaper-review-view);
 //   2. the view: one stroke per element of the file (no fill, the cut type's colour), the bit-centre dashed lines, the direction marks, the legend;
 //   3. a tap on a written path and on a bit-centre line picks its cut ("its cut" label, as the 2D view); Fit; zoom redraws the darts at the same screen size;
 //   4. 2D and 3D still work (2D: no stroke classes, no overlay; its shaded fills).
-// Screenshots: .evidence/793/ (overview, zoomed lead-in + tabs, zoomed programmed pocket).
+// Screenshots: .evidence/793/ (overview, zoomed On line + tabs, zoomed programmed pocket).
 import assert from 'node:assert';
 import path from 'node:path';
 import { openPocketPage } from './helpers/pocket-live.js';
@@ -44,7 +44,7 @@ try {
     set('H', { ...B, cutType: 'interior', cutDepth: 18 });
     set('Q', { ...B, cutType: 'pocket', cutDepth: 6, clearing: 'linked', stepover: 40, finishAllowance: 0.5, loop: true });
     set('R', { ...B, cutType: 'pocket', cutDepth: 4, clearing: 'raster', stepover: 40, finishAllowance: 0.5, rasterAngle: 0 });
-    set('O', { ...B, cutType: 'online', cutDepth: 3, leadIn: true, leadInSide: 'outside' });
+    set('O', { ...B, cutType: 'online', cutDepth: 3 });
     set('G', { cutType: 'guide', cutDepth: 0, cutOffset: 0, toolDia: 6.35 });
   })()`);
   await openMode('review');
@@ -112,13 +112,13 @@ try {
   ok(/inside/.test(l2), `a tap on the hole's bit-centre line reads its cut (inside): ${l2}`);
   assert.strictEqual(await evalJs(`document.querySelectorAll('#review-2d-canvas .rv2d-bit-picked').length`), 1, `${D}: its bit-centre line is highlighted`);
 
-  // zoomed screenshots: the lead-in + tabs, then the programmed (Spiral, Loop on) pocket
+  // zoomed screenshots: the On line + tabs, then the programmed (Spiral, Loop on) pocket
   await zoomAt(90, 105, 7);
   const zoomed = await evalJs(`document.getElementById('review-2d-canvas').getAttribute('viewBox')`);
   ok(zoomed !== fit, `the wheel zoomed: ${fit} -> ${zoomed}`);
   const dartsZoomed = await evalJs(`document.querySelector('#review-2d-canvas .sk-travel-arrows') && document.querySelector('#review-2d-canvas .sk-travel-arrows').getAttribute('d').length`);
   ok(dartsZoomed > 0, 'the darts are redrawn after a zoom');
-  await t.shot(`paths-leadin-${D}.png`, phone ? null : '#review-stage', 1);
+  await t.shot(`paths-online-${D}.png`, phone ? null : '#review-stage', 1);
   await clickEl('#review-fit'); await sleep(300);
   assert.strictEqual(await evalJs(`document.getElementById('review-2d-canvas').getAttribute('viewBox')`), fit, `${D}: Fit frames the view as before`);
   await zoomAt(90, 37, 6);

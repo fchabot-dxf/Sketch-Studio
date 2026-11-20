@@ -1,5 +1,5 @@
 // tests/direction-777-phone-live.test.js — TASK 777: clearer cutting direction marks in Shaper Prepare (PHONE 390x844, real touch taps).
-// Checks: marks on selected cut (Raster pocket, On-line Lead-in, On-line Tabs), none on unselected cuts,
+// Checks: marks on selected cut (Raster pocket, On-line Tabs; TASK 836: the On-line Lead-in removed), none on unselected cuts,
 // prefers-reduced-motion shows the still version, no sideways overflow or layout regression.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -33,7 +33,7 @@ try {
   await waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper phone ready');
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
 
-  // Seed 3 cuts: Raster pocket, On-line Lead-in, On-line Tabs
+  // Seed 2 cuts: Raster pocket, On-line Tabs
   await evalJs(`(async () => {
     const { findLoops } = await import('/packages/core/loop-finder.js');
     const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
@@ -45,14 +45,12 @@ try {
     const line = (a, b) => { const id = 'ps' + (++n); st.shapes.push({ id, type: 'line', joints: [a, b] }); return id; };
     const rect = (x, y, w, h) => { const p = [J(x, y), J(x + w, y), J(x + w, y + h), J(x, y + h)]; return [0, 1, 2, 3].map((i) => line(p[i], p[(i + 1) % 4]))[0]; };
     const eRast = rect(0, 0, 60, 45);
-    const eLead = rect(0, 70, 50, 40);
     const eTabs = rect(0, 130, 60, 45);
     st.saveState('seed777p');
     const loops = findLoops(st);
     const kOf = (edge) => keyOf('loop', loops.find((l) => l.edges.includes(edge)).id);
     const base = { cutDepth: 8, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 };
     V2_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
-    V2_PLAN.set(kOf(eLead), { ...base, cutType: 'online', toolDia: 3.175, leadIn: true, leadInLength: 8, leadInSide: 'outside' });
     V2_PLAN.set(kOf(eTabs), { ...base, cutType: 'online', toolDia: 3.175, holdPart: 'tabs', tabCount: 3, tabWidth: 10 });
   })()`);
 
@@ -75,7 +73,6 @@ try {
     return {
       travel: q('.sk-travel'),
       travelClear: q('.sk-travel-clear'),
-      travelLead: q('.sk-travel-lead'),
       travelOnline: q('.sk-travel-online'),
       arrows: q('.sk-travel-arrows'),
       dasharray: csT && csT.strokeDasharray,
@@ -109,15 +106,6 @@ try {
   assert.strictEqual(sRed.anim, 'none', 'phone reduced motion: animation none');
   assert.ok(sRed.arrows === 0, 'phone reduced motion: still no arrowheads');
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
-
-  // Tap On-line Lead-in (keep target on the uncovered left portion of the phone screen)
-  await evalJs(`window.__prepareView.setView({ x: 55, y: 90, w: 120 })`); await sleep(150);
-  await tapWorld(20, 90);
-  const sLead = await inspect();
-  assert.strictEqual(sLead.travelLead, 1, 'phone lead-in: leg marked');
-  assert.strictEqual(sLead.travelOnline, 1, 'phone lead-in: outline marked');
-  assert.ok(sLead.arrows === 0 && sLead.overflowX <= 0 && sLead.cardFits, 'phone lead-in: no arrowheads, layout clean');
-  await shot('phone-leadin.png');
 
   // Tap On-line Tabs
   await evalJs(`window.__prepareView.setView({ x: 55, y: 152.5, w: 120 })`); await sleep(150);

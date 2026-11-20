@@ -24,7 +24,7 @@ const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}
 
 /** A fresh browser on the Shaper page: desktop (mm), phone 390 (touch, inches) or Fusion mode (mm). null when no headless browser is installed.
  *  Returns the page tools; close() closes the browser and its server and removes the download folder. */
-export async function openPocketPage({ tag, phone = false, fusion = false, evidenceDir = null, args = undefined }) { // TASK 775: evidenceDir / args (the 3D view's swiftshader) for tests/helpers/leadin-live.js
+export async function openPocketPage({ tag, phone = false, fusion = false, evidenceDir = null, args = undefined }) { // TASK 775: evidenceDir / args (the 3D view's swiftshader) for tests/helpers/online-pocket-live.js
   const EVIDENCE_DIR = evidenceDir || process.env.EVIDENCE_DIR || path.resolve('.evidence/745');
   fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
   const cdp = await launchBrowser({ tag, width: 1280, height: 800, ...(args ? { args } : {}) });
@@ -178,7 +178,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
 
     // ── A / B: the standalone app ──
     const setLoop = async (on) => { if (await evalJs(`document.querySelector('.cut-loop').checked`) !== on) { await clickEl('#prepare-panel .cut-row[data-row="loop"] .cut-check'); await sleep(300); } };
-    const markers = () => evalJs(`document.querySelectorAll('#prepare-toolpath-group .sk-lead-tip, #prepare-toolpath-group .sk-lead-end').length`); // TASK 775: a closed loop has no start point: no dot
+    const markers = () => evalJs(`document.querySelectorAll('#prepare-toolpath-group circle').length`); // TASK 775: a closed loop has no start point: no dot
     if (phone) {
       await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
       await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });

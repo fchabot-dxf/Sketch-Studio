@@ -6,6 +6,8 @@
  *
  *   POST /e        one event (packages/ui/analytics.js sends it); validated field by field against the declared vocabulary
  *                  (packages/ui/analytics-events.js + the app ids of packages/ui/app-registry.js): anything else is refused (400), never stored.
+ *   POST /feedback TASK 830: one "Rate & feedback" message { stars, text, email, app, version, host } (packages/ui/feedback-rules.js validateFeedback); ONE row in
+ *                  D1 `feedback` (created on first use), the date added here. No IP is read, stored or logged. Rate-limited per isolate (FEEDBACK_RATE).
  *   GET  /dash     the private dashboard (?key=<DASH_KEY>; a wrong or missing key is a 404)
  *   POST /rollup   the DASH_KEY-gated backfill of the D1 `rollups` table
  *   scheduled()    the nightly rollup of yesterday into D1 (LOUD on failure or a suspicious empty day)
@@ -17,6 +19,7 @@
  */
 import { EVENTS as EVENT_TYPES, HOSTS, ANON_ID, BUILD_STAMP, LOCAL_HOST, isFeatureName } from '../../packages/ui/analytics-events.js';
 import { APPS } from '../../packages/ui/app-registry.js';
+import { validateFeedback } from '../../packages/ui/feedback-rules.js';
 
 // THE dataset name (wrangler.toml [[analytics_engine_datasets]] dataset: tests/analytics-worker.test.js checks they agree).
 export const DATASET = 'sketch_events';
@@ -110,12 +113,65 @@ async function handleEvent(request, env) {
   return new Response(null, { status: 204, headers: CORS });
 }
 
+// ── Feedback (TASK 830) ──────────────────────────────────────────────────────────────────────────────
+// POST /feedback: the body is validated by the ONE shared validateFeedback (the client runs the same). ONE row per message in D1 `feedback`; nothing from the
+// request except the message itself is kept (no IP, no headers, no country: the person typed what they wanted us to have, and the Worker adds only the date).
+export const FEEDBACK_RATE = Object.freeze({ max: 5, windowMs: 60000 }); // per isolate: at most `max` messages per `windowMs`
+export const FEEDBACK_BODY_MAX = 16384; // bytes: 2000 characters of text, even all escaped in JSON, fit well under this
+// THE one place the table is defined; it is created on first use (CREATE TABLE IF NOT EXISTS), by whichever of the endpoint / the dashboard comes first.
+export const FEEDBACK_TABLE_SQL = 'CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, app TEXT NOT NULL, version TEXT NOT NULL, host TEXT NOT NULL, stars INTEGER, text TEXT NOT NULL, email TEXT NOT NULL)';
+export const FEEDBACK_LIST_SQL = 'SELECT at, app, version, stars, text, email FROM feedback ORDER BY id DESC LIMIT 200';
+const tableReady = new WeakSet(); // the D1 bindings whose table this isolate has already ensured
+async function ensureFeedbackTable(env) {
+  if (tableReady.has(env.DB)) return;
+  await env.DB.prepare(FEEDBACK_TABLE_SQL).run();
+  tableReady.add(env.DB);
+}
+const feedbackHits = [];
+/** True when this isolate has already taken FEEDBACK_RATE.max messages in the last FEEDBACK_RATE.windowMs (else this one is counted). */
+export function feedbackLimited(now = Date.now()) {
+  while (feedbackHits.length && now - feedbackHits[0] >= FEEDBACK_RATE.windowMs) feedbackHits.shift();
+  if (feedbackHits.length >= FEEDBACK_RATE.max) return true;
+  feedbackHits.push(now);
+  return false;
+}
+
+async function handleFeedback(request, env) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  if (request.method !== 'POST') return new Response('POST only', { status: 405, headers: CORS });
+  const text = await request.text();
+  if (text.length > FEEDBACK_BODY_MAX) return new Response('too large', { status: 413, headers: CORS });
+  let body;
+  try { body = JSON.parse(text); } catch { return new Response('bad json', { status: 400, headers: CORS }); }
+  const m = validateFeedback(body);
+  if (m.error) return new Response('bad ' + m.error, { status: 400, headers: CORS });
+  if (!env.DB) return new Response('not stored', { status: 503, headers: CORS });
+  if (feedbackLimited()) return new Response('slow down', { status: 429, headers: { ...CORS, 'retry-after': '60' } });
+  try {
+    await ensureFeedbackTable(env);
+    await env.DB.prepare('INSERT INTO feedback (at, app, version, host, stars, text, email) VALUES (?1,?2,?3,?4,?5,?6,?7)')
+      .bind(new Date().toISOString(), m.app, m.version, m.host, m.stars, m.text, m.email).run();
+  } catch (e) {
+    console.error('feedback not stored:', String(e && e.message || e).slice(0, 200)); // the failure only, never the request
+    return new Response('not stored', { status: 500, headers: CORS });
+  }
+  return new Response(null, { status: 204, headers: CORS });
+}
+
+async function feedbackRows(env) {
+  if (!env.DB) throw new Error('the DB binding is missing');
+  await ensureFeedbackTable(env);
+  const r = await env.DB.prepare(FEEDBACK_LIST_SQL).all();
+  return r.results || [];
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/dash') return handleDash(request, env);
     if (url.pathname === '/rollup') return handleRollup(request, env);
     if (url.pathname === '/e') return handleEvent(request, env);
+    if (url.pathname === '/feedback') return handleFeedback(request, env);
     return new Response('Not found', { status: 404 });
   },
 
@@ -260,9 +316,10 @@ async function handleDash(request, env) {
   const showBot = url.searchParams.get('bot') === '1';
   const sql = dashQueries({ days, showDev, showBot });
   const keys = Object.keys(sql);
-  const settled = await Promise.allSettled(keys.map((k) => aeQuery(env, sql[k])));
+  const settled = await Promise.allSettled([...keys.map((k) => aeQuery(env, sql[k])), feedbackRows(env)]); // the last is D1 (TASK 830), not Analytics Engine
   const data = {}, errors = {};
-  settled.forEach((s, i) => { if (s.status === 'fulfilled') data[keys[i]] = s.value; else errors[keys[i]] = String((s.reason && s.reason.message) || s.reason); });
+  sql.feedback = '(D1) ' + FEEDBACK_LIST_SQL;
+  [...keys, 'feedback'].forEach((k, i) => { const s = settled[i]; if (s.status === 'fulfilled') data[k] = s.value; else errors[k] = String((s.reason && s.reason.message) || s.reason); });
   return new Response(renderDash({ data, errors, sql, days, showDev, showBot, key: url.searchParams.get('key') }), {
     headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
   });
@@ -294,6 +351,8 @@ export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
   const quality = (data.quality || []).map((r) => ({ cls: String(r.class || '(unclassified)'), n: num(r.n) }));
   const qReal = quality.filter((q) => !HARD_BOT.includes(q.cls)).reduce((s, q) => s + q.n, 0);
   const qBot = quality.filter((q) => HARD_BOT.includes(q.cls)).reduce((s, q) => s + q.n, 0);
+  // TASK 830: the feedback, newest first. EVERY cell goes through esc() (table()): the text and the email are what a visitor typed.
+  const feedbackCells = (data.feedback || []).map((r) => [String(r.at || '').slice(0, 16).replace('T', ' '), r.app || '—', r.version || '—', r.stars == null ? '—' : r.stars + ' / 5', r.text || '', r.email || '']);
   const recentRows = (data.recent || []).map((r) => [String(r.ts).slice(5, 16), [r.city, r.region && r.region !== r.city ? r.region : '', countryName(r.country)].filter(Boolean).join(', '), r.app || '—', r.host || '—']);
 
   return `<!doctype html><html lang="en"><head>
@@ -320,6 +379,8 @@ export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
   td, th { text-align: left; padding: 6px; border-bottom: 1px solid #1d242e; }
   th { color: #8b98a8; font-weight: 500; }
   td:last-child, th:last-child { text-align: right; }
+  .fb td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .fb td:last-child, .fb th:last-child { text-align: left; }
   .err { background: #2d1418; border-color: #5c2027; color: #ffb4ba; }
   pre { white-space: pre-wrap; word-break: break-word; background: #0b0e13; padding: 8px; border-radius: 6px; }
   canvas { max-height: 280px; }
@@ -342,6 +403,7 @@ export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
   <section class="card full"><h2>Top features</h2>${table(['feature', 'app', 'uses'], featureRows)}</section>
   <section class="card"><h2>Traffic quality</h2><p class="sub">real (clean + datacenter) <b style="color:#2ea043">${qReal.toLocaleString('en')}</b> · bot <b style="color:#e3a008">${qBot.toLocaleString('en')}</b></p>${table(['class', 'visits'], quality.map((q) => [q.cls + (HARD_BOT.includes(q.cls) ? ' (bot)' : ''), q.n.toLocaleString('en')]))}</section>
   <section class="card"><h2>Builds by site</h2>${table(['build', 'app', 'site', 'visits'], versionRows)}</section>
+  <section class="card full fb"><h2>Feedback (newest first, UTC)</h2>${table(['date', 'app', 'version', 'stars', 'text', 'email'], feedbackCells)}</section>
   <section class="card full"><h2>Latest visits (UTC)</h2>${table(['time', 'place', 'app', 'host'], recentRows)}</section>
   ${errKeys.length ? `<section class="card full err"><h2>${errKeys.length} quer${errKeys.length === 1 ? 'y' : 'ies'} failed</h2><p class="sub">The rest of the page is real. Likely an Analytics Engine SQL dialect difference:</p>
     ${errKeys.map((q) => `<p><b>${esc(q)}</b>: ${esc(errors[q])}</p><pre>${esc(sql[q])}</pre>`).join('')}</section>` : ''}

@@ -27,18 +27,27 @@ const eq = (a, b, msg) => { assert.deepStrictEqual(a, b, msg); checks++; };
 // ── stubs ───────────────────────────────────────────────────────────────────────────────────────────
 // an in-memory D1 that APPLIES the SQL this Worker issues (so the stored VALUES are asserted, not just "a write happened")
 function makeD1() {
-  const store = { rollups: [] };
+  const store = { rollups: [], feedback: null }; // feedback: null until CREATE TABLE IF NOT EXISTS ran (TASK 830)
   const apply = (sql, args) => {
     if (sql.startsWith('DELETE FROM rollups WHERE date >= ? AND date < ?')) store.rollups = store.rollups.filter((r) => !(r.date >= args[0] && r.date < args[1]));
     else if (sql.startsWith('INSERT INTO rollups (date, event, count, devCount)')) { const [date, event, count, devCount] = args; store.rollups.push({ date, event, count, devCount }); }
-    else throw new Error('unexpected SQL: ' + sql);
+    else if (sql.startsWith('CREATE TABLE IF NOT EXISTS feedback (')) store.feedback = store.feedback || [];
+    else if (sql.startsWith('INSERT INTO feedback (at, app, version, host, stars, text, email)')) {
+      if (!store.feedback) throw new Error('no such table: feedback');
+      const [at, app, version, host, stars, text, email] = args; store.feedback.push({ id: store.feedback.length + 1, at, app, version, host, stars, text, email });
+    } else throw new Error('unexpected SQL: ' + sql);
   };
   const first = (sql, args) => {
     if (!sql.startsWith('SELECT SUM(count) AS total FROM rollups WHERE date')) throw new Error('unexpected SELECT: ' + sql);
     const rows = store.rollups.filter((r) => r.date === args[0]);
     return rows.length ? { total: rows.reduce((s, r) => s + r.count, 0) } : { total: null }; // SQL SUM over no row is NULL
   };
-  const stmt = (sql) => ({ sql, args: [], bind(...a) { this.args = a; return this; }, async first() { return first(this.sql, this.args); } });
+  const stmt = (sql) => ({ sql, args: [], bind(...a) { this.args = a; return this; }, async first() { return first(this.sql, this.args); }, async run() { apply(this.sql, this.args); return { success: true }; },
+    async all() { // the dashboard's feedback list: newest first
+      if (!this.sql.startsWith('SELECT at, app, version, stars, text, email FROM feedback ORDER BY id DESC')) throw new Error('unexpected SELECT: ' + this.sql);
+      if (!store.feedback) throw new Error('no such table: feedback');
+      return { results: [...store.feedback].reverse().map(({ id, host, ...r }) => r) };
+    } });
   return { store, prepare: stmt, async batch(stmts) { for (const s of stmts) apply(s.sql, s.args); return stmts.map(() => ({ success: true })); } };
 }
 function makeEnv(extra = {}) {
@@ -315,6 +324,116 @@ eq(placeholderProblems('database_id = "e6becbe9-e096-4d66-a142-2fcd5b84c439"\n')
   try { eq(parseLastLogLine('{"ts":1,"ok":true}\n{"ts":2,"ok":false}\n{broken'), { ts: 2, ok: false }, 'the last VALID log line'); } finally { console.warn = warn; }
   ok(errs.length === 1, 'a corrupt log line is reported, not silently skipped');
   ok(/last attempt: FAILED, 3 days ago/.test(formatLastAttempt({ ts: Date.now() - 3 * 86400000, ok: false })), 'the last attempt is printed with its age');
+}
+
+// ── TASK 830: POST /feedback + the dashboard's Feedback section ─────────────────────────────────────────────────────────────
+// the rules themselves (validateFeedback, the ask state) are tests/feedback-830.test.js; here: the endpoint, the stored row, the escaping.
+{
+  const { feedbackLimited, FEEDBACK_RATE, FEEDBACK_TABLE_SQL } = await import('../analytics/src/index.js');
+  const good = { stars: 4, text: 'It works, but the grid is too faint', email: 'maker@example.com', app: 'shaper', version: '2026-11-16T14:05Z', host: 'web' };
+  const fb = (body, opts = {}) => post(body, { path: '/feedback', ...opts });
+  // the limiter is per isolate and reads the clock: each case below starts 10 minutes later than the one before (Date.now is replaced for this block), so
+  // the cases that store a row never count against each other, and the burst case fills one window on purpose
+  const realNow = Date.now; let clock = realNow();
+  const fbEnv = (cfg) => { clock += 10 * FEEDBACK_RATE.windowMs; Date.now = () => clock; return makeEnv(cfg); };
+
+  // accepted: ONE row, the table is created on first use, the date is the Worker's
+  {
+    const { env, ae } = fbEnv();
+    eq(env.DB.store.feedback, null, 'no feedback table before the first message');
+    const r = await worker.fetch(fb(good, { cf: { country: 'CA', city: 'Montreal', region: 'Quebec' }, headers: { 'cf-connecting-ip': '203.0.113.77', 'x-forwarded-for': '198.51.100.9' } }), env);
+    eq(r.status, 204, 'a valid message is accepted (204)');
+    eq(r.headers.get('access-control-allow-origin'), '*', 'with the CORS header the page needs');
+    eq(env.DB.store.feedback.length, 1, 'ONE row stored (the table was created on first use)');
+    const row = env.DB.store.feedback[0];
+    eq({ ...row, at: undefined, id: undefined }, { at: undefined, id: undefined, app: 'shaper', version: '2026-11-16T14:05Z', host: 'web', stars: 4, text: good.text, email: 'maker@example.com' }, 'the row holds the message fields exactly');
+    ok(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(row.at) && Math.abs(Date.parse(row.at) - realNow()) < 60000, 'with the date (UTC, added by the Worker)');
+    // NO IP (and no place) in ANY stored value: every value of the row, and nothing went to Analytics Engine
+    const everything = JSON.stringify(env.DB.store.feedback);
+    ok(!/203\.0\.113\.77|198\.51\.100\.9/.test(everything), 'no IP address in any stored value (searched every value of every row)');
+    ok(!/Montreal|Quebec|"CA"/.test(everything), 'and no country / region / city');
+    eq(Object.keys(row).sort(), ['app', 'at', 'email', 'host', 'id', 'stars', 'text', 'version'], 'the row has only the declared columns');
+    eq(ae.length, 0, 'a feedback message writes nothing to Analytics Engine');
+    ok(/CREATE TABLE IF NOT EXISTS feedback/.test(FEEDBACK_TABLE_SQL) && !/\bip\b|country|city/i.test(FEEDBACK_TABLE_SQL), 'the table definition (one place) has no ip / country / city column');
+  }
+  // refused: nothing stored
+  const refuse = async (body, status, why) => {
+    const { env } = fbEnv();
+    const r = await worker.fetch(fb(body), env);
+    eq([r.status, env.DB.store.feedback === null || env.DB.store.feedback.length === 0], [status, true], why);
+  };
+  await refuse('{not json', 400, 'bad JSON → 400, nothing stored');
+  await refuse({ ...good, stars: 6 }, 400, 'stars 6 → 400');
+  await refuse({ ...good, stars: 0 }, 400, 'stars 0 → 400');
+  await refuse({ ...good, stars: '4' }, 400, 'stars as text → 400');
+  await refuse({ ...good, text: 'x'.repeat(2001) }, 400, 'text over 2000 characters → 400');
+  await refuse({ ...good, email: 'not an email' }, 400, 'a malformed email → 400');
+  await refuse({ ...good, app: 'frame-calc' }, 400, 'an undeclared app → 400');
+  await refuse({ ...good, host: 'desktop' }, 400, 'an undeclared host → 400');
+  await refuse({ ...good, version: '<script>' }, 400, 'a version that is not a build stamp → 400');
+  await refuse({ ...good, stars: null, text: '   ', email: 'a@b.co' }, 400, 'no stars and no words (an email alone) → 400');
+  await refuse('x'.repeat(20000), 413, 'a body over the cap → 413');
+  {
+    const { env } = fbEnv();
+    eq((await worker.fetch(new Request('https://x/feedback', { method: 'GET' }), env)).status, 405, 'GET /feedback → 405');
+    eq((await worker.fetch(new Request('https://x/feedback', { method: 'OPTIONS' }), env)).status, 204, 'the CORS preflight → 204');
+  }
+  // the optional parts: stars only, text only, an empty email, extra fields
+  { const { env } = fbEnv(); eq((await worker.fetch(fb({ ...good, text: '', email: '' }), env)).status, 204, 'stars only, no email → accepted'); eq(env.DB.store.feedback[0].email, '', 'an empty email is stored as empty'); }
+  { const { env } = fbEnv(); eq((await worker.fetch(fb({ ...good, stars: null }), env)).status, 204, 'text only, no stars → accepted'); eq(env.DB.store.feedback[0].stars, null, 'stars stored as NULL'); }
+  { const { env } = fbEnv(); eq((await worker.fetch(fb({ ...good, extra: 'ignored', ip: '1.2.3.4' }), env)).status, 204, 'unknown fields are dropped, not an error'); ok(!JSON.stringify(env.DB.store.feedback).includes('1.2.3.4'), 'an extra ip field is never stored'); }
+  // a failing D1: a 500 to the page (it shows its plain line, the text stays); the log has the failure, not the request
+  {
+    const { env } = fbEnv(); env.DB.prepare = () => ({ bind() { return this; }, async run() { throw new Error('D1 down'); } });
+    const errs = []; const ce = console.error; console.error = (...a) => errs.push(a.join(' '));
+    let r; try { r = await worker.fetch(fb(good, { headers: { 'cf-connecting-ip': '203.0.113.77' } }), env); } finally { console.error = ce; }
+    eq(r.status, 500, 'a D1 failure → 500');
+    ok(errs.length === 1 && /D1 down/.test(errs[0]) && !/203\.0\.113\.77|maker@example\.com|grid is too faint/.test(errs.join('')), 'the failure is logged, without the request: no IP, no email, no text');
+  }
+  // the dashboard: a Feedback section behind the key, newest first, every cell escaped
+  {
+    const { env } = fbEnv(CFG);
+    const hostile = '</td><script>alert(1)</script><img src=x onerror=alert(2)> & "q" \'s\'';
+    await worker.fetch(fb({ ...good, text: 'first <b>bold</b>', email: '', stars: 2, app: 'trace' }), env);
+    await worker.fetch(fb({ ...good, text: 'x', email: '"><svg onload=alert(3)>@x.co' }), env);
+    eq(env.DB.store.feedback.length, 1, '(a hostile EMAIL is refused by the format check: only the first message was stored)');
+    await worker.fetch(fb({ ...good, text: hostile, email: 'a@b.co', stars: 5 }), env);
+    eq(env.DB.store.feedback.length, 2, 'a hostile TEXT is stored as typed');
+    let html = '';
+    await withAe(dashRows, async () => { html = await (await worker.fetch(new Request('https://x/dash?key=k3y'), env)).text(); });
+    ok(html.includes('<h2>Feedback (newest first, UTC)</h2>'), 'the dashboard has a Feedback section');
+    ok(!/quer(y|ies) failed/.test(html), 'and no failed query');
+    const section = html.slice(html.indexOf('<h2>Feedback'), html.indexOf('<h2>Latest visits'));
+    ok(section.indexOf('5 / 5') > 0 && section.indexOf('5 / 5') < section.indexOf('2 / 5'), 'newest first: the later message above the earlier one');
+    ok(section.includes('<td>trace</td>') && section.includes('<td>shaper</td>') && section.includes('<td>a@b.co</td>'), 'the app and the email (when given) are shown');
+    ok(!section.includes('<script') && !section.includes('<img') && !section.includes('<b>bold</b>') && !section.includes('<svg'), 'XSS-safe: no tag a visitor typed survives as a tag');
+    ok(section.includes('&lt;/td&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;img src=x onerror=alert(2)&gt; &amp; &quot;q&quot; &#39;s&#39;') && section.includes('first &lt;b&gt;bold&lt;/b&gt;'), 'the typed text is shown escaped, as text');
+    ok(!html.includes('<script>alert'), 'the whole page has no injected script');
+    eq((await worker.fetch(new Request('https://x/dash?key=wrong'), env)).status, 404, 'the Feedback section is behind DASH_KEY (a wrong key sees nothing)');
+  }
+  // before any message: the table is created on first view and the section is empty; with no DB binding the failure is shown and the rest still renders
+  {
+    const { env } = fbEnv(CFG);
+    let html = ''; await withAe(dashRows, async () => { html = await (await worker.fetch(new Request('https://x/dash?key=k3y'), env)).text(); });
+    ok(/<h2>Feedback[^]*?<p class="sub">no data<\/p>/.test(html), 'before any message the section says no data');
+    const env2 = { ...fbEnv(CFG).env, DB: undefined }; let html2 = ''; await withAe(dashRows, async () => { html2 = await (await worker.fetch(new Request('https://x/dash?key=k3y'), env2)).text(); });
+    ok(/quer(y|ies) failed/.test(html2) && html2.includes('the DB binding is missing') && html2.includes('<h2>Visits</h2>'), 'with no DB binding the failure is shown and the rest of the page still renders');
+  }
+  // the rate limit: FEEDBACK_RATE.max per window per isolate, through the endpoint (one window: the clock does not move inside this case), then the limiter on its own
+  {
+    eq(FEEDBACK_RATE, { max: 5, windowMs: 60000 }, 'the limit is 5 messages per minute per isolate');
+    const { env } = fbEnv();
+    const codes = []; for (let i = 0; i < 8; i++) codes.push((await worker.fetch(fb(good), env)).status);
+    eq(codes, [204, 204, 204, 204, 204, 429, 429, 429], 'through the endpoint the 6th message inside a minute is answered 429');
+    eq(env.DB.store.feedback.length, 5, 'and only 5 were stored');
+    const limited = await worker.fetch(fb(good), env);
+    eq([limited.status, limited.headers.get('retry-after')], [429, '60'], 'a limited answer says when to retry');
+    clock += FEEDBACK_RATE.windowMs + 1;
+    eq((await worker.fetch(fb(good), env)).status, 204, 'a minute later the next message is taken again');
+    const now = clock + 10 * FEEDBACK_RATE.windowMs;
+    eq(Array.from({ length: 7 }, (_, i) => feedbackLimited(now + i)), [false, false, false, false, false, true, true], 'feedbackLimited on its own: the 6th and 7th inside a minute are limited');
+    Date.now = realNow;
+  }
 }
 
 console.log(`analytics-worker: ${checks} checks pass`);

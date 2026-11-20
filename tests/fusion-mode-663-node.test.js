@@ -224,7 +224,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     eq(win.document.querySelector('[data-section="account"]'), null, 'projects: false omits Google account / Drive section');
     eq(win.document.querySelector('[data-section="goto"]'), null, 'no GO TO section (TASK 696: none in any app)');
     const fusionActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
-    deepEq(fusionActs, ['download', 'settings', 'log'], 'projects: false keeps only hostActions');
+    deepEq(fusionActs, ['download', 'settings', 'log', 'feedback'], 'projects: false keeps only hostActions, and the shared Rate & feedback item (TASK 830: in every app, Fusion palette included)');
     chromeHidden.destroy();
 
     // 6b. Normal mode (projects: true) unchanged
@@ -249,7 +249,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     ok(win.document.querySelector('[data-section="account"]') !== null, 'projects: true keeps Google account / Drive section');
     eq(win.document.querySelector('[data-section="goto"]'), null, 'no GO TO section in normal mode either (TASK 696: each app is its own website)');
     const normalActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
-    deepEq(normalActs, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log'], 'projects: true keeps all project/file actions + hostActions');
+    deepEq(normalActs, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log', 'feedback'], 'projects: true keeps all project/file actions + hostActions + the shared Rate & feedback item (TASK 830)');
     chromeNormal.destroy();
   } finally {
     globalThis.window = prev.window;

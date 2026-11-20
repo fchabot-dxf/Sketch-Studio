@@ -13,10 +13,17 @@
 // Opt out: open the app once with ?analytics=off (?analytics=on undoes it); a browser's Do Not Track or Global Privacy Control is honoured.
 // The owner's own devices: ?dev=1 once tags this browser's events dev=1 (the dashboard leaves them out by default); ?dev=0 removes the tag.
 // Both are kept in the site's localStorage: each app is its own site, so once per app and browser.
+//
+// TASK 830: this module is ALSO the one place that talks to the Worker for "Rate & feedback" (feedback.js has the window and the ask card, this has the
+// network): postFeedback() sends one message { stars, text, email, app, version, host } (feedback-rules.js) to the Worker's /feedback, and ONLY because the
+// person pressed Send. It works from any public page, opted out of the analytics or not (it is a message the person chose to send, not a count), and from no
+// local page (a developer's machine never writes to the real Worker). The anonymous id is NOT part of it. onFeature(fn) lets feedback.js hear each declared
+// feature (the exports) as it is tracked, so the one auto-ask counts the same export events the analytics counts.
 
 import { dbg } from '#core/debug.js';
 import { APPS } from './app-registry.js';
 import { HOSTS, ANON_ID, LOCAL_HOST, isFeatureName } from './analytics-events.js';
+import { validateFeedback } from './feedback-rules.js';
 
 // The Worker's event URL (deployed 2026-11-16, analytics/README.md). '' = nothing is ever sent.
 export const ENDPOINT = 'https://sketch-analytics.dansemur.workers.dev/e';
@@ -39,6 +46,7 @@ export function isPublicPage(loc) {
  */
 export function createAnalytics({ endpoint = ENDPOINT, build = BUILD, env = globalThis } = {}) {
   let session = null; // { app, host } once the app started: before that nothing is sent
+  const listeners = new Set(); // TASK 830: onFeature
 
   function read(key) {
     try { return env.localStorage.getItem(key); } catch (e) { dbg.warn('analytics', `localStorage read of ${key} failed`, e && e.message); return null; }
@@ -93,10 +101,39 @@ export function createAnalytics({ endpoint = ENDPOINT, build = BUILD, env = glob
   function track(name) {
     if (!session) return false;
     if (!isFeatureName(name)) { dbg.warn('analytics', `track: "${name}" is not a declared feature (analytics-events.js FEATURES), not sent`); return false; }
+    for (const fn of listeners) fn(name);
     return send('feature', name);
   }
 
-  return { start, track, willSend };
+  /** TASK 830: `fn(name)` is called for every declared feature tracked (whether or not it is sent). Returns the unsubscribe. */
+  function onFeature(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+
+  // TASK 830: the Worker's /feedback is next to its /e
+  const feedbackUrl = endpoint.replace(/\/e$/, '/feedback');
+  /** A message can be sent from a public page with an ENDPOINT (see the top of the file). */
+  const canSendFeedback = () => !!endpoint && isPublicPage(env.location);
+  /**
+   * Send one feedback message: { stars, text, email } of the form; the app, version and host are added here. Resolves { ok: true } or { ok: false, message }
+   * (a plain sentence for the person; the form keeps what they typed). Nothing is sent when the message is not valid (validateFeedback) or this page may not send.
+   */
+  async function postFeedback({ stars = null, text = '', email = '' } = {}) {
+    if (!session) return { ok: false, message: 'The app has not started yet.' };
+    const msg = validateFeedback({ stars, text, email, app: session.app, version: build, host: session.host });
+    if (msg.error) return { ok: false, message: msg.error };
+    if (!canSendFeedback()) return { ok: false, message: 'Feedback can only be sent from the published app, not from this copy.' };
+    let r;
+    try {
+      r = await env.fetch(feedbackUrl, { method: 'POST', body: JSON.stringify(msg), headers: { 'content-type': 'text/plain' } });
+    } catch (e) {
+      dbg.warn('analytics', 'feedback not sent', e && e.message);
+      return { ok: false, message: 'Could not send it (are you offline?). Your message is still here: try again.' };
+    }
+    if (r.status === 429) return { ok: false, message: 'Too many messages just now. Please try again in a minute.' };
+    if (!r.ok) return { ok: false, message: 'The message was not accepted (error ' + r.status + '). Your message is still here: try again later.' };
+    return { ok: true };
+  }
+
+  return { start, track, willSend, onFeature, postFeedback, canSendFeedback };
 }
 
 const pageAnalytics = createAnalytics();
@@ -104,3 +141,8 @@ const pageAnalytics = createAnalytics();
 export const startAnalytics = (opts) => pageAnalytics.start(opts);
 /** A declared feature (analytics-events.js FEATURES) was used. */
 export const track = (name) => pageAnalytics.track(name);
+/** TASK 830 (feedback.js): `fn(name)` for every declared feature tracked; the page's analytics rule (willSend: a public page, not opted out); a feedback message. */
+export const onFeature = (fn) => pageAnalytics.onFeature(fn);
+export const analyticsWillSend = () => pageAnalytics.willSend();
+export const postFeedback = (form) => pageAnalytics.postFeedback(form);
+export const canSendFeedback = () => pageAnalytics.canSendFeedback();

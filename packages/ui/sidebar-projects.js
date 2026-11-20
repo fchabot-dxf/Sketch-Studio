@@ -38,6 +38,7 @@ import { mountLoadingOverlay } from './loading-overlay.js';
 import { saveStateOf, tabSaveState } from './save-state.js';
 import { findFooterEnd } from './footer-slot.js'; // TASK 776: the footer's right end: THE Save button and THE account avatar live there
 import { createAccountAvatar } from './account-avatar.js'; // TASK 776: THE account control (the avatar at the right end of the header / of the tab strip)
+import { openFeedback, feedbackMenuItem, FEEDBACK_ICON } from './feedback.js'; // TASK 830: the "Rate & feedback" entry, in every app's menu
 
 export { relativeTime };
 
@@ -83,6 +84,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), account, start, onClose: () => { manager = null; } });
   }
 
+  // TASK 830: always available, in every app (with or without the project layer); the window is shared (feedback.js)
+  const feedbackItem = feedbackMenuItem({ icon: FEEDBACK_ICON, onClick: () => { openFeedback(); } }); // the drawer closes itself (no keepOpen)
   const actions = projects ? [
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); await refreshName(); }) },
     // TASK 651 / 668: the same template modal the "+" tab button and New design open (Blank design first, one picker configuration)
@@ -98,7 +101,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     { id: 'open-file', label: 'Open…', icon: SIDEBAR_ICONS.open, tooltip: 'Open a design from Google Drive or from a file on this device', keepOpen: true, onClick: act(async () => { sidebar.close(); await projectActions.openDialog(); await refreshName(); }, { close: false }) },
     ...(importFile ? [importSidebarAction({ importFile, getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open })] : []),
     ...(hostActions.length ? [{ divider: true }, ...hostActions] : []),
-  ] : [...hostActions];
+    { divider: true }, feedbackItem, // TASK 830
+  ] : [...hostActions, ...(hostActions.length ? [{ divider: true }] : []), feedbackItem];
 
   // The one-line state under the document name, derived from the store (where the current design lives + how its last save went).
   const statusLine = () => {

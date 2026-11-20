@@ -4,8 +4,9 @@ import { extractCutRecord, CUT_TYPES } from '../apps/shaper/src/shaper.js';
 import { parseSvgText as parseSvg } from '#ui/sketch-import.js'; // the one SVG parser (TASK 706: Shaper's svgio.js re-export went with Explore)
 import { importSvgGeometry, computeImportScale } from '#core/svg-import.js';
 import { findLoops } from '#core/loop-finder.js';
-import { keyOf, CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+import { keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -84,9 +85,9 @@ import { exportShaperSVG } from '#core/shaper-export.js';
     assert(lineShapes.length === 1, 'line has 1 shape tagged with d_line');
   }
 
-  // 3. Integration with findLoops and CUT_PLAN population
+  // 3. Integration with findLoops and V2_PLAN population
   {
-    CUT_PLAN.clear();
+    V2_PLAN.clear();
     let jSeq = 0;
     const genJ = () => 'j' + (jSeq++);
     const st = {
@@ -123,25 +124,25 @@ import { exportShaperSVG } from '#core/shaper-export.js';
     const loopDescIds = new Set(loop.edges.map((eid) => shapeById.get(eid).descId));
     assert(loopDescIds.size === 1 && loopDescIds.has('desc_pock'), 'loop edges map to desc_pock');
 
-    // Register loop in CUT_PLAN
+    // Register loop in V2_PLAN
     const rec = cutRecordByDesc.get('desc_pock');
-    CUT_PLAN.set(keyOf('loop', loop.id), { ...rec });
+    V2_PLAN.set(keyOf('loop', loop.id), { ...rec });
 
-    // Register open chain in CUT_PLAN (TASK 432 replaces kind: 'edge' with kind: 'chain')
+    // Register open chain in V2_PLAN (TASK 432 replaces kind: 'edge' with kind: 'chain')
     const { findOpenChains } = await import('#core/loop-finder.js');
     const chains = findOpenChains(st, loops);
     const lineShape = st.shapes.find((s) => s.descId === 'desc_guide');
     assert(lineShape, 'lineShape exists');
     const chain = chains.find((c) => c.edges.includes(lineShape.id));
     assert(chain, 'chain exists for lineShape');
-    CUT_PLAN.set(keyOf('chain', chain.id), { ...cutRecordByDesc.get('desc_guide') });
+    V2_PLAN.set(keyOf('chain', chain.id), { ...cutRecordByDesc.get('desc_guide') });
 
-    // Verify CUT_PLAN entries
-    const loopRec = CUT_PLAN.get(keyOf('loop', loop.id));
+    // Verify V2_PLAN entries
+    const loopRec = V2_PLAN.get(keyOf('loop', loop.id));
     assert(loopRec.cutType === 'pocket', 'loop cutType is pocket');
     assert(loopRec.cutDepth === 6.35, 'loop cutDepth is 6.35mm');
 
-    const chainRec = CUT_PLAN.get(keyOf('chain', chain.id));
+    const chainRec = V2_PLAN.get(keyOf('chain', chain.id));
     assert(chainRec.cutType === 'guide', 'chain cutType is guide');
 
     // Verify re-export generates proper shaper attributes

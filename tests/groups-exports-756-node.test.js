@@ -17,7 +17,7 @@ import { shapesInGroup } from '#core/group-model.js';
 import { worldToScreen } from '#ui/coords.js';
 import { buildSVG, buildDXF } from '../apps/sketchstudio/ui/export-manager.js';
 import { drawDrawing, planPrint } from '../apps/sketchstudio/drawing-view.js';
-import { cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { shaperSvgOf, shaperPreviewOf } from '../apps/shaper/src/export-payload.js';
 import { importDrawing } from '../apps/penplotter/src/sketch-stage.js';
 import { collectToolpathShapes } from '../apps/penplotter/src/core-geometry.js';
@@ -75,7 +75,7 @@ const landedGrouped = (st, host) => {
     const st = app.state, doc = app.document;
     await quiet(app.importFile)(SVG, 'letters.svg');
     landedGrouped(st, 'shaper');
-    const entries = cutPlanEntries();
+    const entries = planEntries();
     const r = withAndWithout(st, () => ({ svg: shaperSvgOf(st, entries), preview: shaperPreviewOf(st, entries).svg }));
     ok(entries.length >= 7 && r.grouped.svg.includes('<path'), 'shaper: the export has the cuts');
     eq(r.grouped, r.plain, 'shaper: the Shaper SVG file and its 2D preview copy are byte-identical with and without groups');

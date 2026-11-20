@@ -15,11 +15,12 @@ import { deriveProfileCuts } from '#core/profile-model.js';
 import { buildRelief } from '#core/relief-model.js';
 import { LEAD_IN, outlineArc, outlineJunction, leadInDragAt, migrateLeadInRecord } from '#core/lead-in.js';
 import { POCKET_CLEARING, planClearing, clearingSettings, pocketRings } from '#core/pocket-clearing.js';
-import { CUT_PLAN, cutPlanEntries, keyOf, planReliefItems } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf, planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { PARAM_HINTS } from '../apps/shaper/src/param-hints.js';
-import { setOpOrder } from '../apps/shaper/src/operations.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -284,13 +285,13 @@ const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, t
   }
   // 3D buildRelief emits pocket-start mark in rel.marks without adding it to skipped
   const st = polyState([RECT]);
-  CUT_PLAN.clear();
-  CUT_PLAN.set(keyOf('loop', outerOf(st).id), POCKET({ clearing: 'linked', loop: true }));
+  V2_PLAN.clear();
+  V2_PLAN.set(keyOf('loop', outerOf(st).id), POCKET({ clearing: 'linked', loop: true }));
   const rel = buildRelief({ state: st, items: planReliefItems(st), stock: { thickness: 19 } });
   eq(rel.stats.skipped.length, 0, '3D relief: pocket start mark is NOT in skipped');
   eq(rel.marks.length, 1, '3D relief: 1 pocket-start mark emitted');
   eq([rel.marks[0].kind, rel.marks[0].dia], ['pocket-start', 12], '3D relief mark kind & dia (2 * toolDia)');
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
 
   // Zero pocketLeg anywhere in packages/ or apps/
   const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
@@ -323,7 +324,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
 {
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Arc 778');
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
     const doc = app.document, q = (s) => doc.querySelector(s), st = app.state;
@@ -342,7 +343,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
     pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="online"]');
     typed('.cut-depth', '3');
     pressEl('.cut-row[data-row="leadIn"] .cut-preset[data-value="true"]');
-    const kA = [...CUT_PLAN.keys()][0];
+    const kA = [...V2_PLAN.keys()][0];
     // Calculated tags visible, reset buttons hidden
     for (const row of ['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInAt']) {
       eq(q(`.cut-row[data-row="${row}"] .cut-calc-tag`).hidden, false, `${row}: calculated tag shown`);
@@ -354,26 +355,26 @@ SettingsManager.set('LENGTH_PRECISION', null);
     eq(q('.cut-lead-radius').value, '6.35', 'bit change moves calculated radius box to 6.35');
     // Typing Radius stores it, hides calculated tag, shows Reset to calculated
     typed('.cut-lead-radius', '8');
-    eq(CUT_PLAN.get(kA).leadInRadius, 8, 'typed Radius stored');
+    eq(V2_PLAN.get(kA).leadInRadius, 8, 'typed Radius stored');
     eq(q('.cut-row[data-row="leadInRadius"] .cut-calc-tag').hidden, true, 'Radius calculated tag hidden after typing');
     eq(q('.cut-row[data-row="leadInRadius"] .cut-calc-reset').hidden, false, 'Radius Reset button shown after typing');
     // Bit change no longer overwrites typed Radius
     typed('.cut-bit', '3.175');
-    eq([CUT_PLAN.get(kA).leadInRadius, q('.cut-lead-radius').value], [8, '8'], 'typed Radius sticks across bit change');
+    eq([V2_PLAN.get(kA).leadInRadius, q('.cut-lead-radius').value], [8, '8'], 'typed Radius sticks across bit change');
     // Reset to calculated clears to null, restores tag, recalculates to 3.175 (ONE undo step)
     const h0 = st.history.length;
     pressEl('.cut-calc-reset[data-reset="leadInRadius"]');
-    eq([CUT_PLAN.get(kA).leadInRadius, q('.cut-lead-radius').value, st.history.length], [null, '3.175', h0 + 1], 'Reset to calculated restores null & recalculated value in ONE undo step');
+    eq([V2_PLAN.get(kA).leadInRadius, q('.cut-lead-radius').value, st.history.length], [null, '3.175', h0 + 1], 'Reset to calculated restores null & recalculated value in ONE undo step');
     eq(q('.cut-row[data-row="leadInRadius"] .cut-calc-tag').hidden, false, 'Radius calculated tag returns after reset');
     // Sweep & Length typing + reset
     typed('.cut-lead-sweep', '45');
-    eq([CUT_PLAN.get(kA).leadInSweep, q('.cut-row[data-row="leadInSweep"] .cut-calc-tag').hidden], [45, true], 'typed Sweep=45 hides tag');
+    eq([V2_PLAN.get(kA).leadInSweep, q('.cut-row[data-row="leadInSweep"] .cut-calc-tag').hidden], [45, true], 'typed Sweep=45 hides tag');
     typed('.cut-lead-length', '4');
-    eq([CUT_PLAN.get(kA).leadInLength, q('.cut-row[data-row="leadInLength"] .cut-calc-tag').hidden], [4, true], 'typed Length=4 hides tag');
+    eq([V2_PLAN.get(kA).leadInLength, q('.cut-row[data-row="leadInLength"] .cut-calc-tag').hidden], [4, true], 'typed Length=4 hides tag');
     ok(q('.cut-note').textContent.includes('45°') && q('.cut-note').textContent.includes('+ 4 mm straight'), 'note reports sweep 45° and straight length 4 mm');
     pressEl('.cut-calc-reset[data-reset="leadInSweep"]');
     pressEl('.cut-calc-reset[data-reset="leadInLength"]');
-    eq([CUT_PLAN.get(kA).leadInSweep, CUT_PLAN.get(kA).leadInLength], [null, null], 'Reset clears Sweep and Length to null');
+    eq([V2_PLAN.get(kA).leadInSweep, V2_PLAN.get(kA).leadInLength], [null, null], 'Reset clears Sweep and Length to null');
     // Draggable handle exists in Prepare DOM when selected; dragging it moves leadInAt, updates Position row, ONE undo step, Reset clears it
     const handle = q('#prepare-canvas .sk-lead-handle');
     ok(handle, 'Prepare renders 1 draggable lead-in handle at junction');
@@ -383,12 +384,12 @@ SettingsManager.set('LENGTH_PRECISION', null);
     handle.dispatchEvent(new app.window.PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, button: 0, isPrimary: true, clientX: p0.x, clientY: p0.y }));
     pc.dispatchEvent(new app.window.PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 1, buttons: 1, clientX: p1.x, clientY: p1.y }));
     pc.dispatchEvent(new app.window.PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 1, button: 0, clientX: p1.x, clientY: p1.y }));
-    ok(CUT_PLAN.get(kA).leadInAt != null && Math.abs(CUT_PLAN.get(kA).leadInAt - 80 / 320) < 0.02, `drag moved leadInAt to ~0.25: ${CUT_PLAN.get(kA).leadInAt}`);
+    ok(V2_PLAN.get(kA).leadInAt != null && Math.abs(V2_PLAN.get(kA).leadInAt - 80 / 320) < 0.02, `drag moved leadInAt to ~0.25: ${V2_PLAN.get(kA).leadInAt}`);
     eq(st.history.length, hDrag + 1, 'handle drag commits ONE undo step');
     eq([q('.cut-pos-state').textContent, q('.cut-pos-state').classList.contains('is-moved'), q('.cut-calc-reset[data-reset="leadInAt"]').hidden],
       ['moved', true, false], 'Position row shows moved and Reset button');
     pressEl('.cut-calc-reset[data-reset="leadInAt"]');
-    eq([CUT_PLAN.get(kA).leadInAt, q('.cut-pos-state').textContent], [null, 'calculated'], 'Position Reset returns to calculated');
+    eq([V2_PLAN.get(kA).leadInAt, q('.cut-pos-state').textContent], [null, 'calculated'], 'Position Reset returns to calculated');
   } finally { await app.close(); }
 }
 // ── 8. End-to-end 775 document reload through shaper-doc.js ──
@@ -405,15 +406,15 @@ SettingsManager.set('LENGTH_PRECISION', null);
   };
   const pf = await createProfile();
   await createNamedDesign(pf, 'shaper', 'Mig 775', doc775);
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile: pf });
   try {
-    const rec = CUT_PLAN.get(keyOf('loop', loopId));
+    const rec = V2_PLAN.get(keyOf('loop', loopId));
     eq([rec.leadIn, rec.leadInRadius, rec.leadInLength, rec.leadInSide], [true, 6.35, null, 'outside'], 'saved 775 document migrates on open: leadInLength 6.35 -> leadInRadius 6.35, leadInLength null');
-    const svg = shaperSvgOf(app.state, cutPlanEntries());
+    const svg = shaperSvgOf(app.state, planEntries());
     const els = elementsOf(svg);
     ok(els.length === 1 && els[0].d.includes(' A 6.35 6.35 ') && !/Z$/.test(els[0].d), 'migrated 775 document exports tangential arc of radius 6.35 mm');
   } finally { await app.close(); }
 }
-CUT_PLAN.clear(); setOpOrder([]);
+V2_PLAN.clear(); V2_PLAN.setOrder([]);
 console.log(`leadin-arc-778-node: ok (${checks} checks)`);

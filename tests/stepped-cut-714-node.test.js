@@ -18,9 +18,10 @@ import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { buildRelief } from '#core/relief-model.js';
 import { steppedTerraces, sameOutline, STEP_DEPTH, SAME_OUTLINE_TOL_MM } from '#core/stepped-cut.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, lastStepDepth } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, lastStepDepth } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding, availableTypes } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -114,7 +115,7 @@ eq(SAME_OUTLINE_TOL_MM, 0.01, 'the stated tolerance for identical steps: 0.01 mm
 
 // ── 2. the app ──
 SettingsManager.set('DOC_UNIT', 'mm');
-const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {} });
+const exportOf = (app) => exportShaperSVG({ state: app.state, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {} });
 const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) => ({ tag: m[1], type: /shaper:cutType="([^"]+)"/.exec(m[2])[1], depth: (/shaper:cutDepth="([^"]+)"/.exec(m[2]) || [])[1], geom: m[2].replace(/ fill=.*$/, '') }));
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
@@ -128,10 +129,10 @@ const harness = (app) => {
   const setStep = (text) => { const inp = q('.cut-step-depth'); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
   return { q, pressEl, clickAt, menu, pick, note, stepRowShown, setStep };
 };
-const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType === cutType);
+const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === cutType);
 
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     app.modes.showMode('prepare');
@@ -149,9 +150,9 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     eq([pocketRec.cutType, pocketRec.cutDepth, pocketRec.slope.kind], ['pocket', 8, 'pocket'], 'Fusion import: the sloped pocket stays a Pocket (straight) and carries its slope');
     const plainSvg = exportOf(app);
     { // a slope on a plain Pocket changes nothing in its export: the same plan without the slope exports byte-identically
-      const saved = CUT_PLAN.get(pk); CUT_PLAN.set(pk, { ...saved }); delete CUT_PLAN.get(pk).slope;
+      const saved = V2_PLAN.get(pk); V2_PLAN.set(pk, { ...saved }); delete V2_PLAN.get(pk).slope;
       eq(exportOf(app), plainSvg, 'a plain Pocket exports the same with or without a slope');
-      CUT_PLAN.set(pk, saved);
+      V2_PLAN.set(pk, saved);
     }
     eq(elems(plainSvg).map((e) => e.type + '@' + e.depth), ['outside@19.000 mm', 'pocket@8.000 mm'], 'plain: the outline + ONE pocket at 8 mm');
     h.clickAt(10, -10); // the outline (no slope)
@@ -161,7 +162,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     ok(!h.stepRowShown(), 'a Pocket has no step row');
 
     h.pick('roughing');
-    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth, CUT_PLAN.get(pk).cutDepth], ['roughing', 1, 8], 'picked: Stepped pocket, step depth 1 mm (the default), depth 8 kept');
+    eq([V2_PLAN.get(pk).cutType, V2_PLAN.get(pk).stepDepth, V2_PLAN.get(pk).cutDepth], ['roughing', 1, 8], 'picked: Stepped pocket, step depth 1 mm (the default), depth 8 kept');
     ok(h.stepRowShown() && h.q('.cut-step-depth').value === '1', 'the card shows the Step depth row: 1');
     eq(h.q('.cut-type-cur').textContent, 'Roughing', 'the card names the type');
     ok(h.q('.cut-ic-slot svg') && h.q('.cut-ic-slot svg').innerHTML.includes('M4.5 13.5V10.5h3v-3h3v-3h3'), 'with its own icon (a stair)');
@@ -176,24 +177,24 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     // the step row: 2 mm -> 4 pockets, live in the export and the Review; the last step used becomes the default
     const hist = app.state.history.length;
     h.setStep('2');
-    eq([CUT_PLAN.get(pk).stepDepth, lastStepDepth()], [2, 2], 'step depth 2 stored on the record, and remembered');
+    eq([V2_PLAN.get(pk).stepDepth, lastStepDepth()], [2, 2], 'step depth 2 stored on the record, and remembered');
     eq(app.state.history.length, hist + 1, 'the step change is ONE undo step');
     eq(elems(exportOf(app)).filter((e) => e.type === 'pocket').map((e) => e.depth), ['2.000 mm', '4.000 mm', '6.000 mm', '8.000 mm'], 'export follows: 4 pockets');
     eq(planReliefItems(app.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth), [2, 4, 6, 8], 'Review follows');
     eq(h.note(), ['Pocket 1 (8mm): 4 steps, 2 to 8 mm \u00b7 outlines 0.353 mm apart'], 'the note follows');
     h.setStep('0.01');
-    eq(CUT_PLAN.get(pk).stepDepth, 0.01, 'a step of 0.01 mm is stored as typed (no minimum)');
+    eq(V2_PLAN.get(pk).stepDepth, 0.01, 'a step of 0.01 mm is stored as typed (no minimum)');
     app.key('z', { ctrl: true });
-    eq(CUT_PLAN.get(pk).stepDepth, 2, 'Ctrl+Z: step 2 again');
+    eq(V2_PLAN.get(pk).stepDepth, 2, 'Ctrl+Z: step 2 again');
     app.key('z', { ctrl: true });
-    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth], ['roughing', 1], 'Ctrl+Z: step 1');
+    eq([V2_PLAN.get(pk).cutType, V2_PLAN.get(pk).stepDepth], ['roughing', 1], 'Ctrl+Z: step 1');
     app.key('z', { ctrl: true });
-    eq([CUT_PLAN.get(pk).cutType, Boolean(CUT_PLAN.get(pk).slope)], ['pocket', true], 'Ctrl+Z: Pocket again, the slope kept');
+    eq([V2_PLAN.get(pk).cutType, Boolean(V2_PLAN.get(pk).slope)], ['pocket', true], 'Ctrl+Z: Pocket again, the slope kept');
     eq(exportOf(app), plainSvg, 'and the export is the plain one again');
     app.key('y', { ctrl: true });
-    eq([CUT_PLAN.get(pk).cutType, CUT_PLAN.get(pk).stepDepth], ['roughing', 1], 'Ctrl+Y: Stepped pocket, step 1');
+    eq([V2_PLAN.get(pk).cutType, V2_PLAN.get(pk).stepDepth], ['roughing', 1], 'Ctrl+Y: Stepped pocket, step 1');
     app.key('y', { ctrl: true });
-    eq(CUT_PLAN.get(pk).stepDepth, 2, 'Ctrl+Y: step 2');
+    eq(V2_PLAN.get(pk).stepDepth, 2, 'Ctrl+Y: step 2');
 
     // the countersunk hole (06): Stepped inside only, with the last step used as its step
     importFusionSelection(payload('06-countersink'), { controller: app.controller, prepare: app.prepare });
@@ -201,7 +202,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
     eq(h.menu().filter((id) => id === 'roughing'), ['roughing'], 'a countersunk hole: Roughing (TASK 792: in place of Stepped inside)');
     h.pick('roughing');
     const [hk] = recAt('roughing');
-    eq(CUT_PLAN.get(hk).stepDepth, 0.01, 'the next cut switched to a stepped type starts with the last step used (0.01 mm, set above)');
+    eq(V2_PLAN.get(hk).stepDepth, 0.01, 'the next cut switched to a stepped type starts with the last step used (0.01 mm, set above)');
     h.setStep('1');
     eq(elems(exportOf(app)).filter((e) => e.type === 'inside').map((e) => `${e.tag} ${e.geom} @${e.depth}`), ['circle cx="60" cy="-40" r="4" @1.000 mm', 'circle cx="60" cy="-40" r="3" @19.000 mm'], 'export: an inside circle r 4 at 1 mm, then ONE inside circle r 3 at 19 mm');
 
@@ -222,7 +223,7 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
 
 // ── 3. save + reload ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Stepped 714'); // only a NAMED design autosaves; the next load restores it
   let planBefore, svgBefore;
@@ -235,19 +236,19 @@ const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType ===
       h.clickAt(60, -40);
       h.pick('roughing');
       h.setStep('0.5');
-      planBefore = JSON.stringify([...CUT_PLAN.entries()]);
+      planBefore = JSON.stringify([...V2_PLAN.entries()]);
       svgBefore = exportOf(app);
       eq(elems(svgBefore).filter((e) => e.type === 'pocket').map((e) => e.depth), ['5.000 mm', '5.500 mm', '6.000 mm', '6.500 mm', '7.000 mm', '7.500 mm', '8.000 mm'], 'floor fillet at step 0.5: one pocket to 5 mm, then the fillet steps');
       const d = await app.storedDoc();
-      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.cutType === 'roughing' && r.stepDepth === 0.5 && r.slope && r.slope.rings.length === 14), 'the autosave stores the stepped record with its step and slope');
+      ok(storedRecords(d.hosts.shaper).some(([, r]) => r.cutType === 'roughing' && r.stepDepth === 0.5 && r.slope && r.slope.rings.length === 14), 'the autosave stores the stepped record with its step and slope');
     } finally { await app.close(); }
   }
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   {
     const app = await open({ host: 'shaper', profile });
     try {
       app.modes.showMode('prepare');
-      eq(JSON.stringify([...CUT_PLAN.entries()]), planBefore, 'after a reload the plan is equal (type, step, slope)');
+      eq(JSON.stringify([...V2_PLAN.entries()]), planBefore, 'after a reload the plan is equal (type, step, slope)');
       eq(exportOf(app), svgBefore, 'and the export is byte-identical');
     } finally { await app.close(); }
   }

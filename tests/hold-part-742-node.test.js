@@ -18,8 +18,9 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { deriveCuts } from '#core/stepped-cut.js';
 import { deriveCutFootprint } from '#core/profile-model.js';
 import { HOLD_PART, autoTabCount, loopWalk, tabLayout, walkAt } from '#core/hold-part.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, keyOf, holdNoteItems, holdSummary, loopsWithPolygons } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, keyOf, holdNoteItems, holdSummary, loopsWithPolygons } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -286,9 +287,9 @@ const harness = (app) => {
   const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);
   return { q, pressEl, clickAt, pick, note, typed, shown, hold, step };
 };
-const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).id));
+const recOf = (app, edge) => V2_PLAN.get(keyOf('loop', loopOf(app.state, edge).id));
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     const h = harness(app), st = app.state;
@@ -301,7 +302,7 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
     ok(h.shown('holdPart') && !h.shown('tabCount') && !h.shown('tabWidth') && !h.shown('holdThickness'), 'Outside: the Hold part row, Off: no other hold row');
     eq([...h.q('.cut-row[data-row="holdPart"]').querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['Off*', 'Tabs', 'Onion skin'], 'Off | Tabs | Onion skin, Off active');
     eq(h.note(), [], 'Off: no note');
-    const svgOff = exportOf(st, cutPlanEntries());
+    const svgOff = exportOf(st, planEntries());
     let n0 = st.history.length;
     h.hold('tabs');
     eq(st.history.length, n0 + 1, 'Tabs: ONE undo step');
@@ -311,7 +312,7 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
     eq(h.q('.cut-row[data-row="holdThickness"] .cut-field-label').textContent, 'Tab thickness', 'the thickness row reads Tab thickness');
     eq([h.q('.cut-tab-count').value, h.q('.cut-tab-count').placeholder, h.q('.cut-tab-width').value, h.q('.cut-hold-thickness').value], ['', 'Auto (4)', '10', '2'], 'the fields: count empty with Auto (4), 10, 2');
     eq(h.note(), ['Outside: 4 tabs, 10 mm wide, 2 mm thick: 1 pass at 16 mm + 4 gaps at 18 mm', 'Gaps: cut the side against the part; the return leg is optional'], 'the card note');
-    const els = elementsOf(exportOf(st, cutPlanEntries()));
+    const els = elementsOf(exportOf(st, planEntries()));
     eq(els.map((e) => [e.cutType, e.depth]), [['inside', '18.000 mm'], ['outside', '16.000 mm'], ...Array(4).fill(['inside', '18.000 mm'])], 'the export (TASK 802, flat, derivation order): the hole, the pass, then the 4 strips');
     // the Review: the pass at 16, each strip at 18, the hole at 18
     const items = planReliefItems(st);
@@ -321,7 +322,7 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
     h.step('tabCount', 1);
     eq([recOf(app, 's0').tabCount, st.history.length], [5, n0 + 1], 'count + from Auto (4) -> 5, ONE undo step');
     eq(h.note()[0], 'Outside: 5 tabs, 10 mm wide, 2 mm thick: 1 pass at 16 mm + 5 gaps at 18 mm', 'note: 5 tabs');
-    eq(elementsOf(exportOf(st, cutPlanEntries())).filter((e) => e.tag === 'path' && e.cutType === 'inside').length, 5, 'export: 5 strips');
+    eq(elementsOf(exportOf(st, planEntries())).filter((e) => e.tag === 'path' && e.cutType === 'inside').length, 5, 'export: 5 strips');
     h.typed('.cut-tab-count', '3'); eq(recOf(app, 's0').tabCount, 3, 'typed 3');
     h.typed('.cut-tab-count', 'x'); eq(recOf(app, 's0').tabCount, 3, 'typed text: refused, stays 3');
     h.typed('.cut-tab-count', '0'); eq(recOf(app, 's0').tabCount, 3, 'typed 0: refused');
@@ -337,26 +338,26 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
     h.typed('.cut-hold-thickness', '18');
     eq(h.note(), ['Outside: tabs refused: tab thickness 18 mm is not less than the cut depth 18 mm: nothing to hold; cut without them'], 'refused note');
     ok(h.q('.cut-note .cut-note-warn'), 'the refused note is in the warning colour');
-    eq(exportOf(st, cutPlanEntries()), svgOff, 'refused: the export is the plain cut (byte-identical to Off)');
+    eq(exportOf(st, planEntries()), svgOff, 'refused: the export is the plain cut (byte-identical to Off)');
     h.typed('.cut-hold-thickness', '3');
     // onion skin
     h.hold('skin');
     ok(!h.shown('tabCount') && !h.shown('tabWidth') && h.shown('holdThickness'), 'Onion skin: only the thickness row');
     eq(h.q('.cut-row[data-row="holdThickness"] .cut-field-label').textContent, 'Skin thickness', 'it reads Skin thickness');
     eq(h.note(), ['Outside: onion skin 3 mm: 1 pass at 15 mm'], 'onion skin note');
-    eq(elementsOf(exportOf(st, cutPlanEntries())).map((e) => [e.cutType, e.depth]), [['inside', '18.000 mm'], ['outside', '15.000 mm']], 'onion skin export');
+    eq(elementsOf(exportOf(st, planEntries())).map((e) => [e.cutType, e.depth]), [['inside', '18.000 mm'], ['outside', '15.000 mm']], 'onion skin export');
     // undo walks back one edit at a time; Off is byte-identical to before
     app.undo(); eq(recOf(app, 's0').holdPart, 'tabs', 'undo: back to Tabs');
     app.redo(); eq(recOf(app, 's0').holdPart, 'skin', 'redo: Onion skin');
     h.hold('off');
-    eq(exportOf(st, cutPlanEntries()), svgOff, 'Off again: byte-identical to before Tabs');
+    eq(exportOf(st, planEntries()), svgOff, 'Off again: byte-identical to before Tabs');
     eq(h.note(), [], 'Off: no note');
     // the last values are the next record's defaults (width 8, thickness 3, count Auto); an Inside on the hole
     h.clickAt(100, 50);
     h.pick('interior');
     h.typed('.cut-depth', '18');
     h.hold('tabs');
-    const rh = CUT_PLAN.get(keyOf('loop', loopOf(st, 'h').id));
+    const rh = V2_PLAN.get(keyOf('loop', loopOf(st, 'h').id));
     eq([rh.tabCount, rh.tabWidth, rh.holdThickness], ['auto', 8, 3], 'the next record turned to Tabs takes the last values set (Auto, 8 mm, 3 mm)');
     eq(h.note()[0], 'Inside: 3 tabs, 8 mm wide, 3 mm thick: 1 pass at 15 mm + 3 gaps at 18 mm', 'the hole: 3 tabs');
     // a type that cannot hold: no Hold part row
@@ -369,7 +370,7 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
 }
 {
   // save + reload keep the held record and the export byte-identical
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Tabs 742');
   let planBefore, svgBefore;
@@ -386,20 +387,20 @@ const recOf = (app, edge) => CUT_PLAN.get(keyOf('loop', loopOf(app.state, edge).
       h.typed('.cut-depth', '12');
       h.hold('tabs');
       h.typed('.cut-tab-count', '6');
-      planBefore = JSON.stringify([...CUT_PLAN.entries()]);
-      svgBefore = exportOf(app.state, cutPlanEntries());
+      planBefore = JSON.stringify([...V2_PLAN.entries()]);
+      svgBefore = exportOf(app.state, planEntries());
       ok(elementsOf(svgBefore).filter((e) => e.depth === '12.000 mm').length >= 3, 'L with 6 tabs asked: strips at 12 mm');
       const d = await app.storedDoc();
-      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.holdPart === 'tabs' && r.tabCount === 6 && r.tabWidth > 0 && r.holdThickness > 0), 'the autosave stores the held record');
+      ok(storedRecords(d.hosts.shaper).some(([, r]) => r.holdPart === 'tabs' && r.tabCount === 6 && r.tabWidth > 0 && r.holdThickness > 0), 'the autosave stores the held record');
     } finally { await app.close(); }
   }
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   {
     const app = await open({ host: 'shaper', profile });
     try {
       app.modes.showMode('prepare');
-      eq(JSON.stringify([...CUT_PLAN.entries()]), planBefore, 'after a reload the plan is equal');
-      eq(exportOf(app.state, cutPlanEntries()), svgBefore, 'and the export is byte-identical');
+      eq(JSON.stringify([...V2_PLAN.entries()]), planBefore, 'after a reload the plan is equal');
+      eq(exportOf(app.state, planEntries()), svgBefore, 'and the export is byte-identical');
     } finally { await app.close(); }
   }
 }

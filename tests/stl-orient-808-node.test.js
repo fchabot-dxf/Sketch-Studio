@@ -15,7 +15,8 @@ import SettingsManager from '#core/settings-manager.js';
 import * as M from './helpers/stl-mesh.js';
 import { setStlSource, getStlSource, rememberMesh, captureStlDoc, applyStlDoc } from '../apps/shaper/src/stl-source.js';
 import { open } from './helpers/node-app.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -184,7 +185,7 @@ const slice = (tris, o = {}) => { const r = sliceStl(tris, { name: 'part.stl', .
 
 // ── 5. THE APP ──────────────────────────────────────────────────────────────────────────────────
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     const tilt = turn([1, 0, 0], 30);
@@ -203,8 +204,8 @@ const slice = (tris, o = {}) => { const r = sliceStl(tris, { name: 'part.stl', .
     const s1 = getStlSource();
     eq([s1.up, s1.rotation, s1.floor], [null, o.rotation, o.floor], 'the source holds the rotation and the picked normal');
     near(s1.sizeMm.x, 120, 1e-3, 'width back to the block\'s'); near(s1.sizeMm.y, 80, 1e-3, 'length'); near(s1.sizeMm.z, 19, 1e-3, 'height');
-    eq([...CUT_PLAN.values()].map((r) => r.cutType), ['roughing'], 'the relief: one Roughing');
-    near([...CUT_PLAN.values()][0].cutDepth, 19, 1e-3, 'depth 19 mm (float noise under a micron)');
+    eq([...V2_PLAN.values()].map((r) => r.cutType), ['roughing'], 'the relief: one Roughing');
+    near([...V2_PLAN.values()][0].cutDepth, 19, 1e-3, 'depth 19 mm (float noise under a micron)');
     eq(app.document.querySelectorAll('.stl-card .stl-ups .is-active').length, 0, 'no Up side is lit for a clicked floor');
     // undo restores the tilted import (one step)
     app.document.getElementById('btn-undo').click();

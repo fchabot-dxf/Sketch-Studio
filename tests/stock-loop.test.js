@@ -9,9 +9,10 @@ import { findLoops } from '#core/loop-finder.js';
 import { makeProfile } from '#core/profile-model.js';
 import { CUT_TYPES, STOCK_TYPE_ID, exportEncoding, classify, extractCutRecord, effectiveCutRecord, availableTypes } from '../apps/shaper/src/shaper.js';
 import { PARAM_HINTS } from '../apps/shaper/src/param-hints.js'; // TASK 770
-import { CUT_PLAN, planReliefItems, planStockProfile, stockKeyOf, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planReliefItems, planStockProfile, stockKeyOf, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { resolveStock } from '../apps/shaper/src/stock.js';
 import { captureShaperDoc, applyShaperDoc, captureCutPlan, applyCutPlan } from '../apps/shaper/src/shaper-doc.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 const ptIn = (g, x, y) => { let c = false; for (let i = 0, j = g.length - 1; i < g.length; j = i++) { if ((g[i][1] > y) !== (g[j][1] > y) && x < (g[j][0] - g[i][0]) * (y - g[i][1]) / (g[j][1] - g[i][1]) + g[i][0]) c = !c; } return c; };
@@ -162,18 +163,18 @@ const areaL = 60 * 30 + 30 * 30, areaHole = 14 * 14;
 
 // ── persistence + undo ride the cut plan ──
 {
-  const saved = [...CUT_PLAN.entries()];
+  const saved = [...V2_PLAN.entries()];
   try {
-    CUT_PLAN.clear();
-    CUT_PLAN.set('loop:loop_x', { cutType: 'stock', cutDepth: 18.5, cutOffset: 0, toolDia: 3.175 });
-    CUT_PLAN.set('loop:loop_y', { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175 });
+    V2_PLAN.clear();
+    V2_PLAN.set('loop:loop_x', { cutType: 'stock', cutDepth: 18.5, cutOffset: 0, toolDia: 3.175 });
+    V2_PLAN.set('loop:loop_y', { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175 });
     const doc = JSON.parse(JSON.stringify(captureShaperDoc()));                 // through JSON, like the sidecar
-    CUT_PLAN.clear(); assert.strictEqual(stockKeyOf(), null);
+    V2_PLAN.clear(); assert.strictEqual(stockKeyOf(), null);
     applyShaperDoc(doc);
-    assert.strictEqual(stockKeyOf(), 'loop:loop_x'); assert.strictEqual(CUT_PLAN.get('loop:loop_x').cutDepth, 18.5, 'the Stock loop and its thickness survive a reload');
+    assert.strictEqual(stockKeyOf(), 'loop:loop_x'); assert.strictEqual(V2_PLAN.get('loop:loop_x').cutDepth, 18.5, 'the Stock loop and its thickness survive a reload');
     // UNDO: the shared snapshots capture / restore the cut plan (hostSnapshot): move the role, then restore
     const before = captureCutPlan();
-    CUT_PLAN.get('loop:loop_x').cutType = null; CUT_PLAN.get('loop:loop_y').cutType = 'stock';
+    V2_PLAN.get('loop:loop_x').cutType = null; V2_PLAN.get('loop:loop_y').cutType = 'stock';
     assert.strictEqual(stockKeyOf(), 'loop:loop_y');
     applyCutPlan(before);
     assert.strictEqual(stockKeyOf(), 'loop:loop_x', 'undo restores the Stock role to the previous loop');

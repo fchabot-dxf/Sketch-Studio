@@ -6,7 +6,8 @@
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
-import { CUT_PLAN, stockKeyOf } from '../apps/shaper/src/cut-plan.js';
+import { stockKeyOf } from '../apps/shaper/src/cut-plan.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const app = await open({ host: 'shaper' });
 try {
@@ -17,7 +18,7 @@ try {
   // seed: A = an L-shaped outline (the board), B = a 20x20 loop drawn INSIDE it (a part, NOT a hole), C = a separate rectangle
   const st = app.state;
   for (const k of [...st.joints.keys()]) st.joints.delete(k);
-  st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+  st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
   const poly = (p, pts) => { pts.forEach(([x, y], i) => st.joints.set(p + i, { x, y })); pts.forEach((_, i) => st.shapes.push({ id: p + 's' + i, type: 'line', joints: [p + i, p + ((i + 1) % pts.length)] })); };
   poly('A', [[0, 0], [120, 0], [120, 60], [60, 60], [60, 120], [0, 120]]);
   poly('B', [[10, 10], [30, 10], [30, 30], [10, 30]]);
@@ -27,7 +28,7 @@ try {
   assert(pc.children.length > 0, 'prepare canvas ready');
   const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
   const pickType = (tid) => { pressEl('.cut-type-trigger'); assert(q(`.cut-type-opt[data-id="${tid}"]`), 'cut type menu open'); pressEl(`.cut-type-opt[data-id="${tid}"]`); };
-  const stockKey = () => stockKeyOf(CUT_PLAN);
+  const stockKey = () => stockKeyOf(V2_PLAN);
   const notice = () => { const e = doc.getElementById('prepare-notice'); return e && !e.hidden ? e.textContent : ''; };
 
   // the menu: Stock beside the others, with its icon
@@ -47,8 +48,8 @@ try {
   console.log('stock card rows:', JSON.stringify(rows));
   assert.deepStrictEqual(rows, ['cutDepth:Thickness'], 'the card shows only the Thickness row');
   const depth = q('.cut-depth'); depth.value = '0.5in'; depth.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
-  assert(CUT_PLAN.get(stockKeyOf(CUT_PLAN)).cutDepth === 12.7, 'thickness stored');
-  assert.strictEqual(CUT_PLAN.get(stockKeyOf(CUT_PLAN)).cutDepth, 12.7, 'thickness typed as 0.5in is stored in mm');
+  assert(V2_PLAN.get(stockKeyOf(V2_PLAN)).cutDepth === 12.7, 'thickness stored');
+  assert.strictEqual(V2_PLAN.get(stockKeyOf(V2_PLAN)).cutDepth, 12.7, 'thickness typed as 0.5in is stored in mm');
 
   // idle: deselect (click empty canvas): the Stock loop keeps its distinct look (its edge class and its STOCK label exist; the colours are CSS: the browser file)
   clickAt(230, 90);
@@ -62,7 +63,7 @@ try {
   const keyC = stockKey();
   assert.notStrictEqual(keyC, keyA, 'the role moved to the second loop');
   assert.match(notice(), /Stock moved to this loop/);
-  assert.strictEqual([...CUT_PLAN.values()].filter((r) => r.cutType === 'stock').length, 1, 'exactly one Stock');
+  assert.strictEqual([...V2_PLAN.values()].filter((r) => r.cutType === 'stock').length, 1, 'exactly one Stock');
   app.key('z', { ctrl: true });
   assert.strictEqual(stockKey(), keyA, 'Ctrl+Z gives the Stock role back to the L loop');
   console.log('stock-loop-node: ok');

@@ -18,7 +18,7 @@ import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import SettingsManager from '#core/settings-manager.js';
 import { makeGroup, ungroup, selectUnit, shapesInGroup, childGroups, enterGroup, stepOutOfGroup, groupChain, importedPieces } from '#core/group-model.js';
 import { findConnectedChain } from '#core/loop-finder.js';
-import { cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { shaperSvgOf, shaperPreviewOf } from '../apps/shaper/src/export-payload.js';
 import { buildSVG, buildDXF } from '../apps/sketchstudio/ui/export-manager.js';
 
@@ -93,7 +93,7 @@ try {
   measured.svgGroups = st.groups.map((g) => `${g.name}${g.parentId ? '<' + st.groups.find((p) => p.id === g.parentId).name : ''}:${shapesInGroup(st, g.id).length}`);
 
   // exports: byte-identical with vs without groups (Shaper's file + its preview copy, every cut the import kept)
-  const entries = cutPlanEntries();
+  const entries = planEntries();
   ok(entries.length >= 8, 'the import kept the cut of every element (the export has content): ' + entries.length);
   const withG = shaperSvgOf(st, entries), withoutG = shaperSvgOf(strip(st), entries);
   eq(withG, withoutG, 'Shaper export: byte-identical with and without the groups');

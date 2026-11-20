@@ -4,8 +4,9 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, polyArea, sampleArc } from '#core/loop-geometry.js';
 import { makeProfile, resolveProfileViews, resolveProfileForLoop, derivedProfileForLoop, resolveTargetKey, listSketchProfiles } from '#core/profile-model.js';
 import { mountPrepareView } from '../apps/shaper/src/prepare-view.js';
-import { keyOf, parseKey, CUT_PLAN, migrateEdgeRecords } from '../apps/shaper/src/cut-plan.js';
+import { keyOf, parseKey, migrateEdgeRecords } from '../apps/shaper/src/cut-plan.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 // Minimal mock DOM for Node environment
 function setupMockDom() {

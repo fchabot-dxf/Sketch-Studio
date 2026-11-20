@@ -1,3 +1,4 @@
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 // tests/polish-757-tray.js — TASK 757: what the two live tests (polish-757-live / polish-757-phone-live) share: the tray they draw and the Settings select
 // measure. Both are PAGE functions (the tests send their source text to the page: evalJs(`(${fn})()`)), so they use only what the page has.
 export const PHONE = { width: 390, height: 844 };
@@ -7,11 +8,11 @@ export const PHONE = { width: 390, height: 844 };
 // allowance, and a dish (circle r 44.45 at (300,100)) as a Stepped pocket over a cove slope (adaptive: many close outlines). Returns the planned types.
 export async function drawTray() {
   const { findLoops } = await import('/packages/core/loop-finder.js');
-  const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+  const { V2_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
   const { POCKET_CLEARING } = await import('/packages/core/pocket-clearing.js');
   const st = window.__designController.state;
   for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
-  st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+  st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
   let n = 0;
   const J = (x, y) => { const id = 'tj' + (++n); st.joints.set(id, { x, y }); return id; };
   const line = (a, b, more = {}) => { const id = more.id || 'ts' + (++n); st.shapes.push({ id, type: 'line', joints: [a, b], ...more }); return id; };
@@ -25,12 +26,12 @@ export async function drawTray() {
   const base = { cutOffset: 0, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90 };
   const depth = 12.7, cove = depth, R = 44.45, rings = [];
   for (let z = 0; z <= depth + 1e-9; z += 0.25) rings.push({ z: +z.toFixed(3), segments: [{ type: 'circle', cx: 300, cy: 100, r: R - cove + Math.sqrt(Math.max(0, cove * cove - z * z)) }] });
-  CUT_PLAN.set(loopOf(board[0]), { ...base, toolDia: 3.175, cutType: 'stock', cutDepth: 19.05 });
-  CUT_PLAN.set(loopOf(part[0]), { ...base, cutType: 'exterior', cutDepth: 19.05, holdPart: 'tabs', tabCount: 'auto', tabWidth: 9.525, holdThickness: 1.5875 });
-  CUT_PLAN.set(loopOf(slot[0]), { ...base, cutType: 'interior', cutDepth: 19.05 });
-  CUT_PLAN.set(loopOf(pocket[0]), { ...base, cutType: 'pocket', cutDepth: 9.525, clearing: 'raster', stepover: POCKET_CLEARING.stepoverPct.default, finishAllowance: 0.508, rasterAngle: 0 });
-  CUT_PLAN.set(keyOf('loop', loops.find((l) => l.edges.includes('dish')).id), { ...base, cutType: 'roughing', cutDepth: depth, stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.25, slope: { kind: 'pocket', label: 'Dish', rings } });
-  return [...CUT_PLAN.values()].map((r) => r.cutType);
+  V2_PLAN.set(loopOf(board[0]), { ...base, toolDia: 3.175, cutType: 'stock', cutDepth: 19.05 });
+  V2_PLAN.set(loopOf(part[0]), { ...base, cutType: 'exterior', cutDepth: 19.05, holdPart: 'tabs', tabCount: 'auto', tabWidth: 9.525, holdThickness: 1.5875 });
+  V2_PLAN.set(loopOf(slot[0]), { ...base, cutType: 'interior', cutDepth: 19.05 });
+  V2_PLAN.set(loopOf(pocket[0]), { ...base, cutType: 'pocket', cutDepth: 9.525, clearing: 'raster', stepover: POCKET_CLEARING.stepoverPct.default, finishAllowance: 0.508, rasterAngle: 0 });
+  V2_PLAN.set(keyOf('loop', loops.find((l) => l.edges.includes('dish')).id), { ...base, cutType: 'roughing', cutDepth: depth, stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.25, slope: { kind: 'pocket', label: 'Dish', rings } });
+  return [...V2_PLAN.values()].map((r) => r.cutType);
 }
 
 // Every select of the open Settings panel, on every tab: its width, the width it needs to show its longest option (a hidden copy at its intrinsic width:

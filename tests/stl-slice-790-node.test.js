@@ -16,10 +16,11 @@ import { IMPORT_FILE_PICK } from '#ui/project-file.js';
 import * as M from './helpers/stl-mesh.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
-import { CUT_PLAN, planReliefItems } from '../apps/shaper/src/cut-plan.js';
+import { planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { getStock } from '../apps/shaper/src/stock.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { STL_FILE_PICK } from '../apps/shaper/src/stl-import.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -128,12 +129,12 @@ const harness = (app) => {
   };
   return { q, pressEl, clickAt, pick, card };
 };
-const plan = () => [...CUT_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`);
+const plan = () => [...V2_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`);
 
 eq(STL_FILE_PICK.exts, ['.stl'], "Shaper's own pick offers STL");
 ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudio, Pen Plotter, Trace, Shaper SVG / DXF) never offers STL: ' + IMPORT_FILE_PICK.exts);
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   SettingsManager.set('DOC_UNIT', 'mm');
   const app = await open({ host: 'shaper' });
   try {
@@ -152,13 +153,13 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
     h.pressEl('.stl-ups .cut-preset[data-value="-Z"]');
     eq(st.history.length, steps + 1, 'a new Up side: ONE undo step');
     eq(plan(), ['roughing@19'], 'upside down: the relief again');
-    ok(CUT_PLAN.values().next().value.levels.every((l) => l.loops.length === 2), 'upside down: the pocket is under the part (every level: the block + the hole)');
+    ok(V2_PLAN.values().next().value.levels.every((l) => l.loops.length === 2), 'upside down: the pocket is under the part (every level: the block + the hole)');
     eq(app.document.getElementById('prepare-notice').textContent, `Replaced with block.stl: a relief, ${nLv} levels (2400 mm² of the part is out of the top's reach (an overhang, a hollow, a recess under it): the wood there is left)`, 'the notice: replaced, with the warning');
     eq(h.card().up, '−Z', 'the card: -Z');
     st.undo();
-    eq([CUT_PLAN.values().next().value.levels.some((l) => l.loops.length === 3), h.card().up], [true, '+Z'], 'undo: the +Z design (its pocket in the levels) and its card');
+    eq([V2_PLAN.values().next().value.levels.some((l) => l.loops.length === 3), h.card().up], [true, '+Z'], 'undo: the +Z design (its pocket in the levels) and its card');
     st.redo();
-    eq([CUT_PLAN.values().next().value.levels.some((l) => l.loops.length === 3), h.card().up], [false, '−Z'], 'redo: -Z again');
+    eq([V2_PLAN.values().next().value.levels.some((l) => l.loops.length === 3), h.card().up], [false, '−Z'], 'redo: -Z again');
     st.undo();
     h.pressEl('.stl-units .cut-preset[data-value="in"]');
     eq([h.card().unit, h.card().size, getStock().thickness], ['in', '3048 × 2032 × 482.6 mm', 482.6], 'Units in: the size and the stock follow');
@@ -190,7 +191,7 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
 }
 {
   // save + reopen: the card and the mesh are kept; a design without an STL stores none
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'STL 790');
   {
@@ -198,7 +199,7 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
     try {
       importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
       const d0 = await app.storedDoc();
-      eq(Object.keys(d0.hosts.shaper), ['version', 'cutPlan', 'stock', 'opOrder', 'selections'], 'a design not from an STL (here from Fusion) stores no `stl`: its Shaper part is as before (TASK 795: + its selection list, one row)');
+      eq(Object.keys(d0.hosts.shaper), ['version', 'operations', 'regions', 'nextSeq', 'stock', 'selections'], 'a design not from an STL (here from Fusion) stores no `stl`: its Shaper part is as before (TASK 795: + its selection list, one row; TASK S1: the operations store, version 3)');
       app.stl.openFile(M.binaryStl(M.draftedPocket(10)), 'drafted.stl');
       harness(app).pressEl('.stl-units .cut-preset[data-value="mm"]'); // the current unit: nothing happens
       const d = await app.storedDoc();

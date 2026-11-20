@@ -123,7 +123,8 @@ export function applyStore(d) {
     .map((op) => cloneOp({ ...op, settings: op.settings || {} })) : [];
   S.regions = d && d.regions && typeof d.regions === 'object' ? { ...d.regions } : {};
   const maxSeq = Math.max(0, ...S.ops.flatMap((op) => op.geometry.map((r) => Number(r.seq) || 0)));
-  S.nextSeq = Number.isFinite(Number(d && d.nextSeq)) && Number(d.nextSeq) > maxSeq ? Number(d.nextSeq) : maxSeq + 1;
+  const next = Number(d && d.nextSeq);
+  S.nextSeq = Number.isFinite(next) && next > maxSeq ? next : maxSeq + 1;
   bump();
 }
 

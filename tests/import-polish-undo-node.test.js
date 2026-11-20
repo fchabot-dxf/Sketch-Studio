@@ -8,7 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { open } from './helpers/node-app.js';
 import { findOrCreatePlotColor } from '../apps/penplotter/src/state.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = (...p) => path.join(REPO_ROOT, 'tests', 'fixtures', ...p);
@@ -50,7 +51,7 @@ const redo = async (app) => { await app.pause(100); app.redo(); await app.pause(
 {
   const app = await open({ host: 'shaper', sidebar: true });
   try {
-    const plan = () => JSON.parse(JSON.stringify([...CUT_PLAN.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)));
+    const plan = () => JSON.parse(JSON.stringify([...V2_PLAN.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)));
     const nShapes = () => app.state.shapes.length;
     const planBefore = plan(), shBefore = nShapes();
     await importViaMenu(app, FIX('svg', 'fusion-shaper-addin.svg'));

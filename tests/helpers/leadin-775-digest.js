@@ -10,10 +10,11 @@ import crypto from 'node:crypto';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { importDxf } from '#core/dxf-import.js';
 import { shaperSvgOf, shaperPreviewOf } from '../../apps/shaper/src/export-payload.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems } from '../../apps/shaper/src/cut-plan.js';
-import { setOpOrder, planOperations } from '../../apps/shaper/src/operations.js';
+import { planEntries, planReliefItems } from '../../apps/shaper/src/cut-plan.js';
+import { describeOperations } from '../../apps/shaper/src/operations.js';
 import { importFusionSelection } from '../../apps/shaper/src/fusion-import.js';
 import { open } from './node-app.js';
+import { V2_PLAN } from './plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const fx = (p) => new URL('../fixtures/' + p, import.meta.url);
 // the Fusion import names its shapes `fusion<Date.now()>_<n>_s<k>` and its joints `j<n>_<Date.now()>` (#core/shape-id): the clock part is replaced before hashing
@@ -49,7 +50,7 @@ function stripStartMarkSvg(svg) {
 }
 // the operations' words; TASK 775 removed ", ends where it starts" / ", each ends where it starts" from a Loop's words (a closed loop has no start point on the
 // Origin: owner ruling), so the words are compared without it (applied to both sides: a match means that phrase is the ONLY change)
-const opsWords = (st, entries) => planOperations(st, entries).map((op) => [op.label, op.rowText, op.heading].map((t) => String(t).replace(/,? (each )?ends where it starts/g, '')));
+const opsWords = (st, entries) => describeOperations(st, entries).map((op) => [op.label, op.rowText, op.heading].map((t) => String(t).replace(/,? (each )?ends where it starts/g, '')));
 const rec = (cutType, extra = {}) => ({ cutType, cutDepth: 6, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90, ...extra });
 const LOOP_RECS = {
   outside: rec('exterior'), inside: rec('interior'), online: rec('online'), pocket: rec('pocket'),
@@ -61,17 +62,21 @@ const HEAVY_RECS = {
   // TASK 804: no spiralLoop / morphedLoop: the Spiral's and the Morphed spiral's Loop are the gradual double spiral now (changed on purpose; checked in
   // tests/pocket-nocross-804-node.test.js), so their base facets no longer apply
 };
+// TASK S1: the records are loaded as a v2 document (tests/helpers/plan-v2.js: through applyShaperDoc) and derived from the store's entries; the preview facet is
+// hashed WITHOUT its data-op attributes (an operation's id is stored now: op-1 ...; the fixture's preview facets were re-taken so on origin/main c5d4bb1)
+const noOpIds = (svg) => svg.replace(/ data-op="[^"]*"/g, '');
 function facets(st, entries, stripMarks = false) {
-  const pv = shaperPreviewOf(st, entries);
-  CUT_PLAN.clear();
-  for (const e of entries) CUT_PLAN.set(`${e.target.kind}:${e.target.id}`, { ...e.rec });
+  V2_PLAN.use(st).load(entries.map((e) => [`${e.target.kind}:${e.target.id}`, { ...e.rec }]));
+  const ents = planEntries();
+  const pv = shaperPreviewOf(st, ents);
   const relief = reliefOf(st, stripMarks);
-  CUT_PLAN.clear();
-  const dl = shaperSvgOf(st, entries);
+  const dl = shaperSvgOf(st, ents);
+  const ops = opsWords(st, ents);
+  V2_PLAN.use(null).clear();
   return {
     download: hash(stripMarks ? stripStartMarkSvg(dl) : dl),
-    preview: hash(stripMarks ? stripStartMarkSvg(pv.svg) : pv.svg),
-    ops: hash(opsWords(st, entries)),
+    preview: hash(noOpIds(stripMarks ? stripStartMarkSvg(pv.svg) : pv.svg)),
+    ops: hash(ops),
     relief: hash(relief),
   };
 }
@@ -107,13 +112,13 @@ export async function leadinDigest() {
   try {
     app.modes.showMode('prepare');
     for (const f of ['real-solid-plate-711.json', ...fs.readdirSync(fx('sa7-slope')).sort().map((x) => 'sa7-slope/' + x)]) {
-      CUT_PLAN.clear(); setOpOrder([]);
+      V2_PLAN.clear(); V2_PLAN.setOrder([]);
       importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare });
-      const st = app.state, entries = cutPlanEntries();
+      const st = app.state, entries = planEntries();
       const relief = reliefOf(st);
       const pv = shaperPreviewOf(st, entries);
-      digest['fusion/' + f] = { plan: { download: hash(shaperSvgOf(st, entries)), preview: hash(pv.svg), ops: hash(opsWords(st, entries)), relief: hash(relief) }, ...digestOf(st) };
+      digest['fusion/' + f] = { plan: { download: hash(shaperSvgOf(st, entries)), preview: hash(noOpIds(pv.svg)), ops: hash(opsWords(st, entries)), relief: hash(relief) }, ...digestOf(st) };
     }
-  } finally { CUT_PLAN.clear(); setOpOrder([]); await app.close(); }
+  } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
   return digest;
 }

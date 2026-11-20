@@ -17,9 +17,10 @@ import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { steppedTerraces, stepDeviation, terraceOptions, STEP_RESOLUTION, resolutionLevel } from '#core/stepped-cut.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, planSteppedNotes, lastAdaptiveSteps, lastStepDeviation } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, planSteppedNotes, lastAdaptiveSteps, lastStepDeviation } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding, availableTypes } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -119,7 +120,7 @@ const devs = (s, kind, ds) => ds.map((d, i) => stepDeviation(s, { kind, from: i 
 
 // ── 2. the app ──
 SettingsManager.set('DOC_UNIT', 'mm');
-const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: unit, options: {} });
+const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: planEntries(), encoding: exportEncoding(), docUnit: unit, options: {} });
 const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) => ({ type: /shaper:cutType="([^"]+)"/.exec(m[2])[1], depth: (/shaper:cutDepth="([^"]+)"/.exec(m[2]) || [])[1] }));
 const typeDepths = (svg, type) => elems(svg).filter((e) => e.type === type).map((e) => e.depth);
 const harness = (app) => {
@@ -136,11 +137,11 @@ const harness = (app) => {
   const presets = (row) => [...doc.querySelectorAll(`.cut-row[data-row="${row}"] .cut-preset`)].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : ''));
   return { q, pressEl, clickAt, menu, pick, note, set, check, rows, presets };
 };
-const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType === cutType);
+const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === cutType);
 const reviewDepths = (app, type = 'pocket') => planReliefItems(app.state).filter((i) => i.cutType === type).map((i) => i.cutDepth);
 const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     app.modes.showMode('prepare');
@@ -154,12 +155,12 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     eq(h.rows(), ['cutDepth', 'clearing', 'cutOffset', 'toolDia', 'cutterShape'], 'a plain Pocket: no Adaptive stepping, Step depth or Resolution row (TASK 745: its Clearing row, Freehand)');
 
     // the R3 floor fillet (03), Stepped pocket: OFF by default = 716
-    CUT_PLAN.clear();
+    V2_PLAN.clear();
     importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
     const [pk] = recAt('pocket');
     h.clickAt(60, -40);
     h.pick('roughing');
-    const r0 = CUT_PLAN.get(pk);
+    const r0 = V2_PLAN.get(pk);
     eq([r0.stepDepth, r0.adaptiveSteps, r0.stepDeviation], [1, false, 0.25], 'a new stepped record: step 1 mm, Adaptive stepping OFF, resolution Medium (0.25 mm) ready');
     eq(h.rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; OFF: the checkbox, then the Step depth row (no Resolution row); TASK 792: Roughing\'s allowance and Contour rows');
     eq([h.q('.cut-adaptive').checked, h.q('.cut-row[data-row="adaptiveSteps"] .cut-check').textContent.trim()], [false, 'Adaptive stepping'], 'the checkbox reads "Adaptive stepping", unchecked');
@@ -167,17 +168,17 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     eq(h.note(), ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.172–2.236 mm apart'], 'OFF: the 716 note');
     const offSvg = exportOf(app);
     { // OFF exports byte-identically to a 716 record (the same record without the 717 fields)
-      const saved = CUT_PLAN.get(pk), old = { ...saved }; delete old.adaptiveSteps; delete old.stepDeviation;
-      CUT_PLAN.set(pk, old);
+      const saved = V2_PLAN.get(pk), old = { ...saved }; delete old.adaptiveSteps; delete old.stepDeviation;
+      V2_PLAN.set(pk, old);
       eq(exportOf(app), offSvg, 'OFF: the export is byte-identical to the 716 record\'s');
-      CUT_PLAN.set(pk, saved);
+      V2_PLAN.set(pk, saved);
     }
     eq(typeDepths(offSvg, 'pocket'), mmStr([5, 6, 7, 8]), 'OFF export: the 716 pockets at 5, 6, 7, 8 mm');
 
     // ON: one undo step, the Resolution row replaces the Step depth row, Medium
     const hist = app.state.history.length;
     h.check(true);
-    eq([CUT_PLAN.get(pk).adaptiveSteps, lastAdaptiveSteps(), app.state.history.length], [true, true, hist + 1], 'checked: stored on the record, remembered, ONE undo step');
+    eq([V2_PLAN.get(pk).adaptiveSteps, lastAdaptiveSteps(), app.state.history.length], [true, true, hist + 1], 'checked: stored on the record, remembered, ONE undo step');
     eq(h.rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDeviation', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; ON: the Resolution row in place of the Step depth row');
     eq([h.q('.cut-row[data-row="stepDeviation"] .cut-field-label').textContent, h.q('.cut-step-deviation').value, h.presets('stepDeviation'), h.presets('stepDepth').length], ['Resolution', '0.25', ['Coarse', 'Medium*', 'Fine'], 4], 'Resolution 0.25 mm, presets Coarse / Medium (active) / Fine; the Step depth row stays in place, greyed (TASK 813)');
     const medium = depthsOf(adaptive(slopeOf('03-pocket-floor-fillet', 'pocket'), 'pocket', 0.25, 8));
@@ -185,7 +186,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     console.log('card note, Medium: ' + JSON.stringify(noteMedium));
     ok(noteMedium[0].startsWith('Pocket 1 (8mm): adaptive, Medium (0.25 mm): 7 steps at 6.193 · 6.69 · 7.071 · 7.386 · 7.67 · 7.925 · 8 mm · outlines 0.'), 'the note: adaptive, the level, the steps, the spacing');
     eq([...app.document.querySelectorAll('.cut-note-warn')].map((w) => [w.textContent, w.title]), [[noteMedium[0].slice(noteMedium[0].indexOf(' · outlines ')), 'outlines this close may be hard to pick on the Origin: try a coarser resolution']], 'the spacing under 1/16 in is flagged (716\'s hint)');
-    eq(planSteppedNotes(CUT_PLAN), noteMedium, 'the Review info gets the same text');
+    eq(planSteppedNotes(V2_PLAN), noteMedium, 'the Review info gets the same text');
     let svg = exportOf(app);
     const mediumSvg = svg;
     eq(typeDepths(svg, 'pocket'), mmStr(medium), 'export: 7 PLAIN pockets (shaper:cutType="pocket") at the adaptive depths');
@@ -194,38 +195,38 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
 
     // the presets: Coarse -> 4, Fine -> 16
     h.pressEl('.cut-row[data-row="stepDeviation"] .cut-preset[data-value="0.5"]');
-    eq([CUT_PLAN.get(pk).stepDeviation, h.presets('stepDeviation'), reviewDepths(app).length, typeDepths(exportOf(app), 'pocket').length], [0.5, ['Coarse*', 'Medium', 'Fine'], 4, 4], 'Coarse: 4 steps, in the Review and the export');
+    eq([V2_PLAN.get(pk).stepDeviation, h.presets('stepDeviation'), reviewDepths(app).length, typeDepths(exportOf(app), 'pocket').length], [0.5, ['Coarse*', 'Medium', 'Fine'], 4, 4], 'Coarse: 4 steps, in the Review and the export');
     ok(h.note()[0].startsWith('Pocket 1 (8mm): adaptive, Coarse (0.5 mm): 4 steps at 6.651 · 7.333 · 7.843 · 8 mm'), 'Coarse note: ' + h.note()[0]);
     h.pressEl('.cut-row[data-row="stepDeviation"] .cut-preset[data-value="0.1"]');
     svg = exportOf(app);
-    eq([CUT_PLAN.get(pk).stepDeviation, lastStepDeviation(), reviewDepths(app).length], [0.1, 0.1, 16], 'Fine: 16 steps; remembered');
+    eq([V2_PLAN.get(pk).stepDeviation, lastStepDeviation(), reviewDepths(app).length], [0.1, 0.1, 16], 'Fine: 16 steps; remembered');
     eq(typeDepths(svg, 'pocket'), mmStr(reviewDepths(app)), 'Fine: export == Review');
     ok(h.note()[0].startsWith('Pocket 1 (8mm): adaptive, Fine (0.1 mm): 16 steps at 5.765 · 6.081'), 'Fine note: ' + h.note()[0]);
 
     // Custom: a typed value (doc unit), no preset active; any value above 0 is kept
     h.set('.cut-step-deviation', '0.3');
-    eq([CUT_PLAN.get(pk).stepDeviation, h.presets('stepDeviation'), h.q('.cut-step-deviation').value], [0.3, ['Coarse', 'Medium', 'Fine'], '0.3'], 'Custom 0.3 mm: stored, no preset active');
+    eq([V2_PLAN.get(pk).stepDeviation, h.presets('stepDeviation'), h.q('.cut-step-deviation').value], [0.3, ['Coarse', 'Medium', 'Fine'], '0.3'], 'Custom 0.3 mm: stored, no preset active');
     ok(/^Pocket 1 \(8mm\): adaptive, Custom \(0\.3 mm\): \d+ steps at /.test(h.note()[0]), 'the note names it Custom: ' + h.note()[0]);
     const custom = reviewDepths(app);
     ok(custom.length > 4 && custom.length < 7, `Custom 0.3 mm: between Coarse and Medium (${custom.length} steps)`);
     h.set('.cut-step-deviation', '0.001');
-    eq(CUT_PLAN.get(pk).stepDeviation, 0.001, 'a typed 0.001 mm is stored as typed (no minimum)');
+    eq(V2_PLAN.get(pk).stepDeviation, 0.001, 'a typed 0.001 mm is stored as typed (no minimum)');
     h.set('.cut-step-deviation', 'abc');
-    eq([CUT_PLAN.get(pk).stepDeviation, h.q('.cut-step-deviation').value], [0.001, '0.001'], 'an unreadable value changes nothing (the field shows the stored one again)');
+    eq([V2_PLAN.get(pk).stepDeviation, h.q('.cut-step-deviation').value], [0.001, '0.001'], 'an unreadable value changes nothing (the field shows the stored one again)');
 
     // undo / redo walk back through every change to OFF
     app.key('z', { ctrl: true });
-    eq(CUT_PLAN.get(pk).stepDeviation, 0.3, 'Ctrl+Z: Custom 0.3 again');
+    eq(V2_PLAN.get(pk).stepDeviation, 0.3, 'Ctrl+Z: Custom 0.3 again');
     app.key('z', { ctrl: true }); app.key('z', { ctrl: true }); app.key('z', { ctrl: true });
-    eq([CUT_PLAN.get(pk).adaptiveSteps, CUT_PLAN.get(pk).stepDeviation], [true, 0.25], 'Ctrl+Z x3: Fine, Coarse, back to Medium');
+    eq([V2_PLAN.get(pk).adaptiveSteps, V2_PLAN.get(pk).stepDeviation], [true, 0.25], 'Ctrl+Z x3: Fine, Coarse, back to Medium');
     eq(exportOf(app), mediumSvg, 'and the Medium export again');
     app.key('z', { ctrl: true });
-    eq(CUT_PLAN.get(pk).adaptiveSteps, false, 'Ctrl+Z: OFF');
+    eq(V2_PLAN.get(pk).adaptiveSteps, false, 'Ctrl+Z: OFF');
     eq([exportOf(app), h.rows().includes('stepDepth')], [offSvg, true], 'OFF: the 716 export and the Step depth row again');
     app.key('y', { ctrl: true });
-    eq([CUT_PLAN.get(pk).adaptiveSteps, reviewDepths(app)], [true, medium], 'Ctrl+Y: ON, Medium');
+    eq([V2_PLAN.get(pk).adaptiveSteps, reviewDepths(app)], [true, medium], 'Ctrl+Y: ON, Medium');
     app.key('y', { ctrl: true });
-    eq(CUT_PLAN.get(pk).stepDeviation, 0.5, 'Ctrl+Y: Coarse');
+    eq(V2_PLAN.get(pk).stepDeviation, 0.5, 'Ctrl+Y: Coarse');
 
     // the last value is the next stepped cut's default: the countersunk hole (06), Stepped inside
     h.pressEl('.cut-row[data-row="stepDeviation"] .cut-preset[data-value="0.1"]');
@@ -243,13 +244,13 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     ok(/^Through Hole 1: adaptive, Fine \(0\.004 in\): 15 steps at 0\.006 · /.test(h.note()[0]), 'the note in inches');
     eq(h.q('.cut-step-deviation').value, '0.004', 'the Resolution field in inches (3 decimals)');
     h.set('.cut-step-deviation', '0.02');
-    eq(+CUT_PLAN.get(hk).stepDeviation.toFixed(6), 0.508, 'a typed 0.02 in = 0.508 mm (Custom)');
+    eq(+V2_PLAN.get(hk).stepDeviation.toFixed(6), 0.508, 'a typed 0.02 in = 0.508 mm (Custom)');
     SettingsManager.set('DOC_UNIT', 'mm');
   } finally { await app.close(); }
 }
 // ── 3. save + reload ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Adaptive 717');
   let planBefore, svgBefore;
@@ -263,18 +264,18 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
       h.pick('roughing');
       h.check(true);
       h.set('.cut-step-deviation', '0.2');
-      planBefore = JSON.stringify([...CUT_PLAN.entries()]);
+      planBefore = JSON.stringify([...V2_PLAN.entries()]);
       svgBefore = exportOf(app);
       const d = await app.storedDoc();
-      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.cutType === 'roughing' && r.adaptiveSteps === true && r.stepDeviation === 0.2), 'the autosave stores the record adaptive, at 0.2 mm');
+      ok(storedRecords(d.hosts.shaper).some(([, r]) => r.cutType === 'roughing' && r.adaptiveSteps === true && r.stepDeviation === 0.2), 'the autosave stores the record adaptive, at 0.2 mm');
     } finally { await app.close(); }
   }
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   {
     const app = await open({ host: 'shaper', profile });
     try {
       app.modes.showMode('prepare');
-      eq(JSON.stringify([...CUT_PLAN.entries()]), planBefore, 'after a reload the plan is equal');
+      eq(JSON.stringify([...V2_PLAN.entries()]), planBefore, 'after a reload the plan is equal');
       eq(exportOf(app), svgBefore, 'and the export is byte-identical');
       const h = harness(app);
       h.clickAt(60, -40);

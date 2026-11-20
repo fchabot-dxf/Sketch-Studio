@@ -16,12 +16,13 @@ import { evaluateText, parseInput, print } from '#core/expression.js';
 import { quantityText } from '#core/parameters.js';
 import { formatConstraintValue as constraintLabel } from '#ui/svg-renderer.js';
 import { buildParameterRows } from '#ui/parameter-table.js';
-import { CUT_PLAN, cutPlanEntries, steppedNoteItems } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, steppedNoteItems } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, itemLabel, depthText } from '../apps/shaper/src/export-preview.js';
 import { TEMPLATES, buildTemplate, defaultParams } from '#core/templates.js';
 import { renderTemplatePreview } from '#ui/template-picker.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -121,26 +122,26 @@ try {
 
   mode('in', 'decimal');
   app.modes.showMode('prepare');
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
-  const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
-  CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: false });
-  const base = shaperSvgOf(app.state, cutPlanEntries()), basePv = shaperSvgOf(app.state, cutPlanEntries(), { preview: true });
+  const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
+  V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: false });
+  const base = shaperSvgOf(app.state, planEntries()), basePv = shaperSvgOf(app.state, planEntries(), { preview: true });
   ok(/shaper:cutDepth="[0-9.]+ in"/.test(base), 'the file speaks inches');
   for (const den of LENGTH_FRACTIONS) {
     mode('in', 'fractional', den);
-    eq(shaperSvgOf(app.state, cutPlanEntries()), base, `export byte-identical at Fractional 1/${den}`);
-    eq(shaperSvgOf(app.state, cutPlanEntries(), { preview: true }), basePv, `preview file byte-identical at 1/${den}`);
+    eq(shaperSvgOf(app.state, planEntries()), base, `export byte-identical at Fractional 1/${den}`);
+    eq(shaperSvgOf(app.state, planEntries(), { preview: true }), basePv, `preview file byte-identical at 1/${den}`);
   }
   mode('in', 'fractional', 16);
   const labels = previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel);
   ok(labels.length > 0 && labels.every((l) => /· (\d+ )?(\d+\/\d+|\d+)" ·?/.test(l + ' ')), 'the preview list shows fractions: ' + JSON.stringify(labels));
-  const note = steppedNoteItems(CUT_PLAN.get(pk)).map((i) => i.text).join('|');
+  const note = steppedNoteItems(V2_PLAN.get(pk)).map((i) => i.text).join('|');
   ok(/\d+\/\d+ to \d+(?: \d+\/\d+)? in|to \d+\/\d+ in/.test(note) && /outlines [0-9.]+(–[0-9.]+)? in apart/.test(note), 'the stepped note: fraction depths, decimal outline spacing: ' + note);
   mode('in', 'decimal');
   eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel).every((l) => /in\b/.test(l)), true, 'Decimal again: inches shown through lengthText');
 
-} finally { CUT_PLAN.clear(); await app.close(); }
+} finally { V2_PLAN.clear(); await app.close(); }
 
 // 5. the untouched-box rule at Fractional (SketchStudio): a 1.53 in dimension shows 1 1/2"; its box opens with 1 1/2"; Enter on it changes nothing
 mode('in', 'fractional', 16);

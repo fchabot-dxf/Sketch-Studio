@@ -11,9 +11,10 @@ import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { listSketchProfiles } from '#core/profile-model.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
-import { CUT_PLAN, cutPlanEntries, cutPlanNotice } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, cutPlanNotice } from '../apps/shaper/src/cut-plan.js';
 import { applyShaperDoc, captureShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { HOLE_RULE_CASES, holeRuleDoc } from './fixtures/hole-rule-774/docs.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -21,12 +22,12 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 // the exporter writes LF; a Windows checkout (core.autocrlf) gives the fixture CRLF: compared with the exporter's line ends
 const baseline = (name) => fs.readFileSync(new URL(`./fixtures/hole-rule-774/${name}.svg`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
-// the export of `state` with the plan in CUT_PLAN (Shaper's shaperSvgOf, docUnit fixed to mm)
+// the export of `state` with the plan in V2_PLAN (Shaper's shaperSvgOf, docUnit fixed to mm)
 function exportNow(state) {
   const loops = findLoops(state);
   const sById = new Map(state.shapes.map((s) => [s.id, s]));
   const loopPolys = {}; for (const l of loops) loopPolys[l.id] = loopPolygon(l, state, sById);
-  return exportShaperSVG({ state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys });
+  return exportShaperSVG({ state, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys });
 }
 // the stored Shaper sidecar of a case, saved before the rule (version 1), and its loop ids
 function savedDoc(name, version = 1) {
@@ -49,7 +50,7 @@ const counts = (r) => ({ keptHoles: r.keptHoles, lostHoles: r.lostHoles });
   const r = applyShaperDoc(sidecar, state);
   eq(counts(r), { keptHoles: 1, lostHoles: 0 }, 'islands: the one record kept its holes');
   eq(exportNow(state), baseline('islands'), 'islands: the export is byte-identical to the export before 27c00a4');
-  eq([...CUT_PLAN.keys()], [`profile:${state.profiles[0].id}`], 'islands: the record moved to an explicit combined profile');
+  eq([...V2_PLAN.keys()], [`profile:${state.profiles[0].id}`], 'islands: the record moved to an explicit combined profile');
   eq(state.profiles.length, 1, 'islands: one combined profile (visible in Design, Uncombine undoes it)');
   eq(state.profiles[0].inners.length, 2, 'islands: with the two islands');
   eq(cutPlanNotice(r), 'Cut plan updated: 1 cut kept its holes from other sketches (now a combined profile)', 'islands: the one-time notice');
@@ -76,7 +77,7 @@ for (const name of ['same-sketch']) {
   const before = JSON.stringify(sidecar.cutPlan);
   const r = applyShaperDoc(sidecar, state);
   eq(counts(r), { keptHoles: 0, lostHoles: 0 }, `${name}: nothing to keep`);
-  eq(JSON.stringify([...CUT_PLAN]), before, `${name}: the plan is unchanged`);
+  eq(JSON.stringify([...V2_PLAN]), before, `${name}: the plan is unchanged`);
   eq(state.profiles.length, 0, `${name}: no profile made`);
   eq(exportNow(state), baseline(name), `${name}: byte-identical to the export before 27c00a4`);
 }
@@ -89,7 +90,7 @@ for (const name of ['plate', 'plate-owned']) {
   eq(counts(r), { keptHoles: 1, lostHoles: 0 }, `${name}: the plate record kept its hole`);
   eq(exportNow(state), baseline(name), `${name}: byte-identical to the export before 27c00a4`);
   eq(state.profiles[0].inners.length, 1, `${name}: the profile has the one hole without its own record`);
-  if (name === 'plate-owned') eq([...CUT_PLAN.keys()][1], sidecar.cutPlan[1][0], 'plate-owned: the hole\'s own record is unchanged');
+  if (name === 'plate-owned') eq([...V2_PLAN.keys()][1], sidecar.cutPlan[1][0], 'plate-owned: the hole\'s own record is unchanged');
 }
 
 // 4. a Pocket whose Sketch 2 island has its own record: not convertible without changing the island's record -> left, counted, named
@@ -97,7 +98,7 @@ for (const name of ['plate', 'plate-owned']) {
   const { state, sidecar } = savedDoc('own-island');
   const r = applyShaperDoc(sidecar, state);
   eq(counts(r), { keptHoles: 0, lostHoles: 1 }, 'own-island: counted as not kept');
-  eq(JSON.stringify([...CUT_PLAN]), JSON.stringify(sidecar.cutPlan), 'own-island: the plan is unchanged');
+  eq(JSON.stringify([...V2_PLAN]), JSON.stringify(sidecar.cutPlan), 'own-island: the plan is unchanged');
   eq(state.profiles.length, 0, 'own-island: no profile made');
   eq(cutPlanNotice(r), 'Cut plan updated: 1 cut no longer has its holes from other sketches (a hole has its own cut): check it in Prepare', 'own-island: the notice names it');
   ok(exportNow(state) !== baseline('own-island'), 'own-island: (its export differs from before 27c00a4: reported, owner decision)');

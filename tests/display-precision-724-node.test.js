@@ -13,11 +13,12 @@ import { formatConstraintValue as constraintLabel } from '#ui/svg-renderer.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
-import { CUT_PLAN, cutPlanEntries, steppedNoteItems } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, steppedNoteItems } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, previewRows, itemLabel, depthText } from '../apps/shaper/src/export-preview.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -87,25 +88,25 @@ setP(3, 1, false);
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
 };
 SettingsManager.set('DOC_UNIT', 'mm', { persist: false });
 const app = await open({ host: 'shaper' });
 try {
   app.modes.showMode('prepare');
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
-  const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
-  CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
+  const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
+  V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
   setP(3, 1, false);
-  const base = shaperSvgOf(app.state, cutPlanEntries()), basePv = shaperSvgOf(app.state, cutPlanEntries(), { preview: true });
-  const note0 = steppedNoteItems(CUT_PLAN.get(pk)).map((i) => i.text);
+  const base = shaperSvgOf(app.state, planEntries()), basePv = shaperSvgOf(app.state, planEntries(), { preview: true });
+  const note0 = steppedNoteItems(V2_PLAN.get(pk)).map((i) => i.text);
   const label0 = previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel);
   eq(base, plainExport(app.state), 'default: the file equals the plain exporter output');
   for (const tz of [false, true]) for (const p of [0, 3, 6]) {
     setP(p, p === 6 ? 4 : 0, tz);
-    eq(shaperSvgOf(app.state, cutPlanEntries()), base, `export byte-identical at precision ${p} tz=${tz}`);
-    eq(shaperSvgOf(app.state, cutPlanEntries(), { preview: true }), basePv, `preview file byte-identical at precision ${p} tz=${tz}`);
+    eq(shaperSvgOf(app.state, planEntries()), base, `export byte-identical at precision ${p} tz=${tz}`);
+    eq(shaperSvgOf(app.state, planEntries(), { preview: true }), basePv, `preview file byte-identical at precision ${p} tz=${tz}`);
     if (tz) {
       const labels = previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel);
       ok(p === 0 ? labels.every((l) => !/\./.test(l)) : labels.every((l) => new RegExp(`\\d\\.\\d{${p}} mm`).test(l)), `tz=true preview labels show ${p} decimals`);
@@ -115,10 +116,10 @@ try {
   eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel), ['outside · 19.0 mm', 'pocket · 6.7 mm · step 1 of 4', 'pocket · 7.3 mm · step 2 of 4', 'pocket · 7.8 mm · step 3 of 4', 'pocket · 8.0 mm · step 4 of 4'], 'preview labels at precision 1 (tz ON)');
   setP(1, 1, false);
   eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel), ['outside · 19 mm', 'pocket · 6.7 mm · step 1 of 4', 'pocket · 7.3 mm · step 2 of 4', 'pocket · 7.8 mm · step 3 of 4', 'pocket · 8 mm · step 4 of 4'], 'preview labels at precision 1 (tz OFF)');
-  eq(steppedNoteItems(CUT_PLAN.get(pk)).map((i) => i.text).join('|').includes('6.7 · 7.3 · 7.8 · 8 mm'), true, 'stepped note depths at precision 1');
+  eq(steppedNoteItems(V2_PLAN.get(pk)).map((i) => i.text).join('|').includes('6.7 · 7.3 · 7.8 · 8 mm'), true, 'stepped note depths at precision 1');
   setP(3, 1, false);
-  eq(steppedNoteItems(CUT_PLAN.get(pk)).map((i) => i.text), note0, 'defaults again: the stepped note is back to what it was');
+  eq(steppedNoteItems(V2_PLAN.get(pk)).map((i) => i.text), note0, 'defaults again: the stepped note is back to what it was');
   eq(previewItems(parseShaperSvg(basePv, app.document)).map(itemLabel), label0, 'defaults again: the preview labels are back');
-} finally { CUT_PLAN.clear(); setP(3, 1, false); app.close(); }
+} finally { V2_PLAN.clear(); setP(3, 1, false); app.close(); }
 function ok(c, m) { assert.ok(c, m); checks++; }
 console.log(`display-precision-724-node.test.js: ok (${checks} checks)`);

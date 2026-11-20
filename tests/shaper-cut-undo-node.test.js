@@ -4,8 +4,9 @@
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+
 import { importShaperFile } from '../apps/shaper/src/cut-import.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const app = await open({ host: 'shaper' });
 try {
@@ -13,7 +14,7 @@ try {
   const q = (sel) => doc.querySelector(sel);
   const pressEl = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
   const openMode = (mode) => { pressEl(`.sk-header-tab[data-tab="${mode}"]`); assert.strictEqual(q('.sk-header-tab.active').dataset.tab, mode, 'the ' + mode + ' tab opens'); };
-  const plan = () => [...CUT_PLAN.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const plan = () => [...V2_PLAN.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const recs = () => plan().map(([, r]) => r);
   const st = app.state;
   const hist = () => st.history.length;

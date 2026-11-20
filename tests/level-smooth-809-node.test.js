@@ -27,9 +27,10 @@ import { polyToPathD } from '#core/loop-geometry.js';
 import * as M from './helpers/stl-mesh.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
-import { CUT_PLAN, cutPlanEntries, contourKeyOf, deriveKeyFootprints, loopsWithPolygons, planOwnedLoops } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, contourKeyOf, deriveKeyFootprints, loopsWithPolygons, planOwnedLoops } from '../apps/shaper/src/cut-plan.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { planOperations } from '../apps/shaper/src/operations.js';
+import { describeOperations } from '../apps/shaper/src/operations.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -179,7 +180,7 @@ for (const [name, tris, tol] of [['the dome', M.dome(30), 0.02], ['the dome', M.
 
 // ── 6. the app ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Smoothing 809');
   const app = await open({ host: 'shaper', profile });
@@ -192,32 +193,32 @@ for (const [name, tris, tol] of [['the dome', M.dome(30), 0.02], ['the dome', M.
     const rowShown = (name) => { const r = q(`.cut-row[data-row="${name}"]`); return Boolean(r) && r.style.display !== 'none'; };
     const res = app.stl.openFile(M.binaryStl(M.dome(30)), 'dome.stl');
     ok(res.ok, 'Open STL: the dome');
-    const [key, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'roughing');
+    const [key, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'roughing');
     eq('smoothing' in rec, false, 'the Roughing record has no smoothing of its own: the default');
     const levelsJson = JSON.stringify(rec.levels), mapBefore = levelsHeightMap(rec.levels).href;
     clickAt(30, -30);
     eq(q('.cut-type-cur').textContent, 'Roughing', 'its card');
     ok(rowShown('smoothing'), 'the Smoothing row (a part with levels)');
     eq([q('.cut-row[data-row="smoothing"] .cut-field-label').textContent, q('.cut-smoothing').value], ['Smoothing', '0.1'], 'Smoothing: 0.1 (the default)');
-    const svgOf = () => shaperSvgOf(st, cutPlanEntries());
+    const svgOf = () => shaperSvgOf(st, planEntries());
     const cubicsIn = (svg) => (svg.match(/ C /g) || []).length;
     const on = svgOf();
     ok(cubicsIn(on) > 0, `the export: the smoothed paths are cubics (${cubicsIn(on)} C commands)`);
     const { loops, loopPolys } = loopsWithPolygons(st), owned = planOwnedLoops(st, loops, loopPolys);
-    const d0 = deriveKeyFootprints(key, CUT_PLAN.get(key), st, loops, loopPolys, owned);
+    const d0 = deriveKeyFootprints(key, V2_PLAN.get(key), st, loops, loopPolys, owned);
     ok(d0.cuts.length > 0 && d0.cuts.every((c) => /C /.test(c.geom.a)), 'Prepare / the 3D Review / the Paths view derive the same smoothed cuts (each path written with cubics)');
     const hist = st.history.length;
     setField('.cut-smoothing', '0');
-    eq(CUT_PLAN.get(key).smoothing, 0, 'typed 0: the record keeps 0 (off)');
+    eq(V2_PLAN.get(key).smoothing, 0, 'typed 0: the record keeps 0 (off)');
     eq(st.history.length, hist + 1, 'one undo step');
     const offSvg = svgOf();
     eq(cubicsIn(offSvg), 0, 'off: the export has no cubic (the straight segments of the levels)');
-    const d1 = deriveKeyFootprints(key, CUT_PLAN.get(key), st, loops, loopPolys, owned);
+    const d1 = deriveKeyFootprints(key, V2_PLAN.get(key), st, loops, loopPolys, owned);
     ok(d1.cuts.every((c) => c.geom.a === `d="${[c.outerPoly, ...c.holePolys].map(polyToPathD).join(' ')}"`), 'off: every path is its polygon as before (polyToPathD)');
-    eq([JSON.stringify(CUT_PLAN.get(key).levels), levelsHeightMap(CUT_PLAN.get(key).levels).href], [levelsJson, mapBefore], 'the levels are never changed: the same levels, the same height map');
+    eq([JSON.stringify(V2_PLAN.get(key).levels), levelsHeightMap(V2_PLAN.get(key).levels).href], [levelsJson, mapBefore], 'the levels are never changed: the same levels, the same height map');
     eq(q('.cut-smoothing').value, '0', 'the row shows 0');
     doc.getElementById('btn-undo').click();
-    eq(CUT_PLAN.get(key).smoothing, undefined, 'undo: the default again');
+    eq(V2_PLAN.get(key).smoothing, undefined, 'undo: the default again');
     ok(cubicsIn(svgOf()) > 0, 'undo: cubics again');
     // the part's Contour: its own Smoothing (0.05 by default: TASK 810, owner turn 2688)
     pressEl('.cut-row[data-row="contour"] .cut-preset[data-value="true"]');
@@ -225,15 +226,15 @@ for (const [name, tris, tol] of [['the dome', M.dome(30), 0.02], ['the dome', M.
     eq(q('.cut-type-cur').textContent, 'Contour', 'Edit contour: the Contour card');
     ok(rowShown('smoothing'), 'the Contour card: its Smoothing row (its part has levels)');
     eq(q('.cut-smoothing').value, '0.05', 'the Contour: 0.05 (its default)');
-    const crec = CUT_PLAN.get(contourKeyOf(key));
+    const crec = V2_PLAN.get(contourKeyOf(key));
     eq('smoothing' in crec, false, 'the Contour record: the default, not stored');
-    const ops = () => planOperations(st, cutPlanEntries()).map((o) => o.cutType);
+    const ops = () => describeOperations(st, planEntries()).map((o) => o.cutType);
     eq(ops(), ['roughing', 'contour'], 'two operations');
     setField('.cut-smoothing', '0.03');
-    eq(CUT_PLAN.get(contourKeyOf(key)).smoothing, 0.03, 'the Contour at 0.03');
-    ok(planOperations(st, cutPlanEntries()).some((o) => o.settings && o.settings.smoothing === 0.03), 'a Smoothing other than the default is in the operation\'s settings (its own operation)');
+    eq(V2_PLAN.get(contourKeyOf(key)).smoothing, 0.03, 'the Contour at 0.03');
+    ok(describeOperations(st, planEntries()).some((o) => o.settings && o.settings.smoothing === 0.03), 'a Smoothing other than the default is in the operation\'s settings (its own operation)');
     const saved = await app.storedDoc();
-    const plan = new Map(saved.hosts.shaper.cutPlan);
+    const plan = new Map(storedRecords(saved.hosts.shaper));
     eq(plan.get(contourKeyOf(key)).smoothing, 0.03, 'saved with the design');
   } finally { await app.close(); }
 }

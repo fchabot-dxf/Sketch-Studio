@@ -18,11 +18,12 @@ import { offsetPolygonRound } from '#core/plot/clip.js';
 import { buildRelief } from '#core/relief-model.js';
 import { loopsWithPolygons, planReliefItems, holdNoteItems } from '../apps/shaper/src/cut-plan.js';
 import { effectiveCutRecord, defaultCutRecord, exportEncoding } from '../apps/shaper/src/shaper.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
-import { setOpOrder } from '../apps/shaper/src/operations.js';
+
+
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -254,7 +255,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
 {
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Stepper 787');
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
     const doc = app.document, q = (sel) => doc.querySelector(sel), st = app.state;
@@ -273,7 +274,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
     pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="online"]');
     typed('.cut-depth', '3');
     pressEl('.cut-row[data-row="leadIn"] .cut-preset[data-value="true"]');
-    const key = [...CUT_PLAN.keys()][0], radius = () => CUT_PLAN.get(key).leadInRadius;
+    const key = [...V2_PLAN.keys()][0], radius = () => V2_PLAN.get(key).leadInRadius;
     const minus = () => pressEl('.cut-row[data-row="leadInRadius"] .cut-step[data-d="-1"]');
 
     // mm: a 0.508 mm (.02 in) bit: the calculated radius is the bit diameter 0.508; − gives 0.5, then the min 0.254 (it stopped at 0.5)
@@ -299,7 +300,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
     typed('.cut-bit', '0.5');
     const h3 = st.history.length;
     pressEl('.cut-row[data-param="toolDia"] .cut-step[data-d="-1"]');
-    eq([CUT_PLAN.get(key).toolDia, st.history.length], [0.5, h3], 'bit diameter 0.5 mm: − stays (positive, no min: unchanged)');
+    eq([V2_PLAN.get(key).toolDia, st.history.length], [0.5, h3], 'bit diameter 0.5 mm: − stays (positive, no min: unchanged)');
   } finally { await app.close(); }
 }
 

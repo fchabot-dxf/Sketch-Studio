@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import { findLoops } from '#core/loop-finder.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const app = await open({ host: 'shaper', sidebar: true });
@@ -63,7 +64,7 @@ try {
   const st2 = await importFile(path.join(REPO_ROOT, 'tests', 'fixtures', 'svg', 'fusion-shaper-addin-arcs.svg'));
   console.log('svg status:', st2);
   assert.match(st2, /Imported 39 shapes .* 6 cuts kept/);
-  const plan = [...CUT_PLAN.entries()].map(([k, r]) => [k.split(':')[0], r.cutType, Math.round(r.cutDepth * 100) / 100]).sort();
+  const plan = [...V2_PLAN.entries()].map(([k, r]) => [k.split(':')[0], r.cutType, Math.round(r.cutDepth * 100) / 100]).sort();
   assert.deepStrictEqual(plan, [['loop', 'exterior', 81.28], ['loop', 'pocket', 17.78], ['loop', 'pocket', 17.78], ['loop', 'pocket', 27.94], ['loop', 'pocket', 17.78], ['profile', 'pocket', 5.08]].sort());
   console.log('dxf-import-node: ok');
 } finally { await app.close(); }

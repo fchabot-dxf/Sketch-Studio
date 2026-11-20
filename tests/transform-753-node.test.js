@@ -32,7 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { open } from './helpers/node-app.js';
 import { buildSVG, buildDXF } from '../apps/sketchstudio/ui/export-manager.js';
-import { cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { shaperSvgOf, shaperPreviewOf } from '../apps/shaper/src/export-payload.js';
 
 SettingsManager.set('GRID_MAGNETISM', 0.001, { persist: 'none' });
@@ -331,7 +331,7 @@ function rectGroup() {
       const st = app.state;
       await quiet(app.importFile)(SVG, 'letters.svg');
       const file = st.groups.find((g) => !g.parentId);
-      const outputs = () => (host === 'shaper' ? (() => { const e = cutPlanEntries(); return { svg: shaperSvgOf(st, e), preview: shaperPreviewOf(st, e).svg }; })() : { svg: buildSVG(st), dxf: buildDXF(st) });
+      const outputs = () => (host === 'shaper' ? (() => { const e = planEntries(); return { svg: shaperSvgOf(st, e), preview: shaperPreviewOf(st, e).svg }; })() : { svg: buildSVG(st), dxf: buildDXF(st) });
       app.frames();
       const plain = outputs();
       const geo0 = geometry(st);

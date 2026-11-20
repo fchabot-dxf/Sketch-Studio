@@ -22,10 +22,11 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { deriveCuts } from '#core/stepped-cut.js';
 import { deriveProfileCuts, deriveCutFootprint } from '#core/profile-model.js';
 import { POCKET_CLEARING, planClearing, clearingSettings, pocketRings, applyPocketClearing } from '#core/pocket-clearing.js';
-import { CUT_PLAN, cutPlanEntries, keyOf, planReliefItems } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf, planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { opOrder, setOpOrder } from '../apps/shaper/src/operations.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -263,7 +264,7 @@ let svgSaved = null, recSaved = null;
 const profile = await createProfile();
 await createNamedDesign(profile, 'shaper', 'Pocket 745');
 {
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
     const h = harness(app), st = app.state;
@@ -278,7 +279,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     h.typed('.cut-bit', '6');
     ok(h.shown('clearing') && !h.shown('stepover') && !h.shown('finishAllowance') && !h.shown('loop') && !h.shown('rasterAngle'), 'Pocket: the Clearing row, Freehand: no other clearing row');
     eq([h.q('.cut-clear-cur').textContent, h.note()], ['Freehand', []], 'Freehand by default, no note');
-    const kR = keyAt(st, 170, 10), svgFree = shaperSvgOf(st, cutPlanEntries());
+    const kR = keyAt(st, 170, 10), svgFree = shaperSvgOf(st, planEntries());
     h.pressEl('.cut-clear-trigger');
     eq([...app.document.querySelectorAll('.cut-clear-opt')].map((b) => [b.dataset.clearing, b.querySelector('.cut-clear-name').textContent, b.disabled, b.querySelector('svg.cut-ic') !== null]),
       [['freehand', 'Freehand', false, true], ['linked', 'Spiral', false, true], ['raster', 'Raster', false, true], ['morphed', 'Morphed spiral', false, true]], 'the dropdown: 4 choices, each with its pattern icon');
@@ -286,7 +287,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     let n0 = st.history.length;
     h.clearing('linked');
     eq(st.history.length, n0 + 1, 'Spiral: ONE undo step');
-    const r = CUT_PLAN.get(kR);
+    const r = V2_PLAN.get(kR);
     eq([r.clearing, r.stepover, r.finishAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 0, false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster 0 (no depth per pass field)');
     ok(h.shown('stepover') && h.shown('finishAllowance') && h.shown('loop') && !h.shown('rasterAngle') && !h.q('.cut-pass-depth'), 'Spiral: Stepover, Finish allowance, Loop (no Raster angle, no Depth per pass row)');
     eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-finish-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.5', false], 'the fields: 40 % = 2.4 mm, 0.5, depth per pass empty (full depth)');
@@ -300,24 +301,24 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     eq(nt[3], 'AutoPass runs back along it on the next pass', 'the note: open clearing path reverses on AutoPass (TASK 777)');
     ok(/^Leftover: 7\.\d+ mm² not reached by a 6 mm bit \(sharp inside corners, necks narrower than the bit\)$/.test(nt[4]), 'the leftover (the 4 corners): ' + nt[4]);
     ok(h.q('.cut-note .cut-note-warn') && h.q('.cut-note .cut-note-warn').textContent.startsWith('7.'), 'the leftover is in the warning colour');
-    const els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
+    const els = elementsOf(shaperSvgOf(st, planEntries()));
     eq(els.map((e) => e.cutType), ['online', 'inside', 'guide'], 'the download: ONE on-line path (the 12 turns) + the wall + the pocket start mark (guide)');
     // the stepper: + 5 % -> 45 %, ONE undo step, the rings redraw
     n0 = st.history.length;
     h.step('stepover', 1);
-    eq([CUT_PLAN.get(kR).stepover, st.history.length], [45, n0 + 1], 'stepover + -> 45 %, ONE undo step');
+    eq([V2_PLAN.get(kR).stepover, st.history.length], [45, n0 + 1], 'stepover + -> 45 %, ONE undo step');
     ok(/^Pocket: spiral, 10 turns in 1 line \+ wall, stepover 2\.7 mm/.test(h.note()[0]), 'the note follows: ' + h.note()[0]);
     h.typed('.cut-bit', '3.175');
     ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 1\.429 mm/.test(h.note()[0]) && h.note()[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
     app.undo();
-    eq(CUT_PLAN.get(kR).toolDia, 6, 'undo: the bit back to 6 mm');
+    eq(V2_PLAN.get(kR).toolDia, 6, 'undo: the bit back to 6 mm');
     // Raster: + its angle row; presets
     h.clearing('raster');
     ok(h.shown('rasterAngle'), 'Raster: the Raster angle row');
     eq([...h.q('.cut-angle-presets').querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['0°*', '45°', '90°'], 'angle presets 0 / 45 / 90, 0 active');
     ok(/^Pocket: raster 0°: \d+ passes \+ 1 ring \+ wall/.test(h.note()[0]), 'Raster note: ' + h.note()[0]);
     h.pressEl('.cut-angle-presets .cut-preset[data-value="45"]');
-    eq(CUT_PLAN.get(kR).rasterAngle, 45, 'preset 45');
+    eq(V2_PLAN.get(kR).rasterAngle, 45, 'preset 45');
     ok(/^Pocket: raster 45°/.test(h.note()[0]), 'the note follows the angle');
     // depth per pass
     // the spiral
@@ -333,7 +334,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     ok(!h.q('.cut-clear-opt[data-clearing="linked"]').disabled, 'the island pocket: Spiral is never disabled');
     h.pressEl('.cut-clear-opt[data-clearing="linked"]');
     const kI = keyAt(st, 5, 5);
-    eq(CUT_PLAN.get(kI).clearing, 'linked', 'the island pocket: Spiral');
+    eq(V2_PLAN.get(kI).clearing, 'linked', 'the island pocket: Spiral');
     // the operations list: ONE row per programmed pocket
     const list = h.ops();
     console.log('ops: ' + JSON.stringify(list));
@@ -341,54 +342,54 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     // the 3D Review: every cut at its own depth
     const items = planReliefItems(st);
     ok(items.length > 2 && items.every((i) => i.cutDepth === 6), `Review: ${items.length} items (the spiral, the rings, walls, the island), all at 6 mm`);
-    svgSaved = shaperSvgOf(st, cutPlanEntries()); recSaved = JSON.stringify([...CUT_PLAN]);
+    svgSaved = shaperSvgOf(st, planEntries()); recSaved = JSON.stringify([...V2_PLAN]);
     ok(svgSaved !== svgFree, 'the download changed with the clearing');
     const d = await app.storedDoc();
-    ok(JSON.stringify(d.hosts.shaper.cutPlan).includes('"clearing":"morphed"') && JSON.stringify(d.hosts.shaper.cutPlan).includes('"clearing":"linked"'), 'the autosave stores the clearing');
+    ok(JSON.stringify(storedRecords(d.hosts.shaper)).includes('"clearing":"morphed"') && JSON.stringify(storedRecords(d.hosts.shaper)).includes('"clearing":"linked"'), 'the autosave stores the clearing');
   } finally { await app.close(); }
 }
-CUT_PLAN.clear(); setOpOrder([]);
+V2_PLAN.clear(); V2_PLAN.setOrder([]);
 {
   const app = await open({ host: 'shaper', profile });
   try {
     app.modes.showMode('prepare');
-    eq(JSON.stringify([...CUT_PLAN]), recSaved, 'after a reload the records are back');
-    eq(shaperSvgOf(app.state, cutPlanEntries()), svgSaved, 'and the download is byte-identical');
+    eq(JSON.stringify([...V2_PLAN]), recSaved, 'after a reload the records are back');
+    eq(shaperSvgOf(app.state, planEntries()), svgSaved, 'and the download is byte-identical');
     // the bin of an operation with 2 regions: both unassigned in ONE undo step
     const h = harness(app), st = app.state;
     h.clickAt(130, 90); h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
     h.clickAt(5, 5); h.pick('exterior');
     h.clickAt(130, 90, { shift: true });
     // two plain pockets of the same settings = one operation: make the second like the first
-    CUT_PLAN.clear(); setOpOrder([]);
+    V2_PLAN.clear(); V2_PLAN.setOrder([]);
     const kA = keyAt(st, 170, 10), kB = keyAt(st, 130, 90), kI = keyAt(st, 5, 5);
-    CUT_PLAN.set(kA, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
-    CUT_PLAN.set(kB, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
-    CUT_PLAN.set(kI, { cutType: 'exterior', cutDepth: 12, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
+    V2_PLAN.set(kA, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
+    V2_PLAN.set(kB, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
+    V2_PLAN.set(kI, { cutType: 'exterior', cutDepth: 12, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 });
     app.prepare.view().refreshLook(); app.prepare.opList.refresh();
     const rows = [...app.document.querySelectorAll('#prepare-ops .ops-row')];
     eq(h.ops(), ['Pocket · 6 mm | 2 regions', 'Outside · 12 mm | 1 region'], 'two operations: the 2 pockets, the outside');
     h.pressEl(rows[0].querySelector('.ops-pick'));
     eq(app.prepare.view().selection.size, 2, 'the pockets\' operation is picked');
-    const before = shaperSvgOf(st, cutPlanEntries()), elsBefore = elementsOf(before), plan0 = JSON.stringify([...CUT_PLAN]), order0 = opOrder();
+    const before = shaperSvgOf(st, planEntries()), elsBefore = elementsOf(before), plan0 = JSON.stringify([...V2_PLAN]), order0 = V2_PLAN.order();
     const bin = rows[0].querySelector('.ops-del');
     eq([bin.textContent, bin.getAttribute('aria-label')], ['\u{1F5D1}', 'Delete operation 1: unassign its 2 regions'], 'the row\'s bin (the Parameters table\'s glyph)');
     const n0 = st.history.length;
     h.pressEl(bin);
     eq(st.history.length, n0 + 1, 'the delete is ONE undo step');
-    eq([CUT_PLAN.get(kA).cutType, CUT_PLAN.get(kB).cutType, CUT_PLAN.get(kI).cutType], [null, null, 'exterior'], 'both regions unassigned (cut type cleared), the other kept');
+    eq([V2_PLAN.get(kA), V2_PLAN.get(kB), V2_PLAN.get(kI).cutType], [null, null, 'exterior'], 'both regions unassigned (TASK S1: they leave the operation, which goes), the other kept');
     eq(h.ops(), ['Outside · 12 mm | 1 region'], 'the list loses the operation');
     eq(app.prepare.view().selection.size, 0, 'the selection (that operation) clears');
-    const elsAfter = elementsOf(shaperSvgOf(st, cutPlanEntries()));
+    const elsAfter = elementsOf(shaperSvgOf(st, planEntries()));
     eq(elsAfter, elsBefore.filter((e) => e.cutType !== 'pocket'), 'the export loses exactly those two pocket elements');
     eq(st.shapes.length, 16, 'the sketch geometry is untouched');
     app.undo();
-    eq(JSON.stringify([...CUT_PLAN]), plan0, 'Ctrl+Z: the records back');
-    eq([opOrder(), h.ops()], [order0, ['Pocket · 6 mm | 2 regions', 'Outside · 12 mm | 1 region']], 'and the operation in its place');
-    eq(shaperSvgOf(st, cutPlanEntries()), before, 'the export as before');
+    eq(JSON.stringify([...V2_PLAN]), plan0, 'Ctrl+Z: the records back');
+    eq([V2_PLAN.order(), h.ops()], [order0, ['Pocket · 6 mm | 2 regions', 'Outside · 12 mm | 1 region']], 'and the operation in its place');
+    eq(shaperSvgOf(st, planEntries()), before, 'the export as before');
   } finally { await app.close(); }
 }
-CUT_PLAN.clear(); setOpOrder([]);
+V2_PLAN.clear(); V2_PLAN.setOrder([]);
 { // inches: the allowance default is 0.02 in
   SettingsManager.set('DOC_UNIT', 'in');
   const app = await open({ host: 'shaper' });
@@ -399,7 +400,7 @@ CUT_PLAN.clear(); setOpOrder([]);
     h.pressEl('.sk-header-tab[data-tab="prepare"]');
     h.clickAt(50, 30); h.pick('pocket'); h.typed('.cut-depth', '0.25'); h.typed('.cut-bit', '0.25');
     h.clearing('linked');
-    const r = CUT_PLAN.get(keyAt(st, 50, 30));
+    const r = V2_PLAN.get(keyAt(st, 50, 30));
     eq(r.finishAllowance, 0.508, 'inches: the allowance default 0.02 in (0.508 mm)');
     eq(r.stepover, 45, 'the last stepover set (45 %, above) is used by the next pocket');
     eq(h.q('.cut-finish-allowance').value, '0.02', 'shown as 0.02 in');
@@ -407,5 +408,5 @@ CUT_PLAN.clear(); setOpOrder([]);
     ok(/^Leftover: 0\.\d+ in² not reached by a 0\.25 in bit/.test(h.note().at(-1)), 'the inch leftover: ' + h.note().at(-1));
   } finally { await app.close(); SettingsManager.set('DOC_UNIT', 'mm'); }
 }
-CUT_PLAN.clear(); setOpOrder([]);
+V2_PLAN.clear(); V2_PLAN.setOrder([]);
 console.log(`pocket-clearing-745-node.test.js: ok (${checks} checks)`);

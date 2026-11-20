@@ -8,11 +8,12 @@ import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
-import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, insideStepShades } from '../apps/shaper/src/export-preview.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 
 let checks = 0;
@@ -22,7 +23,7 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
 };
 
 const L = (shade) => parseFloat(/hsl\(0, 0%, ([\d.]+)%\)/.exec(shade)[1]);
@@ -30,15 +31,15 @@ SettingsManager.set('DOC_UNIT', 'mm');
 const app = await open({ host: 'shaper' });
 try {
   app.modes.showMode('prepare');
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
-  const hole = [...CUT_PLAN.entries()].find(([, r]) => r.slope);
+  const hole = [...V2_PLAN.entries()].find(([, r]) => r.slope);
   for (const [name, patch] of [['Step 1 mm', { stepDepth: 1 }], ['adaptive Fine', { stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.1 }]]) {
-    CUT_PLAN.set(hole[0], { ...hole[1], cutType: 'roughing', ...patch });
-    const download = shaperSvgOf(app.state, cutPlanEntries());
+    V2_PLAN.set(hole[0], { ...hole[1], cutType: 'roughing', ...patch });
+    const download = shaperSvgOf(app.state, planEntries());
     eq(download, plainExport(app.state), name + ': the downloaded file is byte-identical to the pre-719 exporter call');
     ok(!/hsl\(|data-/.test(download), name + ': no preview styling in the file');
-    const items = previewItems(parseShaperSvg(shaperSvgOf(app.state, cutPlanEntries(), { preview: true }), app.document));
+    const items = previewItems(parseShaperSvg(shaperSvgOf(app.state, planEntries(), { preview: true }), app.document));
     const { shades } = insideStepShades(items);
     const ds = [...shades.keys()].sort((a, b) => parseFloat(a) - parseFloat(b));
     const ls = ds.slice(0, -1).map((d) => L(shades.get(d)));
@@ -49,7 +50,7 @@ try {
     eq(insideStepShades(items.map((i) => ({ ...i, step: null }))).shades.size, 0, name + ': a plain inside gets no shade');
   }
 } finally {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   app.close();
 }
 console.log(`export-preview-720-node.test.js: ok (${checks} checks)`);

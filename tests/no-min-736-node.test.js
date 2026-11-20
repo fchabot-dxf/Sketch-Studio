@@ -9,11 +9,12 @@ import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
 import * as stepped from '#core/stepped-cut.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
-import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { getStock } from '../apps/shaper/src/stock.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { nextValue } from '../apps/shaper/src/number-stepper.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -21,7 +22,7 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 const FIX = new URL('./fixtures/sa7-slope/', import.meta.url);
 const payload = (n) => JSON.parse(fs.readFileSync(new URL(n + '.json', FIX), 'utf8'));
 const slopeOf = (n) => { for (const r of payload(n).regions) { const s = slopeFromRegion(r, { scale: 1, yUp: true }, []); if (s && s.kind === 'pocket') return s; } return null; };
-const exportOf = (app) => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {} });
+const exportOf = (app) => exportShaperSVG({ state: app.state, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {} });
 
 // ── 1. core + the step rule ──
 eq(['minMm' in stepped.STEP_DEPTH, 'minMm' in stepped.STEP_RESOLUTION], [false, false], 'no minMm constant remains in the core');
@@ -58,7 +59,7 @@ for (const [fixture, kind] of [['03-pocket-floor-fillet', 'pocket'], ['02-drafte
 
 // ── 2. the real card and the stock field ──
 SettingsManager.set('DOC_UNIT', 'mm');
-CUT_PLAN.clear();
+V2_PLAN.clear();
 const app = await open({ host: 'shaper' });
 try {
   app.modes.showMode('prepare');
@@ -68,7 +69,7 @@ try {
   importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
   const p = worldToScreen(pc, { x: 60, y: -40 }); app.click(Math.round(p.x), Math.round(p.y), { target: pc });
   pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]');
-  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'roughing');
+  const rec = () => [...V2_PLAN.values()].find((r) => r.cutType === 'roughing');
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   const cb = q('.cut-adaptive'); cb.checked = true; cb.dispatchEvent(new app.window.Event('change'));
   for (const [cls, field, label, v] of [['.cut-bit', 'toolDia', 'bit', 0.05], ['.cut-step-depth', 'stepDepth', 'step depth', 0.01], ['.cut-step-deviation', 'stepDeviation', 'resolution', 0.001]]) {

@@ -32,10 +32,11 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { deriveCuts } from '#core/stepped-cut.js';
 import { deriveCutFootprint, deriveProfileCuts } from '#core/profile-model.js';
 import { planClearing, clearingSettings, pocketRings } from '#core/pocket-clearing.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, keyOf, planLeadInNotes } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, keyOf, planLeadInNotes } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { setOpOrder, planOperations } from '../apps/shaper/src/operations.js';
+import { describeOperations } from '../apps/shaper/src/operations.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -287,7 +288,7 @@ const profile = await createProfile();
 await createNamedDesign(profile, 'shaper', 'Lead-in 775');
 let saved = null;
 {
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
     const h = harness(app), st = app.state;
@@ -304,31 +305,31 @@ let saved = null;
     eq(h.count('circle'), 0, 'a closed line: no dot (no start point on the Origin)');
     let n0 = st.history.length;
     h.preset('leadIn', 'true');
-    eq([CUT_PLAN.get(kA).leadIn, CUT_PLAN.get(kA).leadInSide, CUT_PLAN.get(kA).leadInRadius ?? null, CUT_PLAN.get(kA).leadInSweep ?? null, CUT_PLAN.get(kA).leadInLength ?? null, CUT_PLAN.get(kA).leadInAt ?? null, st.history.length], [true, 'outside', null, null, null, null, n0 + 1], 'Lead-in On: ONE undo step; Outside; calculated values stored as null');
+    eq([V2_PLAN.get(kA).leadIn, V2_PLAN.get(kA).leadInSide, V2_PLAN.get(kA).leadInRadius ?? null, V2_PLAN.get(kA).leadInSweep ?? null, V2_PLAN.get(kA).leadInLength ?? null, V2_PLAN.get(kA).leadInAt ?? null, st.history.length], [true, 'outside', null, null, null, null, n0 + 1], 'Lead-in On: ONE undo step; Outside; calculated values stored as null');
     ok(h.shown('leadInRadius') && h.shown('leadInSweep') && h.shown('leadInLength') && h.shown('leadInSide') && h.shown('leadInAt'), 'On: Radius, Sweep, Length, Side, Position rows');
     eq([h.q('.cut-lead-radius').value, h.q('.cut-lead-sweep').value, h.q('.cut-lead-length').value, h.presets('leadInSide')], ['3.175', '90', '0', ['Outside*', 'Inside']], 'calculated Radius = bit dia, Sweep = 90, Length = 0, Side Outside');
     eq(h.q('.cut-row[data-row="leadInRadius"] .cut-field-label').textContent, 'Radius', 'the Radius label is the table\'s');
     eq(h.note(), ['On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge', TRADE_OFF], 'the note: the arc and the trade-off');
     eq([h.count('.sk-lead-leg'), h.count('.sk-lead-tip'), h.count('.sk-lead-end')], [1, 1, 1], 'Prepare: the arc, the tip dot (start) and the junction ring (the other end)');
-    let els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
+    let els = elementsOf(shaperSvgOf(st, planEntries()));
     eq(els.map((e) => pathPoints(e.d).closed), [false], 'the download: ONE open path');
-    const ops = planOperations(st, cutPlanEntries());
+    const ops = describeOperations(st, planEntries());
     ok(ops.some((op) => /lead-in arc outside/.test(op.label)), 'the operations row says lead-in arc: ' + ops.map((op) => op.label).join(' | '));
-    eq(planLeadInNotes(st, CUT_PLAN), ['On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge', TRADE_OFF], 'the 3D Review info: the same note');
+    eq(planLeadInNotes(st, V2_PLAN), ['On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge', TRADE_OFF], 'the 3D Review info: the same note');
     n0 = st.history.length;
     h.step('leadInRadius', 1);
-    eq([CUT_PLAN.get(kA).leadInRadius, st.history.length], [3.5, n0 + 1], 'Radius +: 3.175 snaps up to the next 0.5 mm step, 3.5, ONE undo step');
-    h.typed('.cut-lead-radius', '6.35'); eq(CUT_PLAN.get(kA).leadInRadius, 6.35, 'typed 6.35');
-    h.typed('.cut-lead-radius', '-1'); eq(CUT_PLAN.get(kA).leadInRadius, 6.35, 'typed -1: refused');
-    h.preset('leadInSide', 'inside'); eq(CUT_PLAN.get(kA).leadInSide, 'inside', 'Side Inside');
-    const tip = pathPoints(elementsOf(shaperSvgOf(st, cutPlanEntries()))[0].d).pts[0];
+    eq([V2_PLAN.get(kA).leadInRadius, st.history.length], [3.5, n0 + 1], 'Radius +: 3.175 snaps up to the next 0.5 mm step, 3.5, ONE undo step');
+    h.typed('.cut-lead-radius', '6.35'); eq(V2_PLAN.get(kA).leadInRadius, 6.35, 'typed 6.35');
+    h.typed('.cut-lead-radius', '-1'); eq(V2_PLAN.get(kA).leadInRadius, 6.35, 'typed -1: refused');
+    h.preset('leadInSide', 'inside'); eq(V2_PLAN.get(kA).leadInSide, 'inside', 'Side Inside');
+    const tip = pathPoints(elementsOf(shaperSvgOf(st, planEntries()))[0].d).pts[0];
     ok(inPoly(tip, XY(RECT)), 'Inside: the tip is inside the outline');
     h.typed('.cut-lead-radius', '1');
     eq(h.note(), ['On line: lead-in arc refused: the radius 1 mm is smaller than the bit radius 1.587 mm; cut as a closed loop'], 'refused: the note says why');
     ok(h.q('.cut-note .cut-note-warn'), 'refused: in the warning colour');
     h.typed('.cut-lead-radius', '6.35');
-    app.undo(); eq(CUT_PLAN.get(kA).leadInRadius, 1, 'undo: back one edit');
-    app.redo(); eq(CUT_PLAN.get(kA).leadInRadius, 6.35, 'redo');
+    app.undo(); eq(V2_PLAN.get(kA).leadInRadius, 1, 'undo: back one edit');
+    app.redo(); eq(V2_PLAN.get(kA).leadInRadius, 6.35, 'redo');
     // Tabs on On line: no thickness row, the lead-in row goes, the note in the owner's words
     h.preset('holdPart', 'tabs');
     ok(h.shown('tabCount') && h.shown('tabWidth') && !h.shown('holdThickness'), 'On line Tabs: count and width, NO thickness (the gaps are not cut at all)');
@@ -336,22 +337,22 @@ let saved = null;
     eq(hintFor(h.q('.cut-row[data-row="tabWidth"] [data-hint]')), 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.', 'Tab width on On line: the gap\'s hint (the table\'s)');
     h.typed('.cut-tab-count', '3'); h.typed('.cut-tab-width', '10');
     eq(h.note(), ['Tabs: 3 gaps of 10 mm left uncut; cut them by hand afterwards', 'Each gap keeps 6.825 mm of wood with a 3.175 mm bit (the gap minus the bit)', 'On line: no lead-in with tabs: each stroke has its own ends'], 'the tabs note (the stored Lead-in On waits: no arc with tabs)');
-    els = elementsOf(shaperSvgOf(st, cutPlanEntries()));
+    els = elementsOf(shaperSvgOf(st, planEntries()));
     eq(els.map((e) => [e.cutType, e.depth, pathPoints(e.d).closed]), Array(3).fill(['online', '3.000 mm', false]), 'the download: 3 open strokes at the full depth');
     eq([h.count('.sk-stroke'), h.count('.sk-tab-mark'), h.count('.sk-lead-tip')], [3, 3, 0], 'Prepare: the 3 strokes and the 3 tab marks, no lead-in');
-    ok(planOperations(st, cutPlanEntries()).some((op) => /3 tabs \(gaps 10 mm left uncut\)/.test(op.label)), 'the operations row: 3 tabs');
+    ok(describeOperations(st, planEntries()).some((op) => /3 tabs \(gaps 10 mm left uncut\)/.test(op.label)), 'the operations row: 3 tabs');
     h.preset('holdPart', 'off');
     ok(h.shown('leadIn') && h.shown('leadInRadius'), 'Tabs off: the Lead-in rows back');
     // calculated defaults: only Side is remembered; Radius / Sweep / Length stay calculated (null)
     h.clickAt(130, 10); h.pick('online'); h.typed('.cut-depth', '3');
     const kB = keyAt(st, 130, 10);
     h.preset('leadIn', 'true');
-    eq([CUT_PLAN.get(kB).leadInRadius, CUT_PLAN.get(kB).leadInSweep, CUT_PLAN.get(kB).leadInLength, CUT_PLAN.get(kB).leadInSide], [null, null, null, 'inside'], 'the next record turned On remembers Side only; Radius/Sweep/Length default to calculated (null)');
+    eq([V2_PLAN.get(kB).leadInRadius, V2_PLAN.get(kB).leadInSweep, V2_PLAN.get(kB).leadInLength, V2_PLAN.get(kB).leadInSide], [null, null, null, 'inside'], 'the next record turned On remembers Side only; Radius/Sweep/Length default to calculated (null)');
     // an open line: no Lead-in row; Tabs refused with the reason
     h.clickAt(165, 90);
-    const chainSel = [...CUT_PLAN.keys()];
+    const chainSel = [...V2_PLAN.keys()];
     h.pick('online');
-    const kC = [...CUT_PLAN.keys()].find((k) => k.startsWith('chain:'));
+    const kC = [...V2_PLAN.keys()].find((k) => k.startsWith('chain:'));
     ok(kC, 'the open line picked: ' + JSON.stringify(chainSel));
     ok(!h.shown('leadIn') && h.shown('holdPart'), 'an open line: no Lead-in row (it has its ends), the Hold part row');
     h.typed('.cut-depth', '3');
@@ -368,21 +369,21 @@ let saved = null;
     eq(h.count('circle'), 0, 'Loop on, closed: no dot on the loop');
     eq(h.count('.sk-pocket-start'), 1, 'Prepare: 1 pocket start mark target');
     ok(/\+ wall: one closed loop, stepover/.test(h.note()[0]), 'the note: one closed loop (nothing about where it starts): ' + h.note()[0]);
-    const pocketEls = elementsOf(shaperSvgOf(st, [{ target: { kind: 'loop', id: kP.slice(5) }, rec: CUT_PLAN.get(kP) }]));
+    const pocketEls = elementsOf(shaperSvgOf(st, [{ target: { kind: 'loop', id: kP.slice(5) }, rec: V2_PLAN.get(kP) }]));
     eq(pocketEls.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], 'the pocket download: ONE closed on-line path + 1 guide start mark');
-    saved = { plan: JSON.stringify([...CUT_PLAN.entries()]), svg: shaperSvgOf(st, cutPlanEntries()) };
+    saved = { plan: JSON.stringify([...V2_PLAN.entries()]), svg: shaperSvgOf(st, planEntries()) };
     const d = await app.storedDoc();
-    ok(d.hosts.shaper.cutPlan.some(([, r]) => r.leadIn === true && r.leadInRadius === 6.35 && r.leadInSide === 'inside'), 'the autosave stores the lead-in fields');
+    ok(storedRecords(d.hosts.shaper).some(([, r]) => r.leadIn === true && r.leadInRadius === 6.35 && r.leadInSide === 'inside'), 'the autosave stores the lead-in fields');
     h.clickAt(300, 300);
   } finally { await app.close(); }
 }
-CUT_PLAN.clear();
+V2_PLAN.clear();
 {
   const app = await open({ host: 'shaper', profile });
   try {
     app.modes.showMode('prepare');
-    eq(JSON.stringify([...CUT_PLAN.entries()]), saved.plan, 'after a reload the plan is equal');
-    eq(shaperSvgOf(app.state, cutPlanEntries()), saved.svg, 'and the download is byte-identical');
+    eq(JSON.stringify([...V2_PLAN.entries()]), saved.plan, 'after a reload the plan is equal');
+    eq(shaperSvgOf(app.state, planEntries()), saved.svg, 'and the download is byte-identical');
   } finally { await app.close(); }
 }
 console.log(`leadin-775-node: ok (${checks} checks)`);

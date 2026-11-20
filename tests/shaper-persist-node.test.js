@@ -6,17 +6,18 @@ import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { applyShaperUnitDefault } from '../apps/shaper/src/design-canvas.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { CUT_TYPES } from '../apps/shaper/src/shaper.js';
-import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { getStock, setStockField } from '../apps/shaper/src/stock.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
-const planJson = () => JSON.stringify([...CUT_PLAN.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)));
+const planJson = () => JSON.stringify([...V2_PLAN.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)));
 const stockJson = () => JSON.stringify(getStock());
 const exportStr = (app) => {
   const st = app.state; const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: CUT_TYPES, docUnit: 'in', options: {}, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: planEntries(), encoding: CUT_TYPES, docUnit: 'in', options: {}, loopPolys: lp });
 };
 const openMode = (app, mode) => { app.press(app.document.querySelector(`.sk-header-tab[data-tab="${mode}"]`)); assert.strictEqual(app.document.querySelector('.sk-header-tab.active').dataset.tab, mode, 'the ' + mode + ' tab opens'); };
 const edges = (app) => app.document.querySelectorAll('#prepare-canvas .sk-edge').length;
@@ -32,7 +33,7 @@ let planBefore, stockBefore, exportBefore;
     openMode(app, 'design');
     const st = app.state;
     for (const k of [...st.joints.keys()]) st.joints.delete(k);
-    st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+    st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
     let n = 0; const J = (x, y) => { const id = 'j' + (++n); st.joints.set(id, { x, y }); return id; };
     const line = (a, b) => st.shapes.push({ id: 's' + (++n), type: 'line', joints: [a, b] });
     const rect = (x, y, w, h) => { const p = [J(x, y), J(x + w, y), J(x + w, y + h), J(x, y + h)]; for (let i = 0; i < 4; i++) line(p[i], p[(i + 1) % 4]); };
@@ -40,11 +41,11 @@ let planBefore, stockBefore, exportBefore;
     const loops = findLoops(st); const chains = findOpenChains(st, loops);
     const L = loops.sort((a, b) => st.joints.get(a.joints[0]).x - st.joints.get(b.joints[0]).x);
     const C = chains.sort((a, b) => st.joints.get(a.shapes[0].joints[0]).x - st.joints.get(b.shapes[0].joints[0]).x);
-    CUT_PLAN.set(keyOf('loop', L[0].id), { cutType: 'pocket', cutDepth: 7.62, cutOffset: 1.5, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90 });
-    CUT_PLAN.set(keyOf('loop', L[1].id), { cutType: 'exterior', cutDepth: 5, cutOffset: 0, toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90 });
-    CUT_PLAN.set(keyOf('loop', L[2].id), { cutType: 'interior', cutDepth: 'unset', cutOffset: -2, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 60 });
-    CUT_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
-    CUT_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
+    V2_PLAN.set(keyOf('loop', L[0].id), { cutType: 'pocket', cutDepth: 7.62, cutOffset: 1.5, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90 });
+    V2_PLAN.set(keyOf('loop', L[1].id), { cutType: 'exterior', cutDepth: 5, cutOffset: 0, toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90 });
+    V2_PLAN.set(keyOf('loop', L[2].id), { cutType: 'interior', cutDepth: 'unset', cutOffset: -2, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 60 });
+    V2_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
+    V2_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
     setStockField('thickness', 25.4); setStockField('margin', 6);
     openMode(app, 'prepare');
     assert(edges(app) >= 14, 'Prepare shows the seeded geometry');
@@ -52,7 +53,7 @@ let planBefore, stockBefore, exportBefore;
     assert.strictEqual(JSON.parse(planBefore).length, 5, 'five cut records assigned');
     assert.deepStrictEqual(JSON.parse(stockBefore), { thickness: 25.4, width: null, height: null, margin: 6 });
     const d = await app.storedDoc(); // the autosave (page-hide path)
-    assert(d.hosts.shaper && d.hosts.shaper.cutPlan.length === 5 && d.hosts.shaper.stock.thickness === 25.4 && d.hosts.shaper.stock.margin === 6, 'the autosave stores the cut plan and stock');
+    assert(d.hosts.shaper && storedRecords(d.hosts.shaper).length === 5 && d.hosts.shaper.stock.thickness === 25.4 && d.hosts.shaper.stock.margin === 6, 'the autosave stores the cut plan and stock');
   } finally { await app.close(); }
 }
 

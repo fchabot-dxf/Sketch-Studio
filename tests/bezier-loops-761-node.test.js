@@ -25,12 +25,13 @@ import { exportShaperSVG } from '#core/shaper-export.js';
 import { importDxf } from '#core/dxf-import.js';
 import { buildSVG, buildDXF } from '../apps/sketchstudio/ui/export-manager.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, reconcileCutPlan, cutPlanNotice } from '../apps/shaper/src/cut-plan.js';
-import { setOpOrder, opKeyOf, planOperations } from '../apps/shaper/src/operations.js';
+import { planEntries, planReliefItems, reconcileCutPlan, cutPlanNotice } from '../apps/shaper/src/cut-plan.js';
+import { opKeyOf, describeOperations } from '../apps/shaper/src/operations.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -105,13 +106,13 @@ for (const d of docs) digest[d.name] = { bezier: hasBezier(d.st), ...digestOf(d.
   try {
     app.modes.showMode('prepare');
     for (const f of ['real-solid-plate-711.json', ...fs.readdirSync(fx('sa7-slope')).map((x) => 'sa7-slope/' + x)]) {
-      CUT_PLAN.clear(); setOpOrder([]);
+      V2_PLAN.clear(); V2_PLAN.setOrder([]);
       importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare });
       const st = app.state;
       const relief = planReliefItems(st).map((i) => [i.key, i.sig, i.cutType, i.cutDepth, i.footprints]);
-      digest['fusion/' + f] = { bezier: hasBezier(st), ...digestOf(st), plan: hash([...CUT_PLAN]), download: hash(shaperSvgOf(st, cutPlanEntries())), relief: hash(relief) };
+      digest['fusion/' + f] = { bezier: hasBezier(st), ...digestOf(st), plan: hash([...V2_PLAN]), download: hash(shaperSvgOf(st, planEntries())), relief: hash(relief) };
     }
-  } finally { CUT_PLAN.clear(); setOpOrder([]); await app.close(); }
+  } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }
 if (WRITE) {
   fs.mkdirSync(new URL('.', DIGEST_FILE), { recursive: true });
@@ -270,23 +271,23 @@ const profile = await createProfile();
   const stored = [['loop:loop_R1-R2-R3-R4', pocketRec], ['chain:chain_B1-L1-L2-L3', online]];
   const order = [opKeyOf(pocketRec), opKeyOf(online)];
   await createNamedDesign(profile, 'shaper', 'Old chain 761', docOf({ ...OUTLINE, ...rect }, shapes, { version: 1, cutPlan: stored, stock: null, opOrder: order }));
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
-    eq([...CUT_PLAN.keys()], ['loop:loop_R1-R2-R3-R4', 'loop:loop_B1-L1-L2-L3'], '4a: the chain record MOVED to the loop with the same shapes, in its place in the plan');
-    eq(CUT_PLAN.get('loop:loop_B1-L1-L2-L3'), online, '4a: same cut type and settings (On line)');
-    const ops = planOperations(app.state, cutPlanEntries());
+    eq([...V2_PLAN.keys()], ['loop:loop_R1-R2-R3-R4', 'loop:loop_B1-L1-L2-L3'], '4a: the chain record MOVED to the loop with the same shapes, in its place in the plan');
+    eq(V2_PLAN.get('loop:loop_B1-L1-L2-L3'), online, '4a: same cut type and settings (On line)');
+    const ops = describeOperations(app.state, planEntries());
     eq(ops.map((o) => [o.cutType, o.records.map((r) => r.planKey)]), [['pocket', ['loop:loop_R1-R2-R3-R4']], ['online', ['loop:loop_B1-L1-L2-L3']]], '4a: the Operations list keeps the stored order (pocket first), the On line operation now on the loop');
-    const svg = shaperSvgOf(app.state, cutPlanEntries());
+    const svg = shaperSvgOf(app.state, planEntries());
     ok(/shaper:cutType="online"[^>]*\/>|<g[^>]*shaper:cutType="online"/.test(svg) && svg.includes('C 70 90 30 90 0 50'), '4a: the export writes the On line cut WITH the curve (missing from the file before)');
     app.modes.showMode('prepare');
     eq(noticeOf(app), 'Cut plan updated: 1 cut was on an outline that is now a closed shape and was kept', '4a: the one-time notice, exact');
     // once: the reconciled plan reconciles to itself; a document saved after it opens without a notice
     eq(reconcileCutPlan(app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0 }, '4a: a second reconciliation changes nothing');
-    const before = JSON.stringify([...CUT_PLAN]);
+    const before = JSON.stringify([...V2_PLAN]);
     eq(applyShaperDoc(captureShaperDoc(), app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0, keptHoles: 0, lostHoles: 0 }, '4a: the saved plan opens with nothing to change (TASK 774: + the hole-rule counts)');
-    eq(JSON.stringify([...CUT_PLAN]), before, '4a: and the same plan');
-  } finally { CUT_PLAN.clear(); setOpOrder([]); await app.close(); }
+    eq(JSON.stringify([...V2_PLAN]), before, '4a: and the same plan');
+  } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }
 { // (b) the records with no exact match: a chain that is now a loop + a tail; a line loop a bezier now splits; the bezier's own old chain
   const j = { ...OUTLINE, t: [-30, -20], e1: [300, 0], e2: [400, 0], e3: [400, 50], e4: [300, 50], q1: [500, 0], q2: [520, 0], q3: [520, 20], q4: [500, 20] };
@@ -295,25 +296,25 @@ const profile = await createProfile();
     line('Q1', 'q1', 'q2'), line('Q2', 'q2', 'q3'), line('Q3', 'q3', 'q4'), line('Q4', 'q4', 'q1')];
   const stored = [['chain:chain_B1-L1-L2-L3-T1', online], ['loop:loop_E1-E2-E3-E4', outsideRec], ['chain:chain_BX', online], ['loop:loop_Q1-Q2-Q3-Q4', pocketRec], ['loop:loop_gone1-gone2', pocketRec]];
   await createNamedDesign(profile, 'shaper', 'Split 761', docOf(j, shapes, { version: 1, cutPlan: stored, stock: null, opOrder: [] }));
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
-    eq([...CUT_PLAN.keys()], ['loop:loop_Q1-Q2-Q3-Q4', 'loop:loop_gone1-gone2'], '4b: the three records the new loops broke are REMOVED; the plain square kept; an unrelated stale record (its shapes are gone) left as before');
+    eq([...V2_PLAN.keys()], ['loop:loop_Q1-Q2-Q3-Q4', 'loop:loop_gone1-gone2'], '4b: the three records the new loops broke are REMOVED; the plain square kept; an unrelated stale record (its shapes are gone) left as before');
     app.modes.showMode('prepare');
     eq(noticeOf(app), 'Cut plan updated: 3 cuts no longer match a shape and were removed: assign them again', '4b: counted in the notice, exact');
-  } finally { CUT_PLAN.clear(); setOpOrder([]); await app.close(); }
+  } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }
 { // (c) a document without a bezier: its plan opens unchanged, no notice
   const stored = [['loop:loop_L1-L2-L3-L4', outsideRec], ['chain:chain_T1', online]];
   const j = { a: [0, 0], b: [100, 0], c: [100, 50], d: [0, 50], t1: [150, 0], t2: [180, 30] };
   await createNamedDesign(profile, 'shaper', 'No bezier 761', docOf(j, [line('L1', 'a', 'b'), line('L2', 'b', 'c'), line('L3', 'c', 'd'), line('L4', 'd', 'a'), line('T1', 't1', 't2')], { version: 1, cutPlan: stored, stock: null, opOrder: [] }));
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
-    eq([...CUT_PLAN], stored, '4c: no bezier: the plan opens exactly as stored');
+    eq([...V2_PLAN], stored, '4c: no bezier: the plan opens exactly as stored');
     app.modes.showMode('prepare');
     eq(noticeOf(app), null, '4c: no notice');
-  } finally { CUT_PLAN.clear(); setOpOrder([]); await app.close(); }
+  } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }
 eq(cutPlanNotice({ edgeMoved: 1, edgeDropped: 2, kept: 0, removed: 0 }), 'Cut plan updated: 1 edge cut moved to chain, 2 dropped from closed loops', '4: the legacy edge notice keeps its words');
 eq(cutPlanNotice({ edgeMoved: 0, edgeDropped: 0, kept: 2, removed: 1 }), 'Cut plan updated: 2 cuts were on outlines that are now closed shapes and were kept; 1 cut no longer matches a shape and was removed: assign it again', '4: the ruling\'s wording');

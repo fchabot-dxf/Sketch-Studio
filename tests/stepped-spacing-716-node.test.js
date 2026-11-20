@@ -12,9 +12,10 @@ import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import * as steppedCut from '#core/stepped-cut.js';
 import { steppedTerraces, stepGaps } from '#core/stepped-cut.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, steppedNoteItems, planSteppedNotes } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, steppedNoteItems, planSteppedNotes } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -43,7 +44,7 @@ const T = (name, kind, o = {}) => steppedTerraces(slopeOf(name, kind), { kind, s
 
 // ── 2. the app ──
 SettingsManager.set('DOC_UNIT', 'mm');
-const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: unit, options: {} });
+const exportOf = (app, unit = 'mm') => exportShaperSVG({ state: app.state, entries: planEntries(), encoding: exportEncoding(), docUnit: unit, options: {} });
 const pocketDepths = (svg) => [...svg.matchAll(/<(?:path|circle) ([^>]*?)\/>/g)].filter((m) => /shaper:cutType="pocket"/.test(m[1])).map((m) => (/shaper:cutDepth="([^"]+)"/.exec(m[1]) || [])[1]);
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
@@ -57,10 +58,10 @@ const harness = (app) => {
   const rows = () => [...doc.querySelectorAll('.cut-row')].filter((r) => r.style.display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param);
   return { q, clickAt, pick, note, warn, set, rows };
 };
-const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType === cutType);
+const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === cutType);
 const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth);
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     app.modes.showMode('prepare');
@@ -71,12 +72,12 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
     h.pick('roughing');
     ok(!app.document.querySelector('[data-row="stepSpacing"]') && !app.document.querySelector('.cut-step-spacing'), 'the card has NO Min spacing row');
     ok(h.rows().includes('stepDepth'), 'the Step depth row is there');
-    eq(CUT_PLAN.get(pk).stepSpacing, undefined, 'a new stepped record stores no spacing');
+    eq(V2_PLAN.get(pk).stepSpacing, undefined, 'a new stepped record stores no spacing');
     eq(h.note(), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'], 'the note shows the spacing: 0.176 mm');
     eq(h.warn(), [[' · outlines 0.176 mm apart', 'outlines this close may be hard to pick on the Origin: try a bigger step']], 'under 1/16 in: the spacing part is flagged, with its title');
     eq(pocketDepths(exportOf(app)).length, 8, 'export: 8 pockets');
     eq(reviewDepths(app), [1, 2, 3, 4, 5, 6, 7, 8], 'Review: the same 8');
-    eq(planSteppedNotes(CUT_PLAN), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'], 'the Review info gets the same text');
+    eq(planSteppedNotes(V2_PLAN), ['Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart'], 'the Review info gets the same text');
     // a bigger step: the spacing grows
     h.set('.cut-step-depth', '9');
     eq([h.note(), h.warn()], [['Pocket 1 (8mm): 1 step, 8 mm'], []], 'one step: no spacing, no warning');
@@ -85,10 +86,10 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
     eq(h.warn().length, 1, '0.7 mm is still under 1/16 in (1.5875 mm): flagged');
     h.set('.cut-step-depth', '1');
     // a 715-era record: a stepSpacing and nothing else: cut as before 715
-    CUT_PLAN.get(pk).stepSpacing = 25.4 / 16;
+    V2_PLAN.get(pk).stepSpacing = 25.4 / 16;
     eq(reviewDepths(app), [1, 2, 3, 4, 5, 6, 7, 8], 'a 715-era record (stepSpacing 1.5875): 8 steps, the spacing is ignored');
     eq(pocketDepths(exportOf(app)).length, 8, 'its export: 8 pockets');
-    delete CUT_PLAN.get(pk).stepSpacing;
+    delete V2_PLAN.get(pk).stepSpacing;
     // the R3 floor fillet: a range
     importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
     h.clickAt(60, -40);
@@ -107,7 +108,7 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
 
 // ── 3. save + reload ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Stepped 716');
   let planBefore, svgBefore;
@@ -119,19 +120,19 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
       importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
       h.clickAt(60, -40);
       h.pick('roughing');
-      planBefore = JSON.stringify([...CUT_PLAN.entries()]);
+      planBefore = JSON.stringify([...V2_PLAN.entries()]);
       svgBefore = exportOf(app);
       eq(pocketDepths(svgBefore).length, 4, 'floor fillet, step 1: 4 pockets (5, 6, 7, 8)');
       const d = await app.storedDoc();
-      ok(d.hosts.shaper.cutPlan.some(([, r]) => r.cutType === 'roughing' && r.stepSpacing === undefined), 'the autosave stores the stepped record, with no spacing');
+      ok(storedRecords(d.hosts.shaper).some(([, r]) => r.cutType === 'roughing' && r.stepSpacing === undefined), 'the autosave stores the stepped record, with no spacing');
     } finally { await app.close(); }
   }
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   {
     const app = await open({ host: 'shaper', profile });
     try {
       app.modes.showMode('prepare');
-      eq(JSON.stringify([...CUT_PLAN.entries()]), planBefore, 'after a reload the plan is equal');
+      eq(JSON.stringify([...V2_PLAN.entries()]), planBefore, 'after a reload the plan is equal');
       eq(exportOf(app), svgBefore, 'and the export is byte-identical');
     } finally { await app.close(); }
   }

@@ -16,11 +16,12 @@ import { createSketchState as sketchState } from '#core/sketch-state.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { findLoops } from '#core/loop-finder.js';
 import { cutterProfile, cutterTerraces, vbitHalfAngleTan, SHAPE_SLICES } from '#core/cutter-profile.js';
-import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { removedVcarvesNotice } from '../apps/shaper/src/prepare-stage.js';
 import { SHAPER_STAGES, shaperStagesFor } from '../apps/shaper/src/modes.js';
 import { applyShaperUnitDefault } from '../apps/shaper/src/design-canvas.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const createSketchState = () => { const e = createEngine(null); e.init(); return sketchState(e, { x: 0, y: 0, w: 100, h: 100 }); }; // a headless sketch state (no DOM)
 let checks = 0;
@@ -82,7 +83,7 @@ let exportOld = null;
     ok(!('vcarves' in app.state), 'Shaper: the opened design has no V-carve in its state');
     eq(app.modes.current(), 'design', 'Shaper opens the design in Design');
     eq(notice(app).hidden, true, 'the notice is not shown outside Prepare');
-    eq([...CUT_PLAN.keys()], [keyOf('loop', loopB)], 'the V-carved region is simply unassigned: the plan has only the Outside cut');
+    eq([...V2_PLAN.keys()], [keyOf('loop', loopB)], 'the V-carved region is simply unassigned: the plan has only the Outside cut');
     openMode(app, 'prepare');
     eq(notice(app), { hidden: false, text: removedVcarvesNotice(1) }, 'Prepare shows the one-time notice on its first mount');
     eq(removedVcarvesNotice(1), 'This design had a V-carve region; V-carve was removed. Pick a cut type for it (V-bit cutter shape for a V-groove).', 'the notice text');
@@ -90,14 +91,14 @@ let exportOld = null;
     const el = app.document.getElementById('prepare-notice'); el.hidden = true; el.textContent = ''; // as its timer leaves it
     openMode(app, 'design'); openMode(app, 'prepare');
     eq(notice(app), { hidden: true, text: '' }, 'a second Prepare mount shows no notice: it is shown once');
-    exportOld = shaperSvgOf(app.state, cutPlanEntries());
+    exportOld = shaperSvgOf(app.state, planEntries());
     ok(/shaper:cutType="outside"/.test(exportOld) && !/cutType="online"/.test(exportOld), 'the export has the Outside cut and no V-carve paths');
     const stored = await app.storedDoc(); // the autosave's page-hide path: nothing changed, so nothing is written
     eq(stored.geometry.vcarves, VCARVES, 'the stored file keeps its V-carve list until the user saves (an untouched open writes nothing)');
-    CUT_PLAN.set(keyOf('loop', loopA), { ...outsideB, cutType: 'online', cutterShape: 'vbit', cutterAngle: 60 }); // the user picks a cut for the region: a V-groove
+    V2_PLAN.set(keyOf('loop', loopA), { ...outsideB, cutType: 'online', cutterShape: 'vbit', cutterAngle: 60 }); // the user picks a cut for the region: a V-groove
     const saved = await app.storedDoc();
     eq(saved.geometry.vcarves, undefined, 'once the user changes the design, the save writes no V-carve list');
-    eq(saved.hosts.shaper.cutPlan.find(([k]) => k === keyOf('loop', loopA))[1].cutterShape, 'vbit', 'the region is cut with the V-bit cutter shape');
+    eq(storedRecords(saved.hosts.shaper).find(([k]) => k === keyOf('loop', loopA))[1].cutterShape, 'vbit', 'the region is cut with the V-bit cutter shape');
   } finally { await app.close(); }
 }
 {
@@ -105,7 +106,7 @@ let exportOld = null;
   try {
     openMode(app, 'prepare');
     eq(notice(app).hidden, true, 'a design without V-carve regions: no notice');
-    const exportNone = shaperSvgOf(app.state, cutPlanEntries());
+    const exportNone = shaperSvgOf(app.state, planEntries());
     eq(exportNone, exportOld, 'C: the export of the old design == the export of the same design with its V-carve list deleted beforehand (byte for byte)');
   } finally { await app.close(); }
 }

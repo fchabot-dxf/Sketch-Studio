@@ -6,6 +6,7 @@
 import assert from 'node:assert';
 import { sleep } from './helpers/cdp-browser.js';
 import { openBromont, CARD_EDITS, sameView } from './helpers/prepare-drive-live.js';
+import { storedRecords } from './helpers/plan-v2.js'; // TASK S1: the saved sidecar's per-shape records
 
 const t0 = Date.now();
 const t = await openBromont({ tag: '766b' });
@@ -15,7 +16,7 @@ try {
   const start = await look();
   const key = JSON.parse(start.plan)[0][0];
   // another device writes a different depth on the pocket (25.4 mm = 1 in)
-  drive.write((doc) => { const r = doc.hosts.shaper.cutPlan.find(([k]) => k === key); r[1].cutDepth = 25.4; });
+  drive.write((doc) => { const r = storedRecords(doc.hosts.shaper).find(([k]) => k === key); r[1].cutDepth = 25.4; });
   // this tab edits the card: its autosave meets the other device's version
   await clickEl(CARD_EDITS[1][1]); // stepover +
   const mine = await look();

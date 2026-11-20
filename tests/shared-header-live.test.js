@@ -2,7 +2,7 @@
 // Verifies in headless Edge (real mouse clicks + real touch taps/drags, zero skipped/mocked paths):
 //   a. Desktop 1440x900 (all 4 apps): header = ☰ + stage buttons only, height 44 px, identical layout/order/spacing, own colors, sideways scroll when tight;
 //   b. ☰ menu entries work by real click in all 4 apps (Style closes menu first, Settings, Log, Debug, Tune solver, Export…, Shaper Settings / Log (TASK 706: no Explore entries), Pen Plotter Panel in .sk-canvas-corner < 768 px Design);
-//   c & d. Phone portrait (390x844, 360x780) & short landscape (844x390, 780x360): NO header bar, .sk-doctabs at top === 0, peeking left .sk-sidebar-chevron (tap to open, backdrop tap to close, drag right to open, drag left to close), stage buttons at top of sidebar switch stages.
+//   c & d. Phone portrait (390x844, 360x780) & short landscape (844x390, 780x360): NO header bar, .sk-doctabs at top === 0, the .sk-sidebar-chevron at the strip's start (TASK 819; tap to open, backdrop tap to close; no drag), stage buttons at top of sidebar switch stages.
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
@@ -257,7 +257,7 @@ try {
           hdlLeft: Math.round(hr.left), hdlW: Math.round(hr.width), hdlH: Math.round(hr.height),
           hdlFree: !!hit && (hit === hdl || hdl.contains(hit)),
           hdlTop: hr.top, hdlBottom: hr.bottom, hdlRight: hr.right, vh: innerHeight,
-          overlaps: [...document.querySelectorAll('.sk-ribbon, .sk-doctabs, .sk-canvas-corner > *')].filter((e) => {
+          overlaps: [...document.querySelectorAll('.sk-ribbon, .sk-canvas-corner > *, .sk-doctab, .sk-doctab-new')].filter((e) => {
             const r = e.getBoundingClientRect();
             return r.width > 0 && r.height > 0 && r.left < hr.right && r.right > hr.left && r.top < hr.bottom && r.bottom > hr.top;
           }).map((e) => e.className + JSON.stringify(e.getBoundingClientRect())),
@@ -266,9 +266,8 @@ try {
       assert.strictEqual(st.hdrDisp, 'none', `${app.name} ${vp.name}: header bar hidden`);
       assert.strictEqual(st.hdrVar, '0px', `${app.name} ${vp.name}: --sk-header-h === 0px`);
       assert.strictEqual(st.tabsTop, 0, `${app.name} ${vp.name}: .sk-doctabs is top row (top=0)`);
-      assert(st.hdlLeft <= 1 && st.hdlW === 24 && st.hdlH === 72 && st.hdlFree, `${app.name} ${vp.name}: peeking handle valid & unobstructed: ${JSON.stringify(st)}`);
-      assert.deepStrictEqual(st.overlaps, [], `${app.name} ${vp.name}: handle overlaps no ribbon / tab strip / canvas-corner button: ${JSON.stringify(st)}`);
-      if (vp.h > vp.w) assert(Math.abs((st.hdlTop + st.hdlBottom) / 2 - st.vh / 3) <= 12, `${app.name} ${vp.name}: handle centre at ~1/3 of viewport height: ${JSON.stringify(st)}`);
+      assert(st.hdlLeft <= 8 && st.hdlW === 44 && st.hdlH >= 24 && st.hdlTop === 0 && st.hdlFree, `${app.name} ${vp.name}: TASK 819: the chevron at the start of the tab strip, unobstructed: ${JSON.stringify(st)}`);
+      assert.deepStrictEqual(st.overlaps, [], `${app.name} ${vp.name}: the chevron overlaps no ribbon / tab / canvas-corner button: ${JSON.stringify(st)}`);
 
       // Tap handle -> sidebar opens; stage buttons are at the top of the sidebar (>= 44 px tall)
       await tapSel('.sk-sidebar-chevron');
@@ -280,14 +279,6 @@ try {
       // Tap outside on backdrop closes sidebar
       await tapPt(vp.w - 20, Math.round(vp.h / 2));
       await waitFor(`!document.querySelector('.sk-sidebar')?.classList.contains('open')`, `${app.name} ${vp.name}: tap backdrop closes sidebar`);
-
-      // Real touch drag right from peeking handle opens sidebar; drag handle back left closes sidebar
-      const hy = await evalJs(`(() => { const r = document.querySelector('.sk-sidebar-chevron').getBoundingClientRect(); return Math.round(r.top + r.height / 2); })()`);
-      await dragTouch(8, hy, 190, hy);
-      assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar')?.classList.contains('open')`), true, `${app.name} ${vp.name}: drag right opens sidebar`);
-      const hOpen = await evalJs(`(() => { const r = document.querySelector('.sk-sidebar-chevron').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
-      await dragTouch(hOpen.x, hOpen.y, 20, hOpen.y);
-      assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar')?.classList.contains('open')`), false, `${app.name} ${vp.name}: drag left closes sidebar`);
 
       // Re-open via handle and switch stage on multi-stage apps
       if (app.id !== 'sketchstudio') {

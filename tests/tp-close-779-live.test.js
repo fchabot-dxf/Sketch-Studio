@@ -119,8 +119,11 @@ try {
   await waitFor(`!!document.querySelector('.sk-tp-panel.sk-tp-small')`, 'Save as small modal open');
   const small = await inspectModal();
   assert.ok(small.panel.height < small.innerHeight - 20 && small.panel.top > 0 && small.panel.radius === '10px', 'sk-tp-small keeps compact centered layout: ' + JSON.stringify(small.panel));
-  await tapEl('.sk-tp-cancel');
+  // TASK 819: the VISIBLE Cancel (the first .sk-tp-cancel is the hidden confirm row's: a tap at its 0,0 rect used to land on nothing and now would land on the chevron)
+  const cancelAt = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-tp-cancel')].find((b) => b.getBoundingClientRect().width > 0); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+  await tapAt(cancelAt.x, cancelAt.y);
   await waitFor(`!document.querySelector('.sk-tp-panel')`, 'Save as closed');
+
 
   // ── 3. Desktop 1440 x 900 unchanged ──
   await send('Emulation.setTouchEmulationEnabled', { enabled: false });

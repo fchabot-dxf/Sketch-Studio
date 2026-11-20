@@ -79,7 +79,7 @@ try {
   assert.strictEqual(ph.coarse, true, 'the emulated phone is a coarse pointer');
   for (const k of ['ribbonBtn', 'construct']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
   assert.ok(ph.recenter[0] >= FOOTER_PHONE_MIN_W - 0.5 && ph.recenter[1] >= 44, `recenter (a footer button, TASK 776: nine share the row) is >= ${FOOTER_PHONE_MIN_W} wide and 44 high on a phone: ${ph.recenter}`);
-  assert.ok(ph.handle && ph.handle[1] >= 44, `peeking drawer handle >= 44 px tall: ${ph.handle}`);
+  assert.ok(ph.handle && ph.handle[0] >= 44 && ph.handle[1] >= 24, `TASK 819: the drawer chevron in the tab strip is 44 px wide and fills the strip row (TASK 608 strip ruling, >= 24 px): ${ph.handle}`);
   assert.ok(parseFloat(ph.groupLbl[2]) >= 12 && ph.groupLbl[0] >= 44 && ph.groupLbl[1] >= 44, `the section name (the dropdown button) is >= 44x44 with >= 12 px text: ${ph.groupLbl}`);
   assert.ok(ph.ribbonLbl[0] <= 1 && ph.ribbonLbl[1] <= 1, `TASK 647: phone tool buttons are icon only (the label is visually hidden, still the accessible name): ${ph.ribbonLbl}`);
   assert.strictEqual(await evalJs(`document.getElementById('viewport-size')`), null, 'the VIEW readout is gone (TASK 618)');

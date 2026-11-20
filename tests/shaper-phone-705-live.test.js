@@ -93,7 +93,7 @@ await (async () => {
       console.log(tag + 'first screen ' + JSON.stringify(first));
       assert.strictEqual(first.stage, 'design', tag + 'a fresh Shaper opens on Design (TASK 706: was Explore)');
       assert(first.canvas && first.canvas.shown, tag + 'the Design canvas is on the first screen');
-      assert(first.handle && first.handle.shown && first.handle.left <= 1 && first.handle.h >= 44 && first.handle.top >= 0 && first.handle.bottom <= size.h, tag + 'the drawer handle (the way to the stages) is on the first screen: ' + JSON.stringify(first.handle));
+      assert(first.handle && first.handle.shown && first.handle.left <= 8.5 && first.handle.w >= 44 && first.handle.h >= 24 && first.handle.top >= 0 && first.handle.bottom <= size.h, tag + 'the drawer chevron in the tab strip (TASK 819; the way to the stages) is on the first screen: ' + JSON.stringify(first.handle));
 
       for (const st of STAGES) {
         // the stage switch: a real tap on the handle opens the drawer; its stage buttons are on screen and 44 px; a tap shows the stage

@@ -86,6 +86,8 @@ function injectStyles() {
   /* TASK 819: the phone door of the drawer: a chevron at the start of the document tab strip (document-tabs.js mounts it as its first child; it stays at the strip's left edge while the tabs scroll) */
   .sk-sidebar-chevron { display: flex; align-items: center; justify-content: center; position: sticky; left: 0; z-index: 2; flex: 0 0 44px; width: 44px; height: var(--sk-doctabs-h, 30px);
     margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--sk-doctab-strip, var(--sk-header-bg, #fff)); color: var(--sk-header-fg, #334155); cursor: pointer; }
+  /* a host with no document tab strip (Shaper in Fusion mode, projects: false) keeps a small tab on the page's left edge, where the old drawer handle sat (a corner chevron would cover that host's own top bar) */
+  .sk-sidebar-chevron.free { position: fixed; top: 33%; left: 0; transform: translateY(-50%); z-index: 9300; width: 24px; height: 72px; flex: none; border-radius: 0 10px 10px 0; box-shadow: 2px 0 8px rgba(0,0,0,0.22); }
   .sk-sidebar-chevron svg { transition: transform 0.18s ease; }
   .sk-sidebar-chevron[aria-expanded="true"] svg { transform: rotate(180deg); }
   .sk-sidebar-chevron:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; }

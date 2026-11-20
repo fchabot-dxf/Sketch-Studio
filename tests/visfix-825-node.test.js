@@ -1,6 +1,7 @@
 // tests/visfix-825-node.test.js — TASK 825: the visual-only bugs proven by the hunt of task 824 (docs/VISUAL-BUGS-824.md), each asserted on the Shaper node page
 // (tests/helpers/node-app.js). A Stock board, two Guides whose values differ (depth 0; depth 1.5 + offset 1), a plain Pocket and a Spiral Pocket (both 6 mm, ¼ in bit):
 //  V8: the "Not cut" heading's box is computed from ALL the rows under it (the Stock counts, ticked and untickable) like every other heading;
+//  V2: the Export step's "unticked:" line names an operation by its row's words and number in the list (a Spiral pocket is told from a plain one);
 //  V4: two Guides that differ show what makes them different on their row (depth, offset), as the other types show their depth.
 import assert from 'node:assert/strict';
 import { open } from './helpers/node-app.js';
@@ -9,6 +10,7 @@ import { findLoops } from '#core/loop-finder.js';
 import { keyOf } from '../apps/shaper/src/cut-plan.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { storeOps } from '../apps/shaper/src/operations-store.js';
+import { exportTickLine } from '../apps/shaper/src/export-payload.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
@@ -60,6 +62,9 @@ try {
   eq(new Set(guides.map((o) => o.label)).size, 3, 'V4: the three Guides are told apart (their row words and labels)');
   eq(ops()[0].rowText, 'Stock', 'V4: the Stock keeps its plain row');
   eq(storeOps().filter((o) => o.type === 'guide').length, 3, 'setup: three Guides');
+  // V2: the Export line
+  app.press(rowBox(idOf('guide', 2))); app.press(rowBox(idOf('pocket', 1)));
+  eq(exportTickLine(ops()), 'Exporting 3 of 5 operations (unticked: 4. Guide · 1.5 mm, 6. Pocket (spiral) · 6 mm (¼″ end mill)). Place it with the same anchor as the earlier file.', 'V2: the unticked ones are named as the list names them, with their numbers: the Spiral pocket is not "Pocket 6 mm"');
   void idOf; void rowBox;
 } finally { await app.close(); }
 console.log(`visfix-825-node: ${checks} checks passed`);

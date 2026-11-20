@@ -85,7 +85,7 @@ try {
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card');
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="roughing"]');
-  const card = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, depth: document.querySelector('.cut-depth').value, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
+  const card = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, depth: document.querySelector('.cut-depth').value || document.querySelector('.cut-depth').placeholder.slice('From model ('.length, -1), /* TASK S2: a Roughing's Depth From model: its placeholder 'From model (8)' */ note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
 
   // 1. Defaults: Length 3, Angle 1, Show trailing zeros OFF
   await waitFor(`document.querySelectorAll('.cut-note div').length > 0`, 'the stepped note');

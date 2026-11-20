@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
-import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { clickOpenLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened to see its card
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/777');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -44,10 +44,10 @@ try {
   };
   const toScreen = (x, y) => evalJs(`(() => { const s = document.getElementById('prepare-canvas'); const p = s.createSVGPoint(); p.x = ${x}; p.y = ${y}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
   const clickWorldRaw = async (x, y) => { const p = await toScreen(x, y); await press(p.x, p.y); };
-  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
-  // operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
-  const s2Steps = { get phone() { return false; }, evalJs, waitFor, clickEl: null };
-  const clickWorld = (x, y) => clickOpenLive(s2Steps, () => clickWorldRaw(x, y));
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): a click on a shape only selects it; its card (the note read below) is its operation's, OPENED from the list (OK on the one
+  // open before): tests/helpers/prepare-open-live.js clickOpenLive, through the list's own buttons
+  const clickElRaw = async (sel) => { const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`); await press(p.x, p.y); };
+  const clickWorld = (x, y) => clickOpenLive({ phone: false, evalJs, waitFor, clickEl: clickElRaw }, () => clickWorldRaw(x, y));
 
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?analytics=off`, 10000);
@@ -257,10 +257,11 @@ try {
   await sleep(200);
 
   const measurePan = async (label) => {
-    const meta = await evalJs(`(() => {
-      const pv = window.__prepareView, s = pv.clearingSummaryFor(pv.selectedTarget());
+    const meta = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((C) => { // TASK S2: the selected pocket's clearing summary (cut-plan.js clearingSummary, as the card's note reads it)
+      const pv = window.__prepareView, st = window.__designController.state, t = pv.selectedTarget(), k = C.keyOf(t.kind, t.id), { loops, loopPolys } = C.loopsWithPolygons(st);
+      const s = C.clearingSummary(k, C.getCutRecord(k), st, loops, loopPolys, C.planOwnedLoops(st, loops, loopPolys));
       return { levels: s.levels, passes: s.passes, travels: document.querySelectorAll('#prepare-canvas .sk-travel').length, arrowNodes: document.querySelectorAll('#prepare-canvas .sk-travel-arrows').length };
-    })()`);
+    })`);
     // Pan via real middle-button drag frames, measuring rAF frame intervals
     const stats = await evalJs(`new Promise((resolve) => {
       const svg = document.getElementById('prepare-canvas');
@@ -290,7 +291,8 @@ try {
   assert.ok(bSpir.arrowNodes <= 3, 'batched arrow DOM nodes on Spiral: ' + bSpir.arrowNodes);
 
   // Switch the same 400x400 pocket to dense Raster (~108 passes at 60% stepover = 3.6mm)
-  await evalJs(`window.__prepareView.setFieldOnSelected('clearing', 'raster')`);
+  // TASK S2: the pocket's operation set to Raster (the open operation's field: prepare-view.js setOpField), then the shape selected again
+  await evalJs(`import('/apps/shaper/src/operations-store.js').then((S) => { const pv = window.__prepareView, sel = pv.selectedTargets(); pv.openOp(S.storeOps()[0].id); pv.setOpField('clearing', 'raster'); pv.closeOp(); pv.setSelection(sel); })`);
   await sleep(200);
   const bRast = await measurePan('dense Raster');
   assert.ok(bRast.passes >= 60, 'dense Raster (60+ passes) measured: ' + bRast.passes);

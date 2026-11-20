@@ -58,13 +58,13 @@ await (async () => {
       const err = () => evalJs(`document.querySelector('.sk-tp-err').textContent`);
 
       await navigate(`http://127.0.0.1:${port}/apps/${host}/index.html`, 10000);
-      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-handle')`, `[${tag}] loaded`);
+      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-chevron')`, `[${tag}] loaded`);
       await waitForApp(host === 'shaper' ? 'design-canvas' : 'svgCanvas');
       // the document is set to inches (the setting the Units tab writes; not persisted)
       await evalJs(`(async () => { (await import('/packages/core/settings-manager.js')).default.set('DOC_UNIT', 'in', { persist: false }); })()`);
       assert.strictEqual(await evalJs(`(async () => (await import('/packages/core/settings-manager.js')).docUnit())()`), 'in', `[${tag}] document unit is inches`);
 
-            await press('.sk-sidebar-btn, .sk-sidebar-handle');
+            await press('.sk-sidebar-btn, .sk-sidebar-chevron');
       await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, `[${tag}] sidebar`);
             await press('[data-action="templates"]');
       await waitFor(`!!document.querySelector('.sk-tp-card')`, `[${tag}] cards`);

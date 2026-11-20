@@ -57,7 +57,7 @@ await (async () => {
   const isPhone = () => evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display === 'none'`);
   const stages = () => evalJs(`[...document.querySelectorAll(getComputedStyle(document.querySelector('header.sk-header')).display === 'none' ? '.sk-sidebar-stage' : '.sk-header-tab')].map((b) => [b.dataset.tab, b.textContent.trim()])`);
   const openMenu = async (what) => {
-    await press(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn', what + ': the menu');
+    await press(phone ? '.sk-sidebar-chevron' : '.sk-sidebar-btn', what + ': the menu');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, what + ': the menu opens'); await sleep(300);
   };
   const closeMenu = async () => { await evalJs(`(() => { const b = document.querySelector('.sk-sidebar-backdrop'); if (b) b.click(); })()`); await sleep(300); };

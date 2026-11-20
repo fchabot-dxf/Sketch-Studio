@@ -38,7 +38,7 @@ await (async () => {
     await navigate(url, 10000);
     await waitFor(`!!document.querySelector('.sk-doctabs')`, 'tab strip');
     await evalJs(`document.querySelector('.sk-doctab-new') ? (document.querySelector('.sk-doctab-new').click(), true) : false`).then(async (ok) => {
-      if (!ok) { await evalJs(`[...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0).click()`); await sleep(300); await evalJs(`document.querySelector('[data-action="templates"]').click()`); }
+      if (!ok) { await evalJs(`[...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-chevron')].find((x) => x.getClientRects().length > 0).click()`); await sleep(300); await evalJs(`document.querySelector('[data-action="templates"]').click()`); }
     });
     await waitFor(`!!document.querySelector('.sk-tp-grid[data-previews="ready"]')`, label + ' previews ready', 15000);
     const m = await measure();

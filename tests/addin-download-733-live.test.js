@@ -137,7 +137,7 @@ await (async () => {
     pointer = touch;
     await navigate(withUrl, 15000);
     await waitForApp('design-canvas');
-    await press('.sk-sidebar-handle', 'phone: the drawer handle');
+    await press('.sk-sidebar-chevron', 'phone: the drawer handle');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'phone: the drawer opens'); await sleep(300);
     await evalJs(`document.querySelector('.sk-sidebar [data-action="fusion-addin"]').scrollIntoView({ block: 'nearest' })`); await sleep(150);
     await press('.sk-sidebar [data-action="fusion-addin"]', 'phone: Fusion add-in');

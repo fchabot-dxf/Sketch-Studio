@@ -30,7 +30,7 @@ try {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?analytics=off`, 10000);
-  await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper phone ready');
+  await waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper phone ready');
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
 
   // Seed 3 cuts: Raster pocket, On-line Lead-in, On-line Tabs
@@ -57,7 +57,7 @@ try {
   })()`);
 
   // Open Prepare via phone sidebar drawer
-  await evalJs(`document.querySelector('.sk-sidebar-handle').click()`); await sleep(250);
+  await evalJs(`document.querySelector('.sk-sidebar-chevron').click()`); await sleep(250);
   await evalJs(`document.querySelector('.sk-sidebar-stage[data-tab="prepare"]').click()`); await sleep(350);
   if (await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) {
     await evalJs(`document.querySelector('.sk-sidebar-scrim').click()`); await sleep(250);
@@ -96,7 +96,7 @@ try {
   await evalJs(`window.__prepareView.setView({ x: 55, y: 22.5, w: 120 })`); await sleep(150);
   await tapWorld(30, 22.5);
   const sRast = await inspect();
-  assert.ok(sRast.travelClear >= 10 && sRast.arrows >= 2, 'phone raster: clearing + wall travel & arrows');
+  assert.ok(sRast.travelClear >= 10 && sRast.arrows === 0, 'phone raster: clearing + wall travel, no arrowheads (TASK 821)');
   assert.strictEqual(sRast.dasharray, '8px, 28px', 'phone: 8px 28px dash pattern');
   assert.strictEqual(sRast.anim, 'sk-march', 'phone: animation running');
   assert.ok(sRast.overflowX <= 0 && sRast.cardFits, 'phone raster: no layout overflow');
@@ -107,7 +107,7 @@ try {
   await sleep(150);
   const sRed = await inspect();
   assert.strictEqual(sRed.anim, 'none', 'phone reduced motion: animation none');
-  assert.ok(sRed.arrows >= 2 && sRed.arrowDisplay !== 'none', 'phone reduced motion: arrows visible');
+  assert.ok(sRed.arrows === 0, 'phone reduced motion: still no arrowheads');
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
 
   // Tap On-line Lead-in (keep target on the uncovered left portion of the phone screen)
@@ -116,7 +116,7 @@ try {
   const sLead = await inspect();
   assert.strictEqual(sLead.travelLead, 1, 'phone lead-in: leg marked');
   assert.strictEqual(sLead.travelOnline, 1, 'phone lead-in: outline marked');
-  assert.ok(sLead.arrows >= 1 && sLead.overflowX <= 0 && sLead.cardFits, 'phone lead-in: arrows & layout clean');
+  assert.ok(sLead.arrows === 0 && sLead.overflowX <= 0 && sLead.cardFits, 'phone lead-in: no arrowheads, layout clean');
   await shot('phone-leadin.png');
 
   // Tap On-line Tabs
@@ -124,7 +124,7 @@ try {
   await tapWorld(20, 152.5);
   const sTabs = await inspect();
   assert.strictEqual(sTabs.travelOnline, 3, 'phone tabs: 3 strokes marked');
-  assert.ok(sTabs.arrows >= 1 && sTabs.overflowX <= 0 && sTabs.cardFits, 'phone tabs: arrows & layout clean');
+  assert.ok(sTabs.arrows === 0 && sTabs.overflowX <= 0 && sTabs.cardFits, 'phone tabs: no arrowheads, layout clean');
   await shot('phone-tabs.png');
 
   console.log('direction-777-phone-live: ok');

@@ -71,7 +71,7 @@ try {
     for (let i = 0; i < 5; i++) {
       if (await activeStage() === mode) return;
       if (phone) {
-        if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-handle');
+        if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-chevron');
         await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
         await clickEl(`.sk-sidebar-stage[data-tab="${mode}"]`);
       } else await clickEl(`.sk-header-tab[data-tab="${mode}"]`);
@@ -106,7 +106,7 @@ try {
   const typeField = async (cls, v) => { await evalJs(`(() => { const i = document.querySelector('${cls}'); i.value = '${v}'; i.dispatchEvent(new Event('change')); })()`); await sleep(200); };
   const tab = async (id) => { if (!await evalJs(`document.querySelector('.cut-tab[data-tab="${id}"]').classList.contains('is-active')`)) await clickEl(`.cut-tab[data-tab="${id}"]`); };
   // THE 805 LAYOUT PROBE: the boxes OUTSIDE the card (the canvas, the Operations list's bar, the footer's Undo / Redo, the header / drawer handle)
-  const outside = () => evalJs(`(() => { const out = {}; for (const sel of ['#prepare-canvas', '#prepare-ops .ops-head', '#btn-undo', '#btn-redo', '.sk-header', '.sk-sidebar-handle']) { const e = document.querySelector(sel); if (!e) continue; const b = e.getBoundingClientRect(); out[sel] = [b.left, b.top, b.width, b.height].map((n) => Math.round(n * 100) / 100).join(','); } return out; })()`);
+  const outside = () => evalJs(`(() => { const out = {}; for (const sel of ['#prepare-canvas', '#prepare-ops .ops-head', '#btn-undo', '#btn-redo', '.sk-header', '.sk-sidebar-chevron']) { const e = document.querySelector(sel); if (!e) continue; const b = e.getBoundingClientRect(); out[sel] = [b.left, b.top, b.width, b.height].map((n) => Math.round(n * 100) / 100).join(','); } return out; })()`);
   const sameOutside = async (ref, what) => { const now = await outside(); assert.deepStrictEqual(now, ref, `${what}: NOTHING outside the card moved (0 px)`); };
 
   const phase = async (label) => {
@@ -234,7 +234,7 @@ try {
     await sleep(1500); // the autosave
     const before = (await ops()).map((o) => [o.type, o.n]);
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-    await waitFor(`!!document.querySelector('${phone ? '.sk-sidebar-handle' : '.sk-header-tab[data-tab="design"]'}')`, 'reloaded');
+    await waitFor(`!!document.querySelector('${phone ? '.sk-sidebar-chevron' : '.sk-header-tab[data-tab="design"]'}')`, 'reloaded');
     await openMode('prepare');
     await waitFor(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().length === ${before.length})`, label + ': reloaded: the operations');
     assert.deepStrictEqual((await ops()).map((o) => [o.type, o.n]), before, label + ': reloaded: the same operations, the empty one too');
@@ -253,7 +253,7 @@ try {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-  await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper app ready (phone)');
+  await waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper app ready (phone)');
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => { m.default.set('DOC_UNIT', 'mm'); })`);
   await phase('phone');
   const side = await evalJs(`({ doc: document.documentElement.scrollWidth, vw: innerWidth })`);

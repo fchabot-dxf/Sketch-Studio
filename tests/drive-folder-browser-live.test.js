@@ -133,7 +133,7 @@ await (async () => {
     await resetBufferLive(cdp);
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 10000);
     await waitForApp('svgCanvas');
-    await press('.sk-sidebar-handle');
+    await press('.sk-sidebar-chevron');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'phone drawer opens');
     await press('[data-action="save-as"]');
     await waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="save"] [data-fd="folder"]')`, 'phone Save as shows Drive folders');

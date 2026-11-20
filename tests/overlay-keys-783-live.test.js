@@ -22,7 +22,7 @@ const HOSTS = {
 const SIZES = [{ name: 'desktop-1280', w: 1280, h: 800, touch: false }, { name: 'phone-390', w: 390, h: 844, touch: true }];
 const OVERLAYS = [
   { name: 'account menu', open: `document.querySelector('.sk-account').click()`, isOpen: `!document.querySelector('.sk-account-menu').hidden`, inside: `document.querySelector('.sk-account-menu').contains(document.activeElement)` },
-  { name: 'drawer', open: `(document.querySelector('.sk-sidebar-btn') || document.querySelector('.sk-sidebar-handle')).click()`, isOpen: `!!document.querySelector('.sk-sidebar.open')`, inside: `document.querySelector('.sk-sidebar').contains(document.activeElement)` },
+  { name: 'drawer', open: `(document.querySelector('.sk-sidebar-btn') || document.querySelector('.sk-sidebar-chevron')).click()`, isOpen: `!!document.querySelector('.sk-sidebar.open')`, inside: `document.querySelector('.sk-sidebar').contains(document.activeElement)` },
   { name: 'Settings panel', open: `document.getElementById('btn-settings').click()`, isOpen: `!document.querySelector('.sk-style-panel').classList.contains('sk-hidden')`, inside: `document.querySelector('.sk-style-panel').contains(document.activeElement)` },
 ];
 
@@ -63,7 +63,7 @@ await (async () => {
           const line = document.getElementById('tool-line');
           const sel = document.getElementById('tool-select');
           const setBtn = document.getElementById('btn-settings');
-          const sideBtn = document.querySelector('.sk-sidebar-btn') || document.querySelector('.sk-sidebar-handle');
+          const sideBtn = document.querySelector('.sk-sidebar-btn') || document.querySelector('.sk-sidebar-chevron');
           return !!c && c.getBoundingClientRect().width > 100 && !!acct && acct.dataset.state === 'signed-in' && !!line && !!sel && !!setBtn && !!sideBtn;
         })()`,
         name + ' ready',

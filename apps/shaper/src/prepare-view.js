@@ -16,12 +16,13 @@ import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, pl
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
 import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in junction (ONE pure derivation)
 import { resultOf } from './op-paths.js'; // TASK 817: the generated paths by their signature (the open operation's: as opened, its Preview)
+import { holdMode, tabHandles, holdTabDragAt } from '#core/hold-part.js'; // TASK 822: draggable tabs (the hold's own layout, ONE pure derivation)
 import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
 import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height map, drawn under the cut lines
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, arrowsAlongPath, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 import { updateViewBox } from '#ui/input-manager.js'; // TASK 605: put a document tab's own Prepare view back
@@ -147,7 +148,7 @@ const depthChip = (x, y, cutDepth, k) => {
 const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
 // TASK 777: ONE declaration of the travel direction mark pattern (screen px + period duration).
 // mountPrepareView pushes --sk-travel-* onto svgEl so .sk-travel and @keyframes sk-march read the SAME constants;
-// TRAVEL_MIN_GAP_PX (TASK 757) and arrowhead spacing derive from it — no second number anywhere.
+// TRAVEL_MIN_GAP_PX (TASK 757) and the Export Paths view's dart spacing derive from it — no second number anywhere.
 export const TRAVEL_STYLE = Object.freeze({
   dashPx: 8,            // short dash length on screen (px)
   gapPx: 28,            // sparse gap between dashes on screen (px)
@@ -167,7 +168,7 @@ export function applyTravelStyle(svgEl) {
   svgEl.style.setProperty('--sk-travel-period', String(TRAVEL_PERIOD_PX));
   svgEl.style.setProperty('--sk-travel-duration', `${TRAVEL_STYLE.durationSec}s`);
 }
-// Screen-px dart arrowhead geometry per travel kind: tip forward (+x), swept tail wings, notched rear
+// TASK 821: Prepare draws no arrowheads; the Export step's Paths view (export-preview.js) still uses these. Screen-px dart arrowhead geometry per travel kind: tip forward (+x), swept tail wings, notched rear
 export const DART_DIMS = Object.freeze({
   wall:   Object.freeze({ tip: 3.8, tail: -2.85, halfW: 2.6, notch: -1.5 }),
   clear:  Object.freeze({ tip: 3.0, tail: -2.25, halfW: 2.1, notch: -1.1 }),
@@ -220,6 +221,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const onSelectionChange = opts.onSelectionChange || (() => {});
   const onNotice = opts.onNotice || (() => {}); // TASK 472: a transient one-line notice (the Stock role moved)
   const onCommitLeadIn = opts.onCommitLeadIn || (() => {}); // TASK 778: dragging the lead-in handle commits ONE undo step via prepare-stage (TASK S2: (opId, geometry key, at))
+  const onCommitTabs = opts.onCommitTabs || (() => {}); // TASK 822: dragging a tab handle: an edit of the open operation's session (opId, geometry key, tabsAt)
   const onToggleShape = opts.onToggleShape || (() => {}); // TASK S2: Add shapes mode: a click on a shape (opId, target); the stage puts it in / takes it out (one undo step)
   svgEl.innerHTML = ''; // clean re-mount
   // TASK 777: push ONE declaration of the travel dash pattern to CSS custom properties on svgEl so .sk-travel and @keyframes sk-march share TRAVEL_STYLE
@@ -400,11 +402,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     let region = '', path = '', hasTravel = false, chip = null, startMark = null;
     const toolPaths = [];
     const leadHandles = []; // TASK 778: draggable handles at On line lead-in junctions
-    // TASK 449 / 777: travel marks (sparse slow marching dashes + zoom-stable screen-sized dart arrowheads); TASK 757: a STEPPED cut's (a terrace's)
-    // go to `stepped`, thinned at draw time (renderStepAndArrows: outlines closer on screen than TRAVEL_MIN_GAP_PX carry none).
+    // TASK 449 / 777: travel marks (sparse slow marching dashes); TASK 757: a STEPPED cut's (a terrace's)
+    // go to `stepped`, thinned at draw time (renderStepTravel: outlines closer on screen than TRAVEL_MIN_GAP_PX carry none).
     const stepped = [];
-    const travels = [];
-    let rasterIdx = 0;
     // TASK 775 / 777 / 778: a LEAD-IN ARC (from the one derivation): its path `lead.d`, a filled dot at its tip, a ring at the junction, and its draggable handle
     const isActiveLead = (lead) => Boolean(lead && (lead.role === 'arc' || lead.role === 'leg') && Array.isArray(lead.legPoints) && lead.legPoints.length >= 2);
     const addLeadLeg = (lead) => {
@@ -422,17 +422,15 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const addTravel = (fp, t) => {
       const d = toolPathD({ points: t.path, closed: t.closed });
       if (!d) return;
-      const kind = t.role === 'leadin' || t.role === 'online' || t.role === 'stroke' ? 'online'
-        : CLEAR_PATH_ROLES.has(t.role) ? 'clear' : 'wall';
       const cls = t.role === 'leadin' ? 'sk-travel sk-travel-lead'
         : (t.role === 'online' || t.role === 'stroke') ? 'sk-travel sk-travel-online'
         : CLEAR_PATH_ROLES.has(t.role) ? 'sk-travel sk-travel-clear' : 'sk-travel';
       const markup = `<path class="${cls}" d="${d}"/>`;
-      if (fp.terrace) stepped.push({ ring: t.path, markup, t, kind });
-      else { path += markup; travels.push({ t, kind, rasterIdx: t.role === 'raster' ? rasterIdx++ : -1 }); }
+      if (fp.terrace) stepped.push({ ring: t.path, markup });
+      else path += markup;
     };
     for (const fp of footprints) {
-      // TASK 745 / 777 / 778: a programmed pocket: clearing paths (thin continuous guide + sparse slow travel dashes & darts), swept band, leftover, walls / islands, and start mark target
+      // TASK 745 / 777 / 778: a programmed pocket: clearing paths (thin continuous guide + sparse slow travel dashes), swept band, leftover, walls / islands, and start mark target
       if (fp.clearing) {
         const cl = fp.clearing;
         if (cl.role === 'start') { // TASK 778: pocket start mark (circle + cross, declared once)
@@ -469,7 +467,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-band"/>`;
         if (fp.kind === 'pocket') region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-pocket-marks" fill="url(#prepare-pocket-marks)"/>`;
       }
-      // TASK 449 / 777: travel marks (one core derivation): sparse slow marching dashes + zoom-stable dart arrowheads (CSS animation, no RAF).
+      // TASK 449 / 777: travel marks (one core derivation): sparse slow marching dashes (CSS animation, no RAF).
       toolPaths.push(...(fp.toolPaths || []));
       // TASK 742: a held cut: its tabs marked on the outline (an onion skin: the whole outline), each gap strip drawn as it is exported (its own
       // band shows what the bit removes; no travel marks on the strips, their loops are too small to read)
@@ -496,7 +494,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       addLeadDots(fp.leadIn); // TASK 775 / 778: tip dot, junction ring, and draggable handle on top of travel marks
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
+    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), leadHandles };
   };
   // TASK 817 (owner turns 2745-2748): a look is drawn from the GENERATED paths (op-paths.js: content-addressed, generated in the background on OK), cached per
   // membership under its paths' signature (+ the unit its chip is written in). Paths not generated yet: nothing is drawn (the look follows when they arrive: the stage
@@ -563,73 +561,77 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const renderToolpaths = () => {
     let out = '';
     for (const { look, faint } of drawnItems()) out += faint ? `<g class="sk-faint">${look.path}</g>` : look.path;
-    toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g><g class="sk-travel-arrows-layer"></g>';
+    toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g>';
     lastZoomK = null;
-    renderStepAndArrows();
+    renderStepTravel();
   };
-  // TASK 757 / 777: stepped travel marks thinned by TRAVEL_MIN_GAP_PX (#core thinTravel) + zoom-stable dart arrowheads (#core arrowsAlongPath)
-  // batched into one <path> per style kind so panning and dense clearing pockets stay smooth.
-  const renderStepAndArrows = () => {
+  // TASK 757 / 777: stepped travel marks thinned by TRAVEL_MIN_GAP_PX (#core thinTravel). TASK 821: Prepare draws NO arrowheads; the marching dashes show the direction.
+  const renderStepTravel = () => {
     const stepLayer = toolpathG.querySelector('.sk-travel-steps');
-    const arrowLayer = toolpathG.querySelector('.sk-travel-arrows-layer');
-    if (!stepLayer && !arrowLayer) return;
+    if (!stepLayer) return;
     const k = worldTolerance(svgEl, 1);
     const minGap = k * TRAVEL_MIN_GAP_PX;
-    const spacing = k * TRAVEL_ARROW_SPACING_PX;
-    const minLen = k * TRAVEL_STYLE.arrowMinPathPx;
     let stepOut = '';
-    const dByKind = { clear: '', wall: '', online: '' };
-    const pushArrows = (entry) => {
-      const dims = DART_DIMS[entry.kind] || DART_DIMS.wall;
-      const phase = entry.rasterIdx >= 0 && entry.rasterIdx % 2 === 1 ? 0.72 : 0.5;
-      for (const a of arrowsAlongPath(entry.t.path, entry.t.closed, { spacing, minLen, phase })) dByKind[entry.kind] += dartSeg(a, dims, k);
-    };
     for (const { look, faint } of drawnItems()) {
-      if (look.travels && !faint) for (const entry of look.travels) pushArrows(entry); // TASK 817: a faint look has no arrows
       if (look.stepped && look.stepped.length) {
         let marks = '';
-        for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) {
-          marks += look.stepped[i].markup;
-          if (!faint) pushArrows(look.stepped[i]);
-        }
-        stepOut += faint ? `<g class="sk-faint">${marks}</g>` : marks;
+        for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) marks += look.stepped[i].markup;
+        stepOut += faint ? `<g class="sk-faint">${marks}</g>` : marks; // TASK 817: the open operation's paths as opened (or a stale Preview): faint
       }
     }
-    if (stepLayer) stepLayer.innerHTML = stepOut;
-    if (arrowLayer) {
-      let arrowsOut = '';
-      if (dByKind.clear) arrowsOut += `<path class="sk-travel-arrows sk-travel-arrows-clear" d="${dByKind.clear}"/>`;
-      if (dByKind.wall) arrowsOut += `<path class="sk-travel-arrows" d="${dByKind.wall}"/>`;
-      if (dByKind.online) arrowsOut += `<path class="sk-travel-arrows sk-travel-arrows-online" d="${dByKind.online}"/>`;
-      arrowLayer.innerHTML = arrowsOut;
-    }
+    stepLayer.innerHTML = stepOut;
     lastZoomK = k;
   };
-  let leadDrag = null; // TASK 778: active junction handle drag { pointerId, key, loop, holes (TASK 787), startAt, lastGood, startJunction, previewLead, refused }
+  // TASK 778: active handle drag { pointerId, key, loop, holes (TASK 787), startAt, lastGood, startJunction, previewLead, refused }; TASK 822: a TAB handle's drag is the
+  // same drag ({ tab: true, fromAt (the tab's centre when the drag began), point (the handle), previewCuts (the hold with the tab there), lastGood (every tab's centre) })
+  let leadDrag = null;
+  const handleMarkup = (id, p, k, extra = '', tabAt = null) => `<g class="sk-lead-handle${tabAt != null ? ' sk-tab-handle' : ''}${extra}" data-lead-key="${id}"${tabAt != null ? ` data-tab-at="${tabAt}"` : ''} transform="translate(${p.x} ${p.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`;
+  // TASK 822: a membership's tab handles (where the hold's layout put its tabs); TASK 817: from its record NOW (the open operation's look is its paths as opened),
+  // made once per record (its JSON)
+  const tabCache = new Map(); // membership id -> { key, handles }
+  const tabHandlesOf = (it) => {
+    const key = JSON.stringify(it.rec, (k, v) => (k === 'levels' || k === 'slope' ? undefined : v));
+    const hit = tabCache.get(it.id);
+    if (hit && hit.key === key) return hit.handles;
+    const rec = effectiveCutRecord(it.rec), pl = holdMode(rec) === 'tabs' ? profileLoopsForTarget(parseKey(it.key)) : null;
+    const handles = pl && pl.outer ? tabHandles(pl.outer, rec, state) : [];
+    tabCache.set(it.id, { key, handles });
+    return handles;
+  };
   const renderHandles = () => {
     const k = worldTolerance(svgEl, 1);
     if (leadDrag) {
-      const j = leadDrag.previewLead && leadDrag.previewLead.junction ? leadDrag.previewLead.junction : leadDrag.startJunction;
-      handleG.innerHTML = j
-        ? `<g class="sk-lead-handle is-dragging${leadDrag.refused ? ' is-refused' : ''}" data-lead-key="${leadDrag.id}" transform="translate(${j.x} ${j.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`
-        : '';
+      const j = leadDrag.tab ? leadDrag.point : leadDrag.previewLead && leadDrag.previewLead.junction ? leadDrag.previewLead.junction : leadDrag.startJunction;
+      handleG.innerHTML = j ? handleMarkup(leadDrag.id, j, k, ` is-dragging${leadDrag.refused ? ' is-refused' : ''}`, leadDrag.tab ? leadDrag.fromAt : null) : '';
       return;
     }
     let out = '';
-    const open = activeOp(); // TASK S2: a lead-in handle is dragged in its operation's edit session only
-    // TASK 817: at the lead-in the open operation's settings make NOW (cut-plan.js leadInSummary: an On line outline's own derivation, light, read here while the
-    // card is open; its paths wait for OK), so the position is adjusted before OK
+    const open = activeOp(); // TASK S2: a lead-in handle (TASK 822: a tab handle) is dragged in its operation's edit session only
+    // TASK 817: at the lead-in / the tabs the open operation's settings make NOW (cut-plan.js leadInSummary, #core hold-part tabHandles: the outline's own light
+    // derivations, read here while the card is open; its paths wait for OK), so they are adjusted before OK
     for (const { it, open: isOpen } of drawnItems()) {
       if (!open || !isOpen || !selection.has(it.key)) continue;
       const lead = leadInSummary(it.planKey, it.rec, state, loops, loopPolys, ownedNow().set);
-      if (lead && lead.role === 'arc' && lead.junction) {
-        out += `<g class="sk-lead-handle" data-lead-key="${it.id}" transform="translate(${lead.junction.x} ${lead.junction.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`;
-      }
+      if (lead && lead.role === 'arc' && lead.junction) out += handleMarkup(it.id, lead.junction, k);
+      for (const h of tabHandlesOf(it)) out += handleMarkup(it.id, h.point, k, '', h.at);
     }
     handleG.innerHTML = out;
   };
   const renderDragPreview = () => {
-    toolpathG.classList.toggle('is-lead-dragging', Boolean(leadDrag));
+    toolpathG.classList.toggle('is-lead-dragging', Boolean(leadDrag && !leadDrag.tab));
+    toolpathG.classList.toggle('is-tab-dragging', Boolean(leadDrag && leadDrag.tab)); // TASK 822: the tabs and strips as they are fade; the dragged layout is drawn on top
+    if (leadDrag && leadDrag.tab) {
+      let out = '';
+      for (const c of leadDrag.previewCuts || []) {
+        if (!c.hold) continue;
+        if (c.hold.role === 'pass' || c.hold.role === 'stroke') for (const d of c.hold.marks || []) out += `<path class="sk-tab-mark" d="${d}"/>`;
+        if (c.hold.role === 'strip') out += `<path class="sk-strip" d="${c.hold.d}"/>`;
+        if (c.hold.role === 'stroke') out += `<path class="sk-stroke" d="${c.hold.d}"/>`;
+      }
+      dragG.innerHTML = out;
+      renderHandles();
+      return;
+    }
     if (!leadDrag || !leadDrag.previewLead) { dragG.innerHTML = ''; renderHandles(); return; }
     const ld = leadDrag.previewLead;
     const cls = leadDrag.refused ? ' is-refused' : '';
@@ -640,9 +642,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     dragG.innerHTML = out;
     renderHandles();
   };
-  const renderZoomed = () => { // what a zoom/resize changes (skipped on pure pan when k is unchanged): thinned stepped marks, dart arrowheads, chips, lead-in handle size
+  const renderZoomed = () => { // what a zoom/resize changes (skipped on pure pan when k is unchanged): thinned stepped marks, chips, lead-in handle size
     const k = worldTolerance(svgEl, 1);
-    if (lastZoomK === null || Math.abs(k - lastZoomK) > 1e-9) { renderStepAndArrows(); renderChips(); renderHandles(); }
+    if (lastZoomK === null || Math.abs(k - lastZoomK) > 1e-9) { renderStepTravel(); renderChips(); renderHandles(); }
   };
   // TASK 455: the depth chip sits ON the tool path (centred on the dashed line) at the point NEAREST THE CURSOR and follows the cursor
   // along it while hovering; selected-but-not-hovered it STAYS at its last spot (a target's first appearance uses the stable
@@ -745,6 +747,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     leadDrag = null;
     try { if (e && svgEl.hasPointerCapture && svgEl.hasPointerCapture(e.pointerId)) svgEl.releasePointerCapture(e.pointerId); } catch (_) {}
     renderDragPreview();
+    if (d.tab) { if (commit && d.lastGood) onCommitTabs(d.opId, d.key, d.lastGood); return true; } // TASK 822: the last place the tab fitted (a refused spot never moves it)
     if (commit && !d.refused && d.lastGood !== d.startAt && (d.lastGood != null) && (d.startAt == null || Math.abs(d.lastGood - d.startAt) > 1e-6)) {
       onCommitLeadIn(d.opId, d.key, d.lastGood); // TASK S2: that membership's own position
     }
@@ -756,6 +759,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const wp = screenToWorld(svgEl, e.clientX, e.clientY);
       if (!wp) return;
       const rec = leadDrag.rec;
+      if (leadDrag.tab) { // TASK 822: the tab goes to the outline's point nearest the pointer where its gap strips fit; elsewhere the handle shows refused and the tab stays
+        const res = holdTabDragAt(leadDrag.loop, effectiveCutRecord(rec), state, leadDrag.fromAt, wp);
+        if (res && res.ok) { leadDrag.lastGood = res.at; leadDrag.point = res.point; leadDrag.previewCuts = res.cuts; leadDrag.refused = false; }
+        else if (res) { leadDrag.point = res.point; leadDrag.refused = true; }
+        renderDragPreview();
+        return;
+      }
       const res = rec ? leadInDragAt(leadDrag.loop, effectiveCutRecord(rec), state, wp, leadDrag.holes) : null; // TASK 787: the part's holes kept clear, as in the export
       if (res && res.leadIn) {
         leadDrag.previewLead = res.leadIn;
@@ -804,6 +814,16 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const op = opId ? opById(opId) : null, ref = op ? op.geometry.find((r) => r.key === key) : null;
       const pl = ref ? profileLoopsForTarget(parseKey(key)) : null;
       const rec = ref ? recordOf(op, ref) : null;
+      const tabAt = handleEl.getAttribute('data-tab-at'); // TASK 822: a tab's handle (its centre, a perimeter fraction)
+      if (pl && pl.outer && rec && tabAt != null) {
+        e.stopPropagation(); e.preventDefault();
+        try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}
+        const h = tabHandles(pl.outer, effectiveCutRecord(rec), state).find((x) => String(x.at) === tabAt);
+        const here = h ? holdTabDragAt(pl.outer, effectiveCutRecord(rec), state, Number(tabAt), h.point) : null; // the layout as it is: drawn until the tab is moved (a refused spot keeps showing it)
+        leadDrag = { tab: true, pointerId: e.pointerId, id, opId, key, rec, loop: pl.outer, fromAt: Number(tabAt), point: h ? h.point : screenToWorld(svgEl, e.clientX, e.clientY), lastGood: null, previewCuts: here ? here.cuts : null, refused: false };
+        renderDragPreview();
+        return;
+      }
       if (pl && pl.outer && rec) {
         e.stopPropagation(); e.preventDefault();
         try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}

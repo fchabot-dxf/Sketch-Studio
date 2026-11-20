@@ -1,14 +1,15 @@
 // apps/shaper/src/operations-store.js — TASK S1 (docs/OPERATIONS-MODEL.md 1.2-1.6): the OPERATIONS + REGIONS store, the one place Shaper's cut plan lives
 // (it replaces the per-geometry CUT_PLAN map). Plain JSON-safe data, module-level (it persists across Prepare re-mounts), saved in the Shaper sidecar (version 3,
 // shaper-doc.js) and in the shared undo snapshots:
-//   operations: [{ id, type, on, settings, geometry: [{ key, seq, at? }] }]   array order = the Operations list order (no separate opOrder)
+//   operations: [{ id, type, on, settings, geometry: [{ key, seq, at?, tabsAt? }] }]   array order = the Operations list order (no separate opOrder)
 //     id        'op-<n>', stable for life (the preview's data-op, the list rows)
 //     on        TASK 798: the Operations list's tick (true for every new / migrated operation; false = left out of the views and the file: setOpsOn)
 //     type      a CUT_TYPES id ('contour': TASK S2, a plain operation with its own settings; its memberships are named `contour:<key>` in Prepare)
 //     settings  the operation's settings, base mm, today's record field names (no cutType, no region data, no leadInAt); cutDepth 'model' = each shape's
 //               own imported depth (regions[key].source.cutDepth)
 //     geometry  the shapes it cuts (TASK S2: possibly none: an EMPTY operation; a shape may be in several operations): `seq` = the FILE order (one counter per document, nextSeq: a new membership takes the next number, a moved one keeps its
-//               own), `at` = a dragged lead-in position on that shape's outline (today's leadInAt)
+//               own), `at` = a dragged lead-in position on that shape's outline (today's leadInAt), `tabsAt` (TASK 822) = its dragged TABS: every tab's centre
+//               as a perimeter fraction of that shape's outline (the record's tabsAt; #core/hold-part tabLayout `at`), set once one tab of it is dragged
 //   regions: { [geometry key]: { slope?, levels?, source? } }  the data that belongs to a GEOMETRY whatever operations use it (entries replaced, never mutated:
 //            undo snapshots share them by reference); source = { cutType, cutDepth } as the import gave them
 //   nextSeq: the next file-order number
@@ -107,6 +108,11 @@ export function setOpSettings(op, settings) { op.settings = { ...settings }; bum
 /** Set / clear a membership's dragged lead-in position. */
 export function setRefAt(ref, at) {
   if (at === undefined) delete ref.at; else ref.at = at;
+  bump();
+}
+/** TASK 822: set / clear (undefined) a membership's dragged tab centres (a NEW array: undo snapshots share the refs' values by reference). */
+export function setRefTabsAt(ref, tabsAt) {
+  if (tabsAt === undefined) delete ref.tabsAt; else ref.tabsAt = [...tabsAt];
   bump();
 }
 /** 'default' | 'stored': whether the list is the default order of its operations or the user's (see the header). */

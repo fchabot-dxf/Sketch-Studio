@@ -165,7 +165,7 @@ shapes is cut with. Where shapes really need different values there are exactly 
 2. **Per-shape placement** that only means something on one outline: the dragged lead-in position (`leadInAt`). It is
    stored on the geometry ref and drawn as the handle on that shape, so it is visible where it applies; it is not a
    machining setting. (Today it is part of the operation key, so every dragged handle makes its own operation:
-   `operations.js:90`; probe below.)
+   `operations.js:90`; probe below.) *(Task 822: the dragged TABS are the second such placement: `tabsAt` on the geometry ref, section 10.)*
 3. **"Make its own operation"**: the shape leaves the operation into a new one with the same settings, then the user
    changes what differs. Two rows, two honest cards.
 
@@ -624,7 +624,26 @@ An empty operation is saved and read back as it is; renameGeometry drops only an
 15. Esc: with a hint tooltip showing, Esc only hides the tooltip; otherwise, with an operation open, Esc is Cancel.
 16. A Fusion import while an operation is open confirms it first (OK, its own undo step); the import is its own step.
 
-## 10. Task 817: toolpaths are generated on OK, in the background (owner turns 2745-2748)
+## 10. Task 822: dragged tabs, a per-shape placement (owner turn 2771)
+
+- **The field.** A geometry ref may carry `tabsAt`: the shape's TAB CENTRES, each a perimeter fraction (0..1) of that shape's outline walk
+  (`#core/hold-part loopWalk`, the measure of the lead-in's `at`). It is section 1.4's mechanism 2 (a per-shape placement, drawn as handles on
+  that shape), not a machining setting: it is in neither the operation key nor the settings, and two shapes of one operation keep their own.
+  `recordOf` puts it on the shape's record (`rec.tabsAt`); `#core/hold-part tabLayout` (`at`) uses it instead of the even spread (count = its
+  length, each centre snapped to the nearest point where its gap strips fit: a stale one after a design edit moves there). Saved with the store
+  (an optional array on a ref of the version 4 document), copied by Duplicate, kept by the import's regrouping (`fileShape`).
+- **Set** by dragging a tab handle of the OPEN operation (`prepare-view.js`: the lead-in handle's drag path and style, 44 px target): the drop
+  stores EVERY tab centre of that shape (`cut-plan.js setShapeTabsAt`, an edit of the session: Cancel restores, OK = one undo step). A spot where
+  the tab cannot be (its strips do not fit, too near a corner or another tab) shows the handle refused and stores nothing.
+- **Cleared** by a tab count set on the operation (Auto, or a typed / stepped number: `setOpFields`): the tabs are laid out again on every shape.
+  While a shape has `tabsAt`, the count row shows their number (not Auto).
+- **Tabs only where the strips fit** (with or without a drag): a tab is never placed where its gap strips cannot be built (`stripFit`). When the even
+  spread puts one there, the tabs are spread along the stretches where they fit (the hold's `narrow`; the note: "placed where a gap strip fits: part
+  of the outline is too narrow for one", or "only n of m tabs fit: part of the outline is too narrow for a gap strip"). Only when no stretch fits is
+  the hold refused (the line of before). On the 909-case corpus: 907 cases unchanged; the 2 cases of one drawing
+  (`tests/fixtures/report/midpoint-move.json`, a 3077.8 mm Outside outline) whose tabs were refused get 21 tabs now.
+
+## 11. Task 817: toolpaths are generated on OK, in the background (owner turns 2745-2748)
 
 "In fusion a toolpath generate is on ok and allow to work still, spin wheel on item only" / "i guess we can adjust lead in only before and show path on ok" /
 "Or with toolpath open add a refresh button so we voluntarily calculate it?" / "Button in the op edit panel". Code: `apps/shaper/src/op-derive.js` (THE

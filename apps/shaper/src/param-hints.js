@@ -74,7 +74,7 @@ const PARAMS = {
   stepDepth: { label: 'Step depth', hint: ({ contour } = {}) => (contour ? 'How much deeper each contour pass goes. Smaller passes follow the slope more closely but take more cuts.' : 'How much deeper each step goes. Smaller steps follow the slope more closely but take more cuts.') }, // TASK 792: a Contour's fine step
   stepDeviation: { label: 'Resolution', hint: 'The most the steps may stray from the true slope. Finer gives more steps.' },
   holdPart: { label: 'Hold part', hint: 'Keeps a cut-out part (or the waste of a hole) from coming loose when the cut goes through.', items: HOLD_PART.modes.map((m) => `holdPart:${m.id}`) },
-  tabCount: { label: 'Tab count', hint: 'How many tabs. Auto spaces them along the outline by its length.' },
+  tabCount: { label: 'Tab count', hint: 'How many tabs. Auto spaces them along the outline by its length. Drag a tab on the outline to move it (the operation open): its shape then keeps its tabs where they are, and the count stays fixed until you pick Auto or type a count.' },
   tabWidth: { label: 'Tab width', hint: ({ online } = {}) => (online ? 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.' : 'How long each tab is, along the outline.') }, // TASK 775: an On line cut's tabs are gaps in the line
   holdThickness: { label: 'Tab thickness', hint: 'How much wood each tab keeps, up from the bottom of the cut.' },
   skinThickness: { label: 'Skin thickness', hint: 'How thick the layer left at the bottom is.' }, // the holdThickness row with Onion skin
@@ -91,7 +91,7 @@ const PARAMS = {
   download: { label: 'Download', hint: 'Saves the Shaper SVG of your cuts to this computer (the same file as Generate Shaper SVG).' }, // the drawer's entry (a sidebar action: its tooltip)
   // ── TASK 772: Prepare Operations, Direction legend, Export toolbar/Cuts, and Sync to ShaperHub ──
   operations: { label: 'Operations', hint: 'Cut order sent to the Origin: drag a grip (or hold a row on touch) to reorder, tap to select, or tap the bin to clear.' },
-  dirLegend: { label: 'direction: conventional (Shaper Origin)', hint: 'Arrows mark conventional cutting direction along closed shapes so the Origin keeps a clean wall finish.' },
+  dirLegend: { label: 'direction: conventional (Shaper Origin)', hint: 'The moving dashes show the conventional cutting direction along closed shapes so the Origin keeps a clean wall finish.' },
   reviewCuts: { label: 'Cuts', hint: 'Assigned operations in job order: click one to highlight it and focus its cut depth details.' },
   reviewThreeD: { label: '3D', hint: 'Show the finished workpiece relief in interactive 3D.' },
   reviewTwoD: { label: '2D', hint: 'Inspect the flat exported Shaper SVG paths and colour coding.' },

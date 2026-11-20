@@ -101,12 +101,12 @@ function injectStyles() {
 .sk-drawing-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 .sk-drawing-world * { pointer-events: none; } /* nothing in the drawing is a target: a press lands on the canvas (pan) */
 .sk-drawing-title { display: none; }
-/* phone portrait / short landscape: Design keeps the steps in the ☰ drawer behind its peeking handle; Drawing shows the step bar instead (the way back)
-   and no drawer handle over the drawing */
+/* phone portrait / short landscape: Design keeps the steps in the ☰ drawer behind the chevron of the tab strip; Drawing shows the step bar instead (the way back)
+   and no drawer chevron over the drawing */
 @media (max-width: 640px), ${SHORT_VIEWPORT_QUERY} {
   body.sk-drawing-shown { --sk-header-h: 44px; } /* the header row's desktop height (sketcher.css sets 0 px there: no header bar on phones) */
   body.sk-drawing-shown .sk-header { display: flex !important; }
-  body.sk-drawing-shown .sk-sidebar-handle { display: none !important; }
+  body.sk-drawing-shown .sk-sidebar-chevron { display: none !important; }
 }
 body.sk-drawing-shown #notification-container { display: none !important; } /* no toast from Design over the drawing */
 /* TASK 776: Drawing shows the footer (Save, Settings, the account) at the bottom of the page, under the drawing (which reserves its height, below). Undo / Redo act on Design's history

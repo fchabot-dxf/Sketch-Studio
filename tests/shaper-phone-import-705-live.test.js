@@ -56,7 +56,7 @@ await (async () => {
   };
   const activeStage = () => evalJs(`(document.querySelector('.sk-sidebar-stage.active') || document.querySelector('.sk-header-tab.active')).dataset.tab`);
   const openDrawer = async (what) => {
-    await press('.sk-sidebar-handle', what + 'the drawer handle');
+    await press('.sk-sidebar-chevron', what + 'the drawer handle');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, what + 'the drawer opens'); await sleep(300);
   };
   // the new sketch: its shapes, and how many lie inside the Design canvas on screen

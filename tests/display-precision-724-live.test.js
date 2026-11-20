@@ -62,7 +62,7 @@ const setPrecision = async (key, value) => {
 };
 const openStyle = async (phone = false) => {
   if (await evalJs(`!!document.querySelector('${P}') && !document.querySelector('${P}').classList.contains('sk-hidden')`)) return;
-  await clickEl(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn'); await sleep(300); await clickEl('.sk-sidebar [data-action="settings"], .sk-sidebar [data-action="style"]');
+  await clickEl(phone ? '.sk-sidebar-chevron' : '.sk-sidebar-btn'); await sleep(300); await clickEl('.sk-sidebar [data-action="settings"], .sk-sidebar [data-action="style"]');
   await waitFor(`!document.querySelector('${P}').classList.contains('sk-hidden')`, 'the Style panel');
   const units = [...await evalJs(`[...document.querySelectorAll('${P} .sk-style-tab')].map((t) => t.dataset.tab)`)].indexOf('units');
   assert.ok(units >= 0, 'the Style panel has a Units tab');

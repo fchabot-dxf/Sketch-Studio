@@ -114,7 +114,7 @@
     #review-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
     #review-toolbar button { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
     #review-toolbar button:hover { border-color: var(--sk-selection, #4c9aff); color: #fff; }
-    #review-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; font: 12px system-ui, sans-serif; max-width: 70%; line-height: 1.5; max-height: calc(100% - 80px); overflow-y: auto; } /* TASK 750: many notes (a phone) scroll inside it, never over the view toggle at the top */
+    #review-info { position: absolute; left: 10px; bottom: calc(10px + var(--sk-footer-clear, 0px)); z-index: 2; font: 12px system-ui, sans-serif; max-width: 70%; line-height: 1.5; max-height: calc(100% - 80px); overflow-y: auto; } /* TASK 750: many notes (a phone) scroll inside it, never over the view toggle at the top */
     #review-info:empty { display: none; }
     /* TASK 754: the 3D view's info line reads on the light paper: it takes the 2D view's info card (one rule for both) */
     #review-info, #review-2d-info { color: #e6e6e6; background: rgba(15,19,32,0.85); border-radius: 6px; padding: 5px 9px; }
@@ -357,6 +357,7 @@
     .sk-lead-tip.is-refused { fill: var(--sk-prep-leftover); }
     .sk-lead-end.is-refused { stroke: var(--sk-prep-leftover); }
     #prepare-toolpath-group.is-lead-dragging .sk-lead-leg, #prepare-toolpath-group.is-lead-dragging .sk-lead-tip, #prepare-toolpath-group.is-lead-dragging .sk-lead-end { opacity: 0.25; }
+    #prepare-toolpath-group.is-tab-dragging .sk-tab-mark, #prepare-toolpath-group.is-tab-dragging .sk-strip { opacity: 0.25; } /* TASK 822: a tab handle's drag: the tabs as they were, faded under the dragged layout */
     .sk-lead-handle { cursor: grab; pointer-events: all; touch-action: none; }
     .sk-lead-handle.is-dragging { cursor: grabbing; }
     .sk-lead-hit { fill: transparent; stroke: none; pointer-events: all; touch-action: none; }
@@ -371,10 +372,10 @@
     .sk-chip-val { font-weight: 700; }
     .sk-chip-unit { fill: var(--sk-prep-chip-unit); }
     /* SP1f: the cut-settings card — a floating panel, top-right of the Prepare view (shown when a target is selected). */
-    /* TASK 449 / 777: travel direction — sparse slow marching dashes + always-visible screen-sized dart arrowheads (CSS animation, no RAF loop).
+    /* TASK 449 / 777: travel direction — sparse slow marching dashes (CSS animation, no RAF loop).
        Dash / gap / period / duration come ONCE from TRAVEL_STYLE (prepare-view.js -> --sk-travel-* on #prepare-canvas).
        stroke-dashoffset DEcreasing moves the dashes FORWARD along the path (the path is ordered in the travel direction).
-       Motion is opt-in under prefers-reduced-motion: no-preference so reduced-motion users keep the still dashes + arrowheads. */
+       Motion is opt-in under prefers-reduced-motion: no-preference so reduced-motion users keep the still dashes (TASK 821: Prepare draws no arrowheads; .sk-travel-arrows is the Export Paths view only). */
     .sk-travel { fill: none; stroke: var(--sk-prep-path); stroke-width: 2; stroke-opacity: 0.95; vector-effect: non-scaling-stroke; stroke-dasharray: calc(var(--sk-travel-dash) * 1px) calc(var(--sk-travel-gap) * 1px); stroke-linecap: butt; }
     .sk-travel-clear { stroke-width: 1.5; stroke-opacity: 0.9; }
     .sk-travel-online, .sk-travel-lead { stroke: var(--sk-prep-path-online); }

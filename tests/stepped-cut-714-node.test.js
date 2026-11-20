@@ -150,7 +150,7 @@ const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === 
     eq([pocketRec.cutType, pocketRec.cutDepth, pocketRec.slope.kind], ['pocket', 8, 'pocket'], 'Fusion import: the sloped pocket stays a Pocket (straight) and carries its slope');
     const plainSvg = exportOf(app);
     { // a slope on a plain Pocket changes nothing in its export: the same plan without the slope exports byte-identically
-      const saved = V2_PLAN.get(pk); V2_PLAN.set(pk, { ...saved }); delete V2_PLAN.get(pk).slope;
+      const saved = { ...V2_PLAN.get(pk) }; V2_PLAN.set(pk, { ...saved }); delete V2_PLAN.get(pk).slope;
       eq(exportOf(app), plainSvg, 'a plain Pocket exports the same with or without a slope');
       V2_PLAN.set(pk, saved);
     }

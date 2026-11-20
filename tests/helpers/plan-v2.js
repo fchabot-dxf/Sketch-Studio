@@ -12,7 +12,7 @@
 import { applyShaperDoc } from '../../apps/shaper/src/shaper-doc.js';
 import { planRecords, getPlanRecord, getCutRecord, recordOf, resolveEntry } from '../../apps/shaper/src/cut-plan.js';
 import { opKeyOf } from '../../apps/shaper/src/operations.js';
-import { memberOf, regionKeys, storeOps, planKeyOf } from '../../apps/shaper/src/operations-store.js';
+import { memberOf, regionKeys, regionOf, storeOps, planKeyOf } from '../../apps/shaper/src/operations-store.js';
 import { getStock } from '../../apps/shaper/src/stock.js';
 import { captureStlDoc } from '../../apps/shaper/src/stl-source.js';
 import { getSelections } from '../../apps/shaper/src/selection-list.js';
@@ -20,8 +20,9 @@ import { getSelections } from '../../apps/shaper/src/selection-list.js';
 let STATE = null;
 let ORDER = [];
 // a shape's live record (see the header)
+const recordNow = (key) => getPlanRecord(key) || (regionOf(key) ? { ...getCutRecord(key), cutType: null } : null); // a shape in no operation with region data: its record without a cut type (as before S1)
 function live(key) {
-  const now = () => getPlanRecord(key) || {};
+  const now = () => recordNow(key) || {};
   return new Proxy({}, {
     get: (t, p) => now()[p],
     set: (t, p, v) => { V2_PLAN.set(key, { ...now(), [p]: v }); return true; },
@@ -59,7 +60,7 @@ export const V2_PLAN = {
   /** The stored operation order of the v2 document (operation keys); [] = the default order. */
   setOrder(keys) { ORDER = Array.isArray(keys) ? keys.slice() : []; load(records()); },
   order: () => ORDER.slice(),
-  get: (key) => freeze(getPlanRecord(key), key),
+  get: (key) => freeze(recordNow(key), key),
   has: (key) => getPlanRecord(key) !== null,
   get size() { return planRecords().length; },
   keys: () => planRecords().map(([k]) => k)[Symbol.iterator](),
@@ -87,3 +88,6 @@ export function storedRecords(side) {
 
 /** The operation keys (operations.js opKeyOf) of the STORED operations, in list order: the order a test of before S1 read as opOrder(). */
 export const storedOpKeys = () => storeOps().map((op) => { const ref = op.geometry[0], r = recordOf(op, ref), e = resolveEntry(planKeyOf(op, ref), r); return opKeyOf(e ? e.rec : r); });
+
+/** Load `plan` (a Map or [[key, record], ...]: a v2 plan) for the sketch `state` (through applyShaperDoc), then return fn(): a derivation of that plan. */
+export function withPlan(state, plan, fn) { V2_PLAN.use(state).load([...plan]); return fn(); }

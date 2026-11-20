@@ -2,12 +2,13 @@
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
-import { keyOf } from '../apps/shaper/src/cut-plan.js';
+import { keyOf, getCutRecord } from '../apps/shaper/src/cut-plan.js';
 import { getStock, setStock } from '../apps/shaper/src/stock.js';
 import { DEFAULT_STOCK } from '#core/relief-model.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { createFusionBridge, FUSION_ACTIONS } from '../apps/shaper/src/fusion-bridge.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { getSelections } from '../apps/shaper/src/selection-list.js';
 
 let checks = 0;
 const ok = (c, m) => { assert.ok(c, m); checks++; };
@@ -121,12 +122,11 @@ const realSketchMessage = {
     const rectKey = keyOf('loop', rectLoop.id);
     const circleKey = keyOf('loop', circleLoop.id);
     const chainKey = keyOf('chain', openChain.id);
-    ok(V2_PLAN.has(rectKey), 'V2_PLAN has rect loop key');
-    ok(V2_PLAN.has(circleKey), 'V2_PLAN has circle disk loop key');
-    ok(V2_PLAN.has(chainKey), 'V2_PLAN has open chain key');
-    eq(V2_PLAN.size, 3, 'V2_PLAN has no guide entry for construction line');
-    eq(V2_PLAN.get(rectKey).cutType, null, 'sketch region defaults cutType to null');
-    eq(V2_PLAN.get(rectKey).cutDepth, 'unset', 'sketch region defaults cutDepth to unset');
+    // TASK S1: a sketch region has no cut type, so it is in no operation; the selection names its regions and Prepare's record of each is the default
+    eq(JSON.stringify(getSelections().at(-1).cutKeys.slice().sort()), JSON.stringify([rectKey, circleKey, chainKey].sort()), 'the selection names the rect loop, the circle disk loop and the open chain (no construction line)');
+    eq(V2_PLAN.size, 0, 'none of them is in an operation (no cut type)');
+    eq(getCutRecord(rectKey).cutType, null, 'sketch region defaults cutType to null');
+    eq(getCutRecord(rectKey).cutDepth, 'unset', 'sketch region defaults cutDepth to unset');
 
     // Both outer rectangle AND inner circle disk stay selectable in Prepare
     const pv = app.prepare.view();

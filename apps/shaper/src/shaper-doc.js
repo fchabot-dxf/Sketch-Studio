@@ -155,7 +155,7 @@ export function applyShaperDoc(d, state = null) {
   if (d && Number(d.version) >= OPERATIONS_VERSION) {
     applyStore(d);
     applySelections(d && d.selections); // TASK 795: the selection list (none for a design that was not built from selections)
-    return state ? { ...reconcileStore(state), keptHoles: 0, lostHoles: 0, migration: null } : null;
+    return state ? { ...reconcileStore(state), keptHoles: 0, lostHoles: 0 } : null;
   }
   const plan = new Map((d && Array.isArray(d.cutPlan) ? d.cutPlan : []).filter((e) => Array.isArray(e) && typeof e[0] === 'string').map(([key, rec]) => [key, rec && typeof rec === 'object' ? withClearingNow({ ...rec }) : rec]));
   let counts = null;

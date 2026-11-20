@@ -57,7 +57,7 @@ const counts = (r) => ({ keptHoles: r.keptHoles, lostHoles: r.lostHoles });
 
   // a second open of the SAVED (migrated) document changes nothing: the sidecar is version 2 now, the record a profile record
   const saved = captureShaperDoc();
-  eq(saved.version, 2, 'the saved sidecar is version 2 (the same-sketch rule)');
+  eq(saved.version, 3, 'the saved sidecar is version 3 (TASK S1), so not below 2: the same-sketch rule');
   const r2 = applyShaperDoc(saved, state);
   eq(counts(r2), { keptHoles: 0, lostHoles: 0 }, 'second open: nothing to keep');
   eq(cutPlanNotice(r2), null, 'second open: no notice');

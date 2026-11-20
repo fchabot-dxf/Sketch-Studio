@@ -1,7 +1,8 @@
 // tests/settings-table-812-node.test.js — TASK 812 (S0 of docs/OPERATIONS-MODEL.md, 1.5): the settings an operation is made of are declared ONCE per cut type
 // (shaper.js CUT_TYPES[].fields) and operations.js settingsOf reads that table.
 //  1. for every cut type, over a corpus of records with every setting varied, the keys settingsOf answers are EXACTLY the type's declared fields (none outside the
-//     table, every declared field reached), in the table's order; a type that is not cut (Guide, Stock) declares none and answers null;
+//     table, every declared field reached), in the table's order; a type that declares none (the Stock) answers null; TASK S1 (advisor ruling 1): the Guide,
+//     not cut, declares its Depth / Offset / Bit (written to the file per element);
 //  2. the operation key is byte for byte what it was before the table (literal keys from the code before 812), and `loopPitch` joins it (a Loop-on pocket with
 //     pitch 1 and 2 are two operations; the default pitch adds nothing);
 //  3. the cut card asks the same table (cutTypeHasField).
@@ -36,7 +37,7 @@ for (const t of CUT_TYPES) {
   const seen = new Set();
   for (let i = 0; i < 600; i++) {
     const s = settingsOf(record(t.id));
-    if (t.opRank === 0) { assert.strictEqual(s, null, `${t.id} is not cut: no settings`); continue; }
+    if (!t.fields.length) { assert.strictEqual(s, null, `${t.id} declares no settings: none`); continue; }
     const keys = Object.keys(s);
     for (const k of keys) { assert(t.fields.includes(k), `${t.id}: settingsOf answered "${k}", which the table does not declare`); seen.add(k); }
     assert.deepStrictEqual(keys, t.fields.filter((f) => keys.includes(f)), `${t.id}: the keys follow the table's order`);

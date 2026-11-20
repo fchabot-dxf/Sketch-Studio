@@ -14,6 +14,7 @@ import { getStock, setStock } from '../apps/shaper/src/stock.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { DEFAULT_STOCK } from '#core/relief-model.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { storeOps } from '../apps/shaper/src/operations-store.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -59,7 +60,7 @@ try {
   eq(st.history.length, h0 + 1, 'an add is ONE undo step');
   eq(texts(), ['Tray · body'], 'the list: A, its summary text');
   eq(getStock().thickness, 12, '794: a fresh start takes the part\'s stock thickness');
-  eq(V2_PLAN.order(), [], '794: a fresh start takes the part\'s own operation order (the stale one is gone)');
+  ok(storeOps().length > 0 && storeOps().every((op) => op.geometry.every((g) => getSelections()[0].cutKeys.includes(g.key))), '794: a fresh start takes the part\'s own operations (TASK S1: the list order is theirs; no stale order)');
   const afterA = snap();
   const recA = new Map([...V2_PLAN.entries()].map(([k, r]) => [k, { ...r }]));
   eq(V2_PLAN.size, 2, 'A: 2 records');
@@ -130,7 +131,7 @@ try {
   V2_PLAN.setOrder(['left-over']);
   imp(B());
   eq(getStock().thickness, DEFAULT_STOCK.thickness, '794: no stock in the payload: the app\'s default thickness');
-  eq(V2_PLAN.order(), [], '794: after Clear all the order starts over');
+  ok(storeOps().every((op) => op.geometry.every((g) => getSelections()[0].cutKeys.includes(g.key))), '794: after Clear all the order starts over (TASK S1: only the part\'s own operations are stored)');
   clearSelections(app.controller, { prepare: app.prepare });
   imp(A());
   eq(getStock().thickness, 12, '794: after Clear all the next part\'s thickness');

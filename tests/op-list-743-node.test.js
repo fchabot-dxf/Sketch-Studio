@@ -20,12 +20,14 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
-import { describeOperations, defaultOpOrder } from '../apps/shaper/src/operations.js';
+import { describeOperations, defaultOpOrder, opKeyOf } from '../apps/shaper/src/operations.js';
 import { shaperSvgOf, shaperPreviewOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, previewRows } from '../apps/shaper/src/export-preview.js';
 import { captureShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { reorderOps, storeOps } from '../apps/shaper/src/operations-store.js';
+const storedIds = () => storeOps().map((o) => o.id); // TASK S1: the list order IS the stored operations' order
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -85,7 +87,7 @@ function checkFiles(name, st, documentForParse) {
   eq(rows.map((g) => g.op && g.op.id), ops.map((o) => o.id), `${name}: the 2D list = the operations, in their order`);
   for (const g of rows) eq(g.count, g.op.records.reduce((n, r) => n + r.cuts.length, 0), `${name}: ${g.op.label}: its elements = the cuts of its records`);
   // a reorder: the download and the preview copy do not change at all; the list follows the new order
-  V2_PLAN.setOrder(ops.map((o) => o.key).reverse());
+  reorderOps(ops.map((o) => o.id).reverse()); // TASK S1: the list's reorder (op-list.js onMove -> operations-store.js reorderOps)
   eq(shaperSvgOf(st, planEntries()), old, `${name}: after a reorder the download is byte-identical`);
   const pv2 = shaperPreviewOf(st, planEntries());
   eq(pv2.svg, pv.svg, `${name}: after a reorder the preview copy is byte-identical`);
@@ -117,17 +119,19 @@ SettingsManager.set('LENGTH_PRECISION', null);
   ], 'the default order: Not cut; the V-bit (its last cut: on line), the ball nose (a pocket), the ⅛ in bit (holes), the ¼ in bit (it frees the part); pockets before the outside');
   ok(/^Change to ¼″ end mill \| ¼″ end mill · Outside · pass 0\.671 in \+ gaps 0\.75 in \(1 region\) · \d+ gaps \(tabs 0\.394 in wide, 0\.079 in thick\) \| plate$/.test(view[6]),
     'the tabbed Outside: its pass + gaps, last: ' + view[6]);
-  eq(ops.map((o) => o.id), ['op-guide', 'op-online-1.5875mm-vbit-6.35mm-60deg', 'op-pocket-3.175mm-ballnose-6mm', 'op-interior-19.05mm-endmill-3.175mm', 'op-pocket-6.35mm-endmill-6.35mm',
-    'op-pocket-6.35mm-offset-0.5mm-endmill-6.35mm', 'op-exterior-19.05mm-tabs-endmill-6.35mm'], 'the operation ids: type, depth, the settings off their default, tool');
+  eq(ops.map((o) => o.id), ['op-1', 'op-2', 'op-3', 'op-4', 'op-5', 'op-6', 'op-7'], 'the operation ids (TASK S1: stored, op-1 ... op-n in list order: docs/OPERATIONS-MODEL.md section 3 step 7)');
   eq(ops.find((o) => o.cutType === 'exterior').records[0].cuts.filter((c) => c.hold && c.hold.role === 'strip').length, Number(/(\d+) gaps \(/.exec(view[6])[1]), 'the gap count is the derivation\'s');
-  // the same operations whatever order the plan holds its records in
-  const shuffled = new Map([...V2_PLAN].reverse());
-  eq(describeOperations(st, planEntries(shuffled)).map((o) => o.key), ops.map((o) => o.key), 'the default order does not depend on the plan\'s order');
+  // the same operations whatever order the plan holds its records in (TASK S1: a v2 document of the records in reverse order, migrated: its operations' keys, opKeyOf)
+  const okey = (o) => opKeyOf(o.records[0].rec);
+  const records0 = [...V2_PLAN].map(([k, r]) => [k, { ...r }]);
+  V2_PLAN.load(records0.slice().reverse());
+  eq(describeOperations(st, planEntries()).map(okey), ops.map(okey), 'the default order does not depend on the plan\'s order');
+  V2_PLAN.load(records0);
   eq(defaultOpOrder(ops.slice().reverse()).map((o) => o.key), ops.map((o) => o.key), 'defaultOpOrder sorts any list into it');
-  // a stored order is kept as stored
-  const stored = ops.map((o) => o.key).reverse();
+  // a stored order (the v2 document's operation keys) is kept as stored
+  const stored = ops.map(okey).reverse();
   V2_PLAN.setOrder(stored);
-  eq(describeOperations(st, planEntries()).map((o) => o.key), stored, 'a stored order is followed');
+  eq(describeOperations(st, planEntries()).map(okey), stored, 'a stored order is followed');
   // a NEW operation with a tool the order already has (a ⅛ in pocket at 1/16 in on pocket C, out of the ¼ in pocket operation): it joins the ⅛ in bit's
   // operations, placed by the in-tool rule (a pocket before the holes), so the bit is not changed twice
   V2_PLAN.set(K.pc, rec('pocket', 1.5875, 3.175));
@@ -136,7 +140,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
   ok(fresh, 'the new ⅛ in pocket operation');
   console.log('new op (known tool): ' + after.map((o) => o.label.split(' (')[0]).join(' > '));
   eq(after.findIndex((o) => o.key === fresh.key) + 1, after.findIndex((o) => o.label.startsWith('⅛″ end mill · Inside')), 'it sits right before the ⅛ in Inside (its tool, the in-tool rule)');
-  eq(after.filter((o) => o !== fresh).map((o) => o.key), stored, 'the stored operations keep their order');
+  eq(after.filter((o) => o !== fresh).map(okey), stored, 'the stored operations keep their order');
   eq(after.find((o) => o.label.startsWith('¼″ end mill · Pocket · 0.25 in (1 region)') && !o.detail).records.map((r) => r.planKey), [K.pa], 'pocket A alone in its operation now');
   // a NEW tool (a ½ in end mill on pocket D): no operation of it in the order, so it goes right after its default-order predecessor
   V2_PLAN.set(K.pd, rec('pocket', 3.175, 12.7));
@@ -220,15 +224,15 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
       // ArrowDown on the first row's grip (TASK 745: no arrow buttons; the focused grip moves its row): ONE undo step; Ctrl+Z / Ctrl+Y
       const gripKey = (grip, key) => { grip.focus(); grip.dispatchEvent(new app.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); };
       eq(app.document.querySelectorAll('#prepare-ops .ops-up, #prepare-ops .ops-down, #prepare-ops .ops-move').length, 0, 'TASK 745: no arrow buttons');
-      const n0 = st.history.length;
+      const n0 = st.history.length, ids0 = storedIds();
       gripKey(app.document.querySelector('#prepare-ops .ops-row .ops-grip'), 'ArrowDown');
       const l1 = listOf(app);
       eq(l1.filter((t) => !t.startsWith('# ')).slice(0, 2).map((t) => t.split(' | ')[0]), ['1. On line · 0.063 in', '2. Guide'], '↓ moved Guide below On line');
       eq(st.history.length, n0 + 1, 'the reorder is ONE undo step');
-      eq(V2_PLAN.order().length, 7, 'the order is stored');
+      eq(storedIds(), [ids0[1], ids0[0], ...ids0.slice(2)], 'the order is stored');
       app.undo();
       eq(listOf(app), l0, 'Ctrl+Z: the default order again');
-      eq(V2_PLAN.order(), [], 'Ctrl+Z: no stored order');
+      eq(storedIds(), ids0, 'Ctrl+Z: the stored order of before');
       app.redo();
       eq(listOf(app), l1, 'Ctrl+Y: the reorder again');
       // ArrowUp on the last (the Outside) twice: above both ¼ in pockets (the grip keeps the focus: the second ArrowUp goes to the same, moved row)
@@ -239,13 +243,13 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
       console.log('app list after reorders: ' + JSON.stringify(listBefore));
       eq(listBefore.slice(-4), ['# Change to ¼″ end mill', listBefore.at(-3), listBefore.at(-2), listBefore.at(-1)], 'still one ¼ in heading');
       ok(/^5\. Outside/.test(listBefore.at(-3)), 'the Outside is first of the ¼ in bit now');
-      orderBefore = V2_PLAN.order();
+      orderBefore = storedIds();
       svgBefore = shaperSvgOf(st, planEntries());
       eq(svgBefore, svg0, 'the download is byte-identical after the reorders');
       eq(svgBefore, before743(st), 'and equal to the pre-743 export');
       const d = await app.storedDoc();
-      eq(d.hosts.shaper.opOrder, orderBefore, 'the autosave stores the operation order');
-      eq(captureShaperDoc().opOrder, orderBefore, 'captureShaperDoc carries it');
+      eq(d.hosts.shaper.operations.map((o) => o.id), orderBefore, 'the autosave stores the operation order (TASK S1: the operations in list order)');
+      eq(captureShaperDoc().operations.map((o) => o.id), orderBefore, 'captureShaperDoc carries it');
     } finally { await app.close(); }
   }
   V2_PLAN.clear(); V2_PLAN.setOrder([]);
@@ -253,7 +257,7 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
     const app = await open({ host: 'shaper', profile });
     try {
       app.modes.showMode('prepare');
-      eq(V2_PLAN.order(), orderBefore, 'after a reload the order is back');
+      eq(storedIds(), orderBefore, 'after a reload the order is back');
       eq(listOf(app), listBefore, 'the list is the same');
       eq(shaperSvgOf(app.state, planEntries()), svgBefore, 'the export is byte-identical');
     } finally { await app.close(); }

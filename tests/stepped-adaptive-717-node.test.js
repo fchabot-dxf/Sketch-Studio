@@ -168,7 +168,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     eq(h.note(), ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.172–2.236 mm apart'], 'OFF: the 716 note');
     const offSvg = exportOf(app);
     { // OFF exports byte-identically to a 716 record (the same record without the 717 fields)
-      const saved = V2_PLAN.get(pk), old = { ...saved }; delete old.adaptiveSteps; delete old.stepDeviation;
+      const saved = { ...V2_PLAN.get(pk) }, old = { ...saved }; delete old.adaptiveSteps; delete old.stepDeviation;
       V2_PLAN.set(pk, old);
       eq(exportOf(app), offSvg, 'OFF: the export is byte-identical to the 716 record\'s');
       V2_PLAN.set(pk, saved);

@@ -11,6 +11,7 @@ import { createFusionBridge, FUSION_ACTIONS } from '../apps/shaper/src/fusion-br
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { getSelections } from '../apps/shaper/src/selection-list.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -63,8 +64,8 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     eq(sketchNames(st), ['Sketch 1', 'FirstPart'], 'the first selection lands in its own sketch');
     eq(st.shapes.length, 4, 'the first selection: 4 lines');
     const firstShapes = shapeIds(st);
-    const firstKey = [...V2_PLAN.keys()][0];
-    eq(V2_PLAN.size, 1, 'the first selection: 1 cut-plan record');
+    const firstKey = getSelections().at(-1).cutKeys[0];
+    eq(V2_PLAN.size, 0, 'the first selection: its region has no cut type, so it is in no operation (TASK S1; it was a record without a cut type)');
 
     // the user sets the cut type on the first selection in Prepare (a click on the square, the type menu: Pocket)
     clickAt(10, -10);
@@ -125,10 +126,11 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     eq(res.message, 'Replaced with Body1 + lines: 2 regions, 2 chains', 'the combined notice counts the regions and the chains');
     eq(sketchNames(st), ['Sketch 1', 'Body1 + lines'], 'the combined selection is ONE sketch');
     eq(st.shapes.length, 8, '4 outline lines + 1 circle + 2 chain lines + 1 construction line');
-    eq(planTypes(), [['chain', null], ['loop', 'exterior'], ['loop', 'interior']], 'ONE plan: the body\'s outline + hole AND the open chain');
+    eq(planTypes(), [['loop', 'exterior'], ['loop', 'interior']], 'ONE plan: the body\'s outline + hole (TASK S1: the open chain has no cut type: in no operation)');
+    eq(getSelections().at(-1).cutKeys.map((k) => k.split(':')[0]).sort(), ['chain', 'loop', 'loop'], 'the selection names the outline, the hole AND the open chain');
     const loops = findLoops(st);
     eq(findOpenChains(st, loops).length, 1, 'the open chain is one cuttable path');
-    ok(V2_PLAN.has(keyOf('chain', findOpenChains(st, loops)[0].id)), 'the chain is in the same plan');
+    ok(getSelections().at(-1).cutKeys.includes(keyOf('chain', findOpenChains(st, loops)[0].id)), 'the chain is in the same selection (TASK S1: no cut type: in no operation)');
   } finally {
     await app.close();
   }

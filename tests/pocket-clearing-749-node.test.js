@@ -30,7 +30,7 @@ import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { opKeyOf } from '../apps/shaper/src/operations.js';
-import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { V2_PLAN, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -228,7 +228,7 @@ console.log('spiral: ' + JSON.stringify(measured));
     V2_PLAN.clear(); V2_PLAN.setOrder([]);
     const app = await openDoc(d, 'Pocket ' + label);
     try {
-      seen[label] = { clearing: Object.fromEntries(Object.keys(recs).map((p) => [p, V2_PLAN.get(keyOf('loop', loopOf(p))).clearing])), order: V2_PLAN.order(), svg: shaperSvgOf(app.state, planEntries()) };
+      seen[label] = { clearing: Object.fromEntries(Object.keys(recs).map((p) => [p, V2_PLAN.get(keyOf('loop', loopOf(p))).clearing])), order: storedOpKeys(), svg: shaperSvgOf(app.state, planEntries()) };
     } finally { await app.close(); }
   }
   eq(seen.old.clearing, { A: 'linked', L: 'morphed', B: 'linked' }, 'the old document opens with concentric -> linked (Spiral), spiral -> morphed (Morphed spiral)');

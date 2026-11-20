@@ -23,7 +23,7 @@ import { effectiveCutRecord, defaultCutRecord, exportEncoding } from '../apps/sh
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
-import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { V2_PLAN, withPlan } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -183,7 +183,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
     const plan = planOf(st, [POCKET, other]);
     const keys = [...plan.keys()];
     let rel = null, err = null;
-    try { rel = buildRelief({ items: planReliefItems(st, plan) }); } catch (e) { err = e; }
+    try { rel = buildRelief({ items: withPlan(st, plan, () => planReliefItems(st)) }); } catch (e) { err = e; }
     eq(err && String(err.stack || err), null, `${name}: the 3D model builds (no error)`);
     eq(rel.marks.map((m) => m.kind).sort(), ['depth-unset', 'pocket-start'], `${name}: the start mark and the depth-unset label are two marks`);
     eq(rel.marks.find((m) => m.kind === 'depth-unset').keys, [keys[1]], `${name}: the depth-unset label names its own cut only`);
@@ -194,7 +194,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
   {
     const st = partState([[0, 0, 2, 2], [3, 0, 2, 2]]);
     const plan = planOf(st, [{ cutType: 'exterior', cutDepth: 'unset', toolDia: 3.175 }, { cutType: 'exterior', cutDepth: 'unset', toolDia: 3.175 }]);
-    const rel = buildRelief({ items: planReliefItems(st, plan) });
+    const rel = buildRelief({ items: withPlan(st, plan, () => planReliefItems(st)) });
     eq(rel.marks.length, 1, 'two Outside cuts 1 mm apart, both unset: one label');
     eq(rel.marks[0].keys.length, 2, 'the label names both cuts');
   }
@@ -230,7 +230,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
   const big = partState([[0, 0, 60, 40]], [[30, 20, 5]]);
   const bl = sortedLoops(big);
   const keyOf = `loop:${bl.loops[0].id}`;
-  const reliefOf = (r) => buildRelief({ items: planReliefItems(big, new Map([[keyOf, { ...defaultCutRecord(), ...r }]])), bounds: { minX: 0, maxX: 60, minY: 0, maxY: 40 } }); // the design's bounds (the app passes them): a board even when nothing is cut
+  const reliefOf = (r) => buildRelief({ items: withPlan(big, [[keyOf, { ...defaultCutRecord(), ...r }]], () => planReliefItems(big)), bounds: { minX: 0, maxX: 60, minY: 0, maxY: 40 } }); // the design's bounds (the app passes them): a board even when nothing is cut
   const freehand = reliefOf({ cutType: 'pocket', cutDepth: 'unset', toolDia: 6.35 });
   eq([freehand.levels.length, freehand.stats.unsetThrough.length], [0, 0], 'a depth-unset Freehand pocket: nothing cut, no through label (the reference)');
   ok(freehand.stats.skipped.every((s) => s.reason === 'no-depth'), 'a depth-unset Freehand pocket: not shown (no depth)');

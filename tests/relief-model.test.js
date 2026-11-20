@@ -5,6 +5,7 @@ import { buildRelief, reliefDepth, DEFAULT_STOCK, meshArea, createReliefCache } 
 import { regionsFromRings, unionRegions, diffRegions } from '#core/plot/clip.js';
 import { deriveCutFootprint, deriveCutFootprintAt } from '#core/profile-model.js';
 import { cutterTerraces, cutterProfile, SHAPE_SLICES } from '#core/cutter-profile.js';
+import { withPlan } from './helpers/plan-v2.js'; // TASK S1: a plan loaded as a v2 document (applyShaperDoc)
 import { planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { findLoops } from '#core/loop-finder.js';
 import { vbitHalfAngleTan } from '#core/cutter-profile.js'; // TASK 741: its one home (V-carve removed)
@@ -244,7 +245,7 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   const st = { joints: new Map([['a', { x: 20, y: 40 }], ['b', { x: 60, y: 40 }], ['c', { x: 60, y: 60 }], ['d', { x: 20, y: 60 }]]), constraints: [],
     shapes: [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].map(([id, p, q]) => ({ id, type: 'line', joints: [p, q] })) };
   const loop = findLoops(st)[0];
-  const items = planReliefItems(st, new Map([['loop:' + loop.id, { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 6, cutterShape: 'vbit', cutterAngle: 90 }]]));
+  const items = withPlan(st, new Map([['loop:' + loop.id, { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 6, cutterShape: 'vbit', cutterAngle: 90 }]]), () => planReliefItems(st));
   assert.strictEqual(items.length, 1, 'one V-bit On Line cut = one item');
   assert.deepStrictEqual(items[0].shape, { cutterShape: 'vbit', cutterAngle: 90, toolDia: 6 }, 'the item carries the V-bit cutter shape');
   const rel = buildRelief({ stock, bounds, items });
@@ -301,7 +302,7 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
     shapes: [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].map(([id, p, q]) => ({ id, type: 'line', joints: [p, q] })) };
   const loop = findLoops(st)[0];
   const vgroove = new Map([['loop:' + loop.id, { cutType: 'online', cutDepth: 14, cutOffset: 0, toolDia: 6, cutterShape: 'vbit', cutterAngle: 90 }]]); // TASK 741: a V-bit On Line cut (was a V-carve stack), its V terraces deeper than the pocket so a pocket change leaves their levels cached
-  const mk = () => [...planReliefItems(st, vgroove),
+  const mk = () => [...withPlan(st, vgroove, () => planReliefItems(st)),
     { key: 'p', sig: 'pocket-a', cutType: 'pocket', cutDepth: 5, footprints: fp([rect(75, 5, 20, 20)]) },
     { key: 'h', sig: 'hole-a', cutType: 'inside', cutDepth: 'unset', footprints: fp([rect(75, 35, 10, 10)]) }];
   const same = (a, b, msg) => { for (const k of ['top', 'floor', 'wall', 'bottom', 'side']) for (const f of ['positions', 'normals', 'indices']) assert.deepStrictEqual(Array.from(a.meshes[k][f]), Array.from(b.meshes[k][f]), `${msg}: ${k}.${f}`); };
@@ -342,7 +343,7 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   const r2 = buildRelief({ stock, bounds, items: [{ key: 'x', cutType: 'inside', cutDepth: T, footprints: fp([rect(5, 5, 10, 10)]) }], cache: c2 });
   assert.strictEqual(r2.stats.cache, null); assert.strictEqual(c2.item.size, 0);
   // signatures follow the content: a moved joint or a changed record changes the signature
-  st.joints.get('c').x = 71; const moved = planReliefItems(st, vgroove);
+  st.joints.get('c').x = 71; const moved = withPlan(st, vgroove, () => planReliefItems(st));
   assert.notStrictEqual(moved[0].sig, items0[0].sig, 'moving a joint changes the V-groove signature');
 }
 

@@ -29,9 +29,9 @@ import { planEntries, planReliefItems, contourKeyOf, contourOf, setContour, reso
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { describeOperations } from '../apps/shaper/src/operations.js';
+import { describeOperations, opKeyOf } from '../apps/shaper/src/operations.js';
 import { effectiveCutRecord, availableTypes } from '../apps/shaper/src/shaper.js';
-import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { V2_PLAN, storedRecords, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -243,11 +243,11 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     const [pk] = recAt((r) => r.slope);
     const doc0 = captureShaperDoc();
     const stepped = { stepDepth: 2, adaptiveSteps: false, stepDeviation: 0.25, cutOffset: 0.3 };
-    applyShaperDoc({ ...doc0, cutPlan: doc0.cutPlan.map(([k, r]) => [k, k === pk ? { ...r, cutType: 'stepped-pocket', ...stepped } : r]), opOrder: [JSON.stringify(['endmill|3.175|', 'stepped-pocket', { depth: 8, offset: 0.3, steps: { step: 2 } }])] }, st);
+    applyShaperDoc({ version: 2, stock: doc0.stock, selections: doc0.selections, cutPlan: storedRecords(doc0).map(([k, r]) => [k, k === pk ? { ...r, cutType: 'stepped-pocket', ...stepped } : r]), opOrder: [JSON.stringify(['endmill|3.175|', 'stepped-pocket', { depth: 8, offset: 0.3, steps: { step: 2 } }])] }, st);
     const mig = V2_PLAN.get(pk);
     eq([mig.cutType, mig.stepDepth, mig.cutOffset, mig.finishAllowance], ['roughing', 2, 0.3, undefined], 'a stored Stepped pocket opens as Roughing: its step and offset kept, no allowance (0)');
-    eq(V2_PLAN.order(), [JSON.stringify(['endmill|3.175|', 'roughing', { depth: 8, offset: 0.3, steps: { step: 2 } }])], 'a stored operation key with the stepped type is mapped to Roughing');
-    eq(describeOperations(st, planEntries()).map((o) => o.key)[0], V2_PLAN.order()[0], 'the mapped key IS the Roughing operation\'s key (allowance 0 adds nothing to it)');
+    eq(storedOpKeys()[0], JSON.stringify(['endmill|3.175|', 'roughing', { depth: 8, offset: 0.3, steps: { step: 2 } }]), 'a stored operation key with the stepped type is mapped to Roughing: it is the first operation (TASK S1: the list order is stored)');
+    eq(opKeyOf(describeOperations(st, planEntries())[0].records[0].rec), storedOpKeys()[0],'the mapped key IS the Roughing operation\'s key (allowance 0 adds nothing to it)');
     // its export: the stepped engine's terraces (steppedTerraces on the same slope) as plain pockets, offset 0.3
     const T = steppedTerraces(mig.slope, { kind: 'pocket', step: 2, depth: 8 });
     const migSvg = exportOf(app);

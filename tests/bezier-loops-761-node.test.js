@@ -25,7 +25,7 @@ import { exportShaperSVG } from '#core/shaper-export.js';
 import { importDxf } from '#core/dxf-import.js';
 import { buildSVG, buildDXF } from '../apps/sketchstudio/ui/export-manager.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { planEntries, planReliefItems, reconcileCutPlan, cutPlanNotice } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, reconcileStore, cutPlanNotice } from '../apps/shaper/src/cut-plan.js';
 import { opKeyOf, describeOperations } from '../apps/shaper/src/operations.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
@@ -283,7 +283,7 @@ const profile = await createProfile();
     app.modes.showMode('prepare');
     eq(noticeOf(app), 'Cut plan updated: 1 cut was on an outline that is now a closed shape and was kept', '4a: the one-time notice, exact');
     // once: the reconciled plan reconciles to itself; a document saved after it opens without a notice
-    eq(reconcileCutPlan(app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0 }, '4a: a second reconciliation changes nothing');
+    eq(reconcileStore(app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0 }, '4a: a second reconciliation (TASK S1: of the store) changes nothing');
     const before = JSON.stringify([...V2_PLAN]);
     eq(applyShaperDoc(captureShaperDoc(), app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0, keptHoles: 0, lostHoles: 0 }, '4a: the saved plan opens with nothing to change (TASK 774: + the hole-rule counts)');
     eq(JSON.stringify([...V2_PLAN]), before, '4a: and the same plan');

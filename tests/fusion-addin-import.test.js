@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js';
 import { extractCutRecord, classify } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the plan as the store holds it
 import { assignImportedCuts, planStockProfile } from '../apps/shaper/src/cut-plan.js';
 import { findLoops } from '#core/loop-finder.js';
 import { arcSweepInfo } from '#core/geometry.js';
@@ -70,8 +71,9 @@ for (const file of ['fusion-shaper-addin.svg', 'fusion-shaper-addin-arcs.svg']) 
 
   // the compound path (path 6, fill-rule nonzero: outer rect + inner profile) = ONE pocket with a HOLE
   const byDesc = new Map(descs.filter((d) => d.cutRecord && d.cutRecord.cutType).map((d) => [d.descId, d.cutRecord]));
-  const plan = new Map();
-  const n = assignImportedCuts(state, byDesc, plan);
+  V2_PLAN.use(null).clear(); // TASK S1: the cuts go into the operations store (read back through V2_PLAN)
+  const n = assignImportedCuts(state, byDesc);
+  const plan = V2_PLAN;
   const keys = [...plan.keys()];
   const prof = keys.filter((k) => k.startsWith('profile:'));
   assert.strictEqual(prof.length, 1, 'the compound path becomes ONE profile'); assert.strictEqual(plan.get(prof[0]).cutType, 'pocket');

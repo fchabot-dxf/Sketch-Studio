@@ -30,7 +30,7 @@ import { getStock } from '../apps/shaper/src/stock.js';
 import { getStlSource } from '../apps/shaper/src/stl-source.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
-import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -213,8 +213,9 @@ const plan = () => [...V2_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`
     // a design saved with an STL before 807: no relief mark, the per-feature records -> sliced again as a relief when opened
     const old = JSON.parse(JSON.stringify(saved));
     delete old.hosts.shaper.stl.relief;
-    const [key] = old.hosts.shaper.cutPlan[0];
-    old.hosts.shaper.cutPlan = [[key, { cutType: 'exterior', cutDepth: 19, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }]];
+    const [key] = storedRecords(old.hosts.shaper)[0]; // TASK S1: the saved document is version 3; the design of before 807 is a version 2 one
+    const { operations, regions, nextSeq, ...rest } = old.hosts.shaper;
+    old.hosts.shaper = { ...rest, version: 2, cutPlan: [[key, { cutType: 'exterior', cutDepth: 19, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }]] };
     V2_PLAN.clear();
     const p2 = await createProfile();
     await createNamedDesign(p2, 'shaper', 'Old STL', old);

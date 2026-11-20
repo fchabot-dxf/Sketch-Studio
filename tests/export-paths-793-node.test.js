@@ -175,7 +175,7 @@ try {
     const { written } = exportOf(st, [entry]);
     const view = bitPathsOf(st, written).flatMap((b) => b.travel);
     const { loops, loopPolys } = loopsWithPolygons(st);
-    const d = deriveKeyFootprints(`loop:${outer.id}`, entry.rec, st, loops, loopPolys, planOwnedLoops(st, loops, loopPolys, new Map()));
+    const d = deriveKeyFootprints(`loop:${outer.id}`, entry.rec, st, loops, loopPolys, new Set() /* TASK S1: the loops an empty plan owns (planOwnedLoops reads the store) */);
     const prep = deriveCutTravel(d.footprints);
     eq(view.map((t) => t.path), prep.map((t) => t.path), 'the Paths view\'s bit-centre polylines == Prepare\'s derivation (deriveKeyFootprints -> deriveCutTravel), point for point');
   }

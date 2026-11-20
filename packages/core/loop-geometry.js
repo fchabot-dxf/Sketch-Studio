@@ -9,6 +9,7 @@
 import { buildNodeMap } from './loop-finder.js';
 import { curveKind, curvePointsFrom, num, sampleArc } from './curve-kinds.js'; // TASK 761: each curve kind's geometry, declared once
 import { pathSignedArea } from './path-d.js'; // TASK 786: the signed area of a WRITTEN path (the hole winding rule)
+import { exportForm } from './origin-rules.js'; // TASK 803: WHICH winding a hole is written with is the Origin rules' (compoundPath.winding)
 
 export { num, sampleArc }; // TASK 761: moved to #core/curve-kinds.js (the per-kind declaration); re-exported for their callers
 
@@ -152,10 +153,10 @@ export function loopToPathD(loop, state, { reverse = false } = {}) {
 // blind reversal filled a circle island in a rect pocket (and a rect island in a circle pocket). '' when the outer is missing.
 export function compoundPathD(outerLoop, holeLoops, state, { outerD = loopToPathD(outerLoop, state) } = {}) {
   if (!outerD) return '';
-  const outerSign = Math.sign(pathSignedArea(outerD));
+  const outerSign = Math.sign(pathSignedArea(outerD)), opposite = exportForm('compoundPath').winding === 'opposite';
   const holeD = (hl) => {
     const d = loopToPathD(hl, state);
-    return d && Math.sign(pathSignedArea(d)) === outerSign ? loopToPathD(hl, state, { reverse: true }) : d;
+    return d && (Math.sign(pathSignedArea(d)) === outerSign) === opposite ? loopToPathD(hl, state, { reverse: true }) : d; // the declared winding: opposite = a hole walked the outer's way is reversed
   };
   return [outerD, ...(holeLoops || []).map(holeD).filter(Boolean)].join(' ');
 }

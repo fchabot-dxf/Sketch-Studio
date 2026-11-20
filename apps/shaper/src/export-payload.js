@@ -23,7 +23,8 @@ export function exportFileName(designName) {
 /** The Shaper SVG of `entries` (the Prepare cut plan, cut-plan.js planEntries()) on the solved sketch `state`: the downloaded file, or with
  *  `preview: true` the same string plus the preview-only data-* attributes. TASK 798: `frame` = the WHOLE plan's entries (planEntries()) when `entries` are the
  *  ticked operations' (planEntries({ ticked: true })): the file then has the whole design's page and hole ownership (#core exportShaperSVG options.frame), so
- *  every partial export lines up on the Origin with the full one; given only when it holds more entries than `entries` (everything ticked: today's file). */
+ *  every partial export lines up on the Origin with the full one (a design with no Stock: + the frame guide, the whole file's drawn extent, advisor turn 2705);
+ *  given only when it holds more entries than `entries` (everything ticked: today's file). */
 export function shaperSvgOf(state, entries, { preview = false, written = null, frame = null } = {}) {
   const sById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
@@ -61,10 +62,11 @@ export function shaperPreviewOf(state, entries, frame = null) {
  *  element, in the file's order); returns [{ index (the element's place in the file), travel }] for the elements that have one, `travel` = deriveCutTravel's
  *  entries ({ role, direction, path (world points), closed }) from deriveCutFootprint of that cut: THE derivation Prepare draws (cut-plan.js
  *  deriveKeyFootprints composes the same two calls), so the view shows what Prepare shows, not a second geometry. An element with no determined travel
- *  (a plain On line cut, a guide, a held cut's gap strip) has no entry. */
+ *  (a plain On line cut, a guide, a held cut's gap strip, TASK 798 the frame guide of a partial file) has no entry. */
 export function bitCentrePaths(state, written) {
   const out = [];
   written.forEach(({ cut }, index) => {
+    if (!cut) return; // TASK 798: the frame guide of a partial file (#core exportShaperSVG options.frame) is no cut
     const travel = deriveCutTravel(deriveCutFootprint([cut], cut.rec, state));
     if (travel.length) out.push({ index, travel });
   });

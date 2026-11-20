@@ -51,7 +51,8 @@ export function getCutRecord(key) {
 // ── TASK 798 (owner turns 2515-2537): the Operations list's TICKS. An operation's `on` (operations-store.js) decides whether it is shown and exported: `ticked: true`
 // keeps the ticked operations only (Prepare's look, the 3D Review, the Export step's Paths / 2D and the exported SVG read the plan through it); without it, every
 // operation (the Operations list itself, the hole ownership and the page of the file: the WHOLE design's, so every export lines up on the Origin). The STOCK is
-// always ticked: it is the board, the guide every export is placed by (the Origin's anchors fall on the same points in every file). THE one filter: isTicked. ──
+// always ticked: it is the board, the guide every export is placed by (the Origin's anchors fall on the same points in every file; a design with no Stock: a partial
+// file gets the frame guide instead, #core exportShaperSVG options.frame, advisor turn 2705). THE one filter: isTicked. ──
 /** TASK 798: whether an operation is ticked (its `on`; the Stock always is). */
 export const isTicked = (op) => op.type === STOCK_TYPE_ID || op.on !== false;
 const planMembers = ({ ticked = false } = {}) => (ticked ? membersInFileOrder().filter(({ op }) => isTicked(op)) : membersInFileOrder());

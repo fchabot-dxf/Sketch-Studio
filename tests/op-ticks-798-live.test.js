@@ -227,6 +227,33 @@ try {
       assert.deepStrictEqual(elements(b).map((l) => /shaper:cutType="(\w+)"/.exec(l)[1]), ['guide', 'outside'], 'hand-check B: the Stock guide + the outline');
       assert.strictEqual(elements(a)[0], elements(b)[0], 'hand-check: the same Stock guide element in both');
       await only(['pocket', 'interior', 'exterior']);
+      // the same design with NO Stock (advisor turn 2705, option b): the Stock binned; the pocket alone, then the outline alone: each starts with the FRAME GUIDE =
+      // the full file's drawn extent (the outline 20..140 x 20..80), in the Stock guide's encoding; everything ticked: the plain file (no guide)
+      await openMode('prepare'); await openList();
+      await clickEl(`#prepare-ops .ops-row[data-id="${await idOf('stock')}"] .ops-del`);
+      await waitFor(`import('/apps/shaper/src/operations-store.js').then((m) => !m.storeOps().some((o) => o.type === 'stock'))`, 'no-Stock: the Stock binned');
+      const fullNs = await pageFull();
+      const ns0 = await download();
+      assert.strictEqual(ns0, fullNs, 'no-Stock: everything ticked: the plain whole-plan file');
+      assert.ok(!ns0.includes('shaper:cutType="guide"'), 'no-Stock: everything ticked: no guide');
+      await only(['pocket']);
+      const na = await download();
+      await only(['exterior']);
+      const nb = await download();
+      fs.writeFileSync(path.join(EVIDENCE_DIR, 'handcheck-nostock-1-pocket-quarter-inch.svg'), na);
+      fs.writeFileSync(path.join(EVIDENCE_DIR, 'handcheck-nostock-2-outline-eighth-inch.svg'), nb);
+      fs.writeFileSync(path.join(EVIDENCE_DIR, 'handcheck-nostock-0-everything.svg'), ns0);
+      console.log('no-Stock hand-check A:\n' + na + '\nno-Stock hand-check B:\n' + nb);
+      const frameGuide = '  <path d="M 20 20 L 140 20 L 140 80 L 20 80 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide" shaper:cutOffset="0in"/>';
+      assert.deepStrictEqual(elements(na), [frameGuide, ...elements(fullNs).filter((l) => /shaper:cutType="pocket"/.test(l))], 'no-Stock hand-check A: the frame guide + the pocket');
+      assert.deepStrictEqual(elements(nb), [frameGuide, ...elements(fullNs).filter((l) => /shaper:cutType="outside"/.test(l))], 'no-Stock hand-check B: the frame guide + the outline');
+      assert.deepStrictEqual([header(na), header(nb)], [header(fullNs), header(fullNs)], 'no-Stock hand-check: the full file\'s page in both');
+      await view('paths');
+      await waitFor(`document.querySelectorAll('#review-cuts-list .rv2d-row, #review-cuts-list .rv2d-op').length > 0`, 'no-Stock: the Paths view with the frame guide');
+      await shot('desktop-nostock-paths-outline-alone.png');
+      await view('2d');
+      await shot('desktop-nostock-2d-outline-alone.png');
+      await view('3d');
     }
     await openMode('prepare');
   };

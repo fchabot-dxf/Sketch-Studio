@@ -85,6 +85,17 @@ function elementBox({ tag, a }) {
   throw new Error(`shaper-export: no box for a written <${tag}>`);
 }
 
+// TASK 798: the drawn extent of written elements (the union of their elementBox), or null when there is none.
+function extentOf(written) {
+  let box = null;
+  for (const it of written) {
+    const b = elementBox(it);
+    if (!b) continue;
+    box = box ? { minX: Math.min(box.minX, b.minX), minY: Math.min(box.minY, b.minY), maxX: Math.max(box.maxX, b.maxX), maxY: Math.max(box.maxY, b.maxY) } : { ...b };
+  }
+  return box;
+}
+
 // fill (always) + stroke (omit when 'none'), from the injected encoding.
 function colorAttrs(enc) {
   let s = ` fill="${enc.fill}"`;
@@ -151,6 +162,12 @@ function datumPolygon(datum) {
 //                                             element the whole plan writes) are the frame's, so each element written is byte-identical to its
 //                                             element in the whole plan's file and every partial file has the same page (they line up on the
 //                                             Origin). Without it (the default) both come from `entries`: the string is byte-identical to before.
+//                                             A PARTIAL file (the frame holds more entries than `entries`) of a plan with NO exportFirst element (no Stock)
+//                                             also gets the FRAME GUIDE (advisor turn 2705, option b): a rectangle = the drawn extent of the whole
+//                                             plan's file (the union of every element's box, elementBox: arcs / lead-ins / tabs' strips by their true
+//                                             extremes; no stroke width), written FIRST with the exportFirst type's encoding (the Stock guide's, task
+//                                             774) and no cut parameters of its own: the full file and every partial one then have the same 9-anchor box
+//                                             on the Origin, read as the page or as the drawn extent. A plan with a Stock: its Stock guide is that box.
 //                previewData: true          → TASK 718: the PREVIEW copy (Shaper's Export step, 2D view) — each element of a stepped cut
 //                                             carries data-step="k/N" (its terrace, from deriveCuts: what the file alone cannot say, since
 //                                             two cuts' steps at the same depth are written alike). Never in the downloaded file: with it
@@ -255,13 +272,20 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
         const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
           + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
         const paint = isMark(cut) ? colorAttrs({ ...c, fill: 'none' }) : colorAttrs(c); // TASK 786: a mark is stroke-only
-        if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, meta: { cut, entry: e } });
+        if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, meta: { cut, entry: e }, first: Boolean(c.exportFirst) });
       }
     }
     items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
     return items;
   };
   const items = itemsOf(ents);
+  const frameItems = frameEnts ? itemsOf(frameEnts) : items;
+  // TASK 798 (advisor turn 2705): the FRAME GUIDE of a partial file of a plan with no Stock (see `options.frame`); its meta has no cut (the Paths view skips it)
+  const guideEnc = enc.find((t) => t && t.exportFirst) || null;
+  if (frameEnts && frameEnts.length > ents.length && guideEnc && !frameItems.some((it) => it.first)) {
+    const box = extentOf(frameItems);
+    if (box) items.unshift({ common: colorAttrs(guideEnc) + shaperAttrs({}, guideEnc, docUnit), tag: 'path', a: `d="M ${num(box.minX)} ${num(box.minY)} L ${num(box.maxX)} ${num(box.minY)} L ${num(box.maxX)} ${num(box.maxY)} L ${num(box.minX)} ${num(box.maxY)} Z"`, meta: { cut: null, entry: null, frameGuide: true } });
+  }
 
   const body = [];
   const wrote = (it) => { if (options.written) options.written.push(it.meta); }; // TASK 793: `written` (an array the caller gives) receives { cut, entry } of every element in the FILE's order (the Export step's Paths view draws each element's bit-centre path from it)
@@ -272,7 +296,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   // them from each element, never from a parent group (measured at the Origin, a Spiral pocket's grouped on-line paths came up "unset").
   for (const it of items) { body.push(`  <${it.tag} ${it.a}${it.common}/>`); wrote(it); }
 
-  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, frameEnts ? itemsOf(frameEnts) : items); // TASK 786: every written element (items holds the Stock too); TASK 798: every element the whole plan writes
+  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, frameItems); // TASK 786: every written element (items holds the Stock too); TASK 798: every element the whole plan writes
   const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;
   return [header, ...body, '</svg>'].join('\n');
 }

@@ -8,7 +8,9 @@
 //     everything-ticked file (attributes and d), the page (width / height / viewBox) and the Stock guide identical in every partial export; everything ticked =
 //     the plain whole-plan export (today's bytes); nothing ticked = no file;
 //  5. the views follow the same filter: Prepare draws no band / tool path for a selected unticked operation (its card still opens), the 3D Review's items and the
-//     2D preview's operations are the ticked ones; the Export line names the unticked ones.
+//     2D preview's operations are the ticked ones; the Export line names the unticked ones;
+//  6. a design with no Stock (advisor turn 2705, option b): a partial file starts with the FRAME GUIDE, a rectangle = the full file's drawn extent, in the Stock
+//     guide's encoding; the everything-ticked file has none (unchanged); the Paths view skips it.
 import assert from 'node:assert/strict';
 import { open } from './helpers/node-app.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -17,7 +19,7 @@ import { planEntries, planReliefItems, keyOf } from '../apps/shaper/src/cut-plan
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { storeOps } from '../apps/shaper/src/operations-store.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
-import { shaperSvgOf, exportFileOf, exportTickLine } from '../apps/shaper/src/export-payload.js';
+import { shaperSvgOf, exportFileOf, exportTickLine, bitCentrePaths } from '../apps/shaper/src/export-payload.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
@@ -145,5 +147,41 @@ try {
   eq(exportTickLine(opsNow()), 'Exporting 2 of 3 operations (unticked: Outside 19 mm (⅛″ end mill)). Place it with the same anchor as the earlier file.', '5: the Export line names the unticked one');
   tickOnly([]);
   eq(exportTickLine(opsNow()), 'Exporting 0 of 3 operations: every one is unticked. Tick one in Prepare\'s Operations list.', '5: everything unticked: the line says so');
+  tickOnly(['pocket', 'interior', 'exterior']);
+
+  // 6. a design with NO Stock (advisor turn 2705, option b): a PARTIAL file starts with the frame guide = the full file's drawn extent (the union of its elements'
+  //    boxes), in the Stock guide's encoding; the everything-ticked file is unchanged (no guide); the Paths view skips the guide
+  app.press([...app.document.querySelectorAll('#prepare-ops .ops-row')].find((r) => r.dataset.id === idOf('stock')).querySelector('.ops-del'));
+  eq(storeOps().map((o) => o.type), ['pocket', 'interior', 'exterior'], '6: the Stock binned: no Stock');
+  const fullNs = shaperSvgOf(st, planEntries());
+  eq(exportFileOf(st).svg, fullNs, '6: everything ticked: the plain whole-plan file (no frame guide)');
+  ok(!fullNs.includes('shaper:cutType="guide"'), '6: (it has no guide)');
+  const extentOf = (lines) => {
+    let b = null;
+    for (const l of lines) {
+      const n = (k) => Number(new RegExp(` ${k}="([^"]*)"`).exec(l)[1]);
+      let x;
+      if (l.trim().startsWith('<circle')) x = { minX: n('cx') - n('r'), minY: n('cy') - n('r'), maxX: n('cx') + n('r'), maxY: n('cy') + n('r') };
+      else { const v = /d="([^"]*)"/.exec(l)[1].match(/-?\d+(\.\d+)?/g).map(Number); const xs = v.filter((_, i) => i % 2 === 0), ys = v.filter((_, i) => i % 2 === 1); x = { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) }; } // straight lines only in this design
+      b = b ? { minX: Math.min(b.minX, x.minX), minY: Math.min(b.minY, x.minY), maxX: Math.max(b.maxX, x.maxX), maxY: Math.max(b.maxY, x.maxY) } : x;
+    }
+    return b;
+  };
+  const ext = extentOf(elements(fullNs));
+  eq(ext, { minX: 20, minY: 20, maxX: 140, maxY: 80 }, '6: the full file\'s drawn extent (the outline)');
+  const guide = `  <path d="M ${ext.minX} ${ext.minY} L ${ext.maxX} ${ext.minY} L ${ext.maxX} ${ext.maxY} L ${ext.minX} ${ext.maxY} Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide" shaper:cutOffset="0mm"/>`; // (mm document)
+  tickOnly(['pocket']);
+  const nsA = exportFileOf(st).svg;
+  tickOnly(['exterior']);
+  const nsB = exportFileOf(st).svg;
+  eq(elements(nsA), [guide, ...elements(fullNs).filter((l) => l.includes('shaper:cutType="pocket"'))], '6: the pocket alone: the frame guide (= the full file\'s drawn extent, the Stock guide\'s encoding) + the pocket, byte-identical');
+  eq(elements(nsB), [guide, ...elements(fullNs).filter((l) => l.includes('shaper:cutType="outside"'))], '6: the outline alone: the same frame guide + the outline');
+  eq([header(nsA), header(nsB)], [header(fullNs), header(fullNs)], '6: the full file\'s page in both');
+  tickOnly(['pocket']);
+  const pv6 = exportFileOf(st, { preview: true });
+  const paths6 = bitCentrePaths(st, pv6.written);
+  eq([pv6.written[0].cut, paths6.some((p) => p.index === 0), paths6.length > 0], [null, false, true], '6: the Paths view: the frame guide (element 0) is no cut and has no bit-centre path; the pocket\'s is there');
+  tickOnly(['pocket', 'interior', 'exterior']);
+  eq(exportFileOf(st).svg, fullNs, '6: everything ticked again: the plain file');
 } finally { await app.close(); }
 console.log(`op-ticks-798: ${checks} checks passed`);

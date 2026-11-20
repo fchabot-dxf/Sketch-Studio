@@ -25,8 +25,6 @@ export { loopToPathD, polyToPathD };
 // TASK 803: what the file is written as is READ from the Origin / Studio rules (#core/origin-rules.js: the target registry's forms, each with its evidence),
 // not repeated here: the namespaces, the attribute placement, the shaper:* attribute order and presence, the paint, a guide's outline, the datum triangle, the page unit.
 const NAMESPACES = exportForm('namespaces');
-const PLACEMENT = exportForm('attrPlacement');
-if (PLACEMENT.groupAttrsAllowed) throw new Error('shaper-export: the declared attribute placement allows <g> attributes, but this exporter writes every attribute on each element (TASK 802)');
 const ATTR_PREFIX = exportForm('attrPrefix');
 
 // Fallback SVG sweep flag (when an arc shape doesn't carry one): the sign of the signed angle start→end about center.

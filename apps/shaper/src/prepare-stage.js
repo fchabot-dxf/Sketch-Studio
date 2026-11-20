@@ -242,13 +242,16 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (!s || !prepareView) return;
     pendingSession = null;
     if (s.view) prepareView.setView(s.view);
-    prepareView.setSelection(s.selection);
+    // TASK S2: the operation that was open is open again (its card, as 766 keeps the open card), with a session of its own (the restored document is the one
+    // Cancel returns to); gone from the restored document: only the selection comes back
+    if (s.open && opById(s.open)) { session = null; beginSession(); openSession(s.open); }
+    else prepareView.setSelection(s.selection);
   }
   const captureSession = () => (prepareView
-    ? { selection: prepareView.selectedTargets().map((t) => ({ kind: t.kind, id: t.id })), view: { ...prepareView.view } }
+    ? { selection: prepareView.selectedTargets().map((t) => ({ kind: t.kind, id: t.id })), view: { ...prepareView.view }, open: session && session.opId ? session.opId : null }
     : pendingSession); // not mounted (the tab was left before Prepare was entered again): what it already carries
   function restoreSession(s) {
-    pendingSession = s && (s.selection.length || s.view) ? s : null;
+    pendingSession = s && (s.selection.length || s.view || s.open) ? s : null;
     if (prepareView && getMode() === 'prepare') applyPendingSession();
   }
 

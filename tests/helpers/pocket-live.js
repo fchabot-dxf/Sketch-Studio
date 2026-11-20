@@ -316,9 +316,12 @@ export async function listsPhase(t, label) {
     if (phone) await clickEl('#prepare-ops .ops-head');
     const ops = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => r.querySelector('.ops-name').textContent + ' | ' + r.querySelector('.ops-sub').textContent)`);
     console.log(label + ' ops: ' + JSON.stringify(ops));
-    assert.strictEqual(ops.length, 2, label + ': 2 operations: the rectangle (Loop off) and the L + the island (Loop on)');
+    // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the quick flow makes a NEW operation each time: the rectangle, the L and the island are three operations (before S2 the
+    // L and the island, the same settings, shared one)
+    assert.strictEqual(ops.length, 3, label + ': 3 operations: the rectangle (Loop off), the L and the island (Loop on)');
     assert.ok(ops.some((t) => /^Pocket \(spiral\) · .* \| 1 region · spiral, \d+ turns in 1 line \+ wall$/.test(t)), label + ': the rectangle row');
-    assert.ok(ops.some((t) => new RegExp(`^Pocket \\(spiral\\) · .* \\| 2 regions · spiral, \\d+ turns \\+ wall: one closed loop; spiral, \\d+ turns \\+ wall: ${islandLoops} closed loops \\(the pocket has islands\\)$`).test(t)), label + ': the L and the island: ONE row');
+    assert.ok(ops.some((t) => /^Pocket \(spiral\) · .* \| 1 region · spiral, \d+ turns \+ wall: one closed loop$/.test(t)), label + ': the L row');
+    assert.ok(ops.some((t) => new RegExp(`^Pocket \\(spiral\\) · .* \\| 1 region · spiral, \\d+ turns \\+ wall: ${islandLoops} closed loops \\(the pocket has islands\\)$`).test(t)), label + ': the island row');
     await shot(`${D}-ops-list.png`, '#prepare-ops', 2);
     if (phone) await clickEl('#prepare-ops .ops-head');
 }

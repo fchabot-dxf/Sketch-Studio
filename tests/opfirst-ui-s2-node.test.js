@@ -14,6 +14,7 @@
 // 10. the bin: of the open operation = Cancel + delete; of another operation while one is open = OK first; Undo while open = Cancel; leaving Prepare = OK;
 // 11. an EMPTY operation is listed "no shapes yet: click shapes to add", saved (version 4) and read back; an edited operation keeps its place in the user's order;
 // 12. (advisor turn 2722) a Fusion import while an operation is open: the open edit is confirmed first (its own undo step), the import is its own step.
+// 13. the tab's session carries the open operation (TASK 605 / 766): restored, it is open again.
 import assert from 'node:assert/strict';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
@@ -245,6 +246,16 @@ try {
   eq([storeOps().length, storeOps().find((o) => o.id === contourId).settings.cutDepth], [n12, 7], '12: Undo: the import gone, the confirmed edit kept');
   app.undo();
   eq(storeOps().find((o) => o.id === contourId).settings.cutDepth, 5, '12: Undo again: the edit gone');
+
+  // 13. the tab's session (TASK 605 / 766: a tab put aside and shown again, Drive's version loaded) carries the open operation: it is open again
+  pressEl(`#prepare-ops .ops-row[data-id="${contourId}"] .ops-pick`); app.press(rowBtn(contourId, 'ops-edit'));
+  const s13 = app.prepare.captureSession();
+  eq(s13.open, contourId, '13: the session names the open operation');
+  pressEl('.cut-ok');
+  app.prepare.afterRestore(); app.prepare.restoreSession(JSON.parse(JSON.stringify(s13)));
+  eq([openId(), q('.cut-type-cur').textContent, q('.cut-actions').hidden], [contourId, 'Contour', false], '13: restored: the operation open again, its card');
+  pressEl('.cut-cancel');
+  eq(openId(), null, '13: and its Cancel closes it');
 
   console.log(`opfirst-ui-s2-node: ${checks} checks passed`);
 } finally {

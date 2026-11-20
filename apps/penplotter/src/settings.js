@@ -6,6 +6,8 @@ import { $, toast } from "./dom.js";
 import { fitViewport, applyViewport } from "./viewport.js";
 import { renderArt as render } from "./render-art.js"; // PP-6: Draw's trimmed renderer
 import { recalcPreview } from "./preview.js";
+import { PAPER_SIZES, PAPER_HINTS, CUSTOM_ID, paperOptionLabel, matchPaper, orientationOf, paperSizeIn } from "./paper-sizes.js"; // TASK 827: the paper standards, declared once
+import { installCursorTooltip } from "#ui/cursor-tooltip.js"; // the shared tooltip at the cursor (Shaper's hints use it too)
 import { DOC_FIELD, SETTINGS_FIELDS, keepNumber, keepSetting } from "./fields.js"; // TASK 453: declared ranges + the one validate helper
 
 const SETTINGS_MAP = {
@@ -70,6 +72,30 @@ export function syncDocFields() {
     document.querySelectorAll(".doc-unit-label").forEach(el => el.textContent = inch ? "in" : "mm");
     const sel = $("#docUnit");
     if (sel) sel.value = state.docUnit;
+    syncPaperFields();
+}
+
+/** TASK 827: the Paper choice shows the standard the document's size is (either orientation) or Custom; Orientation shows which way it is. */
+function syncPaperFields() {
+    const paper = $("#docPaper"), orient = $("#docOrient");
+    if (!paper || !orient) return;
+    if (!paper.options.length) {
+        for (const [id, text] of [...PAPER_SIZES.map((p) => [p.id, paperOptionLabel(p)]), [CUSTOM_ID, "Custom"]]) {
+            const o = document.createElement("option");
+            o.value = id; o.textContent = text;
+            paper.appendChild(o);
+        }
+    }
+    const match = matchPaper(state.doc.w, state.doc.h);
+    paper.value = match ? match.id : CUSTOM_ID;
+    paper.querySelector(`option[value="${CUSTOM_ID}"]`).disabled = !!match; // Custom is what a non-standard size IS; a standard is left by picking another one or typing a size
+    orient.value = orientationOf(state.doc.w, state.doc.h);
+}
+
+/** TASK 827: set the paper unit (persisted, like the Units box). */
+function setDocUnit(unit) {
+    state.docUnit = unit === "in" ? "in" : "mm";
+    try { localStorage.setItem(DOC_UNIT_LS, state.docUnit); } catch { /* ignore */ }
 }
 
 /** IMPORT-DOC-SIZE: set the document size FROM CODE (mm) + refresh everything that reads it — the ONE named
@@ -122,11 +148,26 @@ export function installDocModal() {
 
     const unitSel = $("#docUnit");
     if (unitSel) unitSel.addEventListener("change", (e) => {
-        state.docUnit = e.target.value === "in" ? "in" : "mm";
-        try { localStorage.setItem(DOC_UNIT_LS, state.docUnit); } catch { /* ignore */ }
+        setDocUnit(e.target.value);
         syncDocFields();
         applyViewport(); // refresh the dimension/zoom status text (keeps zoom)
     });
+
+    // TASK 827: picking a standard sets the size (in the current orientation) and the paper unit to the standard's own; Orientation swaps Width and Height.
+    const paperSel = $("#docPaper"), orientSel = $("#docOrient");
+    if (paperSel) paperSel.addEventListener("change", (e) => {
+        const p = PAPER_SIZES.find((x) => x.id === e.target.value);
+        if (!p) return syncDocFields();
+        const s = paperSizeIn(p, orientationOf(state.doc.w, state.doc.h));
+        state.doc.w = s.w; state.doc.h = s.h;
+        setDocUnit(p.unit);
+        syncDocFields(); fitViewport(); render();
+    });
+    if (orientSel) orientSel.addEventListener("change", (e) => {
+        if (orientationOf(state.doc.w, state.doc.h) !== e.target.value) [state.doc.w, state.doc.h] = [state.doc.h, state.doc.w];
+        syncDocFields(); fitViewport(); render();
+    });
+    installCursorTooltip({ doc: document, selector: "#docModal [data-hint]", resolve: (el) => PAPER_HINTS[el.dataset.hint] });
 
     // Openers: the #docInfo dimension readout (Toolpath/Export canvas) + the #designDocBtn control (Design sidebar).
     // Each opener snapshots the doc (size + unit) into _docSnap on open, so Cancel can revert the live edits.

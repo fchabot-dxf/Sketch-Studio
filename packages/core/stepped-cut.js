@@ -746,6 +746,13 @@ export function levelsBand(rec, partDepth) {
   const depth = stop - floor;
   return { top, depth, empty: !(depth > top + Z_EPS) };
 }
+// ── TASK 810 (docs/OPERATIONS-MODEL.md 1.4 / 5): a Contour's WHICH WALLS, record field `walls`: 'all' (every level's pass) | 'sloped' (Sloped only: the level whose
+// outline IS the shape's own outline is not cut: the straight wall a plain Outside / Inside cut already makes; exactly TASK 792's own-wall rule, `sameOutline`).
+// None stored = TODAY'S choice (wallsDefault): Sloped only for the Contour of a plain Outside / Inside cut on a sloped region (its slope rings, no levels), All
+// otherwise; so a Contour cuts byte for byte what it cut before until the user picks.
+export const CONTOUR_WALLS = Object.freeze({ choices: Object.freeze([Object.freeze({ id: 'all', label: 'All' }), Object.freeze({ id: 'sloped', label: 'Sloped only' })]) });
+export const wallsDefault = (rec) => (rec && rec.slope && !hasLevels(rec) && (rec.baseType === 'exterior' || rec.baseType === 'interior') ? 'sloped' : 'all');
+export const wallsOf = (rec) => (rec && (rec.walls === 'all' || rec.walls === 'sloped') ? rec.walls : wallsDefault(rec));
 /** The depth a cut of a Roughing / Contour is made at (its level's, else its record's). */
 const cutLevelDepth = (c) => Number(c.terrace ? c.terrace.depth : c.rec && c.rec.cutDepth);
 
@@ -982,7 +989,14 @@ function deriveLevelsCutsTo(target, rec, depth, state, loops, loopPolys, ownedLo
   const op = rec.levelsOp;
   const label = (rec.slope && rec.slope.label) || null;
   const work = { ...levelsWorkRecord(rec), cutDepth: depth };
-  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryShape', 'boundaryTarget', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance']) delete work[k]; // TASK 810: + the boundary's and the heights' fields // `slope` stays: the stepped engine reads it
+  // TASK 810: a Contour's Sloped only (wallsOf): the levels whose outline IS the shape's own outline (its own cut as `as`) are not cut (TASK 792's rule, any source)
+  const ownWallSkipped = (cuts, as) => {
+    if (op !== 'contour' || wallsOf(rec) !== 'sloped') return cuts;
+    const own = deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops).find((c) => !c.isHole && c.kind !== 'chain');
+    const wall = own && (own.isCompound ? own.outerPoly : own.polygon);
+    return wall ? cuts.filter((c) => !c.terrace || !sameOutline(c.isCompound ? c.outerPoly : c.polygon, wall)) : cuts;
+  };
+  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryShape', 'boundaryTarget', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance', 'walls']) delete work[k]; // TASK 810: + the boundary's, the heights' and the walls' fields // `slope` stays: the stepped engine reads it
   if (hasLevels(rec)) { // path 1
     const plain = deriveProfileCuts(target, { ...work, cutType: 'pocket' }, state, loops, loopPolys, ownedLoops).find((c) => c.isCompound);
     if (!plain) return [];
@@ -990,7 +1004,7 @@ function deriveLevelsCutsTo(target, rec, depth, state, loops, loopPolys, ownedLo
     const tol = smoothingOf(op, rec.smoothing); // TASK 809: the operation's Smoothing (0 = its polylines)
     if (op === 'contour') { // its paths in cutting order (depth-first per area)
       const T = levelsContour(rec.levels, { step: rec.stepDepth, depth, smoothing: tol });
-      return T.paths.map((p) => levelContourCut(p.polygon, p.outer, work, { index: p.level, count: T.steps.length, depth: p.depth, undercutBelow: null, label }, p.ring));
+      return ownWallSkipped(T.paths.map((p) => levelContourCut(p.polygon, p.outer, work, { index: p.level, count: T.steps.length, depth: p.depth, undercutBelow: null, label }, p.ring)), levelsCutAs(rec)); // TASK 810: Sloped only
     }
     const R = levelsRoughingFor({ ...rec, cutDepth: depth }, plain.outerPoly, state, loops, loopPolys); // TASK 810: on its boundary (an error: no path)
     const S = tol > 0 ? smoothedRoughing(R, tol) : null;
@@ -998,11 +1012,7 @@ function deriveLevelsCutsTo(target, rec, depth, state, loops, loopPolys, ownedLo
   }
   const as = levelsCutAs(rec);
   if (rec.slope) { // path 2: THE stepped engine (allowance 0: the stepped cut of 714 byte for byte)
-    const cuts = deriveCuts(target, { ...work, terraceAs: as }, state, loops, loopPolys, ownedLoops);
-    if (op !== 'contour' || (rec.baseType !== 'exterior' && rec.baseType !== 'interior')) return cuts;
-    const own = deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops).find((c) => !c.isHole && c.kind !== 'chain');
-    const wall = own && (own.isCompound ? own.outerPoly : own.polygon);
-    return wall ? cuts.filter((c) => !c.terrace || !sameOutline(c.isCompound ? c.outerPoly : c.polygon, wall)) : cuts;
+    return ownWallSkipped(deriveCuts(target, { ...work, terraceAs: as }, state, loops, loopPolys, ownedLoops), as); // TASK 810: Sloped only = TASK 792's skip next to a plain Outside / Inside cut (its default there)
   }
   return deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops); // path 3: one level, the drawn region at its depth
 }

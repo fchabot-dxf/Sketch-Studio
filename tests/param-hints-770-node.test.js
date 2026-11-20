@@ -74,10 +74,11 @@ const STATES = [
   { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }], boundaryCtx: { hasStock: true } },
   { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }], boundary: 'shape', boundaryTool: 'inside', boundaryOffset: -2 },
   { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }], boundary: 'shape', boundaryShape: 'loop:a', boundaryCtx: { hasStock: true, picking: true } },
+  { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose', wallsCtx: { shown: true, value: 'sloped', defaultId: 'sloped' } }, // TASK 810: a Contour's Walls (its part has slope rings)
 ];
-for (const { boundaryCtx, ...record } of STATES) {
+for (const { boundaryCtx, wallsCtx, ...record } of STATES) {
   const name = JSON.stringify(record);
-  panel.update({ kind: record.cutType === 'contour' ? 'contour' : 'loop', contour: record.cutType === 'roughing' ? { allowed: true, on: true } : null, boundary: boundaryCtx || { hasStock: false, picking: false }, record: { cutDepth: 6, cutOffset: 0, toolDia: 6, ...record } }); // TASK 810: boundary = the Boundary rows' context // TASK 792: a Roughing card shows its Contour row; a Contour is its own card (kind 'contour')
+  panel.update({ kind: record.cutType === 'contour' ? 'contour' : 'loop', contour: record.cutType === 'roughing' ? { allowed: true, on: true } : null, boundary: boundaryCtx || { hasStock: false, picking: false }, walls: wallsCtx || null, record: { cutDepth: 6, cutOffset: 0, toolDia: 6, ...record } }); // TASK 810: boundary = the Boundary rows' context // TASK 792: a Roughing card shows its Contour row; a Contour is its own card (kind 'contour')
   const rows = [...host.querySelectorAll('.cut-field, .cut-row')].filter(visible);
   ok(rows.length >= 1, name + ': rows shown');
   for (const row of rows) {

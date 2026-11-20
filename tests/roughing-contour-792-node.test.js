@@ -288,7 +288,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     ok(E.filter((e) => e.type === 'inside').every((e) => e.dia === '3.175 mm'), 'with the Contour\'s bit');
     // Edit contour: the Contour's own card
     h.pressEl('.cut-contour-edit');
-    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['topDepth', 'bottomDepth', 'floorAllowance', 'stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (TASK 810: its Heights, then its step, bit, cutter shape)');
+    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (TASK 810: its Heights, its Walls, then its step, bit, cutter shape)');
     eq(h.menu(), ['contour'], 'its menu offers the Contour only');
     h.setField('.cut-step-depth', '1');
     eq([CUT_PLAN.get(ck).stepDepth, cutPlanEntries().filter((e) => e.key === ck).length], [1, 1], 'its step is its own (1 mm)');

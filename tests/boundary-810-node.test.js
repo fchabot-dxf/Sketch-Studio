@@ -13,12 +13,13 @@
 //     Pick + a click on the smaller rectangle = ONE undo step (the selection unchanged), the shape FOLLOWS an edit of it, a picked key follows a key rename
 //     (renamePlanKeys), the tab dot, a typed Offset (Reset = calculated), the refusal note, operation keys (defaults = the key before 810), save + reload.
 import assert from 'node:assert';
+import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { open } from './helpers/node-app.js';
 import * as M from './helpers/stl-mesh.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
-import { ROUGH_BOUNDARY, BOUNDARY_CALC_OFFSET_BITS, boundaryToolBits, roughingWorkGrow, boundaryCalcOffset, levelsRoughingFor, levelsBand, LEVELS } from '#core/stepped-cut.js';
+import { ROUGH_BOUNDARY, BOUNDARY_CALC_OFFSET_BITS, boundaryToolBits, roughingWorkGrow, boundaryCalcOffset, levelsRoughingFor, levelsBand, wallsDefault, LEVELS } from '#core/stepped-cut.js';
 import { regionsFromRings, offsetRegions, regionsArea } from '#core/plot/clip.js';
 import { CUT_PLAN, cutPlanEntries, setContour, contourKeyOf, renamePlanKeys } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
@@ -312,6 +313,54 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     eq(els('pocket'), rough, 'the Roughing is not affected by the heights of the Contour');
     const saved = captureShaperDoc();
     eq([new Map(saved.cutPlan).get(contourKeyOf(key)).topDepth, new Map(saved.cutPlan).get(contourKeyOf(key)).floorAllowance], [2, 1], 'saved with the design');
+  } finally { await app.close(); }
+}
+
+// ── 7. a Contour's WHICH WALLS: All | Sloped only (Sloped only = TASK 792's skip of the shape's own wall, the default next to a plain Outside / Inside cut) ──
+eq([wallsDefault({ slope: {}, baseType: 'exterior' }), wallsDefault({ slope: {}, baseType: 'interior' }), wallsDefault({ slope: {}, baseType: 'pocket' }), wallsDefault({ slope: {}, baseType: 'roughing' }), wallsDefault({ baseType: 'exterior', levels: [{ z: 1, loops: [] }] }), wallsDefault({ slope: {}, baseType: 'exterior', levels: [{ z: 1, loops: [] }] })],
+  ['sloped', 'sloped', 'all', 'all', 'all', 'all'], 'the default = the choice of before: Sloped only next to a plain Outside / Inside cut on slope rings, All otherwise');
+{
+  CUT_PLAN.clear();
+  const app = await open({ host: 'shaper' });
+  try {
+    app.modes.showMode('prepare');
+    const st = app.state, doc = app.document, q = (s2) => doc.querySelector(s2);
+    const pressEl = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
+    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
+    const contourEls = () => [...shaperSvgOf(st, cutPlanEntries()).matchAll(/<path [^>]*\/>|<circle [^>]*\/>/g)].map((x) => x[0]).filter((x) => /shaper:toolDia="3\.175 mm"/.test(x) && /shaper:cutType="(outside|inside)"/.test(x));
+    const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/sa7-slope/01-chamfer-outline.json', import.meta.url), 'utf8'));
+    importFusionSelection(fx, { controller: app.controller, prepare: app.prepare });
+    const [key, rec] = [...CUT_PLAN.entries()].find(([, x]) => x.slope);
+    eq(rec.cutType, 'exterior', 'the chamfered outline: a plain Outside cut with its slope rings');
+    rec.toolDia = 6.35;
+    setContour(key, true);
+    const ck = contourKeyOf(key), crec = CUT_PLAN.get(ck);
+    const byDefault = contourEls(), keyDefault = opKeyOf(cutPlanEntries().find((e) => e.key === ck).rec);
+    ok(byDefault.length > 0, `the Contour of the chamfer: ${byDefault.length} passes (Sloped only by default)`);
+    app.prepare.view().setSelection([{ kind: 'contour', id: key }]);
+    eq(q('.cut-type-cur').textContent, 'Contour', 'the Contour card');
+    pressEl('.cut-tab[data-tab="geometry"]');
+    eq(rows(), ['walls'], 'its Geometry tab: Walls');
+    eq([...doc.querySelectorAll('.cut-walls .cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['All', 'Sloped only*'], 'Walls: Sloped only (the choice of before, next to an Outside cut)');
+    const n0 = st.history.length;
+    pressEl('.cut-walls .cut-preset[data-value="all"]');
+    eq([CUT_PLAN.get(ck).walls, st.history.length], ['all', n0 + 1], 'All: stored, ONE undo step');
+    const all = contourEls();
+    ok(all.length > byDefault.length, `All: the own wall too (${all.length} passes, ${all.length - byDefault.length} more)`);
+    for (const e of byDefault) ok(all.includes(e), 'All keeps every Sloped only pass');
+    ok(opKeyOf(cutPlanEntries().find((e) => e.key === ck).rec) !== keyDefault, 'All (off the default here) is part of the operation key');
+    ok(!doc.querySelector('.cut-tab[data-tab="geometry"] .cut-tab-dot').hidden, 'the Geometry tab shows its dot');
+    pressEl('.cut-walls .cut-preset[data-value="sloped"]');
+    eq([CUT_PLAN.get(ck).walls, contourEls(), opKeyOf(cutPlanEntries().find((e) => e.key === ck).rec)], ['sloped', byDefault, keyDefault], 'Sloped only picked: exactly the default passes, the default key');
+    ok(doc.querySelector('.cut-tab[data-tab="geometry"] .cut-tab-dot').hidden, 'no dot: the default');
+    // the same Contour on a Pocket part: All by default (TASK 792 never skipped there); Sloped only skips the pocket's own outline if a level has it
+    rec.cutType = 'pocket';
+    delete CUT_PLAN.get(ck).walls;
+    const pocketDefault = contourEls();
+    app.prepare.view().setSelection([{ kind: 'contour', id: key }]);
+    pressEl('.cut-tab[data-tab="geometry"]');
+    eq([...doc.querySelectorAll('.cut-walls .cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['All*', 'Sloped only'], 'on a Pocket part: All (as before)');
+    ok(pocketDefault.length > 0, 'the Contour of the Pocket part cuts');
   } finally { await app.close(); }
 }
 

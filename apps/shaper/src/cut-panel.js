@@ -6,7 +6,7 @@
 import { availableTypes, cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED, CONTOUR_DEFAULTS } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots)
-import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary
+import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off | On) and its sides
@@ -83,12 +83,13 @@ const boundaryPresets = (hasStock) => ROUGH_BOUNDARY.kinds.map((k) => (k.id === 
   ? { hint: 'boundaryNoStock', label: hintLabel('boundaryNoStock'), value: k.id, disabled: true }
   : { hint: choiceId('boundary', k.id), label: hintLabel(choiceId('boundary', k.id)), value: k.id }));
 const BOUNDARY_TOOL_PRESETS = ROUGH_BOUNDARY.tools.map((t) => ({ hint: choiceId('boundaryTool', t.id), label: hintLabel(choiceId('boundaryTool', t.id)), value: t.id }));
+const WALLS_PRESETS = CONTOUR_WALLS.choices.map((w) => ({ hint: choiceId('walls', w.id), label: hintLabel(choiceId('walls', w.id)), value: w.id })); // TASK 810: a Contour's which walls
 // TASK 810 (owner turns 2657-2658): the ROUGHING and CONTOUR cards are organised in TABS, as Fusion CAM's operation dialogs: the ONE table of which row lives in which tab
 // (a row is its data-row or data-param). Each tab is a FIXED panel: the rows area keeps the height of the tallest tab (applyTabs), so switching tabs moves nothing outside
 // the card; a tab none of whose rows shows on this card is not offered. Every other cut type keeps its single card (no tab bar, every row in its place).
 const CARD_TABS = [
   { id: 'tool', hint: 'tabTool', rows: ['toolDia', 'cutterShape'] },
-  { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth'] },
+  { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth', 'walls'] },
   { id: 'heights', hint: 'tabHeights', rows: ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'] },
   { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'contour', 'smoothing'] },
 ];
@@ -105,6 +106,7 @@ const CHANGED = {
   boundary: (rec) => boundaryOf(rec).kind !== ROUGH_BOUNDARY.defaultKind,
   boundaryTool: (rec) => boundaryOf(rec).tool !== ROUGH_BOUNDARY.defaultTool,
   boundaryOffset: (rec) => boundaryOf(rec).offset != null,
+  walls: (rec, op, c) => Boolean(c.walls) && c.walls.value !== c.walls.defaultId,
   topDepth: (rec) => Number(rec.topDepth) > 0,
   bottomDepth: (rec) => rec.bottomDepth != null && Number(rec.bottomDepth) > 0,
   floorAllowance: (rec) => Number(rec.floorAllowance) > 0,
@@ -224,6 +226,10 @@ export function createCutPanel(hostEl, opts = {}) {
           <span class="cut-unit">mm</span>
         </div>
         <div class="cut-calc-bar"><span class="cut-calc-tag">calculated</span><button type="button" class="cut-calc-reset" data-reset="boundaryOffset" hidden>Reset to calculated</button></div>
+      </div>
+      <div class="cut-row" data-row="walls">
+        <button type="button" class="cut-field-label" data-hint="walls"></button>
+        <div class="cut-presets cut-walls"></div>
       </div>
       <div class="cut-row" data-row="minTerraceWidth">
         <button type="button" class="cut-field-label" data-hint="minTerraceWidth"></button>
@@ -753,6 +759,10 @@ export function createCutPanel(hostEl, opts = {}) {
     bottomInput.value = Number(hr.bottomDepth) > 0 ? fieldText(Number(hr.bottomDepth)) : ''; bottomInput.placeholder = Number(current.partDepth) > 0 ? fieldText(Number(current.partDepth)) : '';
     floorInput.value = fieldText(fieldBase('floorAllowance'));
     syncCalcBar('topDepth', !(Number(hr.topDepth) > 0));
+    // TASK 810: a Contour's which walls, where its part's walls come from levels or slope rings (a drawn region's Contour is its one wall); the choice in effect shown
+    const wallsRow = current.kind === 'contour' && Boolean(current.walls && current.walls.shown);
+    card.querySelector('.cut-row[data-row="walls"]').style.display = wallsRow ? '' : 'none';
+    renderPresets($('.cut-walls'), wallsRow ? WALLS_PRESETS : [], 'walls', wallsRow ? current.walls.value : null);
     syncCalcBar('bottomDepth', !(Number(hr.bottomDepth) > 0));
     card.querySelector('.cut-row[data-row="smoothing"]').style.display = declares('smoothing') && current.levels ? '' : 'none'; // TASK 809: an operation on a part with levels (an STL)
     smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.02 mm = 0.0008 in: a tolerance, always decimals
@@ -830,6 +840,7 @@ export function createCutPanel(hostEl, opts = {}) {
       levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)
       boundaryCtx: { hasStock: Boolean(model.boundary && model.boundary.hasStock), picking: Boolean(model.boundary && model.boundary.picking) }, // TASK 810: does the design have a Stock; is a boundary Pick on
       partDepth: Number(model.partDepth) > 0 ? Number(model.partDepth) : null, // TASK 810: the part's depth (the Bottom's default; a Contour's is its part's)
+      walls: model.walls || null, // TASK 810: a Contour's walls { shown, value (in effect), defaultId }
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;

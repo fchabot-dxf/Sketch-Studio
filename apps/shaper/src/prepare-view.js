@@ -14,7 +14,7 @@ import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprin
   lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary,
   CONTOUR_KIND, contourKeyOf, contourOf, isContourKey, partKeyOf, setContour, rememberContour, levelsSummary, levelsNoteItems, resolveEntry } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour
 import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in junction (ONE pure derivation)
-import { hasLevels } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels
+import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
 import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height map, drawn under the cut lines
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
@@ -830,6 +830,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     clearingSummaryFor: (t) => (t ? clearingSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 745: what its clearing is (the derivation's)
     leadInFor: (t) => (t ? leadInSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 778: the calculated / resolved arc summary
     partDepthFor: (t) => { if (!t) return null; const k = targetKey(t), e = resolveEntry(k, getCutRecord(k)); const d = e ? (isContourKey(k) ? e.rec.baseDepth : e.rec.cutDepth) : null; return Number(d) > 0 ? Number(d) : null; }, // TASK 810: the part's depth (a Contour: its part's)
+    wallsFor: (t) => { if (!t || t.kind !== CONTOUR_KIND) return null; const k = targetKey(t), e = resolveEntry(k, getCutRecord(k)); return e ? { shown: Boolean(e.rec.slope || hasLevels(e.rec)), value: wallsOf(e.rec), defaultId: wallsDefault(e.rec) } : null; }, // TASK 810: a Contour's walls (its part's slope / levels)
     levelsFor: (t) => { if (!t) return false; const k = targetKey(t), e = resolveEntry(k, getCutRecord(k)); return Boolean(e && hasLevels(e.rec)); }, // TASK 809: the record (a Contour: its part) cuts a part's levels
     contourFor: (t) => (t && t.kind !== CONTOUR_KIND ? { allowed: contourAllowed(getCutRecord(targetKey(t))), on: Boolean(contourOf(targetKey(t))) } : null), // TASK 792: the part card's Contour row
     startBoundaryPick({ onPick, onEnd = () => {} }) { // TASK 810: see boundaryPick above

@@ -13,7 +13,7 @@
 import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choices (Off | On) and sides (Outside | Inside)
-import { ROUGH_LAYOUT, ROUGH_BOUNDARY } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule
+import { ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule, a Contour's walls
 
 
 /** The parameters: the cut card's rows (Prepare) and the Export step's cards. */
@@ -50,6 +50,7 @@ const PARAMS = {
   topDepth: { label: 'Top', hint: 'Where the cutting starts, as a depth below the surface: the levels at or above it are not cut (for example, already cleared by another operation). Empty = the surface.' },
   bottomDepth: { label: 'Bottom', hint: 'The depth the cutting stops at: no level goes deeper. Empty = the part’s depth (from the model for a part from Fusion or an STL).' },
   floorAllowance: { label: 'Floor allowance', hint: 'Left above the bottom: the deepest level stops this much higher, for a later pass to finish. Separate from the wall allowance. 0 = none.' },
+  walls: { label: 'Walls', hint: 'Which walls the Contour finishes. Sloped only skips the pass whose outline is the shape’s own outline (the straight wall an Outside or Inside cut already makes). Until you pick, it is Sloped only next to an Outside or Inside cut on a sloped shape, All otherwise.', items: CONTOUR_WALLS.choices.map((w) => `walls:${w.id}`) }, // TASK 810
   roughLayout: { label: 'Layout', hint: 'How the levels are cut. The Origin cuts every path from the surface down.', items: ['roughLayout:terraces', 'roughLayout:nested'] },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },
@@ -125,6 +126,10 @@ const CHOICE_HINTS = {
     on: 'The centre of the bit reaches the line: half the bit goes past it.',
     outside: 'The bit may go out past the boundary until its edge just touches the line from outside.',
   },
+  walls: { // TASK 810
+    all: 'A pass at every level, the straight walls too.',
+    sloped: 'Skips the pass along the shape’s own outline: the sloped walls only.',
+  },
   roughLayout: { // TASK 792 (owner turn 2604)
     terraces: 'Each spot cut once, to its own depth: no passes through air. Best on deep or gentle reliefs.',
     nested: 'One pocket per level over everything that goes at least that deep: fewer, bigger paths. Best on steep or blocky parts.',
@@ -170,6 +175,7 @@ const CHOICE_SOURCES = {
   roughLayout: ROUGH_LAYOUT.layouts.map((l) => ({ id: l.id, label: l.label })), // TASK 792: Roughing's layout
   boundary: ROUGH_BOUNDARY.kinds.map((k) => ({ id: k.id, label: k.label })), // TASK 810: Roughing's boundary
   boundaryTool: ROUGH_BOUNDARY.tools.map((t) => ({ id: t.id, label: t.label })), // TASK 810: its tool rule
+  walls: CONTOUR_WALLS.choices.map((w) => ({ id: w.id, label: w.label })), // TASK 810: a Contour's which walls
 };
 
 /** The id of a choice's entry: `<parameter>:<choice id>`. */

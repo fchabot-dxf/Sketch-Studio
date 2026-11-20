@@ -5,6 +5,8 @@
 // icon (-> favicon.svg, favicon.ico, apple-touch-icon.png, icon-192 / 512, the manifest, the share card), the tile colour (theme colour), the tagline
 // (share card), the seoTitle (the built page's static <title>, og:title, twitter:title and intro h1; the tab keeps appTitle once the app runs) and the description (meta description, Open Graph, JSON-LD, the About page). Nothing of it is copied by hand anywhere.
 //
+// TASK 828: an app is listed on the About page (about.html, built by scripts/site-about.cjs) unless its entry says `about: false` (the one place).
+//
 // The suite is "Sketch Studio"; the apps are Sketch (the parametric CAD), Shaper, Pen Plotter, Trace.
 // Icons (TASK 829, approved by the owner): one family, a 64x64 rounded tile with the app's own drawing: Sketch = a blue rectangle with ring joints and a
 // grey dimension on a light grid; Shaper = a hexagon Outside cut (mint band and edge, dashed bit-centre path, bit ring) on a dark grid; Pen Plotter = a
@@ -29,7 +31,7 @@ export const APPS = [
     seoTitle: "Pen Plotter: Free Pen Plotter Software",
     description: "Free pen plotter software in your browser: draw or import SVG art, set paper size and pens, and export plotter-ready files for AxiDraw-style plotters.",
     icon: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' width='64' height='64'><clipPath id='cx'><rect width='64' height='64' rx='14'/></clipPath><rect width='64' height='64' rx='14' fill='#F5EFE1'/><g clip-path='url(#cx)'><path d='M0 8 H64 M8 0 V64 M0 16 H64 M16 0 V64 M0 24 H64 M24 0 V64 M0 32 H64 M32 0 V64 M0 40 H64 M40 0 V64 M0 48 H64 M48 0 V64 M0 56 H64 M56 0 V64' stroke='#ddd2b8' stroke-width='1.3'/><path d='M9 46 C17 32 23 32 29 42 S41 52 49 36' pathLength='90' fill='none' stroke='#DC2626' stroke-width='4' stroke-dasharray='30 60' stroke-dashoffset='0'/><path d='M9 46 C17 32 23 32 29 42 S41 52 49 36' pathLength='90' fill='none' stroke='#EAB308' stroke-width='4' stroke-dasharray='30 60' stroke-dashoffset='-30'/><path d='M9 46 C17 32 23 32 29 42 S41 52 49 36' pathLength='90' fill='none' stroke='#2563EB' stroke-width='4' stroke-dasharray='30 60' stroke-dashoffset='-60'/><path d='M44 9 L55 20 L41 34 L32 37 L35 28 Z' fill='#1E293B'/><path d='M32 37 L35 28 L41 34 Z' fill='#2563EB'/></g><rect x='0.5' y='0.5' width='63' height='63' rx='13.5' fill='none' stroke='#d9cfb8'/></svg>" },
-  { id: "trace", name: "Trace", accent: "#C084FC", tile: "#FFFFFF",
+  { id: "trace", name: "Trace", accent: "#C084FC", tile: "#FFFFFF", about: false, // TASK 828 (owner turn 2876): Trace is left off the About page for now; delete this flag to list it
     tagline: "Turn a photo into SVG and DXF paths.",
     seoTitle: "Trace: Free Image to Vector (SVG, DXF)",
     description: "Free image to vector converter: trace photos, logos and drawings into clean SVG and DXF paths at real-world size, for laser cutting and CNC.",

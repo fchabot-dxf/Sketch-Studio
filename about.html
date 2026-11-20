@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About – Sketch Studio</title>
+<style>
+  :root { color-scheme: light dark; --fg: #222; --bg: #fff; --muted: #666; --line: #ccc; --link: #0b57d0; --card: #f6f7f9; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e6e8eb; --bg: #1f2023; --muted: #9aa0a8; --line: #3a3d42; --link: #8ab4f8; --card: #2a2c30; } }
+  body { font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 40em; margin: 0 auto; padding: 1.5em 1em 3em; color: var(--fg); background: var(--bg); }
+  h1 { font-size: 1.6em; margin-bottom: .2em; }
+  h2 { font-size: 1.15em; margin: 0 0 .15em; }
+  a { color: var(--link); }
+  .lead, .stamp { color: var(--muted); }
+  .stamp { font-size: .9em; }
+  .apps { list-style: none; margin: 1.4em 0; padding: 0; display: grid; gap: .9em; }
+  .app { display: flex; gap: 1em; align-items: flex-start; padding: 1em; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  .app img { width: 56px; height: 56px; flex: none; }
+  .app p { margin: .2em 0; }
+  .addin { font-size: .95em; }
+  .linklike { font: inherit; color: var(--link); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+  hr { margin: 2em 0; border: 0; border-top: 1px solid var(--line); }
+</style>
+<!-- TASK 828b: the same shared packages as the apps (the site root holds packages/ next to this page); the Feedback link opens THE window of #ui/feedback.js -->
+<script type="importmap">
+{ "imports": { "#core/": "./packages/core/", "#ui/": "./packages/ui/" } }
+</script>
+</head>
+<body data-app="<!--ABOUT:APP-->">
+<p><a href="/">&larr; Sketch Studio</a></p>
+
+<h1>About Sketch Studio</h1>
+<p class="lead">A set of free design tools that run in your browser. Your documents stay in your own browser or your own Google Drive.</p>
+
+<ul class="apps">
+<!--ABOUT:APPS-->
+</ul>
+
+<hr>
+<p><a href="privacy.html">Privacy policy</a> &middot; <button type="button" class="linklike" id="about-feedback" data-feedback-open>Feedback</button></p>
+<p class="stamp"><!--ABOUT:BUILD--></p>
+<script type="module">
+  import { startAnalytics } from '#ui/analytics.js';
+  import { openFeedback } from '#ui/feedback.js';
+  // the page is a page of its app's site: the same visit call every app makes (analytics.js sends only from a public page, never when opted out); the message carries that app
+  startAnalytics({ app: document.body.dataset.app });
+  document.getElementById('about-feedback').addEventListener('click', () => { openFeedback(); });
+</script>
+</body>
+</html>

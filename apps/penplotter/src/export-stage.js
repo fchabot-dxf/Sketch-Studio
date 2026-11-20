@@ -25,6 +25,7 @@ const SCAFFOLD = `
           <select id="exportFiles">${EXPORT_FILES_FIELD.options.map(o => `<option value="${o.value}">${o.label}</option>`).join("")}</select>
         </label>
         <button id="exportBtn" class="dp-btn dp-primary">Export G-code (.zip)</button>
+        <div data-feedback-slot></div>
       </aside>
     </div>
   </div>`;

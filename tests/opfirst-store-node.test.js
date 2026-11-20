@@ -5,14 +5,18 @@
 //  2. the BIN (and the Stock move) take the shapes OUT of their operation (advisor ruling 2, task S1: no parked membership): assigned again, a shape takes the
 //     settings of the operation it joins and goes to the END of the file order (before S1 its record kept its settings and its place);
 //  3. a part's Contour reads its part LIVE (advisor ruling 3): editing the part's depth moves the Contour's depth with it;
-//  4. a value that is not part of the operation key is the operation's (advisor ruling 4): a Freehand pocket's stored stepover is shared by its operation.
+//  4. a value that is not part of the operation key is the operation's (advisor ruling 4): a Freehand pocket's stored stepover is shared by its operation;
+//  5. the LIST ORDER (advisor ruling, turn 2702: listOrder): while the user has never reordered ('default') the list is re-sorted by the default rule after every
+//     change, as before S1 (¼ in Pocket 3 + ¼ in Pocket 6 + ⅛ in Inside, then the 6 mm pocket made an Outside: the ⅛ in Inside first, the Outside last); once
+//     the user reorders ('stored') a new operation joins its tool's run (the 743 slot rule) and the rest keeps its place; saved, reloaded and undone with the store.
 import assert from 'node:assert/strict';
 import { open } from './helpers/node-app.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findLoops } from '#core/loop-finder.js';
 import { planEntries, getPlanRecord, contourKeyOf, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
-import { storeOps } from '../apps/shaper/src/operations-store.js';
+import { storeOps, listOrder, reorderOps } from '../apps/shaper/src/operations-store.js';
+import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { V2_PLAN } from './helpers/plan-v2.js';
 
@@ -105,5 +109,44 @@ try {
     eq(contourDepth(), 10, '3: the part set to 10 mm: its Contour runs to 10 mm (read live, advisor ruling 3)');
     eq(describeOperations(st).map((o) => o.cutType), ['roughing', 'contour'], '3: two operations: the Roughing and its Contour');
   } finally { await app2.close(); }
+}
+// 5. the list order
+{
+  V2_PLAN.use(null).clear();
+  const app3 = await open({ host: 'shaper' });
+  try {
+    const st = app3.state;
+    const K = drawSquares(st);
+    app3.modes.showMode('prepare');
+    const pv = app3.prepare.view();
+    const edit = (k, o) => { pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? pv.applyCutTypeToSelected(v) : pv.setFieldOnSelected(f, v)); };
+    const labels = () => describeOperations(st).map((o) => o.label.split(' (')[0]);
+    edit('A', { cutType: 'pocket', toolDia: 6.35, cutDepth: 3 }); edit('B', { cutType: 'pocket', toolDia: 6.35, cutDepth: 6 }); edit('C', { cutType: 'interior', toolDia: 3.175, cutDepth: 6 });
+    eq([listOrder(), labels()], ['default', ['¼″ end mill · Pocket · 3 mm', '¼″ end mill · Pocket · 6 mm', '⅛″ end mill · Inside · 6 mm']], '5: the default order (no reorder yet)');
+    const v3before = JSON.parse(JSON.stringify(captureShaperDoc()));
+    eq(v3before.listOrder, 'default', '5: saved with listOrder default');
+    edit('B', { cutType: 'exterior' });
+    eq(labels(), ['⅛″ end mill · Inside · 6 mm', '¼″ end mill · Pocket · 3 mm', '¼″ end mill · Outside · 6 mm'], '5 (default): the 6 mm pocket made an Outside: the list is re-sorted as before S1 (the ⅛ in Inside first, the part-freeing Outside last)');
+    // the same in 'stored' mode: the user reordered first (the list's own reorder: the same three rows, the ⅛ in Inside moved up)
+    edit('B', { cutType: 'pocket' });
+    eq(labels(), ['¼″ end mill · Pocket · 3 mm', '¼″ end mill · Pocket · 6 mm', '⅛″ end mill · Inside · 6 mm'], '5: back to the pocket: the default order again');
+    const ids = storeOps().map((o) => o.id);
+    reorderOps([ids[2], ids[0], ids[1]]);
+    eq([listOrder(), labels()], ['stored', ['⅛″ end mill · Inside · 6 mm', '¼″ end mill · Pocket · 3 mm', '¼″ end mill · Pocket · 6 mm']], '5: the user reordered: the order is stored');
+    edit('B', { cutType: 'exterior' });
+    eq(labels(), ['⅛″ end mill · Inside · 6 mm', '¼″ end mill · Pocket · 3 mm', '¼″ end mill · Outside · 6 mm'], '5 (stored): the new Outside joins its tool\'s run, after its pocket (the 743 slot rule); nothing else moves');
+    const v3 = JSON.parse(JSON.stringify(captureShaperDoc()));
+    eq(v3.listOrder, 'stored', '5: saved with listOrder stored');
+    applyShaperDoc(v3, st);
+    eq([listOrder(), labels()], ['stored', ['⅛″ end mill · Inside · 6 mm', '¼″ end mill · Pocket · 3 mm', '¼″ end mill · Outside · 6 mm']], '5: reloaded: the stored order and the flag');
+    applyShaperDoc(v3before, st);
+    eq(listOrder(), 'default', '5: the earlier document: default again');
+    // a version 2 document: stored only when its opOrder was not empty
+    V2_PLAN.use(st).setOrder([]);
+    eq(listOrder(), 'default', '5: a version 2 document without an opOrder migrates as default');
+    V2_PLAN.setOrder([JSON.stringify(['endmill|3.175|', 'interior', { depth: 6, offset: 0 }])]);
+    eq(listOrder(), 'stored', '5: a version 2 document with an opOrder migrates as stored');
+    V2_PLAN.use(null).setOrder([]);
+  } finally { await app3.close(); }
 }
 console.log(`opfirst-store-node: ${checks} checks passed`);

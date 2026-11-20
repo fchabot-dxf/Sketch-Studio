@@ -26,7 +26,7 @@ const OPERATIONS_VERSION = 3;
  *  reference: never mutated). TASK 790: + the STL source (stl-source.js, without its mesh): undoing an STL import / a new Up or Units gives the previous one back (or none). */
 export const capturePrepare = () => ({ store: captureStore(), stl: captureStl(), selections: captureSelections(), stockThickness: getStock().thickness });
 /** TASK S1: the part of a Prepare snapshot an edit compares (prepare-stage.js cutEdit): everything but the regions (the large levels: never changed by an edit). */
-export const comparablePrepare = (p) => JSON.stringify([p.store.operations, p.store.nextSeq, p.stl, p.selections, p.stockThickness]);
+export const comparablePrepare = (p) => JSON.stringify([p.store.operations, p.store.nextSeq, p.store.listOrder, p.stl, p.selections, p.stockThickness]);
 export function applyPrepare(p) {
   applyStore(p && p.store);
   applyStl(p && p.stl);
@@ -38,8 +38,8 @@ export function applyPrepare(p) {
 export function captureShaperDoc() {
   const stl = captureStlDoc();
   const selections = getSelections(); // TASK 795: only when there are some (a design without selections writes the same bytes as before)
-  const { operations, regions, nextSeq } = captureStore();
-  return { version: DOC_VERSION, operations, regions, nextSeq, stock: getStock(), ...(stl ? { stl } : {}), ...(selections.length ? { selections } : {}) };
+  const { operations, regions, nextSeq, listOrder } = captureStore();
+  return { version: DOC_VERSION, operations, regions, nextSeq, listOrder, stock: getStock(), ...(stl ? { stl } : {}), ...(selections.length ? { selections } : {}) };
 }
 
 // TASK 749: a programmed pocket's `clearing` before 749 -> today's value: 'concentric' (the separate rings, replaced by the rings joined) -> 'linked' (Spiral),
@@ -137,7 +137,7 @@ export function migrateV2(plan, storedOrder, state, selections) {
   });
   report.operations = operations.length;
   report.guideOps = operations.filter((op) => op.type === 'guide').length;
-  applyStore({ operations, regions, nextSeq: seq + 1 });
+  applyStore({ operations, regions, nextSeq: seq + 1, listOrder: storedOrder.length ? 'stored' : 'default' }); // the list order is the user's only if the document stored one
   return report;
 }
 

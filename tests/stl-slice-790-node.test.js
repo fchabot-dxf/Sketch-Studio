@@ -199,7 +199,7 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
     try {
       importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
       const d0 = await app.storedDoc();
-      eq(Object.keys(d0.hosts.shaper), ['version', 'operations', 'regions', 'nextSeq', 'stock', 'selections'], 'a design not from an STL (here from Fusion) stores no `stl`: its Shaper part is as before (TASK 795: + its selection list, one row; TASK S1: the operations store, version 3)');
+      eq(Object.keys(d0.hosts.shaper), ['version', 'operations', 'regions', 'nextSeq', 'listOrder', 'stock', 'selections'], 'a design not from an STL (here from Fusion) stores no `stl`: its Shaper part is as before (TASK 795: + its selection list, one row; TASK S1: the operations store, version 3)');
       app.stl.openFile(M.binaryStl(M.draftedPocket(10)), 'drafted.stl');
       harness(app).pressEl('.stl-units .cut-preset[data-value="mm"]'); // the current unit: nothing happens
       const d = await app.storedDoc();

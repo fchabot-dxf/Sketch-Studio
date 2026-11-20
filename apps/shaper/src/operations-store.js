@@ -11,9 +11,12 @@
 //   regions: { [geometry key]: { slope?, levels?, source? } }  the data that belongs to a GEOMETRY whatever operations use it (entries replaced, never mutated:
 //            undo snapshots share them by reference); source = { cutType, cutDepth } as the import gave them
 //   nextSeq: the next file-order number
+//   listOrder: 'default' | 'stored' (advisor ruling, task S1 turn 2702): 'default' while the user has never reordered the list: the operations are kept in the
+//            default order (operations.js defaultOpOrder, re-sorted after every change: the part-freeing Outside last, after the holes); 'stored' once the
+//            user reorders (op-list's drag / arrows: reorderOps), or migrated from a version 2 document with a stored opOrder
 // This module holds the data and its primitives only; the rules of WHICH operation a shape goes into are cut-plan.js's (fileShape), the one writer.
 
-const S = { ops: [], regions: {}, nextSeq: 1 };
+const S = { ops: [], regions: {}, nextSeq: 1, listOrder: 'default' };
 let version = 0;          // bumped on every change: the lookup index below is rebuilt once per version
 let index = null;         // { version, byPlanKey: Map(planKey -> { op, ref }) }
 export const CONTOUR_TYPE = 'contour';
@@ -83,8 +86,12 @@ export function setRefAt(ref, at) {
   if (at === undefined) delete ref.at; else ref.at = at;
   bump();
 }
-/** The list order: `ids` first (in that order), the operations not named keep their order after them. */
-export function reorderOps(ids) {
+/** 'default' | 'stored': whether the list is the default order of its operations or the user's (see the header). */
+export const listOrder = () => S.listOrder;
+/** The USER's reorder (the Operations list's drag / arrows): the list order becomes stored ('stored'); see setOpsOrder. */
+export function reorderOps(ids) { S.listOrder = 'stored'; setOpsOrder(ids); }
+/** The list order: `ids` first (in that order), the operations not named keep their order after them (listOrder unchanged). */
+export function setOpsOrder(ids) {
   const byId = new Map(S.ops.map((op) => [op.id, op]));
   const head = [];
   for (const id of ids) if (byId.has(id) && !head.includes(byId.get(id))) head.push(byId.get(id));
@@ -116,12 +123,13 @@ export function renameGeometry(rename, remove = new Set()) {
 }
 
 /** The store as plain data: what the document (v3) and the undo snapshots keep. Regions are shared by reference (never mutated). */
-export const captureStore = () => ({ operations: S.ops.map(cloneOp), regions: { ...S.regions }, nextSeq: S.nextSeq });
+export const captureStore = () => ({ operations: S.ops.map(cloneOp), regions: { ...S.regions }, nextSeq: S.nextSeq, listOrder: S.listOrder });
 /** Replace the store from captureStore()'s form (anything missing: empty). */
 export function applyStore(d) {
   S.ops = Array.isArray(d && d.operations) ? d.operations.filter((op) => op && typeof op.id === 'string' && typeof op.type === 'string' && Array.isArray(op.geometry))
     .map((op) => cloneOp({ ...op, settings: op.settings || {} })) : [];
   S.regions = d && d.regions && typeof d.regions === 'object' ? { ...d.regions } : {};
+  S.listOrder = d && d.listOrder === 'stored' ? 'stored' : 'default';
   const maxSeq = Math.max(0, ...S.ops.flatMap((op) => op.geometry.map((r) => Number(r.seq) || 0)));
   const next = Number(d && d.nextSeq);
   S.nextSeq = Number.isFinite(next) && next > maxSeq ? next : maxSeq + 1;

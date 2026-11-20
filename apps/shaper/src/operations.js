@@ -282,7 +282,7 @@ function orderView(state, op, entries, geo) {
   const rec = recs.length ? recs[0].rec : { cutType: op.type, ...op.settings };
   const levels = Boolean((cutTypeById(op.type) || {}).levelsOp); // only a Roughing / Contour ranks by its cuts
   const mine = levels ? entries.filter((e) => op.geometry.some((ref) => e.planKey === planKeyOf(op, ref))) : [];
-  const records = [...(entryCutsByOp(state, mine.map((e) => ({ ...e, opId: 'x' })), geo).get('x') || [])];
+  const records = [...(entryCutsByOp(state, mine.map((e) => ({ ...e, opId: 'x' })), levels ? geo() : null).get('x') || [])];
   return { key: op.id, tool: toolOf(rec), cutType: op.type, settings: settingsOf(rec), rank: levelsRank({ cutType: op.type, records }), first: Math.min(...op.geometry.map((r) => r.seq)) };
 }
 const OLD_GUIDE_KEY = JSON.stringify([null, 'guide', null]); // the one Guide operation's key before task S1 (a Guide declared no settings)
@@ -308,6 +308,15 @@ export function migrationOrder(state, groups, storedOrder) {
   return [...orderOps(views, keys).map((v) => v.key), ...stale];
 }
 
+/** TASK S1 (listOrder 'default', advisor ruling turn 2702): the stored operations' ids in the DEFAULT order (defaultOpOrder) on the solved sketch `state`: what the
+ *  list is while the user has never reordered it, as before S1 (re-sorted after every change). */
+export function defaultOrderIds(state) {
+  const st = state || EMPTY_STATE;
+  const entries = planEntries();
+  let g = null; const geo = () => g || (g = plannedGeometry(st, entries)); // only a Roughing / Contour ranks by its cuts: the loops are read for one only
+  return defaultOpOrder(storeOps().map((op) => orderView(st, op, entries, geo))).map((v) => v.key);
+}
+
 /** TASK S1: where a NEW operation (`draft` = { type, settings, geometry }) goes in the stored list: the default-order rule applied once (see the header), on the solved
  *  sketch `state` (a Roughing / Contour ranks by the cuts it makes). */
 export function newOpIndex(state, draft) {
@@ -315,7 +324,7 @@ export function newOpIndex(state, draft) {
   const ops = storeOps();
   const entries = planEntries();
   const draftEntries = draft.geometry.map((ref) => { const pk = planKeyOf(draft, ref), e = resolveEntry(pk, recordOf(draft, ref)); return e ? { ...e, planKey: pk } : null; }).filter(Boolean);
-  const geo = plannedGeometry(st, [...entries, ...draftEntries]);
+  let g = null; const geo = () => g || (g = plannedGeometry(st, [...entries, ...draftEntries]));
   const views = ops.map((op) => orderView(st, op, entries, geo));
   const mine = { ...orderView(st, { ...draft, id: '\u0000new' }, draftEntries, geo), key: '\u0000new' };
   const ordered = orderOps([...views, mine], ops.map((op) => op.id));

@@ -123,9 +123,16 @@ Everything else has a default I chose that is easy to change later; section 7 li
     }
   },
   "nextSeq": 2,
+  "listOrder": "default",               // "default" | "stored" (task S1, advisor turn 2702): see below
   "stock": { }, "selections": [ ], "stl": { }
 }
 ```
+
+**`listOrder`** (task S1, advisor ruling turn 2702): the default operation order is a safety rule (the cut that frees the part comes last, after the
+holes). `"default"` = the user has never reordered the list: the operations are kept in the default order (`defaultOpOrder`, `operations.js:10-20`),
+re-sorted after EVERY change (as before S1); `"stored"` = the user reordered (the list's drag / arrows), or a version 2 document stored an `opOrder`:
+the array order is the user's, and a new operation is slotted in once by the 743 rule. Saved, undone and synced with the operations. S2 keeps it (a new
+operation is placed by the default rule while `"default"`).
 
 ### 1.3 Where each field of today's record goes
 
@@ -235,7 +242,7 @@ recordOf(op, ref) = { cutType: op.type, ...op.settings, ...regionData(ref.key), 
 |---|---|---|
 | `apps/shaper/src/cut-plan.js` | `CUT_PLAN` Map (`:22`), `getCutRecord` / `setFieldFor` (`:24-25`), Contour helpers (`:27-66`), `cutPlanEntries` (`:385`), the plan-wide notes `planHoldNotes` / `planLeadInNotes` / `planClearingNotes` / `planSteppedNotes` / `planLevelsNotes` (`:160`, `:222`, `:331`, `:377`, `:436`), `deriveKeyFootprints` (`:623`), `planOwnedLoops` (`:635`), `planReliefItems` (`:663`), `stockKeyOf` / `planStockProfile` (`:685`, `:696`), `assignImportedCuts` (`:723`) | the store becomes `OPERATIONS` + `REGIONS` (a new `operations-store.js`, the one writer: `addOperation`, `removeOperation`, `setOpField`, `addShapes`, `removeShapes`, `moveShapes`, `renameGeometry`); every `plan`-walking function iterates `planEntries()` instead of the Map (same per-entry calls); the Contour key helpers (`contourKeyOf`, `isContourKey`, `partKeyOf`, `contourOf`, `setContour`, `resolveEntry`) go; `stockKeyOf` = the Stock operation's shape; `assignImportedCuts` makes operations grouped as today's derivation groups records |
 | `cut-plan.js` reconciliation (`:454-598`) | renames / drops keys in the Map | renames through `renameGeometry`; `migrateEdgeRecords` runs inside the v2 migration only |
-| `apps/shaper/src/operations.js` | groups records into operations (`planOperations` `:214`), order by keys (`:33-37`, `orderOps` `:121`) | `planOperations` becomes `describeOperations(state)`: the STORED operations, in array order, each with its entries' cuts and today's words (`describe`, `:155-203`, unchanged); `opKeyOf` / `settingsOf` / `orderOps` stay for the migration and for placing a NEW operation in the list (the 743 default-order rule, `:10-20`, applied once at creation); `assignIds` (`:142`) is replaced by the stored id; `opIdsByPlanKey` (`:241`) = `entry.opId` |
+| `apps/shaper/src/operations.js` | groups records into operations (`planOperations` `:214`), order by keys (`:33-37`, `orderOps` `:121`) | `planOperations` becomes `describeOperations(state)`: the STORED operations, in array order, each with its entries' cuts and today's words (`describe`, `:155-203`, unchanged); `opKeyOf` / `settingsOf` / `orderOps` stay for the migration and for placing a NEW operation in the list (the 743 default-order rule, `:10-20`, applied once at creation while `listOrder` is `"stored"`; while it is `"default"` the whole list is re-sorted by `defaultOpOrder` after every change: task S1, advisor turn 2702); `assignIds` (`:142`) is replaced by the stored id; `opIdsByPlanKey` (`:241`) = `entry.opId` |
 | `apps/shaper/src/op-list.js` | rows of derived operations, bin = unassign the regions (`:13`, `:161-163`) | rows of stored operations; an empty row ("no shapes yet: click shapes to add"); the palette strip in the header (section 4); bin = delete the operation (its shapes stay in their other operations); drag reorders the array (one undo step, as `prepare-stage.js:67`) |
 | `apps/shaper/src/prepare-stage.js` | card edits go to the selected records (`:56-58`), a row tap selects its regions (`:68`), the bin unassigns (`:73-77`) | the ACTIVE operation (one at a time) is the card's subject; a row tap makes it active and selects its shapes; the bin deletes the operation; `cutEdit` (`:45-54`) unchanged (one undo step) but compares the operations store only, not the large `regions` (today it stringifies the whole plan, levels included, twice per edit: `:48`, `:52`) |
 | `apps/shaper/src/prepare-view.js` | selection = plan keys incl. `contour:` targets (`:276`, `:813-816`); `applyCutTypeToSelected` (`:825-856`), `setFieldOnSelected` (`:858-903`) write records; the look walks `CUT_PLAN` (`:503`, `:508`, `:530`, `:562`, `:594`, `:624`) | selection = geometry keys only; "Add shapes" mode for the active operation (a click toggles a shape in / out of it); the quick flow (4.4) replaces `applyCutTypeToSelected`; `setFieldOnSelected` becomes `setOpField(activeOp, ...)` with today's remembered-defaults rules (`:860-898`) kept; the look walks `planEntries()`; the Roughing allowance write on Contour (`:849`) goes |
@@ -411,8 +418,8 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
   Freehand pocket's stored stepover) is the operation's: after switching a pattern back, the number shown can differ.
   Contour: its depth and wall side are read LIVE from its part, as before (ruling 3); S2 keeps this as the Contour's
   "From part" default, and the explicit `cutDepth` / `wallSide` / `walls` of section 3 apply only where the user set them.
-  NOT RULED YET (task S1 report): a NEW operation is placed once, when it is made (the 743 rule: section 2); before S1 a list with no stored order was
-  re-sorted on every change.
+  The list order is kept as before S1 by `listOrder` (advisor ruling, turn 2702; sections 1.2 and 2): while the user has never
+  reordered, the list is re-sorted by the default rule after every change.
 - S2: editing an operation's setting changes ALL its shapes (today: only the selected shapes, which then regroup); an
   edited operation keeps its place in the list (today it moves); the bin deletes the operation, and its shapes stay in
   their other operations (today: unassigns the regions); Contour is a type in the menus, the Roughing card loses its

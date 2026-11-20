@@ -15,8 +15,8 @@ import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
-import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, setOpSettings, setRefAt, takeSeq, renameGeometry, regionKeys } from './operations-store.js'; // TASK S1: the operations + regions store
-import { opKeyOf, newOpIndex } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
+import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, setOpSettings, setRefAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
+import { opKeyOf, newOpIndex, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -138,7 +138,19 @@ function writeRegionData(key, rec) {
 }
 /** TASK S1: the imported cut type / depth of a geometry (regions[key].source: what Fusion / the STL said; a Depth of 'model' follows it). */
 export function setRegionSource(key, source) { setRegion(key, { ...(regionOf(key) || {}), source: source ? { cutType: source.cutType ?? null, cutDepth: source.cutDepth ?? 'unset' } : undefined }); }
+/** TASK S1 (advisor ruling turn 2702): while the user has never reordered the list (listOrder 'default'), it is re-sorted by the default rule after every change
+ *  (operations.js defaultOrderIds), as before S1: the part-freeing Outside after the holes. A stored order ('stored') is left as it is. */
+export function settleOrder(state = null) {
+  if (listOrder() !== 'default') return;
+  const ids = defaultOrderIds(state);
+  if (ids.join('\n') !== storeOps().map((op) => op.id).join('\n')) setOpsOrder(ids);
+}
 export function fileShape(planKey, rec, state = null) {
+  const out = fileShapeOnly(planKey, rec, state);
+  settleOrder(state);
+  return out;
+}
+function fileShapeOnly(planKey, rec, state) {
   const contour = isContourKey(planKey), key = partKeyOf(planKey);
   if (!contour && rec) writeRegionData(key, rec);
   const cur = memberOf(planKey);
@@ -171,7 +183,7 @@ export function fileShape(planKey, rec, state = null) {
 function refileContour(planKey, state) {
   if (isContourKey(planKey)) return;
   const ck = contourKeyOf(planKey), c = getPlanRecord(ck);
-  if (c) fileShape(ck, c, state);
+  if (c) fileShapeOnly(ck, c, state);
 }
 /** Set one field of a shape's record (Prepare's card edits, its lead-in drag): fileShape with the resulting record. */
 export function setFieldFor(key, field, value, state = null) { return fileShape(key, { ...getCutRecord(key), [field]: value }, state); }

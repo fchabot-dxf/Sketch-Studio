@@ -3,7 +3,7 @@
 // selectionId), and keep the user's Prepare settings of a region that is still there after an update. The history step, the list change and the page's
 // refresh are the callers' (one undo step each).
 import { removeGeometry } from '#core/delete-manager.js';
-import { getCutRecord, fileShape } from './cut-plan.js'; // TASK S1: a shape's record (its operation's, or its imported depth / region data), the one writer
+import { getCutRecord, fileShape, settleOrder } from './cut-plan.js'; // TASK S1: a shape's record (its operation's, or its imported depth / region data), the one writer
 import { renameGeometry } from './operations-store.js';
 import { getSelections, setSelections, localSelectionId } from './selection-list.js';
 import { setStlSource } from './stl-source.js';
@@ -75,6 +75,7 @@ export function keepSettings(entry, prior, state = null) {
 export function dropSelectionGeometry(st, entry) {
   const profileIds = new Set();
   renameGeometry(new Map(), new Set(entry.cutKeys)); // TASK S1: its shapes leave every operation, their region data goes
+  settleOrder(st); // the list's default order (listOrder 'default') without them
   for (const key of entry.cutKeys) if (key.startsWith('profile:')) profileIds.add(key.slice('profile:'.length));
   if (Array.isArray(st.profiles) && profileIds.size) {
     for (let i = st.profiles.length - 1; i >= 0; i--) if (profileIds.has(st.profiles[i].id)) st.profiles.splice(i, 1);

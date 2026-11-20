@@ -146,7 +146,7 @@ export const ORIGIN_RULES = deepFreeze([
   },
   {
     id: 'cut-type-encoding', name: 'Cut type = fill + stroke colours', targets: ['origin', 'studio'], sev: 'error', status: 'measured',
-    statement: 'An element\'s shaper:cutType and its fill / stroke colours are one of the declared cut-type encodings (the app\'s CUT_TYPES: outside black, inside white with a black stroke, pocket grey, on-line grey stroke, guide blue); a start mark is the guide drawn as its outline (fill="none").',
+    statement: 'An element\'s shaper:cutType and its fill / stroke colours are one of the declared cut-type encodings (the app\'s CUT_TYPES, the ONE declaration of the colours: apps/shaper/src/shaper.js); a start mark is the guide drawn as its outline (fill="none").',
     check: { kind: 'cut-type-encoding' },
     message: 'shaper:cutType and the fill / stroke do not match a declared cut-type encoding',
     evidence: [{ log: 'TURN 456' }, { log: 'TURN 786' }, { file: 'apps/shaper/samples/Untitled-2.svg' }],
@@ -258,9 +258,9 @@ export const ORIGIN_RULES = deepFreeze([
   },
   {
     id: 'guide-never-cut', name: 'Guides are shown, never cut; the Stock goes first', targets: ['origin', 'studio'], sev: null, status: 'documented',
-    statement: 'A guide (shaper:cutType="guide", blue #0068FF fill and stroke in Studio) is shown and never cut; the Stock outline is exported as a guide, written FIRST so what paints the file in order draws the board behind the cuts; a pocket\'s start mark is a stroke-only guide (fill="none") written right after its pocket.',
+    statement: 'A guide (shaper:cutType="guide", blue in Studio: CUT_TYPES.guide) is shown and never cut; the Stock outline is exported as a guide, written FIRST so what paints the file in order draws the board behind the cuts; a pocket\'s start mark is a stroke-only guide (fill="none") written right after its pocket.',
     check: null, message: null,
-    evidence: [{ log: 'TURN 472' }, { log: 'TURN 774' }, { log: 'TURN 786' }, { log: 'TURN 814' }],
+    evidence: [{ log: 'TURN 472' }, { log: 'TURN 774' }, { log: 'TURN 786' }],
     usedBy: ['packages/core/shaper-export.js#exportFirst', 'apps/shaper/src/shaper.js#drawnOnly', 'apps/shaper/src/export-preview.js#GUIDE_FILL'],
   },
   {

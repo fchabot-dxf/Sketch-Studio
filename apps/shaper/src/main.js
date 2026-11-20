@@ -5,6 +5,8 @@ import { download } from './download.js';
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { sketchesSignature } from '#core/sketch-model.js';
+import { checkOriginRules, formatOriginRuleWarning } from '#core/origin-rules.js'; // TASK 803: every exported file is checked against the Origin rules
+import { exportEncoding } from './shaper.js'; // TASK 803: the cut types' encoding, injected into the check like the exporter's
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, mountShaperBrowser, shaperBufferOptions, applyShaperUnitDefault } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
@@ -82,6 +84,8 @@ const chrome = mountAppChrome({
       const payload = generateShaperSvgPayload();
       if (!payload) { groupStatus(emptyExportText()); return; }
       download(designFileName(), payload.svg);
+      const status = document.getElementById('simexport-status'); // TASK 803: the Origin-rules warning shows in the Export step's status line
+      if (payload.warning && status) status.textContent = payload.warning;
     } },
     fusionAddinAction({ fusion: fusionMode, open: () => chrome.sidebar.showView(ADDIN_VIEW_ID) }),
     { divider: true },
@@ -110,7 +114,10 @@ function generateShaperSvgPayload({ preview = false } = {}) {
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
   const p = exportFileOf(st, { preview }); // TASK 798: the ticked operations on the whole design's frame (export-payload.js, declared once)
-  return p ? { ...p, state: st } : null;
+  if (!p) return null;
+  // TASK 803: every file that leaves the app (Generate, Download, Send to ShaperHub) is checked against the Origin rules (#core/origin-rules.js); a broken rule is a short warning, the file is still allowed
+  const warning = preview ? '' : formatOriginRuleWarning(checkOriginRules(p.svg, { targets: ['origin', 'studio'], encoding: exportEncoding() }));
+  return { ...p, state: st, warning };
 }
 
 // TASK 767: the name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync dialog's file name): the design's name
@@ -142,6 +149,7 @@ if (btnGenerateSvg) {
     Object.assign(hub, { href: 'https://hub.shapertools.com/my-files', target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
     hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
     if (status) status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. Drop it into ', hub, ' to sync with Origin.');
+    if (status && payload.warning) status.append(` ${payload.warning}`); // TASK 803
   });
 }
 
@@ -546,7 +554,7 @@ async function sendToShaperHub(mode) {
   const line = sentLine(data);
   showSyncStatus('is-success', line);
   const expStatus = document.getElementById('simexport-status');
-  if (expStatus) expStatus.textContent = `✓ ${line}. It will now appear on your Origin over Wi-Fi.`;
+  if (expStatus) expStatus.textContent = `✓ ${line}. It will now appear on your Origin over Wi-Fi.${payload.warning ? ` ${payload.warning}` : ''}`;
   // TASK 758: the login is NOT kept by the app. Closing the dialog hides the form after the successful fetch: that is what tells the browser's
   // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared).
   syncCloseTimer = setTimeout(closeSyncModal, 1200); // TASK 788: ended when the dialog closes (below), so it only ever closes the opening it was started for

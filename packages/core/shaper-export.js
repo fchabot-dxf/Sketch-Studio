@@ -216,7 +216,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
   const firstItems = []; // TASK 774: the elements of the exportFirst types (the Stock)
-  const owned = ownedLoopIds(ents, state, loops, ensurePolys()); // TASK 711: a hole with its own entry is cut by that entry only
+  const owned = ownedLoopIds(ents, state, loops, ensurePolys(), enc); // TASK 711: a hole with its own entry is cut by that entry only
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
     // TASK 714 / 792: a ROUGHING / CONTOUR type's encoding declares `levelsOp` (TASK 792 replaced the stepped types' `terraceAs`): deriveCuts then

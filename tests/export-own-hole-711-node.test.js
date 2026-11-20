@@ -136,22 +136,36 @@ const exportNow = (st) => {
   ok(guides.some((e) => /M 110 10 /.test(e.geom)), 'part B keeps its guide line: ' + guides.map((e) => e.geom).join(' | '));
   CUT_PLAN.clear();
 
-  // an Outside plate with a hole assigned Guide: the hole is a guide line only, the plate does not cut it
-  const st2 = { joints: new Map(), shapes: [], constraints: [], groups: [], profiles: [] };
-  n = 0;
-  const rect2 = (x, y, w, h) => {
-    const ids = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(([px, py]) => { const id = 'j' + (++n); st2.joints.set(id, { x: px, y: py }); return id; });
-    const first = 's' + (n + 1);
-    for (let i = 0; i < 4; i++) st2.shapes.push({ id: 's' + (++n), type: 'line', joints: [ids[i], ids[(i + 1) % 4]] });
-    return first;
+  // TASK 814: an Outside plate with a hole assigned Guide still cuts the hole (the Guide is drawn, never cut: it owns no loop) and the guide is written besides
+  const plate = (hole) => {
+    const st = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 60, y: 0 }], ['c', { x: 60, y: 40 }], ['d', { x: 0, y: 40 }], ['o', { x: 30, y: 20 }]]),
+      shapes: [{ id: 's1', type: 'line', joints: ['a', 'b'] }, { id: 's2', type: 'line', joints: ['b', 'c'] }, { id: 's3', type: 'line', joints: ['c', 'd'] }, { id: 's4', type: 'line', joints: ['d', 'a'] }, { id: 'c1', type: 'circle', joints: ['o'], radius: 5 }],
+      constraints: [], groups: [], profiles: [] };
+    CUT_PLAN.clear();
+    const lp = findLoops(st);
+    CUT_PLAN.set(keyOf('loop', lp.find((l) => l.edges.includes('s1')).id), rec('exterior', 12));
+    if (hole) CUT_PLAN.set(keyOf('loop', lp.find((l) => l.edges.includes('c1')).id), rec(hole, hole === 'guide' ? 0 : 12));
+    return st;
   };
-  const s2Plate = rect2(0, 0, 90, 80), s2Mark = rect2(30, 20, 20, 20);
-  const loops2 = findLoops(st2);
-  CUT_PLAN.set(keyOf('loop', loops2.find((l) => l.edges.includes(s2Plate)).id), rec('exterior', 12));
-  CUT_PLAN.set(keyOf('loop', loops2.find((l) => l.edges.includes(s2Mark)).id), rec('guide', 0));
-  els = elementsOf(exportNow(st2));
-  eq(els.map((e) => e.cutType).sort(), ['guide', 'outside'], 'a Guide-assigned hole: the guide line and the plate outline, no Inside cut');
-  eq(planReliefItems(st2).filter((i) => i.cutType === 'interior').length, 0, 'Review: the plate does not cut the Guide-assigned hole');
+  const key = (e) => e.cutType + ' ' + e.depth + ' ' + e.geom;
+  const base = elementsOf(exportNow(plate(null))); // (a) hole unassigned
+  const baseHole = base.find((e) => e.geom === 'circle 30,20 r5');
+  ok(baseHole && baseHole.cutType === 'inside', '(a) baseline: the unassigned hole is cut as the plate Inside hole');
+  const stG = plate('guide');
+  const withGuide = elementsOf(exportNow(stG)); // (b) hole on Guide
+  ok(withGuide.some((e) => key(e) === key(baseHole)), '(b) the plate hole cut is still written, the same element as in (a)');
+  eq(withGuide.filter((e) => e.cutType === 'guide' && e.geom === baseHole.geom).length, 1, '(b) and the hole guide element too');
+  eq(withGuide.length, base.length + 1, '(b) the plate cuts plus the guide');
+  eq(planReliefItems(stG).filter((i) => i.cutType === 'interior').length, 1, '(b) Review: the plate cuts the Guide-assigned hole');
+  const own = elementsOf(exportNow(plate('interior'))); // (c) hole on Inside: cut once by its own record (TASK 711)
+  eq(own.filter((e) => e.geom === baseHole.geom).length, 1, '(c) a hole on Inside is written once');
+  // (d) a Pocket plate with a Guide hole: the hole is the pocket's island, the guide is written
+  const stP = plate('guide');
+  const plateKey = [...CUT_PLAN.keys()].find((k) => CUT_PLAN.get(k).cutType === 'exterior');
+  CUT_PLAN.set(plateKey, rec('pocket', 5));
+  const pk = elementsOf(exportNow(stP));
+  eq(pk.map((e) => e.cutType).sort(), ['guide', 'pocket'], '(d) Pocket plate: the pocket (hole as island, 2 subpaths) and the guide');
+  eq(pk.find((e) => e.cutType === 'pocket').subpaths, 2, '(d) the pocket keeps the hole as an island');
   CUT_PLAN.clear();
 }
 

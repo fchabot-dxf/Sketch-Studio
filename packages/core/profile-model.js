@@ -665,12 +665,15 @@ export function listSketchProfiles(state, loops, loopPolys) {
  * ownedLoopIds(entries, state, loops, loopPolys) — TASK 711: the loops that have their OWN record in a cut plan: the outer loop
  * each assigned entry ({ target, rec } with a rec.cutType) resolves to (resolveTargetKey). deriveProfileCuts takes this set and
  * never cuts one of these loops as an automatic hole of an enclosing profile. Chains and stale targets own no loop.
+ * TASK 814: a type the `encoding` (the injected CUT_TYPES list) declares `drawnOnly` (the Guide: drawn, never cut) owns no loop, so the
+ * enclosing profile still cuts that hole and the Guide's own element is written besides.
  */
-export function ownedLoopIds(entries, state, loops, loopPolys) {
+export function ownedLoopIds(entries, state, loops, loopPolys, encoding) {
+  const drawnOnly = new Set((encoding || []).filter((t) => t && t.drawnOnly).map((t) => t.id));
   const owned = new Set();
   const allLoops = loops || (state ? findLoops(state) : []);
   for (const e of (entries || [])) {
-    if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
+    if (!e || !e.target || !e.rec || !e.rec.cutType || drawnOnly.has(e.rec.cutType)) continue;
     const spec = resolveTargetKey(e.target, state, allLoops, loopPolys);
     if (spec && !spec.invalid && spec.outer) owned.add(spec.outer);
   }

@@ -423,9 +423,8 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
    is a tab opened before S0 and still open after S1.
 2. *Test churn:* about 100 test files touch the plan (count in section 3). S1 keeps the entry interface and moves tests
    to the real migration path; still the largest stage.
-3. *A Guide on a hole counts as "its own entry"* (`ownedLoopIds`, `profile-model.js:669-677`, includes every entry with a
-   cut type), so an Outside plate then stops cutting that hole. True today; multi-membership makes "Guide on everything"
-   more likely. Not changed by this design (byte identity); flagged for its own task.
+3. *(Fixed, TASK 814)* A Guide on a hole no longer counts as "its own entry": CUT_TYPES declares the Guide `drawnOnly`, `ownedLoopIds`
+   skips it, so the enclosing Outside / Inside / On line profile still cuts the hole and the guide element is written besides.
 4. *810 and S2 both rewrite `cut-panel.js`:* never in parallel (section 5).
 5. *Undo snapshot cost:* the snapshots already hold the plan; moving `levels` into `regions` (shared, never mutated) and
    comparing only the operations store in `cutEdit` removes today's double stringify of the rose's ~1.6 MB levels per edit.

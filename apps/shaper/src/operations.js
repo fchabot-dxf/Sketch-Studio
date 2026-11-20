@@ -19,7 +19,7 @@
 //  the first of them that the in-tool rule puts after it, else after the last of them: no extra tool change); a new tool goes right after the operation
 //  that comes before it in the default order (at the top when none does).
 // An operation's regions are listed in the plan's order.
-import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS } from './shaper.js';
+import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS, CUT_TYPES } from './shaper.js';
 import { keyOf, parseKey, loopsWithPolygons, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout, boundaryOf, ROUGH_BOUNDARY, wallsDefault } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; a Contour's walls
@@ -256,7 +256,7 @@ export function planOperations(state, entries, keys = order) {
   const ents = (entries || []).filter((e) => e && e.target && e.rec && e.rec.cutType);
   if (!ents.length) return [];
   const { loops, loopPolys } = loopsWithPolygons(state);
-  const owned = ownedLoopIds(ents, state, loops, loopPolys);
+  const owned = ownedLoopIds(ents, state, loops, loopPolys, CUT_TYPES);
   const byKey = new Map();
   ents.forEach((e, i) => {
     const cuts = deriveCuts(e.target, effectiveCutRecord(e.rec), state, loops, loopPolys, owned) || [];

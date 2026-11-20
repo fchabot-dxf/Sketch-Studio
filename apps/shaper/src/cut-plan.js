@@ -6,7 +6,7 @@
 // Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter). This is app STATE (not #core).
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
-import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
+import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById, CUT_TYPES } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
 import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughingFor, boundaryOf, levelsBand } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; the heights' band
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
@@ -601,7 +601,7 @@ export function keepHolesFromOtherSketches(state, plan = CUT_PLAN) {
   const { loops, loopPolys } = loopsWithPolygons(state);
   const loopById = new Map(loops.map((l) => [l.id, l]));
   const shapeById = shapeIndexOf(state);
-  const owned = ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys);
+  const owned = ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys, CUT_TYPES);
   const covered = (loopId) => { const p = resolveProfileForLoop(loopId, state, loops, loopPolys, { shapeById }); return !!p && !p.isDerived; };
   const rename = new Map();
   let lostHoles = 0;
@@ -661,7 +661,7 @@ export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, own
 /** TASK 711: the loops that have their own record in `plan` (#core ownedLoopIds over the plan's assigned entries, the set the exporter
  *  derives from the same entries). */
 export function planOwnedLoops(state, loops, loopPolys, plan = CUT_PLAN) {
-  return ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys);
+  return ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys, CUT_TYPES);
 }
 
 /** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. */

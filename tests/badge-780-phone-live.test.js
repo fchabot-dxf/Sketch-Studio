@@ -10,7 +10,7 @@ try {
   await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await resetBufferLive(cdp);
   await cdp.navigate(`http://127.0.0.1:${cdp.port}/apps/shaper/index.html?analytics=off`, 10000);
-  await cdp.waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper phone ready');
+  await cdp.waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper phone ready');
   console.log('outside badge at ' + JSON.stringify(await runBadge780(cdp, { phone: true, shotPrefix: 'phone-', expectOutsideAt: 'translate(-2.9161901904696346e-16 -1.5875)' })));
   console.log('badge-780-phone-live: ok');
 } finally { await cdp.close(); }

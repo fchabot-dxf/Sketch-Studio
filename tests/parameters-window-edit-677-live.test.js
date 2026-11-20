@@ -69,13 +69,13 @@ await (async () => {
   const active = () => evalJs(`(() => { const a = document.activeElement; const r = a && a.closest && a.closest('tr.sk-ptable-row'); return a ? { tag: a.tagName, col: a.dataset.col || null, row: r ? (r.dataset.name || r.dataset.kind) : null, cls: a.className } : null; })()`);
   const winOpen = () => evalJs(`(() => { const e = document.querySelector('${W}'); return !!e && !e.hidden && e.getBoundingClientRect().width > 0; })()`);
   const openMenu = async () => {
-    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-chevron')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
   };
   const dontSave = async () => { await sleep(300); const has = await evalJs(`[...document.querySelectorAll('.sk-sidebar-ask button')].some((b) => /Don.t save/.test(b.textContent))`); if (has) await press('.sk-sidebar-ask button:nth-of-type(2)'); };
   const openShaper = async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
-    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-handle')`, 'Shaper to load');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-chevron')`, 'Shaper to load');
     for (let i = 0; i < 5; i++) { const on = await evalJs(`(() => { const t = document.querySelector('.sk-header-tab.active'); return !t || t.dataset.tab === 'design'; })()`); if (on) break; await press('.sk-header-tab[data-tab="design"]'); }
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab');
     await waitForApp('design-canvas');

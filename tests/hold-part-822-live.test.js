@@ -64,7 +64,7 @@ try {
     for (let i = 0; i < 5; i++) {
       if (await activeStage() === mode) return;
       if (phone) {
-        if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickElRaw('.sk-sidebar-handle');
+        if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickElRaw('.sk-sidebar-chevron');
         await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
         await clickElRaw(`.sk-sidebar-stage[data-tab="${mode}"]`);
       } else await clickElRaw(`.sk-header-tab[data-tab="${mode}"]`);

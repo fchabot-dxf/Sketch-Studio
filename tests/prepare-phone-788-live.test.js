@@ -51,7 +51,7 @@ try {
     const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/tests/helpers/plan-v2.js');
     cp.V2_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 6.35 });
   })()`);
-  await clickEl('.sk-sidebar-handle');
+  await clickEl('.sk-sidebar-chevron');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
   await sleep(250);
   await clickEl('.sk-sidebar-stage[data-tab="prepare"]');

@@ -42,7 +42,7 @@ await (async () => {
   const cornerChoices = (param) => evalJs(`[...document.querySelectorAll('.sk-tp-corners .sk-tp-corner[data-param="${param}"] button')].filter((b) => !b.hidden).map((b) => [b.dataset.value, b.getAttribute('aria-label'), b.getAttribute('aria-pressed')])`);
   const cornerSel = (param, value) => `.sk-tp-corners .sk-tp-corner[data-param="${param}"] button[data-value="${value}"]`;
   const openMenu = async () => {
-    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-chevron')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
   };
   const openCards = async () => { await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'the template modal'); await waitFor(`!!document.querySelector('.sk-tp-grid[data-previews="ready"]')`, 'every card preview drawn (TASK 674)'); };
@@ -55,7 +55,7 @@ await (async () => {
   const openIt = async (what) => { await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp-panel')`, what + ': Open closes the modal'); await dontSave(); };
   const openShaper = async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
-    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-handle')`, 'Shaper to load');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-chevron')`, 'Shaper to load');
     for (let i = 0; i < 5; i++) { const on = await evalJs(`(() => { const t = document.querySelector('.sk-header-tab.active'); return !t || t.dataset.tab === 'design'; })()`); if (on) break; await press('.sk-header-tab[data-tab="design"]'); }
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab');
     await waitForApp('design-canvas');

@@ -54,7 +54,7 @@ export async function runBadge780(cdp, { phone, shotPrefix, expectOutsideAt }) {
     V2_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
   })()`);
   if (phone) {
-    await evalJs(`document.querySelector('.sk-sidebar-handle').click()`); await sleep(250);
+    await evalJs(`document.querySelector('.sk-sidebar-chevron').click()`); await sleep(250);
     await evalJs(`document.querySelector('.sk-sidebar-stage[data-tab="prepare"]').click()`); await sleep(350);
     if (await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) { await evalJs(`document.querySelector('.sk-sidebar-scrim').click()`); await sleep(250); }
   } else await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);

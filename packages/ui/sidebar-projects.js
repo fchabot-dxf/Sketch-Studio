@@ -171,12 +171,13 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       },
       onPress: () => { saveNow().catch(fail); },
     });
-    tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName,
+    tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName, leading: sidebar.chevron,
       activity, signedIn, onRefresh: (list) => { shownTabs = list; saveButton.refresh(); } });
     overlay = mountLoadingOverlay({ activity, below: () => tabStrip.el });
   }
   // the tab strip goes below the host's <header> (whose menu button this sidebar owns); THE Save button and THE avatar go into the footer's right end (the host mounts the
   // footer too, in any order: place each as soon as its place exists)
+  if (!tabStrip) { sidebar.chevron.classList.add('free'); document.body.appendChild(sidebar.chevron); } // TASK 819: no strip to hold the phone door (Fusion mode): it sits on the page's corner
   let stripPlaced = !tabStrip, controlsPlaced = !(saveButton || avatar);
   const place = () => {
     if (!stripPlaced) {

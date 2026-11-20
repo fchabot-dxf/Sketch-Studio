@@ -68,7 +68,7 @@ await (async () => {
     const esc = () => sendRealKey(send, 'Escape', 'Escape', 27);
     const enter = () => sendRealKey(send, 'Enter', 'Enter', 13, 0, '\r');
     const menu = async (action) => {
-      if (!(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`))) await press(touch ? '.sk-sidebar-handle' : '.sk-sidebar-btn'); // a phone: the drawer handle
+      if (!(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`))) await press(touch ? '.sk-sidebar-chevron' : '.sk-sidebar-btn'); // a phone: the drawer handle
       await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the menu open');
       await press(`[data-action="${action}"]`);
     };

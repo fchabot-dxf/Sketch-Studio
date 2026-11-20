@@ -86,6 +86,11 @@ for (const record of STATES) {
     eq(hintFor(trig), hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the tooltip text is the table's hint in the card's context`);
     for (const c of row.querySelectorAll('[data-hint]')) { seen.add(c.dataset.hint); eq(c.textContent, hintLabel(c.dataset.hint), `${name}: the element ${c.dataset.hint} shows its name`); if (c !== trig) eq(hintFor(c), hintText(c.dataset.hint), `${name}: its tooltip is its hint`); }
   }
+  for (const tab of [...host.querySelectorAll('.cut-tab')].filter(visible)) { // TASK 810: a Roughing / Contour card's tabs: each shows its name, its tooltip is its hint
+    const n = tab.querySelector('[data-hint]');
+    seen.add(n.dataset.hint);
+    eq([n.textContent, hintFor(n)], [hintLabel(n.dataset.hint), hintText(n.dataset.hint)], `${name}: the tab ${n.dataset.hint}: its name and its hint`);
+  }
   ok(!host.querySelector('.sk-hint, .sk-hint-trigger, .sk-hint-i, .sk-opt-hint'), `${name}: TASK 805: no hint text or (i) is laid out in the card`);
   // the menus: each row shows its name only (its hint is the tooltip)
   for (const [trigSel, popSel, optSel, param] of [['.cut-type-trigger', '.cut-type-menu', '.cut-type-opt', 'cutType'], ['.cut-shape-trigger', '.cut-shape-pop', '.cut-type-opt', 'cutterShape'], ['.cut-clear-trigger', '.cut-clear-pop', '.cut-clear-opt', 'clearing']]) {

@@ -31,8 +31,13 @@ const PARAMS = {
   contourEdit: { label: 'Edit contour', hint: 'Shows the Contour’s own settings: its step and its bit.' },
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
-  // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); its row moves to the Passes tab in task 810
+  // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab
   smoothing: { label: 'Smoothing', hint: 'Fits smooth curves to this operation’s paths, never farther than this from the sliced levels (on either side), so the file is lighter and the bit runs smoothly. Details smaller than it may be smoothed away. 0 = off: the straight segments of the levels. The levels themselves are not changed.' },
+  // TASK 810 (owner turns 2657-2658): the tabs of the Roughing and Contour cards (cut-panel.js CARD_TABS); a dot on a tab = one of its settings is not the default
+  tabTool: { label: 'Tool', hint: 'The bit: its diameter and its shape. A dot means a setting here is not the default.' },
+  tabGeometry: { label: 'Geometry', hint: 'Where the operation cuts: the area it works in and how close to the walls. A dot means a setting here is not the default.' },
+  tabHeights: { label: 'Heights', hint: 'How deep it goes: where the cutting starts and stops. A dot means a setting here is not the default.' },
+  tabPasses: { label: 'Passes', hint: 'How the material comes off: the levels, the step down, what is left on the walls and the smoothing. A dot means a setting here is not the default.' },
   roughLayout: { label: 'Layout', hint: 'How the levels are cut. The Origin cuts every path from the surface down.', items: ['roughLayout:terraces', 'roughLayout:nested'] },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },

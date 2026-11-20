@@ -43,7 +43,8 @@ export function resolveEntry(key, rec, plan = CUT_PLAN) {
   return { key, target: parseKey(pk), rec: { ...rec, baseDepth: part.cutDepth, baseType: part.cutType, ...(part.slope ? { slope: part.slope } : {}), ...(part.levels ? { levels: part.levels } : {}) } };
 }
 // The Contour defaults: the last bit / cutter shape / step set on any Contour (owner's example: a 1/8 in ball nose at 0.25 mm). App state, like the step depth.
-let lastContourV = { toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90, stepDepth: LEVELS.contourStepMm };
+export const CONTOUR_DEFAULTS = Object.freeze({ toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90, stepDepth: LEVELS.contourStepMm }); // TASK 810: declared (the card's tab dots read what a Contour starts with)
+let lastContourV = { ...CONTOUR_DEFAULTS };
 export const lastContour = () => ({ ...lastContourV });
 export function rememberContour(field, value) { if (field in lastContourV && value != null) lastContourV = { ...lastContourV, [field]: value }; return lastContour(); }
 /**

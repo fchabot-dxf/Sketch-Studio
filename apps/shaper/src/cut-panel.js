@@ -5,7 +5,7 @@
 
 import { availableTypes, cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
-import { CLEARING_REFUSED } from './cut-plan.js';
+import { CLEARING_REFUSED, CONTOUR_DEFAULTS } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots)
 import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, hasLevels } from '#core/stepped-cut.js';
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
@@ -74,6 +74,33 @@ const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 const CONTOUR_PRESETS = [{ hint: choiceId('contour', 'off'), label: hintLabel(choiceId('contour', 'off')), value: false }, { hint: choiceId('contour', 'on'), label: hintLabel(choiceId('contour', 'on')), value: true }];
 // TASK 792 (owner turn 2604): Roughing's Layout row (#core ROUGH_LAYOUT), as preset buttons (the ONE preset widget)
 const LAYOUT_PRESETS = ROUGH_LAYOUT.layouts.map((l) => ({ hint: choiceId('roughLayout', l.id), label: hintLabel(choiceId('roughLayout', l.id)), value: l.id }));
+// TASK 810 (owner turns 2657-2658): the ROUGHING and CONTOUR cards are organised in TABS, as Fusion CAM's operation dialogs: the ONE table of which row lives in which tab
+// (a row is its data-row or data-param). Each tab is a FIXED panel: the rows area keeps the height of the tallest tab (applyTabs), so switching tabs moves nothing outside
+// the card; a tab none of whose rows shows on this card is not offered. Every other cut type keeps its single card (no tab bar, every row in its place).
+const CARD_TABS = [
+  { id: 'tool', hint: 'tabTool', rows: ['toolDia', 'cutterShape'] },
+  { id: 'geometry', hint: 'tabGeometry', rows: ['cutOffset', 'minTerraceWidth'] },
+  { id: 'heights', hint: 'tabHeights', rows: ['cutDepth'] },
+  { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'contour', 'smoothing'] },
+];
+const TAB_OF_ROW = new Map(CARD_TABS.flatMap((t) => t.rows.map((r) => [r, t.id])));
+const tabbedType = (cutType) => Boolean(cutType && cutTypeById(cutType) && cutTypeById(cutType).levelsOp); // Roughing, Contour
+// TASK 810: a row holds a CHANGED value when it differs from what the operation starts with (the declared defaults): its tab shows a dot. `rec` = the stored record,
+// `op` = 'roughing' | 'contour', `c` = the card's state. A row not listed never marks its tab (the depth is the part's own, not a choice).
+const near6 = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-6;
+const CHANGED = {
+  toolDia: (rec, op) => !near6(Number(rec.toolDia) || 0, op === 'contour' ? CONTOUR_DEFAULTS.toolDia : TOOLDIA_DEFAULT_MM),
+  cutterShape: (rec, op) => (rec.cutterShape || 'endmill') !== (op === 'contour' ? CONTOUR_DEFAULTS.cutterShape : 'endmill'),
+  cutOffset: (rec) => (Number(rec.cutOffset) || 0) !== 0,
+  minTerraceWidth: (rec) => Number(rec.minTerraceWidth) > 0,
+  roughLayout: (rec) => rec.roughLayout === 'nested',
+  stepDepth: (rec, op) => Number(rec.stepDepth) > 0 && !near6(rec.stepDepth, op === 'contour' ? CONTOUR_DEFAULTS.stepDepth : STEP_DEPTH.defaultMm),
+  adaptiveSteps: (rec) => rec.adaptiveSteps === true,
+  stepDeviation: (rec) => Number(rec.stepDeviation) > 0 && !near6(rec.stepDeviation, STEP_RESOLUTION.defaultMm),
+  finishAllowance: (rec) => Number(rec.finishAllowance) > 0,
+  contour: (rec, op, c) => Boolean(c.contour && c.contour.on),
+  smoothing: (rec, op) => rec.smoothing != null && smoothingOf(op, rec.smoothing) !== smoothingOf(op, undefined),
+};
 
 // a field's text: lengthText (the one length-format decider: Length precision, default 3, trailing zeros dropped unless TRAILING_ZEROS, or an inch fraction); the unit is beside it
 const fieldText = (baseMM) => lengthText(baseMM, { show: 'field' });
@@ -101,6 +128,7 @@ export function createCutPanel(hostEl, opts = {}) {
         </button>
       </div>
     </div>
+    <div class="cut-tabs" role="tablist" hidden></div>
     <div class="cut-rows">
       <div class="cut-row" data-param="cutDepth">
         <button type="button" class="cut-field-label" data-hint="cutDepth"></button>
@@ -275,6 +303,7 @@ export function createCutPanel(hostEl, opts = {}) {
   hostEl.appendChild(card);
 
   const $ = (sel) => card.querySelector(sel);
+  const rowsEl = $('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll); TASK 810: the tabs' panel
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
   const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets');
   const adaptiveInput = $('.cut-adaptive'), deviationInput = $('.cut-step-deviation'), deviationPresetsWrap = $('.cut-row[data-row="stepDeviation"] .cut-presets'); // TASK 717
@@ -294,6 +323,26 @@ export function createCutPanel(hostEl, opts = {}) {
     reset: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-reset`),
   }]));
   for (const [f, b] of Object.entries(calcBars)) b.reset.addEventListener('click', () => onSetField(f, null));
+  // TASK 810: the tab bar of a Roughing / Contour card (CARD_TABS): a tab = its name (the table's label; its hint the tooltip) and a dot when one of its rows holds a changed value
+  const tabsEl = $('.cut-tabs');
+  const offsetRow = $('.cut-row[data-param="cutOffset"]'); // the note's place among the rows of an untabbed card (just before it)
+  let activeTab = CARD_TABS[0].id; // the tab shown; kept while the page lives (another Roughing / Contour card opens on the same tab)
+  const tabButtons = {};
+  for (const t of CARD_TABS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'cut-tab'; b.dataset.tab = t.id; b.setAttribute('role', 'tab'); b.id = `cut-tab-${t.id}`;
+    b.innerHTML = `<span class="cut-tab-name" data-hint="${t.hint}"></span><span class="cut-tab-dot" hidden></span>`;
+    b.addEventListener('click', () => { if (activeTab === t.id) return; activeTab = t.id; rowsEl.scrollTop = 0; applyTabs(); });
+    tabsEl.appendChild(b);
+    tabButtons[t.id] = { button: b, dot: b.querySelector('.cut-tab-dot') };
+  }
+  tabsEl.addEventListener('keydown', (e) => { // the arrow keys move along the offered tabs (the tablist pattern)
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const offered = CARD_TABS.filter((t) => !tabButtons[t.id].button.hidden).map((t) => t.id);
+    const i = offered.indexOf(activeTab); if (i < 0) return;
+    activeTab = offered[(i + (e.key === 'ArrowRight' ? 1 : offered.length - 1)) % offered.length];
+    e.preventDefault(); applyTabs(); tabButtons[activeTab].button.focus();
+  });
   // TASK 805: every row's label comes from the table (param-hints.js) and its hint shows as a tooltip at the cursor (hint.js; installed once by main.js): the card holds
   // the label only, no hint text. A row's label is its data-hint element; a choice (a menu row, a Hold part button ...) carries its own data-hint.
   holdModesWrap.setAttribute('role', 'group');
@@ -322,7 +371,6 @@ export function createCutPanel(hostEl, opts = {}) {
     clearTrigger.setAttribute('aria-expanded', String(!clearPop.hidden)); clearTrigger.classList.toggle('is-open', !clearPop.hidden);
   };
   const closePops = (except) => { for (const p of pops) if (p !== except) p.hidden = true; syncOpenState(); };
-  const rowsEl = card.querySelector('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll)
   const openPop = (pop, anchor) => { closePops(pop); const row = anchor.closest('.cut-row, .cut-field') || anchor; pop.style.top = (row.offsetTop - (rowsEl.contains(row) ? rowsEl.scrollTop : 0)) + 'px'; pop.hidden = false; keepOnScreen(pop); syncOpenState(); };
   // TASK 770 / 805: a menu taller than the room below its row (the cutter shape row is the last of the card) moves up to end where the card's panel ends (above the phone's
   // Operations bar), and scrolls when it is taller than the panel; one that fits stays at its row
@@ -515,6 +563,37 @@ export function createCutPanel(hostEl, opts = {}) {
   });
   stepperFor('leadInLength', leadLengthInput, 'lead-in length', { box: leadLengthInput.closest('.cut-box') });
 
+  // TASK 810: show the active tab's rows of a Roughing / Contour card (the rows the card logic shows, CARD_TABS), the dots, and the panel's fixed height (the tallest tab's
+  // rows, measured: every tab is laid out once, the rows area then keeps that height as its flex basis, shrinking and scrolling only where the panel is shorter). The card
+  // note sits under the panel on a tabbed card (the same in every tab), in its place among the rows otherwise. An untabbed card: every row as the card logic left it.
+  const rowKey = (row) => row.dataset.row || row.dataset.param;
+  function applyTabs() {
+    const tabbed = tabbedType(current.cutType);
+    const rows = [...rowsEl.children].filter((el) => el.classList.contains('cut-row'));
+    rowsEl.style.flex = '';
+    if (tabbed && noteEl.parentNode === rowsEl) card.insertBefore(noteEl, rowsEl.nextSibling);
+    if (!tabbed && noteEl.parentNode !== rowsEl) rowsEl.insertBefore(noteEl, offsetRow);
+    tabsEl.hidden = !tabbed;
+    if (!tabbed) { for (const r of rows) delete r.dataset.offTab; return; }
+    const op = cutTypeById(current.cutType).levelsOp, rec = current.record || {};
+    const shown = rows.filter((r) => r.style.display !== 'none');
+    const offered = CARD_TABS.filter((t) => shown.some((r) => TAB_OF_ROW.get(rowKey(r)) === t.id));
+    const tab = offered.some((t) => t.id === activeTab) ? activeTab : (offered[0] || CARD_TABS[0]).id; // the stored tab when this card offers it
+    for (const t of CARD_TABS) {
+      const tb = tabButtons[t.id], on = t.id === tab;
+      tb.button.hidden = !offered.includes(t);
+      tb.dot.hidden = !shown.some((r) => TAB_OF_ROW.get(rowKey(r)) === t.id && CHANGED[rowKey(r)] && CHANGED[rowKey(r)](rec, op, current));
+      tb.button.classList.toggle('is-active', on); tb.button.setAttribute('aria-selected', String(on)); tb.button.tabIndex = on ? 0 : -1;
+      tb.button.setAttribute('aria-label', `${hintLabel(t.hint)}${tb.dot.hidden ? '' : ' (changed)'}`);
+    }
+    const showTab = (id) => { for (const r of rows) { if (TAB_OF_ROW.get(rowKey(r)) === id) delete r.dataset.offTab; else r.dataset.offTab = ''; } };
+    let tallest = 0;
+    for (const t of offered) { showTab(t.id); tallest = Math.max(tallest, rowsEl.scrollHeight); }
+    showTab(tab);
+    rowsEl.setAttribute('role', 'tabpanel'); rowsEl.setAttribute('aria-labelledby', `cut-tab-${tab}`);
+    if (tallest > 0) rowsEl.style.flex = `0 1 ${tallest}px`;
+  }
+
   // Re-format the displayed values (BASE mm → doc unit). Called on selection change AND on DOC_UNIT change (re-label).
   const renderFields = () => {
     depthInput.value = isUnset(current.cutDepth) ? '' : fieldText(current.cutDepth);
@@ -630,6 +709,7 @@ export function createCutPanel(hostEl, opts = {}) {
     shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${angleText(Number(current.cutterAngle) || 90, { show: 'deg' })}` : shapeName;
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
+    applyTabs(); // TASK 810: last, on the rows the card logic shows
   };
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).

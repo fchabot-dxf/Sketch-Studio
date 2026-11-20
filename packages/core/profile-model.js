@@ -667,15 +667,21 @@ export function listSketchProfiles(state, loops, loopPolys) {
  * never cuts one of these loops as an automatic hole of an enclosing profile. Chains and stale targets own no loop.
  * TASK 814: a type the `encoding` (the injected CUT_TYPES list) declares `drawnOnly` (the Guide: drawn, never cut) owns no loop, so the
  * enclosing profile still cuts that hole and the Guide's own element is written besides.
+ * TASK 825 (V9): a type the `encoding` declares `exportFirst` (the Stock, the board) writes only its outline: its inner loops count as owned too, so it never
+ * emits them as automatic holes (the Outside / Inside / On line cuts still do: an un-owned hole is cut).
  */
 export function ownedLoopIds(entries, state, loops, loopPolys, encoding) {
   const drawnOnly = new Set((encoding || []).filter((t) => t && t.drawnOnly).map((t) => t.id));
+  const outlineOnly = new Set((encoding || []).filter((t) => t && t.exportFirst).map((t) => t.id)); // TASK 825 (V9, owner turn 2819): the Stock (the board) writes ONLY its own outline
   const owned = new Set();
   const allLoops = loops || (state ? findLoops(state) : []);
   for (const e of (entries || [])) {
     if (!e || !e.target || !e.rec || !e.rec.cutType || drawnOnly.has(e.rec.cutType)) continue;
     const spec = resolveTargetKey(e.target, state, allLoops, loopPolys);
-    if (spec && !spec.invalid && spec.outer) owned.add(spec.outer);
+    if (spec && !spec.invalid && spec.outer) {
+      owned.add(spec.outer);
+      if (outlineOnly.has(e.rec.cutType)) for (const hid of spec.inners || []) owned.add(hid); // its inner loops are never its automatic holes: they reach the file only through their own operations, once
+    }
   }
   return owned;
 }

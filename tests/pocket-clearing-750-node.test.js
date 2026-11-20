@@ -256,8 +256,8 @@ let saved = null;
       h.toggleLoop();
       eq([V2_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
       eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
-      const nt = h.note();
-      ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`); // TASK 775: a closed loop has no start point (no "ends where it starts")
+      const nt = h.note(), nf = h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l)); // TASK 825: the warning lines (the leftover) come first
+      ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nf[0]), `${pat}: the note: ${nf[0]}`); // TASK 775: a closed loop has no start point (no "ends where it starts")
       ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);
       eq(elementsOf(shaperSvgOf(st, planEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], `${pat}: the download: ONE closed on-line path + 1 guide start mark, no inside cut`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-lead-tip, #prepare-toolpath-group .sk-lead-end, #prepare-toolpath-group circle').length, 0, `${pat}: TASK 775: no dot on a closed loop (it has no start point on the Origin)`);

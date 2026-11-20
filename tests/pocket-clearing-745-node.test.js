@@ -31,6 +31,8 @@ import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an 
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
+// TASK 825: the card lists its warning lines (the leftover and its reason) FIRST; facts() = the note without them
+const facts = (n) => n.filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l));
 const ok = (c, m) => { assert.ok(c, m); checks++; };
 const near = (a, b, tol, m) => { assert.ok(Math.abs(a - b) <= tol, `${m}: ${a} vs ${b} (tol ${tol})`); checks++; };
 const BIT = 6, R = BIT / 2, ALLOW = 0.5, S = 0.4 * BIT, D0 = R + ALLOW;
@@ -299,11 +301,12 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     eq(h.q('.cut-row[data-row="finishAllowance"] .cut-field-label').textContent, 'Finish allowance', 'TASK 766: the row is Finish allowance');
     const nt = h.note();
     console.log('card note: ' + JSON.stringify(nt));
-    ok(/^Pocket: spiral, 12 turns in 1 line \+ wall, stepover 2\.4 mm, \d+\.\d m of path, about \d+ min at 1000 mm\/min$/.test(nt[0]), 'the note: turns in 1 line + wall, stepover, path length, time at the declared feed: ' + nt[0]);
-    eq(nt[1], 'Drawn for a 6 mm bit: a smaller bit leaves ridges', 'the note names the bit the rings are drawn for');
-    eq(nt[2], 'Depth passes: set Pass Depth or AutoPass on the Origin', 'the note: the step-downs are the Origin\'s (TASK 750)');
-    eq(nt[3], 'AutoPass runs back along it on the next pass', 'the note: open clearing path reverses on AutoPass (TASK 777)');
-    ok(/^Leftover: 7\.\d+ mm² not reached by a 6 mm bit \(sharp inside corners, necks narrower than the bit\)$/.test(nt[4]), 'the leftover (the 4 corners): ' + nt[4]);
+    ok(/^Pocket: spiral, 12 turns in 1 line \+ wall, stepover 2\.4 mm, \d+\.\d m of path, about \d+ min at 1000 mm\/min$/.test(nt[2]), 'the note: turns in 1 line + wall, stepover, path length, time at the declared feed: ' + nt[0]);
+    eq(nt[3], 'Drawn for a 6 mm bit: a smaller bit leaves ridges', 'the note names the bit the rings are drawn for');
+    eq(nt[4], 'Depth passes: set Pass Depth or AutoPass on the Origin', 'the note: the step-downs are the Origin\'s (TASK 750)');
+    eq(nt[5], 'AutoPass runs back along it on the next pass', 'the note: open clearing path reverses on AutoPass (TASK 777)');
+    ok(/^Leftover: 7\.\d+ mm² not reached by a 6 mm bit$/.test(nt[0]), 'TASK 825: the leftover (the 4 corners) is the note FIRST line: ' + nt[0]);
+    eq(nt[1], 'Sharp inside corners, necks narrower than the bit', 'and its reason the line after it');
     ok(h.q('.cut-note .cut-note-warn') && h.q('.cut-note .cut-note-warn').textContent.startsWith('7.'), 'the leftover is in the warning colour');
     const els = elementsOf(shaperSvgOf(st, planEntries()));
     eq(els.map((e) => e.cutType), ['online', 'inside', 'guide'], 'the download: ONE on-line path (the 12 turns) + the wall + the pocket start mark (guide)');
@@ -311,24 +314,24 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     n0 = st.history.length;
     h.step('stepover', 1);
     eq([V2_PLAN.get(kR).stepover, st.history.length], [45, n0 + 1], 'stepover + -> 45 %, ONE undo step');
-    ok(/^Pocket: spiral, 10 turns in 1 line \+ wall, stepover 2\.7 mm/.test(h.note()[0]), 'the note follows: ' + h.note()[0]);
+    ok(/^Pocket: spiral, 10 turns in 1 line \+ wall, stepover 2\.7 mm/.test(facts(h.note())[0]), 'the note follows: ' + facts(h.note())[0]);
     h.typed('.cut-bit', '3.175');
-    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 1\.429 mm/.test(h.note()[0]) && h.note()[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
+    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 1\.429 mm/.test(facts(h.note())[0]) && facts(h.note())[1] === 'Drawn for a 3.175 mm bit: a smaller bit leaves ridges', 'a smaller bit: more rings, the stepover follows the bit: ' + h.note().slice(0, 2).join(' / '));
     app.undo();
     eq(V2_PLAN.get(kR).toolDia, 6, 'undo: the bit back to 6 mm');
     // Raster: + its angle row; presets
     h.clearing('raster');
     ok(h.shown('rasterAngle'), 'Raster: the Raster angle row');
     eq([...h.q('.cut-angle-presets').querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['0°*', '45°', '90°'], 'angle presets 0 / 45 / 90, 0 active');
-    ok(/^Pocket: raster 0°: \d+ passes \+ 1 ring \+ wall/.test(h.note()[0]), 'Raster note: ' + h.note()[0]);
+    ok(/^Pocket: raster 0°: \d+ passes \+ 1 ring \+ wall/.test(facts(h.note())[0]), 'Raster note: ' + facts(h.note())[0]);
     h.pressEl('.cut-angle-presets .cut-preset[data-value="45"]');
     eq(V2_PLAN.get(kR).rasterAngle, 45, 'preset 45');
-    ok(/^Pocket: raster 45°/.test(h.note()[0]), 'the note follows the angle');
+    ok(/^Pocket: raster 45°/.test(facts(h.note())[0]), 'the note follows the angle');
     // depth per pass
     // the spiral
     ok(h.shown('loop'), 'Raster: the Loop row too');
     h.clearing('morphed');
-    ok(/^Pocket: morphed spiral: \d+ turns \+ wall/.test(h.note()[0]) && !h.shown('rasterAngle') && h.shown('loop'), 'Morphed spiral: its note, no angle row, the Loop row');
+    ok(/^Pocket: morphed spiral: \d+ turns \+ wall/.test(facts(h.note())[0]) && !h.shown('rasterAngle') && h.shown('loop'), 'Morphed spiral: its note, no angle row, the Loop row');
     // the island pocket: the spiral greyed with its reason
     h.clickAt(5, 5);
     h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
@@ -408,8 +411,8 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
     eq(r.finishAllowance, 0.508, 'inches: the allowance default 0.02 in (0.508 mm)');
     eq(r.stepover, 45, 'the last stepover set (45 %, above) is used by the next pocket');
     eq(h.q('.cut-finish-allowance').value, '0.02', 'shown as 0.02 in');
-    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 0\.113 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[0]), 'the inch note: ' + h.note()[0]);
-    ok(/^Leftover: 0\.\d+ in² not reached by a 0\.25 in bit/.test(h.note().at(-1)), 'the inch leftover: ' + h.note().at(-1));
+    ok(/^Pocket: spiral, \d+ turns in 1 line \+ wall, stepover 0\.113 in, \d+\.\d ft of path, about \d+ min at 39 in\/min$/.test(h.note()[2]), 'the inch note: ' + h.note()[2]);
+    ok(/^Leftover: 0\.\d+ in² not reached by a 0\.25 in bit$/.test(h.note()[0]), 'the inch leftover (TASK 825: the warnings come first): ' + h.note()[0]);
   } finally { await app.close(); SettingsManager.set('DOC_UNIT', 'mm'); }
 }
 V2_PLAN.clear(); V2_PLAN.setOrder([]);

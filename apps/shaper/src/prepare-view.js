@@ -960,7 +960,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
   const unsubDocUnit = SettingsManager && SettingsManager.subscribe
-    ? SettingsManager.subscribe((key) => { if (key === 'DOC_UNIT' || isPrecisionKey(key)) refreshLook(); })
+    ? SettingsManager.subscribe((key) => { if (key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) refreshLook(); }) // TASK 825 (V3): key null = a reset or a load: any setting, the unit too, may have changed
     : null;
 
   return {

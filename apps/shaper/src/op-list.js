@@ -168,10 +168,11 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
         lastTool = toolKey;
         // TASK 798: the heading's checkbox ticks / unticks this run of operations (the ones with this bit, up to the next heading)
         let end = i; while (end + 1 < ops.length && toolKeyOf(ops[end + 1]) === toolKey) end++;
-        const run = ops.slice(i, end + 1).filter((o) => o.tickable !== false);
+        const all = ops.slice(i, end + 1), run = all.filter((o) => o.tickable !== false);
         const nOn = run.filter((o) => o.on !== false).length;
+        const allOn = all.filter((o) => o.on !== false).length; // TASK 825 (V8): the heading's box shows EVERY row under it (the Stock is always on: untick the Guides beside it and the heading is mixed, not empty); a tap still acts on the tickable ones
         const h = doc.createElement('div'); h.className = 'ops-tool';
-        const box = tickBox(nOn === run.length, run.length > 0 && nOn > 0 && nOn < run.length, !run.length,
+        const box = tickBox(allOn === all.length, allOn > 0 && allOn < all.length, !run.length,
           !run.length ? 'Always exported' : nOn === run.length ? `Untick all ${run.length}: leave them out of the views and the file` : `Tick all ${run.length}: show and export them`);
         box.dataset.group = op.heading;
         box.querySelector('input').addEventListener('change', () => onTick(run.map((o) => o.id), nOn !== run.length));

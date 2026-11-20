@@ -181,7 +181,7 @@ try {
     const build1 = await evalJs(`import('/apps/shaper/src/main.js').then((m) => ({ triangles: m.currentReviewView().lastBuild.triangles, levels: m.currentReviewView().lastBuild.levels }))`);
     const line = await evalJs(`(() => { const e = document.getElementById('simexport-ticked'); return { hidden: e.hidden, text: e.textContent }; })()`);
     console.log(label + ' 3D (Outside unticked): ' + JSON.stringify(build1) + ' line: ' + JSON.stringify(line));
-    assert.deepStrictEqual(line, { hidden: false, text: `Exporting 2 of 3 operations (unticked: Outside ${full} (⅛″ end mill)). Place it with the same anchor as the earlier file.` }, label + ': the Export line names the unticked Outside');
+    assert.deepStrictEqual(line, { hidden: false, text: `Exporting 2 of 3 operations (unticked: 4. Outside · ${full} (⅛″ end mill)). Place it with the same anchor as the earlier file.` }, label + ': the Export line names the unticked Outside');
     await shot(`${D}-export-3d-outline-unticked.png`);
     await shot(`${D}-export-line.png`, '#simexport-panel', 2);
     await view('2d');

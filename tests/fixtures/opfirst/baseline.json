@@ -9060,8 +9060,8 @@
    "f": "14183263053b620738e8fdc15098e8e8"
   },
   "stock-loop-node__0001__6a8cb243": {
-   "a": "18b515425f8184a9ae5cf2f6dc7ce352",
-   "b": "18b515425f8184a9ae5cf2f6dc7ce352",
+   "a": "9006c180768fe4b000a8c3c831090ee8",
+   "b": "9006c180768fe4b000a8c3c831090ee8",
    "c": "d751713988987e9331980363e24189ce",
    "d": "d751713988987e9331980363e24189ce",
    "dContent": "d751713988987e9331980363e24189ce",
@@ -9070,8 +9070,8 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "stock-loop-node__0002__a0075faf": {
-   "a": "dc9348d38190c366e6519c2be8d7529a",
-   "b": "dc9348d38190c366e6519c2be8d7529a",
+   "a": "3e03c3a3eaae99d09124f12c8f52d254",
+   "b": "3e03c3a3eaae99d09124f12c8f52d254",
    "c": "d751713988987e9331980363e24189ce",
    "d": "d751713988987e9331980363e24189ce",
    "dContent": "d751713988987e9331980363e24189ce",
@@ -9090,9 +9090,9 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "stock-loop__0001__8b0cf78c": {
-   "a": "e3e45543286a3c14762c20b26c805248",
-   "b": "e3e45543286a3c14762c20b26c805248",
-   "c": "2b6d6506bad01510e67d08d7f720ab4e",
+   "a": "e22251e880afae9271004c1cbbfb7cbb",
+   "b": "e22251e880afae9271004c1cbbfb7cbb",
+   "c": "f92a26c44c6315ff10bc0f10681897cb",
    "d": "89d00d222ed2b13a185a264f0e27823e",
    "dContent": "5a078a126f1802621d223758182a46a8",
    "e": "5c6166f9bceaf2dd6450550493b9061e",
@@ -9153,6 +9153,19 @@
     "matrix__pocket-raster-loop",
     "pocket-clearing-750-node__0007__63a764a4"
    ]
+  },
+  "825": {
+   "why": "V9 (owner turn 2819: the file holds exactly the lines the user drew): a Stock writes ONLY its own outline; a loop inside it reaches the file only through its own operation, once. Each case below has a Stock with a loop drawn inside it that no operation owned: its file no longer holds that loop as a second Stock-guide path (exactly ONE path removed per case, every other element identical and in the same order); a, b (and c, the Paths view) re-measured here on purpose; every other case and measurement is the one frozen on c5d4bb1.",
+   "cases": [
+    "stock-loop-node__0001__6a8cb243",
+    "stock-loop-node__0002__a0075faf",
+    "stock-loop__0001__8b0cf78c"
+   ],
+   "removedPaths": {
+    "stock-loop-node__0001__6a8cb243": "<path d=\"M 10 10 L 30 10 L 30 30 L 10 30 Z\" fill=\"#0068FF\" stroke=\"#0068FF\" shaper:cutType=\"guide\" shaper:cutOffset=\"0mm\" shaper:toolDia=\"3.175 mm\"/>",
+    "stock-loop__0001__8b0cf78c": "<path d=\"M 8 8 L 22 8 L 22 22 L 8 22 Z\" fill=\"#0068FF\" stroke=\"#0068FF\" shaper:cutType=\"guide\" shaper:cutDepth=\"20.000 mm\" shaper:cutOffset=\"0mm\"/>",
+    "stock-loop-node__0002__a0075faf": "<path d=\"M 10 10 L 30 10 L 30 30 L 10 30 Z\" fill=\"#0068FF\" stroke=\"#0068FF\" shaper:cutType=\"guide\" shaper:cutDepth=\"12.700 mm\" shaper:cutOffset=\"0mm\" shaper:toolDia=\"3.175 mm\"/>"
+   }
   }
  }
 }

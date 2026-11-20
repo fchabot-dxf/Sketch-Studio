@@ -69,14 +69,14 @@ try {
   const rowSel = (id) => `#prepare-ops .ops-row[data-id="${id}"]`;
   const spinningRows = () => evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row.is-generating')].filter((r) => r.querySelector('.ops-spin')).map((r) => r.dataset.id)`);
   const listOpen = async (open) => { if (await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`) === open) { await clickEl('#prepare-ops .ops-head'); await sleep(300); } };
-  const outside = () => evalJs(`(() => { const out = {}; for (const sel of ['#prepare-canvas', '#prepare-ops .ops-head', '#btn-undo', '#btn-redo', '.sk-header', '.sk-sidebar-handle']) { const e = document.querySelector(sel); if (!e) continue; const b = e.getBoundingClientRect(); out[sel] = [b.left, b.top, b.width, b.height].map((n) => Math.round(n * 100) / 100).join(','); } return out; })()`);
+  const outside = () => evalJs(`(() => { const out = {}; for (const sel of ['#prepare-canvas', '#prepare-ops .ops-head', '#btn-undo', '#btn-redo', '.sk-header', '.sk-sidebar-chevron']) { const e = document.querySelector(sel); if (!e) continue; const b = e.getBoundingClientRect(); out[sel] = [b.left, b.top, b.width, b.height].map((n) => Math.round(n * 100) / 100).join(','); } return out; })()`);
   const barBoxes = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-actions button')].map((b) => { const r = b.getBoundingClientRect(); return [b.className, [r.left, r.top, r.width, r.height].map((n) => Math.round(n * 100) / 100).join(',')]; })`);
 
   const openStl = async () => {
     await evalJs('delete window.showOpenFilePicker');
     await send('DOM.getDocument', { depth: 0 });
     await send('Page.setInterceptFileChooserDialog', { enabled: true });
-    await clickEl(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn');
+    await clickEl(phone ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, D + ': the drawer opens'); await sleep(300);
     const chooser = once('Page.fileChooserOpened');
     await clickEl('[data-action="open-stl"]');
@@ -190,7 +190,7 @@ try {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-  await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper app ready (phone)');
+  await waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper app ready (phone)');
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => { m.default.set('DOC_UNIT', 'mm'); })`);
   await phase();
   await send('Emulation.setTouchEmulationEnabled', { enabled: false });

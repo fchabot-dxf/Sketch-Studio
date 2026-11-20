@@ -21,6 +21,12 @@ const { buildSite, SITE_HOST } = require('../scripts/build-site.cjs');
 const id = require('../scripts/site-identity.cjs');
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+const OWNER_TEXT = { // owner turn 2918, verbatim
+  sketchstudio: ['Sketch: Free Online 2D CAD with Constraints', 'Free online 2D CAD with constraints: draw and dimension shapes, lay out woodworking jobs, work out sizes on site, and export SVG and DXF for CNC.'],
+  shaper: ['Shaper: Free Shaper Origin Design Tool', 'Free Shaper Origin design tool in your browser: turn sketches and STL models into Shaper-ready SVG with inside, outside, pocket, roughing and contour cuts.'],
+  penplotter: ['Pen Plotter: Free Pen Plotter Software', 'Free pen plotter software in your browser: draw or import SVG art, set paper size and pens, and export plotter-ready files for AxiDraw-style plotters.'],
+  trace: ['Trace: Free Image to Vector (SVG, DXF)', 'Free image to vector converter: trace photos, logos and drawings into clean SVG and DXF paths at real-world size, for laser cutting and CNC.'],
+};
 const APPROVED = { // sha256 of the approved final-icons/<id>.svg (the drawings the owner approved, turns 2832-2905)
   sketchstudio: 'a88fc3ce0ae5a557f34b49b521faa47b342ed09c19577834546b9eb176ff5f11',
   shaper: '2d07048d268b645044db4836583213f47678ff5c230e7b49c1bd12862b0d208d',
@@ -39,6 +45,7 @@ try {
     // ---- the declaration ----
     assert.strictEqual(sha(app.icon), APPROVED[app.id], `${app.id}: the registry's icon is the approved drawing (sha256)`);
     assert.ok(app.description.length > 20 && app.description.length <= 155, `${app.id}: description is ${app.description.length} characters (<= 155)`);
+    assert.deepStrictEqual([app.seoTitle, app.description], OWNER_TEXT[app.id], `${app.id}: the owner's approved SEO title and description, verbatim`);
     assert.ok(app.tagline && app.tile, `${app.id}: tagline and tile`);
     assert.strictEqual(app.icon.match(/<rect width='64' height='64' rx='14' fill='(#[0-9A-Fa-f]{6})'/)[1].toUpperCase(), app.tile.toUpperCase(), `${app.id}: the tile colour is the icon's own tile`);
     assert.ok(/viewBox='0 0 64 64'/.test(app.icon), `${app.id}: 64x64 viewBox`);
@@ -78,7 +85,10 @@ try {
     assert.strictEqual(attr(html, /<link rel="canonical" href="([^"]*)">/), url, `${app.id}: canonical = the production address`);
     assert.strictEqual(meta(html, 'name', 'theme-color'), app.tile, `${app.id}: theme-color = the tile`);
     assert.strictEqual(meta(html, 'property', 'og:type'), 'website');
-    assert.strictEqual(meta(html, 'property', 'og:title'), appTitle(app.id), `${app.id}: og:title`);
+    assert.strictEqual(meta(html, 'property', 'og:title'), app.seoTitle, `${app.id}: og:title = the seoTitle`);
+    assert.strictEqual(meta(html, 'name', 'twitter:title'), app.seoTitle, `${app.id}: twitter:title = the seoTitle`);
+    assert.ok(html.includes(`<title>${app.seoTitle}</title>`), `${app.id}: the built page's static <title> = the seoTitle`);
+    assert.strictEqual((html.match(/<title>/g) || []).length, 1, `${app.id}: one <title>`);
     assert.strictEqual(meta(html, 'property', 'og:description'), app.description, `${app.id}: og:description`);
     assert.strictEqual(meta(html, 'property', 'og:url'), url, `${app.id}: og:url`);
     assert.strictEqual(meta(html, 'property', 'og:image'), `${url}og-image.png`, `${app.id}: og:image is absolute`);
@@ -96,7 +106,10 @@ try {
     assert.ok(intro, `${app.id}: the intro is the first thing in <body>`);
     assert.ok(/position:fixed/.test(intro[1]), `${app.id}: the intro is out of flow (position:fixed): it moves nothing`);
     assert.strictEqual(intro[3].replace(/&amp;/g, '&'), app.description, `${app.id}: the intro paragraph = the description`);
-    assert.ok(intro[2].startsWith(app.name), `${app.id}: the intro <h1> names the app`);
+    assert.strictEqual(intro[2], app.seoTitle, `${app.id}: the intro <h1> = the seoTitle`);
+    // the tab, once the app runs, keeps today's title (applyAppIdentity is unchanged): appTitle, not the seoTitle
+    assert.strictEqual(appTitle(app.id), `${app.name} · ${SUITE_NAME}`, `${app.id}: the running app's tab title stays appTitle`);
+    assert.strictEqual(appTitle(app.id, 'My part'), `My part — ${app.name}`, `${app.id}: with a design open the tab shows its name`);
     assert.ok(!/<link rel="icon"|<meta name="description"/.test(fs.readFileSync(path.join(REPO_ROOT, 'apps', app.id, 'index.html'), 'utf8')), `${app.id}: the repo page carries no copy of these (they are generated into the built page)`);
     console.log(`${app.id}: ${r.identity.length} identity files + head tags + intro; description ${app.description.length} characters; icon sha256 ${APPROVED[app.id].slice(0, 12)}`);
   }

@@ -51,7 +51,8 @@ await (async () => {
       assert.ok(intro, `${app.id}: the intro is in the static page (no JavaScript ran)`);
       assert.strictEqual(intro.position, 'fixed', `${app.id}: the intro is out of flow`);
       assert.ok(intro.w > 100 && intro.h > 20, `${app.id}: the intro is visible without JavaScript (${intro.w} x ${intro.h})`);
-      assert.ok(intro.h1.startsWith(app.name) && intro.p === app.description, `${app.id}: the intro is the app's name and description`);
+      assert.ok(intro.h1 === app.seoTitle && intro.p === app.description, `${app.id}: the intro is the seoTitle and description`);
+      assert.strictEqual(await evalJs(`document.title`), app.seoTitle, `${app.id}: the static page's <title> is the seoTitle (before the app runs)`);
       const withIntro = await boxes();
       await evalJs(`document.getElementById('${SEO_INTRO_ID}').style.display = 'none'`);
       const without = await boxes();

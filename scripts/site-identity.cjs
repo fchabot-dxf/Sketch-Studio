@@ -32,7 +32,7 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const registryApp = (id) => {
   const a = REGISTRY.find((x) => x.id === id);
   if (!a) throw new Error(`site-identity: no app "${id}" in packages/ui/app-registry.js`);
-  for (const k of ['name', 'tile', 'tagline', 'description', 'icon']) if (typeof a[k] !== 'string' || !a[k]) throw new Error(`site-identity: ${id} has no ${k} in the registry`);
+  for (const k of ['name', 'tile', 'tagline', 'seoTitle', 'description', 'icon']) if (typeof a[k] !== 'string' || !a[k]) throw new Error(`site-identity: ${id} has no ${k} in the registry`);
   if (a.description.length > 155) throw new Error(`site-identity: the ${id} description is ${a.description.length} characters (155 at most)`);
   return a;
 };
@@ -126,7 +126,7 @@ function jsonLd(app, host) {
   };
 }
 function identityHead(app, host) {
-  const url = `https://${host}/`, image = `https://${host}/og-image.png`, title = esc(appTitle(app.id)), desc = esc(app.description);
+  const url = `https://${host}/`, image = `https://${host}/og-image.png`, title = esc(app.seoTitle), desc = esc(app.description);
   return [
     `<meta name="description" content="${desc}">`,
     `<link rel="canonical" href="${url}">`,
@@ -154,12 +154,12 @@ function identityHead(app, host) {
 // A small <h1> + the description, the first thing in <body>. It is OUT OF FLOW (position: fixed), so it moves nothing; the app removes it as it starts
 // (applyAppIdentity in app-registry.js, called at each app's boot). A crawler or a reader without JavaScript sees it.
 function identityIntro(app) {
-  return `<div id="${SEO_INTRO_ID}" style="position:fixed;left:0;top:0;right:0;padding:16px 20px;font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:#8B9099;pointer-events:none"><h1 style="margin:0 0 6px;font-size:20px;font-weight:700">${esc(app.name)} · ${esc(SUITE_NAME)}</h1><p style="margin:0">${esc(app.description)}</p></div>`;
+  return `<div id="${SEO_INTRO_ID}" style="position:fixed;left:0;top:0;right:0;padding:16px 20px;font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:#8B9099;pointer-events:none"><h1 style="margin:0 0 6px;font-size:20px;font-weight:700">${esc(app.seoTitle)}</h1><p style="margin:0">${esc(app.description)}</p></div>`;
 }
 function injectIdentity(html, app, host) {
   if (/<meta\s+name=["']description["']/i.test(html)) throw new Error(`site-identity: the ${app.id} page already has a meta description (it comes from the registry only)`);
   if (!/<\/title>/i.test(html) || !/<body[^>]*>/i.test(html)) throw new Error(`site-identity: the ${app.id} page has no </title> or <body> to put the identity after`);
-  return html.replace(/<\/title>/i, (m) => `${m}\n${identityHead(app, host)}`).replace(/<body[^>]*>/i, (m) => `${m}\n${identityIntro(app)}`);
+  return html.replace(/<title>[^<]*<\/title>/i, () => `<title>${esc(app.seoTitle)}</title>\n${identityHead(app, host)}`).replace(/<body[^>]*>/i, (m) => `${m}\n${identityIntro(app)}`);
 }
 
 // write the site's identity files into <out> and put the head + intro into its built index.html; -> the files written (site paths)

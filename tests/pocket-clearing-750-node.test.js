@@ -33,6 +33,7 @@ import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { opKeyOf } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
+import { passCoverage } from './helpers/raster-passes-835.js'; // TASK 835: how a Raster loop cuts the passes
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -111,7 +112,12 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     const noFinish = [];
     for (const c of on.clear) {
       const last = c.turns.at(-1);
-      if (c.turns.some((t) => t.kind === 'finish')) eq(last.kind, 'finish', `${tag}: the last turn of loop ${c.index} is its finish turn`);
+      // TASK 835: a Raster loop's wall ring is a balloon from its last point on the area's edge; after it only the closing stretch back to the seam (passes
+      // of one line and a corridor side: what any closed path walks back over already cut ground)
+      if (pattern === 'raster' && c.turns.some((t) => t.kind === 'finish')) {
+        const after = c.turns.slice(c.turns.findLastIndex((t) => t.kind === 'finish') + 1);
+        ok(after.length <= 2 && after.every((t) => t.kind === 'pass'), `${tag}: after loop ${c.index}'s last ring only the closing stretch (${JSON.stringify(after)})`);
+      } else if (c.turns.some((t) => t.kind === 'finish')) eq(last.kind, 'finish', `${tag}: the last turn of loop ${c.index} is its finish turn`);
       else noFinish.push(`${tag} loop ${c.index}`); // a chain that ends deeper (749's rule): it never reaches a wall, its own outermost ring is its last turn
       for (const t of c.turns.filter((u) => u.kind === 'finish')) for (const p of c.points.slice(t.start, t.end + 1)) worstF = Math.max(worstF, Math.abs(reg.dist(p) - R));
       // after the last turn only the closing leg
@@ -121,10 +127,18 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     ok(worstF <= 0.01, `${tag}: every finish turn is the region inset by exactly the bit radius (worst ${worstF.toFixed(5)} mm)`);
     // every turn / pass of the Loop-OFF derivation is in a loop, vertex for vertex (TASK 804b: Raster's Loop has no clean-up ring: the wall ring's sweep
     // covers it, the leftover below is Loop off's)
-    const all = new Set(on.clear.flatMap((c) => c.points.map(key)));
-    const offPaths = off.clear.filter((c) => c.role !== 'cleanup').map((c) => c.points);
-    const missing = offPaths.reduce((n, pts) => n + pts.filter((p) => !all.has(key(p))).length, 0);
-    eq(missing, 0, `${tag}: every vertex of the Loop-OFF clearing (${offPaths.length} paths) is in the loops`);
+    // TASK 835: a Raster loop runs along every pass ONCE, from the area's edge to the area's edge, but for the gaps where a corridor leaves it (each at most
+    // half a stepover: the bit sweeps it)
+    if (pattern === 'raster') {
+      const bad = (x) => !(x.twice <= 0.01 && x.ends <= 0.01 && x.gaps.every((g) => g <= S / 2 + 0.01));
+      const cov = passCoverage(on.clear, off.clear.filter((c) => c.role === 'raster').map((c) => c.points));
+      ok(!cov.some(bad), `${tag}: every pass cut once, edge to edge, but for its corridor gaps (${JSON.stringify(cov.find(bad))})`);
+    } else {
+      const all = new Set(on.clear.flatMap((c) => c.points.map(key)));
+      const offPaths = off.clear.filter((c) => c.role !== 'cleanup').map((c) => c.points);
+      const missing = offPaths.reduce((n, pts) => n + pts.filter((p) => !all.has(key(p))).length, 0);
+      eq(missing, 0, `${tag}: every vertex of the Loop-OFF clearing (${offPaths.length} paths) is in the loops`);
+    }
     // the finish turns: the wall's and each island's turns at r (the same centre lines the separate inside / outside cuts follow)
     const finTurns = on.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind === 'finish').length, 0);
     ok(finTurns >= 1 + reg.holes.length, `${tag}: ${finTurns} finish turn(s): the wall's and each island's`);

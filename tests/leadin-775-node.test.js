@@ -254,7 +254,8 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   // purpose, checked in tests/pocket-nocross-804-node.test.js
   const changed804 = new Set(['spiralLoop', 'morphedLoop']);
   // TASK 804b: Raster + Loop is the zero-crossing loop now (the wall ring whole, no clean-up ring): its download, preview and 3D footprints changed on
-  // purpose (checked in tests/pocket-nocross-804-node.test.js); its Operations list did not
+  // purpose (checked in tests/pocket-nocross-804-node.test.js); its Operations list did not (TASK 835: the loop that cuts both ways changed them again,
+  // tests/pocket-raster-loop-835-node.test.js; the Operations list still the same)
   const changed804b = new Set(['rasterLoop']);
   let guideWordsDiffer = false; // (the digest of a set without that Guide's row stays the same)
   const GUIDE_DEPTH_WORDS_825 = new Set(['dxf/close-path-760-gap.dxf', 'dxf/fusion-sketch4.dxf', 'dxf/part-mm.dxf', 'pattern-params-694-old.document.json', 'pre-577-two-sketches.document.json']); // TASK 825 (V4): a Guide with a depth lists it in its row

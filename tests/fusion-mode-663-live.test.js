@@ -61,7 +61,7 @@ try {
   assert.deepStrictEqual(bootState.headerTabs.map((t) => t.id), ['prepare', 'review'], 'Header tabs filtered to Prepare and Review only');
   assert.strictEqual(bootState.headerTabs.find((t) => t.id === 'prepare').active, true, 'Prepare tab is active');
   assert.deepStrictEqual(bootState.sidebarStages.map((t) => t.id), ['prepare', 'review'], 'Sidebar drawer stages filtered to Prepare and Review only');
-  assert.deepStrictEqual(bootState.sidebarActions, ['download', 'settings', 'log'], 'Fusion mode hides Open/New/Save/Projects file actions, keeps host actions');
+  assert.deepStrictEqual(bootState.sidebarActions, ['download', 'settings', 'log', 'feedback'], 'Fusion mode hides Open/New/Save/Projects file actions, keeps host actions + the shared Rate & feedback item (TASK 830)');
   assert.strictEqual(bootState.sidebarDocCount, 0, 'Fusion mode hides document title/rename header');
   assert.strictEqual(bootState.sidebarStatusCount, 0, 'Fusion mode hides Drive/save status line');
   assert.strictEqual(bootState.sidebarAccountCount, 0, 'Fusion mode has no Google account / Drive controls (no avatar either)');
@@ -158,7 +158,7 @@ try {
   }))()`);
   await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`);
   await waitFor(`!document.querySelector('.sk-sidebar').classList.contains('open')`, 'normal Shaper drawer close');
-  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'open-stl', 'download', 'fusion-addin', 'settings', 'log'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export; TASK 733: + the Fusion add-in download, hidden in Fusion mode; TASK 790: + Open STL, hidden in Fusion mode)');
+  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'open-stl', 'download', 'fusion-addin', 'settings', 'log', 'feedback'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export; TASK 733: + the Fusion add-in download, hidden in Fusion mode; TASK 790: + Open STL, hidden in Fusion mode)');
   assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
   assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
   assert.strictEqual(normalSidebar.hasAccount, false, 'normal Shaper: the drawer has no account row (TASK 776: the account is the avatar in the footer)');

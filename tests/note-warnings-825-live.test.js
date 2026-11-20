@@ -56,7 +56,7 @@ async function phase(label, width, height, touch) {
       for (let i = 0; i < 5; i++) {
         if (await evalJs(`(() => { const e = document.querySelector('.sk-sidebar-stage.active') || document.querySelector('.sk-header-tab.active'); return e ? e.dataset.tab : null; })()`) === mode) return;
         if (touch) {
-          if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-handle');
+          if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-chevron');
           await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'drawer'); await sleep(300);
           await clickEl(`.sk-sidebar-stage[data-tab="${mode}"]`);
         } else await clickEl(`.sk-header-tab[data-tab="${mode}"]`);

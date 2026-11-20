@@ -191,7 +191,7 @@ function buildSite(app, outDir = path.join(REPO_ROOT, 'dist'), { addin = null } 
   stampBuild(out, build);
   fs.writeFileSync(path.join(out, '_redirects'), siteRedirects(app));
   fs.writeFileSync(path.join(out, '404.html'), NOT_FOUND_PAGE);
-  writeAbout(out, { hostOf: SITE_HOST, addinUrl: `https://${SITE_HOST[ADDIN_DOWNLOAD.app]}/${sitePath(ADDIN_DOWNLOAD.app, ADDIN_DOWNLOAD.dir)}/${ADDIN_DOWNLOAD.zip}`, addinLine: ADDIN_DOWNLOAD.about, addinApp: ADDIN_DOWNLOAD.app, build }); // TASK 828
+  writeAbout(out, { hostOf: SITE_HOST, addinUrl: `https://${SITE_HOST[ADDIN_DOWNLOAD.app]}/${sitePath(ADDIN_DOWNLOAD.app, ADDIN_DOWNLOAD.dir)}/${ADDIN_DOWNLOAD.zip}`, addinLine: ADDIN_DOWNLOAD.about, addinApp: ADDIN_DOWNLOAD.app, build, app }); // TASK 828 (+ 828b: app = whose site)
   checkRootLayout(app, out, closure);
   const identity = writeIdentity(app, out, SITE_HOST[app]); // after the proof: it adds links to the built page
   const addinRelease = release ? copyAddinDownload(release, out) : null;

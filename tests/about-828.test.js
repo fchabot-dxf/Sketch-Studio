@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { APPS } = require('../packages/ui/app-registry.js');
 const { buildSite, SITE_HOST, ADDIN_DOWNLOAD, sitePath } = require('../scripts/build-site.cjs');
-const { aboutHtml, aboutApps } = require('../scripts/site-about.cjs');
+const { aboutHtml, aboutApps, APP_MARK } = require('../scripts/site-about.cjs');
 
 const decode = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'about-828-'));
@@ -40,8 +40,14 @@ try {
       if (hasAddin) assert.ok(body.includes(ADDIN_DOWNLOAD.about), 'the add-in line text is the declared one');
     }
     assert.strictEqual((html.match(/shaper-addin\.zip/g) || []).length, 1, `${app.id}: one add-in link, no entry of its own`);
-    assert.ok(!html.includes(SITE_HOST.trace) && !/data-app="trace"/.test(html), `${app.id}: Trace is not on the page`);
+    assert.ok(!html.includes(SITE_HOST.trace) && !/<li class="app" data-app="trace"/.test(html), `${app.id}: Trace is not on the page`);
     assert.ok(html.includes('<a href="privacy.html">'), `${app.id}: links the privacy page`);
+    // TASK 828b: the Feedback link opens the shared window (#ui/feedback.js openFeedback): the page maps #ui / #core to the site's packages/ and names its own app
+    assert.ok(html.includes('id="about-feedback"') && />Feedback<\/button>/.test(html), `${app.id}: the Feedback link`);
+    assert.ok(/from '#ui\/feedback\.js'/.test(html) && /openFeedback\(\)/.test(html), `${app.id}: it opens the shared feedback window, no form of its own`);
+    assert.ok(!/<form|mailto:|<textarea/i.test(html), `${app.id}: no second form, no mailto`);
+    assert.ok(html.includes('"#ui/": "./packages/ui/"') && fs.existsSync(path.join(tmp, app.id, 'packages/ui/feedback.js')), `${app.id}: the import map reaches the site's own packages/ui/feedback.js`);
+    assert.ok(html.includes(`<body data-app="${app.id}">`) && !html.includes(APP_MARK), `${app.id}: the page names its own app for the feedback message`);
     assert.ok(fs.existsSync(path.join(tmp, app.id, 'privacy.html')), `${app.id}: the privacy page it links is in the site`);
     const stamp = fs.readFileSync(path.join(tmp, app.id, 'packages/ui/analytics.js'), 'utf8').match(/export const BUILD = '([^']+)'/)[1];
     assert.ok(html.includes(`Build ${stamp}`), `${app.id}: the build stamp is the analytics version (${stamp})`);

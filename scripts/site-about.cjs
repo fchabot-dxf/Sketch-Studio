@@ -3,6 +3,7 @@
 //   which apps, in what order, their name, description and icon   packages/ui/app-registry.js (APPS; an entry with `about: false` is left out: Trace, owner turn 2876)
 //   each app's address                                            SITE_HOST of build-site.cjs
 //   the Fusion add-in line + download link                        ADDIN_DOWNLOAD of build-site.cjs; it sits INSIDE its app's entry (owner turn 2889), no entry of its own
+//   the app whose site it is (data-app on <body>)                 the app being built: the Feedback link's message names it (#ui/analytics.js start)
 //   the build stamp                                               the same minute build-site stamps into analytics.js
 'use strict';
 const fs = require('fs');
@@ -10,7 +11,7 @@ const path = require('path');
 const { APPS: REGISTRY } = require('../packages/ui/app-registry.js');
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const APPS_MARK = '<!--ABOUT:APPS-->', BUILD_MARK = '<!--ABOUT:BUILD-->';
+const APPS_MARK = '<!--ABOUT:APPS-->', BUILD_MARK = '<!--ABOUT:BUILD-->', APP_MARK = '<!--ABOUT:APP-->';
 
 const aboutApps = () => REGISTRY.filter((a) => a.about !== false);
 
@@ -32,8 +33,8 @@ function appItem(app, { hostOf, addinUrl, addinLine, addinApp }) {
 
 // the About page text from its frame
 function aboutHtml(frame, opts) {
-  if (!frame.includes(APPS_MARK) || !frame.includes(BUILD_MARK)) throw new Error(`site-about: about.html must hold ${APPS_MARK} and ${BUILD_MARK}`);
-  return frame.replace(APPS_MARK, () => aboutApps().map((a) => appItem(a, opts)).join('\n')).replace(BUILD_MARK, () => `Build ${esc(opts.build)}`);
+  if (!frame.includes(APPS_MARK) || !frame.includes(BUILD_MARK) || !frame.includes(APP_MARK)) throw new Error(`site-about: about.html must hold ${APPS_MARK}, ${BUILD_MARK} and ${APP_MARK}`);
+  return frame.replace(APPS_MARK, () => aboutApps().map((a) => appItem(a, opts)).join('\n')).replace(BUILD_MARK, () => `Build ${esc(opts.build)}`).replace(APP_MARK, () => esc(opts.app));
 }
 
 // write the list into <out>/about.html (copied there as the frame)
@@ -42,4 +43,4 @@ function writeAbout(out, opts) {
   fs.writeFileSync(file, aboutHtml(fs.readFileSync(file, 'utf8'), opts));
 }
 
-module.exports = { aboutApps, aboutHtml, writeAbout, APPS_MARK, BUILD_MARK };
+module.exports = { aboutApps, aboutHtml, writeAbout, APPS_MARK, BUILD_MARK, APP_MARK };

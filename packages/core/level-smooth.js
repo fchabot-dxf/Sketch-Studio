@@ -1,38 +1,39 @@
 // packages/core/level-smooth.js — TASK 809 (owner turns 2655, 2660-2661): SMOOTHING, a TOOLPATH setting of Roughing and Contour. PURE (no DOM).
 // A relief's levels (#core/stl-slice.js: marching squares on a 0.1 mm height map, reduced by Douglas-Peucker) are many short straight segments with a
 // slight stair-step. Each Roughing / Contour record has its own `smoothing` (a tolerance, base mm; LEVEL_SMOOTH.roughingMm / contourMm by default, 0 =
-// off = the polylines as before): when the operation builds its paths from the levels (#core/stepped-cut.js levelsRoughing / levelsContour), each
-// path's outline is FITTED with CUBIC BEZIERS (#core/curve-fit: Schneider's least squares and Newton steps), G1 where the outline is smooth, a CORNER
-// kept where it turns by LEVEL_SMOOTH.cornerDeg or more within LEVEL_SMOOTH.cornerSpanMm either side. The LEVELS themselves are never changed (the
-// record's `levels`, Prepare's height map and its outlines stay exact): each operation derives its own curves, once (memoised with its paths).
+// off = the polylines as before): when the operation builds its paths from the levels (#core/stepped-cut.js deriveLevelsCuts: each Roughing pocket
+// element; each Contour level's material), each outline is FITTED with CUBIC BEZIERS (#core/curve-fit: Schneider's least squares and Newton steps), G1
+// at every join of two cubics, a CORNER kept where it turns by LEVEL_SMOOTH.cornerDeg or more within LEVEL_SMOOTH.cornerSpanMm either side. The LEVELS
+// themselves are never changed (the record's `levels`, Prepare's height map stay exact): each operation derives its own curves, once (memoised).
 //
 // THE RULES (tests/level-smooth-809-node.test.js):
-//  * WITHIN THE TOLERANCE: a curve is accepted on a SAMPLED CHECK: sampled at a chord deviation of LEVEL_SMOOTH.checkShare of its fit tolerance, every
-//    sample within the fit tolerance (LEVEL_SMOOTH.fitShare of the tolerance; the sampling slack counted in) of the outline it fits, every point of
-//    that outline within it of the curve; else the piece is split at its worst point and fitted again (a two-point piece is the straight segment
-//    itself, so a fit always ends). The fit is SYMMETRIC: the curve strays at most the tolerance to either side, so it never moves into the material
-//    by more than the tolerance (not biased: a waste-side bias would halve the fitting budget; on the owner's rose at Roughing's 0.1 mm the segments
-//    would drop 2.8 times instead of 11.6, and a cubic costs three times a straight segment in the file).
-//  * NO TOUCHING, NESTING KEPT: the fitted rings of one region are COMBINED, not trusted: a region = its fitted outer MINUS its fitted holes, the
-//    regions of a level = their UNION, and (Contour) a level's material = that INTERSECTED with the next deeper level's smoothed material, by Clipper
-//    on the sampled curves (StrictlySimple: the result's rings never touch or cross) with every vertex traced back to the cubic and parameter it was
-//    sampled from: each run of a result ring along one source curve is that curve's own piece (de Casteljau), the crossings between two curves a
-//    straight segment of at most a sample's length. So two loops of a level never cross, a level's loops never cross the next level's (a shared
-//    stretch is the SAME curve: they touch there, as the traced levels do), and a curve never crosses itself.
-//  * FEATURES SMALLER THAN THE TOLERANCE MAY VANISH: a slot or a gap narrower than about the tolerance may close, an island or a hole smaller than it
-//    may go.
+//  * WITHIN THE TOLERANCE: the cubics are fitted to a DENOISED copy of the traced points (fitRun) and each is accepted only on a SAMPLED CHECK against
+//    the traced points themselves: every traced point and every sample of the curve (a chord deviation of LEVEL_SMOOTH.checkShare of the fit
+//    tolerance, that slack counted in) within LEVEL_SMOOTH.fitShare of the tolerance; a cubic that loops or turns back is refused; where no cubic
+//    covers three traced segments (a cubic costs three straight segments in the file) the traced segment itself is kept. The fit is SYMMETRIC: the
+//    curve strays at most the tolerance to either side, so it moves into the material by at most the tolerance (not biased: a waste-side bias would
+//    halve the fitting budget; on the owner's rose at Roughing's 0.1 mm the pieces would drop 2.8 times instead of 11.6).
+//  * NO TOUCHING, NESTING KEPT: the fitted rings are COMBINED, not trusted: a region = its fitted outer MINUS its fitted holes, the regions = their
+//    UNION, and (Contour) a level's material = that INTERSECTED with the next deeper level's smoothed material, by Clipper on the curves' samples (the
+//    result rings cannot cross; StrictlySimple when they would touch at a vertex), every result vertex traced back to the cubic and parameter it was
+//    sampled at: a run of a result ring along one source curve is that curve's own piece (de Casteljau), a crossing of two curves a straight piece
+//    through Clipper's crossing point. A SMOOTHED RING's polygon IS that result (so a level's loops never touch or cross, nor a loop itself, and a
+//    level's loops lie in the next level's smoothed material, to Clipper's 0.001 mm grid); where a level and the next weave along the same wall, the
+//    deeper level's curve is taken all along it when it stays within the tolerance of the level's traced loop (mergeRuns: one curve, they touch).
+//  * FEATURES SMALLER THAN THE TOLERANCE MAY VANISH: a bump or a dent with no corner smaller than the tolerance is not followed, a ring enclosing less
+//    than tol² goes; a slot with sharp corners is kept (its corners are corners).
 //
 //   smoothingOf(op, value)         -> the tolerance (base mm) of a Roughing / Contour record's `smoothing` (missing = the op's default; <= 0 = 0, off)
 //   fitClosed(ring, tol)           -> SEGS: the closed outline [[x, y], ...] fitted within tol, [{ p0, c1, c2, p3 }] (cubics; { p0, p3, line: true } a line)
-//   smoothRing(ring, tol)          -> a SMOOTHED RING (below) of the outline fitted at tol (0: the outline itself)
+//   smoothRing(ring, tol)          -> a SMOOTHED RING (below) of the outline fitted within fitShare x tol (0: the outline itself)
 //   smoothRegions(regions, tol, { fit }) -> SMOOTHED REGIONS [{ outer, holes }] of Clipper regions (rings [[x, y], ...] closed); `fit(ring, isOuter)`
 //                                    may hand back a SMOOTHED RING made before (a Contour level whose loop is the next level's)
-//   intersectSmoothed(A, B, tol)   -> A ∩ B, SMOOTHED REGIONS (a run along B's curve is B's piece)
+//   intersectSmoothed(A, B, tol, traced) -> A ∩ B, SMOOTHED REGIONS (a run along B's curve is B's piece; mergeRuns within the tolerance of `traced`)
 //   ringPathD(segs)                -> 'M x y C ... Z' (TASK 761's exported path numbers: #core/curve-kinds num; a line piece is `L`)
-//   ringsTouch(A, B) / ringSelfTouch(A): two sampled closed rings [[x, y], ...] touch or cross / one touches itself (the tests' check)
-// A SMOOTHED RING = { segs (SEGS), poly: [[x, y], ...] closed (sampled at CURVE_TOLERANCE_MM, as every bezier is wherever a polyline stands for it:
-// footprints, the 3D Review, the Paths view), work: the samples the booleans use ({ pts, seg, t }: chord deviation LEVEL_SMOOTH.workShare of the
-// tolerance, at most CURVE_TOLERANCE_MM), tol }.
+//   ringsTouch(A, B) / ringsCross(A, B) / ringSelfTouch(A): sampled closed rings [[x, y], ...] share a point / cross / one touches itself (the tests')
+// A SMOOTHED RING = { segs (SEGS), poly: its polygon [[x, y], ...] closed = work.pts (the curves sampled at a chord deviation of LEVEL_SMOOTH.workShare
+// of the tolerance, at most CURVE_TOLERANCE_MM, as every bezier is wherever a polyline stands for it: footprints, the 3D Review, the Paths view; a
+// boolean's result: its own vertices), work: { pts, seg, t } (each vertex, the segment it starts or lies on, its parameter there), tol }.
 import { bezier as bezAt, chordLengthParameterize, generateBezier, newtonRaphson } from './curve-fit.js';
 import { bezierSteps, CURVE_TOLERANCE_MM, num } from './curve-kinds.js';
 import { ClipperLib, CLIP_SCALE } from './plot/clip.js';
@@ -248,13 +249,6 @@ function pieceOf(s, t0, t1) {
   return { p0: q[0], c1: q[1], c2: q[2], p3: q[3] };
 }
 const reverseSeg = (s) => (s.line ? lineSeg(s.p3, s.p0) : { p0: s.p3, c1: s.c2, c2: s.c1, p3: s.p0 });
-/** SEGS sampled at chord deviation `chord` -> [[x, y], ...] closed. */
-export function sampleSegs(segs, chord = CURVE_TOLERANCE_MM) {
-  const out = [];
-  for (const s of segs) { const n = stepsOf(s, chord); for (let k = 0; k < n; k++) { const p = ptOf(s, k / n); out.push([p.x, p.y]); } }
-  out.push([out[0][0], out[0][1]]);
-  return out;
-}
 /** 'M x y C ... Z' of closed SEGS (TASK 761's path numbers; a line piece `L`). */
 export function ringPathD(segs) {
   let d = `M ${num(segs[0].p0.x)} ${num(segs[0].p0.y)}`;

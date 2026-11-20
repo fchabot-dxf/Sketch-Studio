@@ -109,7 +109,13 @@ function checkFit(bz, Q, a, b, u, ftol) {
   for (let i = a; i <= b; i++) { const p = bezAt(bz, u[i - a]); const e = Math.hypot(p.x - Q[i].x, p.y - Q[i].y); if (e > err) { err = e; if (err > ftol) return err; } }
   const chord = ftol * LEVEL_SMOOTH.checkShare;
   const n = Math.max(8, Math.min(1024, bezierSteps(bz, chord)));
+  const cx = bz[3].x - bz[0].x, cy = bz[3].y - bz[0].y;
   let j = 0;
+  for (let k = 0; k <= n; k++) { // the curve always moves along its chord (no loop, no cusp, no turning back)
+    const t = k / n, v = 1 - t;
+    const dx = v * v * (bz[1].x - bz[0].x) + 2 * v * t * (bz[2].x - bz[1].x) + t * t * (bz[3].x - bz[2].x), dy = v * v * (bz[1].y - bz[0].y) + 2 * v * t * (bz[2].y - bz[1].y) + t * t * (bz[3].y - bz[2].y);
+    if (!(dx * cx + dy * cy > 0)) return Infinity;
+  }
   for (let k = 1; k < n; k++) { // every sample within ftol of the traced polyline (its segments about the sample's parameter: an upper bound of the distance)
     const t = k / n, p = bezAt(bz, t);
     while (j + 1 < u.length - 1 && u[j + 1] < t) j++;
@@ -255,8 +261,10 @@ function ringOfSegs(segs, tol) {
   const chord = workChord(tol);
   const pts = [], seg = [], t = [];
   segs.forEach((s, i) => { const n = stepsOf(s, chord); for (let k = 0; k < n; k++) { const p = ptOf(s, k / n); pts.push(p); seg.push(i); t.push(k / n); } });
-  return { segs, poly: sampleSegs(segs), work: { pts, seg, t }, tol };
+  return ringOfWork(segs, { pts, seg, t }, tol);
 }
+// a SMOOTHED RING of SEGS and its polygon (work: its vertices on the curves, each with its segment and parameter)
+const ringOfWork = (segs, work, tol) => ({ segs, poly: [...work.pts.map((p) => [p.x, p.y]), [work.pts[0].x, work.pts[0].y]], work, tol });
 /** smoothRing(ring, tol) -> a SMOOTHED RING (header) of the outline ring ([[x, y], ...]) fitted within LEVEL_SMOOTH.fitShare x tol (tol 0: the
  *  outline itself, its straight segments), or null for fewer than 3 points. */
 export function smoothRing(ring, tol) {
@@ -271,7 +279,8 @@ function clipPath(ring, positive) {
   if (ClipperLib.Clipper.Orientation(path) !== positive) path.reverse();
   return path;
 }
-// a result ring (Clipper path) -> SEGS: each run of vertices along one source ring's samples is that ring's own piece; the rest straight segments.
+// a result ring (Clipper path) -> { segs, pts, seg, t }: SEGS where each run of vertices along one source ring's samples is that ring's own piece, the rest
+// straight segments; pts = the vertices (the polygon Clipper made: the segs pass through every one), seg / t = the segment each starts or lies on.
 // opts.prefer (a Set of source ring numbers) + opts.within(points): between two runs along the same PREFERRED ring (the same direction), what lies
 // between (other curves' runs, crossings) is replaced by the preferred ring's own piece when every sample of that piece passes `within` (the traced
 // outline's tolerance): a Contour level and the next deeper level weaving along the same wall take ONE curve there, the deeper's (shared: they touch).
@@ -287,8 +296,8 @@ function rebuild(path, src, rings, opts) {
   let s0 = -1;
   for (let i = 0; i < n && s0 < 0; i++) { const p = (i - 1 + n) % n, pp = (i - 2 + n) % n; const d = step(at[p], at[i]); if (!d || d !== step(at[pp], at[p])) s0 = i; }
   if (s0 < 0) { // one source ring, all of it
-    const r = rings[at[0].r], dir = step(at[0], at[1]);
-    return dir > 0 ? r.segs.slice() : r.segs.slice().reverse().map(reverseSeg);
+    const r = rings[at[0].r], w = step(at[0], at[1]) > 0 ? r : reverseRing(r);
+    return { segs: w.segs, pts: w.work.pts, seg: w.work.seg, t: w.work.t };
   }
   const items = []; // round the ring from s0: runs { r, qa, qb, dir } and lone points { p }
   for (let k = 0; k < n;) {
@@ -299,20 +308,39 @@ function rebuild(path, src, rings, opts) {
     k = j + 1;
   }
   if (opts && opts.prefer) mergeRuns(items, rings, opts);
+  // emit: the SEGS, and the ring's polygon = its vertices in order (each run's source samples, each lone point), each with the segment it starts or
+  // lies on and its parameter there (so this ring can be a source of the next boolean in turn)
   const startOf = (it) => (it.p ? it.p : rings[it.r].work.pts[it.qa]);
-  const out = [];
-  let cur = null; // the end point of what is built so far
-  const lineTo = (p) => { if (cur && Math.hypot(p.x - cur.x, p.y - cur.y) > 1e-9) out.push(lineSeg(cur, p)); cur = p; };
-  items.forEach((it, k) => {
-    if (it.p && cur) { // a lone point (a crossing Clipper made, on its 0.001 mm grid): kept only where it bends the way by more than that grid (else a
-      const nx = startOf(items[(k + 1) % items.length]); // micro back-and-forth would cross the curve it came off)
-      if (segDist(it.p, cur, nx) <= 2 / CLIP_SCALE) return;
+  const segs = [], pts = [], seg = [], t = [];
+  let cur = null; // the end point of what is built so far (not yet a vertex)
+  const lineTo = (p) => { if (cur && Math.hypot(p.x - cur.x, p.y - cur.y) > 1e-9) { pts.push(cur); seg.push(segs.length); t.push(0); segs.push(lineSeg(cur, p)); } cur = p; };
+  const spike = 3 / CLIP_SCALE;
+  for (let k = 0; k < items.length; k++) {
+    const it = items[k];
+    if (it.p && cur) { // a lone point (a crossing on Clipper's 0.001 mm grid) that only turns the way back over a grid step or two: a spike, dropped
+      const nx = startOf(items[(k + 1) % items.length]), ux = it.p.x - cur.x, uy = it.p.y - cur.y, vx = nx.x - it.p.x, vy = nx.y - it.p.y;
+      if (ux * vx + uy * vy < 0 && Math.min(Math.hypot(ux, uy), Math.hypot(vx, vy)) < spike) continue;
     }
     lineTo(startOf(it));
-    if (!it.p) { out.push(...curvePiece(rings[it.r], it.qa, it.qb, it.dir)); cur = rings[it.r].work.pts[it.qb]; }
-  });
+    if (it.p) continue;
+    const { pieces, map } = curvePiece(rings[it.r], it.qa, it.qb, it.dir);
+    for (const m of map) { pts.push(m.p); seg.push(segs.length + m.k); t.push(m.t); }
+    segs.push(...pieces);
+    cur = rings[it.r].work.pts[it.qb];
+  }
   lineTo(startOf(items[0])); // back to the start
-  return out;
+  return { segs, pts, seg, t };
+}
+// a SMOOTHED RING walked the other way
+function reverseRing(ring) {
+  const N = ring.segs.length, { pts, seg, t } = ring.work, Q = pts.length;
+  const out = { pts: [], seg: [], t: [] };
+  for (let k = 0; k < Q; k++) {
+    const q = (Q - k) % Q, s = seg[q], u = t[q];
+    out.pts.push(pts[q]);
+    if (u > 0) { out.seg.push(N - 1 - s); out.t.push(1 - u); } else { out.seg.push((N - s) % N); out.t.push(0); }
+  }
+  return { segs: ring.segs.slice().reverse().map(reverseSeg), work: out };
 }
 // mergeRuns (rebuild's opts): a preferred run and the next preferred run of the same ring and direction joined along that ring, when its piece
 // between them is forward of the first, no longer than twice what it replaces (+ 1 mm: it is a detour of the same wall, not the way round), and
@@ -341,23 +369,41 @@ function mergeRuns(items, rings, { prefer, within }) {
     }
   }
 }
-// the source ring's curve from its sample qa to qb, forward (dir 1) or backward (-1)
+// the source ring's curve from its sample qa to qb, forward (dir 1) or backward (-1): { pieces (SEGS), map: one { p, k (piece), t } per sample from qa
+// up to qb (qb itself not: it ends the last piece) }
 function curvePiece(ring, qa, qb, dir) {
-  const { seg, t } = ring.work, segs = ring.segs, N = segs.length;
-  if (dir < 0) return curvePiece(ring, qb, qa, 1).reverse().map(reverseSeg);
-  const out = [];
-  let sa = seg[qa], ta = t[qa];
-  const sb = seg[qb], tb = t[qb];
+  const { pts, seg, t } = ring.work, segs = ring.segs, N = segs.length, Q = pts.length;
+  const from = dir > 0 ? qa : qb, to = dir > 0 ? qb : qa; // the forward walk from `from` to `to`
+  const ranges = []; // [segment, t0, t1] in forward order
+  let sa = seg[from], ta = t[from];
+  const sb = seg[to], tb = t[to];
   for (let guard = 0; guard <= N; guard++) {
-    if (sa === sb && ta <= tb) { if (tb > ta) out.push(pieceOf(segs[sa], ta, tb)); break; }
-    if (ta < 1) out.push(pieceOf(segs[sa], ta, 1));
+    if (sa === sb && ta <= tb) { if (tb > ta) ranges.push([sa, ta, tb]); break; }
+    if (ta < 1) ranges.push([sa, ta, 1]);
     sa = (sa + 1) % N; ta = 0;
   }
-  return out;
+  const fwd = []; // the forward position of each sample from `from` up to `to` (exclusive): [range index, t within it]
+  let k = 0;
+  for (let q = from; q !== to; q = (q + 1) % Q) {
+    while (k < ranges.length - 1 && (seg[q] !== ranges[k][0] || t[q] >= ranges[k][2])) k++;
+    const [, t0, t1] = ranges[k];
+    fwd.push({ q, k, t: (t[q] - t0) / (t1 - t0) });
+  }
+  const pieces = ranges.map(([s, t0, t1]) => pieceOf(segs[s], t0, t1));
+  if (dir > 0) return { pieces, map: fwd.map((f) => ({ p: pts[f.q], k: f.k, t: f.t })) };
+  // backward: the pieces reversed; the samples from qa back to qb (exclusive) = the forward ones after `from`, in reverse, plus none for qb (= from)
+  const m = pieces.length, map = [{ p: pts[qa], k: 0, t: 0 }];
+  for (let i = fwd.length - 1; i >= 1; i--) { const f = fwd[i]; map.push(f.t > 0 ? { p: pts[f.q], k: m - 1 - f.k, t: 1 - f.t } : { p: pts[f.q], k: m - f.k, t: 0 }); }
+  return { pieces: pieces.reverse().map(reverseSeg), map };
 }
 function regionsOf(tree, src, rings, tol, opts) {
   const out = [];
-  const make = (contour) => { const segs = rebuild(contour, src, rings, opts); return segs.length ? ringOfSegs(segs, tol) : null; };
+  const tiny = tol * tol; // a ring enclosing less than tol² (a crossing's sliver; a feature smaller than the tolerance) is dropped
+  const make = (contour) => {
+    if (Math.abs(ClipperLib.Clipper.Area(contour)) < tiny * CLIP_SCALE * CLIP_SCALE) return null;
+    const r = rebuild(contour, src, rings, opts);
+    return r.segs.length ? ringOfWork(r.segs, { pts: r.pts, seg: r.seg, t: r.t }, tol) : null;
+  };
   const walk = (node) => {
     const outer = make(node.Contour());
     const holes = node.Childs().map((h) => make(h.Contour())).filter(Boolean);
@@ -367,8 +413,8 @@ function regionsOf(tree, src, rings, tol, opts) {
   for (const top of tree.Childs()) walk(top);
   return out;
 }
-// Clipper `type` on the subject regions' rings and the clip regions' rings (NonZero, outer positive / holes negative), StrictlySimple. within: see
-// rebuild (the clip rings preferred).
+// Clipper `type` on the subject regions' rings and the clip regions' rings (NonZero, outer positive / holes negative; StrictlySimple when the result
+// touches at a vertex). within: see rebuild (the clip rings preferred).
 function combine(type, subj, clip, tol, within = null) {
   const rings = [], src = new Map();
   const add = (ring, positive) => {
@@ -377,15 +423,25 @@ function combine(type, subj, clip, tol, within = null) {
     return clipPath(ring, positive);
   };
   const paths = (regions) => regions.flatMap((g) => [add(g.outer, true), ...g.holes.map((h) => add(h, false))]);
-  const c = new ClipperLib.Clipper(ClipperLib.Clipper.ioStrictlySimple | ClipperLib.Clipper.ioPreserveCollinear);
   const sp = paths(subj), firstClip = rings.length, cp = paths(clip);
   if (!sp.length) return [];
-  c.AddPaths(sp, ClipperLib.PolyType.ptSubject, true);
-  if (cp.length) c.AddPaths(cp, ClipperLib.PolyType.ptClip, true);
-  const tree = new ClipperLib.PolyTree();
-  c.Execute(type, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+  const run = (options) => {
+    const c = new ClipperLib.Clipper(options), tree = new ClipperLib.PolyTree();
+    c.AddPaths(sp, ClipperLib.PolyType.ptSubject, true);
+    if (cp.length) c.AddPaths(cp, ClipperLib.PolyType.ptClip, true);
+    c.Execute(type, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+    return tree;
+  };
+  let tree = run(ClipperLib.Clipper.ioPreserveCollinear);
+  if (touchingVertices(tree)) tree = run(ClipperLib.Clipper.ioPreserveCollinear | ClipperLib.Clipper.ioStrictlySimple); // rings that touch at a vertex: split them (StrictlySimple is slow: only then)
   const opts = within ? { prefer: new Set(rings.map((r, i) => i).filter((i) => i >= firstClip)), within } : null;
   return regionsOf(tree, src, rings, tol, opts);
+}
+// a result's rings share a vertex (one ring passing a point twice, or two rings meeting there): Clipper's non-strict output can touch only so
+function touchingVertices(tree) {
+  const seen = new Set();
+  const walk = (node) => { for (const ch of node.Childs()) { for (const v of ch.Contour()) { const k = KEY(v.X, v.Y); if (seen.has(k)) return true; seen.add(k); } if (walk(ch)) return true; } return false; };
+  return walk(tree);
 }
 // (p) => p is within d of an edge of the rings ([[x, y], ...] closed): a grid of the edges, each in every cell its box grown by d touches
 function nearChecker(rings, d) {

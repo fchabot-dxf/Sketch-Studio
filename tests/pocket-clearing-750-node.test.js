@@ -130,7 +130,7 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     // TASK 835: a Raster loop runs along every pass ONCE, from the area's edge to the area's edge, but for the gaps where a corridor leaves it (each at most
     // half a stepover: the bit sweeps it)
     if (pattern === 'raster') {
-      const bad = (x) => !(x.twice <= 0.01 && x.ends <= 0.01 && x.gaps.every((g) => g <= S / 2 + 0.01));
+      const bad = (x) => !(x.twice <= 0.01 && x.uncut.every(([u, v]) => v - u <= S / 2 + 0.01 || v <= BIT + S + 0.01 || u >= x.length - BIT - S - 0.01)); // TASK 835b: or within the wall band of an end (a flush corridor)
       const cov = passCoverage(on.clear, off.clear.filter((c) => c.role === 'raster').map((c) => c.points));
       ok(!cov.some(bad), `${tag}: every pass cut once, edge to edge, but for its corridor gaps (${JSON.stringify(cov.find(bad))})`);
     } else {

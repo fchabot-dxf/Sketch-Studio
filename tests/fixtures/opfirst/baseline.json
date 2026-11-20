@@ -2820,11 +2820,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "cam-paths-787-node__0008__d2d21b4d": {
-   "a": "0988a4885ac2ea68ed8d66e56ce06fa6",
-   "b": "17add8c7d07716ca9e4ac30807245062",
-   "c": "8fa4f73493f4cae339a4c771797a4692",
+   "a": "bd5416221dacf36500b7e339fd8fa055",
+   "b": "c03827cc7eb7b6d692b998c76342417b",
+   "c": "86d9c38bfa5944388987f6bdcf3af0d5",
    "d": "ad2e97079d8069915aff425f0d1b53ac",
-   "dContent": "383db806c6919e4d3098f1b65a9b133d",
+   "dContent": "19d5e1bdf6c1c2190f5451c8a90db320",
    "e": "a4e1bebdbe69afdddc9dedfd3110d2d3",
    "eNoId": "212726a2d683bbd18b51295a8c9be22d",
    "f": "d751713988987e9331980363e24189ce"
@@ -4050,11 +4050,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0026__63de60f2": {
-   "a": "38c0cb9e3c7c31b86e16829f92e1c6e0",
-   "b": "38dc654e8fa609ca0a2ead34e701c206",
-   "c": "398cde0c5bcb758ae60dc8c73283e6df",
+   "a": "0a551b333c32090ccea368f3732ac893",
+   "b": "ef64c9fa3fcb3452ac7591d6d9b25f86",
+   "c": "e11660772096e168f96800a61b3c9b2f",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "1ded417fd55c01b68682385d2a8f3df5",
+   "dContent": "5a0070d4ac3fe0ac320f981b8d7d37f2",
    "e": "93552b8300f5b52bea8b420409b61abf",
    "eNoId": "cf7e52da373dcd624ace126de383ac3b",
    "f": "d751713988987e9331980363e24189ce"
@@ -9168,7 +9168,7 @@
    }
   },
   "835": {
-   "why": "Raster + Loop cuts both ways now (task 835, owner turns 2990-2996: the boundary of a comb of every other strip joined by corridors, every pass cut once, the wall ring a balloon from the last point on the area's edge, the start near the middle; zero crossings). Every corpus case with a Raster Loop record whose measurements changed has them re-measured here (on purpose); every other case and measurement is unchanged.",
+   "why": "Raster + Loop cuts both ways now (task 835, owner turns 2990-2996: the boundary of a comb of every other strip joined by corridors, every pass cut once, the wall ring a balloon from the last point on the area's edge, the start near the middle; zero crossings; 835b: corridors a wall band from where passes end, on straight spines, a plain turn along the wall where passes are too short). Every corpus case with a Raster Loop record whose measurements changed has them re-measured here (on purpose); every other case and measurement is unchanged.",
    "cases": [
     "cam-paths-787-node__0008__d2d21b4d",
     "leadin-775-node__0008__07f32269",

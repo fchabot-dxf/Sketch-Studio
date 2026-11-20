@@ -78,9 +78,14 @@
 //       ONE closed path = the boundary of a COMB, walked once. The STRIPS between consecutive pass lines (and the margins beyond the first / last
 //       line), each cut into CELLS (the connected pieces of the area between the two lines), alternate: the comb HOLDS every other strip's cells, the
 //       others are BAYS. Held cells are joined by CORRIDORS: a band half a stepover wide (narrower where two short passes overlap less), perpendicular
-//       to the passes, across a bay from a held cell to the held cell beyond, as near the area's middle line as the two passes it crosses allow; the
-//       corridors a spanning tree (Kruskal, the nearest the middle first) so the comb is ONE region with no hole (both parities tried, the shorter loop
-//       kept). Every pass then has the comb on one side and a bay on the other, so the comb's boundary runs along EVERY pass exactly once (split where a
+//       to the passes, across a bay from a held cell to the held cell beyond. TASK 835b (owner turn 3021: no jog at the wall): a corridor stands at
+//       least the WALL BAND (a bit diameter + a stepover) from where its two passes end, along them, and the corridors share STRAIGHT SPINES (the area's
+//       middle line wherever it fits, then the fewest more lines, each in the middle of what its corridors share: e.g. one per bow-tie wing, near its
+//       square outer wall since the wing narrows to its tip); where two passes are too short for that (a wing's tip, a round cap, a narrow neck) the
+//       corridor is FLUSH: the part of the bay within one corridor width of the wall, on the side the two passes end the most square: a PLAIN TURN (the
+//       bay's passes end a corridor width from the wall and join by one link along it; the held strips' ends run on along the wall). The corridors a
+//       spanning tree (Kruskal: clear of the band nearest the middle first, then flush on a square wall, then flush on any wall) so the comb is ONE
+//       region with no hole (both parities tried, the shorter loop kept). Every pass then has the comb on one side and a bay on the other, so the comb's boundary runs along EVERY pass exactly once (split where a
 //       corridor leaves it: the bit sweeps that gap); between passes it runs a hairpin along the area's edge or a corridor side (one stepover). A
 //       boundary of one region crosses nothing, by construction. On a convex area the corridors line up into one spine through the middle:
 //            ______________________
@@ -869,8 +874,14 @@ function rasterComb(g, pcs, parity, s, r, F, centre) {
   });
   // the corridor width: half a stepover, narrower where the bit would not sweep the gap it leaves in the two passes (a stepover over a bit radius)
   const wCover = 2 * Math.sqrt(Math.max(0, r * r - Math.max(0, s - r) ** 2));
-  const w = Math.max(0.02, Math.min(s / 2, 0.9 * wCover)), xc = uOf(centre), grown = offsetRegions([g], 0.01);
-  const edges = [];
+  const w = Math.max(0.02, Math.min(s / 2, 0.9 * wCover)), xc = uOf(centre);
+  // TASK 835b (owner turn 3021: no jog at the wall): a corridor stands at least the WALL BAND (a bit diameter + a stepover) from where its two passes end,
+  // along them (no stub of a pass between a corridor and the wall); where the passes are too short for that, FLUSH: the part of the bay within one
+  // corridor width of the wall, on the side its two passes end the most square (a plain turn: the bay's passes end one corridor width from the wall and
+  // join along it, the held strips' ends run on along the wall)
+  const band = 2 * r + s, grown = offsetRegions([g], 0.01);
+  const wallBand = diffRegions([g], offsetRegions([g], -w, POCKET_CLEARING.chordTolMm));
+  const cand = [];
   cells.forEach((q, qi) => {
     if (q.held) return;
     const lower = ends.filter((e) => e.line === q.j && e.above === qi && e.below >= 0 && cells[e.below].held);
@@ -879,18 +890,38 @@ function rasterComb(g, pcs, parity, s, r, F, centre) {
       const lo = Math.max(A.u0, B.u0), hi = Math.min(A.u1, B.u1);
       const we = Math.min(w, (hi - lo) / 2); // narrower where the two passes overlap less (a short pass near a tip)
       if (we < 0.01) continue;
-      const gap = Math.min(s, (hi - lo - we) / 2); // keep clear of the passes' ends (the area's edge)
-      const x = Math.min(Math.max(xc, lo + gap + we / 2), hi - gap - we / 2); // as near the middle line as the two passes allow
-      if (![x - we / 2, x + we / 2].every((u) => segmentInside(at(u, cOf(q.j)), at(u, cOf(q.j + 1)), grown))) continue;
-      edges.push({ a: A.below, b: B.above, x, w: we, j: q.j, cost: Math.abs(x - xc) });
+      const room = []; // where the corridor's middle may go: at least the wall band from where either pass ends, along it
+      { const l = lo + band + we / 2, h = hi - band - we / 2; if (h >= l) room.push([l, h]); }
+      cand.push({ a: A.below, b: B.above, q: qi, j: q.j, w: we, lo, hi, room, sideL: Math.abs(A.u0 - B.u0), sideR: Math.abs(A.u1 - B.u1) });
     }
   });
+  // THE SPINES: the corridors clear of the wall band share as few straight lines as possible: the middle line first (every corridor whose room holds it), then the fewest
+  // more lines (greedy stabbing by the rooms' right ends), each moved to the middle of what its corridors share
+  const rooms = cand.flatMap((c) => c.room), spines = [];
+  if (rooms.some(([l, h]) => xc >= l && xc <= h)) spines.push(xc);
+  for (const [l, h] of rooms.filter(([l, h]) => !(xc >= l && xc <= h)).sort((x, y) => x[1] - y[1] || x[0] - y[0])) {
+    if (spines.some((x) => x >= l && x <= h)) continue;
+    const shared = rooms.filter(([a, b]) => a <= h && b >= h && !(xc >= a && xc <= b) && !spines.some((x) => x >= a && x <= b));
+    spines.push((Math.max(...shared.map(([a]) => a)) + h) / 2);
+  }
+  const edges = [];
+  for (const c of cand) {
+    const xs = spines.filter((x) => c.room.some(([l, h]) => x >= l - 1e-9 && x <= h + 1e-9)).sort((x, y) => Math.abs(x - xc) - Math.abs(y - xc));
+    const x = xs.find((v) => [v - c.w / 2, v + c.w / 2].every((u) => segmentInside(at(u, cOf(c.j)), at(u, cOf(c.j + 1)), grown)));
+    if (x !== undefined) { edges.push({ ...c, x0: x - c.w / 2, x1: x + c.w / 2, flush: false, cost: Math.abs(x - xc) }); continue; }
+    // FLUSH: along the wall where the two passes end the most square (their ends' offset along the pass smaller); one whose wall is not square (the ends
+    // more than a stepover apart: a round cap, a neck's mouth) only where nothing else joins the comb
+    const left = c.sideL <= c.sideR, off = Math.min(c.sideL, c.sideR), mid = (c.lo + c.hi) / 2;
+    edges.push({ ...c, x0: left ? uLo : mid, x1: left ? mid : uHi, flush: true, cost: (off <= s ? 1e6 : 1e9) + off });
+  }
   const held = cells.map((c, i) => (c.held ? i : -1)).filter((i) => i >= 0);
   const root = cells.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
   const tree = [];
-  for (const e of edges.sort((x, y) => x.cost - y.cost || x.j - y.j || x.x - y.x)) { const fa = find(e.a), fb = find(e.b); if (fa !== fb) { root[fa] = fb; tree.push(e); } }
+  for (const e of edges.sort((x, y) => x.cost - y.cost || x.j - y.j || x.x0 - y.x0)) { const fa = find(e.a), fb = find(e.b); if (fa !== fb) { root[fa] = fb; tree.push(e); } }
   if (new Set(held.map(find)).size !== 1) return null;
-  const T = unionRegions(...held.map((i) => [cells[i].g]), ...tree.map((e) => rect(e.x - e.w / 2, e.x + e.w / 2, cOf(e.j) - d, cOf(e.j + 1) + d)));
+  // each corridor clipped to its bay and the two held cells it joins (never another part of the area); a flush one to the wall band
+  const corridor = (e) => { const k = intersectRegions(rect(e.x0, e.x1, cOf(e.j) - d, cOf(e.j + 1) + d), unionRegions([cells[e.q].g], [cells[e.a].g], [cells[e.b].g])); return e.flush ? intersectRegions(k, wallBand) : k; };
+  const T = unionRegions(...held.map((i) => [cells[i].g]), ...tree.map(corridor));
   if (T.length !== 1 || T[0].holes.length) return null;
   const pts = toXY(T[0].outer);
   const rowOf = (p) => { const k = Math.round((nOf(p) - c0) / s) + l0; return k >= kmin && k <= kmax && Math.abs(nOf(p) - cOf(k)) < 0.003 ? k : null; };

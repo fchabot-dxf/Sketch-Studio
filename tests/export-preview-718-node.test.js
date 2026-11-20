@@ -14,11 +14,12 @@ import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
-import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, previewRows, itemLabel } from '../apps/shaper/src/export-preview.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -42,7 +43,7 @@ function exportElements(svg) {
 const plainExport = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
 };
 const stripPreview = (s) => s.replace(/ data-step="\d+\/\d+"/g, '');
 
@@ -53,11 +54,11 @@ try {
   app.modes.showMode('prepare');
 
   // ── the real Fusion solid (711): 1 outside, 3 inside, 4 pockets ──
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   {
-    const download = shaperSvgOf(app.state, cutPlanEntries());
-    const copy = shaperSvgOf(app.state, cutPlanEntries(), { preview: true });
+    const download = shaperSvgOf(app.state, planEntries());
+    const copy = shaperSvgOf(app.state, planEntries(), { preview: true });
     eq(download, plainExport(app.state), 'real solid: the downloaded file is byte-identical to the exporter\'s output before task 718');
     eq(copy, download, 'real solid: no stepped cut, so the preview copy IS the downloaded string');
     const ex = exportElements(download);
@@ -77,14 +78,14 @@ try {
   }
 
   // ── the SA-7 R3 floor fillet pocket as a Stepped pocket, adaptive Coarse (717: 4 steps at 6.651 7.333 7.843 8) ──
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   {
-    const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
+    const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
     ok(rec.slope, 'the imported pocket has its slope');
-    CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
-    const download = shaperSvgOf(app.state, cutPlanEntries());
-    const copy = shaperSvgOf(app.state, cutPlanEntries(), { preview: true });
+    V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
+    const download = shaperSvgOf(app.state, planEntries());
+    const copy = shaperSvgOf(app.state, planEntries(), { preview: true });
     eq(download, plainExport(app.state), 'R3 fillet: the downloaded file is byte-identical to the exporter\'s output before task 718');
     ok(!/data-/.test(download), 'R3 fillet: the downloaded file carries no data-* attribute');
     eq(stripPreview(copy), download, 'R3 fillet: the preview copy minus its data-step attributes == the downloaded file, byte for byte');
@@ -102,7 +103,7 @@ try {
   // a file that does not parse throws (never an empty view that hides the error)
   assert.throws(() => parseShaperSvg('<svg', app.document), /does not parse/); checks++;
 } finally {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   app.close();
 }
 console.log(`export-preview-718-node.test.js: ok (${checks} checks)`);

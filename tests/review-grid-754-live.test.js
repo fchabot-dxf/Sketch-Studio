@@ -306,13 +306,13 @@ try {
   await openStage('prepare');
   await waitFor(`document.querySelectorAll('#prepare-canvas .sk-edge').length >= 8`, 'Prepare shows the seeded geometry');
   await evalJs(`(async () => {
-    const plan = await import('/apps/shaper/src/cut-plan.js');
+    const plan = await import('/tests/helpers/plan-v2.js');
     const { findLoops } = await import('#core/loop-finder.js');
     const { loopPolygon } = await import('#core/loop-geometry.js');
     const st = window.__designController.state;
     const loops = findLoops(st).map((l) => ({ ...l, polygon: loopPolygon(l, st, new Map(st.shapes.map((sh) => [sh.id, sh]))) }));
     const B = loops.find((l) => Math.abs(Math.min(...l.polygon.map((p) => p.x)) - 20) < 1e-6);
-    plan.CUT_PLAN.set(plan.keyOf('loop', B.id), { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 });
+    plan.V2_PLAN.set(plan.keyOf('loop', B.id), { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 });
   })()`);
   await openStage('review');
   await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'app mode: the 3D build', 15000);

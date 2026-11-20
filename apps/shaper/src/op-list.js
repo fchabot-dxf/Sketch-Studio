@@ -21,7 +21,7 @@ const BIN = '\u{1F5D1}'; // the shared bin of the Parameters table's rows (packa
 
 /**
  * createOpList(hostEl, { getOps, onMove, onPick, isPicked, onDelete }) -> { refresh(), inspect(), setOpen(open) }
- *   getOps()       the operations, in order (planOperations)
+ *   getOps()       the operations, in order (operations.js describeOperations)
  *   onMove(keys)   a reorder: the operation keys in their new order
  *   onPick(op)     a tap on an operation
  *   isPicked(op)   whether the operation's regions are the canvas selection (the row is marked)

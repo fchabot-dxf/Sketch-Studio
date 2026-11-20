@@ -9,9 +9,10 @@ import { findLoops } from '#core/loop-finder.js';
 import { makeProfile } from '#core/profile-model.js';
 import { CUT_TYPES, STOCK_TYPE_ID, exportEncoding, classify, extractCutRecord, effectiveCutRecord, availableTypes } from '../apps/shaper/src/shaper.js';
 import { PARAM_HINTS } from '../apps/shaper/src/param-hints.js'; // TASK 770
-import { CUT_PLAN, planReliefItems, planStockProfile, stockKeyOf, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planReliefItems, planStockProfile, stockKeyOf, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { resolveStock } from '../apps/shaper/src/stock.js';
-import { captureShaperDoc, applyShaperDoc, captureCutPlan, applyCutPlan } from '../apps/shaper/src/shaper-doc.js';
+import { captureShaperDoc, applyShaperDoc, capturePrepare, applyPrepare } from '../apps/shaper/src/shaper-doc.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 const ptIn = (g, x, y) => { let c = false; for (let i = 0, j = g.length - 1; i < g.length; j = i++) { if ((g[i][1] > y) !== (g[j][1] > y) && x < (g[j][0] - g[i][0]) * (y - g[i][1]) / (g[j][1] - g[i][1]) + g[i][0]) c = !c; } return c; };
@@ -114,7 +115,7 @@ const areaL = 60 * 30 + 30 * 30, areaHole = 14 * 14;
 {
   const st = sketch([{ id: 'A', pts: [[0, 0], [60, 0], [60, 30], [30, 30], [30, 60], [0, 60]] }, { id: 'B', pts: [[8, 8], [22, 8], [22, 22], [8, 22]] }, { id: 'C', pts: [[100, 0], [140, 0], [140, 40], [100, 40]] }]);
   const la = loopAt(st, 0, 0), lb = loopAt(st, 8, 8);
-  const plan = new Map();
+  const plan = V2_PLAN.use(st); plan.clear(); // TASK S1: the plan as a v2 document loaded through applyShaperDoc
   assert.strictEqual(stockKeyOf(plan), null); assert.strictEqual(planStockProfile(st, plan), null);
   // a PLAIN Stock loop with another loop merely drawn inside it: that inner loop is a part to cut, NOT a hole of the board
   plan.set(keyOf('loop', la.id), { cutType: 'stock', cutDepth: 15 });
@@ -133,11 +134,13 @@ const areaL = 60 * 30 + 30 * 30, areaHole = 14 * 14;
   // resolveStock: the loop form carries the profile + thickness; with no Stock loop it is the declared record
   const rs = resolveStock(st, plan);
   assert.strictEqual(rs.fromLoop.thickness, 20); assert.ok(rs.stock.profile && rs.stock.profile.holes.length === 1);
-  const none = resolveStock(st, new Map([[keyOf('loop', la.id), { cutType: 'pocket', cutDepth: 5 }]]));
+  V2_PLAN.load([[keyOf('loop', la.id), { cutType: 'pocket', cutDepth: 5 }]]);
+  const none = resolveStock(st);
   assert.strictEqual(none.fromLoop, null); assert.strictEqual(none.stock.profile, undefined); assert.strictEqual(none.stock.thickness, DEFAULT_STOCK.thickness);
   // ONE stock: a second Stock record does not make two boards (the first in the plan wins)
   const two = new Map([[keyOf('loop', la.id), { cutType: 'stock', cutDepth: 10 }], [keyOf('loop', loopAt(st, 100, 0).id), { cutType: 'stock', cutDepth: 30 }]]);
-  assert.strictEqual(stockKeyOf(two), keyOf('loop', la.id));
+  V2_PLAN.load([...two]);
+  assert.strictEqual(stockKeyOf(), keyOf('loop', la.id));
 
   // ── the EXPORT: a GUIDE (Studio guide encoding #0068FF), thickness in cutDepth, same order / format as every other cut ──
   const entries = [{ target: { kind: 'loop', id: la.id }, rec: { cutType: 'stock', cutDepth: 15, cutOffset: 0, toolDia: 3.175 } },
@@ -162,21 +165,21 @@ const areaL = 60 * 30 + 30 * 30, areaHole = 14 * 14;
 
 // ── persistence + undo ride the cut plan ──
 {
-  const saved = [...CUT_PLAN.entries()];
+  const saved = capturePrepare();
   try {
-    CUT_PLAN.clear();
-    CUT_PLAN.set('loop:loop_x', { cutType: 'stock', cutDepth: 18.5, cutOffset: 0, toolDia: 3.175 });
-    CUT_PLAN.set('loop:loop_y', { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175 });
+    V2_PLAN.clear();
+    V2_PLAN.set('loop:loop_x', { cutType: 'stock', cutDepth: 18.5, cutOffset: 0, toolDia: 3.175 });
+    V2_PLAN.set('loop:loop_y', { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175 });
     const doc = JSON.parse(JSON.stringify(captureShaperDoc()));                 // through JSON, like the sidecar
-    CUT_PLAN.clear(); assert.strictEqual(stockKeyOf(), null);
+    V2_PLAN.clear(); assert.strictEqual(stockKeyOf(), null);
     applyShaperDoc(doc);
-    assert.strictEqual(stockKeyOf(), 'loop:loop_x'); assert.strictEqual(CUT_PLAN.get('loop:loop_x').cutDepth, 18.5, 'the Stock loop and its thickness survive a reload');
+    assert.strictEqual(stockKeyOf(), 'loop:loop_x'); assert.strictEqual(V2_PLAN.get('loop:loop_x').cutDepth, 18.5, 'the Stock loop and its thickness survive a reload');
     // UNDO: the shared snapshots capture / restore the cut plan (hostSnapshot): move the role, then restore
-    const before = captureCutPlan();
-    CUT_PLAN.get('loop:loop_x').cutType = null; CUT_PLAN.get('loop:loop_y').cutType = 'stock';
+    const before = capturePrepare();
+    V2_PLAN.get('loop:loop_x').cutType = null; V2_PLAN.get('loop:loop_y').cutType = 'stock';
     assert.strictEqual(stockKeyOf(), 'loop:loop_y');
-    applyCutPlan(before);
+    applyPrepare(before);
     assert.strictEqual(stockKeyOf(), 'loop:loop_x', 'undo restores the Stock role to the previous loop');
-  } finally { applyCutPlan(saved); }
+  } finally { applyPrepare(saved); }
 }
 console.log('stock-loop: ok');

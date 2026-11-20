@@ -83,7 +83,7 @@ const notice = () => evalJs(`document.getElementById('prepare-notice').textConte
 const card = () => evalJs(`(() => { const c = document.querySelector('#prepare-panel .stl-card'); if (!c || c.hidden) return null; const q = (s) => c.querySelector(s);
   const b = (s) => (q(s) && !q('.stl-body').hidden ? q(s).textContent : null); // a folded card shows no rows
   return { name: q('.stl-name').textContent, up: b('.stl-body .stl-ups .is-active'), unit: b('.stl-body .stl-units .is-active'), size: b('.stl-body .stl-size'), open: c.dataset.open }; })()`);
-const plan = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].map((r) => r.cutType + '@' + r.cutDepth))`);
+const plan = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].map((r) => r.cutType + '@' + r.cutDepth))`);
 const openStage = async (id) => { await clickEl(`.sk-header-tab[data-tab="${id}"]`); await waitFor(`!document.getElementById('view-${id}').hidden`, `the ${id} stage`); };
 // the drawer's Open STL…, the chooser answered with `stl`
 const openStl = async (stl, what) => {
@@ -164,7 +164,7 @@ try {
   await openStl(DOME, '3');
   await review('\\d+');
   console.log('3: ' + await evalJs(`document.getElementById('review-info').textContent`));
-  const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...new Set(m.planReliefItems(window.__designController.state).map((i) => i.cutDepth))].sort((a, b) => a - b))`);
+  const levels = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...new Set(m.planReliefItems(window.__designController.state).map((i) => i.cutDepth))].sort((a, b) => a - b))`);
   assert.deepStrictEqual(levels.filter((d) => d !== 29), [...Array.from({ length: 28 }, (_, i) => i + 1), 30], '3: terraces at every 1 mm, 1..30 (29: the 0.03 mm band at the dome\'s foot, kept only where wider than the drawing tolerance): ' + levels);
   await zoomReview(true);
   await shot('3-review-dome-top.png', '#review-canvas-host');

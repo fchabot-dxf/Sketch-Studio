@@ -59,9 +59,9 @@ export async function openBromont({ tag, drive: sharedDrive }) { // TASK 773: `d
       await press(p.x, p.y);
     };
     const toScreen = (x, y) => evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y}; const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
-    const look = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((C) => { const v = window.__prepareView, c = document.querySelector('#prepare-panel .cut-card');
+    const look = () => evalJs(`import('/tests/helpers/plan-v2.js').then((C) => { const v = window.__prepareView, c = document.querySelector('#prepare-panel .cut-card');
       return { view: v ? [v.view.x, v.view.y, v.view.w, v.view.h] : null, sel: v ? v.selectedTargets().map((t) => t.kind + ':' + t.id) : [], card: !!c && !c.hidden, mounts: window.__prepareMounts,
-        plan: JSON.stringify([...C.CUT_PLAN.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)) }; })`);
+        plan: JSON.stringify([...C.V2_PLAN.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)) }; })`);
     const openStage = async (mode) => { await clickEl(`.sk-header-tab[data-tab="${mode}"]`); await sleep(300); };
     const menu = async () => {
       if (!(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`))) await clickEl('.sk-sidebar-btn');

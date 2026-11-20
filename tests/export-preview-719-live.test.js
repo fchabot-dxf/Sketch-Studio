@@ -86,7 +86,7 @@ const lightness = (f) => parseFloat(/hsl\(0, 0%, ([\d.]+)%\)/.exec(f)[1]);
 const zoomOnto = async (wx, wy, n) => { const p = await screenOf(wx, wy); await wheelAt(p.x, p.y, n); };
 const setPlan = async (cutType) => {
   await clickEl('#prepare-panel .cut-type-trigger'); await clickEl(`.cut-type-opt[data-id="${cutType}"]`);
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === '${cutType}'))`, cutType + ' set');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === '${cutType}'))`, cutType + ' set');
   if (cutType === 'roughing') { await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); } // TASK 810: the Roughing card is tabbed: its stepping rows are in Passes
 };
 const checkDownload = (svg, what) => assert.ok(!/hsl\(/.test(svg) && !/stroke="#222"/.test(svg) && !/data-/.test(svg), `${what}: the downloaded file has none of the preview's styling`);
@@ -142,7 +142,7 @@ try {
   for (const [dev, n, name] of [['0.5', 4, 'coarse'], ['0.1', null, 'fine']]) {
     if (name === 'fine') await clickWorld(60, -40); // back on Prepare: select the pocket again
     await clickEl(`.cut-row[data-row="stepDeviation"] .cut-preset[data-value="${dev}"]`);
-    await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.stepDeviation === ${dev}))`, name);
+    await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.stepDeviation === ${dev}))`, name);
     await openStage('review');
     await waitFor(`document.querySelectorAll('#review-2d-canvas [data-step]').length > 1`, 'the stepped 2D view');
     await clickEl('#review-fit');
@@ -188,7 +188,7 @@ try {
   console.log('x2 card as inherited: ' + JSON.stringify(await evalJs(`({ adaptive: document.querySelector('.cut-adaptive').checked, step: document.querySelector('.cut-step-depth').value })`)));
   if (await evalJs(`document.querySelector('.cut-adaptive').checked`)) await clickEl('.cut-adaptive');
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '1'; i.dispatchEvent(new Event('change')); })()`);
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'x2: Step depth 1 mm, Adaptive off');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'roughing' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'x2: Step depth 1 mm, Adaptive off');
   const out = await zoomShot('desktop-2d-x2-stepped-outside-corner.png', 5, { x: 0, y: -80 });
   checkDownload(await dl(), 'x2 stepped outside');
   assert.strictEqual(out.n, 2, 'x2: 2 terraces at step 1 mm');

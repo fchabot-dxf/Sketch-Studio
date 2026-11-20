@@ -52,10 +52,10 @@ try {
   // Seed 8 distinct rectangles in Design, each with a different cut kind
   await evalJs(`(async () => {
     const { findLoops } = await import('/packages/core/loop-finder.js');
-    const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+    const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
-    st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+    st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
     let n = 0;
     const J = (x, y) => { const id = 'dj' + (++n); st.joints.set(id, { x, y }); return id; };
     const line = (a, b) => { const id = 'ds' + (++n); st.shapes.push({ id, type: 'line', joints: [a, b] }); return id; };
@@ -72,14 +72,14 @@ try {
     const loops = findLoops(st);
     const kOf = (edge) => keyOf('loop', loops.find((l) => l.edges.includes(edge)).id);
     const base = { cutDepth: 8, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 };
-    CUT_PLAN.set(kOf(eOut), { ...base, cutType: 'exterior' });
-    CUT_PLAN.set(kOf(eIn), { ...base, cutType: 'interior' });
-    CUT_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
-    CUT_PLAN.set(kOf(eSpir), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: false });
-    CUT_PLAN.set(kOf(eLoopLead), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: true, leadIn: true, leadInLength: 8 });
-    CUT_PLAN.set(kOf(eLeadIn), { ...base, cutType: 'online', toolDia: 3.175, leadIn: true, leadInLength: 8, leadInSide: 'outside' });
-    CUT_PLAN.set(kOf(eTabs), { ...base, cutType: 'online', toolDia: 3.175, holdPart: 'tabs', tabCount: 3, tabWidth: 10 });
-    CUT_PLAN.set(kOf(ePlainOnline), { ...base, cutType: 'online', toolDia: 3.175 });
+    V2_PLAN.set(kOf(eOut), { ...base, cutType: 'exterior' });
+    V2_PLAN.set(kOf(eIn), { ...base, cutType: 'interior' });
+    V2_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
+    V2_PLAN.set(kOf(eSpir), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: false });
+    V2_PLAN.set(kOf(eLoopLead), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: true, leadIn: true, leadInLength: 8 });
+    V2_PLAN.set(kOf(eLeadIn), { ...base, cutType: 'online', toolDia: 3.175, leadIn: true, leadInLength: 8, leadInSide: 'outside' });
+    V2_PLAN.set(kOf(eTabs), { ...base, cutType: 'online', toolDia: 3.175, holdPart: 'tabs', tabCount: 3, tabWidth: 10 });
+    V2_PLAN.set(kOf(ePlainOnline), { ...base, cutType: 'online', toolDia: 3.175 });
   })()`);
 
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);
@@ -234,16 +234,16 @@ try {
   // ── 6. Pan frame-time benchmark on 50+ ring Spiral and dense (~60 pass) Raster ──
   await evalJs(`(async () => {
     const { findLoops } = await import('/packages/core/loop-finder.js');
-    const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+    const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
-    st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+    st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
     const J = (id, x, y) => { st.joints.set(id, { x, y }); return id; };
     const p = [J('a', 0, 0), J('b', 400, 0), J('c', 400, 400), J('d', 0, 400)];
     for (let i = 0; i < 4; i++) st.shapes.push({ id: 'bl' + i, type: 'line', joints: [p[i], p[(i + 1) % 4]] });
     st.saveState('bench777');
     const l = findLoops(st)[0];
-    CUT_PLAN.set(keyOf('loop', l.id), { cutType: 'pocket', cutDepth: 10, cutOffset: 0, toolDia: 6, clearing: 'linked', stepover: 60, finishAllowance: 0.5, loop: false });
+    V2_PLAN.set(keyOf('loop', l.id), { cutType: 'pocket', cutDepth: 10, cutOffset: 0, toolDia: 6, clearing: 'linked', stepover: 60, finishAllowance: 0.5, loop: false });
   })()`);
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`); await sleep(120);
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);

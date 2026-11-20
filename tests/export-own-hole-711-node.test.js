@@ -8,11 +8,12 @@
 //     island: no pocket outline is cut through the plate, the outer pocket keeps the inner one as its hole, the island stays uncut.
 // The real Fusion payload (arcs, which Node samples as chords) runs in the browser: tests/export-own-hole-711-live.test.js.
 import assert from 'node:assert';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -36,12 +37,12 @@ function elementsOf(svg) {
 const exportNow = (st) => {
   const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {};
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
-  return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
+  return exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: lp });
 };
 
 // ── (1) a drawn plate: an unassigned inner circle keeps its automatic Inside cut; an assigned one is cut by its own record only ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const st = {
     joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }], ['c', { x: 100, y: 60 }], ['d', { x: 0, y: 60 }], ['o', { x: 30, y: 30 }], ['p', { x: 70, y: 30 }]]),
     shapes: [
@@ -54,7 +55,7 @@ const exportNow = (st) => {
   const loops = findLoops(st);
   const plate = loops.find((l) => l.edges.includes('s1'));
   const hole1 = loops.find((l) => l.edges.includes('c1'));
-  CUT_PLAN.set(keyOf('loop', plate.id), { cutType: 'exterior', cutDepth: 12, cutOffset: 0, toolDia: 3.175 });
+  V2_PLAN.set(keyOf('loop', plate.id), { cutType: 'exterior', cutDepth: 12, cutOffset: 0, toolDia: 3.175 });
 
   let els = elementsOf(exportNow(st));
   eq(els.map((e) => e.cutType + ' ' + e.depth).sort(), ['inside 12.000 mm', 'inside 12.000 mm', 'outside 12.000 mm'],
@@ -62,7 +63,7 @@ const exportNow = (st) => {
   let items = planReliefItems(st);
   eq(items.filter((i) => i.cutType === 'interior').length, 2, 'Review: both automatic hole cuts');
 
-  CUT_PLAN.set(keyOf('loop', hole1.id), { cutType: 'pocket', cutDepth: 3, cutOffset: 0, toolDia: 3.175 });
+  V2_PLAN.set(keyOf('loop', hole1.id), { cutType: 'pocket', cutDepth: 3, cutOffset: 0, toolDia: 3.175 });
   els = elementsOf(exportNow(st));
   eq(els.map((e) => e.cutType + ' ' + e.depth).sort(), ['inside 12.000 mm', 'outside 12.000 mm', 'pocket 3.000 mm'],
     'the circle with its own Pocket record is pocketed only; the unassigned circle keeps its automatic Inside cut');
@@ -71,16 +72,16 @@ const exportNow = (st) => {
   eq(items.filter((i) => i.cutType === 'interior').length, 1, 'Review: one automatic hole cut');
   eq(items.filter((i) => i.cutType === 'pocket').length, 1, 'Review: the pocket');
 
-  CUT_PLAN.set(keyOf('loop', hole1.id), { cutType: 'interior', cutDepth: 12, cutOffset: 0, toolDia: 3.175 });
+  V2_PLAN.set(keyOf('loop', hole1.id), { cutType: 'interior', cutDepth: 12, cutOffset: 0, toolDia: 3.175 });
   els = elementsOf(exportNow(st));
   eq(els.length, 3, 'a circle with its own Inside record is written once (not also as the plate\'s hole)');
   eq(new Set(els.map((e) => e.geom)).size, 3, 'three distinct elements');
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
 }
 
 // ── (2) an Outside plate around a stepped pocket and a pocket with an island (the Fusion solid, drawn with lines) ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const st = { joints: new Map(), shapes: [], constraints: [], groups: [], profiles: [] };
   let n = 0;
   const rect = (x, y, w, h) => {
@@ -93,10 +94,10 @@ const exportNow = (st) => {
   const loops = findLoops(st);
   const loopOf = (sid) => loops.find((l) => l.edges.includes(sid));
   const rec = (cutType, cutDepth) => ({ cutType, cutDepth, cutOffset: 0, toolDia: 3.175 });
-  CUT_PLAN.set(keyOf('loop', loopOf(sPlate).id), rec('exterior', 19));
-  CUT_PLAN.set(keyOf('loop', loopOf(sStep).id), rec('pocket', 4));
-  CUT_PLAN.set(keyOf('loop', loopOf(sInner).id), rec('pocket', 10));
-  CUT_PLAN.set(keyOf('loop', loopOf(sIsl).id), rec('pocket', 8)); // its derived profile: the island is its hole, the island has no record
+  V2_PLAN.set(keyOf('loop', loopOf(sPlate).id), rec('exterior', 19));
+  V2_PLAN.set(keyOf('loop', loopOf(sStep).id), rec('pocket', 4));
+  V2_PLAN.set(keyOf('loop', loopOf(sInner).id), rec('pocket', 10));
+  V2_PLAN.set(keyOf('loop', loopOf(sIsl).id), rec('pocket', 8)); // its derived profile: the island is its hole, the island has no record
 
   const els = elementsOf(exportNow(st));
   eq(els.map((e) => e.cutType + ' ' + e.depth + ' ' + e.subpaths).sort(),
@@ -104,13 +105,13 @@ const exportNow = (st) => {
     'one Outside (the plate), the 4 mm pocket with the 10 mm step as its hole, the 10 mm step, the 8 mm pocket around the island; no Inside cut');
   const items = planReliefItems(st);
   eq(items.map((i) => i.cutType + ' ' + i.cutDepth).sort(), ['exterior 19', 'pocket 10', 'pocket 4', 'pocket 8'], 'Review: the same four cuts');
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
 }
 
 // ── (3) advisor ruling (a), every cut type: a Stock loop (exported as a guide) writes no extra guide line for a child loop that has its
 //     own record (an unassigned child keeps it), and a Guide-assigned hole is not cut by its Outside plate ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const st = { joints: new Map(), shapes: [], constraints: [], groups: [], profiles: [] };
   let n = 0;
   const rect = (x, y, w, h) => {
@@ -125,8 +126,8 @@ const exportNow = (st) => {
   const loopOf = (sid) => loops.find((l) => l.edges.includes(sid));
   const rec = (cutType, cutDepth) => ({ cutType, cutDepth, cutOffset: 0, toolDia: 3.175 });
   // the board: a Stock loop around part A (its own Pocket record) and part B (no record)
-  CUT_PLAN.set(keyOf('loop', loopOf(sBoard).id), rec('stock', 18));
-  CUT_PLAN.set(keyOf('loop', loopOf(sPartA).id), rec('pocket', 5));
+  V2_PLAN.set(keyOf('loop', loopOf(sBoard).id), rec('stock', 18));
+  V2_PLAN.set(keyOf('loop', loopOf(sPartA).id), rec('pocket', 5));
   let els = elementsOf(exportNow(st));
   const guides = els.filter((e) => e.cutType === 'guide');
   eq(guides.length, 2, 'Stock: the board outline + the UNASSIGNED part B as guide lines, no guide line for part A (it has its own record)');
@@ -134,17 +135,17 @@ const exportNow = (st) => {
   eq(pocketA.length, 1, 'part A is pocketed by its own record');
   ok(!guides.some((e) => e.geom === pocketA[0].geom), 'no guide line along part A: ' + guides.map((e) => e.geom).join(' | '));
   ok(guides.some((e) => /M 110 10 /.test(e.geom)), 'part B keeps its guide line: ' + guides.map((e) => e.geom).join(' | '));
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
 
   // TASK 814: an Outside plate with a hole assigned Guide still cuts the hole (the Guide is drawn, never cut: it owns no loop) and the guide is written besides
   const plate = (hole) => {
     const st = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 60, y: 0 }], ['c', { x: 60, y: 40 }], ['d', { x: 0, y: 40 }], ['o', { x: 30, y: 20 }]]),
       shapes: [{ id: 's1', type: 'line', joints: ['a', 'b'] }, { id: 's2', type: 'line', joints: ['b', 'c'] }, { id: 's3', type: 'line', joints: ['c', 'd'] }, { id: 's4', type: 'line', joints: ['d', 'a'] }, { id: 'c1', type: 'circle', joints: ['o'], radius: 5 }],
       constraints: [], groups: [], profiles: [] };
-    CUT_PLAN.clear();
+    V2_PLAN.clear();
     const lp = findLoops(st);
-    CUT_PLAN.set(keyOf('loop', lp.find((l) => l.edges.includes('s1')).id), rec('exterior', 12));
-    if (hole) CUT_PLAN.set(keyOf('loop', lp.find((l) => l.edges.includes('c1')).id), rec(hole, hole === 'guide' ? 0 : 12));
+    V2_PLAN.set(keyOf('loop', lp.find((l) => l.edges.includes('s1')).id), rec('exterior', 12));
+    if (hole) V2_PLAN.set(keyOf('loop', lp.find((l) => l.edges.includes('c1')).id), rec(hole, hole === 'guide' ? 0 : 12));
     return st;
   };
   const key = (e) => e.cutType + ' ' + e.depth + ' ' + e.geom;
@@ -161,12 +162,12 @@ const exportNow = (st) => {
   eq(own.filter((e) => e.geom === baseHole.geom).length, 1, '(c) a hole on Inside is written once');
   // (d) a Pocket plate with a Guide hole: the hole is the pocket's island, the guide is written
   const stP = plate('guide');
-  const plateKey = [...CUT_PLAN.keys()].find((k) => CUT_PLAN.get(k).cutType === 'exterior');
-  CUT_PLAN.set(plateKey, rec('pocket', 5));
+  const plateKey = [...V2_PLAN.keys()].find((k) => V2_PLAN.get(k).cutType === 'exterior');
+  V2_PLAN.set(plateKey, rec('pocket', 5));
   const pk = elementsOf(exportNow(stP));
   eq(pk.map((e) => e.cutType).sort(), ['guide', 'pocket'], '(d) Pocket plate: the pocket (hole as island, 2 subpaths) and the guide');
   eq(pk.find((e) => e.cutType === 'pocket').subpaths, 2, '(d) the pocket keeps the hole as an island');
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
 }
 
 console.log(`export-own-hole-711-node: ${checks} checks passed`);

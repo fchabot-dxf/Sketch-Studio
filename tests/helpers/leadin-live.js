@@ -49,7 +49,7 @@ function tools(t) {
   const count = (sel) => evalJs(`document.querySelectorAll('#prepare-toolpath-group ${sel}').length`);
   const preset = async (row, v) => { await clickEl(`#prepare-panel .cut-row[data-row="${row}"] .cut-preset[data-value="${v}"]`); await sleep(250); };
   const presetBoxes = (row) => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-row[data-row="${row}"] .cut-preset')].map((b) => { const r = b.getBoundingClientRect(); return [b.textContent + (b.classList.contains('is-active') ? '*' : ''), Math.round(r.width), Math.round(r.height)]; })`);
-  const pageSvg = () => evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => m.shaperSvgOf(window.__designController.state, C.cutPlanEntries())))`);
+  const pageSvg = () => evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => m.shaperSvgOf(window.__designController.state, C.planEntries())))`);
   const unit = () => evalJs(`import('/packages/core/settings-manager.js').then((m) => m.docUnit())`);
   return { D, pick, rows, note, count, preset, presetBoxes, pageSvg, unit };
 }
@@ -58,7 +58,7 @@ async function drawShapes(t, js) {
   const { evalJs, waitFor, openMode } = t;
   await openMode('design');
   await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await evalJs(`(() => {
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) st.joints.delete(k);
@@ -208,7 +208,7 @@ export async function fusionPhase(t) {
   const { evalJs, waitFor, setUnit, clickWorld, pickClearing, setLoop, pickType, shotWorld, shot, fileElements } = t;
   const { count, preset, rows, pageSvg } = tools(t);
   await setUnit('mm');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fs.readFileSync(new URL('../fixtures/sa7-slope/02-drafted-pocket.json', import.meta.url), 'utf8'))})`);
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'Fusion: the drafted pocket imported');
   await clickWorld(60, -40);

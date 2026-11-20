@@ -50,10 +50,10 @@ const draw = (outer, island) => evalJs(`(async () => {
   add(${JSON.stringify(outer)}, 'o'); add(${JSON.stringify(island)}, 'i');
   st.saveState('786 drawing');
   const lf = await import('/packages/core/loop-finder.js');
-  const cp = await import('/apps/shaper/src/cut-plan.js');
-  cp.CUT_PLAN.clear();
+  const cp = await import('/tests/helpers/plan-v2.js');
+  cp.V2_PLAN.clear();
   const outerLoop = lf.findLoops(st).find((l) => l.edges.every((e) => e.startsWith('o')));
-  cp.CUT_PLAN.set('loop:' + outerLoop.id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 });
+  cp.V2_PLAN.set('loop:' + outerLoop.id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 });
   return outerLoop.id;
 })()`);
 

@@ -27,10 +27,11 @@ import { createSketchState as sketchState } from '#core/sketch-state.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { deriveProfileCuts } from '#core/profile-model.js';
 import { planClearing, clearingSettings, pocketRings } from '#core/pocket-clearing.js';
-import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { opOrder, setOpOrder, opKeyOf } from '../apps/shaper/src/operations.js';
+import { opKeyOf } from '../apps/shaper/src/operations.js';
+import { V2_PLAN, storedRecords, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -231,7 +232,7 @@ const profile = await createProfile();
 await createNamedDesign(profile, 'shaper', 'Loop 750');
 let saved = null;
 {
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
     const h = harness(app), st = app.state;
@@ -245,45 +246,45 @@ let saved = null;
     for (const pat of ['linked', 'raster', 'morphed']) {
       h.clearing(pat);
       ok(h.shown('loop') && h.q('.cut-loop').checked === false, `${pat}: the Loop row (the card's checkbox), off`);
-      eq(CUT_PLAN.get(kA).loop, false, `${pat}: Loop off by default (stored)`);
+      eq(V2_PLAN.get(kA).loop, false, `${pat}: Loop off by default (stored)`);
       const n0 = st.history.length;
       h.toggleLoop();
-      eq([CUT_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
+      eq([V2_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
       eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
       const nt = h.note();
       ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nt[0]), `${pat}: the note: ${nt[0]}`); // TASK 775: a closed loop has no start point (no "ends where it starts")
       ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);
-      eq(elementsOf(shaperSvgOf(st, cutPlanEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], `${pat}: the download: ONE closed on-line path + 1 guide start mark, no inside cut`);
+      eq(elementsOf(shaperSvgOf(st, planEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], `${pat}: the download: ONE closed on-line path + 1 guide start mark, no inside cut`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-lead-tip, #prepare-toolpath-group .sk-lead-end, #prepare-toolpath-group circle').length, 0, `${pat}: TASK 775: no dot on a closed loop (it has no start point on the Origin)`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-pocket-start').length, 1, `${pat}: TASK 778: 1 pocket start mark target in Prepare`);
       app.undo();
-      eq([CUT_PLAN.get(kA).loop, h.q('.cut-loop').checked], [false, false], `${pat}: undo: Loop off again`);
-      const offEls = elementsOf(shaperSvgOf(st, cutPlanEntries()));
+      eq([V2_PLAN.get(kA).loop, h.q('.cut-loop').checked], [false, false], `${pat}: undo: Loop off again`);
+      const offEls = elementsOf(shaperSvgOf(st, planEntries()));
       ok(offEls.length >= 3 && offEls.at(-1).cutType === 'guide' && offEls.at(-2).cutType === 'inside' && offEls.slice(0, -2).every((e) => e.cutType === 'online'), `${pat}: Loop off: on-line paths + the inside cut + 1 guide start mark`);
       app.redo();
-      eq(CUT_PLAN.get(kA).loop, true, `${pat}: redo: Loop on`);
+      eq(V2_PLAN.get(kA).loop, true, `${pat}: redo: Loop on`);
       h.toggleLoop();
-      eq(CUT_PLAN.get(kA).loop, false, `${pat}: Loop off again (the next pattern starts from the record's own value)`);
+      eq(V2_PLAN.get(kA).loop, false, `${pat}: Loop off again (the next pattern starts from the record's own value)`);
     }
     h.toggleLoop(); // the Morphed spiral with Loop on: the last value set
     // the last value remembered: the next pocket set to a programmed clearing starts with Loop on
     h.clickAt(130, 10); h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
     h.clearing('linked');
-    eq([CUT_PLAN.get(keyAt(st, 130, 10)).loop, h.q('.cut-loop').checked], [true, true], 'the last Loop set (on) is the next pocket\'s');
+    eq([V2_PLAN.get(keyAt(st, 130, 10)).loop, h.q('.cut-loop').checked], [true, true], 'the last Loop set (on) is the next pocket\'s');
     const ops = [...app.document.querySelectorAll('#prepare-ops .ops-row')].map((r) => `${r.querySelector('.ops-name').textContent} | ${r.querySelector('.ops-sub').textContent}`);
     console.log('ops: ' + JSON.stringify(ops));
     ok(ops.some((t) => /^Pocket \(morphed spiral\) · 6 mm \| 1 region · morphed spiral: \d+ turns \+ wall: one closed loop$/.test(t)) && ops.some((t) => /^Pocket \(spiral\) · 6 mm \| 1 region · spiral, \d+ turns \+ wall: one closed loop$/.test(t)), 'the operations list says the loop');
-    saved = { plan: JSON.stringify([...CUT_PLAN]), svg: shaperSvgOf(st, cutPlanEntries()) };
+    saved = { plan: JSON.stringify([...V2_PLAN]), svg: shaperSvgOf(st, planEntries()) };
     const d = await app.storedDoc();
-    ok(JSON.stringify(d.hosts.shaper.cutPlan).includes('"loop":true') && !JSON.stringify(d.hosts.shaper).includes('passDepth'), 'the autosave stores loop, and no passDepth');
+    ok(JSON.stringify(storedRecords(d.hosts.shaper)).includes('"loop":true') && !JSON.stringify(d.hosts.shaper).includes('passDepth'), 'the autosave stores loop, and no passDepth');
   } finally { await app.close(); }
 }
-CUT_PLAN.clear(); setOpOrder([]);
+V2_PLAN.clear(); V2_PLAN.setOrder([]);
 {
   const app = await open({ host: 'shaper', profile });
   try {
-    eq(JSON.stringify([...CUT_PLAN]), saved.plan, 'after a reload the records are back (Loop on)');
-    eq(shaperSvgOf(app.state, cutPlanEntries()), saved.svg, 'and the download is byte-identical');
+    eq(JSON.stringify([...V2_PLAN]), saved.plan, 'after a reload the records are back (Loop on)');
+    eq(shaperSvgOf(app.state, planEntries()), saved.svg, 'and the download is byte-identical');
   } finally { await app.close(); }
 }
 // an old document with passDepth (records and the stored operation order): opens without it, exports as the same document without it
@@ -306,10 +307,10 @@ CUT_PLAN.clear(); setOpOrder([]);
   }));
   const seen = {};
   for (const [label, withPass] of [['without', false], ['old', true]]) {
-    CUT_PLAN.clear(); setOpOrder([]);
+    V2_PLAN.clear(); V2_PLAN.setOrder([]);
     const pf = await createProfile(); await createNamedDesign(pf, 'shaper', 'Pass ' + label, doc(withPass));
     const app = await open({ host: 'shaper', profile: pf });
-    try { seen[label] = { has: [...CUT_PLAN.values()].some((r) => 'passDepth' in r), order: opOrder(), svg: shaperSvgOf(app.state, cutPlanEntries()) }; } finally { await app.close(); }
+    try { seen[label] = { has: [...V2_PLAN.values()].some((r) => 'passDepth' in r), order: storedOpKeys(), svg: shaperSvgOf(app.state, planEntries()) }; } finally { await app.close(); }
   }
   eq(seen.old.has, false, 'an old document\'s passDepth is dropped on read');
   eq(seen.old.order, keysNow, 'its stored operation order is kept (passDepth dropped from the keys)');
@@ -317,6 +318,6 @@ CUT_PLAN.clear(); setOpOrder([]);
   const els = elementsOf(seen.old.svg);
   eq(new Set(els.map((e) => e.d)).size, els.length, 'no stacked duplicate paths');
   eq([...new Set(els.filter((e) => e.cutType !== 'guide').map((e) => e.depth))], ['6.000 mm'], 'every cut at the full depth (start marks are guides)');
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
 }
 console.log(`pocket-clearing-750-node.test.js: ok (${checks} checks)`);

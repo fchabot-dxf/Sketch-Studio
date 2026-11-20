@@ -25,12 +25,13 @@ import { readLevels, levelsRoughing, levelsContour, deriveCuts, LEVELS, steppedT
 import { regionsFromRings, offsetRegions, diffRegions, regionsArea, unionRegions, intersectRegions } from '#core/plot/clip.js';
 import { buildRelief } from '#core/relief-model.js';
 import { levelsHeightMap, HEIGHT_MAP } from '#core/height-map.js';
-import { CUT_PLAN, cutPlanEntries, planReliefItems, contourKeyOf, contourOf, setContour, resolveEntry } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, planReliefItems, contourKeyOf, contourOf, setContour, resolveEntry } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { planOperations, opOrder, setOpOrder } from '../apps/shaper/src/operations.js';
+import { describeOperations, opKeyOf } from '../apps/shaper/src/operations.js';
 import { effectiveCutRecord, availableTypes } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN, storedRecords, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -226,12 +227,12 @@ const harness = (app) => {
   const contour = (on) => pressEl(`.cut-row[data-row="contour"] .cut-preset[data-value="${on}"]`);
   return { q, pressEl, clickAt, menu, pick, note, rows, setField, contour };
 };
-const recAt = (pred) => [...CUT_PLAN.entries()].find(([, r]) => pred(r));
-const exportOf = (app) => shaperSvgOf(app.state, cutPlanEntries());
+const recAt = (pred) => [...V2_PLAN.entries()].find(([, r]) => pred(r));
+const exportOf = (app) => shaperSvgOf(app.state, planEntries());
 const TAN10 = Math.tan((10 * Math.PI) / 180);
 
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     app.modes.showMode('prepare');
@@ -242,20 +243,20 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     const [pk] = recAt((r) => r.slope);
     const doc0 = captureShaperDoc();
     const stepped = { stepDepth: 2, adaptiveSteps: false, stepDeviation: 0.25, cutOffset: 0.3 };
-    applyShaperDoc({ ...doc0, cutPlan: doc0.cutPlan.map(([k, r]) => [k, k === pk ? { ...r, cutType: 'stepped-pocket', ...stepped } : r]), opOrder: [JSON.stringify(['endmill|3.175|', 'stepped-pocket', { depth: 8, offset: 0.3, steps: { step: 2 } }])] }, st);
-    const mig = CUT_PLAN.get(pk);
+    applyShaperDoc({ version: 2, stock: doc0.stock, selections: doc0.selections, cutPlan: storedRecords(doc0).map(([k, r]) => [k, k === pk ? { ...r, cutType: 'stepped-pocket', ...stepped } : r]), opOrder: [JSON.stringify(['endmill|3.175|', 'stepped-pocket', { depth: 8, offset: 0.3, steps: { step: 2 } }])] }, st);
+    const mig = V2_PLAN.get(pk);
     eq([mig.cutType, mig.stepDepth, mig.cutOffset, mig.finishAllowance], ['roughing', 2, 0.3, undefined], 'a stored Stepped pocket opens as Roughing: its step and offset kept, no allowance (0)');
-    eq(opOrder(), [JSON.stringify(['endmill|3.175|', 'roughing', { depth: 8, offset: 0.3, steps: { step: 2 } }])], 'a stored operation key with the stepped type is mapped to Roughing');
-    eq(planOperations(st, cutPlanEntries()).map((o) => o.key)[0], opOrder()[0], 'the mapped key IS the Roughing operation\'s key (allowance 0 adds nothing to it)');
+    eq(storedOpKeys()[0], JSON.stringify(['endmill|3.175|', 'roughing', { depth: 8, offset: 0.3, steps: { step: 2 } }]), 'a stored operation key with the stepped type is mapped to Roughing: it is the first operation (TASK S1: the list order is stored)');
+    eq(opKeyOf(describeOperations(st, planEntries())[0].records[0].rec), storedOpKeys()[0],'the mapped key IS the Roughing operation\'s key (allowance 0 adds nothing to it)');
     // its export: the stepped engine's terraces (steppedTerraces on the same slope) as plain pockets, offset 0.3
     const T = steppedTerraces(mig.slope, { kind: 'pocket', step: 2, depth: 8 });
     const migSvg = exportOf(app);
     eq(elems(migSvg).map((e) => `${e.type}@${e.depth}/${e.offset}`), ['outside@19.000 mm/0mm', ...T.steps.map((s) => `pocket@${s.depth.toFixed(3)} mm/0.300 mm`)], 'the migrated Roughing exports the stepped terraces: plain pockets at 2, 4, 6, 8 mm, offset 0.3');
     // the allowance on a sloped Roughing = the offset: 0.5 more on every terrace, nothing else changes
-    CUT_PLAN.get(pk).finishAllowance = 0.5;
+    V2_PLAN.get(pk).finishAllowance = 0.5;
     eq(elems(exportOf(app)).map((e) => e.offset), ['0mm', '0.800 mm', '0.800 mm', '0.800 mm', '0.800 mm'], 'allowance 0.5 on a sloped Roughing: every terrace offset 0.3 + 0.5');
     eq(exportOf(app).replace(/0\.800 mm/g, '0.300 mm'), migSvg, 'and nothing else of the file changes');
-    CUT_PLAN.get(pk).finishAllowance = 0;
+    V2_PLAN.get(pk).finishAllowance = 0;
     eq(exportOf(app), migSvg, 'allowance 0 again: the stepped export');
 
     // 3. POCKET + CONTOUR on the drafted pocket (Pocket 1/4 in on the floor, Contour 1/8 in ball 0.25 mm): every contour pass on the wall at its depth
@@ -266,7 +267,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq(h.rows().includes('contour'), true, 'a sloped Pocket offers the Contour row');
     h.setField('.cut-bit', '6.35');
     h.contour(true);
-    const ck = contourKeyOf(pk2), crec = CUT_PLAN.get(ck);
+    const ck = contourKeyOf(pk2), crec = V2_PLAN.get(ck);
     eq([crec.cutType, crec.toolDia, crec.cutterShape, crec.stepDepth], ['contour', 3.175, 'ballnose', 0.25], 'Contour On: its own record, 1/8 in ball nose, 0.25 mm step (the owner\'s example: the defaults)');
     eq(prec.finishAllowance, undefined, 'a Pocket has no Roughing allowance to set');
     const cuts = deriveCuts(resolveEntry(ck, crec).target, effectiveCutRecord(resolveEntry(ck, crec).rec), st);
@@ -278,8 +279,8 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
       near(b[0], 30 + k * TAN10, 0.002, `the pass at ${k} mm lies on the wall (the drafted ring at its depth)`);
     }
     ok(cuts.every((c) => c.terrace.depth <= 8), 'none below the floor');
-    ok(!cuts.some((c) => sameOutline(c.polygon, CUT_PLAN.get(pk2) && deriveCuts({ kind: 'loop', id: pk2.slice(5) }, effectiveCutRecord(prec), st).find((x) => x.isCompound).outerPoly)), 'none is the Pocket\'s own outline (the floor cut\'s wall)');
-    const ops = planOperations(st, cutPlanEntries());
+    ok(!cuts.some((c) => sameOutline(c.polygon, V2_PLAN.get(pk2) && deriveCuts({ kind: 'loop', id: pk2.slice(5) }, effectiveCutRecord(prec), st).find((x) => x.isCompound).outerPoly)), 'none is the Pocket\'s own outline (the floor cut\'s wall)');
+    const ops = describeOperations(st, planEntries());
     eq(ops.map((o) => [o.cutType, o.tool.label]), [['pocket', '¼″ end mill'], ['contour', '⅛″ ball nose'], ['exterior', '⅛″ end mill']], 'the Operations list: the Pocket, then its Contour (its own bit group), then the outline');
     eq(ops[1].rowText, 'Contour · 0.25–8 mm', 'the Contour row: its levels\' depths');
     eq(ops[1].detail, '32 levels', 'and how many levels');
@@ -291,10 +292,10 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (TASK 810: its Heights, its Walls, then its step, bit, cutter shape)');
     eq(h.menu(), ['contour'], 'its menu offers the Contour only');
     h.setField('.cut-step-depth', '1');
-    eq([CUT_PLAN.get(ck).stepDepth, cutPlanEntries().filter((e) => e.key === ck).length], [1, 1], 'its step is its own (1 mm)');
-    eq(deriveCuts(resolveEntry(ck, CUT_PLAN.get(ck)).target, effectiveCutRecord(resolveEntry(ck, CUT_PLAN.get(ck)).rec), st).length, 8, '8 passes at 1 mm');
+    eq([V2_PLAN.get(ck).stepDepth, planEntries().filter((e) => e.planKey === ck).length], [1, 1], 'its step is its own (1 mm)');
+    eq(deriveCuts(resolveEntry(ck, V2_PLAN.get(ck)).target, effectiveCutRecord(resolveEntry(ck, V2_PLAN.get(ck)).rec), st).length, 8, '8 passes at 1 mm');
     st.undo();
-    eq(CUT_PLAN.get(ck).stepDepth, 0.25, 'undo: 0.25 again');
+    eq(V2_PLAN.get(ck).stepDepth, 0.25, 'undo: 0.25 again');
     st.undo(); // the Contour On
     eq(contourOf(pk2), null, 'undo: no Contour');
     st.redo();
@@ -303,22 +304,22 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     // ROUGHING + CONTOUR on the same pocket: the allowance follows the Contour (owner ruling)
     h.clickAt(60, -40);
     h.pick('roughing');
-    eq([CUT_PLAN.get(pk2).cutType, CUT_PLAN.get(pk2).finishAllowance], ['roughing', 0.5], 'Roughing on a part that has a Contour: the declared finish allowance (0.5 mm)');
+    eq([V2_PLAN.get(pk2).cutType, V2_PLAN.get(pk2).finishAllowance], ['roughing', 0.5], 'Roughing on a part that has a Contour: the declared finish allowance (0.5 mm)');
     eq(h.rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'the Roughing card: depth, TASK 810 its Heights (Top, Bottom, Floor allowance), allowance, Contour, adaptive, step, offset, bit, shape');
     h.contour(false);
-    eq([contourOf(pk2), CUT_PLAN.get(pk2).finishAllowance], [null, 0], 'Contour Off: no Contour record, allowance 0');
+    eq([contourOf(pk2), V2_PLAN.get(pk2).finishAllowance], [null, 0], 'Contour Off: no Contour record, allowance 0');
     h.contour(true);
-    eq([Boolean(contourOf(pk2)), CUT_PLAN.get(pk2).finishAllowance], [true, 0.5], 'Contour On: the allowance 0.5 again');
+    eq([Boolean(contourOf(pk2)), V2_PLAN.get(pk2).finishAllowance], [true, 0.5], 'Contour On: the allowance 0.5 again');
     eq(h.note()[0], 'Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart', 'a sloped Roughing keeps the stepped note');
     eq(h.note()[1], 'Roughing: 0.5 mm left on every wall for the Contour', 'and says the allowance');
-    const ops2 = planOperations(st, cutPlanEntries());
+    const ops2 = describeOperations(st, planEntries());
     eq(ops2.map((o) => o.cutType), ['roughing', 'contour', 'exterior'], 'the Contour after the Roughing');
     eq(ops2[0].label, '¼″ end mill · Roughing · 1–8 mm (1 region) · 8 levels, allowance 0.5 mm', 'the Roughing operation');
 
     // a DRAWN pocket (no slope, no levels): ONE level; its Contour = its wall + its island
     const lk = recAt((r) => r.cutType === 'exterior')[0];
-    CUT_PLAN.clear();
-    CUT_PLAN.set(lk, { cutType: 'roughing', cutDepth: 5, cutOffset: 0, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90, stepDepth: 1, finishAllowance: 0.5 });
+    V2_PLAN.clear();
+    V2_PLAN.set(lk, { cutType: 'roughing', cutDepth: 5, cutOffset: 0, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90, stepDepth: 1, finishAllowance: 0.5 });
     setContour(lk, true);
     const drawn = elems(exportOf(app));
     eq(drawn.map((e) => `${e.type}@${e.depth}/${e.offset}/${e.dia}`), ['pocket@5.000 mm/0.500 mm/6.350 mm', 'outside@5.000 mm/0mm/3.175 mm', 'inside@5.000 mm/0mm/3.175 mm'], 'the outline as a drawn region with its hole: Roughing = ONE pocket at its depth with the allowance as offset (the hole its island); Contour = the island (Outside) + the wall (Inside)');
@@ -327,7 +328,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     app.stl.openFile(M.binaryStl(bossPlate()), 'boss.stl');
     const [ok1, orec] = recAt((r) => r.levels);
     ok(orec && orec.cutType === 'roughing' && orec.levels.length >= 40, 'Open STL (TASK 807: a relief): the part is ONE Roughing record carrying the levels');
-    eq(CUT_PLAN.size, 1, 'the relief: one record (no per-feature pockets)');
+    eq(V2_PLAN.size, 1, 'the relief: one record (no per-feature pockets)');
     orec.cutType = 'exterior';
     const before = exportOf(app);
     { const lv = orec.levels; delete orec.levels; eq(exportOf(app), before, 'an Outside cut exports the same with or without levels'); orec.levels = lv; }
@@ -340,7 +341,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq(relief.levels.map((l) => l.depth), [4, 10], 'the 3D Review: terraces at 4 and 10 mm');
     ok(relief.stats.triangles > 0 && items.every((i) => i.footprints[0].rings.length > 0), 'every level has a footprint (drawn with Clipper offsets)');
     setContour(ok1, true);
-    eq(CUT_PLAN.get(ok1).finishAllowance, 0.5, 'the Contour sets the allowance');
+    eq(V2_PLAN.get(ok1).finishAllowance, 0.5, 'the Contour sets the allowance');
     const cont = elems(exportOf(app)).filter((e) => e.type === 'outside' && e.dia === '3.175 mm');
     eq(cont.map((e) => e.depth), ['4.000 mm', '10.000 mm'], 'its Contour: the boss wall (4 mm) and the plate wall (10 mm): Outside cuts');
 
@@ -356,12 +357,12 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq([h.q('.cut-layout-modes .is-active').textContent, h.q('.cut-min-terrace').value], ['Terraces', '0'], 'the defaults: Terraces, 0');
     const n0 = st.history.length;
     h.pressEl('.cut-layout-modes .cut-preset[data-value="nested"]');
-    eq([CUT_PLAN.get(tk).roughLayout, st.history.length, h.rows().includes('minTerraceWidth')], ['nested', n0 + 1, false], 'Nested: stored, one undo step, no Min terrace width row');
+    eq([V2_PLAN.get(tk).roughLayout, st.history.length, h.rows().includes('minTerraceWidth')], ['nested', n0 + 1, false], 'Nested: stored, one undo step, no Min terrace width row');
     eq(elems(exportOf(app)).map((e) => `${e.type}@${e.depth}`), ['pocket@2.000 mm', 'pocket@3.000 mm', 'pocket@6.000 mm'], 'Nested: the 2 mm level, the pocket in the plate at 3 (the band the same at 3 and 6: one path, at 6), the band at 6');
     st.undo();
-    eq(CUT_PLAN.get(tk).roughLayout, undefined, 'undo: Terraces again');
+    eq(V2_PLAN.get(tk).roughLayout, undefined, 'undo: Terraces again');
     h.setField('.cut-min-terrace', '20');
-    eq(CUT_PLAN.get(tk).minTerraceWidth, 20, 'Min terrace width 20 mm stored');
+    eq(V2_PLAN.get(tk).minTerraceWidth, 20, 'Min terrace width 20 mm stored');
     ok(h.note().some((t) => /^Roughing: \d+ bands? narrower than 20 mm left uncut$/.test(t)), 'the note says the bands left: ' + JSON.stringify(h.note()));
     h.setField('.cut-min-terrace', '0');
 
@@ -370,10 +371,10 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     const saved = captureShaperDoc();
     const svgBefore = exportOf(app);
     applyShaperDoc(JSON.parse(JSON.stringify(saved)), st);
-    eq([CUT_PLAN.get(tk).cutType, CUT_PLAN.get(tk).levels.length, Boolean(contourOf(tk))], ['roughing', 4, true], 'reloaded: Roughing, its levels, its Contour');
+    eq([V2_PLAN.get(tk).cutType, V2_PLAN.get(tk).levels.length, Boolean(contourOf(tk))], ['roughing', 4, true], 'reloaded: Roughing, its levels, its Contour');
     eq(exportOf(app), svgBefore, 'reloaded: the same export');
     eq(availableTypes('contour').map((t) => t.id), ['contour'], 'a Contour target takes the Contour only');
-    setOpOrder([]);
+    V2_PLAN.setOrder([]);
   } finally { await app.close(); }
 }
 

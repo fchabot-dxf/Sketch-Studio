@@ -8,6 +8,7 @@
 // have): nothing changes; a stage switch away and back and a reload keep the cut plan exactly.
 import assert from 'node:assert';
 import { sleep } from './helpers/cdp-browser.js';
+import { storedRecords } from './helpers/stored-records.js'; // TASK S1: the saved sidecar (version 3) read as per-shape records
 import { openBromont, CARD_EDITS, planWithout, sameView } from './helpers/prepare-drive-live.js';
 
 const t0 = Date.now();
@@ -36,7 +37,7 @@ try {
     console.log(`${label}: ok (Drive v${drive.version()})`);
     prev = after;
   }
-  assert.strictEqual(JSON.stringify(drive.doc().document.hosts.shaper.cutPlan.sort((a, b) => a[0] < b[0] ? -1 : 1)), prev.plan, 'Drive holds exactly the running cut plan');
+  assert.strictEqual(JSON.stringify(storedRecords(drive.doc().document.hosts.shaper).sort((a, b) => a[0] < b[0] ? -1 : 1)), prev.plan, 'Drive holds exactly the running cut plan');
   assert.ok(!/Another device/.test(await evalJs(`(document.querySelector('.sk-sidebar [data-section="status"]') || {}).textContent || ''`)), 'no conflict notice');
   // Ctrl+S, then Drive's version moves with the SAME content (another tab writing what we have): nothing changes
   await ctrlS(); await saved();

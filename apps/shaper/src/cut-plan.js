@@ -15,41 +15,82 @@ import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
+import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, setOpSettings, setRefAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
+import { opKeyOf, newOpIndex, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
 
-export const CUT_PLAN = new Map(); // key → cut record
+// TASK S1 (docs/OPERATIONS-MODEL.md section 2): the plan lives in the OPERATIONS + REGIONS store (operations-store.js); a shape's RECORD (what every derivation
+// takes) is rebuilt from its operation and its region: recordOf(op, ref) = { cutType: the operation's type, ...its settings, ...the region's slope / levels,
+// leadInAt: the ref's dragged position }, cutDepth 'model' -> the shape's imported depth. The per-shape names of today's Prepare (S1 behaves as before) stay:
+// a geometry key ('loop:<id>' ...) for its operation, `contour:<key>` for its part's Contour.
+const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'leadInAt']);
+/** The settings part of a record (everything but the cut type, the region data and the dragged lead-in position). */
+export const settingsPart = (rec) => Object.fromEntries(Object.entries(rec || {}).filter(([k]) => !SHAPE_FIELDS.has(k)));
+const sourceDepth = (key) => { const s = (regionOf(key) || {}).source; return s && s.cutDepth != null ? s.cutDepth : undefined; };
+/** The record of a membership (see above). */
+export function recordOf(op, ref) {
+  const r = { cutType: op.type, ...op.settings };
+  if (r.cutDepth === 'model') r.cutDepth = sourceDepth(ref.key) ?? 'unset';
+  if (op.type !== CONTOUR_TYPE) { const reg = regionOf(ref.key); if (reg) { if (reg.slope) r.slope = reg.slope; if (reg.levels) r.levels = reg.levels; } }
+  if (Object.hasOwn(ref, 'at')) r.leadInAt = ref.at;
+  return r;
+}
+/** The record of a plan key (a geometry key: its operation's; `contour:<key>`: its Contour's), or null when it is in no operation. */
+export function getPlanRecord(planKey) { const m = memberOf(planKey); return m ? recordOf(m.op, m.ref) : null; }
+/** The record Prepare shows / edits for a plan key: its operation's, else a fresh default record carrying the geometry's region data and its imported depth (a shape
+ *  in no operation: an imported region without a cut type keeps the depth the import gave it, as its record did before task S1). */
+export function getCutRecord(key) {
+  const r = getPlanRecord(key);
+  if (r) return r;
+  const out = defaultCutRecord(), reg = isContourKey(key) ? null : regionOf(key);
+  if (reg) { if (reg.source && reg.source.cutDepth != null) out.cutDepth = reg.source.cutDepth; if (reg.slope) out.slope = reg.slope; if (reg.levels) out.levels = reg.levels; }
+  return out;
+}
+/** The plan as [planKey, record] in FILE order (every membership; a Contour's record as stored, not resolved). */
+export const planRecords = () => membersInFileOrder().map(({ op, ref }) => [planKeyOf(op, ref), recordOf(op, ref)]);
+/**
+ * planEntries() — THE one reader (docs/OPERATIONS-MODEL.md section 2; it replaces cutPlanEntries): one entry per membership, in FILE order (seq), as the derivation
+ * takes it: { key: '<op id>|<geometry key>', opId, planKey, target, rec } (resolveEntry: a Contour cuts its part's target with its part's depth / type / slope /
+ * levels). A Contour whose part is in no operation derives nothing (no entry).
+ */
+export function planEntries() {
+  const out = [];
+  for (const { op, ref } of membersInFileOrder()) {
+    const planKey = planKeyOf(op, ref);
+    const e = resolveEntry(planKey, recordOf(op, ref));
+    if (e) out.push({ key: `${op.id}|${ref.key}`, opId: op.id, planKey, target: e.target, rec: e.rec });
+  }
+  return out;
+}
 
-export function getCutRecord(key) { return CUT_PLAN.get(key) || defaultCutRecord(); }
-export function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec[field] = value; CUT_PLAN.set(key, rec); return rec; }
-
-// ── TASK 792: a part's CONTOUR (the finish of its sloped walls: #core/stepped-cut.js, its TASK 792 header) is its OWN record, keyed `contour:<the part's
-// key>` (e.g. 'contour:loop:loop_a-b'): its own cut type ('contour'), fine step, bit and cutter shape, so it is its own operation and bit group, and it
-// is saved, undone and reordered like any record. It cuts the PART's geometry: resolveEntry hands it the part's target, depth, `slope` / `levels` and
-// cut type (the part record stays the one place those live). A contour record whose part has no cut type derives to nothing. ──
+// ── TASK 792: a part's CONTOUR (the finish of its sloped walls: #core/stepped-cut.js, its TASK 792 header) is its OWN operation (type 'contour'), whose shapes are
+// the PARTS' keys; Prepare names its membership `contour:<the part's key>` (e.g. 'contour:loop:loop_a-b'). It cuts the PART's geometry: resolveEntry hands it the
+// part's target, depth, `slope` / `levels` and cut type, read LIVE from the part's operation at derive time (advisor ruling, task S1: a part edit moves its Contour
+// exactly as before). A Contour whose part is in no operation derives to nothing. ──
 export const CONTOUR_KIND = 'contour';
 export const contourKeyOf = (key) => keyOf(CONTOUR_KIND, key);
 export const isContourKey = (key) => typeof key === 'string' && key.startsWith(CONTOUR_KIND + ':');
 export const partKeyOf = (key) => (isContourKey(key) ? key.slice(CONTOUR_KIND.length + 1) : key);
-/** The part record's Contour record (with a cut type), or null. */
-export const contourOf = (key, plan = CUT_PLAN) => { const r = plan.get(contourKeyOf(key)); return r && r.cutType ? r : null; };
+/** The part's Contour record (with a cut type), or null. */
+export const contourOf = (key) => getPlanRecord(contourKeyOf(key));
 /** A plan entry as the derivation takes it: { key, target, rec }. A contour record gets its PART's target, and its record the part's depth (`baseDepth`),
  *  cut type (`baseType`), `slope` and `levels`; null when its part has no cut type. Every other record: its own key's target, its record as stored (TASK 810: a
  *  Roughing whose boundary is the Stock or a picked shape gets that shape's target as `boundaryTarget`: withBoundaryTarget). */
-export function resolveEntry(key, rec, plan = CUT_PLAN) {
-  if (!isContourKey(key)) return { key, target: parseKey(key), rec: withBoundaryTarget(rec, plan) };
-  const pk = partKeyOf(key), part = plan.get(pk);
+export function resolveEntry(key, rec) {
+  if (!isContourKey(key)) return { key, target: parseKey(key), rec: withBoundaryTarget(rec) };
+  const pk = partKeyOf(key), part = getPlanRecord(pk);
   if (!rec || !part || !part.cutType) return null;
   return { key, target: parseKey(pk), rec: { ...rec, baseDepth: part.cutDepth, baseType: part.cutType, ...(part.slope ? { slope: part.slope } : {}), ...(part.levels ? { levels: part.levels } : {}) } };
 }
 /** TASK 810: a Roughing record whose boundary (#core boundaryOf) is the Stock or a picked Shape, with that shape's target `boundaryTarget` ({ kind, id }: the Stock
  *  of the plan, stockKeyOf; the picked `boundaryShape` key); without one (no Stock, nothing picked) the record as stored: the derivation then refuses with its reason.
  *  Every other record: itself (the same object). */
-export function withBoundaryTarget(rec, plan = CUT_PLAN) {
+export function withBoundaryTarget(rec) {
   if (!rec || !(cutTypeById(rec.cutType) || {}).levelsOp || !hasLevels(rec)) return rec;
   const b = boundaryOf(rec);
-  const key = b.kind === 'stock' ? stockKeyOf(plan) : b.kind === 'shape' ? b.shape : null;
+  const key = b.kind === 'stock' ? stockKeyOf() : b.kind === 'shape' ? b.shape : null;
   return key ? { ...rec, boundaryTarget: parseKey(key) } : rec;
 }
 /** TASK 810: why a Roughing has nothing to cut (#core levelsRoughingFor's error), in the card note's words (a fact, not a nag). */
@@ -60,9 +101,9 @@ export const ROUGHING_REFUSED = {
   'no-room': 'the boundary leaves no room for the bit',
   band: 'no level between the Top and the Bottom (less the floor allowance)', // the Heights (Roughing and Contour)
 };
-/** TASK 810: rename plan KEYS (`rename`: old key -> new key) and drop some (`remove`), in place, the plan's order kept: the records AND every reference to a key a
- *  record holds (a Roughing's picked boundary shape, `boundaryShape`), so a reference follows its shape as the record of that shape does. The one place keys move. */
-export function renamePlanKeys(rename, remove = new Set(), plan = CUT_PLAN) {
+/** TASK 810: rename the keys of a STORED v2 plan map (`rename`: old key -> new key) and drop some (`remove`), in place, the map's order kept: the records AND every
+ *  reference to a key a record holds (`boundaryShape`). The v2 migration's (shaper-doc.js); the store renames through renameGeometry. */
+export function renamePlanKeys(rename, remove, plan) {
   if (!rename.size && !remove.size) return;
   const entries = [...plan];
   plan.clear();
@@ -72,32 +113,107 @@ export function renamePlanKeys(rename, remove = new Set(), plan = CUT_PLAN) {
     plan.set(rename.get(key) || key, rec);
   }
 }
+
+// ── TASK S1: THE writer. A shape's record changes (a card edit, a type pick, the bin, an import): the shape MOVES into the operation of the resulting settings
+// (docs/OPERATIONS-MODEL.md section 6, S1: the list and the files stay today's):
+//  * the same operation key as before (operations.js opKeyOf: tool + type + declared settings): it stays, and the operation takes the record's settings (one
+//    settings set per operation: a value that is not part of the key is the operation's, advisor ruling 4, task S1);
+//  * else it leaves its operation (removed when empty) and joins the first operation whose shapes have that key (taking its settings), or a NEW operation placed by
+//    the default-order rule (operations.js newOpIndex: the 743 rule applied once at creation); it keeps its file place (`seq`) when it had one, else takes the next;
+//  * no cut type (the bin, a Stock moved away): it leaves its operation and keeps no place (advisor ruling 2, task S1: assigned again, it goes to the end of the file).
+// A part's Contour membership is filed again after its part changes (its key reads the part: resolveEntry). cutDepth is stored 'model' while every shape of the
+// operation has an imported depth equal to it (normalizeDepth). Returns the shape's record now (null when it left every operation). `state` = the solved sketch
+// (a new operation's place reads the derived cuts' ranks).
+const memberKey = (planKey, rec) => { const e = resolveEntry(planKey, rec); return opKeyOf(e ? e.rec : rec); };
+function normalizeDepth(op) {
+  if (op.type === CONTOUR_TYPE || !op.geometry.length || op.settings.cutDepth === undefined) return;
+  const d = recordOf(op, op.geometry[0]).cutDepth;
+  const model = d !== 'unset' && Number.isFinite(Number(d)) && op.geometry.every((r) => { const s = sourceDepth(r.key); return s !== undefined && Number(s) === Number(d); });
+  const next = model ? 'model' : d;
+  if (op.settings.cutDepth !== next) setOpSettings(op, { ...op.settings, cutDepth: next });
+}
+function writeRegionData(key, rec) {
+  const reg = regionOf(key) || {};
+  if ((rec.slope || undefined) !== reg.slope || (rec.levels || undefined) !== reg.levels) setRegion(key, { ...reg, slope: rec.slope || undefined, levels: rec.levels || undefined });
+}
+/** TASK S1: the imported cut type / depth of a geometry (regions[key].source: what Fusion / the STL said; a Depth of 'model' follows it). */
+export function setRegionSource(key, source) { setRegion(key, { ...(regionOf(key) || {}), source: source ? { cutType: source.cutType ?? null, cutDepth: source.cutDepth ?? 'unset' } : undefined }); }
+/** TASK S1 (advisor ruling turn 2702): while the user has never reordered the list (listOrder 'default'), it is re-sorted by the default rule after every change
+ *  (operations.js defaultOrderIds), as before S1: the part-freeing Outside after the holes. A stored order ('stored') is left as it is. */
+export function settleOrder(state = null) {
+  if (listOrder() !== 'default') return;
+  const ids = defaultOrderIds(state);
+  if (ids.join('\n') !== storeOps().map((op) => op.id).join('\n')) setOpsOrder(ids);
+}
+export function fileShape(planKey, rec, state = null) {
+  const out = fileShapeOnly(planKey, rec, state);
+  settleOrder(state);
+  return out;
+}
+function fileShapeOnly(planKey, rec, state) {
+  const contour = isContourKey(planKey), key = partKeyOf(planKey);
+  if (!contour && rec) writeRegionData(key, rec);
+  const cur = memberOf(planKey);
+  if (!rec || !rec.cutType) { if (cur) removeRef(cur.op, cur.ref); refileContour(planKey, state); return null; }
+  const settings = settingsPart(rec);
+  const at = !contour && Object.hasOwn(rec, 'leadInAt') ? rec.leadInAt : undefined;
+  const newKey = memberKey(planKey, rec);
+  let seq;
+  if (cur) {
+    const others = cur.op.geometry.filter((r) => r !== cur.ref);
+    const opKeyNow = others.length ? memberKey(planKeyOf(cur.op, others[0]), recordOf(cur.op, others[0])) : memberKey(planKey, recordOf(cur.op, cur.ref));
+    if (cur.op.type === rec.cutType && opKeyNow === newKey) {
+      setOpSettings(cur.op, cur.op.settings.cutDepth === 'model' && settings.cutDepth === recordOf(cur.op, cur.ref).cutDepth ? { ...settings, cutDepth: 'model' } : settings);
+      setRefAt(cur.ref, at);
+      normalizeDepth(cur.op);
+      refileContour(planKey, state);
+      return getPlanRecord(planKey);
+    }
+    seq = cur.ref.seq;
+    removeRef(cur.op, cur.ref);
+  } else seq = takeSeq();
+  const ref = { key, seq, ...(at !== undefined ? { at } : {}) };
+  const target = storeOps().find((op) => op.type === rec.cutType && op.geometry.length && !op.geometry.some((r) => r.key === key) && memberKey(planKeyOf(op, op.geometry[0]), recordOf(op, op.geometry[0])) === newKey);
+  if (target) { addRef(target, ref); normalizeDepth(target); }
+  else { const draft = { type: rec.cutType, settings, geometry: [ref] }; normalizeDepth(insertOp(newOpIndex(state, draft), draft)); }
+  refileContour(planKey, state);
+  return getPlanRecord(planKey);
+}
+// a part changed: its Contour's key may read it (the walls' default, the heights): the Contour membership is filed again with its own record
+function refileContour(planKey, state) {
+  if (isContourKey(planKey)) return;
+  const ck = contourKeyOf(planKey), c = getPlanRecord(ck);
+  if (c) fileShapeOnly(ck, c, state);
+}
+/** Set one field of a shape's record (Prepare's card edits, its lead-in drag): fileShape with the resulting record. */
+export function setFieldFor(key, field, value, state = null) { return fileShape(key, { ...getCutRecord(key), [field]: value }, state); }
+
 // The Contour defaults: the last bit / cutter shape / step set on any Contour (owner's example: a 1/8 in ball nose at 0.25 mm). App state, like the step depth.
 export const CONTOUR_DEFAULTS = Object.freeze({ toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90, stepDepth: LEVELS.contourStepMm }); // TASK 810: declared (the card's tab dots read what a Contour starts with)
 let lastContourV = { ...CONTOUR_DEFAULTS };
 export const lastContour = () => ({ ...lastContourV });
 export function rememberContour(field, value) { if (field in lastContourV && value != null) lastContourV = { ...lastContourV, [field]: value }; return lastContour(); }
 /**
- * setContour(key, on, plan) — TASK 792: add (on) or remove (off) the Contour of the part record `key`. Adding makes its record (the last Contour settings)
+ * setContour(key, on, state) — TASK 792: add (on) or remove (off) the Contour of the part `key`. Adding files its Contour membership (the last Contour settings)
  * and, on a Roughing part, sets its allowance to the declared finish allowance (the last one set: lastFinishAllowance; owner ruling: the allowance is 0
- * while the part has no Contour); removing deletes it and puts a Roughing part's allowance back to 0. Returns the part record.
+ * while the part has no Contour); removing takes it out and puts a Roughing part's allowance back to 0. Returns the part record. (TASK S1: through fileShape.)
  */
-export function setContour(key, on, plan = CUT_PLAN) {
-  const part = plan.get(key);
+export function setContour(key, on, state = null) {
+  const part = getPlanRecord(key);
   if (!part || !part.cutType || isContourKey(key)) return part || null;
   const rough = (cutTypeById(part.cutType) || {}).levelsOp === 'roughing';
   if (on) {
-    if (!contourOf(key, plan)) plan.set(contourKeyOf(key), { ...defaultCutRecord(), ...lastContour(), cutType: 'contour' });
-    if (rough) part.finishAllowance = lastFinishAllowance();
+    if (!contourOf(key)) fileShape(contourKeyOf(key), { ...defaultCutRecord(), ...lastContour(), cutType: 'contour' }, state);
+    if (rough) fileShape(key, { ...getPlanRecord(key), finishAllowance: lastFinishAllowance() }, state);
   } else {
-    plan.delete(contourKeyOf(key));
-    if (rough) part.finishAllowance = 0;
+    fileShape(contourKeyOf(key), null, state);
+    if (rough) fileShape(key, { ...getPlanRecord(key), finishAllowance: 0 }, state);
   }
-  return part;
+  return getPlanRecord(key);
 }
 
 // TASK 714: the STEP DEPTH a target switched to a stepped type gets when its record has none: the last step depth the user set on any stepped
-// cut (owner turn 1947), STEP_DEPTH.defaultMm (#core/stepped-cut.js) until one is set. Base mm. App state, like CUT_PLAN.
+// cut (owner turn 1947), STEP_DEPTH.defaultMm (#core/stepped-cut.js) until one is set. Base mm. App state, like the plan.
 let lastStep = STEP_DEPTH.defaultMm;
 export const lastStepDepth = () => lastStep;
 export function rememberStepDepth(mm) { const n = Number(mm); if (n > 0) lastStep = n; return lastStep; }
@@ -188,12 +304,12 @@ export function holdNoteItems(storedRec, hold) {
   return items;
 }
 /** TASK 742: the hold notes of every held record of the plan (the 3D Review's info). */
-export function planHoldNotes(state, plan = CUT_PLAN) {
+export function planHoldNotes(state) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of plan) {
+  for (const [key, rec] of planRecords()) {
     if (!rec || !rec.cutType || holdMode(effectiveCutRecord(rec)) === 'off') continue;
-    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
     out.push(...holdNoteItems(rec, holdSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
   }
   return out;
@@ -250,12 +366,12 @@ export function leadInNoteItems(storedRec, lead) {
   return [{ text: `${name}: lead-in arc, radius ${f(lead.radius)} ${u}, ${angleText(lead.sweep, { show: 'deg' })}${straight} ${lead.side}, ${where}` }, { text: LEAD_IN_TRADE_OFF }];
 }
 /** TASK 775: the lead-in notes of every On line outline with a lead-in (the 3D Review's info; a programmed pocket's are in its clearing notes). */
-export function planLeadInNotes(state, plan = CUT_PLAN) {
+export function planLeadInNotes(state) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of plan) {
+  for (const [key, rec] of planRecords()) {
     if (!rec || !rec.cutType || !outlineLeadIn(effectiveCutRecord(rec))) continue;
-    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
     out.push(...leadInNoteItems(rec, leadInSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
   }
   return out;
@@ -359,12 +475,12 @@ export function clearingNoteItems(storedRec, sum) {
   return items;
 }
 /** TASK 745: the clearing notes of every programmed pocket of the plan (the 3D Review's info). */
-export function planClearingNotes(state, plan = CUT_PLAN) {
+export function planClearingNotes(state) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of plan) {
+  for (const [key, rec] of planRecords()) {
     if (!rec || !rec.cutType || clearingPattern(effectiveCutRecord(rec)) === 'freehand') continue;
-    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
     out.push(...clearingNoteItems(rec, clearingSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
   }
   return out;
@@ -405,20 +521,29 @@ export function steppedNoteItems(storedRec) {
 /** The note lines (text) of a stepped record. */
 export const steppedNoteLines = (storedRec) => steppedNoteItems(storedRec).map((i) => i.text);
 /** The note lines of every stepped record of the plan (the 3D Review's info). */
-export function planSteppedNotes(plan = CUT_PLAN) {
+export function planSteppedNotes() {
   const out = [];
-  for (const rec of plan.values()) if (rec && rec.cutType) out.push(...steppedNoteLines(rec));
+  for (const [, rec] of planRecords()) if (rec && rec.cutType) out.push(...steppedNoteLines(rec));
   return out;
 }
 
-// All ASSIGNED entries (a cutType is set) → [{ key, target:{kind,id}, rec }] for the exporter (TASK 792: resolveEntry: a part's Contour cuts the part's
-// target). Loop targets are resolved against the live design at export time (findLoops), so a stale id simply yields nothing.
-export function cutPlanEntries(plan = CUT_PLAN) {
+// The entries of a STORED v2 plan map (the v2 migration's: shaper-doc.js; a Contour record resolved against its part's record in the same map), as the
+// derivation takes them. Loop targets are resolved against the live design (findLoops), so a stale id simply yields nothing.
+export function v2PlanEntries(plan) {
   const out = [];
   for (const [key, rec] of plan) {
-    if (rec && rec.cutType) { const e = resolveEntry(key, rec, plan); if (e) out.push(e); }
+    if (!rec || !rec.cutType) continue;
+    if (!isContourKey(key)) { out.push({ key, target: parseKey(key), rec: v2WithBoundaryTarget(rec, plan) }); continue; }
+    const pk = partKeyOf(key), part = plan.get(pk);
+    if (part && part.cutType) out.push({ key, target: parseKey(pk), rec: { ...rec, baseDepth: part.cutDepth, baseType: part.cutType, ...(part.slope ? { slope: part.slope } : {}), ...(part.levels ? { levels: part.levels } : {}) } });
   }
   return out;
+}
+function v2WithBoundaryTarget(rec, plan) {
+  if (!rec || !(cutTypeById(rec.cutType) || {}).levelsOp || !hasLevels(rec)) return rec;
+  const b = boundaryOf(rec);
+  const key = b.kind === 'stock' ? [...plan].find(([, r]) => r && r.cutType === STOCK_TYPE_ID)?.[0] : b.kind === 'shape' ? b.shape : null;
+  return key ? { ...rec, boundaryTarget: parseKey(key) } : rec;
 }
 
 /**
@@ -427,8 +552,8 @@ export function cutPlanEntries(plan = CUT_PLAN) {
  * passes (cuts written), allowance, islands / small (Roughing from levels: the most material islands left standing on one level, and those narrower than
  * the bit), toolDia }, or null for any other record (or a Contour whose part has no cut type).
  */
-export function levelsSummary(key, storedRec, state, loops, loopPolys, owned, plan = CUT_PLAN) {
-  const e = storedRec && storedRec.cutType ? resolveEntry(key, storedRec, plan) : null;
+export function levelsSummary(key, storedRec, state, loops, loopPolys, owned) {
+  const e = storedRec && storedRec.cutType ? resolveEntry(key, storedRec) : null;
   const rec = e ? effectiveCutRecord(e.rec) : null;
   if (!rec || !rec.levelsOp) return null;
   const cuts = deriveCuts(e.target, rec, state, loops, loopPolys, owned) || [];
@@ -469,25 +594,25 @@ export function levelsNoteItems(storedRec, sum) {
   return items;
 }
 /** TASK 792: the notes of every Roughing / Contour record of the plan (the 3D Review's info; a sloped Roughing's stepped note is in planSteppedNotes). */
-export function planLevelsNotes(state, plan = CUT_PLAN) {
+export function planLevelsNotes(state) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of plan) {
+  for (const [key, rec] of planRecords()) {
     if (!rec || !(cutTypeById(rec.cutType) || {}).levelsOp) continue;
-    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys, plan) }; }
-    out.push(...levelsNoteItems(rec, levelsSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned, plan)).map((i) => i.text));
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
+    out.push(...levelsNoteItems(rec, levelsSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
   }
   return out;
 }
 
 /**
- * migrateEdgeRecords(loops, chains, plan = CUT_PLAN) → { dropped, moved }
+ * migrateEdgeRecords(loops, chains, plan) → { dropped, moved } (a STORED v2 plan map: the v2 migration's)
  * For each `edge:<shapeId>` key:
  *   - if the shape is in a loop → delete the record and count it;
  *   - if it's in a chain whose `chain:<id>` key has no record → move it there;
  *   - otherwise delete it and count it.
  */
-export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN) {
+export function migrateEdgeRecords(loops, chains, plan) {
   const loopEdgeIds = new Set();
   for (const l of (loops || [])) {
     for (const eid of (l.edges || [])) loopEdgeIds.add(eid);
@@ -547,7 +672,7 @@ function idsNamedBy(text, shapeIds) {
 }
 
 /**
- * reconcileCutPlan(state, plan = CUT_PLAN) -> { edgeMoved, edgeDropped, kept, removed } — THE reconciliation of a stored cut plan with the
+ * reconcileCutPlan(state, plan) -> { edgeMoved, edgeDropped, kept, removed } — THE reconciliation of a stored cut plan with the
  * document's regions, run ONCE where a Shaper document is read (shaper-doc.js applyShaperDoc, before any reader of the plan: Prepare, the
  * operations list, Export 2D / 3D, Generate / Sync), never on undo snapshots:
  *  - the legacy `edge:<shapeId>` records (migrateEdgeRecords: moved to their chain, or dropped when the shape is in a loop);
@@ -560,30 +685,44 @@ function idsNamedBy(text, shapeIds) {
  *    bezier, or an edge of a loop that has a bezier edge. Any other stale record is left as before (it derives to nothing).
  * The counts feed the one notice (cutPlanNotice). Mutates `plan` (order kept).
  */
-export function reconcileCutPlan(state, plan = CUT_PLAN) {
+export function reconcileCutPlan(state, plan) {
   const loops = findLoops(state), chains = findOpenChains(state, loops);
   const { dropped: edgeDropped, moved: edgeMoved } = migrateEdgeRecords(loops, chains, plan);
+  const { rename, remove } = staleKeyMoves(state, loops, chains, [...plan.keys()]);
+  renamePlanKeys(rename, remove, plan); // TASK 810: the records and the keys they reference
+  return { edgeMoved, edgeDropped, kept: rename.size, removed: remove.size };
+}
+/** TASK S1: the same reconciliation of the STORE (a version 3 document: its geometry keys move through renameGeometry; it holds no legacy edge keys). */
+export function reconcileStore(state) {
+  const loops = findLoops(state), chains = findOpenChains(state, loops);
+  const keys = [...new Set([...storeOps().flatMap((op) => op.geometry.map((r) => r.key)), ...regionKeys()])];
+  const { rename, remove } = staleKeyMoves(state, loops, chains, keys);
+  renameGeometry(rename, remove);
+  return { edgeMoved: 0, edgeDropped: 0, kept: rename.size, removed: remove.size };
+}
+// the stale chain / loop keys of a plan that move (rename) or go (remove): see reconcileCutPlan
+function staleKeyMoves(state, loops, chains, keys) {
   const loopIds = new Set(loops.map((l) => l.id)), chainIds = new Set(chains.map((c) => c.id));
+  const has = new Set(keys);
   const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
   const shapeIds = new Set(shapeById.keys());
   const isBezier = (id) => (shapeById.get(id) || {}).type === 'bezier';
   const nearBezier = new Set(loops.filter((l) => l.edges.some(isBezier)).flatMap((l) => l.edges)); // the edges of loops that have a bezier edge
   const rename = new Map(), remove = new Set();
-  for (const key of plan.keys()) {
+  for (const key of keys) {
     const { kind, id } = parseKey(key);
     const stale = (kind === 'chain' && !chainIds.has(id)) || (kind === 'loop' && !loopIds.has(id));
     if (!stale || !id.startsWith(kind + '_')) continue;
     const named = id.slice(kind.length + 1);
-    if (kind === 'chain' && loopIds.has('loop_' + named) && !plan.has(keyOf('loop', 'loop_' + named))) { rename.set(key, keyOf('loop', 'loop_' + named)); continue; }
+    if (kind === 'chain' && loopIds.has('loop_' + named) && !has.has(keyOf('loop', 'loop_' + named))) { rename.set(key, keyOf('loop', 'loop_' + named)); continue; }
     const members = idsNamedBy(named, shapeIds);
     if (members && members.some((m) => isBezier(m) || nearBezier.has(m))) remove.add(key);
   }
-  renamePlanKeys(rename, remove, plan); // TASK 810: the records and the keys they reference
-  return { edgeMoved, edgeDropped, kept: rename.size, removed: remove.size };
+  return { rename, remove };
 }
 
 /**
- * keepHolesFromOtherSketches(state, plan = CUT_PLAN) -> { keptHoles, lostHoles } — TASK 774 (owner turn 2357), run ONCE where a Shaper document SAVED BEFORE
+ * keepHolesFromOtherSketches(state, plan) -> { keptHoles, lostHoles } (a STORED v2 plan map: the v2 migration's) — TASK 774 (owner turn 2357), run ONCE where a Shaper document SAVED BEFORE
  * the same-sketch hole rule is read (shaper-doc.js applyShaperDoc: a sidecar `version` below 2). Commit 27c00a4 made a derived face's automatic holes
  * same-sketch only (#core/profile-model.js directlyContainedLoops); a stored `loop:<id>` record on a face whose holes were drawn in ANOTHER sketch then
  * derives without them (a Pocket clears through its islands, an Outside plate loses its hole cuts). Such a record keeps the geometry it was saved with:
@@ -597,11 +736,11 @@ export function reconcileCutPlan(state, plan = CUT_PLAN) {
  * A record of a face whose holes the rule did not change (no hole in another sketch; or a face a combined profile already covers) is untouched.
  * Mutates `plan` (order kept) and state.profiles. A NEW cut made after the load follows the same-sketch rule.
  */
-export function keepHolesFromOtherSketches(state, plan = CUT_PLAN) {
+export function keepHolesFromOtherSketches(state, plan) {
   const { loops, loopPolys } = loopsWithPolygons(state);
   const loopById = new Map(loops.map((l) => [l.id, l]));
   const shapeById = shapeIndexOf(state);
-  const owned = ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys, CUT_TYPES);
+  const owned = ownedLoopIds(v2PlanEntries(plan), state, loops, loopPolys, CUT_TYPES);
   const covered = (loopId) => { const p = resolveProfileForLoop(loopId, state, loops, loopPolys, { shapeById }); return !!p && !p.isDerived; };
   const rename = new Map();
   let lostHoles = 0;
@@ -648,8 +787,8 @@ export function cutPlanNotice(r) {
  * `loops` must carry the host-side `polygon` (see loopsWithPolygons); `loopPolys` = { [loop id]: polygon }; `owned` = the loops with
  * their own record in the plan (planOwnedLoops), never cut again as a hole of this target (TASK 711, as the exporter does).
  */
-export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned, plan = CUT_PLAN) {
-  const e = resolveEntry(key, storedRec, plan); // TASK 792: a part's Contour cuts the part
+export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) {
+  const e = resolveEntry(key, storedRec); // TASK 792: a part's Contour cuts the part
   if (!e) return null;
   const rec = effectiveCutRecord(e.rec); // TASK 450: On line / Guide take no offset: a stored one is ignored
   const cuts = deriveCuts(e.target, rec, state, loops, loopPolys, owned); // TASK 714: a stepped record derives to its terraces (the exporter's derivation too)
@@ -660,8 +799,8 @@ export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, own
 
 /** TASK 711: the loops that have their own record in `plan` (#core ownedLoopIds over the plan's assigned entries, the set the exporter
  *  derives from the same entries). */
-export function planOwnedLoops(state, loops, loopPolys, plan = CUT_PLAN) {
-  return ownedLoopIds(cutPlanEntries(plan), state, loops, loopPolys, CUT_TYPES);
+export function planOwnedLoops(state, loops, loopPolys) {
+  return ownedLoopIds(planEntries(), state, loops, loopPolys, CUT_TYPES);
 }
 
 /** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. */
@@ -684,18 +823,18 @@ const cutsSig = (cuts, state) => cuts.map((c) => [c.kind, c.cutType, c.offsetSid
   c.chain ? (c.chain.shapes || []).map((sh) => [sh, (sh.joints || []).map((id) => { const j = state.joints.get(id); return j ? [j.x, j.y] : null; })]) : null]);
 
 /**
- * planReliefItems(state, plan = CUT_PLAN) — the cut plan as the 3D Review's input, one item per derived
+ * planReliefItems(state) — the cut plan as the 3D Review's input, one item per derived
  * footprint: [{ key, cutType, cutDepth, footprints:[fp], shape, footprintsAt }], via deriveKeyFootprints / deriveCutFootprintAt
  * (the same derivation at another cutter half-width). Stale keys derive to nothing, as in the exporter.
  */
-export function planReliefItems(state, plan = CUT_PLAN) {
+export function planReliefItems(state) {
   const { loops, loopPolys } = loopsWithPolygons(state);
-  const owned = planOwnedLoops(state, loops, loopPolys, plan);
+  const owned = planOwnedLoops(state, loops, loopPolys);
   const items = [];
 
-  for (const [key, stored] of plan) {
+  for (const [key, stored] of planRecords()) {
     if (!stored || !stored.cutType || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
-    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned, plan);
+    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned);
     if (!d) continue;
     const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
@@ -710,22 +849,22 @@ export function planReliefItems(state, plan = CUT_PLAN) {
 
 /** The key of the Stock loop in the plan ('loop:<id>' | 'profile:<id>'), or null. ONE stock per document: Prepare moves the role, and if a
  *  loaded document somehow holds two, the first in the plan wins. */
-export function stockKeyOf(plan = CUT_PLAN) {
-  for (const [key, rec] of plan) if (rec && rec.cutType === STOCK_TYPE_ID) return key;
+export function stockKeyOf() {
+  for (const { op, ref } of membersInFileOrder()) if (op.type === STOCK_TYPE_ID) return ref.key;
   return null;
 }
 
 /**
- * planStockProfile(state, plan = CUT_PLAN) — TASK 472: the board profile of the Stock loop, or null when there is none (or it no longer
+ * planStockProfile(state) — TASK 472: the board profile of the Stock loop, or null when there is none (or it no longer
  * derives to a loop). { key, thickness (base mm, or null when unset), outer, holes (closed rings [[x,y],...]), sig }. The rings are the
  * loop polygons the derivation already yields for the target (deriveProfileCuts): the outer loop, and the holes of an explicit combined profile.
  * No geometry is computed here.
  */
-export function planStockProfile(state, plan = CUT_PLAN) {
-  const key = stockKeyOf(plan);
+export function planStockProfile(state) {
+  const key = stockKeyOf();
   if (!key) return null;
   const { loops, loopPolys } = loopsWithPolygons(state);
-  const rec = effectiveCutRecord(plan.get(key));
+  const rec = effectiveCutRecord(getPlanRecord(key));
   const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys);
   const ring = (poly) => { const r = poly.map((p) => [p.x, p.y]); return r.concat([r[0].slice()]); };
   const outerCut = (cuts || []).find((c) => !c.isHole && c.polygon && c.polygon.length >= 3);
@@ -740,7 +879,7 @@ export function planStockProfile(state, plan = CUT_PLAN) {
 
 
 /**
- * assignImportedCuts(state, cutRecordByDesc, plan = CUT_PLAN) — TASK 478: connect the cut metadata an SVG import carried (one record per
+ * assignImportedCuts(state, cutRecordByDesc) — TASK 478: connect the cut metadata an SVG import carried (one record per
  * source element, keyed by the shapes' `descId`) to the plan; returns how many cuts were assigned.
  *  - an element that forms ONE closed loop -> 'loop:<id>' (as before);
  *  - a COMPOUND element (several closed subpaths in one <path>: the Fusion add-in's pocket with an island) -> its biggest loop is the outer,
@@ -748,7 +887,7 @@ export function planStockProfile(state, plan = CUT_PLAN) {
  *    pocket with a hole, not two separate pockets (the island must stay uncut); subpaths outside the outer keep their own loop record;
  *  - an open chain keeps today's rule (On Line / Guide, or any record with a depth).
  */
-export function assignImportedCuts(state, cutRecordByDesc, plan = CUT_PLAN) {
+export function assignImportedCuts(state, cutRecordByDesc) {
   if (!cutRecordByDesc || cutRecordByDesc.size === 0) return 0;
   const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
   const { loops } = loopsWithPolygons(state);
@@ -766,14 +905,14 @@ export function assignImportedCuts(state, cutRecordByDesc, plan = CUT_PLAN) {
   let n = 0;
   for (const [d, list] of byDesc) {
     const rec = cutRecordByDesc.get(d);
-    if (list.length === 1) { plan.set(keyOf('loop', list[0].id), { ...rec }); n++; continue; }
+    if (list.length === 1) { fileShape(keyOf('loop', list[0].id), { ...rec }, state); n++; continue; }
     const sorted = [...list].sort((a, b) => polyArea(b.polygon) - polyArea(a.polygon));
     const outer = sorted[0];
     const inside = sorted.slice(1).filter((l) => pointInPolygon(outer.polygon, l.polygon[0]));
     const apart = sorted.slice(1).filter((l) => !inside.includes(l));
-    if (inside.length) { const prof = makeProfile(state, outer, inside); plan.set(keyOf('profile', prof.id), { ...rec }); n++; }
-    else { plan.set(keyOf('loop', outer.id), { ...rec }); n++; }
-    for (const l of apart) { plan.set(keyOf('loop', l.id), { ...rec }); n++; }
+    if (inside.length) { const prof = makeProfile(state, outer, inside); fileShape(keyOf('profile', prof.id), { ...rec }, state); n++; }
+    else { fileShape(keyOf('loop', outer.id), { ...rec }, state); n++; }
+    for (const l of apart) { fileShape(keyOf('loop', l.id), { ...rec }, state); n++; }
   }
   for (const c of findOpenChains(state, loops)) {
     for (const sh of (c.shapes || [])) {
@@ -781,7 +920,7 @@ export function assignImportedCuts(state, cutRecordByDesc, plan = CUT_PLAN) {
       const rec = cutRecordByDesc.get(sh.descId);
       if (rec.cutType === 'online' || rec.cutType === 'guide' || (rec.cutDepth != null && rec.cutDepth !== 'unset')) {
         const chainKey = keyOf('chain', c.id);
-        if (!plan.has(chainKey)) { plan.set(chainKey, { ...rec, cutType: rec.cutType || 'online' }); n++; }
+        if (!memberOf(chainKey)) { fileShape(chainKey, { ...rec, cutType: rec.cutType || 'online' }, state); n++; }
       }
     }
   }

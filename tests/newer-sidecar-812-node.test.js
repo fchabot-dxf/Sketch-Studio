@@ -4,8 +4,8 @@
 //     `newer: true`), an edit does NOT autosave, the page-hide flush writes nothing, Save as over another design / Save as to a file / Save to the file home
 //     refuse with the one message and write nothing, the working buffer keeps the sidecar byte for byte; controls: a version-2 sidecar autosaves, and a host
 //     without `hostVersion` is unaffected (the guard is opt-in).
-//  B. the real Shaper page: a stored design with a version-3 sidecar is opened, a line is drawn, the stored document's bytes are unchanged, Prepare shows the
-//     one notice; a version-2 design draws and saves, no notice.
+//  B. the real Shaper page: a stored design with a sidecar of a version above the app's (TASK S1: Shaper writes version 3: a version-4 one) is opened, a line is
+//     drawn, the stored document's bytes are unchanged, Prepare shows the one notice; a version-2 design draws and saves (as version 3, TASK S1), no notice.
 import assert from 'node:assert';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js';
@@ -99,14 +99,14 @@ const noticeOf = (app) => { const el = app.document.getElementById('prepare-noti
 const drawLine = (app) => { const o = app.toScreen(0, 0); app.tool('line'); app.click(o.x + 40, o.y - 40); app.click(o.x + 200, o.y - 40); app.esc(); };
 {
   const profile = await createProfile();
-  const original = sidecar(3);
+  const original = sidecar(4); // TASK S1: above the app's DOC_VERSION 3
   await createNamedDesign(profile, 'shaper', 'Newer design', docWith(original));
   const app = await open({ host: 'shaper', profile });
   try {
     drawLine(app);
     assert(app.state.shapes.length > 0, 'the line is drawn (the design opened and takes edits)');
     const d = await app.storedDoc();
-    assert.strictEqual(JSON.stringify(d.hosts.shaper), JSON.stringify(original), 'the stored sidecar is byte for byte the version-3 one');
+    assert.strictEqual(JSON.stringify(d.hosts.shaper), JSON.stringify(original), 'the stored sidecar is byte for byte the version-4 one');
     assert.strictEqual(d.geometry.shapes.length, 0, 'and so is the drawing: nothing was saved');
     app.modes.showMode('prepare');
     assert.strictEqual(noticeOf(app), NEWER, 'Prepare shows the one notice');
@@ -120,7 +120,7 @@ const drawLine = (app) => { const o = app.toScreen(0, 0); app.tool('line'); app.
     drawLine(app);
     const d = await app.storedDoc();
     assert(d.geometry.shapes.length > 0, 'a version-2 design saves the line');
-    assert.strictEqual(d.hosts.shaper.version, 2, 'with its sidecar');
+    assert.strictEqual(d.hosts.shaper.version, 3, 'with its sidecar (TASK S1: migrated, written as version 3)');
     app.modes.showMode('prepare');
     assert.strictEqual(noticeOf(app), null, 'no notice');
   } finally { await app.close(); }

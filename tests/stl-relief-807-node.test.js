@@ -25,11 +25,12 @@ import SettingsManager from '#core/settings-manager.js';
 import * as M from './helpers/stl-mesh.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
-import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { getStock } from '../apps/shaper/src/stock.js';
 import { getStlSource } from '../apps/shaper/src/stl-source.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { planOperations } from '../apps/shaper/src/operations.js';
+import { describeOperations } from '../apps/shaper/src/operations.js';
+import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -177,9 +178,9 @@ const harness = (app) => {
   const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
   return { q, pressEl, clickAt };
 };
-const plan = () => [...CUT_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`);
+const plan = () => [...V2_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`);
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Relief 807');
   let saved = null;
@@ -192,16 +193,16 @@ const plan = () => [...CUT_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}
       eq([res.ok, res.message], [true, `Added block.stl: a relief, ${n} levels`], 'Open STL: the notice');
       eq(app.document.getElementById('prepare-notice').textContent, `Added block.stl: a relief, ${n} levels`, "Prepare's notice");
       eq(plan(), ['roughing@19'], 'ONE record: Roughing to the full height');
-      const rec = [...CUT_PLAN.values()][0];
+      const rec = [...V2_PLAN.values()][0];
       ok(Array.isArray(rec.levels) && rec.levels.length === n, 'it carries the levels');
       eq(getStock().thickness, 19, 'the stock = the height');
       eq([...app.document.querySelectorAll('.stl-card .cut-field-label')].map((b) => b.textContent), ['Up', 'Units', 'Size'], 'the STL card: Up, Units, Size (no Import as)');
       h.clickAt(1, -1);
       eq(h.q('.cut-type-cur').textContent, 'Roughing', 'its card: Roughing');
       eq(h.q('.cut-layout-modes .is-active').textContent, 'Terraces', 'Layout: Terraces');
-      const ops = planOperations(app.state, cutPlanEntries());
+      const ops = describeOperations(app.state, planEntries());
       eq(ops.length, 1, 'the Operations list: one operation');
-      const svg = shaperSvgOf(app.state, cutPlanEntries());
+      const svg = shaperSvgOf(app.state, planEntries());
       const paths = (svg.match(/<path /g) || []).length;
       ok(paths >= 2 && /shaper:cutType="pocket"/.test(svg), `the Shaper SVG: ${paths} pocket paths`);
       saved = await app.storedDoc();
@@ -212,16 +213,17 @@ const plan = () => [...CUT_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}
     // a design saved with an STL before 807: no relief mark, the per-feature records -> sliced again as a relief when opened
     const old = JSON.parse(JSON.stringify(saved));
     delete old.hosts.shaper.stl.relief;
-    const [key] = old.hosts.shaper.cutPlan[0];
-    old.hosts.shaper.cutPlan = [[key, { cutType: 'exterior', cutDepth: 19, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }]];
-    CUT_PLAN.clear();
+    const [key] = storedRecords(old.hosts.shaper)[0]; // TASK S1: the saved document is version 3; the design of before 807 is a version 2 one
+    const { operations, regions, nextSeq, ...rest } = old.hosts.shaper;
+    old.hosts.shaper = { ...rest, version: 2, cutPlan: [[key, { cutType: 'exterior', cutDepth: 19, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }]] };
+    V2_PLAN.clear();
     const p2 = await createProfile();
     await createNamedDesign(p2, 'shaper', 'Old STL', old);
     const app = await open({ host: 'shaper', profile: p2 });
     try {
       app.modes.showMode('design');
       eq(plan(), ['roughing@19'], 'an STL design from before 807 opens as the relief (Roughing)');
-      ok([...CUT_PLAN.values()][0].levels.length > 70, 'with its levels');
+      ok([...V2_PLAN.values()][0].levels.length > 70, 'with its levels');
       eq(getStlSource().old, undefined, 'its STL source is a relief now (the stored file is rewritten at the next change: the re-import is part of opening it)');
     } finally { await app.close(); }
   }

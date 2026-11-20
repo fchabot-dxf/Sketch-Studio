@@ -111,12 +111,12 @@ const shot = async (name, sel = '#shaper-sync-modal') => {
   fs.writeFileSync(path.join(EVIDENCE_DIR, name), Buffer.from(data, 'base64'));
   console.log('screenshot ' + path.join(EVIDENCE_DIR, name));
 };
-const planSize = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.cutPlanEntries().length)`);
+const planSize = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.planEntries().length)`);
 const pickPocket = async () => {
   await clickEl('#prepare-panel .cut-type-trigger');
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
   await clickEl('.cut-type-opt[data-id="pocket"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => m.cutPlanEntries().length > 0)`, 'a planned cut');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => m.planEntries().length > 0)`, 'a planned cut');
 };
 // a 120 x 70 rectangle, planned as a Pocket in Prepare
 const planRectangle = async (label) => {

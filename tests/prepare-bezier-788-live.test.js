@@ -34,8 +34,8 @@ try {
     st.joints.set('bj0', { x: 0, y: 50 }); st.joints.set('bj1', { x: 100, y: 50 });
     st.shapes.push({ id: 'bs0', type: 'bezier', joints: ['bj0', 'bj1'], c1: [30, 0], c2: [70, 0] });
     st.saveState('draw');
-    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/apps/shaper/src/cut-plan.js');
-    cp.CUT_PLAN.set('chain:' + lf.findOpenChains(st)[0].id, { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 });
+    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/tests/helpers/plan-v2.js');
+    cp.V2_PLAN.set('chain:' + lf.findOpenChains(st)[0].id, { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 });
   })()`);
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);
   await waitFor(`!document.getElementById('view-prepare').hidden && !!window.__prepareView`, 'Prepare mounted');

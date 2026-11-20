@@ -16,8 +16,9 @@ import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea, polygonContains } from '#core/loop-geometry.js';
 import { resolveProfileAtPoint, derivedProfileForLoop } from '#core/profile-model.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
-import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -58,16 +59,16 @@ eq([bbox(polys[bottom.outer]), bottom.inners], [[0, -T, L, 0].map(r3), []], '2. 
 eq(derivedProfileForLoop(bottom.outer, loops, polys, st).inners, [], '2. the bottom board\'s derived face has no holes');
 
 // 3. a pocket on the bottom board exports only the bottom board's outline
-CUT_PLAN.clear();
-CUT_PLAN.set(keyOf('loop', bottom.outer), { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 3.175 });
-const svg = exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: polys });
+V2_PLAN.clear();
+V2_PLAN.set(keyOf('loop', bottom.outer), { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 3.175 });
+const svg = exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: polys });
 const paths = [...svg.matchAll(/<path\s[^>]*\bd="([^"]*)"/g)].map((m) => m[1]);
 eq(paths.length, 1, '3. one element in the export:\n' + svg);
 eq((paths[0].match(/M/g) || []).length, 1, '3. one subpath (no neighbour board written as a hole): ' + paths[0]);
 const pts = [...paths[0].matchAll(/(-?[\d.]+)[ ,](-?[\d.]+)/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
 const bb = bbox(pts);
 eq([r3(bb[2] - bb[0]), r3(bb[3] - bb[1])], [r3(L), r3(T)], '3. the exported outline is the bottom board: ' + paths[0]);
-CUT_PLAN.clear();
+V2_PLAN.clear();
 
 // 4. polygonContains on the case itself and on true holes
 const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];

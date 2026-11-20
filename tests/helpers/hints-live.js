@@ -28,7 +28,7 @@ export async function hintsPhase(t, { fusion = false } = {}) {
   const D = fusion ? 'fusion' : phone ? 'phone' : 'desktop';
   if (fusion) {
     await setUnit('mm');
-    await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+    await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
     await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
     await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'Fusion: the drafted pocket imported');
     await clickWorld(60, -40);

@@ -15,6 +15,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { storedRecords } from './helpers/stored-records.js'; // TASK S1: the saved sidecar (version 3) read as per-shape records
 
 const STORE = `import('/packages/ui/project-store.js').then((m) => m.getProjectStore())`;
 const CANVAS = { sketchstudio: 'svgCanvas', shaper: 'design-canvas', penplotter: 'design-canvas', trace: 'design-canvas' };
@@ -82,7 +83,7 @@ await (async () => {
       const bufTab = (name) => evalJs(`${STORE}.then(async (s) => { const b = await s.readBuffer({}); const t = b && b.tabs.find((x) => x.name === ${JSON.stringify(name)}); return t ? JSON.parse(JSON.stringify(t.doc)) : null; })`);
       const geom = (doc) => JSON.stringify({ shapes: doc.geometry.shapes.map((x) => [x.id, x.type, x.joints]), joints: doc.geometry.joints.map(([id, j]) => [id, Math.round(j.x * 1e6) / 1e6, Math.round(j.y * 1e6) / 1e6]) });
       const centreOf = (doc) => { const js = doc.geometry.joints.filter(([id]) => id !== 'j_origin').map(([, j]) => j); return { x: js.reduce((a, j) => a + j.x, 0) / js.length, y: js.reduce((a, j) => a + j.y, 0) / js.length }; };
-      const cutPlan = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].map((r) => r.cutType))`);
+      const cutPlan = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].map((r) => r.cutType))`);
       const pocketAt = async (doc, what) => { // Prepare: a press inside the loop, then the cut type menu -> Pocket (real pointer)
         await waitFor(`document.getElementById('prepare-canvas').children.length > 0`, `${mode}: Prepare is mounted`);
         const c = centreOf(doc);
@@ -91,7 +92,7 @@ await (async () => {
         await press('.cut-type-trigger');
         await waitFor(`!!document.querySelector('.cut-type-opt[data-id="pocket"]')`, `${mode}: the cut type menu (${what})`);
         await press('.cut-type-opt[data-id="pocket"]');
-        await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'pocket'))`, `${mode}: a Pocket on ${what}`);
+        await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'pocket'))`, `${mode}: a Pocket on ${what}`);
       };
 
       // ---- SketchStudio: the saved design + an unsaved one with content -------------------------------------------------------------------------------
@@ -151,11 +152,11 @@ await (async () => {
       await shot('4-sketchstudio-back');
       const plateAfter = await evalJs(`${STORE}.then(async (s) => JSON.parse(JSON.stringify((await s.get(${JSON.stringify(savedId)})).document)))`);
       assert.strictEqual(geom(plateAfter), geom(plateBefore), mode + ': the Saved plate geometry is unchanged after Shaper and Pen Plotter');
-      const plateCuts = ((plateAfter.hosts.shaper || {}).cutPlan || []).map(([, r]) => r.cutType);
+      const plateCuts = storedRecords(plateAfter.hosts.shaper || {}).map(([, r]) => r.cutType); // TASK S1: the saved sidecar is version 3
       assert.deepStrictEqual(plateCuts, ['pocket'], mode + ": Shaper's cut plan is in the saved design: " + JSON.stringify(plateAfter.hosts));
       const hexAfter = await bufTab('Hexagon');
       assert.strictEqual(geom(hexAfter), geom(hexBefore), mode + ': the unsaved Hexagon geometry is unchanged');
-      assert.deepStrictEqual(((hexAfter.hosts.shaper || {}).cutPlan || []).map(([, r]) => r.cutType), ['pocket'], mode + ": Shaper's cut plan is in the unsaved design (shared buffer)");
+      assert.deepStrictEqual(storedRecords(hexAfter.hosts.shaper || {}).map(([, r]) => r.cutType), ['pocket'], mode + ": Shaper's cut plan is in the unsaved design (shared buffer)");
       await activate(1, 'Hexagon');
       await waitFor(`document.querySelectorAll('#svgCanvas .shape-elem').length === ${hexShapes}`, `${mode}: Studio shows the unsaved Hexagon`);
       await activate(0, 'Saved plate');
@@ -167,10 +168,10 @@ await (async () => {
       // ---- Shaper again: both cut plans are there --------------------------------------------------------------------------------------------------------
       await visit('shaper');
       await stage('prepare');
-      await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.size === 1)`, mode + ': reopened Shaper: the Saved plate cut plan');
+      await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.size === 1)`, mode + ': reopened Shaper: the Saved plate cut plan');
       assert.deepStrictEqual(await cutPlan(), ['pocket'], mode + ': reopened Shaper: the Saved plate has its Pocket');
       await activate(1, 'Hexagon');
-      await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].length === 1)`, mode + ': reopened Shaper: the Hexagon cut plan');
+      await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].length === 1)`, mode + ': reopened Shaper: the Hexagon cut plan');
       assert.deepStrictEqual(await cutPlan(), ['pocket'], mode + ': reopened Shaper: the unsaved Hexagon has its Pocket');
       console.log(`${mode}: Studio -> Shaper -> Pen Plotter -> Studio -> Trace -> Shaper: same 2 tabs + active, ${plateShapes} / ${hexShapes} shapes, both Pockets kept`);
       if (phone) { await send('Emulation.setTouchEmulationEnabled', { enabled: false }); await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false }); }

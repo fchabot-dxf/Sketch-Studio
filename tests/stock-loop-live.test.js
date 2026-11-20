@@ -52,10 +52,10 @@ await (async () => {
     await openMode('prepare');
     await waitFor(`!!document.getElementById('prepare-canvas').getScreenCTM() && document.getElementById('prepare-canvas').children.length > 0`, 'prepare canvas ready');
     // setup: the L loop is the Stock (what picking Stock on it in Prepare stores: tests/stock-loop-node.test.js), 0.5 in thick
-    await evalJs(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); const { findLoops } = await import('#core/loop-finder.js'); const { loopPolygon } = await import('#core/loop-geometry.js');
+    await evalJs(`(async () => { const plan = await import('/tests/helpers/plan-v2.js'); const { findLoops } = await import('#core/loop-finder.js'); const { loopPolygon } = await import('#core/loop-geometry.js');
       const st = window.__designController.state; const sb = new Map(st.shapes.map((x) => [x.id, x]));
       const a = findLoops(st).map((l) => ({ ...l, polygon: loopPolygon(l, st, sb) })).find((l) => Math.max(...l.polygon.map((p) => p.x)) === 120);
-      plan.CUT_PLAN.set(plan.keyOf('loop', a.id), { cutType: 'stock', cutDepth: 12.7, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
+      plan.V2_PLAN.set(plan.keyOf('loop', a.id), { cutType: 'stock', cutDepth: 12.7, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
       window.__prepareView.refreshLook(); })()`);
     // the Stock loop keeps its distinct look when not selected: warm tan dashed edge + label
     await waitFor(`(() => { const e = document.querySelector('#prepare-canvas .sk-edge-stock'); return !!e && /227, 184, 115/.test(getComputedStyle(e).stroke); })()`, 'the unselected Stock edge is drawn');
@@ -66,10 +66,10 @@ await (async () => {
     if (process.env.EVIDENCE_DIR) { const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 44, width: 1400, height: 750, scale: 1 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, 'prepare-stock-idle.png'), Buffer.from(r.data, 'base64')); }
 
     // a pocket part inside the board (B), then the Review: the board IS the L profile
-    await evalJs(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); const { findLoops } = await import('#core/loop-finder.js'); const { loopPolygon } = await import('#core/loop-geometry.js');
+    await evalJs(`(async () => { const plan = await import('/tests/helpers/plan-v2.js'); const { findLoops } = await import('#core/loop-finder.js'); const { loopPolygon } = await import('#core/loop-geometry.js');
       const st = window.__designController.state; const sb = new Map(st.shapes.map((x) => [x.id, x]));
       const b = findLoops(st).map((l) => ({ ...l, polygon: loopPolygon(l, st, sb) })).find((l) => Math.min(...l.polygon.map((p) => p.x)) === 10);
-      plan.CUT_PLAN.set(plan.keyOf('loop', b.id), { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }); })()`);
+      plan.V2_PLAN.set(plan.keyOf('loop', b.id), { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }); })()`);
     await openMode('review');
     await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'review built');
     const infoText = await evalJs(`document.getElementById('review-info').textContent`);

@@ -5,6 +5,7 @@
 // version"; chosen, the tab shows Drive's version: the other device's setting, and the SAME view and the same (still valid) selection with its card open.
 import assert from 'node:assert';
 import { sleep } from './helpers/cdp-browser.js';
+import { storedRecords } from './helpers/stored-records.js'; // TASK S1: the saved sidecar (version 3) read as per-shape records
 import { openBromont, CARD_EDITS, sameView } from './helpers/prepare-drive-live.js';
 
 const t0 = Date.now();
@@ -15,13 +16,13 @@ try {
   const start = await look();
   const key = JSON.parse(start.plan)[0][0];
   // another device writes a different depth on the pocket (25.4 mm = 1 in)
-  drive.write((doc) => { const r = doc.hosts.shaper.cutPlan.find(([k]) => k === key); r[1].cutDepth = 25.4; });
+  drive.write((doc) => { const op = doc.hosts.shaper.operations.find((o) => o.geometry.some((g) => g.key === key)); op.settings.cutDepth = 25.4; }) // TASK S1: the other device's version 3 document: its operation's depth;
   // this tab edits the card: its autosave meets the other device's version
   await clickEl(CARD_EDITS[1][1]); // stepover +
   const mine = await look();
   await sleep(1700); await flushDrive(); await sleep(300);
   assert.strictEqual(drive.copies().length, 1, 'this tab\'s edit is kept as ONE conflicted copy: ' + JSON.stringify(drive.files()));
-  assert.strictEqual(drive.doc().document.hosts.shaper.cutPlan.find(([k]) => k === key)[1].cutDepth, 25.4, 'the other device\'s version is not overwritten');
+  assert.strictEqual(storedRecords(drive.doc().document.hosts.shaper).find(([k]) => k === key)[1].cutDepth, 25.4, 'the other device\'s version is not overwritten');
   const kept = await look();
   assert.strictEqual(kept.plan, mine.plan, 'the running cut plan is NOT replaced (this tab\'s settings stay)');
   assert.ok(sameView(kept.view, start.view), 'the view is unchanged: ' + JSON.stringify(kept.view));
@@ -33,7 +34,7 @@ try {
   await shot('conflict-notice.png');
   await clickEl('[data-action="load-drive-version"]');
   await waitFor(`!document.querySelector('.sk-sidebar').classList.contains('open')`, 'the menu closed');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((C) => C.CUT_PLAN.get(${JSON.stringify(key)}).cutDepth === 25.4)`, 'the tab now shows the Drive version');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((C) => C.V2_PLAN.get(${JSON.stringify(key)}).cutDepth === 25.4)`, 'the tab now shows the Drive version');
   await sleep(300);
   const loaded = await look();
   assert.ok(sameView(loaded.view, start.view), 'Drive\'s version loaded: the view is kept: ' + JSON.stringify(loaded.view));

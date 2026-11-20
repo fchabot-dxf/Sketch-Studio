@@ -1,11 +1,11 @@
 // apps/shaper/src/operations.js — TASK 743: Shaper's OPERATIONS (owner turns 2099-2101 + 2145: "an op list"; send-back ruling: "I didn't mean to use actual
 // SVG groups, just display groups as toolpaths"). DISPLAY ONLY: they group and order what Prepare's list and the Export step's 2D list show (the user's job
 // plan); the downloaded / synced SVG never changes (export-payload.js: only the 2D view's PREVIEW copy tags each element with its operation, data-op).
-// An operation = the cut records that share the same TOOL (cutter shape + bit diameter, + the angle of a V-bit), the same CUT TYPE and the same
-// CUTTING SETTINGS (the params the type declares: depth, offset; a stepped type's step depth / adaptive resolution; a held cut's Tabs / Onion skin
-// values). It is DERIVED from the cut plan every time (planOperations): nothing about an operation is stored but its place in the ORDER, the one
-// thing the user adds (OP_ORDER: the operation keys in the user's order, per document, saved with the cut plan and undone with it: shaper-doc.js).
-// Guides and the Stock are not cut: one operation each (no tool), under the heading "Not cut".
+// TASK S1 (docs/OPERATIONS-MODEL.md): the operations are STORED (operations-store.js, in list order); this module DESCRIBES them (describeOperations: their
+// cuts and words) and keeps the operation KEY (opKeyOf) = the TOOL (cutter shape + bit diameter, + the angle of a V-bit), the CUT TYPE and the CUTTING SETTINGS
+// the type declares (CUT_TYPES[].fields): a shape joins the operation of its key (cut-plan.js fileShape), and the v2 migration groups the records of an old
+// document by it (shaper-doc.js). Guides and the Stock are not cut (no tool), under the heading "Not cut"; a Guide's settings are its depth / offset / bit
+// (advisor ruling 1, task S1: they are written per element, so Guides with different values are different operations).
 //
 // DEFAULT ORDER (no order stored, and where a NEW operation slots into a stored one):
 //  1. by tool: the tools whose LAST cut frees the least come first, so the cut that frees the part (outside) is in the last tool's group and every
@@ -15,12 +15,13 @@
 //     order is the order the user happened to click regions in, which says nothing about the cutting order.
 //  2. inside one tool: by opRank (on line, pockets, inside = holes, outside last: holes before the part is freed, pockets before through cuts),
 //     then shallow before deep (unset depth last), then the smaller offset, then the plan's order.
-//  A NEW operation (not in the stored order) slots in by the same rule: when the stored order already has operations with its tool, it joins them (before
-//  the first of them that the in-tool rule puts after it, else after the last of them: no extra tool change); a new tool goes right after the operation
-//  that comes before it in the default order (at the top when none does).
+//  A NEW operation slots into the stored list by the same rule, once, when it is made (newOpIndex): when the list already has operations with its tool, it joins
+//  them (before the first of them that the in-tool rule puts after it, else after the last of them: no extra tool change); a new tool goes right after the
+//  operation that comes before it in the default order (at the top when none does). The v2 migration orders an old document's operations by its stored order.
 // An operation's regions are listed in the plan's order.
 import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS, CUT_TYPES } from './shaper.js';
-import { keyOf, parseKey, loopsWithPolygons, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
+import { parseKey, loopsWithPolygons, clearingWords, planEntries, recordOf, resolveEntry } from './cut-plan.js'; // TASK 745: clearingWords; TASK S1: the store's entries
+import { storeOps, planKeyOf } from './operations-store.js'; // TASK S1: the stored operations
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout, boundaryOf, ROUGH_BOUNDARY, wallsDefault } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809
@@ -28,13 +29,6 @@ import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in is one of its settings
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
 import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
-
-// ── the user's ORDER (operation keys), per document: the one stored fact ──
-let order = [];
-/** The stored operation order (keys), [] = the default order. */
-export const opOrder = () => order.slice();
-/** Replace the stored order (keys; anything else is dropped). */
-export function setOpOrder(keys) { order = Array.isArray(keys) ? keys.filter((k) => typeof k === 'string') : []; }
 
 const round6 = (n) => Math.round(Number(n) * 1e6) / 1e6;
 const isSet = (d) => d != null && d !== 'unset' && Number.isFinite(Number(d));
@@ -72,6 +66,7 @@ export function toolOf(rec) {
 const SETTING_FIELDS = {
   depth: (rec) => depthOf(rec.cutDepth),
   offset: (rec) => round6(Number(rec.cutOffset) || 0),
+  bit: (rec) => round6(Number(rec.toolDia) || 0), // TASK S1: a type that is not cut has no tool, yet a Guide's bit is written to the file (its settings)
   steps: (rec, eff) => {
     if (eff.terraceAs) { // a sloped Roughing (TASK 714's stepped cut): the step depth, or the adaptive resolution (#core terraceOptions: what the terraces are made with)
       const o = terraceOptions(eff);
@@ -122,10 +117,10 @@ const SETTING_FIELDS = {
   },
 };
 
-/** The CUTTING SETTINGS of a stored record that make two records one operation (the settings its type declares, CUT_TYPES[].fields, base mm), or null for a type not cut. */
+/** The SETTINGS of a record that make two records one operation (the settings its type declares, CUT_TYPES[].fields, base mm), or null for a type that declares none. */
 export function settingsOf(rec) {
   const t = rec && cutTypeById(rec.cutType);
-  if (!t || t.opRank === 0) return null;
+  if (!t || !t.fields.length) return null;
   const eff = effectiveCutRecord(rec);
   const s = {};
   for (const f of t.fields) { const v = SETTING_FIELDS[f](rec, eff); if (v !== undefined) s[f] = v; }
@@ -139,11 +134,13 @@ export function opKeyOf(rec) {
 }
 
 const rankOf = (op) => op.rank ?? (cutTypeById(op.cutType) || {}).opRank ?? 9; // TASK 792: a Roughing / Contour operation's rank is derived (planOperations)
-const depthNum = (op) => (op.settings && isSet(op.settings.depth) ? op.settings.depth : Infinity);
+const cutSettings = (op) => ((cutTypeById(op.cutType) || {}).opRank > 0 ? op.settings : null); // TASK S1: a Guide's settings (declared since S1) never order it: what is not cut keeps the plan's order
+const depthNum = (op) => { const s = cutSettings(op); return s && isSet(s.depth) ? s.depth : Infinity; };
 const shapeIndex = (tool) => CUTTER_SHAPES.findIndex((s) => s.id === tool.shape);
 const toolKeyOf = (op) => (op.tool ? op.tool.key : '');
 // inside one tool: on line, pockets, inside, outside (opRank); shallow before deep; the smaller offset; the plan's order
-const inTool = (a, b) => rankOf(a) - rankOf(b) || depthNum(a) - depthNum(b) || ((a.settings && a.settings.offset) || 0) - ((b.settings && b.settings.offset) || 0) || a.first - b.first;
+const offsetNum = (op) => { const s = cutSettings(op); return (s && s.offset) || 0; };
+const inTool = (a, b) => rankOf(a) - rankOf(b) || depthNum(a) - depthNum(b) || offsetNum(a) - offsetNum(b) || a.first - b.first;
 
 /** The DEFAULT order of `ops` (see the header). */
 export function defaultOpOrder(ops) {
@@ -158,8 +155,8 @@ export function defaultOpOrder(ops) {
   return [...tools.values()].sort(byTool).flatMap((g) => g.ops.sort(inTool));
 }
 
-/** `ops` in the stored order `keys`; an operation not in it slots in by the default rule (see the header). */
-export function orderOps(ops, keys = order) {
+/** `ops` in the order `keys`; an operation not in it slots in by the default rule (see the header). */
+export function orderOps(ops, keys) {
   const def = defaultOpOrder(ops.slice());
   const byKey = new Map(ops.map((op) => [op.key, op]));
   const out = [];
@@ -176,28 +173,12 @@ export function orderOps(ops, keys = order) {
   return out.map((k) => byKey.get(k));
 }
 
-// an id for an operation (ASCII, base mm: the rows' data-id and the preview copy's data-op): its type, depth, the settings off their default (offset, the step or
-// the adaptive resolution, tabs / onion skin) and its tool; a clash (two operations that differ only by a tab count / width / thickness) gets -2, -3 by key order
-const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '');
-const numText = (n) => String(round6(n));
-function assignIds(ops) {
-  const base = (op) => { const s = op.settings || {}; return 'op-' + [op.cutType, s.depth !== undefined ? (s.depth === 'unset' ? 'unset' : numText(s.depth) + 'mm') : null,
-    s.offset ? `offset-${numText(s.offset)}mm` : null, s.steps ? (s.steps.deviation != null ? `adaptive-${numText(s.steps.deviation)}mm` : `step-${numText(s.steps.step)}mm`) : null,
-    s.hold ? s.hold.mode : null, s.clearing ? s.clearing.pattern : null, s.leadIn ? 'lead-in' : null, op.tool ? `${op.tool.shape}-${numText(op.tool.dia)}mm${op.tool.angle != null ? '-' + op.tool.angle + 'deg' : ''}` : null].filter(Boolean).map(slug).join('-'); };
-  const seen = new Map();
-  for (const op of [...ops].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))) {
-    const b = base(op), n = (seen.get(b) || 0) + 1;
-    seen.set(b, n);
-    op.id = n === 1 ? b : `${b}-${n}`;
-  }
-}
-
 // the words of an operation: { depthText, detail, regions, rowText, label }
 function describe(op) {
   const len = lengthLabel;
   const type = cutTypeById(op.cutType);
   const typeLabel = (type && type.menuLabel) || op.cutType;
-  const s = op.settings || {};
+  const s = type && type.opRank === 0 ? {} : op.settings || {}; // a Guide / the Stock: no depth or offset in its words (as before its settings were declared)
   const n = op.records.length, chains = op.records.every((r) => r.target.kind === 'chain');
   const regions = `${n} ${chains ? (n === 1 ? 'path' : 'paths') : (n === 1 ? 'region' : 'regions')}`;
   let depthText = s.depth === undefined ? null : s.depth === 'unset' ? 'depth unset' : len(s.depth);
@@ -246,37 +227,106 @@ function describe(op) {
 /** The heading of a run of operations with this tool: "Change to ¼″ end mill", or "Not cut" (Guide / Stock). */
 export const toolHeading = (tool) => (tool ? `Change to ${tool.label}` : 'Not cut');
 
-/**
- * planOperations(state, entries, keys = the stored order) → the operations of the cut plan `entries` (cutPlanEntries(): [{ target, rec }] in plan order) on the
- * solved sketch `state`, in order: [{ key, id, tool, cutType, settings, records: [{ planKey, target, rec, cuts }], first, label, rowText, depthText, detail,
- * regions, heading }] (the words in the doc unit at the Length precision setting). A record that derives to no cut (a stale target) is in no operation.
- * `cuts` = that record's cuts (#core/stepped-cut deriveCuts, as the exporter, Prepare and the 3D Review derive them).
- */
-export function planOperations(state, entries, keys = order) {
+// TASK 792: a Roughing / Contour operation ranks as the plain cuts it makes (pockets 2, inside 3, outside 4: an outline's roughing frees the part); a Contour (the finish) after them
+function levelsRank(op) {
+  const t = cutTypeById(op.cutType);
+  if (!t || !t.levelsOp) return undefined;
+  const ranks = op.records.flatMap((r) => r.cuts.map((c) => (cutTypeById(c.rec && c.rec.cutType) || {}).opRank)).filter(Number.isFinite);
+  return Math.max(t.opRank, ...ranks) + (t.levelsOp === 'contour' ? 0.5 : 0);
+}
+// each entry's cuts (#core/stepped-cut deriveCuts, as the exporter, Prepare and the 3D Review derive them), grouped by operation id: Map(opId -> [{ planKey, target, pick, rec, cuts, i }])
+function entryCutsByOp(state, entries, geo = null) {
   const ents = (entries || []).filter((e) => e && e.target && e.rec && e.rec.cutType);
-  if (!ents.length) return [];
-  const { loops, loopPolys } = loopsWithPolygons(state);
-  const owned = ownedLoopIds(ents, state, loops, loopPolys, CUT_TYPES);
-  const byKey = new Map();
+  const byOp = new Map();
+  if (!ents.length) return byOp;
+  const { loops, loopPolys, owned } = geo || plannedGeometry(state, ents);
   ents.forEach((e, i) => {
     const cuts = deriveCuts(e.target, effectiveCutRecord(e.rec), state, loops, loopPolys, owned) || [];
     if (!cuts.length) return;
-    const key = opKeyOf(e.rec);
-    if (!byKey.has(key)) byKey.set(key, { key, tool: toolOf(e.rec), cutType: e.rec.cutType, settings: settingsOf(e.rec), records: [], first: i });
-    const planKey = e.key || keyOf(e.target.kind, e.target.id); // TASK 792: a part's Contour is its own record (cut-plan.js `contour:<key>`), cutting the part's target
-    byKey.get(key).records.push({ planKey, target: e.target, pick: parseKey(planKey), rec: e.rec, cuts });
+    if (!byOp.has(e.opId)) byOp.set(e.opId, []);
+    byOp.get(e.opId).push({ planKey: e.planKey, target: e.target, pick: parseKey(e.planKey), rec: e.rec, cuts, i }); // TASK 792: a Contour's planKey is `contour:<part key>`
   });
-  const ops = [...byKey.values()];
-  for (const op of ops) { // TASK 792: a Roughing / Contour operation ranks as the plain cuts it makes (pockets 2, inside 3, outside 4: an outline's roughing frees the part); a Contour (the finish) after them
-    const t = cutTypeById(op.cutType);
-    if (!t || !t.levelsOp) continue;
-    const ranks = op.records.flatMap((r) => r.cuts.map((c) => (cutTypeById(c.rec && c.rec.cutType) || {}).opRank)).filter(Number.isFinite);
-    op.rank = Math.max(t.opRank, ...ranks) + (t.levelsOp === 'contour' ? 0.5 : 0);
-  }
-  assignIds(ops);
-  for (const op of ops) Object.assign(op, describe(op), { heading: toolHeading(op.tool) });
-  return orderOps(ops, keys);
+  return byOp;
 }
 
-/** The operation id of each plan key (the 2D view's preview copy tags each element with it: export-payload.js shaperPreviewOf). */
-export const opIdsByPlanKey = (ops) => new Map(ops.flatMap((op) => op.records.map((r) => [r.planKey, op.id])));
+/**
+ * describeOperations(state, entries = planEntries()) → the STORED operations (operations-store.js, in list order) with their cuts and words on the solved sketch
+ * `state`: [{ key (= id), id, tool, cutType, settings, records: [{ planKey, target, rec, cuts }], first, label, rowText, depthText, detail, regions, heading }]
+ * (the words in the doc unit at the Length precision setting). A shape that derives to no cut (a stale target) is in no row; an operation none of whose shapes
+ * derives a cut is not listed (S1: the list as before).
+ */
+export function describeOperations(state, entries = planEntries()) {
+  const byOp = entryCutsByOp(state, entries);
+  const ops = [];
+  for (const stored of storeOps()) {
+    const records = (byOp.get(stored.id) || []).map(({ i, ...r }) => r);
+    if (!records.length) continue;
+    const rec = records[0].rec;
+    const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, first: byOp.get(stored.id)[0].i };
+    op.rank = levelsRank(op);
+    Object.assign(op, describe(op), { heading: toolHeading(op.tool) });
+    ops.push(op);
+  }
+  return ops;
+}
+
+// an operation as the default-order rule reads it: { key, tool, cutType, settings, rank, first } (its shapes' records and cuts on `state`)
+const EMPTY_STATE = Object.freeze({ joints: new Map(), shapes: [], constraints: [], profiles: [] });
+// the loops of `state` and the loops the entries own (#core ownedLoopIds: never cut again as a hole)
+function plannedGeometry(state, entries) {
+  const { loops, loopPolys } = loopsWithPolygons(state);
+  return { loops, loopPolys, owned: ownedLoopIds(entries, state, loops, loopPolys, CUT_TYPES) };
+}
+function orderView(state, op, entries, geo) {
+  const recs = op.geometry.map((ref) => resolveEntry(planKeyOf(op, ref), recordOf(op, ref))).filter(Boolean);
+  const rec = recs.length ? recs[0].rec : { cutType: op.type, ...op.settings };
+  const levels = Boolean((cutTypeById(op.type) || {}).levelsOp); // only a Roughing / Contour ranks by its cuts
+  const mine = levels ? entries.filter((e) => op.geometry.some((ref) => e.planKey === planKeyOf(op, ref))) : [];
+  const records = [...(entryCutsByOp(state, mine.map((e) => ({ ...e, opId: 'x' })), levels ? geo() : null).get('x') || [])];
+  return { key: op.id, tool: toolOf(rec), cutType: op.type, settings: settingsOf(rec), rank: levelsRank({ cutType: op.type, records }), first: Math.min(...op.geometry.map((r) => r.seq)) };
+}
+const OLD_GUIDE_KEY = JSON.stringify([null, 'guide', null]); // the one Guide operation's key before task S1 (a Guide declared no settings)
+/**
+ * migrationOrder(state, groups, storedOrder) -> the group keys in list order — TASK S1, docs/OPERATIONS-MODEL.md section 3 step 6: the v2 migration's operations
+ * (`groups` = [{ key: the operation key, entries: [{ planKey, target, rec, n (the record's place in the plan) }] }]) ordered as the list showed them: orderOps over
+ * the operations that derive a cut on the solved sketch `state` (as planOperations listed them before S1), in the stored order (old keys mapped by the caller; the
+ * Guide key of before S1 stands for every Guide operation, in the default order); the groups that derive nothing (stale) after them, in plan order. Without a
+ * state every group is listed (nothing is derived).
+ */
+export function migrationOrder(state, groups, storedOrder) {
+  const all = groups.flatMap((g) => g.entries.map((e) => ({ ...e, opId: g.key }))).sort((a, b) => a.n - b.n);
+  const byOp = state ? entryCutsByOp(state, all) : new Map();
+  const views = [], stale = [];
+  for (const g of groups) {
+    const records = byOp.get(g.key) || [];
+    if (state && !records.length) { stale.push(g.key); continue; }
+    const rec = g.entries[0].rec;
+    views.push({ key: g.key, tool: toolOf(rec), cutType: rec.cutType, settings: settingsOf(rec), rank: levelsRank({ cutType: rec.cutType, records }), first: records.length ? records[0].i : all.findIndex((e) => e.opId === g.key) });
+  }
+  const guides = defaultOpOrder(views.filter((v) => v.cutType === 'guide')).map((v) => v.key);
+  const keys = (storedOrder || []).flatMap((k) => (k === OLD_GUIDE_KEY ? guides : [k]));
+  return [...orderOps(views, keys).map((v) => v.key), ...stale];
+}
+
+/** TASK S1 (listOrder 'default', advisor ruling turn 2702): the stored operations' ids in the DEFAULT order (defaultOpOrder) on the solved sketch `state`: what the
+ *  list is while the user has never reordered it, as before S1 (re-sorted after every change). */
+export function defaultOrderIds(state) {
+  const st = state || EMPTY_STATE;
+  const entries = planEntries();
+  let g = null; const geo = () => g || (g = plannedGeometry(st, entries)); // only a Roughing / Contour ranks by its cuts: the loops are read for one only
+  return defaultOpOrder(storeOps().map((op) => orderView(st, op, entries, geo))).map((v) => v.key);
+}
+
+/** TASK S1: where a NEW operation (`draft` = { type, settings, geometry }) goes in the stored list: the default-order rule applied once (see the header), on the solved
+ *  sketch `state` (a Roughing / Contour ranks by the cuts it makes). */
+export function newOpIndex(state, draft) {
+  const st = state || EMPTY_STATE;
+  const ops = storeOps();
+  const entries = planEntries();
+  const draftEntries = draft.geometry.map((ref) => { const pk = planKeyOf(draft, ref), e = resolveEntry(pk, recordOf(draft, ref)); return e ? { ...e, planKey: pk } : null; }).filter(Boolean);
+  let g = null; const geo = () => g || (g = plannedGeometry(st, [...entries, ...draftEntries]));
+  const views = ops.map((op) => orderView(st, op, entries, geo));
+  const mine = { ...orderView(st, { ...draft, id: '\u0000new' }, draftEntries, geo), key: '\u0000new' };
+  const ordered = orderOps([...views, mine], ops.map((op) => op.id));
+  return ordered.indexOf(mine);
+}

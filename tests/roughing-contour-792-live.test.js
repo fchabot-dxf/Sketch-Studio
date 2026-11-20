@@ -73,8 +73,8 @@ const clickEl = async (sel) => {
   assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
   await press(p.x, p.y);
 };
-const plan = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.entries()].map(([k, r]) => (k.startsWith('contour:') ? 'contour:' : '') + r.cutType))`);
-const outlineKey = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.entries()].find(([, r]) => r.levels)[0])`);
+const plan = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.entries()].map(([k, r]) => (k.startsWith('contour:') ? 'contour:' : '') + r.cutType))`);
+const outlineKey = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.entries()].find(([, r]) => r.levels)[0])`);
 const openStage = async (id) => { // desktop: the header's stage tab; a phone has no header: the drawer's stage button
   if (touch) { await clickEl('.sk-sidebar-handle'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); }
   else await clickEl(`.sk-header-tab[data-tab="${id}"]`);
@@ -100,7 +100,7 @@ const openStl = async (what) => {
 };
 // the outline: a press on its edge, at the first of its vertices (top-most first) that is on the canvas, not under a panel
 const pressOutline = async () => {
-  const p = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const k = [...m.CUT_PLAN.entries()].find(([, r]) => r.levels)[0];
+  const p = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const k = [...m.V2_PLAN.entries()].find(([, r]) => r.levels)[0];
     const { loops } = m.loopsWithPolygons(window.__designController.state); const l = loops.find((x) => 'loop:' + x.id === k); const poly = l.polygon;
     const svg = document.getElementById('prepare-canvas'), M = svg.getScreenCTM();
     for (const q of [...poly].sort((a, b) => a.y - b.y)) { const pt = svg.createSVGPoint(); pt.x = q.x; pt.y = q.y; const s = pt.matrixTransform(M); const x = Math.round(s.x), y = Math.round(s.y);

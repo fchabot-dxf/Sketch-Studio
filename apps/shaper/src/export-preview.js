@@ -148,7 +148,7 @@ export const depthText = (depth) => {
 export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear, false), it.lead ? 'lead-in arc' : null].filter(Boolean).join(' · '); // TASK 778: "lead-in arc"
 
 /**
- * The list: TASK 743: one group per OPERATION of `ops` (operations.js planOperations: their order; { op, count, types, rows }), then one per cut type for the
+ * The list: TASK 743: one group per OPERATION of `ops` (operations.js describeOperations: their order; { op, count, types, rows }), then one per cut type for the
  * elements of no listed operation ({ op: null, cutType, ... }; all of them when no `ops` is given); in each, one row per cut type + depth + step
  * (+ TASK 742 hold kind) (file order) with its elements.
  */

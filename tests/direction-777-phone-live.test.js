@@ -36,10 +36,10 @@ try {
   // Seed 3 cuts: Raster pocket, On-line Lead-in, On-line Tabs
   await evalJs(`(async () => {
     const { findLoops } = await import('/packages/core/loop-finder.js');
-    const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+    const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
-    st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+    st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
     let n = 0;
     const J = (x, y) => { const id = 'pj' + (++n); st.joints.set(id, { x, y }); return id; };
     const line = (a, b) => { const id = 'ps' + (++n); st.shapes.push({ id, type: 'line', joints: [a, b] }); return id; };
@@ -51,9 +51,9 @@ try {
     const loops = findLoops(st);
     const kOf = (edge) => keyOf('loop', loops.find((l) => l.edges.includes(edge)).id);
     const base = { cutDepth: 8, cutOffset: 0, toolDia: 6, cutterShape: 'endmill', cutterAngle: 90 };
-    CUT_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
-    CUT_PLAN.set(kOf(eLead), { ...base, cutType: 'online', toolDia: 3.175, leadIn: true, leadInLength: 8, leadInSide: 'outside' });
-    CUT_PLAN.set(kOf(eTabs), { ...base, cutType: 'online', toolDia: 3.175, holdPart: 'tabs', tabCount: 3, tabWidth: 10 });
+    V2_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
+    V2_PLAN.set(kOf(eLead), { ...base, cutType: 'online', toolDia: 3.175, leadIn: true, leadInLength: 8, leadInSide: 'outside' });
+    V2_PLAN.set(kOf(eTabs), { ...base, cutType: 'online', toolDia: 3.175, holdPart: 'tabs', tabCount: 3, tabWidth: 10 });
   })()`);
 
   // Open Prepare via phone sidebar drawer

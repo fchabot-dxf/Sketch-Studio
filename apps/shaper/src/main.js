@@ -15,16 +15,16 @@ import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Re
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
 import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 795: the selection list's X and Clear all
-import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + CUT_PLAN + stock
+import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + the plan + stock
 import { dbg } from '#core/debug.js';
 import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
-import { cutPlanEntries, CUT_PLAN, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes, planLeadInNotes, planLevelsNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes; TASK 775: planLeadInNotes
+import { planEntries, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes, planLeadInNotes, planLevelsNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes; TASK 775: planLeadInNotes
 import { shaperSvgOf, shaperPreviewOf, bitCentrePaths, exportFileName } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name
-import { opOrder } from './operations.js';            // TASK 743: the operation order (the 2D view rebuilds when it changes)
+import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
@@ -98,7 +98,7 @@ const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // th
 
 // TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes) and (TASK 743) the operations it lists
 function generateShaperSvgPayload({ preview = false } = {}) {
-  const entries = cutPlanEntries();
+  const entries = planEntries();
   if (!entries.length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
@@ -451,7 +451,7 @@ const btnSyncShaper = document.getElementById('btn-sync-shaper');
 if (btnSyncShaper) {
   btnSyncShaper.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
-    const entries = cutPlanEntries();
+    const entries = planEntries();
     if (!entries.length) {
       if (status) status.textContent = NO_CUTS;
       return;
@@ -564,7 +564,7 @@ syncExistsCancelBtn.addEventListener('click', () => { // nothing is sent; the di
 const groupStatus = createGroupStatus(() => VIEWS.design); // TASK 610: group-status.js (the page and the node test kit both create it)
 
 // SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js), with Shaper's own options
-// declared in cut-import.js (TASK 583: each element's cut record, kept descIds, the cuts kept in CUT_PLAN; the node test kit calls it too).
+// declared in cut-import.js (TASK 583: each element's cut record, kept descIds, the cuts kept in the plan; the node test kit calls it too).
 // The entry is the sidebar's "Import SVG / DXF…" (project-actions.js, passed to mountProjectSidebar above); a drop anywhere on the page is the second way in
 // (TASK 706). Either one shows Design first (modes.js showDesign, declared to the shared importer).
 const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => document.body, showDesign: () => modes.showDesign() }); // TASK 610: cut-import.js
@@ -695,9 +695,9 @@ const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
   // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
-  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(CUT_PLAN), ...planHoldNotes(st, CUT_PLAN), ...planClearingNotes(st, CUT_PLAN), ...planLeadInNotes(st, CUT_PLAN), ...planLevelsNotes(st, CUT_PLAN)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
+  return { stock: resolveStock(st).stock, items: planReliefItems(st), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(), ...planHoldNotes(st), ...planClearingNotes(st), ...planLeadInNotes(st), ...planLevelsNotes(st)] }; // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
 };
-const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(), opOrder(),
+const reviewSig = (st) => JSON.stringify([storeSignature(), getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
   SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
 // TASK 718: the Export step's view: '3d' (the board above), '2d' (the exported file, export-preview.js) or (TASK 793) 'paths' (every path written + the bit-centre
 // paths, the same module), remembered per app like the stage (MODE_KEY)

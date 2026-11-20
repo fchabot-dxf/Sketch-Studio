@@ -75,7 +75,7 @@ const exportDepths = async () => {
   await clickWorld(60, -40); // the selection is gone after a stage change: select the pocket again
   return [...svg.matchAll(/<(path|circle) [^>]*shaper:cutType="pocket"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => m[2]);
 };
-const reviewDepths = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth.toFixed(3) + ' mm'))`);
+const reviewDepths = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.planReliefItems(window.__designController.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth.toFixed(3) + ' mm'))`);
 const preset = (value) => clickEl(`.cut-row[data-row="stepDeviation"] .cut-preset[data-value="${value}"]`);
 try {
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dlDir });
@@ -89,7 +89,7 @@ try {
   await clickWorld(60, -40);
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
   await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); // TASK 810: the Roughing card is tabbed: these rows are in Passes (the card stays on it)
   // OFF: the 716 card
   let c = await cardState();

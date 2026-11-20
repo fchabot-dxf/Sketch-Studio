@@ -18,7 +18,7 @@ if (!t) { console.log('skipped: no headless Edge/Chrome binary installed'); proc
 try {
   const { send, evalJs, waitFor, setUnit, clickEl, clickWorld, pickClearing, setLoop, pickType, shotWorld, shot, fileElements } = t;
   await setUnit('mm');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   const payload = fs.readFileSync(new URL('./fixtures/sa7-slope/02-drafted-pocket.json', import.meta.url), 'utf8');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(payload)})`);
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'Fusion: drafted pocket imported');
@@ -53,7 +53,7 @@ try {
   await shot('fusion-card-arc.png', '#prepare-panel .cut-card', 2);
   await shotWorld('fusion-outline-arc.png', [-12, -92, 132, 12], 2);
 
-  const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => m.shaperSvgOf(window.__designController.state, C.cutPlanEntries())))`);
+  const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => m.shaperSvgOf(window.__designController.state, C.planEntries())))`);
   const els = fileElements(svg);
   const online = els.filter((e) => e[2] === 'online'), guides = els.filter((e) => e[2] === 'guide');
   assert.ok(online.length === 2 && online.filter((e) => /Z$/.test(e[1])).length === 1 && online.filter((e) => !/Z$/.test(e[1]) && e[1].includes(' A ')).length === 1 && guides.length === 1,

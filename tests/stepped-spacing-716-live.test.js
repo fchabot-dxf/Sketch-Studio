@@ -79,7 +79,7 @@ const exportDepths = async () => {
   await clickWorld(60, -40); // the selection is gone after a stage change: select the pocket again
   return [...svg.matchAll(/<(path|circle) [^>]*shaper:cutType="pocket"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => m[2]);
 };
-const reviewDepths = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth.toFixed(3) + ' mm'))`);
+const reviewDepths = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.planReliefItems(window.__designController.state).filter((i) => i.cutType === 'pocket').map((i) => i.cutDepth.toFixed(3) + ' mm'))`);
 const preset = (row, value) => clickEl(`.cut-row[data-row="${row}"] .cut-preset[data-value="${value}"]`);
 try {
   await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dlDir });
@@ -93,7 +93,7 @@ try {
   await clickWorld(60, -40);
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
   await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); // TASK 810: the Roughing card is tabbed: the Step depth row is in Passes (the card stays on it)
   // step 1: 8 steps, 0.18 mm apart, flagged
   let c = await cardState();
@@ -129,7 +129,7 @@ try {
   assert.deepStrictEqual(await exportDepths(), ['8.000 mm'], 'step 8: export one pocket');
   // TASK 736: no minimum: a 0.05 mm bit and a 0.01 mm step depth are kept exactly, 0 is refused, the note follows
   await evalJs(`(() => { for (const [c, v] of [['.cut-bit', '0.05'], ['.cut-step-depth', '0.01']]) { const i = document.querySelector(c); i.value = v; i.dispatchEvent(new Event('change')); } })()`);
-  const tiny = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()].find((x) => x.cutType === 'roughing'); return [r.toolDia, r.stepDepth]; })`);
+  const tiny = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()].find((x) => x.cutType === 'roughing'); return [r.toolDia, r.stepDepth]; })`);
   assert.deepStrictEqual(tiny, [0.05, 0.01], 'a 0.05 mm bit and a 0.01 mm step depth are kept exactly');
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '0'; i.dispatchEvent(new Event('change')); })()`);
   c = await cardState();

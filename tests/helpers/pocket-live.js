@@ -125,10 +125,10 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
     const typeField = async (cls, v) => { await evalJs(`(() => { const i = document.querySelector('${cls}'); i.value = '${v}'; i.dispatchEvent(new Event('change')); })()`); await sleep(200); };
     const openClearing = async () => { await clickEl('#prepare-panel .cut-clear-trigger'); await waitFor(`!document.querySelector('.cut-clear-pop').hidden`, 'the Clearing popover'); };
     const pickClearing = async (id) => { await openClearing(); await clickEl(`.cut-clear-opt[data-clearing="${id}"]`); await waitFor(`document.querySelector('.cut-clear-pop').hidden`, 'the popover closes'); await sleep(300); };
-    const rec = (x, y) => evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/packages/core/loop-geometry.js'), import('/apps/shaper/src/cut-plan.js')]).then(([L, G, C]) => {
+    const rec = (x, y) => evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/packages/core/loop-geometry.js'), import('/tests/helpers/plan-v2.js')]).then(([L, G, C]) => {
       const st = window.__designController.state, by = new Map(st.shapes.map((s) => [s.id, s]));
       const l = L.findLoops(st).map((l) => ({ l, p: G.loopPolygon(l, st, by) })).filter((o) => G.pointInPolygon(o.p, { x: ${x}, y: ${y} })).sort((a, b) => Math.abs(G.polyArea(a.p)) - Math.abs(G.polyArea(b.p)))[0];
-      const r = C.CUT_PLAN.get('loop:' + l.l.id); return r ? { cutType: r.cutType, clearing: r.clearing ?? null, stepover: r.stepover ?? null, finishAllowance: r.finishAllowance ?? null, rasterAngle: r.rasterAngle ?? null, loop: r.loop ?? null, toolDia: r.toolDia } : null; })`);
+      const r = C.V2_PLAN.get('loop:' + l.l.id); return r ? { cutType: r.cutType, clearing: r.clearing ?? null, stepover: r.stepover ?? null, finishAllowance: r.finishAllowance ?? null, rasterAngle: r.rasterAngle ?? null, loop: r.loop ?? null, toolDia: r.toolDia } : null; })`);
     const download = async () => {
       await openMode('review');
       for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
@@ -167,7 +167,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
         return { rows, count: els.length, clears: els.map((e) => e.getAttribute('data-clear')).filter(Boolean) };
       })()`);
     };
-    const preview2dElements = () => evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => m.shaperPreviewOf(window.__designController.state, C.cutPlanEntries()).svg))`);
+    const preview2dElements = () => evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => m.shaperPreviewOf(window.__designController.state, C.planEntries()).svg))`);
 
     // ── A / B: the standalone app ──
     const setLoop = async (on) => { if (await evalJs(`document.querySelector('.cut-loop').checked`) !== on) { await clickEl('#prepare-panel .cut-row[data-row="loop"] .cut-check'); await sleep(300); } };
@@ -201,7 +201,7 @@ export async function setupPockets(t, label) {
     const bitWords = inch ? '0.25 in' : '6 mm';
     await openMode('design');
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
-    await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+    await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
     assert.strictEqual(await draw(), 18, label + ': drawn');
     await openMode('prepare');
     if (phone && !await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head'); // the folded bar keeps the card free
@@ -391,7 +391,7 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
 export async function fusionPhase(t) {
   const { evalJs, waitFor, setUnit, clickWorld, pickClearing, setLoop, card, look, shotWorld, shot, fileElements } = t;
   await setUnit('mm');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'Fusion: the drafted pocket imported');
   await clickWorld(60, -40);
@@ -406,7 +406,7 @@ export async function fusionPhase(t) {
     assert.ok(l.paths >= 1, `Fusion ${id}: drawn`);
     const b = await evalJs(`(() => { const r = [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getBBox()); return [Math.min(...r.map((q) => q.x)) - 8, Math.min(...r.map((q) => q.y)) - 8, Math.max(...r.map((q) => q.x + q.width)) + 8, Math.max(...r.map((q) => q.y + q.height)) + 8]; })()`);
     await shotWorld(`fusion-loop-${id}.png`, b);
-    const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => m.shaperSvgOf(window.__designController.state, C.cutPlanEntries())))`);
+    const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => m.shaperSvgOf(window.__designController.state, C.planEntries())))`);
     const els = fileElements(svg).map((e) => e[2]);
     fusion[id] = els.reduce((o, k) => ({ ...o, [k]: (o[k] || 0) + 1 }), {});
     assert.ok(els.filter((k) => k === 'online').length === 1 && els.filter((k) => k === 'guide').length === 1 && !els.includes('inside') && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is ONE closed on-line path + 1 guide start mark (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);

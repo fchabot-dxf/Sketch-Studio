@@ -18,11 +18,12 @@ import { offsetPolygonRound } from '#core/plot/clip.js';
 import { buildRelief } from '#core/relief-model.js';
 import { loopsWithPolygons, planReliefItems, holdNoteItems } from '../apps/shaper/src/cut-plan.js';
 import { effectiveCutRecord, defaultCutRecord, exportEncoding } from '../apps/shaper/src/shaper.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
-import { setOpOrder } from '../apps/shaper/src/operations.js';
+
+
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
+import { V2_PLAN, withPlan } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -182,7 +183,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
     const plan = planOf(st, [POCKET, other]);
     const keys = [...plan.keys()];
     let rel = null, err = null;
-    try { rel = buildRelief({ items: planReliefItems(st, plan) }); } catch (e) { err = e; }
+    try { rel = buildRelief({ items: withPlan(st, plan, () => planReliefItems(st)) }); } catch (e) { err = e; }
     eq(err && String(err.stack || err), null, `${name}: the 3D model builds (no error)`);
     eq(rel.marks.map((m) => m.kind).sort(), ['depth-unset', 'pocket-start'], `${name}: the start mark and the depth-unset label are two marks`);
     eq(rel.marks.find((m) => m.kind === 'depth-unset').keys, [keys[1]], `${name}: the depth-unset label names its own cut only`);
@@ -193,7 +194,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
   {
     const st = partState([[0, 0, 2, 2], [3, 0, 2, 2]]);
     const plan = planOf(st, [{ cutType: 'exterior', cutDepth: 'unset', toolDia: 3.175 }, { cutType: 'exterior', cutDepth: 'unset', toolDia: 3.175 }]);
-    const rel = buildRelief({ items: planReliefItems(st, plan) });
+    const rel = buildRelief({ items: withPlan(st, plan, () => planReliefItems(st)) });
     eq(rel.marks.length, 1, 'two Outside cuts 1 mm apart, both unset: one label');
     eq(rel.marks[0].keys.length, 2, 'the label names both cuts');
   }
@@ -229,7 +230,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
   const big = partState([[0, 0, 60, 40]], [[30, 20, 5]]);
   const bl = sortedLoops(big);
   const keyOf = `loop:${bl.loops[0].id}`;
-  const reliefOf = (r) => buildRelief({ items: planReliefItems(big, new Map([[keyOf, { ...defaultCutRecord(), ...r }]])), bounds: { minX: 0, maxX: 60, minY: 0, maxY: 40 } }); // the design's bounds (the app passes them): a board even when nothing is cut
+  const reliefOf = (r) => buildRelief({ items: withPlan(big, [[keyOf, { ...defaultCutRecord(), ...r }]], () => planReliefItems(big)), bounds: { minX: 0, maxX: 60, minY: 0, maxY: 40 } }); // the design's bounds (the app passes them): a board even when nothing is cut
   const freehand = reliefOf({ cutType: 'pocket', cutDepth: 'unset', toolDia: 6.35 });
   eq([freehand.levels.length, freehand.stats.unsetThrough.length], [0, 0], 'a depth-unset Freehand pocket: nothing cut, no through label (the reference)');
   ok(freehand.stats.skipped.every((s) => s.reason === 'no-depth'), 'a depth-unset Freehand pocket: not shown (no depth)');
@@ -254,7 +255,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
 {
   const profile = await createProfile();
   await createNamedDesign(profile, 'shaper', 'Stepper 787');
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper', profile });
   try {
     const doc = app.document, q = (sel) => doc.querySelector(sel), st = app.state;
@@ -273,7 +274,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
     pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="online"]');
     typed('.cut-depth', '3');
     pressEl('.cut-row[data-row="leadIn"] .cut-preset[data-value="true"]');
-    const key = [...CUT_PLAN.keys()][0], radius = () => CUT_PLAN.get(key).leadInRadius;
+    const key = [...V2_PLAN.keys()][0], radius = () => V2_PLAN.get(key).leadInRadius;
     const minus = () => pressEl('.cut-row[data-row="leadInRadius"] .cut-step[data-d="-1"]');
 
     // mm: a 0.508 mm (.02 in) bit: the calculated radius is the bit diameter 0.508; − gives 0.5, then the min 0.254 (it stopped at 0.5)
@@ -299,7 +300,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
     typed('.cut-bit', '0.5');
     const h3 = st.history.length;
     pressEl('.cut-row[data-param="toolDia"] .cut-step[data-d="-1"]');
-    eq([CUT_PLAN.get(key).toolDia, st.history.length], [0.5, h3], 'bit diameter 0.5 mm: − stays (positive, no min: unchanged)');
+    eq([V2_PLAN.get(key).toolDia, st.history.length], [0.5, h3], 'bit diameter 0.5 mm: − stays (positive, no min: unchanged)');
   } finally { await app.close(); }
 }
 

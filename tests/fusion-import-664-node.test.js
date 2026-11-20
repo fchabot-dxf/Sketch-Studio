@@ -2,11 +2,13 @@
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
-import { CUT_PLAN, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { keyOf, getCutRecord } from '../apps/shaper/src/cut-plan.js';
 import { getStock, setStock } from '../apps/shaper/src/stock.js';
 import { DEFAULT_STOCK } from '#core/relief-model.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { createFusionBridge, FUSION_ACTIONS } from '../apps/shaper/src/fusion-bridge.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { getSelections } from '../apps/shaper/src/selection-list.js';
 
 let checks = 0;
 const ok = (c, m) => { assert.ok(c, m); checks++; };
@@ -69,9 +71,9 @@ const realSketchMessage = {
   warnings: [],
 };
 
-// ── 1. Real Fusion sketch message: 1 sketch, deduplicated circle, construction, CUT_PLAN keys, BOTH loops selectable ──
+// ── 1. Real Fusion sketch message: 1 sketch, deduplicated circle, construction, V2_PLAN keys, BOTH loops selectable ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   setStock({ ...DEFAULT_STOCK });
   const app = await open({ host: 'shaper' });
   try {
@@ -110,7 +112,7 @@ const realSketchMessage = {
     eq(circleLoop.edges[0], circles[0].id, 'disk loop references the single shared circle');
     eq(rectLoop.joints.length, 4, 'rect closed cleanly on 4 shared corner joints');
 
-    // Construction line is excluded from loops & open chains (not a guide entry in CUT_PLAN)
+    // Construction line is excluded from loops & open chains (not a guide entry in V2_PLAN)
     const chains = findOpenChains(app.state, rectLoops);
     eq(chains.length, 1, 'findOpenChains returns only the non-construction open line chain');
     const openChain = chains[0];
@@ -120,12 +122,11 @@ const realSketchMessage = {
     const rectKey = keyOf('loop', rectLoop.id);
     const circleKey = keyOf('loop', circleLoop.id);
     const chainKey = keyOf('chain', openChain.id);
-    ok(CUT_PLAN.has(rectKey), 'CUT_PLAN has rect loop key');
-    ok(CUT_PLAN.has(circleKey), 'CUT_PLAN has circle disk loop key');
-    ok(CUT_PLAN.has(chainKey), 'CUT_PLAN has open chain key');
-    eq(CUT_PLAN.size, 3, 'CUT_PLAN has no guide entry for construction line');
-    eq(CUT_PLAN.get(rectKey).cutType, null, 'sketch region defaults cutType to null');
-    eq(CUT_PLAN.get(rectKey).cutDepth, 'unset', 'sketch region defaults cutDepth to unset');
+    // TASK S1: a sketch region has no cut type, so it is in no operation; the selection names its regions and Prepare's record of each is the default
+    eq(JSON.stringify(getSelections().at(-1).cutKeys.slice().sort()), JSON.stringify([rectKey, circleKey, chainKey].sort()), 'the selection names the rect loop, the circle disk loop and the open chain (no construction line)');
+    eq(V2_PLAN.size, 0, 'none of them is in an operation (no cut type)');
+    eq(getCutRecord(rectKey).cutType, null, 'sketch region defaults cutType to null');
+    eq(getCutRecord(rectKey).cutDepth, 'unset', 'sketch region defaults cutDepth to unset');
 
     // Both outer rectangle AND inner circle disk stay selectable in Prepare
     const pv = app.prepare.view();
@@ -143,7 +144,7 @@ const realSketchMessage = {
 
 // ── 2. Real arcs via arcShape (Y-up ccw -> sweep = !ccw) & bridge warnings[] notice ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   setStock({ ...DEFAULT_STOCK });
   const app = await open({ host: 'shaper' });
   try {
@@ -198,7 +199,7 @@ const realSketchMessage = {
 
 // ── 3. Body-style message: cutType mapping (outside/inside/pocket) + depthMm + island makeProfile + stock.thicknessMm ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   setStock({ ...DEFAULT_STOCK });
   const app = await open({ host: 'shaper' });
   try {
@@ -247,12 +248,12 @@ const realSketchMessage = {
     eq(app.state.profiles.length, 1, 'pocket with non-standalone island creates 1 combined profile via makeProfile');
 
     const profKey = keyOf('profile', app.state.profiles[0].id);
-    const profRec = CUT_PLAN.get(profKey);
-    ok(profRec, 'CUT_PLAN has profile:<id> record');
+    const profRec = V2_PLAN.get(profKey);
+    ok(profRec, 'V2_PLAN has profile:<id> record');
     eq(profRec.cutType, 'pocket', 'pocket cutType mapped');
     eq(profRec.cutDepth, 6.5, 'pocket cutDepth set to 6.5mm');
 
-    const entries = [...CUT_PLAN.values()];
+    const entries = [...V2_PLAN.values()];
     ok(entries.some((r) => r.cutType === 'interior' && r.cutDepth === 19.05), 'inside mapped to interior with 19.05mm depth');
     ok(entries.some((r) => r.cutType === 'exterior' && r.cutDepth === 19.05), 'outside mapped to exterior with 19.05mm depth');
     near(getStock().thickness, 19.05, 1e-6, 'stock.thicknessMm updated via setStock');
@@ -263,7 +264,7 @@ const realSketchMessage = {
 
 // ── 4. Two Add selections -> TASK 712 (owner ruling "Replace"): the second REPLACES the first; ONE undo gives the first back (sketch + geometry + cut plan) ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   setStock({ ...DEFAULT_STOCK });
   const app = await open({ host: 'shaper' });
   try {
@@ -289,7 +290,7 @@ const realSketchMessage = {
     const r1 = importFusionSelection(msg1, { controller: app.controller, prepare: app.prepare });
     const shapesAfterFirst = app.state.shapes.length;
     const sketchesAfterFirst = app.state.sketches.length;
-    const planAfterFirst = CUT_PLAN.size;
+    const planAfterFirst = V2_PLAN.size;
 
     const r2 = importFusionSelection(msg2, { controller: app.controller, prepare: app.prepare });
     eq(r1.sketch.name, 'FirstPart', 'first import made FirstPart');
@@ -297,8 +298,8 @@ const realSketchMessage = {
     eq(r2.message, 'Replaced with SecondPart: 1 regions, 0 chains', 'the second notice says Replaced');
     eq(app.state.sketches.map((s) => s.name).join('|'), 'Sketch 1|SecondPart', 'only SecondPart after the 2nd Add selection (FirstPart replaced)');
     eq(app.state.shapes.length, 4, 'only the second selection shapes');
-    eq(CUT_PLAN.size, 1, 'only the second selection cut plan entry');
-    ok(!CUT_PLAN.has(r1.cutKeys[0]) && CUT_PLAN.has(r2.cutKeys[0]), 'FirstPart cut entry gone, SecondPart in CUT_PLAN');
+    eq(V2_PLAN.size, 1, 'only the second selection cut plan entry');
+    ok(!V2_PLAN.has(r1.cutKeys[0]) && V2_PLAN.has(r2.cutKeys[0]), 'FirstPart cut entry gone, SecondPart in V2_PLAN');
 
     // ONE undo gives FirstPart back (sketch, geometry, and cut plan entry)
     const histBeforeUndo = app.state.history.length;
@@ -306,8 +307,8 @@ const realSketchMessage = {
     eq(app.state.history.length, histBeforeUndo - 1, 'undo pops exactly one snapshot');
     eq(app.state.sketches.length, sketchesAfterFirst, 'one undo brought the FirstPart sketch back');
     eq(app.state.shapes.length, shapesAfterFirst, 'one undo brought the FirstPart shapes back');
-    eq(CUT_PLAN.size, planAfterFirst, 'one undo restored CUT_PLAN to FirstPart only');
-    ok(CUT_PLAN.has(r1.cutKeys[0]) && !CUT_PLAN.has(r2.cutKeys[0]), 'FirstPart cut entry back, SecondPart removed');
+    eq(V2_PLAN.size, planAfterFirst, 'one undo restored V2_PLAN to FirstPart only');
+    ok(V2_PLAN.has(r1.cutKeys[0]) && !V2_PLAN.has(r2.cutKeys[0]), 'FirstPart cut entry back, SecondPart removed');
   } finally {
     await app.close();
   }

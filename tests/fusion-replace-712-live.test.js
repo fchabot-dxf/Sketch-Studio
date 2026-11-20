@@ -2,7 +2,7 @@
 // selection_data through window.fusionJavaScriptHandler.handle) a selection REPLACES what the palette shows. Run at the palette's size (480 x 731)
 // and on a desktop (1280 x 800), mouse:
 //   1. a first selection; the user sets Pocket on it in the Prepare cut card (real clicks);
-//   2. a second selection: only it shows (Prepare edges, sketches, CUT_PLAN), the notice says "Replaced with ...";
+//   2. a second selection: only it shows (Prepare edges, sketches, V2_PLAN), the notice says "Replaced with ...";
 //   3. the footer Undo (a real click): the first selection with its Pocket; Ctrl+Y (a real key): the second again;
 //   4. ONE payload with a body's regions AND sketch chains lands as one plan;
 //   5. a reload in Fusion mode shows the last selection (the stored design);
@@ -75,14 +75,14 @@ async function run({ width, height, pileUp }) {
   };
   const select = (payload) => evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(JSON.stringify(payload))})`);
   // what the palette shows: the notice, the Prepare edges, the sketches, the cut plan (key kind + cut type)
-  const look = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => {
+  const look = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => {
     const notice = document.getElementById('prepare-notice');
     return {
       notice: notice.hidden ? '' : notice.textContent,
       edges: document.querySelectorAll('#prepare-world-group .sk-edge').length,
       sketches: window.__designController.state.sketches.map((s) => s.name),
       shapes: window.__designController.state.shapes.length,
-      plan: [...m.CUT_PLAN.entries()].map(([k, r]) => k.split(':')[0] + ':' + r.cutType).sort(),
+      plan: [...m.V2_PLAN.entries()].map(([k, r]) => k.split(':')[0] + ':' + r.cutType).sort(),
     };
   })`);
   // the page's own pagehide flush writes its open tabs to the shared buffer (IndexedDB); wait until the buffer holds the drawing (n shapes) before leaving
@@ -106,13 +106,13 @@ async function run({ width, height, pileUp }) {
     await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 4`, 'the first selection in Prepare');
     const first = await look();
     console.log(`[${label}] first:`, JSON.stringify(first));
-    assert.deepStrictEqual([first.notice, first.sketches, first.plan], ['Added Test plate: 1 regions, 0 chains', ['Sketch 1', 'Test plate'], ['loop:null']], `[${label}] the first selection`);
+    assert.deepStrictEqual([first.notice, first.sketches, first.plan], ['Added Test plate: 1 regions, 0 chains', ['Sketch 1', 'Test plate'], []], `[${label}] the first selection (TASK S1: its region has no cut type, so it is in no operation)`);
     await clickWorld(20, -15);
     await waitFor(`!!document.querySelector('#prepare-panel .cut-card') && !document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card for the plate');
     await clickEl('#prepare-panel .cut-type-trigger');
     await waitFor(`!!document.querySelector('.cut-type-opt[data-id="pocket"]') && document.querySelector('.cut-type-opt[data-id="pocket"]').getBoundingClientRect().width > 0`, 'the cut type menu');
     await clickEl('.cut-type-opt[data-id="pocket"]');
-    await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'pocket'))`, 'Pocket set on the plate');
+    await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'pocket'))`, 'Pocket set on the plate');
 
     // 2. the second selection replaces it
     await select(SECOND);
@@ -139,7 +139,7 @@ async function run({ width, height, pileUp }) {
     await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 7`, 'the combined selection (7 edges)'); // TASK 757: 8 shapes, the construction line c1 is not drawn in Prepare
     const combined = await look();
     console.log(`[${label}] combined:`, JSON.stringify(combined));
-    assert.deepStrictEqual(combined, { notice: 'Replaced with Body2 + lines: 2 regions, 2 chains', edges: 7, sketches: ['Sketch 1', 'Body2 + lines'], shapes: 8, plan: ['chain:null', 'loop:exterior', 'loop:interior'] },
+    assert.deepStrictEqual(combined, { notice: 'Replaced with Body2 + lines: 2 regions, 2 chains', edges: 7, sketches: ['Sketch 1', 'Body2 + lines'], shapes: 8, plan: ['loop:exterior', 'loop:interior'] } /* TASK S1: the open chain has no cut type: in no operation */,
       `[${label}] a body + chains payload lands as one plan`);
 
     // 5. a reload in Fusion mode shows the last selection (the stored design)
@@ -148,7 +148,7 @@ async function run({ width, height, pileUp }) {
     await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 7`, 'after a reload: the last selection in Prepare');
     const reloaded = await look();
     console.log(`[${label}] reload:`, JSON.stringify(reloaded));
-    assert.deepStrictEqual([reloaded.sketches, reloaded.plan], [['Sketch 1', 'Body2 + lines'], ['chain:null', 'loop:exterior', 'loop:interior']], `[${label}] a reload shows the last selection with its plan`);
+    assert.deepStrictEqual([reloaded.sketches, reloaded.plan], [['Sketch 1', 'Body2 + lines'], ['loop:exterior', 'loop:interior']] /* TASK S1: the chain, no cut type, is in no operation */, `[${label}] a reload shows the last selection with its plan`);
 
     if (pileUp) {
       // 6. an older pile-up: made by the normal app's import (each drop a NEW sketch, unchanged), replaced whole by the next selection

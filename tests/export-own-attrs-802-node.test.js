@@ -6,10 +6,11 @@
 import assert from 'node:assert';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
-import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -28,14 +29,14 @@ const loops = findLoops(st);
 const by = new Map(st.shapes.map((s) => [s.id, s]));
 const loopAt = (x, y) => loops.find((l) => { const p = loopPolygon(l, st, by); return Math.min(...p.map((q) => q.x)) === x && Math.min(...p.map((q) => q.y)) === y; });
 const POCKET = { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: BIT, cutterShape: 'endmill', stepover: 40, finishAllowance: 0.5, rasterAngle: 0 };
-CUT_PLAN.clear();
-CUT_PLAN.set(keyOf('loop', loopAt(0, 0).id), { ...POCKET, clearing: 'linked', loop: true });   // Spiral, Loop on
-CUT_PLAN.set(keyOf('loop', loopAt(120, 0).id), { ...POCKET, clearing: 'linked', loop: false }); // Spiral, Loop off
-CUT_PLAN.set(keyOf('loop', loopAt(240, 0).id), { ...POCKET });                                  // two pockets of the same depth and bit
-CUT_PLAN.set(keyOf('loop', loopAt(360, 0).id), { ...POCKET });
-CUT_PLAN.set(keyOf('loop', loopAt(0, 80).id), { cutType: 'exterior', cutDepth: 18, cutOffset: 0, toolDia: BIT, holdPart: 'tabs', tabCount: 'auto', tabWidth: 10, holdThickness: 2 }); // tabs
+V2_PLAN.clear();
+V2_PLAN.set(keyOf('loop', loopAt(0, 0).id), { ...POCKET, clearing: 'linked', loop: true });   // Spiral, Loop on
+V2_PLAN.set(keyOf('loop', loopAt(120, 0).id), { ...POCKET, clearing: 'linked', loop: false }); // Spiral, Loop off
+V2_PLAN.set(keyOf('loop', loopAt(240, 0).id), { ...POCKET });                                  // two pockets of the same depth and bit
+V2_PLAN.set(keyOf('loop', loopAt(360, 0).id), { ...POCKET });
+V2_PLAN.set(keyOf('loop', loopAt(0, 80).id), { cutType: 'exterior', cutDepth: 18, cutOffset: 0, toolDia: BIT, holdPart: 'tabs', tabCount: 'auto', tabWidth: 10, holdThickness: 2 }); // tabs
 
-const files = { download: shaperSvgOf(st, cutPlanEntries()), preview: shaperSvgOf(st, cutPlanEntries(), { preview: true }) };
+const files = { download: shaperSvgOf(st, planEntries()), preview: shaperSvgOf(st, planEntries(), { preview: true }) };
 for (const [name, svg] of Object.entries(files)) {
   eq(/<g[\s>]/.test(svg), false, `${name}: no <g> at all`);
   eq(/<g[^>]*shaper:/.test(svg), false, `${name}: no <g> carries a shaper:* attribute`);
@@ -54,6 +55,6 @@ const online = [...files.download.matchAll(/<path\b[^>]*shaper:cutType="online"[
 ok(online.length >= 2, `the Spiral pockets' on-line paths are written (${online.length})`);
 ok(online.every((el) => / shaper:cutDepth="6\.000 mm"/.test(el) && / stroke="#7F7F7F"/.test(el)), 'each on-line path: its own depth and stroke');
 // the one exporter with no option: the same flat file
-eq(exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, st, by)])) }).includes('<g'), false, 'exportShaperSVG with no options: flat');
-CUT_PLAN.clear();
+eq(exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys: Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, st, by)])) }).includes('<g'), false, 'exportShaperSVG with no options: flat');
+V2_PLAN.clear();
 console.log(`export-own-attrs-802-node: ok (${checks} checks)`);

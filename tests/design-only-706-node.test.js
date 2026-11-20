@@ -19,12 +19,13 @@ import { serializeProjectFile } from '../packages/ui/project-file.js';
 import { importIntoSketch } from '../packages/ui/sketch-import.js';
 import { createSketchState } from '../packages/core/sketch-state.js';
 import { createEngine } from '../packages/core/constraint-solver.js';
-import { CUT_PLAN, cutPlanEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { createShaperSession } from '../apps/shaper/src/shaper-session.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, msg) => { assert.deepStrictEqual(a, b, msg); checks++; };
@@ -132,38 +133,38 @@ const record = (r) => [r.cutType, Math.round(Number(r.cutDepth) * 1000) / 1000, 
       '<rect x="60" y="10" width="30" height="20" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6 mm" shaper:toolDia="6.35 mm"/>' +
       '<rect x="110" y="10" width="40" height="40" fill="#000000" shaper:cutType="outside" shaper:cutDepth="12 mm" shaper:cutOffset="0.5 mm"/>' +
       '<path d="M 10 80 L 90 80 L 90 95" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="1 mm" shaper:toolDia="3 mm"/></svg>';
-    const before = new Set(CUT_PLAN.keys());
+    const before = new Set(V2_PLAN.keys());
     sh.importFile(src, 'cuts.svg');
-    const keysA = [...CUT_PLAN.keys()].filter((k) => !before.has(k));
-    const original = keysA.map((k) => record(CUT_PLAN.get(k))).sort();
+    const keysA = [...V2_PLAN.keys()].filter((k) => !before.has(k));
+    const original = keysA.map((k) => record(V2_PLAN.get(k))).sort();
     eq(original, [['exterior', 12, 0.5, 3.175], ['online', 1, 0, 3], ['pocket', 6, 0, 6.35], ['pocket', 6, 0, 6.35]], 'the source design: 4 cuts');
     // the Shaper export, with the inputs main.js generateShaperSvgPayload gives it
     const st = sh.state;
     const sById = new Map(st.shapes.map((s) => [s.id, s]));
     const loopPolys = {}; for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
-    const entries = cutPlanEntries().filter((e) => keysA.includes(e.target.kind + ':' + e.target.id));
+    const entries = planEntries().filter((e) => keysA.includes(e.target.kind + ':' + e.target.id));
     const exported = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys });
     eq(/<g[ >]/.test(exported), false, 'TASK 802: the export has no <g>: each element carries its own cut');
     eq([...exported.matchAll(/<(?:path|circle)[^>]*>/g)].every((m) => /shaper:cutType="/.test(m[0])), true, 'every element carries its own shaper:cutType');
-    const before2 = new Set(CUT_PLAN.keys());
+    const before2 = new Set(V2_PLAN.keys());
     sh.importFile(exported, 'cuts-export.svg');
-    const keysB = [...CUT_PLAN.keys()].filter((k) => !before2.has(k));
-    eq(keysB.map((k) => record(CUT_PLAN.get(k))).sort(), original, 'export -> import: every record (type, depth, offset, bit) comes back');
+    const keysB = [...V2_PLAN.keys()].filter((k) => !before2.has(k));
+    eq(keysB.map((k) => record(V2_PLAN.get(k))).sort(), original, 'export -> import: every record (type, depth, offset, bit) comes back');
 
     // an element's own attribute wins over its group's; what it lacks comes from the nearest <g>
     const nested = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="200mm" height="100mm" viewBox="0 0 200 100">' +
       '<g fill="#000000" shaper:cutType="outside" shaper:cutDepth="9 mm"><g fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="4 mm">' +
       '<rect x="10" y="10" width="30" height="20"/>' +
       '<rect x="60" y="10" width="30" height="20" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/></g></g></svg>';
-    const before3 = new Set(CUT_PLAN.keys());
+    const before3 = new Set(V2_PLAN.keys());
     sh.importFile(nested, 'nested.svg');
-    const got = [...CUT_PLAN.keys()].filter((k) => !before3.has(k)).map((k) => record(CUT_PLAN.get(k))).sort();
+    const got = [...V2_PLAN.keys()].filter((k) => !before3.has(k)).map((k) => record(V2_PLAN.get(k))).sort();
     eq(got, [['interior', 4, 0, 3.175], ['pocket', 4, 0, 3.175]], "the nearest <g> gives what an element lacks; the element's own cut type wins");
     // the root <svg>'s paint is not inherited (icon sets put fill on the root)
     const rooted = '<svg xmlns="http://www.w3.org/2000/svg" fill="#000000" width="100mm" height="100mm" viewBox="0 0 100 100"><rect x="10" y="10" width="30" height="20"/></svg>';
-    const before4 = new Set(CUT_PLAN.keys());
+    const before4 = new Set(V2_PLAN.keys());
     sh.importFile(rooted, 'rooted.svg');
-    eq([...CUT_PLAN.keys()].filter((k) => !before4.has(k)).length, 0, "the root <svg>'s fill is not a cut");
+    eq([...V2_PLAN.keys()].filter((k) => !before4.has(k)).length, 0, "the root <svg>'s fill is not a cut");
   } finally { await sh.close(); }
 }
 

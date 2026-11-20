@@ -105,11 +105,11 @@ await (async () => {
     console.log(label + ' notice: ' + notice);
     assert.strictEqual(notice, NOTICE, label + ': the notice text');
     await shot(`notice-${label}.png`, '#prepare-notice', 24);
-    const plan = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.keys()])`);
+    const plan = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.keys()])`);
     assert.deepStrictEqual(plan, [], label + ': the V-carved region is simply unassigned');
 
     // 3. a V-bit On Line cut on that loop previews with V walls in Export 3D
-    await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { m.CUT_PLAN.set('loop:${loopId}', { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 60 }); })`);
+    await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { m.V2_PLAN.set('loop:${loopId}', { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 60 }); })`);
     await openStage('review', label);
     await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the 3D board is built', 20000);
     const build = await evalJs(`import('/apps/shaper/src/main.js').then((m) => { const b = m.currentReviewView().lastBuild; return { levels: b.levels, triangles: b.triangles }; })`);

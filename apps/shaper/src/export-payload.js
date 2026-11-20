@@ -8,7 +8,7 @@ import { deriveCutFootprint, deriveCutTravel } from '#core/profile-model.js'; //
 import { loopPolygon } from '#core/loop-geometry.js';   // HOST computes loop polys (DOM) → serializer stays pure
 import { docUnit } from '#core/settings-manager.js';
 import { exportEncoding } from './shaper.js';            // injected as the exporter's encoding
-import { planOperations, opIdsByPlanKey } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
+import { describeOperations } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
 import { shaperFileName } from '#core/shaper-cloud.js';   // TASK 767: the one name rule (the upload applies it too)
 import { UNTITLED } from '#ui/document-buffer.js';
 
@@ -19,7 +19,7 @@ export function exportFileName(designName) {
   return shaperFileName(!designName || designName === UNTITLED ? '' : designName);
 }
 
-/** The Shaper SVG of `entries` (the Prepare cut plan, cutPlanEntries()) on the solved sketch `state`: the downloaded file, or with
+/** The Shaper SVG of `entries` (the Prepare cut plan, cut-plan.js planEntries()) on the solved sketch `state`: the downloaded file, or with
  *  `preview: true` the same string plus the preview-only data-* attributes. */
 export function shaperSvgOf(state, entries, { preview = false, written = null } = {}) {
   const sById = new Map((state.shapes || []).map((s) => [s.id, s]));
@@ -31,14 +31,14 @@ export function shaperSvgOf(state, entries, { preview = false, written = null } 
 }
 
 /** TASK 743: the Export step's 2D view: { svg, ops } = the PREVIEW copy (shaperSvgOf with preview: true, each entry tagged with the id of its OPERATION, so
- *  every element carries data-op="<id>"; the entries stay in plan order: the elements, their order and grouping are the download's) and the operations in the
- *  document's order (operations.js planOperations, the same list Prepare shows). Operations are a display grouping: the downloaded file never changes. */
+ *  every element carries data-op="<id>"; the entries stay in file order: the elements, their order and grouping are the download's) and the operations in the
+ *  document's order (operations.js describeOperations, the same list Prepare shows). Operations are a display grouping: the downloaded file never changes.
+ *  TASK S1: an element's operation is its entry's stored operation (`opId`). */
 export function shaperPreviewOf(state, entries) {
-  const ops = planOperations(state, entries);
-  const ids = opIdsByPlanKey(ops);
-  const keyOf = (e) => e.key || `${e.target.kind}:${e.target.id}`; // TASK 792: a part's Contour is its own record (its own key), cutting the part's target
+  const ops = describeOperations(state, entries);
+  const listed = new Set(ops.map((op) => op.id));
   const written = []; // TASK 793: the elements' cuts, in the file's order (the Paths view's bit-centre paths)
-  return { svg: shaperSvgOf(state, entries.map((e) => (ids.has(keyOf(e)) ? { ...e, op: ids.get(keyOf(e)) } : e)), { preview: true, written }), ops, written };
+  return { svg: shaperSvgOf(state, entries.map((e) => (listed.has(e.opId) ? { ...e, op: e.opId } : e)), { preview: true, written }), ops, written };
 }
 
 /** TASK 793: the Export step's Paths view: the bit-centre travel of every element of the file. `written` = shaperPreviewOf's list ({ cut, entry } of each

@@ -95,7 +95,7 @@ try {
     await evalJs(`document.querySelector(${JSON.stringify(sel)}).blur()`);
     await sleep(200);
   };
-  const rec = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()].find((x) => x.cutType === 'exterior'); return r ? { holdPart: r.holdPart, tabCount: r.tabCount, tabWidth: r.tabWidth, holdThickness: r.holdThickness, cutDepth: r.cutDepth } : null; })`);
+  const rec = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()].find((x) => x.cutType === 'exterior'); return r ? { holdPart: r.holdPart, tabCount: r.tabCount, tabWidth: r.tabWidth, holdThickness: r.holdThickness, cutDepth: r.cutDepth } : null; })`);
   const note = () => evalJs(`[...document.querySelectorAll('.cut-note div')].map((d) => d.textContent)`);
   const marks = () => evalJs(`({ tabs: document.querySelectorAll('#prepare-canvas .sk-tab-mark').length, strips: document.querySelectorAll('#prepare-canvas .sk-strip').length, skin: document.querySelectorAll('#prepare-canvas .sk-skin-mark').length })`);
   const shownElements = () => evalJs(`import('/apps/shaper/src/export-preview.js').then((m) => m.previewItems(document.querySelector('#review-2d-canvas .rv2d-doc') || document.createElement('div')).map((e) => ({ key: e.tag + ' ' + e.cutType + ' ' + e.depth, d: e.el.getAttribute('d'), hold: e.el.getAttribute('data-hold') })))`);
@@ -264,7 +264,7 @@ try {
   await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper app ready (phone)');
   await openMode('design');
   await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready (phone)');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await setUnit('in');
   await drawPlate();
   await phase('phone (in)');

@@ -26,10 +26,11 @@ import { createEngine } from '#core/constraint-solver.js';
 import { deriveProfileCuts } from '#core/profile-model.js';
 import { planClearing, clearingSettings, pocketRings, POCKET_CLEARING } from '#core/pocket-clearing.js';
 import { offsetRegions, regionsFromRings, sweepPaths, diffRegions, regionsArea } from '#core/plot/clip.js';
-import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
-import { opOrder, setOpOrder, opKeyOf } from '../apps/shaper/src/operations.js';
+import { opKeyOf } from '../apps/shaper/src/operations.js';
+import { V2_PLAN, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -224,16 +225,16 @@ console.log('spiral: ' + JSON.stringify(measured));
   const openDoc = async (d, name) => { const profile = await createProfile(); await createNamedDesign(profile, 'shaper', name, d); return open({ host: 'shaper', profile }); };
   const seen = {};
   for (const [label, d] of [['new', docNew], ['old', docOld]]) {
-    CUT_PLAN.clear(); setOpOrder([]);
+    V2_PLAN.clear(); V2_PLAN.setOrder([]);
     const app = await openDoc(d, 'Pocket ' + label);
     try {
-      seen[label] = { clearing: Object.fromEntries(Object.keys(recs).map((p) => [p, CUT_PLAN.get(keyOf('loop', loopOf(p))).clearing])), order: opOrder(), svg: shaperSvgOf(app.state, cutPlanEntries()) };
+      seen[label] = { clearing: Object.fromEntries(Object.keys(recs).map((p) => [p, V2_PLAN.get(keyOf('loop', loopOf(p))).clearing])), order: storedOpKeys(), svg: shaperSvgOf(app.state, planEntries()) };
     } finally { await app.close(); }
   }
   eq(seen.old.clearing, { A: 'linked', L: 'morphed', B: 'linked' }, 'the old document opens with concentric -> linked (Spiral), spiral -> morphed (Morphed spiral)');
   eq(seen.old.order, keysNew, 'its stored operation order is mapped the same way (the user\'s order is kept)');
   eq(seen.old.svg, seen.new.svg, 'its export == the same document authored with the new values (byte for byte)');
   ok(elementsOf(seen.new.svg).filter((e) => e.cutType === 'inside').length === 3, 'that export: each pocket\'s wall is an inside cut (Loop off)');
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
 }
 console.log(`pocket-clearing-749-node.test.js: ok (${checks} checks)`);

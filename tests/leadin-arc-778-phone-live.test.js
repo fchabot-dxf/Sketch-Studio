@@ -20,7 +20,7 @@ try {
   await setUnit('mm');
   await openMode('design');
   await waitFor('!!(window.__designController && window.__designController.state)', 'design ready');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await evalJs(`(() => {
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) st.joints.delete(k);
@@ -62,7 +62,7 @@ try {
   await shotWorld('phone-drag-before.png', [-10, -10, 70, 50], 2);
 
   const view0 = await evalJs(`({ ...window.__prepareView.view })`);
-  const recA = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((C) => { const k = [...window.__prepareView.selection.keys()][0]; return C.CUT_PLAN.get(k).leadInAt ?? null; })`);
+  const recA = () => evalJs(`import('/tests/helpers/plan-v2.js').then((C) => { const k = [...window.__prepareView.selection.keys()][0]; return C.V2_PLAN.get(k).leadInAt ?? null; })`);
   assert.strictEqual(await recA(), null, 'phone before drag: leadInAt null');
 
   // Real finger touch drag from (30, 0) to (50, 0)

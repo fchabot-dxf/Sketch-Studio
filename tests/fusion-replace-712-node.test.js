@@ -6,10 +6,12 @@
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
-import { CUT_PLAN, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { keyOf } from '../apps/shaper/src/cut-plan.js';
 import { createFusionBridge, FUSION_ACTIONS } from '../apps/shaper/src/fusion-bridge.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { getSelections } from '../apps/shaper/src/selection-list.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -34,12 +36,12 @@ const SECOND = msg('Body1', [
 ], [], { kind: 'body', stock: { thicknessMm: 12 } });
 
 const sketchNames = (st) => st.sketches.map((s) => s.name);
-const planTypes = () => [...CUT_PLAN.entries()].map(([k, r]) => [k.split(':')[0], r.cutType]).sort();
+const planTypes = () => [...V2_PLAN.entries()].map(([k, r]) => [k.split(':')[0], r.cutType]).sort();
 const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
 
 // ── 1. Two selections in a row: only the second shows; ONE undo step; undo -> the first with its edited cut type; redo -> the second ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     const doc = app.document;
@@ -62,14 +64,14 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     eq(sketchNames(st), ['Sketch 1', 'FirstPart'], 'the first selection lands in its own sketch');
     eq(st.shapes.length, 4, 'the first selection: 4 lines');
     const firstShapes = shapeIds(st);
-    const firstKey = [...CUT_PLAN.keys()][0];
-    eq(CUT_PLAN.size, 1, 'the first selection: 1 cut-plan record');
+    const firstKey = getSelections().at(-1).cutKeys[0];
+    eq(V2_PLAN.size, 0, 'the first selection: its region has no cut type, so it is in no operation (TASK S1; it was a record without a cut type)');
 
     // the user sets the cut type on the first selection in Prepare (a click on the square, the type menu: Pocket)
     clickAt(10, -10);
     pressEl('.cut-type-trigger');
     pressEl('.cut-type-opt[data-id="pocket"]');
-    eq(CUT_PLAN.get(firstKey).cutType, 'pocket', 'the user set Pocket on the first selection');
+    eq(V2_PLAN.get(firstKey).cutType, 'pocket', 'the user set Pocket on the first selection');
 
     const histBefore = st.history.length;
     bridge.handle(FUSION_ACTIONS.SELECTION_DATA, JSON.stringify(SECOND));
@@ -79,8 +81,8 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     eq(st.shapes.length, 5, 'only the new selection\'s shapes: 4 lines + 1 circle');
     ok(!firstShapes.some((id) => st.shapes.some((s) => s.id === id)), 'no shape of the first selection is left');
     eq([...st.joints.keys()].filter((id) => st.shapes.every((s) => !(s.joints || []).includes(id))), ['j_origin'], 'no joint of the first selection is left (only the origin is unused)');
-    eq(CUT_PLAN.size, 2, 'only the new selection\'s cut-plan records');
-    ok(!CUT_PLAN.has(firstKey), 'the first selection\'s cut record is gone');
+    eq(V2_PLAN.size, 2, 'only the new selection\'s cut-plan records');
+    ok(!V2_PLAN.has(firstKey), 'the first selection\'s cut record is gone');
     eq(planTypes(), [['loop', 'exterior'], ['loop', 'interior']], 'the new plan: outline exterior + hole interior');
     eq(st.history.length, histBefore + 1, 'the replace is ONE undo step');
     const secondShapes = shapeIds(st);
@@ -91,8 +93,8 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     app.key('z', { ctrl: true });
     eq(sketchNames(st), ['Sketch 1', 'FirstPart'], 'Ctrl+Z: the first selection\'s sketch is back');
     eq(shapeIds(st), firstShapes, 'Ctrl+Z: the first selection\'s shapes are back');
-    eq(CUT_PLAN.size, 1, 'Ctrl+Z: the first selection\'s plan is back');
-    eq(CUT_PLAN.get(firstKey) && CUT_PLAN.get(firstKey).cutType, 'pocket', 'Ctrl+Z: with the cut type the user had set (Pocket)');
+    eq(V2_PLAN.size, 1, 'Ctrl+Z: the first selection\'s plan is back');
+    eq(V2_PLAN.get(firstKey) && V2_PLAN.get(firstKey).cutType, 'pocket', 'Ctrl+Z: with the cut type the user had set (Pocket)');
 
     app.key('y', { ctrl: true });
     eq(sketchNames(st), ['Sketch 1', 'Body1'], 'Ctrl+Y: the new selection again');
@@ -105,7 +107,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
 
 // ── 2. ONE payload carrying a body's regions AND sketch chains lands as ONE plan (combining = one selection) ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     app.modes.showMode('prepare');
@@ -124,10 +126,11 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     eq(res.message, 'Replaced with Body1 + lines: 2 regions, 2 chains', 'the combined notice counts the regions and the chains');
     eq(sketchNames(st), ['Sketch 1', 'Body1 + lines'], 'the combined selection is ONE sketch');
     eq(st.shapes.length, 8, '4 outline lines + 1 circle + 2 chain lines + 1 construction line');
-    eq(planTypes(), [['chain', null], ['loop', 'exterior'], ['loop', 'interior']], 'ONE plan: the body\'s outline + hole AND the open chain');
+    eq(planTypes(), [['loop', 'exterior'], ['loop', 'interior']], 'ONE plan: the body\'s outline + hole (TASK S1: the open chain has no cut type: in no operation)');
+    eq(getSelections().at(-1).cutKeys.map((k) => k.split(':')[0]).sort(), ['chain', 'loop', 'loop'], 'the selection names the outline, the hole AND the open chain');
     const loops = findLoops(st);
     eq(findOpenChains(st, loops).length, 1, 'the open chain is one cuttable path');
-    ok(CUT_PLAN.has(keyOf('chain', findOpenChains(st, loops)[0].id)), 'the chain is in the same plan');
+    ok(getSelections().at(-1).cutKeys.includes(keyOf('chain', findOpenChains(st, loops)[0].id)), 'the chain is in the same selection (TASK S1: no cut type: in no operation)');
   } finally {
     await app.close();
   }
@@ -135,7 +138,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
 
 // ── 3. An older pile-up (several sketches, made by imports before this change) is replaced whole, not added to; undo gives it back ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     const st = app.state;
@@ -159,7 +162,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
 
 // ── 4. The normal Shaper app's Import SVG still ADDS a new sketch each time (unchanged) ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     const st = app.state;
@@ -176,7 +179,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
 
 // ── 5. A selection with nothing importable leaves the design as it is (its notice wording is unchanged from before TASK 712) ──
 {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   const app = await open({ host: 'shaper' });
   try {
     const st = app.state;

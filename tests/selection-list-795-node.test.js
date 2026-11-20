@@ -4,15 +4,17 @@
 // (794). Undo / Redo, save / reload, and the rows of the Prepare bar with the add-in's highlight_selection / clear_selection (a fake window.adsk.fusionSendData).
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+
 import { importFusionSelection, mapFusionCutType } from '../apps/shaper/src/fusion-import.js';
 import { mountFusionPrepareBar } from '../apps/shaper/src/fusion-bridge.js';
 import { getSelections, setSelections } from '../apps/shaper/src/selection-list.js';
 import { removeSelection, clearSelections } from '../apps/shaper/src/selection-edit.js';
 import { getStock, setStock } from '../apps/shaper/src/stock.js';
-import { opOrder, setOpOrder } from '../apps/shaper/src/operations.js';
+
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { DEFAULT_STOCK } from '#core/relief-model.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { storeOps } from '../apps/shaper/src/operations-store.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -44,13 +46,13 @@ const st = app.state;
 const imp = (p) => importFusionSelection(p, { controller: app.controller, prepare: app.prepare });
 const ids = () => getSelections().map((e) => e.id);
 const texts = () => getSelections().map((e) => e.text);
-const plan = () => [...CUT_PLAN.keys()].sort();
+const plan = () => [...V2_PLAN.keys()].sort();
 const snap = () => ({ list: ids(), shapes: st.shapes.map((s) => s.id).sort(), plan: plan(), thickness: getStock().thickness, sketches: st.sketches.map((s) => s.name) });
 
 try {
   // ── 1. Add two selections: a body, then a sketch; the list, the sketches, the records ──
-  CUT_PLAN.clear(); setSelections([]);
-  setOpOrder(['stale-order-key']); setStock({ ...getStock(), thickness: 7 });
+  V2_PLAN.clear(); setSelections([]);
+  V2_PLAN.setOrder(['stale-order-key']); setStock({ ...getStock(), thickness: 7 });
   let h0 = st.history.length;
   const r1 = imp(A());
   ok(r1.ok && r1.imported === 5, 'A imported');
@@ -58,15 +60,15 @@ try {
   eq(st.history.length, h0 + 1, 'an add is ONE undo step');
   eq(texts(), ['Tray · body'], 'the list: A, its summary text');
   eq(getStock().thickness, 12, '794: a fresh start takes the part\'s stock thickness');
-  eq(opOrder(), [], '794: a fresh start takes the part\'s own operation order (the stale one is gone)');
+  ok(storeOps().length > 0 && storeOps().every((op) => op.geometry.every((g) => getSelections()[0].cutKeys.includes(g.key))), '794: a fresh start takes the part\'s own operations (TASK S1: the list order is theirs; no stale order)');
   const afterA = snap();
-  const recA = new Map([...CUT_PLAN.entries()].map(([k, r]) => [k, { ...r }]));
-  eq(CUT_PLAN.size, 2, 'A: 2 records');
+  const recA = new Map([...V2_PLAN.entries()].map(([k, r]) => [k, { ...r }]));
+  eq(V2_PLAN.size, 2, 'A: 2 records');
 
   // the user sets Prepare settings on A's first record
   const [aKey] = getSelections()[0].cutKeys;
-  CUT_PLAN.get(aKey).toolDia = 6.35;
-  setOpOrder(['user-order']);
+  V2_PLAN.get(aKey).toolDia = 6.35;
+  V2_PLAN.setOrder(['user-order']);
   h0 = st.history.length;
   const r2 = imp(B());
   ok(r2.ok && r2.imported === 4, 'B imported');
@@ -74,8 +76,8 @@ try {
   eq(texts(), ['Tray · body', 'Sketch2 · 4 lines'], 'the list: A then B');
   eq(st.sketches.map((s) => s.name), ['Sketch 1', 'Tray', 'Sketch2'], 'each selection has its own sketch');
   eq(st.shapes.length, 9, 'A\'s shapes stay, B\'s are added');
-  eq(CUT_PLAN.get(aKey).toolDia, 6.35, 'A\'s Prepare settings are kept');
-  eq(opOrder(), ['user-order'], '794: adding to a design that has parts keeps the operation order');
+  eq(V2_PLAN.get(aKey).toolDia, 6.35, 'A\'s Prepare settings are kept');
+  eq(V2_PLAN.order(), ['user-order'], '794: adding to a design that has parts keeps the operation order');
   eq(getStock().thickness, 12, 'B has no stock: the thickness stays');
   const afterB = snap();
   const bKey = getSelections()[1].cutKeys[0];
@@ -92,22 +94,22 @@ try {
   st.undo();
 
   // ── 2. Remove A (the X): its regions gone, B's untouched; one undo step; Undo / Redo ──
-  CUT_PLAN.get(bKey).cutType = 'pocket'; // B's setting
+  V2_PLAN.get(bKey).cutType = 'pocket'; // B's setting
   h0 = st.history.length;
   const rm = removeSelection(app.controller, 'sel-A', { prepare: app.prepare });
   ok(rm.ok, 'removeSelection ok');
   eq(st.history.length, h0 + 1, 'the X is ONE undo step');
   eq(ids(), ['sel-B'], 'the list: only B');
   eq(st.shapes.length, 4, 'A\'s shapes are gone');
-  ok(!CUT_PLAN.has(aKey) && CUT_PLAN.size === 1, 'A\'s cut records are gone');
-  eq(CUT_PLAN.get(bKey).cutType, 'pocket', 'B\'s settings are intact');
+  ok(!V2_PLAN.has(aKey) && V2_PLAN.size === 1, 'A\'s cut records are gone');
+  eq(V2_PLAN.get(bKey).cutType, 'pocket', 'B\'s settings are intact');
   eq(st.sketches.map((s) => s.name), ['Sketch 1', 'Sketch2'], 'A\'s sketch is gone');
   eq([...st.joints.keys()].length, 5, 'A\'s points are gone (4 corners + the origin)');
   const afterRm = snap();
   st.undo();
   eq(ids(), ['sel-A', 'sel-B'], 'Undo of the X: the list has A back');
   eq(st.shapes.length, 9, 'Undo: A\'s shapes are back');
-  eq(CUT_PLAN.get(aKey) && CUT_PLAN.get(aKey).toolDia, 6.35, 'Undo: A\'s record with the user\'s setting');
+  eq(V2_PLAN.get(aKey) && V2_PLAN.get(aKey).toolDia, 6.35, 'Undo: A\'s record with the user\'s setting');
   st.redo();
   eq(snap(), afterRm, 'Redo of the X');
   st.undo();
@@ -117,7 +119,7 @@ try {
   const cl = clearSelections(app.controller, { prepare: app.prepare });
   ok(cl.ok, 'clearSelections ok');
   eq(st.history.length, h0 + 1, 'Clear all is ONE undo step');
-  eq([ids(), st.shapes.length, CUT_PLAN.size], [[], 0, 0], 'Clear all: no selection, no shape, no record');
+  eq([ids(), st.shapes.length, V2_PLAN.size], [[], 0, 0], 'Clear all: no selection, no shape, no record');
   const cleared = snap();
   st.undo();
   eq(ids(), ['sel-A', 'sel-B'], 'Undo of Clear all gives both back');
@@ -126,16 +128,16 @@ try {
   eq(snap(), cleared, 'Redo of Clear all');
 
   // ── 4. A fresh start after Clear all (794): thickness = the part's, default when it has none; the order is the part's own ──
-  setOpOrder(['left-over']);
+  V2_PLAN.setOrder(['left-over']);
   imp(B());
   eq(getStock().thickness, DEFAULT_STOCK.thickness, '794: no stock in the payload: the app\'s default thickness');
-  eq(opOrder(), [], '794: after Clear all the order starts over');
+  ok(storeOps().every((op) => op.geometry.every((g) => getSelections()[0].cutKeys.includes(g.key))), '794: after Clear all the order starts over (TASK S1: only the part\'s own operations are stored)');
   clearSelections(app.controller, { prepare: app.prepare });
   imp(A());
   eq(getStock().thickness, 12, '794: after Clear all the next part\'s thickness');
 
   // ── 5. The same selectionId again updates in place ──
-  CUT_PLAN.get(getSelections()[0].cutKeys[0]).toolDia = 9;
+  V2_PLAN.get(getSelections()[0].cutKeys[0]).toolDia = 9;
   const before = snap();
   h0 = st.history.length;
   const upd = A({ stock: { thicknessMm: 12 } });
@@ -145,7 +147,7 @@ try {
   eq(st.history.length, h0 + 1, 'an update is ONE undo step');
   eq(ids(), ['sel-A'], 'still one row');
   eq(st.shapes.length, 5, 'the old regions are replaced, not piled up');
-  const outline = [...CUT_PLAN.values()].find((r) => r.cutType === 'exterior');
+  const outline = [...V2_PLAN.values()].find((r) => r.cutType === 'exterior');
   eq([outline.toolDia, outline.cutDepth], [9, 15], 'the same region keeps the user\'s settings; what Fusion changed (the depth) follows Fusion');
   st.undo();
   eq(snap().list, before.list, 'Undo of the update: the list');
@@ -182,7 +184,7 @@ try {
   eq([mapFusionCutType('stepped-pocket'), mapFusionCutType('pocket'), mapFusionCutType('outside')], [null, 'pocket', 'exterior'], 'cutType mapping');
 
   // ── 9. The rows of the Prepare bar: fake window.adsk.fusionSendData records what goes to Fusion ──
-  setSelections([]); CUT_PLAN.clear();
+  setSelections([]); V2_PLAN.clear();
   const sent = [];
   const view = app.document.createElement('div'); app.document.body.append(view);
   const notice = app.document.createElement('div'); view.append(notice);

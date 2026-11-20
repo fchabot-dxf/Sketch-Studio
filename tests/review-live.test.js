@@ -50,15 +50,15 @@ await (async () => {
     await openMode('prepare');
     await waitFor(`document.querySelectorAll('#prepare-canvas .sk-edge').length >= 12`, 'Prepare shows the seeded geometry');
     await evalJs(`(async () => {
-      const plan = await import('/apps/shaper/src/cut-plan.js');
+      const plan = await import('/tests/helpers/plan-v2.js');
       const { findLoops } = await import('#core/loop-finder.js');
       const { loopPolygon } = await import('#core/loop-geometry.js');
       const stt = window.__designController.state;
       const loops = findLoops(stt).map((l) => ({ ...l, polygon: loopPolygon(l, stt, new Map(stt.shapes.map((sh) => [sh.id, sh]))) }));
       const minX = (l) => Math.min(...l.polygon.map((p) => p.x));
       const A = loops.find((l) => Math.abs(minX(l) - 0) < 1e-6), B = loops.find((l) => Math.abs(minX(l) - 70) < 1e-6);
-      plan.CUT_PLAN.set(plan.keyOf('loop', A.id), { cutType: 'interior', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 });
-      plan.CUT_PLAN.set(plan.keyOf('loop', B.id), { cutType: 'pocket', cutDepth: 8, cutOffset: 0, toolDia: 6.35 });
+      plan.V2_PLAN.set(plan.keyOf('loop', A.id), { cutType: 'interior', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 });
+      plan.V2_PLAN.set(plan.keyOf('loop', B.id), { cutType: 'pocket', cutDepth: 8, cutOffset: 0, toolDia: 6.35 });
     })()`);
     await openMode('review');
     await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the Review model info', 10000);

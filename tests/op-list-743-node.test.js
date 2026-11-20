@@ -18,13 +18,16 @@ import SettingsManager from '#core/settings-manager.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
-import { CUT_PLAN, cutPlanEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
-import { planOperations, defaultOpOrder, opOrder, setOpOrder } from '../apps/shaper/src/operations.js';
+import { describeOperations, defaultOpOrder, opKeyOf } from '../apps/shaper/src/operations.js';
 import { shaperSvgOf, shaperPreviewOf } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems, previewRows } from '../apps/shaper/src/export-preview.js';
 import { captureShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { reorderOps, storeOps } from '../apps/shaper/src/operations-store.js';
+const storedIds = () => storeOps().map((o) => o.id); // TASK S1: the list order IS the stored operations' order
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -51,32 +54,32 @@ const keysOf = (st) => {
 };
 const rec = (cutType, cutDepth, toolDia, more = {}) => ({ cutType, cutDepth, cutOffset: 0, toolDia, cutterShape: 'endmill', cutterAngle: 90, ...more });
 function plan(K) {
-  CUT_PLAN.clear();
-  CUT_PLAN.set(K.plate, rec('exterior', 19.05, 6.35, { holdPart: 'tabs', tabCount: 'auto', tabWidth: 10, holdThickness: 2 }));
-  CUT_PLAN.set(K.ha, rec('interior', 19.05, 3.175));
-  CUT_PLAN.set(K.pa, rec('pocket', 6.35, 6.35));
-  CUT_PLAN.set(K.guide, rec('guide', 'unset', 3.175));
-  CUT_PLAN.set(K.pb, rec('pocket', 6.35, 6.35, { cutOffset: 0.5 }));
-  CUT_PLAN.set(K.hb, rec('interior', 19.05, 3.175));
-  CUT_PLAN.set(K.pd, rec('pocket', 3.175, 6, { cutterShape: 'ballnose' }));
-  CUT_PLAN.set(K.pc, rec('pocket', 6.35, 6.35));
-  CUT_PLAN.set(K.slot, rec('online', 1.5875, 6.35, { cutterShape: 'vbit', cutterAngle: 60 }));
+  V2_PLAN.clear();
+  V2_PLAN.set(K.plate, rec('exterior', 19.05, 6.35, { holdPart: 'tabs', tabCount: 'auto', tabWidth: 10, holdThickness: 2 }));
+  V2_PLAN.set(K.ha, rec('interior', 19.05, 3.175));
+  V2_PLAN.set(K.pa, rec('pocket', 6.35, 6.35));
+  V2_PLAN.set(K.guide, rec('guide', 'unset', 3.175));
+  V2_PLAN.set(K.pb, rec('pocket', 6.35, 6.35, { cutOffset: 0.5 }));
+  V2_PLAN.set(K.hb, rec('interior', 19.05, 3.175));
+  V2_PLAN.set(K.pd, rec('pocket', 3.175, 6, { cutterShape: 'ballnose' }));
+  V2_PLAN.set(K.pc, rec('pocket', 6.35, 6.35));
+  V2_PLAN.set(K.slot, rec('online', 1.5875, 6.35, { cutterShape: 'vbit', cutterAngle: 60 }));
 }
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 // the export written as before task 743: the plan's entries in plan order (the page's call, export-payload.js before this task; TASK 802: flat, no grouping)
-const before743 = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: {}, loopPolys: polysOf(st) });
+const before743 = (st) => exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: {}, loopPolys: polysOf(st) });
 // the pre-743 PREVIEW copy (TASK 718's call with preview: true)
-const before743Preview = (st) => exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: { previewData: true }, loopPolys: polysOf(st) });
+const before743Preview = (st) => exportShaperSVG({ state: st, entries: planEntries(), encoding: exportEncoding(), docUnit: SettingsManager.get('DOC_UNIT'), options: { previewData: true }, loopPolys: polysOf(st) });
 const stripOp = (svg) => svg.replace(/ data-op="[^"]*"/g, '');
 // the download and the preview copy against the pre-743 calls, before and after reversing the operation order; the preview's elements map to the operations
 function checkFiles(name, st, documentForParse) {
-  setOpOrder([]);
+  V2_PLAN.setOrder([]);
   const old = before743(st), oldPv = before743Preview(st);
-  const ops = planOperations(st, cutPlanEntries());
-  eq(shaperSvgOf(st, cutPlanEntries()), old, `${name}: the download is byte-identical to the pre-743 export`);
-  const pv = shaperPreviewOf(st, cutPlanEntries());
+  const ops = describeOperations(st, planEntries());
+  eq(shaperSvgOf(st, planEntries()), old, `${name}: the download is byte-identical to the pre-743 export`);
+  const pv = shaperPreviewOf(st, planEntries());
   eq(stripOp(pv.svg), oldPv, `${name}: the preview copy is the pre-743 preview copy + data-op only`);
-  ok(!/<title>|<g id=/.test(old) && !/data-/.test(shaperSvgOf(st, cutPlanEntries())), `${name}: no <g id>, no <title>, no data-* in the download`);
+  ok(!/<title>|<g id=/.test(old) && !/data-/.test(shaperSvgOf(st, planEntries())), `${name}: no <g id>, no <title>, no data-* in the download`);
   // every element carries the id of the operation its record belongs to; the list groups them in the operation order
   const items = previewItems(parseShaperSvg(pv.svg, documentForParse));
   ok(items.length > 0 && items.every((it) => ops.some((o) => o.id === it.op)), `${name}: every preview element names its operation (data-op)`);
@@ -84,12 +87,12 @@ function checkFiles(name, st, documentForParse) {
   eq(rows.map((g) => g.op && g.op.id), ops.map((o) => o.id), `${name}: the 2D list = the operations, in their order`);
   for (const g of rows) eq(g.count, g.op.records.reduce((n, r) => n + r.cuts.length, 0), `${name}: ${g.op.label}: its elements = the cuts of its records`);
   // a reorder: the download and the preview copy do not change at all; the list follows the new order
-  setOpOrder(ops.map((o) => o.key).reverse());
-  eq(shaperSvgOf(st, cutPlanEntries()), old, `${name}: after a reorder the download is byte-identical`);
-  const pv2 = shaperPreviewOf(st, cutPlanEntries());
+  reorderOps(ops.map((o) => o.id).reverse()); // TASK S1: the list's reorder (op-list.js onMove -> operations-store.js reorderOps)
+  eq(shaperSvgOf(st, planEntries()), old, `${name}: after a reorder the download is byte-identical`);
+  const pv2 = shaperPreviewOf(st, planEntries());
   eq(pv2.svg, pv.svg, `${name}: after a reorder the preview copy is byte-identical`);
   eq(previewRows(previewItems(parseShaperSvg(pv2.svg, documentForParse)), pv2.ops).map((g) => g.op.id), ops.map((o) => o.id).reverse(), `${name}: the 2D list follows the new order`);
-  setOpOrder([]);
+  V2_PLAN.setOrder([]);
   console.log(`${name}: download == pre-743 (${old.length} bytes), ${ops.length} operations, ${items.length} elements`);
   return old;
 }
@@ -101,8 +104,8 @@ SettingsManager.set('LENGTH_PRECISION', null);
 {
   const st = design(), K = keysOf(st);
   plan(K);
-  setOpOrder([]);
-  const ops = planOperations(st, cutPlanEntries());
+  V2_PLAN.setOrder([]);
+  const ops = describeOperations(st, planEntries());
   const view = ops.map((op) => `${op.heading} | ${op.label} | ${op.records.map((r) => Object.entries(K).find(([, k]) => k === r.planKey)[0]).join(',')}`);
   console.log('operations:\n  ' + view.join('\n  '));
   eq(ops.length, 7, '9 records -> 7 operations (the two holes are one, the two equal pockets are one)');
@@ -116,36 +119,38 @@ SettingsManager.set('LENGTH_PRECISION', null);
   ], 'the default order: Not cut; the V-bit (its last cut: on line), the ball nose (a pocket), the ⅛ in bit (holes), the ¼ in bit (it frees the part); pockets before the outside');
   ok(/^Change to ¼″ end mill \| ¼″ end mill · Outside · pass 0\.671 in \+ gaps 0\.75 in \(1 region\) · \d+ gaps \(tabs 0\.394 in wide, 0\.079 in thick\) \| plate$/.test(view[6]),
     'the tabbed Outside: its pass + gaps, last: ' + view[6]);
-  eq(ops.map((o) => o.id), ['op-guide', 'op-online-1.5875mm-vbit-6.35mm-60deg', 'op-pocket-3.175mm-ballnose-6mm', 'op-interior-19.05mm-endmill-3.175mm', 'op-pocket-6.35mm-endmill-6.35mm',
-    'op-pocket-6.35mm-offset-0.5mm-endmill-6.35mm', 'op-exterior-19.05mm-tabs-endmill-6.35mm'], 'the operation ids: type, depth, the settings off their default, tool');
+  eq(ops.map((o) => o.id), ['op-1', 'op-2', 'op-3', 'op-4', 'op-5', 'op-6', 'op-7'], 'the operation ids (TASK S1: stored, op-1 ... op-n in list order: docs/OPERATIONS-MODEL.md section 3 step 7)');
   eq(ops.find((o) => o.cutType === 'exterior').records[0].cuts.filter((c) => c.hold && c.hold.role === 'strip').length, Number(/(\d+) gaps \(/.exec(view[6])[1]), 'the gap count is the derivation\'s');
-  // the same operations whatever order the plan holds its records in
-  const shuffled = new Map([...CUT_PLAN].reverse());
-  eq(planOperations(st, cutPlanEntries(shuffled)).map((o) => o.key), ops.map((o) => o.key), 'the default order does not depend on the plan\'s order');
+  // the same operations whatever order the plan holds its records in (TASK S1: a v2 document of the records in reverse order, migrated: its operations' keys, opKeyOf)
+  const okey = (o) => opKeyOf(o.records[0].rec);
+  const records0 = [...V2_PLAN].map(([k, r]) => [k, { ...r }]);
+  V2_PLAN.load(records0.slice().reverse());
+  eq(describeOperations(st, planEntries()).map(okey), ops.map(okey), 'the default order does not depend on the plan\'s order');
+  V2_PLAN.load(records0);
   eq(defaultOpOrder(ops.slice().reverse()).map((o) => o.key), ops.map((o) => o.key), 'defaultOpOrder sorts any list into it');
-  // a stored order is kept as stored
-  const stored = ops.map((o) => o.key).reverse();
-  setOpOrder(stored);
-  eq(planOperations(st, cutPlanEntries()).map((o) => o.key), stored, 'a stored order is followed');
+  // a stored order (the v2 document's operation keys) is kept as stored
+  const stored = ops.map(okey).reverse();
+  V2_PLAN.setOrder(stored);
+  eq(describeOperations(st, planEntries()).map(okey), stored, 'a stored order is followed');
   // a NEW operation with a tool the order already has (a ⅛ in pocket at 1/16 in on pocket C, out of the ¼ in pocket operation): it joins the ⅛ in bit's
   // operations, placed by the in-tool rule (a pocket before the holes), so the bit is not changed twice
-  CUT_PLAN.set(K.pc, rec('pocket', 1.5875, 3.175));
-  const after = planOperations(st, cutPlanEntries());
+  V2_PLAN.set(K.pc, rec('pocket', 1.5875, 3.175));
+  const after = describeOperations(st, planEntries());
   const fresh = after.find((o) => o.label.startsWith('⅛″ end mill · Pocket'));
   ok(fresh, 'the new ⅛ in pocket operation');
   console.log('new op (known tool): ' + after.map((o) => o.label.split(' (')[0]).join(' > '));
   eq(after.findIndex((o) => o.key === fresh.key) + 1, after.findIndex((o) => o.label.startsWith('⅛″ end mill · Inside')), 'it sits right before the ⅛ in Inside (its tool, the in-tool rule)');
-  eq(after.filter((o) => o !== fresh).map((o) => o.key), stored, 'the stored operations keep their order');
+  eq(after.filter((o) => o !== fresh).map(okey), stored, 'the stored operations keep their order');
   eq(after.find((o) => o.label.startsWith('¼″ end mill · Pocket · 0.25 in (1 region)') && !o.detail).records.map((r) => r.planKey), [K.pa], 'pocket A alone in its operation now');
   // a NEW tool (a ½ in end mill on pocket D): no operation of it in the order, so it goes right after its default-order predecessor
-  CUT_PLAN.set(K.pd, rec('pocket', 3.175, 12.7));
-  const after2 = planOperations(st, cutPlanEntries());
+  V2_PLAN.set(K.pd, rec('pocket', 3.175, 12.7));
+  const after2 = describeOperations(st, planEntries());
   const half = after2.find((o) => o.tool && o.tool.label === '½″ end mill');
   const def = defaultOpOrder(after2.slice());
   const pred = def[def.findIndex((o) => o.key === half.key) - 1];
   console.log('new op (new tool): ' + half.label + ' | default predecessor: ' + pred.label + ' | order: ' + after2.map((o) => o.label.split(' (')[0]).join(' > '));
   eq(after2.findIndex((o) => o.key === half.key), after2.findIndex((o) => o.key === pred.key) + 1, 'a new tool sits right after its default-order predecessor');
-  setOpOrder([]);
+  V2_PLAN.setOrder([]);
 }
 
 // ── 3. the mixed plate: the download unchanged, the preview mapped (fixtures in the app part below) ──
@@ -157,8 +162,8 @@ SettingsManager.set('LENGTH_PRECISION', null);
   const svg = checkFiles('mixed plate (tabs on the Outside)', st, win.document);
   // a display precision changes the lists' words, never a file
   SettingsManager.set('LENGTH_PRECISION', 1);
-  eq(shaperSvgOf(st, cutPlanEntries()), svg, 'Length precision 1: the download byte-identical');
-  eq(planOperations(st, cutPlanEntries()).find((o) => o.cutType === 'interior').rowText, 'Inside · 0.8 in', 'Length precision 1: the list writes 0.8 in');
+  eq(shaperSvgOf(st, planEntries()), svg, 'Length precision 1: the download byte-identical');
+  eq(describeOperations(st, planEntries()).find((o) => o.cutType === 'interior').rowText, 'Inside · 0.8 in', 'Length precision 1: the list writes 0.8 in');
   SettingsManager.set('LENGTH_PRECISION', null);
   fs.mkdirSync('.evidence/743', { recursive: true });
   fs.writeFileSync('.evidence/743/node-mixed-export.svg', svg);
@@ -166,25 +171,25 @@ SettingsManager.set('LENGTH_PRECISION', null);
 }
 
 // ── 2 + 5. the app: a stepped operation; the list, a tap, the reorder as one undo step, save + reload ──
-CUT_PLAN.clear(); setOpOrder([]);
+V2_PLAN.clear(); V2_PLAN.setOrder([]);
 {
   const app = await open({ host: 'shaper' });
   try {
     app.modes.showMode('prepare');
     importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
-    const [pk, r] = [...CUT_PLAN.entries()].find(([, x]) => x.cutType === 'pocket');
-    CUT_PLAN.set(pk, { ...r, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
-    const ops = planOperations(app.state, cutPlanEntries());
+    const [pk, r] = [...V2_PLAN.entries()].find(([, x]) => x.cutType === 'pocket');
+    V2_PLAN.set(pk, { ...r, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
+    const ops = describeOperations(app.state, planEntries());
     console.log('stepped: ' + JSON.stringify(ops.map((o) => o.label)));
     const stepped = ops.find((o) => o.cutType === 'roughing');
     eq(stepped.rowText, 'Roughing · 0.262–0.315 in', 'the Roughing operation\'s depths in the doc unit (TASK 792: it replaced the Stepped pocket): its first to its last step (6.651 to 8 mm)');
     eq(stepped.detail, '4 levels, adaptive Coarse', 'the Roughing operation shows its levels count (TASK 792: levels, the steps of 714)');
     eq(ops.map((o) => o.cutType), ['roughing', 'exterior'], 'the stepped pocket before the outside');
     checkFiles('R3 floor fillet, Stepped pocket adaptive Coarse', app.state, app.document);
-    CUT_PLAN.clear();
+    V2_PLAN.clear();
     importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
     checkFiles('real Fusion solid (711)', app.state, app.document);
-  } finally { CUT_PLAN.clear(); await app.close(); }
+  } finally { V2_PLAN.clear(); await app.close(); }
 }
 {
   const profile = await createProfile();
@@ -204,7 +209,7 @@ CUT_PLAN.clear(); setOpOrder([]);
       const K = keysOf(st);
       plan(K);
       app.press(app.document.querySelector('.sk-header-tab[data-tab="prepare"]'));
-      const svg0 = shaperSvgOf(st, cutPlanEntries());
+      const svg0 = shaperSvgOf(st, planEntries());
       const l0 = listOf(app);
       console.log('app list: ' + JSON.stringify(l0));
       eq(l0.filter((t) => t.startsWith('# ')), ['# Not cut', '# Change to ¼″ 60° V-bit', '# Change to 0.236 in ball nose', '# Change to ⅛″ end mill', '# Change to ¼″ end mill'], 'the list: one heading per tool run');
@@ -219,15 +224,15 @@ CUT_PLAN.clear(); setOpOrder([]);
       // ArrowDown on the first row's grip (TASK 745: no arrow buttons; the focused grip moves its row): ONE undo step; Ctrl+Z / Ctrl+Y
       const gripKey = (grip, key) => { grip.focus(); grip.dispatchEvent(new app.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); };
       eq(app.document.querySelectorAll('#prepare-ops .ops-up, #prepare-ops .ops-down, #prepare-ops .ops-move').length, 0, 'TASK 745: no arrow buttons');
-      const n0 = st.history.length;
+      const n0 = st.history.length, ids0 = storedIds();
       gripKey(app.document.querySelector('#prepare-ops .ops-row .ops-grip'), 'ArrowDown');
       const l1 = listOf(app);
       eq(l1.filter((t) => !t.startsWith('# ')).slice(0, 2).map((t) => t.split(' | ')[0]), ['1. On line · 0.063 in', '2. Guide'], '↓ moved Guide below On line');
       eq(st.history.length, n0 + 1, 'the reorder is ONE undo step');
-      eq(opOrder().length, 7, 'the order is stored');
+      eq(storedIds(), [ids0[1], ids0[0], ...ids0.slice(2)], 'the order is stored');
       app.undo();
       eq(listOf(app), l0, 'Ctrl+Z: the default order again');
-      eq(opOrder(), [], 'Ctrl+Z: no stored order');
+      eq(storedIds(), ids0, 'Ctrl+Z: the stored order of before');
       app.redo();
       eq(listOf(app), l1, 'Ctrl+Y: the reorder again');
       // ArrowUp on the last (the Outside) twice: above both ¼ in pockets (the grip keeps the focus: the second ArrowUp goes to the same, moved row)
@@ -238,25 +243,25 @@ CUT_PLAN.clear(); setOpOrder([]);
       console.log('app list after reorders: ' + JSON.stringify(listBefore));
       eq(listBefore.slice(-4), ['# Change to ¼″ end mill', listBefore.at(-3), listBefore.at(-2), listBefore.at(-1)], 'still one ¼ in heading');
       ok(/^5\. Outside/.test(listBefore.at(-3)), 'the Outside is first of the ¼ in bit now');
-      orderBefore = opOrder();
-      svgBefore = shaperSvgOf(st, cutPlanEntries());
+      orderBefore = storedIds();
+      svgBefore = shaperSvgOf(st, planEntries());
       eq(svgBefore, svg0, 'the download is byte-identical after the reorders');
       eq(svgBefore, before743(st), 'and equal to the pre-743 export');
       const d = await app.storedDoc();
-      eq(d.hosts.shaper.opOrder, orderBefore, 'the autosave stores the operation order');
-      eq(captureShaperDoc().opOrder, orderBefore, 'captureShaperDoc carries it');
+      eq(d.hosts.shaper.operations.map((o) => o.id), orderBefore, 'the autosave stores the operation order (TASK S1: the operations in list order)');
+      eq(captureShaperDoc().operations.map((o) => o.id), orderBefore, 'captureShaperDoc carries it');
     } finally { await app.close(); }
   }
-  CUT_PLAN.clear(); setOpOrder([]);
+  V2_PLAN.clear(); V2_PLAN.setOrder([]);
   {
     const app = await open({ host: 'shaper', profile });
     try {
       app.modes.showMode('prepare');
-      eq(opOrder(), orderBefore, 'after a reload the order is back');
+      eq(storedIds(), orderBefore, 'after a reload the order is back');
       eq(listOf(app), listBefore, 'the list is the same');
-      eq(shaperSvgOf(app.state, cutPlanEntries()), svgBefore, 'the export is byte-identical');
+      eq(shaperSvgOf(app.state, planEntries()), svgBefore, 'the export is byte-identical');
     } finally { await app.close(); }
   }
 }
-CUT_PLAN.clear(); setOpOrder([]);
+V2_PLAN.clear(); V2_PLAN.setOrder([]);
 console.log(`op-list-743-node.test.js: ok (${checks} checks)`);

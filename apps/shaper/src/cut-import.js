@@ -1,12 +1,12 @@
 // apps/shaper/src/cut-import.js — Shaper's SVG / DXF IMPORT into a new sketch, DECLARED in one importable place (TASK 583). The page script (main.js
 // importFileToSketch) and the node test kit's tests both call importShaperFile(): the ONE shared importer (#ui/sketch-import.js) with what is Shaper's own
-// declared as options: each element's cut record (describeElement), kept descIds, and connecting those records to the in-memory CUT_PLAN after the shapes are
+// declared as options: each element's cut record (describeElement), kept descIds, and connecting those records to the plan (the operations store) after the shapes are
 // in (afterImport; a compound <path> becomes ONE pocket-with-hole profile: see assignImportedCuts). Moved out of main.js unchanged; the page keeps its status
 // line and panel refresh.
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 import { docUnit } from '#core/settings-manager.js';
 import { extractCutRecord } from './shaper.js';
-import { CUT_PLAN, assignImportedCuts } from './cut-plan.js';
+import { assignImportedCuts } from './cut-plan.js';
 
 /**
  * TASK 706: an element's cut attributes as Shaper reads them: per attribute, the element's OWN value, else the nearest ancestor <g>'s (not the root <svg>).
@@ -41,7 +41,7 @@ export function importShaperFile(designController, text, fileName, getDocUnit, {
       for (const d of descs) {
         if (d.cutRecord && (d.cutRecord.cutType || (d.cutRecord.cutDepth != null && d.cutRecord.cutDepth !== 'unset'))) cutRecordByDesc.set(d.descId, d.cutRecord);
       }
-      const n = assignImportedCuts(state, cutRecordByDesc, CUT_PLAN);
+      const n = assignImportedCuts(state, cutRecordByDesc);
       return n ? `${n} cut${n === 1 ? '' : 's'} kept` : null;
     },
   });

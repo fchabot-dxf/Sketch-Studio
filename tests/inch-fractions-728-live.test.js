@@ -100,7 +100,7 @@ async function shaper(phone) {
   await clickWorld(60, -40); // the pocket
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card');
   const depth = () => evalJs(`document.querySelector('.cut-depth').value`);
-  const stored = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((r) => r.cutType === 'pocket').cutDepth)`);
+  const stored = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].find((r) => r.cutType === 'pocket').cutDepth)`);
   const mm0 = await stored();
   assert.strictEqual(await depth(), (mm0 / IN).toFixed(3), `${tag}: Decimal: the depth in inches, 3 decimals`);
   // the Units tab in an inch document

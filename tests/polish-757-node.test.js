@@ -11,10 +11,11 @@ import { open } from './helpers/node-app.js';
 import SettingsManager, { lengthText } from '#core/settings-manager.js';
 import { buildRelief } from '#core/relief-model.js';
 import { thinTravel } from '#core/profile-model.js';
-import { CUT_PLAN, keyOf, holdNoteItems } from '../apps/shaper/src/cut-plan.js';
+import { keyOf, holdNoteItems } from '../apps/shaper/src/cut-plan.js';
 import { lengthLabel } from '../apps/shaper/src/operations.js';
 import { mountExportPreview } from '../apps/shaper/src/export-preview.js';
 import { findLoops } from '#core/loop-finder.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -78,7 +79,7 @@ const app = await open({ host: 'shaper' });
 try {
   const st = app.state;
   for (const k of [...st.joints.keys()]) st.joints.delete(k);
-  st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+  st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
   let n = 0; const J = (x, y) => { const id = 'j' + (++n); st.joints.set(id, { x, y }); return id; };
   const line = (a, b, more = {}) => { const id = 's' + (++n); st.shapes.push({ id, type: 'line', joints: [a, b], ...more }); return id; };
   const rect = (x, y, w, h) => { const p = [J(x, y), J(x + w, y), J(x + w, y + h), J(x, y + h)]; const ids = []; for (let i = 0; i < 4; i++) ids.push(line(p[i], p[(i + 1) % 4])); return ids; };
@@ -87,8 +88,8 @@ try {
   st.saveState('draw');
   const loops = findLoops(st);
   const loopOf = (edge) => loops.find((l) => l.edges.includes(edge));
-  CUT_PLAN.set(keyOf('loop', loopOf(board[0]).id), { cutType: 'stock', cutDepth: 19.05 });
-  CUT_PLAN.set(keyOf('loop', loopOf(part[0]).id), { cutType: 'exterior', cutDepth: 19.05, cutOffset: 0, toolDia: 6.35 });
+  V2_PLAN.set(keyOf('loop', loopOf(board[0]).id), { cutType: 'stock', cutDepth: 19.05 });
+  V2_PLAN.set(keyOf('loop', loopOf(part[0]).id), { cutType: 'exterior', cutDepth: 19.05, cutOffset: 0, toolDia: 6.35 });
   app.press(app.document.querySelector('.sk-header-tab[data-tab="prepare"]'));
   const prep = app.document.getElementById('prepare-canvas');
   ok(prep.querySelectorAll('[data-shape-id]').length === 8, `Prepare draws the 8 cut edges: ${prep.querySelectorAll('[data-shape-id]').length}`);
@@ -106,6 +107,6 @@ try {
   eq([guide.getAttribute('fill'), guide.getAttribute('stroke')], ['none', '#0068FF'], 'the Stock guide is its blue outline, no fill');
   ok(shown.indexOf(guide) < shown.indexOf(outside), 'the guide is painted BEHIND the outside cut');
   ok(FILE.includes('fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"'), 'the file string keeps its filled guide (display only)');
-} finally { CUT_PLAN.clear(); await app.close(); }
+} finally { V2_PLAN.clear(); await app.close(); }
 
 console.log(`polish-757-node: ${checks} checks passed`);

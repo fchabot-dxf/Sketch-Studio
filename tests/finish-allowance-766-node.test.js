@@ -3,13 +3,14 @@
 // design keeps its value (and the download stays byte-identical: pocket-clearing-749 / 750-node compare the md5 of every download with their fixtures).
 import assert from 'node:assert';
 import { applyShaperDoc, captureShaperDoc } from '../apps/shaper/src/shaper-doc.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+
 
 applyShaperDoc({ version: 1, cutPlan: [['loop:a', { cutType: 'pocket', clearing: 'linked', stepover: 40, wallAllowance: 0.3 }], ['loop:b', { cutType: 'pocket', clearing: 'raster', wallAllowance: 0 }], ['loop:c', { cutType: 'pocket' }]] });
-assert.deepStrictEqual(CUT_PLAN.get('loop:a'), { cutType: 'pocket', clearing: 'linked', stepover: 40, finishAllowance: 0.3 }, 'an old wallAllowance is the finishAllowance');
-assert.strictEqual(CUT_PLAN.get('loop:b').finishAllowance, 0, 'a 0 allowance stays 0');
-assert.ok(!('finishAllowance' in CUT_PLAN.get('loop:c')) && !('wallAllowance' in CUT_PLAN.get('loop:c')), 'a record without one gets none');
+assert.deepStrictEqual(V2_PLAN.get('loop:a'), { cutType: 'pocket', clearing: 'linked', stepover: 40, finishAllowance: 0.3 }, 'an old wallAllowance is the finishAllowance');
+assert.strictEqual(V2_PLAN.get('loop:b').finishAllowance, 0, 'a 0 allowance stays 0');
+assert.ok(!('finishAllowance' in V2_PLAN.get('loop:c')) && !('wallAllowance' in V2_PLAN.get('loop:c')), 'a record without one gets none');
 assert.ok(!JSON.stringify(captureShaperDoc()).includes('wallAllowance'), 'the next save writes finishAllowance only');
 applyShaperDoc({ version: 1, cutPlan: [['loop:a', { cutType: 'pocket', clearing: 'linked', finishAllowance: 0.2 }]] });
-assert.strictEqual(CUT_PLAN.get('loop:a').finishAllowance, 0.2, 'a document saved after 766 reads as it is');
+assert.strictEqual(V2_PLAN.get('loop:a').finishAllowance, 0.2, 'a document saved after 766 reads as it is');
 console.log('finish-allowance-766-node: ok');

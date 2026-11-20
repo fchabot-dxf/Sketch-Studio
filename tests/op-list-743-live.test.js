@@ -86,7 +86,7 @@ try {
   };
   const setUnit = (u) => evalJs(`import('/packages/core/settings-manager.js').then((m) => { m.default.set('DOC_UNIT', '${u}'); })`);
   // the design: a plate, two holes, three pockets, an open slot line; then the cut plan on their loop / chain keys
-  const drawAndPlan = () => evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/apps/shaper/src/cut-plan.js')]).then(([L, C]) => {
+  const drawAndPlan = () => evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/tests/helpers/plan-v2.js')]).then(([L, C]) => {
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) st.joints.delete(k);
     st.shapes.length = 0; st.constraints.length = 0;
@@ -100,21 +100,22 @@ try {
     const loops = L.findLoops(st), chains = L.findOpenChains(st, loops);
     const loopKey = (shapeId) => 'loop:' + loops.find((l) => l.edges.includes(shapeId)).id;
     const rec = (cutType, cutDepth, toolDia) => ({ cutType, cutDepth, cutOffset: 0, toolDia, cutterShape: 'endmill', cutterAngle: 90 });
-    C.CUT_PLAN.clear();
-    C.CUT_PLAN.set(loopKey('PLs0'), rec('exterior', 19.05, 6.35));
-    C.CUT_PLAN.set(loopKey('HA'), rec('interior', 19.05, 3.175));
-    C.CUT_PLAN.set(loopKey('PAs0'), rec('pocket', 6.35, 6.35));
-    C.CUT_PLAN.set(loopKey('PBs0'), rec('pocket', 3.175, 6.35));
-    C.CUT_PLAN.set(loopKey('HB'), rec('interior', 19.05, 3.175));
-    C.CUT_PLAN.set(loopKey('PCs0'), rec('pocket', 6.35, 6.35));
-    C.CUT_PLAN.set('chain:' + chains.find((c) => c.shapes.some((s) => s.id === 'SL')).id, rec('online', 1.5875, 3.175));
-    return [...C.CUT_PLAN.keys()];
+    C.V2_PLAN.clear();
+    C.V2_PLAN.set(loopKey('PLs0'), rec('exterior', 19.05, 6.35));
+    C.V2_PLAN.set(loopKey('HA'), rec('interior', 19.05, 3.175));
+    C.V2_PLAN.set(loopKey('PAs0'), rec('pocket', 6.35, 6.35));
+    C.V2_PLAN.set(loopKey('PBs0'), rec('pocket', 3.175, 6.35));
+    C.V2_PLAN.set(loopKey('HB'), rec('interior', 19.05, 3.175));
+    C.V2_PLAN.set(loopKey('PCs0'), rec('pocket', 6.35, 6.35));
+    C.V2_PLAN.set('chain:' + chains.find((c) => c.shapes.some((s) => s.id === 'SL')).id, rec('online', 1.5875, 3.175));
+    return [...C.V2_PLAN.keys()];
   })`);
   const list = () => evalJs(`[...document.querySelectorAll('#prepare-ops .ops-body > *')].map((e) => e.classList.contains('ops-tool') ? '# ' + e.textContent : e.querySelector('.ops-num').textContent + '. ' + e.querySelector('.ops-name').textContent + ' | ' + e.querySelector('.ops-sub').textContent)`);
   const rowsText = (l) => l.filter((t) => !t.startsWith('# ')).map((t) => t.replace(/^\d+\. /, '').split(' | ')[0]);
   // the selector of the n-th operation row (1-based), or of `inner` in it
   const rowSel = async (n, inner = '') => `#prepare-ops .ops-row[data-id="${await evalJs(`document.querySelectorAll('#prepare-ops .ops-row')[${n - 1}].dataset.id`)}"] ${inner}`.trim();
-  const stored = () => evalJs(`import('/apps/shaper/src/operations.js').then((m) => m.opOrder().length)`);
+  const stored = () => evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().map((o) => o.id))`); // TASK S1: the list order IS the stored operations' order
+  let def0 = null; // the stored order before any reorder
   const download = async () => {
     await openMode('review'); // Generate Shaper SVG is on the Export step
     for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
@@ -158,7 +159,7 @@ try {
     console.log(label + ' list: ' + JSON.stringify(l0));
     assert.deepStrictEqual(l0, ['# Change to ⅛″ end mill', `1. On line · ${L.online} | 1 path`, `2. Inside · ${L.full} | 2 regions`,
       '# Change to ¼″ end mill', `3. Pocket · ${L.shallow} | 1 region`, `4. Pocket · ${L.deep} | 2 regions`, `5. Outside · ${L.full} | 1 region`], label + ': the default order under tool headings');
-    assert.strictEqual(await stored(), 0, label + ': no order stored yet (the default)');
+    def0 = await stored(); // TASK S1: the default order, as stored
     assert.strictEqual(await evalJs(`document.querySelectorAll('#prepare-ops .ops-up, #prepare-ops .ops-down, #prepare-ops .ops-move').length`), 0, label + ': TASK 745: no arrow buttons');
     const targets = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-grip, #prepare-ops .ops-del')].map((b) => { const r = b.getBoundingClientRect(); return [b.className, Math.round(r.width), Math.round(r.height)]; })`);
     assert.strictEqual(targets.length, 10, label + ': a grip and a bin on each of the 5 rows');
@@ -194,7 +195,7 @@ try {
       const swiped = await evalJs(`({ lifted: document.querySelectorAll('#prepare-ops .ops-lifted').length, scrollable: (() => { const b = document.querySelector('#prepare-ops .ops-body'); return b.scrollHeight > b.clientHeight; })(), scrollTop: document.querySelector('#prepare-ops .ops-body').scrollTop })`);
       console.log(label + ' swipe: ' + JSON.stringify(swiped));
       assert.deepStrictEqual(rowsText(await list()), order0, label + ': a quick swipe reorders nothing');
-      assert.strictEqual(await stored(), 0, label + ': nothing stored by the swipe');
+      assert.deepStrictEqual(await stored(), def0, label + ': nothing stored by the swipe');
       if (swiped.scrollable) assert.ok(swiped.scrollTop > 0, label + ': the swipe scrolled the list');
       await evalJs(`document.querySelector('#prepare-ops .ops-body').scrollTop = 0`);
       await sleep(200);
@@ -216,7 +217,7 @@ try {
     const l1 = await list();
     console.log(label + ' after drag 1: ' + JSON.stringify(l1));
     assert.deepStrictEqual(rowsText(l1), [`Inside · ${L.full}`, `On line · ${L.online}`, `Pocket · ${L.shallow}`, `Pocket · ${L.deep}`, `Outside · ${L.full}`], label + ': the drag moved On line below Inside');
-    assert.strictEqual(await stored(), 5, label + ': the order is stored (5 keys)');
+    assert.ok((await stored()).length === 5 && JSON.stringify(await stored()) !== JSON.stringify(def0), label + ': the order is stored (the 5 operations in their new order)');
     await clickEl('#btn-undo');
     await waitFor(`document.querySelector('#prepare-ops .ops-row .ops-name').textContent.startsWith('On line')`, label + ': Undo puts On line back first');
     assert.deepStrictEqual(rowsText(await list()), rowsText(l0), label + ': Undo: the default order again');
@@ -264,12 +265,12 @@ try {
     // TASK 745: the bin of the Inside operation (the 2 holes): both unassigned in ONE undo step, the export loses exactly those two elements; Undo brings them back
     await openMode('prepare');
     if (phone && await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head');
-    const plan0 = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => JSON.stringify([...m.CUT_PLAN]))`);
-    const order0 = await evalJs(`import('/apps/shaper/src/operations.js').then((m) => m.opOrder())`);
+    const plan0 = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => JSON.stringify([...m.V2_PLAN]))`);
+    const order0 = await stored();
     assert.ok(/^Inside/.test(rowsText(await list())[0]), label + ': row 1 is the Inside operation');
     await clickEl(await rowSel(1, '.ops-del'));
     await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 4`, label + ': the operation is gone');
-    const holes = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [${JSON.stringify(keys[1])}, ${JSON.stringify(keys[4])}].map((k) => m.CUT_PLAN.get(k).cutType))`);
+    const holes = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [${JSON.stringify(keys[1])}, ${JSON.stringify(keys[4])}].map((k) => m.V2_PLAN.get(k) && m.V2_PLAN.get(k).cutType))`); // TASK S1: binned, they are in no operation (get: null)
     assert.deepStrictEqual(holes, [null, null], label + ': both holes unassigned');
     await shot(`${D}-ops-after-delete.png`, '#prepare-ops', phone ? 1 : 2);
     const file2 = await download();
@@ -284,8 +285,8 @@ try {
     await openMode('prepare');
     await clickEl('#btn-undo');
     await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 5`, label + ': Undo brings the operation back');
-    assert.strictEqual(await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => JSON.stringify([...m.CUT_PLAN]))`), plan0, label + ': Undo: the records as before');
-    assert.deepStrictEqual(await evalJs(`import('/apps/shaper/src/operations.js').then((m) => m.opOrder())`), order0, label + ': and the order (the operation in its place)');
+    assert.strictEqual(await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => JSON.stringify([...m.V2_PLAN]))`), plan0, label + ': Undo: the records as before');
+    assert.deepStrictEqual(await stored(), order0, label + ': and the order (the operation in its place)');
     assert.deepStrictEqual(rowsText(await list()), rowsText(l3), label + ': the list as before');
     assert.strictEqual(await download(), file1, label + ': the export as before');
     await openMode('prepare');
@@ -303,27 +304,26 @@ try {
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
   await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper app ready (phone)');
-  await evalJs(`import('/apps/shaper/src/operations.js').then((m) => m.setOpOrder([]))`);
   await setUnit('mm');
   await phase('phone (mm)');
   // TASK 745: a list long enough to scroll (12 pockets, 12 depths = 12 operations): a quick swipe on a row SCROLLS the list (native scrolling) and reorders nothing
   await openMode('design');
-  await evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/apps/shaper/src/cut-plan.js'), import('/apps/shaper/src/operations.js')]).then(([L, C, O]) => {
+  await evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/tests/helpers/plan-v2.js'), import('/apps/shaper/src/operations.js')]).then(([L, C, O]) => {
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) st.joints.delete(k);
     st.shapes.length = 0; st.constraints.length = 0;
     for (let n = 0; n < 12; n++) { const x0 = (n % 4) * 30, y0 = Math.floor(n / 4) * 30; [[x0, y0], [x0 + 20, y0], [x0 + 20, y0 + 20], [x0, y0 + 20]].forEach(([x, y], i) => st.joints.set('Q' + n + 'j' + i, { x, y }));
       for (let i = 0; i < 4; i++) st.shapes.push({ id: 'Q' + n + 's' + i, type: 'line', joints: ['Q' + n + 'j' + i, 'Q' + n + 'j' + ((i + 1) % 4)] }); }
     const loops = L.findLoops(st);
-    C.CUT_PLAN.clear(); O.setOpOrder([]);
-    for (let n = 0; n < 12; n++) C.CUT_PLAN.set('loop:' + loops.find((l) => l.edges.includes('Q' + n + 's0')).id, { cutType: 'pocket', cutDepth: n + 1, cutOffset: 0, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90 });
+    C.V2_PLAN.use(st); C.V2_PLAN.setOrder([]); C.V2_PLAN.clear();
+    for (let n = 0; n < 12; n++) C.V2_PLAN.set('loop:' + loops.find((l) => l.edges.includes('Q' + n + 's0')).id, { cutType: 'pocket', cutDepth: n + 1, cutOffset: 0, toolDia: 6.35, cutterShape: 'endmill', cutterAngle: 90 });
   })`);
   await openMode('prepare');
   await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 12`, 'phone: 12 operations');
   if (await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head');
   await evalJs(`document.querySelector('#prepare-ops .ops-body').scrollTop = 0`);
   await sleep(200);
-  const before = rowsText(await list());
+  const before = rowsText(await list()), phone0 = await stored();
   const can = await evalJs(`(() => { const b = document.querySelector('#prepare-ops .ops-body'); return { sh: b.scrollHeight, ch: b.clientHeight }; })()`);
   assert.ok(can.sh > can.ch, 'phone: the 12-row list overflows its sheet (it scrolls) ' + JSON.stringify(can));
   const rr = await boxOf('#prepare-ops .ops-row:nth-of-type(3) .ops-name');
@@ -336,7 +336,7 @@ try {
   assert.ok(after.top > 0, 'phone: the quick swipe scrolled the list (scrollTop ' + after.top + ')');
   assert.deepStrictEqual([after.lifted, after.sel], [0, 0], 'phone: no row lifted, nothing selected');
   assert.deepStrictEqual(rowsText(await list()), before, 'phone: the swipe reordered nothing');
-  assert.strictEqual(await stored(), 0, 'phone: no order stored');
+  assert.deepStrictEqual(await stored(), phone0, 'phone: no order stored (the stored order unchanged)');
   await shot('phone-ops-long-list-swiped.png', '#prepare-ops', 1);
   const side = await evalJs(`({ doc: document.documentElement.scrollWidth, vw: innerWidth })`);
   assert.ok(side.doc <= side.vw, 'phone: no sideways scroll ' + JSON.stringify(side));

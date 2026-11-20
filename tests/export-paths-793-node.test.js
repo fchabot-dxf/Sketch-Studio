@@ -16,11 +16,12 @@ import { exportShaperSVG } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { deriveCutTravel } from '#core/profile-model.js';
-import { CUT_PLAN, cutPlanEntries, loopsWithPolygons, planOwnedLoops, deriveKeyFootprints } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, loopsWithPolygons, planOwnedLoops, deriveKeyFootprints } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperPreviewOf, bitCentrePaths } from '../apps/shaper/src/export-payload.js';
 import { parseShaperSvg, previewItems } from '../apps/shaper/src/export-preview.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -174,18 +175,18 @@ try {
     const { written } = exportOf(st, [entry]);
     const view = bitPathsOf(st, written).flatMap((b) => b.travel);
     const { loops, loopPolys } = loopsWithPolygons(st);
-    const d = deriveKeyFootprints(`loop:${outer.id}`, entry.rec, st, loops, loopPolys, planOwnedLoops(st, loops, loopPolys, new Map()));
+    const d = deriveKeyFootprints(`loop:${outer.id}`, entry.rec, st, loops, loopPolys, new Set() /* TASK S1: the loops an empty plan owns (planOwnedLoops reads the store) */);
     const prep = deriveCutTravel(d.footprints);
     eq(view.map((t) => t.path), prep.map((t) => t.path), 'the Paths view\'s bit-centre polylines == Prepare\'s derivation (deriveKeyFootprints -> deriveCutTravel), point for point');
   }
 
   // ── a stepped pocket (the SA-7 R3 floor fillet): one bit-centre set per terrace ──
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
   {
-    const [pk, rec] = [...CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
-    CUT_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 }); // TASK 792: Roughing replaced the Stepped pocket (allowance 0: the same terraces)
-    const p = shaperPreviewOf(app.state, cutPlanEntries());
+    const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
+    V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 }); // TASK 792: Roughing replaced the Stepped pocket (allowance 0: the same terraces)
+    const p = shaperPreviewOf(app.state, planEntries());
     const items = previewItems(parseShaperSvg(p.svg, app.document));
     eq(p.written.length, items.length, 'stepped pocket: one written entry per element');
     eq(items.map((it) => it.cutType), p.written.map((w) => encType(w.cut.rec.cutType)), 'stepped pocket: the cut types, in the file\'s order');
@@ -193,7 +194,7 @@ try {
     eq(bits.filter((b) => b.travel.some((t) => t.role === 'wall')).length, 4, 'stepped pocket: a wall bit-centre path for each of the 4 terraces');
   }
 } finally {
-  CUT_PLAN.clear();
+  V2_PLAN.clear();
   app.close();
 }
 console.log(`export-paths-793-node.test.js: ok (${checks} checks)`);

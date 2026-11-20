@@ -47,10 +47,10 @@ await (async () => {
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
     await evalJs(`(async () => {
       const { findLoops, findOpenChains } = await import('/packages/core/loop-finder.js');
-      const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+      const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
       const st = window.__designController.state;
       for (const k of [...st.joints.keys()]) st.joints.delete(k);
-      st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+      st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
       let n = 0; const J = (x, y) => { const id = 'j' + (++n); st.joints.set(id, { x, y }); return id; };
       const line = (a, b) => st.shapes.push({ id: 's' + (++n), type: 'line', joints: [a, b] });
       const rect = (x, y, w, h) => { const p = [J(x, y), J(x + w, y), J(x + w, y + h), J(x, y + h)]; for (let i = 0; i < 4; i++) line(p[i], p[(i + 1) % 4]); };
@@ -62,11 +62,11 @@ await (async () => {
       const L = loops.sort((a, b) => byX(a) - byX(b));
       const C = chains.sort((a, b) => st.joints.get(a.shapes[0].joints[0]).x - st.joints.get(b.shapes[0].joints[0]).x);
       const base = { cutDepth: 7.62, cutOffset: 0, toolDia: 6.35 };
-      CUT_PLAN.set(keyOf('loop', L[0].id), { cutType: 'exterior', ...base });
-      CUT_PLAN.set(keyOf('loop', L[1].id), { cutType: 'interior', ...base });
-      CUT_PLAN.set(keyOf('loop', L[2].id), { cutType: 'pocket', ...base });
-      CUT_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', ...base });
-      CUT_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 6.35 });
+      V2_PLAN.set(keyOf('loop', L[0].id), { cutType: 'exterior', ...base });
+      V2_PLAN.set(keyOf('loop', L[1].id), { cutType: 'interior', ...base });
+      V2_PLAN.set(keyOf('loop', L[2].id), { cutType: 'pocket', ...base });
+      V2_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', ...base });
+      V2_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 6.35 });
     })()`);
     await clickEl('.sk-header-tab[data-tab="prepare"]');
     await waitFor(`!!document.querySelector('#prepare-canvas .sk-edge') && !!document.getElementById('prepare-canvas').getScreenCTM()`, 'prepare view drawn');
@@ -134,14 +134,14 @@ await (async () => {
     assert.deepStrictEqual(card.bitPresets, ['.02', '⅛', '¼', '½']);
     assert.deepStrictEqual(card.presets, ['Off', 'Tabs', 'Onion skin', 'Auto', '.02', '⅛', '¼', '½'], 'an Outside card: the Hold part choice (TASK 742), the greyed Tab count Auto (TASK 813) and the bit presets');
     const popOpen = (sel) => waitFor(`(() => { const e = document.querySelector('${sel}'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; })()`, sel + ' open');
-    const planHas = (cond) => waitFor(`import('/apps/shaper/src/cut-plan.js').then(({ CUT_PLAN }) => [...CUT_PLAN.values()].some((r) => r.cutType === 'exterior' && (${cond})))`, 'exterior cut record: ' + cond);
+    const planHas = (cond) => waitFor(`import('/tests/helpers/plan-v2.js').then(({ V2_PLAN }) => [...V2_PLAN.values()].some((r) => r.cutType === 'exterior' && (${cond})))`, 'exterior cut record: ' + cond);
     await clickEl('.cut-type-trigger'); await popOpen('.cut-type-menu');
     const typeRows = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => ({ id: o.dataset.id, icon: !!o.querySelector('svg.cut-ic'), current: o.classList.contains('is-current'), disabled: o.classList.contains('is-disabled') }))`);
     assert.ok(typeRows.every((o) => o.icon), 'every type row has an icon');
     assert.deepStrictEqual(typeRows.filter((o) => o.current).map((o) => o.id), ['exterior'], 'the current type is highlighted');
     // ── 4. TASK 455 amendments: hover boundary, chip rides the path, popovers to the LEFT, offset presets, cutter shape ──
     const rectOf = (sel) => evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 }; })()`);
-    const planRec = (kind, idx) => evalJs(`(async () => { const { CUT_PLAN } = await import('/apps/shaper/src/cut-plan.js'); return JSON.stringify([...CUT_PLAN.entries()]); })()`).then((j) => JSON.parse(j));
+    const planRec = (kind, idx) => evalJs(`(async () => { const { V2_PLAN } = await import('/tests/helpers/plan-v2.js'); return JSON.stringify([...V2_PLAN.entries()]); })()`).then((j) => JSON.parse(j));
     await click(away.x, away.y);
     // hover boundary: bold white #F6F7F9, 3px
     await move(targets.outside.x, targets.outside.y);

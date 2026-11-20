@@ -8,9 +8,10 @@ import fs from 'node:fs';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
-import { CUT_PLAN } from '../apps/shaper/src/cut-plan.js';
+
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { nextValue, stepIn, HOLD_DELAY_MS, HOLD_REPEAT_MS } from '../apps/shaper/src/number-stepper.js';
+import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -33,7 +34,7 @@ eq([stepIn({ step: { mm: 0.5, in: 1 / 32 } }, 'mm'), stepIn({ step: { mm: 0.5, i
 
 // ── 2. the card ──
 SettingsManager.set('DOC_UNIT', 'mm');
-CUT_PLAN.clear();
+V2_PLAN.clear();
 const FIX = new URL('./fixtures/sa7-slope/', import.meta.url);
 const app = await open({ host: 'shaper' });
 try {
@@ -44,7 +45,7 @@ try {
   importFusionSelection(JSON.parse(fs.readFileSync(new URL('03-pocket-floor-fillet.json', FIX), 'utf8')), { controller: app.controller, prepare: app.prepare });
   const p = worldToScreen(pc, { x: 60, y: -40 }); app.click(Math.round(p.x), Math.round(p.y), { target: pc });
   pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="roughing"]');
-  const rec = () => [...CUT_PLAN.values()].find((r) => r.cutType === 'roughing');
+  const rec = () => [...V2_PLAN.values()].find((r) => r.cutType === 'roughing');
   const hist = () => st.history.length;
   const row = (name) => `.cut-row[data-${name.startsWith('cut') || name === 'toolDia' ? 'param' : 'row'}="${name}"]`;
   const step = (name, d) => pressEl(`${row(name)} .cut-step[data-d="${d}"]`);

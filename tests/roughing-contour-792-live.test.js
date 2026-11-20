@@ -111,6 +111,7 @@ const pressOutline = async () => {
   await press(p.x, p.y);
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the outline\'s card');
 };
+const tab = async (id) => { await clickEl(`.cut-tab[data-tab="${id}"]`); await waitFor(`document.querySelector('.cut-tab[data-tab="${id}"]').classList.contains('is-active')`, `the ${id} tab`); }; // TASK 810: the Roughing / Contour cards are tabbed
 const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-rows .cut-row')].filter((r) => r.style.display !== 'none').map((r) => r.dataset.row || r.dataset.param)`);
 const ops = () => evalJs(`[...document.querySelectorAll('#prepare-ops .ops-tool, #prepare-ops .ops-row')].map((e) => e.classList.contains('ops-tool') ? '# ' + e.textContent : e.querySelector('.ops-name').textContent + ' | ' + e.querySelector('.ops-sub').textContent)`);
 const review = async (what) => {
@@ -155,12 +156,14 @@ async function phase(what) {
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': Roughing set', 60000);
   timings[what].roughing = Date.now() - t0;
-  assert.deepStrictEqual(await rows(), ['cutDepth', 'finishAllowance', 'contour', 'roughLayout', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing; no adaptive stepping)');
+  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing, TASK 810 the Heights and the boundary; no adaptive stepping)');
+  await tab('tool');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0 (no Contour yet)');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-contour-modes .is-active').textContent`), 'Off', what + ': Contour Off');
   await clickEl('.cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]');
   await waitFor(`document.querySelector('.cut-bit').value === '6.35'`, what + ': the 1/4 in bit');
   t0 = Date.now();
+  await tab('passes');
   await clickEl('.cut-contour-modes .cut-preset[data-value="true"]');
   await waitFor(`document.querySelector('.cut-finish-allowance').value === '0.5' && !document.querySelector('.cut-contour-edit').hidden`, what + ': Contour On', 60000);
   timings[what].contour = Date.now() - t0;
@@ -179,7 +182,7 @@ async function phase(what) {
   await clickEl('.cut-contour-edit');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour'`, what + ': the Contour card');
   assert.deepStrictEqual([await rows(), await evalJs(`[document.querySelector('.cut-step-depth').value, document.querySelector('.cut-bit').value, document.querySelector('.cut-shape-cur').textContent]`)],
-    [['smoothing', 'stepDepth', 'toolDia', 'cutterShape'], ['0.25', '3.175', 'ball nose']], what + ': the Contour card: (TASK 809: its Smoothing) step 0.25, 1/8 in, ball nose');
+    [['topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'smoothing', 'stepDepth', 'toolDia', 'cutterShape'], ['0.25', '3.175', 'ball nose']], what + ': the Contour card: (TASK 810: its Heights and Walls; TASK 809: its Smoothing) step 0.25, 1/8 in, ball nose');
   await shot(`${what}-contour-card.png`, '#prepare-panel .cut-card');
   await shot(`${what}-prepare.png`);
   const r = await review(what);
@@ -192,6 +195,7 @@ async function phase(what) {
   // TASK 807: the Nested layout, reviewed too
   await openStage('prepare');
   await pressOutline();
+  await tab('passes');
   await clickEl('.cut-layout-modes .cut-preset[data-value="nested"]');
   await waitFor(`document.querySelector('.cut-layout-modes .is-active').textContent === 'Nested'`, what + ': Nested', 60000);
   const listN = await ops();

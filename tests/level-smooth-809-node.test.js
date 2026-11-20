@@ -3,7 +3,7 @@
 //  1. THE FIT (fitClosed / smoothRing): a traced circle (a 0.3 mm polyline with a +-0.03 mm stair-like ripple) at 0.1 mm: far fewer pieces; every sample of
 //     the curve (0.001 mm chords) within the tolerance of the traced polyline and every traced point within it of the curve; G1 at every join of two
 //     cubics; a traced square keeps its 4 corners (and turns nowhere else); 0 = the traced polyline itself. smoothingOf: the defaults (Roughing 0.1,
-//     Contour 0.02), 0 = off, any other op 0.
+//     Contour 0.05: TASK 810, owner turn 2688, was 0.02), 0 = off, any other op 0.
 //  2. NO TOUCHING (smoothRegions): two islands 0.06 mm apart and a hole 0.05 mm inside an outline, at 0.1 mm: no ring touches another or itself, every
 //     curve within the tolerance of the traced rings; a slot with sharp corners is kept (a corner is a corner); a FEATURE SMALLER THAN THE TOLERANCE
 //     VANISHES: a 0.06 mm bump with no corner is not followed, an island of less than tol² goes.
@@ -15,7 +15,7 @@
 //  5. OFF: smoothing 0 = the paths of before (the same derivation, straight segments only).
 //  6. THE APP (tests/helpers/node-app.js): Open STL (a dome) -> a Roughing record without `smoothing` cuts with its default 0.1 mm (the export has cubics,
 //     the card's Smoothing row shows 0.1); typing 0 = one undo step, the export of polylines (no cubic), the levels untouched (the same height map);
-//     undo puts the default back; a Contour of the part (its card shows 0.02); a Smoothing other than the default = another operation; the record's
+//     undo puts the default back; a Contour of the part (its card shows 0.05, TASK 810); a Smoothing other than the default = another operation; the record's
 //     `smoothing` is saved with the design.
 import assert from 'node:assert';
 import SettingsManager from '#core/settings-manager.js';
@@ -49,8 +49,8 @@ const flat = (R) => R.map((p) => [p[0], p[1]]);
 const tangentAt = (s, end) => { const [a, b] = s.line ? [s.p0, s.p3] : end ? [s.c2, s.p3] : [s.p0, s.c1]; const L = Math.hypot(b.x - a.x, b.y - a.y); return [(b.x - a.x) / L, (b.y - a.y) / L]; };
 
 // ── 1. the fit ──
-eq([smoothingOf('roughing'), smoothingOf('contour'), smoothingOf('roughing', 0), smoothingOf('contour', 0.05), smoothingOf('roughing', -1), smoothingOf('pocket', 0.1)], [0.1, 0.02, 0, 0.05, 0, 0], 'smoothingOf: the defaults (Roughing 0.1, Contour 0.02), 0 / negative = off, another op 0');
-eq([LEVEL_SMOOTH.roughingMm, LEVEL_SMOOTH.contourMm], [0.1, 0.02], 'the declared defaults (owner turn 2661)');
+eq([smoothingOf('roughing'), smoothingOf('contour'), smoothingOf('roughing', 0), smoothingOf('contour', 0.05), smoothingOf('roughing', -1), smoothingOf('pocket', 0.1)], [0.1, 0.05, 0, 0.05, 0, 0], 'smoothingOf: the defaults (Roughing 0.1, Contour 0.05: TASK 810, owner turn 2688), 0 / negative = off, another op 0');
+eq([LEVEL_SMOOTH.roughingMm, LEVEL_SMOOTH.contourMm], [0.1, 0.05], 'the declared defaults (owner turn 2661; the Contour 0.05: TASK 810, owner turn 2688)');
 const ripple = (i) => 0.03 * Math.sin(i * 2.3) * Math.cos(i * 0.7); // a deterministic stair-like ripple of at most 0.03 mm
 const tracedCircle = (cx, cy, r, step = 0.3) => { const n = Math.round((2 * Math.PI * r) / step); return Array.from({ length: n }, (_, i) => { const a = (2 * Math.PI * i) / n, rr = r + ripple(i); return [cx + rr * Math.cos(a), cy + rr * Math.sin(a)]; }); };
 {
@@ -219,22 +219,22 @@ for (const [name, tris, tol] of [['the dome', M.dome(30), 0.02], ['the dome', M.
     doc.getElementById('btn-undo').click();
     eq(CUT_PLAN.get(key).smoothing, undefined, 'undo: the default again');
     ok(cubicsIn(svgOf()) > 0, 'undo: cubics again');
-    // the part's Contour: its own Smoothing (0.02 by default)
+    // the part's Contour: its own Smoothing (0.05 by default: TASK 810, owner turn 2688)
     pressEl('.cut-row[data-row="contour"] .cut-preset[data-value="true"]');
     pressEl('.cut-contour-edit');
     eq(q('.cut-type-cur').textContent, 'Contour', 'Edit contour: the Contour card');
     ok(rowShown('smoothing'), 'the Contour card: its Smoothing row (its part has levels)');
-    eq(q('.cut-smoothing').value, '0.02', 'the Contour: 0.02 (its default)');
+    eq(q('.cut-smoothing').value, '0.05', 'the Contour: 0.05 (its default)');
     const crec = CUT_PLAN.get(contourKeyOf(key));
     eq('smoothing' in crec, false, 'the Contour record: the default, not stored');
     const ops = () => planOperations(st, cutPlanEntries()).map((o) => o.cutType);
     eq(ops(), ['roughing', 'contour'], 'two operations');
-    setField('.cut-smoothing', '0.05');
-    eq(CUT_PLAN.get(contourKeyOf(key)).smoothing, 0.05, 'the Contour at 0.05');
-    ok(planOperations(st, cutPlanEntries()).some((o) => o.settings && o.settings.smoothing === 0.05), 'a Smoothing other than the default is in the operation\'s settings (its own operation)');
+    setField('.cut-smoothing', '0.03');
+    eq(CUT_PLAN.get(contourKeyOf(key)).smoothing, 0.03, 'the Contour at 0.03');
+    ok(planOperations(st, cutPlanEntries()).some((o) => o.settings && o.settings.smoothing === 0.03), 'a Smoothing other than the default is in the operation\'s settings (its own operation)');
     const saved = await app.storedDoc();
     const plan = new Map(saved.hosts.shaper.cutPlan);
-    eq(plan.get(contourKeyOf(key)).smoothing, 0.05, 'saved with the design');
+    eq(plan.get(contourKeyOf(key)).smoothing, 0.03, 'saved with the design');
   } finally { await app.close(); }
 }
 

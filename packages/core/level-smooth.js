@@ -40,7 +40,7 @@ import { ClipperLib, CLIP_SCALE } from './plot/clip.js';
 
 export const LEVEL_SMOOTH = Object.freeze({
   roughingMm: 0.1,      // Roughing's default tolerance (owner turn 2661)
-  contourMm: 0.02,      // Contour's default tolerance (the finish)
+  contourMm: 0.05,      // Contour's default tolerance (the finish; TASK 810, owner turn 2688: 0.05, was 0.02)
   fitShare: 0.75,       // a curve is fitted within this share of the tolerance (the rest: the booleans' sampling and Clipper's 0.001 mm grid)
   checkShare: 0.1,      // the check samples a curve at a chord deviation of this share of its fit tolerance
   workShare: 0.2,       // the booleans sample the curves at a chord deviation of this share of the tolerance (at most CURVE_TOLERANCE_MM)

@@ -112,6 +112,7 @@ try {
   assert.ok(wide.menu >= 134 && wide.oneLine, 'the menu grows to keep "stepped pocket" on one line');
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
+  await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); // TASK 810: the Roughing card is tabbed: the Step depth row is in Passes
   const card = await evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, step: document.querySelector('.cut-step-depth').value,
     stepShown: getComputedStyle(document.querySelector('.cut-row[data-row="stepDepth"]')).display !== 'none', note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
   console.log('card: ' + JSON.stringify(card));

@@ -97,8 +97,8 @@ const CONFIGS = {
   terraces14: (rec) => { rec.toolDia = 6.35; },
   nested: (rec) => { rec.toolDia = 6.35; rec.roughLayout = 'nested'; },
   minw: (rec) => { rec.toolDia = 6.35; rec.minTerraceWidth = 2; },
-  contour: (rec, key) => { rec.toolDia = 6.35; setContour(key, true); rec.finishAllowance = 0.5; },
-  contourNested: (rec, key) => { rec.toolDia = 6.35; rec.roughLayout = 'nested'; setContour(key, true); rec.finishAllowance = 0.5; CUT_PLAN.get(contourKeyOf(key)).stepDepth = 0.5; },
+  contour: (rec, key) => { rec.toolDia = 6.35; setContour(key, true); rec.finishAllowance = 0.5; CUT_PLAN.get(contourKeyOf(key)).smoothing = 0.02; }, // 0.02 = the Contour's default at 81226b7 (owner turn 2688 made it 0.05)
+  contourNested: (rec, key) => { rec.toolDia = 6.35; rec.roughLayout = 'nested'; setContour(key, true); rec.finishAllowance = 0.5; CUT_PLAN.get(contourKeyOf(key)).stepDepth = 0.5; CUT_PLAN.get(contourKeyOf(key)).smoothing = 0.02; },
 };
 {
   CUT_PLAN.clear();

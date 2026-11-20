@@ -182,6 +182,7 @@ try {
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
+  await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); // TASK 810: the Roughing card is tabbed: its stepping rows are in Passes
   await clickEl('.cut-adaptive');
   await waitFor(`document.querySelector('.cut-adaptive').checked`, 'Adaptive stepping on');
   await clickEl('.cut-row[data-row="stepDeviation"] .cut-preset[data-value="0.5"]');

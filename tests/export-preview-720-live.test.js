@@ -82,6 +82,7 @@ const dl = async () => { await evalJs(`document.getElementById('btn-generate-svg
 const setPlan = async (cutType) => {
   await clickEl('#prepare-panel .cut-type-trigger'); await clickEl(`.cut-type-opt[data-id="${cutType}"]`);
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === '${cutType}'))`, cutType + ' set');
+  if (cutType === 'roughing') { await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); } // TASK 810: the Roughing card is tabbed: its stepping rows are in Passes
 };
 const checkDownload = (svg, what) => assert.ok(!/hsl\(/.test(svg) && !/data-/.test(svg), `${what}: the downloaded file has none of the preview's styling`);
 const shootRings = async (name, expectRings) => { // expectRings: the exact count of terraces, or 0 = more than 2

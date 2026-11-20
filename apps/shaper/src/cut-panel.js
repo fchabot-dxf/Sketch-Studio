@@ -765,7 +765,7 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets($('.cut-walls'), wallsRow ? WALLS_PRESETS : [], 'walls', wallsRow ? current.walls.value : null);
     syncCalcBar('bottomDepth', !(Number(hr.bottomDepth) > 0));
     card.querySelector('.cut-row[data-row="smoothing"]').style.display = declares('smoothing') && current.levels ? '' : 'none'; // TASK 809: an operation on a part with levels (an STL)
-    smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.02 mm = 0.0008 in: a tolerance, always decimals
+    smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.05 mm = 0.002 in: a tolerance, always decimals
     card.querySelector('.cut-row[data-row="rasterAngle"]').style.display = clearing === 'raster' ? '' : 'none';
     const choice = CLEARING_CHOICE(clearing || 'freehand');
     clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));

@@ -617,3 +617,9 @@ An empty operation is saved and read back as it is; renameGeometry drops only an
 10. The Depth hints read as in 9.4 (flat types, and Roughing / Contour); a migrated Contour whose walls were "Sloped only" next to an
     Outside / Inside cut now shows its Geometry tab's dot (All is a Contour's own default now).
 11. The document is saved as version 4 (an app of version 2 or 3 opens it read-only).
+12. Every operation is in Prepare's list, an empty one ("no shapes yet: click shapes to add") and one whose shapes cut nothing
+    ("n shapes: nothing to cut"), so it can be opened from its row; the export's 2D / Paths lists still show only what is cut.
+13. The open operation's card lists its shapes first in its scrolling rows (under the STL card on a short screen the rows stay reachable).
+14. A document tab put aside and shown again (and Drive's version loaded, TASK 766) opens again the operation that was open in it.
+15. Esc: with a hint tooltip showing, Esc only hides the tooltip; otherwise, with an operation open, Esc is Cancel.
+16. A Fusion import while an operation is open confirms it first (OK, its own undo step); the import is its own step.

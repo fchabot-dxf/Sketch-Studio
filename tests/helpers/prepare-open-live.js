@@ -8,7 +8,7 @@
 //   stepLive(t, change)     a change made in the open operation, then OK and the operation opened again: its own undo step (as each card change was before S2)
 import { sleep } from './cdp-browser.js';
 
-const openId = (t) => t.evalJs(`(() => { const ok = document.querySelector('#prepare-panel .cut-actions'); return ok && !ok.hidden ? window.__prepareView.activeOp().id : null; })()`);
+const openId = (t) => t.evalJs(`(() => { const op = window.__prepareView && window.__prepareView.activeOp(); return op ? op.id : null; })()`); // the operation open now (null: none)
 
 export async function okLive(t) {
   if (await openId(t)) { await t.clickEl('#prepare-panel .cut-ok'); await sleep(200); }

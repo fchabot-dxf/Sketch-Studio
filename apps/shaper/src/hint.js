@@ -40,11 +40,15 @@ export function hintFor(el) {
 /** The Review toolbar's buttons have their own element-anchored tooltip (#ui mountTooltip with a title and the text): they are not this one's. */
 const OWN_TOOLTIP = '#review-toolbar';
 
-/** Install the one tooltip of the page: every element with data-hint. */
+/** Install the one tooltip of the page: every element with data-hint. TASK S2: an Esc that hides a showing tooltip does only that (it is marked handled: an open
+ *  operation's Esc = Cancel, prepare-view.js, leaves it alone), registered before the tooltip's own listener so it sees the tooltip still showing. */
 export function installHintTooltip(doc = document) {
-  return installCursorTooltip({
+  let tip = null;
+  doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && tip && tip.isShown()) e.preventDefault(); }, true);
+  tip = installCursorTooltip({
     doc,
     selector: '[data-hint]',
     resolve: (el) => (el.closest(OWN_TOOLTIP) ? null : hintFor(el)),
   });
+  return tip;
 }

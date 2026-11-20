@@ -51,10 +51,21 @@ try {
     const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
     return { x, y, w: Math.round(r.width), h: Math.round(r.height), onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
   const clickEl = async (sel) => { const p = await boxOf(sel); assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`); await press(p.x, p.y); return p; };
-  const clickWorld = async (x, y) => {
-    const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y}; const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
-    await press(p.x, p.y);
+  const screenOf = (x, y) => evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y}; const s = pt.matrixTransform(svg.getScreenCTM());
+    const h = document.elementFromPoint(s.x, s.y); return { x: Math.round(s.x), y: Math.round(s.y), free: !!h && !!h.closest('#prepare-canvas') && s.x > 4 && s.x < innerWidth - 4 }; })()`);
+  // a phone: the open card covers the right of the canvas; the user pans the drawing (two fingers on Prepare's canvas) until the shape is uncovered: here a
+  // two-finger stroke leftwards on empty canvas above the drawing, as often as needed
+  const reveal = async (x, y) => {
+    for (let i = 0; i < 4; i++) {
+      const p = await screenOf(x, y);
+      if (p.free) return p;
+      await T('touchStart', [{ x: 130, y: 120 }, { x: 130, y: 180 }]);
+      for (let k = 1; k <= 8; k++) { await T('touchMove', [{ x: 130 - k * 15, y: 120 }, { x: 130 - k * 15, y: 180 }]); await sleep(16); }
+      await T('touchEnd', []); await sleep(250);
+    }
+    assert.fail(`the world point ${x},${y} stays covered`);
   };
+  const clickWorld = async (x, y) => { const p = await reveal(x, y); await press(p.x, p.y); };
   const activeStage = () => evalJs(`(() => { const e = document.querySelector('.sk-sidebar-stage.active') || document.querySelector('.sk-header-tab.active'); return e ? e.dataset.tab : null; })()`);
   const openMode = async (mode) => {
     for (let i = 0; i < 5; i++) {
@@ -148,7 +159,8 @@ try {
     // Roughing + Contour on C; a click on C: exactly those 2 rows highlighted, the card the type menu only
     await clickWorld(120, 20); await pickType('roughing');
     await tab('heights'); await typeField('.cut-depth', '8'); await okLive(t);
-    await clickWorld(120, 20); await pickType('contour');
+    await clickWorld(120, 20);
+    await pickType('contour');
     await tab('heights');
     const depthRow = await evalJs(`(() => { const r = document.querySelector('.cut-row[data-param="cutDepth"]'); return { off: 'off' in r.dataset, value: document.querySelector('.cut-depth').value, placeholder: document.querySelector('.cut-depth').placeholder, bottom: !!document.querySelector('.cut-row[data-row="bottomDepth"]') }; })()`);
     assert.deepStrictEqual(depthRow, { off: false, value: '', placeholder: 'From model', bottom: false }, label + ': the Contour ONE depth: the live Depth row, From model; no Bottom row');
@@ -162,8 +174,9 @@ try {
       console.log(`${label} tooltip ${name}: ${JSON.stringify(tip)}`);
       assert.deepStrictEqual(tipProblems(tip, pt, text, { phone }), [], `${label}: the ${name} tooltip (${phone ? 'long press' : 'hover'}) is the owner's words`);
       await shot(`${D}-4-tooltip-${name}.png`, ['#prepare-panel .cut-card', '#sk-cursor-tip'], 2);
-      await tp.leave();
+      if (phone) await tp.release(); else await tp.leave();
     }
+    assert.strictEqual(await cardState(), 'open', label + ': (the operation is still open)');
     await okLive(t);
     const contourId = (await ops()).find((o) => o.type === 'contour').id, roughId = (await ops()).find((o) => o.type === 'roughing').id;
     await clickWorld(120, 20);
@@ -193,7 +206,13 @@ try {
     await typeField('.cut-depth', '9');
     const tpF = probe(t), ptF = await tpF.show('#prepare-panel .cut-row[data-param="cutDepth"] .cut-field-label'), tipF = await tpF.tip();
     assert.deepStrictEqual(tipProblems(tipF, ptF, FLAT_DEPTH, { phone }), [], label + ': a flat Depth\'s tooltip: the owner\'s words');
-    await tpF.leave();
+    if (phone) await tpF.release(); // the finger lifts (a phone has no Esc key: the next tap hides the tooltip)
+    else { // desktop: an Esc while the tooltip shows hides the tooltip ONLY: the operation stays open (its Esc = Cancel needs a second press)
+      await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      await sleep(150);
+      assert.deepStrictEqual([await tpF.tip(), await cardState()], [null, 'open'], label + ': Esc with a tooltip showing: the tooltip hides, the operation stays open');
+      await tpF.leave();
+    }
     await clickEl('#prepare-panel .cut-cancel');
     assert.deepStrictEqual([await store(), await hist()], [s5, h5], label + ': Cancel: as it was, nothing in the undo stack');
     await listOpen(true);

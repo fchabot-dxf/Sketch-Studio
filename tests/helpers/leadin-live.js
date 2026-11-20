@@ -45,7 +45,7 @@ function tools(t) {
     await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, `the card at ${x}, ${y}`);
   };
   const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-row[data-row]')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row)`);
-  const note = () => evalJs(`[...document.querySelectorAll('.cut-note div')].map((d) => d.textContent)`);
+  const note = () => evalJs(`[...document.querySelectorAll('.cut-note div')].sort((a, b) => !!a.querySelector('.cut-note-warn') - !!b.querySelector('.cut-note-warn')).map((d) => d.textContent)`); // TASK 825: the card lists its warning lines FIRST; read the facts first, the warnings after (a stable sort), as these tests were written
   const count = (sel) => evalJs(`document.querySelectorAll('#prepare-toolpath-group ${sel}').length`);
   const preset = async (row, v) => { await clickEl(`#prepare-panel .cut-row[data-row="${row}"] .cut-preset[data-value="${v}"]`); await sleep(250); };
   const presetBoxes = (row) => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-row[data-row="${row}"] .cut-preset')].map((b) => { const r = b.getBoundingClientRect(); return [b.textContent + (b.classList.contains('is-active') ? '*' : ''), Math.round(r.width), Math.round(r.height)]; })`);

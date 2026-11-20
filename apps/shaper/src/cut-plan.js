@@ -415,16 +415,16 @@ export function holdNoteItems(storedRec, hold) {
   if (hold.mode === 'skin') return [{ text: `${name}: onion skin ${f(hold.thickness)} ${u}: 1 pass at ${f(hold.depth)} ${u}` }];
   if (hold.role === 'stroke') { // TASK 775: an On line cut's tabs: the gaps between its strokes are left uncut (the owner's wording)
     const n = hold.count, items = [{ text: `Tabs: ${n} gap${n === 1 ? '' : 's'} of ${f(hold.width)} ${u} left uncut; cut them by hand afterwards` }];
-    if (n < hold.requested) { const t = ` (only ${n} of ${hold.requested} tabs fit)`; items[0].text += t; items[0].warn = t; items[0].title = 'the outline has too few stretches long enough for a tab'; }
+    if (n < hold.requested) { const t = `Only ${n} of ${hold.requested} tabs fit`; items.push({ text: t, warn: t, title: 'the outline has too few stretches long enough for a tab' }); } // TASK 825 (V1): its own warning line (the card lists warnings first), not the tail of the long first line
     items.push({ text: `Each gap keeps ${f(hold.left)} ${u} of wood with a ${f(hold.toolDia)} ${u} bit (the gap minus the bit)` });
     return items;
   }
   const n = hold.count, gaps = `${n} gap${n === 1 ? '' : 's'}`;
   const items = [{ text: `${name}: ${n} tab${n === 1 ? '' : 's'}, ${f(hold.width)} ${u} wide, ${f(hold.thickness)} ${u} thick: 1 pass at ${f(hold.depth)} ${u} + ${gaps} at ${f(Number(hold.fullDepth))} ${u}` }];
-  if (hold.narrow) { // TASK 822: tabs kept off the stretches too narrow for a gap strip (a stem, a neck)
-    const t = n < hold.requested ? ` (only ${n} of ${hold.requested} tabs fit: part of the outline is too narrow for a gap strip)` : ' (placed where a gap strip fits: part of the outline is too narrow for one)';
-    items[0].text += t; items[0].warn = t; items[0].title = 'a gap strip needs the strip width clear beside the outline';
-  } else if (n < hold.requested) { const t = ` (only ${n} of ${hold.requested} tabs fit)`; items[0].text += t; items[0].warn = t; items[0].title = 'the outline has too few stretches long enough for a tab'; }
+  if (hold.narrow) { // TASK 822: tabs kept off the stretches too narrow for a gap strip (a stem, a neck); TASK 825: its words are a warning line of their own (the card lists warnings first)
+    const t = n < hold.requested ? `Only ${n} of ${hold.requested} tabs fit: part of the outline is too narrow for a gap strip` : 'Placed where a gap strip fits: part of the outline is too narrow for one';
+    items.push({ text: t, warn: t, title: 'a gap strip needs the strip width clear beside the outline' });
+  } else if (n < hold.requested) { const t = `Only ${n} of ${hold.requested} tabs fit`; items.push({ text: t, warn: t, title: 'the outline has too few stretches long enough for a tab' }); } // TASK 825 (V1): its own warning line (the card lists warnings first), not the tail of the long first line
   items.push({ text: `Gaps: cut the side against the part; the return leg is optional` });
   return items;
 }
@@ -593,9 +593,11 @@ export function clearingNoteItems(storedRec, sum) {
   if (!sum.loop && !sum.leadIn && Array.isArray(sum.clear) && sum.clear.some((c) => !c.closed)) items.push({ text: OPEN_PATH_AUTOPASS_NOTE }); // TASK 777: open clearing paths reverse on AutoPass
   const lo = sum.leftover;
   if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {
-    let t = `${areaText(lo.area, u)} not reached by a ${bit} bit`;
-    t += lo.missed > POCKET_CLEARING.leftoverTolMm2 ? ` (${areaText(lo.missed, u)} of it missed between passes: lower the stepover)` : ' (sharp inside corners, necks narrower than the bit)';
+    // TASK 825 (V1): the warning is the leftover itself (two lines on the card); WHY it is left is the line after it (the card's area is three lines: a four-line warning was cut)
+    const t = `${areaText(lo.area, u)} not reached by a ${bit} bit`;
     items.push({ text: `Leftover: ${t}`, warn: t, title: 'material the bit does not reach (orange in Prepare)' });
+    const why = lo.missed > POCKET_CLEARING.leftoverTolMm2 ? `${areaText(lo.missed, u)} of it missed between passes: lower the stepover` : 'Sharp inside corners, necks narrower than the bit';
+    items.push({ text: why, warn: why, title: 'material the bit does not reach (orange in Prepare)' }); // a warning line too: it stays right under the leftover
   }
   return items;
 }

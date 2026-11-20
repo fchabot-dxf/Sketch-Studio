@@ -19,7 +19,7 @@ import { applyShaperDoc } from '../../apps/shaper/src/shaper-doc.js';
 import { planMemberItems, pathsInputOf, pathsCtx, loopsWithPolygons, planOwnedLoops } from '../../apps/shaper/src/cut-plan.js';
 import { exportFileOf, exportFileInBackground, bitCentrePaths } from '../../apps/shaper/src/export-payload.js';
 import { deriveItem } from '../../apps/shaper/src/op-derive.js';
-import { setPathsPort, localPort, lookup, idle } from '../../apps/shaper/src/op-paths.js';
+import { setPathsPort, localPort, lookup, idle, pathsSig } from '../../apps/shaper/src/op-paths.js';
 
 const DIR = new URL('../fixtures/opfirst/', import.meta.url);
 const cases = JSON.parse(fs.readFileSync(new URL('cases.json', DIR), 'utf8'));
@@ -35,6 +35,7 @@ const noOpIds = (svg) => svg.replace(/ data-op="[^"]*"/g, '');
 
 export async function runPathsCorpus(part, parts) {
   let checks = 0, items = 0, files = 0;
+  const seen = new Set(); // the signatures already compared
   const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
   setPathsPort(nodeWorkerPort());
   try {
@@ -51,6 +52,9 @@ export async function runPathsCorpus(part, parts) {
       for (const { it, input } of inputs) {
         const gen = lookup(ctx, input.target, input.rec, { request: false });
         assert.ok(gen !== undefined, `${c.name} ${it.id}: generated`);
+        const sig = pathsSig(ctx, input.target, input.rec);
+        if (seen.has(sig)) continue; // the same inputs (a case repeating another's geometry and settings): compared once
+        seen.add(sig);
         eq(canonical(gen), canonical(deriveItem(input.target, input.rec, state, loops, loopPolys, owned)), `${c.name} ${it.id}: the worker's derivation = the main thread's`);
         items++;
       }

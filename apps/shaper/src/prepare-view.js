@@ -803,7 +803,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         e.stopPropagation(); e.preventDefault();
         try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}
         const h = tabHandles(pl.outer, effectiveCutRecord(rec), state).find((x) => String(x.at) === tabAt);
-        leadDrag = { tab: true, pointerId: e.pointerId, id, opId, key, rec, loop: pl.outer, fromAt: Number(tabAt), point: h ? h.point : screenToWorld(svgEl, e.clientX, e.clientY), lastGood: null, previewCuts: null, refused: false };
+        const here = h ? holdTabDragAt(pl.outer, effectiveCutRecord(rec), state, Number(tabAt), h.point) : null; // the layout as it is: drawn until the tab is moved (a refused spot keeps showing it)
+        leadDrag = { tab: true, pointerId: e.pointerId, id, opId, key, rec, loop: pl.outer, fromAt: Number(tabAt), point: h ? h.point : screenToWorld(svgEl, e.clientX, e.clientY), lastGood: null, previewCuts: here ? here.cuts : null, refused: false };
         renderDragPreview();
         return;
       }

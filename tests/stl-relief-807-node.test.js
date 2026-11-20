@@ -31,6 +31,7 @@ import { getStlSource } from '../apps/shaper/src/stl-source.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -175,7 +176,8 @@ const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
   const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
   const pc = doc.getElementById('prepare-canvas');
-  const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   return { q, pressEl, clickAt };
 };
 const plan = () => [...V2_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`);

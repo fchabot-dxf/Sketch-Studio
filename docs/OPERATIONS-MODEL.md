@@ -173,7 +173,7 @@ Why not overrides: an override makes the card lie ("6 mm" while one shape is cut
 queued task (798 ticks, 801 simulation, 806 Select in Fusion) would have to merge two layers of settings, and the owner's
 rule is plain settings, honest hints, no guessing.
 
-**Contour, explicit instead of borrowed.** Today the Contour reads its part record's type to decide which side its walls
+**Contour, explicit instead of borrowed.** *(S2: see 9.3 / 9.4: the Contour is a plain operation with its own Depth (the one depth row; no Bottom), Walls and Wall side; no part link.)* Today the Contour reads its part record's type to decide which side its walls
 are and whether to skip the full-depth wall that a plain Outside / Inside cut already makes (`stepped-cut.js:573-581`,
 `:906-911`). In this model those are two Contour settings: `wallSide` (Inside the shape: a pocket's wall | Outside the
 shape: a part's outline; used only when the region's own `slope.kind` or `levels` do not already say it, as today) and
@@ -331,6 +331,7 @@ migrated: they derive nothing today and a geometry needs no record to exist.
 
 ### 4.2 Click and drag
 
+- *(S2: the open / OK / Cancel model of 9.1 replaces the Add shapes mode below; S3 builds the palette on it.)*
 - **Click a palette button** = an empty operation of that type appears, placed by the 743 default-order rule
   (`operations.js:10-20`), selected (active), its card open, in **Add shapes** mode: its row says "click shapes to add ·
   Done"; a click on a shape adds it, a click on a shape already in it takes it out; Done or Esc ends the mode. With
@@ -346,6 +347,7 @@ migrated: they derive nothing today and a geometry needs no record to exist.
 
 ### 4.3 The cards
 
+- *(S2: the cards as built are 9.1: the open operation's card with its Shapes, Duplicate, OK / Cancel; a selection shows the type menu only; no chips.)*
 - **Operation card** (an operation is active): the same cut card as today (task 810's tabs when they land), its subject
   the operation: header "Pocket 2 · 3 shapes: a change applies to all 3", the type's rows, and a Geometry row with
   Add shapes / Remove / Make its own operation. Changing the type is allowed when every shape can take the new type
@@ -356,7 +358,7 @@ migrated: they derive nothing today and a geometry needs no record to exist.
 
 ### 4.4 The quick flow: the standard shortcut "geometry first, then a type" (owner turns 2682-2684)
 
-Click a shape (or several), then pick a type in the card's menu (or a palette button, 4.1): **a NEW operation of that
+*(S2: the new operation is created OPEN, 9.1; Cancel removes it.)* Click a shape (or several), then pick a type in the card's menu (or a palette button, 4.1): **a NEW operation of that
 type is created, holding the selected shape(s), and it is left selected (the active operation)**. Clicking more shapes
 then adds them to it (Add shapes mode, 4.2); there is no "join the type's last-used operation" and no search for an
 existing operation to reuse. The card shows the new operation ("Pocket 2 · 1 shape"). If the shape is already in an
@@ -399,7 +401,7 @@ bin and "Make its own operation" are how the user cleans up. A Stock pick keeps 
 |---|---|---|---|
 | **S0** | (a) the version guard: an app that reads a Shaper sidecar with a `version` above its own opens it but never saves over it, with one notice ("made by a newer version of the app: reload to edit"); (b) the declared settings table `CUT_TYPES[].fields` (1.5), read by `settingsOf` and the card (`loopPitch` joins the key: no user-visible change today, no card row sets it) | node: a v3 sidecar is not overwritten by autosave / save; settingsOf = the table; every existing test unchanged | S: ~150 lines, 2 test files; deploy at least a few days before S1 |
 | **S1** | the operations + regions store, the migration, `planEntries` and every reader of section 2 switched; the UI behaves EXACTLY as today: a field edit on selected shapes moves them into the operation with the resulting settings (found or new, keeping their `seq`), so the list and the files are today's | the migration corpus of section 3 (byte-identical (a)-(e)); every existing test passes, adjusted only where it pokes `CUT_PLAN` directly (they load a v2 sidecar through `applyShaperDoc` instead: the real migration path, no test-only code) | L: ~1,000 lines app, ~60 test files adjusted, 1 new corpus test |
-| **S2** | operation first: empty operations, the active operation, Add shapes mode, the operation card (edits all its shapes) and the shape card (chips, Make its own operation), multi-membership, Contour as its own type in the menus (the Contour row and the allowance coupling removed), the quick flow (4.4), the bin deletes the operation | node + live (desktop 1280, phone 390): add empty, add / remove shapes, a shape in Roughing + Contour, edit = all shapes, make its own, undo / redo of each, save + reload | L: ~700 lines, 2 new test files |
+| **S2** | *(as built: section 9)* operation first: empty operations, the active operation, Add shapes mode, the operation card (edits all its shapes) and the shape card (chips, Make its own operation), multi-membership, Contour as its own type in the menus (the Contour row and the allowance coupling removed), the quick flow (4.4), the bin deletes the operation | node + live (desktop 1280, phone 390): add empty, add / remove shapes, a shape in Roughing + Contour, edit = all shapes, make its own, undo / redo of each, save + reload | L: ~700 lines, 2 new test files |
 | **S3** | the palette (4.1, 4.2): click, drag (mouse, touch hold), keyboard, greyed with reasons, phone sheet `+` | live desktop + phone: click = empty selected, drag onto a shape, drop on nothing = nothing, 0 px layout shift (805 probe), 44 px targets | M: ~400 lines, 1 live test |
 | **S4** | My lineups (4.5): store synced by part, save / apply (always new operations) / rename / delete | node: save, apply to 1 and 2 parts (new operations each time), units, sync merge per lineup; live: menu on desktop + phone | M: ~400 lines, 2 test files |
 
@@ -420,7 +422,7 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
   "From part" default, and the explicit `cutDepth` / `wallSide` / `walls` of section 3 apply only where the user set them.
   The list order is kept as before S1 by `listOrder` (advisor ruling, turn 2702; sections 1.2 and 2): while the user has never
   reordered, the list is re-sorted by the default rule after every change.
-- S2: editing an operation's setting changes ALL its shapes (today: only the selected shapes, which then regroup); an
+- S2: the full list as built is 9.6. Editing an operation's setting changes ALL its shapes (today: only the selected shapes, which then regroup); an
   edited operation keeps its place in the list (today it moves); the bin deletes the operation, and its shapes stay in
   their other operations (today: unassigns the regions); Contour is a type in the menus, the Roughing card loses its
   Contour row and "Edit contour"; adding / removing a Contour no longer sets Roughing's allowance.
@@ -502,3 +504,122 @@ copy, does the Origin merge or hide any, does cutting one leave the others cutta
 
 Until the result is known, stages S0-S1 are unaffected (S1 writes exactly today's files); the Export line of outcome B,
 if needed, belongs to stage S2 (where shapes can first be in several operations) and needs 798's ticks.
+
+---
+
+## 9. Stage S2 as built: the owner's rulings (turns 2709-2734) and the decisions they set
+
+These rulings came while S2 was being built. Where they differ from sections 1.4, 4.2-4.4 and 6, **this section wins** (those
+sections carry a pointer here). Code: `apps/shaper/src/prepare-stage.js` (the edit session, the card model, the list's hooks),
+`prepare-view.js` (selection, the open operation, canvas clicks), `cut-panel.js` (the card), `op-list.js` (the row actions),
+`cut-plan.js` (the operation writers, `typeRefusal`), `shaper-doc.js` (`migrateContours`, `migrateHeights`), `#core/stepped-cut.js`
+(`wallSide`).
+
+### 9.1 Editing is deliberate: open, edit, confirm (turns 2716-2719)
+
+- **A click on a shape only SELECTS it** (shift adds / removes, as before). The card then shows ONLY the quick flow's type
+  menu: no settings, no depth / offset / bit rows, no "in 1 Roughing" text (turn 2717). The Operations list rows of every
+  operation the selected shape(s) are in get the list's selected-row style, and the first of them is scrolled into view
+  while the list is open; nothing opens (turn 2718; on a phone, nothing more while the sheet is folded). With nothing
+  selected and nothing open the card is hidden, as before S2 (the card is an overlay: hiding it moves nothing outside it).
+- **An operation is OPENED** from the list: a tap on a row SELECTS it (its shapes are selected, nothing opens); the
+  selected row alone shows its actions beside its text, in this order: **Edit, Duplicate, X** (turns 2719-2720; 44 px on a
+  phone; the row's text is one line each, its full words in its tooltip, so the actions appearing never change its height).
+  A double-click on a row opens it too. The quick flow and Duplicate also open the operation they make.
+- **The OPEN operation** = its card: a header "Pocket 2 · 3 shapes" with **Duplicate**, its **Shapes** (one row per shape,
+  its words "Shape 40 × 40 mm", with an X that takes it out; a row under the pointer shows its shape on the canvas), its
+  rows (810's tabs, 813's layout), the note area, **OK** and **Cancel**. While it is open, a click on a shape puts it in, or
+  takes it out when it is in it; a press on empty canvas pans. Every change PREVIEWS live (Prepare, the 3D Review, the file).
+- **OK** = the whole session is ONE undo step, then the card closes. **Cancel / Esc** = the operation exactly as it was
+  when opened, nothing in the undo stack. The session's undo point is taken at its FIRST change (opening and cancelling
+  with no change touch no history and keep Redo).
+- **One operation open at a time.** Anything else = OK on it first: another row's Edit or Duplicate, a tap on another row,
+  a tick, a reorder, another row's X, leaving Prepare, a Fusion / STL import (advisor turn 2722: an import is its own
+  deliberate step and never lands inside a session). The open operation's own X = Cancel, then the delete. **Undo while
+  it is open**: with changes = Cancel (its undo point is undone); with none = the plain Undo of the step before, and the
+  operation stays open (gone: the card closes). A document switch drops an open session (the document's history goes with it).
+- **The quick flow** (4.4): shapes selected + a type = a NEW operation holding the shapes, created OPEN; OK keeps it,
+  Cancel removes it entirely. The Stock keeps the one-Stock move (the last closed shape picked).
+- **Duplicate** (turns 2710-2712, as Fusion's): a new operation with the same type, settings, tick and shapes (new file
+  places, the dragged lead-in positions kept), right after the original while the list order is the user's ('stored'),
+  else by the default rule; it opens; Cancel removes the copy.
+- The bin of before is the row's **X**: it deletes the operation, ONE undo step; its shapes stay in their other operations.
+- There is NO "Make its own operation", NO Remove button, NO Add shapes mode button, NO shape card with chips: they were
+  built on the way and replaced by the rulings above (Duplicate + the X per shape cover "make its own").
+
+### 9.2 Type buttons are never greyed; a refusal is told (turn 2716)
+
+Every type is offered in every menu (and the S3 palette). A pick the shapes cannot take is told in ONE plain line at the top
+of the card's note area (813's fixed area), e.g. "This open line can't be a Pocket: a pocket needs a closed shape". The
+rule is ONE function, `cut-plan.js typeRefusal(type, keys)` (the type's declared `targetKind`: a 'path' type on any shape,
+every other type on a closed one; the Stock one shape). What happens: a shape clicked into an open operation is NOT added;
+a quick-flow pick none of whose shapes fits creates NOTHING; one where some fit creates the operation with those and the
+line names the ones left out; a type change of the open operation that one of its shapes cannot take changes nothing; a
+boundary Pick on an open line is refused with its line.
+
+### 9.3 The Contour is a plain operation (turns 2709-2713)
+
+- Contour is always in the type menus, never greyed, linked to NO other operation: it has its OWN settings. Its Depth is
+  its own Depth row (9.4); Walls is 810's row; **Wall side** (`wallSide`: Inside | Outside, a new Contour setting, #core
+  `levelsCutAs`) decides the side for a shape whose model does not say it (a drawn shape: no slope, no levels; a Fusion
+  slope always carries its `kind`, an STL's levels are outlines). Unset = Inside (what a drawn shape's Contour cut before S2:
+  its part could only be a Roughing). Its Walls default is All (the default no longer reads a part's type).
+- S1's live borrowing (a Contour read its part's depth, type, walls default) is REMOVED, and with it every "first in list"
+  rule. Editing a Roughing's depth no longer moves a Contour.
+- Adding / removing a Contour no longer touches the Roughing's allowance. A new Roughing's allowance starts at 0 (the value
+  a Roughing got before S2 when no Contour was involved).
+
+### 9.4 A Roughing's / Contour's ONE depth: the Depth row; 810's Bottom row is gone (turns 2730-2740)
+
+- ONE stored setting, `cutDepth`, edited in the normal, LIVE Depth row (the Heights tab of these two cards, with Top and Floor
+  allowance): empty = **From model** ('model' where every shape has an imported depth, else unset): each shape to its own
+  model depth; a value = the cut **STOPS** at that depth: it follows the model's slope above it and is flat where the model
+  goes deeper; it never scales the slope (#core already worked so: every level / terrace is cut down to the band's depth,
+  levelsBand). 810's separate Bottom row (`bottomDepth`) is REMOVED (owner turn 2740: "why have two depth fields?"); a
+  stored bottom is mapped into the Depth (9.5). The hint (the table: `levelsDepth`, CUT_TYPES `depthParam`): "From model:
+  each shape to its own model depth. A typed depth: the cut follows the model's slope and stops flat at that depth." The
+  refusal note of an empty band reads "no level between the Top and the Depth (less the floor allowance)". (Turns 2731-2734's
+  greyed Depth row showing a Bottom value were built and replaced by this.)
+- Flat types (Pocket, Inside, Outside, On line, Guide) keep their Depth row: "One flat depth for every shape. From model:
+  each shape's own model depth (the deepest point of a sloped shape)." (empty = unset, as before).
+
+### 9.5 The document: version 4 (S2)
+
+A version 3 document is read into version 4 once (shaper-doc.js, after the v2 -> v3 migration for an older one):
+1. `migrateContours`: each Contour membership gets the values S1 read live from its part at load: `cutDepth` ('model'
+   where the part's was), `walls` (the choice in effect), `wallSide` ('outside' where the part was an Outside cut). One
+   settings set per operation: shapes reading different values would be split into a new Contour right after it
+   (`splits`); a membership with no part (it cut nothing) leaves the Contour (`noPart`).
+2. `migrateHeights`: a Roughing's / Contour's stored `bottomDepth` becomes its `cutDepth` = the depth its cuts were made to
+   (levelsBand: min(depth, bottom)); where the bottom changed nothing the depth is kept as stored. Shapes ending at
+   different depths would be split (`splits`). Where depth and bottom disagree (the bottom above the depth) the cuts were
+   made to the smaller one, so that is the Depth: the file is the same, the Depth shown is the depth the part is cut to.
+On the 909-case corpus: 35 Contours, 0 splits, 0 without a part; 9 operations with a bottom merged, 0 splits; every
+download, preview, Paths view, Review item and list row byte-identical to the baseline (tests/opfirst-corpus-*-node). A
+version 4 document is protected from a version 2 or 3 app by S0's guard (tested: both open it, neither writes over it).
+An empty operation is saved and read back as it is; renameGeometry drops only an operation it empties itself.
+
+### 9.6 Behaviour changes for existing users (S2)
+
+1. A click on a shape only selects it: settings show only after the operation is opened (the row's Edit / double-click).
+2. Editing an operation changes ALL its shapes, previewed, and is confirmed with OK (one undo step) or Cancel.
+3. An edited operation keeps its place in the list (in the user's order; the default order still re-sorts).
+4. Picking a type for selected shapes ALWAYS makes a new operation (never changes the type of the operation they are in).
+5. The list's bin is the selected row's X; it deletes the operation (its shapes stay in their other operations); Edit and
+   Duplicate beside it; the row text is one line each (ellipsis; full words in its tooltip).
+6. A shape can be in several operations (two identical paths in the file, one per operation, each with its own settings).
+7. Contour: a type of its own in the menus; the Roughing card's Contour row and "Edit contour" are gone; adding / removing
+   a Contour no longer sets the Roughing's allowance; a Contour's depth, walls and wall side are its own (editing the
+   Roughing no longer moves it).
+8. Roughing / Contour: ONE depth, the Depth row (From model, or a typed depth the cut stops at); the Heights' Bottom row is
+   gone (a stored bottom becomes the Depth, the file unchanged).
+9. Type buttons are never greyed; an incompatible pick says why in the card's note area.
+10. The Depth hints read as in 9.4 (flat types, and Roughing / Contour); a migrated Contour whose walls were "Sloped only" next to an
+    Outside / Inside cut now shows its Geometry tab's dot (All is a Contour's own default now).
+11. The document is saved as version 4 (an app of version 2 or 3 opens it read-only).
+12. Every operation is in Prepare's list, an empty one ("no shapes yet: click shapes to add") and one whose shapes cut nothing
+    ("n shapes: nothing to cut"), so it can be opened from its row; the export's 2D / Paths lists still show only what is cut.
+13. The open operation's card lists its shapes first in its scrolling rows (under the STL card on a short screen the rows stay reachable).
+14. A document tab put aside and shown again (and Drive's version loaded, TASK 766) opens again the operation that was open in it.
+15. Esc: with a hint tooltip showing, Esc only hides the tooltip; otherwise, with an operation open, Esc is Cancel.
+16. A Fusion import while an operation is open confirms it first (OK, its own undo step); the import is its own step.

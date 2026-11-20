@@ -146,10 +146,14 @@ try {
     await openList();
     // its row tap still opens its card; Prepare draws no tool path for it
     await clickEl(`#prepare-ops .ops-row[data-id="${ext}"] .ops-pick`);
+    await clickEl(`#prepare-ops .ops-row[data-id="${ext}"] .ops-edit`); // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): a tap selects; the row's Edit opens its card
     const picked = await evalJs(`({ sel: [...window.__prepareView.selection.keys()], card: document.querySelector('.cut-type-cur') && document.querySelector('.cut-type-cur').textContent, paths: document.querySelectorAll('#prepare-toolpath-group path, #prepare-toolpath-group polyline').length, band: document.getElementById('prepare-cut-group').innerHTML.length })`);
     console.log(label + ' unticked picked: ' + JSON.stringify(picked));
     assert.deepStrictEqual(picked, { sel: [K.part], card: 'Outside', paths: 0, band: 0 }, label + ': the unticked Outside: its card opens (Outside), no band and no tool path drawn');
     await shot(`${D}-prepare-unticked-picked.png`);
+    // TASK S2: confirmed (nothing changed: no undo step); on a phone the open list's sheet is folded first (it lies over the card's foot)
+    if (phone && !await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) { await clickEl('#prepare-ops .ops-head'); await waitFor(`document.querySelector('#prepare-ops .ops-body').hidden`, 'the list folds'); }
+    await clickEl('#prepare-panel .cut-ok');
     // the ticked pocket, picked: drawn
     await openList();
     await clickEl(`#prepare-ops .ops-row[data-id="${await idOf('pocket')}"] .ops-pick`);
@@ -230,6 +234,7 @@ try {
       // the same design with NO Stock (advisor turn 2705, option b): the Stock binned; the pocket alone, then the outline alone: each starts with the FRAME GUIDE =
       // the full file's drawn extent (the outline 20..140 x 20..80), in the Stock guide's encoding; everything ticked: the plain file (no guide)
       await openMode('prepare'); await openList();
+      await clickEl(`#prepare-ops .ops-row[data-id="${await idOf('stock')}"] .ops-pick`); // TASK S2: the bin is on the selected row
       await clickEl(`#prepare-ops .ops-row[data-id="${await idOf('stock')}"] .ops-del`);
       await waitFor(`import('/apps/shaper/src/operations-store.js').then((m) => !m.storeOps().some((o) => o.type === 'stock'))`, 'no-Stock: the Stock binned');
       const fullNs = await pageFull();

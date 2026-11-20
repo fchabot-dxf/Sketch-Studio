@@ -6,6 +6,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { blockRemote } from './helpers/block-remote.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { openOpLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened to show its card
 
 const EVID = process.env.EVIDENCE_DIR ? path.resolve(process.env.EVIDENCE_DIR) : path.resolve('.evidence/788');
 const PREFIX = process.env.SHOT_PREFIX || 'after';
@@ -55,7 +56,8 @@ try {
   await sleep(250);
   await clickEl('.sk-sidebar-stage[data-tab="prepare"]');
   await waitFor(`!document.getElementById('view-prepare').hidden && !!window.__prepareView`, 'prepare ready');
-  await evalJs(`(() => { const pv = window.__prepareView; pv.setSelection([{ kind: 'loop', id: pv.loops[0].id }]); })()`);
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the pocket's operation OPENED (its list row, then Edit) shows its card
+  await openOpLive({ evalJs, waitFor, clickEl }, await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps()[0].id)`));
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && !document.getElementById('prepare-dir-legend').hidden`, 'card and legend visible');
   await sleep(300);
 

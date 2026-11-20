@@ -189,6 +189,9 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   if (!st || !st.joints || !Array.isArray(st.shapes)) {
     return { ok: false, message: 'Cannot import selection: sketch state is not ready' };
   }
+  // TASK S2 (advisor turn 2722): an import is a deliberate action of its own (no edit session): an operation OPEN in Prepare is confirmed first (OK, its own undo step),
+  // so an import never lands inside an uncommitted session and a Cancel never undoes part of it
+  if (prepare && typeof prepare.ok === 'function') prepare.ok();
 
   const regions = Array.isArray(data.regions) ? data.regions : [];
   const chains = Array.isArray(data.chains) ? data.chains : [];

@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = path.resolve('.evidence/724');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -34,7 +35,7 @@ const mouse = async (x, y) => {
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
   await sleep(150);
 };
-const clickEl = async (sel) => {
+const clickElRaw = async (sel) => {
   const find = `[...document.querySelectorAll(${JSON.stringify(sel)})].find((e) => e.getBoundingClientRect().width > 0)`;
   await waitFor(`!!(${find})`, sel + ' visible');
   const p = await evalJs(`(() => { const e = ${find}; const r = e.getBoundingClientRect();
@@ -43,11 +44,16 @@ const clickEl = async (sel) => {
   assert.ok(p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
   await mouse(p.x, p.y);
 };
-const clickWorld = async (x, y) => {
+const clickWorldRaw = async (x, y) => {
   const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y};
     const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
   await mouse(p.x, p.y);
 };
+// TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+// operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
+const s2Steps = { get phone() { return false; }, evalJs, waitFor, clickEl: clickElRaw };
+const clickEl = (sel) => stepLive(s2Steps, () => clickElRaw(sel));
+const clickWorld = (x, y) => clickOpenLive(s2Steps, () => clickWorldRaw(x, y));
 const P = '.sk-style-panel';
 // the Style panel > Units tab: pick a precision in the real <select> (value + the change event the control listens to)
 const setPrecision = async (key, value) => {
@@ -79,7 +85,7 @@ try {
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card');
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="roughing"]');
-  const card = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, depth: document.querySelector('.cut-depth').value, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
+  const card = () => evalJs(`({ step: document.querySelector('.cut-step-depth').value, depth: document.querySelector('.cut-depth').value || document.querySelector('.cut-depth').placeholder.slice('From model ('.length, -1), /* TASK S2: a Roughing's Depth From model: its placeholder 'From model (8)' */ note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
 
   // 1. Defaults: Length 3, Angle 1, Show trailing zeros OFF
   await waitFor(`document.querySelectorAll('.cut-note div').length > 0`, 'the stepped note');

@@ -158,6 +158,7 @@ function setupMockDom() {
   const dom = setupMockDom();
 
   const { mountPrepareView } = await import('../apps/shaper/src/prepare-view.js');
+  const { newOperation, setOpFields, keyOf } = await import('../apps/shaper/src/cut-plan.js'); // TASK S2
   const { computeGeometryBounds } = await import('#core/geometry-bounds.js');
   const { fitViewToExtents } = await import('#ui/input-handlers/pan-zoom.js');
 
@@ -328,8 +329,8 @@ function setupMockDom() {
 
   // --- Check 8: View stays preserved across cut-plan edits while in Prepare ---
   const keptView = { ...prepare.view };
-  prepare.applyCutTypeToSelected('exterior');
-  prepare.setFieldOnSelected('toolDia', 3.175);
+  const op = newOperation('exterior', [keyOf(selected.kind, selected.id)], state); // TASK S2: the quick flow's writer (a new operation holding the selected shape)
+  setOpFields(op, { toolDia: 3.175 }, state); prepare.refreshLook(); // its setting (the open card's writer)
   assert.strictEqual(prepare.view.x, keptView.x, 'Prepare view.x kept while editing cut settings');
   assert.strictEqual(prepare.view.y, keptView.y, 'Prepare view.y kept while editing cut settings');
   assert.strictEqual(prepare.view.w, keptView.w, 'Prepare view.w kept while editing cut settings');

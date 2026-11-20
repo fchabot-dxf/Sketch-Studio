@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 const EVIDENCE_DIR = path.resolve('.evidence/716');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
@@ -29,18 +30,23 @@ const mouse = async (x, y) => {
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
 };
 // a real click on the element's centre, after checking nothing covers it there
-const clickEl = async (sel) => {
+const clickElRaw = async (sel) => {
   const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect();
     const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
     return { x, y, onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
   assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
   await mouse(p.x, p.y);
 };
-const clickWorld = async (x, y) => {
+const clickWorldRaw = async (x, y) => {
   const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y};
     const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
   await mouse(p.x, p.y);
 };
+// TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+// operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
+const s2Steps = { get phone() { return false; }, evalJs, waitFor, clickEl: clickElRaw };
+const clickEl = (sel) => stepLive(s2Steps, () => clickElRaw(sel));
+const clickWorld = (x, y) => clickOpenLive(s2Steps, () => clickWorldRaw(x, y));
 const openStage = async (id) => {
   await clickEl(`.sk-header-tab[data-tab="${id}"]`);
   await waitFor(`!document.getElementById('view-${id}').hidden`, `the ${id} stage`);

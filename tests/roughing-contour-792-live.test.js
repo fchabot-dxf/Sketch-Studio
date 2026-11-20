@@ -4,9 +4,10 @@
 // numbers are printed, the relief's own counts are not asserted).
 //  TASK 807: an STL opens as a RELIEF: ONE Roughing (Terraces) on its work area, ready; the run also switches the Layout to Nested and reviews it
 //  (screenshots <name>-nested-review-*.png) and prints the Operations count. `node tests/roughing-contour-792-live.test.js <file.stl> [name]`.
-//  DESKTOP 1280 x 800: the drawer's Open STL -> the part (already Roughing) -> the cut menu's Roughing -> its card (Depth, Finish allowance 0, Contour Off, Step depth,
-//   bit) -> the bit 1/4 in -> Contour On (allowance 0.5, "Edit contour") -> the Operations list (two operations under two bit headings, the Contour
-//   after the Roughing) -> Edit contour: the Contour card (step 0.25, 1/8 in, ball nose) -> the 3D Review (levels, zoomed top + angled screenshots)
+//  DESKTOP 1280 x 800: the drawer's Open STL -> the part (already Roughing) -> TASK S2: the outline pressed: the type menu (Contour in it) -> the Roughing operation
+//   opened (its list row, Edit): its card (Depth, Finish allowance 0, Step depth, bit) -> the bit 1/4 in -> OK -> the outline, Contour in the type menu: a NEW Contour
+//   operation, open: its card (its Depth, step 0.25, 1/8 in, ball nose) -> OK -> the Operations list (two operations under two bit headings, the Contour after the
+//   Roughing) -> the 3D Review (levels, zoomed top + angled screenshots); the time of each OK printed (TIMINGS roughingOk / contourOk)
 //   -> Generate Shaper SVG (the roughing pockets at their levels with the 1/4 in bit, the contour passes with the 1/8 in bit).
 //  G (both): Prepare draws the part's HEIGHT MAP (#core/height-map.js: one PNG image) under every cut layer, no pointer events; a drawn design has none.
 //  PHONE 390 x 844 (touch): the same up to the Operations list and the Review.
@@ -18,6 +19,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import * as M from './helpers/stl-mesh.js';
+import { openOpLive, okLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = path.resolve('.evidence/792');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -73,6 +75,9 @@ const clickEl = async (sel) => {
   assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
   await press(p.x, p.y);
 };
+// TASK S2: an operation is opened (its list row, then Edit) and confirmed (OK) through the page's own buttons (tests/helpers/prepare-open-live.js)
+const t = { evalJs, waitFor, clickEl };
+const opOf = (type) => evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().find((o) => o.type === ${JSON.stringify(type)}).id)`);
 const plan = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.entries()].map(([k, r]) => (k.startsWith('contour:') ? 'contour:' : '') + r.cutType))`);
 const outlineKey = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.entries()].find(([, r]) => r.levels)[0])`);
 const openStage = async (id) => { // desktop: the header's stage tab; a phone has no header: the drawer's stage button
@@ -147,43 +152,55 @@ async function phase(what) {
   assert.deepStrictEqual(hm, { images: 1, under: true, png: true, pe: 'none' }, what + ': the height map: one PNG under the edges and the cut layers, no pointer events');
   await waitFor(`document.getElementById('prepare-notice').hidden`, what + ': the import notice gone', 10000); // (it covers the canvas on a phone)
   await shot(`${what}-heightmap.png`, '#prepare-canvas');
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1-9.3): a press on the outline only SELECTS it: the card is the quick flow's type menu (every type, the Contour one of them)
   await pressOutline();
   await clickEl('#prepare-panel .cut-type-trigger');
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, what + ': the menu');
   const menu = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id)`);
-  assert.deepStrictEqual(menu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], what + ': Roughing in the menu, after Pocket (no Contour there)');
+  assert.deepStrictEqual(menu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, what + ': Roughing in the menu, after Pocket, then the Contour');
+  await clickEl('#prepare-panel .cut-type-trigger'); // closed again
+  // the STL's Roughing operation OPENED (its list row, then Edit): its card
   let t0 = Date.now();
-  await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': Roughing set', 60000);
+  await openOpLive(t, await opOf('roughing'));
+  await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': the Roughing card', 60000);
   timings[what].roughing = Date.now() - t0;
-  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing, TASK 810 the Heights and the boundary; no adaptive stepping)');
+  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout Terraces: its Boundary, the narrowest terrace, the smoothing; TASK 810: its Heights; TASK S2: one Depth, no Contour row)');
   await tab('tool');
-  assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0 (no Contour yet)');
-  assert.strictEqual(await evalJs(`document.querySelector('.cut-contour-modes .is-active').textContent`), 'Off', what + ': Contour Off');
+  assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0');
   await clickEl('.cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]');
   await waitFor(`document.querySelector('.cut-bit').value === '6.35'`, what + ': the 1/4 in bit');
-  t0 = Date.now();
   await tab('passes');
-  await clickEl('.cut-contour-modes .cut-preset[data-value="true"]');
-  await waitFor(`document.querySelector('.cut-finish-allowance').value === '0.5' && !document.querySelector('.cut-contour-edit').hidden`, what + ': Contour On', 60000);
-  timings[what].contour = Date.now() - t0;
   const note = await evalJs(`[...document.querySelectorAll('.cut-note div')].map((d) => d.textContent)`);
   console.log(`${what}: Roughing note ${JSON.stringify(note)}`);
-  assert.ok(note.some((n) => /^Roughing: \d+ levels?, /.test(n)) && note.includes('Roughing: 0.5 mm left on every wall for the Contour'), what + ': the note: levels and allowance');
+  assert.ok(note.some((n) => /^Roughing: \d+ levels?, /.test(n)), what + ': the note: its levels');
   await shot(`${what}-roughing-card.png`, '#prepare-panel .cut-card');
-  await shot(`${what}-heightmap-selected.png`, '#prepare-canvas'); // the outline selected over the height map: its band, edges and chip on top
+  await shot(`${what}-heightmap-selected.png`, '#prepare-canvas'); // the outline's operation open over the height map: its band, edges and chip on top
+  t0 = Date.now();
+  await okLive(t); // OK: the Roughing's change confirmed (ONE undo step), its derivations rebuilt
+  timings[what].roughingOk = Date.now() - t0;
+  // the CONTOUR, an operation of its own (TASK S2): the outline selected, Contour in the type menu = a NEW operation, open
+  await pressOutline();
+  await clickEl('#prepare-panel .cut-type-trigger');
+  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, what + ': the menu again');
+  t0 = Date.now();
+  await clickEl('.cut-type-opt[data-id="contour"]');
+  await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour' && !document.querySelector('#prepare-panel .cut-actions').hidden`, what + ': the new Contour operation, open', 60000);
+  timings[what].contour = Date.now() - t0;
+  const crows = await rows();
+  console.log(`${what}: the Contour card ${JSON.stringify(crows)}`);
+  assert.deepStrictEqual([crows, await evalJs(`[document.querySelector('.cut-step-depth').value, document.querySelector('.cut-bit').value, document.querySelector('.cut-shape-cur').textContent]`)],
+    [['cutDepth', 'topDepth', 'floorAllowance', 'walls', 'smoothing', 'stepDepth', 'toolDia', 'cutterShape'], ['0.25', '3.175', 'ball nose']], what + ': the Contour card: its Depth, Heights and Walls (TASK 810), its Smoothing (TASK 809), step 0.25, 1/8 in, ball nose');
+  await shot(`${what}-contour-card.png`, '#prepare-panel .cut-card');
+  t0 = Date.now();
+  await okLive(t); // OK: the new Contour confirmed, its passes derived
+  timings[what].contourOk = Date.now() - t0;
   const list = await ops();
   console.log(`${what}: Operations ${JSON.stringify(list)}`);
   const iR = list.findIndex((x) => x.startsWith('Roughing')), iC = list.findIndex((x) => x.startsWith('Contour'));
   assert.ok(iR >= 0 && iC > iR, what + ': the Contour after the Roughing');
-  assert.ok(list[iR - 1] === '# Change to ¼″ end mill' && list[iC - 1] === '# Change to ⅛″ ball nose', what + ': each under its own bit heading');
-  assert.ok(/levels?, allowance 0\.5 mm$/.test(list[iR]) && /levels?$/.test(list[iC]), what + ': the rows say their levels');
+  assert.ok(list[iR - 1] === '# Change to \u00bc\u2033 end mill' && list[iC - 1] === '# Change to \u215b\u2033 ball nose', what + ': each under its own bit heading');
+  assert.ok(/levels?$/.test(list[iR]) && /levels?$/.test(list[iC]), what + ': the rows say their levels');
   await shot(`${what}-operations.png`, '#prepare-ops');
-  await clickEl('.cut-contour-edit');
-  await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour'`, what + ': the Contour card');
-  assert.deepStrictEqual([await rows(), await evalJs(`[document.querySelector('.cut-step-depth').value, document.querySelector('.cut-bit').value, document.querySelector('.cut-shape-cur').textContent]`)],
-    [['topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'smoothing', 'stepDepth', 'toolDia', 'cutterShape'], ['0.25', '3.175', 'ball nose']], what + ': the Contour card: (TASK 810: its Heights and Walls; TASK 809: its Smoothing) step 0.25, 1/8 in, ball nose');
-  await shot(`${what}-contour-card.png`, '#prepare-panel .cut-card');
   await shot(`${what}-prepare.png`);
   const r = await review(what);
   timings[what].review = r.ms;
@@ -194,10 +211,11 @@ async function phase(what) {
   await shot(`${what}-review-angled.png`, '#review-canvas-host');
   // TASK 807: the Nested layout, reviewed too
   await openStage('prepare');
-  await pressOutline();
+  await openOpLive(t, await opOf('roughing')); // TASK S2: the Roughing operation opened
   await tab('passes');
   await clickEl('.cut-layout-modes .cut-preset[data-value="nested"]');
   await waitFor(`document.querySelector('.cut-layout-modes .is-active').textContent === 'Nested'`, what + ': Nested', 60000);
+  await okLive(t);
   const listN = await ops();
   console.log(`${what}: Operations (Nested) ${JSON.stringify(listN)}`);
   timings[what].operations = list.filter((x) => !x.startsWith('# ')).length;

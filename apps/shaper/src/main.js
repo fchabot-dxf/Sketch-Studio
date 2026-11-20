@@ -679,7 +679,7 @@ function ensureSketch() {
 modes = createModeRouter({
   views: VIEWS, stages: activeStages, defaultMode: activeStages[0].id,
   onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
-  afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design
+  afterShow: (mode) => { if (mode !== 'prepare') prepare.leave(); history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design; TASK S2: leaving Prepare = OK on the open operation
   enter: {
     prepare: prepare.enter,
     review: () => {

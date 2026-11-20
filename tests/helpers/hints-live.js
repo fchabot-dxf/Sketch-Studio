@@ -18,7 +18,7 @@ import { probe, tipProblems } from './tooltip-live.js';
 
 const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
 const HINT = {
-  cutDepth: 'How deep the cut goes from the surface. Leave it empty to set the depth on the Origin.',
+  cutDepth: 'One flat depth for every shape. From model: each shape’s own model depth (the deepest point of a sloped shape).', // TASK S2 (owner turn 2740): a flat type's Depth
   finishOff: 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.',
   finishOn: 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.',
 };
@@ -85,7 +85,8 @@ export async function hintsPhase(t, { fusion = false } = {}) {
     await key('Escape', 'Escape', 27);
     assert.strictEqual(await tp.tip(), null, D + ': Esc hides it');
     await tp.leave();
-    await evalJs(`document.querySelector('#prepare-panel .cut-type-trigger').focus()`);
+    // TASK S2: the open operation's shape list (its X buttons) comes before the Depth row: the Tab starts from the last of them
+    await evalJs(`(document.querySelectorAll('#prepare-panel .cut-geo-x').length ? [...document.querySelectorAll('#prepare-panel .cut-geo-x')].pop() : document.querySelector('#prepare-panel .cut-type-trigger')).focus()`);
     await key('Tab', 'Tab', 9);
     assert.ok(await evalJs(`document.activeElement === document.querySelector('${label('cutDepth')}')`), D + ': Tab lands on the Depth label');
     const kb = await tp.tip();

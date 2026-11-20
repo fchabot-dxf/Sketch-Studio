@@ -4,10 +4,10 @@
 //   operations: [{ id, type, on, settings, geometry: [{ key, seq, at? }] }]   array order = the Operations list order (no separate opOrder)
 //     id        'op-<n>', stable for life (the preview's data-op, the list rows)
 //     on        TASK 798: the Operations list's tick (true for every new / migrated operation; false = left out of the views and the file: setOpsOn)
-//     type      a CUT_TYPES id ('contour' = a part's Contour: its refs are the PARTS' keys, cut-plan.js resolveEntry gives it its part's depth, type, slope, levels)
+//     type      a CUT_TYPES id ('contour': TASK S2, a plain operation with its own settings; its memberships are named `contour:<key>` in Prepare)
 //     settings  the operation's settings, base mm, today's record field names (no cutType, no region data, no leadInAt); cutDepth 'model' = each shape's
 //               own imported depth (regions[key].source.cutDepth)
-//     geometry  the shapes it cuts: `seq` = the FILE order (one counter per document, nextSeq: a new membership takes the next number, a moved one keeps its
+//     geometry  the shapes it cuts (TASK S2: possibly none: an EMPTY operation; a shape may be in several operations): `seq` = the FILE order (one counter per document, nextSeq: a new membership takes the next number, a moved one keeps its
 //               own), `at` = a dragged lead-in position on that shape's outline (today's leadInAt)
 //   regions: { [geometry key]: { slope?, levels?, source? } }  the data that belongs to a GEOMETRY whatever operations use it (entries replaced, never mutated:
 //            undo snapshots share them by reference); source = { cutType, cutDepth } as the import gave them
@@ -37,7 +37,7 @@ export const regionKeys = () => Object.keys(S.regions);
 
 /** The plan key of a membership: the geometry key, or `contour:<key>` for a Contour operation's (the Prepare selection's names, cut-plan.js). */
 export const planKeyOf = (op, ref) => (op.type === CONTOUR_TYPE ? CONTOUR_PREFIX + ref.key : ref.key);
-/** { op, ref } of a plan key, or null (a geometry is in at most one operation besides its Contour in S1). */
+/** { op, ref } of a plan key: its FIRST membership in list order, or null (TASK S2: a geometry may be in several operations; membersOf lists them all). */
 export function memberOf(planKey) {
   if (!index || index.version !== version) {
     const byPlanKey = new Map();
@@ -46,6 +46,14 @@ export function memberOf(planKey) {
   }
   return index.byPlanKey.get(planKey) || null;
 }
+/** TASK S2: every membership of a GEOMETRY key (whatever the operation's type, a Contour's included), in list order: [{ op, ref }]. */
+export function membersOf(key) {
+  const out = [];
+  for (const op of S.ops) for (const ref of op.geometry) if (ref.key === key) out.push({ op, ref });
+  return out;
+}
+/** TASK S2: the stored operation of an id, or null. */
+export const opById = (id) => S.ops.find((op) => op.id === id) || null;
 /** Every membership in FILE order (seq): [{ op, ref }]. */
 export function membersInFileOrder() {
   const out = [];
@@ -74,12 +82,19 @@ export function addRef(op, ref) {
   op.geometry.sort((a, b) => a.seq - b.seq);
   bump();
 }
-/** Take a membership out of its operation; an operation left with no shape is removed (S1: the list never shows an empty operation). */
+/** Take a membership out of its operation. TASK S2: the operation stays, possibly EMPTY (docs/OPERATIONS-MODEL.md 1.6: an operation may have no geometry); the
+ *  writer that MOVES a shape (cut-plan.js fileShape: an import's regrouping) removes the operation it emptied itself (deleteOp). */
 export function removeRef(op, ref) {
   op.geometry = op.geometry.filter((r) => r !== ref);
-  if (!op.geometry.length) S.ops = S.ops.filter((o) => o !== op);
   bump();
 }
+/** TASK S2: delete an operation (the Operations list's bin; its shapes stay in their other operations). */
+export function deleteOp(op) {
+  S.ops = S.ops.filter((o) => o !== op);
+  bump();
+}
+/** TASK S2: change an operation's type (its id, tick, place, shapes and their file places kept). */
+export function setOpType(op, type) { op.type = type; bump(); }
 /** TASK 798: tick / untick operations (the Operations list's checkboxes: `on` false = left out of Prepare's look, the 3D Review, Paths / 2D and the exported file;
  *  cut-plan.js planEntries({ ticked: true }) is the one filter). `ids` = the operation ids; an unknown id is ignored. Saved and undone with the store (captureStore). */
 export function setOpsOn(ids, on) {
@@ -115,15 +130,19 @@ export function setRegion(key, region) {
 
 /**
  * renameGeometry(rename, remove) — docs/OPERATIONS-MODEL.md 1.6: rename geometry keys (`rename`: old -> new) and drop some (`remove`): in every operation's refs, in
- * `regions` and in any setting that holds a key (TASK 810's Roughing boundary shape, `boundaryShape`). The one place keys move. An operation left empty is removed.
+ * `regions` and in any setting that holds a key (TASK 810's Roughing boundary shape, `boundaryShape`). The one place keys move. An operation this call empties is
+ * removed (as before task S2: a stale shape dropped on load, a selection taken out); one that was already empty stays.
  */
 export function renameGeometry(rename, remove = new Set()) {
   if (!rename.size && !remove.size) return;
+  const emptied = new Set(); // TASK S2: only an operation THIS call empties goes (an operation saved empty stays)
   for (const op of S.ops) {
+    const had = op.geometry.length;
     op.geometry = op.geometry.filter((r) => !remove.has(r.key)).map((r) => (rename.has(r.key) ? { ...r, key: rename.get(r.key) } : r));
+    if (had && !op.geometry.length) emptied.add(op);
     if (typeof op.settings.boundaryShape === 'string' && rename.has(op.settings.boundaryShape)) op.settings = { ...op.settings, boundaryShape: rename.get(op.settings.boundaryShape) };
   }
-  S.ops = S.ops.filter((op) => op.geometry.length);
+  S.ops = S.ops.filter((op) => !emptied.has(op));
   const regions = {};
   for (const [k, v] of Object.entries(S.regions)) if (!remove.has(k)) regions[rename.get(k) || k] = v;
   S.regions = regions;

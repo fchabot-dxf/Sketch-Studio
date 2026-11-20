@@ -10,7 +10,12 @@
 //    navigator.vibrate where the browser has it) and follows the finger (the touchmoves are then cancelled so the list does not scroll); release drops it. A
 //    hold released without a move reorders nothing, and it never also fires the row's tap (the click that follows is swallowed).
 //  * Keyboard: the grip is focusable; ArrowUp / ArrowDown on it move the row (the grip keeps the focus).
-// DELETE (owner turn 2174): the bin calls onDelete(op) (the stage unassigns every region / path of the operation in ONE undo step).
+// DELETE (owner turn 2174): the bin calls onDelete(op) (TASK S2: the stage deletes the operation, ONE undo step; its shapes stay in their other operations).
+// TASK S2 (owner turns 2716-2719): a tap on a row SELECTS it (onPick: the stage selects its shapes; nothing opens); the SELECTED row (isSelected: the one tapped)
+// alone shows its actions, inside the row beside its text: Edit (onEdit: opens the operation), Duplicate (onDuplicate: its copy, opened) and the X (onDelete); a
+// double-click on a row opens it too. The rows of the operations the selected shapes are in are highlighted (isPicked: the selected row style); reveal() scrolls the
+// first of them into view while the list is open (never opening anything). A row's text is one line each (its full words are its tooltip), so the actions
+// appearing never change its height.
 // TICKS (TASK 798, owner turns 2515-2537): every row has a checkbox (op.on: ticked = shown in Prepare, the 3D Review, Paths / 2D and in the exported SVG; unticked =
 // left out, its settings kept: the row stays, dimmed, and its tap still opens its card). Each tool heading has one too: ticked when all its operations are,
 // mixed (indeterminate) when some, empty when none; a tap ticks them all, or unticks them all when all were ticked. onTick(ids, on) gets the operation ids. The
@@ -22,19 +27,26 @@ const DRAG_START_PX = 4;    // a grip press (mouse / pen) that moves less than t
 export const HOLD_MS = 350; // a touch held this long without moving lifts the row
 const SCROLL_SLOP_PX = 8;   // a touch that moves more than this before the hold is a scroll
 const GRIP_SVG = '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.4"/><circle cx="7" cy="3" r="1.4"/><circle cx="3" cy="8" r="1.4"/><circle cx="7" cy="8" r="1.4"/><circle cx="3" cy="13" r="1.4"/><circle cx="7" cy="13" r="1.4"/></g></svg>';
-const BIN = '\u{1F5D1}'; // the shared bin of the Parameters table's rows (packages/ui/parameter-table.js)
+const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their label = aria-label and tooltip)
+  { cls: 'ops-edit', glyph: '\u270E', words: (n) => `Edit operation ${n}`, call: 'onEdit' },
+  { cls: 'ops-dup', glyph: '\u29C9', words: (n) => `Duplicate operation ${n}`, call: 'onDuplicate' },
+  { cls: 'ops-del', glyph: '\u2715', words: (n) => `Delete operation ${n} (its shapes stay in their other operations)`, call: 'onDelete' },
+];
 
 /**
- * createOpList(hostEl, { getOps, onMove, onPick, isPicked, onDelete, onTick }) -> { refresh(), inspect(), inspectTicks(), setOpen(open) }
+ * createOpList(hostEl, { getOps, onMove, onPick, isPicked, isSelected, isOpen, onEdit, onDuplicate, onDelete, onTick }) -> { refresh(), reveal(), inspect(), inspectActions(), inspectTicks(), setOpen(open) }
  *   getOps()       the operations, in order (operations.js describeOperations)
  *   onMove(keys)   a reorder: the operation keys in their new order
- *   onPick(op)     a tap on an operation
- *   isPicked(op)   whether the operation's regions are the canvas selection (the row is marked)
- *   onDelete(op)   TASK 745: the operation's bin
+ *   onPick(op)     a tap on an operation (TASK S2: it selects it)
+ *   isPicked(op)   TASK S2: whether one of its shapes is selected (the row is highlighted)
+ *   isSelected(op) TASK S2: whether it is the selected row (its actions show)
+ *   isOpen(op)     TASK S2: whether it is the operation open in the card
+ *   onEdit(op) / onDuplicate(op) / onDelete(op)   TASK S2: the selected row's actions (TASK 745: the delete)
  *   onTick(ids, on) TASK 798: a row's or a heading's checkbox (the operation ids, ticked or not)
  */
-export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, onDelete = () => {}, onTick = () => {} }) {
-  if (!hostEl) return { refresh() {}, inspect: () => null, inspectTicks: () => null };
+export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, isSelected = () => false, isOpen = () => false, onEdit = () => {}, onDuplicate = () => {}, onDelete = () => {}, onTick = () => {} }) {
+  if (!hostEl) return { refresh() {}, reveal() {}, inspect: () => null, inspectActions: () => null, inspectTicks: () => null };
+  const calls = { onEdit, onDuplicate, onDelete };
   const doc = hostEl.ownerDocument;
   const win = doc.defaultView;
   hostEl.classList.add('ops-panel');
@@ -79,7 +91,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
 
   function onDown(e, i, row) {
     if (drag || (e.button != null && e.button !== 0)) return;
-    if (e.target.closest && e.target.closest('.ops-del, .ops-tick')) return; // the bin and (TASK 798) the checkbox are controls of their own
+    if (e.target.closest && e.target.closest('.ops-act, .ops-tick')) return; // the actions (TASK S2) and (TASK 798) the checkbox are controls of their own
     const touch = e.pointerType === 'touch';
     if (!touch) {
       if (!(e.target.closest && e.target.closest('.ops-grip'))) return; // a mouse / pen drags by the grip only (a click on the row picks it)
@@ -168,6 +180,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       }
       const row = doc.createElement('div'); row.className = 'ops-row'; row.dataset.key = op.key; row.dataset.id = op.id;
       if (isPicked(op)) row.classList.add('is-picked');
+      if (isOpen(op)) row.classList.add('is-open'); // TASK S2: the operation open in the card
       if (op.on === false) row.classList.add('is-off'); // TASK 798: unticked (dimmed: left out of the views and the file)
       const grip = doc.createElement('span'); grip.className = 'ops-grip'; grip.tabIndex = 0; grip.setAttribute('role', 'button');
       grip.title = 'Drag to reorder (or Arrow Up / Down)'; grip.setAttribute('aria-label', `Reorder operation ${i + 1}: Arrow Up / Arrow Down`);
@@ -186,29 +199,44 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       text.append(name, sub);
       pick.append(num, text);
       pick.addEventListener('click', () => onPick(op));
-      const del = doc.createElement('button'); del.type = 'button'; del.className = 'ops-del'; del.textContent = BIN;
-      del.title = `Delete operation ${i + 1}: unassign its ${op.regions}`; del.setAttribute('aria-label', del.title);
-      del.addEventListener('click', () => onDelete(op));
+      pick.addEventListener('dblclick', () => onEdit(op)); // TASK S2: a double-click opens it too
+      // TASK S2: the selected row alone shows its actions, beside its text
+      const acts = isSelected(op) ? ACTIONS.map((a) => {
+        const b = doc.createElement('button'); b.type = 'button'; b.className = `ops-act ${a.cls}`; b.textContent = a.glyph;
+        b.title = a.words(i + 1); b.setAttribute('aria-label', b.title);
+        b.addEventListener('click', () => calls[a.call](op));
+        return b;
+      }) : [];
       row.addEventListener('pointerdown', (e) => onDown(e, i, row));
       const tick = tickBox(op.on !== false, false, op.tickable === false,
         op.tickable === false ? 'The Stock is always exported: every file is placed by it' : op.on === false ? `Tick operation ${i + 1}: show and export it` : `Untick operation ${i + 1}: leave it out of the views and the file`);
       tick.querySelector('input').addEventListener('change', (e) => onTick([op.id], e.target.checked));
-      row.append(grip, tick, pick, del);
+      row.append(grip, tick, pick, ...acts);
       out.push(row);
     });
     body.replaceChildren(...out);
   }
 
+  /** TASK S2 (owner turn 2718): the first highlighted row in view, while the list is open (a folded list, e.g. the phone's closed sheet: nothing). */
+  function reveal() {
+    if (!fold.open) return;
+    const row = body.querySelector('.ops-row.is-picked');
+    if (!row) return;
+    const r = row.getBoundingClientRect(), b = body.getBoundingClientRect();
+    if (r.top < b.top || r.bottom > b.bottom) row.scrollIntoView({ block: 'nearest' });
+  }
   /** What the list shows: { open, items: [{ heading } | { id, text, sub, picked } | { empty }] } (tests). */
   const inspect = () => ({
     open: fold.open,
     items: [...body.children].map((el) => (el.classList.contains('ops-tool') ? { heading: el.textContent }
       : el.classList.contains('ops-row') ? { id: el.dataset.id, text: el.querySelector('.ops-name').textContent, sub: el.querySelector('.ops-sub').textContent, picked: el.classList.contains('is-picked') } : { empty: el.textContent })),
   });
+  /** TASK S2: each row's actions (the selected row's Edit, Duplicate, X): [{ id, actions: ['ops-edit', ...] }] (tests). */
+  const inspectActions = () => [...body.querySelectorAll('.ops-row')].map((el) => ({ id: el.dataset.id, actions: [...el.querySelectorAll('.ops-act')].map((b) => b.classList[1]) }));
   /** TASK 798: the checkboxes: { rows: [{ id, on, disabled }], groups: [{ heading, state: 'all' | 'some' | 'none', disabled }] } (tests). */
   const inspectTicks = () => ({
     rows: [...body.querySelectorAll('.ops-row')].map((el) => { const b = el.querySelector('.ops-tick input'); return { id: el.dataset.id, on: b.checked, disabled: b.disabled, off: el.classList.contains('is-off') }; }),
     groups: [...body.querySelectorAll('.ops-tool')].map((el) => { const b = el.querySelector('.ops-tick input'); return { heading: el.textContent, state: b.indeterminate ? 'some' : b.checked ? 'all' : 'none', disabled: b.disabled }; }),
   });
-  return { refresh, inspect, inspectTicks, setOpen };
+  return { refresh, reveal, inspect, inspectActions, inspectTicks, setOpen };
 }

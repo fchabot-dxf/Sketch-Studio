@@ -19,8 +19,9 @@ import { exportShaperSVG } from '#core/shaper-export.js';
 import { steppedTerraces, stepDeviation, terraceOptions, STEP_RESOLUTION, resolutionLevel } from '#core/stepped-cut.js';
 import { planEntries, planReliefItems, planSteppedNotes, lastAdaptiveSteps, lastStepDeviation } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
-import { exportEncoding, availableTypes } from '../apps/shaper/src/shaper.js';
+import { exportEncoding, CUT_TYPES } from '../apps/shaper/src/shaper.js';
 import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -125,14 +126,16 @@ const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) 
 const typeDepths = (svg, type) => elems(svg).filter((e) => e.type === type).map((e) => e.depth);
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
-  const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+  const pressElRaw = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+  const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const pc = doc.getElementById('prepare-canvas');
-  const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const menu = () => { pressEl('.cut-type-trigger'); const ids = [...doc.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id); pressEl('.cut-type-trigger'); return ids; };
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
-  const set = (cls, text) => { const inp = q(cls); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
-  const check = (on) => { const c = q('.cut-adaptive'); c.checked = on; c.dispatchEvent(new app.window.Event('change')); };
+  const set = (cls, text) => editStep(app, () => { const inp = q(cls); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); }); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
+  const check = (on) => editStep(app, () => { const c = q('.cut-adaptive'); c.checked = on; c.dispatchEvent(new app.window.Event('change')); }); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((r) => r.style.display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param);
   const presets = (row) => [...doc.querySelectorAll(`.cut-row[data-row="${row}"] .cut-preset`)].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : ''));
   return { q, pressEl, clickAt, menu, pick, note, set, check, rows, presets };
@@ -150,7 +153,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     importFusionSelection(payload('08-spline'), { controller: app.controller, prepare: app.prepare });
     h.clickAt(60, -40);
     eq(h.menu().filter((id) => id.startsWith('stepped')), [], 'a vertical pocket offers no stepped type');
-    eq(availableTypes('loop', recAt('pocket')[1]).filter((t) => t.slopeKind).length, 0, 'availableTypes: none for a record without a slope');
+    eq(CUT_TYPES.filter((t) => t.slopeKind).length, 0, 'no stepped type is declared (TASK 792: Roughing replaced them)');
     h.pick('pocket');
     eq(h.rows(), ['cutDepth', 'clearing', 'cutOffset', 'toolDia', 'cutterShape'], 'a plain Pocket: no Adaptive stepping, Step depth or Resolution row (TASK 745: its Clearing row, Freehand)');
 
@@ -162,7 +165,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     h.pick('roughing');
     const r0 = V2_PLAN.get(pk);
     eq([r0.stepDepth, r0.adaptiveSteps, r0.stepDeviation], [1, false, 0.25], 'a new stepped record: step 1 mm, Adaptive stepping OFF, resolution Medium (0.25 mm) ready');
-    eq(h.rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; OFF: the checkbox, then the Step depth row (no Resolution row); TASK 792: Roughing\'s allowance and Contour rows');
+    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; OFF: the checkbox, then the Step depth row (no Resolution row); TASK 792: Roughing\'s allowance and Contour rows');
     eq([h.q('.cut-adaptive').checked, h.q('.cut-row[data-row="adaptiveSteps"] .cut-check').textContent.trim()], [false, 'Adaptive stepping'], 'the checkbox reads "Adaptive stepping", unchecked');
     eq([h.q('.cut-row[data-row="stepDeviation"]').dataset.off !== undefined, h.q('.cut-row[data-row="stepDepth"]').dataset.off !== undefined], [true, false], 'TASK 813: the Resolution row stays in place, greyed (inert), while Adaptive stepping is off; the Step depth row is live');
     eq(h.note(), ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.172–2.236 mm apart'], 'OFF: the 716 note');
@@ -174,12 +177,13 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
       V2_PLAN.set(pk, saved);
     }
     eq(typeDepths(offSvg, 'pocket'), mmStr([5, 6, 7, 8]), 'OFF export: the 716 pockets at 5, 6, 7, 8 mm');
+    h.clickAt(60, -40); // TASK S2: the reloaded document's operation opened again (a load renumbers the operations)
 
     // ON: one undo step, the Resolution row replaces the Step depth row, Medium
     const hist = app.state.history.length;
     h.check(true);
     eq([V2_PLAN.get(pk).adaptiveSteps, lastAdaptiveSteps(), app.state.history.length], [true, true, hist + 1], 'checked: stored on the record, remembered, ONE undo step');
-    eq(h.rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDeviation', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; ON: the Resolution row in place of the Step depth row');
+    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDeviation', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; ON: the Resolution row in place of the Step depth row');
     eq([h.q('.cut-row[data-row="stepDeviation"] .cut-field-label').textContent, h.q('.cut-step-deviation').value, h.presets('stepDeviation'), h.presets('stepDepth').length], ['Resolution', '0.25', ['Coarse', 'Medium*', 'Fine'], 4], 'Resolution 0.25 mm, presets Coarse / Medium (active) / Fine; the Step depth row stays in place, greyed (TASK 813)');
     const medium = depthsOf(adaptive(slopeOf('03-pocket-floor-fillet', 'pocket'), 'pocket', 0.25, 8));
     const noteMedium = h.note();

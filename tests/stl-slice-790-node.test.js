@@ -21,6 +21,7 @@ import { getStock } from '../apps/shaper/src/stock.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { STL_FILE_PICK } from '../apps/shaper/src/stl-import.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -119,7 +120,8 @@ const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
   const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
   const pc = doc.getElementById('prepare-canvas');
-  const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const card = () => {
     const c = q('.stl-card');

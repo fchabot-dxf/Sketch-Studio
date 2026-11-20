@@ -27,15 +27,17 @@ const eq = (a, b, msg) => { assert.deepStrictEqual(a, b, msg); checks++; };
 // ── stubs ───────────────────────────────────────────────────────────────────────────────────────────
 // an in-memory D1 that APPLIES the SQL this Worker issues (so the stored VALUES are asserted, not just "a write happened")
 function makeD1() {
-  const store = { rollups: [], feedback: null }; // feedback: null until CREATE TABLE IF NOT EXISTS ran (TASK 830)
+  const store = { rollups: [], feedback: null, nextId: 0 }; // feedback: null until CREATE TABLE IF NOT EXISTS ran (TASK 830)
   const apply = (sql, args) => {
     if (sql.startsWith('DELETE FROM rollups WHERE date >= ? AND date < ?')) store.rollups = store.rollups.filter((r) => !(r.date >= args[0] && r.date < args[1]));
     else if (sql.startsWith('INSERT INTO rollups (date, event, count, devCount)')) { const [date, event, count, devCount] = args; store.rollups.push({ date, event, count, devCount }); }
     else if (sql.startsWith('CREATE TABLE IF NOT EXISTS feedback (')) store.feedback = store.feedback || [];
     else if (sql.startsWith('INSERT INTO feedback (at, app, version, host, stars, text, email)')) {
       if (!store.feedback) throw new Error('no such table: feedback');
-      const [at, app, version, host, stars, text, email] = args; store.feedback.push({ id: store.feedback.length + 1, at, app, version, host, stars, text, email });
-    } else throw new Error('unexpected SQL: ' + sql);
+      const [at, app, version, host, stars, text, email] = args; store.feedback.push({ id: ++store.nextId, at, app, version, host, stars, text, email, status: 'new' });
+    } else if (sql.startsWith('UPDATE feedback SET status = ?1 WHERE id = ?2')) { const r = store.feedback.find((x) => x.id === args[1]); if (r) r.status = args[0]; }
+    else if (sql.startsWith('DELETE FROM feedback WHERE id = ?1')) store.feedback = store.feedback.filter((x) => x.id !== args[0]);
+    else throw new Error('unexpected SQL: ' + sql);
   };
   const first = (sql, args) => {
     if (!sql.startsWith('SELECT SUM(count) AS total FROM rollups WHERE date')) throw new Error('unexpected SELECT: ' + sql);
@@ -44,9 +46,9 @@ function makeD1() {
   };
   const stmt = (sql) => ({ sql, args: [], bind(...a) { this.args = a; return this; }, async first() { return first(this.sql, this.args); }, async run() { apply(this.sql, this.args); return { success: true }; },
     async all() { // the dashboard's feedback list: newest first
-      if (!this.sql.startsWith('SELECT at, app, version, stars, text, email FROM feedback ORDER BY id DESC')) throw new Error('unexpected SELECT: ' + this.sql);
+      if (!this.sql.startsWith('SELECT id, at, app, version, host, stars, text, email, status FROM feedback ORDER BY id DESC')) throw new Error('unexpected SELECT: ' + this.sql);
       if (!store.feedback) throw new Error('no such table: feedback');
-      return { results: [...store.feedback].reverse().map(({ id, host, ...r }) => r) };
+      return { results: [...store.feedback].reverse().map((r) => ({ ...r })) };
     } });
   return { store, prepare: stmt, async batch(stmts) { for (const s of stmts) apply(s.sql, s.args); return stmts.map(() => ({ success: true })); } };
 }
@@ -346,13 +348,13 @@ eq(placeholderProblems('database_id = "e6becbe9-e096-4d66-a142-2fcd5b84c439"\n')
     eq(r.headers.get('access-control-allow-origin'), '*', 'with the CORS header the page needs');
     eq(env.DB.store.feedback.length, 1, 'ONE row stored (the table was created on first use)');
     const row = env.DB.store.feedback[0];
-    eq({ ...row, at: undefined, id: undefined }, { at: undefined, id: undefined, app: 'shaper', version: '2026-11-16T14:05Z', host: 'web', stars: 4, text: good.text, email: 'maker@example.com' }, 'the row holds the message fields exactly');
+    eq({ ...row, at: undefined, id: undefined }, { at: undefined, id: undefined, app: 'shaper', version: '2026-11-16T14:05Z', host: 'web', stars: 4, text: good.text, email: 'maker@example.com', status: 'new' }, 'the row holds the message fields exactly');
     ok(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(row.at) && Math.abs(Date.parse(row.at) - realNow()) < 60000, 'with the date (UTC, added by the Worker)');
     // NO IP (and no place) in ANY stored value: every value of the row, and nothing went to Analytics Engine
     const everything = JSON.stringify(env.DB.store.feedback);
     ok(!/203\.0\.113\.77|198\.51\.100\.9/.test(everything), 'no IP address in any stored value (searched every value of every row)');
     ok(!/Montreal|Quebec|"CA"/.test(everything), 'and no country / region / city');
-    eq(Object.keys(row).sort(), ['app', 'at', 'email', 'host', 'id', 'stars', 'text', 'version'], 'the row has only the declared columns');
+    eq(Object.keys(row).sort(), ['app', 'at', 'email', 'host', 'id', 'stars', 'status', 'text', 'version'], 'the row has only the declared columns');
     eq(ae.length, 0, 'a feedback message writes nothing to Analytics Engine');
     ok(/CREATE TABLE IF NOT EXISTS feedback/.test(FEEDBACK_TABLE_SQL) && !/\bip\b|country|city/i.test(FEEDBACK_TABLE_SQL), 'the table definition (one place) has no ip / country / city column');
   }
@@ -390,34 +392,86 @@ eq(placeholderProblems('database_id = "e6becbe9-e096-4d66-a142-2fcd5b84c439"\n')
     eq(r.status, 500, 'a D1 failure → 500');
     ok(errs.length === 1 && /D1 down/.test(errs[0]) && !/203\.0\.113\.77|maker@example\.com|grid is too faint/.test(errs.join('')), 'the failure is logged, without the request: no IP, no email, no text');
   }
-  // the dashboard: a Feedback section behind the key, newest first, every cell escaped
+  // the dashboard's Feedback section (owner turns 2929-2934): cards, counts, filters in the URL, Reply, Mark done, Delete; behind the key; every value escaped
   {
+    const { feedbackFilter, relTime } = await import('../analytics/src/index.js');
     const { env } = fbEnv(CFG);
-    const hostile = '</td><script>alert(1)</script><img src=x onerror=alert(2)> & "q" \'s\'';
-    await worker.fetch(fb({ ...good, text: 'first <b>bold</b>', email: '', stars: 2, app: 'trace' }), env);
-    await worker.fetch(fb({ ...good, text: 'x', email: '"><svg onload=alert(3)>@x.co' }), env);
-    eq(env.DB.store.feedback.length, 1, '(a hostile EMAIL is refused by the format check: only the first message was stored)');
-    await worker.fetch(fb({ ...good, text: hostile, email: 'a@b.co', stars: 5 }), env);
-    eq(env.DB.store.feedback.length, 2, 'a hostile TEXT is stored as typed');
-    let html = '';
-    await withAe(dashRows, async () => { html = await (await worker.fetch(new Request('https://x/dash?key=k3y'), env)).text(); });
-    ok(html.includes('<h2>Feedback (newest first, UTC)</h2>'), 'the dashboard has a Feedback section');
-    ok(!/quer(y|ies) failed/.test(html), 'and no failed query');
-    const section = html.slice(html.indexOf('<h2>Feedback'), html.indexOf('<h2>Latest visits'));
-    ok(section.indexOf('5 / 5') > 0 && section.indexOf('5 / 5') < section.indexOf('2 / 5'), 'newest first: the later message above the earlier one');
-    ok(section.includes('<td>trace</td>') && section.includes('<td>shaper</td>') && section.includes('<td>a@b.co</td>'), 'the app and the email (when given) are shown');
-    ok(!section.includes('<script') && !section.includes('<img') && !section.includes('<b>bold</b>') && !section.includes('<svg'), 'XSS-safe: no tag a visitor typed survives as a tag');
-    ok(section.includes('&lt;/td&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;img src=x onerror=alert(2)&gt; &amp; &quot;q&quot; &#39;s&#39;') && section.includes('first &lt;b&gt;bold&lt;/b&gt;'), 'the typed text is shown escaped, as text');
-    ok(!html.includes('<script>alert'), 'the whole page has no injected script');
-    eq((await worker.fetch(new Request('https://x/dash?key=wrong'), env)).status, 404, 'the Feedback section is behind DASH_KEY (a wrong key sees nothing)');
+    const hostile = '</td><script>alert(1)</script><img src=x onerror=alert(2)> & "q" \'s\'\nsecond line';
+    const put = async (patch) => { clock += 1000; assert.strictEqual((await worker.fetch(fb({ ...good, ...patch }), env)).status, 204); };
+    await put({ text: 'first <b>bold</b>', email: '', stars: 2, app: 'trace' });
+    eq((await worker.fetch(fb({ ...good, text: 'x', email: '"><svg onload=alert(3)>@x.co' }), env)).status, 400, 'a hostile EMAIL is refused by the format check');
+    await put({ text: hostile, email: 'a@b.co', stars: 5 });
+    await put({ text: 'plain shaper', email: '', stars: 3, app: 'shaper' });
+    eq(env.DB.store.feedback.length, 3, 'three messages stored, all status new');
+    ok(env.DB.store.feedback.every((r) => r.status === 'new'), 'a stored message starts as new (the column default)');
+    const get = async (qs = '', e = env) => { let html = ''; await withAe(dashRows, async () => { html = await (await worker.fetch(new Request('https://x/dash?key=k3y' + qs), e)).text(); }); return html; };
+    let html = await get();
+    ok(!/quer(y|ies) failed/.test(html), 'no failed query');
+    ok(/<p class="fbtop"><a href="#feedback">Feedback: 3 new<\/a>/.test(html), 'the TOP of the page says "Feedback: 3 new" and links to the section');
+    ok(html.indexOf('class="fbtop"') < html.indexOf('<main>') && html.includes('<section class="card full" id="feedback">'), 'the line is above the cards, the section has the anchor');
+    const cardIds = (h) => [...h.matchAll(/<article class="fbcard" data-id="(\d+)" data-status="(\w+)"/g)].map((m) => m[1] + m[2]);
+    eq(cardIds(html), ['3new', '2new', '1new'], 'cards newest first');
+    const card2 = html.slice(html.indexOf('data-id="2"'), html.indexOf('data-id="1"'));
+    ok(card2.includes('class="stars" aria-label="5 of 5 stars"') && card2.includes('★★★★★'), 'stars as ★ (5 lit)');
+    ok(card2.includes('<b>Shaper</b> · 2026-11-16T14:05Z · web'), 'app name, version, host');
+    ok(/<time title="20\d\d-\d\d-\d\dT[\d:.]+Z" datetime="[^"]+">[^<]+<\/time>/.test(card2), 'the date: the full date in the tooltip');
+    eq([relTime('2026-11-20T10:00:00Z', Date.parse('2026-11-20T12:00:00Z')), relTime('2026-11-20T11:59:40Z', Date.parse('2026-11-20T12:00:00Z')), relTime('2026-11-20T11:30:00Z', Date.parse('2026-11-20T12:00:00Z')), relTime('2026-11-10T12:00:00Z', Date.parse('2026-11-20T12:00:00Z'))], ['2 h ago', 'just now', '30 min ago', '10 days ago'], 'the relative time ("2 h ago")');
+    // escaping
+    ok(!/<script>alert|<img src=x|<svg onload|<b>bold<\/b>/.test(html), 'XSS-safe: no tag a visitor typed survives as a tag, anywhere in the page');
+    ok(card2.includes('&lt;/td&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;img src=x onerror=alert(2)&gt; &amp; &quot;q&quot; &#39;s&#39;\nsecond line'), 'the text is shown escaped, its line break kept (pre-wrap)');
+    ok(html.includes('first &lt;b&gt;bold&lt;/b&gt;') && /\.fbtext \{[^}]*white-space: pre-wrap/.test(html), 'line breaks are kept by CSS');
+    // Reply: only with an email
+    ok(card2.includes('href="mailto:a@b.co?subject=Re%3A%20your%20Shaper%20feedback"') && card2.includes('>Reply<'), 'Reply = mailto with the subject "Re: your Shaper feedback"');
+    const card1 = html.slice(html.indexOf('data-id="1"'));
+    ok(!card1.includes('mailto:') && !card1.includes('>Reply<') && !card1.includes('class="fbmail"'), 'a message with no email has no Reply and no address line');
+    ok(html.includes('mailto:a@b.co?subject=Re%3A%20your%20Shaper%20feedback') && !/mailto:[^"]*trace/.test(html), '(only the one address has a mailto)');
+    // buttons are POST forms with the key
+    ok(card2.includes('<form method="post" action="/dash/feedback?key=k3y">') && card2.includes('name="action" value="done"') && card2.includes('>Mark done<') && card2.includes('>Delete<') && card2.includes("onsubmit=\"return confirm('Delete this feedback for good?')\""), 'Mark done and Delete are POST forms with the key; Delete asks once');
+    ok(!/<a [^>]*href="[^"]*(action=|\/dash\/feedback)/.test(html), 'no GET link changes anything');
+    ok(/\.btn \{[^}]*min-height: 44px/.test(html) && /\.chip \{[^}]*min-height: 44px/.test(html) && /@media \(max-width: 640px\)/.test(html) && html.includes('minmax(min(340px, 100%), 1fr)'), 'phone: 44 px buttons and filters, cards that stack');
+    // filters, kept in the URL
+    ok(html.includes('href="/dash?key=k3y&days=30&dev=0&bot=0&fapp=trace&fstars=all&fview=new#feedback"') && html.includes('fapp=all&fstars=4-5&fview=new#feedback') && html.includes('fapp=all&fstars=all&fview=done#feedback'), 'the filter links carry the whole view in the URL (bookmarkable)');
+    for (const a of ['Sketch', 'Shaper', 'Pen Plotter', 'Trace']) ok(html.includes(`>${a}</a>`), `an app filter: ${a}`);
+    eq(cardIds(await get('&fapp=trace')), ['1new'], 'filter app = Trace');
+    eq(cardIds(await get('&fapp=shaper')), ['3new', '2new'], 'filter app = Shaper');
+    eq(cardIds(await get('&fstars=1-2')), ['1new'], 'filter stars 1-2');
+    eq(cardIds(await get('&fstars=3')), ['3new'], 'filter stars 3');
+    eq(cardIds(await get('&fstars=4-5')), ['2new'], 'filter stars 4-5');
+    eq(cardIds(await get('&fapp=shaper&fstars=4-5')), ['2new'], 'filters combine');
+    eq(cardIds(await get('&fapp=bogus&fstars=9&fview=x')), ['3new', '2new', '1new'], 'an unknown filter value is "all" / new');
+    eq(feedbackFilter(new URLSearchParams('fapp=penplotter&fstars=3&fview=done')), { app: 'penplotter', stars: '3', view: 'done' }, 'feedbackFilter reads the three parameters');
+    // mark done / delete: POST with the key; 404 without it; GET changes nothing
+    const act = (id, action, key = 'k3y', method = 'POST', back = '') => worker.fetch(new Request('https://x/dash/feedback?key=' + key, { method, headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: method === 'POST' ? new URLSearchParams({ id: String(id), action, back }).toString() : undefined }), env);
+    eq([(await act(2, 'done', 'wrong')).status, (await act(2, 'done', '')).status], [404, 404], 'mark done without / with a wrong key → 404');
+    eq((await act(2, 'delete', 'wrong')).status, 404, 'delete without the key → 404');
+    eq((await act(2, 'done', 'k3y', 'GET')).status, 405, 'GET never changes state (405)');
+    ok(env.DB.store.feedback.every((r) => r.status === 'new') && env.DB.store.feedback.length === 3, 'nothing changed so far');
+    eq([(await act(2, 'maybe')).status, (await act('x', 'done')).status], [400, 400], 'a bad action / id → 400');
+    const r = await act(2, 'done', 'k3y', 'POST', '/dash?key=k3y&days=7&fapp=shaper&fstars=all&fview=new');
+    eq([r.status, r.headers.get('location')], [303, '/dash?key=k3y&days=7&fapp=shaper&fstars=all&fview=new#feedback'], 'Mark done answers 303 back to the same filtered view');
+    eq(env.DB.store.feedback.find((x) => x.id === 2).status, 'done', 'the row is now done');
+    eq((await act(2, 'done', 'k3y', 'POST', 'https://evil.example/')).headers.get('location'), '/dash?key=k3y#feedback', 'a back address outside /dash is ignored (no open redirect)');
+    html = await get();
+    ok(/Feedback: 2 new<\/a> <span class="sub">· 1 done<\/span>/.test(html), 'the top line counts: 2 new, 1 done');
+    eq(cardIds(html), ['3new', '1new', '2done'], 'the done card moved to the Done list (after the new ones)');
+    ok(/<details class="fbdone"><summary>Done \(1\)<\/summary>/.test(html) && !/<details class="fbdone" open/.test(html), 'the Done list is a <details>, folded by default');
+    eq(cardIds(await get('&fview=done')), ['2done'], 'New / Done filter: Done shows the done cards');
+    ok(html.includes('Move back to New'), 'a done card can go back to New');
+    await act(2, 'new');
+    eq(env.DB.store.feedback.find((x) => x.id === 2).status, 'new', '… and it does');
+    await act(1, 'delete');
+    eq(env.DB.store.feedback.map((x) => x.id), [2, 3], 'Delete removes the row');
+    ok(/Feedback: 2 new/.test(await get()), 'and the count follows');
+    eq((await worker.fetch(new Request('https://x/dash?key=wrong'), env)).status, 404, 'the section is behind DASH_KEY (a wrong key sees nothing)');
+    ok(FEEDBACK_TABLE_SQL.includes("status TEXT NOT NULL DEFAULT 'new'"), 'the status column is in the ONE table definition');
   }
-  // before any message: the table is created on first view and the section is empty; with no DB binding the failure is shown and the rest still renders
+  // before any message: the table is created on first view and the section says so; with no DB binding the failure is shown and the rest still renders
   {
     const { env } = fbEnv(CFG);
     let html = ''; await withAe(dashRows, async () => { html = await (await worker.fetch(new Request('https://x/dash?key=k3y'), env)).text(); });
-    ok(/<h2>Feedback[^]*?<p class="sub">no data<\/p>/.test(html), 'before any message the section says no data');
+    ok(html.includes('Feedback: 0 new') && html.includes('no new feedback'), 'before any message: 0 new, the section says so');
     const env2 = { ...fbEnv(CFG).env, DB: undefined }; let html2 = ''; await withAe(dashRows, async () => { html2 = await (await worker.fetch(new Request('https://x/dash?key=k3y'), env2)).text(); });
-    ok(/quer(y|ies) failed/.test(html2) && html2.includes('the DB binding is missing') && html2.includes('<h2>Visits</h2>'), 'with no DB binding the failure is shown and the rest of the page still renders');
+    ok(/quer(y|ies) failed/.test(html2) && html2.includes('the DB binding is missing') && html2.includes('<h2>Visits</h2') && html2.includes('could not be read'), 'with no DB binding the failure is shown and the rest of the page still renders');
   }
   // the rate limit: FEEDBACK_RATE.max per window per isolate, through the endpoint (one window: the clock does not move inside this case), then the limiter on its own
   {

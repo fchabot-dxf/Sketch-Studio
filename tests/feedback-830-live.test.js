@@ -32,8 +32,10 @@ const ENDPOINT_LINE = /^export const ENDPOINT = '[^']*';$/m;
 const rows = [];
 const requests = [];
 let failNext = false;
-const db = { prepare: (sql) => ({ sql, args: [], bind(...a) { this.args = a; return this; }, async run() {
-  if (this.sql.startsWith('INSERT INTO feedback')) { const [at, app, version, host, stars, text, email] = this.args; rows.push({ at, app, version, host, stars, text, email }); }
+let nextId = 0;
+const db = { prepare: (sql) => ({ sql, args: [], bind(...a) { this.args = a; return this; }, async all() { return { results: [...rows].reverse() }; }, async run() {
+  if (this.sql.startsWith('INSERT INTO feedback')) { const [at, app, version, host, stars, text, email] = this.args; rows.push({ id: ++nextId, at, app, version, host, stars, text, email, status: 'new' }); }
+  else if (this.sql.startsWith('UPDATE feedback SET status')) { const r = rows.find((x) => x.id === this.args[1]); if (r) r.status = this.args[0]; }
   else if (!this.sql.startsWith('CREATE TABLE IF NOT EXISTS feedback')) throw new Error('unexpected SQL ' + this.sql);
   return { success: true };
 } }) };
@@ -42,7 +44,7 @@ const stub = http.createServer(async (req, res) => {
   const body = Buffer.concat(chunks).toString('utf8');
   requests.push({ method: req.method, url: req.url, body });
   if (req.url === '/feedback' && failNext && req.method === 'POST') { failNext = false; res.writeHead(503, { 'access-control-allow-origin': '*' }); res.end('down'); return; }
-  const r = await worker.fetch(new Request('http://stub' + req.url, { method: req.method, headers: { 'content-type': 'text/plain' }, body: req.method === 'POST' ? body : undefined }), { DB: db, EVENTS: { writeDataPoint() {} } });
+  const r = await worker.fetch(new Request('http://stub' + req.url, { method: req.method, headers: { 'content-type': 'text/plain' }, body: req.method === 'POST' ? body : undefined }), { DB: db, EVENTS: { writeDataPoint() {} }, DASH_KEY: 'k3y', AE_TOKEN: 't', ACCOUNT_ID: 'a' });
   res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(await r.text());
 });
 await new Promise((r) => stub.listen(0, '127.0.0.1', r));
@@ -222,7 +224,7 @@ try {
   await shot('shaper-desktop-thanks.png');
   assert.strictEqual(rows.length, 1, 'M: ONE row stored');
   const buildStamp = rows[0].version;
-  assert.deepStrictEqual({ ...rows[0], at: undefined }, { at: undefined, app: 'shaper', version: buildStamp, host: 'web', stars: 4, text: 'The grid is too faint, but the cuts are right.', email: 'maker@example.com' }, 'M: the row: stars, text, email, app, build, host');
+  assert.deepStrictEqual({ ...rows[0], at: undefined, id: undefined }, { at: undefined, id: undefined, status: 'new', app: 'shaper', version: buildStamp, host: 'web', stars: 4, text: 'The grid is too faint, but the cuts are right.', email: 'maker@example.com' }, 'M: the row: stars, text, email, app, build, host');
   assert.ok(/^[0-9A-Za-z:.-]{1,32}$/.test(buildStamp) && buildStamp !== 'source', `M: the build stamp of the built site (${buildStamp})`);
   const lastPost = JSON.parse(feedbackPosts().pop().body);
   assert.deepStrictEqual(Object.keys(lastPost).sort(), ['app', 'email', 'host', 'stars', 'text', 'version'], 'M: the page sent exactly those fields (no id, no file name)');
@@ -397,8 +399,36 @@ try {
   await shot('sketch-phone-window.png');
   await finish();
 
+  // ── D. the owner's dashboard on a phone: the Feedback section (the Worker's own page, the Analytics Engine calls answered empty) ──
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u, init) => (String(u).startsWith('https://api.cloudflare.com/') ? { ok: true, status: 200, text: async () => JSON.stringify({ data: [] }) } : realFetch(u, init));
+  const at = (h) => new Date(Date.now() - h * 3600000).toISOString();
+  rows.push({ id: ++nextId, at: at(2), app: 'penplotter', version: buildStamp, host: 'web', stars: 2, text: 'The pen-up height is not remembered.\nSecond line of the note.', email: 'plotter@example.com', status: 'new' },
+    { id: ++nextId, at: at(30), app: 'trace', version: buildStamp, host: 'fusion', stars: null, text: 'Please add <b>PNG</b> export & more', email: '', status: 'done' });
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  touch = true;
+  await navigate(`http://127.0.0.1:${stub.address().port}/dash?key=k3y&fapp=all#feedback`, 15000);
+  await waitFor(`!!document.querySelector('#feedback .fbcard')`, 'D: the cards');
+  assert.ok(await evalJs(`document.documentElement.scrollWidth <= innerWidth`), 'D: no sideways scroll at 390 px');
+  assert.strictEqual(await evalJs(`/^Feedback: \\d+ new/.test(document.querySelector('.fbtop').innerText)`), true, 'D: the top line');
+  const sizes = await evalJs(`[...document.querySelectorAll('#feedback .btn, #feedback .chip')].map((e) => Math.round(e.getBoundingClientRect().height))`);
+  assert.ok(sizes.length > 8 && sizes.every((h) => h >= 44), 'D: every button and filter is at least 44 px tall: ' + JSON.stringify(sizes));
+  const xs = await evalJs(`[...document.querySelectorAll('#feedback .fbcard')].filter((c) => c.offsetParent).map((c) => Math.round(c.getBoundingClientRect().left))`);
+  assert.ok(new Set(xs).size === 1, 'D: the cards stack in one column: ' + JSON.stringify(xs));
+  await evalJs(`document.querySelector('#feedback').scrollIntoView()`); await sleep(300);
+  await shot('dashboard-phone-feedback.png');
+  // Mark done by a real tap on the first new card, then the page shows it in the folded Done list
+  const firstId = await evalJs(`document.querySelector('#feedback .fbcard[data-status="new"]').dataset.id`);
+  await press(`#feedback .fbcard[data-id="${firstId}"] form input[value="done"] ~ button`);
+  await waitFor(`!document.querySelector('#feedback .fbcard[data-status="new"][data-id="${firstId}"]')`, 'D: the card left the New list');
+  assert.strictEqual(rows.find((r) => String(r.id) === firstId).status, 'done', 'D: the Worker stored status done');
+  assert.strictEqual(await evalJs(`document.querySelector('.fbdone').open`), false, 'D: the Done list is folded');
+  globalThis.fetch = realFetch;
+  touch = false;
+
   // every request this test made to the Worker was a /feedback POST (the pages ran no analytics events: the stub saw none of /e from these pages other than visits and features)
-  assert.ok(requests.every((r) => r.method === 'POST' && (r.url === '/feedback' || r.url === '/e')), 'only /e and /feedback were called');
+  assert.ok(requests.every((r) => r.url === '/feedback' || r.url === '/e' || r.url.startsWith('/dash') || r.url === '/favicon.ico'), 'only /e, /feedback and the dashboard were called: ' + JSON.stringify([...new Set(requests.map((r) => r.url))]));
   console.log(`feedback-830-live: ${rows.length} messages stored by the Worker; screenshots in ${EVIDENCE}; all checks pass`);
 } finally {
   await close();

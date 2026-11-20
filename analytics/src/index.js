@@ -119,8 +119,10 @@ async function handleEvent(request, env) {
 export const FEEDBACK_RATE = Object.freeze({ max: 5, windowMs: 60000 }); // per isolate: at most `max` messages per `windowMs`
 export const FEEDBACK_BODY_MAX = 16384; // bytes: 2000 characters of text, even all escaped in JSON, fit well under this
 // THE one place the table is defined; it is created on first use (CREATE TABLE IF NOT EXISTS), by whichever of the endpoint / the dashboard comes first.
-export const FEEDBACK_TABLE_SQL = 'CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, app TEXT NOT NULL, version TEXT NOT NULL, host TEXT NOT NULL, stars INTEGER, text TEXT NOT NULL, email TEXT NOT NULL)';
-export const FEEDBACK_LIST_SQL = 'SELECT at, app, version, stars, text, email FROM feedback ORDER BY id DESC LIMIT 200';
+export const FEEDBACK_TABLE_SQL = 'CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, app TEXT NOT NULL, version TEXT NOT NULL, host TEXT NOT NULL, stars INTEGER, text TEXT NOT NULL, email TEXT NOT NULL, status TEXT NOT NULL DEFAULT \'new\')';
+export const FEEDBACK_LIST_SQL = 'SELECT id, at, app, version, host, stars, text, email, status FROM feedback ORDER BY id DESC LIMIT 500';
+export const FEEDBACK_STATUS_SQL = 'UPDATE feedback SET status = ?1 WHERE id = ?2';
+export const FEEDBACK_DELETE_SQL = 'DELETE FROM feedback WHERE id = ?1';
 const tableReady = new WeakSet(); // the D1 bindings whose table this isolate has already ensured
 async function ensureFeedbackTable(env) {
   if (tableReady.has(env.DB)) return;
@@ -158,6 +160,24 @@ async function handleFeedback(request, env) {
   return new Response(null, { status: 204, headers: CORS });
 }
 
+// POST /dash/feedback?key=<DASH_KEY>, a form post { id, action: done | new | delete, back }: the dashboard's two buttons (and "Move back to New"). The key gate comes
+// first (a wrong key is a 404); GET never changes anything (405); the answer is a 303 back to the view the button was pressed in.
+async function handleFeedbackAction(request, env) {
+  const url = new URL(request.url);
+  if (!keyOk(url, env)) return new Response('Not found', { status: 404 });
+  if (request.method !== 'POST') return new Response('POST only', { status: 405 });
+  if (!env.DB) return new Response('the DB binding is missing', { status: 503 });
+  const form = new URLSearchParams(await request.text());
+  const id = Number(form.get('id')), action = form.get('action');
+  if (!Number.isInteger(id) || id < 1 || !['done', 'new', 'delete'].includes(action)) return new Response('bad request', { status: 400 });
+  await ensureFeedbackTable(env);
+  if (action === 'delete') await env.DB.prepare(FEEDBACK_DELETE_SQL).bind(id).run();
+  else await env.DB.prepare(FEEDBACK_STATUS_SQL).bind(action, id).run();
+  const back = String(form.get('back') || '');
+  const to = /^\/dash\?key=[^#\s]*$/.test(back) ? back : '/dash?key=' + encodeURIComponent(url.searchParams.get('key'));
+  return new Response(null, { status: 303, headers: { location: to + '#feedback', 'cache-control': 'no-store' } });
+}
+
 async function feedbackRows(env) {
   if (!env.DB) throw new Error('the DB binding is missing');
   await ensureFeedbackTable(env);
@@ -172,6 +192,7 @@ export default {
     if (url.pathname === '/rollup') return handleRollup(request, env);
     if (url.pathname === '/e') return handleEvent(request, env);
     if (url.pathname === '/feedback') return handleFeedback(request, env);
+    if (url.pathname === '/dash/feedback') return handleFeedbackAction(request, env);
     return new Response('Not found', { status: 404 });
   },
 
@@ -314,13 +335,14 @@ async function handleDash(request, env) {
   const days = DAY_CHOICES.includes(daysReq) ? daysReq : 30;
   const showDev = url.searchParams.get('dev') === '1';
   const showBot = url.searchParams.get('bot') === '1';
+  const fb = feedbackFilter(url.searchParams);
   const sql = dashQueries({ days, showDev, showBot });
   const keys = Object.keys(sql);
   const settled = await Promise.allSettled([...keys.map((k) => aeQuery(env, sql[k])), feedbackRows(env)]); // the last is D1 (TASK 830), not Analytics Engine
   const data = {}, errors = {};
   sql.feedback = '(D1) ' + FEEDBACK_LIST_SQL;
   [...keys, 'feedback'].forEach((k, i) => { const s = settled[i]; if (s.status === 'fulfilled') data[k] = s.value; else errors[k] = String((s.reason && s.reason.message) || s.reason); });
-  return new Response(renderDash({ data, errors, sql, days, showDev, showBot, key: url.searchParams.get('key') }), {
+  return new Response(renderDash({ data, errors, sql, days, showDev, showBot, key: url.searchParams.get('key'), fb }), {
     headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
   });
 }
@@ -339,7 +361,37 @@ function table(head, rows) {
   return `<div class="scroll"><table><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>`;
 }
 
-export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
+// The Feedback section's view, from the URL (so a filtered view can be bookmarked): fapp = an app id | all, fstars = all | 1-2 | 3 | 4-5, fview = new | done.
+export const FEEDBACK_STARS = Object.freeze(['all', '1-2', '3', '4-5']);
+export function feedbackFilter(q) {
+  const app = q.get('fapp'), stars = q.get('fstars'), view = q.get('fview');
+  return { app: APP_IDS.includes(app) ? app : 'all', stars: FEEDBACK_STARS.includes(stars) ? stars : 'all', view: view === 'done' ? 'done' : 'new' };
+}
+const starsMatch = (f, n) => f === 'all' || (n != null && (f === '1-2' ? n <= 2 : f === '3' ? n === 3 : n >= 4));
+export function relTime(iso, now = Date.now()) {
+  const t = Date.parse(iso); if (!Number.isFinite(t)) return '';
+  const m = Math.max(0, Math.round((now - t) / 60000));
+  if (m < 1) return 'just now'; if (m < 60) return m + ' min ago';
+  const h = Math.round(m / 60); if (h < 48) return h + ' h ago';
+  return Math.round(h / 24) + ' days ago';
+}
+const appName = (id) => { const a = APPS.find((x) => x.id === id); return a ? a.name : String(id || '—'); };
+
+/** One feedback card: EVERY value goes through esc() (the text and the email are what a visitor typed); line breaks kept by CSS (white-space: pre-wrap). */
+function feedbackCard(r, { key, back, now }) {
+  const name = appName(r.app);
+  const stars = r.stars == null ? '' : `<span class="stars" aria-label="${esc(r.stars)} of 5 stars" title="${esc(r.stars)} / 5">${'★'.repeat(r.stars)}<span class="off">${'★'.repeat(5 - r.stars)}</span></span>`;
+  const act = (action, label, extra = '') => `<form method="post" action="/dash/feedback?key=${encodeURIComponent(key)}"${extra}><input type="hidden" name="id" value="${esc(r.id)}"><input type="hidden" name="action" value="${action}"><input type="hidden" name="back" value="${esc(back)}"><button type="submit" class="btn${action === 'delete' ? ' danger' : ''}">${label}</button></form>`;
+  const reply = r.email ? `<a class="btn" href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Re: your ' + name + ' feedback')}">Reply</a>` : '';
+  return `<article class="fbcard" data-id="${esc(r.id)}" data-status="${esc(r.status)}">
+    <header>${stars}<span class="meta"><b>${esc(name)}</b> · ${esc(r.version)} · ${esc(r.host)}</span><time title="${esc(r.at)}" datetime="${esc(r.at)}">${esc(relTime(r.at, now))}</time></header>
+    <p class="fbtext">${esc(r.text) || '<span class="sub">(no text)</span>'}</p>
+    ${r.email ? `<p class="fbmail">${esc(r.email)}</p>` : ''}
+    <div class="fbact">${reply}${r.status === 'done' ? act('new', 'Move back to New') : act('done', 'Mark done')}${act('delete', 'Delete', ' onsubmit="return confirm(\'Delete this feedback for good?\')"')}</div>
+  </article>`;
+}
+
+export function renderDash({ data, errors, sql, days, showDev, showBot, key, fb = feedbackFilter(new URLSearchParams()), now = Date.now() }) {
   const k = encodeURIComponent(key || '');
   const link = (d, dev, bot) => `/dash?key=${k}&days=${d}&dev=${dev ? 1 : 0}&bot=${bot ? 1 : 0}`;
   const total = (data.total && data.total[0]) || {};
@@ -351,8 +403,23 @@ export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
   const quality = (data.quality || []).map((r) => ({ cls: String(r.class || '(unclassified)'), n: num(r.n) }));
   const qReal = quality.filter((q) => !HARD_BOT.includes(q.cls)).reduce((s, q) => s + q.n, 0);
   const qBot = quality.filter((q) => HARD_BOT.includes(q.cls)).reduce((s, q) => s + q.n, 0);
-  // TASK 830: the feedback, newest first. EVERY cell goes through esc() (table()): the text and the email are what a visitor typed.
-  const feedbackCells = (data.feedback || []).map((r) => [String(r.at || '').slice(0, 16).replace('T', ' '), r.app || '—', r.version || '—', r.stars == null ? '—' : r.stars + ' / 5', r.text || '', r.email || '']);
+  // TASK 830: the feedback as cards, newest first, in a view kept in the URL. Counts are of ALL rows (the filters only narrow what is listed).
+  const allFb = data.feedback || [];
+  const nNew = allFb.filter((r) => r.status !== 'done').length, nDone = allFb.length - nNew;
+  const fbUrl = (patch) => { const f = { ...fb, ...patch }; return `/dash?key=${k}&days=${days}&dev=${showDev ? 1 : 0}&bot=${showBot ? 1 : 0}&fapp=${f.app}&fstars=${f.stars}&fview=${f.view}#feedback`; };
+  const here = fbUrl({}).replace(/#feedback$/, '');
+  const narrowed = allFb.filter((r) => (fb.app === 'all' || r.app === fb.app) && starsMatch(fb.stars, r.stars));
+  const cardOf = (r) => feedbackCard(r, { key: key || '', back: here, now });
+  const newCards = narrowed.filter((r) => r.status !== 'done').map(cardOf), doneCards = narrowed.filter((r) => r.status === 'done').map(cardOf);
+  const chip = (label, on, href) => `<a class="chip${on ? ' on' : ''}" href="${href}">${esc(label)}</a>`;
+  const fbFilters = `<nav class="fbfilters" aria-label="Feedback filters">
+    <span class="grp">${chip('New (' + nNew + ')', fb.view === 'new', fbUrl({ view: 'new' }))}${chip('Done (' + nDone + ')', fb.view === 'done', fbUrl({ view: 'done' }))}</span>
+    <span class="grp">${chip('All apps', fb.app === 'all', fbUrl({ app: 'all' }))}${APPS.map((a) => chip(a.name, fb.app === a.id, fbUrl({ app: a.id }))).join('')}</span>
+    <span class="grp">${[['all', 'All stars'], ['1-2', '1-2 ★'], ['3', '3 ★'], ['4-5', '4-5 ★']].map(([v, l]) => chip(l, fb.stars === v, fbUrl({ stars: v }))).join('')}</span></nav>`;
+  const fbBody = errors.feedback ? '' : fb.view === 'done'
+    ? `<div class="fblist">${doneCards.join('') || '<p class="sub">nothing done yet</p>'}</div>`
+    : `<div class="fblist">${newCards.join('') || '<p class="sub">no new feedback' + (nNew ? ' with these filters' : '') + '</p>'}</div>
+       <details class="fbdone"><summary>Done (${doneCards.length}${doneCards.length === nDone ? '' : ' of ' + nDone})</summary><div class="fblist">${doneCards.join('') || '<p class="sub">none</p>'}</div></details>`;
   const recentRows = (data.recent || []).map((r) => [String(r.ts).slice(5, 16), [r.city, r.region && r.region !== r.city ? r.region : '', countryName(r.country)].filter(Boolean).join(', '), r.app || '—', r.host || '—']);
 
   return `<!doctype html><html lang="en"><head>
@@ -379,8 +446,24 @@ export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
   td, th { text-align: left; padding: 6px; border-bottom: 1px solid #1d242e; }
   th { color: #8b98a8; font-weight: 500; }
   td:last-child, th:last-child { text-align: right; }
-  .fb td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .fb td:last-child, .fb th:last-child { text-align: left; }
+  .fbtop { margin: 0; padding: 10px 16px; border-bottom: 1px solid #222a35; font-size: 15px; }
+  .fbtop a { color: #7fb4ff; font-weight: 600; }
+  .fbfilters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .fbfilters .grp { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { color: #9db4d0; text-decoration: none; padding: 0 12px; min-height: 44px; display: inline-flex; align-items: center; border: 1px solid #2a3340; border-radius: 6px; font-size: 14px; }
+  .chip.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .fblist { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); }
+  .fbcard { background: #0f141b; border: 1px solid #222a35; border-radius: 8px; padding: 12px; min-width: 0; }
+  .fbcard header { padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .fbcard .stars { color: #f2b01e; font-size: 20px; letter-spacing: 1px; } .fbcard .stars .off { color: #3a4350; }
+  .fbcard .meta { color: #c8d3df; font-size: 13px; } .fbcard time { color: #8b98a8; font-size: 13px; margin-left: auto; }
+  .fbtext { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
+  .fbmail { margin: 0 0 8px; color: #9db4d0; font-size: 13px; overflow-wrap: anywhere; }
+  .fbact { display: flex; flex-wrap: wrap; gap: 8px; } .fbact form { margin: 0; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 14px; font: inherit; font-size: 14px; color: #e6edf3; background: #1b2330; border: 1px solid #2a3340; border-radius: 6px; text-decoration: none; cursor: pointer; }
+  .btn.danger { color: #ffb4ba; border-color: #5c2027; }
+  .fbdone { margin-top: 12px; } .fbdone summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: #9db4d0; }
+  @media (max-width: 640px) { .fbact .btn { flex: 1 1 auto; } }
   .err { background: #2d1418; border-color: #5c2027; color: #ffb4ba; }
   pre { white-space: pre-wrap; word-break: break-word; background: #0b0e13; padding: 8px; border-radius: 6px; }
   canvas { max-height: 280px; }
@@ -394,6 +477,7 @@ export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
     <a href="${link(days, showDev, !showBot)}">${showBot ? 'hide bots' : 'show bots'}</a>
   </nav>
 </header>
+<p class="fbtop"><a href="#feedback">Feedback: ${nNew} new</a>${nDone ? ` <span class="sub">· ${nDone} done</span>` : ''}${errors.feedback ? ' <span class="sub">(could not be read)</span>' : ''}</p>
 <main>
   <section class="card"><h2>Visits</h2><div class="big">${num(total.visits).toLocaleString('en')}</div><p class="sub">${num(total.people).toLocaleString('en')} anonymous browsers</p></section>
   <section class="card"><h2>By app</h2><canvas id="c_app"></canvas></section>
@@ -403,7 +487,7 @@ export function renderDash({ data, errors, sql, days, showDev, showBot, key }) {
   <section class="card full"><h2>Top features</h2>${table(['feature', 'app', 'uses'], featureRows)}</section>
   <section class="card"><h2>Traffic quality</h2><p class="sub">real (clean + datacenter) <b style="color:#2ea043">${qReal.toLocaleString('en')}</b> · bot <b style="color:#e3a008">${qBot.toLocaleString('en')}</b></p>${table(['class', 'visits'], quality.map((q) => [q.cls + (HARD_BOT.includes(q.cls) ? ' (bot)' : ''), q.n.toLocaleString('en')]))}</section>
   <section class="card"><h2>Builds by site</h2>${table(['build', 'app', 'site', 'visits'], versionRows)}</section>
-  <section class="card full fb"><h2>Feedback (newest first, UTC)</h2>${table(['date', 'app', 'version', 'stars', 'text', 'email'], feedbackCells)}</section>
+  <section class="card full" id="feedback"><h2>Feedback (newest first)</h2>${fbFilters}${fbBody}</section>
   <section class="card full"><h2>Latest visits (UTC)</h2>${table(['time', 'place', 'app', 'host'], recentRows)}</section>
   ${errKeys.length ? `<section class="card full err"><h2>${errKeys.length} quer${errKeys.length === 1 ? 'y' : 'ies'} failed</h2><p class="sub">The rest of the page is real. Likely an Analytics Engine SQL dialect difference:</p>
     ${errKeys.map((q) => `<p><b>${esc(q)}</b>: ${esc(errors[q])}</p><pre>${esc(sql[q])}</pre>`).join('')}</section>` : ''}

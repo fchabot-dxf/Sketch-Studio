@@ -8,7 +8,7 @@
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
-import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughing } from '#core/stepped-cut.js';
+import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughingFor, boundaryOf, levelsBand } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; the heights' band
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
@@ -35,15 +35,46 @@ export const partKeyOf = (key) => (isContourKey(key) ? key.slice(CONTOUR_KIND.le
 /** The part record's Contour record (with a cut type), or null. */
 export const contourOf = (key, plan = CUT_PLAN) => { const r = plan.get(contourKeyOf(key)); return r && r.cutType ? r : null; };
 /** A plan entry as the derivation takes it: { key, target, rec }. A contour record gets its PART's target, and its record the part's depth (`baseDepth`),
- *  cut type (`baseType`), `slope` and `levels`; null when its part has no cut type. Every other record: its own key's target, its record as stored. */
+ *  cut type (`baseType`), `slope` and `levels`; null when its part has no cut type. Every other record: its own key's target, its record as stored (TASK 810: a
+ *  Roughing whose boundary is the Stock or a picked shape gets that shape's target as `boundaryTarget`: withBoundaryTarget). */
 export function resolveEntry(key, rec, plan = CUT_PLAN) {
-  if (!isContourKey(key)) return { key, target: parseKey(key), rec };
+  if (!isContourKey(key)) return { key, target: parseKey(key), rec: withBoundaryTarget(rec, plan) };
   const pk = partKeyOf(key), part = plan.get(pk);
   if (!rec || !part || !part.cutType) return null;
   return { key, target: parseKey(pk), rec: { ...rec, baseDepth: part.cutDepth, baseType: part.cutType, ...(part.slope ? { slope: part.slope } : {}), ...(part.levels ? { levels: part.levels } : {}) } };
 }
+/** TASK 810: a Roughing record whose boundary (#core boundaryOf) is the Stock or a picked Shape, with that shape's target `boundaryTarget` ({ kind, id }: the Stock
+ *  of the plan, stockKeyOf; the picked `boundaryShape` key); without one (no Stock, nothing picked) the record as stored: the derivation then refuses with its reason.
+ *  Every other record: itself (the same object). */
+export function withBoundaryTarget(rec, plan = CUT_PLAN) {
+  if (!rec || !(cutTypeById(rec.cutType) || {}).levelsOp || !hasLevels(rec)) return rec;
+  const b = boundaryOf(rec);
+  const key = b.kind === 'stock' ? stockKeyOf(plan) : b.kind === 'shape' ? b.shape : null;
+  return key ? { ...rec, boundaryTarget: parseKey(key) } : rec;
+}
+/** TASK 810: why a Roughing has nothing to cut (#core levelsRoughingFor's error), in the card note's words (a fact, not a nag). */
+export const ROUGHING_REFUSED = {
+  'no-stock': 'the design has no Stock: mark a closed shape as Stock, or pick another boundary',
+  'no-shape': 'no boundary shape yet: press Pick, then click a closed shape',
+  'shape-gone': 'the boundary shape is no longer in the design',
+  'no-room': 'the boundary leaves no room for the bit',
+  band: 'no level between the Top and the Bottom (less the floor allowance)', // the Heights (Roughing and Contour)
+};
+/** TASK 810: rename plan KEYS (`rename`: old key -> new key) and drop some (`remove`), in place, the plan's order kept: the records AND every reference to a key a
+ *  record holds (a Roughing's picked boundary shape, `boundaryShape`), so a reference follows its shape as the record of that shape does. The one place keys move. */
+export function renamePlanKeys(rename, remove = new Set(), plan = CUT_PLAN) {
+  if (!rename.size && !remove.size) return;
+  const entries = [...plan];
+  plan.clear();
+  for (const [key, rec] of entries) {
+    if (remove.has(key)) continue;
+    if (rec && typeof rec.boundaryShape === 'string' && rename.has(rec.boundaryShape)) rec.boundaryShape = rename.get(rec.boundaryShape);
+    plan.set(rename.get(key) || key, rec);
+  }
+}
 // The Contour defaults: the last bit / cutter shape / step set on any Contour (owner's example: a 1/8 in ball nose at 0.25 mm). App state, like the step depth.
-let lastContourV = { toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90, stepDepth: LEVELS.contourStepMm };
+export const CONTOUR_DEFAULTS = Object.freeze({ toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90, stepDepth: LEVELS.contourStepMm }); // TASK 810: declared (the card's tab dots read what a Contour starts with)
+let lastContourV = { ...CONTOUR_DEFAULTS };
 export const lastContour = () => ({ ...lastContourV });
 export function rememberContour(field, value) { if (field in lastContourV && value != null) lastContourV = { ...lastContourV, [field]: value }; return lastContour(); }
 /**
@@ -406,9 +437,13 @@ export function levelsSummary(key, storedRec, state, loops, loopPolys, owned, pl
   const perLevel = new Map();
   for (const c of cuts) if (c.terrace && c.terrace.islands != null) perLevel.set(c.terrace.depth, { islands: c.terrace.islands, small: c.terrace.small });
   const worst = [...perLevel.values()].reduce((m, v) => (v.islands > m.islands ? v : m), { islands: 0, small: 0 });
-  const thin = hasLevels(rec) && rec.levelsOp === 'roughing' && roughLayout(rec) === 'terraces' && Number(rec.minTerraceWidth) > 0 // TASK 792: the bands the Min terrace width leaves
-    ? levelsRoughing(rec.levels, { outer: (deriveProfileCuts(e.target, { ...rec, cutType: 'pocket' }, state, loops, loopPolys, owned).find((c) => c.isCompound) || {}).outerPoly, step: rec.stepDepth, depth: rec.cutDepth, toolDia: rec.toolDia, allowance: roughingAllowance(rec), layout: 'terraces', minWidth: rec.minTerraceWidth }).steps.reduce((n, s) => n + (s.thin || 0), 0) : 0;
-  return { op: rec.levelsOp, layout: roughLayout(rec), source: hasLevels(rec) ? 'levels' : rec.slope ? 'slope' : 'drawn', depths, passes: cuts.length, allowance: roughingAllowance(rec), islands: worst.islands, small: worst.small, thin, minWidth: Number(rec.minTerraceWidth) || 0, toolDia: Number(rec.toolDia) || 0 };
+  // TASK 792 / 810: a Roughing from levels, as its cuts were made (#core levelsRoughingFor: its boundary): the bands the Min terrace width leaves, and why it has nothing to cut
+  const outer = hasLevels(rec) && rec.levelsOp === 'roughing' ? (deriveProfileCuts(e.target, { ...rec, cutType: 'pocket' }, state, loops, loopPolys, owned).find((c) => c.isCompound) || {}).outerPoly : null;
+  const band = levelsBand(rec, rec.levelsOp === 'contour' ? rec.baseDepth : rec.cutDepth); // TASK 810: its heights
+  const LR = outer && !band.empty ? levelsRoughingFor({ ...rec, cutDepth: band.depth }, outer, state, loops, loopPolys) : null;
+  const thin = LR && roughLayout(rec) === 'terraces' && Number(rec.minTerraceWidth) > 0 ? LR.steps.reduce((n, s) => n + (s.thin || 0), 0) : 0;
+  const refused = band.empty ? 'band' : LR && ROUGHING_REFUSED[LR.error] ? LR.error : null;
+  return { op: rec.levelsOp, layout: roughLayout(rec), source: hasLevels(rec) ? 'levels' : rec.slope ? 'slope' : 'drawn', depths, passes: cuts.length, allowance: roughingAllowance(rec), islands: worst.islands, small: worst.small, thin, minWidth: Number(rec.minTerraceWidth) || 0, toolDia: Number(rec.toolDia) || 0, refused };
 }
 /**
  * levelsNoteItems(storedRec, sum) — TASK 792: the card note of a Roughing / Contour record (doc unit), from its levelsSummary: "Roughing: 4 levels, 1 to
@@ -420,6 +455,7 @@ export function levelsNoteItems(storedRec, sum) {
   if (!sum || !storedRec) return [];
   const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, show: 'field' });
   const name = sum.op === 'contour' ? 'Contour' : 'Roughing';
+  if (sum.refused) { const t = `${name}: nothing to cut: ${ROUGHING_REFUSED[sum.refused]}`; return [{ text: t, warn: t.slice(name.length + 2) }]; } // TASK 810: the boundary's reason
   if (!sum.depths.length) { const t = `${name}: nothing to cut (no level, or the part has no depth)`; return [{ text: t, warn: t.slice(name.length + 2), title: 'set the part\u2019s depth' }]; }
   const items = [];
   const n = sum.depths.length, span = `${n > 1 ? `${f(sum.depths[0])} to ` : ''}${f(sum.depths[n - 1])} ${u}`;
@@ -542,11 +578,7 @@ export function reconcileCutPlan(state, plan = CUT_PLAN) {
     const members = idsNamedBy(named, shapeIds);
     if (members && members.some((m) => isBezier(m) || nearBezier.has(m))) remove.add(key);
   }
-  if (rename.size || remove.size) {
-    const entries = [...plan];
-    plan.clear();
-    for (const [key, rec] of entries) if (!remove.has(key)) plan.set(rename.get(key) || key, rec);
-  }
+  renamePlanKeys(rename, remove, plan); // TASK 810: the records and the keys they reference
   return { edgeMoved, edgeDropped, kept: rename.size, removed: remove.size };
 }
 
@@ -589,11 +621,7 @@ export function keepHolesFromOtherSketches(state, plan = CUT_PLAN) {
     const prof = makeProfile(state, loopById.get(id), holes.map((h) => loopById.get(h)));
     rename.set(key, keyOf('profile', prof.id));
   }
-  if (rename.size) {
-    const entries = [...plan];
-    plan.clear();
-    for (const [key, rec] of entries) plan.set(rename.get(key) || key, rec);
-  }
+  renamePlanKeys(rename, new Set(), plan); // TASK 810: the records and the keys they reference
   return { keptHoles: rename.size, lostHoles };
 }
 

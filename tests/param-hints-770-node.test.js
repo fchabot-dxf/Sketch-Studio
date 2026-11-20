@@ -70,10 +70,15 @@ const STATES = [
   { cutType: 'roughing' }, { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose' }, // TASK 792: a drawn region's Roughing, a part's Contour card
   { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }] }, { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }], roughLayout: 'nested' }, // TASK 792: a part with levels: its Layout row
   { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }] }, // TASK 809: a Contour of a part with levels: its Smoothing row
+  // TASK 810: Roughing's boundary rows: the Stock greyed (no Stock) / offered, Shape with its Pick (and Cancel pick while picking), a typed offset
+  { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }], boundaryCtx: { hasStock: true } },
+  { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }], boundary: 'shape', boundaryTool: 'inside', boundaryOffset: -2 },
+  { cutType: 'roughing', levels: [{ z: 1, loops: [[0, 0, 10, 0, 10, 10]] }], boundary: 'shape', boundaryShape: 'loop:a', boundaryCtx: { hasStock: true, picking: true } },
+  { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose', wallsCtx: { shown: true, value: 'sloped', defaultId: 'sloped' } }, // TASK 810: a Contour's Walls (its part has slope rings)
 ];
-for (const record of STATES) {
+for (const { boundaryCtx, wallsCtx, ...record } of STATES) {
   const name = JSON.stringify(record);
-  panel.update({ kind: record.cutType === 'contour' ? 'contour' : 'loop', contour: record.cutType === 'roughing' ? { allowed: true, on: true } : null, record: { cutDepth: 6, cutOffset: 0, toolDia: 6, ...record } }); // TASK 792: a Roughing card shows its Contour row; a Contour is its own card (kind 'contour')
+  panel.update({ kind: record.cutType === 'contour' ? 'contour' : 'loop', contour: record.cutType === 'roughing' ? { allowed: true, on: true } : null, boundary: boundaryCtx || { hasStock: false, picking: false }, walls: wallsCtx || null, record: { cutDepth: 6, cutOffset: 0, toolDia: 6, ...record } }); // TASK 810: boundary = the Boundary rows' context // TASK 792: a Roughing card shows its Contour row; a Contour is its own card (kind 'contour')
   const rows = [...host.querySelectorAll('.cut-field, .cut-row')].filter(visible);
   ok(rows.length >= 1, name + ': rows shown');
   for (const row of rows) {
@@ -85,6 +90,11 @@ for (const record of STATES) {
     eq(trig.textContent, hintLabel(id), `${name} ${id}: the label is the table's`);
     eq(hintFor(trig), hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the tooltip text is the table's hint in the card's context`);
     for (const c of row.querySelectorAll('[data-hint]')) { seen.add(c.dataset.hint); eq(c.textContent, hintLabel(c.dataset.hint), `${name}: the element ${c.dataset.hint} shows its name`); if (c !== trig) eq(hintFor(c), hintText(c.dataset.hint), `${name}: its tooltip is its hint`); }
+  }
+  for (const tab of [...host.querySelectorAll('.cut-tab')].filter(visible)) { // TASK 810: a Roughing / Contour card's tabs: each shows its name, its tooltip is its hint
+    const n = tab.querySelector('[data-hint]');
+    seen.add(n.dataset.hint);
+    eq([n.textContent, hintFor(n)], [hintLabel(n.dataset.hint), hintText(n.dataset.hint)], `${name}: the tab ${n.dataset.hint}: its name and its hint`);
   }
   ok(!host.querySelector('.sk-hint, .sk-hint-trigger, .sk-hint-i, .sk-opt-hint'), `${name}: TASK 805: no hint text or (i) is laid out in the card`);
   // the menus: each row shows its name only (its hint is the tooltip)

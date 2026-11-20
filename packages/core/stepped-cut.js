@@ -516,6 +516,9 @@ export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
 //     its deepest level (at 1.5 the band only just holds the bit: the Origin could not move it, and the drawn footprint is empty).
 //     Not the Stock outline: an STL has none, and wood farther out than one bit from the part is not in the part's way. Contour at d = an Outside cut
 //     along each outer loop of that material and an Inside cut along each of its holes.
+//     TASK 810 (owner turn 2656): that work area is the USER'S choice (ROUGH_BOUNDARY, roughingBoundary / roughingWorkGrow below): the BOUNDARY (the part's
+//     silhouette, its bounding box, the Stock outline, or a closed shape the user picked), the TOOL rule (the bit inside / centred on / outside the boundary) and
+//     an OFFSET; the defaults (Silhouette, Outside, the offset calculated: allowance + 3/4 bit) ARE the work area above, to the bit.
 //  2. else `rec.slope` (a Fusion region's rings, SA-7): THE stepped engine above, unchanged: steppedTerraces at the step, every level cut as the
 //     region's own plain type (levelsCutAs: pocket / inside / outside); Roughing's allowance goes into the cut OFFSET (the Origin leaves it on every
 //     wall), so allowance 0 is byte for byte the stepped cut of TASKS 714-717. Contour = the same terraces at its fine step as Inside cuts (a pocket,
@@ -669,6 +672,90 @@ function depthFirstPerArea(items, areaBoxes) {
   return out;
 }
 
+// ── TASK 810 (owner turn 2656: "is the machining area outside or inside the geometry, and any offset from that" is the user's decision): Roughing's MACHINING
+// BOUNDARY, a part with levels (a sloped or drawn region's Roughing cuts its own region). Record fields: `boundary` (ROUGH_BOUNDARY.kinds; none = Silhouette),
+// `boundaryShape` (the plan key of the picked closed shape, 'loop:<id>' | 'profile:<id>': the app resolves it, and the Stock's, into `boundaryTarget`), `boundaryTool`
+// (ROUGH_BOUNDARY.tools; none = Outside), `boundaryOffset` (base mm, signed: + moves the boundary out, - in, before the tool rule; none / null = CALCULATED).
+// THE RULE: the bit's CENTRE may go as far as the boundary moved by the offset, then by the tool rule (Inside: one bit radius in, so its edge stays inside the
+// line; On: on it; Outside: one bit radius out, so its edge just touches the line from outside). The pocket written (the work area W) is that limit grown by
+// what the Origin keeps its bit back from a pocket's line: the bit radius + its automatic offset (LEVELS.pocketKeepBackBits). So W = the boundary grown by
+// offset + boundaryToolBits(tool) bit diameters, boundaryToolBits = (centre in radii) / 2 + 1/2 + 1/4: Inside 0.25, On 0.75, Outside 1.25.
+// THE DEFAULTS reproduce TASK 792's work area exactly (the silhouette grown by the allowance + LEVELS.workMarginBits = 2 bits): Silhouette, Outside, and the
+// calculated offset = the allowance + BOUNDARY_CALC_OFFSET_BITS bit diameters, BOUNDARY_CALC_OFFSET_BITS = 2 - 1.25 = 0.75; the growth is then written
+// allowance + (0.75 + 1.25) * bit = allowance + 2 * bit, the same floating-point operations as before (0.75 + 1.25 is exactly 2), so the export is byte for byte the same.
+export const ROUGH_BOUNDARY = Object.freeze({
+  kinds: Object.freeze([Object.freeze({ id: 'silhouette', label: 'Silhouette' }), Object.freeze({ id: 'box', label: 'Bounding box' }), Object.freeze({ id: 'stock', label: 'Stock' }), Object.freeze({ id: 'shape', label: 'Shape' })]),
+  tools: Object.freeze([Object.freeze({ id: 'inside', label: 'Inside', centreRadii: -1 }), Object.freeze({ id: 'on', label: 'On', centreRadii: 0 }), Object.freeze({ id: 'outside', label: 'Outside', centreRadii: 1 })]),
+  defaultKind: 'silhouette', defaultTool: 'outside',
+});
+/** The work area's growth past the (offset) boundary for a tool rule, in bit diameters (the rule above). */
+export const boundaryToolBits = (toolId) => (ROUGH_BOUNDARY.tools.find((t) => t.id === toolId) || ROUGH_BOUNDARY.tools.find((t) => t.id === ROUGH_BOUNDARY.defaultTool)).centreRadii / 2 + 0.5 + LEVELS.pocketKeepBackBits;
+/** The calculated offset's bit diameters (+ the wall allowance): what makes the defaults TASK 792's work area. */
+export const BOUNDARY_CALC_OFFSET_BITS = LEVELS.workMarginBits - boundaryToolBits(ROUGH_BOUNDARY.defaultTool);
+/** A Roughing record's boundary: { kind, tool, offset (base mm, or null = calculated), shape (plan key | null) } (unset fields = the defaults). */
+export function boundaryOf(rec) {
+  const r = rec || {};
+  const kind = ROUGH_BOUNDARY.kinds.some((k) => k.id === r.boundary) ? r.boundary : ROUGH_BOUNDARY.defaultKind;
+  const tool = ROUGH_BOUNDARY.tools.some((t) => t.id === r.boundaryTool) ? r.boundaryTool : ROUGH_BOUNDARY.defaultTool;
+  const offset = r.boundaryOffset != null && Number.isFinite(Number(r.boundaryOffset)) ? Number(r.boundaryOffset) : null;
+  return { kind, tool, offset, shape: typeof r.boundaryShape === 'string' && r.boundaryShape ? r.boundaryShape : null };
+}
+/** The calculated offset (base mm): the wall allowance + BOUNDARY_CALC_OFFSET_BITS bit diameters (what an empty Offset row means). */
+export const boundaryCalcOffset = (rec) => roughingAllowance(rec) + BOUNDARY_CALC_OFFSET_BITS * Math.max(0, Number(rec && rec.toolDia) || 0);
+/** The work area's growth past the boundary (base mm): the offset + the tool rule (the defaults: allowance + 2 bits, written as TASK 792 wrote it). */
+export function roughingWorkGrow(rec) {
+  const b = boundaryOf(rec), dia = Math.max(0, Number(rec && rec.toolDia) || 0), tb = boundaryToolBits(b.tool);
+  return b.offset == null ? roughingAllowance(rec) + (BOUNDARY_CALC_OFFSET_BITS + tb) * dia : b.offset + tb * dia;
+}
+/** The boundary's outline (world mm polygon) of a Roughing record whose part outline (its target's outer loop) is `partOuter`: { polygon } or { error }:
+ *  'no-stock' (Stock chosen, the document has none), 'no-shape' (Shape chosen, none picked), 'shape-gone' (the picked shape / the Stock no longer derives). */
+export function roughingBoundary(rec, partOuter, state, loops, loopPolys) {
+  const b = boundaryOf(rec);
+  if (b.kind === 'silhouette') return { polygon: partOuter };
+  if (b.kind === 'box') { const [x0, y0, x1, y1] = boxOf(partOuter); return { polygon: [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)] }; }
+  const t = rec && rec.boundaryTarget;
+  if (!t) return { error: b.kind === 'stock' ? 'no-stock' : 'no-shape' };
+  const own = deriveProfileCuts(t, { cutType: 'pocket', cutDepth: 1, cutOffset: 0, toolDia: 0 }, state, loops, loopPolys).find((c) => !c.isHole && c.kind !== 'chain');
+  const polygon = own && (own.isCompound ? own.outerPoly : own.polygon);
+  return polygon && polygon.length >= 3 ? { polygon } : { error: 'shape-gone' };
+}
+/** The Roughing of a record with levels (levelsRoughing on its boundary, work area growth, step, depth, bit, allowance, layout, min width), or the boundary's error. */
+export function levelsRoughingFor(rec, partOuter, state, loops, loopPolys) {
+  const b = roughingBoundary(rec, partOuter, state, loops, loopPolys);
+  if (b.error) return { steps: [], paths: [], layout: roughLayout(rec), zMax: null, error: b.error };
+  return levelsRoughing(rec.levels, { outer: b.polygon, grow: roughingWorkGrow(rec), step: rec.stepDepth, depth: rec.cutDepth, toolDia: rec.toolDia, allowance: roughingAllowance(rec), layout: roughLayout(rec), minWidth: rec.minTerraceWidth });
+}
+
+// ── TASK 810 (owner turns 2657-2658): the HEIGHTS of a Roughing / Contour (any source: levels, slope rings, a drawn region): it cuts only a BAND of depths.
+// Record fields: `topDepth` (base mm below the surface where it starts; none = the Surface: a level at or above it is not cut), `bottomDepth` (the depth it stops
+// at; none = the part's depth: the Roughing's Depth, the Contour's part's: "From model" for a part read from Fusion or an STL), `floorAllowance` (base mm >= 0: the
+// deepest level stops that much above the bottom; separate from the wall allowance; none / 0 = none). The levels are made as before down to the band's bottom
+// (bottom - floor allowance: its last level there), then the levels shallower than or at the top are dropped. None of them set: the depth as it was (byte for byte).
+const modelDepth = (rec) => (hasLevels(rec) ? rec.levels[rec.levels.length - 1].z : rec.slope && Array.isArray(rec.slope.rings) && rec.slope.rings.length ? Math.max(...rec.slope.rings.map((r) => Number(r && r.z)).filter(Number.isFinite)) : null);
+/** levelsBand(rec, partDepth) -> { top (base mm, 0 = the surface), depth (the depth the levels are made to: partDepth itself when no height is set), empty (no level
+ *  can be cut between the top and the bottom) }. */
+export function levelsBand(rec, partDepth) {
+  const r = rec || {};
+  const top = Number(r.topDepth) > 0 ? Number(r.topDepth) : 0;
+  const bottom = r.bottomDepth != null && Number(r.bottomDepth) > 0 ? Number(r.bottomDepth) : null;
+  const floor = Number(r.floorAllowance) > 0 ? Number(r.floorAllowance) : 0;
+  if (!top && bottom == null && !floor) return { top: 0, depth: partDepth, empty: false };
+  const part = Number(partDepth) > 0 && partDepth !== true ? Number(partDepth) : modelDepth(r);
+  const stop = bottom != null ? (part != null ? Math.min(part, bottom) : bottom) : part;
+  if (stop == null) return { top, depth: partDepth, empty: false }; // no depth known (a drawn region with its depth unset): nothing to limit
+  const depth = stop - floor;
+  return { top, depth, empty: !(depth > top + Z_EPS) };
+}
+// ── TASK 810 (docs/OPERATIONS-MODEL.md 1.4 / 5): a Contour's WHICH WALLS, record field `walls`: 'all' (every level's pass) | 'sloped' (Sloped only: the level whose
+// outline IS the shape's own outline is not cut: the straight wall a plain Outside / Inside cut already makes; exactly TASK 792's own-wall rule, `sameOutline`).
+// None stored = TODAY'S choice (wallsDefault): Sloped only for the Contour of a plain Outside / Inside cut on a sloped region (its slope rings, no levels), All
+// otherwise; so a Contour cuts byte for byte what it cut before until the user picks.
+export const CONTOUR_WALLS = Object.freeze({ choices: Object.freeze([Object.freeze({ id: 'all', label: 'All' }), Object.freeze({ id: 'sloped', label: 'Sloped only' })]) });
+export const wallsDefault = (rec) => (rec && rec.slope && !hasLevels(rec) && (rec.baseType === 'exterior' || rec.baseType === 'interior') ? 'sloped' : 'all');
+export const wallsOf = (rec) => (rec && (rec.walls === 'all' || rec.walls === 'sloped') ? rec.walls : wallsDefault(rec));
+/** The depth a cut of a Roughing / Contour is made at (its level's, else its record's). */
+const cutLevelDepth = (c) => Number(c.terrace ? c.terrace.depth : c.rec && c.rec.cutDepth);
+
 /** TASK 792 (owner turn 2604): Roughing's two LAYOUTS, the record field `roughLayout` (a part with levels; a sloped region's Roughing is the stepped engine,
  *  nested by nature). `terraces` (the default): every spot cut ONCE, from the surface to its own floor (no air passes; best on deep or gentle reliefs).
  *  `nested`: level k = one pocket over everything that must reach at least d_k (fewer, bigger, continuous paths; best on steep or blocky parts). */
@@ -684,10 +771,12 @@ const thinnerThanTol = (g) => !offsetRegions([g], -LEVELS.drawTolMm / 2, LEVELS.
 const pocketClears = (regions, r, m) => (r > 0 ? offsetRegions(offsetRegions(regions, -(r + m), LEVELS.drawTolMm), r, LEVELS.drawTolMm) : regions);
 
 /**
- * levelsRoughing(levels, { outer, step, depth, toolDia, allowance, layout }) -> { steps, paths, layout, zMax, error } — Roughing from a levels list (header,
+ * levelsRoughing(levels, { outer, grow, step, depth, toolDia, allowance, layout }) -> { steps, paths, layout, zMax, error } — Roughing from a levels list (header,
  * path 1). Levels: one every `step` (base mm, STEP_DEPTH.defaultMm when missing) down to `depth` (the part's depth; missing = the deepest section);
  * identical consecutive levels (the same cumulative material within SAME_OUTLINE_TOL_MM, compared with the run's FIRST level) are ONE level at the deeper
- * depth. REMOVAL R_k = the work area W minus the material at d_k grown by the allowance (R_1 holds R_2 ...).
+ * depth. REMOVAL R_k = the work area W minus the material at d_k grown by the allowance (R_1 holds R_2 ...). W = `outer` grown by `grow` (base mm; TASK 810: the
+ * boundary and its growth, roughingWorkGrow; missing = the allowance + LEVELS.workMarginBits bits, TASK 792's). A W the bit's centre has no room in (nothing left once
+ * shrunk by the bit radius + the Origin's offset: a boundary smaller than the bit, Inside) is refused: error 'no-room', no path.
  *  * layout 'nested': every connected piece of R_k is a path (a pocket at d_k); a piece the next level has too (the same outline, holes included) is cut
  *    there, not here (the same outline over consecutive levels = ONE path at the deepest of them).
  *  * layout 'terraces' (owner turns 2601-2603): TERRACE T_k = E_k minus E_k+1 (the deepest level's = its E), E_k = R_k shrunk by the Origin's automatic
@@ -702,7 +791,7 @@ const pocketClears = (regions, r, m) => (r > 0 ? offsetRegions(offsetRegions(reg
  * the bit); paths in cutting order (depthFirstPerArea over the pieces of R_1): [{ depth, level, region (the terrace / nested piece), regions (the pocket
  * elements written), box }].
  */
-export function levelsRoughing(levels, { outer, step, depth, toolDia, allowance = 0, layout = 'terraces', minWidth = 0 } = {}) {
+export function levelsRoughing(levels, { outer, grow, step, depth, toolDia, allowance = 0, layout = 'terraces', minWidth = 0 } = {}) {
   if (!Array.isArray(levels) || !levels.length) return { steps: [], paths: [], layout, zMax: null, error: 'no levels' };
   if (!Array.isArray(outer) || outer.length < 3) return { steps: [], paths: [], layout, zMax: null, error: 'no outline' };
   const st = levelStack(levels), zMax = st.zs[st.zs.length - 1];
@@ -710,9 +799,15 @@ export function levelsRoughing(levels, { outer, step, depth, toolDia, allowance 
   const dia = Math.max(0, Number(toolDia) || 0), a = Math.max(0, Number(allowance) || 0);
   const nested = layout === 'nested';
   const minW = !nested && Number(minWidth) > 0 ? Number(minWidth) : 0;
-  const key = ['R', nested ? 'N' : 'T', step, D, dia, a, minW, outer.length, ...boxOf(outer)].join('|');
+  const g = grow != null && Number.isFinite(Number(grow)) ? Number(grow) : a + LEVELS.workMarginBits * dia; // TASK 810: the boundary's growth (roughingWorkGrow)
+  const key = ['R', nested ? 'N' : 'T', step, D, dia, a, minW, g, outer.length, ...boxOf(outer)].join('|');
   if (st.memo.has(key)) return st.memo.get(key);
-  const W = offsetRegions(regionsFromRings([ringOf(outer)], 'nonzero'), a + LEVELS.workMarginBits * dia);
+  const W = offsetRegions(regionsFromRings([ringOf(outer)], 'nonzero'), g);
+  if (!W.length || (dia > 0 && !offsetRegions(W, -(dia / 2 + LEVELS.pocketKeepBackBits * dia), LEVELS.drawTolMm).length)) { // TASK 810: no room for the bit's centre
+    const none = { steps: [], paths: [], layout: nested ? 'nested' : 'terraces', zMax, error: 'no-room' };
+    st.memo.set(key, none);
+    return none;
+  }
   const runs = [];
   let ref = -1;
   for (const d of depthList(step, D)) {
@@ -883,12 +978,25 @@ function smoothedRoughing(R, tol) {
 }
 
 // deriveCuts for a record with `levelsOp` (header). The record carries `levels` and / or `slope` (a Contour: its part's, with `baseDepth` / `baseType`).
+// TASK 810: only the band of its heights (levelsBand): made down to the band's depth, the levels at or above its top dropped; an empty band cuts nothing.
 function deriveLevelsCuts(target, rec, state, loops, loopPolys, ownedLoops) {
+  const band = levelsBand(rec, rec.levelsOp === 'contour' ? rec.baseDepth : rec.cutDepth);
+  if (band.empty) return [];
+  const cuts = deriveLevelsCutsTo(target, rec, band.depth, state, loops, loopPolys, ownedLoops);
+  return band.top > 0 ? cuts.filter((c) => cutLevelDepth(c) > band.top + Z_EPS) : cuts;
+}
+function deriveLevelsCutsTo(target, rec, depth, state, loops, loopPolys, ownedLoops) {
   const op = rec.levelsOp;
-  const depth = op === 'contour' ? rec.baseDepth : rec.cutDepth;
   const label = (rec.slope && rec.slope.label) || null;
   const work = { ...levelsWorkRecord(rec), cutDepth: depth };
-  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing']) delete work[k]; // `slope` stays: the stepped engine reads it
+  // TASK 810: a Contour's Sloped only (wallsOf): the levels whose outline IS the shape's own outline (its own cut as `as`) are not cut (TASK 792's rule, any source)
+  const ownWallSkipped = (cuts, as) => {
+    if (op !== 'contour' || wallsOf(rec) !== 'sloped') return cuts;
+    const own = deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops).find((c) => !c.isHole && c.kind !== 'chain');
+    const wall = own && (own.isCompound ? own.outerPoly : own.polygon);
+    return wall ? cuts.filter((c) => !c.terrace || !sameOutline(c.isCompound ? c.outerPoly : c.polygon, wall)) : cuts;
+  };
+  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryShape', 'boundaryTarget', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance', 'walls']) delete work[k]; // TASK 810: + the boundary's, the heights' and the walls' fields // `slope` stays: the stepped engine reads it
   if (hasLevels(rec)) { // path 1
     const plain = deriveProfileCuts(target, { ...work, cutType: 'pocket' }, state, loops, loopPolys, ownedLoops).find((c) => c.isCompound);
     if (!plain) return [];
@@ -896,19 +1004,15 @@ function deriveLevelsCuts(target, rec, state, loops, loopPolys, ownedLoops) {
     const tol = smoothingOf(op, rec.smoothing); // TASK 809: the operation's Smoothing (0 = its polylines)
     if (op === 'contour') { // its paths in cutting order (depth-first per area)
       const T = levelsContour(rec.levels, { step: rec.stepDepth, depth, smoothing: tol });
-      return T.paths.map((p) => levelContourCut(p.polygon, p.outer, work, { index: p.level, count: T.steps.length, depth: p.depth, undercutBelow: null, label }, p.ring));
+      return ownWallSkipped(T.paths.map((p) => levelContourCut(p.polygon, p.outer, work, { index: p.level, count: T.steps.length, depth: p.depth, undercutBelow: null, label }, p.ring)), levelsCutAs(rec)); // TASK 810: Sloped only
     }
-    const R = levelsRoughing(rec.levels, { outer: plain.outerPoly, step: rec.stepDepth, depth, toolDia: rec.toolDia, allowance: roughingAllowance(rec), layout: roughLayout(rec), minWidth: rec.minTerraceWidth });
+    const R = levelsRoughingFor({ ...rec, cutDepth: depth }, plain.outerPoly, state, loops, loopPolys); // TASK 810: on its boundary (an error: no path)
     const S = tol > 0 ? smoothedRoughing(R, tol) : null;
     return R.paths.flatMap((p, i) => (S ? S[i] : p.regions.map((reg) => ({ reg, d: null }))).map(({ reg, d }) => levelPocketCut(reg, work, { index: p.level, count: R.steps.length, depth: p.depth, undercutBelow: null, label, islands: R.steps[p.level].islands, small: R.steps[p.level].small }, d)));
   }
   const as = levelsCutAs(rec);
   if (rec.slope) { // path 2: THE stepped engine (allowance 0: the stepped cut of 714 byte for byte)
-    const cuts = deriveCuts(target, { ...work, terraceAs: as }, state, loops, loopPolys, ownedLoops);
-    if (op !== 'contour' || (rec.baseType !== 'exterior' && rec.baseType !== 'interior')) return cuts;
-    const own = deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops).find((c) => !c.isHole && c.kind !== 'chain');
-    const wall = own && (own.isCompound ? own.outerPoly : own.polygon);
-    return wall ? cuts.filter((c) => !c.terrace || !sameOutline(c.isCompound ? c.outerPoly : c.polygon, wall)) : cuts;
+    return ownWallSkipped(deriveCuts(target, { ...work, terraceAs: as }, state, loops, loopPolys, ownedLoops), as); // TASK 810: Sloped only = TASK 792's skip next to a plain Outside / Inside cut (its default there)
   }
   return deriveProfileCuts(target, { ...work, cutType: as }, state, loops, loopPolys, ownedLoops); // path 3: one level, the drawn region at its depth
 }

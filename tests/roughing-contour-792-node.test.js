@@ -288,7 +288,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     ok(E.filter((e) => e.type === 'inside').every((e) => e.dia === '3.175 mm'), 'with the Contour\'s bit');
     // Edit contour: the Contour's own card
     h.pressEl('.cut-contour-edit');
-    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (its step, bit, cutter shape)');
+    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (TASK 810: its Heights, its Walls, then its step, bit, cutter shape)');
     eq(h.menu(), ['contour'], 'its menu offers the Contour only');
     h.setField('.cut-step-depth', '1');
     eq([CUT_PLAN.get(ck).stepDepth, cutPlanEntries().filter((e) => e.key === ck).length], [1, 1], 'its step is its own (1 mm)');
@@ -304,7 +304,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     h.clickAt(60, -40);
     h.pick('roughing');
     eq([CUT_PLAN.get(pk2).cutType, CUT_PLAN.get(pk2).finishAllowance], ['roughing', 0.5], 'Roughing on a part that has a Contour: the declared finish allowance (0.5 mm)');
-    eq(h.rows(), ['cutDepth', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'the Roughing card: depth, allowance, Contour, adaptive, step, offset, bit, shape');
+    eq(h.rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'the Roughing card: depth, TASK 810 its Heights (Top, Bottom, Floor allowance), allowance, Contour, adaptive, step, offset, bit, shape');
     h.contour(false);
     eq([contourOf(pk2), CUT_PLAN.get(pk2).finishAllowance], [null, 0], 'Contour Off: no Contour record, allowance 0');
     h.contour(true);

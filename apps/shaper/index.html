@@ -425,6 +425,27 @@
     /* the display rules above and on .cut-card beat the [hidden] attribute: an empty / unselected card and any row cut-panel.js hides must really hide */
     .cut-field[hidden], .cut-row[hidden], #prepare-panel .cut-card[hidden] { display: none; }
     .cut-rows { display: flex; flex-direction: column; gap: 12px; margin: 0; }
+    /* TASK 810: the TABS of a Roughing / Contour card (cut-panel.js CARD_TABS): names in the labels' look, the active one underlined, a dot = a changed setting in that tab;
+       a row of another tab is out of the layout (data-off-tab beats the card logic's inline display) */
+    .cut-tabs { display: flex; gap: 2px; margin-top: -4px; border-bottom: 1px solid var(--sk-prep-field-bg); }
+    .cut-tabs[hidden], .cut-tab[hidden] { display: none; }
+    .cut-tab { all: unset; box-sizing: border-box; position: relative; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; height: 28px; padding: 0 3px; margin-bottom: -1px; border-bottom: 2px solid transparent; font-size: 11px; color: var(--sk-prep-unit); text-transform: lowercase; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .cut-tab.is-active { color: var(--sk-prep-chip-text); border-bottom-color: var(--sk-prep-focus); }
+    .cut-tab:focus-visible { outline: 2px solid var(--sk-prep-focus); outline-offset: -2px; border-radius: 4px; }
+    .cut-tab-dot { position: absolute; top: 5px; right: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--sk-prep-focus); }
+    .cut-tab-dot[hidden] { display: none; }
+    .cut-row[data-off-tab] { display: none !important; }
+    @media (max-width: 640px), (pointer: coarse) { .cut-tab { height: 44px; } }
+    /* TASK 810: Roughing's Boundary (2 x 2: Silhouette, Bounding box, Stock, Shape; the Stock greyed while the design has none) and Tool (Inside, On, Outside); Pick: a crosshair */
+    .cut-row[data-row="boundary"] .cut-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cut-row[data-row="boundaryTool"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cut-row[data-row="walls"] .cut-presets { grid-template-columns: auto 1fr; }
+    .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset { font-size: 12px; padding: 0 8px; white-space: nowrap; background: var(--sk-prep-field-bg); }
+    .cut-row[data-row="boundary"] .cut-preset.is-active, .cut-row[data-row="boundaryTool"] .cut-preset.is-active, .cut-row[data-row="walls"] .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    .cut-preset.is-disabled { color: var(--sk-prep-disabled); cursor: not-allowed; }
+    .cut-boundary-pick[aria-pressed="true"] { color: var(--sk-prep-focus); }
+    #prepare-canvas.is-picking { cursor: crosshair; }
+    @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset { height: 44px; } }
     .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
     .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-type-cur { text-transform: lowercase; }

@@ -87,6 +87,7 @@ const zoomOnto = async (wx, wy, n) => { const p = await screenOf(wx, wy); await 
 const setPlan = async (cutType) => {
   await clickEl('#prepare-panel .cut-type-trigger'); await clickEl(`.cut-type-opt[data-id="${cutType}"]`);
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === '${cutType}'))`, cutType + ' set');
+  if (cutType === 'roughing') { await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); } // TASK 810: the Roughing card is tabbed: its stepping rows are in Passes
 };
 const checkDownload = (svg, what) => assert.ok(!/hsl\(/.test(svg) && !/stroke="#222"/.test(svg) && !/data-/.test(svg), `${what}: the downloaded file has none of the preview's styling`);
 const dl = async () => { await evalJs(`document.getElementById('btn-generate-svg').scrollIntoView({ block: 'nearest' })`); await sleep(100); return download(); }; // a long list can push the button below the fold

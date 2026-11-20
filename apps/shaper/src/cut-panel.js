@@ -5,8 +5,8 @@
 
 import { availableTypes, cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
-import { CLEARING_REFUSED } from './cut-plan.js';
-import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, hasLevels } from '#core/stepped-cut.js';
+import { CLEARING_REFUSED, CONTOUR_DEFAULTS } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots)
+import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off | On) and its sides
@@ -54,6 +54,10 @@ const STEPPERS = {
   finishAllowance: { step: { mm: 0.1, in: 0.005 }, min: 0 },
   minTerraceWidth: { step: { mm: 0.5, in: 1 / 32 }, min: 0 }, // TASK 792: Roughing's Min terrace width (0 = rough every band)
   smoothing:     { step: { mm: 0.01, in: 0.0005 }, min: 0 }, // TASK 809: Roughing / Contour's Smoothing tolerance (0 = off)
+  boundaryOffset: { step: { mm: 0.25, in: 1 / 64 } }, // TASK 810: Roughing's boundary offset (signed: no min, as the cut offset)
+  topDepth:      { step: { mm: 0.5, in: 1 / 32 }, min: 0 }, // TASK 810: the Heights (depths below the surface; 0 = the surface)
+  bottomDepth:   { step: { mm: 0.5, in: 1 / 32 }, min: 0 },
+  floorAllowance: { step: { mm: 0.1, in: 0.005 }, min: 0 },
   rasterAngle:   { step: { mm: 15, in: 15 }, min: 0, max: 180 },
   // TASK 775 / 778: the tangential arc lead-in: radius (min = bit radius), sweep (15-180 deg, step 15), optional straight length (min 0)
   leadInRadius:  { step: { mm: 0.5, in: 1 / 32 }, positive: true },
@@ -74,6 +78,46 @@ const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 const CONTOUR_PRESETS = [{ hint: choiceId('contour', 'off'), label: hintLabel(choiceId('contour', 'off')), value: false }, { hint: choiceId('contour', 'on'), label: hintLabel(choiceId('contour', 'on')), value: true }];
 // TASK 792 (owner turn 2604): Roughing's Layout row (#core ROUGH_LAYOUT), as preset buttons (the ONE preset widget)
 const LAYOUT_PRESETS = ROUGH_LAYOUT.layouts.map((l) => ({ hint: choiceId('roughLayout', l.id), label: hintLabel(choiceId('roughLayout', l.id)), value: l.id }));
+// TASK 810: Roughing's Boundary (#core ROUGH_BOUNDARY.kinds; the Stock greyed, with its reason as its tooltip, while the design has none) and Tool rule (ROUGH_BOUNDARY.tools)
+const boundaryPresets = (hasStock) => ROUGH_BOUNDARY.kinds.map((k) => (k.id === 'stock' && !hasStock
+  ? { hint: 'boundaryNoStock', label: hintLabel('boundaryNoStock'), value: k.id, disabled: true }
+  : { hint: choiceId('boundary', k.id), label: hintLabel(choiceId('boundary', k.id)), value: k.id }));
+const BOUNDARY_TOOL_PRESETS = ROUGH_BOUNDARY.tools.map((t) => ({ hint: choiceId('boundaryTool', t.id), label: hintLabel(choiceId('boundaryTool', t.id)), value: t.id }));
+const WALLS_PRESETS = CONTOUR_WALLS.choices.map((w) => ({ hint: choiceId('walls', w.id), label: hintLabel(choiceId('walls', w.id)), value: w.id })); // TASK 810: a Contour's which walls
+// TASK 810 (owner turns 2657-2658): the ROUGHING and CONTOUR cards are organised in TABS, as Fusion CAM's operation dialogs: the ONE table of which row lives in which tab
+// (a row is its data-row or data-param). Each tab is a FIXED panel: the rows area keeps the height of the tallest tab (applyTabs), so switching tabs moves nothing outside
+// the card; a tab none of whose rows shows on this card is not offered. Every other cut type keeps its single card (no tab bar, every row in its place).
+const CARD_TABS = [
+  { id: 'tool', hint: 'tabTool', rows: ['toolDia', 'cutterShape'] },
+  { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth', 'walls'] },
+  { id: 'heights', hint: 'tabHeights', rows: ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'] },
+  { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'contour', 'smoothing'] },
+];
+const TAB_OF_ROW = new Map(CARD_TABS.flatMap((t) => t.rows.map((r) => [r, t.id])));
+const tabbedType = (cutType) => Boolean(cutType && cutTypeById(cutType) && cutTypeById(cutType).levelsOp); // Roughing, Contour
+// TASK 810: a row holds a CHANGED value when it differs from what the operation starts with (the declared defaults): its tab shows a dot. `rec` = the stored record,
+// `op` = 'roughing' | 'contour', `c` = the card's state. A row not listed never marks its tab (the depth is the part's own, not a choice).
+const near6 = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-6;
+const CHANGED = {
+  toolDia: (rec, op) => !near6(Number(rec.toolDia) || 0, op === 'contour' ? CONTOUR_DEFAULTS.toolDia : TOOLDIA_DEFAULT_MM),
+  cutterShape: (rec, op) => (rec.cutterShape || 'endmill') !== (op === 'contour' ? CONTOUR_DEFAULTS.cutterShape : 'endmill'),
+  cutOffset: (rec) => (Number(rec.cutOffset) || 0) !== 0,
+  minTerraceWidth: (rec) => Number(rec.minTerraceWidth) > 0,
+  boundary: (rec) => boundaryOf(rec).kind !== ROUGH_BOUNDARY.defaultKind,
+  boundaryTool: (rec) => boundaryOf(rec).tool !== ROUGH_BOUNDARY.defaultTool,
+  boundaryOffset: (rec) => boundaryOf(rec).offset != null,
+  walls: (rec, op, c) => Boolean(c.walls) && c.walls.value !== c.walls.defaultId,
+  topDepth: (rec) => Number(rec.topDepth) > 0,
+  bottomDepth: (rec) => rec.bottomDepth != null && Number(rec.bottomDepth) > 0,
+  floorAllowance: (rec) => Number(rec.floorAllowance) > 0,
+  roughLayout: (rec) => rec.roughLayout === 'nested',
+  stepDepth: (rec, op) => Number(rec.stepDepth) > 0 && !near6(rec.stepDepth, op === 'contour' ? CONTOUR_DEFAULTS.stepDepth : STEP_DEPTH.defaultMm),
+  adaptiveSteps: (rec) => rec.adaptiveSteps === true,
+  stepDeviation: (rec) => Number(rec.stepDeviation) > 0 && !near6(rec.stepDeviation, STEP_RESOLUTION.defaultMm),
+  finishAllowance: (rec) => Number(rec.finishAllowance) > 0,
+  contour: (rec, op, c) => Boolean(c.contour && c.contour.on),
+  smoothing: (rec, op) => rec.smoothing != null && smoothingOf(op, rec.smoothing) !== smoothingOf(op, undefined),
+};
 
 // a field's text: lengthText (the one length-format decider: Length precision, default 3, trailing zeros dropped unless TRAILING_ZEROS, or an inch fraction); the unit is beside it
 const fieldText = (baseMM) => lengthText(baseMM, { show: 'field' });
@@ -85,7 +129,8 @@ export function createCutPanel(hostEl, opts = {}) {
   const onPickType = opts.onPickType || (() => {});
   const onSetField = opts.onSetField || (() => {});
   const onSetFields = opts.onSetFields || ((o) => { for (const [k, v] of Object.entries(o)) onSetField(k, v); }); // TASK 463: several fields = ONE undo step
-  const onEditContour = opts.onEditContour || (() => {}); // TASK 792: the part card's "Edit contour" 
+  const onEditContour = opts.onEditContour || (() => {}); // TASK 792: the part card's "Edit contour"
+  const onPickBoundary = opts.onPickBoundary || (() => {}); // TASK 810: Roughing's boundary "Pick" (then a click on a closed shape in Prepare); pressed again while picking: cancel
   hostEl.innerHTML = '';
 
   const card = document.createElement('div');
@@ -101,11 +146,35 @@ export function createCutPanel(hostEl, opts = {}) {
         </button>
       </div>
     </div>
+    <div class="cut-tabs" role="tablist" hidden></div>
     <div class="cut-rows">
       <div class="cut-row" data-param="cutDepth">
         <button type="button" class="cut-field-label" data-hint="cutDepth"></button>
         <div class="cut-stepper cut-box">
           <div class="cut-mid"><input type="text" class="cut-num cut-depth" inputmode="decimal" placeholder="unset"><span class="cut-unit">mm</span></div>
+        </div>
+      </div>
+      <div class="cut-row" data-row="topDepth">
+        <button type="button" class="cut-field-label" data-hint="topDepth"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-top-depth" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+        <div class="cut-calc-bar"><span class="cut-calc-tag">surface</span><button type="button" class="cut-calc-reset" data-reset="topDepth" hidden>Reset to surface</button></div>
+      </div>
+      <div class="cut-row" data-row="bottomDepth">
+        <button type="button" class="cut-field-label" data-hint="bottomDepth"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-bottom-depth" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+        <div class="cut-calc-bar"><span class="cut-calc-tag">part depth</span><button type="button" class="cut-calc-reset" data-reset="bottomDepth" hidden>Reset to part depth</button></div>
+      </div>
+      <div class="cut-row" data-row="floorAllowance">
+        <button type="button" class="cut-field-label" data-hint="floorAllowance"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-floor-allowance" inputmode="decimal">
+          <span class="cut-unit">mm</span>
         </div>
       </div>
       <div class="cut-row" data-row="clearing">
@@ -137,6 +206,30 @@ export function createCutPanel(hostEl, opts = {}) {
       <div class="cut-row" data-row="roughLayout">
         <button type="button" class="cut-field-label" data-hint="roughLayout"></button>
         <div class="cut-presets cut-layout-modes"></div>
+      </div>
+      <div class="cut-row" data-row="boundary">
+        <button type="button" class="cut-field-label" data-hint="boundary"></button>
+        <div class="cut-presets cut-boundary-kinds"></div>
+      </div>
+      <div class="cut-row" data-row="boundaryShape">
+        <button type="button" class="cut-field-label" data-hint="boundaryShape"></button>
+        <div class="cut-calc-bar"><span class="cut-calc-tag cut-boundary-state"></span><button type="button" class="cut-calc-reset cut-boundary-pick" data-hint="boundaryPick" aria-pressed="false"></button></div>
+      </div>
+      <div class="cut-row" data-row="boundaryTool">
+        <button type="button" class="cut-field-label" data-hint="boundaryTool"></button>
+        <div class="cut-presets cut-boundary-tools"></div>
+      </div>
+      <div class="cut-row" data-row="boundaryOffset">
+        <button type="button" class="cut-field-label" data-hint="boundaryOffset"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-boundary-offset" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+        <div class="cut-calc-bar"><span class="cut-calc-tag">calculated</span><button type="button" class="cut-calc-reset" data-reset="boundaryOffset" hidden>Reset to calculated</button></div>
+      </div>
+      <div class="cut-row" data-row="walls">
+        <button type="button" class="cut-field-label" data-hint="walls"></button>
+        <div class="cut-presets cut-walls"></div>
       </div>
       <div class="cut-row" data-row="minTerraceWidth">
         <button type="button" class="cut-field-label" data-hint="minTerraceWidth"></button>
@@ -275,6 +368,7 @@ export function createCutPanel(hostEl, opts = {}) {
   hostEl.appendChild(card);
 
   const $ = (sel) => card.querySelector(sel);
+  const rowsEl = $('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll); TASK 810: the tabs' panel
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
   const depthInput = $('.cut-depth'), stepInput = $('.cut-step-depth'), noteEl = $('.cut-note'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-row[data-param="toolDia"] .cut-presets'), stepPresetsWrap = $('.cut-row[data-row="stepDepth"] .cut-presets');
   const adaptiveInput = $('.cut-adaptive'), deviationInput = $('.cut-step-deviation'), deviationPresetsWrap = $('.cut-row[data-row="stepDeviation"] .cut-presets'); // TASK 717
@@ -289,11 +383,50 @@ export function createCutPanel(hostEl, opts = {}) {
   contourEditBtn.textContent = hintLabel('contourEdit'); contourEditBtn.dataset.hint = 'contourEdit';
   contourEditBtn.addEventListener('click', () => onEditContour());
   const leadModesWrap = $('.cut-lead-modes'), leadRadiusInput = $('.cut-lead-radius'), leadSweepInput = $('.cut-lead-sweep'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'), leadPosState = $('.cut-pos-state'); // TASK 775 / 778
-  const calcBars = Object.fromEntries(['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInAt'].map((f) => [f, {
+  // TASK 810: Roughing's machining boundary rows: the Boundary and Tool choices, the picked shape (Pick), the Offset (empty / Reset = calculated)
+  const boundaryKindsWrap = $('.cut-boundary-kinds'), boundaryToolsWrap = $('.cut-boundary-tools'), boundaryOffsetInput = $('.cut-boundary-offset'), boundaryState = $('.cut-boundary-state'), boundaryPickBtn = $('.cut-boundary-pick');
+  boundaryKindsWrap.setAttribute('role', 'group'); boundaryToolsWrap.setAttribute('role', 'group');
+  boundaryPickBtn.addEventListener('click', () => onPickBoundary());
+  boundaryOffsetInput.addEventListener('change', () => {
+    const raw = boundaryOffsetInput.value.trim();
+    if (raw === '') { onSetField('boundaryOffset', null); return; }
+    const n = parseUnit(raw, docUnit());
+    if (n != null && Number.isFinite(n)) onSetField('boundaryOffset', n); else renderFields();
+  });
+  // TASK 810: the Heights rows: Top (empty / Reset = the surface), Bottom (empty / Reset = the part's depth), Floor allowance (>= 0)
+  const topInput = $('.cut-top-depth'), bottomInput = $('.cut-bottom-depth'), floorInput = $('.cut-floor-allowance');
+  for (const [input, field] of [[topInput, 'topDepth'], [bottomInput, 'bottomDepth']]) input.addEventListener('change', () => {
+    const raw = input.value.trim();
+    if (raw === '') { onSetField(field, null); return; }
+    const n = parseUnit(raw, docUnit());
+    if (n != null && Number.isFinite(n) && n >= 0) onSetField(field, n > 0 ? n : null); else renderFields(); // 0 = the surface / no limit: the default
+  });
+  floorInput.addEventListener('change', () => { const n = parseUnit(floorInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('floorAllowance', n); else renderFields(); });
+  const calcBars = Object.fromEntries(['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInAt', 'boundaryOffset', 'topDepth', 'bottomDepth'].map((f) => [f, {
     tag: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-tag`),
     reset: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-reset`),
   }]));
   for (const [f, b] of Object.entries(calcBars)) b.reset.addEventListener('click', () => onSetField(f, null));
+  // TASK 810: the tab bar of a Roughing / Contour card (CARD_TABS): a tab = its name (the table's label; its hint the tooltip) and a dot when one of its rows holds a changed value
+  const tabsEl = $('.cut-tabs');
+  const offsetRow = $('.cut-row[data-param="cutOffset"]'); // the note's place among the rows of an untabbed card (just before it)
+  let activeTab = CARD_TABS[0].id; // the tab shown; kept while the page lives (another Roughing / Contour card opens on the same tab)
+  const tabButtons = {};
+  for (const t of CARD_TABS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'cut-tab'; b.dataset.tab = t.id; b.setAttribute('role', 'tab'); b.id = `cut-tab-${t.id}`;
+    b.innerHTML = `<span class="cut-tab-name" data-hint="${t.hint}"></span><span class="cut-tab-dot" hidden></span>`;
+    b.addEventListener('click', () => { if (activeTab === t.id) return; activeTab = t.id; rowsEl.scrollTop = 0; applyTabs(); });
+    tabsEl.appendChild(b);
+    tabButtons[t.id] = { button: b, dot: b.querySelector('.cut-tab-dot') };
+  }
+  tabsEl.addEventListener('keydown', (e) => { // the arrow keys move along the offered tabs (the tablist pattern)
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const offered = CARD_TABS.filter((t) => !tabButtons[t.id].button.hidden).map((t) => t.id);
+    const i = offered.indexOf(activeTab); if (i < 0) return;
+    activeTab = offered[(i + (e.key === 'ArrowRight' ? 1 : offered.length - 1)) % offered.length];
+    e.preventDefault(); applyTabs(); tabButtons[activeTab].button.focus();
+  });
   // TASK 805: every row's label comes from the table (param-hints.js) and its hint shows as a tooltip at the cursor (hint.js; installed once by main.js): the card holds
   // the label only, no hint text. A row's label is its data-hint element; a choice (a menu row, a Hold part button ...) carries its own data-hint.
   holdModesWrap.setAttribute('role', 'group');
@@ -312,7 +445,7 @@ export function createCutPanel(hostEl, opts = {}) {
     opt.dataset.hint = choiceId(param, id);
   };
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, contour: null, record: null, note: [] };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, contour: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [] };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop, clearPop];
@@ -322,7 +455,6 @@ export function createCutPanel(hostEl, opts = {}) {
     clearTrigger.setAttribute('aria-expanded', String(!clearPop.hidden)); clearTrigger.classList.toggle('is-open', !clearPop.hidden);
   };
   const closePops = (except) => { for (const p of pops) if (p !== except) p.hidden = true; syncOpenState(); };
-  const rowsEl = card.querySelector('.cut-rows'); // TASK 742: a tall card scrolls its rows: a popover sits at its row as shown (offsetTop minus that scroll)
   const openPop = (pop, anchor) => { closePops(pop); const row = anchor.closest('.cut-row, .cut-field') || anchor; pop.style.top = (row.offsetTop - (rowsEl.contains(row) ? rowsEl.scrollTop : 0)) + 'px'; pop.hidden = false; keepOnScreen(pop); syncOpenState(); };
   // TASK 770 / 805: a menu taller than the room below its row (the cutter shape row is the last of the card) moves up to end where the card's panel ends (above the phone's
   // Operations bar), and scrolls when it is taller than the panel; one that fits stays at its row
@@ -364,6 +496,7 @@ export function createCutPanel(hostEl, opts = {}) {
       const same = typeof p.value === 'number' ? Math.abs(p.value - value) < 1e-6 : p.value === value; // TASK 742: a choice preset (a string value) is active when equal
       b.type = 'button'; b.className = 'cut-preset' + (same ? ' is-active' : ''); b.dataset.value = String(p.value); b.textContent = p.label;
       if (p.hint) b.dataset.hint = p.hint; // TASK 805: a choice with a hint of its own (Hold part modes, Lead-in, Side, Contour, Layout) shows it as a tooltip
+      if (p.disabled) { b.classList.add('is-disabled'); b.setAttribute('aria-disabled', 'true'); wrap.appendChild(b); continue; } // TASK 810: greyed, its reason in its tooltip (not `disabled`: it keeps its tooltip)
       b.addEventListener('click', () => onSetField(field, p.value)); // base mm
       wrap.appendChild(b);
     }
@@ -381,6 +514,10 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'holdThickness' ? (Number(current.holdThickness) > 0 ? Number(current.holdThickness) : holdDefaults(docUnit()).thickness)
     : field === 'finishAllowance' ? (current.finishAllowance != null && Number(current.finishAllowance) >= 0 ? Number(current.finishAllowance) : cutTypeHasField(current.cutType, 'clearing') ? allowanceDefault(docUnit()) : 0) // TASK 745; TASK 792: a Roughing without one has 0
     : field === 'minTerraceWidth' ? (Number(current.record && current.record.minTerraceWidth) > 0 ? Number(current.record.minTerraceWidth) : 0) // TASK 792
+    : field === 'boundaryOffset' ? boundaryOffsetBase() // TASK 810: unset = the calculated offset
+    : field === 'topDepth' ? (Number(current.record && current.record.topDepth) > 0 ? Number(current.record.topDepth) : 0) // TASK 810: unset = the surface
+    : field === 'bottomDepth' ? (Number(current.record && current.record.bottomDepth) > 0 ? Number(current.record.bottomDepth) : (Number(current.partDepth) > 0 ? Number(current.partDepth) : 0)) // unset = the part's depth
+    : field === 'floorAllowance' ? (Number(current.record && current.record.floorAllowance) > 0 ? Number(current.record.floorAllowance) : 0)
     : field === 'smoothing' ? smoothingOf((cutTypeById(current.cutType) || {}).levelsOp, current.record ? current.record.smoothing : undefined) // TASK 809: unset = the operation's default
     : field === 'leadInRadius' ? (current.leadInRadius != null && Number(current.leadInRadius) > 0 ? Number(current.leadInRadius) : (current.leadInInfo && Number(current.leadInInfo.radius) > 0 ? Number(current.leadInInfo.radius) : Number(current.toolDia) || 0)) // TASK 778: null = calculated by derivation
     : field === 'leadInLength' ? (current.leadInLength != null && Number(current.leadInLength) >= 0 ? Number(current.leadInLength) : (current.leadInInfo && Number(current.leadInInfo.length) >= 0 ? Number(current.leadInInfo.length) : 0)) // TASK 778: null = calculated (0)
@@ -484,6 +621,10 @@ export function createCutPanel(hostEl, opts = {}) {
   stepperFor('finishAllowance', allowanceInput, 'finish allowance', { box: allowanceInput.closest('.cut-box') });
   stepperFor('minTerraceWidth', minTerraceInput, 'min terrace width', { box: minTerraceInput.closest('.cut-box') }); // TASK 792
   stepperFor('smoothing', smoothingInput, 'smoothing', { box: smoothingInput.closest('.cut-box') }); // TASK 809
+  stepperFor('boundaryOffset', boundaryOffsetInput, 'boundary offset', { box: boundaryOffsetInput.closest('.cut-box') }); // TASK 810: from the calculated value while it is unset
+  stepperFor('topDepth', topInput, 'top', { box: topInput.closest('.cut-box') }); // TASK 810: from the surface (0) while unset
+  stepperFor('bottomDepth', bottomInput, 'bottom', { box: bottomInput.closest('.cut-box') }); // TASK 810: from the part's depth while unset
+  stepperFor('floorAllowance', floorInput, 'floor allowance', { box: floorInput.closest('.cut-box') });
   // TASK 778: the tangential arc lead-in fields: Radius (doc unit, min bit radius on stepper, empty resets to calculated), Sweep (15-180 deg, step 15), Length (>= 0, straight part before arc)
   leadRadiusInput.addEventListener('change', () => {
     const raw = leadRadiusInput.value.trim();
@@ -514,6 +655,39 @@ export function createCutPanel(hostEl, opts = {}) {
     if (n != null && Number.isFinite(n) && n >= 0) onSetField('leadInLength', n); else renderFields();
   });
   stepperFor('leadInLength', leadLengthInput, 'lead-in length', { box: leadLengthInput.closest('.cut-box') });
+
+  const syncCalcBar = (f, isCalculated) => { calcBars[f].tag.hidden = !isCalculated; calcBars[f].reset.hidden = isCalculated; }; // a calculated value: its tag, else Reset to calculated
+  const boundaryOffsetBase = () => { const b = boundaryOf(current.record); return b.offset != null ? b.offset : boundaryCalcOffset({ ...(current.record || {}), levelsOp: 'roughing' }); }; // TASK 810
+  // TASK 810: show the active tab's rows of a Roughing / Contour card (the rows the card logic shows, CARD_TABS), the dots, and the panel's fixed height (the tallest tab's
+  // rows, measured: every tab is laid out once, the rows area then keeps that height as its flex basis, shrinking and scrolling only where the panel is shorter). The card
+  // note sits under the panel on a tabbed card (the same in every tab), in its place among the rows otherwise. An untabbed card: every row as the card logic left it.
+  const rowKey = (row) => row.dataset.row || row.dataset.param;
+  function applyTabs() {
+    const tabbed = tabbedType(current.cutType);
+    const rows = [...rowsEl.children].filter((el) => el.classList.contains('cut-row'));
+    rowsEl.style.flex = '';
+    if (tabbed && noteEl.parentNode === rowsEl) card.insertBefore(noteEl, rowsEl.nextSibling);
+    if (!tabbed && noteEl.parentNode !== rowsEl) rowsEl.insertBefore(noteEl, offsetRow);
+    tabsEl.hidden = !tabbed;
+    if (!tabbed) { for (const r of rows) delete r.dataset.offTab; return; }
+    const op = cutTypeById(current.cutType).levelsOp, rec = current.record || {};
+    const shown = rows.filter((r) => r.style.display !== 'none');
+    const offered = CARD_TABS.filter((t) => shown.some((r) => TAB_OF_ROW.get(rowKey(r)) === t.id));
+    const tab = offered.some((t) => t.id === activeTab) ? activeTab : (offered[0] || CARD_TABS[0]).id; // the stored tab when this card offers it
+    for (const t of CARD_TABS) {
+      const tb = tabButtons[t.id], on = t.id === tab;
+      tb.button.hidden = !offered.includes(t);
+      tb.dot.hidden = !shown.some((r) => TAB_OF_ROW.get(rowKey(r)) === t.id && CHANGED[rowKey(r)] && CHANGED[rowKey(r)](rec, op, current));
+      tb.button.classList.toggle('is-active', on); tb.button.setAttribute('aria-selected', String(on)); tb.button.tabIndex = on ? 0 : -1;
+      tb.button.setAttribute('aria-label', `${hintLabel(t.hint)}${tb.dot.hidden ? '' : ' (changed)'}`);
+    }
+    const showTab = (id) => { for (const r of rows) { if (TAB_OF_ROW.get(rowKey(r)) === id) delete r.dataset.offTab; else r.dataset.offTab = ''; } };
+    let tallest = 0;
+    for (const t of offered) { showTab(t.id); tallest = Math.max(tallest, rowsEl.scrollHeight); }
+    showTab(tab);
+    rowsEl.setAttribute('role', 'tabpanel'); rowsEl.setAttribute('aria-labelledby', `cut-tab-${tab}`);
+    if (tallest > 0) rowsEl.style.flex = `0 1 ${tallest}px`;
+  }
 
   // Re-format the displayed values (BASE mm → doc unit). Called on selection change AND on DOC_UNIT change (re-label).
   const renderFields = () => {
@@ -567,8 +741,31 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets(layoutModesWrap, layoutRow ? LAYOUT_PRESETS : [], 'roughLayout', current.record && current.record.roughLayout === 'nested' ? 'nested' : 'terraces');
     card.querySelector('.cut-row[data-row="minTerraceWidth"]').style.display = layoutRow && !(current.record && current.record.roughLayout === 'nested') ? '' : 'none'; // the Terraces layout's row
     minTerraceInput.value = fieldText(fieldBase('minTerraceWidth'));
+    // TASK 810: Roughing's machining boundary (a part with levels, as the Layout): Boundary, the picked Shape (with Shape), Tool, Offset (calculated while unset)
+    const b = boundaryOf(current.record), boundaryRows = declares('boundary') && layoutRow;
+    for (const row of ['boundary', 'boundaryTool', 'boundaryOffset']) card.querySelector(`.cut-row[data-row="${row}"]`).style.display = boundaryRows ? '' : 'none';
+    card.querySelector('.cut-row[data-row="boundaryShape"]').style.display = boundaryRows && b.kind === 'shape' ? '' : 'none';
+    renderPresets(boundaryKindsWrap, boundaryRows ? boundaryPresets(current.boundaryCtx.hasStock) : [], 'boundary', b.kind);
+    renderPresets(boundaryToolsWrap, boundaryRows ? BOUNDARY_TOOL_PRESETS : [], 'boundaryTool', b.tool);
+    boundaryState.textContent = current.boundaryCtx.picking ? 'click a closed shape' : b.shape ? 'picked' : 'none picked';
+    hints.boundaryPick.setId(current.boundaryCtx.picking ? 'boundaryPickCancel' : 'boundaryPick');
+    boundaryPickBtn.setAttribute('aria-pressed', String(Boolean(current.boundaryCtx.picking)));
+    boundaryOffsetInput.value = fieldText(fieldBase('boundaryOffset'));
+    syncCalcBar('boundaryOffset', b.offset == null);
+    // TASK 810: the Heights of a Roughing / Contour (any part): Top, Bottom (empty = the surface / the part's depth, shown greyed), Floor allowance
+    const heights = tabbedType(current.cutType), hr = current.record || {};
+    for (const row of ['topDepth', 'bottomDepth', 'floorAllowance']) card.querySelector(`.cut-row[data-row="${row}"]`).style.display = heights ? '' : 'none';
+    topInput.value = Number(hr.topDepth) > 0 ? fieldText(Number(hr.topDepth)) : ''; topInput.placeholder = fieldText(0);
+    bottomInput.value = Number(hr.bottomDepth) > 0 ? fieldText(Number(hr.bottomDepth)) : ''; bottomInput.placeholder = Number(current.partDepth) > 0 ? fieldText(Number(current.partDepth)) : '';
+    floorInput.value = fieldText(fieldBase('floorAllowance'));
+    syncCalcBar('topDepth', !(Number(hr.topDepth) > 0));
+    // TASK 810: a Contour's which walls, where its part's walls come from levels or slope rings (a drawn region's Contour is its one wall); the choice in effect shown
+    const wallsRow = current.kind === 'contour' && Boolean(current.walls && current.walls.shown);
+    card.querySelector('.cut-row[data-row="walls"]').style.display = wallsRow ? '' : 'none';
+    renderPresets($('.cut-walls'), wallsRow ? WALLS_PRESETS : [], 'walls', wallsRow ? current.walls.value : null);
+    syncCalcBar('bottomDepth', !(Number(hr.bottomDepth) > 0));
     card.querySelector('.cut-row[data-row="smoothing"]').style.display = declares('smoothing') && current.levels ? '' : 'none'; // TASK 809: an operation on a part with levels (an STL)
-    smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.02 mm = 0.0008 in: a tolerance, always decimals
+    smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.05 mm = 0.002 in: a tolerance, always decimals
     card.querySelector('.cut-row[data-row="rasterAngle"]').style.display = clearing === 'raster' ? '' : 'none';
     const choice = CLEARING_CHOICE(clearing || 'freehand');
     clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));
@@ -592,10 +789,9 @@ export function createCutPanel(hostEl, opts = {}) {
     const sweepVal = current.leadInSweep != null && Number.isFinite(Number(current.leadInSweep)) ? Number(current.leadInSweep) : (current.leadInInfo && Number.isFinite(Number(current.leadInInfo.sweep)) ? Number(current.leadInInfo.sweep) : LEAD_IN.sweep.defaultDeg);
     leadSweepInput.value = String(Math.round(sweepVal * 100) / 100);
     leadLengthInput.value = fieldText(fieldBase('leadInLength'));
-    const syncCalc = (f, isCalculated) => { calcBars[f].tag.hidden = !isCalculated; calcBars[f].reset.hidden = isCalculated; };
-    syncCalc('leadInRadius', current.leadInRadius == null);
-    syncCalc('leadInSweep', current.leadInSweep == null);
-    syncCalc('leadInLength', current.leadInLength == null);
+    syncCalcBar('leadInRadius', current.leadInRadius == null);
+    syncCalcBar('leadInSweep', current.leadInSweep == null);
+    syncCalcBar('leadInLength', current.leadInLength == null);
     const posMoved = current.leadInAt != null;
     leadPosState.textContent = posMoved ? 'moved' : 'calculated';
     leadPosState.classList.toggle('is-moved', posMoved);
@@ -630,17 +826,21 @@ export function createCutPanel(hostEl, opts = {}) {
     shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${angleText(Number(current.cutterAngle) || 90, { show: 'deg' })}` : shapeName;
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
+    applyTabs(); // TASK 810: last, on the rows the card logic shows
   };
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, contour: null, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, contour: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
       leadIn: rec.leadIn === true, leadInRadius: rec.leadInRadius ?? null, leadInSweep: rec.leadInSweep ?? null, leadInLength: rec.leadInLength ?? null, leadInSide: rec.leadInSide === 'inside' ? 'inside' : 'outside', leadInAt: rec.leadInAt ?? null, leadInInfo: model.leadIn || null, // TASK 775 / 778
       contour: model.contour || null, // TASK 792: { allowed, on }
       levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)
+      boundaryCtx: { hasStock: Boolean(model.boundary && model.boundary.hasStock), picking: Boolean(model.boundary && model.boundary.picking) }, // TASK 810: does the design have a Stock; is a boundary Pick on
+      partDepth: Number(model.partDepth) > 0 ? Number(model.partDepth) : null, // TASK 810: the part's depth (the Bottom's default; a Contour's is its part's)
+      walls: model.walls || null, // TASK 810: a Contour's walls { shown, value (in effect), defaultId }
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;

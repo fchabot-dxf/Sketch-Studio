@@ -7,7 +7,7 @@ import { capturePrepare, applyPrepare } from './shaper-doc.js'; // TASK 460: the
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { CUT_PLAN, cutPlanEntries, setFieldFor, cutPlanNotice } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 761: the reconciliation's notice
+import { CUT_PLAN, cutPlanEntries, setFieldFor, cutPlanNotice, stockKeyOf } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice) // SP1j-4: the shared cut-plan store; TASK 761: the reconciliation's notice
 import { planOperations, setOpOrder } from './operations.js'; // TASK 743: the operations (derived) and their order (the one stored fact)
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 
@@ -30,11 +30,12 @@ export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-car
 
 export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ensureSketch = () => {}, onViewChange = () => {} }) {
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
+  let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
   // changes (every cut-plan edit, an undo / redo, a selection change, a re-mount), so it is refreshed here too.
   const refreshCutPanel = () => {
     const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
-    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t), leadIn: prepareView.leadInFor(t), contour: prepareView.contourFor(t), levels: prepareView.levelsFor(t) } : null); // TASK 809: levels = it cuts a part's levels (the Smoothing row) // TASK 792: contour = the part has a Contour ({ allowed, on }) // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take; TASK 778: leadIn = calculated / resolved arc summary
+    cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t), note: prepareView.noteFor(t), hold: prepareView.holdFor(t), clearing: prepareView.clearingFor(t), leadIn: prepareView.leadInFor(t), contour: prepareView.contourFor(t), levels: prepareView.levelsFor(t), boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, partDepth: prepareView.partDepthFor(t), walls: prepareView.wallsFor(t) } : null); // TASK 810: boundary = the Boundary rows' context, partDepth = the Bottom's default // TASK 809: levels = it cuts a part's levels (the Smoothing row) // TASK 792: contour = the part has a Contour ({ allowed, on }) // TASK 714: note = a stepped cut's steps / undercut; TASK 742: hold = what its Hold part does; TASK 745: clearing = the Clearing choices it can take; TASK 778: leadIn = calculated / resolved arc summary
     opList.refresh();
   };
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
@@ -59,6 +60,18 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onSetField: (field, value) => cutEdit(() => { if (prepareView) prepareView.setFieldOnSelected(field, value); }),
     onSetFields: (o) => cutEdit(() => { if (prepareView) for (const [k, v] of Object.entries(o)) prepareView.setFieldOnSelected(k, v); }),
     onEditContour: () => { if (prepareView) prepareView.selectContour(); }, // TASK 792: the part card's "Edit contour" shows the Contour's own card
+    // TASK 810: Roughing's boundary Pick: the next click on a closed shape in Prepare sets the selected Roughing's `boundaryShape` (ONE undo step); pressed again, a
+    // click on nothing / an open path, or Esc: cancelled, nothing changes
+    onPickBoundary: () => {
+      if (!prepareView) return;
+      if (boundaryPicking) { prepareView.stopBoundaryPick(); return; }
+      boundaryPicking = true;
+      prepareView.startBoundaryPick({
+        onPick: (key) => cutEdit(() => { prepareView.setFieldOnSelected('boundaryShape', key); }),
+        onEnd: () => { boundaryPicking = false; refreshCutPanel(); },
+      });
+      refreshCutPanel();
+    },
   });
   // TASK 743: the operations of the plan (derived: operations.js) in the document's order; a reorder is ONE undo step (cutEdit: the snapshot carries the order);
   // a tap on an operation selects its regions (the card then edits them all, as a shift-selection does)

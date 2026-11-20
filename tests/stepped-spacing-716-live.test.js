@@ -94,6 +94,7 @@ try {
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
+  await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); // TASK 810: the Roughing card is tabbed: the Step depth row is in Passes (the card stays on it)
   // step 1: 8 steps, 0.18 mm apart, flagged
   let c = await cardState();
   console.log('card: ' + JSON.stringify(c));

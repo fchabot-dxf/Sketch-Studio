@@ -3,7 +3,7 @@
 // steps on another STL (its numbers are printed; the screenshots are named after it).
 //  DESKTOP 1280 x 800: the drawer's Open STL -> the relief's card: the Smoothing row, 0.1 (Roughing's default) -> the Export step's Paths view: every
 //   written path of the Roughing is cubics (C), zoomed screenshot -> back in Prepare, typed 0 in Smoothing (one undo step): the Paths view's paths are
-//   straight segments only (no C), the same zoom, screenshot -> the footer's Undo: 0.1 again -> Contour On, Edit contour: its card's Smoothing 0.02.
+//   straight segments only (no C), the same zoom, screenshot -> the footer's Undo: 0.1 again -> Contour On, Edit contour: its card's Smoothing 0.05 (TASK 810, owner turn 2688; was 0.02).
 //  PHONE 390 x 844 (touch): Open STL -> a tap on the relief: the card's Smoothing row on the screen, 0.1.
 // No console error / page exception. Screenshots (.evidence/809/<name>-*.png).
 import assert from 'node:assert';
@@ -92,6 +92,7 @@ const pressOutline = async () => {
   await press(p.x, p.y);
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the relief\'s card');
 };
+const passesTab = async () => { await clickEl('.cut-tab[data-tab="passes"]'); await waitFor(`document.querySelector('.cut-tab[data-tab="passes"]').classList.contains('is-active')`, 'the Passes tab'); }; // TASK 810: Smoothing is in the Passes tab
 const rowShown = (name) => evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-row[data-row="${name}"]'); return !!r && r.style.display !== 'none'; })()`);
 const smoothingValue = () => evalJs(`document.querySelector('#prepare-panel .cut-smoothing').value`);
 const record = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()].find((x) => x.levels); return { smoothing: r.smoothing === undefined ? 'unset' : r.smoothing }; })`);
@@ -128,8 +129,9 @@ try {
   assert.ok(await rowShown('smoothing'), 'desktop: the Smoothing row');
   assert.deepStrictEqual([await evalJs(`document.querySelector('#prepare-panel .cut-row[data-row="smoothing"] .cut-field-label').textContent`), await smoothingValue(), await record()],
     ['Smoothing', '0.1', { smoothing: 'unset' }], 'desktop: Smoothing 0.1, the Roughing default (not stored)');
+  await passesTab();
   await evalJs(`document.querySelector('#prepare-panel .cut-row[data-row="smoothing"]').scrollIntoView({ block: 'nearest' })`); await sleep(200);
-  await shot('desktop-card.png', ['#prepare-panel .cut-row[data-row="minTerraceWidth"]', '#prepare-panel .cut-row[data-row="smoothing"]']);
+  await shot('desktop-card.png', ['#prepare-panel .cut-row[data-row="smoothing"]']);
   await openPaths();
   const on = await pathsFacts();
   console.log(`desktop: smoothed (0.1): ${JSON.stringify(on)}`);
@@ -142,6 +144,7 @@ try {
   await openStage('prepare');
   await pressOutline();
   const hist = await evalJs(`window.__designController.state.history.length`);
+  await passesTab();
   await clickEl('#prepare-panel .cut-smoothing');
   await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
   await send('Input.insertText', { text: '0' });
@@ -162,13 +165,14 @@ try {
   await openStage('prepare');
   await clickEl('#btn-undo');
   await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((x) => x.levels).smoothing === undefined)`, 'desktop: undo', 30000);
-  // the part's Contour: its own Smoothing (0.02)
+  // the part's Contour: its own Smoothing (0.05: TASK 810, owner turn 2688)
   await pressOutline();
+  await passesTab();
   await clickEl('.cut-contour-modes .cut-preset[data-value="true"]');
   await waitFor(`!document.querySelector('.cut-contour-edit').hidden`, 'desktop: Contour On', 60000);
   await clickEl('.cut-contour-edit');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour'`, 'desktop: the Contour card');
-  assert.deepStrictEqual([await rowShown('smoothing'), await smoothingValue()], [true, '0.02'], 'desktop: the Contour card: Smoothing 0.02 (its default)');
+  assert.deepStrictEqual([await rowShown('smoothing'), await smoothingValue()], [true, '0.05'], 'desktop: the Contour card: Smoothing 0.05 (its default)');
   await shot('desktop-contour-card.png', ['#prepare-panel .cut-row[data-row="smoothing"]', '#prepare-panel .cut-row[data-row="stepDepth"]']);
 
   // PHONE
@@ -181,6 +185,7 @@ try {
   await openStl('phone');
   await pressOutline();
   assert.ok(await rowShown('smoothing'), 'phone: the Smoothing row');
+  await passesTab();
   await evalJs(`document.querySelector('#prepare-panel .cut-row[data-row="smoothing"]').scrollIntoView({ block: 'nearest' })`); await sleep(300);
   const onScreen = await evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-smoothing').getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
     return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && !!hit && (hit.closest('.cut-row') || {}).dataset.row === 'smoothing'; })()`);

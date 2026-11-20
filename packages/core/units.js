@@ -11,6 +11,7 @@
 // Adopted by the dimension field (U2) + the Shaper cut params (U3); INERT until then.
 
 import { parseInput, evaluate } from './expression.js'; // TASK 817: relative, as every other #core module: a module worker (apps/shaper paths-worker.js) has no import map
+import { exportForm } from './origin-rules.js'; // TASK 803: the shaper:* length format is the Origin / Studio rules' (paramFormat); TASK 817: relative (see above)
 
 export const BASE = 'mm'; // 1 world unit = 1 mm
 
@@ -121,10 +122,11 @@ export const unitNumber = (baseMM, docUnit = BASE) => Number(format(baseMM, docU
 // attribute values, matching Shaper Studio's exports: every non-zero value = 3 decimals + a SPACE + the unit ("0.100 in",
 // "-2.000 in", "0.125 in"); with zeroBare a ZERO is "0in" (Studio writes an unset offset that way). mm / cm mirror the
 // pattern ("6.350 mm", "0mm") — UNVERIFIED against a Studio mm export (the samples are all inches).
-export function formatShaperParam(baseMM, docUnit = BASE, { zeroBare = false, decimals = 3 } = {}) { // decimals: DISPLAY callers only (TASK 724); the export never passes it
+// TASK 803: the decimals and the separator are the Origin / Studio rules' paramFormat (#core/origin-rules.js), read here, not repeated.
+export function formatShaperParam(baseMM, docUnit = BASE, { zeroBare = false, decimals = exportForm('paramFormat').decimals } = {}) { // decimals: DISPLAY callers only (TASK 724); the export never passes it
   const v = Number(baseMM);
   if (!Number.isFinite(v)) return '';
   const unit = TO_MM[docUnit] ? docUnit : BASE;
   if (zeroBare && v === 0) return `0${unit}`;
-  return `${(v / TO_MM[unit]).toFixed(decimals)} ${unit}`;
+  return `${(v / TO_MM[unit]).toFixed(decimals)}${exportForm('paramFormat').separator}${unit}`;
 }

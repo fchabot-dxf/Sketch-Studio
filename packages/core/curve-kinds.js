@@ -19,6 +19,7 @@
 import { calculateArcPath, arcSweepInfo } from './geometry.js';
 import { flattenCubic } from './svg-import.js'; // the ONE cubic flattener (de Casteljau), here with the step count the tolerance asks for
 import { TOOL_MODES, MIRROR_STEPS } from './constants.js';
+import { exportForm } from './origin-rules.js'; // TASK 803: the written number's decimals are the Origin rules' (geomDecimals)
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -30,9 +31,10 @@ export const CURVE_TOLERANCE_MM = 0.005;
 /** A bound on the steps of one bezier (a huge curve at the tolerance): 2048 segments. */
 export const BEZIER_MAX_STEPS = 2048;
 
-// SVG path number: <= 4 dp, trailing zeros trimmed, no "-0" (world units = base mm). (Moved here from #core/loop-geometry, which re-exports it.)
+// SVG path number: <= geomDecimals dp (4: #core/origin-rules.js), trailing zeros trimmed, no "-0" (world units = base mm). (Moved here from #core/loop-geometry, which re-exports it.)
+const GEOM_SCALE = 10 ** exportForm('geomDecimals');
 export function num(n) {
-  let r = Math.round(Number(n) * 1e4) / 1e4;
+  let r = Math.round(Number(n) * GEOM_SCALE) / GEOM_SCALE;
   if (Object.is(r, -0)) r = 0;
   return String(r);
 }

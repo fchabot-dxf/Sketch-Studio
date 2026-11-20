@@ -99,7 +99,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 480, height: 731, deviceScaleFactor: 1, mobile: false });
   await waitFor(`window.innerWidth === 480 && window.innerHeight === 731`, 'palette viewport 480x731');
   await shot('fusion-palette-480x731.png');
-  await evalJs(`document.querySelector('.sk-sidebar-handle').click()`);
+  await evalJs(`document.querySelector('.sk-sidebar-chevron').click()`);
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'palette drawer opened');
   await new Promise((r) => setTimeout(r, 250));
   await shot('fusion-palette-sidebar-open-480x731.png');

@@ -30,7 +30,7 @@ try {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?analytics=off`, 10000);
-  await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper phone ready');
+  await waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper phone ready');
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
 
   // Seed 3 cuts: Raster pocket, On-line Lead-in, On-line Tabs
@@ -57,7 +57,7 @@ try {
   })()`);
 
   // Open Prepare via phone sidebar drawer
-  await evalJs(`document.querySelector('.sk-sidebar-handle').click()`); await sleep(250);
+  await evalJs(`document.querySelector('.sk-sidebar-chevron').click()`); await sleep(250);
   await evalJs(`document.querySelector('.sk-sidebar-stage[data-tab="prepare"]').click()`); await sleep(350);
   if (await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) {
     await evalJs(`document.querySelector('.sk-sidebar-scrim').click()`); await sleep(250);

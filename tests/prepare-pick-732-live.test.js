@@ -62,7 +62,7 @@ await (async () => {
     await waitForApp('design-canvas');
     // the document is set to inches (the setting the Units tab writes; not persisted)
     await evalJs(`(async () => { (await import('/packages/core/settings-manager.js')).default.set('DOC_UNIT', 'in', { persist: false }); })()`);
-    await press('.sk-sidebar-btn, .sk-sidebar-handle');
+    await press('.sk-sidebar-btn, .sk-sidebar-chevron');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar');
     await press('[data-action="templates"]');
     await waitFor(`!!document.querySelector('.sk-tp-card[data-template="box-frame"]')`, 'template cards');

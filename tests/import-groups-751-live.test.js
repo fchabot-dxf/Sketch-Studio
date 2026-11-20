@@ -295,7 +295,7 @@ try {
     await send('DOM.getDocument', { depth: 0 });
     await send('Page.setInterceptFileChooserDialog', { enabled: true });
     const pressSel = async (s) => { const c = await evalJs(`(() => { const r = document.querySelector('${s}').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`); await tap(c); await sleep(450); };
-    await pressSel('.sk-sidebar-handle');
+    await pressSel('.sk-sidebar-chevron');
     const chooser = once('Page.fileChooserOpened');
     await pressSel('.sk-sidebar-item[data-action="import-file"]');
     const ch = await chooser;

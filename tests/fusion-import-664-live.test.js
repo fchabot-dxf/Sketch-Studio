@@ -158,7 +158,7 @@ try {
   await shot('fusion-import-palette-480x731.png');
 
   // Open drawer at 480x731 and confirm GO TO section is hidden in Fusion mode
-  await evalJs(`document.querySelector('.sk-sidebar-handle').click()`);
+  await evalJs(`document.querySelector('.sk-sidebar-chevron').click()`);
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar drawer opens at 480x731');
   await new Promise((r) => setTimeout(r, 250));
   const drawerCheck = await evalJs(`({

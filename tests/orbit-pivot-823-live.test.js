@@ -195,7 +195,7 @@ try {
     await evalJs('delete window.showOpenFilePicker');
     await send('DOM.getDocument', { depth: 0 });
     await send('Page.setInterceptFileChooserDialog', { enabled: true });
-    await clickEl(touchMode ? '.sk-sidebar-handle' : '.sk-sidebar-btn');
+    await clickEl(touchMode ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
     const chooser = once('Page.fileChooserOpened');
     await clickEl('[data-action="open-stl"]');

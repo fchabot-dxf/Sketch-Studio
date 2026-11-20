@@ -34,7 +34,7 @@ await (async () => {
   let pointer = mouse;
   const press = async (sel) => { const c = await center(sel); await pointer(c.x, c.y); return c; };
   const openMenu = async () => {
-    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-chevron')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger not found'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
   };
   const openTemplatesModal = async () => {
@@ -149,7 +149,7 @@ await (async () => {
     for (const host of ['shaper', 'penplotter', 'trace']) {
       await resetBufferLive(cdp);
       await navigate(url(host), 10000);
-      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-handle')`, host + ': menu ready');
+      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-chevron')`, host + ': menu ready');
       await sleep(300);
       await openMenu(); await press('[data-action="templates"]');
       await waitFor(`!!document.querySelector('.sk-tp-card')`, host + ': modal open');

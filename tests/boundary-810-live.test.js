@@ -80,7 +80,7 @@ const openWorld = (pts, what) => clickOpenLive(s2Steps, () => pressWorld(pts, wh
 const PART_PTS = [[5, -5], [75, -5], [5, -45], [75, -45], [10, -25], [70, -25], [3, -30], [77, -30], [12, -3], [12, -47]];
 const WINDOW_PTS = [[22, -25], [25, -10], [25, -40], [55, -10], [55, -40], [58, -25], [40, -8], [40, -42], [22, -8], [22, -42]];
 const openStage = async (id) => {
-  if (touch) { await clickEl('.sk-sidebar-handle'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); }
+  if (touch) { await clickEl('.sk-sidebar-chevron'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); }
   else await clickEl(`.sk-header-tab[data-tab="${id}"]`);
   await waitFor(`!document.getElementById('${id === 'design' ? 'design-view' : 'view-' + id}').hidden`, `the ${id} stage`);
   await sleep(300);

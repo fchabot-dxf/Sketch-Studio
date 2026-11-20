@@ -90,7 +90,7 @@ const openStl = async (stl, what) => {
   await evalJs('delete window.showOpenFilePicker'); // the <input type=file> path (as on a phone): the chooser can be intercepted
   await send('DOM.getDocument', { depth: 0 });
   await send('Page.setInterceptFileChooserDialog', { enabled: true });
-  await clickEl(touch ? '.sk-sidebar-handle' : '.sk-sidebar-btn');
+  await clickEl(touch ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, what + ': the drawer opens'); await sleep(300);
   assert.strictEqual(await evalJs(`document.querySelector('[data-action="open-stl"]').textContent.trim()`), 'Open STL…', what + ': the entry');
   const chooser = once('Page.fileChooserOpened');

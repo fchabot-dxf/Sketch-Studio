@@ -55,7 +55,7 @@ await (async () => {
       const dots = () => evalJs(`[...document.querySelectorAll('.sk-doctab')].map((t) => !!t.querySelector('.sk-doctab-dot:not(.saving)'))`); // the not-saved dot (a stored design's Drive write in flight shows a 'saving' one)
       const shapes = (app) => evalJs(`document.querySelectorAll('#${CANVAS[app]} .shape-elem').length`);
       const menuOpen = `(() => { const g = document.querySelector('.sk-sidebar-actions'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
-      const openMenu = async () => { if (!(await evalJs(menuOpen))) await press(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn'); await waitFor(menuOpen, mode + ': the menu'); };
+      const openMenu = async () => { if (!(await evalJs(menuOpen))) await press(phone ? '.sk-sidebar-chevron' : '.sk-sidebar-btn'); await waitFor(menuOpen, mode + ': the menu'); };
       const shot = async (name) => {
         if (!process.env.EVIDENCE_DIR) return;
         const r = await evalJs(`(() => { const r = document.querySelector('.sk-doctabs').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()`);
@@ -63,7 +63,7 @@ await (async () => {
         fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, `${mode}-${name}.png`), Buffer.from(s.data, 'base64'));
       };
       const stage = async (id) => { // a host's stage: the header tab with a mouse, the drawer's stage list on a phone (no header bar there)
-        if (phone) { await openMenu(); await press(`.sk-sidebar-stage[data-tab="${id}"]`); if (await evalJs(menuOpen)) await press('.sk-sidebar-handle'); }
+        if (phone) { await openMenu(); await press(`.sk-sidebar-stage[data-tab="${id}"]`); if (await evalJs(menuOpen)) await press('.sk-sidebar-chevron'); }
         else await press(`.sk-header-tab[data-tab="${id}"]`);
         await sleep(400);
       };

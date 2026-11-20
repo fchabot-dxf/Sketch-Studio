@@ -86,7 +86,7 @@ const openStage = async (id) => {
   for (let i = 0; i < 5; i++) {
     if (await activeStage() === id) return;
     if (phone) {
-      if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-handle');
+      if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-chevron');
       await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
       await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`);
     } else await clickEl(`.sk-header-tab[data-tab="${id}"]`);

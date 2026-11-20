@@ -23,7 +23,7 @@ await (async () => {
     ];
     const measure = () => evalJs(`(() => { const h = document.querySelector('header.sk-header'); const hr = h.getBoundingClientRect(); const vw = window.innerWidth;
       const controls = [...h.querySelectorAll('button, input, a, select')].map((e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return { id: (e.id || e.className || e.tagName).toString().slice(0, 30), text: (e.textContent || '').trim().slice(0, 12), shown: r.width > 0 && r.height > 0 && cs.visibility !== 'hidden', left: r.left, right: r.right, top: r.top, bottom: r.bottom, h: r.height, w: r.width }; }).filter((c) => c.shown);
-      const handle = document.querySelector('.sk-sidebar-handle'); const har = handle ? handle.getBoundingClientRect() : null;
+      const handle = document.querySelector('.sk-sidebar-chevron'); const har = handle ? handle.getBoundingClientRect() : null;
       const strip = document.querySelector('.sk-doctabs'); const sr = strip ? strip.getBoundingClientRect() : null;
       return { vw, hdrDisplay: getComputedStyle(h).display, hdrLeft: hr.left, hdrRight: hr.right, hdrH: hr.height, scrollW: document.documentElement.scrollWidth, bodyScrollW: document.body.scrollWidth, controls,
         handle: har ? { left: har.left, right: har.right, top: har.top, bottom: har.bottom, w: har.width, h: har.height } : null,
@@ -47,7 +47,7 @@ await (async () => {
           assert.strictEqual(m.hdrDisplay, 'none', tag + 'phone has NO header bar');
           assert.strictEqual(m.hdrH, 0, tag + 'phone header height is 0');
           assert.strictEqual(m.stripTop, 0, tag + 'document tab strip is the top row on phones');
-          assert(m.handle && m.handle.w >= 14 && m.handle.h >= 44 && m.handle.left <= 1, tag + 'peeking drawer handle visible on left edge: ' + JSON.stringify(m.handle));
+          assert(m.handle && m.handle.w >= 44 && m.handle.h >= 24 && m.handle.left <= 8.5 && m.handle.top < 1, tag + 'TASK 819: the drawer chevron is the first control of the strip, at its left edge: ' + JSON.stringify(m.handle));
           if (h.drawer) {
             const tog = await evalJs(`(() => { const e = document.querySelector('.sk-canvas-corner .sk-browser-corner-btn'); const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }; })()`);
             assert(tog.w >= 43.5 && tog.h >= 43.5 && tog.right <= m.vw + 0.5 && tog.left >= 0, tag + 'the Sketches layers button is on screen, 44 px: ' + JSON.stringify(tog));
@@ -62,6 +62,6 @@ await (async () => {
         }
       }
     }
-    console.log('LIVE-OK phone headers: phone has no header bar + peeking drawer handle + canvas-corner toggles; desktop 1440 unified 44 px');
+    console.log('LIVE-OK phone headers: phone has no header bar + drawer chevron in the tab strip + canvas-corner toggles; desktop 1440 unified 44 px');
   } finally { await cdp.close(); }
 })();

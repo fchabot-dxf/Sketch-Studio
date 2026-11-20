@@ -59,7 +59,7 @@ try {
     }
     assert.fail('could not open the ' + mode + ' stage');
   };
-  const rec = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()][0]; return r ? { cutType: r.cutType, cutDepth: r.cutDepth, cutOffset: r.cutOffset, toolDia: r.toolDia } : null; })`);
+  const rec = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()][0]; return r ? { cutType: r.cutType, cutDepth: r.cutDepth, cutOffset: r.cutOffset, toolDia: r.toolDia } : null; })`);
   const near = (a, b, m) => assert.ok(Math.abs(a - b) < 1e-6, `${m}: ${a} vs ${b}`);
 
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
@@ -171,7 +171,7 @@ try {
     const poly = (p, pts) => { pts.forEach(([x, y], i) => st.joints.set(p + i, { x, y })); pts.forEach((_, i) => st.shapes.push({ id: p + 's' + i, type: 'line', joints: [p + i, p + ((i + 1) % pts.length)] })); };
     poly('A', [[-30, -20], [30, -20], [30, 20], [-30, 20]]);
   })()`);
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await setMm();
   await phase('phone');
   await send('Emulation.setTouchEmulationEnabled', { enabled: false });

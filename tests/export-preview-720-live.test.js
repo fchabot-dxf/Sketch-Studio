@@ -81,7 +81,7 @@ const looks = () => evalJs(`import('/apps/shaper/src/export-preview.js').then((m
 const dl = async () => { await evalJs(`document.getElementById('btn-generate-svg').scrollIntoView({ block: 'nearest' })`); await sleep(100); return download(); };
 const setPlan = async (cutType) => {
   await clickEl('#prepare-panel .cut-type-trigger'); await clickEl(`.cut-type-opt[data-id="${cutType}"]`);
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === '${cutType}'))`, cutType + ' set');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === '${cutType}'))`, cutType + ' set');
   if (cutType === 'roughing') { await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); } // TASK 810: the Roughing card is tabbed: its stepping rows are in Passes
 };
 const checkDownload = (svg, what) => assert.ok(!/hsl\(/.test(svg) && !/data-/.test(svg), `${what}: the downloaded file has none of the preview's styling`);
@@ -125,14 +125,14 @@ try {
   await setPlan('roughing');
   if (await evalJs(`document.querySelector('.cut-adaptive').checked`)) await clickEl('.cut-adaptive');
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '1'; i.dispatchEvent(new Event('change')); })()`);
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'Step depth 1 mm, Adaptive off');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'roughing' && r.stepDepth === 1 && !r.adaptiveSteps))`, 'Step depth 1 mm, Adaptive off');
   await shootRings('desktop-2d-06-inside-step1mm.png', 2);
   await openStage('prepare');
   await clickWorld(60, -40);
   await clickEl('.cut-adaptive');
   await waitFor(`document.querySelector('.cut-adaptive').checked`, 'Adaptive on');
   await clickEl('.cut-row[data-row="stepDeviation"] .cut-preset[data-value="0.1"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.stepDeviation === 0.1))`, 'Fine');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.stepDeviation === 0.1))`, 'Fine');
   await shootRings('desktop-2d-06-inside-fine.png', 0);
   console.log('export-preview-720-live.test.js: ok');
 } finally {

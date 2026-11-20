@@ -73,8 +73,8 @@ try {
     [[0, 0], [120, 0], [120, 70], [0, 70]].forEach(([x, y], i) => st.joints.set('Rj' + i, { x, y }));
     for (let i = 0; i < 4; i++) st.shapes.push({ id: 'Rs' + i, type: 'line', joints: ['Rj' + i, 'Rj' + ((i + 1) % 4)] });
     st.saveState('draw');
-    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/apps/shaper/src/cut-plan.js');
-    cp.CUT_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
+    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/tests/helpers/plan-v2.js');
+    cp.V2_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
   await clickEl('.sk-header-tab[data-tab="review"]');
   await waitFor(`!document.getElementById('view-review').hidden`, 'Export step');
   await clickEl('#btn-sync-shaper');

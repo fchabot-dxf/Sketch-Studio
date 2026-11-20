@@ -402,13 +402,21 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
 **Behaviour changes for existing users** (each stage's REPORT repeats its own)
 
 - S0: none visible (a newer document is protected from an older app).
-- S1: none (byte-identical files and lists, asserted).
+- S1: byte-identical files and lists for every saved document (asserted on the corpus), except as ruled by the advisor
+  (task S1, turn 2701): (ruling 1) a Guide declares its Depth / Offset / Bit, so a document whose Guides hold different
+  values lists one Guide operation per value set (its file is unchanged); (ruling 2) a shape that is binned or moved off the
+  Stock leaves its operation with nothing kept: assigned again it takes the settings of the operation it joins (a fresh
+  default record when it makes a new one) and moves to the end of the FILE order (before S1 its record kept its settings
+  and its place; the elements are the same); (ruling 4) a value that is not part of the operation key (for example a
+  Freehand pocket's stored stepover) is the operation's: after switching a pattern back, the number shown can differ.
+  Contour: its depth and wall side are read LIVE from its part, as before (ruling 3); S2 keeps this as the Contour's
+  "From part" default, and the explicit `cutDepth` / `wallSide` / `walls` of section 3 apply only where the user set them.
+  NOT RULED YET (task S1 report): a NEW operation is placed once, when it is made (the 743 rule: section 2); before S1 a list with no stored order was
+  re-sorted on every change.
 - S2: editing an operation's setting changes ALL its shapes (today: only the selected shapes, which then regroup); an
   edited operation keeps its place in the list (today it moves); the bin deletes the operation, and its shapes stay in
   their other operations (today: unassigns the regions); Contour is a type in the menus, the Roughing card loses its
-  Contour row and "Edit contour"; adding / removing a Contour no longer sets Roughing's allowance; a shape removed from an
-  operation and added again moves to the end of the FILE order (today a record kept its place even unassigned; the
-  elements are the same).
+  Contour row and "Edit contour"; adding / removing a Contour no longer sets Roughing's allowance.
 - S3: the palette strip in the Operations card (the card is ~80 px taller on desktop; on a phone the sheet shows it first).
 - S4: the lineups menu; a new synced settings key.
 

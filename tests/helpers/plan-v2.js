@@ -16,6 +16,8 @@ import { memberOf, regionKeys, regionOf, storeOps, planKeyOf } from '../../apps/
 import { getStock } from '../../apps/shaper/src/stock.js';
 import { captureStlDoc } from '../../apps/shaper/src/stl-source.js';
 import { getSelections } from '../../apps/shaper/src/selection-list.js';
+export * from '../../apps/shaper/src/cut-plan.js'; // TASK S1: a live test's page imports this module in place of cut-plan.js (V2_PLAN + the cut plan's own API)
+export { storedRecords } from './stored-records.js'; // the saved sidecar's per-shape records
 
 let STATE = null;
 let ORDER = [];
@@ -68,23 +70,6 @@ export const V2_PLAN = {
   entries: () => planRecords().map(([k, r]) => [k, freeze(r, k)])[Symbol.iterator](),
   [Symbol.iterator]() { return this.entries(); },
 };
-
-/** The per-shape records a SAVED version 3 Shaper sidecar holds, [[planKey, record]] in file order (each shape's operation's type + settings, its region's slope /
- *  levels, its dragged lead-in position; Depth 'model' read from its region's source): what a test of before S1 read as d.hosts.shaper.cutPlan. */
-export function storedRecords(side) {
-  const regions = (side && side.regions) || {};
-  const out = [];
-  for (const op of (side && side.operations) || []) {
-    for (const ref of op.geometry) {
-      const r = { cutType: op.type, ...op.settings }, g = regions[ref.key] || {};
-      if (r.cutDepth === 'model') r.cutDepth = g.source && g.source.cutDepth != null ? g.source.cutDepth : 'unset';
-      if (op.type !== 'contour') { if (g.slope) r.slope = g.slope; if (g.levels) r.levels = g.levels; }
-      if (Object.hasOwn(ref, 'at')) r.leadInAt = ref.at;
-      out.push([op.type === 'contour' ? 'contour:' + ref.key : ref.key, r, ref.seq]);
-    }
-  }
-  return out.sort((a, b) => a[2] - b[2]).map(([k, r]) => [k, r]);
-}
 
 /** The operation keys (operations.js opKeyOf) of the STORED operations, in list order: the order a test of before S1 read as opOrder(). */
 export const storedOpKeys = () => storeOps().map((op) => { const ref = op.geometry[0], r = recordOf(op, ref), e = resolveEntry(planKeyOf(op, ref), r); return opKeyOf(e ? e.rec : r); });

@@ -82,7 +82,7 @@ const openStl = async (what) => {
 };
 // the relief: a press on its outline (top-most vertex on the canvas, away from the edges)
 const pressOutline = async () => {
-  const p = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const k = [...m.CUT_PLAN.entries()].find(([, r]) => r.levels)[0];
+  const p = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const k = [...m.V2_PLAN.entries()].find(([, r]) => r.levels)[0];
     const { loops } = m.loopsWithPolygons(window.__designController.state); const l = loops.find((x) => 'loop:' + x.id === k);
     const svg = document.getElementById('prepare-canvas'), M = svg.getScreenCTM();
     for (const q of [...l.polygon].sort((a, b) => a.y - b.y)) { const pt = svg.createSVGPoint(); pt.x = q.x; pt.y = q.y; const s = pt.matrixTransform(M); const x = Math.round(s.x), y = Math.round(s.y);
@@ -95,7 +95,7 @@ const pressOutline = async () => {
 const passesTab = async () => { await clickEl('.cut-tab[data-tab="passes"]'); await waitFor(`document.querySelector('.cut-tab[data-tab="passes"]').classList.contains('is-active')`, 'the Passes tab'); }; // TASK 810: Smoothing is in the Passes tab
 const rowShown = (name) => evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-row[data-row="${name}"]'); return !!r && r.style.display !== 'none'; })()`);
 const smoothingValue = () => evalJs(`document.querySelector('#prepare-panel .cut-smoothing').value`);
-const record = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()].find((x) => x.levels); return { smoothing: r.smoothing === undefined ? 'unset' : r.smoothing }; })`);
+const record = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()].find((x) => x.levels); return { smoothing: r.smoothing === undefined ? 'unset' : r.smoothing }; })`);
 // the Paths view's written paths (the file's own d strings): their count, the cubics and the straight pieces in them
 const pathsFacts = () => evalJs(`(() => { const ds = [...document.querySelectorAll('#review-2d-canvas .rv2d-doc .rv2d-path')].map((e) => e.getAttribute('d') || '');
   return { paths: ds.length, C: ds.reduce((n, d) => n + (d.match(/C /g) || []).length, 0), L: ds.reduce((n, d) => n + (d.match(/L /g) || []).length, 0), bytes: ds.reduce((n, d) => n + d.length, 0) }; })()`);
@@ -150,7 +150,7 @@ try {
   await send('Input.insertText', { text: '0' });
   await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   await evalJs(`document.querySelector('#prepare-panel .cut-smoothing').blur()`);
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((x) => x.levels).smoothing === 0)`, 'desktop: Smoothing 0 stored', 30000);
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].find((x) => x.levels).smoothing === 0)`, 'desktop: Smoothing 0 stored', 30000);
   assert.strictEqual(await evalJs(`window.__designController.state.history.length`), hist + 1, 'desktop: one undo step');
   assert.strictEqual(await smoothingValue(), '0', 'desktop: the row shows 0');
   await openPaths();
@@ -164,7 +164,7 @@ try {
   // Undo: the default again
   await openStage('prepare');
   await clickEl('#btn-undo');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((x) => x.levels).smoothing === undefined)`, 'desktop: undo', 30000);
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].find((x) => x.levels).smoothing === undefined)`, 'desktop: undo', 30000);
   // the part's Contour: its own Smoothing (0.05: TASK 810, owner turn 2688)
   await pressOutline();
   await passesTab();

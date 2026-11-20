@@ -39,13 +39,13 @@ try {
     for (let i = 0; i < 4; i++) st.shapes.push({ id: 'os' + i, type: 'line', joints: ['oj' + i, 'oj' + ((i + 1) % 4)] });
     st.saveState('draw');
     const lf = await import('/packages/core/loop-finder.js');
-    const cp = await import('/apps/shaper/src/cut-plan.js');
-    cp.CUT_PLAN.clear();
+    const cp = await import('/tests/helpers/plan-v2.js');
+    cp.V2_PLAN.clear();
     const loops = lf.findLoops(st);
     const pLoop = loops.find((l) => l.edges.some((e) => e.startsWith('ps')));
     const oLoop = loops.find((l) => l.edges.some((e) => e.startsWith('os')));
-    cp.CUT_PLAN.set('loop:' + pLoop.id, { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175, clearing: 'linked', stepover: 40, finishAllowance: 0.5 });
-    cp.CUT_PLAN.set('loop:' + oLoop.id, { cutType: 'exterior', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 });
+    cp.V2_PLAN.set('loop:' + pLoop.id, { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175, clearing: 'linked', stepover: 40, finishAllowance: 0.5 });
+    cp.V2_PLAN.set('loop:' + oLoop.id, { cutType: 'exterior', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 });
     return ['loop:' + pLoop.id, 'loop:' + oLoop.id];
   })()`);
   await openMode('review');
@@ -57,7 +57,7 @@ try {
   const info = await evalJs(`document.getElementById('review-info').textContent`);
   console.log('review-info: ' + info);
   ok(/1 Outside\/Inside cut with depth unset shown cut through/.test(info), 'the info line names the depth-unset cut: ' + info);
-  const rel = await evalJs(`Promise.all([import('/packages/core/relief-model.js'), import('/apps/shaper/src/cut-plan.js')]).then(([R, C]) => { const r = R.buildRelief({ items: C.planReliefItems(window.__designController.state) }); return { marks: r.marks.map((m) => ({ kind: m.kind, key: m.key, keys: m.keys || null })), levels: r.levels.map((l) => [l.depth, l.through]) }; })`);
+  const rel = await evalJs(`Promise.all([import('/packages/core/relief-model.js'), import('/tests/helpers/plan-v2.js')]).then(([R, C]) => { const r = R.buildRelief({ items: C.planReliefItems(window.__designController.state) }); return { marks: r.marks.map((m) => ({ kind: m.kind, key: m.key, keys: m.keys || null })), levels: r.levels.map((l) => [l.depth, l.through]) }; })`);
   console.log('marks: ' + JSON.stringify(rel.marks) + ' levels: ' + JSON.stringify(rel.levels));
   ok(rel.levels.some(([d, through]) => d === 5 && !through), 'the pocket is cut at 5 mm');
   eq(rel.marks.map((m) => m.kind).sort(), ['depth-unset', 'pocket-start'], 'the start mark and the depth-unset label are two marks');

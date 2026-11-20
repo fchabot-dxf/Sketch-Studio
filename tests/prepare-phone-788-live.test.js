@@ -47,8 +47,8 @@ try {
     [[0,0],[100,0],[100,60],[0,60]].forEach(([x,y],i) => st.joints.set('aj'+i, {x,y}));
     for (let i=0;i<4;i++) st.shapes.push({ id:'as'+i, type:'line', joints:['aj'+i, 'aj'+((i+1)%4)] });
     st.saveState('phone-draw');
-    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/apps/shaper/src/cut-plan.js');
-    cp.CUT_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 6.35 });
+    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/tests/helpers/plan-v2.js');
+    cp.V2_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 6.35 });
   })()`);
   await clickEl('.sk-sidebar-handle');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');

@@ -51,7 +51,7 @@ const clickWorld = async (x, y) => {
     const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
   await mouse(p.x, p.y);
 };
-const plan = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].map((r) => ({ cutType: r.cutType, stepDepth: r.stepDepth ?? null, slope: r.slope ? r.slope.kind : null })))`);
+const plan = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].map((r) => ({ cutType: r.cutType, stepDepth: r.stepDepth ?? null, slope: r.slope ? r.slope.kind : null })))`);
 const openStage = async (id) => {
   await clickEl(`.sk-header-tab[data-tab="${id}"]`);
   await waitFor(`!document.getElementById('view-${id}').hidden`, `the ${id} stage`);
@@ -111,7 +111,7 @@ try {
   console.log('menu with Stepped pocket: ' + JSON.stringify(wide));
   assert.ok(wide.menu >= 134 && wide.oneLine, 'the menu grows to keep "stepped pocket" on one line');
   await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
   await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); // TASK 810: the Roughing card is tabbed: the Step depth row is in Passes
   const card = await evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, step: document.querySelector('.cut-step-depth').value,
     stepShown: !('off' in document.querySelector('.cut-row[data-row="stepDepth"]').dataset), note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
@@ -121,7 +121,7 @@ try {
   const steppedInfo = await review(9);
   console.log('Review (stepped): ' + JSON.stringify(steppedInfo));
   assert.ok(steppedInfo.includes('Pocket 1 (8mm): 8 steps, 1 to 8 mm \u00b7 outlines 0.176 mm apart'), 'the Review info says the steps');
-  const levels = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutType + '@' + i.cutDepth))`);
+  const levels = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutType + '@' + i.cutDepth))`);
   assert.deepStrictEqual(levels, ['exterior@19', 'pocket@1', 'pocket@2', 'pocket@3', 'pocket@4', 'pocket@5', 'pocket@6', 'pocket@7', 'pocket@8'], 'the Review input: 8 terrace pockets');
   await zoomReview();
   await shot('review-drafted-stepped.png', '#review-canvas-host');
@@ -145,7 +145,7 @@ try {
   const x2Menu = await menuIds();
   assert.ok(x2Menu.includes('roughing') && !x2Menu.some((id) => id.startsWith('stepped')), 'x2 outline: Roughing (TASK 792: in place of Stepped outside): ' + x2Menu);
   await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped outside set');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped outside set');
   const x2Info = await review(2);
   console.log('Review (x2 stepped outside): ' + JSON.stringify(x2Info));
   assert.ok(x2Info.includes('Outline: 2 steps, 1 to 19 mm \u00b7 outlines 1 mm apart') && x2Info.includes('Outline: undercut below 17 mm cut straight'), 'the Review says the steps and the undercut');

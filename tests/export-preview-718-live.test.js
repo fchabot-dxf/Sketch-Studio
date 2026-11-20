@@ -181,12 +181,12 @@ try {
   await clickWorld(60, -40);
   await clickEl('#prepare-panel .cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="roughing"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'roughing'))`, 'Stepped pocket set');
   await clickEl('.cut-tab[data-tab="passes"]'); await sleep(150); // TASK 810: the Roughing card is tabbed: its stepping rows are in Passes
   await clickEl('.cut-adaptive');
   await waitFor(`document.querySelector('.cut-adaptive').checked`, 'Adaptive stepping on');
   await clickEl('.cut-row[data-row="stepDeviation"] .cut-preset[data-value="0.5"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.stepDeviation === 0.5))`, 'Coarse');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.stepDeviation === 0.5))`, 'Coarse');
   await openStage('review');
   assert.strictEqual(await evalJs(`!document.getElementById('review-2d').hidden && document.getElementById('review-view-2d').getAttribute('aria-pressed')`), 'true', 'the Export step shows 2D again (the choice stays)');
   await waitFor(`document.querySelectorAll('#review-2d-canvas [data-step]').length === 4`, 'the 2D view of the stepped plan');

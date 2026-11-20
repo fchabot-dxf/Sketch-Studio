@@ -22,16 +22,16 @@ await (async () => {
       await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
       for (const [label, w, h] of [['strip-20mm', 120, 20], ['square-300mm', 300, 300]]) {
         await evalJs(`(async () => {
-          const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+          const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
           const { findLoops } = await import('/packages/core/loop-finder.js');
           const st = window.__designController.state;
           for (const k of [...st.joints.keys()]) st.joints.delete(k);
-          st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+          st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
           let n = 0; const J = (x, y) => { const id = 'j' + (++n); st.joints.set(id, { x, y }); return id; };
           const p = [J(0, 0), J(${w}, 0), J(${w}, ${h}), J(0, ${h})];
           for (let i = 0; i < 4; i++) st.shapes.push({ id: 's' + (++n), type: 'line', joints: [p[i], p[(i + 1) % 4]] });
           const L = findLoops(st);
-          CUT_PLAN.set(keyOf('loop', L[0].id), { cutType: 'pocket', cutDepth: 7.62, cutOffset: 0, toolDia: 3 });
+          V2_PLAN.set(keyOf('loop', L[0].id), { cutType: 'pocket', cutDepth: 7.62, cutOffset: 0, toolDia: 3 });
         })()`);
         await evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);
         await waitFor(`!!document.querySelector('#prepare-canvas .sk-edge') && !!document.getElementById('prepare-canvas').getScreenCTM()`, 'prepare drawn');

@@ -86,11 +86,11 @@ const snap = () => evalJs(`(() => { const out = {}; const r2 = (n) => Math.round
   for (const sel of ${JSON.stringify(OUTSIDE)}) [...document.querySelectorAll(sel)].forEach((e, i) => { const b = e.getBoundingClientRect(); out[sel + '#' + i] = [r2(b.left), r2(b.top), r2(b.width), r2(b.height)].join(','); });
   return out; })()`);
 const moved = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]).map((k) => `${k}: ${a[k]} -> ${b[k]}`);
-const partKey = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.entries()].find(([, r]) => r.levels)[0])`);
-const rec = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()].find((x) => x.levels); const { levels, ...rest } = r; return rest; })`);
+const partKey = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.entries()].find(([, r]) => r.levels)[0])`);
+const rec = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()].find((x) => x.levels); const { levels, ...rest } = r; return rest; })`);
 // the leftmost x (world mm) the Roughing's pockets reach in the export (the same derivation the 3D Review and the Paths view draw)
-const exportMinX = () => evalJs(`Promise.all([import('/apps/shaper/src/cut-plan.js'), import('/apps/shaper/src/export-payload.js')]).then(([c, e]) => {
-  const svg = e.shaperSvgOf(window.__designController.state, c.cutPlanEntries()); const xs = [];
+const exportMinX = () => evalJs(`Promise.all([import('/tests/helpers/plan-v2.js'), import('/apps/shaper/src/export-payload.js')]).then(([c, e]) => {
+  const svg = e.shaperSvgOf(window.__designController.state, c.planEntries()); const xs = [];
   for (const m of svg.matchAll(/<path [^>]*shaper:cutType="pocket"[^>]*\\/>/g)) for (const q of m[0].matchAll(/[ML] (-?[\\d.]+) /g)) xs.push(Number(q[1]));
   return xs.length ? Math.min(...xs) : null; })`);
 // the Paths view: the leftmost x (world) of its pocket strokes
@@ -99,7 +99,7 @@ const pathsMinX = () => evalJs(`(() => { const els = [...document.querySelectorA
 async function phase() {
   await openStage('prepare');
   await evalJs(`import('/apps/shaper/src/fusion-import.js').then((m) => m.importFusionSelection(${JSON.stringify(PAYLOAD)}, { controller: window.__designController }))`);
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const r = [...m.CUT_PLAN.values()].find((x) => x.levels); Object.assign(r, { cutType: 'roughing', toolDia: 6.35, stepDepth: 1, roughLayout: 'nested', smoothing: 0 }); })`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()].find((x) => x.levels); Object.assign(r, { cutType: 'roughing', toolDia: 6.35, stepDepth: 1, roughLayout: 'nested', smoothing: 0 }); })`);
   await openStage('design'); await openStage('prepare'); // Prepare mounts the imported design
   await waitFor(`document.getElementById('prepare-notice').hidden`, 'the notice gone', 10000);
   await pressWorld(PART_PTS, 'the part');
@@ -147,7 +147,7 @@ async function phase() {
   assert.strictEqual(await evalJs(`document.querySelector('.cut-boundary-pick').textContent`), 'Cancel pick', `${device}: the button reads Cancel pick`);
   await shot('picking.png', '#prepare-panel .cut-card');
   await pressWorld(WINDOW_PTS, 'the window');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].some((r) => r.levels && r.boundaryShape))`, `${device}: the window picked`);
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.levels && r.boundaryShape))`, `${device}: the window picked`);
   const r = await rec();
   assert.ok(r.boundary === 'shape' && /^loop:/.test(r.boundaryShape) && r.boundaryShape !== await partKey(), `${device}: the window is the boundary shape: ${r.boundaryShape}`);
   assert.deepStrictEqual(await evalJs(`[document.querySelector('.cut-type-cur').textContent, document.getElementById('prepare-canvas').classList.contains('is-picking'), document.querySelector('.cut-boundary-state').textContent]`), ['Roughing', false, 'picked'], `${device}: still the part's card, picking over, picked`);

@@ -46,7 +46,7 @@ try {
   await waitFor(`document.getElementById('prepare-notice') && /8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the import notice (8 regions)');
 
   // the Outline region (holes: []) is a derived-loop target, unchanged by task 711
-  const outlineKey = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN].filter(([, r]) => r.cutType === 'exterior').map(([k]) => k))`);
+  const outlineKey = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN].filter(([, r]) => r.cutType === 'exterior').map(([k]) => k))`);
   assert.strictEqual(outlineKey.length, 1, 'one Outside record');
   assert.ok(outlineKey[0].startsWith('loop:'), 'the Outline is a loop:<id> target: ' + outlineKey[0]);
 
@@ -84,7 +84,7 @@ try {
   assert.strictEqual(new Set(els.map((e) => e.cutType + '|' + e.depth + '|' + e.geom)).size, els.length, 'no element written twice');
 
   // the 3D Review's input from the same plan, in the page
-  const review = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutType + ' ' + i.cutDepth).sort())`);
+  const review = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.planReliefItems(window.__designController.state).map((i) => i.cutType + ' ' + i.cutDepth).sort())`);
   console.log('REVIEW ' + JSON.stringify(review));
   assert.deepStrictEqual(review, ['exterior 19', 'interior 19', 'interior 19', 'interior 19', 'pocket 10', 'pocket 4', 'pocket 6', 'pocket 8'], 'Review: the same 8 cuts');
   console.log('export-own-hole-711-live.test.js: ok');

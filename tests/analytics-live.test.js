@@ -122,7 +122,7 @@ try {
   assert.ok(ch, 'W: the file chooser opened');
   await send('DOM.setFileInputFiles', { files: [SVG], backendNodeId: ch.backendNodeId });
   await until(() => points.length >= w0 + 3, 'W: import:svg');
-  await waitFor(`import('/src/cut-plan.js').then((m) => m.CUT_PLAN.size > 0)`, 'W: the imported cut in the plan');
+  await waitFor(`import('/src/cut-plan.js').then((m) => m.planEntries().length > 0)`, 'W: the imported cut in the plan');
   await openStage('review');
   await generate();
   await until(() => points.length >= w0 + 5, 'W: stage:review and export:shaper');

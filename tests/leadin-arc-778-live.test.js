@@ -24,7 +24,7 @@ try {
   await setUnit('in');
   await openMode('design');
   await waitFor('!!(window.__designController && window.__designController.state)', 'design ready');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   // Owner Origin test drawing:
   //   A: 1 in square (0..1 in)         -> On line, 0.25 in arc lead-in OUTSIDE
   //   B: 1 in square (1.75..2.75 in)   -> On line, 0.25 in arc lead-in INSIDE
@@ -110,7 +110,7 @@ try {
   await clickEl('#review-view-3d');
   await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, '3D built');
   await sleep(600);
-  const marks3d = await evalJs(`Promise.all([import('/packages/core/relief-model.js'), import('/apps/shaper/src/cut-plan.js')]).then(([R, C]) => R.buildRelief({ state: window.__designController.state, items: C.planReliefItems(window.__designController.state), stock: { thickness: 19.05 } }).marks)`);
+  const marks3d = await evalJs(`Promise.all([import('/packages/core/relief-model.js'), import('/tests/helpers/plan-v2.js')]).then(([R, C]) => R.buildRelief({ state: window.__designController.state, items: C.planReliefItems(window.__designController.state), stock: { thickness: 19.05 } }).marks)`);
   assert.ok(Array.isArray(marks3d) && marks3d.some((m) => m.kind === 'pocket-start'), 'Export 3D builds pocket-start mark: ' + JSON.stringify(marks3d));
   await clickEl('#review-top');
   await sleep(500);
@@ -123,7 +123,7 @@ try {
   await sleep(200);
   await shotWorld('desktop-drag-before.png', [-10, -10, IN + 10, IN + 10], 2);
   const view0 = await evalJs(`({ ...window.__prepareView.view })`);
-  const recA = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((C) => { const k = [...window.__prepareView.selection.keys()][0]; const r = C.CUT_PLAN.get(k); return { leadInAt: r.leadInAt ?? null, leadInSide: r.leadInSide }; })`);
+  const recA = () => evalJs(`import('/tests/helpers/plan-v2.js').then((C) => { const k = [...window.__prepareView.selection.keys()][0]; const r = C.V2_PLAN.get(k); return { leadInAt: r.leadInAt ?? null, leadInSide: r.leadInSide }; })`);
   assert.strictEqual((await recA()).leadInAt, null, 'before drag: leadInAt is null (calculated)');
 
   // Drag from junction (IN/2, 0) to right edge middle (IN, IN/2)

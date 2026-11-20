@@ -21,7 +21,7 @@ export async function bowtiePhase(t, label) {
   const D = phone ? 'phone' : 'desktop';
   await openMode('design');
   await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.CUT_PLAN.clear())`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   const n = await evalJs(`(() => {
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) st.joints.delete(k);

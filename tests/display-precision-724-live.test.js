@@ -130,7 +130,7 @@ try {
   // typing still takes any number of decimals: 1.23456789 is stored whole
   await evalJs(`(() => { const i = document.querySelector('.cut-step-depth'); i.value = '1.23456789'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
   await sleep(250);
-  assert.strictEqual(await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((r) => r.cutType === 'roughing').stepDepth)`), 1.23456789, 'typed decimals are stored whole (display only)');
+  assert.strictEqual(await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].find((r) => r.cutType === 'roughing').stepDepth)`), 1.23456789, 'typed decimals are stored whole (display only)');
 
   // 3. Design: a distance label, the Parameters value cell, an angle label (Length 3, Angle 0)
   await openStyle(); await setPrecision('LENGTH_PRECISION', 3); await setPrecision('ANGLE_PRECISION', 0);
@@ -224,10 +224,10 @@ try {
   await clickEl('.sk-header-tab[data-tab="prepare"]');
   await clickWorld(60, -40);
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card');
-  await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => { const [k, r] = [...m.CUT_PLAN.entries()].find(([, r]) => r.cutType === 'pocket'); m.CUT_PLAN.set(k, { ...r, cutDepth: 7.333 }); })`);
+  await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const [k, r] = [...m.V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket'); m.V2_PLAN.set(k, { ...r, cutDepth: 7.333 }); })`);
   await clickWorld(60, -40); await sleep(300);
   assert.strictEqual(await evalJs(`document.querySelector('.cut-depth').value`), '7', 'precision 0: depth 7.333 shows 7');
-  const depthStored = () => evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => [...m.CUT_PLAN.values()].find((r) => r.cutType === 'pocket').cutDepth)`);
+  const depthStored = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].find((r) => r.cutType === 'pocket').cutDepth)`);
   await evalJs(`document.querySelector('.cut-depth').focus()`); await sleep(100);
   await evalJs(`document.querySelector('.cut-depth').blur()`); await sleep(300);
   assert.strictEqual(await depthStored(), 7.333, 'focus + blur untouched: the stored depth stays 7.333');

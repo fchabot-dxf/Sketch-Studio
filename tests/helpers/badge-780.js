@@ -36,10 +36,10 @@ export async function runBadge780(cdp, { phone, shotPrefix, expectOutsideAt }) {
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'in'))`);
   await evalJs(`(async () => {
     const { findLoops } = await import('/packages/core/loop-finder.js');
-    const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+    const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
     const st = window.__designController.state;
     for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);
-    st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
+    st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
     let n = 0;
     const J = (x, y) => { const id = 'bj' + (++n); st.joints.set(id, { x, y }); return id; };
     const line = (a, b) => { const id = 'bs' + (++n); st.shapes.push({ id, type: 'line', joints: [a, b] }); return id; };
@@ -49,9 +49,9 @@ export async function runBadge780(cdp, { phone, shotPrefix, expectOutsideAt }) {
     const loops = findLoops(st);
     const kOf = (edge) => keyOf('loop', loops.find((l) => l.edges.includes(edge)).id);
     const base = { cutDepth: 3.175, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 };
-    CUT_PLAN.set(kOf(eOut), { ...base, cutType: 'exterior' });
-    CUT_PLAN.set(kOf(eSpir), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: true });
-    CUT_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
+    V2_PLAN.set(kOf(eOut), { ...base, cutType: 'exterior' });
+    V2_PLAN.set(kOf(eSpir), { ...base, cutType: 'pocket', clearing: 'linked', stepover: 50, finishAllowance: 0.5, loop: true });
+    V2_PLAN.set(kOf(eRast), { ...base, cutType: 'pocket', clearing: 'raster', stepover: 50, finishAllowance: 0.5, rasterAngle: 0, loop: false });
   })()`);
   if (phone) {
     await evalJs(`document.querySelector('.sk-sidebar-handle').click()`); await sleep(250);

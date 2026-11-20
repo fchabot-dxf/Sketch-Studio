@@ -172,7 +172,7 @@ try {
   await clickEl('#prepare-panel .cut-type-trigger');
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'cut type menu open');
   await clickEl('.cut-type-opt[data-id="pocket"]');
-  await waitFor(`import('/apps/shaper/src/cut-plan.js').then((m) => m.cutPlanEntries().length > 0)`, 'Pocket planned');
+  await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => m.planEntries().length > 0)`, 'Pocket planned');
   await hoverEl('#prepare-dir-legend [data-hint="dirLegend"]'); // TASK 805: Shaper's hints are a tooltip at the cursor, not text laid out in the legend
   await waitFor(`(() => { const h = document.getElementById('sk-cursor-tip'); return !!h && !h.hidden && h.textContent.length > 10; })()`, 'Prepare dirLegend tooltip shows');
 
@@ -245,8 +245,8 @@ try {
   await waitFor(`!!(window.__designController && window.__designController.state)`, 'phone designController ready');
   await evalJs(`(async () => { const st = window.__designController.state;
     if (!st.shapes.some((s) => s.id === 'Rs0')) { [[0, 0], [120, 0], [120, 70], [0, 70]].forEach(([x, y], i) => st.joints.set('Rj' + i, { x, y })); for (let i = 0; i < 4; i++) st.shapes.push({ id: 'Rs' + i, type: 'line', joints: ['Rj' + i, 'Rj' + ((i + 1) % 4)] }); st.saveState('draw'); }
-    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/apps/shaper/src/cut-plan.js');
-    if (!cp.cutPlanEntries().length) cp.CUT_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
+    const lf = await import('/packages/core/loop-finder.js'); const cp = await import('/tests/helpers/plan-v2.js');
+    if (!cp.planEntries().length) cp.V2_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
   await clickEl('.sk-header-tab[data-tab="review"]');
   await waitFor(`!document.getElementById('view-review').hidden`, 'phone Export tab');
   await clickEl('#btn-sync-shaper');

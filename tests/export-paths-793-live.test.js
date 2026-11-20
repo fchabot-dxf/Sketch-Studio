@@ -35,10 +35,10 @@ try {
     circ('G', 190, 105, 12);
     st.saveState('793 drawing');
     const lf = await import('/packages/core/loop-finder.js');
-    const cp = await import('/apps/shaper/src/cut-plan.js');
-    cp.CUT_PLAN.clear();
+    const cp = await import('/tests/helpers/plan-v2.js');
+    cp.V2_PLAN.clear();
     const loopOf = (p) => lf.findLoops(st).find((l) => l.edges.every((e) => e.startsWith(p)));
-    const set = (p, rec) => cp.CUT_PLAN.set('loop:' + loopOf(p).id, rec);
+    const set = (p, rec) => cp.V2_PLAN.set('loop:' + loopOf(p).id, rec);
     const B = { cutOffset: 0, toolDia: 6.35, cutterShape: 'endmill' };
     set('P', { ...B, cutType: 'exterior', cutDepth: 18, holdPart: 'tabs', tabCount: 4, tabWidth: 12, holdThickness: 2 });
     set('H', { ...B, cutType: 'interior', cutDepth: 18 });
@@ -64,8 +64,8 @@ try {
   assert.strictEqual(await evalJs(`document.getElementById('review-2d').dataset.mode`), 'paths');
 
   // 2. one stroke per element of the file, no fill, the cut type's colour; the bit-centre paths; the marks; the legend
-  const facts = () => evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/apps/shaper/src/cut-plan.js').then((C) => {
-    const p = m.shaperPreviewOf(window.__designController.state, C.cutPlanEntries());
+  const facts = () => evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => {
+    const p = m.shaperPreviewOf(window.__designController.state, C.planEntries());
     const els = [...document.querySelectorAll('#review-2d-canvas .rv2d-doc .rv2d-path')];
     const colour = (e) => getComputedStyle(e).stroke;
     return { written: p.written.length, strokes: els.length, fills: [...new Set(els.map((e) => getComputedStyle(e).fill))], types: [...new Set(els.map((e) => e.className.baseVal.split(' ')[1]))].sort(),

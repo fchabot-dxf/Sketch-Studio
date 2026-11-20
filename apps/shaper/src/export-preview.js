@@ -33,6 +33,7 @@ import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 import { lengthText } from '#core/settings-manager.js';
 import { unitInfo } from '#core/units.js';
 import { arrowsAlongPath } from '#core/profile-model.js';
+import { exportForm } from '#core/origin-rules.js'; // TASK 803: the attribute prefix and where a cut attribute lives (the element itself) are the Origin rules'
 import { TRAVEL_STYLE, TRAVEL_ARROW_SPACING_PX, DART_DIMS, dartSeg, applyTravelStyle } from './prepare-view.js'; // TASK 793: the ONE travel declaration + dart geometry
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -64,7 +65,7 @@ export function parseShaperSvg(text, doc = document) {
 // a cut attribute of the element (TASK 802: always its own, never a parent <g>'s); read by its qualified name as the exporter writes it
 // (shaper:cutType ...), which the browser and the node tests' DOM (happy-dom: no attribute namespaces) both match
 function cutAttr(el, name) {
-  return el.getAttribute('shaper:' + name) || null;
+  return el.getAttribute(exportForm('attrPrefix') + name) || null;
 }
 
 // TASK 743: a paint attribute (fill / stroke) of the element (TASK 802: its own), or null

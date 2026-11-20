@@ -10,8 +10,10 @@
 import { parse as parseUnit } from '#core/units.js';
 import { POCKET_CLEARING } from '#core/pocket-clearing.js'; // TASK 745: the Clearing choices of the Pocket card
 import { levelsCutAs, hasLevels } from '#core/stepped-cut.js'; // TASK 792: the plain type a Roughing / Contour level is cut as
+import { exportForm } from '#core/origin-rules.js'; // TASK 803: the namespace and the attribute prefix are the Origin rules' (one declaration for the exporter and this reader)
 
-const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
+const SHAPER_NS = exportForm('namespaces').shaper;
+const ATTR_PREFIX = exportForm('attrPrefix');
 
 // Hex is UPPERCASE to round-trip byte-for-byte with Shaper's own exporter.
 // Match is case-insensitive (see classify), so lowercase input still works.
@@ -250,7 +252,7 @@ function getShaperAttr(el, name) {
     if (nsVal != null) return nsVal;
   }
   if (el.getAttribute) {
-    return el.getAttribute(`shaper:${name}`) || el.getAttribute(name);
+    return el.getAttribute(`${ATTR_PREFIX}${name}`) || el.getAttribute(name);
   }
   return null;
 }

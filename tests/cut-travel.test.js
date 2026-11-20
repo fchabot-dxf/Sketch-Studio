@@ -73,7 +73,7 @@ assert.deepStrictEqual(travelOf([loopCut(rect(0, 0, 60, 40), 'interior', -1)], {
   assert.deepStrictEqual(arrowsAlongClosed([], 6), []);
 }
 // TASK 777: sparse slow dashes declared ONCE in TRAVEL_STYLE (prepare-view.js -> --sk-travel-* on #prepare-canvas),
-// animation opt-in under prefers-reduced-motion: no-preference (so reduced motion keeps the still dashes + always-visible arrowheads).
+// animation opt-in under prefers-reduced-motion: no-preference (so reduced motion keeps the still dashes). TASK 821: Prepare draws no arrowheads (the .sk-travel-arrows CSS is the Export Paths view's).
 {
   const { readFileSync } = await import('node:fs');
   const { TRAVEL_STYLE, TRAVEL_MIN_GAP_PX } = await import('../apps/shaper/src/prepare-view.js');
@@ -87,6 +87,8 @@ assert.deepStrictEqual(travelOf([loopCut(rect(0, 0, 60, 40), 'interior', -1)], {
   assert.ok(/@media \(prefers-reduced-motion: no-preference\)\s*\{\s*\.sk-travel\s*\{\s*animation:\s*sk-march var\(--sk-travel-duration\) linear infinite;/.test(html), 'motion opts in under prefers-reduced-motion: no-preference (still under reduce)');
   assert.ok(/@keyframes sk-march \{ from \{ stroke-dashoffset: 0; \} to \{ stroke-dashoffset: calc\(var\(--sk-travel-period\) \* -1px\); \} \}/.test(html), 'forward-marching keyframes driven by --sk-travel-period');
   assert.ok(/\.sk-travel-arrows\s*\{[^}]*fill:\s*var\(--sk-prep-path\)/.test(html) && !/\.sk-travel-arrows\s*\{[^}]*display:\s*none/.test(html), 'arrowheads always shown (not hidden by default)');
+  const prepSrc = readFileSync(new URL('../apps/shaper/src/prepare-view.js', import.meta.url), 'utf8');
+  assert.ok(!/sk-travel-arrows|arrowsAlongPath|dartSeg\(/.test(prepSrc.replace(/\/\/.*$/gm, '')), 'TASK 821: the Prepare view draws no arrowheads (no arrow layer, no arrowsAlongPath call)');
   const view = readFileSync(new URL('../apps/shaper/src/prepare-view.js', import.meta.url), 'utf8');
   assert.ok(!/requestAnimationFrame/.test(view), 'no RAF loop in the Prepare view');
   // no climb/conventional switch anywhere: no field or control named climb

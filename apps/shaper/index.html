@@ -370,10 +370,10 @@
     .sk-chip-val { font-weight: 700; }
     .sk-chip-unit { fill: var(--sk-prep-chip-unit); }
     /* SP1f: the cut-settings card — a floating panel, top-right of the Prepare view (shown when a target is selected). */
-    /* TASK 449 / 777: travel direction — sparse slow marching dashes + always-visible screen-sized dart arrowheads (CSS animation, no RAF loop).
+    /* TASK 449 / 777: travel direction — sparse slow marching dashes (CSS animation, no RAF loop).
        Dash / gap / period / duration come ONCE from TRAVEL_STYLE (prepare-view.js -> --sk-travel-* on #prepare-canvas).
        stroke-dashoffset DEcreasing moves the dashes FORWARD along the path (the path is ordered in the travel direction).
-       Motion is opt-in under prefers-reduced-motion: no-preference so reduced-motion users keep the still dashes + arrowheads. */
+       Motion is opt-in under prefers-reduced-motion: no-preference so reduced-motion users keep the still dashes (TASK 821: Prepare draws no arrowheads; .sk-travel-arrows is the Export Paths view only). */
     .sk-travel { fill: none; stroke: var(--sk-prep-path); stroke-width: 2; stroke-opacity: 0.95; vector-effect: non-scaling-stroke; stroke-dasharray: calc(var(--sk-travel-dash) * 1px) calc(var(--sk-travel-gap) * 1px); stroke-linecap: butt; }
     .sk-travel-clear { stroke-width: 1.5; stroke-opacity: 0.9; }
     .sk-travel-online, .sk-travel-lead { stroke: var(--sk-prep-path-online); }

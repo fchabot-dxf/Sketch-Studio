@@ -107,7 +107,7 @@ export async function hintsPhase(t, { fusion = false } = {}) {
   const rowIds = await evalJs(`[...document.querySelectorAll('#prepare-panel .cut-card [data-hint]')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => e.dataset.hint)`);
   console.log(`${D} labels shown: ${rowIds.join(', ')}`);
   assert.ok(rowIds.length >= 6, D + ': the card shows its labels');
-  for (const id of rowIds) if (id !== 'finishAllowance') await checkTip(`#prepare-panel .cut-card [data-hint="${id}"]`, await hintOf(id), 'label');
+  for (const id of rowIds) if (id !== 'finishAllowance') await checkTip(`#prepare-panel .cut-card [data-hint="${id}"]`, (id === 'rasterAngle' ? 'Only Raster has an angle: choose Raster in Clearing to set this. ' : '') + await hintOf(id), 'label'); // TASK 813: Spiral: the Raster angle row stays, greyed: its tooltip starts with the reason
   assert.strictEqual(await evalJs(`document.querySelector('.cut-loop').checked`), false, D + ': Loop starts off');
   await checkTip(label('finishAllowance'), HINT.finishOff, 'Finish allowance, Loop off');
   await t.setLoop(true);

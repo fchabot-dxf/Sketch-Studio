@@ -119,7 +119,7 @@ try {
 
   // ── 4. the tab count field ──
   await clickWorld(60, 100); // the part, between the slot and the pocket
-  await waitFor(`!document.querySelector('.cut-row[data-row="tabCount"]').hidden && document.querySelector('.cut-row[data-row="tabCount"]').style.display !== 'none'`, 'the tab count row');
+  await waitFor(`!document.querySelector('.cut-row[data-row="tabCount"]').hidden && document.querySelector('.cut-row[data-row="tabCount"]').style.display !== 'none' && !('off' in document.querySelector('.cut-row[data-row="tabCount"]').dataset)`, 'the tab count row');
   const fit = await evalJs(`(() => { const i = document.querySelector('.cut-tab-count'), cs = getComputedStyle(i), c = document.createElement('canvas').getContext('2d');
     c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily; const box = i.closest('.cut-box');
     return { placeholder: i.placeholder, room: i.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), longest: c.measureText('Auto (99)').width, shown: c.measureText(i.placeholder).width, boxOverflow: box.scrollWidth - box.clientWidth }; })()`);

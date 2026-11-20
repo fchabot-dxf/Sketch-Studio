@@ -59,7 +59,7 @@ const zoomReview = async () => {
   await sleep(300);
 };
 const cardState = () => evalJs(`({ checked: document.querySelector('.cut-adaptive').checked,
-  rows: [...document.querySelectorAll('.cut-rows .cut-row')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row || r.dataset.param),
+  rows: [...document.querySelectorAll('.cut-rows .cut-row')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param),
   resolution: document.querySelector('.cut-step-deviation').value,
   presets: [...document.querySelectorAll('.cut-row[data-row="stepDeviation"] .cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')),
   note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
@@ -99,7 +99,7 @@ try {
   await shot('card-off.png', '#prepare-panel .cut-card');
   // ON (a real click on the checkbox): Medium
   await clickEl('.cut-adaptive');
-  await waitFor(`document.querySelector('.cut-adaptive').checked && getComputedStyle(document.querySelector('.cut-row[data-row="stepDeviation"]')).display !== 'none'`, 'the Resolution row');
+  await waitFor(`document.querySelector('.cut-adaptive').checked && !('off' in document.querySelector('.cut-row[data-row="stepDeviation"]').dataset)`, 'the Resolution row');
   c = await cardState();
   console.log('ON: ' + JSON.stringify(c));
   assert.deepStrictEqual([c.rows.slice(0, 4), c.resolution, c.presets], [['finishAllowance', 'contour', 'adaptiveSteps', 'stepDeviation'], '0.25', ['Coarse', 'Medium*', 'Fine']], 'ON: Resolution 0.25 mm, Medium active, no Step depth row');

@@ -112,7 +112,7 @@ const pressOutline = async () => {
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the outline\'s card');
 };
 const tab = async (id) => { await clickEl(`.cut-tab[data-tab="${id}"]`); await waitFor(`document.querySelector('.cut-tab[data-tab="${id}"]').classList.contains('is-active')`, `the ${id} tab`); }; // TASK 810: the Roughing / Contour cards are tabbed
-const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-rows .cut-row')].filter((r) => r.style.display !== 'none').map((r) => r.dataset.row || r.dataset.param)`);
+const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-rows .cut-row')].filter((r) => r.style.display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param)`);
 const ops = () => evalJs(`[...document.querySelectorAll('#prepare-ops .ops-tool, #prepare-ops .ops-row')].map((e) => e.classList.contains('ops-tool') ? '# ' + e.textContent : e.querySelector('.ops-name').textContent + ' | ' + e.querySelector('.ops-sub').textContent)`);
 const review = async (what) => {
   const t0 = Date.now();

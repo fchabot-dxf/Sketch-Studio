@@ -273,7 +273,7 @@ const harness = (app) => {
   const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
-  const shown = (row) => q(`.cut-row[data-row="${row}"]`).style.display !== 'none';
+  const shown = (row) => { const r = q(`.cut-row[data-row="${row}"]`); return r.style.display !== 'none' && !('off' in r.dataset); }; // TASK 813: a row that does not apply stays in place, greyed (data-off): not shown as an applicable row
   const preset = (row, v) => pressEl(`.cut-row[data-row="${row}"] .cut-preset[data-value="${v}"]`);
   const presets = (row) => [...q(`.cut-row[data-row="${row}"]`).querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : ''));
   const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);

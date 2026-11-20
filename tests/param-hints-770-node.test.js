@@ -57,7 +57,7 @@ const panel = createCutPanel(host, {});
 const seen = new Set();
 const slope = (kind) => ({ kind, rings: [{}, {}] }); // (TASK 792: hasSlopeOf removed; Roughing's Contour row reads a slope)  a slope of that kind with 2 rings (the card only reads that it exists)
 const press = (el) => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-const visible = (el) => { for (let e = el; e && e !== host; e = e.parentElement) if (e.hidden || e.style.display === 'none') return false; return true; };
+const visible = (el) => { for (let e = el; e && e !== host; e = e.parentElement) if (e.hidden || e.style.display === 'none' || (e.dataset && 'off' in e.dataset)) return false; return true; }; // TASK 813: a row greyed in place (data-off) is checked below: its tooltip = its reason + the table's text
 const STATES = [
   ...CUT_TYPES.filter((t) => !t.slopeKind).map((t) => ({ cutType: t.id })),
   ...['freehand', 'linked', 'raster', 'morphed'].flatMap((c) => [{ cutType: 'pocket', clearing: c }, { cutType: 'pocket', clearing: c, loop: true }]),
@@ -90,6 +90,10 @@ for (const { boundaryCtx, wallsCtx, ...record } of STATES) {
     eq(trig.textContent, hintLabel(id), `${name} ${id}: the label is the table's`);
     eq(hintFor(trig), hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the tooltip text is the table's hint in the card's context`);
     for (const c of row.querySelectorAll('[data-hint]')) { seen.add(c.dataset.hint); eq(c.textContent, hintLabel(c.dataset.hint), `${name}: the element ${c.dataset.hint} shows its name`); if (c !== trig) eq(hintFor(c), hintText(c.dataset.hint), `${name}: its tooltip is its hint`); }
+  }
+  for (const row of host.querySelectorAll('.cut-row[data-off]')) { // TASK 813: a greyed row stays in place: its label's tooltip is the reason, then the table's text
+    const trig = row.querySelector('[data-hint]'), base = hintText(trig.dataset.hint, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' });
+    ok(hintFor(trig).endsWith(base) && hintFor(trig).length > base.length + 10, `${name} ${row.dataset.row}: the greyed row's tooltip starts with its reason`);
   }
   for (const tab of [...host.querySelectorAll('.cut-tab')].filter(visible)) { // TASK 810: a Roughing / Contour card's tabs: each shows its name, its tooltip is its hint
     const n = tab.querySelector('[data-hint]');

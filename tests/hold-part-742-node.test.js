@@ -281,7 +281,7 @@ const harness = (app) => {
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
-  const shown = (row) => q(`.cut-row[data-row="${row}"]`).style.display !== 'none';
+  const shown = (row) => { const r = q(`.cut-row[data-row="${row}"]`); return r.style.display !== 'none' && !('off' in r.dataset); }; // TASK 813: a row that does not apply stays in place, greyed (data-off): not shown as an applicable row
   const hold = (id) => pressEl(`.cut-row[data-row="holdPart"] .cut-preset[data-value="${id}"]`);
   const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);
   return { q, pressEl, clickAt, pick, note, typed, shown, hold, step };

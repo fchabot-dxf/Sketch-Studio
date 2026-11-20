@@ -44,7 +44,7 @@ function tools(t) {
     await clickWorld(x, y);
     await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, `the card at ${x}, ${y}`);
   };
-  const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-row[data-row]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row)`);
+  const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-row[data-row]')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row)`);
   const note = () => evalJs(`[...document.querySelectorAll('.cut-note div')].map((d) => d.textContent)`);
   const count = (sel) => evalJs(`document.querySelectorAll('#prepare-toolpath-group ${sel}').length`);
   const preset = async (row, v) => { await clickEl(`#prepare-panel .cut-row[data-row="${row}"] .cut-preset[data-value="${v}"]`); await sleep(250); };

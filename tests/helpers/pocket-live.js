@@ -115,7 +115,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
       st.saveState('draw');
       return st.shapes.length; })()`);
     const card = () => evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, clearing: document.querySelector('.cut-clear-cur').textContent,
-      rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="finishAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row),
+      rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="finishAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row),
       loop: document.querySelector('.cut-loop').checked,
       stepover: document.querySelector('.cut-stepover').value, len: document.querySelector('.cut-stepover-len').textContent, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
     const look = () => evalJs(`({ paths: document.querySelectorAll('#prepare-toolpath-group .sk-clear-path').length, cleanup: document.querySelectorAll('#prepare-toolpath-group .sk-clear-cleanup').length,
@@ -288,8 +288,8 @@ async function threePockets(t, label, shots) {
     await clickWorld(10, 100);
     await pickType('pocket'); await typeField('.cut-depth', inch ? '0.25' : '6'); await quarter();
     await openClearing();
-    const sp = await evalJs(`(() => { const o = document.querySelector('.cut-clear-opt[data-clearing="morphed"]'), l = document.querySelector('.cut-clear-opt[data-clearing="linked"]'); return [o.disabled, o.classList.contains('is-disabled'), o.querySelector('.cut-clear-why') && o.querySelector('.cut-clear-why').textContent, l.disabled]; })()`);
-    assert.deepStrictEqual(sp, [true, true, 'has islands: use Spiral or Raster', false], label + ': the island pocket: Morphed spiral greyed with its reason, Spiral never disabled');
+    const sp = await evalJs(`(() => { const o = document.querySelector('.cut-clear-opt[data-clearing="morphed"]'), l = document.querySelector('.cut-clear-opt[data-clearing="linked"]'); return [o.getAttribute('aria-disabled'), o.classList.contains('is-disabled'), o.querySelector('.cut-clear-why'), l.getAttribute('aria-disabled')]; })()`); // TASK 813: greyed with aria-disabled, its reason is its tooltip (no line)
+    assert.deepStrictEqual(sp, ['true', true, null, null], label + ': the island pocket: Morphed spiral greyed with its reason, Spiral never disabled');
     await clickEl('.cut-clear-opt[data-clearing="linked"]');
     await sleep(300);
     const cI = await card();

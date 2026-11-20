@@ -271,7 +271,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (prepareView) prepareView.destroy();
     const st = designController.state; // TASK 761: the stored plan's legacy edge records are reconciled where the document is read (shaper-doc.js applyShaperDoc), not here
     prepareView = mountPrepareView(st, canvasEl, {
-      onSelectionChange: () => { line = null; rowId = null; refreshCutPanel(); }, // a canvas selection: no row is the selected one onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(),
+      onSelectionChange: () => { line = null; rowId = null; refreshCutPanel(); }, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(), // TASK S2: a canvas selection: no row is the selected one
       onCommitLeadIn: (opId, key, at) => sessionEdit(() => { const op = opById(opId); if (op) setShapeLeadInAt(op, key, at, st); }), // TASK 778: dragging the open operation's lead-in handle (TASK S2: an edit of its session, that membership's)
       // TASK S2: while an operation is open, a click on a shape puts it in, or takes it out when it is in it (an edit of its session); a shape the type cannot take is
       // not added: the card's line says why (cut-plan.js typeRefusal); Esc = Cancel

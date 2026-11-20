@@ -38,7 +38,7 @@ const tap = async (x, y) => {
 };
 // a real click / tap on the element's centre, after checking nothing covers it there
 const clickElRaw = async (sel) => {
-  const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect();
+  const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); // TASK S2: a reopened card starts its rows at the top
     const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
     return { x, y, onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
   assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);

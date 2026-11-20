@@ -39,7 +39,16 @@ export function constraintTargets(c, shapes = []) {
   if (Array.isArray(c.shapes)) c.shapes.forEach((s) => shapeIds.add(s));
   for (const k of ['shape', 'line', 'circle']) if (c[k]) shapeIds.add(c[k]);
   if (!shapeIds.size) {
-    for (const s of shapes) if (Array.isArray(s.joints) && s.joints.some((j) => joints.has(j))) shapeIds.add(s.id);
+    // a joints-only constraint (vertical / horizontal ...) binds the shape holding ALL its joints (task 820: the line a-b, not an arc that
+    // merely shares an end); a 4-joint one (parallel, perpendicular, equal of two lines) is resolved per pair [j0,j1] [j2,j3]. Only a group no
+    // one shape holds (a coincident of two shapes' points) falls back to every shape having one of its joints.
+    const holders = (js) => {
+      const all = shapes.filter((s) => Array.isArray(s.joints) && js.every((j) => s.joints.includes(j)));
+      return all.length ? all : shapes.filter((s) => Array.isArray(s.joints) && s.joints.some((j) => js.includes(j)));
+    };
+    const js = Array.isArray(c.joints) ? c.joints : [];
+    const groups = js.length === 4 ? [js.slice(0, 2), js.slice(2)] : [[...joints]];
+    for (const g of groups) if (g.length) holders(g).forEach((s) => shapeIds.add(s.id));
   }
   return { joints, shapes: shapeIds };
 }

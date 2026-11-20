@@ -16977,3 +16977,6 @@ Orbit around the point under the pointer (owner turn 2773), apps/shaper/src/orbi
 - A round dot in the selection colour (--sk-selection), 12 screen px, shows at P only while the orbit lasts.
 - Test hooks (read by the tests, like inspect's other fields): review inspect().pivot, orient view api.pivot().
 - Tests: tests/orbit-pivot-823-node.test.js (vendored three + real OrbitControls on a stub canvas), tests/orbit-pivot-823-live.test.js (Review desktop + phone 390, Orient desktop + phone 390); evidence .evidence/823/ (local).
+## TURN 820
+constraintTargets (packages/ui/geometry-labels.js): a joints-only constraint now binds the shape(s) holding ALL its joints; any-joint fallback only when none does. New tests/constraint-targets-820.test.js; tests/glyph-pick-hover-live.test.js BOUND now [rE2] (was the 3 lines touching r2/r3).
+Follow-up: 4-joint constraints (parallel, perpendicular, equal of two lines) resolve per pair [j0,j1] [j2,j3]; new live tests/keyhole-constraint-highlight-820-live.test.js (before/after screenshots in .evidence/820).

@@ -2820,11 +2820,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "cam-paths-787-node__0008__d2d21b4d": {
-   "a": "0bbe578db168e0e5f71a6f23f7c05c32",
-   "b": "c11b73d960f4bf2e7feadb40bf7a5b46",
-   "c": "e61ab3b21f7976549ac1e3ca16c226ed",
+   "a": "e958fa26f80b97147c78393468d0cf26",
+   "b": "cebcf0960c2bb7b2d3357ca4ca3839ef",
+   "c": "b7a55cfb390fd2d443da5fc3431c62e1",
    "d": "ad2e97079d8069915aff425f0d1b53ac",
-   "dContent": "84217a0acf9ab6d920a335313f440b63",
+   "dContent": "2606192168eb939ddf5b17d9bfebb875",
    "e": "a4e1bebdbe69afdddc9dedfd3110d2d3",
    "eNoId": "212726a2d683bbd18b51295a8c9be22d",
    "f": "d751713988987e9331980363e24189ce"
@@ -3870,11 +3870,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0008__07f32269": {
-   "a": "1b85a2dbdc819bf9371f861e50672060",
-   "b": "c6c1bfeba3a6664d28068536995276d2",
-   "c": "7fcacfee0096adb1d011ba094734cc24",
+   "a": "84fdcacaf41ad418c9cd82034b3d214a",
+   "b": "0b4f4f7a5a00889c6f061a8a93429875",
+   "c": "48d81796ea655d8243864291d634d059",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "4c825f07f727224a4b5a41ca00679e93",
+   "dContent": "44144c71b085b780c9d867d0efd54c7b",
    "e": "ac4390d84a1ba19aba46fd9c4280ec98",
    "eNoId": "ac30552d3f2b3c55abf3d6b5a32c4e4c",
    "f": "d751713988987e9331980363e24189ce"
@@ -4050,11 +4050,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0026__63de60f2": {
-   "a": "e8692d29085ebbd7ce517d12ac6f6e36",
-   "b": "fe5965f723534b36bfc5afc1a24ddf4b",
-   "c": "1087845ff1a853e456dd32c807576263",
+   "a": "b5ade0d3507836e9c5e317e48d1f0cee",
+   "b": "a00114b5132678f6577cf339fdc7cf8c",
+   "c": "79e7a75d36f9ee19373395ac2c99e726",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "991e2d655f40e95a3f378d0745b18e09",
+   "dContent": "5f424d0082d99e88c521eec12ee89ef6",
    "e": "93552b8300f5b52bea8b420409b61abf",
    "eNoId": "cf7e52da373dcd624ace126de383ac3b",
    "f": "d751713988987e9331980363e24189ce"
@@ -4290,11 +4290,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0050__28408637": {
-   "a": "4645c265b11df5c511e8533a0f4d4bbe",
-   "b": "06f8ead91e9bec202c48ad27d2b3dd0c",
-   "c": "197568f772352e02f7f6e7de74141a3f",
+   "a": "e303d2e4706a640af9b1bb9907e82d8c",
+   "b": "38bc251537574d460d21d25d46bcf4e4",
+   "c": "7ab14e96947877437ec8d56e24397294",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "0f62782903568069e877c6f69928f912",
+   "dContent": "340df5ad9d8e79c53168f28c75b216cf",
    "e": "0e922356e914c1371949036917c66016",
    "eNoId": "3d47557f65c44282a8524d4626fc9ba8",
    "f": "d751713988987e9331980363e24189ce"
@@ -4530,11 +4530,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0074__3e03fa21": {
-   "a": "b90dc11de96c16ddc58cb4a1ece86f1d",
-   "b": "6d23fa9d2424f9c3acaf033e67f72d9a",
-   "c": "13ebb423f75aa8464ff3648cdf0cb460",
+   "a": "8cb3569ae47121e6bec21ea37d501333",
+   "b": "6b7f7f35aa1768fea11f64b50302f0e2",
+   "c": "f09baf96f225002b0ae096048b16185a",
    "d": "7832d83bef7ba3e75c7a0c960b958834",
-   "dContent": "e77df17e1fb6f87d093b222822a6bfa2",
+   "dContent": "66ea4cd160c6e09d1713375767c6a1eb",
    "e": "5c4b8f82d32866046683a51f9501f40a",
    "eNoId": "2d3afcb5df11a8eebe35ae085d198f72",
    "f": "d751713988987e9331980363e24189ce"
@@ -4610,11 +4610,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0082__864222e2": {
-   "a": "c9f20f67a570030305d6f94e0f95cb29",
-   "b": "5cff28bfcbf35b7b40debd5a0d17872a",
-   "c": "9e8421ee425801e746501e95d5f8d695",
+   "a": "861c414b1259d9c82502a7fc8fd28e7b",
+   "b": "cfb7e5626ff57140e6adc03e337d69ec",
+   "c": "bab855be1d3db28586552e242f02e3d7",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "0996213e0355a04a6fc6557c4b0dca6f",
+   "dContent": "c7f2482ba879f0025742cfec609b8f66",
    "e": "e807735dd372978cea212a21a222939c",
    "eNoId": "9e14ce522465a0144859caa83477985c",
    "f": "d751713988987e9331980363e24189ce"
@@ -6230,11 +6230,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "matrix__pocket-raster-loop": {
-   "a": "79e70be5a993e65678b5da460aef5001",
-   "b": "ab0f14991b49ff398043fca924162d22",
-   "c": "1e2bb02e69910fbeaf95aefca23410b5",
+   "a": "51ab3000a6dab6cced62f2847042dc6a",
+   "b": "f3d91733f0beecf7aa5bc927595b1341",
+   "c": "66d3c87657b6635fcbb6f8085648ea37",
    "d": "63ef593dab3ee4c8b8612f968124fcc0",
-   "dContent": "6bbeb8c945a74293b8c512abaa79069f",
+   "dContent": "92a60f2e3eaf34596b7d320f5ba135fa",
    "e": "a5a9bd1e5f25f1dbaa9614d8fb93949f",
    "eNoId": "8a99b82957782f8908ba22f6f5071275",
    "f": "d751713988987e9331980363e24189ce"
@@ -7880,11 +7880,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0007__63a764a4": {
-   "a": "83e3784c469f28f3a81be17d8bdbc773",
-   "b": "b84cfaaa9a653debea5dd2ff8aea6aca",
-   "c": "5d589b673a3d1ae84cab8ec5de8f39b9",
+   "a": "8dbcb0a87bffb4180dd988f59a091bfe",
+   "b": "251c5196a89e44227516a94297f6ec8f",
+   "c": "cd735d4fee927d81d64bc958c0421b50",
    "d": "8de42324600ae18d76e6b7f499d715c5",
-   "dContent": "e5ab984c6d56c8e08b76b7d9e71e57ef",
+   "dContent": "56844123f3f9409b1a6dc2ea9ad5c8dc",
    "e": "dc3db906d91c9aca2c45f739cffc6c06",
    "eNoId": "0bf54adc6b2b93e606211ac9ec5d0539",
    "f": "d751713988987e9331980363e24189ce"
@@ -9138,6 +9138,21 @@
    "e": "e7da67d360a687c2593d1f289c335cd1",
    "eNoId": "4fe28d366775e385bf991c9a84be9fa2",
    "f": "d751713988987e9331980363e24189ce"
+  }
+ },
+ "rebased": {
+  "804b": {
+   "why": "Raster + Loop is the zero-crossing loop now (owner design 2595: the passes row by row, the wall ring whole, back along it to the first pass; no clean-up ring). Every corpus case with a Raster Loop record whose measurements changed has its a, b, c, dContent re-measured here (on purpose); every other case and measurement is the one frozen on c5d4bb1.",
+   "cases": [
+    "cam-paths-787-node__0008__d2d21b4d",
+    "leadin-775-node__0008__07f32269",
+    "leadin-775-node__0026__63de60f2",
+    "leadin-775-node__0050__28408637",
+    "leadin-775-node__0074__3e03fa21",
+    "leadin-775-node__0082__864222e2",
+    "matrix__pocket-raster-loop",
+    "pocket-clearing-750-node__0007__63a764a4"
+   ]
   }
  }
 }

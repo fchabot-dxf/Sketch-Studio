@@ -61,8 +61,8 @@
 //  * FINISH PASS (Loop off), last: the pocket's own outer loop as the Origin's INSIDE cut (the wall is exact with whatever bit is in the machine; the
 //    record's offset is its cutOffset), and each island's loop as an OUTSIDE cut. Refused (the pocket is cut Freehand and the note says why) when that
 //    pass would cut an island or the wall (an island closer to the wall or to another island than the bit). The same check holds with Loop on.
-//  * LOOP (TASK 750, record field `loop`: true | false, default off, any programmed pattern): everything the record cuts (its clearing, Raster's clean-up
-//    ring, AND the FINISH TURNS = the contours of R inset by EXACTLY r: a clean copy of the wall's shape, taking only the allowance skin, and each
+//  * LOOP (TASK 750, record field `loop`: true | false, default off, any programmed pattern): everything the record cuts (its clearing (TASK 804b: Raster
+//    without its clean-up ring), AND the FINISH TURNS = the contours of R inset by EXACTLY r: a clean copy of the wall's shape, taking only the allowance skin, and each
 //    island's turn at r outside it) is joined into CLOSED on-line paths (first point == last point, d ends with Z); no separate inside / outside cut
 //    is written (TASK 787: with nothing to clear inside the allowance, any pattern's loops are the finish turns alone). A closed loop has NO start point on the Origin (the operator plunges anywhere) and AutoPass cuts it the same direction every pass. The wall is then exact for the card's bit only (the Origin does not offset an on-line path): the note
 //    says so. With no allowance ring 0 already IS the finish turn (not written twice). Every link and return leg is a chain of straight steps between
@@ -74,12 +74,20 @@
 //       IN on X1, X3, X5, ..., then OUT on the rings between (..., X4, X2), then X0, then close X0 -> X1 (one step). A step from Xi to Xj runs through
 //       the anchors between (|i - j| - 1 crossings). One closed loop per line (749's chain rule: an island's finish turn is in the line that reaches it;
 //       a turn no line reaches is a loop of its own).
-//     - Raster: per area of A0: the passes in their zigzag order joined by links ALONG A0's contour (the shorter way; a straight link only where two
-//       pass ends lie on different contours and the segment is inside A0), then each contour's clean-up ring (an island's first, the contour the
-//       first pass starts on last), each followed by its finish turn (a step of the allowance out to the nearest finish turn and back), then the
-//       shortest closing leg: back to the clean-up contour and along it to the first pass's start, or straight when that is shorter and inside R
-//       inset by r. Where two pieces cannot be joined inside A0 (no common contour, no inside segment) the Loop is REFUSED with its reason (cut as
-//       open paths + the separate wall; the note says so).
+//     - Raster (TASK 804b, owner design 2595: ZERO crossings): per area of A0 ONE closed path: the passes in their zigzag order (row by row) joined by
+//       links ALONG the area's contour (the shorter way, from the pass's own end; a straight link only where two pass ends lie on different contours
+//       and the segment is inside A0), then from the last pass's end a step of the allowance out to the WALL RING (the finish turn round the region
+//       of R inset by r the area lies in), the wall ring WHOLE (started away from the first pass's start, so it comes back from that side), back along
+//       it (the shorter arc, cut twice) to the first pass's start, and the step in: the wall ring lies outside every pass and link, so nothing crosses;
+//       the finish turn IS the return. No clean-up ring: the wall ring's sweep (2 r from the wall) covers the passes' scallops (the leftover is Loop
+//       off's for an allowance up to r). ISLANDS: each island's ring is a BALLOON on the path: from a point one allowance from it (a pass's end
+//       first: the first, in the path's order, where nothing crosses) a step out, the ring whole (started back the way the path came), the same step
+//       back; a link along the island's contour passing that point would cross, so a point no other link passes is found (on a rectangle's island:
+//       the row where the links switch from under the island to over it). A wall ring another area already cut whole: that area's path only walks
+//       its arc; a ring no area reaches: a loop of its own. Every candidate is checked with THE crossing check (#core/path-crossings); where none is
+//       crossing-free (some concave shapes at some Raster angles: the zigzag's links along the contour interleave) the Loop is REFUSED ('loop
+//       cross': cut as open paths + the separate wall; the note says so), never cut crossing. Where two pieces cannot be joined inside A0 (no common
+//       contour, no inside segment) the Loop is REFUSED ('raster join').
 //     - Morphed spiral: the spiral as it is (the gap between neighbouring turns stays the stepover), then the finish turn (a step of the allowance out
 //       from where the closing turn ends and back), then the RETURN leg straight down the chain of turn starts (each step one stepover, along the chain
 //       of nearest points every turn starts on) to the first point. Chosen over two interleaved arms at twice the pitch: the spiral's geometry is
@@ -586,17 +594,6 @@ function nearestOfLoops(loops, q) {
   loops.forEach((pts, c) => { const f = nearestOnLoop(pts, q); if (!best || f.d < best.d) best = { ...f, c }; });
   return best;
 }
-// how many times the segment a-b crosses the open paths `paths` (each {x,y}[])
-function crossingsOf(a, b, paths) {
-  const cr = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
-  let n = 0;
-  for (const pts of paths) for (let i = 0; i + 1 < pts.length; i++) {
-    const c = pts[i], d = pts[i + 1];
-    const d1 = cr(a, b, c), d2 = cr(a, b, d), d3 = cr(c, d, a), d4 = cr(c, d, b);
-    if (((d1 > 1e-12 && d2 < -1e-12) || (d1 < -1e-12 && d2 > 1e-12)) && ((d3 > 1e-12 && d4 < -1e-12) || (d3 < -1e-12 && d4 > 1e-12))) n++;
-  }
-  return n;
-}
 // ── TASK 804: THE GRADUAL LOOP (see THE RULES): per chain, a double spiral of exact offset levels with its transitions side by side ──
 // a point ON a closed loop (open {x,y}[]): { i, t, p } on its segment i -> i + 1
 const onLoop = (pts, i, t) => { const a = pts[i], b = pts[(i + 1) % pts.length]; return { i, t, p: P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) }; };
@@ -785,63 +782,109 @@ function gradualLoops(seqs, alone, R, s, pitch, bridges = []) {
   return out;
 }
 
-/** TASK 750: the Raster's closed loops: per area of A0 its passes (zigzag) joined along A0's contours, each contour's clean-up ring + its finish turn, the
- *  start contour last, then the shortest closing leg; a finish turn no area reaches is a loop of its own. { loops: [builder], refused: null | 'raster join' } */
-function rasterLoops(A0, pieces, finishLoops, a, Rr) {
-  const grownA0 = offsetRegions(A0, 0.01), grownRr = offsetRegions(Rr, 0.01), done = new Set(), loops = [];
-  const passPaths = pieces.map((pc) => pc.points);
-  for (const g of A0) {
+/** TASK 804b: THE RASTER'S LOOP (see THE RULES): per area of A0 ONE closed path with ZERO crossings: its passes in zigzag order joined along the area's
+ *  contour, then a step out to its WALL RING (the finish turn round the Rr region the area lies in), the wall ring WHOLE, back along it to the first
+ *  pass's start; each island's ring a BALLOON (a step out, the ring whole, the same step back) where nothing crosses; a ring no area reaches is a loop of
+ *  its own. { loops: [builder], refused: null | 'raster join' | 'loop cross' } */
+function rasterLoops(A0, pieces, Rr, a) {
+  const grownA0 = offsetRegions(A0, 0.01), loops = [], owned = new Set(); // owned: 'region:contour' of a ring already cut whole
+  const rings = Rr.map((G) => [G.outer, ...G.holes].map(toXY)); // per region of Rr: its wall ring, then its islands' rings
+  const near = a + 0.01; // a step to a ring is the allowance long (+ the offsets' rounding)
+  const crosses = (items) => pathCrossings([{ points: assemble(items).pts, closed: true }, ...loops.map((b) => ({ points: b.pts, closed: true }))]).count > 0;
+  // the region (of A0, of Rr) a pass lies in: the one holding a point of it (its middle, else a quarter of the way: a pass along an island's edge has its
+  // middle ON that edge)
+  const holding = (regions, pc) => {
+    if (regions.length === 1) return 0;
+    const u = pc.points[0], v = pc.points[pc.points.length - 1];
+    for (const t of [0.5, 0.25, 0.75, 0.125, 0.875]) { const q = P(u.x + (v.x - u.x) * t, u.y + (v.y - u.y) * t), k = regions.findIndex((g) => inRegion(q, g)); if (k >= 0) return k; }
+    return -1;
+  };
+  const inArea = pieces.map((pc) => holding(A0, pc));
+  if (inArea.includes(-1)) return { loops: [], refused: 'raster join' }; // a pass in no area (not met on the test shapes): refused, never dropped
+  for (const [gk, g] of A0.entries()) {
     const C = [g.outer, ...g.holes].map(toXY).filter((pts) => pts.length >= 3);
-    const pcs = pieces.filter((pc) => { const u = pc.points[0], v = pc.points[pc.points.length - 1]; return inRegion(P((u.x + v.x) / 2, (u.y + v.y) / 2), g); });
-    const locate = (q) => nearestOfLoops(C, q);
-    const b = loopBuilder();
-    const reach = (q, c) => { // from the current point to contour c: along it (already on it) or a straight leg inside A0
-      const here = locate(q);
-      if (here.c === c && here.d < 1e-3) return here;
-      const at = nearestOnLoop(C[c], q);
-      if (!segmentInside(q, at.p, grownA0)) return null;
-      b.leg([at.p], crossingsOf(q, at.p, passPaths));
-      return { ...at, c };
-    };
-    const ringAndFinish = (c, at) => { // the clean-up ring from `at`, then the finish turn nearest it (a step of the allowance out and back)
-      b.turn(loopFrom(C[c], at), a > 0 ? 'cleanup' : 'finish'); // with no allowance the clean-up ring IS the finish turn
-      if (!(a > 0)) return;
-      const f = nearestOfLoops(finishLoops, at.p);
-      if (!f || done.has(f.c)) return;
-      done.add(f.c);
-      b.leg([f.p]); b.turn(loopFrom(finishLoops[f.c], f), 'finish'); b.leg([at.p]);
-    };
-    let start;
-    if (pcs.length) {
-      b.turn(pcs[0].points, 'pass');
-      start = locate(pcs[0].points[0]);
-      for (let k = 1; k < pcs.length; k++) {
-        const e = b.last(), s0 = pcs[k].points[0], le = locate(e), ls = locate(s0);
-        if (le.c === ls.c) b.leg(alongLoop(C[le.c], le, ls));
-        else if (segmentInside(e, s0, grownA0)) b.leg([s0], crossingsOf(e, s0, passPaths));
-        else return { loops: [], refused: 'raster join' };
-        b.turn(pcs[k].points, 'pass');
-      }
-    } else { start = { c: 0, ...ringStart(C[0]) }; b.leg([start.p]); }
-    const todo = C.map((_, c) => c).filter((c) => c !== start.c);
-    while (todo.length) { // the other contours (an island's), nearest first
-      const e = b.last();
-      todo.sort((x, y) => nearestOnLoop(C[x], e).d - nearestOnLoop(C[y], e).d);
-      const c = todo.shift(), at = reach(e, c);
-      if (!at) return { loops: [], refused: 'raster join' };
-      ringAndFinish(c, at);
+    const pcs = pieces.filter((_, i) => inArea[i] === gk);
+    if (!pcs.length) { // an area no pass reaches: its contours are its clean-up rings, each a loop of its own (with no allowance they are the finish turns: below)
+      if (a > 0) for (const pts of C) { const b = loopBuilder(); b.turn(loopFrom(pts, ringStart(pts)), 'cleanup'); loops.push(b); }
+      continue;
     }
-    const at0 = reach(b.last(), start.c);
-    if (!at0) return { loops: [], refused: 'raster join' };
-    ringAndFinish(start.c, at0);
-    // the shortest closing leg back to the first point: along the start contour, or straight when inside R inset by r and shorter
-    const e = b.last(), first = b.pts[0], arc = alongLoop(C[start.c], locate(e).c === start.c ? locate(e) : { ...nearestOnLoop(C[start.c], e) }, start);
-    if (segmentInside(e, first, grownRr) && Math.hypot(first.x - e.x, first.y - e.y) <= pathLength(arc, false)) b.leg([first], crossingsOf(e, first, passPaths));
-    else b.leg([...arc, first]);
-    loops.push(b);
+    // the passes in zigzag order, each joined to the next ALONG the area's contour (the shorter way), or straight where they end on two contours
+    const items = [{ kind: 'pass', pts: pcs[0].points }];
+    for (let k = 1; k < pcs.length; k++) {
+      const e = pcs[k - 1].points[pcs[k - 1].points.length - 1], s0 = pcs[k].points[0], le = nearestOfLoops(C, e), ls = nearestOfLoops(C, s0);
+      if (le.c === ls.c) items.push({ kind: null, pts: alongLoop(C[le.c], { ...le, p: e }, { ...ls, p: s0 }) }); // from the pass's own end (no 0.0001 mm jog)
+      else if (segmentInside(e, s0, grownA0)) items.push({ kind: null, pts: [s0] });
+      else return { loops: [], refused: 'raster join' };
+      items.push({ kind: 'pass', pts: pcs[k].points });
+    }
+    const S = pcs[0].points[0], last = pcs[pcs.length - 1].points, E = last[last.length - 1];
+    const gi = holding(Rr, pcs[0]); // the region of Rr round the area
+    if (gi < 0) return { loops: [], refused: 'loop cross' };
+    // THE WALL RING: from the last pass's end E a step out to it, the ring whole starting AWAY from the first pass's start S (so it comes back to the step
+    // from S's side), then back along it (the shorter arc, already cut) to S's step, and in to S. A ring another area already cut whole: only the arc
+    const W = rings[gi][0], fE = onRing(W, E), fS = onRing(W, S);
+    if (!(fE.d <= near && fS.d <= near)) return { loops: [], refused: 'loop cross' }; // the first / last pass does not end next to the wall ring
+    const arcLen = (dir) => pathLength(walkLoop(W, fS, fE, dir), false);
+    const short = arcLen(1) <= arcLen(-1) ? 1 : -1, own = !owned.has(`${gi}:0`);
+    const wallOf = (dir) => (own
+      ? [{ kind: null, pts: [fE.p] }, { kind: 'finish', pts: walkLoop(W, fE, fE, dir) }, { kind: null, pts: walkLoop(W, fE, fS, -dir) }, { kind: null, pts: [S] }]
+      : [{ kind: null, pts: [fE.p] }, { kind: null, pts: walkLoop(W, fE, fS, -dir) }, { kind: null, pts: [S] }]);
+    let path = null;
+    for (const dir of [short, -short]) { const t = [...items, ...wallOf(dir)]; if (!crosses(t)) { path = t; break; } }
+    if (!path) return { loops: [], refused: 'loop cross' };
+    if (own) owned.add(`${gi}:0`);
+    // THE ISLANDS' RINGS: each a balloon from a point of the path one allowance from it (a pass's end first), started back the way the path came (so it
+    // returns from the side the path goes on to); the first such point where nothing crosses
+    for (let c = 1; c < rings[gi].length; c++) {
+      if (owned.has(`${gi}:${c}`)) continue;
+      const H = rings[gi][c], upto = path.length - (own ? 4 : 3), at = [];
+      for (let i = 0; i < upto; i++) path[i].pts.forEach((p, j) => at.push({ i, j, p, d: nearestOnLoop(H, p).d, end: path[i].kind === 'pass' && (j === 0 || j === path[i].pts.length - 1) ? 1 : 0 }));
+      const cand = at.filter((x) => x.d <= near).sort((x, y) => y.end - x.end).slice(0, 96); // the pass ends first, in the path's order
+      if (!cand.length) continue; // no pass reaches it: a loop of its own (below)
+      let got = null;
+      const flat = assemble(path).pts;
+      for (const x of cand) {
+        const k = flat.findIndex((q) => same(q, x.p));
+        const prev = flat[(k - 1 + flat.length) % flat.length], next = flat[(k + 1) % flat.length];
+        const Q = onRing(H, x.p), h0 = H[Q.i], h1 = H[(Q.i + 1) % H.length];
+        const along = (q, r) => ((r.x - q.x) * (h1.x - h0.x) + (r.y - q.y) * (h1.y - h0.y)) / (Math.hypot(r.x - q.x, r.y - q.y) || 1);
+        const pref = along(prev, x.p) + along(x.p, next) > 0 ? -1 : 1; // back the way the path came, away from where it goes on
+        for (const dir of [pref, -pref]) {
+          const balloon = [{ kind: null, pts: [Q.p] }, { kind: 'finish', pts: walkLoop(H, Q, Q, dir) }, { kind: null, pts: [x.p] }];
+          const it = path[x.i], t = x.j === 0 ? [...path.slice(0, x.i), ...balloon, ...path.slice(x.i)]
+            : x.j === it.pts.length - 1 ? [...path.slice(0, x.i + 1), ...balloon, ...path.slice(x.i + 1)]
+              : [...path.slice(0, x.i), { kind: it.kind, pts: it.pts.slice(0, x.j + 1) }, ...balloon, { kind: it.kind, pts: it.pts.slice(x.j) }, ...path.slice(x.i + 1)];
+          if (!crosses(t)) { got = t; break; }
+        }
+        if (got) break;
+      }
+      if (!got) return { loops: [], refused: 'loop cross' }; // an island no balloon reaches without a crossing: refused, never cut crossing
+      path = got;
+      owned.add(`${gi}:${c}`);
+    }
+    loops.push(assemble(path));
   }
-  finishLoops.forEach((F, c) => { if (a > 0 && !done.has(c)) loops.push(finishTurnLoop(F)); });
+  rings.forEach((rs, gi) => rs.forEach((F, c) => { if (!owned.has(`${gi}:${c}`)) loops.push(finishTurnLoop(F)); })); // a ring no area cut: a loop of its own
   return { loops, refused: null };
+}
+// TASK 804b: a closed loop ({ points, turns }) cut at every turn's start and end into pieces (its turns and the legs between), for its sweep: a piece
+// that ends where it began (a ring walked whole) is swept as a closed ring (an open path whose ends meet is not swept whole by Clipper's offset)
+function loopPieces(c) {
+  const at = [...new Set([0, ...c.turns.flatMap((t) => [t.start, t.end]), c.points.length - 1])].sort((x, y) => x - y);
+  const out = [];
+  for (let k = 0; k + 1 < at.length; k++) {
+    const pts = c.points.slice(at[k], at[k + 1] + 1), ring = pts.length > 3 && same(pts[0], pts[pts.length - 1]);
+    out.push({ points: ring ? pts.slice(0, -1) : pts, closed: ring });
+  }
+  return out;
+}
+// the nearest point of a ring to q ({ i, t, d, p }): q itself where it lies on the ring (no allowance: the step has no length, and no 0.0001 mm jog)
+const onRing = (pts, q) => { const f = nearestOnLoop(pts, q); return f.d < 1e-3 ? { ...f, p: q } : f; };
+// the items ({ kind: a turn's kind | null (a leg), pts }) as a closed loop (loopBuilder)
+function assemble(items) {
+  const b = loopBuilder();
+  for (const it of items) if (it.kind) b.turn(it.pts, it.kind); else b.leg(it.pts);
+  return b;
 }
 /** A finish turn no clearing reaches, as a closed loop of its own (Raster's rule above; TASK 787: every pattern's, when there is nothing to clear). */
 function finishTurnLoop(F) { const b = loopBuilder(); b.turn(loopFrom(F, ringStart(F)), 'finish'); return b; }
@@ -853,7 +896,7 @@ const MEMO = new Map(), MEMO_MAX = 48;
  *   { pattern, clear: [{ points, closed, role: 'linked' | 'raster' | 'cleanup' | 'morphed', level?, index, count }] (in cutting order; a Spiral line also
  *     carries its rings: [{ level, start, end, finish }] (TASK 750 Loop on: the finish turn at r has level -1, or 0 with no allowance; finish = true) and
  *     links: [from], see linkedSpiral); TASK 750 Loop on: clear = the closed loops [{ points (first == last), closed: true, role: 'loop', index, count }],
- *     loop: true, loopCount, loopCrossings, loopExtra (mm), loopRefused (null | 'raster join': Loop off cut instead, the note says so),
+ *     loop: true, loopCount, loopCrossings, loopExtra (mm), loopRefused (null | 'raster join' | 'loop cross': Loop off cut instead, the note says so),
  *     levels (Spiral / Morphed spiral: the number of rings), loops
  *     (their loops), lines (Spiral: its lines) + linesWhy (null | 'islands' | 'splits': why there are several), passes (Raster), cleanup (Raster: the
  *     clean-up loops), turns (Morphed spiral), wall: [centre loops], islands: [[centre loops] per island], swept (regions), leftover: { area,
@@ -951,7 +994,7 @@ function computePlan({ outer, holes }, st) {
     cleanup = ring0.length;
     ring0.forEach((pts, i) => clear.push({ points: pts, closed: true, role: 'cleanup', level: 0, index: i + 1, count: ring0.length }));
     if (st.loop && A0.length) {
-      const rl = rasterLoops(A0, pieces, finishLoops, a, Rr);
+      const rl = rasterLoops(A0, pieces, Rr, a);
       if (rl.refused) loopRefused = rl.refused; else built = rl.loops;
       linesWhy = holes.length ? 'islands' : A0.length > 1 ? 'splits' : null;
     }
@@ -975,7 +1018,10 @@ function computePlan({ outer, holes }, st) {
   const seamStart = loop && pattern === 'linked' && built[0].centre ? built[0].centre.A.p : null;
   const startPoint = seamStart || innerStart || (clear.length && clear[0].points.length ? clear[0].points[0] : null);
   // what the bit sweeps (the clearing + the finish pass) and what it leaves
-  const all = [...clear.map((c) => ({ points: c.points.map((p) => [p.x, p.y]), closed: c.closed })), ...(loop ? [] : finish)]; // Loop on: the finish turns are in the loops
+  // TASK 804b: a Raster loop walks back along its wall ring and its islands' steps (a path folding back on itself, which Clipper's offset of the whole path
+  // does not sweep: the two sides cancel): its sweep is the union of its turns' and legs' sweeps, each piece swept on its own
+  const sweepOf = (c) => (loop && pattern === 'raster' ? loopPieces(c) : [c]).map((q) => ({ points: q.points.map((p) => [p.x, p.y]), closed: q.closed }));
+  const all = [...clear.flatMap(sweepOf), ...(loop ? [] : finish)]; // Loop on: the finish turns are in the loops
   const swept = sweepPaths(all, r, POCKET_CLEARING.chordTolMm);
   const leftR = withoutSlivers(diffRegions(R, swept));
   const area = regionsArea(leftR);

@@ -252,7 +252,14 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   // TASK 804: the Spiral's and the Morphed spiral's Loop are now the gradual double spiral (zero crossings; the old interleave replaced): changed on
   // purpose, checked in tests/pocket-nocross-804-node.test.js
   const changed804 = new Set(['spiralLoop', 'morphedLoop']);
-  for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) { if (changed804.has(set)) continue; eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length; }
+  // TASK 804b: Raster + Loop is the zero-crossing loop now (the wall ring whole, no clean-up ring): its download, preview and 3D footprints changed on
+  // purpose (checked in tests/pocket-nocross-804-node.test.js); its Operations list did not
+  const changed804b = new Set(['rasterLoop']);
+  for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) {
+    if (changed804.has(set)) continue;
+    if (changed804b.has(set)) { eq(now[name][set].ops, facets.ops, `${name} ${set}: the operations identical to origin/main 5e79336`); n++; continue; }
+    eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length;
+  }
   console.log(`byte-identical: ${Object.keys(base).length} drawings, ${n} facets`);
 }
 

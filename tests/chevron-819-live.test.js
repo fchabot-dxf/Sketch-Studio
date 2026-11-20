@@ -79,6 +79,13 @@ try {
           const edge = await evalJs(`parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sk-canvas-edge')) || 0`);
           assert(f.l >= rl.r && Math.abs(hgt - f.b - edge - 8) <= 0.5, st + `landscape, with the rail: right of it: ${JSON.stringify([f, rl])}`);
         }
+        // the host's own bottom-left overlays stay reachable (coordinator finding V6): Shaper's Review chip, Pen Plotter's paper readout and its Deselect all
+        const reach = { 'shaper:review': ['#review-info'], 'penplotter:toolpath': ['#docInfo', '#exportNone'], 'penplotter:export': ['#docInfo'] }[`${h.name}:${stage}`] || [];
+        for (const sel of reach) {
+          await evalJs(`document.querySelector(${JSON.stringify(sel)}).scrollIntoView({ block: 'nearest' })`); await sleep(200);
+          const ok = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return 'missing'; const r = e.getBoundingClientRect(); if (!r.width || !r.height) return 'empty'; const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit === e || e.contains(hit) ? 'ok' : 'covered by ' + (hit && (hit.id || hit.className)); })()`);
+          assert.strictEqual(ok, 'ok', st + sel + ' is visible and not covered');
+        }
         const s = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(EVID, `after-${h.name}-${w}x${hgt}-${stage}.png`), Buffer.from(s.data, 'base64'));
       }
     }

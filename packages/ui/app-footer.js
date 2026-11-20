@@ -36,7 +36,7 @@ function injectStyles() {
   const s = document.createElement('style');
   s.id = 'sk-footer-styles';
   s.textContent = `
-:root { --sk-footer-h: 40px; --sk-footer-btn-w: 32px; --sk-footer-btn-h: 32px; --sk-footer-btn-icon: 22px; --sk-footer-danger: var(--sk-error, #ef4444); --sk-footer-danger-gap: 6px; }
+:root { --sk-footer-clear: 0px; --sk-footer-h: 40px; --sk-footer-btn-w: 32px; --sk-footer-btn-h: 32px; --sk-footer-btn-icon: 22px; --sk-footer-danger: var(--sk-error, #ef4444); --sk-footer-danger-gap: 6px; }
 :where(:root) { --sk-footer-ink: #111827; }
 @media (pointer: coarse) {
   :root { --sk-footer-btn-w: 44px; --sk-footer-btn-h: 44px; --sk-footer-btn-icon: 28px; --sk-footer-h: var(--sk-footer-btn-h); }
@@ -53,6 +53,7 @@ function injectStyles() {
   body .sk-footer, body .sk-statusbar { position: fixed !important; left: 0; right: 0; bottom: var(--sk-canvas-inset, 8px); height: var(--sk-footer-btn-h); padding: 0 var(--sk-canvas-inset, 8px) !important; gap: 6px; background: transparent !important; border: 0 !important; box-shadow: none !important; pointer-events: none; z-index: 30; }
   body .sk-footer, body .sk-statusbar { justify-content: flex-start !important; } /* one cluster at the bottom-left, clear of a host's own right-hand panel (Pen Plotter's Design panel) */
   body .sk-footer-end { margin-left: 0; }
+  :root { --sk-footer-clear: calc(var(--sk-footer-btn-h) + 2 * var(--sk-canvas-inset, 8px)); } /* TASK 819: the band the floating footer occupies at the screen's bottom-left; a host's own bottom-left overlay (a chip, a readout, the foot of a side panel) lifts / pads by it so the buttons never cover it (0 where the footer is a docked row) */
   /* TASK 819: tucked in the lower-left corner of the screen (8 px in, 8 px up) in every stage; where a Design surface shows (refresh() sets sk-footer-rail) the tool rail is on the left, so the cluster sits inside the canvas frame, right of the rail, as before */
   body .sk-footer.sk-footer-rail, body .sk-statusbar.sk-footer-rail { left: calc(var(--sk-rail-w) + var(--sk-canvas-edge, 0px)); bottom: calc(var(--sk-canvas-edge, 0px) + var(--sk-canvas-inset, 8px)); }
   body .sk-footer .sk-history-btn, body .sk-footer .sk-footer-btn, body .sk-statusbar .sk-history-btn, body .sk-statusbar .sk-footer-btn, body .sk-footer .sk-save, body .sk-footer .sk-account, body .sk-statusbar .sk-save, body .sk-statusbar .sk-account { pointer-events: auto; background: var(--sk-header-bg, #f1f5f9); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }

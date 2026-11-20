@@ -25,10 +25,16 @@ const PARAMS = {
   clearing: { label: 'Clearing', hint: 'How the inside of the pocket is removed.' },
   stepover: { label: 'Stepover', hint: 'How far the bit moves sideways between passes, as a share of its diameter. Smaller is smoother and slower.' },
   // TASK 766: the last pass that takes the allowance off is the Origin's own inside cut with Loop off, the loop's turn along the wall with Loop on (pocket-clearing.js)
-  finishAllowance: { label: 'Finish allowance', hint: ({ loop, roughing } = {}) => (roughing ? 'Left on every wall by the roughing levels; the Contour takes it off. 0 = none (the part has no Contour).' : `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.`) }, // TASK 792: Roughing's allowance
+  finishAllowance: { label: 'Finish allowance', hint: ({ loop, roughing } = {}) => (roughing ? 'Left on every wall by the roughing levels, for a finishing pass (a Contour) to take off. 0 = none.' : `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.`) }, // TASK 792: Roughing's allowance
   // TASK 792: a part's Contour (the finish of its sloped walls), added from the part's card
-  contour: { label: 'Contour', hint: 'Adds a finishing pass along the sloped walls at a fine step, with its own bit. It is its own operation in the list.', items: ['contour:off', 'contour:on', 'contourEdit'] },
-  contourEdit: { label: 'Edit contour', hint: 'Shows the Contour’s own settings: its step and its bit.' },
+  // TASK S2 (docs/OPERATIONS-MODEL.md 4.3): the OPERATION card's Geometry row (its shapes) and the SHAPE card's chips (the operations a shape is in). TASK 792's Contour row
+  // and Edit contour are gone: the Contour is an operation type of its own (the type menu).
+  opShapes: { label: 'Shapes', hint: 'The shapes this operation cuts. A change to its settings applies to every one of them.', items: ['opAddShapes', 'opRemoveShape', 'opMakeOwn'] },
+  opAddShapes: { label: 'Add shapes', hint: 'Then click shapes on the drawing to put them in this operation; click one again to take it out. Done or Esc ends it.' },
+  opDone: { label: 'Done', hint: 'Stop adding shapes: a click on a shape picks it again.' },
+  opRemoveShape: { label: 'Remove', hint: 'Takes the shape in hand (the one you clicked) out of this operation. It stays in its other operations.' },
+  opMakeOwn: { label: 'Make its own operation', hint: 'Moves the shape in hand into a new operation with the same settings, so you can change what must differ.' },
+  opChips: { label: 'In operations', hint: 'The operations this shape is in: click one to open it. Picking a type below makes a new operation.' },
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
   // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab
@@ -134,10 +140,6 @@ const CHOICE_HINTS = {
     terraces: 'Each spot cut once, to its own depth: no passes through air. Best on deep or gentle reliefs.',
     nested: 'One pocket per level over everything that goes at least that deep: fewer, bigger paths. Best on steep or blocky parts.',
   },
-  contour: { // TASK 792
-    off: 'No finishing pass.',
-    on: 'A finishing pass along the walls at a fine step (its own operation and bit).',
-  },
   clearing: {
     freehand: 'You clear it by hand on the Origin, inside the outline.',
     linked: 'Rings from the middle outward, joined into one path (more if the pocket narrows or has islands).',
@@ -171,7 +173,6 @@ const CHOICE_SOURCES = {
   holdPart: HOLD_PART.modes.map((m) => ({ id: m.id, label: m.label })),
   leadIn: LEAD_IN.modes.map((m) => ({ id: m.id, label: m.label })), // TASK 775
   leadInSide: LEAD_IN.sides.map((m) => ({ id: m.id, label: m.label })),
-  contour: [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }], // TASK 792: the Contour row of a part's card
   roughLayout: ROUGH_LAYOUT.layouts.map((l) => ({ id: l.id, label: l.label })), // TASK 792: Roughing's layout
   boundary: ROUGH_BOUNDARY.kinds.map((k) => ({ id: k.id, label: k.label })), // TASK 810: Roughing's boundary
   boundaryTool: ROUGH_BOUNDARY.tools.map((t) => ({ id: t.id, label: t.label })), // TASK 810: its tool rule

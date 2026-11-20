@@ -140,7 +140,7 @@ const shapeIndex = (tool) => CUTTER_SHAPES.findIndex((s) => s.id === tool.shape)
 const toolKeyOf = (op) => (op.tool ? op.tool.key : '');
 // inside one tool: on line, pockets, inside, outside (opRank); shallow before deep; the smaller offset; the plan's order
 const offsetNum = (op) => { const s = cutSettings(op); return (s && s.offset) || 0; };
-const inTool = (a, b) => rankOf(a) - rankOf(b) || depthNum(a) - depthNum(b) || offsetNum(a) - offsetNum(b) || a.first - b.first;
+const inTool = (a, b) => rankOf(a) - rankOf(b) || depthNum(a) - depthNum(b) || offsetNum(a) - offsetNum(b) || (a.first === b.first ? 0 : a.first - b.first); // TASK S2: an empty operation has no file place (Infinity): after the others
 
 /** The DEFAULT order of `ops` (see the header). */
 export function defaultOpOrder(ops) {
@@ -173,6 +173,8 @@ export function orderOps(ops, keys) {
   return out.map((k) => byKey.get(k));
 }
 
+/** TASK S2: the sub-line of an operation with no shapes yet (docs/OPERATIONS-MODEL.md section 0). */
+export const EMPTY_WORDS = 'no shapes yet: click shapes to add';
 // the words of an operation: { depthText, detail, regions, rowText, label }
 function describe(op) {
   const len = lengthLabel;
@@ -262,11 +264,12 @@ export function describeOperations(state, entries = planEntries(), frame = null)
   const ops = [];
   for (const stored of storeOps()) {
     const records = (byOp.get(stored.id) || []).map(({ i, ...r }) => r);
-    if (!records.length) continue;
-    const rec = records[0].rec;
-    const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, first: byOp.get(stored.id)[0].i, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable)
+    if (!records.length && stored.geometry.length) continue; // S1: an operation none of whose shapes derives a cut is not listed (stale shapes)
+    const rec = records.length ? records[0].rec : { cutType: stored.type, ...stored.settings }; // TASK S2: an EMPTY operation (no shapes yet) is listed, with its own settings
+    const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, shapes: stored.geometry.map((r) => r.key), first: records.length ? byOp.get(stored.id)[0].i : Infinity, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable); TASK S2: `shapes` = its geometry keys
     op.rank = levelsRank(op);
     Object.assign(op, describe(op), { heading: toolHeading(op.tool) });
+    if (!stored.geometry.length) op.regions = EMPTY_WORDS; // TASK S2
     ops.push(op);
   }
   return ops;

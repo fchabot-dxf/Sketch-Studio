@@ -79,16 +79,17 @@ export const CUT_TYPES = [
   //  * Roughing REPLACES the stepped types of TASK 714 (Stepped pocket / inside / outside; owner turn 2512): a stepped record opens as Roughing with
   //    allowance 0 (shaper-doc.js applyShaperDoc), which IS the stepped cut. Offered on every closed region (a drawn pocket = one level); its rows: the
   //    depth, `stepDepth` (#core STEP_DEPTH) or ADAPTIVE stepping (TASK 717: `adaptiveSteps` + `stepDeviation`, a sloped region only), `finishAllowance`
-  //    (the allowance left on every wall: 0 while the part has no Contour), `contour` (Off | On: adds / removes the part's Contour record), the bit;
+  //    (the allowance left on every wall; TASK S2: a plain setting, 0 to start), the bit;
   //    `roughLayout` (owner turn 2604: Terraces | Nested, #core ROUGH_LAYOUT; a part with levels only).
 //  * TASK 809: both declare `smoothing` (a part with levels only): the operation's paths fitted with curves within that tolerance (#core/level-smooth.js).
 //  * TASK 810: Roughing declares its MACHINING BOUNDARY (a part with levels only; #core ROUGH_BOUNDARY): `boundary` (+ the picked `boundaryShape`), `boundaryTool`, `boundaryOffset`;
 //    both declare their HEIGHTS (#core levelsBand): `topDepth`, `bottomDepth`, `floorAllowance`; Contour its WHICH WALLS (#core CONTOUR_WALLS): `walls`.
-  //  * Contour is never picked from the menu of a region: the Contour row of the part's card adds it as its OWN record (cut-plan.js `contour:<key>`, its
-  //    own operation and bit group); its card has the fine step (`stepDepth`, #core LEVELS.contourStepMm by default), the bit and the cutter shape.
+  //  * TASK S2: Contour is an operation TYPE of its own, in the type menus (greyed on a shape with no part: cut-plan.js typeRefusal); its memberships are the
+  //    PARTS' keys (Prepare names them `contour:<key>`); its card has the fine step (`stepDepth`, #core LEVELS.contourStepMm by default), the bit and the cutter
+  //    shape. (Before S2 the Contour row of the part's card added it and set the Roughing's allowance: both gone.)
   // fill / stroke = the pocket's / the outside cut's and declared AFTER them, so classify() (import) never reads them. `opRank`: Roughing ranks as a
   // pocket, Contour after (operations.js ranks a levels operation by the cuts it makes, its finish after).
-  { id: 'roughing', label: 'Roughing', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none', desc: 'Clear the part level by level, leaving an allowance on the walls', targetKind: 'region', menuLabel: 'Roughing', levelsOp: 'roughing', contourOn: 'always', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 13.5V10.5h3v-3h3v-3h3' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linejoin='round'/>", opRank: 2, fields: ['depth', 'offset', 'steps', 'allowance', 'layout', 'minWidth', 'smoothing', 'boundary', 'heights'], params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'contour', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance'] },
+  { id: 'roughing', label: 'Roughing', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none', desc: 'Clear the part level by level, leaving an allowance on the walls', targetKind: 'region', menuLabel: 'Roughing', levelsOp: 'roughing', contourOn: 'always', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 13.5V10.5h3v-3h3v-3h3' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linejoin='round'/>", opRank: 2, fields: ['depth', 'offset', 'steps', 'allowance', 'layout', 'minWidth', 'smoothing', 'boundary', 'heights'], params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance'] },
   { id: 'contour', label: 'Contour', cutType: 'outside', fill: '#000000', stroke: 'none', desc: 'Finish the sloped walls at a fine step, along the walls', targetKind: 'finish', menuLabel: 'Contour', levelsOp: 'contour', icon: "<path d='M2.5 15.5h3.2c1.2-3.6 2.4-6.2 3.3-8.2c0.9-2 2.1-4 3.4-4.8h3.1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M5.2 12.5h1.6M6.4 9.5h1.6M7.9 6.5h1.6' fill='none' stroke='currentColor' stroke-width='1.2'/>", opRank: 3, fields: ['steps', 'smoothing', 'heights', 'walls'], params: ['toolDia', 'stepDepth', 'smoothing', 'topDepth', 'bottomDepth', 'floorAllowance', 'walls'] },
 ];
 
@@ -180,16 +181,11 @@ export const OFFSET_PRESETS = [
   { label: '1/32', mm: 25.4 / 32 }, { label: '1/16', mm: 25.4 / 16 }, { label: '1/8', mm: 25.4 / 8 },
 ];
 
-// Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'profile' | 'chain').
-// A LOOP or PROFILE is both a closed region AND a closed path → all 5. A CHAIN is an open path → only the 'path' types.
-// TASK 792: Roughing (a region type) on every closed region; the stepped types of TASK 714 (offered only with a slope) are gone. A CONTOUR target
-// (kind 'contour': a part's Contour record, cut-plan.js) takes the 'finish' type only, and no other target ever does.
-export function availableTypes(selectedKind, record = null) {
-  if (selectedKind === 'contour') return CUT_TYPES.filter((t) => t.targetKind === 'finish');
-  return CUT_TYPES.filter((t) => t.targetKind !== 'finish' && (t.targetKind === 'path' || selectedKind === 'loop' || selectedKind === 'profile'));
-}
-// TASK 792: where a part's card offers a CONTOUR (the finish): a type's `contourOn`: 'always' (Roughing) | 'sloped' (a plain Pocket / Inside / Outside cut,
-// only when its record has sloped walls: a Fusion `slope` or an STL's `levels`; a vertical wall needs none).
+// TASK S2: the gating of which shapes an operation type takes is cut-plan.js typeRefusal (a 'path' type on any shape; every other type, the Contour included, on a
+// closed one; the Stock one shape; a Contour a shape with a part, below). (availableTypes, the gating by the selection's kind, is gone with it.)
+// TASK 792: which operations a CONTOUR (the finish) can be the finish of: a type's `contourOn`: 'always' (Roughing) | 'sloped' (a plain Pocket / Inside / Outside cut,
+// only when its record has sloped walls: a Fusion `slope` or an STL's `levels`; a vertical wall needs none). TASK S2: a Contour's PART on a shape is the shape's first
+// such operation in list order (cut-plan.js contourPartOf).
 export function contourAllowed(rec) {
   const t = rec && cutTypeById(rec.cutType);
   if (!t || !t.contourOn) return false;

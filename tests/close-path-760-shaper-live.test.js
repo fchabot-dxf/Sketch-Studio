@@ -1,6 +1,7 @@
 // tests/close-path-760-shaper-live.test.js — TASK 760: Close path in Shaper, in depth (desktop 1280 x 800, real mouse and keys; tests/helpers/close-path-live.js).
 // The fixture (a 30 x 20 mm plate 0.08 mm short of closed + an open engraving zigzag) is dropped on the Design canvas:
-//  1. PREPARE BEFORE: the plate is an open chain: a click on its edge picks it and the cut-type menu has Inside (and Outside, Pocket) DISABLED; a click
+//  1. PREPARE BEFORE: the plate is an open chain: a click on its edge picks it; TASK S2 (owner turn 2716): the cut-type menu offers every type (never greyed),
+//     a pick of Inside, Outside or Pocket makes NO operation and the card's note says why in one plain line, On line makes one (Cancel removes it); a click
 //     inside it picks nothing (no region);
 //  2. DESIGN: Shift+C, a click on the plate's edge closes it: ONE line, in the plate's own group (the import's "plate" group, not entered: one rigid
 //     block with the whole file: nothing is entered), only two coincidents added; findLoops (the page's own #core module on the page's state) returns the plate as a loop;
@@ -33,8 +34,29 @@ else {
     await t.click(await prepAt(25, 10));
     assert.ok(await cardShown(), '1: a click on the plate\'s edge picks the open chain');
     out.menuBefore = await typeMenu();
-    assert.deepStrictEqual([out.menuBefore.interior, out.menuBefore.exterior, out.menuBefore.pocket, out.menuBefore.online], [false, false, false, true], '1: on the open chain: Inside / Outside / Pocket disabled, On line enabled: ' + JSON.stringify(out.menuBefore));
+    assert.deepStrictEqual([out.menuBefore.interior, out.menuBefore.exterior, out.menuBefore.pocket, out.menuBefore.online], [true, true, true, true], '1: on the open chain: every type offered, none greyed (TASK S2, owner turn 2716): ' + JSON.stringify(out.menuBefore));
     await t.shot('shaper-prepare-before-open-chain.png', await evalJs(`(() => { const r = document.querySelector('.cut-type-menu').getBoundingClientRect(); return { x: r.left - 10, y: r.top - 10, width: r.width + 20, height: r.height + 20 }; })()`));
+    // TASK S2: a closed-only type picked for the open chain: no operation, the plain refusal line in the card's note; On line: a new operation, open
+    const nOps = () => evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().length)`);
+    const pickOpt = async (id) => {
+      if (await evalJs(`document.querySelector('.cut-type-menu').hidden`)) await typeMenu();
+      await t.click(await evalJs(`(() => { const r = document.querySelector('.cut-type-menu .cut-type-opt[data-id="${id}"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+      await sleep(200);
+    };
+    const n0 = await nOps();
+    out.refused = {};
+    for (const [id, name] of [['pocket', 'Pocket'], ['interior', 'Inside'], ['exterior', 'Outside']]) {
+      await pickOpt(id);
+      const note = await evalJs(`[...document.querySelectorAll('#prepare-panel .cut-note div')].map((d) => d.textContent).join(' | ')`);
+      out.refused[id] = note;
+      assert.strictEqual(await nOps(), n0, `1: ${name} on the open chain: no operation made`);
+      assert.strictEqual(note, `This open line can\u2019t be ${name === 'Inside' || name === 'Outside' ? 'an' : 'a'} ${name}: ${name === 'Inside' || name === 'Outside' ? 'an' : 'a'} ${name.toLowerCase()} needs a closed shape`, `1: ${name}: the plain refusal line: ${note}`);
+    }
+    await pickOpt('online');
+    assert.deepStrictEqual([await nOps(), await evalJs(`document.querySelector('#prepare-panel .cut-type-cur').textContent`), await evalJs(`!document.querySelector('#prepare-panel .cut-actions').hidden`)], [n0 + 1, 'On line', true], '1: On line on the open chain: a new operation, open');
+    await t.click(await evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-cancel').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+    await sleep(200);
+    assert.strictEqual(await nOps(), n0, '1: its Cancel removes it');
     await t.keys.esc();
     // 2. Design: Close path on the plate
     await stage('design');

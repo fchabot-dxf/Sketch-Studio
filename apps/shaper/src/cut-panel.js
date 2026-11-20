@@ -150,12 +150,12 @@ export function createCutPanel(hostEl, opts = {}) {
         </button>
       </div>
     </div>
-    <div class="cut-geo" hidden>
-      <button type="button" class="cut-field-label" data-hint="opShapes"></button>
-      <div class="cut-geo-list"></div>
-    </div>
     <div class="cut-tabs" role="tablist" hidden></div>
     <div class="cut-rows">
+      <div class="cut-geo" hidden><!-- TASK S2: the open operation's shapes, first in the rows' scroll (a short card, e.g. under the STL card, keeps its rows reachable) -->
+        <button type="button" class="cut-field-label" data-hint="opShapes"></button>
+        <div class="cut-geo-list"></div>
+      </div>
       <div class="cut-row" data-param="cutDepth">
         <button type="button" class="cut-field-label" data-hint="cutDepth"></button>
         <div class="cut-stepper cut-box">

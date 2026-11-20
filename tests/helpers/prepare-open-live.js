@@ -6,6 +6,8 @@
 //   clickOpenLive(t, click) OK, the click (t.clickWorld ...), and when it picked exactly ONE shape that is already in an operation, that operation opened (its first in
 //                           the list); a shape in no operation, several, or nothing: only selected (the quick flow's type menu)
 //   stepLive(t, change)     a change made in the open operation, then OK and the operation opened again: its own undo step (as each card change was before S2)
+//   previewLive(t, what)    TASK 817: the open operation's Preview (the card's button), then waits until its paths for the card's settings now are drawn (the
+//                           button's state 'fresh'): the open operation's paths, tab marks, direction legend and levels / clearing notes show after it (or OK)
 import { sleep } from './cdp-browser.js';
 
 const openId = (t) => t.evalJs(`(() => { const op = window.__prepareView && window.__prepareView.activeOp(); return op ? op.id : null; })()`); // the operation open now (null: none)
@@ -15,6 +17,11 @@ export async function okLive(t) {
     await t.clickEl('#prepare-panel .cut-ok'); await sleep(200);
     await t.waitFor(`import('/apps/shaper/src/op-paths.js').then((m) => m.generatingCount() === 0)`, 'the paths of OK generated (TASK 817: in the background)', 120000);
   }
+}
+
+export async function previewLive(t, what = 'the preview') {
+  await t.clickEl('#prepare-panel .cut-preview');
+  await t.waitFor(`document.querySelector('#prepare-panel .cut-preview').dataset.state === 'fresh'`, `${what} drawn (TASK 817: generated in the background)`, 120000);
 }
 
 export async function openOpLive(t, opId) {

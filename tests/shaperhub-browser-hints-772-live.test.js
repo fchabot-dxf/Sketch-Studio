@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { previewLive } from './helpers/prepare-open-live.js'; // TASK 817: the open operation's paths are drawn on its Preview
 import { createFakeShaperApi, FAKE_LOGIN, FAKE_TOKEN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
 
@@ -173,8 +174,11 @@ try {
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'cut type menu open');
   await clickEl('.cut-type-opt[data-id="pocket"]');
   await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => m.planEntries().length > 0)`, 'Pocket planned');
+  // TASK 817: the new (open) Pocket's paths, and the direction legend that explains their dashes, are drawn on its Preview (generated in the background)
+  await previewLive({ clickEl, waitFor }, 'the Pocket\'s Preview');
   await hoverEl('#prepare-dir-legend [data-hint="dirLegend"]'); // TASK 805: Shaper's hints are a tooltip at the cursor, not text laid out in the legend
-  await waitFor(`(() => { const h = document.getElementById('sk-cursor-tip'); return !!h && !h.hidden && h.textContent.length > 10; })()`, 'Prepare dirLegend tooltip shows');
+  const legendHint = await evalJs(`import('/apps/shaper/src/param-hints.js').then((m) => m.hintText('dirLegend'))`); // the legend's own text (not the Preview button's tooltip, under the pointer just before)
+  await waitFor(`(() => { const h = document.getElementById('sk-cursor-tip'); return !!h && !h.hidden && h.textContent === ${JSON.stringify(legendHint)}; })()`, 'Prepare dirLegend tooltip shows');
 
   // Check Export (review) tab toolbar tooltips & Sync modal
   await clickEl('.sk-header-tab[data-tab="review"]');

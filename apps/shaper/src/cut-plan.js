@@ -7,16 +7,19 @@
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById, cutTypeHasParam, CUT_TYPES } from './shaper.js';
-import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
-import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughingFor, boundaryOf, levelsBand } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; the heights' band
+import { deriveProfileCuts, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
+import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, hasLevels, roughingAllowance, roughLayout, boundaryOf } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary (TASK 817: the levels facts and the footprints are op-derive.js's)
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
+import { pointInPolygon } from '#core/loop-geometry.js';
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
-import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
-import { opKeyOf, newOpIndex, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
+import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
+import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
+import { loopsWithPolygons, deriveFootprints } from './op-derive.js'; // TASK 817: THE derivation, shared with the background worker (paths-worker.js)
+import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
+export { loopsWithPolygons };
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -157,9 +160,41 @@ export function setRegionSource(key, source) { setRegion(key, { ...(regionOf(key
  *  (operations.js defaultOrderIds), as before S1: the part-freeing Outside after the holes. A stored order ('stored') is left as it is. */
 export function settleOrder(state = null) {
   if (listOrder() !== 'default') return;
-  const ids = defaultOrderIds(state);
-  if (ids.join('\n') !== storeOps().map((op) => op.id).join('\n')) setOpsOrder(ids);
+  const { ids, waits } = defaultOrderIds(state);
+  orderWaits = waits; // TASK 817: a Roughing's / Contour's rank waits for its generated cuts: sorted again when they are there (settleWaiting)
+  if (ids && ids.join('\n') !== storeOps().map((op) => op.id).join('\n')) setOpsOrder(ids);
 }
+// TASK 817: the ORDER that waits for generated paths. A Roughing / Contour ranks by the cuts it makes (operations.js levelsRank), and its cuts are generated in the
+// background (op-paths.js): the default order is sorted again (settleOrder), and a NEW operation in a user-ordered list ('stored') is placed by the rule once more
+// (as newOpIndex places it: the rule applied once, when it is made), when they are there. A placement waits only while nothing else moved in the list (the list
+// order at the placement is kept with it): the user's own order always wins.
+let orderWaits = false;
+const placing = new Map(); // op id -> the list order (ids) when it was placed with its rank not known
+const orderNow = () => storeOps().map((op) => op.id).join('\n');
+function placeNew(state, draft) {
+  const { index, known } = newOpPlace(state, draft);
+  const op = insertOp(index, draft);
+  if (!known && listOrder() === 'stored') placing.set(op.id, orderNow());
+  return op;
+}
+/** TASK 817: do what waited for generated paths (see above), on the solved sketch `state`. Returns true when the list order changed (the caller refreshes). */
+export function settleWaiting(state) {
+  const before = orderNow();
+  if (orderWaits) settleOrder(state);
+  for (const [id, at] of [...placing]) {
+    const op = opById(id), now = orderNow();
+    if (!op || listOrder() !== 'stored' || now !== at) { placing.delete(id); continue; }
+    const { index, known } = newOpPlace(state, { type: op.type, settings: op.settings, geometry: op.geometry }, { without: id });
+    if (!known) continue;
+    placing.delete(id);
+    const ids = storeOps().map((o) => o.id).filter((x) => x !== id);
+    ids.splice(index, 0, id);
+    if (ids.join('\n') !== now) setOpsOrder(ids);
+  }
+  return orderNow() !== before;
+}
+/** TASK 817: whether something waits for generated paths (settleWaiting has work). */
+export const orderWaiting = () => orderWaits || placing.size > 0;
 export function fileShape(planKey, rec, state = null) {
   const out = fileShapeOnly(planKey, rec, state);
   settleOrder(state);
@@ -189,7 +224,7 @@ function fileShapeOnly(planKey, rec, state) {
   const ref = { key, seq, ...(at !== undefined ? { at } : {}) };
   const target = storeOps().find((op) => op.type === rec.cutType && op.geometry.length && !op.geometry.some((r) => r.key === key) && memberKey(planKeyOf(op, op.geometry[0]), recordOf(op, op.geometry[0])) === newKey);
   if (target) { addRef(target, ref); normalizeDepth(target); }
-  else { const draft = { type: rec.cutType, settings, geometry: [ref] }; normalizeDepth(insertOp(newOpIndex(state, draft), draft)); }
+  else { const draft = { type: rec.cutType, settings, geometry: [ref] }; normalizeDepth(placeNew(state, draft)); }
   return getPlanRecord(planKey);
 }
 // fileShape MOVES a shape: the operation it leaves goes when it is left empty (as before task S2; an EMPTY operation made by the user stays: TASK S2)
@@ -243,7 +278,7 @@ export function newOperation(type, keys, state = null) {
   const settings = settingsPart(rec);
   if (cutTypeHasParam(type, 'cutDepth') && keys.length && keys.every((k) => sourceDepth(k) !== undefined)) settings.cutDepth = 'model';
   const draft = { type, settings, geometry: keys.map((key) => ({ key, seq: takeSeq() })) };
-  const op = insertOp(newOpIndex(state, draft), draft);
+  const op = placeNew(state, draft);
   settleOrder(state);
   return op;
 }
@@ -255,7 +290,7 @@ export function setStock(key, state = null) {
   const moved = Boolean(prev && prev.geometry.length);
   if (prev) deleteOp(prev);
   const draft = { type: STOCK_TYPE_ID, settings: settingsPart({ ...freshRecord(key), cutType: STOCK_TYPE_ID }), geometry: [{ key, seq: takeSeq() }] };
-  const op = insertOp(newOpIndex(state, draft), draft);
+  const op = placeNew(state, draft);
   settleOrder(state);
   return { op, moved };
 }
@@ -309,7 +344,7 @@ export function removeShapeFromOp(op, key, state = null) {
  *  user's ('stored'), else by the default rule. Returns the copy. */
 export function duplicateOperation(op, state = null) {
   const draft = { type: op.type, settings: { ...op.settings }, geometry: op.geometry.map((r) => ({ key: r.key, seq: takeSeq(), ...(Object.hasOwn(r, 'at') ? { at: r.at } : {}) })) };
-  const at = listOrder() === 'stored' ? storeOps().indexOf(op) + 1 : newOpIndex(state, draft);
+  const at = listOrder() === 'stored' ? storeOps().indexOf(op) + 1 : newOpPlace(state, draft).index; // (the default order: settleOrder below, or when the ranks are generated)
   const copy = insertOp(at, draft);
   if (op.on === false) setOpsOn([copy.id], false);
   settleOrder(state);
@@ -500,11 +535,14 @@ export function rememberRasterAngle(deg) { const n = Number(deg); if (Number.isF
  * clearingSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 745: what a programmed pocket's clearing is, read off THE derivation (deriveCuts through
  * the effective record, as Prepare / Review / the export cut it): the plan carried by its wall cut ({ pattern, levels, passes, turns, length, leftover,
  * settings, depths, ... }: #core/pocket-clearing applyPocketClearing), or for a refused one the pocket cut's { refused, summary }; null when the record is Freehand.
+ * TASK 817: read off the GENERATED paths (pathsOf; `ctx` = a reading pass, `request` false = a peek): undefined while they are not there.
  */
-export function clearingSummary(key, storedRec, state, loops, loopPolys, owned) {
+export function clearingSummary(key, storedRec, state, loops, loopPolys, owned, { ctx = null, request = true } = {}) {
   const rec = effectiveCutRecord(storedRec);
   if (clearingPattern(rec) === 'freehand') return null;
-  const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned) || [];
+  const d = pathsOf(key, storedRec, ctx || pathsCtx(state, { loops, loopPolys, owned }), { request }); // TASK 817: the generated paths (the same derivation)
+  if (d === undefined) return undefined; // not generated (yet): no note
+  const cuts = d ? d.cuts : [];
   const c = cuts.find((x) => x.clearing && x.clearing.summary); // the wall cut, a refused pocket, or (TASK 749) a Spiral's last line when its wall is in the line
   return c ? { ...c.clearing.summary, refused: c.clearing.role === 'refused' ? c.clearing.refused : null } : null;
 }
@@ -589,8 +627,8 @@ export function planClearingNotes(state, opts) {
   let geo = null;
   for (const [key, rec] of planRecords(opts)) {
     if (!rec || !rec.cutType || clearingPattern(effectiveCutRecord(rec)) === 'freehand') continue;
-    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
-    out.push(...clearingNoteItems(rec, clearingSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; geo.ctx = pathsCtx(state, geo); }
+    out.push(...clearingNoteItems(rec, clearingSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned, { ctx: geo.ctx })).map((i) => i.text));
   }
   return out;
 }
@@ -659,24 +697,26 @@ function v2WithBoundaryTarget(rec, plan) {
  * levelsSummary(key, storedRec, state, loops, loopPolys, owned, plan) — TASK 792: what a Roughing / Contour record cuts, read off THE derivation (deriveCuts
  * through the effective record, as Prepare / Review / the export cut it): { op, source ('levels' | 'slope' | 'drawn'), depths (base mm, shallow to deep),
  * passes (cuts written), allowance, islands / small (Roughing from levels: the most material islands left standing on one level, and those narrower than
- * the bit), toolDia }, or null for any other record (or a Contour whose part has no cut type).
+ * the bit), toolDia }, or null for any other record (or a Contour whose part has no cut type). TASK 817: read off the GENERATED paths (itemOf; `ctx` = a reading
+ * pass, `request` false = a peek): undefined while they are not there.
  */
-export function levelsSummary(key, storedRec, state, loops, loopPolys, owned) {
+export function levelsSummary(key, storedRec, state, loops, loopPolys, owned, { ctx = null, request = true } = {}) {
   const e = storedRec && storedRec.cutType ? resolveEntry(key, storedRec) : null;
   const rec = e ? effectiveCutRecord(e.rec) : null;
   if (!rec || !rec.levelsOp) return null;
-  const cuts = deriveCuts(e.target, rec, state, loops, loopPolys, owned) || [];
+  const item = itemOf(key, storedRec, ctx || pathsCtx(state, { loops, loopPolys, owned }), { request }); // TASK 817: the generated paths and level facts (the same derivation)
+  if (item === undefined) return undefined; // not generated (yet): no note
+  const cuts = item.paths ? item.paths.cuts : [];
   const depthOf = (c) => Number(c.terrace ? c.terrace.depth : c.rec && c.rec.cutDepth);
   const depths = [...new Set(cuts.map(depthOf).filter(Number.isFinite))].sort((a, b) => a - b);
   const perLevel = new Map();
   for (const c of cuts) if (c.terrace && c.terrace.islands != null) perLevel.set(c.terrace.depth, { islands: c.terrace.islands, small: c.terrace.small });
   const worst = [...perLevel.values()].reduce((m, v) => (v.islands > m.islands ? v : m), { islands: 0, small: 0 });
   // TASK 792 / 810: a Roughing from levels, as its cuts were made (#core levelsRoughingFor: its boundary): the bands the Min terrace width leaves, and why it has nothing to cut
-  const outer = hasLevels(rec) && rec.levelsOp === 'roughing' ? (deriveProfileCuts(e.target, { ...rec, cutType: 'pocket' }, state, loops, loopPolys, owned).find((c) => c.isCompound) || {}).outerPoly : null;
-  const band = levelsBand(rec, rec.levelsOp === 'contour' ? rec.baseDepth : rec.cutDepth); // TASK 810: its heights
-  const LR = outer && !band.empty ? levelsRoughingFor({ ...rec, cutDepth: band.depth }, outer, state, loops, loopPolys) : null;
-  const thin = LR && roughLayout(rec) === 'terraces' && Number(rec.minTerraceWidth) > 0 ? LR.steps.reduce((n, s) => n + (s.thin || 0), 0) : 0;
-  const refused = band.empty ? 'band' : LR && ROUGHING_REFUSED[LR.error] ? LR.error : null;
+  // (TASK 817: op-derive.js levelsFacts, generated with its cuts)
+  const f = item.levels || { bandEmpty: false, thin: 0, roughingError: null };
+  const thin = f.thin;
+  const refused = f.bandEmpty ? 'band' : f.roughingError && ROUGHING_REFUSED[f.roughingError] ? f.roughingError : null;
   return { op: rec.levelsOp, layout: roughLayout(rec), source: hasLevels(rec) ? 'levels' : rec.slope ? 'slope' : 'drawn', depths, passes: cuts.length, allowance: roughingAllowance(rec), islands: worst.islands, small: worst.small, thin, minWidth: Number(rec.minTerraceWidth) || 0, toolDia: Number(rec.toolDia) || 0, refused };
 }
 /**
@@ -708,8 +748,8 @@ export function planLevelsNotes(state, opts) {
   let geo = null;
   for (const [key, rec] of planRecords(opts)) {
     if (!rec || !(cutTypeById(rec.cutType) || {}).levelsOp) continue;
-    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
-    out.push(...levelsNoteItems(rec, levelsSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
+    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; geo.ctx = pathsCtx(state, geo); }
+    out.push(...levelsNoteItems(rec, levelsSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned, { ctx: geo.ctx })).map((i) => i.text));
   }
   return out;
 }
@@ -899,11 +939,37 @@ export function cutPlanNotice(r) {
 export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, owned) {
   const e = resolveEntry(key, storedRec); // TASK 792: a part's Contour cuts the part
   if (!e) return null;
-  const rec = effectiveCutRecord(e.rec); // TASK 450: On line / Guide take no offset: a stored one is ignored
-  const cuts = deriveCuts(e.target, rec, state, loops, loopPolys, owned); // TASK 714: a stepped record derives to its terraces (the exporter's derivation too)
-  if (!cuts || !cuts.length) return null;
-  const work = levelsWorkRecord(rec); // TASK 792: a Roughing's allowance is drawn with its cuts (#core levelsWorkRecord: the record they are made with)
-  return { rec: work, cuts, footprints: deriveCutFootprint(cuts, work, state) };
+  return deriveFootprints(e.target, effectiveCutRecord(e.rec), state, loops, loopPolys, owned); // TASK 450: On line / Guide take no offset (effectiveCutRecord); TASK 817: op-derive.js, the worker's too
+}
+
+/**
+ * TASK 817: the GENERATED paths. pathsCtx(state, geo) = one reading pass over the plan (op-paths.js pathsContext: the sketch's geometry signature, the plan's owned
+ * loops; `geo` = { loops, loopPolys, owned } when the caller has them). pathsOf(key, storedRec, ctx, { request }) = deriveKeyFootprints' result for this plan item
+ * as the background generation made it ({ rec, cuts, footprints }; null: it derives to nothing), or UNDEFINED while it is generating / not asked for (a peek:
+ * request false; `opId` = the operation it is read for: the open one's edits are generated on OK); itemOf = the whole job's result { paths, levels } (op-derive.js deriveItem: + a Roughing's /
+ * Contour's level facts). The same resolution as deriveKeyFootprints (resolveEntry + effectiveCutRecord).
+ */
+export function pathsCtx(state, geo = null) {
+  const g = geo && geo.loops ? geo : loopsWithPolygons(state);
+  return pathsContext(state, { loops: g.loops, loopPolys: g.loopPolys, owned: geo && geo.owned ? geo.owned : planOwnedLoops(state, g.loops, g.loopPolys) });
+}
+/** TASK 817: what a plan item's derivation takes: { target, rec } (rec = the EFFECTIVE record), or null when it has no entry: THE resolution (deriveKeyFootprints'). */
+export function pathsInputOf(key, storedRec) {
+  const e = resolveEntry(key, storedRec);
+  return e ? { target: e.target, rec: effectiveCutRecord(e.rec) } : null;
+}
+export function itemOf(key, storedRec, ctx, { request = true, opId = null } = {}) {
+  const input = pathsInputOf(key, storedRec);
+  if (!input) return { paths: null, levels: null };
+  return lookupPaths(ctx, input.target, input.rec, { request, opId });
+}
+export function pathsOf(key, storedRec, ctx, opts) { const it = itemOf(key, storedRec, ctx, opts); return it === undefined ? undefined : it.paths; }
+/** TASK 817: the generated paths of an entry already resolved (planEntries: { target, rec }), as pathsOf. */
+export function entryPathsOf(target, resolvedRec, ctx, opts) { const it = lookupPaths(ctx, target, effectiveCutRecord(resolvedRec), opts); return it === undefined ? undefined : it.paths; }
+/** TASK 817: the signature of a plan item's derivation (op-paths.js pathsSig), or null when it has no entry. */
+export function pathsSigOf(key, storedRec, ctx) {
+  const input = pathsInputOf(key, storedRec);
+  return input ? pathsSigFn(ctx, input.target, input.rec) : null;
 }
 
 /** TASK 711: the loops that have their own record in `plan` (#core ownedLoopIds over the plan's assigned entries, the set the exporter
@@ -912,12 +978,7 @@ export function planOwnedLoops(state, loops, loopPolys) {
   return ownedLoopIds(planEntries(), state, loops, loopPolys, CUT_TYPES);
 }
 
-/** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. */
-export function loopsWithPolygons(state) {
-  const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
-  const loops = findLoops(state).map((l) => ({ ...l, polygon: loopPolygon(l, state, shapeById) }));
-  return { loops, loopPolys: Object.fromEntries(loops.map((l) => [l.id, l.polygon])) };
-}
+// TASK 817: loopsWithPolygons (the loops of `state` with their host-side polygons + the { id: polygon } map) moved to op-derive.js (the worker needs it); re-exported above.
 
 // A content SIGNATURE for the Review's build cache (FNV-1a of the JSON text): equal signature = equal footprints, so the model can
 // reuse the work of an earlier build. Covers the effective record and the cut GEOMETRY (polygons, chain joints), never object identity.
@@ -940,15 +1001,19 @@ const cutsSig = (cuts, state) => cuts.map((c) => [c.kind, c.cutType, c.offsetSid
 export function planReliefItems(state, opts) {
   const { loops, loopPolys } = loopsWithPolygons(state);
   const owned = planOwnedLoops(state, loops, loopPolys);
+  const ctx = pathsCtx(state, { loops, loopPolys, owned }); // TASK 817: the generated paths (the Review waits until nothing is generating: main.js)
   const items = [];
 
   for (const [key, stored] of planRecords(opts)) {
     if (!stored || !stored.cutType || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
-    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned);
-    if (!d) continue;
+    const d = pathsOf(key, stored, ctx);
+    if (!d) continue; // nothing to cut (TASK 817: or not generated yet)
     const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
-    const atW = (w) => { if (!at.has(w)) at.set(w, deriveCutFootprintAt(d.cuts, d.rec, state, w)); return at.get(w); };
+    // TASK 817: a shaped cutter's other widths sweep the cuts again (#core deriveCutFootprintAt calls each cut's `sweep`, a function that does not cross from the worker):
+    // they are derived from the main thread's own derivation of the same item (deriveKeyFootprints), made once, only when the 3D build asks for a width
+    let own = null;
+    const atW = (w) => { if (!at.has(w)) { if (!own) own = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned); at.set(w, deriveCutFootprintAt(own.cuts, own.rec, state, w)); } return at.get(w); };
     const geo = d.rec.levelsOp ? sigHash(cutsSig(d.cuts, state)) : cutsSig(d.cuts, state); // TASK 792: a Roughing / Contour hashes its geometry ONCE (254 contour passes re-stringified it per item); every other record's signature is the one before 792
     const recSig = d.rec.levelsOp ? sigHash(d.rec.levels ? { ...d.rec, levels: levelsSig(d.rec.levels) } : d.rec) : d.rec; // TASK 792: the same for its record (its part's sections by their own hash, made once per list)
     d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, recSig, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : fp.hold && fp.hold.depth != null ? fp.hold.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth; TASK 742: a held cut's pass / gap strip at its own

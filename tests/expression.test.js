@@ -343,7 +343,7 @@ assert(ACCEPTED_ARG_SEPARATORS.join('') === ';,' && STORED_ARG_SEPARATOR === ';'
   const src = readFileSync(new URL('../packages/core/expression.js', import.meta.url), 'utf8');
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\/\/ .*$/gm, '');
   const imports = [...code.matchAll(/^\s*import\s[^;]*from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-  assert(imports.length === 1 && imports[0] === '#core/units.js', `expression.js imports only units.js, got ${JSON.stringify(imports)}`);
+  assert(imports.length === 1 && imports[0] === './units.js', `expression.js imports only units.js, got ${JSON.stringify(imports)}`); // TASK 817: by relative path (a module worker has no import map)
   assert(!/#ui|packages\/ui|apps\//.test(code), 'no #ui / app reference');
   assert(!/\beval\s*\(|new\s+Function|\bFunction\s*\(|\bdocument\b|\bwindow\b|\blocalStorage\b|\bsetTimeout\b/.test(code), 'no eval, Function, DOM or timers');
   assert(!/25\.4|TO_MM/.test(code), 'no conversion factor outside units.js');

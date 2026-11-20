@@ -10,7 +10,7 @@
 //
 // Adopted by the dimension field (U2) + the Shaper cut params (U3); INERT until then.
 
-import { parseInput, evaluate } from '#core/expression.js';
+import { parseInput, evaluate } from './expression.js'; // TASK 817: relative, as every other #core module: a module worker (apps/shaper paths-worker.js) has no import map
 
 export const BASE = 'mm'; // 1 world unit = 1 mm
 

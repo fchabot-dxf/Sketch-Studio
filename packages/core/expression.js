@@ -22,7 +22,7 @@
 //
 // Values are quantities { v, L, A }: v in the BASE units (mm, degrees), L the length exponent, A the angle exponent.
 
-import { unitInfo } from '#core/units.js';
+import { unitInfo } from './units.js'; // TASK 817: relative (see units.js)
 
 // ── DECLARED DECISIONS (docs/PARAMETERS-DESIGN.md owner table). Each is ONE constant so the owner can flip it. ──
 export const CASE_SENSITIVE_NAMES = true;            // O6  names are case-sensitive (Fusion). false: names are folded to lower case

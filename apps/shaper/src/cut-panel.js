@@ -122,6 +122,13 @@ const fieldText = (baseMM) => lengthText(baseMM, { show: 'field' });
 const toDocNum = (baseMM) => unitNumber(baseMM, docUnit());  // BASE mm → doc-unit number
 const isUnset = (v) => v === 'unset' || v == null;
 
+// TASK 817: the Preview button's icon per state (16 px, currentColor): refresh (idle, stale), a turning arc (busy: CSS .cut-preview[data-state="busy"]), a check (fresh)
+const PREVIEW_REFRESH = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.2 1.8v3.4H9.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const PREVIEW_ICONS = Object.freeze({
+  idle: PREVIEW_REFRESH, stale: PREVIEW_REFRESH,
+  busy: '<svg class="cut-spin" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.8"/><path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  fresh: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+});
 export function createCutPanel(hostEl, opts = {}) {
   if (!hostEl) return { update() {}, destroy() {} };
   const onPickType = opts.onPickType || (() => {});
@@ -132,6 +139,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const onDuplicate = opts.onDuplicate || (() => {});
   const onOk = opts.onOk || (() => {});
   const onCancel = opts.onCancel || (() => {});
+  const onPreview = opts.onPreview || (() => {}); // TASK 817: the open operation's Preview (its paths with the card's settings now, in the background)
   const onHoverShape = opts.onHoverShape || (() => {}); // (geometry key | null): a shape row under the pointer
   const onPickBoundary = opts.onPickBoundary || (() => {}); // TASK 810: Roughing's boundary "Pick" (then a click on a closed shape in Prepare); pressed again while picking: cancel
   hostEl.innerHTML = '';
@@ -360,7 +368,7 @@ export function createCutPanel(hostEl, opts = {}) {
       </div>
     </div>
     <div class="cut-note"></div>
-    <div class="cut-actions" hidden><button type="button" class="cut-cancel" data-hint="opCancel"></button><button type="button" class="cut-ok" data-hint="opOk"></button></div>
+    <div class="cut-actions" hidden><button type="button" class="cut-preview" data-hint="opPreview"></button><button type="button" class="cut-cancel" data-hint="opCancel"></button><button type="button" class="cut-ok" data-hint="opOk"></button></div>
     <div class="cut-pop cut-type-menu" role="listbox" hidden></div>
     <div class="cut-pop cut-offset-pop" hidden></div>
     <div class="cut-pop cut-shape-pop" role="listbox" hidden></div>
@@ -387,6 +395,8 @@ export function createCutPanel(hostEl, opts = {}) {
   dupBtn.addEventListener('click', () => onDuplicate());
   $('.cut-ok').addEventListener('click', () => onOk());
   $('.cut-cancel').addEventListener('click', () => onCancel());
+  const previewBtn = $('.cut-preview');
+  previewBtn.addEventListener('click', () => onPreview());
   geoList.addEventListener('pointerleave', () => onHoverShape(null));
   const leadModesWrap = $('.cut-lead-modes'), leadRadiusInput = $('.cut-lead-radius'), leadSweepInput = $('.cut-lead-sweep'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'), leadPosState = $('.cut-pos-state'); // TASK 775 / 778
   // TASK 810: Roughing's machining boundary rows: the Boundary and Tool choices, the picked shape (Pick), the Offset (empty / Reset = calculated)
@@ -438,6 +448,10 @@ export function createCutPanel(hostEl, opts = {}) {
   leadModesWrap.setAttribute('role', 'group'); leadSidesWrap.setAttribute('role', 'group'); // TASK 775
   const hints = {};
   for (const t of card.querySelectorAll('[data-hint]')) hints[t.dataset.hint] = bindHint({ el: t });
+  // TASK 817 (owner turns 2747-2748): the Preview button, in the action bar left of Cancel / OK: its icon (refresh; a spinner while its paths are generating; a check
+  // while they show the card's settings) in a box of its own size, then its name, so the bar never moves when the icon changes
+  previewBtn.innerHTML = '<span class="cut-preview-ic" aria-hidden="true"></span><span class="cut-preview-label"></span>';
+  previewBtn.querySelector('.cut-preview-label').textContent = hintLabel('opPreview');
   hints.holdPart.trigger.id = 'cut-hold-label';
   holdModesWrap.setAttribute('aria-labelledby', 'cut-hold-label');
   hints.leadIn.trigger.id = 'cut-lead-label'; leadModesWrap.setAttribute('aria-labelledby', 'cut-lead-label'); // TASK 775
@@ -852,6 +866,14 @@ export function createCutPanel(hostEl, opts = {}) {
     const op = model.mode === 'op';
     headRow.hidden = !op; opHead.textContent = op ? model.title : '';
     geoEl.hidden = !op; actionsEl.hidden = !op;
+    // TASK 817: the Preview's state (prepare-stage.js): 'idle' (none), 'busy' (generating), 'fresh' (drawn: the card's settings now), 'stale' (drawn faded: changed since)
+    const pv = op ? model.preview || 'idle' : 'idle';
+    if (previewBtn.dataset.state !== pv) {
+      previewBtn.dataset.state = pv;
+      previewBtn.querySelector('.cut-preview-ic').innerHTML = PREVIEW_ICONS[pv];
+      previewBtn.setAttribute('aria-busy', pv === 'busy' ? 'true' : 'false');
+      previewBtn.setAttribute('aria-pressed', pv === 'fresh' ? 'true' : 'false');
+    }
     geoList.replaceChildren(...((op && model.shapes) || []).map(({ key, label }) => { // one row per shape: its words and an X that takes it out of the operation
       const row = document.createElement('div'); row.className = 'cut-geo-shape'; row.dataset.key = key;
       const name = document.createElement('span'); name.className = 'cut-geo-name'; name.textContent = label;

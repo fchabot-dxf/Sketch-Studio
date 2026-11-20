@@ -72,11 +72,11 @@ const exportOf = (st, entries) => exportShaperSVG({ state: st, entries, encoding
   ok(lay.tabs.every((t) => fit.capRing(t.s0) === 0 && fit.capRing(t.s1) === 0), 'every tab end: its cap reaches ring 0 at the strip width');
   // the note (inch document)
   SettingsManager.set('DOC_UNIT', 'in'); SettingsManager.set('LENGTH_PRECISION', null);
-  eq(holdNoteItems(OWNER, hold).map((i) => i.text), ['Inside: 5 tabs, 0.063 in wide, 0.063 in thick: 1 pass at 0.093 in + 5 gaps at 0.156 in (placed where a gap strip fits: part of the outline is too narrow for one)', 'Gaps: cut the side against the part; the return leg is optional'], 'the note: the honest fact');
-  ok(holdNoteItems(OWNER, hold)[0].warn, 'in the warning style');
+  eq(holdNoteItems(OWNER, hold).map((i) => i.text), ['Inside: 5 tabs, 0.063 in wide, 0.063 in thick: 1 pass at 0.093 in + 5 gaps at 0.156 in', 'Placed where a gap strip fits: part of the outline is too narrow for one', 'Gaps: cut the side against the part; the return leg is optional'], 'the note: the honest fact');
+  ok(holdNoteItems(OWNER, hold)[1].warn, 'in the warning style (TASK 825: a line of its own, listed first on the card)');
   const many = holdOf(cutsOf(st, 'big', { ...OWNER, tabCount: 20 }));
   eq([many.role, many.requested, many.count], ['pass', 20, 8], '20 asked: the 8 that fit on the circle');
-  eq(holdNoteItems(OWNER, many)[0].text.endsWith('(only 8 of 20 tabs fit: part of the outline is too narrow for a gap strip)'), true, 'the note: only 8 of 20 tabs fit');
+  eq(holdNoteItems(OWNER, many)[1].text, 'Only 8 of 20 tabs fit: part of the outline is too narrow for a gap strip', 'the note: only 8 of 20 tabs fit');
   const auto = holdOf(cutsOf(st, 'big', { ...OWNER, tabCount: 'auto' }));
   eq([auto.role, auto.requested, auto.count, tabHandles(loop, { ...OWNER, tabCount: 'auto' }, st).every((h) => onCircle(h.point))], ['pass', 3, 3, true], 'Auto (3): 3 on the circle');
   // a slot where no gap strip fits anywhere (7 mm wide, strips 4.175 mm from each side): still refused, today's line
@@ -176,7 +176,7 @@ await createNamedDesign(profile, 'shaper', 'Tabs 822');
     h.typed('.cut-depth', '0.156');
     h.pressEl('.cut-row[data-row="holdPart"] .cut-preset[data-value="tabs"]');
     h.typed('.cut-tab-count', '5'); h.typed('.cut-tab-width', '0.063'); h.typed('.cut-hold-thickness', '0.063');
-    ok(h.q('.cut-note').textContent.includes('Inside: 5 tabs, 0.063 in wide') && h.q('.cut-note').textContent.includes('placed where a gap strip fits'), 'the card note: 5 tabs, placed where a gap strip fits');
+    ok(h.q('.cut-note').textContent.includes('Inside: 5 tabs, 0.063 in wide') && h.q('.cut-note').textContent.includes('Placed where a gap strip fits'), 'the card note: 5 tabs, placed where a gap strip fits');
     let hs = h.handles();
     eq(hs.length, 5, 'the open operation: 5 tab handles on the outline');
     ok(hs.every((x) => onCircle(x)), 'each on the circle');

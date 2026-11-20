@@ -256,6 +256,8 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   // TASK 804b: Raster + Loop is the zero-crossing loop now (the wall ring whole, no clean-up ring): its download, preview and 3D footprints changed on
   // purpose (checked in tests/pocket-nocross-804-node.test.js); its Operations list did not
   const changed804b = new Set(['rasterLoop']);
+  let guideWordsDiffer = false; // (the digest of a set without that Guide's row stays the same)
+  const GUIDE_DEPTH_WORDS_825 = new Set(['dxf/close-path-760-gap.dxf', 'dxf/fusion-sketch4.dxf', 'dxf/part-mm.dxf', 'pattern-params-694-old.document.json', 'pre-577-two-sketches.document.json']); // TASK 825 (V4): a Guide with a depth lists it in its row
   // TASK 822: report/midpoint-move.json's 3077.8 mm Outside outline: its tabs were REFUSED (a tab of the even spread landed where its gap strip did not fit) and
   // are PLACED now (kept off the narrow stretches, tests/hold-part-822-node.test.js): its download, preview, Operations row and 3D changed on purpose
   const changed822 = (name, set) => name === 'report/midpoint-move.json' && set === 'tabs';
@@ -263,8 +265,10 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
     if (changed804.has(set)) continue;
     if (changed822(name, set)) { ok(now[name][set].download !== facets.download, `${name} ${set}: its refused tabs are placed now (TASK 822)`); n++; continue; }
     if (changed804b.has(set)) { eq(now[name][set].ops, facets.ops, `${name} ${set}: the operations identical to origin/main 5e79336`); n++; continue; }
+    if (GUIDE_DEPTH_WORDS_825.has(name)) { const { ops: o1, ...r1 } = now[name][set], { ops: o2, ...r2 } = facets; eq(r1, r2, `${name} ${set}: download, preview copy and 3D footprints identical to origin/main 5e79336`); guideWordsDiffer ||= o1 !== o2; n += 4; continue; }
     eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length;
   }
+  assert.ok(guideWordsDiffer, "TASK 825 V4: the document with a Guide that has a depth lists it in its row");
   console.log(`byte-identical: ${Object.keys(base).length} drawings, ${n} facets`);
 }
 
@@ -383,7 +387,7 @@ let saved = null;
     ok(!h.shown('leadIn') && !h.shown('leadInRadius'), 'Loop on: still no Lead-in row on pockets (TASK 778)');
     eq(h.count('circle'), 0, 'Loop on, closed: no dot on the loop');
     eq(h.count('.sk-pocket-start'), 1, 'Prepare: 1 pocket start mark target');
-    ok(/\+ wall: one closed loop, stepover/.test(h.note()[0]), 'the note: one closed loop (nothing about where it starts): ' + h.note()[0]);
+    ok(/\+ wall: one closed loop, stepover/.test(h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l))[0]), 'the note (TASK 825: the warnings come first): one closed loop (nothing about where it starts): ' + h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l))[0]);
     const pocketEls = elementsOf(shaperSvgOf(st, [{ target: { kind: 'loop', id: kP.slice(5) }, rec: V2_PLAN.get(kP) }]));
     eq(pocketEls.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], 'the pocket download: ONE closed on-line path + 1 guide start mark');
     saved = { plan: JSON.stringify([...V2_PLAN.entries()]), svg: shaperSvgOf(st, planEntries()) };

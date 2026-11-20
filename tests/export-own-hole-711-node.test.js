@@ -130,11 +130,11 @@ const exportNow = (st) => {
   V2_PLAN.set(keyOf('loop', loopOf(sPartA).id), rec('pocket', 5));
   let els = elementsOf(exportNow(st));
   const guides = els.filter((e) => e.cutType === 'guide');
-  eq(guides.length, 2, 'Stock: the board outline + the UNASSIGNED part B as guide lines, no guide line for part A (it has its own record)');
+  eq(guides.length, 1, 'Stock: the board outline ALONE (TASK 825, owner turn 2819: a Stock writes only its own outline: no guide line for the unassigned part B, none for part A)');
   const pocketA = els.filter((e) => e.cutType === 'pocket');
   eq(pocketA.length, 1, 'part A is pocketed by its own record');
   ok(!guides.some((e) => e.geom === pocketA[0].geom), 'no guide line along part A: ' + guides.map((e) => e.geom).join(' | '));
-  ok(guides.some((e) => /M 110 10 /.test(e.geom)), 'part B keeps its guide line: ' + guides.map((e) => e.geom).join(' | '));
+  ok(!guides.some((e) => /M 110 10 /.test(e.geom)), 'part B (no record) has no guide line: ' + guides.map((e) => e.geom).join(' | '));
   V2_PLAN.clear();
 
   // TASK 814: an Outside plate with a hole assigned Guide still cuts the hole (the Guide is drawn, never cut: it owns no loop) and the guide is written besides

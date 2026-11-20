@@ -42,13 +42,21 @@ export function constraintTargets(c, shapes = []) {
     // a joints-only constraint (vertical / horizontal ...) binds the shape holding ALL its joints (task 820: the line a-b, not an arc that
     // merely shares an end); a 4-joint one (parallel, perpendicular, equal of two lines) is resolved per pair [j0,j1] [j2,j3]. Only a group no
     // one shape holds (a coincident of two shapes' points) falls back to every shape having one of its joints.
-    const holders = (js) => {
+    const holders = (js, strict = false) => {
       const all = shapes.filter((s) => Array.isArray(s.joints) && js.every((j) => s.joints.includes(j)));
-      return all.length ? all : shapes.filter((s) => Array.isArray(s.joints) && s.joints.some((j) => js.includes(j)));
+      return all.length || strict ? all : shapes.filter((s) => Array.isArray(s.joints) && s.joints.some((j) => js.includes(j)));
     };
     const js = Array.isArray(c.joints) ? c.joints : [];
-    const groups = js.length === 4 ? [js.slice(0, 2), js.slice(2)] : [[...joints]];
-    for (const g of groups) if (g.length) holders(g).forEach((s) => shapeIds.add(s.id));
+    // task 825: a dimension / midpoint binds exactly what the panel's constraintGeometryText names, so no any-joint fallback: a width = its line; a diagonal (two
+    // corners of no one line) = the two points only; a point-to-line dimension (point, then the line's two joints) and a midpoint (the line's two joints, then the
+    // point) = that line (the point is a joint, no shape).
+    const lineOf = js.length === 3 && c.type === 'distance' ? js.slice(1) : js.length === 3 && c.type === 'midpoint' ? js.slice(0, 2) : null;
+    if (lineOf) holders(lineOf, true).forEach((s) => shapeIds.add(s.id));
+    else if (c.type === 'distance' && js.length === 2) holders(js, true).forEach((s) => shapeIds.add(s.id));
+    else {
+      const groups = js.length === 4 ? [js.slice(0, 2), js.slice(2)] : [[...joints]];
+      for (const g of groups) if (g.length) holders(g).forEach((s) => shapeIds.add(s.id));
+    }
   }
   return { joints, shapes: shapeIds };
 }

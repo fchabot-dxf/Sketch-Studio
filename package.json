@@ -30,6 +30,7 @@
     "#ui/*": "./packages/ui/*"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@salusoft89/planegcs": "^1.1.7",
     "happy-dom": "21.0.4"
   }

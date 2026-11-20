@@ -19,7 +19,7 @@
 //  them (before the first of them that the in-tool rule puts after it, else after the last of them: no extra tool change); a new tool goes right after the
 //  operation that comes before it in the default order (at the top when none does). The v2 migration orders an old document's operations by its stored order.
 // An operation's regions are listed in the plan's order.
-import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS, CUT_TYPES, STOCK_TYPE_ID } from './shaper.js';
+import { cutTypeById, cutTypeHasParam, effectiveCutRecord, defaultCutRecord, CUTTER_SHAPES, BIT_PRESETS, CUT_TYPES, STOCK_TYPE_ID } from './shaper.js';
 import { parseKey, loopsWithPolygons, clearingWords, planEntries, recordOf, resolveEntry, isTicked } from './cut-plan.js'; // TASK 745: clearingWords; TASK S1: the store's entries
 import { storeOps, planKeyOf } from './operations-store.js'; // TASK S1: the stored operations
 import { ownedLoopIds } from '#core/profile-model.js';
@@ -180,10 +180,11 @@ function describe(op) {
   const len = lengthLabel;
   const type = cutTypeById(op.cutType);
   const typeLabel = (type && type.menuLabel) || op.cutType;
-  const s = type && type.opRank === 0 ? {} : op.settings || {}; // a Guide / the Stock: no depth or offset in its words (as before its settings were declared)
+  const s = op.cutType === 'stock' ? {} : op.settings || {}; // the Stock: its plain row. TASK 825 (V4): a Guide's words show the values that make it its own operation (S1: depth / offset / bit are written per element), as the cut types show theirs
   const n = op.records.length, chains = op.records.every((r) => r.target.kind === 'chain');
   const regions = `${n} ${chains ? (n === 1 ? 'path' : 'paths') : (n === 1 ? 'region' : 'regions')}`;
   let depthText = s.depth === undefined ? null : s.depth === 'unset' ? 'depth unset' : len(s.depth);
+  if (op.cutType === 'guide' && s.depth === 'unset') depthText = null; // TASK 825 (V4): a Guide drawn without a depth keeps its plain row (every Guide starts so: nothing to tell apart)
   let detail = null;
   if (type && type.levelsOp) { // TASK 792: a Roughing / Contour operation: its levels (the depths its cuts are made at, from the derivation) and the step / resolution
     const levelsOf = (r) => [...new Set(r.cuts.map((c) => Number(c.terrace ? c.terrace.depth : c.rec && c.rec.cutDepth)).filter(Number.isFinite))];
@@ -219,6 +220,7 @@ function describe(op) {
     detail = (detail ? detail + ', ' : '') + words;
   }
   if (s.offset) detail = (detail ? detail + ', ' : '') + `offset ${len(s.offset)}`;
+  if (op.cutType !== 'stock' && !op.tool && s.bit > 0 && Math.abs(s.bit - defaultCutRecord().toolDia) > 1e-6) detail = (detail ? detail + ', ' : '') + `bit ${len(s.bit)}`; // TASK 825 (V4): a Guide's own bit (it is no tool heading: a Guide is not cut) when it is not the default one
   const what = [typeWords, depthText].filter(Boolean).join(' · ');
   const tail = detail ? ` · ${detail}` : '';
   return { typeLabel, depthText, detail, regions,

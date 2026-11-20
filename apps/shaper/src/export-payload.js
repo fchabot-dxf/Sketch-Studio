@@ -73,8 +73,8 @@ export function bitCentrePaths(state, written) {
   return out;
 }
 
-/** TASK 798: the Export step's ONE line while an operation is unticked (phone-readable): "Exporting 2 of 4 operations (unticked: Contour 1 mm (⅛″ ball nose),
- *  Outside 19 mm (¼″ end mill)). Place it with the same anchor as the earlier file." — `ops` = describeOperations(state) (every listed operation, with its `on` /
+/** TASK 798: the Export step's ONE line while an operation is unticked (phone-readable): "Exporting 2 of 4 operations (unticked: 3. Contour · 1 mm (⅛″ ball nose),
+ *  4. Outside · 19 mm (¼″ end mill)). Place it with the same anchor as the earlier file." — `ops` = describeOperations(state) (every listed operation, with its `on` /
  *  `tickable`; the Stock is not counted: it is in every file). Everything ticked (or nothing to tick): ''. */
 export function exportTickLine(ops) {
   const tickable = ops.filter((op) => op.tickable !== false);
@@ -82,6 +82,6 @@ export function exportTickLine(ops) {
   if (on.length === tickable.length) return '';
   const n = tickable.length, ops1 = n === 1 ? 'operation' : 'operations';
   if (!on.length) return `Exporting 0 of ${n} ${ops1}: every one is unticked. Tick one in Prepare's Operations list.`;
-  const name = (op) => [op.typeLabel, op.depthText].filter(Boolean).join(' ') + (op.tool ? ` (${op.tool.label})` : '');
+  const name = (op) => `${ops.indexOf(op) + 1}. ${op.rowText}` + (op.tool ? ` (${op.tool.label})` : ''); // TASK 825 (V2): the operation's words in the Operations list (its row's text: a Spiral pocket is "Pocket (spiral) · 6 mm") and its number there
   return `Exporting ${on.length} of ${n} ${ops1} (unticked: ${tickable.filter((op) => op.on === false).map(name).join(', ')}). Place it with the same anchor as the earlier file.`;
 }

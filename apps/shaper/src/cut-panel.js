@@ -779,7 +779,7 @@ export function createCutPanel(hostEl, opts = {}) {
     place('wallSide', isContour ? current.wallSideFree || 'Its shapes\u2019 model says which side: a slope or the STL\u2019s levels.' : false);
     renderPresets($('.cut-wall-side'), isContour ? WALL_SIDE_PRESETS : [], 'wallSide', current.record && current.record.wallSide === 'outside' ? 'outside' : 'inside');
     // TASK S2 (owner turn 2740): a Roughing's / Contour's Depth is its ONE depth, a live row: empty = From model (each shape to its own model depth), a value = the cut stops there
-    if (heights) { depthInput.value = current.depthFromModel ? '' : fieldText(Number(current.cutDepth)); depthInput.placeholder = 'From model'; } else depthInput.placeholder = 'unset';
+    if (heights) { depthInput.value = current.depthFromModel ? '' : fieldText(Number(current.cutDepth)); depthInput.placeholder = Number(current.partDepth) > 0 && current.depthFromModel ? `From model (${fieldText(Number(current.partDepth))})` : 'From model'; } else depthInput.placeholder = 'unset'; // From model: the model's depth beside it when it is known
     place('smoothing', declares('smoothing') && Boolean(current.levels)); // TASK 809: an operation on a part with levels (an STL)
     smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.05 mm = 0.002 in: a tolerance, always decimals
     place('rasterAngle', clearing ? clearing === 'raster' || 'Only Raster has an angle: choose Raster in Clearing to set this.' : false);
@@ -841,10 +841,10 @@ export function createCutPanel(hostEl, opts = {}) {
     shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${angleText(Number(current.cutterAngle) || 90, { show: 'deg' })}` : shapeName;
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
-    applyTabs(); // TASK 810: last, on the rows the card logic shows
-    // TASK S2 (owner turn 2717): with shapes selected and no operation open the card is the type menu only: no rows, no tabs
+    // TASK S2 (owner turn 2717): with shapes selected and no operation open the card is the type menu only: no rows, no tabs (set BEFORE applyTabs measures the tabs)
     const typeOnly = current.mode === 'shape';
     rowsEl.hidden = typeOnly;
+    applyTabs(); // TASK 810: last, on the rows the card logic shows
     if (typeOnly) tabsEl.hidden = true;
   };
   // TASK S2: the header, the chips, the Geometry row and a Contour's part line of the card in hand (see above)

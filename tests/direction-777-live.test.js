@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/777');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -42,7 +43,11 @@ try {
     await sleep(140);
   };
   const toScreen = (x, y) => evalJs(`(() => { const s = document.getElementById('prepare-canvas'); const p = s.createSVGPoint(); p.x = ${x}; p.y = ${y}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
-  const clickWorld = async (x, y) => { const p = await toScreen(x, y); await press(p.x, p.y); };
+  const clickWorldRaw = async (x, y) => { const p = await toScreen(x, y); await press(p.x, p.y); };
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+  // operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
+  const s2Steps = { get phone() { return false; }, evalJs, waitFor, clickEl: null };
+  const clickWorld = (x, y) => clickOpenLive(s2Steps, () => clickWorldRaw(x, y));
 
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?analytics=off`, 10000);

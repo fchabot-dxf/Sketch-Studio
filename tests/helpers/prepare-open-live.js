@@ -17,6 +17,7 @@ export async function okLive(t) {
 export async function openOpLive(t, opId) {
   const folded = t.phone && await t.evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`);
   if (folded) { await t.clickEl('#prepare-ops .ops-head'); await sleep(250); }
+  await t.waitFor(`!!document.querySelector('#prepare-ops .ops-row[data-id="${opId}"]')`, `the list row of ${opId} (listed: ` + JSON.stringify(await t.evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => r.dataset.id + ' ' + r.textContent)`)) + ')');
   await t.clickEl(`#prepare-ops .ops-row[data-id="${opId}"] .ops-pick`);
   await t.clickEl(`#prepare-ops .ops-row[data-id="${opId}"] .ops-edit`);
   await t.waitFor(`(() => { const a = document.querySelector('#prepare-panel .cut-actions'); return a && !a.hidden && window.__prepareView.activeOp() && window.__prepareView.activeOp().id === ${JSON.stringify(opId)}; })()`, `operation ${opId} open`);
@@ -33,9 +34,9 @@ export async function clickOpenLive(t, click) {
 }
 
 export async function stepLive(t, change) {
-  const before = await openId(t), h = await t.evalJs(`window.__designController.state.history.length`);
-  await change();
-  await sleep(150);
+  const before = await openId(t), h = await t.evalJs(`window.__designController && window.__designController.state ? window.__designController.state.history.length : 0`);
+  const out = await change();
   const now = await openId(t);
   if (now && (now !== before || await t.evalJs(`window.__designController.state.history.length`) > h)) { await okLive(t); await openOpLive(t, now); }
+  return out;
 }

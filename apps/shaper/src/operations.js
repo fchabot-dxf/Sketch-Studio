@@ -264,12 +264,12 @@ export function describeOperations(state, entries = planEntries(), frame = null)
   const ops = [];
   for (const stored of storeOps()) {
     const records = (byOp.get(stored.id) || []).map(({ i, ...r }) => r);
-    if (!records.length && stored.geometry.length) continue; // S1: an operation none of whose shapes derives a cut is not listed (stale shapes)
-    const rec = records.length ? records[0].rec : { cutType: stored.type, ...stored.settings }; // TASK S2: an EMPTY operation (no shapes yet) is listed, with its own settings
+    const rec = records.length ? records[0].rec : { cutType: stored.type, ...stored.settings }; // TASK S2: EVERY operation is listed (an empty one, one that cuts nothing), with its own settings
     const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, shapes: stored.geometry.map((r) => r.key), first: records.length ? byOp.get(stored.id)[0].i : Infinity, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable); TASK S2: `shapes` = its geometry keys
     op.rank = levelsRank(op);
     Object.assign(op, describe(op), { heading: toolHeading(op.tool) });
     if (!stored.geometry.length) op.regions = EMPTY_WORDS; // TASK S2
+    else if (!records.length) { const n = stored.geometry.length; op.regions = `${n} shape${n === 1 ? '' : 's'}: nothing to cut`; } // TASK S2: listed all the same (it is opened from its row)
     ops.push(op);
   }
   return ops;

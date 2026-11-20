@@ -39,6 +39,9 @@ const expand = (c) => {
 };
 // advisor ruling 1: the cases whose Guides hold different Depth / Offset / Bit (one Guide operation per value set now)
 const GUIDE_ROWS = new Set(['matrix__guide-mixed-params']);
+// TASK S2: every operation is listed (an operation is opened from its row): the cases with a Roughing that cuts nothing (refused: no Stock / no boundary shape) list
+// that row too, "1 shape: nothing to cut" (before S2 it was not listed); their files, previews, Paths and 3D are unchanged
+const CUT_NOTHING_ROWS = new Set(['boundary-810-node__0045__7c1e6253', 'boundary-810-node__0049__85e437cf', 'boundary-810-node__0050__6ae4dfb1', 'boundary-810-node__0058__f88413f7']);
 const ASSERTED = ['a', 'b', 'c', 'dContent', 'eNoId', 'f'];
 
 export async function runCorpus(part, parts) {
@@ -65,6 +68,7 @@ export async function runCorpus(part, parts) {
     const now = measureNow(state), base = baseline[c.name];
     for (const k of ASSERTED) {
       if (k === 'eNoId' && GUIDE_ROWS.has(c.name)) { ok(now[k] !== base[k], `${c.name}: Guides with different values list one operation each (advisor ruling 1)`); continue; }
+      if (k === 'eNoId' && CUT_NOTHING_ROWS.has(c.name)) { ok(now[k] !== base[k] && describeOperations(state, planEntries()).some((o) => /: nothing to cut$/.test(o.regions)), `${c.name}: its Roughing that cuts nothing is listed (TASK S2)`); continue; }
       if (now[k] !== base[k]) differ.push(`${c.name}.${k}`);
       checks++;
     }

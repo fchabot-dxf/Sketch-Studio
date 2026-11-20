@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './cdp-browser.js';
 import { probe, tipProblems } from './tooltip-live.js';
+import { clickOpenLive, stepLive } from './prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
 
@@ -78,17 +79,22 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
     const boxOf = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect();
       const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
       return { x, y, w: Math.round(r.width), h: Math.round(r.height), onTop: !!hit && (hit === e || e.contains(hit)), hit: hit ? hit.outerHTML.slice(0, 160) + " in " + (hit.parentElement ? hit.parentElement.outerHTML.slice(0, 120) : "") : null }; })()`);
-    const clickEl = async (sel) => {
+    const clickElRaw = async (sel) => {
       const p = await boxOf(sel);
       assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
       await press(p.x, p.y);
       return p;
     };
-    const clickWorld = async (x, y) => {
+    const clickWorldRaw = async (x, y) => {
       const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y};
         const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
       await press(p.x, p.y);
     };
+    // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+    // operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step (OK, opened again)
+    const raw = { phone, evalJs, waitFor, clickEl: clickElRaw };
+    const clickEl = (sel) => stepLive(raw, () => clickElRaw(sel));
+    const clickWorld = (x, y) => clickOpenLive(raw, () => clickWorldRaw(x, y));
     const activeStage = () => evalJs(`(() => { const e = document.querySelector('.sk-sidebar-stage.active') || document.querySelector('.sk-header-tab.active'); return e ? e.dataset.tab : null; })()`);
     const openMode = async (mode) => {
       for (let i = 0; i < 5; i++) {
@@ -122,7 +128,8 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
       leftover: document.querySelectorAll('#prepare-cut-group .sk-leftover').length, band: document.querySelectorAll('#prepare-cut-group .sk-band').length,
       d: [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getAttribute('d').length).reduce((a, b) => a + b, 0) })`);
     const pickType = async (id) => { await clickEl('#prepare-panel .cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu'); await clickEl(`.cut-type-opt[data-id="${id}"]`); };
-    const typeField = async (cls, v) => { await evalJs(`(() => { const i = document.querySelector('${cls}'); i.value = '${v}'; i.dispatchEvent(new Event('change')); })()`); await sleep(200); };
+    const typeFieldRaw = async (cls, v) => { await evalJs(`(() => { const i = document.querySelector('${cls}'); i.value = '${v}'; i.dispatchEvent(new Event('change')); })()`); await sleep(200); };
+    const typeField = (cls, v) => stepLive(raw, () => typeFieldRaw(cls, v)); // TASK S2: its own step
     const openClearing = async () => { await clickEl('#prepare-panel .cut-clear-trigger'); await waitFor(`!document.querySelector('.cut-clear-pop').hidden`, 'the Clearing popover'); };
     const pickClearing = async (id) => { await openClearing(); await clickEl(`.cut-clear-opt[data-clearing="${id}"]`); await waitFor(`document.querySelector('.cut-clear-pop').hidden`, 'the popover closes'); await sleep(300); };
     const rec = (x, y) => evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/packages/core/loop-geometry.js'), import('/tests/helpers/plan-v2.js')]).then(([L, G, C]) => {
@@ -187,7 +194,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
       else await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper app ready');
       await setUnit(phone ? 'in' : 'mm');
     }
-    return { phone, EVIDENCE_DIR, send, evalJs, waitFor, close, shot, shotWorld, press, clickEl, clickWorld, openMode, setUnit, draw, card, look, pickType, typeField,
+    return { phone, EVIDENCE_DIR, send, evalJs, waitFor, close, shot, shotWorld, press, clickEl, clickElRaw, clickWorld, clickWorldRaw, openMode, setUnit, draw, card, look, pickType, typeField,
       openClearing, pickClearing, rec, download, fileElements, export2d, preview2dElements, setLoop, markers, dlDir };
   } catch (e) { await close(); throw e; }
 }

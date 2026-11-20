@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const EVIDENCE_DIR = path.resolve('.evidence/728');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -33,7 +34,7 @@ const shot = async (name, sels = null) => {
 const mouse = (type, x, y, buttons = 0, clickCount) => send('Input.dispatchMouseEvent', { type, x, y, button: (type === 'mouseMoved' && !buttons) ? 'none' : 'left', buttons, clickCount: clickCount != null ? clickCount : type === 'mouseMoved' ? 0 : 1 });
 const click = async (x, y) => { await mouse('mouseMoved', x, y); await sleep(40); await mouse('mousePressed', x, y, 1); await sleep(40); await mouse('mouseReleased', x, y); await sleep(250); };
 const key = (k, code, vk, mods = 0, text = '') => sendRealKey(send, k, code, vk, mods, text);
-const clickEl = async (sel) => {
+const clickElRaw = async (sel) => {
   const find = `[...document.querySelectorAll(${JSON.stringify(sel)})].find((e) => e.getBoundingClientRect().width > 0)`;
   await waitFor(`!!(${find})`, sel + ' visible');
   await evalJs(`(${find}).scrollIntoView({ block: 'nearest', inline: 'nearest' })`);
@@ -43,11 +44,16 @@ const clickEl = async (sel) => {
   assert.ok(p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
   await click(p.x, p.y);
 };
-const clickWorld = async (x, y) => {
+const clickWorldRaw = async (x, y) => {
   const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${x}; pt.y = ${y};
     const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
   await click(p.x, p.y);
 };
+// TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the steps of before S2 in today's terms (tests/helpers/prepare-open-live.js): a click on the canvas = OK on the open
+// operation, the click, and the clicked shape's operation opened (it is in one); a press / a typed field that changes the open operation = its own step
+const s2Steps = { get phone() { return false; }, evalJs, waitFor, clickEl: clickElRaw };
+const clickEl = (sel) => stepLive(s2Steps, () => clickElRaw(sel));
+const clickWorld = (x, y) => clickOpenLive(s2Steps, () => clickWorldRaw(x, y));
 // a Shaper stage: the header tab on a desktop; on a phone (no header bar) the drawer's stage row (task 619)
 const activeStage = () => evalJs(`(() => { const e = document.querySelector('.sk-sidebar-stage.active') || document.querySelector('.sk-header-tab.active'); return e ? e.dataset.tab : null; })()`);
 const openMode = async (mode, phone) => {

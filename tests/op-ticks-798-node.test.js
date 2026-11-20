@@ -43,7 +43,8 @@ try {
   const K = Object.fromEntries(['S', 'P', 'Q', 'H'].map((n) => [n, keyOf('loop', loops.find((l) => l.edges.includes(`${n}s0`)).id)]));
   app.modes.showMode('prepare');
   let pv = app.prepare.view();
-  const edit = (k, o) => { pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? pv.applyCutTypeToSelected(v) : pv.setFieldOnSelected(f, v)); };
+  // TASK S2: the shape picked, its type (a NEW operation, open), its fields set in it, OK
+  const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? app.prepare.pickType(v) : pv.setOpField(f, v)); app.prepare.ok(); };
   edit('S', { cutType: 'stock' });
   edit('Q', { cutType: 'pocket', toolDia: 6.35, cutDepth: 6 });
   edit('H', { cutType: 'interior', toolDia: 6.35, cutDepth: 19 });
@@ -151,7 +152,8 @@ try {
 
   // 6. a design with NO Stock (advisor turn 2705, option b): a PARTIAL file starts with the frame guide = the full file's drawn extent (the union of its elements'
   //    boxes), in the Stock guide's encoding; the everything-ticked file is unchanged (no guide); the Paths view skips the guide
-  app.press([...app.document.querySelectorAll('#prepare-ops .ops-row')].find((r) => r.dataset.id === idOf('stock')).querySelector('.ops-del'));
+  const stockRow = () => [...app.document.querySelectorAll('#prepare-ops .ops-row')].find((r) => r.dataset.id === idOf('stock'));
+  app.press(stockRow().querySelector('.ops-pick')); app.press(stockRow().querySelector('.ops-del')); // TASK S2: the row selected, then its X
   eq(storeOps().map((o) => o.type), ['pocket', 'interior', 'exterior'], '6: the Stock binned: no Stock');
   const fullNs = shaperSvgOf(st, planEntries());
   eq(exportFileOf(st).svg, fullNs, '6: everything ticked: the plain whole-plan file (no frame guide)');

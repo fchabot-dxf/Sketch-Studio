@@ -20,8 +20,10 @@ import { buildRelief } from '#core/relief-model.js';
 import { steppedTerraces, sameOutline, STEP_DEPTH, SAME_OUTLINE_TOL_MM } from '#core/stepped-cut.js';
 import { planEntries, planReliefItems, lastStepDepth } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection, slopeFromRegion } from '../apps/shaper/src/fusion-import.js';
-import { exportEncoding, availableTypes } from '../apps/shaper/src/shaper.js';
+import { exportEncoding, CUT_TYPES } from '../apps/shaper/src/shaper.js';
+import { typeRefusal } from '../apps/shaper/src/cut-plan.js'; // TASK S2: the one compatibility rule
 import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -119,14 +121,16 @@ const exportOf = (app) => exportShaperSVG({ state: app.state, entries: planEntri
 const elems = (svg) => [...svg.matchAll(/<(path|circle) ([^>]*?)\/>/g)].map((m) => ({ tag: m[1], type: /shaper:cutType="([^"]+)"/.exec(m[2])[1], depth: (/shaper:cutDepth="([^"]+)"/.exec(m[2]) || [])[1], geom: m[2].replace(/ fill=.*$/, '') }));
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
-  const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+  const pressElRaw = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+  const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const pc = doc.getElementById('prepare-canvas');
-  const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+  const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const menu = () => { pressEl('.cut-type-trigger'); const ids = [...doc.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.disabled ? ':off' : '')); pressEl('.cut-type-trigger'); return ids; };
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const stepRowShown = () => q('.cut-row[data-row="stepDepth"]').style.display !== 'none';
-  const setStep = (text) => { const inp = q('.cut-step-depth'); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+  const setStep = (text) => editStep(app, () => { const inp = q('.cut-step-depth'); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); }); // TASK S2: its own step
   return { q, pressEl, clickAt, menu, pick, note, stepRowShown, setStep };
 };
 const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === cutType);
@@ -141,8 +145,8 @@ const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === 
     importFusionSelection(payload('08-spline'), { controller: app.controller, prepare: app.prepare });
     ok(!recAt('pocket')[1].slope, '08-spline: the pocket carries no slope');
     h.clickAt(60, -40);
-    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], 'a vertical pocket: the plain types + Roughing (TASK 792: Roughing, which replaced the stepped types, is offered on every closed region)');
-    eq(availableTypes('loop').map((t) => t.id), ['exterior', 'interior', 'pocket', 'online', 'guide', 'stock', 'roughing'], 'availableTypes without a record: Roughing, never the Contour (TASK 792)');
+    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, 'a vertical pocket: the plain types + Roughing (TASK 792: Roughing, which replaced the stepped types, is offered on every closed region)');
+    eq(CUT_TYPES.filter((t) => !typeRefusal(t.id, ['loop:any'])).map((t) => t.id), CUT_TYPES.map((t) => t.id), 'a closed shape takes every type (TASK S2: the Contour too: an operation type of its own)');
 
     // the drafted pocket (02): Stepped pocket offered on the pocket only
     importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare });
@@ -158,7 +162,7 @@ const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === 
     h.clickAt(10, -10); // the outline (no slope)
     eq(h.menu().filter((id) => id.startsWith('stepped')), [], 'TASK 792: no stepped type is offered anywhere any more');
     h.clickAt(60, -40); // the pocket
-    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], 'the sloped pocket: Roughing, right after Pocket (TASK 792: it replaced the Stepped pocket)');
+    eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, 'the sloped pocket: Roughing, right after Pocket (TASK 792: it replaced the Stepped pocket)');
     ok(!h.stepRowShown(), 'a Pocket has no step row');
 
     h.pick('roughing');

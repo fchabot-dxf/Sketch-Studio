@@ -107,7 +107,7 @@ const CHANGED = {
   boundaryTool: (rec) => boundaryOf(rec).tool !== ROUGH_BOUNDARY.defaultTool,
   boundaryOffset: (rec) => boundaryOf(rec).offset != null,
   walls: (rec, op, c) => Boolean(c.walls) && c.walls.value !== c.walls.defaultId,
-  wallSide: (rec) => rec.wallSide === 'outside', // TASK S2: Inside is what a Contour starts with
+  wallSide: (rec, op, c) => c.wallSideFree && rec.wallSide === 'outside', // TASK S2: Inside is what a Contour starts with; it applies only where the model does not say the side
   topDepth: (rec) => Number(rec.topDepth) > 0,
   bottomDepth: (rec) => rec.bottomDepth != null && Number(rec.bottomDepth) > 0,
   floorAllowance: (rec) => Number(rec.floorAllowance) > 0,

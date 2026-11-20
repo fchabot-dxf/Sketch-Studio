@@ -7,12 +7,15 @@ import { worldToScreen } from '#ui/coords.js';
 
 import { importShaperFile } from '../apps/shaper/src/cut-import.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { editStep } from './helpers/prepare-open.js'; // TASK S2: a change of the open operation = its own step
+import { storeOps } from '../apps/shaper/src/operations-store.js';
 
 const app = await open({ host: 'shaper' });
 try {
   const doc = app.document;
   const q = (sel) => doc.querySelector(sel);
-  const pressEl = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
+  const pressElRaw = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
+  const pressEl = (sel) => editStep(app, () => pressElRaw(sel)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const openMode = (mode) => { pressEl(`.sk-header-tab[data-tab="${mode}"]`); assert.strictEqual(q('.sk-header-tab.active').dataset.tab, mode, 'the ' + mode + ' tab opens'); };
   const plan = () => [...V2_PLAN.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const recs = () => plan().map(([, r]) => r);
@@ -50,6 +53,7 @@ try {
   assert.strictEqual(q('.cut-card').hidden, false, 'the selection and the card survive an undo that only changed the plan');
 
   // ── DEPTH: change -> undo -> old depth ──
+  app.prepare.edit(storeOps()[0].id); // TASK S2: the operation opened (the list's Edit): its depth is edited in its card
   h0 = hist();
   pressEl('.cut-step[data-d="1"]');
   assert.strictEqual(hist(), h0 + 1, 'a depth step is ONE history step');

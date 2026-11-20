@@ -11,7 +11,8 @@
 //  8. in the open card: a shape row's X takes the shape out; a type change (refused with its line: the Stock and two shapes);
 //  9. (owner ruling turn 2713) the CONTOUR is a plain operation: its own Depth and Wall side; editing a Roughing's depth does not move it; no allowance coupling;
 // 10. the bin: of the open operation = Cancel + delete; of another operation while one is open = OK first; Undo while open = Cancel; leaving Prepare = OK;
-// 11. an EMPTY operation is listed "no shapes yet: click shapes to add", saved (version 4) and read back; an edited operation keeps its place in the user's order.
+// 11. an EMPTY operation is listed "no shapes yet: click shapes to add", saved (version 4) and read back; an edited operation keeps its place in the user's order;
+// 12. (advisor turn 2722) a Fusion import while an operation is open: the open edit is confirmed first (its own undo step), the import is its own step.
 import assert from 'node:assert/strict';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
@@ -20,6 +21,7 @@ import { findLoops } from '#core/loop-finder.js';
 import { keyOf, planEntries } from '../apps/shaper/src/cut-plan.js';
 import { storeOps, captureStore, reorderOps } from '../apps/shaper/src/operations-store.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
+import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
@@ -226,6 +228,21 @@ try {
   pressEl(`#prepare-ops .ops-row[data-id="${contourId}"] .ops-pick`); app.press(rowBtn(contourId, 'ops-edit'));
   tab('tool'); pressEl('.cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]'); pressEl('.cut-ok');
   eq([storeOps().findIndex((o) => o.id === contourId), storeOps()[place].settings.toolDia], [place, 6.35], '11: an edited operation keeps its place (the user\'s list order)');
+
+  // 12. a Fusion import while an operation is open
+  const h12 = hist(), n12 = storeOps().length;
+  pressEl(`#prepare-ops .ops-row[data-id="${contourId}"] .ops-pick`); app.press(rowBtn(contourId, 'ops-edit'));
+  tab('heights'); typed('.cut-depth', '7');
+  const line = (x1, y1, x2, y2) => ({ type: 'line', x1, y1, x2, y2 });
+  const sq = (x0, y0, x1, y1) => ({ closed: true, segments: [line(x0, y0, x1, y0), line(x1, y0, x1, y1), line(x1, y1, x0, y1), line(x0, y1, x0, y0)] });
+  const res = importFusionSelection({ action: 'selection_data', version: 1, units: 'mm', coordSystem: { yAxis: 'up', frame: 'plane-2d' }, source: { name: 'Body1' }, selectionId: 'sel-s2',
+    regions: [{ id: 'r0', label: 'Plate', cutType: 'pocket', depthMm: 3, through: false, outer: sq(200, 0, 240, 40), holes: [] }], chains: [], warnings: [] }, { controller: app.controller, prepare: app.prepare });
+  ok(res.ok, '12: the import went in');
+  eq([openId(), hist() - h12, storeOps().find((o) => o.id === contourId).settings.cutDepth, storeOps().length > n12], [null, 2, 7, true], '12: the open edit confirmed first (one step), then the import (its own step)');
+  app.undo();
+  eq([storeOps().length, storeOps().find((o) => o.id === contourId).settings.cutDepth], [n12, 7], '12: Undo: the import gone, the confirmed edit kept');
+  app.undo();
+  eq(storeOps().find((o) => o.id === contourId).settings.cutDepth, 5, '12: Undo again: the edit gone');
 
   console.log(`opfirst-ui-s2-node: ${checks} checks passed`);
 } finally {

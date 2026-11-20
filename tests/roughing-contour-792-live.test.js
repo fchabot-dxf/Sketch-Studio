@@ -151,12 +151,12 @@ async function phase(what) {
   await clickEl('#prepare-panel .cut-type-trigger');
   await waitFor(`!document.querySelector('.cut-type-menu').hidden`, what + ': the menu');
   const menu = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id)`);
-  assert.deepStrictEqual(menu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], what + ': Roughing in the menu, after Pocket (no Contour there)');
+  assert.deepStrictEqual(menu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, what + ': Roughing in the menu, after Pocket (no Contour there)');
   let t0 = Date.now();
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': Roughing set', 60000);
   timings[what].roughing = Date.now() - t0;
-  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'contour', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing, TASK 810 the Heights and the boundary; no adaptive stepping)');
+  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance', 'finishAllowance', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing, TASK 810 the Heights and the boundary; no adaptive stepping)');
   await tab('tool');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0 (no Contour yet)');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-contour-modes .is-active').textContent`), 'Off', what + ': Contour Off');

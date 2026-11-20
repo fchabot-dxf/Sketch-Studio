@@ -92,23 +92,30 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     refreshCutPanel();
   }
   const sketchState = () => (getController() ? getController().state : null);
-  // TASK S2: the EDIT SESSION of the open operation: begun with the undo point of the state before it (the same pre-edit snapshot as cutEdit); its edits change the
-  // store with no history (they preview live); OK keeps the undo point (dropped when nothing changed), Cancel puts the snapshot back and drops it.
-  let session = null; // { opId, pre (capturePrepare), before (comparable), n (the history length after its undo point) }
+  // TASK S2: the EDIT SESSION of the open operation: the state before it is kept (`pre`); its first change takes the undo point of that state (the same pre-edit
+  // snapshot as cutEdit: changed()), its changes then go to the store with no history (they preview live); OK keeps the undo point (dropped when nothing changed in
+  // the end), Cancel puts the state back and drops it. Opening and cancelling with no change touch no history (Redo is kept).
+  let session = null; // { opId, pre (capturePrepare), before (comparable), n (the history length after its undo point; null before its first change) }
   function beginSession() {
-    const st = sketchState(), pre = capturePrepare();
-    if (st) st.saveState('cut plan edit');
-    session = { opId: null, pre, before: comparablePrepare(pre), n: st ? st.history.length : 0 };
+    const pre = capturePrepare();
+    session = { opId: null, pre, before: comparablePrepare(pre), n: null };
+  }
+  function changed() { // before a change of the session: its undo point, once
+    const st = sketchState();
+    if (!session || session.n !== null || !st) return;
+    st.saveState('cut plan edit');
+    session.n = st.history.length;
   }
   let rowId = null; // TASK S2 (owner turn 2719): the SELECTED (tapped) row of the list: it alone shows Edit, Duplicate, X
   // Duplicate (the selected row's, the open card's): OK on the open operation first, then the copy is created OPEN (Cancel removes it)
-  function duplicateAndOpen(opId) { commitSession(); const op = opById(opId); if (!op || !prepareView) return; beginSession(); const copy = duplicateOperation(op, sketchState()); rowId = copy.id; openSession(copy.id); }
+  function duplicateAndOpen(opId) { commitSession(); const op = opById(opId); if (!op || !prepareView) return; beginSession(); changed(); const copy = duplicateOperation(op, sketchState()); rowId = copy.id; openSession(copy.id); }
   // the list's Edit: open the operation (OK on another open one first); nothing when it is the open one
   function openForEdit(opId) { if (!prepareView || (session && session.opId === opId)) return; commitSession(); if (!opById(opId)) return; beginSession(); openSession(opId); }
   function openSession(opId) { session.opId = opId; line = null; prepareView.openOp(opId); prepareView.refreshLook(); refreshCutPanel(); }
   function sessionEdit(apply) {
     if (!session || !prepareView) return;
     line = null;
+    changed();
     apply();
     prepareView.syncActive(); prepareView.refreshLook();
     refreshCutPanel();
@@ -118,7 +125,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const st = sketchState(), s0 = session;
     session = null;
     if (!keep) applyPrepare(s0.pre);
-    if (st && (!keep || comparablePrepare(capturePrepare()) === s0.before)) st.discardSnapshotAt(s0.n);
+    if (st && s0.n !== null && (!keep || comparablePrepare(capturePrepare()) === s0.before)) st.discardSnapshotAt(s0.n);
     line = null;
     if (prepareView) { prepareView.closeOp(); prepareView.setSelection([]); prepareView.refreshLook(); } // the card closes
     refreshCutPanel();
@@ -144,7 +151,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const fit = picked.filter((k) => !typeRefusal(id, [k])), out = picked.filter((k) => !fit.includes(k));
     const keys = id === STOCK_TYPE_ID ? fit.slice(-1) : fit;
     if (!keys.length) { say(typeRefusal(id, picked)); refreshCutPanel(); return; }
-    beginSession();
+    beginSession(); changed();
     let made;
     if (id === STOCK_TYPE_ID) { stockNotice(keys[0]); made = setStock(keys[0], st).op; } else made = newOperation(id, keys, st);
     openSession(made.id);
@@ -206,7 +213,10 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   const geomSig = (st) => JSON.stringify([[...st.joints.entries()].map(([k, j]) => [k, j.x, j.y]), st.shapes.map((x) => [x.id, x.type, x.joints, x.radius])]);
   function restoreCutPlanFromHistory(snapshot) {
     applyPrepare(snapshot);
-    if (session) { session = null; line = null; if (prepareView) prepareView.closeOp(); } // TASK S2: Undo while an operation is open undoes its session's undo point = Cancel
+    // TASK S2: Undo while an operation is open: with changes, it undoes the session's own undo point (= Cancel: the operation as opened, closed); with none, it is the
+    // plain Undo of the step before, and the operation stays open (its card shows the restored values; gone: closed)
+    if (session && session.n !== null) { session = null; line = null; if (prepareView) prepareView.closeOp(); }
+    else if (session && !opById(session.opId)) { session = null; if (prepareView) prepareView.closeOp(); }
     const designController = getController();
     if (getMode() !== 'prepare' || !designController) return;
     if (prepareView && geomSig(designController.state) === prepareSig) { prepareView.syncActive(); prepareView.refreshLook(); refreshCutPanel(); }

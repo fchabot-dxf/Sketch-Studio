@@ -37,6 +37,7 @@ import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -268,17 +269,20 @@ const drawInto = (app, src) => {
 };
 const harness = (app) => {
   const doc = app.document, q = (s) => doc.querySelector(s);
-  const pressEl = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
-  const clickAt = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const pressElRaw = (s) => { const e = typeof s === 'string' ? q(s) : s; assert(e, s + ' not found'); app.press(e); };
+  const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
+  const clickRaw = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
+  const clickAt = (x, y, o) => clickOpen(app, () => clickRaw(x, y, o)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
   const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
-  const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
+  const typed = (cls, v) => editStep(app, () => typedRaw(cls, v)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const shown = (row) => { const r = q(`.cut-row[data-row="${row}"]`); return r.style.display !== 'none' && !('off' in r.dataset); }; // TASK 813: a row that does not apply stays in place, greyed (data-off): not shown as an applicable row
   const preset = (row, v) => pressEl(`.cut-row[data-row="${row}"] .cut-preset[data-value="${v}"]`);
   const presets = (row) => [...q(`.cut-row[data-row="${row}"]`).querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : ''));
   const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);
-  const toggleLoop = () => { const i = q('.cut-loop'); i.checked = !i.checked; i.dispatchEvent(new app.window.Event('change')); };
+  const toggleLoop = () => editStep(app, () => { const i = q('.cut-loop'); i.checked = !i.checked; i.dispatchEvent(new app.window.Event('change')); }); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const tg = () => doc.querySelector('#prepare-toolpath-group');
   const count = (sel) => tg().querySelectorAll(sel).length;
   return { q, pressEl, clickAt, pick, clearing, note, typed, shown, preset, presets, step, toggleLoop, count };

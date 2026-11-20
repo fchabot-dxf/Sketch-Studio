@@ -12,6 +12,7 @@ import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 import { getSelections } from '../apps/shaper/src/selection-list.js';
+import { clickOpen } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -57,7 +58,8 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
       onSelectionData: (p) => importFusionSelection(p, { controller: app.controller, prepare: app.prepare }),
     });
     const pc = doc.getElementById('prepare-canvas');
-    const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
 
     bridge.handle(FUSION_ACTIONS.SELECTION_DATA, JSON.stringify(FIRST));
     eq(notices.at(-1), 'Added FirstPart: 1 regions, 0 chains', 'a first selection into an empty palette says Added');

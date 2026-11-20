@@ -28,6 +28,7 @@ import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { opKeyOf } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords, addContourV2 } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -139,14 +140,16 @@ const payload = () => ({
   try {
     app.modes.showMode('prepare');
     const st = app.state, doc = app.document, q = (s) => doc.querySelector(s);
-    const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+    const pressElRaw = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
+    const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     const pc = doc.getElementById('prepare-canvas');
-    const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
-    const openAt = (x, y) => { clickAt(x, y); pressEl('.cut-chip'); }; // TASK S2: a click on an assigned shape opens its shape card: its chip opens its operation's card
+    const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
     const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const tabs = () => [...doc.querySelectorAll('.cut-tab')].filter((b) => !b.hidden).map((b) => b.dataset.tab + (b.classList.contains('is-active') ? '*' : '') + (b.querySelector('.cut-tab-dot').hidden ? '' : '.'));
     const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
-    const setField = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+    const setFieldRaw = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+    const setField = (sel, text) => editStep(app, () => setFieldRaw(sel, text)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     const exportOf = () => shaperSvgOf(st, planEntries());
     const pockets = () => [...exportOf().matchAll(/<path [^>]*shaper:cutType="pocket"[^>]*\/>/g)].map((x) => x[0]);
 
@@ -155,7 +158,7 @@ const payload = () => ({
     const [pk, prec] = [...V2_PLAN.entries()].find(([, x]) => x.levels);
     prec.cutType = 'roughing'; prec.stepDepth = 1; prec.toolDia = 6.35; prec.roughLayout = 'nested'; prec.smoothing = 0; // Smoothing off: the pockets are the exact polygons (their coordinates read below)
     const keyBefore = opKeyOf(prec);
-    openAt(5, -5); // the part, outside the window and the boss
+    clickAt(5, -5); // the part, outside the window and the boss
     eq(q('.cut-type-cur').textContent, 'Roughing', 'the part\'s Roughing card');
     eq(tabs(), ['tool*.', 'geometry', 'heights', 'passes.'], 'its tabs: Tool (shown; a dot: the 1/4 in bit is not the default 1/8), Geometry, Heights, Passes (a dot: Nested, Smoothing 0)');
     eq(rows(), ['toolDia', 'cutterShape'], 'the Tool tab: the bit and its shape');
@@ -189,7 +192,7 @@ const payload = () => ({
     eq(keys.length, 2, 'the board and the window regions');
     const [boardKey, windowKey] = keys; // payload order
     V2_PLAN.get(boardKey).cutType = 'stock';
-    openAt(5, -5);
+    clickAt(5, -5);
     pressEl('.cut-tab[data-tab="geometry"]');
     eq(q('.cut-boundary-kinds .cut-preset[data-value="stock"]').getAttribute('aria-disabled'), null, 'a Stock exists: the Stock choice is offered');
     pressEl('.cut-boundary-kinds .cut-preset[data-value="stock"]');
@@ -206,7 +209,7 @@ const payload = () => ({
     const n1 = st.history.length;
     pressEl('.cut-boundary-pick');
     eq([q('.cut-boundary-state').textContent, q('.cut-boundary-pick').textContent, pc.classList.contains('is-picking')], ['click a closed shape', 'Cancel pick', true], 'picking: the state, Cancel pick, the crosshair');
-    clickAt(22, -25); // inside the window, outside the boss
+    clickRaw(22, -25); // inside the window, outside the boss (a press during the Pick: a plain click)
     eq(V2_PLAN.get(pk).boundaryShape, windowKey, 'the window is the boundary shape');
     eq(st.history.length, n1 + 1, 'the pick: ONE undo step');
     eq([q('.cut-type-cur').textContent, pc.classList.contains('is-picking'), q('.cut-boundary-state').textContent], ['Roughing', false, 'picked'], 'the selection is still the part; picking ended');
@@ -223,7 +226,7 @@ const payload = () => ({
     // a cancelled pick changes nothing
     const before = JSON.stringify([...V2_PLAN]);
     pressEl('.cut-boundary-pick');
-    clickAt(200, -200); // empty space
+    clickRaw(200, -200); // empty space (a press during the Pick: a plain click)
     eq([JSON.stringify([...V2_PLAN]), pc.classList.contains('is-picking')], [before, false], 'a click on nothing cancels the pick: nothing changes');
     pressEl('.cut-boundary-pick'); pressEl('.cut-boundary-pick');
     eq(pc.classList.contains('is-picking'), false, 'Pick pressed again: cancelled');
@@ -233,7 +236,7 @@ const payload = () => ({
     eq([[...plan.keys()], plan.get('loop:b').boundaryShape], [['profile:p1', 'loop:b'], 'profile:p1'], 'renamePlanKeys: the record and the boundary shape that names it');
     // Inside a shape smaller than the bit: the refusal note
     V2_PLAN.get(pk).boundaryTool = 'inside'; V2_PLAN.get(pk).boundaryOffset = -18;
-    console.log('DBG', JSON.stringify(storeOps().map(o=>[o.id,o.type,o.geometry.length])), app.prepare.view().activeOp()?.id, app.prepare.view().isAdding()); openAt(5, -5);
+    clickAt(5, -5);
     ok(note().includes('Roughing: nothing to cut: the boundary leaves no room for the bit'), 'Inside the window shrunk by 18 mm: no room for the bit: ' + JSON.stringify(note()));
     delete V2_PLAN.get(pk).boundaryTool; delete V2_PLAN.get(pk).boundaryOffset;
     // save + reload
@@ -265,13 +268,15 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
   try {
     app.modes.showMode('prepare');
     const st = app.state, doc = app.document, q = (s2) => doc.querySelector(s2);
-    const pressEl = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
+    const pressElRaw = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
+    const pressEl = (s2) => editStep(app, () => pressElRaw(s2)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     const pc = doc.getElementById('prepare-canvas');
-    const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
-    const openAt = (x, y) => { clickAt(x, y); pressEl('.cut-chip'); }; // TASK S2: a click on an assigned shape opens its shape card: its chip opens its operation's card
+    const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
     const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
-    const setField = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+    const setFieldRaw = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+    const setField = (sel, text) => editStep(app, () => setFieldRaw(sel, text)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     const els = (type) => [...shaperSvgOf(st, planEntries()).matchAll(/<path [^>]*\/>/g)].map((x) => x[0]).filter((x) => new RegExp(`shaper:cutType="(${type})"`).test(x));
     const depthOf = (e) => Number(/shaper:cutDepth="([\d.]+) mm"/.exec(e)[1]);
     const res = app.stl.openFile(M.binaryStl(M.dome(30)), 'dome.stl');
@@ -280,7 +285,7 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     rec.toolDia = 6.35;
     const D = Number(rec.cutDepth);
     const all = els('pocket');
-    openAt(30, -30);
+    clickAt(30, -30);
     pressEl('.cut-tab[data-tab="heights"]');
     eq(rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'], 'the Heights tab: Depth, Top, Bottom, Floor allowance');
     eq([q('.cut-top-depth').value, q('.cut-top-depth').placeholder, q('.cut-bottom-depth').value, q('.cut-bottom-depth').placeholder, q('.cut-floor-allowance').value], ['', '0', '', String(+D.toFixed(3)), '0'], 'the defaults: the surface, the depth of the part (greyed), no floor allowance');
@@ -329,7 +334,8 @@ eq([wallsDefault({ slope: {}, baseType: 'exterior' }), wallsDefault({ slope: {},
   try {
     app.modes.showMode('prepare');
     const st = app.state, doc = app.document, q = (s2) => doc.querySelector(s2);
-    const pressEl = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
+    const pressElRaw = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
+    const pressEl = (s2) => editStep(app, () => pressElRaw(s2)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
     const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const contourEls = () => [...shaperSvgOf(st, planEntries()).matchAll(/<path [^>]*\/>|<circle [^>]*\/>/g)].map((x) => x[0]).filter((x) => /shaper:toolDia="3\.175 mm"/.test(x) && /shaper:cutType="(outside|inside)"/.test(x));
     const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/sa7-slope/01-chamfer-outline.json', import.meta.url), 'utf8'));
@@ -341,7 +347,7 @@ eq([wallsDefault({ slope: {}, baseType: 'exterior' }), wallsDefault({ slope: {},
     const ck = contourKeyOf(key), crec = V2_PLAN.get(ck);
     const byDefault = contourEls(), keyDefault = opKeyOf(planEntries().find((e) => e.planKey === ck).rec);
     ok(byDefault.length > 0, `the Contour of the chamfer: ${byDefault.length} passes (Sloped only by default)`);
-    const openContour = () => app.prepare.view().activate(storeOps().find((o) => o.type === 'contour').id); // TASK S2: the Contour OPERATION's card
+    const openContour = () => { app.prepare.ok(); app.prepare.edit(storeOps().find((o) => o.type === 'contour').id); }; // TASK S2: the Contour OPERATION opened
     openContour();
     eq(q('.cut-type-cur').textContent, 'Contour', 'the Contour card');
     pressEl('.cut-tab[data-tab="geometry"]');

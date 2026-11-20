@@ -105,7 +105,7 @@ try {
   await clickEl('#prepare-panel .cut-type-trigger'); // close
   await clickWorld(60, -40); // the pocket
   const pocketMenu = await menuIds();
-  assert.deepStrictEqual(pocketMenu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'exterior', 'stock'], 'the sloped pocket: Stepped pocket after Pocket');
+  assert.deepStrictEqual(pocketMenu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, 'the sloped pocket: Stepped pocket after Pocket');
   await shot('prepare-stepped-menu.png', ['#prepare-panel .cut-card', '.cut-type-menu']);
   const wide = await evalJs(`(() => { const m = document.querySelector('.cut-type-menu').getBoundingClientRect(), o = document.querySelector('.cut-type-opt[data-id="roughing"] .cut-opt-name'); return { menu: m.width, oneLine: o.getBoundingClientRect().height <= 22 }; })()`);
   console.log('menu with Stepped pocket: ' + JSON.stringify(wide));

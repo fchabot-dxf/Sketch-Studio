@@ -120,6 +120,18 @@ for (const { boundaryCtx, wallsCtx, ...record } of STATES) {
   }
 }
 for (const t of CUT_TYPES) ok(seen.has(choiceId('cutType', t.id)), `the cut type menu shows ${t.id}`);
+{ // TASK S2: the OPEN operation's card: its Shapes (a row's X), Duplicate, OK / Cancel; a Contour's own Wall side (a drawn shape: its Geometry tab)
+  panel.update({ mode: 'op', kind: 'loop', title: 'Contour 1 · 1 shape', shapes: [{ key: 'loop:a', label: 'Shape 40 × 40 mm' }], wallSideFree: true, boundary: { hasStock: false, picking: false }, record: { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose' } });
+  press(host.querySelector('.cut-tab[data-tab="geometry"]'));
+  const els = [...host.querySelectorAll('[data-hint]')].filter(visible);
+  for (const id of ['opShapes', 'opRemoveShape', 'opDuplicate', 'opOk', 'opCancel', 'wallSide', 'wallSide:inside', 'wallSide:outside']) {
+    const el = els.find((e) => e.dataset.hint === id);
+    ok(el, `the open operation's card shows ${id}`);
+    eq(hintFor(el), hintText(id), `${id}: its tooltip is its hint`);
+    if (id !== 'opRemoveShape') eq(el.textContent, hintLabel(id), `${id}: its name is the table's`); // the X shows its glyph (its name is its aria-label)
+    seen.add(id);
+  }
+}
 
 // ── 3. every entry is rendered somewhere ──
 const html = fs.readFileSync(new URL('../apps/shaper/index.html', import.meta.url), 'utf8');

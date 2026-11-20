@@ -23,6 +23,7 @@ import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PR
 import { keyOf, parseKey, loopsWithPolygons, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout } from '#core/stepped-cut.js';
+import { smoothingOf } from '#core/level-smooth.js'; // TASK 809
 import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in is one of its settings
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
@@ -80,6 +81,7 @@ export function settingsOf(rec) {
   if (roughingAllowance(eff) > 0) s.allowance = round6(roughingAllowance(eff));
   if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'nested') s.layout = 'nested';
   if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'terraces' && Number(rec.minTerraceWidth) > 0) s.minWidth = round6(rec.minTerraceWidth); // TASK 792: the Min terrace width (0 adds nothing) // TASK 792 (owner turn 2604): the Nested layout (Terraces, the default, adds nothing) // TASK 792: a Roughing's allowance (0 adds nothing: a stepped record's key is the one before 792)
+  if (eff.levelsOp && smoothingOf(eff.levelsOp, rec.smoothing) !== smoothingOf(eff.levelsOp, undefined)) s.smoothing = round6(smoothingOf(eff.levelsOp, rec.smoothing)); // TASK 809: a Smoothing other than the operation's default (the default adds nothing)
   const m = holdMode(eff); // TASK 742: a held cut's mode and its values (Off adds nothing)
   if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness
   if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };

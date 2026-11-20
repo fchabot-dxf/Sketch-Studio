@@ -178,7 +178,9 @@ function fitRun(Q, tL, tR, ftol, out) {
       bestB = lo;
     }
     if (best && traced[bestB] - traced[a] >= 3) { out.push({ p0: best.bz[0], c1: best.bz[1], c2: best.bz[2], p3: best.bz[3] }); cur = best.bz[3]; l = neg(best.r); a = bestB; continue; } // a cubic (three numbers pairs) pays for three traced segments or more
-    out.push(lineSeg(cur, Q[a + 1])); cur = Q[a + 1]; a += 1; l = tangentAt(a); // no cubic covers three traced segments here: the traced segment itself
+    let nx = a + 1; // no cubic covers three traced segments here: the traced segment itself (to its next traced point, past the densifying ones)
+    while (nx < last && Q[nx].added) nx++;
+    out.push(lineSeg(cur, Q[nx])); cur = Q[nx]; a = nx; l = tangentAt(a);
   }
 }
 

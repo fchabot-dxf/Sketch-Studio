@@ -6,6 +6,7 @@
 // by applyViewport, so interaction.js's pick-threshold reads (state.viewport.scale) keep working unchanged.
 
 import { state } from "./state.js";
+import { matchPaper } from "./paper-sizes.js";
 import { canvas, canvasWrap, docInfoEl } from "./dom.js";
 
 let _fitted = false; // one initial doc-fit (whichever canvas is shown first at a real size does it)
@@ -53,7 +54,8 @@ export function applyViewport() {
   if (docInfoEl) {
     const inch = state.docUnit === "in", conv = inch ? 1 / 25.4 : 1;
     const fmt = (mm) => (inch ? (mm * conv).toFixed(2) : Math.round(mm * conv));
-    docInfoEl.textContent = `${fmt(state.doc.w)} × ${fmt(state.doc.h)} ${inch ? "in" : "mm"}  ·  ${(scale * 25.4 / 96).toFixed(2)}× display`;
+    const std = matchPaper(state.doc.w, state.doc.h); // TASK 827: a standard size is named
+    docInfoEl.textContent = `${std ? std.label + " · " : ""}${fmt(state.doc.w)} × ${fmt(state.doc.h)} ${inch ? "in" : "mm"}  ·  ${(scale * 25.4 / 96).toFixed(2)}× display`;
   }
 }
 

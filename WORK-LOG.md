@@ -16989,3 +16989,10 @@ Orbit around the point under the pointer (owner turn 2773), apps/shaper/src/orbi
 ## TURN 820
 constraintTargets (packages/ui/geometry-labels.js): a joints-only constraint now binds the shape(s) holding ALL its joints; any-joint fallback only when none does. New tests/constraint-targets-820.test.js; tests/glyph-pick-hover-live.test.js BOUND now [rE2] (was the 3 lines touching r2/r3).
 Follow-up: 4-joint constraints (parallel, perpendicular, equal of two lines) resolve per pair [j0,j1] [j2,j3]; new live tests/keyhole-constraint-highlight-820-live.test.js (before/after screenshots in .evidence/820).
+
+## TURN 827 — Pen Plotter: paper size standards in the Document dialog (Claude Sonnet)
+- New `apps/penplotter/src/paper-sizes.js`: ONE table `PAPER_SIZES` ({id,label,w,h,unit} in each standard's own unit: A6-A1 mm; Letter, Legal, Tabloid / Ledger, ARCH A/B/C in), one formatter (`formatSize`, `paperOptionLabel`: "A4 · 210 × 297 mm (8.27 × 11.69 in)"), `matchPaper` (either orientation, 0.05 mm), `orientationOf`, `paperSizeIn`, and the two hint texts.
+- Document dialog (index.html + settings.js): Paper select (12 standards + Custom, Custom disabled while a standard matches), Orientation select; picking a standard sets Width/Height (current orientation) and the paper unit to the standard's own (state.docUnit, persisted like Units; NOT tied to shared Settings > Units); Orientation swaps W/H; typing a non-standard size shows Custom; reopening shows the matching standard. Hints via the existing shared `#ui/cursor-tooltip.js` (data-hint), no shared file changed.
+- `#docInfo` readout (viewport.js) names the standard when matched: "Letter · 11.00 × 8.50 in".
+- Found + fixed (Pen Plotter CSS only): on the phone the Document dialog (.overlay z 400) sat UNDER the slide-over Design drawer (z 9500), so Done / Cancel were covered; `#docModal { z-index: 9600 }`. Phone targets 44 px under `pointer: coarse`.
+- Tests: tests/penplotter-paper-827-node.test.js (table, match/custom/orientation, dialog), tests/penplotter-paper-827-live.test.js (desktop 1280 + phone 390; screenshots in .evidence/827).

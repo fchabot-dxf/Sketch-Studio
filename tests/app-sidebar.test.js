@@ -35,10 +35,10 @@ await (async () => {
     const stageTab = (name) => clickEl(`.sk-header-tab[data-tab="${name}"]`);
 
     const hosts = [
-      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'open-stl', 'download', 'fusion-addin', 'settings', 'log', 'feedback'] }, // TASK 706: Explore's Open SVG / Export are gone; TASK 733: the Fusion add-in download (Shaper only); TASK 790: Open STL (Shaper only)
-      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'log', 'feedback'] },
-      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'export', 'download-svg', 'download-dxf', 'style', 'log', 'debug', 'tune', 'feedback'] },
-      { id: 'trace', path: '/apps/trace/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download-svg', 'download-dxf', 'log', 'feedback'] },
+      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'open-stl', 'download', 'fusion-addin', 'settings', 'log', 'about', 'feedback'] }, // TASK 706: Explore's Open SVG / Export are gone; TASK 733: the Fusion add-in download (Shaper only); TASK 790: Open STL (Shaper only)
+      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'log', 'about', 'feedback'] },
+      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'export', 'download-svg', 'download-dxf', 'style', 'log', 'debug', 'tune', 'about', 'feedback'] },
+      { id: 'trace', path: '/apps/trace/index.html', actions: ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download-svg', 'download-dxf', 'log', 'about', 'feedback'] },
     ];
     // ── the registry: names, distinct icons, titles; each index.html's static <title> fallback equals the registry's ──
     assert.deepStrictEqual(APPS.map((a) => a.name), ['Sketch', 'Shaper', 'Pen Plotter', 'Trace']);

@@ -52,6 +52,7 @@ export const SIDEBAR_ICONS = {
   // TASK 733: a puzzle piece = an add-in (the Shaper sidebar's "Fusion add-in")
   addin: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5V4a2 2 0 0 1 4 0v.5h3.5V8H14a2 2 0 0 0 0 4h.5v3.5H11V15a2 2 0 0 0-4 0v.5H3.5V12H4a2 2 0 0 0 0-4h-.5V4.5z"/></svg>',
   chevron: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l5 5-5 5"/></svg>',
+  info: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="7"/><path d="M9 8v4.5M9 5.4v.1"/></svg>', // TASK 828: About
   debug: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l4 4-4 4M9.5 13H14"/></svg>',
 };
 

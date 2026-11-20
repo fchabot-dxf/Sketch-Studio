@@ -47,7 +47,7 @@ function usePort() {
 export function setPathsPort(p) {
   if (port) port.close();
   port = p;
-  cache.clear(); inflight.clear(); sent.clear();
+  cache.clear(); inflight.clear(); sent.clear(); lastUse.clear();
   for (const j of jobs.values()) if (j.reject) j.reject(new Error('the paths port was replaced'));
   jobs.clear();
   port.listen(receive, (message) => { for (const id of [...jobs.keys()]) receive({ type: 'error', id, message }); });
@@ -89,19 +89,37 @@ export function pathsContext(state, { loops, loopPolys, owned }) {
 /** The signature of one plan item's derivation: `target` + `rec` = the EFFECTIVE record (cut-plan.js resolveEntry + effectiveCutRecord). */
 export const pathsSig = (ctx, target, rec) => hashText(JSON.stringify([target, recSigText(rec), ctx.ownedSig, ctx.geomSig]));
 
+// the inputs the worker keeps are bounded: the sketches of the last KEEP_SKETCHES geometries and the last KEEP_INPUTS other inputs (levels lists, slopes, the
+// encoding) it was sent, never one a job still waiting names; the others are forgotten on both sides (sent again when a job needs them again)
+const KEEP_SKETCHES = 4, KEEP_INPUTS = 24;
+const lastUse = new Map(); let useN = 0;
+function staleRefs() {
+  const busy = new Set();
+  for (const j of jobs.values()) for (const id of j.ids || []) busy.add(id);
+  const out = [];
+  for (const [sketch, cap] of [[true, KEEP_SKETCHES], [false, KEEP_INPUTS]]) {
+    const mine = [...sent].filter((id) => id.startsWith('s:') === sketch).sort((a, b) => lastUse.get(a) - lastUse.get(b));
+    let n = mine.length;
+    for (const id of mine) { if (n <= cap) break; if (busy.has(id)) continue; out.push(id); n--; }
+  }
+  for (const id of out) { sent.delete(id); lastUse.delete(id); const v = refValues.get(id); if (id.startsWith('v') && v) valueIds.delete(v); refValues.delete(id); }
+  return out;
+}
 function post(msg, ids) {
   const p = usePort();
   const refs = refsFor(ids);
-  p.post(refs.length ? { ...msg, refs } : msg);
+  for (const id of ids) lastUse.set(id, ++useN);
+  const forget = staleRefs();
+  p.post({ ...msg, ...(refs.length ? { refs } : {}), ...(forget.length ? { forget } : {}) });
 }
 function want(sig, ctx, target, rec) {
   if (cache.has(sig) || inflight.has(sig)) return;
   usePort(); // (made before the job is filed: a new port starts from nothing)
   const id = 'p' + (nextId++);
+  const sid = sketchRef(ctx), ids = [sid, ...recIds(rec)];
   inflight.set(sig, id);
-  jobs.set(id, { kind: 'paths', sig });
-  const sid = sketchRef(ctx);
-  post({ type: 'paths', id, target, rec: packRec(rec, refId), state: { $ref: sid }, owned: [...ctx.owned] }, [sid, ...recIds(rec)]);
+  jobs.set(id, { kind: 'paths', sig, ids });
+  post({ type: 'paths', id, target, rec: packRec(rec, refId), state: { $ref: sid }, owned: [...ctx.owned] }, ids);
 }
 function file(sig, entry) {
   cache.delete(sig); cache.set(sig, entry);
@@ -177,7 +195,7 @@ export function exportJob({ state, entries, frame = null, encoding, docUnit, pre
   const id = 'x' + (nextId++);
   usePort();
   return new Promise((resolve, reject) => {
-    jobs.set(id, { kind: 'export', resolve, reject });
+    jobs.set(id, { kind: 'export', resolve, reject, ids });
     post({ type: 'export', id, args: { state: { $ref: sid }, encoding: { $ref: eid }, entries: packEntries(entries), frame: frame ? packEntries(frame) : null, docUnit, preview } }, ids);
   });
 }

@@ -135,22 +135,29 @@ export function setRegion(key, region) {
 }
 
 /**
- * renameGeometry(rename, remove) — docs/OPERATIONS-MODEL.md 1.6: rename geometry keys (`rename`: old -> new) and drop some (`remove`): in every operation's refs, in
+ * renameGeometry(rename, remove) — docs/OPERATIONS-MODEL.md 1.6: rename geometry keys (`rename`: old -> new, or old -> [new...]: TASK 832, a shape split in pieces,
+ * each piece a membership of the operation, at the old one's file place) and drop some (`remove`): in every operation's refs, in
  * `regions` and in any setting that holds a key (TASK 810's Roughing boundary shape, `boundaryShape`). The one place keys move. An operation this call empties is
  * removed (as before task S2: a stale shape dropped on load, a selection taken out); one that was already empty stays.
  */
 export function renameGeometry(rename, remove = new Set()) {
   if (!rename.size && !remove.size) return;
+  const to = (k) => [].concat(rename.get(k)); // TASK 832: a key may become SEVERAL (a shape split in pieces): its membership is one per piece
   const emptied = new Set(); // TASK S2: only an operation THIS call empties goes (an operation saved empty stays)
   for (const op of S.ops) {
-    const had = op.geometry.length;
-    op.geometry = op.geometry.filter((r) => !remove.has(r.key)).map((r) => (rename.has(r.key) ? { ...r, key: rename.get(r.key) } : r));
+    const had = op.geometry.length, seen = new Set();
+    op.geometry = op.geometry.filter((r) => !remove.has(r.key))
+      .flatMap((r) => (rename.has(r.key) ? to(r.key).map((key, i) => (i ? { key, seq: r.seq } : { ...r, key })) : [r])) // the first piece keeps the dragged lead-in / tabs
+      .filter((r) => !seen.has(r.key) && seen.add(r.key)); // TASK 832: two shapes of one operation that became the same shape (merged): one membership
     if (had && !op.geometry.length) emptied.add(op);
-    if (typeof op.settings.boundaryShape === 'string' && rename.has(op.settings.boundaryShape)) op.settings = { ...op.settings, boundaryShape: rename.get(op.settings.boundaryShape) };
+    if (typeof op.settings.boundaryShape === 'string' && rename.has(op.settings.boundaryShape)) op.settings = { ...op.settings, boundaryShape: to(op.settings.boundaryShape)[0] };
   }
   S.ops = S.ops.filter((op) => !emptied.has(op));
   const regions = {};
-  for (const [k, v] of Object.entries(S.regions)) if (!remove.has(k)) regions[rename.get(k) || k] = v;
+  for (const [k, v] of Object.entries(S.regions)) {
+    if (remove.has(k)) continue;
+    for (const nk of (rename.has(k) ? to(k) : [k])) if (!(nk in regions) || nk === k) regions[nk] = v;
+  }
   S.regions = regions;
   bump();
 }

@@ -288,8 +288,8 @@ async function threePockets(t, label, shots) {
     await clickWorld(10, 100);
     await pickType('pocket'); await typeField('.cut-depth', inch ? '0.25' : '6'); await quarter();
     await openClearing();
-    const sp = await evalJs(`(() => { const o = document.querySelector('.cut-clear-opt[data-clearing="morphed"]'), l = document.querySelector('.cut-clear-opt[data-clearing="linked"]'); return [o.disabled, o.classList.contains('is-disabled'), o.querySelector('.cut-clear-why') && o.querySelector('.cut-clear-why').textContent, l.disabled]; })()`);
-    assert.deepStrictEqual(sp, [true, true, 'has islands: use Spiral or Raster', false], label + ': the island pocket: Morphed spiral greyed with its reason, Spiral never disabled');
+    const sp = await evalJs(`(() => { const o = document.querySelector('.cut-clear-opt[data-clearing="morphed"]'), l = document.querySelector('.cut-clear-opt[data-clearing="linked"]'); return [o.getAttribute('aria-disabled'), o.classList.contains('is-disabled'), o.querySelector('.cut-clear-why'), l.getAttribute('aria-disabled')]; })()`); // TASK 813: greyed with aria-disabled, its reason is its tooltip (no line)
+    assert.deepStrictEqual(sp, ['true', true, null, null], label + ': the island pocket: Morphed spiral greyed with its reason, Spiral never disabled');
     await clickEl('.cut-clear-opt[data-clearing="linked"]');
     await sleep(300);
     const cI = await card();

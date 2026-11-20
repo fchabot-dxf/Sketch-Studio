@@ -48,16 +48,23 @@ export function getCutRecord(key) {
   if (reg) { if (reg.source && reg.source.cutDepth != null) out.cutDepth = reg.source.cutDepth; if (reg.slope) out.slope = reg.slope; if (reg.levels) out.levels = reg.levels; }
   return out;
 }
-/** The plan as [planKey, record] in FILE order (every membership; a Contour's record as stored, not resolved). */
-export const planRecords = () => membersInFileOrder().map(({ op, ref }) => [planKeyOf(op, ref), recordOf(op, ref)]);
+// ── TASK 798 (owner turns 2515-2537): the Operations list's TICKS. An operation's `on` (operations-store.js) decides whether it is shown and exported: `ticked: true`
+// keeps the ticked operations only (Prepare's look, the 3D Review, the Export step's Paths / 2D and the exported SVG read the plan through it); without it, every
+// operation (the Operations list itself, the hole ownership and the page of the file: the WHOLE design's, so every export lines up on the Origin). The STOCK is
+// always ticked: it is the board, the guide every export is placed by (the Origin's anchors fall on the same points in every file). THE one filter: isTicked. ──
+/** TASK 798: whether an operation is ticked (its `on`; the Stock always is). */
+export const isTicked = (op) => op.type === STOCK_TYPE_ID || op.on !== false;
+const planMembers = ({ ticked = false } = {}) => (ticked ? membersInFileOrder().filter(({ op }) => isTicked(op)) : membersInFileOrder());
+/** The plan as [planKey, record] in FILE order (every membership, or with `ticked: true` the ticked operations' only; a Contour's record as stored, not resolved). */
+export const planRecords = (opts) => planMembers(opts).map(({ op, ref }) => [planKeyOf(op, ref), recordOf(op, ref)]);
 /**
- * planEntries() — THE one reader (docs/OPERATIONS-MODEL.md section 2; it replaces cutPlanEntries): one entry per membership, in FILE order (seq), as the derivation
+ * planEntries({ ticked }) — THE one reader (docs/OPERATIONS-MODEL.md section 2; it replaces cutPlanEntries): one entry per membership, in FILE order (seq), as the derivation
  * takes it: { key: '<op id>|<geometry key>', opId, planKey, target, rec } (resolveEntry: a Contour cuts its part's target with its part's depth / type / slope /
- * levels). A Contour whose part is in no operation derives nothing (no entry).
+ * levels). A Contour whose part is in no operation derives nothing (no entry). TASK 798: `ticked: true` = the ticked operations' entries only (see above).
  */
-export function planEntries() {
+export function planEntries(opts) {
   const out = [];
-  for (const { op, ref } of membersInFileOrder()) {
+  for (const { op, ref } of planMembers(opts)) {
     const planKey = planKeyOf(op, ref);
     const e = resolveEntry(planKey, recordOf(op, ref));
     if (e) out.push({ key: `${op.id}|${ref.key}`, opId: op.id, planKey, target: e.target, rec: e.rec });
@@ -303,11 +310,11 @@ export function holdNoteItems(storedRec, hold) {
   items.push({ text: `Gaps: cut the side against the part; the return leg is optional` });
   return items;
 }
-/** TASK 742: the hold notes of every held record of the plan (the 3D Review's info). */
-export function planHoldNotes(state) {
+/** TASK 742: the hold notes of every held record of the plan (the 3D Review's info; TASK 798: `opts` = planRecords' { ticked }). */
+export function planHoldNotes(state, opts) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of planRecords()) {
+  for (const [key, rec] of planRecords(opts)) {
     if (!rec || !rec.cutType || holdMode(effectiveCutRecord(rec)) === 'off') continue;
     if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
     out.push(...holdNoteItems(rec, holdSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
@@ -365,11 +372,11 @@ export function leadInNoteItems(storedRec, lead) {
   const where = lead.isCalc && !lead.isCalc.at ? 'from a moved position' : `from the middle of the longest ${lead.at === 'line' ? 'straight edge' : 'segment'}`;
   return [{ text: `${name}: lead-in arc, radius ${f(lead.radius)} ${u}, ${angleText(lead.sweep, { show: 'deg' })}${straight} ${lead.side}, ${where}` }, { text: LEAD_IN_TRADE_OFF }];
 }
-/** TASK 775: the lead-in notes of every On line outline with a lead-in (the 3D Review's info; a programmed pocket's are in its clearing notes). */
-export function planLeadInNotes(state) {
+/** TASK 775: the lead-in notes of every On line outline with a lead-in (the 3D Review's info; a programmed pocket's are in its clearing notes; TASK 798: `opts` = planRecords' { ticked }). */
+export function planLeadInNotes(state, opts) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of planRecords()) {
+  for (const [key, rec] of planRecords(opts)) {
     if (!rec || !rec.cutType || !outlineLeadIn(effectiveCutRecord(rec))) continue;
     if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
     out.push(...leadInNoteItems(rec, leadInSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
@@ -474,11 +481,11 @@ export function clearingNoteItems(storedRec, sum) {
   }
   return items;
 }
-/** TASK 745: the clearing notes of every programmed pocket of the plan (the 3D Review's info). */
-export function planClearingNotes(state) {
+/** TASK 745: the clearing notes of every programmed pocket of the plan (the 3D Review's info; TASK 798: `opts` = planRecords' { ticked }). */
+export function planClearingNotes(state, opts) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of planRecords()) {
+  for (const [key, rec] of planRecords(opts)) {
     if (!rec || !rec.cutType || clearingPattern(effectiveCutRecord(rec)) === 'freehand') continue;
     if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
     out.push(...clearingNoteItems(rec, clearingSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
@@ -520,10 +527,10 @@ export function steppedNoteItems(storedRec) {
 }
 /** The note lines (text) of a stepped record. */
 export const steppedNoteLines = (storedRec) => steppedNoteItems(storedRec).map((i) => i.text);
-/** The note lines of every stepped record of the plan (the 3D Review's info). */
-export function planSteppedNotes() {
+/** The note lines of every stepped record of the plan (the 3D Review's info; TASK 798: `opts` = planRecords' { ticked }). */
+export function planSteppedNotes(opts) {
   const out = [];
-  for (const [, rec] of planRecords()) if (rec && rec.cutType) out.push(...steppedNoteLines(rec));
+  for (const [, rec] of planRecords(opts)) if (rec && rec.cutType) out.push(...steppedNoteLines(rec));
   return out;
 }
 
@@ -593,11 +600,11 @@ export function levelsNoteItems(storedRec, sum) {
   }
   return items;
 }
-/** TASK 792: the notes of every Roughing / Contour record of the plan (the 3D Review's info; a sloped Roughing's stepped note is in planSteppedNotes). */
-export function planLevelsNotes(state) {
+/** TASK 792: the notes of every Roughing / Contour record of the plan (the 3D Review's info; a sloped Roughing's stepped note is in planSteppedNotes; TASK 798: `opts` = planRecords' { ticked }). */
+export function planLevelsNotes(state, opts) {
   const out = [];
   let geo = null;
-  for (const [key, rec] of planRecords()) {
+  for (const [key, rec] of planRecords(opts)) {
     if (!rec || !(cutTypeById(rec.cutType) || {}).levelsOp) continue;
     if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
     out.push(...levelsNoteItems(rec, levelsSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
@@ -798,7 +805,7 @@ export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys, own
 }
 
 /** TASK 711: the loops that have their own record in `plan` (#core ownedLoopIds over the plan's assigned entries, the set the exporter
- *  derives from the same entries). */
+ *  derives from the same entries). TASK 798: EVERY operation's, ticked or not (an unticked hole is still its own cut, left out: never cut by its plate). */
 export function planOwnedLoops(state, loops, loopPolys) {
   return ownedLoopIds(planEntries(), state, loops, loopPolys, CUT_TYPES);
 }
@@ -823,16 +830,17 @@ const cutsSig = (cuts, state) => cuts.map((c) => [c.kind, c.cutType, c.offsetSid
   c.chain ? (c.chain.shapes || []).map((sh) => [sh, (sh.joints || []).map((id) => { const j = state.joints.get(id); return j ? [j.x, j.y] : null; })]) : null]);
 
 /**
- * planReliefItems(state) — the cut plan as the 3D Review's input, one item per derived
+ * planReliefItems(state, opts) — the cut plan as the 3D Review's input, one item per derived
  * footprint: [{ key, cutType, cutDepth, footprints:[fp], shape, footprintsAt }], via deriveKeyFootprints / deriveCutFootprintAt
- * (the same derivation at another cutter half-width). Stale keys derive to nothing, as in the exporter.
+ * (the same derivation at another cutter half-width). Stale keys derive to nothing, as in the exporter. TASK 798: `opts` = planRecords' { ticked } (the 3D Review
+ * shows the ticked operations); the hole ownership stays the whole plan's (planOwnedLoops), so a ticked cut is derived exactly as with everything ticked.
  */
-export function planReliefItems(state) {
+export function planReliefItems(state, opts) {
   const { loops, loopPolys } = loopsWithPolygons(state);
   const owned = planOwnedLoops(state, loops, loopPolys);
   const items = [];
 
-  for (const [key, stored] of planRecords()) {
+  for (const [key, stored] of planRecords(opts)) {
     if (!stored || !stored.cutType || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
     const d = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned);
     if (!d) continue;

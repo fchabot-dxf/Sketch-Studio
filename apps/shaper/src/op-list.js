@@ -11,6 +11,11 @@
 //    hold released without a move reorders nothing, and it never also fires the row's tap (the click that follows is swallowed).
 //  * Keyboard: the grip is focusable; ArrowUp / ArrowDown on it move the row (the grip keeps the focus).
 // DELETE (owner turn 2174): the bin calls onDelete(op) (the stage unassigns every region / path of the operation in ONE undo step).
+// TICKS (TASK 798, owner turns 2515-2537): every row has a checkbox (op.on: ticked = shown in Prepare, the 3D Review, Paths / 2D and in the exported SVG; unticked =
+// left out, its settings kept: the row stays, dimmed, and its tap still opens its card). Each tool heading has one too: ticked when all its operations are,
+// mixed (indeterminate) when some, empty when none; a tap ticks them all, or unticks them all when all were ticked. onTick(ids, on) gets the operation ids. The
+// Stock's box is ticked and disabled (op.tickable false: the board is in every file, the guide each export is placed by).
+// ONE tap of a box never starts a drag or picks the row (the box is its own control, like the bin).
 import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 757: the fold (open on a wide screen, folded on a phone)
 import { bindHint } from './hint.js';
 const DRAG_START_PX = 4;    // a grip press (mouse / pen) that moves less than this is not a drag
@@ -20,15 +25,16 @@ const GRIP_SVG = '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="t
 const BIN = '\u{1F5D1}'; // the shared bin of the Parameters table's rows (packages/ui/parameter-table.js)
 
 /**
- * createOpList(hostEl, { getOps, onMove, onPick, isPicked, onDelete }) -> { refresh(), inspect(), setOpen(open) }
+ * createOpList(hostEl, { getOps, onMove, onPick, isPicked, onDelete, onTick }) -> { refresh(), inspect(), inspectTicks(), setOpen(open) }
  *   getOps()       the operations, in order (operations.js describeOperations)
  *   onMove(keys)   a reorder: the operation keys in their new order
  *   onPick(op)     a tap on an operation
  *   isPicked(op)   whether the operation's regions are the canvas selection (the row is marked)
  *   onDelete(op)   TASK 745: the operation's bin
+ *   onTick(ids, on) TASK 798: a row's or a heading's checkbox (the operation ids, ticked or not)
  */
-export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, onDelete = () => {} }) {
-  if (!hostEl) return { refresh() {}, inspect: () => null };
+export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, onDelete = () => {}, onTick = () => {} }) {
+  if (!hostEl) return { refresh() {}, inspect: () => null, inspectTicks: () => null };
   const doc = hostEl.ownerDocument;
   const win = doc.defaultView;
   hostEl.classList.add('ops-panel');
@@ -73,7 +79,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
 
   function onDown(e, i, row) {
     if (drag || (e.button != null && e.button !== 0)) return;
-    if (e.target.closest && e.target.closest('.ops-del')) return; // the bin is a button of its own
+    if (e.target.closest && e.target.closest('.ops-del, .ops-tick')) return; // the bin and (TASK 798) the checkbox are controls of their own
     const touch = e.pointerType === 'touch';
     if (!touch) {
       if (!(e.target.closest && e.target.closest('.ops-grip'))) return; // a mouse / pen drags by the grip only (a click on the row picks it)
@@ -121,6 +127,16 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
 
   const focusGrip = (key) => { const r = rowEls().find((el) => el.dataset.key === key); if (r) r.querySelector('.ops-grip').focus(); };
 
+  // TASK 798: one checkbox (a native box in a 44 px touch target on a phone; title + aria-label = what a tap does)
+  function tickBox(checked, mixed, disabled, title) {
+    const wrap = doc.createElement('label'); wrap.className = 'ops-tick'; wrap.title = title;
+    const input = doc.createElement('input'); input.type = 'checkbox';
+    input.checked = checked; input.indeterminate = mixed; input.disabled = disabled;
+    input.setAttribute('aria-label', title);
+    wrap.append(input);
+    return wrap;
+  }
+
   function refresh() {
     endDrag();
     ops = getOps();
@@ -132,15 +148,27 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       out.push(p);
     }
     let lastTool;
+    const toolKeyOf = (op) => (op.tool ? op.tool.key : '');
     ops.forEach((op, i) => {
-      const toolKey = op.tool ? op.tool.key : '';
+      const toolKey = toolKeyOf(op);
       if (toolKey !== lastTool) {
         lastTool = toolKey;
-        const h = doc.createElement('div'); h.className = 'ops-tool'; h.textContent = op.heading;
+        // TASK 798: the heading's checkbox ticks / unticks this run of operations (the ones with this bit, up to the next heading)
+        let end = i; while (end + 1 < ops.length && toolKeyOf(ops[end + 1]) === toolKey) end++;
+        const run = ops.slice(i, end + 1).filter((o) => o.tickable !== false);
+        const nOn = run.filter((o) => o.on !== false).length;
+        const h = doc.createElement('div'); h.className = 'ops-tool';
+        const box = tickBox(nOn === run.length, run.length > 0 && nOn > 0 && nOn < run.length, !run.length,
+          !run.length ? 'Always exported' : nOn === run.length ? `Untick all ${run.length}: leave them out of the views and the file` : `Tick all ${run.length}: show and export them`);
+        box.dataset.group = op.heading;
+        box.querySelector('input').addEventListener('change', () => onTick(run.map((o) => o.id), nOn !== run.length));
+        const label = doc.createElement('span'); label.className = 'ops-tool-text'; label.textContent = op.heading;
+        h.append(box, label);
         out.push(h);
       }
       const row = doc.createElement('div'); row.className = 'ops-row'; row.dataset.key = op.key; row.dataset.id = op.id;
       if (isPicked(op)) row.classList.add('is-picked');
+      if (op.on === false) row.classList.add('is-off'); // TASK 798: unticked (dimmed: left out of the views and the file)
       const grip = doc.createElement('span'); grip.className = 'ops-grip'; grip.tabIndex = 0; grip.setAttribute('role', 'button');
       grip.title = 'Drag to reorder (or Arrow Up / Down)'; grip.setAttribute('aria-label', `Reorder operation ${i + 1}: Arrow Up / Arrow Down`);
       grip.innerHTML = GRIP_SVG;
@@ -162,7 +190,10 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       del.title = `Delete operation ${i + 1}: unassign its ${op.regions}`; del.setAttribute('aria-label', del.title);
       del.addEventListener('click', () => onDelete(op));
       row.addEventListener('pointerdown', (e) => onDown(e, i, row));
-      row.append(grip, pick, del);
+      const tick = tickBox(op.on !== false, false, op.tickable === false,
+        op.tickable === false ? 'The Stock is always exported: every file is placed by it' : op.on === false ? `Tick operation ${i + 1}: show and export it` : `Untick operation ${i + 1}: leave it out of the views and the file`);
+      tick.querySelector('input').addEventListener('change', (e) => onTick([op.id], e.target.checked));
+      row.append(grip, tick, pick, del);
       out.push(row);
     });
     body.replaceChildren(...out);
@@ -174,5 +205,10 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
     items: [...body.children].map((el) => (el.classList.contains('ops-tool') ? { heading: el.textContent }
       : el.classList.contains('ops-row') ? { id: el.dataset.id, text: el.querySelector('.ops-name').textContent, sub: el.querySelector('.ops-sub').textContent, picked: el.classList.contains('is-picked') } : { empty: el.textContent })),
   });
-  return { refresh, inspect, setOpen };
+  /** TASK 798: the checkboxes: { rows: [{ id, on, disabled }], groups: [{ heading, state: 'all' | 'some' | 'none', disabled }] } (tests). */
+  const inspectTicks = () => ({
+    rows: [...body.querySelectorAll('.ops-row')].map((el) => { const b = el.querySelector('.ops-tick input'); return { id: el.dataset.id, on: b.checked, disabled: b.disabled, off: el.classList.contains('is-off') }; }),
+    groups: [...body.querySelectorAll('.ops-tool')].map((el) => { const b = el.querySelector('.ops-tick input'); return { heading: el.textContent, state: b.indeterminate ? 'some' : b.checked ? 'all' : 'none', disabled: b.disabled }; }),
+  });
+  return { refresh, inspect, inspectTicks, setOpen };
 }

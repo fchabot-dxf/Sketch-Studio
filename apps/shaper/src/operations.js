@@ -19,8 +19,8 @@
 //  them (before the first of them that the in-tool rule puts after it, else after the last of them: no extra tool change); a new tool goes right after the
 //  operation that comes before it in the default order (at the top when none does). The v2 migration orders an old document's operations by its stored order.
 // An operation's regions are listed in the plan's order.
-import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS, CUT_TYPES } from './shaper.js';
-import { parseKey, loopsWithPolygons, clearingWords, planEntries, recordOf, resolveEntry } from './cut-plan.js'; // TASK 745: clearingWords; TASK S1: the store's entries
+import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS, CUT_TYPES, STOCK_TYPE_ID } from './shaper.js';
+import { parseKey, loopsWithPolygons, clearingWords, planEntries, recordOf, resolveEntry, isTicked } from './cut-plan.js'; // TASK 745: clearingWords; TASK S1: the store's entries
 import { storeOps, planKeyOf } from './operations-store.js'; // TASK S1: the stored operations
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout, boundaryOf, ROUGH_BOUNDARY, wallsDefault } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; a Contour's walls
@@ -253,16 +253,18 @@ function entryCutsByOp(state, entries, geo = null) {
  * describeOperations(state, entries = planEntries()) → the STORED operations (operations-store.js, in list order) with their cuts and words on the solved sketch
  * `state`: [{ key (= id), id, tool, cutType, settings, records: [{ planKey, target, rec, cuts }], first, label, rowText, depthText, detail, regions, heading }]
  * (the words in the doc unit at the Length precision setting). A shape that derives to no cut (a stale target) is in no row; an operation none of whose shapes
- * derives a cut is not listed (S1: the list as before).
+ * derives a cut is not listed (S1: the list as before). TASK 798: + `on` (its tick, cut-plan.js isTicked) and `tickable` (false for the Stock: always exported, the
+ * board every file is placed by); `frame` = the whole plan's entries when `entries` are the ticked ones (the hole ownership stays the whole plan's, as the export).
  */
-export function describeOperations(state, entries = planEntries()) {
-  const byOp = entryCutsByOp(state, entries);
+export function describeOperations(state, entries = planEntries(), frame = null) {
+  const ents = (entries || []).filter((e) => e && e.target && e.rec && e.rec.cutType);
+  const byOp = entryCutsByOp(state, entries, frame && frame.length > ents.length ? plannedGeometry(state, frame.filter((e) => e && e.target && e.rec && e.rec.cutType)) : null); // TASK 798: the whole plan's hole ownership
   const ops = [];
   for (const stored of storeOps()) {
     const records = (byOp.get(stored.id) || []).map(({ i, ...r }) => r);
     if (!records.length) continue;
     const rec = records[0].rec;
-    const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, first: byOp.get(stored.id)[0].i };
+    const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, first: byOp.get(stored.id)[0].i, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable)
     op.rank = levelsRank(op);
     Object.assign(op, describe(op), { heading: toolHeading(op.tool) });
     ops.push(op);

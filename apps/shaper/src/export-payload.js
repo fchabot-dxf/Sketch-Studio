@@ -9,6 +9,7 @@ import { loopPolygon } from '#core/loop-geometry.js';   // HOST computes loop po
 import { docUnit } from '#core/settings-manager.js';
 import { exportEncoding } from './shaper.js';            // injected as the exporter's encoding
 import { describeOperations } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
+import { planEntries } from './cut-plan.js'; // TASK 798: the ticked operations (the file) and the whole plan (its frame)
 import { shaperFileName } from '#core/shaper-cloud.js';   // TASK 767: the one name rule (the upload applies it too)
 import { UNTITLED } from '#ui/document-buffer.js';
 
@@ -20,25 +21,40 @@ export function exportFileName(designName) {
 }
 
 /** The Shaper SVG of `entries` (the Prepare cut plan, cut-plan.js planEntries()) on the solved sketch `state`: the downloaded file, or with
- *  `preview: true` the same string plus the preview-only data-* attributes. */
-export function shaperSvgOf(state, entries, { preview = false, written = null } = {}) {
+ *  `preview: true` the same string plus the preview-only data-* attributes. TASK 798: `frame` = the WHOLE plan's entries (planEntries()) when `entries` are the
+ *  ticked operations' (planEntries({ ticked: true })): the file then has the whole design's page and hole ownership (#core exportShaperSVG options.frame), so
+ *  every partial export lines up on the Origin with the full one; given only when it holds more entries than `entries` (everything ticked: today's file). */
+export function shaperSvgOf(state, entries, { preview = false, written = null, frame = null } = {}) {
   const sById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(state)) loopPolys[l.id] = loopPolygon(l, state, sById);
   const options = preview ? { previewData: true } : {};
   if (written) options.written = written; // TASK 793: receives { cut, entry } of each element in the file's order (the Export step's Paths view)
+  if (frame && frame.length > entries.length) options.frame = { entries: frame }; // TASK 798
   return exportShaperSVG({ state, entries, encoding: exportEncoding(), docUnit: docUnit(), options, loopPolys });
+}
+
+/** TASK 798 (owner ruling turn 2537: "checked boxes export in one svg"): THE file of the Export step (Generate Shaper SVG, Download, Send to ShaperHub, the 2D /
+ *  Paths views): the TICKED operations (planEntries({ ticked: true })) on the WHOLE plan's frame (planEntries(): the page and the hole ownership), on the solved
+ *  sketch `state`. Returns null when nothing is ticked (or the plan is empty); else { svg, entries } (the download), or with `preview: true` shaperPreviewOf's
+ *  { svg, ops, written } + entries. Everything ticked: today's file, byte for byte. */
+export function exportFileOf(state, { preview = false } = {}) {
+  const entries = planEntries({ ticked: true });
+  if (!entries.length) return null;
+  const frame = planEntries();
+  if (preview) return { ...shaperPreviewOf(state, entries, frame), entries };
+  return { svg: shaperSvgOf(state, entries, { frame }), entries };
 }
 
 /** TASK 743: the Export step's 2D view: { svg, ops } = the PREVIEW copy (shaperSvgOf with preview: true, each entry tagged with the id of its OPERATION, so
  *  every element carries data-op="<id>"; the entries stay in file order: the elements, their order and grouping are the download's) and the operations in the
  *  document's order (operations.js describeOperations, the same list Prepare shows). Operations are a display grouping: the downloaded file never changes.
- *  TASK S1: an element's operation is its entry's stored operation (`opId`). */
-export function shaperPreviewOf(state, entries) {
-  const ops = describeOperations(state, entries);
+ *  TASK S1: an element's operation is its entry's stored operation (`opId`). TASK 798: `entries` = the ticked operations', `frame` = the whole plan's (see shaperSvgOf). */
+export function shaperPreviewOf(state, entries, frame = null) {
+  const ops = describeOperations(state, entries, frame); // TASK 798: the ticked operations (`entries`), derived with the whole plan's hole ownership (`frame`)
   const listed = new Set(ops.map((op) => op.id));
   const written = []; // TASK 793: the elements' cuts, in the file's order (the Paths view's bit-centre paths)
-  return { svg: shaperSvgOf(state, entries.map((e) => (listed.has(e.opId) ? { ...e, op: e.opId } : e)), { preview: true, written }), ops, written };
+  return { svg: shaperSvgOf(state, entries.map((e) => (listed.has(e.opId) ? { ...e, op: e.opId } : e)), { preview: true, written, frame }), ops, written };
 }
 
 /** TASK 793: the Export step's Paths view: the bit-centre travel of every element of the file. `written` = shaperPreviewOf's list ({ cut, entry } of each
@@ -53,4 +69,17 @@ export function bitCentrePaths(state, written) {
     if (travel.length) out.push({ index, travel });
   });
   return out;
+}
+
+/** TASK 798: the Export step's ONE line while an operation is unticked (phone-readable): "Exporting 2 of 4 operations (unticked: Contour 1 mm (⅛″ ball nose),
+ *  Outside 19 mm (¼″ end mill)). Place it with the same anchor as the earlier file." — `ops` = describeOperations(state) (every listed operation, with its `on` /
+ *  `tickable`; the Stock is not counted: it is in every file). Everything ticked (or nothing to tick): ''. */
+export function exportTickLine(ops) {
+  const tickable = ops.filter((op) => op.tickable !== false);
+  const on = tickable.filter((op) => op.on !== false);
+  if (on.length === tickable.length) return '';
+  const n = tickable.length, ops1 = n === 1 ? 'operation' : 'operations';
+  if (!on.length) return `Exporting 0 of ${n} ${ops1}: every one is unticked. Tick one in Prepare's Operations list.`;
+  const name = (op) => [op.typeLabel, op.depthText].filter(Boolean).join(' ') + (op.tool ? ` (${op.tool.label})` : '');
+  return `Exporting ${on.length} of ${n} ${ops1} (unticked: ${tickable.filter((op) => op.on === false).map(name).join(', ')}). Place it with the same anchor as the earlier file.`;
 }

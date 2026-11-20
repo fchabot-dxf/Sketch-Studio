@@ -9,7 +9,7 @@ import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { setFieldFor, cutPlanNotice, stockKeyOf } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice
 import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
-import { reorderOps } from './operations-store.js'; // TASK S1: the list order is the stored operations' order
+import { reorderOps, setOpsOn } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 
 /**
@@ -93,6 +93,9 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       for (const r of op.records) setFieldFor(r.planKey, 'cutType', null, st);
       if (prepareView) { if (picked) prepareView.setSelection([]); prepareView.refreshLook(); }
     }),
+    // TASK 798: a row's / a heading's checkbox ticks or unticks its operations: ONE undo step (the snapshot carries the store and its `on`); Prepare's look shows the
+    // ticked operations only (prepare-view.js), the selection and the card stay as they are
+    onTick: (ids, on) => cutEdit(() => { setOpsOn(ids, on); if (prepareView) prepareView.refreshLook(); }),
   });
 
   // The geometry signature the mounted Prepare view was built from: an undo that changed only the cut plan just repaints it

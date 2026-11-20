@@ -146,6 +146,11 @@ function datumPolygon(datum) {
 //   docUnit  — 'mm' | 'cm' | 'in' — suffixes the cut PARAMS; the geometry stays mm-canonical.
 //   options  — { datum? } — DECLARED unsurfaced features, DEFAULT OFF (so callers/oracles are unchanged):
 //                datum: true | {legX,legY}  → emit the red registration triangle FIRST.
+//                frame: { entries }         → TASK 798: the WHOLE plan's entries when `entries` is a part of it (the app's ticked operations):
+//                                             the hole ownership (ownedLoopIds) and the PAGE (width / height / viewBox: boundsOf over every
+//                                             element the whole plan writes) are the frame's, so each element written is byte-identical to its
+//                                             element in the whole plan's file and every partial file has the same page (they line up on the
+//                                             Origin). Without it (the default) both come from `entries`: the string is byte-identical to before.
 //                previewData: true          → TASK 718: the PREVIEW copy (Shaper's Export step, 2D view) — each element of a stepped cut
 //                                             carries data-step="k/N" (its terrace, from deriveCuts: what the file alone cannot say, since
 //                                             two cuts' steps at the same depth are written alike). Never in the downloaded file: with it
@@ -214,44 +219,49 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   };
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
-  const items = [];
-  const firstItems = []; // TASK 774: the elements of the exportFirst types (the Stock)
-  const owned = ownedLoopIds(ents, state, loops, ensurePolys(), enc); // TASK 711: a hole with its own entry is cut by that entry only
-  for (const e of ents) {
-    if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
-    // TASK 714 / 792: a ROUGHING / CONTOUR type's encoding declares `levelsOp` (TASK 792 replaced the stepped types' `terraceAs`): deriveCuts then
-    // returns one plain cut per level (#core/stepped-cut.js: pockets, inside / outside cuts), each written with ITS type's encoding at its own depth,
-    // and its own outline (`geom`). The Origin sees plain cuts.
-    const typeEnc = encOf(e.rec.cutType);
-    const rec = typeEnc && typeEnc.levelsOp ? { ...e.rec, levelsOp: typeEnc.levelsOp } : e.rec;
-    const cuts = deriveCuts(e.target, rec, state, loops, ensurePolys(), owned);
-    for (const cut of cuts) {
-      const c = encOf(cut.rec.cutType);
-      if (!c) continue;
-      let geom = null;
-      if (cut.geom) {
-        geom = cut.geom;
-      } else if (cut.isCompound) {
-        if (cut.d) {
-          geom = { tag: 'path', a: `d="${cut.d}"` };
-        } else if (cut.holeLoops && cut.holeLoops.length > 0) {
-          geom = compoundOrLoopGeom(cut.outerLoop, cut.holeLoops.map((h) => h.id));
-        } else {
-          geom = loopGeom(cut.outerLoop, state, shapeById);
+  const frameEnts = options.frame && Array.isArray(options.frame.entries) ? options.frame.entries : null; // TASK 798: the whole plan (see `options`)
+  const owned = ownedLoopIds(frameEnts || ents, state, loops, ensurePolys(), enc); // TASK 711: a hole with its own entry is cut by that entry only (TASK 798: the whole plan's)
+  const itemsOf = (list) => {
+    const items = [];
+    const firstItems = []; // TASK 774: the elements of the exportFirst types (the Stock)
+    for (const e of list) {
+      if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
+      // TASK 714 / 792: a ROUGHING / CONTOUR type's encoding declares `levelsOp` (TASK 792 replaced the stepped types' `terraceAs`): deriveCuts then
+      // returns one plain cut per level (#core/stepped-cut.js: pockets, inside / outside cuts), each written with ITS type's encoding at its own depth,
+      // and its own outline (`geom`). The Origin sees plain cuts.
+      const typeEnc = encOf(e.rec.cutType);
+      const rec = typeEnc && typeEnc.levelsOp ? { ...e.rec, levelsOp: typeEnc.levelsOp } : e.rec;
+      const cuts = deriveCuts(e.target, rec, state, loops, ensurePolys(), owned);
+      for (const cut of cuts) {
+        const c = encOf(cut.rec.cutType);
+        if (!c) continue;
+        let geom = null;
+        if (cut.geom) {
+          geom = cut.geom;
+        } else if (cut.isCompound) {
+          if (cut.d) {
+            geom = { tag: 'path', a: `d="${cut.d}"` };
+          } else if (cut.holeLoops && cut.holeLoops.length > 0) {
+            geom = compoundOrLoopGeom(cut.outerLoop, cut.holeLoops.map((h) => h.id));
+          } else {
+            geom = loopGeom(cut.outerLoop, state, shapeById);
+          }
+        } else if (cut.kind === 'chain') {
+          const d = chainToPathD(cut.chain, state);
+          if (d) geom = { tag: 'path', a: `d="${d}"` };
+        } else if (cut.loop) {
+          geom = loopGeom(cut.loop, state, shapeById);
         }
-      } else if (cut.kind === 'chain') {
-        const d = chainToPathD(cut.chain, state);
-        if (d) geom = { tag: 'path', a: `d="${d}"` };
-      } else if (cut.loop) {
-        geom = loopGeom(cut.loop, state, shapeById);
+        const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
+          + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
+        const paint = isMark(cut) ? colorAttrs({ ...c, fill: 'none' }) : colorAttrs(c); // TASK 786: a mark is stroke-only
+        if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, meta: { cut, entry: e } });
       }
-      const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
-        + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
-      const paint = isMark(cut) ? colorAttrs({ ...c, fill: 'none' }) : colorAttrs(c); // TASK 786: a mark is stroke-only
-      if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, meta: { cut, entry: e } });
     }
-  }
-  items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
+    items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
+    return items;
+  };
+  const items = itemsOf(ents);
 
   const body = [];
   const wrote = (it) => { if (options.written) options.written.push(it.meta); }; // TASK 793: `written` (an array the caller gives) receives { cut, entry } of every element in the FILE's order (the Export step's Paths view draws each element's bit-centre path from it)
@@ -262,7 +272,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   // them from each element, never from a parent group (measured at the Origin, a Spiral pocket's grouped on-line paths came up "unset").
   for (const it of items) { body.push(`  <${it.tag} ${it.a}${it.common}/>`); wrote(it); }
 
-  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, items); // TASK 786: every written element (items holds the Stock too)
+  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null, frameEnts ? itemsOf(frameEnts) : items); // TASK 786: every written element (items holds the Stock too); TASK 798: every element the whole plan writes
   const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;
   return [header, ...body, '</svg>'].join('\n');
 }

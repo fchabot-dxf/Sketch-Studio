@@ -186,7 +186,10 @@ try {
   await drag(c, { x: -120, y: -40 }, 'left', 1);
   const n1 = await state();
   console.log(`left drag: target moved ${moved(n0.target, n1.target).toFixed(3)} mm, camera moved ${moved(n0.camera, n1.camera).toFixed(1)} mm`);
-  assert.ok(moved(n0.target, n1.target) < 1e-6 && moved(n0.camera, n1.camera) > 1, 'a left drag orbits: the target stays, the camera moves');
+  // TASK 823: the drag starts on the board, so the orbit turns round the pressed point and the target turns with the camera (before: the target stayed);
+  // it is still an orbit: the camera moves and its distance to the target is kept (a pan or a zoom would change one of them)
+  assert.ok(moved(n0.camera, n1.camera) > 1, 'a left drag orbits: the camera moves');
+  assert.ok(Math.abs(moved(n0.camera, n0.target) - moved(n1.camera, n1.target)) < 1e-6 * moved(n0.camera, n0.target) + 1e-6, 'a left drag orbits: the camera-target distance is kept');
   for (const [label, button, buttons, modifiers] of [['middle drag', 'middle', 4, 0], ['Shift + left drag', 'left', 1, 8], ['right drag', 'right', 2, 0]]) {
     const a = await state();
     await drag(c, { x: 80, y: 50 }, button, buttons, modifiers);
@@ -255,7 +258,8 @@ try {
   await T('touchEnd', []); await sleep(200);
   const t1 = await state();
   console.log(`phone one finger: target moved ${moved(t0.target, t1.target).toFixed(3)} mm, camera moved ${moved(t0.camera, t1.camera).toFixed(1)} mm`);
-  assert.ok(moved(t0.target, t1.target) < 1e-6 && moved(t0.camera, t1.camera) > 1, 'phone: one finger orbits (the target stays)');
+  // TASK 823: the finger lands on the board: the orbit turns round that point, the target turns with the camera (distance kept)
+  assert.ok(moved(t0.camera, t1.camera) > 1 && Math.abs(moved(t0.camera, t0.target) - moved(t1.camera, t1.target)) < 1e-6 * moved(t0.camera, t0.target) + 1e-6, 'phone: one finger orbits (the camera moves, its distance to the target is kept)');
   await T('touchStart', [{ x: pc.x - 30, y: pc.y }, { x: pc.x + 30, y: pc.y }]);
   for (let i = 1; i <= 8; i++) { await T('touchMove', [{ x: pc.x - 30 + 8 * i, y: pc.y + 5 * i }, { x: pc.x + 30 + 8 * i, y: pc.y + 5 * i }]); await sleep(30); }
   await T('touchEnd', []); await sleep(200);

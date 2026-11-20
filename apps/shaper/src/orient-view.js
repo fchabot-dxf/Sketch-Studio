@@ -33,7 +33,7 @@ export async function openOrientView({ tris, unit, rotation = null, up = null, o
   doc.body.appendChild(root);
   const host = root.querySelector('.orient-host'), infoEl = root.querySelector('.orient-info');
 
-  const { renderer, scene, sun, camera, controls, size } = createOrbitStage(THREE, OrbitControls, host);
+  const { renderer, scene, sun, camera, controls, size, pivot } = createOrbitStage(THREE, OrbitControls, host);
   scene.background = new THREE.Color(0x0b1020);
   // the mesh in mm, in its own (raw) frame; the group maps the part's frame (x, y, z up) to the stage's (y up)
   const world = new THREE.Group();
@@ -122,6 +122,8 @@ export async function openOrientView({ tris, unit, rotation = null, up = null, o
   root.querySelector('.orient-cancel').addEventListener('click', () => close('cancel'));
   root.querySelector('.orient-done').addEventListener('click', () => close(changed ? 'done' : 'cancel'));
   const api = {
+    /** TASK 823: the part's point (x, y, z in mm, as screenOf takes it) an orbit in progress turns round, or null. */
+    pivot() { const p = pivot(); return p && [p.x, -p.z, p.y]; },
     /** CSS px of the page where the part's point (x, y, z in mm, as shown now: the floor at z 0) is drawn. */
     screenOf([x, y, z]) {
       const v = new THREE.Vector3(x, z, -y).project(camera), r = el.getBoundingClientRect();

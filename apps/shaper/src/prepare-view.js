@@ -829,6 +829,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     clearingFor: (t) => (t ? clearingAvailability(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys) : null), // TASK 745: which Clearing choices it can take
     clearingSummaryFor: (t) => (t ? clearingSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 745: what its clearing is (the derivation's)
     leadInFor: (t) => (t ? leadInSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 778: the calculated / resolved arc summary
+    partDepthFor: (t) => { if (!t) return null; const k = targetKey(t), e = resolveEntry(k, getCutRecord(k)); const d = e ? (isContourKey(k) ? e.rec.baseDepth : e.rec.cutDepth) : null; return Number(d) > 0 ? Number(d) : null; }, // TASK 810: the part's depth (a Contour: its part's)
     levelsFor: (t) => { if (!t) return false; const k = targetKey(t), e = resolveEntry(k, getCutRecord(k)); return Boolean(e && hasLevels(e.rec)); }, // TASK 809: the record (a Contour: its part) cuts a part's levels
     contourFor: (t) => (t && t.kind !== CONTOUR_KIND ? { allowed: contourAllowed(getCutRecord(targetKey(t))), on: Boolean(contourOf(targetKey(t))) } : null), // TASK 792: the part card's Contour row
     startBoundaryPick({ onPick, onEnd = () => {} }) { // TASK 810: see boundaryPick above

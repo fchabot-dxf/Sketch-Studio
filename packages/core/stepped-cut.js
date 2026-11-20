@@ -726,6 +726,29 @@ export function levelsRoughingFor(rec, partOuter, state, loops, loopPolys) {
   return levelsRoughing(rec.levels, { outer: b.polygon, grow: roughingWorkGrow(rec), step: rec.stepDepth, depth: rec.cutDepth, toolDia: rec.toolDia, allowance: roughingAllowance(rec), layout: roughLayout(rec), minWidth: rec.minTerraceWidth });
 }
 
+// ── TASK 810 (owner turns 2657-2658): the HEIGHTS of a Roughing / Contour (any source: levels, slope rings, a drawn region): it cuts only a BAND of depths.
+// Record fields: `topDepth` (base mm below the surface where it starts; none = the Surface: a level at or above it is not cut), `bottomDepth` (the depth it stops
+// at; none = the part's depth: the Roughing's Depth, the Contour's part's: "From model" for a part read from Fusion or an STL), `floorAllowance` (base mm >= 0: the
+// deepest level stops that much above the bottom; separate from the wall allowance; none / 0 = none). The levels are made as before down to the band's bottom
+// (bottom - floor allowance: its last level there), then the levels shallower than or at the top are dropped. None of them set: the depth as it was (byte for byte).
+const modelDepth = (rec) => (hasLevels(rec) ? rec.levels[rec.levels.length - 1].z : rec.slope && Array.isArray(rec.slope.rings) && rec.slope.rings.length ? Math.max(...rec.slope.rings.map((r) => Number(r && r.z)).filter(Number.isFinite)) : null);
+/** levelsBand(rec, partDepth) -> { top (base mm, 0 = the surface), depth (the depth the levels are made to: partDepth itself when no height is set), empty (no level
+ *  can be cut between the top and the bottom) }. */
+export function levelsBand(rec, partDepth) {
+  const r = rec || {};
+  const top = Number(r.topDepth) > 0 ? Number(r.topDepth) : 0;
+  const bottom = r.bottomDepth != null && Number(r.bottomDepth) > 0 ? Number(r.bottomDepth) : null;
+  const floor = Number(r.floorAllowance) > 0 ? Number(r.floorAllowance) : 0;
+  if (!top && bottom == null && !floor) return { top: 0, depth: partDepth, empty: false };
+  const part = Number(partDepth) > 0 && partDepth !== true ? Number(partDepth) : modelDepth(r);
+  const stop = bottom != null ? (part != null ? Math.min(part, bottom) : bottom) : part;
+  if (stop == null) return { top, depth: partDepth, empty: false }; // no depth known (a drawn region with its depth unset): nothing to limit
+  const depth = stop - floor;
+  return { top, depth, empty: !(depth > top + Z_EPS) };
+}
+/** The depth a cut of a Roughing / Contour is made at (its level's, else its record's). */
+const cutLevelDepth = (c) => Number(c.terrace ? c.terrace.depth : c.rec && c.rec.cutDepth);
+
 /** TASK 792 (owner turn 2604): Roughing's two LAYOUTS, the record field `roughLayout` (a part with levels; a sloped region's Roughing is the stepped engine,
  *  nested by nature). `terraces` (the default): every spot cut ONCE, from the surface to its own floor (no air passes; best on deep or gentle reliefs).
  *  `nested`: level k = one pocket over everything that must reach at least d_k (fewer, bigger, continuous paths; best on steep or blocky parts). */
@@ -948,12 +971,18 @@ function smoothedRoughing(R, tol) {
 }
 
 // deriveCuts for a record with `levelsOp` (header). The record carries `levels` and / or `slope` (a Contour: its part's, with `baseDepth` / `baseType`).
+// TASK 810: only the band of its heights (levelsBand): made down to the band's depth, the levels at or above its top dropped; an empty band cuts nothing.
 function deriveLevelsCuts(target, rec, state, loops, loopPolys, ownedLoops) {
+  const band = levelsBand(rec, rec.levelsOp === 'contour' ? rec.baseDepth : rec.cutDepth);
+  if (band.empty) return [];
+  const cuts = deriveLevelsCutsTo(target, rec, band.depth, state, loops, loopPolys, ownedLoops);
+  return band.top > 0 ? cuts.filter((c) => cutLevelDepth(c) > band.top + Z_EPS) : cuts;
+}
+function deriveLevelsCutsTo(target, rec, depth, state, loops, loopPolys, ownedLoops) {
   const op = rec.levelsOp;
-  const depth = op === 'contour' ? rec.baseDepth : rec.cutDepth;
   const label = (rec.slope && rec.slope.label) || null;
   const work = { ...levelsWorkRecord(rec), cutDepth: depth };
-  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryShape', 'boundaryTarget', 'boundaryTool', 'boundaryOffset']) delete work[k]; // TASK 810: + the boundary's fields // `slope` stays: the stepped engine reads it
+  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryShape', 'boundaryTarget', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance']) delete work[k]; // TASK 810: + the boundary's and the heights' fields // `slope` stays: the stepped engine reads it
   if (hasLevels(rec)) { // path 1
     const plain = deriveProfileCuts(target, { ...work, cutType: 'pocket' }, state, loops, loopPolys, ownedLoops).find((c) => c.isCompound);
     if (!plain) return [];

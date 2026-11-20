@@ -18,7 +18,7 @@ import { open } from './helpers/node-app.js';
 import * as M from './helpers/stl-mesh.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
-import { ROUGH_BOUNDARY, BOUNDARY_CALC_OFFSET_BITS, boundaryToolBits, roughingWorkGrow, boundaryCalcOffset, levelsRoughingFor, LEVELS } from '#core/stepped-cut.js';
+import { ROUGH_BOUNDARY, BOUNDARY_CALC_OFFSET_BITS, boundaryToolBits, roughingWorkGrow, boundaryCalcOffset, levelsRoughingFor, levelsBand, LEVELS } from '#core/stepped-cut.js';
 import { regionsFromRings, offsetRegions, regionsArea } from '#core/plot/clip.js';
 import { CUT_PLAN, cutPlanEntries, setContour, contourKeyOf, renamePlanKeys } from '../apps/shaper/src/cut-plan.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
@@ -244,6 +244,74 @@ const payload = () => ({
     const c1 = contourOnly();
     CUT_PLAN.get(pk).boundary = 'box';
     eq(contourOnly(), c1, 'the Contour follows the material walls: the same whatever the boundary');
+  } finally { await app.close(); }
+}
+
+// ── 6. HEIGHTS (Roughing and Contour): Top, Bottom, Floor allowance cut a band of depths ──
+eq(levelsBand({}, 7), { top: 0, depth: 7, empty: false }, 'no height set: the depth as it was');
+eq(levelsBand({}, 'unset'), { top: 0, depth: 'unset', empty: false }, 'no height set: even an unset depth is passed as it was');
+eq(levelsBand({ topDepth: 2, bottomDepth: 5, floorAllowance: 0.5 }, 7), { top: 2, depth: 4.5, empty: false }, 'Top 2, Bottom 5, floor 0.5: levels made down to 4.5, those at or above 2 dropped');
+eq(levelsBand({ bottomDepth: 9 }, 7).depth, 7, 'a Bottom below the part: the depth of the part');
+eq(levelsBand({ floorAllowance: 1 }, undefined, ).depth, undefined, 'no depth known (a drawn region with its depth unset): nothing to limit');
+eq(levelsBand({ floorAllowance: 1, levels: [{ z: 2, loops: [] }, { z: 6, loops: [] }] }, undefined).depth, 5, 'no depth set on a part with levels: its model depth (the deepest level) less the floor allowance');
+eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an empty band');
+{
+  CUT_PLAN.clear();
+  const app = await open({ host: 'shaper' });
+  try {
+    app.modes.showMode('prepare');
+    const st = app.state, doc = app.document, q = (s2) => doc.querySelector(s2);
+    const pressEl = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
+    const pc = doc.getElementById('prepare-canvas');
+    const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
+    const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
+    const setField = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
+    const els = (type) => [...shaperSvgOf(st, cutPlanEntries()).matchAll(/<path [^>]*\/>/g)].map((x) => x[0]).filter((x) => new RegExp(`shaper:cutType="(${type})"`).test(x));
+    const depthOf = (e) => Number(/shaper:cutDepth="([\d.]+) mm"/.exec(e)[1]);
+    const res = app.stl.openFile(M.binaryStl(M.dome(30)), 'dome.stl');
+    ok(res.ok, 'the dome');
+    const [key, rec] = [...CUT_PLAN.entries()].find(([, x]) => x.levels);
+    rec.toolDia = 6.35;
+    const D = Number(rec.cutDepth);
+    const all = els('pocket');
+    clickAt(30, -30);
+    pressEl('.cut-tab[data-tab="heights"]');
+    eq(rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'], 'the Heights tab: Depth, Top, Bottom, Floor allowance');
+    eq([q('.cut-top-depth').value, q('.cut-top-depth').placeholder, q('.cut-bottom-depth').value, q('.cut-bottom-depth').placeholder, q('.cut-floor-allowance').value], ['', '0', '', String(+D.toFixed(3)), '0'], 'the defaults: the surface, the depth of the part (greyed), no floor allowance');
+    const keyBefore = opKeyOf(rec);
+    const n0 = st.history.length;
+    setField('.cut-top-depth', '3');
+    eq([CUT_PLAN.get(key).topDepth, st.history.length], [3, n0 + 1], 'Top 3: stored, ONE undo step');
+    const top3 = els('pocket');
+    eq(top3, all.filter((e) => depthOf(e) > 3), 'Top 3: exactly the paths deeper than 3 mm (the others not cut)');
+    ok(top3.length < all.length && top3.length > 0, `fewer paths (${top3.length} of ${all.length})`);
+    ok(opKeyOf(CUT_PLAN.get(key)) !== keyBefore, 'a Top is part of the operation key');
+    ok([...doc.querySelectorAll('.cut-tab')].find((b) => b.dataset.tab === 'heights').querySelector('.cut-tab-dot').hidden === false, 'the Heights tab shows its dot');
+    pressEl('.cut-row[data-row="topDepth"] .cut-calc-reset');
+    eq([CUT_PLAN.get(key).topDepth, els('pocket'), opKeyOf(CUT_PLAN.get(key))], [null, all, keyBefore], 'Reset to surface: every path again, the key of before');
+    setField('.cut-bottom-depth', '5');
+    const b5 = els('pocket').map(depthOf);
+    ok(Math.max(...b5) === 5 && b5.every((d) => d <= 5), 'Bottom 5: no path deeper, the last level at 5: ' + [...new Set(b5)].join(','));
+    setField('.cut-floor-allowance', '0.5');
+    const f = els('pocket').map(depthOf);
+    ok(Math.max(...f) === 4.5, 'Bottom 5 + floor allowance 0.5: the deepest level at 4.5');
+    setField('.cut-top-depth', '6');
+    eq(els('pocket').length, 0, 'Top 6 under a 4.5 bottom: nothing cut');
+    ok(note().includes('Roughing: nothing to cut: no level between the Top and the Bottom (less the floor allowance)'), 'the note says why: ' + JSON.stringify(note()));
+    setField('.cut-top-depth', ''); setField('.cut-bottom-depth', ''); setField('.cut-floor-allowance', '0');
+    eq(els('pocket'), all, 'all cleared: the default export');
+    // the Contour: its own Heights (Bottom = its part's depth)
+    setContour(key, true);
+    const call = els('outside|inside'), rough = els('pocket'); // (the Contour sets the Roughing's wall allowance: its paths are those of that allowance)
+    const crec = CUT_PLAN.get(contourKeyOf(key));
+    crec.topDepth = 2; crec.floorAllowance = 1;
+    const c2 = els('outside|inside').map(depthOf);
+    ok(c2.length > 0 && c2.every((d) => d > 2 && d <= D - 1 + 1e-9) && Math.abs(Math.max(...c2) - (D - 1)) < 1e-6, `the Contour's band: deeper than 2, the last level at the part's depth less 1 (${D - 1})`);
+    ok(c2.length < call.length, 'fewer contour passes');
+    eq(els('pocket'), rough, 'the Roughing is not affected by the heights of the Contour');
+    const saved = captureShaperDoc();
+    eq([new Map(saved.cutPlan).get(contourKeyOf(key)).topDepth, new Map(saved.cutPlan).get(contourKeyOf(key)).floorAllowance], [2, 1], 'saved with the design');
   } finally { await app.close(); }
 }
 

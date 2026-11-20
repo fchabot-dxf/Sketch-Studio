@@ -84,6 +84,14 @@ const SETTING_FIELDS = {
   layout: (rec, eff) => (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'nested' ? 'nested' : undefined), // TASK 792 (owner turn 2604): the Nested layout (Terraces, the default, adds nothing)
   minWidth: (rec, eff) => (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'terraces' && Number(rec.minTerraceWidth) > 0 ? round6(rec.minTerraceWidth) : undefined), // TASK 792: the Min terrace width (0 adds nothing)
   smoothing: (rec, eff) => (eff.levelsOp && smoothingOf(eff.levelsOp, rec.smoothing) !== smoothingOf(eff.levelsOp, undefined) ? round6(smoothingOf(eff.levelsOp, rec.smoothing)) : undefined), // TASK 809: a Smoothing other than the operation's default (the default adds nothing)
+  heights: (rec, eff) => { // TASK 810: a Roughing / Contour's Heights, each off its default (the Surface, the part's depth, no floor allowance add nothing)
+    if (!eff.levelsOp) return undefined;
+    const o = {};
+    if (Number(rec.topDepth) > 0) o.top = round6(rec.topDepth);
+    if (rec.bottomDepth != null && Number(rec.bottomDepth) > 0) o.bottom = round6(rec.bottomDepth);
+    if (Number(rec.floorAllowance) > 0) o.floor = round6(rec.floorAllowance);
+    return Object.keys(o).length ? o : undefined;
+  },
   boundary: (rec, eff) => { // TASK 810: a Roughing's machining boundary (a part with levels), each part off its default (Silhouette, Outside, the calculated offset add nothing)
     if (eff.levelsOp !== 'roughing' || !hasLevels(eff)) return undefined;
     const b = boundaryOf(rec), o = {};

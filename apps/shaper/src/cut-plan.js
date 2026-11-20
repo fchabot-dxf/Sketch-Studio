@@ -8,7 +8,7 @@
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
-import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughingFor, boundaryOf } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary
+import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughingFor, boundaryOf, levelsBand } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; the heights' band
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
@@ -58,6 +58,7 @@ export const ROUGHING_REFUSED = {
   'no-shape': 'no boundary shape yet: press Pick, then click a closed shape',
   'shape-gone': 'the boundary shape is no longer in the design',
   'no-room': 'the boundary leaves no room for the bit',
+  band: 'no level between the Top and the Bottom (less the floor allowance)', // the Heights (Roughing and Contour)
 };
 /** TASK 810: rename plan KEYS (`rename`: old key -> new key) and drop some (`remove`), in place, the plan's order kept: the records AND every reference to a key a
  *  record holds (a Roughing's picked boundary shape, `boundaryShape`), so a reference follows its shape as the record of that shape does. The one place keys move. */
@@ -438,9 +439,10 @@ export function levelsSummary(key, storedRec, state, loops, loopPolys, owned, pl
   const worst = [...perLevel.values()].reduce((m, v) => (v.islands > m.islands ? v : m), { islands: 0, small: 0 });
   // TASK 792 / 810: a Roughing from levels, as its cuts were made (#core levelsRoughingFor: its boundary): the bands the Min terrace width leaves, and why it has nothing to cut
   const outer = hasLevels(rec) && rec.levelsOp === 'roughing' ? (deriveProfileCuts(e.target, { ...rec, cutType: 'pocket' }, state, loops, loopPolys, owned).find((c) => c.isCompound) || {}).outerPoly : null;
-  const LR = outer ? levelsRoughingFor(rec, outer, state, loops, loopPolys) : null;
+  const band = levelsBand(rec, rec.levelsOp === 'contour' ? rec.baseDepth : rec.cutDepth); // TASK 810: its heights
+  const LR = outer && !band.empty ? levelsRoughingFor({ ...rec, cutDepth: band.depth }, outer, state, loops, loopPolys) : null;
   const thin = LR && roughLayout(rec) === 'terraces' && Number(rec.minTerraceWidth) > 0 ? LR.steps.reduce((n, s) => n + (s.thin || 0), 0) : 0;
-  const refused = LR && ROUGHING_REFUSED[LR.error] ? LR.error : null;
+  const refused = band.empty ? 'band' : LR && ROUGHING_REFUSED[LR.error] ? LR.error : null;
   return { op: rec.levelsOp, layout: roughLayout(rec), source: hasLevels(rec) ? 'levels' : rec.slope ? 'slope' : 'drawn', depths, passes: cuts.length, allowance: roughingAllowance(rec), islands: worst.islands, small: worst.small, thin, minWidth: Number(rec.minTerraceWidth) || 0, toolDia: Number(rec.toolDia) || 0, refused };
 }
 /**

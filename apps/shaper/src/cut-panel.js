@@ -55,6 +55,9 @@ const STEPPERS = {
   minTerraceWidth: { step: { mm: 0.5, in: 1 / 32 }, min: 0 }, // TASK 792: Roughing's Min terrace width (0 = rough every band)
   smoothing:     { step: { mm: 0.01, in: 0.0005 }, min: 0 }, // TASK 809: Roughing / Contour's Smoothing tolerance (0 = off)
   boundaryOffset: { step: { mm: 0.25, in: 1 / 64 } }, // TASK 810: Roughing's boundary offset (signed: no min, as the cut offset)
+  topDepth:      { step: { mm: 0.5, in: 1 / 32 }, min: 0 }, // TASK 810: the Heights (depths below the surface; 0 = the surface)
+  bottomDepth:   { step: { mm: 0.5, in: 1 / 32 }, min: 0 },
+  floorAllowance: { step: { mm: 0.1, in: 0.005 }, min: 0 },
   rasterAngle:   { step: { mm: 15, in: 15 }, min: 0, max: 180 },
   // TASK 775 / 778: the tangential arc lead-in: radius (min = bit radius), sweep (15-180 deg, step 15), optional straight length (min 0)
   leadInRadius:  { step: { mm: 0.5, in: 1 / 32 }, positive: true },
@@ -86,7 +89,7 @@ const BOUNDARY_TOOL_PRESETS = ROUGH_BOUNDARY.tools.map((t) => ({ hint: choiceId(
 const CARD_TABS = [
   { id: 'tool', hint: 'tabTool', rows: ['toolDia', 'cutterShape'] },
   { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth'] },
-  { id: 'heights', hint: 'tabHeights', rows: ['cutDepth'] },
+  { id: 'heights', hint: 'tabHeights', rows: ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'] },
   { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'contour', 'smoothing'] },
 ];
 const TAB_OF_ROW = new Map(CARD_TABS.flatMap((t) => t.rows.map((r) => [r, t.id])));
@@ -102,6 +105,9 @@ const CHANGED = {
   boundary: (rec) => boundaryOf(rec).kind !== ROUGH_BOUNDARY.defaultKind,
   boundaryTool: (rec) => boundaryOf(rec).tool !== ROUGH_BOUNDARY.defaultTool,
   boundaryOffset: (rec) => boundaryOf(rec).offset != null,
+  topDepth: (rec) => Number(rec.topDepth) > 0,
+  bottomDepth: (rec) => rec.bottomDepth != null && Number(rec.bottomDepth) > 0,
+  floorAllowance: (rec) => Number(rec.floorAllowance) > 0,
   roughLayout: (rec) => rec.roughLayout === 'nested',
   stepDepth: (rec, op) => Number(rec.stepDepth) > 0 && !near6(rec.stepDepth, op === 'contour' ? CONTOUR_DEFAULTS.stepDepth : STEP_DEPTH.defaultMm),
   adaptiveSteps: (rec) => rec.adaptiveSteps === true,
@@ -144,6 +150,29 @@ export function createCutPanel(hostEl, opts = {}) {
         <button type="button" class="cut-field-label" data-hint="cutDepth"></button>
         <div class="cut-stepper cut-box">
           <div class="cut-mid"><input type="text" class="cut-num cut-depth" inputmode="decimal" placeholder="unset"><span class="cut-unit">mm</span></div>
+        </div>
+      </div>
+      <div class="cut-row" data-row="topDepth">
+        <button type="button" class="cut-field-label" data-hint="topDepth"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-top-depth" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+        <div class="cut-calc-bar"><span class="cut-calc-tag">surface</span><button type="button" class="cut-calc-reset" data-reset="topDepth" hidden>Reset to surface</button></div>
+      </div>
+      <div class="cut-row" data-row="bottomDepth">
+        <button type="button" class="cut-field-label" data-hint="bottomDepth"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-bottom-depth" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+        <div class="cut-calc-bar"><span class="cut-calc-tag">part depth</span><button type="button" class="cut-calc-reset" data-reset="bottomDepth" hidden>Reset to part depth</button></div>
+      </div>
+      <div class="cut-row" data-row="floorAllowance">
+        <button type="button" class="cut-field-label" data-hint="floorAllowance"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-floor-allowance" inputmode="decimal">
+          <span class="cut-unit">mm</span>
         </div>
       </div>
       <div class="cut-row" data-row="clearing">
@@ -358,7 +387,16 @@ export function createCutPanel(hostEl, opts = {}) {
     const n = parseUnit(raw, docUnit());
     if (n != null && Number.isFinite(n)) onSetField('boundaryOffset', n); else renderFields();
   });
-  const calcBars = Object.fromEntries(['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInAt', 'boundaryOffset'].map((f) => [f, {
+  // TASK 810: the Heights rows: Top (empty / Reset = the surface), Bottom (empty / Reset = the part's depth), Floor allowance (>= 0)
+  const topInput = $('.cut-top-depth'), bottomInput = $('.cut-bottom-depth'), floorInput = $('.cut-floor-allowance');
+  for (const [input, field] of [[topInput, 'topDepth'], [bottomInput, 'bottomDepth']]) input.addEventListener('change', () => {
+    const raw = input.value.trim();
+    if (raw === '') { onSetField(field, null); return; }
+    const n = parseUnit(raw, docUnit());
+    if (n != null && Number.isFinite(n) && n >= 0) onSetField(field, n > 0 ? n : null); else renderFields(); // 0 = the surface / no limit: the default
+  });
+  floorInput.addEventListener('change', () => { const n = parseUnit(floorInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('floorAllowance', n); else renderFields(); });
+  const calcBars = Object.fromEntries(['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInAt', 'boundaryOffset', 'topDepth', 'bottomDepth'].map((f) => [f, {
     tag: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-tag`),
     reset: card.querySelector(`.cut-row[data-row="${f}"] .cut-calc-reset`),
   }]));
@@ -471,6 +509,9 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'finishAllowance' ? (current.finishAllowance != null && Number(current.finishAllowance) >= 0 ? Number(current.finishAllowance) : cutTypeHasField(current.cutType, 'clearing') ? allowanceDefault(docUnit()) : 0) // TASK 745; TASK 792: a Roughing without one has 0
     : field === 'minTerraceWidth' ? (Number(current.record && current.record.minTerraceWidth) > 0 ? Number(current.record.minTerraceWidth) : 0) // TASK 792
     : field === 'boundaryOffset' ? boundaryOffsetBase() // TASK 810: unset = the calculated offset
+    : field === 'topDepth' ? (Number(current.record && current.record.topDepth) > 0 ? Number(current.record.topDepth) : 0) // TASK 810: unset = the surface
+    : field === 'bottomDepth' ? (Number(current.record && current.record.bottomDepth) > 0 ? Number(current.record.bottomDepth) : (Number(current.partDepth) > 0 ? Number(current.partDepth) : 0)) // unset = the part's depth
+    : field === 'floorAllowance' ? (Number(current.record && current.record.floorAllowance) > 0 ? Number(current.record.floorAllowance) : 0)
     : field === 'smoothing' ? smoothingOf((cutTypeById(current.cutType) || {}).levelsOp, current.record ? current.record.smoothing : undefined) // TASK 809: unset = the operation's default
     : field === 'leadInRadius' ? (current.leadInRadius != null && Number(current.leadInRadius) > 0 ? Number(current.leadInRadius) : (current.leadInInfo && Number(current.leadInInfo.radius) > 0 ? Number(current.leadInInfo.radius) : Number(current.toolDia) || 0)) // TASK 778: null = calculated by derivation
     : field === 'leadInLength' ? (current.leadInLength != null && Number(current.leadInLength) >= 0 ? Number(current.leadInLength) : (current.leadInInfo && Number(current.leadInInfo.length) >= 0 ? Number(current.leadInInfo.length) : 0)) // TASK 778: null = calculated (0)
@@ -575,6 +616,9 @@ export function createCutPanel(hostEl, opts = {}) {
   stepperFor('minTerraceWidth', minTerraceInput, 'min terrace width', { box: minTerraceInput.closest('.cut-box') }); // TASK 792
   stepperFor('smoothing', smoothingInput, 'smoothing', { box: smoothingInput.closest('.cut-box') }); // TASK 809
   stepperFor('boundaryOffset', boundaryOffsetInput, 'boundary offset', { box: boundaryOffsetInput.closest('.cut-box') }); // TASK 810: from the calculated value while it is unset
+  stepperFor('topDepth', topInput, 'top', { box: topInput.closest('.cut-box') }); // TASK 810: from the surface (0) while unset
+  stepperFor('bottomDepth', bottomInput, 'bottom', { box: bottomInput.closest('.cut-box') }); // TASK 810: from the part's depth while unset
+  stepperFor('floorAllowance', floorInput, 'floor allowance', { box: floorInput.closest('.cut-box') });
   // TASK 778: the tangential arc lead-in fields: Radius (doc unit, min bit radius on stepper, empty resets to calculated), Sweep (15-180 deg, step 15), Length (>= 0, straight part before arc)
   leadRadiusInput.addEventListener('change', () => {
     const raw = leadRadiusInput.value.trim();
@@ -702,6 +746,14 @@ export function createCutPanel(hostEl, opts = {}) {
     boundaryPickBtn.setAttribute('aria-pressed', String(Boolean(current.boundaryCtx.picking)));
     boundaryOffsetInput.value = fieldText(fieldBase('boundaryOffset'));
     syncCalcBar('boundaryOffset', b.offset == null);
+    // TASK 810: the Heights of a Roughing / Contour (any part): Top, Bottom (empty = the surface / the part's depth, shown greyed), Floor allowance
+    const heights = tabbedType(current.cutType), hr = current.record || {};
+    for (const row of ['topDepth', 'bottomDepth', 'floorAllowance']) card.querySelector(`.cut-row[data-row="${row}"]`).style.display = heights ? '' : 'none';
+    topInput.value = Number(hr.topDepth) > 0 ? fieldText(Number(hr.topDepth)) : ''; topInput.placeholder = fieldText(0);
+    bottomInput.value = Number(hr.bottomDepth) > 0 ? fieldText(Number(hr.bottomDepth)) : ''; bottomInput.placeholder = Number(current.partDepth) > 0 ? fieldText(Number(current.partDepth)) : '';
+    floorInput.value = fieldText(fieldBase('floorAllowance'));
+    syncCalcBar('topDepth', !(Number(hr.topDepth) > 0));
+    syncCalcBar('bottomDepth', !(Number(hr.bottomDepth) > 0));
     card.querySelector('.cut-row[data-row="smoothing"]').style.display = declares('smoothing') && current.levels ? '' : 'none'; // TASK 809: an operation on a part with levels (an STL)
     smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.02 mm = 0.0008 in: a tolerance, always decimals
     card.querySelector('.cut-row[data-row="rasterAngle"]').style.display = clearing === 'raster' ? '' : 'none';
@@ -777,6 +829,7 @@ export function createCutPanel(hostEl, opts = {}) {
       contour: model.contour || null, // TASK 792: { allowed, on }
       levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)
       boundaryCtx: { hasStock: Boolean(model.boundary && model.boundary.hasStock), picking: Boolean(model.boundary && model.boundary.picking) }, // TASK 810: does the design have a Stock; is a boundary Pick on
+      partDepth: Number(model.partDepth) > 0 ? Number(model.partDepth) : null, // TASK 810: the part's depth (the Bottom's default; a Contour's is its part's)
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;

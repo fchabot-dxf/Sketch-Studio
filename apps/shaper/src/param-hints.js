@@ -46,6 +46,10 @@ const PARAMS = {
   boundaryPickCancel: { label: 'Cancel pick', hint: 'Stops picking: the boundary stays as it was.' },
   boundaryTool: { label: 'Tool', hint: 'Where the bit may go at the boundary: kept inside it, its centre on it, or out past it.', items: ROUGH_BOUNDARY.tools.map((t) => `boundaryTool:${t.id}`) },
   boundaryOffset: { label: 'Boundary offset', hint: 'Moves the boundary out (positive) or in (negative) before the tool rule. Empty = calculated: the wall allowance plus three quarters of the bit, which with Outside clears a band two bits wide round the part.' },
+  // TASK 810: the HEIGHTS of a Roughing / Contour: only a band of depths is cut
+  topDepth: { label: 'Top', hint: 'Where the cutting starts, as a depth below the surface: the levels at or above it are not cut (for example, already cleared by another operation). Empty = the surface.' },
+  bottomDepth: { label: 'Bottom', hint: 'The depth the cutting stops at: no level goes deeper. Empty = the part’s depth (from the model for a part from Fusion or an STL).' },
+  floorAllowance: { label: 'Floor allowance', hint: 'Left above the bottom: the deepest level stops this much higher, for a later pass to finish. Separate from the wall allowance. 0 = none.' },
   roughLayout: { label: 'Layout', hint: 'How the levels are cut. The Origin cuts every path from the surface down.', items: ['roughLayout:terraces', 'roughLayout:nested'] },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },

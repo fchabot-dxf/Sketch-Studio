@@ -213,6 +213,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
       importFile: () => {},
       documentTabs: true,
       projects: false,
+      host: 'fusion', // as Shaper's main.js passes it; TASK 828: the About item is not in Fusion's palette
       store: stubStore(),
       account: stubAccount(),
       hostActions,

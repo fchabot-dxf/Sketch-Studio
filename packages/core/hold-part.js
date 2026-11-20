@@ -27,8 +27,14 @@
 //    shorter than that takes no tab, nor an arc that curves round the strips' side with a radius up to the strip width. The tabs are spread evenly by perimeter (k * perimeter / count from the middle of the longest stretch
 //    that can take one), each moved to the nearest allowed point; a tab closer to the previous one than width + strip width (the gap a strip
 //    needs) is dropped, and the count is first lowered until the even spacing leaves that gap. Fewer than asked: the summary says how many fit.
+//    TASK 822, WHERE A STRIP FITS: a tab goes only where the gap strips on both its ends fit (each end cap reaches the outline's offset at exactly the
+//    strip width, all on one ring of it: stripFit). When the even spread puts a tab where they do not (a stem or a neck narrower than two strips: the
+//    owner's keyhole), the tabs are spread evenly along the stretches where they fit instead (the count lowered until each gap is the strip width; the
+//    hold's `narrow`, the summary says so); before, ONE such tab refused the whole hold. DRAGGED TABS: a shape's own tab centres (`tabsAt`, perimeter
+//    fractions, stored on its operation's geometry ref: Prepare's tab handles) replace the even spread (count = their number), each snapped to the
+//    nearest point where it may go (a stale one, after a design edit, moves there; one too near the one before is dropped).
 //  * REFUSED (the cut is exported as without hold, the summary says why): no cut depth; thickness >= depth (nothing to hold); no segment long
-//    enough for a tab; the offset outline of a gap is not one ring (a neck narrower than the strip), or the record's bit + offset does not fit
+//    enough for a tab; TASK 822: no stretch where a gap strip fits ('strip'); the offset outline of a gap is not one ring (a neck narrower than the strip), or the record's bit + offset does not fit
 //    in a strip (an offset over stripExtraMm / 2); TASK 787 'offset': the tabs fit at the tab width but not at the written width (the offset needs
 //    more outline than there is), or the offset leaves no written tab at all.
 //  * TASK 775, ON LINE (the cut type 'online'; the Origin follows the line itself, material both sides): the same Hold part rows (one declaration).
@@ -218,13 +224,53 @@ export function piecesPoints(pieces) {
   return [...pieces.flatMap((s) => segSamples(s)), pointAt(last, segLen(last))];
 }
 
+/** Nearest point on walk `w` to world point `pt`: { frac (0..1), s, point, dist }. Used when dragging a handle along the outline in Prepare: the lead-in junction
+ *  (TASK 778, #core/lead-in) and a tab (TASK 822, holdTabDragAt). */
+export function nearestWalkFrac(w, pt) {
+  let best = null;
+  const offer = (i, u, q) => {
+    const d = Math.hypot(pt.x - q.x, pt.y - q.y);
+    if (!best || d < best.dist) best = { i, u, point: q, dist: d };
+  };
+  w.segs.forEach((sg, i) => {
+    if (sg.type === 'line') {
+      const vx = sg.b.x - sg.a.x, vy = sg.b.y - sg.a.y, len2 = vx * vx + vy * vy;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((pt.x - sg.a.x) * vx + (pt.y - sg.a.y) * vy) / len2)) : 0;
+      offer(i, t * Math.sqrt(len2), P(sg.a.x + t * vx, sg.a.y + t * vy));
+    } else if (sg.type === 'arc') {
+      const dir = Math.sign(sg.sw) || 1, span = Math.abs(sg.sw);
+      const ang = Math.atan2(pt.y - sg.c.y, pt.x - sg.c.x);
+      let rel = (ang - sg.t0) * dir;
+      while (rel < 0) rel += TAU;
+      while (rel >= TAU) rel -= TAU;
+      const atA = (a) => P(sg.c.x + sg.r * Math.cos(sg.t0 + dir * a), sg.c.y + sg.r * Math.sin(sg.t0 + dir * a));
+      if (rel <= span) offer(i, rel * sg.r, atA(rel));
+      else { offer(i, 0, atA(0)); offer(i, span * sg.r, atA(span)); }
+    } else if (sg.type === 'poly') {
+      for (let k = 0; k + 1 < sg.pts.length; k++) {
+        const a = sg.pts[k], b = sg.pts[k + 1], vx = b.x - a.x, vy = b.y - a.y, len2 = vx * vx + vy * vy;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / len2)) : 0;
+        offer(i, sg.cum[k] + t * (sg.cum[k + 1] - sg.cum[k]), P(a.x + t * vx, a.y + t * vy));
+      }
+    }
+  });
+  const s = best ? w.starts[best.i] + best.u : 0;
+  const frac = w.length > 0 ? (((s / w.length) % 1) + 1) % 1 : 0;
+  return { frac, s, point: best ? best.point : P(0, 0), dist: best ? best.dist : Infinity };
+}
+
 /**
- * tabLayout(walk, { count, width, bitRadius, gap, side }) -> { perimeter, requested, tabs: [{ s, s0, s1 }] } — where the tabs go (THE PLACEMENT
+ * tabLayout(walk, { count, width, bitRadius, gap, side, at, fit }) -> { perimeter, requested, tabs: [{ s, s0, s1 }], narrow? } — where the tabs go (THE PLACEMENT
  * rule above). count = the asked number (Auto resolved by the caller), width = the tab width, bitRadius = the record's bit radius, gap = the
  * strip width (the least gap between two tabs), side = +1 strips outside the part (Outside cut), -1 inside (Inside cut). s = the tab's centre, s0 / s1 its ends, as perimeter positions (s0 < s1, s1 may pass the
  * perimeter on a circle), ordered by s.
+ * TASK 822: `at` = the tabs' own CENTRES (perimeter fractions 0..1: the shape's dragged tabs, `tabsAt`), each snapped to the nearest allowed point instead of the
+ * even spread (count = their number; one too close to the one before it is dropped, as above). `fit` = stripFit(...) (a held Outside / Inside cut): a tab is placed
+ * only where the gap strips on both its ends fit (each end cap reaches the outline's offset at exactly the strip width, all on ONE ring of it); when the layout
+ * above puts a tab where they do not (a stem or a neck narrower than two strips), the tabs are laid out again on the stretches where they fit (`narrow`: true):
+ * the count spread evenly along those stretches, lowered until each gap is the strip width (`at`: each snapped into them). No such stretch: no tab.
  */
-export function tabLayout(w, { count, width, bitRadius, gap, side = 1 }) {
+export function tabLayout(w, { count, width, bitRadius, gap, side = 1, at = null, fit = null }) {
   const Pm = w.length, half = width / 2, r = Math.max(0, bitRadius || 0);
   const out = { perimeter: Pm, requested: count, tabs: [] };
   const n0 = w.segs.length;
@@ -237,28 +283,112 @@ export function tabLayout(w, { count, width, bitRadius, gap, side = 1 }) {
       const lo = w.starts[i] + half + (closesOnStrip(i) ? gap : r), hi = w.starts[i] + segLen(sg) - half - (closesOnStrip((i + 1) % n0) ? gap : r);
       return hi >= lo - 1e-9 ? { lo, hi } : null;
     }).filter(Boolean);
-  if (!zones.length || !(count >= 1)) return out;
-  let n = Math.floor(count);
-  while (n > 0 && Pm / n - width < gap - 1e-9) n--;
+  const fixed = Array.isArray(at) && at.length ? at.map(Number).filter(Number.isFinite).map((f) => (((f % 1) + 1) % 1) * Pm) : null; // TASK 822: the dragged centres
+  if (fixed) { out.requested = fixed.length; out.fixed = true; }
+  if (!zones.length || !(fixed ? fixed.length : count >= 1)) return out;
+  let n = fixed ? fixed.length : Math.floor(count);
+  if (!fixed) while (n > 0 && Pm / n - width < gap - 1e-9) n--;
   if (n < 1) return out;
   const cyc = (a, b) => { const d = Math.abs(wrap(w, a) - wrap(w, b)); return Math.min(d, Pm - d); };
-  const snap = (x) => {
+  // the nearest point of the zones `zs` to x; TASK 822: `round` = across the perimeter's seam too (a zone's ends are candidates: a point past the last zone may be
+  // nearest the first one's start). The even spread keeps the clamp of before (its layouts unchanged)
+  const snapIn = (zs, x, round = false) => {
     let best = null, bd = Infinity;
-    for (const z of zones) {
-      const y = z.all ? wrap(w, x) : Math.min(z.hi, Math.max(z.lo, wrap(w, x)));
-      const d = cyc(x, y);
-      if (d < bd - 1e-9) { bd = d; best = y; }
+    for (const z of zs) {
+      for (const y of z.all ? [wrap(w, x)] : [Math.min(z.hi, Math.max(z.lo, wrap(w, x))), ...(round ? [z.lo, z.hi] : [])]) {
+        const d = cyc(x, y);
+        if (d < bd - 1e-9) { bd = d; best = y; }
+      }
     }
     return best;
   };
+  const keep = (vals) => {
+    const centres = [...new Set(vals.map((v) => Math.round(v * 1e9) / 1e9))].sort((a, b) => a - b);
+    const kept = [];
+    for (const c of centres) if (!kept.length || c - kept[kept.length - 1] >= width + gap - 1e-9) kept.push(c);
+    while (kept.length > 1 && kept[0] + Pm - kept[kept.length - 1] < width + gap - 1e-9) kept.pop();
+    return kept;
+  };
   const longest = zones.reduce((a, z) => (z.hi - z.lo > a.hi - a.lo ? z : a), zones[0]);
   const start = longest.all ? 0 : (longest.lo + longest.hi) / 2;
-  const centres = [...new Set(Array.from({ length: n }, (_, k) => snap(start + (k * Pm) / n)).map((v) => Math.round(v * 1e9) / 1e9))].sort((a, b) => a - b);
-  const kept = [];
-  for (const c of centres) if (!kept.length || c - kept[kept.length - 1] >= width + gap - 1e-9) kept.push(c);
-  while (kept.length > 1 && kept[0] + Pm - kept[kept.length - 1] < width + gap - 1e-9) kept.pop();
+  let kept = keep(fixed ? fixed.map((x) => snapIn(zones, x, true)) : Array.from({ length: n }, (_, k) => snapIn(zones, start + (k * Pm) / n)));
+  // TASK 822: do every tab's gap strips fit (both end caps on one ring of the offset)? Else the tabs are laid out again where they do (see above)
+  const capRings = (cs) => cs.flatMap((c) => [fit.capRing(c - half), fit.capRing(c + half)]);
+  if (fit && kept.length && !capRings(kept).every((v, i, all) => v >= 0 && v === all[0])) {
+    out.narrow = true;
+    let best = null;
+    for (const iv of capIntervals(w, fit.capRing, gap).values()) { const L = iv.reduce((t, [a, b]) => t + b - a, 0); if (!best || L > best.L + 1e-9) best = { iv, L }; }
+    const zoneIv = cycNorm(Pm, zones.map((z) => (z.all ? [0, Pm] : [z.lo, z.hi])));
+    const allowed = best ? cycAnd(cycAnd(cycNorm(Pm, best.iv.map(([a, b]) => [a + half, b + half])), cycNorm(Pm, best.iv.map(([a, b]) => [a - half, b - half]))), zoneIv) : [];
+    if (!allowed.length) kept = [];
+    else if (fixed) kept = keep(fixed.map((x) => snapIn(allowed.map(([lo, hi]) => ({ lo, hi })), x, true)));
+    else {
+      const T = allowed.reduce((t, [a, b]) => t + b - a, 0);
+      let m = n;
+      while (m > 1 && T / m < width + gap - 1e-9) m--;
+      const along = (u) => { for (const [a, b] of allowed) { if (u <= b - a + 1e-12) return a + Math.min(u, b - a); u -= b - a; } return allowed[allowed.length - 1][1]; };
+      kept = keep(T > 1e-9 ? Array.from({ length: m }, (_, k) => along(((k + 0.5) * T) / m)) : [allowed[0][0]]);
+    }
+  }
   out.tabs = kept.map((s) => ({ s, s0: s - half, s1: s + half }));
   return out;
+}
+// TASK 822: cyclic intervals on [0, Pm): `list` of [a, b] (a <= b, any reals) wrapped into [0, Pm], split at the seam, sorted and merged
+function cycNorm(Pm, list) {
+  const parts = [];
+  for (const [a, b] of list) {
+    if (b - a >= Pm - 1e-9) { parts.push([0, Pm]); continue; }
+    const a0 = ((a % Pm) + Pm) % Pm, b0 = a0 + (b - a);
+    if (b0 > Pm) parts.push([a0, Pm], [0, b0 - Pm]); else parts.push([a0, b0]);
+  }
+  parts.sort((p, q) => p[0] - q[0]);
+  const out = [];
+  for (const p of parts) { const last = out[out.length - 1]; if (last && p[0] <= last[1] + 1e-9) last[1] = Math.max(last[1], p[1]); else out.push([p[0], p[1]]); }
+  return out;
+}
+// TASK 822: the intersection of two cycNorm lists
+function cycAnd(A, B) {
+  const out = [];
+  for (let i = 0, j = 0; i < A.length && j < B.length;) {
+    const lo = Math.max(A[i][0], B[j][0]), hi = Math.min(A[i][1], B[j][1]);
+    if (hi >= lo - 1e-9) out.push([lo, Math.max(lo, hi)]);
+    if (A[i][1] < B[j][1]) i++; else j++;
+  }
+  return out;
+}
+// TASK 822: the perimeter stretches where a gap strip's end cap fits, per ring of the offset: Map(ring -> [[a, b]] (b may pass the perimeter)). capRing is
+// sampled (8 samples per strip width, 64 .. 4096 in all) and each change is bisected to 1e-7 mm; a stretch shorter than a sample can be missed (holdStrips
+// checks the layout it is given: a miss refuses the hold, never a wrong strip)
+function capIntervals(w, capRing, gap) {
+  const Pm = w.length, N = Math.min(4096, Math.max(64, Math.ceil(Pm / (gap / 8)))), h = Pm / N;
+  const v = Array.from({ length: N }, (_, i) => capRing(i * h));
+  const out = new Map();
+  const add = (ring, a, b) => { if (!out.has(ring)) out.set(ring, []); out.get(ring).push([a, b]); };
+  if (v.every((x) => x === v[0])) { if (v[0] >= 0) add(v[0], 0, Pm); return out; }
+  // the point between a and b where capRing stops being `val` (leaving: capRing(a) === val) or starts being it (capRing(b) === val)
+  const edge = (a, b, val, leaving) => { for (let k = 0; k < 60 && b - a > 1e-7; k++) { const m = (a + b) / 2; if ((capRing(m) === val) === leaving) a = m; else b = m; } return leaving ? a : b; };
+  let i0 = 0;
+  while (v[i0] === v[(i0 - 1 + N) % N]) i0++; // a sample where a run starts
+  for (let k = 0; k < N;) {
+    const i = (i0 + k) % N, val = v[i];
+    let len = 1;
+    while (len < N && v[(i + len) % N] === val) len++;
+    if (val >= 0) add(val, edge((i0 + k - 1) * h, (i0 + k) * h, val, false), edge((i0 + k + len - 1) * h, (i0 + k + len) * h, val, true));
+    k += len;
+  }
+  return out;
+}
+/**
+ * stripFit(w, side, stripWidth) -> { rings, capRing } — TASK 822: the outline's offset by the strip width on the strips' side (the rings holdStrips builds the
+ * strips' other edges on) and capRing(s) = the ring a gap strip's end cap at perimeter position s reaches at exactly the strip width (THE TABS rule above), or -1
+ * when it does not (another part of the outline's offset is in the way). ONE test, shared by tabLayout (where a tab may go) and holdStrips (the strips).
+ */
+export function stripFit(w, side, stripWidth) {
+  const rings = offsetPolygonRound(walkPoints(w).map((p) => [p.x, p.y]), side * stripWidth, HOLD_PART.chordTolMm)
+    .map((r) => { const pts = r.slice(0, -1).map(([x, y]) => P(x, y)); return signedArea(pts) < 0 ? pts.reverse() : pts; });
+  const cap = (s) => { const { point, tangent } = walkAt(w, s), n = P(side * tangent.y, -side * tangent.x); return { point, hit: rings.length ? rayHit(rings, point, n) : null }; }; // right of travel = away from the part
+  const capRing = (s) => { const { hit } = cap(s); return hit && Math.abs(hit.t - stripWidth) <= CAP_TOL_MM ? hit.ring : -1; };
+  return { rings, cap, capRing };
 }
 
 // the first crossing of the ray from p along unit n with the rings' edges: { ring, edge, k (along the edge), t (along the ray), point } | null
@@ -293,22 +423,21 @@ function ringBetween(R, A, B) {
 }
 
 /**
- * holdStrips(w, layout, side, stripWidth) -> [{ polygon, d, tabFrom, tabTo }] | null — the GAP STRIPS (the TABS rule above) of a tab layout on
- * walk w; side = +1 strips outside the part (an Outside cut), -1 inside (an Inside cut). null when a gap's offset is not one ring.
+ * holdStrips(w, layout, side, stripWidth, fit) -> [{ polygon, d, tabFrom, tabTo }] | null — the GAP STRIPS (the TABS rule above) of a tab layout on
+ * walk w; side = +1 strips outside the part (an Outside cut), -1 inside (an Inside cut). null when a gap's offset is not one ring. TASK 822: `fit` = stripFit(w,
+ * side, stripWidth) when the caller has it (the same rings and cap test the layout used).
  */
-export function holdStrips(w, layout, side, stripWidth) {
+export function holdStrips(w, layout, side, stripWidth, fit = null) {
   const tabs = layout.tabs;
   if (!tabs.length) return [];
-  const rings = offsetPolygonRound(walkPoints(w).map((p) => [p.x, p.y]), side * stripWidth, HOLD_PART.chordTolMm)
-    .map((r) => { const pts = r.slice(0, -1).map(([x, y]) => P(x, y)); return signedArea(pts) < 0 ? pts.reverse() : pts; });
+  const { rings, cap } = fit || stripFit(w, side, stripWidth);
   if (!rings.length) return null;
-  const awayAt = (s) => { const { point, tangent } = walkAt(w, s); return { point, n: P(side * tangent.y, -side * tangent.x) }; }; // right of travel = away from the part
   const out = [];
   for (let k = 0; k < tabs.length; k++) {
     const from = tabs[k], to = tabs[(k + 1) % tabs.length];
     const sa = from.s1, len = wrap(w, to.s0 - sa) || w.length;
-    const A = awayAt(sa), B = awayAt(sa + len);
-    const hA = rayHit(rings, A.point, A.n), hB = rayHit(rings, B.point, B.n);
+    const { point: pA, hit: hA } = cap(sa), { point: pB, hit: hB } = cap(sa + len);
+    const A = { point: pA }, B = { point: pB };
     if (!hA || !hB || hA.ring !== hB.ring || Math.abs(hA.t - stripWidth) > CAP_TOL_MM || Math.abs(hB.t - stripWidth) > CAP_TOL_MM) return null; // each cap is exactly the strip width
     const pieces = subWalk(w, sa, len);
     const outer = [hA.point, ...ringBetween(rings[hA.ring], hA, hB), hB.point].reverse();
@@ -320,6 +449,13 @@ export function holdStrips(w, layout, side, stripWidth) {
   return out;
 }
 
+/** TASK 822: a record's DRAGGED tab centres (`tabsAt`: perimeter fractions 0..1 along its outline's walk, a per-shape placement of the operation's geometry ref,
+ *  docs/OPERATIONS-MODEL.md 1.4 mechanism 2), or null: the tabs are laid out by the count. */
+export const tabsAtOf = (rec) => (rec && Array.isArray(rec.tabsAt) && rec.tabsAt.length && rec.tabsAt.every((f) => Number.isFinite(Number(f))) ? rec.tabsAt.map(Number) : null);
+// TASK 822: the layout's facts a hold carries (only when true, so a hold of before is the same object): `fixed` = the shape's dragged positions were used (the
+// count is theirs), `narrow` = tabs were kept off stretches where a gap strip does not fit. Where each tab is: tabHandles below.
+const tabFacts = (layout) => ({ ...(layout.fixed ? { fixed: true } : {}), ...(layout.narrow ? { narrow: true } : {}) });
+
 /**
  * applyHoldPart(cuts, rec, state) -> cuts — #core/profile-model deriveProfileCuts' cuts for `rec`, with its hold applied (unchanged, the SAME
  * array, when holdMode(rec) is 'off'). The record's own outline cut (the outer loop cut, not a hole) becomes pass 1 (rec.cutDepth = depth -
@@ -329,10 +465,12 @@ export function holdStrips(w, layout, side, stripWidth) {
  * index, count, depth, d (the strip's path text, as exported), outline (the strip as a polygon, arcs sampled) }. A refused hold leaves
  * every cut as it is and puts `hold` = { mode, role: 'refused', error, ... } on the outline cut.
  */
-export function applyHoldPart(cuts, rec, state) {
+export const applyHoldPart = (cuts, rec, state) => holdCuts(cuts, rec, state, null);
+// applyHoldPart; TASK 822: `sink` (an object, or null) is given the walk and the tab layout the hold was made with (tabHandles, holdTabDragAt: the same derivation)
+function holdCuts(cuts, rec, state, sink) {
   const mode = holdMode(rec);
   if (mode === 'off' || !Array.isArray(cuts)) return cuts;
-  if (isOnline(rec.cutType)) return onlineHold(cuts, rec, state, mode); // TASK 775
+  if (isOnline(rec.cutType)) return onlineHold(cuts, rec, state, mode, sink); // TASK 775
   const outer = cuts.find((c) => c && !c.isHole && c.kind === 'loop' && c.loop);
   if (!outer) return cuts;
   const D = Number(rec.cutDepth), t = Number(rec.holdThickness), width = Number(rec.tabWidth), toolDia = Number(rec.toolDia) || 0;
@@ -354,10 +492,11 @@ export function applyHoldPart(cuts, rec, state) {
   const offset = Number(rec.cutOffset) || 0;
   const written = width - 2 * offset; // TASK 787 (THE OFFSET): the strips' caps sit round tabs this wide, so the Origin's offset leaves the tab width
   if (!(written > 0)) return refuse('offset', { requested, count: 0, perimeter: w.length, stripWidth, offset, written });
-  const layout = tabLayout(w, { count: requested, width: written, bitRadius: toolDia / 2, gap: stripWidth, side });
-  const sizes = { requested, count: layout.tabs.length, perimeter: w.length, stripWidth, offset, written };
-  if (!layout.tabs.length) return refuse(written > width && tabLayout(w, { count: requested, width, bitRadius: toolDia / 2, gap: stripWidth, side }).tabs.length ? 'offset' : 'no room', sizes);
-  const strips = holdStrips(w, layout, side, stripWidth);
+  const fit = stripFit(w, side, stripWidth); // TASK 822: where a gap strip fits (the layout's and the strips' one test)
+  const layout = tabLayout(w, { count: requested, width: written, bitRadius: toolDia / 2, gap: stripWidth, side, at: tabsAtOf(rec), fit });
+  const sizes = { requested: layout.requested, count: layout.tabs.length, perimeter: w.length, stripWidth, offset, written };
+  if (!layout.tabs.length) return refuse(layout.narrow ? 'strip' : written > width && tabLayout(w, { count: requested, width, bitRadius: toolDia / 2, gap: stripWidth, side }).tabs.length ? 'offset' : 'no room', sizes);
+  const strips = holdStrips(w, layout, side, stripWidth, fit);
   if (!strips) return refuse('strip', sizes);
   const marks = layout.tabs.map((tb) => { const pc = subWalk(w, tb.s - width / 2, width), a = segStart(pc[0]); return `M ${num(a.x)} ${num(a.y)} ${piecesD(pc)}`; });
   const stripType = rec.cutType === 'outside' || rec.cutType === 'inside' ? 'inside' : 'interior';
@@ -374,7 +513,8 @@ export function applyHoldPart(cuts, rec, state) {
     hold: { mode, role: 'strip', index, count: strips.length, depth: D, d: st.d, outline: st.polygon },
   }));
   const out = [];
-  for (const c of cuts) { if (c === outer) out.push(pass({ ...sizes, marks }), ...stripCuts); else out.push(c); }
+  for (const c of cuts) { if (c === outer) out.push(pass({ ...sizes, ...tabFacts(layout), marks }), ...stripCuts); else out.push(c); }
+  if (sink) Object.assign(sink, { w, layout });
   return out;
 }
 
@@ -397,7 +537,7 @@ export function sweeper(centers) {
  * role: 'stroke', index, count, depth, d, requested, perimeter, width, toolDia, left (the wood a gap keeps: width - the bit diameter), marks (on the
  * first stroke: each tab's span on the outline) }. A refused hold leaves the cuts as they are, `hold` = { role: 'refused', error } on the record's own cut.
  */
-function onlineHold(cuts, rec, state, mode) {
+function onlineHold(cuts, rec, state, mode, sink) {
   const outer = cuts.find((c) => c && !c.isHole && c.kind === 'loop' && c.loop);
   const own = outer || cuts.find((c) => c && c.kind === 'chain');
   if (!own) return cuts;
@@ -420,8 +560,8 @@ function onlineHold(cuts, rec, state, mode) {
   const w = loopWalk(outer.loop, state);
   if (!w) return refuse('outline');
   const requested = rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? autoTabCount(w.length) : Math.floor(Number(rec.tabCount));
-  const layout = tabLayout(w, { count: requested, width, bitRadius: toolDia / 2, gap: toolDia, side: 0 });
-  const sizes = { requested, count: layout.tabs.length, perimeter: w.length, toolDia, left: width - toolDia };
+  const layout = tabLayout(w, { count: requested, width, bitRadius: toolDia / 2, gap: toolDia, side: 0, at: tabsAtOf(rec) }); // TASK 822: the shape's dragged tabs
+  const sizes = { requested: layout.requested, count: layout.tabs.length, perimeter: w.length, toolDia, left: width - toolDia };
   if (!layout.tabs.length) return refuse('no room', sizes);
   const marks = layout.tabs.map((tb) => openPiecesD(subWalk(w, tb.s0, width)));
   const n = layout.tabs.length;
@@ -430,7 +570,45 @@ function onlineHold(cuts, rec, state, mode) {
     const pieces = subWalk(w, from.s1, len), d = openPiecesD(pieces), centers = [{ points: piecesPoints(pieces), closed: false }];
     return { kind: 'stroke', loopId: outer.loopId, cutType: outer.cutType, offsetSide: 0, isHole: false, isCompound: false, centers, sweep: sweeper(centers),
       rec: { ...outer.rec }, geom: { tag: 'path', a: `d="${d}"` },
-      hold: { ...base, role: 'stroke', index: k, count: n, depth: rec.cutDepth, d, ...sizes, ...(k === 0 ? { marks } : {}) } };
+      hold: { ...base, role: 'stroke', index: k, count: n, depth: rec.cutDepth, d, ...sizes, ...tabFacts(layout), ...(k === 0 ? { marks } : {}) } };
   });
+  if (sink) Object.assign(sink, { w, layout });
   return cuts.flatMap((c) => (c === outer ? strokes : [c]));
+}
+
+/**
+ * tabHandles(outerLoop, rec, state) -> [{ at, point }] — TASK 822: where a held record's TABS are (THE derivation: applyHoldPart's layout), one per tab: `at` = its
+ * centre as a perimeter fraction of the outline's walk (what a drag stores, `tabsAt`), `point` = its world point (Prepare's tab handle). None when the record makes
+ * no tabs (Hold part off / an onion skin / refused).
+ */
+export function tabHandles(outerLoop, rec, state) {
+  const sink = {};
+  const own = heldOwn(holdCuts([{ kind: 'loop', loop: outerLoop, isHole: false, rec }], rec, state, sink));
+  if (!own || !sink.layout) return [];
+  return sink.layout.tabs.map((t) => ({ at: wrap(sink.w, t.s) / sink.w.length, point: walkAt(sink.w, t.s).point }));
+}
+// the record's own held cut of holdCuts' result: its pass (tabs) or its first stroke (On line tabs), else null
+const heldOwn = (cuts) => (cuts || []).find((c) => c.hold && c.hold.mode === 'tabs' && (c.hold.role === 'pass' || (c.hold.role === 'stroke' && c.hold.index === 0))) || null;
+
+/**
+ * holdTabDragAt(outerLoop, rec, state, fromAt, worldPt) -> { at, ok, point, cuts } | null — TASK 822: evaluate dragging the tab whose centre is at perimeter fraction
+ * `fromAt` (one of tabHandles' `at`) to world point `worldPt` (ONE derivation, as #core/lead-in leadInDragAt; Prepare never lays tabs out itself). The tab goes to
+ * the outline's point nearest `worldPt` (`point`); `at` = every tab's centre then (sorted perimeter fractions: the shape's `tabsAt` to store), `cuts` = the hold's
+ * cuts with them (the preview: the pass's marks, the strips). ok = false when the tab cannot be there (its gap strips do not fit, it is too near a corner or
+ * another tab: the layout would move or drop it): the caller keeps the tab where it was. null when the record makes no tabs.
+ */
+export function holdTabDragAt(outerLoop, rec, state, fromAt, worldPt) {
+  const before = tabHandles(outerLoop, rec, state);
+  if (!before.length) return null;
+  const w = loopWalk(outerLoop, state);
+  if (!w) return null;
+  const cyc = (a, b) => { const d = Math.abs((((a - b) % 1) + 1) % 1); return Math.min(d, 1 - d); };
+  const k = before.reduce((bi, h, i) => (cyc(h.at, fromAt) < cyc(before[bi].at, fromAt) ? i : bi), 0);
+  const hit = nearestWalkFrac(w, worldPt);
+  const want = before.map((h, i) => (i === k ? hit.frac : h.at));
+  const sink = {}, wantRec = { ...rec, tabsAt: want };
+  const cuts = holdCuts([{ kind: 'loop', loop: outerLoop, isHole: false, rec: wantRec }], wantRec, state, sink);
+  const placed = heldOwn(cuts) && sink.layout ? sink.layout.tabs.map((t) => wrap(sink.w, t.s) / sink.w.length) : [];
+  const ok = placed.length === want.length && placed.some((a) => cyc(a, hit.frac) * w.length < 1e-6);
+  return { at: placed, ok, point: hit.point, cuts };
 }

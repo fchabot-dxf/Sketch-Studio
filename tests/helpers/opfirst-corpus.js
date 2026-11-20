@@ -42,6 +42,10 @@ const GUIDE_ROWS = new Set(['matrix__guide-mixed-params']);
 // TASK S2: every operation is listed (an operation is opened from its row): the cases with a Roughing that cuts nothing (refused: no Stock / no boundary shape) list
 // that row too, "1 shape: nothing to cut" (before S2 it was not listed); their files, previews, Paths and 3D are unchanged
 const CUT_NOTHING_ROWS = new Set(['boundary-810-node__0045__7c1e6253', 'boundary-810-node__0049__85e437cf', 'boundary-810-node__0050__6ae4dfb1', 'boundary-810-node__0058__f88413f7']);
+// TASK 822: tabs are kept off the stretches where a gap strip does not fit (#core/hold-part tabLayout `fit`) instead of refusing the whole hold: the cases whose
+// Outside tabs were REFUSED ('strip': a tab of the even spread landed where its strip did not fit) and are now PLACED (the drawing tests/fixtures/report/
+// midpoint-move.json, its 3077.8 mm outline: 21 tabs). Their file, preview, Paths, 3D and Operations row change on purpose; every other case is unchanged
+const TABS_PLACED_822 = new Set(['bezier-loops-761-node__0028__64ea064e', 'leadin-775-node__0071__64ea064e']);
 const ASSERTED = ['a', 'b', 'c', 'dContent', 'eNoId', 'f'];
 
 export async function runCorpus(part, parts) {
@@ -68,6 +72,7 @@ export async function runCorpus(part, parts) {
     const now = measureNow(state), base = baseline[c.name];
     for (const k of ASSERTED) {
       if (k === 'eNoId' && GUIDE_ROWS.has(c.name)) { ok(now[k] !== base[k], `${c.name}: Guides with different values list one operation each (advisor ruling 1)`); continue; }
+      if (TABS_PLACED_822.has(c.name) && k !== 'f') { ok(now[k] !== base[k] && planReliefItems(state).some((i) => i.footprints.some((fp) => fp.hold && fp.hold.role === 'pass' && fp.hold.narrow === true && fp.hold.count === 21)), `${c.name}.${k}: its refused tabs are placed now: 21 tabs kept off the stretches too narrow for a gap strip (TASK 822)`); continue; }
       if (k === 'eNoId' && CUT_NOTHING_ROWS.has(c.name)) { ok(now[k] !== base[k] && describeOperations(state, planEntries()).some((o) => /: nothing to cut$/.test(o.regions)), `${c.name}: its Roughing that cuts nothing is listed (TASK S2)`); continue; }
       if (now[k] !== base[k]) differ.push(`${c.name}.${k}`);
       checks++;

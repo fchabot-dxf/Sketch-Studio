@@ -102,12 +102,9 @@ const shot = async (name, clip) => {
 const isOpen = () => evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`);
 const openMenu = async () => {
   if (await isOpen()) return;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await press(touch ? '.sk-sidebar-handle' : '.sk-sidebar-btn');
-    await sleep(400);
-    if (await isOpen()) { if (attempt > 1) console.log(`  (openMenu needed ${attempt} taps)`); return; }
-  }
-  throw new Error('the drawer did not open after 3 presses: ' + JSON.stringify(await evalJs(`({ cls: document.querySelector('.sk-sidebar').className, handle: (() => { const r = document.querySelector('.sk-sidebar-handle').getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; })() })`)));
+  await press(touch ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
+  await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens');
+  await sleep(350);
 };
 const openStage = async (id) => {
   if (touch) { await openMenu(); await press(`.sk-sidebar-stage[data-tab="${id}"]`); } else await press(`.sk-header-tab[data-tab="${id}"]`);

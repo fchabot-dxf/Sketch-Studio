@@ -9,6 +9,7 @@
 //   packages/        the shared packages, ONE copy in git, copied here at build time (their tests/ folders left out)
 //   <root files>     the files outside apps/ and packages/ the app reaches (site-closure.cjs: e.g. assets/constraint-glyphs.svg, the glyph sheet)
 //   privacy.html     the privacy page (the Google OAuth consent screen links it)
+//   about.html       TASK 828: the About page: the apps of the suite (the registry's, SITE_HOST addresses) and the Shaper add-in line (ADDIN_DOWNLOAD), written into the page by site-about.cjs
 //   TASK 738: the site's copy of packages/ui/analytics.js carries the build time as BUILD (stampBuild: the analytics `version`); every other file is a plain copy
 //   _redirects       this site's Cloudflare Pages rules (siteRedirects below: the old /apps/<app>/ addresses forward to the root)
 //   TASK 829: the site's identity, generated from the app registry (scripts/site-identity.cjs): favicon.svg / .ico, apple-touch-icon.png, icon-192 / 512.png,
@@ -30,8 +31,9 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { APPS, siteClosure } = require('./site-closure.cjs');
+const { APPS, STANDALONE_PAGES, siteClosure } = require('./site-closure.cjs');
 const { writeIdentity, LINKED: IDENTITY_LINKED } = require('./site-identity.cjs');
+const { writeAbout } = require('./site-about.cjs');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
@@ -97,7 +99,8 @@ function stampBuild(out, stamp) {
 // "Fusion add-in" view reads <dir>/<json> (apps/shaper/src/addin-download.js ADDIN_RELEASE_JSON); a site built without --addin has no json, and
 // the view says the download is not available in this build. `dir` is the REPO path (next to the page in development); in the site the files are
 // at sitePath of it, downloads/ (TASK 763: https://shaper-svg.pages.dev/downloads/shaper-addin.zip).
-const ADDIN_DOWNLOAD = { app: 'shaper', dir: 'apps/shaper/downloads', zip: 'shaper-addin.zip', json: 'shaper-addin.json' };
+const ADDIN_DOWNLOAD = { app: 'shaper', dir: 'apps/shaper/downloads', zip: 'shaper-addin.zip', json: 'shaper-addin.json',
+  about: 'The Fusion 360 add-in that opens Shaper in a Fusion palette.' }; // TASK 828: the one line the About page gives under Shaper, with the zip's link
 
 // Check the release folder BEFORE the site is written (the json names the zip and gives its sha256 / size); -> what copyAddinDownload copies.
 function readAddinRelease(fromDir) {
@@ -169,8 +172,8 @@ function buildSite(app, outDir = path.join(REPO_ROOT, 'dist'), { addin = null } 
   }
   const release = addin != null ? readAddinRelease(addin) : null;
   // the site's files: the app folder (at the top), packages/, the other root files the app reaches, privacy.html; each lands once, none on a reserved name
-  const files = [...listTree(path.join(REPO_ROOT, 'apps', app), []), ...listTree(path.join(REPO_ROOT, 'packages'), []),
-    ...[...closure.files].filter((f) => !f.startsWith(`apps/${app}/`) && !f.startsWith('packages/')), 'privacy.html'];
+  const files = [...new Set([...listTree(path.join(REPO_ROOT, 'apps', app), []), ...listTree(path.join(REPO_ROOT, 'packages'), []),
+    ...[...closure.files].filter((f) => !f.startsWith(`apps/${app}/`) && !f.startsWith('packages/')), ...STANDALONE_PAGES])]; // privacy.html + about.html (TASK 828: about.html is also reached from the menu's About item (a Set: each file once)
   const at = new Map(); // site path -> repo path
   for (const f of files) {
     const to = sitePath(app, f);
@@ -188,6 +191,7 @@ function buildSite(app, outDir = path.join(REPO_ROOT, 'dist'), { addin = null } 
   stampBuild(out, build);
   fs.writeFileSync(path.join(out, '_redirects'), siteRedirects(app));
   fs.writeFileSync(path.join(out, '404.html'), NOT_FOUND_PAGE);
+  writeAbout(out, { hostOf: SITE_HOST, addinUrl: `https://${SITE_HOST[ADDIN_DOWNLOAD.app]}/${sitePath(ADDIN_DOWNLOAD.app, ADDIN_DOWNLOAD.dir)}/${ADDIN_DOWNLOAD.zip}`, addinLine: ADDIN_DOWNLOAD.about, addinApp: ADDIN_DOWNLOAD.app, build }); // TASK 828
   checkRootLayout(app, out, closure);
   const identity = writeIdentity(app, out, SITE_HOST[app]); // after the proof: it adds links to the built page
   const addinRelease = release ? copyAddinDownload(release, out) : null;

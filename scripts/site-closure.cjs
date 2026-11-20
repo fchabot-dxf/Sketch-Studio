@@ -156,6 +156,9 @@ function functionFile(functionsRoot, pathname) {
   return null;
 }
 
+// TASK 828: the standalone pages at the repo root that build-site.cjs ships with every site (privacy.html, about.html): a page of the app that links one reaches the file only.
+const STANDALONE_PAGES = ['privacy.html', 'about.html'];
+
 function siteClosure({ root, app, functionsRoot = root, entry = `apps/${app}/index.html` }) {
   if (!APPS.includes(app)) throw new Error(`site-closure: unknown app "${app}" (one of ${APPS.join(', ')})`);
   const pageUrl = urlOf(entry);
@@ -172,6 +175,7 @@ function siteClosure({ root, app, functionsRoot = root, entry = `apps/${app}/ind
     files.add(rel);
     const ext = path.extname(rel).toLowerCase();
     if (!['.html', '.js', '.mjs', '.css'].includes(ext)) continue; // an image, an SVG sheet, JSON: a leaf
+    if (STANDALONE_PAGES.includes(rel)) continue; // TASK 828: a standalone site page (the About page a menu opens): reached, but its own links are not the app's
     const src = fs.readFileSync(path.join(root, rel), 'utf8');
     let found;
     if (ext === '.html') { const p = htmlParts(src); found = p.refs; if (rel === entry) importMap = p.importMap; }
@@ -198,4 +202,4 @@ function siteClosure({ root, app, functionsRoot = root, entry = `apps/${app}/ind
   return { files, refs, missing, crossApp, functions };
 }
 
-module.exports = { APPS, siteClosure, stripJsComments, jsRefs, cssRefs, htmlParts };
+module.exports = { APPS, STANDALONE_PAGES, siteClosure, stripJsComments, jsRefs, cssRefs, htmlParts };

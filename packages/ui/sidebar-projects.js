@@ -45,7 +45,7 @@ export { relativeTime };
 // immediately AFTER the host's <header> (the element holding this sidebar's button; TASK 602, owner: between the header and the tool ribbon), Open / Open recent / Open from file / New open a new tab, and the name,
 // status line and page title below follow the ACTIVE tab's design (the buffer's), not the device-wide "current" pointer. A host without it is unchanged.
 // TASK 663: `projects: false` opts the host out of the project/file layer (document name/status header, New/Templates/Save/Duplicate/Open recent/Projects/Open file/Import file actions, Drive/Google account controls, Projects modal, document tab strip, Ctrl+S save prompt, and unsaved-leave prompt) while keeping `hostActions` and the stage switcher.
-export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, projects = true, store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
+export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, projects = true, host = 'web', store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
   let currentDesignId = null;
@@ -83,6 +83,12 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), account, start, onClose: () => { manager = null; } });
   }
 
+  // TASK 828: the site items, last in every host's menu (one declaration here, so the four apps agree): About = about.html at the site root, in a new tab.
+  // Not in Fusion's palette (host 'fusion'): a palette has no browser tab to open it in.
+  const siteActions = [
+    { divider: true, visible: () => host !== 'fusion' },
+    { id: 'about', label: 'About', icon: SIDEBAR_ICONS.info, tooltip: 'The apps of Sketch Studio', visible: () => host !== 'fusion', onClick: () => window.open('/about.html', '_blank', 'noopener') },
+  ];
   const actions = projects ? [
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); await refreshName(); }) },
     // TASK 651 / 668: the same template modal the "+" tab button and New design open (Blank design first, one picker configuration)
@@ -98,7 +104,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     { id: 'open-file', label: 'Open…', icon: SIDEBAR_ICONS.open, tooltip: 'Open a design from Google Drive or from a file on this device', keepOpen: true, onClick: act(async () => { sidebar.close(); await projectActions.openDialog(); await refreshName(); }, { close: false }) },
     ...(importFile ? [importSidebarAction({ importFile, getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open })] : []),
     ...(hostActions.length ? [{ divider: true }, ...hostActions] : []),
-  ] : [...hostActions];
+    ...siteActions,
+  ] : [...hostActions, ...siteActions];
 
   // The one-line state under the document name, derived from the store (where the current design lives + how its last save went).
   const statusLine = () => {

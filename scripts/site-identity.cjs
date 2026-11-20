@@ -114,7 +114,7 @@ const manifestOf = (app) => ({
 });
 
 const robotsOf = (host) => `User-agent: *\nAllow: /\n\nSitemap: https://${host}/sitemap.xml\n`;
-const SITE_PAGES = ['/', '/privacy']; // the root page and the privacy page (Pages serves privacy.html at /privacy)
+const SITE_PAGES = ['/', '/about', '/privacy']; // the root page, the About page and the privacy page (Pages serves about.html at /about, privacy.html at /privacy)
 const sitemapOf = (host) => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${SITE_PAGES.map((p) => `  <url><loc>https://${host}${p}</loc></url>`).join('\n')}\n</urlset>\n`;
 
 // ---- what goes into the built page ----

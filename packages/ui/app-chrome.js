@@ -55,6 +55,7 @@ export function mountAppChrome({
     getBuffer,
     importFile,
     hostActions,
+    host,
     documentTabs: projects ? documentTabs : false,
     projects,
     store,

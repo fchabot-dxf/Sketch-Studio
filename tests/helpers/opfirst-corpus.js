@@ -56,6 +56,24 @@ const GUIDE_DEPTH_WORDS = new Set([
 // Outside tabs were REFUSED ('strip': a tab of the even spread landed where its strip did not fit) and are now PLACED (the drawing tests/fixtures/report/
 // midpoint-move.json, its 3077.8 mm outline: 21 tabs). Their file, preview, Paths, 3D and Operations row change on purpose; every other case is unchanged
 const TABS_PLACED_822 = new Set(['bezier-loops-761-node__0028__64ea064e', 'leadin-775-node__0071__64ea064e']);
+// TASK 836 (owner ruling 2026-11-20: lead-ins removed from the app): REBASED BY NAME: the 42 cases whose stored sidecar holds an On line record with a lead-in on
+// (exactly those: checked below). Their lead-in fields are dropped on load (apps/shaper/src/shaper-doc.js dropLeadIn), so the On line outline is cut as the plain
+// closed loop: their download, preview, Paths view, 3D items and Operations row change on purpose (3 of them, whose lead-in was refused and so already cut closed:
+// only their 3D items' lead-in data and their Operations row's "refused" words); the selection list (f) is unchanged. Every other case stays byte-identical.
+const LEAD_IN_REMOVED_836 = new Set([
+  'cam-paths-787-node__0012__4cee22ef', 'cam-paths-787-node__0013__901ccb52', 'cam-paths-787-node__0014__88ba5db9', 'cam-paths-787-node__0015__e0016b8e',
+  'cam-paths-787-node__0016__3e27a71b', 'cam-paths-787-node__0017__fe991460', 'cam-paths-787-node__0018__951f046e', 'leadin-775-node__0173__826b35f3',
+  'leadin-775-node__0174__123b3f43', 'leadin-775-node__0175__071f7735', 'leadin-775-node__0176__ea330ef5', 'leadin-775-node__0177__bc97e118',
+  'leadin-775-node__0178__af0bd3af', 'leadin-775-node__0179__87e5ec12', 'leadin-775-node__0180__8110408c', 'leadin-775-node__0181__ed5cb347',
+  'leadin-775-node__0182__1b5d1c48', 'leadin-775-node__0183__4e89eda0', 'leadin-775-node__0184__6ae17093', 'leadin-775-node__0185__2cc6bdd6',
+  'leadin-775-node__0186__47756612', 'leadin-775-node__0187__de97a007', 'leadin-775-node__0188__31f22120', 'leadin-775-node__0189__5a007c19',
+  'leadin-775-node__0190__f1f21724', 'leadin-775-node__0191__c32af6bb', 'leadin-775-node__0192__7e2d8dd7', 'leadin-775-node__0194__b28b7a68',
+  'leadin-arc-778-node__0004__46e895be', 'leadin-arc-778-node__0005__ba754e06', 'leadin-arc-778-node__0006__53266743', 'leadin-arc-778-node__0007__d894bb5d',
+  'leadin-arc-778-node__0008__3a102117', 'leadin-arc-778-node__0009__96fea1d0', 'leadin-arc-778-node__0010__3968586a', 'leadin-arc-778-node__0011__97025162',
+  'leadin-arc-778-node__0012__936ea33c', 'leadin-arc-778-node__0013__e81cf77a', 'matrix__old-values', 'matrix__online-leadin-calc',
+  'matrix__online-leadin-custom', 'matrix__online-leadin-dragged',
+]);
+const onlineLeadIn = (sidecar) => (sidecar.cutPlan || []).filter((e) => Array.isArray(e) && e[1] && e[1].cutType === 'online' && e[1].leadIn === true);
 const ASSERTED = ['a', 'b', 'c', 'dContent', 'eNoId', 'f'];
 
 export async function runCorpus(part, parts) {
@@ -80,7 +98,22 @@ export async function runCorpus(part, parts) {
     report.contours += m.contours.contours; report.contourSplits += m.contours.splits; report.contourNoPart += m.contours.noPart;
     ok(m.heights && m.heights.splits === 0, `${c.name}: a Roughing's / Contour's Depth = its Bottom: no split (${JSON.stringify(m.heights)})`); report.heightsMerged = (report.heightsMerged || 0) + m.heights.merged;
     const now = measureNow(state), base = baseline[c.name];
-    for (const k of ASSERTED) {
+    ok(LEAD_IN_REMOVED_836.has(c.name) === (onlineLeadIn(x.sidecar).length > 0), `${c.name}: in the TASK 836 list exactly when its sidecar has an On line lead-in`);
+    if (LEAD_IN_REMOVED_836.has(c.name)) { // TASK 836: why it changes, and what it is now
+      ok(!/"leadIn/.test(JSON.stringify(captureShaperDoc())), `${c.name}: its lead-in fields are dropped on load (TASK 836)`);
+      ok(describeOperations(state, planEntries()).every((o) => !/lead-in/.test(o.rowText)), `${c.name}: no Operations row speaks of a lead-in (TASK 836)`);
+      ok(planReliefItems(state).every((i) => i.footprints.every((fp) => !('leadIn' in fp))), `${c.name}: no 3D item carries a lead-in (TASK 836)`);
+      ok(['a', 'b', 'c', 'dContent', 'eNoId'].some((k) => now[k] !== base[k]) && now.f === base.f, `${c.name}: changed on purpose (TASK 836), its selection list unchanged`);
+      for (const [key, r] of onlineLeadIn(x.sidecar)) { // the On line outline that had the lead-in: written as the plain closed loop (with Tabs: its open strokes, as before)
+        const mine = planEntries().filter((e) => e.planKey === key);
+        if (!mine.length || r.holdPart === 'tabs') continue;
+        const els = [...shaperSvgOf(state, mine).matchAll(/<path d="([^"]*)"[^>]*shaper:cutType="online"/g)].map((m) => m[1]);
+        ok(els.length > 0 && els.every((d) => /Z$/.test(d)), `${c.name} ${key}: its On line outline is written CLOSED, the plain loop (TASK 836): ${els.map((d) => d.slice(-12)).join(' | ')}`);
+        report.closedChecked = (report.closedChecked || 0) + 1;
+      }
+      report.leadInRemoved = (report.leadInRemoved || 0) + 1;
+    }
+    if (!LEAD_IN_REMOVED_836.has(c.name)) for (const k of ASSERTED) {
       if (k === 'eNoId' && GUIDE_ROWS.has(c.name)) { ok(now[k] !== base[k], `${c.name}: Guides with different values list one operation each (advisor ruling 1)`); continue; }
       if (k === 'eNoId' && GUIDE_DEPTH_WORDS.has(c.name)) { ok(now[k] !== base[k] && describeOperations(state, planEntries()).some((o) => /^Guide · /.test(o.rowText)), `${c.name}: its Guide's row shows its depth (TASK 825 V4)`); continue; }
       if (TABS_PLACED_822.has(c.name) && k !== 'f') { ok(now[k] !== base[k] && planReliefItems(state).some((i) => i.footprints.some((fp) => fp.hold && fp.hold.role === 'pass' && fp.hold.narrow === true && fp.hold.count === 21)), `${c.name}.${k}: its refused tabs are placed now: 21 tabs kept off the stretches too narrow for a gap strip (TASK 822)`); continue; }
@@ -111,6 +144,7 @@ export async function runCorpus(part, parts) {
   }
   if (differ.length) { const by = {}; for (const d of differ) { const k = d.replace(/^.*.(w+)( (v3 reload))?$/, '$1$2'); (by[k] = by[k] || []).push(d); } for (const [k, v] of Object.entries(by)) console.log(`DIFFER ${k}: ${v.length}: ${v.slice(0, 6).join(', ')}`); }
   assert.deepEqual(differ, [], `measurements that differ from the baseline: ${differ.slice(0, 20).join(', ')}`);
+  if (report.leadInRemoved) { assert.ok(report.closedChecked > 0, 'TASK 836: the On line outlines of the rebased cases were checked closed'); console.log(`TASK 836: ${report.leadInRemoved} lead-in cases rebased by name, ${report.closedChecked} On line outlines checked closed`); }
   assert.deepEqual(report.guideCases, cases.filter((x, n) => n % parts === part && GUIDE_ROWS.has(x.name)).map((x) => x.name), 'the cases with more than one Guide operation are exactly the declared ones');
 
   if (part === 0) for (const appVersion of [2, 3]) { // the version guard (task 812): an app of version 2 (S0) or 3 (S1) opens a migrated version 4 document (the kitchen sink) but never writes over it

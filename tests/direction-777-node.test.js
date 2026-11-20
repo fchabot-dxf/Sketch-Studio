@@ -3,10 +3,10 @@
 //  1. Single declaration (TRAVEL_STYLE -> TRAVEL_MIN_GAP_PX & CSS --sk-travel-* tokens, sparse slow parameters)
 //  2. Conventional closed walls (outside CCW, inside CW, freehand/programmed pocket walls CW & islands CCW, split wall, stepped terraces)
 //  3. Programmed clearing lines (Spiral rings + outward links, Raster zigzag passes + cleanup ring, Morphed spiral, Loop on + last finish turn)
-//  4. Lead-in legs (On-line outline & Pocket Loop+Lead-in: tip -> junction, plus curved arc legPoints readiness for Task 778)
+//  4. (TASK 836: the On-line lead-in legs removed with the lead-in)
 //  5. On-line tab strokes (each open stroke in its exported order)
 //  6. Plain On-line (operator chooses on Origin), Guide, Stock, held gap strips -> no direction marks
-//  7. Open-path AutoPass note (added on Loop-off programmed clearing; never duplicated where 775's LEAD_IN_TRADE_OFF already says it)
+//  7. Open-path AutoPass note (added on Loop-off programmed clearing only)
 //  8. arrowsAlongPath (open & closed paths, spacing, minLen, zero-length segments, tangent alignment)
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -15,7 +15,7 @@ import { deriveCuts } from '#core/stepped-cut.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { effectiveCutRecord } from '../apps/shaper/src/shaper.js';
-import { clearingSummary, clearingNoteItems, leadInSummary, leadInNoteItems, LEAD_IN_TRADE_OFF, OPEN_PATH_AUTOPASS_NOTE, keyOf } from '../apps/shaper/src/cut-plan.js';
+import { clearingSummary, clearingNoteItems, OPEN_PATH_AUTOPASS_NOTE, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { TRAVEL_STYLE, TRAVEL_MIN_GAP_PX } from '../apps/shaper/src/prepare-view.js';
 
 let checks = 0;
@@ -159,48 +159,10 @@ const travelFor = (g, loopIdx, rawRec) => {
   ok(!mLine[0].closed && Math.hypot(mLine[0].path[0].x - center.x, mLine[0].path[0].y - center.y) < Math.hypot(mLine[0].path.at(-1).x - center.x, mLine[0].path.at(-1).y - center.y), '3 morphed: spirals inside-out');
   assertArrowsOnPath(mLine[0], 'morphed spiral');
 
-  // Loop ON (without lead-in): closed loop including finish turn
-  const lp = travelFor(g, 0, { ...base, clearing: 'linked', loop: true, leadIn: false });
-  eq(lp.travel.map((t) => [t.role, t.closed]), [['loop', true]], '3 loop ON (no lead-in): closed loop travel');
+  // Loop ON: closed loop including finish turn
+  const lp = travelFor(g, 0, { ...base, clearing: 'linked', loop: true });
+  eq(lp.travel.map((t) => [t.role, t.closed]), [['loop', true]], '3 loop ON: closed loop travel');
   assertArrowsOnPath(lp.travel[0], 'pocket loop');
-
-  // Loop ON + saved leadIn: true (TASK 778: pocket lead-in removed; pocket ignores leadIn, stays a closed loop + guide start mark)
-  const lpLead = travelFor(g, 0, { ...base, clearing: 'linked', loop: true, leadIn: true, leadInLength: 6 });
-  eq(lpLead.travel.map((t) => [t.role, t.closed]), [['loop', true]], '3 loop ON + saved leadIn:true: stays closed loop (no pocket lead-in leg)');
-  assertArrowsOnPath(lpLead.travel[0], 'pocket loop');
-}
-
-// ── 4. On-line Lead-in (straight 775 + curved arc readiness 778) ──
-{
-  const g = makeState([[0, 0, 60, 40]]);
-  for (const side of ['outside', 'inside']) {
-    const res = travelFor(g, 0, { cutType: 'online', cutDepth: 6, toolDia: 4, leadIn: true, leadInLength: 6, leadInSide: side });
-    eq(res.travel.map((t) => [t.role, t.closed]), [['leadin', false], ['online', false]], `4 online lead-in (${side}): leg + open outline`);
-    const fp = res.fps[0];
-    ok(nearPt(res.travel[0].path[0], fp.leadIn.tip) && nearPt(res.travel[0].path.at(-1), fp.leadIn.junction), `4 online lead-in (${side}): leg runs tip -> junction`);
-    ok(nearPt(res.travel[1].path[0], fp.leadIn.junction) && nearPt(res.travel[1].path.at(-1), fp.leadIn.junction), `4 online lead-in (${side}): loop starts and ends at junction`);
-    eq(screenDir(res.travel[1].path.slice(0, -1)), 'cw', `4 online lead-in (${side}): loop runs CW (matches loopWalk export)`);
-    assertArrowsOnPath(res.travel[0], `online lead-in leg (${side})`);
-    assertArrowsOnPath(res.travel[1], `online lead-in loop (${side})`);
-  }
-
-  // Task 778 arc readiness: a curved multi-point arc leadIn.legPoints is used verbatim (never flattened to tip->junction chord)
-  const arcPts = Array.from({ length: 17 }, (_, i) => {
-    const th = Math.PI + (i / 16) * (Math.PI / 2); // quarter-circle arc radius 10 centered at (30, 10): from (20, 10) to (30, 0)
-    return { x: 30 + 10 * Math.cos(th), y: 10 + 10 * Math.sin(th) };
-  });
-  const synthFp = {
-    kind: 'band', cutType: 'online',
-    center: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 40 }, { x: 0, y: 40 }],
-    leadIn: { role: 'leg', tip: arcPts[0], junction: arcPts.at(-1), legPoints: arcPts },
-  };
-  const [arcLeg] = deriveCutTravel([synthFp]);
-  eq(arcLeg.role, 'leadin', '4 arc lead-in: role is leadin');
-  eq(arcLeg.path.length, arcPts.length, '4 arc lead-in: preserves all arc points (not 2-point straight chord)');
-  // Midpoint arrow sits on the arc at (30 - 10*cos(45°), 10 - 10*sin(45°)) ≈ (22.93, 2.93), NOT on the straight chord midpoint (25, 5)
-  const mid = arcLeg.arrows[0];
-  ok(Math.hypot(mid.x - (30 - 10 * Math.SQRT1_2), mid.y - (10 - 10 * Math.SQRT1_2)) < 0.1, `4 arc lead-in: arrow sits on the arc (${mid.x.toFixed(2)},${mid.y.toFixed(2)}), not the chord`);
-  ok(Math.hypot(mid.x - 25, mid.y - 5) > 2, '4 arc lead-in: arrow clearly off the straight tip->junction chord');
 }
 
 // ── 5. On-line Tab strokes ──
@@ -226,7 +188,7 @@ const travelFor = (g, loopIdx, rawRec) => {
   eq(heldOut.travel.map((t) => t.role), ['outside'], '6 held Outside with tabs: pass 1 gets travel, gap strips do not');
 }
 
-// ── 7. Open-path AutoPass note (no duplication with 775 LEAD_IN_TRADE_OFF) ──
+// ── 7. Open-path AutoPass note ──
 {
   const g = makeState([[0, 0, 80, 50]]);
   const k = keyOf('loop', g.loopFor(0).id);
@@ -236,17 +198,11 @@ const travelFor = (g, loopIdx, rawRec) => {
     const notesOff = clearingNoteItems(recOff, clearingSummary(k, recOff, g.state, g.loops, g.loopPolys, owned)).map((i) => i.text);
     eq(notesOff.filter((t) => t === OPEN_PATH_AUTOPASS_NOTE).length, 1, `7 ${pat} Loop off: includes AutoPass reverse line once`);
 
-    const recOn = { ...recOff, loop: true, leadIn: false };
+    const recOn = { ...recOff, loop: true };
     const notesOn = clearingNoteItems(recOn, clearingSummary(k, recOn, g.state, g.loops, g.loopPolys, owned)).map((i) => i.text);
     eq(notesOn.filter((t) => t === OPEN_PATH_AUTOPASS_NOTE).length, 0, `7 ${pat} Loop on (closed): no open-path AutoPass reverse line`);
 
-    const recLead = { ...recOff, loop: true, leadIn: true, leadInLength: 6 };
-    const notesLead = clearingNoteItems(recLead, clearingSummary(k, recLead, g.state, g.loops, g.loopPolys, owned)).map((i) => i.text);
-    eq(notesLead.filter((t) => t === OPEN_PATH_AUTOPASS_NOTE).length, 0, `7 ${pat} Loop+saved leadIn: closed loop, no open-path AutoPass line`);
   }
-  const recOL = { cutType: 'online', cutDepth: 6, toolDia: 4, leadIn: true, leadInLength: 6, leadInSide: 'outside' };
-  const notesOL = leadInNoteItems(recOL, leadInSummary(k, recOL, g.state, g.loops, g.loopPolys, owned)).map((i) => i.text);
-  ok(notesOL.includes(LEAD_IN_TRADE_OFF) && !notesOL.includes(OPEN_PATH_AUTOPASS_NOTE), '7 On-line Lead-in: reuses 775 trade-off line, no duplicate');
 }
 
 // ── 8. arrowsAlongPath edge cases ──

@@ -1,7 +1,7 @@
 // tests/noshift-813-live.test.js — TASK 813 in the real page (Shaper, real mouse / touch input), desktop 1280 x 800 then a phone 390 x 844 (touch): NO LAYOUT SHIFTS in the cut card.
 // Task 805's layout probe (tests/helpers/tooltip-live.js snap / movedBoxes): every card row, field, box, the note, the panel, the Operations rows keep their boxes (0 px) while:
 //   * Outside: Hold part Tabs -> Onion skin -> Off (its rows stay in place, greyed);
-//   * On line: Lead-in On -> Off, then Hold part Tabs (Lead-in greys with its reason) -> Off;
+//   * On line: Hold part Tabs -> Off (TASK 836: its Lead-in rows removed with the lead-in);
 //   * Pocket: Clearing Spiral (a note with the turns, the leftover ... appears) -> Loop on -> off -> Raster -> Freehand (its rows stay in place);
 //   * a long note (more lines than the area shows) and no note: the note area keeps its box; the Prepare notice (an overlay) and the Export status line (a slot of its own).
 // A greyed row's label shows its reason in its tooltip (the probe's real hover / long press). No console error / page exception. Screenshots: .evidence/813/<device>-*.png.
@@ -121,17 +121,11 @@ async function phase() {
   const holdTip = await tooltipOf('.cut-row[data-row="tabCount"] .cut-field-label');
   assert.ok(holdTip && holdTip.startsWith('Choose Tabs in Hold part to set this.'), `${device}: the greyed Tab count row says why in its tooltip: ${JSON.stringify(holdTip)}`);
 
-  // ON LINE: Lead-in, Hold part Tabs
+  // ON LINE: Hold part Tabs (TASK 836: no Lead-in row)
   await pickType('online');
-  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn/.test(r)), ['leadIn', 'leadInRadius:off', 'leadInSweep:off', 'leadInLength:off', 'leadInSide:off', 'leadInAt:off'], `${device}: On line, Lead-in Off: its rows stay, greyed`);
-  await shot('online-leadin-off.png', '#prepare-panel .cut-card');
-  await noShift('On line: Lead-in On', () => preset('cut-lead-modes', 'true'));
-  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn/.test(r)), ['leadIn', 'leadInRadius', 'leadInSweep', 'leadInLength', 'leadInSide', 'leadInAt'], `${device}: Lead-in On: its rows are live`);
-  await shot('online-leadin-on.png', '#prepare-panel .cut-card');
-  await noShift('On line: Lead-in Off', () => preset('cut-lead-modes', 'false'));
+  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn/.test(r)), [], `${device}: On line: no Lead-in row`);
+  await shot('online-card.png', '#prepare-panel .cut-card');
   await noShift('On line: Hold part Tabs', () => preset('cut-hold-modes', 'tabs'));
-  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn(:|$)/.test(r) || r === 'leadIn:off'), ['leadIn:off'], `${device}: Tabs: the Lead-in row stays, greyed`);
-  assert.ok((await tooltipOf('.cut-row[data-row="leadIn"] .cut-field-label')).startsWith('Not with Tabs'), `${device}: Lead-in's tooltip says why`);
   await noShift('On line: Hold part Off', () => preset('cut-hold-modes', 'off'));
 
   // POCKET: Clearing, Loop, the note

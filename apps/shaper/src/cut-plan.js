@@ -14,8 +14,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon, loopSuccessors } from '#core/loop-geometry.js'; // TASK 832: loopSuccessors (followDesign)
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
-import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
-import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefAt, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
+import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpIndex, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 
 export const keyOf = (kind, id) => kind + ':' + id;
@@ -23,10 +22,10 @@ export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: ke
 
 // TASK S1 (docs/OPERATIONS-MODEL.md section 2): the plan lives in the OPERATIONS + REGIONS store (operations-store.js); a shape's RECORD (what every derivation
 // takes) is rebuilt from its operation and its region: recordOf(op, ref) = { cutType: the operation's type, ...its settings, ...the region's slope / levels,
-// leadInAt: the ref's dragged position, tabsAt (TASK 822): the ref's dragged tabs }, cutDepth 'model' -> the shape's imported depth. The per-shape names of today's Prepare (S1 behaves as before) stay:
+// tabsAt (TASK 822): the ref's dragged tabs }, cutDepth 'model' -> the shape's imported depth. The per-shape names of today's Prepare (S1 behaves as before) stay:
 // a geometry key ('loop:<id>' ...) for its operation, `contour:<key>` for its part's Contour.
-const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'leadInAt', 'tabsAt']);
-/** The settings part of a record (everything but the cut type, the region data, the dragged lead-in position and the dragged tabs). */
+const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'tabsAt']);
+/** The settings part of a record (everything but the cut type, the region data and the dragged tabs). */
 export const settingsPart = (rec) => Object.fromEntries(Object.entries(rec || {}).filter(([k]) => !SHAPE_FIELDS.has(k)));
 const sourceDepth = (key) => { const s = (regionOf(key) || {}).source; return s && s.cutDepth != null ? s.cutDepth : undefined; };
 /** The record of a membership (see above). */
@@ -34,7 +33,6 @@ export function recordOf(op, ref) {
   const r = { cutType: op.type, ...op.settings };
   if (r.cutDepth === 'model') r.cutDepth = sourceDepth(ref.key) ?? 'unset';
   if (op.type !== CONTOUR_TYPE) { const reg = regionOf(ref.key); if (reg) { if (reg.slope) r.slope = reg.slope; if (reg.levels) r.levels = reg.levels; } }
-  if (Object.hasOwn(ref, 'at')) r.leadInAt = ref.at;
   if (Array.isArray(ref.tabsAt)) r.tabsAt = [...ref.tabsAt]; // TASK 822: the shape's dragged tabs (#core/hold-part tabsAtOf)
   return r;
 }
@@ -172,7 +170,6 @@ function fileShapeOnly(planKey, rec, state) {
   const cur = memberOf(planKey);
   if (!rec || !rec.cutType) { if (cur) leaveOp(cur.op, cur.ref); return null; }
   const settings = settingsPart(rec);
-  const at = !contour && Object.hasOwn(rec, 'leadInAt') ? rec.leadInAt : undefined;
   const tabsAt = !contour && Array.isArray(rec.tabsAt) ? rec.tabsAt : undefined; // TASK 822: the shape's dragged tabs stay with it
   const newKey = memberKey(planKey, rec);
   let seq;
@@ -181,7 +178,6 @@ function fileShapeOnly(planKey, rec, state) {
     const opKeyNow = others.length ? memberKey(planKeyOf(cur.op, others[0]), recordOf(cur.op, others[0])) : memberKey(planKey, recordOf(cur.op, cur.ref));
     if (cur.op.type === rec.cutType && opKeyNow === newKey) {
       setOpSettings(cur.op, cur.op.settings.cutDepth === 'model' && settings.cutDepth === recordOf(cur.op, cur.ref).cutDepth ? { ...settings, cutDepth: 'model' } : settings);
-      setRefAt(cur.ref, at);
       setRefTabsAt(cur.ref, tabsAt);
       normalizeDepth(cur.op);
       return getPlanRecord(planKey);
@@ -189,7 +185,7 @@ function fileShapeOnly(planKey, rec, state) {
     seq = cur.ref.seq;
     leaveOp(cur.op, cur.ref);
   } else seq = takeSeq();
-  const ref = { key, seq, ...(at !== undefined ? { at } : {}), ...(tabsAt !== undefined ? { tabsAt: [...tabsAt] } : {}) };
+  const ref = { key, seq, ...(tabsAt !== undefined ? { tabsAt: [...tabsAt] } : {}) };
   const target = storeOps().find((op) => op.type === rec.cutType && op.geometry.length && !op.geometry.some((r) => r.key === key) && memberKey(planKeyOf(op, op.geometry[0]), recordOf(op, op.geometry[0])) === newKey);
   if (target) { addRef(target, ref); normalizeDepth(target); }
   else { const draft = { type: rec.cutType, settings, geometry: [ref] }; normalizeDepth(insertOp(newOpIndex(state, draft), draft)); }
@@ -197,7 +193,7 @@ function fileShapeOnly(planKey, rec, state) {
 }
 // fileShape MOVES a shape: the operation it leaves goes when it is left empty (as before task S2; an EMPTY operation made by the user stays: TASK S2)
 function leaveOp(op, ref) { removeRef(op, ref); if (!op.geometry.length) deleteOp(op); }
-/** Set one field of a shape's record (Prepare's card edits, its lead-in drag): fileShape with the resulting record. */
+/** Set one field of a shape's record (Prepare's card edits): fileShape with the resulting record. */
 export function setFieldFor(key, field, value, state = null) { return fileShape(key, { ...getCutRecord(key), [field]: value }, state); }
 
 // The Contour defaults: the last bit / cutter shape / step set on any Contour (owner's example: a 1/8 in ball nose at 0.25 mm). App state, like the step depth.
@@ -273,26 +269,18 @@ export function changeOpType(op, type, state = null) {
   settleOrder(state);
   return op;
 }
-/** TASK S2: set an operation's settings (`patch`: field -> value, base mm): they apply to ALL its shapes. `leadInAt` is each shape's own (its dragged lead-in position):
- *  it is set on every membership. A typed depth equal to every shape's imported depth is stored 'model' (as since S1). TASK 822: a tab count set (a number or Auto)
+/** TASK S2: set an operation's settings (`patch`: field -> value, base mm): they apply to ALL its shapes. A typed depth equal to every shape's imported depth is stored 'model' (as since S1). TASK 822: a tab count set (a number or Auto)
  *  lays the tabs out again: every shape's dragged tabs (`tabsAt`) are dropped. */
 export function setOpFields(op, patch, state = null) {
-  const { leadInAt, ...rest } = patch;
+  const rest = { ...patch };
   // TASK S2 (owner turns 2730-2731): a Depth set back to the model (null: a Roughing's / Contour's Bottom emptied or Reset) = 'model' where every shape has an imported
   // depth, else unset (a part's own levels / slope depth)
   if (Object.hasOwn(rest, 'cutDepth') && rest.cutDepth === null) rest.cutDepth = op.geometry.length && op.geometry.every((r) => sourceDepth(r.key) !== undefined) ? 'model' : 'unset';
   if (Object.keys(rest).length) setOpSettings(op, { ...op.settings, ...rest });
-  if (Object.hasOwn(patch, 'leadInAt')) for (const ref of op.geometry) setRefAt(ref, leadInAt);
   if (Object.hasOwn(rest, 'tabCount')) for (const ref of op.geometry) if (Object.hasOwn(ref, 'tabsAt')) setRefTabsAt(ref, undefined); // TASK 822
   if (Object.hasOwn(rest, 'cutDepth')) normalizeDepth(op);
   settleOrder(state);
   return op;
-}
-/** TASK S2: the dragged lead-in position of ONE membership (the handle on that shape). */
-export function setShapeLeadInAt(op, key, at, state = null) {
-  const ref = op.geometry.find((r) => r.key === key);
-  if (ref) setRefAt(ref, at);
-  settleOrder(state);
 }
 /** TASK 822: the dragged tabs of ONE membership (its tab handles): every tab's centre as a perimeter fraction of its outline (#core/hold-part holdTabDragAt `at`). */
 export function setShapeTabsAt(op, key, tabsAt, state = null) {
@@ -316,10 +304,10 @@ export function removeShapeFromOp(op, key, state = null) {
   return true;
 }
 /** TASK S2 (owner turns 2710-2712, "I usually copy a toolpath and differentiate them separately", as Fusion's Duplicate): a NEW operation with the same type, settings,
- *  tick and shapes (each a new membership: the next file place, its dragged lead-in position and tabs kept), placed right after the original while the list order is the
+ *  tick and shapes (each a new membership: the next file place, its dragged tabs kept), placed right after the original while the list order is the
  *  user's ('stored'), else by the default rule. Returns the copy. */
 export function duplicateOperation(op, state = null) {
-  const draft = { type: op.type, settings: { ...op.settings }, geometry: op.geometry.map((r) => ({ key: r.key, seq: takeSeq(), ...(Object.hasOwn(r, 'at') ? { at: r.at } : {}), ...(Array.isArray(r.tabsAt) ? { tabsAt: [...r.tabsAt] } : {}) })) };
+  const draft = { type: op.type, settings: { ...op.settings }, geometry: op.geometry.map((r) => ({ key: r.key, seq: takeSeq(), ...(Array.isArray(r.tabsAt) ? { tabsAt: [...r.tabsAt] } : {}) })) };
   const at = listOrder() === 'stored' ? storeOps().indexOf(op) + 1 : newOpIndex(state, draft);
   const copy = insertOp(at, draft);
   if (op.on === false) setOpsOn([copy.id], false);
@@ -440,68 +428,12 @@ export function planHoldNotes(state, opts) {
   return out;
 }
 
+/** TASK 777: the short note line for an open toolpath (e.g. Loop-off programmed clearing). */
+export const OPEN_PATH_AUTOPASS_NOTE = 'AutoPass runs back along it on the next pass';
+
 // TASK 745: the PROGRAMMED POCKET. The last stepover / finish allowance / raster angle / Loop (TASK 750) set on any record are the next record's when its
 // Clearing is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; Loop off).
 // A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
-// TASK 775 / 778: the LEAD-IN. Radius / Sweep / Length default to CALCULATED from bit and outline (never remembered across records);
-// only Side is remembered (Outside until changed). App state, like the step depth above.
-let lastLeadInSideV = 'outside';
-export const lastLeadInSide = () => lastLeadInSideV;
-export function rememberLeadInSide(v) { if (v === 'outside' || v === 'inside') lastLeadInSideV = v; return lastLeadInSideV; }
-/**
- * leadInSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 775 / 778: what an On line record's lead-in does, read off THE derivation
- * (deriveCuts through the effective record, as Prepare / Review / the export cut it): the `leadIn` of its outline cut (#core/lead-in applyLeadIn:
- * role 'arc' with tip / junction / radius / sweep / length / side / at / atFrac / isCalc, or 'refused' with its error), or null when the record has none.
- */
-export function leadInSummary(key, storedRec, state, loops, loopPolys, owned) {
-  const rec = effectiveCutRecord(storedRec);
-  if (!outlineLeadIn(rec)) return null;
-  const cuts = deriveCuts(parseKey(key), rec, state, loops, loopPolys, owned) || [];
-  const c = cuts.find((x) => x.leadIn);
-  return c ? { ...c.leadIn, r: leadInSettings(rec).r } : null;
-}
-/** TASK 775 / 778: the one line every lead-in note carries (the trade-off, owner's wording). */
-export const LEAD_IN_TRADE_OFF = "Lead-in: you start at the arc's end; AutoPass then reverses at each end, so the cutting direction alternates.";
-/** TASK 777: the short note line for an open toolpath (e.g. Loop-off programmed clearing) that does not already carry LEAD_IN_TRADE_OFF. */
-export const OPEN_PATH_AUTOPASS_NOTE = 'AutoPass runs back along it on the next pass';
-const LEAD_REFUSED = {
-  'no length': 'set a bit diameter or a radius',
-  sweep: 'sweep must be between 15° and 180°',
-  length: 'straight length cannot be negative',
-  outline: 'the outline could not be read',
-  room: 'another part of the outline is in the way of the arc: try the other side or a smaller radius',
-};
-/**
- * leadInNoteItems(storedRec, lead) — TASK 775 / 778: the card note of an On line outline's lead-in arc (doc unit), from its leadInSummary:
- * "On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge" + the trade-off line; a refused one says why
- * (warning colour; the outline is cut as a closed loop).
- */
-export function leadInNoteItems(storedRec, lead) {
-  if (!lead || !storedRec) return [];
-  const u = docUnit(), f = (mm) => lengthText(mm, { unit: u, show: 'field' });
-  const name = (cutTypeById(storedRec.cutType) || {}).menuLabel || 'Cut';
-  if (lead.role === 'refused' && lead.error === 'tabs') return [{ text: `${name}: no lead-in with tabs: each stroke has its own ends` }]; // the Lead-in row is hidden with Tabs; the stored choice waits
-  if (lead.role === 'refused') {
-    const why = lead.error === 'short' ? `the radius ${f(lead.radius)} ${u} is smaller than the bit radius ${f(lead.r)} ${u}` : LEAD_REFUSED[lead.error] || lead.error;
-    const text = `${name}: lead-in arc refused: ${why}; cut as a closed loop`;
-    return [{ text, warn: text.slice(name.length + 2), title: 'the line is cut as a closed loop (no start point)' }];
-  }
-  const straight = lead.length > 1e-9 ? ` + ${f(lead.length)} ${u} straight` : '';
-  const where = lead.isCalc && !lead.isCalc.at ? 'from a moved position' : `from the middle of the longest ${lead.at === 'line' ? 'straight edge' : 'segment'}`;
-  return [{ text: `${name}: lead-in arc, radius ${f(lead.radius)} ${u}, ${angleText(lead.sweep, { show: 'deg' })}${straight} ${lead.side}, ${where}` }, { text: LEAD_IN_TRADE_OFF }];
-}
-/** TASK 775: the lead-in notes of every On line outline with a lead-in (the 3D Review's info; a programmed pocket's are in its clearing notes; TASK 798: `opts` = planRecords' { ticked }). */
-export function planLeadInNotes(state, opts) {
-  const out = [];
-  let geo = null;
-  for (const [key, rec] of planRecords(opts)) {
-    if (!rec || !rec.cutType || !outlineLeadIn(effectiveCutRecord(rec))) continue;
-    if (!geo) { const { loops, loopPolys } = loopsWithPolygons(state); geo = { loops, loopPolys, owned: planOwnedLoops(state, loops, loopPolys) }; }
-    out.push(...leadInNoteItems(rec, leadInSummary(key, rec, state, geo.loops, geo.loopPolys, geo.owned)).map((i) => i.text));
-  }
-  return out;
-}
-
 let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle, lastLoopV = false;
 export const lastStepover = () => lastStepoverV;
 export function rememberStepover(pct) { const n = Number(pct); if (n > 0) lastStepoverV = n; return lastStepoverV; }
@@ -590,7 +522,7 @@ export function clearingNoteItems(storedRec, sum) {
   if (sum.loop) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only` }); // TASK 750: the Origin does not offset an on-line path
   if (sum.loopRefused) { const t = `Loop refused: ${CLEARING_REFUSED[sum.loopRefused] || sum.loopRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut with open paths + the Origin\'s inside cut on the wall' }); }
   items.push({ text: 'Depth passes: set Pass Depth or AutoPass on the Origin' }); // TASK 750: the clearing is written once, at the full depth
-  if (!sum.loop && !sum.leadIn && Array.isArray(sum.clear) && sum.clear.some((c) => !c.closed)) items.push({ text: OPEN_PATH_AUTOPASS_NOTE }); // TASK 777: open clearing paths reverse on AutoPass
+  if (!sum.loop && Array.isArray(sum.clear) && sum.clear.some((c) => !c.closed)) items.push({ text: OPEN_PATH_AUTOPASS_NOTE }); // TASK 777: open clearing paths reverse on AutoPass
   const lo = sum.leftover;
   if (lo && lo.area > POCKET_CLEARING.leftoverTolMm2) {
     // TASK 825 (V1): the warning is the leftover itself (two lines on the card); WHY it is left is the line after it (the card's area is three lines: a four-line warning was cut)

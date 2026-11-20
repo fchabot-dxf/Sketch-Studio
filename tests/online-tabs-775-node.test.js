@@ -1,14 +1,5 @@
-// tests/leadin-775-node.test.js — TASK 775 (verified on the owner's Origin 2026-11-17): LEAD-IN legs, TABS on On line cuts, honest LOOP wording.
-//  1. LEAD-IN on an On line OUTLINE (#core/lead-in applyLeadIn, through #core/stepped-cut deriveCuts): the download is ONE OPEN path (no Z) whose two ends
-//     are the leg tip and the junction: M tip L junction, the whole loop, back to the junction; the junction is the middle of the longest straight edge
-//     (a circle: the middle of its one segment); the leg is `length` long along the outline's normal, Outside = away from the shape, Inside = into it;
-//     default length = one bit diameter; refused (closed loop, byte-identical to no lead-in, its reason) when another part of the outline is in the way,
-//     under the bit radius, with tabs; an open line ignores it; the viewBox holds an outside tip; the preview copy says data-lead="in" (never the file);
-//     the footprint sweeps the leg.
-//  2. LEAD-IN on a programmed pocket with Loop on (Spiral / Raster / Morphed spiral; rectangle, island, L, circle): every loop is ONE OPEN path from the
-//     leg tip to the loop's start, round, back to it (no Z); the leg is `length` long, inside the pocket region at least the bit radius from the wall and
-//     every island (0.02 mm: never across the wall or an island); refused (closed loops, its reason) when no leg fits / under the bit radius; Loop off or
-//     Freehand ignore it; the leftover is not larger.
+// tests/online-tabs-775-node.test.js — TASK 775 (verified on the owner's Origin 2026-11-17): TABS on On line cuts, honest LOOP wording. (Renamed from
+// tests/leadin-775-node.test.js in TASK 836: its lead-in sections 1, 2 and the lead-in part of 6 went with the lead-in, owner ruling 2026-11-20; the rest kept.)
 //  3. TABS on an On line outline (#core/hold-part, 742's rows): separate OPEN strokes, stroke count = tab count, each gap exactly the tab width (0.01 mm), at
 //     the full depth; the Review leaves the tabs standing; onion skin = the whole line at depth - skin (an open line too); refused (as without) on an open
 //     line, a tab not wider than the bit, no room; a profile's hole loops stay closed.
@@ -16,8 +7,8 @@
 //  5. BYTE-IDENTICAL without the new options: tests/fixtures/leadin-775-before.json (written by origin/main 5e79336's own code, tests/helpers/leadin-775-digest.js;
 //     TASK 786: the download / preview facets re-written by the 786 exporter, every change explained in WORK-LOG TURN 786: the page grown to hold every written
 //     element, the start mark stroke-only, a mixed-kind hole wound opposite; operations and 3D footprints unchanged).
-//  6. The app (node kit): the cut card rows (Lead-in Off | On, Length, Side; On line's Hold part with no Tab thickness), ONE undo step each, the notes, the
-//     last values remembered, Prepare's leg and dots, the operations row, save + reload.
+//  6. The app (node kit): the cut card rows (On line's Hold part with no Tab thickness, no Lead-in row), ONE undo step each, the notes, the operations row,
+//     an open line, a programmed pocket's start mark, save + reload.
 import assert from 'node:assert';
 import { hintFor } from '../apps/shaper/src/hint.js'; // TASK 805: the tooltip's text (hints are no longer laid out in the card)
 import fs from 'node:fs';
@@ -32,7 +23,7 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { deriveCuts } from '#core/stepped-cut.js';
 import { deriveCutFootprint, deriveProfileCuts } from '#core/profile-model.js';
 import { planClearing, clearingSettings, pocketRings } from '#core/pocket-clearing.js';
-import { planEntries, planReliefItems, keyOf, planLeadInNotes } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
@@ -44,7 +35,6 @@ const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
 const ok = (c, m) => { assert.ok(c, m); checks++; };
 const near = (a, b, tol, m) => { assert.ok(Math.abs(a - b) <= tol, `${m}: ${a} vs ${b} (tol ${tol})`); checks++; };
 const BIT = 3.175, R = BIT / 2;
-const TRADE_OFF = "Lead-in: you start at the arc's end; AutoPass then reverses at each end, so the cutting direction alternates.";
 
 function polyState(loops, circles = [], chains = []) {
   const joints = new Map(), shapes = [];
@@ -95,87 +85,6 @@ const distSeg = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx
 const distRing = (p, pts) => { let m = Infinity; for (let i = 0; i < pts.length; i++) m = Math.min(m, distSeg(p, pts[i], pts[(i + 1) % pts.length])); return m; };
 const inPoly = (p, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c; } return c; };
 const XY = (a) => a.map(([x, y]) => ({ x, y }));
-
-// ── 1. LEAD-IN on an On line outline ──
-{
-  const st = polyState([RECT]);
-  const plain = one(st, ONLINE());
-  for (const side of ['outside', 'inside']) {
-    const svg = one(st, ONLINE({ leadIn: true, leadInSide: side }));
-    const els = elementsOf(svg);
-    eq(els.map((e) => [e.tag, e.cutType, e.depth]), [['path', 'online', '3.000 mm']], `${side}: ONE on-line path`);
-    const { pts, closed, subpaths } = pathPoints(els[0].d);
-    eq([closed, subpaths], [false, 1], `${side}: OPEN (no Z), one stroke`);
-    const tip = pts[0], J = pts[1];
-    ok((dist(J, { x: 50, y: 0 }) < 1e-9) || dist(J, { x: 50, y: 60 }) < 1e-9, `${side}: the junction is the middle of a longest (100 mm) straight edge: ${JSON.stringify(J)}`);
-    eq(J.c, 'A', `${side}: the lead-in arrives at the junction via an SVG arc (A)`);
-    eq([pts.at(-1).x, pts.at(-1).y], [J.x, J.y], `${side}: the path ends back at the junction (its other end)`);
-    near(Math.abs(tip.y - J.y), BIT, 1e-4, `${side}: 90° arc of radius = bit dia: tip is one radius out from the line`);
-    near(Math.abs(tip.x - J.x), BIT, 1e-4, `${side}: 90° arc of radius = bit dia: tip is one radius back along the line`);
-    ok(side === 'outside' ? !inPoly(tip, XY(RECT)) : inPoly(tip, XY(RECT)), `${side}: the tip is ${side} the shape`);
-    for (const c of RECT) ok(pts.some((p) => p.x === c[0] && p.y === c[1]), `${side}: the loop goes round every corner ${c}`);
-    if (side === 'outside') ok(/viewBox="0 -3\.175 100 63\.175"|viewBox="0 0 100 63\.175"/.test(svg), 'outside: the viewBox holds the tip: ' + svg.split('\n')[0]);
-    else ok(svg.split('\n')[0] === plain.split('\n')[0], 'inside: the viewBox is the drawing\'s');
-    ok(!/data-/.test(svg), `${side}: the download has no data-* attribute`);
-    eq(elementsOf(one(st, ONLINE({ leadIn: true, leadInSide: side }), { previewData: true }))[0].a['data-lead'], 'in', `${side}: the preview copy says data-lead="in"`);
-    // the footprint sweeps the arc (its middle is inside the band) and carries it as a tool path
-    const rec = ONLINE({ leadIn: true, leadInSide: side }), fp = deriveCutFootprint(cutsOf(st, rec), rec, st)[0];
-    const mid = fp.leadIn.points[Math.floor(fp.leadIn.points.length / 2)];
-    ok(fp.leadIn && fp.leadIn.role === 'arc' && fp.toolPaths.some((t) => !t.closed && t.points.length >= 3), `${side}: the footprint carries the arc`);
-    ok(fp.rings.some((r) => inPoly(mid, r)), `${side}: the arc's middle is inside the swept band`);
-  }
-  // a larger radius, typed
-  const long = pathPoints(elementsOf(one(st, ONLINE({ leadIn: true, leadInRadius: 6.35 })))[0].d).pts;
-  near(dist(long[0], long[1]), 6.35 * Math.SQRT2, 1e-3, 'Radius 6.35 mm (90° arc): chord tip..J = R * sqrt(2)');
-  // Off / Lead-in fields with leadIn false: byte-identical
-  eq(one(st, ONLINE({ leadIn: false, leadInRadius: 9, leadInLength: 5, leadInSide: 'inside' })), plain, 'Lead-in Off (its fields set): byte-identical to a record without them');
-  // refusals: closed loop, as without, with its reason
-  const thin = polyState([[[0, 0], [100, 0], [100, 4], [0, 4]]]);
-  const thinCuts = cutsOf(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInRadius: 6.35, leadInSweep: 90 }));
-  eq(thinCuts.find((c) => c.leadIn).leadIn.role + ':' + thinCuts.find((c) => c.leadIn).leadIn.error, 'refused:room', 'a 4 mm strip, Inside radius 6.35 mm at 90°: refused, the far edge is in the way');
-  eq(one(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInRadius: 6.35, leadInSweep: 90 })), one(thin, ONLINE()), 'refused: exported as without (closed)');
-  ok(pathPoints(elementsOf(one(thin, ONLINE({ leadIn: true, leadInSide: 'inside', leadInRadius: 1.9, leadInSweep: 90 })))[0].d).closed === false, 'the same strip, Inside radius 1.9 mm at 90°: fits');
-  eq(cutsOf(st, ONLINE({ leadIn: true, leadInRadius: 1 })).find((c) => c.leadIn).leadIn.error, 'short', 'a 1 mm radius under the 1.5875 mm bit radius: refused');
-  eq(cutsOf(st, ONLINE({ leadIn: true, holdPart: 'tabs', tabCount: 3, tabWidth: 10 })).find((c) => c.leadIn).leadIn.error, 'tabs', 'with tabs: refused (each stroke has its own ends)');
-  // a circle: the middle of its one segment, tangential arc outside
-  const circ = polyState([], [['c', [50, 50], 30]]);
-  const cp = pathPoints(elementsOf(one(circ, ONLINE({ leadIn: true })))[0].d);
-  ok(dist(cp.pts[0], { x: 50, y: 50 }) > 30 + BIT - 0.1, 'circle, Outside: the tip is outside the circle');
-  near(dist(cp.pts[1], { x: 50, y: 50 }), 30, 1e-6, 'circle: the junction is on the circle');
-  ok(!cp.closed && cp.pts[1].c === 'A' && cp.pts.slice(2).every((p) => p.c === 'A') && dist(cp.pts.at(-1), cp.pts[1]) < 1e-6, 'circle: the arc lead-in, then outline arcs back to the junction, no Z');
-  // onion skin + lead-in: the arc at the skin's depth
-  eq(elementsOf(one(st, ONLINE({ leadIn: true, holdPart: 'skin', holdThickness: 1 }))).map((e) => [e.depth, pathPoints(e.d).closed]), [['2.000 mm', false]], 'onion skin + lead-in: one open path at depth - skin');
-  // an open line: nothing to add
-  const ch = polyState([], [], [[[0, 0], [50, 0], [50, 30]]]);
-  const chain = findOpenChains(ch, findLoops(ch))[0];
-  const chainSvg = (rec) => exportOf(ch, [{ target: { kind: 'chain', id: chain.id }, rec }]);
-  eq(chainSvg(ONLINE({ leadIn: true })), chainSvg(ONLINE()), 'an open line: the lead-in adds nothing (it has its ends)');
-  // TASK 775b (merge with 774): a design with a STOCK and an On line lead-in: the Stock is written FIRST (774's exportFirst), the lead-in path is the same
-  // text as without the Stock, and the viewBox still holds the tip
-  {
-    const both = polyState([[[-20, -20], [140, -20], [140, 70], [-20, 70]], RECT]);
-    const lp = polysOf(both), byArea = findLoops(both).sort((a, b) => Math.abs(area(lp[b.id])) - Math.abs(area(lp[a.id])));
-    const [board, part] = byArea;
-    const lead = { target: { kind: 'loop', id: part.id }, rec: ONLINE({ leadIn: true, leadInRadius: 25 }) };
-    const stock = { target: { kind: 'loop', id: board.id }, rec: { cutType: 'stock', cutDepth: 19, cutOffset: 0, toolDia: BIT } };
-    const svg = exportOf(both, [lead, stock]), withStock = elementsOf(svg), alone = elementsOf(exportOf(both, [lead]));
-    eq(withStock.map((e) => e.cutType), ['guide', 'online'], 'Stock + lead-in: the Stock (written as a guide) FIRST though it is second in the plan (774), then the lead-in path');
-    eq(withStock[1].d, alone[0].d, 'Stock + lead-in: the lead-in path unchanged');
-    const tip = pathPoints(withStock[1].d).pts[0], vb = /viewBox="([^"]+)"/.exec(svg)[1].split(' ').map(Number);
-    ok(!pathPoints(withStock[1].d).closed && Math.abs(Math.abs(tip.y - 30) - 55) < 1e-4 && tip.y >= vb[1] - 1e-9 && tip.y <= vb[1] + vb[3] + 1e-9, `Stock + lead-in: ONE open path, its tip 25 mm off the part, inside the viewBox ${vb.join(' ')}`);
-  }
-  // a profile with a hole: only the record's own outline gets the arc; the hole stays a closed loop
-  const plate = polyState([RECT, ISLAND]);
-  const pe = elementsOf(one(plate, ONLINE({ leadIn: true })));
-  eq(pe.map((e) => pathPoints(e.d).closed), [true, false], 'a profile with a hole: the hole closed, the outline opened by the arc');
-}
-
-// ── 2. (TASK 778: pocket lead-in REMOVED — programmed pockets ignore leadIn and emit a guide start mark; full tests in leadin-arc-778-node.test.js) ──
-{
-  const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6, stepover: 40, finishAllowance: 0.5, rasterAngle: 0, ...more });
-  const st = polyState([RECT]);
-  eq(one(st, POCKET({ clearing: 'linked', loop: true, leadIn: true })), one(st, POCKET({ clearing: 'linked', loop: true })), 'pocket with saved leadIn:true exports byte-identical to without (closed loop + guide start mark)');
-}
 
 // ── 3. TABS on an On line outline ──
 {
@@ -304,7 +213,7 @@ const harness = (app) => {
 };
 const keyAt = (st, x, y) => { const loops = findLoops(st), lp = polysOf(st); const l = loops.filter((l0) => inPoly({ x, y }, lp[l0.id])).sort((a, b) => Math.abs(area(lp[a.id])) - Math.abs(area(lp[b.id])))[0]; return keyOf('loop', l.id); };
 const profile = await createProfile();
-await createNamedDesign(profile, 'shaper', 'Lead-in 775');
+await createNamedDesign(profile, 'shaper', 'Tabs 775');
 let saved = null;
 {
   V2_PLAN.clear(); V2_PLAN.setOrder([]);
@@ -315,76 +224,47 @@ let saved = null;
     drawInto(app, polyState([RECT, [[120, 0], [220, 0], [220, 60], [120, 60]], [[0, 80], [100, 80], [100, 140], [0, 140]]], [], [[[130, 90], [200, 90], [200, 130]]]));
     st.saveState('draw');
     h.pressEl('.sk-header-tab[data-tab="prepare"]');
-    // On line on the first rectangle
+    // On line on the first rectangle: the Hold part row, no Lead-in row (TASK 836)
     h.clickAt(10, 10); h.pick('online'); h.typed('.cut-depth', '3');
     const kA = keyAt(st, 10, 10);
-    ok(h.shown('leadIn') && !h.shown('leadInRadius') && !h.shown('leadInSweep') && !h.shown('leadInLength') && !h.shown('leadInSide') && !h.shown('leadInAt'), 'On line outline: the Lead-in row, Off: no arc detail rows');
-    eq(h.presets('leadIn'), ['Off*', 'On'], 'Lead-in: Off | On, Off active');
+    ok(!h.q('.cut-row[data-row="leadIn"]') && !h.q('.cut-lead-radius'), 'On line outline: no Lead-in row in the card (TASK 836)');
     ok(h.shown('holdPart') && !h.shown('tabCount') && !h.shown('holdThickness'), 'On line: the Hold part row (Off)');
     eq(h.count('circle'), 0, 'a closed line: no dot (no start point on the Origin)');
-    let n0 = st.history.length;
-    h.preset('leadIn', 'true');
-    eq([V2_PLAN.get(kA).leadIn, V2_PLAN.get(kA).leadInSide, V2_PLAN.get(kA).leadInRadius ?? null, V2_PLAN.get(kA).leadInSweep ?? null, V2_PLAN.get(kA).leadInLength ?? null, V2_PLAN.get(kA).leadInAt ?? null, st.history.length], [true, 'outside', null, null, null, null, n0 + 1], 'Lead-in On: ONE undo step; Outside; calculated values stored as null');
-    ok(h.shown('leadInRadius') && h.shown('leadInSweep') && h.shown('leadInLength') && h.shown('leadInSide') && h.shown('leadInAt'), 'On: Radius, Sweep, Length, Side, Position rows');
-    eq([h.q('.cut-lead-radius').value, h.q('.cut-lead-sweep').value, h.q('.cut-lead-length').value, h.presets('leadInSide')], ['3.175', '90', '0', ['Outside*', 'Inside']], 'calculated Radius = bit dia, Sweep = 90, Length = 0, Side Outside');
-    eq(h.q('.cut-row[data-row="leadInRadius"] .cut-field-label').textContent, 'Radius', 'the Radius label is the table\'s');
-    eq(h.note(), ['On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge', TRADE_OFF], 'the note: the arc and the trade-off');
-    eq([h.count('.sk-lead-leg'), h.count('.sk-lead-tip'), h.count('.sk-lead-end')], [1, 1, 1], 'Prepare: the arc, the tip dot (start) and the junction ring (the other end)');
     let els = elementsOf(shaperSvgOf(st, planEntries()));
-    eq(els.map((e) => pathPoints(e.d).closed), [false], 'the download: ONE open path');
-    const ops = describeOperations(st, planEntries());
-    ok(ops.some((op) => /lead-in arc outside/.test(op.label)), 'the operations row says lead-in arc: ' + ops.map((op) => op.label).join(' | '));
-    eq(planLeadInNotes(st, V2_PLAN), ['On line: lead-in arc, radius 3.175 mm, 90° outside, from the middle of the longest straight edge', TRADE_OFF], 'the 3D Review info: the same note');
-    n0 = st.history.length;
-    h.step('leadInRadius', 1);
-    eq([V2_PLAN.get(kA).leadInRadius, st.history.length], [3.5, n0 + 1], 'Radius +: 3.175 snaps up to the next 0.5 mm step, 3.5, ONE undo step');
-    h.typed('.cut-lead-radius', '6.35'); eq(V2_PLAN.get(kA).leadInRadius, 6.35, 'typed 6.35');
-    h.typed('.cut-lead-radius', '-1'); eq(V2_PLAN.get(kA).leadInRadius, 6.35, 'typed -1: refused');
-    h.preset('leadInSide', 'inside'); eq(V2_PLAN.get(kA).leadInSide, 'inside', 'Side Inside');
-    const tip = pathPoints(elementsOf(shaperSvgOf(st, planEntries()))[0].d).pts[0];
-    ok(inPoly(tip, XY(RECT)), 'Inside: the tip is inside the outline');
-    h.typed('.cut-lead-radius', '1');
-    eq(h.note(), ['On line: lead-in arc refused: the radius 1 mm is smaller than the bit radius 1.587 mm; cut as a closed loop'], 'refused: the note says why');
-    ok(h.q('.cut-note .cut-note-warn'), 'refused: in the warning colour');
-    h.typed('.cut-lead-radius', '6.35');
-    app.undo(); eq(V2_PLAN.get(kA).leadInRadius, 1, 'undo: back one edit');
-    app.redo(); eq(V2_PLAN.get(kA).leadInRadius, 6.35, 'redo');
-    // Tabs on On line: no thickness row, the lead-in row goes, the note in the owner's words
+    eq(els.map((e) => pathPoints(e.d).closed), [true], 'the download: ONE closed path');
+    // Tabs on On line: no thickness row, the note in the owner's words
+    let n0 = st.history.length;
     h.preset('holdPart', 'tabs');
+    eq(st.history.length, n0 + 1, 'Tabs: ONE undo step');
     ok(h.shown('tabCount') && h.shown('tabWidth') && !h.shown('holdThickness'), 'On line Tabs: count and width, NO thickness (the gaps are not cut at all)');
-    ok(!h.shown('leadIn') && !h.shown('leadInRadius'), 'with Tabs: no Lead-in row (each stroke has its ends)');
     eq(hintFor(h.q('.cut-row[data-row="tabWidth"] [data-hint]')), 'How long each gap left uncut in the line is; the wood it keeps is this minus the bit diameter.', 'Tab width on On line: the gap\'s hint (the table\'s)');
     h.typed('.cut-tab-count', '3'); h.typed('.cut-tab-width', '10');
-    eq(h.note(), ['Tabs: 3 gaps of 10 mm left uncut; cut them by hand afterwards', 'Each gap keeps 6.825 mm of wood with a 3.175 mm bit (the gap minus the bit)', 'On line: no lead-in with tabs: each stroke has its own ends'], 'the tabs note (the stored Lead-in On waits: no arc with tabs)');
+    eq(h.note(), ['Tabs: 3 gaps of 10 mm left uncut; cut them by hand afterwards', 'Each gap keeps 6.825 mm of wood with a 3.175 mm bit (the gap minus the bit)'], 'the tabs note');
     els = elementsOf(shaperSvgOf(st, planEntries()));
     eq(els.map((e) => [e.cutType, e.depth, pathPoints(e.d).closed]), Array(3).fill(['online', '3.000 mm', false]), 'the download: 3 open strokes at the full depth');
-    eq([h.count('.sk-stroke'), h.count('.sk-tab-mark'), h.count('.sk-lead-tip')], [3, 3, 0], 'Prepare: the 3 strokes and the 3 tab marks, no lead-in');
+    eq([h.count('.sk-stroke'), h.count('.sk-tab-mark')], [3, 3], 'Prepare: the 3 strokes and the 3 tab marks');
     ok(describeOperations(st, planEntries()).some((op) => /3 tabs \(gaps 10 mm left uncut\)/.test(op.label)), 'the operations row: 3 tabs');
+    n0 = st.history.length;
+    h.typed('.cut-tab-width', '12');
+    app.undo(); eq([V2_PLAN.get(kA).tabWidth, st.history.length], [10, n0], 'undo: back one edit');
+    app.redo(); eq(V2_PLAN.get(kA).tabWidth, 12, 'redo');
     h.preset('holdPart', 'off');
-    ok(h.shown('leadIn') && h.shown('leadInRadius'), 'Tabs off: the Lead-in rows back');
-    // calculated defaults: only Side is remembered; Radius / Sweep / Length stay calculated (null)
-    h.clickAt(130, 10); h.pick('online'); h.typed('.cut-depth', '3');
-    const kB = keyAt(st, 130, 10);
-    h.preset('leadIn', 'true');
-    eq([V2_PLAN.get(kB).leadInRadius, V2_PLAN.get(kB).leadInSweep, V2_PLAN.get(kB).leadInLength, V2_PLAN.get(kB).leadInSide], [null, null, null, 'inside'], 'the next record turned On remembers Side only; Radius/Sweep/Length default to calculated (null)');
-    // an open line: no Lead-in row; Tabs refused with the reason
+    // an open line: Tabs refused with the reason
     h.clickAt(165, 90);
     const chainSel = [...V2_PLAN.keys()];
     h.pick('online');
     const kC = [...V2_PLAN.keys()].find((k) => k.startsWith('chain:'));
     ok(kC, 'the open line picked: ' + JSON.stringify(chainSel));
-    ok(!h.shown('leadIn') && h.shown('holdPart'), 'an open line: no Lead-in row (it has its ends), the Hold part row');
+    ok(h.shown('holdPart'), 'an open line: the Hold part row');
     h.typed('.cut-depth', '3');
     h.preset('holdPart', 'tabs');
     eq(h.note(), ['On line: tabs refused: tabs need a closed outline: this is an open line; cut without them'], 'tabs on an open line: refused, the reason');
     h.preset('holdPart', 'off');
-    // a programmed pocket with Loop on: NO Lead-in row; shows start mark target (TASK 778)
+    // a programmed pocket with Loop on: a start mark target (TASK 778)
     h.clickAt(10, 90); h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
     const kP = keyAt(st, 10, 90);
     h.clearing('linked');
-    ok(!h.shown('leadIn'), 'Spiral, Loop off: no Lead-in row');
     h.toggleLoop();
-    ok(!h.shown('leadIn') && !h.shown('leadInRadius'), 'Loop on: still no Lead-in row on pockets (TASK 778)');
     eq(h.count('circle'), 0, 'Loop on, closed: no dot on the loop');
     eq(h.count('.sk-pocket-start'), 1, 'Prepare: 1 pocket start mark target');
     ok(/\+ wall: one closed loop, stepover/.test(h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l))[0]), 'the note (TASK 825: the warnings come first): one closed loop (nothing about where it starts): ' + h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l))[0]);
@@ -392,7 +272,7 @@ let saved = null;
     eq(pocketEls.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], 'the pocket download: ONE closed on-line path + 1 guide start mark');
     saved = { plan: JSON.stringify([...V2_PLAN.entries()]), svg: shaperSvgOf(st, planEntries()) };
     const d = await app.storedDoc();
-    ok(storedRecords(d.hosts.shaper).some(([, r]) => r.leadIn === true && r.leadInRadius === 6.35 && r.leadInSide === 'inside'), 'the autosave stores the lead-in fields');
+    ok(storedRecords(d.hosts.shaper).some(([, r]) => r.cutType === 'online' && r.holdPart === 'off' && r.tabWidth === 12), 'the autosave stores the On line record');
     h.clickAt(300, 300);
   } finally { await app.close(); }
 }
@@ -405,4 +285,4 @@ V2_PLAN.clear();
     eq(shaperSvgOf(app.state, planEntries()), saved.svg, 'and the download is byte-identical');
   } finally { await app.close(); }
 }
-console.log(`leadin-775-node: ok (${checks} checks)`);
+console.log(`online-tabs-775-node: ok (${checks} checks)`);

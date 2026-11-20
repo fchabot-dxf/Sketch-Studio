@@ -223,10 +223,24 @@ export const ORIGIN_RULES = deepFreeze([
   },
   {
     id: 'lead-in-opens-path', name: 'A lead-in makes the on-line path open', targets: ['origin'], sev: null, status: 'measured',
-    statement: 'A closed outline with a lead-in attached, written as ONE path with no Z, is ONE open object on the Origin (end dots at the tip and the junction), so AutoPass reverses each pass.',
+    statement: 'HISTORY (the app has no lead-in since TASK 836). A closed outline with a lead-in attached, written as ONE path with no Z, is ONE open object on the Origin (end dots at the tip and the junction), so AutoPass reverses each pass; measured 2026-11-20: the plunge at the tip worked, but the junction end reversed ON the part and could dent it. Owner ruling 2026-11-20: lead-ins removed from the app (On line only, not worth it); turning an Outside / Inside cut into an On line loop to get one was rejected as too hacky (the bit and the offset would be baked into the file).',
     check: null, message: null,
-    evidence: [{ log: 'TURN 775' }, { log: 'TURN 778' }, { file: 'tests/leadin-arc-778-node.test.js' }],
-    usedBy: ['packages/core/lead-in.js#applyLeadIn', 'apps/shaper/src/cut-plan.js#LEAD_IN_TRADE_OFF'],
+    evidence: [{ log: 'TURN 775' }, { log: 'TURN 778' }, { log: 'TURN 836' }, { note: 'owner, Origin, 2026-11-20: the open lead-in reversed at the junction on the part' }],
+    usedBy: ['apps/shaper/src/cut-plan.js#OPEN_PATH_AUTOPASS_NOTE'],
+  },
+  {
+    id: 'tangent-circle-closed-loop', name: 'A tangent circle in a closed on-line loop cuts clean', targets: ['origin'], sev: null, status: 'measured',
+    statement: 'HISTORY (TASK 836, not in the app: lead-ins were removed). A small circle in the waste tangent to an outline at a junction, written with the outline as ONE CLOSED on-line path (M junction, the circle as two arcs, the outline back to the junction, Z), is cut in one direction every pass with no turnaround anywhere; the operator plunges on the circle and the join is clean. Tested file (1 in square, 1/8 in bit, circle radius = the bit radius, outside, the top edge middle): M 12.7 0 A 1.5875 1.5875 0 0 0 12.7 -3.175 A 1.5875 1.5875 0 0 0 12.7 0 L 25.4 0 L 25.4 25.4 L 0 25.4 L 0 0 Z.',
+    check: null, message: null,
+    evidence: [{ log: 'TURN 836' }, { note: 'owner, Origin, 2026-11-20: the tangent-circle loop test, "worked perf"' }],
+    usedBy: ['packages/core/pocket-clearing.js#planClearing'],
+  },
+  {
+    id: 'online-no-machine-offset', name: 'An On line cut has no offset at the machine', targets: ['origin'], sev: null, status: 'measured',
+    statement: 'The Origin cannot change the offset of an On line cut ("not possible to offset"): the bit centre follows the line as written.',
+    check: null, message: null,
+    evidence: [{ log: 'TURN 836' }, { note: 'owner, Origin, 2026-11-20, on the tangent-circle loop test: "not possible to offset"' }],
+    usedBy: ['apps/shaper/src/shaper.js#offsetMovesCut'],
   },
   {
     id: 'placed-file-one-object', name: 'A placed file is ONE object', targets: ['origin'], sev: null, status: 'measured',
@@ -251,10 +265,10 @@ export const ORIGIN_RULES = deepFreeze([
   },
   {
     id: 'inside-outside-from-area', name: 'Inside / Outside cuts are computed from the area', targets: ['studio'], sev: null, status: 'measured',
-    statement: 'Studio computes an Inside / Outside cut from the shape\'s AREA: a line outside the area makes a bump, a line inside it or a zero-width spur is swallowed. So a lead-in exists only as an on-line path.',
+    statement: 'Studio computes an Inside / Outside cut from the shape\'s AREA: a line outside the area makes a bump, a line inside it or a zero-width spur is swallowed. So a lead-in could exist only as an on-line path (TASK 775; the app has none since TASK 836).',
     check: null, message: null,
     evidence: [{ note: 'owner Studio tests' }, { log: 'TURN 775' }, { log: 'TURN 778' }],
-    usedBy: ['packages/core/lead-in.js#applyLeadIn', 'apps/shaper/src/shaper.js#leadIn'],
+    usedBy: ['packages/core/profile-model.js#deriveProfileCuts'],
   },
   {
     id: 'guide-never-cut', name: 'Guides are shown, never cut; the Stock goes first', targets: ['origin', 'studio'], sev: null, status: 'documented',

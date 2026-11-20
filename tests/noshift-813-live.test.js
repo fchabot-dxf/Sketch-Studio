@@ -71,7 +71,7 @@ const pressWorld = async (pts, what) => {
 };
 const A_PTS = [[5, -5], [55, -5], [5, -35], [55, -35], [30, -3], [3, -20]];
 const openStage = async (id) => {
-  if (touch) { await clickEl('.sk-sidebar-handle'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); }
+  if (touch) { await clickEl('.sk-sidebar-chevron'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); }
   else await clickEl(`.sk-header-tab[data-tab="${id}"]`);
   await waitFor(`!document.getElementById('${id === 'design' ? 'design-view' : 'view-' + id}').hidden`, `the ${id} stage`);
   await sleep(300);

@@ -19,7 +19,7 @@ await (async () => {
       const s = await send('Page.captureScreenshot', { format: 'png', clip: { ...clip, scale: 2 } });
       fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, name), Buffer.from(s.data, 'base64'));
     };
-    const center = (sel, i = 0) => evalJs(`(() => { const e = document.querySelectorAll('${sel}')[${i}]; if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const center = (sel, i = 0) => evalJs(`(() => { const e = [...document.querySelectorAll('${sel}')].filter((b) => b.getClientRects().length && b.getBoundingClientRect().width > 0)[${i}]; if (!e) return null; /* TASK 819: shown ones only (a hidden Cancel is 0x0 at 0,0, where a tap now reaches the drawer chevron) */ const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
     for (const mode of ['desktop', 'phone']) {
       const phone = mode === 'phone';
@@ -85,7 +85,7 @@ await (async () => {
       await closeFirst(); await sendRealKey(send, 'Enter', 'Enter', 13, 0, '\r');
       await waitFor(`!!document.querySelector('.sk-tp-backdrop [role="dialog"] input')`, mode + ': the Save as name prompt after Enter (in the modal)');
       assert(/Save as/.test(await evalJs(`document.querySelector('.sk-tp-backdrop [role="dialog"]').textContent`)), mode + ': it is the Save as prompt');
-      await press('.sk-tp-backdrop .sk-tp-cancel'); await sleep(300);
+      await press('.sk-tp-cancel'); await sleep(300);
       assert.strictEqual((await names()).length, 2, mode + ': cancelling the name prompt keeps the tab');
       // 5. Don't save closes it
       await closeFirst(); await press('.sk-tp-btn[data-choice="discard"]'); await modalGone();

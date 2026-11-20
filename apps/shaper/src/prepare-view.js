@@ -21,7 +21,7 @@ import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height m
 import SettingsManager, { docUnit, lengthText, isPrecisionKey } from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 import { curveKind } from '#core/curve-kinds.js'; // TASK 761: each curve kind's points / path
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, arrowsAlongPath, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths, thinTravel } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 import { updateViewBox } from '#ui/input-manager.js'; // TASK 605: put a document tab's own Prepare view back
@@ -147,7 +147,7 @@ const depthChip = (x, y, cutDepth, k) => {
 const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
 // TASK 777: ONE declaration of the travel direction mark pattern (screen px + period duration).
 // mountPrepareView pushes --sk-travel-* onto svgEl so .sk-travel and @keyframes sk-march read the SAME constants;
-// TRAVEL_MIN_GAP_PX (TASK 757) and arrowhead spacing derive from it — no second number anywhere.
+// TRAVEL_MIN_GAP_PX (TASK 757) and the Export Paths view's dart spacing derive from it — no second number anywhere.
 export const TRAVEL_STYLE = Object.freeze({
   dashPx: 8,            // short dash length on screen (px)
   gapPx: 28,            // sparse gap between dashes on screen (px)
@@ -167,7 +167,7 @@ export function applyTravelStyle(svgEl) {
   svgEl.style.setProperty('--sk-travel-period', String(TRAVEL_PERIOD_PX));
   svgEl.style.setProperty('--sk-travel-duration', `${TRAVEL_STYLE.durationSec}s`);
 }
-// Screen-px dart arrowhead geometry per travel kind: tip forward (+x), swept tail wings, notched rear
+// TASK 821: Prepare draws no arrowheads; the Export step's Paths view (export-preview.js) still uses these. Screen-px dart arrowhead geometry per travel kind: tip forward (+x), swept tail wings, notched rear
 export const DART_DIMS = Object.freeze({
   wall:   Object.freeze({ tip: 3.8, tail: -2.85, halfW: 2.6, notch: -1.5 }),
   clear:  Object.freeze({ tip: 3.0, tail: -2.25, halfW: 2.1, notch: -1.1 }),
@@ -402,11 +402,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     let region = '', path = '', hasTravel = false, chip = null, startMark = null;
     const toolPaths = [];
     const leadHandles = []; // TASK 778: draggable handles at On line lead-in junctions
-    // TASK 449 / 777: travel marks (sparse slow marching dashes + zoom-stable screen-sized dart arrowheads); TASK 757: a STEPPED cut's (a terrace's)
-    // go to `stepped`, thinned at draw time (renderStepAndArrows: outlines closer on screen than TRAVEL_MIN_GAP_PX carry none).
+    // TASK 449 / 777: travel marks (sparse slow marching dashes); TASK 757: a STEPPED cut's (a terrace's)
+    // go to `stepped`, thinned at draw time (renderStepTravel: outlines closer on screen than TRAVEL_MIN_GAP_PX carry none).
     const stepped = [];
-    const travels = [];
-    let rasterIdx = 0;
     // TASK 775 / 777 / 778: a LEAD-IN ARC (from the one derivation): its path `lead.d`, a filled dot at its tip, a ring at the junction, and its draggable handle
     const isActiveLead = (lead) => Boolean(lead && (lead.role === 'arc' || lead.role === 'leg') && Array.isArray(lead.legPoints) && lead.legPoints.length >= 2);
     const addLeadLeg = (lead) => {
@@ -424,17 +422,15 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const addTravel = (fp, t) => {
       const d = toolPathD({ points: t.path, closed: t.closed });
       if (!d) return;
-      const kind = t.role === 'leadin' || t.role === 'online' || t.role === 'stroke' ? 'online'
-        : CLEAR_PATH_ROLES.has(t.role) ? 'clear' : 'wall';
       const cls = t.role === 'leadin' ? 'sk-travel sk-travel-lead'
         : (t.role === 'online' || t.role === 'stroke') ? 'sk-travel sk-travel-online'
         : CLEAR_PATH_ROLES.has(t.role) ? 'sk-travel sk-travel-clear' : 'sk-travel';
       const markup = `<path class="${cls}" d="${d}"/>`;
-      if (fp.terrace) stepped.push({ ring: t.path, markup, t, kind });
-      else { path += markup; travels.push({ t, kind, rasterIdx: t.role === 'raster' ? rasterIdx++ : -1 }); }
+      if (fp.terrace) stepped.push({ ring: t.path, markup });
+      else path += markup;
     };
     for (const fp of footprints) {
-      // TASK 745 / 777 / 778: a programmed pocket: clearing paths (thin continuous guide + sparse slow travel dashes & darts), swept band, leftover, walls / islands, and start mark target
+      // TASK 745 / 777 / 778: a programmed pocket: clearing paths (thin continuous guide + sparse slow travel dashes), swept band, leftover, walls / islands, and start mark target
       if (fp.clearing) {
         const cl = fp.clearing;
         if (cl.role === 'start') { // TASK 778: pocket start mark (circle + cross, declared once)
@@ -471,7 +467,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-band"/>`;
         if (fp.kind === 'pocket') region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-pocket-marks" fill="url(#prepare-pocket-marks)"/>`;
       }
-      // TASK 449 / 777: travel marks (one core derivation): sparse slow marching dashes + zoom-stable dart arrowheads (CSS animation, no RAF).
+      // TASK 449 / 777: travel marks (one core derivation): sparse slow marching dashes (CSS animation, no RAF).
       toolPaths.push(...(fp.toolPaths || []));
       // TASK 742: a held cut: its tabs marked on the outline (an onion skin: the whole outline), each gap strip drawn as it is exported (its own
       // band shows what the bit removes; no travel marks on the strips, their loops are too small to read)
@@ -498,7 +494,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       addLeadDots(fp.leadIn); // TASK 775 / 778: tip dot, junction ring, and draggable handle on top of travel marks
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
+    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), leadHandles };
   };
   const getLook = (it) => { const sig = sigOf(it.rec); const hit = lookCache.get(it.id); if (hit && hit.sig === sig) return hit; const look = computeLook(it); look.sig = sig; lookCache.set(it.id, look); return look; }; // TASK S2: cached per membership (a Contour reads its own settings only)
 
@@ -531,45 +527,24 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const renderToolpaths = () => {
     let out = '';
     for (const { it } of drawnItems()) out += getLook(it).path;
-    toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g><g class="sk-travel-arrows-layer"></g>';
+    toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g>';
     lastZoomK = null;
-    renderStepAndArrows();
+    renderStepTravel();
   };
-  // TASK 757 / 777: stepped travel marks thinned by TRAVEL_MIN_GAP_PX (#core thinTravel) + zoom-stable dart arrowheads (#core arrowsAlongPath)
-  // batched into one <path> per style kind so panning and dense clearing pockets stay smooth.
-  const renderStepAndArrows = () => {
+  // TASK 757 / 777: stepped travel marks thinned by TRAVEL_MIN_GAP_PX (#core thinTravel). TASK 821: Prepare draws NO arrowheads; the marching dashes show the direction.
+  const renderStepTravel = () => {
     const stepLayer = toolpathG.querySelector('.sk-travel-steps');
-    const arrowLayer = toolpathG.querySelector('.sk-travel-arrows-layer');
-    if (!stepLayer && !arrowLayer) return;
+    if (!stepLayer) return;
     const k = worldTolerance(svgEl, 1);
     const minGap = k * TRAVEL_MIN_GAP_PX;
-    const spacing = k * TRAVEL_ARROW_SPACING_PX;
-    const minLen = k * TRAVEL_STYLE.arrowMinPathPx;
     let stepOut = '';
-    const dByKind = { clear: '', wall: '', online: '' };
-    const pushArrows = (entry) => {
-      const dims = DART_DIMS[entry.kind] || DART_DIMS.wall;
-      const phase = entry.rasterIdx >= 0 && entry.rasterIdx % 2 === 1 ? 0.72 : 0.5;
-      for (const a of arrowsAlongPath(entry.t.path, entry.t.closed, { spacing, minLen, phase })) dByKind[entry.kind] += dartSeg(a, dims, k);
-    };
     for (const { it } of drawnItems()) {
       const look = getLook(it);
-      if (look.travels) for (const entry of look.travels) pushArrows(entry);
       if (look.stepped && look.stepped.length) {
-        for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) {
-          stepOut += look.stepped[i].markup;
-          pushArrows(look.stepped[i]);
-        }
+        for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) stepOut += look.stepped[i].markup;
       }
     }
-    if (stepLayer) stepLayer.innerHTML = stepOut;
-    if (arrowLayer) {
-      let arrowsOut = '';
-      if (dByKind.clear) arrowsOut += `<path class="sk-travel-arrows sk-travel-arrows-clear" d="${dByKind.clear}"/>`;
-      if (dByKind.wall) arrowsOut += `<path class="sk-travel-arrows" d="${dByKind.wall}"/>`;
-      if (dByKind.online) arrowsOut += `<path class="sk-travel-arrows sk-travel-arrows-online" d="${dByKind.online}"/>`;
-      arrowLayer.innerHTML = arrowsOut;
-    }
+    stepLayer.innerHTML = stepOut;
     lastZoomK = k;
   };
   // TASK 778: active handle drag { pointerId, key, loop, holes (TASK 787), startAt, lastGood, startJunction, previewLead, refused }; TASK 822: a TAB handle's drag is the
@@ -626,9 +601,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     dragG.innerHTML = out;
     renderHandles();
   };
-  const renderZoomed = () => { // what a zoom/resize changes (skipped on pure pan when k is unchanged): thinned stepped marks, dart arrowheads, chips, lead-in handle size
+  const renderZoomed = () => { // what a zoom/resize changes (skipped on pure pan when k is unchanged): thinned stepped marks, chips, lead-in handle size
     const k = worldTolerance(svgEl, 1);
-    if (lastZoomK === null || Math.abs(k - lastZoomK) > 1e-9) { renderStepAndArrows(); renderChips(); renderHandles(); }
+    if (lastZoomK === null || Math.abs(k - lastZoomK) > 1e-9) { renderStepTravel(); renderChips(); renderHandles(); }
   };
   // TASK 455: the depth chip sits ON the tool path (centred on the dashed line) at the point NEAREST THE CURSOR and follows the cursor
   // along it while hovering; selected-but-not-hovered it STAYS at its last spot (a target's first appearance uses the stable

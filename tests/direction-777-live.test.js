@@ -1,12 +1,12 @@
 // tests/direction-777-live.test.js — TASK 777: clearer cutting direction marks in Shaper Prepare (DESKTOP 1280x800).
 // Checks:
-//  1. Every determined toolpath kind carries sparse slow dashes (8px 28px, 5s = 7.2 px/s) + always-visible dart arrowheads:
+//  1. Every determined toolpath kind carries sparse slow dashes (8px 28px, 5s = 7.2 px/s), NO arrowheads (TASK 821):
 //     Outside, Inside, Raster pocket (passes + cleanup + wall), Spiral pocket (linked + wall), Pocket Loop + Lead-in,
 //     On-line Lead-in (leg + outline), On-line Tabs (3 strokes). Plain On-line (no lead-in/tabs) keeps static .sk-tp-online.
 //  2. Selected / hovered ONLY: unselected cuts carry no travel marks; deselecting clears all .sk-travel / .sk-travel-arrows.
 //  3. Open-path AutoPass note on Loop-off programmed clearing; no duplication where 775 LEAD_IN_TRADE_OFF already appears.
 //  4. 4 frames 1 s apart showing slow forward motion (~7.2 px/s) saved to .evidence/777/motion-frame-{0..3}.png.
-//  5. prefers-reduced-motion: reduce -> animationName 'none', static dashes + visible arrowheads.
+//  5. prefers-reduced-motion: reduce -> animationName 'none', static dashes, no arrowheads.
 //  6. Pan smoothness measured on a 50+ ring Spiral AND a dense (~60 pass) Raster pocket.
 //  7. Zoomed screenshots (raster pocket, spiral pocket, lead-in, tabs, reduced motion) saved to .evidence/777/.
 import assert from 'node:assert';
@@ -107,6 +107,7 @@ try {
       travelOnline: q('.sk-travel-online'),
       travelLead: q('.sk-travel-lead'),
       arrows: q('.sk-travel-arrows'),
+      arrowLayerKids: q('.sk-travel-arrows-layer > *'),
       arrowBBox: a ? { w: Math.round(a.getBBox().width * 10) / 10, h: Math.round(a.getBBox().height * 10) / 10 } : null,
       tpOnline: q('.sk-tp-online'),
       dasharray: csT && csT.strokeDasharray,
@@ -136,11 +137,11 @@ try {
   await clickWorld(25, 20); await move(away.x, away.y);
   const sOut = await inspect();
   assert.strictEqual(sOut.travel, 1, 'outside: 1 travel path (none on unselected cuts)');
-  assert.strictEqual(sOut.arrows, 1, 'outside: 1 arrow layer path');
+  assert.strictEqual(sOut.arrows, 0, 'outside: TASK 821: no arrowheads'); assert.strictEqual(sOut.arrowLayerKids, 0, 'outside: no .sk-travel-arrows-layer children');
   assert.strictEqual(sOut.dasharray, '8px, 28px', 'sparse dash pattern 8px 28px');
   assert.strictEqual(sOut.anim, 'sk-march', 'marching animation active');
   assert.strictEqual(sOut.dur, '5s', 'slow 5s period (7.2 px/s)');
-  assert.ok(sOut.arrowDisplay !== 'none' && sOut.arrowBBox.w > 0, 'arrowheads visible');
+  assert.strictEqual(sOut.arrowBBox, null, 'no arrowhead drawn');
   assert.strictEqual(sOut.legendVisible, true, 'legend visible');
 
   // Inside
@@ -148,14 +149,14 @@ try {
   await clickWorld(95, 20); await move(away.x, away.y);
   const sIn = await inspect();
   assert.strictEqual(sIn.travel, 1, 'inside: 1 travel path');
-  assert.strictEqual(sIn.arrows, 1, 'inside: 1 arrow layer path');
+  assert.strictEqual(sIn.arrows, 0, 'inside: no arrowheads'); assert.strictEqual(sIn.arrowLayerKids, 0, 'inside: no .sk-travel-arrows-layer children');
 
   // Raster pocket (Loop off) — zoomed screenshot
   await setZoom(170, 22.5, 110); await sleep(120);
   await clickWorld(170, 22.5); await move(away.x, away.y);
   const sRast = await inspect();
   assert.ok(sRast.travelClear >= 10 && sRast.travel === sRast.travelClear + 1, 'raster pocket: clearing passes + cleanup + finish wall all marked: ' + JSON.stringify(sRast));
-  assert.ok(sRast.arrows >= 2, 'raster pocket: clearing + wall arrowheads visible');
+  assert.strictEqual(sRast.arrows, 0, 'raster pocket: no arrowheads'); assert.strictEqual(sRast.arrowLayerKids, 0, 'raster pocket: no .sk-travel-arrows-layer children');
   assert.ok(sRast.note.includes('AutoPass runs back along it on the next pass'), 'raster Loop off: AutoPass reverse line in card note');
   await shot('desktop-raster-pocket.png', await canvasClip());
 
@@ -182,7 +183,7 @@ try {
   const sLead = await inspect();
   assert.strictEqual(sLead.travelLead, 1, 'on-line Lead-in: 1 leg travel');
   assert.strictEqual(sLead.travelOnline, 1, 'on-line Lead-in: 1 open outline travel');
-  assert.strictEqual(sLead.arrows, 1, 'on-line Lead-in: arrowheads visible');
+  assert.strictEqual(sLead.arrows, 0, 'on-line Lead-in: no arrowheads');
   assert.ok(!sLead.note.includes('AutoPass runs back along it on the next pass'), 'on-line Lead-in: no duplicate AutoPass line');
   await shot('desktop-leadin.png', await canvasClip());
 
@@ -208,7 +209,7 @@ try {
   await clickWorld(180, 92.5); await move(away.x, away.y);
   const sTabs = await inspect();
   assert.strictEqual(sTabs.travelOnline, 3, 'on-line Tabs: 3 tab strokes carry travel marks');
-  assert.strictEqual(sTabs.arrows, 1, 'on-line Tabs: arrowheads visible on strokes');
+  assert.strictEqual(sTabs.arrows, 0, 'on-line Tabs: no arrowheads');
   await shot('desktop-tabs.png', await canvasClip());
 
   // Plain On-line (no lead-in, no tabs): no travel marks (operator chooses on Origin)
@@ -218,7 +219,7 @@ try {
   assert.strictEqual(sPlain.travel, 0, 'plain On-line: 0 travel marks');
   assert.strictEqual(sPlain.arrows, 0, 'plain On-line: 0 arrow marks');
 
-  // ── 5. prefers-reduced-motion: reduce -> still dashes + visible arrowheads ──
+  // ── 5. prefers-reduced-motion: reduce -> still dashes, no arrowheads ──
   await setZoom(170, 22.5, 110); await sleep(120);
   await clickWorld(170, 22.5); await move(away.x, away.y);
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
@@ -226,7 +227,7 @@ try {
   const sRed = await inspect();
   assert.strictEqual(sRed.anim, 'none', 'reduced motion: animation is none');
   assert.strictEqual(sRed.dasharray, '8px, 28px', 'reduced motion: dashes remain');
-  assert.ok(sRed.arrows >= 2 && sRed.arrowDisplay !== 'none', 'reduced motion: arrowheads remain visible');
+  assert.strictEqual(sRed.arrows, 0, 'reduced motion: still no arrowheads (static dashes only)');
   await shot('desktop-reduced-motion.png', await canvasClip());
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
 

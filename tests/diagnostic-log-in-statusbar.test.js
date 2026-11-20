@@ -39,7 +39,7 @@ await (async () => {
       const r = await evalJs(`(() => { const f = document.querySelector('footer'); return { fOver: f.scrollWidth - f.clientWidth, doc: document.documentElement.scrollWidth - innerWidth }; })()`);
       assert.ok(r.fOver <= 0 && r.doc <= 0, `${label}: the status bar and page do not overflow sideways ${JSON.stringify(r)}`);
       await shot(`statusbar-${width}.png`);
-      if (width <= 640) await clickEl('.sk-sidebar-handle');
+      if (width <= 640) await clickEl('.sk-sidebar-chevron');
       else await clickEl('.sk-sidebar-btn');
       await sleep(400);
       await evalJs(`document.querySelector('.sk-sidebar [data-action="log"]')?.scrollIntoView({ block: 'nearest' })`); await sleep(80);

@@ -89,7 +89,7 @@ const PARAMS = {
   download: { label: 'Download', hint: 'Saves the Shaper SVG of your cuts to this computer (the same file as Generate Shaper SVG).' }, // the drawer's entry (a sidebar action: its tooltip)
   // ── TASK 772: Prepare Operations, Direction legend, Export toolbar/Cuts, and Sync to ShaperHub ──
   operations: { label: 'Operations', hint: 'Cut order sent to the Origin: drag a grip (or hold a row on touch) to reorder, tap to select, or tap the bin to clear.' },
-  dirLegend: { label: 'direction: conventional (Shaper Origin)', hint: 'Arrows mark conventional cutting direction along closed shapes so the Origin keeps a clean wall finish.' },
+  dirLegend: { label: 'direction: conventional (Shaper Origin)', hint: 'The moving dashes show the conventional cutting direction along closed shapes so the Origin keeps a clean wall finish.' },
   reviewCuts: { label: 'Cuts', hint: 'Assigned operations in job order: click one to highlight it and focus its cut depth details.' },
   reviewThreeD: { label: '3D', hint: 'Show the finished workpiece relief in interactive 3D.' },
   reviewTwoD: { label: '2D', hint: 'Inspect the flat exported Shaper SVG paths and colour coding.' },

@@ -156,9 +156,8 @@ export async function runPhoneLandscape(hostName) {
         for (const c of others) {
           const t = tag + `control ${c.id} "${c.text}"`;
           assert(c.left >= -0.5 && c.top >= -0.5 && c.right <= size.w + 0.5 && c.bottom <= size.h + 0.5, t + ' is inside the viewport: ' + JSON.stringify(c));
-          const isHandle = /sk-sidebar-handle/.test(c.id);
           const strip = /sk-doctab/.test(c.id) || c.inStrip; // TASK 768: a control IN the strip (the Save button where the header is hidden) is a strip control. TASK 608 (owner ruling, relaxes 562): the tab strip is a thin 31 px row: every tab / x / + is at least 24 x 24 (WCAG 2.2 AA) and fills the row
-          const minW = isHandle ? 14 : (strip ? 24 : (c.inFooter ? FOOTER_PHONE_MIN_W - 0.5 : 43.5)); // TASK 776: the footer's nine buttons (Save and the account too) are FOOTER_PHONE_MIN_W wide, 44 px high, so the cluster ends before a host's right-hand panel
+          const minW = (strip ? 24 : (c.inFooter ? FOOTER_PHONE_MIN_W - 0.5 : 43.5)); // TASK 776: the footer's nine buttons (Save and the account too) are FOOTER_PHONE_MIN_W wide, 44 px high, so the cluster ends before a host's right-hand panel
           const minH = strip ? 24 : 43.5;
           assert(c.w >= minW && c.h >= minH, t + ` target size (${Math.round(c.w)} x ${Math.round(c.h)})`);
           assert(c.free, t + ' is not covered by anything');
@@ -169,18 +168,18 @@ export async function runPhoneLandscape(hostName) {
           assert.strictEqual(await evalJs(`!!document.querySelector('#status-diag-slot, #btn-tuning-toggle, #btn-mag-toggle')`), false, tag + 'Log, Tune and MAG LENS removed from footer');
           assert.strictEqual(await evalJs(`!!document.getElementById('viewport-size')`), false, tag + 'no VIEW readout');
           assert.strictEqual(await evalJs(`!!document.getElementById('save-status')`), false, tag + 'no "Saved" text');
-          await tap(await rectOf(`document.querySelector('.sk-sidebar-handle')`)); await sleep(300);
+          await tap(await rectOf(`document.querySelector('.sk-sidebar-chevron')`)); await sleep(300);
           await evalJs(`document.querySelector('.sk-sidebar-item[data-action="log"]').scrollIntoView({ block: 'nearest' })`); await sleep(100); // the menu scrolls
           const log = await rectOf(`document.querySelector('.sk-sidebar-item[data-action="log"]')`);
           assert(log && log.h >= 44 && log.bottom <= size.h + 0.5, tag + 'the menu has Log: ' + JSON.stringify(log));
           await tap(log);
           assert.strictEqual(await evalJs(`!document.querySelector('.sk-diag-panel').classList.contains('sk-hidden')`), true, tag + 'Log from the menu opens the log');
           await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await sleep(200);
-          await tap(await rectOf(`document.querySelector('.sk-sidebar-handle')`)); await sleep(300);
+          await tap(await rectOf(`document.querySelector('.sk-sidebar-chevron')`)); await sleep(300);
           await evalJs(`document.querySelector('.sk-sidebar-item[data-action="export"]').scrollIntoView({ block: 'nearest' })`); await sleep(100);
           await tap(await rectOf(`document.querySelector('.sk-sidebar-item[data-action="export"]')`));
           assert.strictEqual(await evalJs(`!document.getElementById('export-panel').classList.contains('hidden') && getComputedStyle(document.getElementById('toolsRibbon')).display === 'none'`), true, tag + 'Export from the menu shows the Export view');
-          await tap(await rectOf(`document.querySelector('.sk-sidebar-handle')`)); await sleep(300);
+          await tap(await rectOf(`document.querySelector('.sk-sidebar-chevron')`)); await sleep(300);
           await tap(await rectOf(`document.querySelector('.sk-sidebar-stage[data-tab="design"]')`));
           assert.strictEqual(await evalJs(`document.getElementById('export-panel').classList.contains('hidden') && getComputedStyle(document.getElementById('toolsRibbon')).display !== 'none'`), true, tag + 'the sidebar Design button brings the Design view back');
         }

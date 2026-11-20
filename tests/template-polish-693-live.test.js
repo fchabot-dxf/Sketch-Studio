@@ -57,7 +57,7 @@ await (async () => {
         if (has) await press('.sk-tp-backdrop [role="dialog"] button:nth-of-type(2)');
       };
       const openStart = async (id) => {
-        await press('.sk-sidebar-btn, .sk-sidebar-handle');
+        await press('.sk-sidebar-btn, .sk-sidebar-chevron');
         await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, `[${kind}] sidebar`);
         await press('[data-action="templates"]');
         await waitFor(`!!document.querySelector('.sk-tp-card')`, `[${kind}] template cards`);
@@ -75,7 +75,7 @@ await (async () => {
       }))()`);
 
       await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
-      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-handle')`, `[${kind}] Shaper loaded`);
+      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-chevron')`, `[${kind}] Shaper loaded`);
       await waitForApp('design-canvas');
       // TASK 722: Shaper's document is inches; this test is about joints in mm values (the inch start view is template-units-722-live)
       await evalJs(`(async () => { (await import('/packages/core/settings-manager.js')).default.set('DOC_UNIT', 'mm', { persist: false }); })()`);

@@ -1,4 +1,4 @@
-// packages/ui/app-chrome.js — ONE shared mount for the desktop header, ☰ sidebar menu, document tab strip, and phone peeking handle.
+// packages/ui/app-chrome.js — ONE shared mount for the desktop header, ☰ sidebar menu, document tab strip, and phone drawer chevron.
 // Each host DECLARES its appId, stages, and menu entries; no host builds its own <header>, stage nav, or phone menu toggle.
 
 import { createAppHeader } from './app-header.js';

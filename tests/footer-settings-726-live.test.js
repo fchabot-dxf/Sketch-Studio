@@ -68,7 +68,7 @@ await (async () => {
         // the drawer's own item toggles the same single panel element
         const act = drawerItem(name);
         if (act) {
-          await evalJs(`document.querySelector('.sk-sidebar-btn') ? document.querySelector('.sk-sidebar-btn').click() : document.querySelector('.sk-sidebar-handle').click()`); await sleep(300);
+          await evalJs(`document.querySelector('.sk-sidebar-btn') ? document.querySelector('.sk-sidebar-btn').click() : document.querySelector('.sk-sidebar-chevron').click()`); await sleep(300);
           assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-item[data-action="${act}"]').textContent.trim()`), 'Settings', 'the drawer item reads Settings (TASK 726)'); await shot(`${tag}-${name}-drawer.png`);
           await evalJs(`document.querySelector('.sk-sidebar-item[data-action="${act}"]').click()`); await sleep(300);
           assert.strictEqual(await panelOpen(), true, `${tag} ${name}: the drawer item still opens the panel`);

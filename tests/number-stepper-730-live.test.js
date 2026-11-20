@@ -51,7 +51,7 @@ try {
     for (let i = 0; i < 5; i++) {
       if (await activeStage() === mode) return;
       if (phone) { // phones have no header bar: the stages are the drawer's first row (task 619)
-        await clickEl('.sk-sidebar-handle');
+        await clickEl('.sk-sidebar-chevron');
         await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
         await clickEl(`.sk-sidebar-stage[data-tab="${mode}"]`);
       } else await clickEl(`.sk-header-tab[data-tab="${mode}"]`);

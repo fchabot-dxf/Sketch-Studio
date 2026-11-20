@@ -58,7 +58,7 @@ await (async () => {
   const stageIds = () => evalJs(`[...document.querySelectorAll(getComputedStyle(document.querySelector('header.sk-header')).display === 'none' ? '.sk-sidebar-stage' : '.sk-header-tab')].map((b) => b.dataset.tab)`); // desktop: the header's tabs; phone: the drawer's first row
   const openMenu = async (what) => {
     const phone = await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display === 'none'`);
-    await press(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn', what + 'the menu');
+    await press(phone ? '.sk-sidebar-chevron' : '.sk-sidebar-btn', what + 'the menu');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, what + 'the menu opens'); await sleep(300);
   };
   // the drawer's Import SVG / DXF… with a real press; the real chooser gets `file`

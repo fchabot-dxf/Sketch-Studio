@@ -145,7 +145,7 @@ eq([(read('apps/shaper/index.html').match(slot) || []).length, (read('apps/trace
 ok(/id="simexport-status"[^]*data-feedback-slot[^]*<\/aside>/.test(read('apps/shaper/index.html')), 'Shaper: after the Export card\'s status line (the last thing in the panel: nothing above it moves)');
 ok(/id="export-scale-note"[^]*data-feedback-slot/.test(read('apps/trace/index.html')) && /id="export-panel"[^]*data-feedback-slot[^]*id="export-filename"/.test(read('apps/sketchstudio/index.html')) && /id="exportBtn"[^]*data-feedback-slot/.test(read('apps/penplotter/src/export-stage.js')), 'Trace and Pen Plotter: after the export controls; Sketch: at the top of its Export view (the card appears while that view is closed)');
 const sb = read('packages/ui/sidebar-projects.js');
-ok(/feedbackMenuItem\(/.test(sb) && /\] : \[\.\.\.hostActions, \.\.\.\(hostActions\.length \? \[\{ divider: true \}\] : \[\]\), feedbackItem\]/.test(sb) && /\{ divider: true \}, feedbackItem/.test(sb), 'the shared menu adds the item in both shapes (with the project layer, and without it: Fusion mode)');
+ok(/feedbackMenuItem\(/.test(sb) && /const siteActions = \[[^\]]*\{ divider: true \},[^\]]*feedbackItem,\s*\];/.test(sb) && /\.\.\.siteActions,\s*\] : \[\.\.\.hostActions, \.\.\.siteActions\]/.test(sb), 'the shared menu adds the item in both shapes (with the project layer, and without it: Fusion mode; TASK 828b: it is the LAST of the site items, after About)');
 ok(/startFeedback\(\{ appId \}\)/.test(read('packages/ui/app-chrome.js')), 'app-chrome (every app) starts the ask');
 ok(!/feedback/i.test(read('packages/ui/app-sidebar.js')) && !/feedback/i.test(read('packages/ui/app-footer.js')), 'app-sidebar.js / app-footer.js are not touched (the item goes in through the item list)');
 

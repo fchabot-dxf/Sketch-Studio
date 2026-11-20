@@ -161,8 +161,9 @@ try {
       '# Change to ¼″ end mill', `3. Pocket · ${L.shallow} | 1 region`, `4. Pocket · ${L.deep} | 2 regions`, `5. Outside · ${L.full} | 1 region`], label + ': the default order under tool headings');
     def0 = await stored(); // TASK S1: the default order, as stored
     assert.strictEqual(await evalJs(`document.querySelectorAll('#prepare-ops .ops-up, #prepare-ops .ops-down, #prepare-ops .ops-move').length`), 0, label + ': TASK 745: no arrow buttons');
-    const targets = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-grip, #prepare-ops .ops-del')].map((b) => { const r = b.getBoundingClientRect(); return [b.className, Math.round(r.width), Math.round(r.height)]; })`);
-    assert.strictEqual(targets.length, 10, label + ': a grip and a bin on each of the 5 rows');
+    // TASK S2 (owner turns 2719-2720): a grip on each row; Edit, Duplicate and the bin only on the SELECTED row (checked below, once a row is tapped)
+    const targets = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-grip, #prepare-ops .ops-act')].map((b) => { const r = b.getBoundingClientRect(); return [b.className, Math.round(r.width), Math.round(r.height)]; })`);
+    assert.strictEqual(targets.length, 5, label + ': a grip on each of the 5 rows, no row action while no row is selected');
     if (phone) for (const [c, w, h] of targets) assert.ok(w >= 44 && h >= 44, `${label}: ${c} is ${w} x ${h} (44 px on a phone)`);
     await shot(`${D}-prepare-ops.png`);
     await shot(`${D}-ops-list.png`, '#prepare-ops', phone ? 1 : 2);
@@ -170,11 +171,13 @@ try {
     // a tap on "Pocket · 1/4 in (2 regions)" selects both pockets on the canvas
     await clickEl(await rowSel(4, '.ops-pick'));
     const picked = await evalJs(`(() => { const v = window.__prepareView; return { sel: [...v.selection.keys()].sort(), drawn: document.querySelectorAll('#prepare-select-group path').length,
-      card: document.querySelector('.cut-type-cur').textContent, marked: [...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => r.classList.contains('is-picked')) }; })()`);
+      card: document.querySelector('.cut-type-cur').textContent, acts: [...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => [...r.querySelectorAll('.ops-act')].map((b) => { const q = b.getBoundingClientRect(); return [b.classList.contains('ops-edit') ? 'edit' : b.classList.contains('ops-dup') ? 'dup' : 'del', Math.round(q.width), Math.round(q.height)]; })), marked: [...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => r.classList.contains('is-picked')) }; })()`);
     console.log(label + ' picked: ' + JSON.stringify(picked));
     assert.deepStrictEqual(picked.sel, [keys[2], keys[5]].sort(), label + ': the tap selected the two 1/4 in deep pockets');
     assert.strictEqual(picked.drawn, 2, label + ': both are drawn selected on the canvas');
-    assert.strictEqual(picked.card, 'Pocket', label + ': the card shows their type');
+    assert.strictEqual(picked.card, 'Select type', label + ': TASK S2: a tap only selects: the card is the quick flow’s type menu');
+    assert.deepStrictEqual(picked.acts.map((a) => a.map((x) => x[0])), [[], [], [], ['edit', 'dup', 'del'], []], label + ': TASK S2: Edit, Duplicate, X on the selected row only');
+    if (phone) for (const [c, w, h] of picked.acts[3]) assert.ok(w >= 44 && h >= 44, `${label}: ${c} is ${w} x ${h} (44 px on a phone)`);
     assert.deepStrictEqual(picked.marked, [false, false, false, true, false], label + ': the row is marked');
     await shot(`${D}-prepare-op-picked.png`);
     const file0 = await download(); // the export before any reorder (Generate lives on the Export step: come back after)
@@ -268,6 +271,7 @@ try {
     const plan0 = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => JSON.stringify([...m.V2_PLAN]))`);
     const order0 = await stored();
     assert.ok(/^Inside/.test(rowsText(await list())[0]), label + ': row 1 is the Inside operation');
+    await clickEl(await rowSel(1, '.ops-pick')); // TASK S2: the bin is on the selected row
     await clickEl(await rowSel(1, '.ops-del'));
     await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 4`, label + ': the operation is gone');
     const holes = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [${JSON.stringify(keys[1])}, ${JSON.stringify(keys[4])}].map((k) => m.V2_PLAN.get(k) && m.V2_PLAN.get(k).cutType))`); // TASK S1: binned, they are in no operation (get: null)

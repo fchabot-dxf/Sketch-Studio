@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUT_TYPES } from '../apps/shaper/src/shaper.js';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
+import { clickOpenLive, openOpLive, okLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -24,10 +25,14 @@ await (async () => {
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 }); await sleep(150);
     };
     const clickEl = async (sel) => {
-      const c = await evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; })()`);
+      // TASK S2: the card's rows scroll under its OK / Cancel: the row is scrolled into view first (as the user scrolls the card)
+      const c = await evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; })()`);
       assert(c, sel + ' not found');
       await click(c.x, c.y);
     };
+    // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): a click on a shape only selects it; its operation's card is OPENED (its list row, then Edit) and confirmed (OK)
+    const t3 = { evalJs, waitFor, clickEl };
+    const openSelectedOp = async () => openOpLive(t3, await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => { const t = window.__prepareView.selectedTargets()[0]; return m.membersOf(t.kind + ':' + t.id)[0].op.id; })`));
     const stageTab = (name) => clickEl(`.sk-header-tab[data-tab="${name}"]`);
 
     // ── 1. tokens, not hex literals ──
@@ -127,7 +132,7 @@ await (async () => {
     g = await snap(); assert.deepStrictEqual([g.bands, g.tp, g.chips], [0, 0, 0], 'guide selected: no band / dashes / chip'); assert.ok(g.hlSelect >= 1, 'guide selected: mint line');
 
     // ── 3. the cut card look + its type list ──
-    await click(targets.outside.x, targets.outside.y);
+    await clickOpenLive(t3, () => click(targets.outside.x, targets.outside.y));
     const card = await evalJs(`(() => { const c = getComputedStyle(document.querySelector('.cut-card')); const f = getComputedStyle(document.querySelector('.cut-box')); const l = document.querySelector('.cut-field-label');
       return { bg: c.backgroundColor, radius: c.borderRadius, field: f.backgroundColor, labelCase: getComputedStyle(l).textTransform, dPrefix: !!document.querySelector('.cut-dia-prefix'), presets: [...document.querySelectorAll('.cut-preset')].map((b) => b.textContent), bitPresets: [...document.querySelectorAll('.cut-row[data-param="toolDia"] .cut-preset')].map((b) => b.textContent) }; })()`);
     assert.strictEqual(card.bg, 'rgb(10, 10, 11)'); assert.strictEqual(card.field, 'rgb(42, 43, 45)'); assert.strictEqual(card.labelCase, 'lowercase'); assert.ok(card.dPrefix);
@@ -142,6 +147,8 @@ await (async () => {
     // ── 4. TASK 455 amendments: hover boundary, chip rides the path, popovers to the LEFT, offset presets, cutter shape ──
     const rectOf = (sel) => evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 }; })()`);
     const planRec = (kind, idx) => evalJs(`(async () => { const { V2_PLAN } = await import('/tests/helpers/plan-v2.js'); return JSON.stringify([...V2_PLAN.entries()]); })()`).then((j) => JSON.parse(j));
+    await clickEl('.cut-type-trigger'); await waitFor(`document.querySelector('.cut-type-menu').hidden === true`, 'cut-type menu closed');
+    await okLive(t3); // TASK S2: the Outside confirmed (unchanged: no undo step)
     await click(away.x, away.y);
     // hover boundary: bold white #F6F7F9, 3px
     await move(targets.outside.x, targets.outside.y);
@@ -156,6 +163,7 @@ await (async () => {
     await click(botPt.x, botPt.y); await move(away.x, away.y);
     const chipStay = await rectOf('#prepare-canvas .sk-chip-bg');
     assert.ok(Math.abs(chipStay.cy - chipBot.cy) < 2, 'selected but not hovered: the chip stays at its last spot');
+    await openSelectedOp(); // TASK S2: its operation opened to edit it
 
     // the selected target is the outside rect: open the cut card popovers
     const cardR = await rectOf('.cut-card');

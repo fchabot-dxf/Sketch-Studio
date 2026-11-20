@@ -166,7 +166,7 @@ try {
     actions: [...document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action),
   })`);
   assert.strictEqual(drawerCheck.hasGoto, false, 'GO TO section hidden in Fusion mode drawer');
-  assert.deepStrictEqual(drawerCheck.actions, ['download', 'settings', 'log'], 'only host actions shown');
+  assert.deepStrictEqual(drawerCheck.actions, ['download', 'settings', 'log', 'feedback'], 'only host actions + the shared Rate & feedback item shown (no file actions)');
   await shot('fusion-import-drawer-no-goto-480x731.png');
 
   console.log('fusion-import-664-live.test.js: ok');

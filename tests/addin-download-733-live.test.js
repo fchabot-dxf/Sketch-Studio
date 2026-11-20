@@ -126,7 +126,7 @@ await (async () => {
     await press('.sk-sidebar-btn', 'fusion: the menu button');
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'fusion: the drawer opens'); await sleep(300);
     const fusionActs = await actions();
-    assert.deepStrictEqual(fusionActs, ['download', 'settings', 'log'], 'Fusion mode: no "Fusion add-in" entry');
+    assert.deepStrictEqual(fusionActs, ['download', 'settings', 'log', 'feedback'], 'Fusion mode: no "Fusion add-in" entry');
     assert.strictEqual(await evalJs(`document.querySelectorAll('[data-action="fusion-addin"]').length`), 0, 'Fusion mode: nowhere in the page');
     await shot('fusion-mode-no-entry.png', await drawerClip());
     console.log(`fusion mode: drawer actions ${fusionActs.join(', ')}`);

@@ -17,6 +17,7 @@ const require = createRequire(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { APPS, siteClosure, jsRefs } = require('../scripts/site-closure.cjs');
 const { buildSite, sitePath, siteRedirects } = require('../scripts/build-site.cjs');
+const { LINKED: IDENTITY_LINKED } = require('../scripts/site-identity.cjs'); // TASK 829: the files the built page links that the repo page does not (generated from the registry)
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'site-696-'));
 const tree = (dir) => fs.readdirSync(dir, { withFileTypes: true }).map((e) => e.name + (e.isDirectory() ? '/' : '')).sort();
@@ -46,9 +47,10 @@ try {
     assert.ok(!fs.existsSync(path.join(out, 'functions')) && !fs.existsSync(path.join(out, 'tests')) && !fs.existsSync(path.join(out, 'packages', 'core', 'tests')), `${app}: no functions/ (wrangler compiles them from its cwd), no tests in the site`);
     const c = siteClosure({ root: out, app, entry: 'index.html', functionsRoot: REPO_ROOT });
     assert.deepStrictEqual(c.missing, [], `${app} (dist): every reference resolves inside the site`);
+    for (const f of IDENTITY_LINKED) assert.ok(c.files.has(f), `${app} (dist): the built page links ${f} (TASK 829) and it is in the site`);
     assert.deepStrictEqual(c.crossApp, [], `${app} (dist): no reference into another app`);
     const repo = siteClosure({ root: REPO_ROOT, app });
-    assert.deepStrictEqual([...c.files].sort(), [...repo.files].map((f) => sitePath(app, f)).sort(), `${app}: the dist serves exactly what the repo page reaches, each file at its root-layout path`);
+    assert.deepStrictEqual([...c.files].filter((f) => !IDENTITY_LINKED.includes(f)).sort(), [...repo.files].map((f) => sitePath(app, f)).sort(), `${app}: the dist serves exactly what the repo page reaches, each file at its root-layout path`);
     // the rules themselves: tests/site-root-763.test.js (every rule of every app)
     assert.strictEqual(fs.readFileSync(path.join(out, '_redirects'), 'utf8'), siteRedirects(app), `${app}: its _redirects`);
     console.log(`${app} dist: ${tree(out).join(' ')} | ${c.files.size} reached files, 0 missing, 0 other-app`);

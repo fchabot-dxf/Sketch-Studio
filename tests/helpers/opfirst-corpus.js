@@ -37,10 +37,6 @@ const expand = (c) => {
   if (sidecar.stl && sidecar.stl.$stl) sidecar.stl = pool.stl[sidecar.stl.$stl];
   return { geometry: pool.geometry[c.geometry], sidecar, settings: c.settings };
 };
-// TASK 804b: the cases with a Raster + Loop record whose download / 2D / Paths / 3D items changed ON PURPOSE (the zero-crossing Raster Loop): measured against
-// tests/fixtures/opfirst/raster-loop-804b.json (their values now) instead of the frozen baseline; it holds exactly the cases with a Raster Loop record that differ
-const RASTER_LOOP_804B = JSON.parse(fs.readFileSync(new URL('raster-loop-804b.json', DIR), 'utf8')).cases;
-const hasRasterLoop = (c) => (c.sidecar.cutPlan || []).some((e) => e && e[1] && e[1].clearing === 'raster' && e[1].loop === true);
 // advisor ruling 1: the cases whose Guides hold different Depth / Offset / Bit (one Guide operation per value set now)
 const GUIDE_ROWS = new Set(['matrix__guide-mixed-params']);
 const ASSERTED = ['a', 'b', 'c', 'dContent', 'eNoId', 'f'];
@@ -62,8 +58,7 @@ export async function runCorpus(part, parts) {
     for (const k of ['records', 'unassigned', 'operations', 'splits', 'hiddenLost', 'model']) report[k] += m[k];
     if (m.hiddenLost) report.hiddenCases++;
     if (m.guideOps > 1) report.guideCases.push(c.name);
-    if (RASTER_LOOP_804B[c.name]) ok(hasRasterLoop(c), `${c.name}: re-measured for task 804b only because it has a Raster Loop record`);
-    const now = measureNow(state), base = { ...baseline[c.name], ...(RASTER_LOOP_804B[c.name] || {}) };
+    const now = measureNow(state), base = baseline[c.name];
     for (const k of ASSERTED) {
       if (k === 'eNoId' && GUIDE_ROWS.has(c.name)) { ok(now[k] !== base[k], `${c.name}: Guides with different values list one operation each (advisor ruling 1)`); continue; }
       if (now[k] !== base[k]) differ.push(`${c.name}.${k}`);

@@ -1,5 +1,6 @@
 // tests/visfix-825-node.test.js — TASK 825: the visual-only bugs proven by the hunt of task 824 (docs/VISUAL-BUGS-824.md), each asserted on the Shaper node page
 // (tests/helpers/node-app.js). A Stock board, two Guides whose values differ (depth 0; depth 1.5 + offset 1), a plain Pocket and a Spiral Pocket (both 6 mm, ¼ in bit):
+//  V7: a point-to-line / midpoint / diagonal dimension lights exactly the geometry it binds (constraintTargets, no any-joint fallback for them);
 //  V8: the "Not cut" heading's box is computed from ALL the rows under it (the Stock counts, ticked and untickable) like every other heading;
 //  V2: the Export step's "unticked:" line names an operation by its row's words and number in the list (a Spiral pocket is told from a plain one);
 //  V3: after Settings > Reset (a unit change sent as key null) Prepare's depth chip is redrawn in the new unit;
@@ -11,6 +12,7 @@ import { findLoops } from '#core/loop-finder.js';
 import { keyOf } from '../apps/shaper/src/cut-plan.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { storeOps } from '../apps/shaper/src/operations-store.js';
+import { constraintTargets } from '../packages/ui/geometry-labels.js';
 import { exportTickLine } from '../apps/shaper/src/export-payload.js';
 
 let checks = 0;
@@ -67,6 +69,15 @@ try {
   app.press(rowBox(idOf('guide', 2))); app.press(rowBox(idOf('pocket', 1)));
   eq(exportTickLine(ops()), 'Exporting 3 of 5 operations (unticked: 4. Guide · 1.5 mm, 6. Pocket (spiral) · 6 mm (¼″ end mill)). Place it with the same anchor as the earlier file.', 'V2: the unticked ones are named as the list names them, with their numbers: the Spiral pocket is not "Pocket 6 mm"');
   void idOf; void rowBox;
+
+  // V7: constraintTargets: a rectangle A-B-C-D (L1..L4) and a separate line P-Q (L5)
+  const shapes7 = [{ id: 'L1', type: 'line', joints: ['A', 'B'] }, { id: 'L2', type: 'line', joints: ['B', 'C'] }, { id: 'L3', type: 'line', joints: ['C', 'D'] }, { id: 'L4', type: 'line', joints: ['D', 'A'] }, { id: 'L5', type: 'line', joints: ['P', 'Q'] }];
+  const lit = (c) => { const t = constraintTargets(c, shapes7); return { shapes: [...t.shapes].sort(), joints: [...t.joints].sort() }; };
+  eq(lit({ type: 'distance', joints: ['A', 'B'] }), { shapes: ['L1'], joints: ['A', 'B'] }, 'V7: a width (both ends of one line): that line');
+  eq(lit({ type: 'distance', joints: ['A', 'C'] }), { shapes: [], joints: ['A', 'C'] }, 'V7: a diagonal (two corners of no one line): the two points only, no line');
+  eq(lit({ type: 'distance', joints: ['P', 'C', 'D'] }), { shapes: ['L3'], joints: ['C', 'D', 'P'] }, 'V7: a point-to-line dimension: the line C-D and the point P (no other line)');
+  eq(lit({ type: 'midpoint', joints: ['C', 'D', 'P'] }), { shapes: ['L3'], joints: ['C', 'D', 'P'] }, 'V7: a midpoint: the line C-D and the point P');
+  eq(lit({ type: 'coincident', joints: ['B', 'D'] }), { shapes: ['L1', 'L2', 'L3', 'L4'], joints: ['B', 'D'] }, 'V7: (a coincident keeps the any-joint rule: every line at either corner)');
 
   // V3: Settings > Reset (key null) while Prepare shows a depth chip in inches
   SettingsManager.set('DOC_UNIT', 'in', { persist: false });

@@ -118,9 +118,10 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     }
     eq(noFinish.length, name === 'island' && pattern === 'linked' ? 1 : 0, `${tag}: every loop ends with a finish turn but the chain that ends deeper (${JSON.stringify(noFinish)})`);
     ok(worstF <= 0.01, `${tag}: every finish turn is the region inset by exactly the bit radius (worst ${worstF.toFixed(5)} mm)`);
-    // every turn / pass / clean-up ring of the Loop-OFF derivation is in a loop, vertex for vertex
+    // every turn / pass of the Loop-OFF derivation is in a loop, vertex for vertex (TASK 804b: Raster's Loop has no clean-up ring: the wall ring's sweep
+    // covers it, the leftover below is Loop off's)
     const all = new Set(on.clear.flatMap((c) => c.points.map(key)));
-    const offPaths = off.clear.map((c) => c.points);
+    const offPaths = off.clear.filter((c) => c.role !== 'cleanup').map((c) => c.points);
     const missing = offPaths.reduce((n, pts) => n + pts.filter((p) => !all.has(key(p))).length, 0);
     eq(missing, 0, `${tag}: every vertex of the Loop-OFF clearing (${offPaths.length} paths) is in the loops`);
     // the finish turns: the wall's and each island's turns at r (the same centre lines the separate inside / outside cuts follow)

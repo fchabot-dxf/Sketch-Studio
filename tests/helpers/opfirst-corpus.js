@@ -42,6 +42,16 @@ const GUIDE_ROWS = new Set(['matrix__guide-mixed-params']);
 // TASK S2: every operation is listed (an operation is opened from its row): the cases with a Roughing that cuts nothing (refused: no Stock / no boundary shape) list
 // that row too, "1 shape: nothing to cut" (before S2 it was not listed); their files, previews, Paths and 3D are unchanged
 const CUT_NOTHING_ROWS = new Set(['boundary-810-node__0045__7c1e6253', 'boundary-810-node__0049__85e437cf', 'boundary-810-node__0050__6ae4dfb1', 'boundary-810-node__0058__f88413f7']);
+// TASK 825 (V4): a Guide's row shows the depth that makes it its own operation (a Guide with no depth keeps "Guide"): the cases with such a Guide list it so now
+// (their files, previews, Paths and 3D are unchanged)
+const GUIDE_DEPTH_WORDS = new Set([
+  'boundary-810-node__0038__be74bb42', 'boundary-810-node__0041__f1b10001', 'boundary-810-node__0044__e6dcd7c9',
+  'boundary-810-node__0047__cfa8c730', 'export-own-hole-711-node__0004__d039839a', 'leadin-775-node__0088__9c799ee7',
+  'boundary-810-node__0039__104b1105', 'boundary-810-node__0042__52c8659d', 'boundary-810-node__0048__61469c1f',
+  'boundary-810-node__0051__18b249f0', 'boundary-810-node__0037__4dd1cefa', 'boundary-810-node__0040__6a83caf4',
+  'boundary-810-node__0043__6cce202e', 'boundary-810-node__0046__099653c8', 'leadin-775-node__0012__2fe3fbe6',
+  'leadin-775-node__0018__6738e5e1', 'leadin-775-node__0084__4fa2df27', 'leadin-775-node__0096__f564d9ec',
+]);
 const ASSERTED = ['a', 'b', 'c', 'dContent', 'eNoId', 'f'];
 
 export async function runCorpus(part, parts) {
@@ -68,6 +78,7 @@ export async function runCorpus(part, parts) {
     const now = measureNow(state), base = baseline[c.name];
     for (const k of ASSERTED) {
       if (k === 'eNoId' && GUIDE_ROWS.has(c.name)) { ok(now[k] !== base[k], `${c.name}: Guides with different values list one operation each (advisor ruling 1)`); continue; }
+      if (k === 'eNoId' && GUIDE_DEPTH_WORDS.has(c.name)) { ok(now[k] !== base[k] && describeOperations(state, planEntries()).some((o) => /^Guide · /.test(o.rowText)), `${c.name}: its Guide's row shows its depth (TASK 825 V4)`); continue; }
       if (k === 'eNoId' && CUT_NOTHING_ROWS.has(c.name)) { ok(now[k] !== base[k] && describeOperations(state, planEntries()).some((o) => /: nothing to cut$/.test(o.regions)), `${c.name}: its Roughing that cuts nothing is listed (TASK S2)`); continue; }
       if (now[k] !== base[k]) differ.push(`${c.name}.${k}`);
       checks++;

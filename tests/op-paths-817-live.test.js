@@ -116,7 +116,7 @@ try {
     await waitFor(`document.querySelector('#prepare-panel .cut-preview').dataset.state === 'fresh'`, D + ': the preview generated', 120000);
     assert.ok(await solid() > 0, D + ': the preview is drawn (the card\'s settings now)');
     assert.deepStrictEqual(await barBoxes(), bar, D + ': the bar still in place (fresh)');
-    await typeField('.cut-step-depth', '0.5');
+    await typeField('.cut-step-depth', '0.25');
     assert.deepStrictEqual([await evalJs(`document.querySelector('#prepare-panel .cut-preview').dataset.state`), await evalJs(`document.querySelector('#prepare-panel .cut-preview').textContent`), await solid(), (await faint()) > 0], ['stale', 'Preview', 0, true], D + ': a later change: the preview faded (stale), the button "Preview" again');
     // ── 3. OK: the row spins, the page stays usable, the long tasks, the paths appear ──
     await evalJs(`(() => { window.__lt = []; window.__inp = []; if (!window.__ltObs) { window.__ltObs = new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push([Math.round(e.startTime), Math.round(e.duration)]); }); window.__ltObs.observe({ type: 'longtask' });
@@ -194,6 +194,35 @@ try {
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => { m.default.set('DOC_UNIT', 'mm'); })`);
   await phase();
   await send('Emulation.setTouchEmulationEnabled', { enabled: false });
+
+  // ── 5. the worker = the page's main thread, IN THE BROWSER (arcs: the page samples them with its SVG DOM, the worker derives with those samples): the real Fusion
+  // plate of TASK 711 (R10 corners, holes, a slot, pockets, an island) sent the way the add-in sends it; every plan membership's derivation and the files ──
+  D = 'fusion-plate';
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+  await resetBufferLive(cdp);
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.adsk = { _sent: [], fusionSendData(a, d) { this._sent.push({ a, d }); return '{}'; } };` });
+  await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`, 8000);
+  await waitFor(`!!window.fusionJavaScriptHandler`, 'the Fusion handler');
+  const plate = fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8');
+  await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(plate)})`);
+  await waitFor(`document.getElementById('prepare-notice') && /8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the plate imported (8 regions)');
+  const same = await evalJs(`Promise.all(['/apps/shaper/src/export-payload.js', '/apps/shaper/src/cut-plan.js', '/apps/shaper/src/op-derive.js', '/apps/shaper/src/op-paths.js'].map((u) => import(u))).then(async ([ep, cp, od, op]) => {
+    const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) && !(x instanceof Map) ? Object.fromEntries(Object.keys(x).sort().map((q) => [q, x[q]])) : x instanceof Map ? [...x] : typeof x === 'function' ? undefined : x));
+    const st = window.__designController.state;
+    const { loops, loopPolys } = cp.loopsWithPolygons(st), owned = cp.planOwnedLoops(st, loops, loopPolys), ctx = cp.pathsCtx(st, { loops, loopPolys, owned });
+    const items = cp.planMemberItems().map((it) => cp.pathsInputOf(it.planKey, it.rec)).filter(Boolean);
+    for (const x of items) op.lookup(ctx, x.target, x.rec);
+    await op.idle();
+    const arcs = st.shapes.filter((s) => s.type === 'arc').length;
+    const derivations = items.map((x) => canon(op.lookup(ctx, x.target, x.rec, { request: false })) === canon(od.deriveItem(x.target, x.rec, st, loops, loopPolys, owned)));
+    const dl = ep.exportFileOf(st), bg = await ep.exportFileInBackground(st);
+    const pm = ep.exportFileOf(st, { preview: true }), pb = await ep.exportFileInBackground(st, { preview: true });
+    return { arcs, items: items.length, derivations, file: dl.svg === bg.svg, preview: pm.svg === pb.svg, paths: canon(ep.bitCentrePaths(st, pm.written)) === canon(pb.bitPaths), bytes: bg.svg.length };
+  })`);
+  console.log('fusion plate, page main thread vs worker: ' + JSON.stringify(same));
+  assert.ok(same.arcs > 0, 'the plate has arcs (sampled by the page SVG DOM)');
+  assert.deepStrictEqual([same.derivations.every(Boolean), same.file, same.preview, same.paths], [true, true, true, true], 'in the browser: every membership derivation, the file, its preview copy and the Paths view made by the worker = the page own');
+  results[D] = same;
   assert.deepStrictEqual(problems, [], 'no console error, no page exception');
   fs.writeFileSync(path.join(EVIDENCE_DIR, 'live-measurements.json'), JSON.stringify(results, null, 1));
   console.log('op-paths-817-live: ok ' + JSON.stringify(results));

@@ -13,6 +13,7 @@
 // THE PORT (how jobs reach op-derive.js createPathsServer): the page sets a WORKER port (main.js); without one (the node test kit, the node tests) the in-process
 // localPort serves every job at once, on a structured COPY of the job and of the answer, exactly what crossing to the worker does. Same server, same derivation.
 import { createPathsServer, packRec, unpackResult, REF_FIELDS } from './op-derive.js';
+import { arcSamplesOf } from '../../../packages/core/curve-kinds.js'; // the sketch's arcs sampled here (the page's SVG DOM) for the worker, which has none
 
 // FNV-1a of a string: the signatures (equal text = equal inputs)
 function hashText(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + '.' + str.length.toString(36); }
@@ -74,10 +75,11 @@ const recSigText = (rec) => JSON.stringify(rec, (k, v) => (REF_FIELDS.includes(k
 export function geometrySig(state) {
   return hashText(JSON.stringify([[...(state.joints || new Map()).entries()], state.shapes || [], state.constraints || [], state.profiles || []]));
 }
-/** The sketch as a job carries it (a copy is made where it crosses): joints, shapes, constraints, profiles, filed under its geometry signature. */
+/** The sketch as a job carries it (a copy is made where it crosses): joints, shapes, constraints, profiles, filed under its geometry signature, and its arcs
+ *  sampled HERE (#core curve-kinds arcSamplesOf: the browser's SVG path API on the page; the worker derives with exactly these points, withArcSamples). */
 function sketchRef(ctx) {
   const id = 's:' + ctx.geomSig;
-  if (!refValues.has(id)) refValues.set(id, { joints: new Map(ctx.state.joints), shapes: [...(ctx.state.shapes || [])], profiles: [...(ctx.state.profiles || [])], constraints: [...(ctx.state.constraints || [])] }); // plain arrays (the sketch's shapes array carries its own push)
+  if (!refValues.has(id)) refValues.set(id, { joints: new Map(ctx.state.joints), shapes: [...(ctx.state.shapes || [])], profiles: [...(ctx.state.profiles || [])], constraints: [...(ctx.state.constraints || [])], arcSamples: arcSamplesOf(ctx.state) }); // plain arrays (the sketch's shapes array carries its own push)
   return id;
 }
 /** A reading context: ONE pass over the plan (the geometry signature and the owned loops are worked out once). `owned` = the plan's owned loop ids (a Set). */

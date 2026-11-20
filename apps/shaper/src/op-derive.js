@@ -13,6 +13,7 @@ import { loopPolygon } from '../../../packages/core/loop-geometry.js';
 import { deriveCuts, levelsWorkRecord, hasLevels, levelsBand, levelsRoughingFor, roughLayout } from '../../../packages/core/stepped-cut.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutTravel } from '../../../packages/core/profile-model.js';
 import { exportShaperSVG } from '../../../packages/core/shaper-export.js';
+import { withArcSamples } from '../../../packages/core/curve-kinds.js'; // the sketch's arc samples made by the page (a worker has no SVG DOM to sample them)
 
 /** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. (Moved here from cut-plan.js, which re-exports it.) */
 export function loopsWithPolygons(state) {
@@ -131,19 +132,24 @@ export function createPathsServer({ post, schedule }) {
   const valueOf = (id) => { if (!refs.has(id)) throw new Error(`paths worker: unknown input ${id}`); return refs.get(id); };
   const idOf = (v) => ids.get(v) || null;
   const geometry = (state) => { let g = geo.get(state); if (!g) { g = loopsWithPolygons(state); geo.set(state, g); } return g; };
+  // every job runs with its sketch's arc samples (the page's: op-paths.js sketchRef, #core curve-kinds arcSamplesOf), so the polygons are the page's
   function run(job) {
     if (job.type === 'paths') {
       const state = valueOf(job.state.$ref);
-      const { loops, loopPolys } = geometry(state);
-      return packResult(deriveItem(job.target, unpackRec(job.rec, valueOf), state, loops, loopPolys, new Set(job.owned)), idOf);
+      return withArcSamples(state.arcSamples, () => {
+        const { loops, loopPolys } = geometry(state);
+        return packResult(deriveItem(job.target, unpackRec(job.rec, valueOf), state, loops, loopPolys, new Set(job.owned)), idOf);
+      });
     }
     const a = job.args;
     const state = valueOf(a.state.$ref), encoding = valueOf(a.encoding.$ref);
     const entries = a.entries.map((e) => ({ ...e, rec: unpackRec(e.rec, valueOf) }));
     const frame = a.frame ? a.frame.map((e) => ({ ...e, rec: unpackRec(e.rec, valueOf) })) : null;
-    const written = a.preview ? [] : null;
-    const svg = svgOf({ state, entries, encoding, docUnit: a.docUnit, preview: a.preview, written, frame });
-    return { svg, bitPaths: written ? bitCentrePaths(state, written) : null };
+    return withArcSamples(state.arcSamples, () => {
+      const written = a.preview ? [] : null;
+      const svg = svgOf({ state, entries, encoding, docUnit: a.docUnit, preview: a.preview, written, frame });
+      return { svg, bitPaths: written ? bitCentrePaths(state, written) : null };
+    });
   }
   function next() {
     const job = queue.shift();

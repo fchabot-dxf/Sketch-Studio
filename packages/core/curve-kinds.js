@@ -41,7 +41,28 @@ export function num(n) {
 
 // Sample an arc shape into points (start→end) using the SAME path math the renderer uses (TRUE curve, not chord). Needs the DOM (the browser SVG
 // path API); in Node it degrades to the endpoints. (Moved here unchanged from #core/loop-geometry, which re-exports it.)
+// TASK 817: a computation can be handed the samples of a sketch's arcs instead (withArcSamples): a module WORKER has no SVG DOM, so the page samples its
+// arcs here, with the DOM (arcSamplesOf), hands the table over, and the worker's derivation reads exactly those points (the same polygons, the same file
+// as on the page). An arc the table lacks is an error there, never its endpoints in its place.
+let suppliedArcs = null; // { N, byId: { [shape id]: [{x, y}] } } while a withArcSamples computation runs
+/** The samples of every arc of `state` at N points (this function's: the DOM's where there is one), as withArcSamples takes them. */
+export function arcSamplesOf(state, N = 24) {
+  const byId = {};
+  for (const s of state.shapes || []) if (s && s.type === 'arc') byId[s.id] = sampleArc(s, state, N);
+  return { N, byId };
+}
+/** fn() with sampleArc reading `table` (arcSamplesOf's, or null: sampleArc as above). Returns fn's result. */
+export function withArcSamples(table, fn) {
+  const prev = suppliedArcs;
+  suppliedArcs = table || null;
+  try { return fn(); } finally { suppliedArcs = prev; }
+}
 export function sampleArc(s, state, N = 24) {
+  if (suppliedArcs) {
+    const pts = suppliedArcs.N === N ? suppliedArcs.byId[s.id] : undefined;
+    if (!pts) throw new Error(`arc samples not supplied for ${s.id} at ${N} points`);
+    return pts.map((p) => ({ x: p.x, y: p.y }));
+  }
   const [p1, p2, p3] = (s.joints || []).map((id) => state.joints.get(id));
   if (!p1 || !p2 || !p3) return [];
   const d = calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep });

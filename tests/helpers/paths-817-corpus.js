@@ -4,8 +4,9 @@
 // running the page's paths worker (tests/helpers/node-paths-worker.js: apps/shaper/src/paths-worker.js, structured clone between the threads):
 //   1. every plan membership: the worker's generated derivation (op-paths.js lookup: op-derive.js deriveItem in the worker, copied across) = the main thread's own
 //      deriveItem of the same input, as key-sorted JSON (functions dropped: a cut's `sweep` stays in the worker);
-//   2. the file made in the background (export-payload.js exportFileInBackground: svgOf in the worker) = the main thread's (exportFileOf), and = the BASELINE frozen
-//      before S1 (its md5 `a`); its preview copy too (without data-op: `b`) and the Paths view's bit-centre travel computed in the worker (`c`).
+//   2. the file made in the background (export-payload.js exportFileInBackground: svgOf in the worker) = the BASELINE frozen before S1 (its md5 `a`), which the main
+//      thread's file equals (tests/opfirst-corpus-<n>-node); its preview copy too (without data-op: `b`) and the Paths view's bit-centre travel computed in the worker
+//      (`c`); the first cases of each part also against the main thread's own files directly.
 // Split in parts like the corpus test (every parts-th case) so each file stays within the gate's per-file time.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -52,18 +53,20 @@ export async function runPathsCorpus(part, parts) {
         eq(canonical(gen), canonical(deriveItem(input.target, input.rec, state, loops, loopPolys, owned)), `${c.name} ${it.id}: the worker's derivation = the main thread's`);
         items++;
       }
-      const dl = exportFileOf(state);
-      if (!dl) continue;
-      const base = baseline[c.name];
+      // the files: made in the worker, compared with the baseline the main thread's files are compared with (tests/opfirst-corpus-<n>-node: main = baseline), so
+      // worker = baseline = main without deriving them a second time here (the gate's per-file time)
       const bg = await exportFileInBackground(state);
-      eq(bg.svg, dl.svg, `${c.name}: the file made in the worker = the main thread's`);
+      if (!bg) continue;
+      const base = baseline[c.name];
       eq(md5(bg.svg), base.a, `${c.name}: the file made in the worker = the baseline frozen before S1 (a)`);
-      const pm = exportFileOf(state, { preview: true });
       const pb = await exportFileInBackground(state, { preview: true });
-      eq(pb.svg, pm.svg, `${c.name}: the preview copy made in the worker = the main thread's`);
-      eq(md5(noOpIds(pb.svg)), base.b, `${c.name}: the preview copy = the baseline (b)`);
-      eq(canonical(pb.bitPaths), canonical(bitCentrePaths(state, pm.written)), `${c.name}: the Paths view's travel made in the worker = the main thread's`);
-      eq(md5(pb.bitPaths), base.c, `${c.name}: the Paths view = the baseline (c)`);
+      eq(md5(noOpIds(pb.svg)), base.b, `${c.name}: the preview copy made in the worker = the baseline (b)`);
+      eq(md5(pb.bitPaths), base.c, `${c.name}: the Paths view's travel made in the worker = the baseline (c)`);
+      if (files < 12) { // and, for the first cases of the part, against the main thread's own files directly
+        eq(bg.svg, exportFileOf(state).svg, `${c.name}: the file made in the worker = the main thread's`);
+        const pm = exportFileOf(state, { preview: true });
+        eq([pb.svg, canonical(pb.bitPaths)], [pm.svg, canonical(bitCentrePaths(state, pm.written))], `${c.name}: the preview copy and the Paths view made in the worker = the main thread's`);
+      }
       files++;
     }
   } finally { setPathsPort(localPort()); } // the worker thread is terminated

@@ -66,28 +66,51 @@ export function toolOf(rec) {
   return { ...tool, label: toolName(tool) };
 }
 
-/** The CUTTING SETTINGS of a stored record that make two records one operation (the params its type declares, base mm), or null for a type not cut. */
+// TASK 812: the SETTINGS FIELDS, each computed from a stored record in ONE place: `eff` = effectiveCutRecord(rec), `rec` = the stored record. A cut type
+// DECLARES which of them it has (shaper.js CUT_TYPES[].fields, the one table: docs/OPERATIONS-MODEL.md 1.5); a field answers undefined when it adds nothing (the
+// key stays the one before the setting existed). The ORDER of a type's `fields` is the order of the key's settings.
+const SETTING_FIELDS = {
+  depth: (rec) => depthOf(rec.cutDepth),
+  offset: (rec) => round6(Number(rec.cutOffset) || 0),
+  steps: (rec, eff) => {
+    if (eff.terraceAs) { // a sloped Roughing (TASK 714's stepped cut): the step depth, or the adaptive resolution (#core terraceOptions: what the terraces are made with)
+      const o = terraceOptions(eff);
+      return o.deviation != null ? { deviation: round6(o.deviation) } : { step: round6(Number(o.step) > 0 ? o.step : STEP_DEPTH.defaultMm) };
+    }
+    if (eff.levelsOp) return { step: round6(Number(rec.stepDepth) > 0 ? rec.stepDepth : eff.levelsOp === 'contour' ? LEVELS.contourStepMm : STEP_DEPTH.defaultMm) }; // TASK 792: Roughing / Contour
+    return undefined;
+  },
+  allowance: (rec, eff) => (roughingAllowance(eff) > 0 ? round6(roughingAllowance(eff)) : undefined), // TASK 792: a Roughing's allowance (0 adds nothing: a stepped record's key is the one before 792)
+  layout: (rec, eff) => (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'nested' ? 'nested' : undefined), // TASK 792 (owner turn 2604): the Nested layout (Terraces, the default, adds nothing)
+  minWidth: (rec, eff) => (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'terraces' && Number(rec.minTerraceWidth) > 0 ? round6(rec.minTerraceWidth) : undefined), // TASK 792: the Min terrace width (0 adds nothing)
+  smoothing: (rec, eff) => (eff.levelsOp && smoothingOf(eff.levelsOp, rec.smoothing) !== smoothingOf(eff.levelsOp, undefined) ? round6(smoothingOf(eff.levelsOp, rec.smoothing)) : undefined), // TASK 809: a Smoothing other than the operation's default (the default adds nothing)
+  hold: (rec, eff) => { // TASK 742: a held cut's mode and its values (Off adds nothing)
+    const m = holdMode(eff);
+    if (m === 'tabs') return { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness
+    if (m === 'skin') return { mode: m, thickness: round6(rec.holdThickness) };
+    return undefined;
+  },
+  clearing: (rec, eff) => { // TASK 745: a programmed pocket's clearing and the values it is computed with (Freehand adds nothing: the key is the one before 745)
+    const pat = clearingPattern(eff);
+    if (pat === 'freehand') return undefined;
+    const c = clearingSettings(eff);
+    // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 778: pockets have no lead-in; TASK 812: the Loop's arm pitch (it changes the cuts: pocket-clearing.js; the default adds nothing)
+    return { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true, ...(c.pitch !== POCKET_CLEARING.loopPitch.default ? { loopPitch: round6(c.pitch) } : {}) } : {}) };
+  },
+  leadIn: (rec, eff) => { // TASK 778: an On line outline's tangential arc lead-in (Off adds nothing)
+    if (!outlineLeadIn(eff)) return undefined;
+    const l = leadInSettings(eff);
+    return { radius: l.radius != null ? round6(l.radius) : 'calc', sweep: l.sweep != null ? round6(l.sweep) : 'calc', length: l.length != null ? round6(l.length) : 'calc', side: l.side, ...(l.at != null ? { at: round6(l.at) } : {}) };
+  },
+};
+
+/** The CUTTING SETTINGS of a stored record that make two records one operation (the settings its type declares, CUT_TYPES[].fields, base mm), or null for a type not cut. */
 export function settingsOf(rec) {
   const t = rec && cutTypeById(rec.cutType);
   if (!t || t.opRank === 0) return null;
-  const s = {};
-  if (cutTypeHasParam(rec.cutType, 'cutDepth')) s.depth = depthOf(rec.cutDepth);
-  if (cutTypeHasParam(rec.cutType, 'cutOffset')) s.offset = round6(Number(rec.cutOffset) || 0);
   const eff = effectiveCutRecord(rec);
-  if (eff.terraceAs) { // a sloped Roughing (TASK 714's stepped cut): the step depth, or the adaptive resolution (#core terraceOptions: what the terraces are made with)
-    const o = terraceOptions(eff);
-    s.steps = o.deviation != null ? { deviation: round6(o.deviation) } : { step: round6(Number(o.step) > 0 ? o.step : STEP_DEPTH.defaultMm) };
-  } else if (eff.levelsOp) s.steps = { step: round6(Number(rec.stepDepth) > 0 ? rec.stepDepth : eff.levelsOp === 'contour' ? LEVELS.contourStepMm : STEP_DEPTH.defaultMm) }; // TASK 792: Roughing / Contour
-  if (roughingAllowance(eff) > 0) s.allowance = round6(roughingAllowance(eff));
-  if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'nested') s.layout = 'nested';
-  if (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'terraces' && Number(rec.minTerraceWidth) > 0) s.minWidth = round6(rec.minTerraceWidth); // TASK 792: the Min terrace width (0 adds nothing) // TASK 792 (owner turn 2604): the Nested layout (Terraces, the default, adds nothing) // TASK 792: a Roughing's allowance (0 adds nothing: a stepped record's key is the one before 792)
-  if (eff.levelsOp && smoothingOf(eff.levelsOp, rec.smoothing) !== smoothingOf(eff.levelsOp, undefined)) s.smoothing = round6(smoothingOf(eff.levelsOp, rec.smoothing)); // TASK 809: a Smoothing other than the operation's default (the default adds nothing)
-  const m = holdMode(eff); // TASK 742: a held cut's mode and its values (Off adds nothing)
-  if (m === 'tabs') s.hold = { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness
-  if (m === 'skin') s.hold = { mode: m, thickness: round6(rec.holdThickness) };
-  const pat = clearingPattern(eff); // TASK 745: a programmed pocket's clearing and the values it is computed with (Freehand adds nothing: the key is the one before 745)
-  if (pat !== 'freehand') { const c = clearingSettings(eff); s.clearing = { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true } : {}) }; } // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 778: pockets have no lead-in
-  if (outlineLeadIn(eff)) { const l = leadInSettings(eff); s.leadIn = { radius: l.radius != null ? round6(l.radius) : 'calc', sweep: l.sweep != null ? round6(l.sweep) : 'calc', length: l.length != null ? round6(l.length) : 'calc', side: l.side, ...(l.at != null ? { at: round6(l.at) } : {}) }; } // TASK 778: an On line outline's tangential arc lead-in (Off adds nothing)
+  const s = {};
+  for (const f of t.fields) { const v = SETTING_FIELDS[f](rec, eff); if (v !== undefined) s[f] = v; }
   return s;
 }
 

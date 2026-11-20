@@ -3,7 +3,7 @@
 // callbacks. Cut params parse/format through #core/units.js per the document unit, and RE-LABEL when DOC_UNIT changes.
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
-import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
+import { availableTypes, cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED } from './cut-plan.js';
 import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, hasLevels } from '#core/stepped-cut.js';
@@ -79,7 +79,6 @@ const LAYOUT_PRESETS = ROUGH_LAYOUT.layouts.map((l) => ({ hint: choiceId('roughL
 const fieldText = (baseMM) => lengthText(baseMM, { show: 'field' });
 const toDocNum = (baseMM) => unitNumber(baseMM, docUnit());  // BASE mm → doc-unit number
 const isUnset = (v) => v === 'unset' || v == null;
-const declaresOf = (id, p) => { const t = id ? cutTypeById(id) : null; return Boolean(t && (t.params || []).includes(p)); };
 
 export function createCutPanel(hostEl, opts = {}) {
   if (!hostEl) return { update() {}, destroy() {} };
@@ -380,7 +379,7 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'stepDepth' ? (Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm)
     : field === 'tabWidth' ? (Number(current.tabWidth) > 0 ? Number(current.tabWidth) : holdDefaults(docUnit()).tabWidth)
     : field === 'holdThickness' ? (Number(current.holdThickness) > 0 ? Number(current.holdThickness) : holdDefaults(docUnit()).thickness)
-    : field === 'finishAllowance' ? (current.finishAllowance != null && Number(current.finishAllowance) >= 0 ? Number(current.finishAllowance) : declaresOf(current.cutType, 'clearing') ? allowanceDefault(docUnit()) : 0) // TASK 745; TASK 792: a Roughing without one has 0
+    : field === 'finishAllowance' ? (current.finishAllowance != null && Number(current.finishAllowance) >= 0 ? Number(current.finishAllowance) : cutTypeHasField(current.cutType, 'clearing') ? allowanceDefault(docUnit()) : 0) // TASK 745; TASK 792: a Roughing without one has 0
     : field === 'minTerraceWidth' ? (Number(current.record && current.record.minTerraceWidth) > 0 ? Number(current.record.minTerraceWidth) : 0) // TASK 792
     : field === 'smoothing' ? smoothingOf((cutTypeById(current.cutType) || {}).levelsOp, current.record ? current.record.smoothing : undefined) // TASK 809: unset = the operation's default
     : field === 'leadInRadius' ? (current.leadInRadius != null && Number(current.leadInRadius) > 0 ? Number(current.leadInRadius) : (current.leadInInfo && Number(current.leadInInfo.radius) > 0 ? Number(current.leadInInfo.radius) : Number(current.toolDia) || 0)) // TASK 778: null = calculated by derivation

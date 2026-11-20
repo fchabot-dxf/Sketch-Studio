@@ -38,6 +38,7 @@ import { mountLoadingOverlay } from './loading-overlay.js';
 import { saveStateOf, tabSaveState } from './save-state.js';
 import { findFooterEnd } from './footer-slot.js'; // TASK 776: the footer's right end: THE Save button and THE account avatar live there
 import { createAccountAvatar } from './account-avatar.js'; // TASK 776: THE account control (the avatar at the right end of the header / of the tab strip)
+import { openFeedback, feedbackMenuItem, FEEDBACK_ICON } from './feedback.js'; // TASK 830: the "Rate & feedback" entry, in every app's menu
 
 export { relativeTime };
 
@@ -83,11 +84,14 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), account, start, onClose: () => { manager = null; } });
   }
 
-  // TASK 828: the site items, last in every host's menu (one declaration here, so the four apps agree): About = about.html at the site root, in a new tab.
+  // TASK 830: always available, in every app (with or without the project layer); the window is shared (feedback.js)
+  const feedbackItem = feedbackMenuItem({ icon: FEEDBACK_ICON, onClick: () => { openFeedback(); } }); // the drawer closes itself (no keepOpen)
+  // TASK 828: the site items, last in every host's menu, About, then the shared Rate & feedback (TASK 830, always last) (one declaration here, so the four apps agree): About = about.html at the site root, in a new tab.
   // Not in Fusion's palette (host 'fusion'): a palette has no browser tab to open it in.
   const siteActions = [
-    { divider: true, visible: () => host !== 'fusion' },
+    { divider: true },
     { id: 'about', label: 'About', icon: SIDEBAR_ICONS.info, tooltip: 'The apps of Sketch Studio', visible: () => host !== 'fusion', onClick: () => window.open('/about.html', '_blank', 'noopener') },
+    feedbackItem,
   ];
   const actions = projects ? [
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); await refreshName(); }) },

@@ -11,7 +11,7 @@ import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, makeProfil
 import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, levelsWorkRecord, hasLevels, roughingAllowance, roughLayout, levelsRoughingFor, boundaryOf, levelsBand } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; the heights' band
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
+import { loopPolygon, pointInPolygon, loopSuccessors } from '#core/loop-geometry.js'; // TASK 832: loopSuccessors (followDesign)
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in
@@ -819,13 +819,42 @@ export function reconcileCutPlan(state, plan) {
   renamePlanKeys(rename, remove, plan); // TASK 810: the records and the keys they reference
   return { edgeMoved, edgeDropped, kept: rename.size, removed: remove.size };
 }
-/** TASK S1: the same reconciliation of the STORE (a version 3 document: its geometry keys move through renameGeometry; it holds no legacy edge keys). */
+/** TASK S1: the same reconciliation of the STORE (a version 3 document: its geometry keys move through renameGeometry; it holds no legacy edge keys). TASK 832: then
+ *  every shape follows its Design edits (followDesign): a document saved before its operations were followed opens on the shapes they cut. */
 export function reconcileStore(state) {
   const loops = findLoops(state), chains = findOpenChains(state, loops);
   const keys = [...new Set([...storeOps().flatMap((op) => op.geometry.map((r) => r.key)), ...regionKeys()])];
   const { rename, remove } = staleKeyMoves(state, loops, chains, keys);
   renameGeometry(rename, remove);
+  followDesign(state);
   return { edgeMoved: 0, edgeDropped: 0, kept: rename.size, removed: remove.size };
+}
+/**
+ * followDesign(state) -> the number of geometry keys that moved — TASK 832 (owner rulings turns 2955-2965: "this makes the toolpath out of date, but not nothing to
+ * cut, simple recalc"): an operation's shapes FOLLOW the Design edits made to them. A loop key names its outline's edges (#core/loop-finder.js); an edit that
+ * changes them (a fillet, a point added on a side, a shape snapped or pinned onto it, a shared side deleted, a divider across it) gives the same shape another
+ * key: every stored key that is no longer a loop moves to its successors (#core/loop-geometry.js loopSuccessors: the loops that hold its surviving edges and lie
+ * in or around its old region), in every operation that has it, with its region data (renameGeometry). A split shape: each piece, at the shape's file place; two
+ * shapes of one operation merged into one: one membership. Nothing is ever removed: a key with no successor (its edges deleted, or its outline opened: a side
+ * trimmed or made construction) stays as it is, and comes back when the outline is whole again (construction turned off). A pure function of the store and the
+ * sketch, run where the plan is read against a sketch that may have been edited since: Prepare built (prepare-stage.js mountPrepare), the Review entered
+ * (main.js), an undo / redo step restored (prepare-stage.js restoreCutPlanFromHistory) and a document read (reconcileStore). Not an undo step of its own:
+ * the next step's snapshot carries the followed keys.
+ */
+export function followDesign(state) {
+  const keys = [...new Set([...storeOps().flatMap((op) => op.geometry.map((r) => r.key)), ...regionKeys()])].filter((k) => parseKey(k).kind === 'loop');
+  if (!keys.length) return 0;
+  const live = new Set(findLoops(state).map((l) => l.id));
+  const stale = keys.filter((k) => !live.has(parseKey(k).id));
+  if (!stale.length) return 0; // nothing edited away: no polygon is sampled
+  const { loops } = loopsWithPolygons(state);
+  const rename = new Map();
+  for (const key of stale) {
+    const next = loopSuccessors(parseKey(key).id, state, loops);
+    if (next.length) rename.set(key, next.length === 1 ? keyOf('loop', next[0]) : next.map((n) => keyOf('loop', n)));
+  }
+  renameGeometry(rename);
+  return rename.size;
 }
 // the stale chain / loop keys of a plan that move (rename) or go (remove): see reconcileCutPlan
 function staleKeyMoves(state, loops, chains, keys) {

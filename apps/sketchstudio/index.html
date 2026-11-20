@@ -399,6 +399,7 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
     <div id="export-panel" class="hidden flex-1 overflow-auto p-6" aria-hidden="true">
       <div class="max-w-md mx-auto">
         <div class="mb-3" style="color:#60a5fa; font-size:13px; font-weight:600;">Export</div>
+        <div data-feedback-slot></div><!-- TASK 830: the one "Enjoying Sketch?" card, #ui/feedback.js: at the top, as the Export view is only ever opened for the form below (the card appears while it is closed) -->
         <div class="space-y-3">
             <label class="block"><span class="text-xs">File name</span><input id="export-filename" class="w-full mt-1 p-1 border rounded" type="text" value="sketch"/></label>
             <label class="block"><span class="text-xs">File type</span>

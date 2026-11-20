@@ -250,7 +250,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
     ok(win.document.querySelector('[data-section="account"]') !== null, 'projects: true keeps Google account / Drive section');
     eq(win.document.querySelector('[data-section="goto"]'), null, 'no GO TO section in normal mode either (TASK 696: each app is its own website)');
     const normalActs = [...win.document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action);
-    deepEq(normalActs, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log'], 'projects: true keeps all project/file actions + hostActions');
+    deepEq(normalActs, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'settings', 'log', 'about'], 'projects: true keeps all project/file actions + hostActions + the site items (TASK 828: About)');
     chromeNormal.destroy();
   } finally {
     globalThis.window = prev.window;

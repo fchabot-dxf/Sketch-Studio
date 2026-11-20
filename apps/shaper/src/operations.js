@@ -22,7 +22,7 @@
 import { cutTypeById, cutTypeHasParam, effectiveCutRecord, CUTTER_SHAPES, BIT_PRESETS } from './shaper.js';
 import { keyOf, parseKey, loopsWithPolygons, clearingWords } from './cut-plan.js'; // TASK 745: clearingWords
 import { ownedLoopIds } from '#core/profile-model.js';
-import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout } from '#core/stepped-cut.js';
+import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout, boundaryOf, ROUGH_BOUNDARY } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809
 import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
 import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in is one of its settings
@@ -84,6 +84,15 @@ const SETTING_FIELDS = {
   layout: (rec, eff) => (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'nested' ? 'nested' : undefined), // TASK 792 (owner turn 2604): the Nested layout (Terraces, the default, adds nothing)
   minWidth: (rec, eff) => (eff.levelsOp === 'roughing' && hasLevels(eff) && roughLayout(eff) === 'terraces' && Number(rec.minTerraceWidth) > 0 ? round6(rec.minTerraceWidth) : undefined), // TASK 792: the Min terrace width (0 adds nothing)
   smoothing: (rec, eff) => (eff.levelsOp && smoothingOf(eff.levelsOp, rec.smoothing) !== smoothingOf(eff.levelsOp, undefined) ? round6(smoothingOf(eff.levelsOp, rec.smoothing)) : undefined), // TASK 809: a Smoothing other than the operation's default (the default adds nothing)
+  boundary: (rec, eff) => { // TASK 810: a Roughing's machining boundary (a part with levels), each part off its default (Silhouette, Outside, the calculated offset add nothing)
+    if (eff.levelsOp !== 'roughing' || !hasLevels(eff)) return undefined;
+    const b = boundaryOf(rec), o = {};
+    if (b.kind !== ROUGH_BOUNDARY.defaultKind) o.kind = b.kind;
+    if (b.kind === 'shape' && b.shape) o.shape = b.shape;
+    if (b.tool !== ROUGH_BOUNDARY.defaultTool) o.tool = b.tool;
+    if (b.offset != null) o.offset = round6(b.offset);
+    return Object.keys(o).length ? o : undefined;
+  },
   hold: (rec, eff) => { // TASK 742: a held cut's mode and its values (Off adds nothing)
     const m = holdMode(eff);
     if (m === 'tabs') return { mode: m, count: rec.tabCount === 'auto' || !(Number(rec.tabCount) >= 1) ? 'auto' : Math.floor(Number(rec.tabCount)), width: round6(rec.tabWidth), ...(tabsHaveThickness(rec.cutType) ? { thickness: round6(rec.holdThickness) } : {}) }; // TASK 775: an On line cut's tabs have no thickness

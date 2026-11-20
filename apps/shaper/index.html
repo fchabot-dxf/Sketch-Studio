@@ -436,6 +436,15 @@
     .cut-tab-dot[hidden] { display: none; }
     .cut-row[data-off-tab] { display: none !important; }
     @media (max-width: 640px), (pointer: coarse) { .cut-tab { height: 44px; } }
+    /* TASK 810: Roughing's Boundary (2 x 2: Silhouette, Bounding box, Stock, Shape; the Stock greyed while the design has none) and Tool (Inside, On, Outside); Pick: a crosshair */
+    .cut-row[data-row="boundary"] .cut-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cut-row[data-row="boundaryTool"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset { font-size: 12px; background: var(--sk-prep-field-bg); }
+    .cut-row[data-row="boundary"] .cut-preset.is-active, .cut-row[data-row="boundaryTool"] .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    .cut-preset.is-disabled { color: var(--sk-prep-disabled); cursor: not-allowed; }
+    .cut-boundary-pick[aria-pressed="true"] { color: var(--sk-prep-focus); }
+    #prepare-canvas.is-picking { cursor: crosshair; }
+    @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset { height: 44px; } }
     .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
     .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-type-cur { text-transform: lowercase; }

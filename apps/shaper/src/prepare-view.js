@@ -371,7 +371,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${rec.smoothing}|${docUnit()}|${ownedNow().keys}`; // TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.leadIn}|${rec.leadInRadius}|${rec.leadInSweep}|${rec.leadInLength}|${rec.leadInSide}|${rec.leadInAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${rec.smoothing}|${rec.boundary}|${rec.boundaryShape}|${rec.boundaryTool}|${rec.boundaryOffset}|${rec.topDepth}|${rec.bottomDepth}|${rec.floorAllowance}|${rec.walls}|${docUnit()}|${ownedNow().keys}`; // TASK 810: its boundary, heights and walls; TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing; TASK 775 / 778: its lead-in arc + position
   const computeLook = (key, storedRec) => {
     const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
     if (!derived) return { region: '', path: '', toolPaths: [], leadHandles: [] };
@@ -714,7 +714,28 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (hovered) renderChips(); // the chip follows the cursor along the path
   };
   const onLeave = () => { if (!leadDrag) { hoverPt = null; setHover(null); } };
+  // TASK 810: a Roughing boundary PICK (prepare-stage.js): the next press on a closed shape (a loop or a combined profile) is handed to onPick as its plan key and the
+  // selection stays as it is; a press on nothing or on an open path, Esc, or stopBoundaryPick() cancels. Either way onEnd is told once.
+  let boundaryPick = null;
+  const onPickKey = (e) => { if (boundaryPick && e.key === 'Escape') { e.preventDefault(); endBoundaryPick(); } };
+  function endBoundaryPick() {
+    if (!boundaryPick) return;
+    const { onEnd } = boundaryPick;
+    boundaryPick = null;
+    svgEl.classList.remove('is-picking');
+    document.removeEventListener('keydown', onPickKey, true);
+    onEnd();
+  }
   const onDown = (e) => {
+    if (boundaryPick && (e.button == null || e.button === 0)) { // TASK 810: the pick takes this press
+      const wp = screenToWorld(svgEl, e.clientX, e.clientY);
+      const t = wp ? resolveTarget(wp) : null;
+      const pick = boundaryPick;
+      e.stopPropagation(); e.preventDefault();
+      if (t && (t.kind === 'loop' || t.kind === 'profile')) pick.onPick(targetKey(t));
+      endBoundaryPick();
+      return;
+    }
     // TASK 778: dragging the selected cut's lead-in junction handle slides it along the outline and NEVER pans the view (mouse or touch)
     const handleEl = e.target && e.target.closest ? e.target.closest('.sk-lead-handle') : null;
     if (handleEl && (e.button == null || e.button === 0)) {
@@ -810,6 +831,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     leadInFor: (t) => (t ? leadInSummary(targetKey(t), getCutRecord(targetKey(t)), state, loops, loopPolys, ownedNow().set) : null), // TASK 778: the calculated / resolved arc summary
     levelsFor: (t) => { if (!t) return false; const k = targetKey(t), e = resolveEntry(k, getCutRecord(k)); return Boolean(e && hasLevels(e.rec)); }, // TASK 809: the record (a Contour: its part) cuts a part's levels
     contourFor: (t) => (t && t.kind !== CONTOUR_KIND ? { allowed: contourAllowed(getCutRecord(targetKey(t))), on: Boolean(contourOf(targetKey(t))) } : null), // TASK 792: the part card's Contour row
+    startBoundaryPick({ onPick, onEnd = () => {} }) { // TASK 810: see boundaryPick above
+      endBoundaryPick();
+      boundaryPick = { onPick, onEnd };
+      svgEl.classList.add('is-picking');
+      document.addEventListener('keydown', onPickKey, true);
+    },
+    stopBoundaryPick: () => endBoundaryPick(),
     selectContour() { // TASK 792: "Edit contour": the selected part's Contour record (its own card)
       const t = selectedTarget();
       if (t && t.kind !== CONTOUR_KIND && contourOf(targetKey(t))) this.setSelection([{ kind: CONTOUR_KIND, id: targetKey(t) }]);
@@ -902,6 +930,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       return lastRec;
     },
     destroy() {
+      endBoundaryPick(); // TASK 810: a pick does not outlive its view
       if (unsubDocUnit) unsubDocUnit();
       if (chipResizeObs) chipResizeObs.disconnect();
       svgEl.removeEventListener('wheel', onWheel);

@@ -13,7 +13,7 @@
 import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choices (Off | On) and sides (Outside | Inside)
-import { ROUGH_LAYOUT } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts
+import { ROUGH_LAYOUT, ROUGH_BOUNDARY } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule
 
 
 /** The parameters: the cut card's rows (Prepare) and the Export step's cards. */
@@ -38,6 +38,14 @@ const PARAMS = {
   tabGeometry: { label: 'Geometry', hint: 'Where the operation cuts: the area it works in and how close to the walls. A dot means a setting here is not the default.' },
   tabHeights: { label: 'Heights', hint: 'How deep it goes: where the cutting starts and stops. A dot means a setting here is not the default.' },
   tabPasses: { label: 'Passes', hint: 'How the material comes off: the levels, the step down, what is left on the walls and the smoothing. A dot means a setting here is not the default.' },
+  // TASK 810 (owner turn 2656): Roughing's MACHINING BOUNDARY (a part with levels): where the roughing may cut is the user's choice, no longer fixed
+  boundary: { label: 'Boundary', hint: 'The outline Roughing works inside. The tool rule and the offset below say how close the bit may come to it.', items: [...ROUGH_BOUNDARY.kinds.map((k) => `boundary:${k.id}`), 'boundaryShape'] },
+  boundaryNoStock: { label: 'Stock', hint: 'Not available: this design has no Stock. Mark a closed shape as Stock (its cut type) to work inside the board.' },
+  boundaryShape: { label: 'Boundary shape', hint: 'The closed shape Roughing works inside. Press Pick, then click a closed shape in Prepare. It follows the shape when you edit it.' },
+  boundaryPick: { label: 'Pick', hint: 'Then click a closed shape in Prepare: it becomes the boundary. A click on empty space cancels.' },
+  boundaryPickCancel: { label: 'Cancel pick', hint: 'Stops picking: the boundary stays as it was.' },
+  boundaryTool: { label: 'Tool', hint: 'Where the bit may go at the boundary: kept inside it, its centre on it, or out past it.', items: ROUGH_BOUNDARY.tools.map((t) => `boundaryTool:${t.id}`) },
+  boundaryOffset: { label: 'Boundary offset', hint: 'Moves the boundary out (positive) or in (negative) before the tool rule. Empty = calculated: the wall allowance plus three quarters of the bit, which with Outside clears a band two bits wide round the part.' },
   roughLayout: { label: 'Layout', hint: 'How the levels are cut. The Origin cuts every path from the surface down.', items: ['roughLayout:terraces', 'roughLayout:nested'] },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },
@@ -102,6 +110,17 @@ const CHOICE_HINTS = {
     stock: 'The outline of your board. Not cut: it sets the board in the 3D preview and goes in the file as a guide.',
     contour: 'Finishes the sloped walls: a pass along them at every fine step, no clearing.', // TASK 792
   },
+  boundary: { // TASK 810
+    silhouette: 'The outline of the part seen from above.',
+    box: 'The rectangle round the part seen from above.',
+    stock: 'The outline of the Stock (your board).',
+    shape: 'A closed shape you pick in Prepare.',
+  },
+  boundaryTool: { // TASK 810
+    inside: 'The bit stays inside the boundary: its edge reaches the line.',
+    on: 'The centre of the bit reaches the line: half the bit goes past it.',
+    outside: 'The bit may go out past the boundary until its edge just touches the line from outside.',
+  },
   roughLayout: { // TASK 792 (owner turn 2604)
     terraces: 'Each spot cut once, to its own depth: no passes through air. Best on deep or gentle reliefs.',
     nested: 'One pocket per level over everything that goes at least that deep: fewer, bigger paths. Best on steep or blocky parts.',
@@ -145,6 +164,8 @@ const CHOICE_SOURCES = {
   leadInSide: LEAD_IN.sides.map((m) => ({ id: m.id, label: m.label })),
   contour: [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }], // TASK 792: the Contour row of a part's card
   roughLayout: ROUGH_LAYOUT.layouts.map((l) => ({ id: l.id, label: l.label })), // TASK 792: Roughing's layout
+  boundary: ROUGH_BOUNDARY.kinds.map((k) => ({ id: k.id, label: k.label })), // TASK 810: Roughing's boundary
+  boundaryTool: ROUGH_BOUNDARY.tools.map((t) => ({ id: t.id, label: t.label })), // TASK 810: its tool rule
 };
 
 /** The id of a choice's entry: `<parameter>:<choice id>`. */

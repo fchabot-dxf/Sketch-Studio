@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import './node-app.js';
 import { loadCase, md5, canonical } from './opfirst-measure.js';
+import { TABS_PLACED_822 } from './opfirst-corpus.js'; // the cases whose files changed on purpose since the baseline (task 822)
 import { nodeWorkerPort } from './node-paths-worker.js';
 import { applyShaperDoc } from '../../apps/shaper/src/shaper-doc.js';
 import { planMemberItems, pathsInputOf, pathsCtx, loopsWithPolygons, planOwnedLoops } from '../../apps/shaper/src/cut-plan.js';
@@ -58,6 +59,12 @@ export async function runPathsCorpus(part, parts) {
       const bg = await exportFileInBackground(state);
       if (!bg) continue;
       const base = baseline[c.name];
+      if (TABS_PLACED_822.has(c.name)) { // changed on purpose by task 822 (its refused tabs are placed now): the worker's files = the main thread's own, directly
+        const pm = exportFileOf(state, { preview: true }), pb = await exportFileInBackground(state, { preview: true });
+        eq([bg.svg, pb.svg, canonical(pb.bitPaths)], [exportFileOf(state).svg, pm.svg, canonical(bitCentrePaths(state, pm.written))], `${c.name}: (task 822's changed case) the worker's file, preview and Paths = the main thread's`);
+        files++;
+        continue;
+      }
       eq(md5(bg.svg), base.a, `${c.name}: the file made in the worker = the baseline frozen before S1 (a)`);
       const pb = await exportFileInBackground(state, { preview: true });
       eq(md5(noOpIds(pb.svg)), base.b, `${c.name}: the preview copy made in the worker = the baseline (b)`);

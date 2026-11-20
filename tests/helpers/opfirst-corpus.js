@@ -45,7 +45,7 @@ const CUT_NOTHING_ROWS = new Set(['boundary-810-node__0045__7c1e6253', 'boundary
 // TASK 822: tabs are kept off the stretches where a gap strip does not fit (#core/hold-part tabLayout `fit`) instead of refusing the whole hold: the cases whose
 // Outside tabs were REFUSED ('strip': a tab of the even spread landed where its strip did not fit) and are now PLACED (the drawing tests/fixtures/report/
 // midpoint-move.json, its 3077.8 mm outline: 21 tabs). Their file, preview, Paths, 3D and Operations row change on purpose; every other case is unchanged
-const TABS_PLACED_822 = new Set(['bezier-loops-761-node__0028__64ea064e', 'leadin-775-node__0071__64ea064e']);
+export const TABS_PLACED_822 = new Set(['bezier-loops-761-node__0028__64ea064e', 'leadin-775-node__0071__64ea064e']);
 const ASSERTED = ['a', 'b', 'c', 'dContent', 'eNoId', 'f'];
 
 export async function runCorpus(part, parts) {

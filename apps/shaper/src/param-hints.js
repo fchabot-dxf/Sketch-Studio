@@ -26,15 +26,13 @@ const PARAMS = {
   stepover: { label: 'Stepover', hint: 'How far the bit moves sideways between passes, as a share of its diameter. Smaller is smoother and slower.' },
   // TASK 766: the last pass that takes the allowance off is the Origin's own inside cut with Loop off, the loop's turn along the wall with Loop on (pocket-clearing.js)
   finishAllowance: { label: 'Finish allowance', hint: ({ loop, roughing } = {}) => (roughing ? 'Left on every wall by the roughing levels, for a finishing pass (a Contour) to take off. 0 = none.' : `Left on the walls by the clearing passes; ${loop ? 'the loop’s turn along the wall' : 'the Origin’s inside cut'} takes it off for a clean edge. 0 = none.`) }, // TASK 792: Roughing's allowance
-  // TASK 792: a part's Contour (the finish of its sloped walls), added from the part's card
-  // TASK S2 (docs/OPERATIONS-MODEL.md 4.3): the OPERATION card's Geometry row (its shapes) and the SHAPE card's chips (the operations a shape is in). TASK 792's Contour row
-  // and Edit contour are gone: the Contour is an operation type of its own (the type menu).
-  opShapes: { label: 'Shapes', hint: 'The shapes this operation cuts. A change to its settings applies to every one of them.', items: ['opAddShapes', 'opRemoveShape'] },
-  opAddShapes: { label: 'Add shapes', hint: 'Then click shapes on the drawing to put them in this operation; click one again to take it out. Done or Esc ends it.' },
-  opDone: { label: 'Done', hint: 'Stop adding shapes: a click on a shape picks it again.' },
+  // TASK S2 (docs/OPERATIONS-MODEL.md 4.3, owner rulings turns 2710-2716): the OPEN operation's card: its Shapes (an X each), Duplicate, OK, Cancel. TASK 792's
+  // Contour row and Edit contour are gone: the Contour is an operation type of its own (the type menu).
+  opShapes: { label: 'Shapes', hint: 'The shapes this operation cuts. Click a shape on the drawing to add it, or click it again to take it out.', items: ['opRemoveShape'] },
   opRemoveShape: { label: 'Take out', hint: 'Takes this shape out of the operation. It stays in its other operations.' },
   opDuplicate: { label: 'Duplicate', hint: 'A copy of this operation, with the same type, settings and shapes, to change separately.' },
-  opChips: { label: 'In operations', hint: 'The operations this shape is in: click one to open it. Picking a type below makes a new operation.' },
+  opOk: { label: 'OK', hint: 'Keeps the changes: one step of Undo.' },
+  opCancel: { label: 'Cancel', hint: 'Puts the operation back as it was when you opened it (Esc does the same).' },
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
   // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab

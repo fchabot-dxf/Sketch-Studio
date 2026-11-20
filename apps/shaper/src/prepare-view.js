@@ -278,10 +278,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   //   • combined profile → `profile:<profileId>`
   //   • open chain → `chain:<chainId>`
   // Shift+click (e.shiftKey) toggles targets in `selection`; plain click selects one (or clears on empty space).
-  // TASK S2 (docs/OPERATIONS-MODEL.md 4.2-4.4): the selection holds GEOMETRY keys only (a Contour is an operation of its own, never a selected target). The ACTIVE
-  // operation (`active`: { opId, add }) is what the card edits: its shapes are the selection; `add` = Add shapes mode (a click on a shape puts it in / takes it out:
-  // opts.onToggleShape, one undo step; Done / Esc end it; a press on empty canvas pans and the mode stays). Outside Add mode a click on a shape (or on nothing)
-  // leaves the operation: the shape card (or no card).
+  // TASK S2 (docs/OPERATIONS-MODEL.md 4.2-4.4, owner rulings turns 2716-2718): the selection holds GEOMETRY keys only (a Contour is an operation of its own, never a
+  // selected target); a click only SELECTS. The OPEN operation (`active`: { opId }, opened by the stage: openOp) is what the card edits: its shapes are the
+  // selection; a click on a shape puts it in / takes it out (opts.onToggleShape: an edit of its session), a press on empty canvas pans, Esc = Cancel (opts.onEscape).
   const selection = new Map(); // key -> { kind, id }
   const targetKey = (t) => keyOf(t.kind, t.id);
   let active = null;
@@ -582,8 +581,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       return;
     }
     let out = '';
+    const open = activeOp(); // TASK S2: a lead-in handle is dragged in its operation's edit session only
     for (const { it } of drawnItems()) {
-      if (!selection.has(it.key)) continue;
+      if (!open || it.opId !== open.id || !selection.has(it.key)) continue;
       const look = getLook(it);
       for (const h of look.leadHandles || []) {
         out += `<g class="sk-lead-handle" data-lead-key="${h.id}" transform="translate(${h.junction.x} ${h.junction.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`;
@@ -755,6 +755,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const pick = boundaryPick;
       e.stopPropagation(); e.preventDefault();
       if (t && (t.kind === 'loop' || t.kind === 'profile')) pick.onPick(targetKey(t));
+      else if (t && pick.onRefuse) pick.onRefuse(t); // TASK S2: an open line: the card's line says why
       endBoundaryPick();
       return;
     }
@@ -789,12 +790,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     const t = wp ? resolveTarget(wp) : null;
-    const op = activeOp(); // TASK S2: the active operation (see `active` above)
-    if (op && active.add) { // Add shapes mode: a shape goes in / out (the stage's one undo step, then syncActive); a press on nothing pans, the mode stays
+    const op = activeOp(); // TASK S2: the open operation (see `active` above): a shape goes in / out (the stage's session edit, then syncActive); a press on nothing pans
+    if (op) {
       if (t) onToggleShape(op.id, t); else handlePanZoomPointerDown(e, svgEl, viewState);
       return;
     }
-    if (op) leaveOp(); // anything else leaves the operation
     if (e.shiftKey) {
       if (t) {
         const k = targetKey(t);
@@ -836,23 +836,22 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const selectedTargets = () => [...selection.values()];
   // TASK 605: a document tab keeps its Prepare selection and view aside while another tab shows (prepare-session.js); these put them back on a fresh mount.
   const setSelection = (targets) => {
-    if (active) leaveOp(); // TASK S2: picked shapes = no active operation (the shape card)
     selection.clear();
     for (const t of targets) selection.set(targetKey(t), t);
     renderSelection(); renderHover();
     onSelectionChange(selectedTarget());
   };
   const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); renderZoomed(); };
-  // TASK S2: Add shapes mode shows on the canvas (its cursor) and listens for Esc (= Done) while it is on
+  // TASK S2: an open operation shows on the canvas (its cursor: a click adds / takes out a shape) and listens for Esc (= Cancel) while it is open
   let escOn = false;
-  const onAddKey = (e) => { if (e.key === 'Escape' && active && active.add) { e.preventDefault(); setAddMode(false); } };
-  function showAdding(on) {
+  const onOpenKey = (e) => { if (e.key === 'Escape' && active && !boundaryPick && !e.defaultPrevented) { // (Esc of a boundary Pick cancels the pick only)
+    e.preventDefault(); opts.onEscape && opts.onEscape(); } };
+  function showOpen(on) {
     if (on === escOn) return;
     escOn = on;
     svgEl.classList.toggle('is-adding', on);
-    if (on) document.addEventListener('keydown', onAddKey, true); else document.removeEventListener('keydown', onAddKey, true);
+    if (on) document.addEventListener('keydown', onOpenKey, true); else document.removeEventListener('keydown', onOpenKey, true);
   }
-  function leaveOp() { active = null; showAdding(false); }
   // TASK S2: the ACTIVE operation (see `active` above): its shapes are the selection; syncActive() after any store change (an edit, an undo) re-reads it (gone: none)
   const syncActive = () => {
     const op = activeOp();
@@ -860,15 +859,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       selection.clear();
       for (const r of op.geometry) selection.set(r.key, parseKey(r.key));
     }
-    showAdding(Boolean(op && active.add));
+    showOpen(Boolean(op));
     renderSelection(); renderHover();
   };
-  const activate = (opId, { add = false } = {}) => {
-    active = opById(opId) ? { opId, add: Boolean(add) } : null;
-    syncActive();
-    onSelectionChange(selectedTarget());
-  };
-  const setAddMode = (on) => { if (!activeOp()) return; active.add = Boolean(on); syncActive(); onSelectionChange(selectedTarget()); };
+  const openOp = (opId) => { active = opById(opId) ? { opId } : null; syncActive(); };
+  const closeOp = () => { active = null; showOpen(false); };
 
   // TASK S2: a shape's words in the operation card's list: what it is and its size in the document unit ("Shape 40 × 40 mm", "Open line 160 × 0 mm")
   const KIND_WORDS = { loop: 'Shape', profile: 'Combined shape', chain: 'Open line' };
@@ -907,13 +902,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     view, viewState,
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null), // a shape's record in its first operation (else a fresh one)
     // TASK S2: the active operation and its Add shapes mode; the facts and the shapes' words the card shows
-    activeOp, activate, setAddMode, syncActive,
-    isAdding: () => Boolean(activeOp() && active.add),
+    activeOp, openOp, closeOp, syncActive,
     factsOf, shapeLabel,
     hoverKey: (key) => { hoverPt = null; setHover(key ? parseKey(key) : null); }, // TASK S2: the card's shape row under the pointer shows its shape on the canvas
-    startBoundaryPick({ onPick, onEnd = () => {} }) { // TASK 810: see boundaryPick above
+    startBoundaryPick({ onPick, onRefuse = null, onEnd = () => {} }) { // TASK 810: see boundaryPick above
       endBoundaryPick();
-      boundaryPick = { onPick, onEnd };
+      boundaryPick = { onPick, onRefuse, onEnd };
       svgEl.classList.add('is-picking');
       document.addEventListener('keydown', onPickKey, true);
     },
@@ -963,7 +957,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     },
     destroy() {
       endBoundaryPick(); // TASK 810: a pick does not outlive its view
-      showAdding(false); // TASK S2: its Esc listener
+      showOpen(false); // TASK S2: its Esc listener
       if (unsubDocUnit) unsubDocUnit();
       if (chipResizeObs) chipResizeObs.disconnect();
       svgEl.removeEventListener('wheel', onWheel);

@@ -208,14 +208,14 @@ export function rememberContour(field, value) { if (field in lastContourV && val
 // operation. Each writer is one step of the caller's undo (prepare-stage.js cutEdit). While the list keeps the default order (listOrder 'default') it is re-sorted
 // after every change (settleOrder, as since S1). fileShape above stays the import's writer (it regroups imported shapes by their settings). ──
 const closedOnly = (t) => Boolean(t) && t.targetKind !== 'path'; // a region type (and the Contour: a part's walls) needs a closed shape
-/** TASK S2: why the shapes `keys` (geometry keys) cannot be an operation of `type` (a short reason: the greyed menu choice's tooltip), or null when they can. An empty
- *  list can take any type. */
+/** TASK S2: why the shapes `keys` (geometry keys) cannot be an operation of `type`, or null when they can: THE one rule (the type's declared targetKind); its words are
+ *  the one plain line the card shows when such a pick is refused (owner ruling turn 2716: never greyed). An empty list can take any type. */
 export function typeRefusal(type, keys) {
   const t = cutTypeById(type);
   if (!t) return 'unknown type';
-  const open = keys.filter((k) => parseKey(k).kind === 'chain').length;
-  if (closedOnly(t) && open) return `${t.menuLabel} needs a closed shape: ${keys.length === 1 ? 'this one is an open line' : `${open} of the shapes ${open === 1 ? 'is an open line' : 'are open lines'}`}`;
-  if (type === STOCK_TYPE_ID && keys.length > 1) return `The Stock is one shape: ${keys.length} are picked`;
+  const open = keys.filter((k) => parseKey(k).kind === 'chain').length, an = /^[aeiou]/i.test(t.menuLabel) ? 'an' : 'a', needs = `${an} ${t.menuLabel.toLowerCase()} needs a closed shape`;
+  if (closedOnly(t) && open) return keys.length === 1 ? `This open line can’t be ${an} ${t.menuLabel}: ${needs}` : `${open === keys.length ? `These ${open} open lines` : `${open} of the ${keys.length} shapes are open lines and`} can’t be ${an} ${t.menuLabel}: ${needs}`; // owner turn 2716's wording
+  if (type === STOCK_TYPE_ID && keys.length > 1) return `The Stock is one shape, not ${keys.length}`;
   return null;
 }
 // what a record of `type` starts with, as a type pick set it before task S2: a Roughing takes the last step depth / adaptive choice / resolution used and the

@@ -21,12 +21,13 @@ import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
 import { ROUGH_BOUNDARY, BOUNDARY_CALC_OFFSET_BITS, boundaryToolBits, roughingWorkGrow, boundaryCalcOffset, levelsRoughingFor, levelsBand, wallsDefault, LEVELS } from '#core/stepped-cut.js';
 import { regionsFromRings, offsetRegions, regionsArea } from '#core/plot/clip.js';
-import { planEntries, setContour, contourKeyOf, renamePlanKeys } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, contourKeyOf, renamePlanKeys } from '../apps/shaper/src/cut-plan.js';
+import { storeOps } from '../apps/shaper/src/operations-store.js'; // TASK S2: the Contour operation
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { opKeyOf } from '../apps/shaper/src/operations.js';
-import { V2_PLAN, storedRecords } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { V2_PLAN, storedRecords, addContourV2 } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -98,8 +99,8 @@ const CONFIGS = {
   terraces14: (rec) => { rec.toolDia = 6.35; },
   nested: (rec) => { rec.toolDia = 6.35; rec.roughLayout = 'nested'; },
   minw: (rec) => { rec.toolDia = 6.35; rec.minTerraceWidth = 2; },
-  contour: (rec, key) => { rec.toolDia = 6.35; setContour(key, true); rec.finishAllowance = 0.5; V2_PLAN.get(contourKeyOf(key)).smoothing = 0.02; }, // 0.02 = the Contour's default at 81226b7 (owner turn 2688 made it 0.05)
-  contourNested: (rec, key) => { rec.toolDia = 6.35; rec.roughLayout = 'nested'; setContour(key, true); rec.finishAllowance = 0.5; V2_PLAN.get(contourKeyOf(key)).stepDepth = 0.5; V2_PLAN.get(contourKeyOf(key)).smoothing = 0.02; },
+  contour: (rec, key) => { rec.toolDia = 6.35; addContourV2(key); rec.finishAllowance = 0.5; V2_PLAN.get(contourKeyOf(key)).smoothing = 0.02; }, // 0.02 = the Contour's default at 81226b7 (owner turn 2688 made it 0.05)
+  contourNested: (rec, key) => { rec.toolDia = 6.35; rec.roughLayout = 'nested'; addContourV2(key); rec.finishAllowance = 0.5; V2_PLAN.get(contourKeyOf(key)).stepDepth = 0.5; V2_PLAN.get(contourKeyOf(key)).smoothing = 0.02; },
 };
 {
   V2_PLAN.clear();
@@ -141,6 +142,7 @@ const payload = () => ({
     const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
     const pc = doc.getElementById('prepare-canvas');
     const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const openAt = (x, y) => { clickAt(x, y); pressEl('.cut-chip'); }; // TASK S2: a click on an assigned shape opens its shape card: its chip opens its operation's card
     const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const tabs = () => [...doc.querySelectorAll('.cut-tab')].filter((b) => !b.hidden).map((b) => b.dataset.tab + (b.classList.contains('is-active') ? '*' : '') + (b.querySelector('.cut-tab-dot').hidden ? '' : '.'));
     const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
@@ -153,7 +155,7 @@ const payload = () => ({
     const [pk, prec] = [...V2_PLAN.entries()].find(([, x]) => x.levels);
     prec.cutType = 'roughing'; prec.stepDepth = 1; prec.toolDia = 6.35; prec.roughLayout = 'nested'; prec.smoothing = 0; // Smoothing off: the pockets are the exact polygons (their coordinates read below)
     const keyBefore = opKeyOf(prec);
-    clickAt(5, -5); // the part, outside the window and the boss
+    openAt(5, -5); // the part, outside the window and the boss
     eq(q('.cut-type-cur').textContent, 'Roughing', 'the part\'s Roughing card');
     eq(tabs(), ['tool*.', 'geometry', 'heights', 'passes.'], 'its tabs: Tool (shown; a dot: the 1/4 in bit is not the default 1/8), Geometry, Heights, Passes (a dot: Nested, Smoothing 0)');
     eq(rows(), ['toolDia', 'cutterShape'], 'the Tool tab: the bit and its shape');
@@ -187,7 +189,7 @@ const payload = () => ({
     eq(keys.length, 2, 'the board and the window regions');
     const [boardKey, windowKey] = keys; // payload order
     V2_PLAN.get(boardKey).cutType = 'stock';
-    clickAt(5, -5);
+    openAt(5, -5);
     pressEl('.cut-tab[data-tab="geometry"]');
     eq(q('.cut-boundary-kinds .cut-preset[data-value="stock"]').getAttribute('aria-disabled'), null, 'a Stock exists: the Stock choice is offered');
     pressEl('.cut-boundary-kinds .cut-preset[data-value="stock"]');
@@ -231,7 +233,7 @@ const payload = () => ({
     eq([[...plan.keys()], plan.get('loop:b').boundaryShape], [['profile:p1', 'loop:b'], 'profile:p1'], 'renamePlanKeys: the record and the boundary shape that names it');
     // Inside a shape smaller than the bit: the refusal note
     V2_PLAN.get(pk).boundaryTool = 'inside'; V2_PLAN.get(pk).boundaryOffset = -18;
-    clickAt(5, -5);
+    console.log('DBG', JSON.stringify(storeOps().map(o=>[o.id,o.type,o.geometry.length])), app.prepare.view().activeOp()?.id, app.prepare.view().isAdding()); openAt(5, -5);
     ok(note().includes('Roughing: nothing to cut: the boundary leaves no room for the bit'), 'Inside the window shrunk by 18 mm: no room for the bit: ' + JSON.stringify(note()));
     delete V2_PLAN.get(pk).boundaryTool; delete V2_PLAN.get(pk).boundaryOffset;
     // save + reload
@@ -241,7 +243,7 @@ const payload = () => ({
     eq([V2_PLAN.get(pk).boundary, V2_PLAN.get(pk).boundaryShape], ['shape', windowKey], 'reloaded: the boundary and its shape');
     eq(exportOf(), svgBefore, 'reloaded: the same export');
     // the Contour is not affected by the boundary
-    setContour(pk, true);
+    addContourV2(pk);
     const contourOnly = () => exportOf().split('\n').filter((l) => /cutType="(outside|inside)"/.test(l)).join('\n');
     const c1 = contourOnly();
     V2_PLAN.get(pk).boundary = 'box';
@@ -266,6 +268,7 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     const pressEl = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
     const pc = doc.getElementById('prepare-canvas');
     const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
+    const openAt = (x, y) => { clickAt(x, y); pressEl('.cut-chip'); }; // TASK S2: a click on an assigned shape opens its shape card: its chip opens its operation's card
     const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
     const setField = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
@@ -277,7 +280,7 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     rec.toolDia = 6.35;
     const D = Number(rec.cutDepth);
     const all = els('pocket');
-    clickAt(30, -30);
+    openAt(30, -30);
     pressEl('.cut-tab[data-tab="heights"]');
     eq(rows(), ['cutDepth', 'topDepth', 'bottomDepth', 'floorAllowance'], 'the Heights tab: Depth, Top, Bottom, Floor allowance');
     eq([q('.cut-top-depth').value, q('.cut-top-depth').placeholder, q('.cut-bottom-depth').value, q('.cut-bottom-depth').placeholder, q('.cut-floor-allowance').value], ['', '0', '', String(+D.toFixed(3)), '0'], 'the defaults: the surface, the depth of the part (greyed), no floor allowance');
@@ -304,8 +307,8 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     setField('.cut-top-depth', ''); setField('.cut-bottom-depth', ''); setField('.cut-floor-allowance', '0');
     eq(els('pocket'), all, 'all cleared: the default export');
     // the Contour: its own Heights (Bottom = its part's depth)
-    setContour(key, true);
-    const call = els('outside|inside'), rough = els('pocket'); // (the Contour sets the Roughing's wall allowance: its paths are those of that allowance)
+    addContourV2(key);
+    const call = els('outside|inside'), rough = els('pocket'); // (TASK S2: adding the Contour no longer sets the Roughing's allowance)
     const crec = V2_PLAN.get(contourKeyOf(key));
     crec.topDepth = 2; crec.floorAllowance = 1;
     const c2 = els('outside|inside').map(depthOf);
@@ -334,11 +337,12 @@ eq([wallsDefault({ slope: {}, baseType: 'exterior' }), wallsDefault({ slope: {},
     const [key, rec] = [...V2_PLAN.entries()].find(([, x]) => x.slope);
     eq(rec.cutType, 'exterior', 'the chamfered outline: a plain Outside cut with its slope rings');
     rec.toolDia = 6.35;
-    setContour(key, true);
+    addContourV2(key);
     const ck = contourKeyOf(key), crec = V2_PLAN.get(ck);
     const byDefault = contourEls(), keyDefault = opKeyOf(planEntries().find((e) => e.planKey === ck).rec);
     ok(byDefault.length > 0, `the Contour of the chamfer: ${byDefault.length} passes (Sloped only by default)`);
-    app.prepare.view().setSelection([{ kind: 'contour', id: key }]);
+    const openContour = () => app.prepare.view().activate(storeOps().find((o) => o.type === 'contour').id); // TASK S2: the Contour OPERATION's card
+    openContour();
     eq(q('.cut-type-cur').textContent, 'Contour', 'the Contour card');
     pressEl('.cut-tab[data-tab="geometry"]');
     eq(rows(), ['walls'], 'its Geometry tab: Walls');
@@ -350,15 +354,15 @@ eq([wallsDefault({ slope: {}, baseType: 'exterior' }), wallsDefault({ slope: {},
     ok(all.length > byDefault.length, `All: the own wall too (${all.length} passes, ${all.length - byDefault.length} more)`);
     for (const e of byDefault) ok(all.includes(e), 'All keeps every Sloped only pass');
     ok(opKeyOf(planEntries().find((e) => e.planKey === ck).rec) !== keyDefault, 'All (off the default here) is part of the operation key');
-    ok(!doc.querySelector('.cut-tab[data-tab="geometry"] .cut-tab-dot').hidden, 'the Geometry tab shows its dot');
+    ok(doc.querySelector('.cut-tab[data-tab="geometry"] .cut-tab-dot').hidden, 'no dot: All is what a Contour starts with (TASK S2: its own default, linked to no part)');
     pressEl('.cut-walls .cut-preset[data-value="sloped"]');
     eq([V2_PLAN.get(ck).walls, contourEls(), opKeyOf(planEntries().find((e) => e.planKey === ck).rec)], ['sloped', byDefault, keyDefault], 'Sloped only picked: exactly the default passes, the default key');
-    ok(doc.querySelector('.cut-tab[data-tab="geometry"] .cut-tab-dot').hidden, 'no dot: the default');
+    ok(!doc.querySelector('.cut-tab[data-tab="geometry"] .cut-tab-dot').hidden, 'Sloped only: the Geometry tab shows its dot (TASK S2: off the Contour default)');
     // the same Contour on a Pocket part: All by default (TASK 792 never skipped there); Sloped only skips the pocket's own outline if a level has it
     rec.cutType = 'pocket';
     delete V2_PLAN.get(ck).walls;
     const pocketDefault = contourEls();
-    app.prepare.view().setSelection([{ kind: 'contour', id: key }]);
+    openContour();
     pressEl('.cut-tab[data-tab="geometry"]');
     eq([...doc.querySelectorAll('.cut-walls .cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['All*', 'Sloped only'], 'on a Pocket part: All (as before)');
     ok(pocketDefault.length > 0, 'the Contour of the Pocket part cuts');

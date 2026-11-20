@@ -129,11 +129,11 @@ export function createCutPanel(hostEl, opts = {}) {
   const onPickType = opts.onPickType || (() => {});
   const onSetField = opts.onSetField || (() => {});
   const onSetFields = opts.onSetFields || ((o) => { for (const [k, v] of Object.entries(o)) onSetField(k, v); }); // TASK 463: several fields = ONE undo step
-  // TASK S2: the shape card's chips and the operation card's Geometry row (prepare-stage.js)
-  const onChip = opts.onChip || (() => {});
-  const onAddShapes = opts.onAddShapes || (() => {});
+  // TASK S2: the open operation's card (prepare-stage.js): its shapes, Duplicate, OK, Cancel
   const onRemoveShape = opts.onRemoveShape || (() => {}); // (geometry key): the X of a shape row
   const onDuplicate = opts.onDuplicate || (() => {});
+  const onOk = opts.onOk || (() => {});
+  const onCancel = opts.onCancel || (() => {});
   const onHoverShape = opts.onHoverShape || (() => {}); // (geometry key | null): a shape row under the pointer
   const onPickBoundary = opts.onPickBoundary || (() => {}); // TASK 810: Roughing's boundary "Pick" (then a click on a closed shape in Prepare); pressed again while picking: cancel
   hostEl.innerHTML = '';
@@ -144,7 +144,6 @@ export function createCutPanel(hostEl, opts = {}) {
   card.innerHTML = `
     <div class="cut-card-title">Cut</div>
     <div class="cut-op-headrow" hidden><div class="cut-op-head"></div><button type="button" class="cut-op-dup" data-hint="opDuplicate"></button></div>
-    <div class="cut-chips" hidden><button type="button" class="cut-field-label" data-hint="opChips"></button><div class="cut-chip-list"></div></div>
     <div class="cut-field">
       <button type="button" class="cut-field-label" data-hint="cutType"></button>
       <div class="cut-type-dd">
@@ -156,7 +155,6 @@ export function createCutPanel(hostEl, opts = {}) {
     <div class="cut-geo" hidden>
       <button type="button" class="cut-field-label" data-hint="opShapes"></button>
       <div class="cut-geo-list"></div>
-      <div class="cut-geo-btns"><button type="button" class="cut-preset cut-geo-add" data-hint="opAddShapes" aria-pressed="false"></button></div>
     </div>
     <div class="cut-tabs" role="tablist" hidden></div>
     <div class="cut-rows">
@@ -372,6 +370,7 @@ export function createCutPanel(hostEl, opts = {}) {
       </div>
     </div>
     <div class="cut-note"></div>
+    <div class="cut-actions" hidden><button type="button" class="cut-cancel" data-hint="opCancel"></button><button type="button" class="cut-ok" data-hint="opOk"></button></div>
     <div class="cut-pop cut-type-menu" role="listbox" hidden></div>
     <div class="cut-pop cut-offset-pop" hidden></div>
     <div class="cut-pop cut-shape-pop" role="listbox" hidden></div>
@@ -391,14 +390,14 @@ export function createCutPanel(hostEl, opts = {}) {
   minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
   const smoothingInput = $('.cut-smoothing'); // TASK 809
   smoothingInput.addEventListener('change', () => { const n = parseUnit(smoothingInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('smoothing', n); else renderFields(); });
-  // TASK S2: the operation card's header ("Pocket 2 · 3 shapes: a change applies to all 3"), the shape card's chips, the Geometry row (Add shapes | Done, Remove, Make
-  // its own operation: greyed with their reason, 813's pattern) and a Contour's part line ("Depth and walls: from part (1 Roughing)")
-  const headRow = $('.cut-op-headrow'), opHead = $('.cut-op-head'), dupBtn = $('.cut-op-dup'), chipsEl = $('.cut-chips'), chipList = $('.cut-chip-list'), geoEl = $('.cut-geo'), geoList = $('.cut-geo-list');
-  const geoAdd = $('.cut-geo-add');
-  geoAdd.addEventListener('click', () => { if (geoAdd.getAttribute('aria-disabled') !== 'true') onAddShapes(); }); // greyed (the Stock): its tooltip says why
+  // TASK S2 (owner rulings turns 2710-2717): the OPEN operation's card: its header ("Pocket 2 · 3 shapes") with Duplicate, its Shapes (one row each with an X that takes
+  // it out), its rows (810's tabs, 813's layout), the note area, OK / Cancel. With shapes selected and no operation open: the quick flow's type menu only (+ the note
+  // area for a refusal's line).
+  const headRow = $('.cut-op-headrow'), opHead = $('.cut-op-head'), dupBtn = $('.cut-op-dup'), geoEl = $('.cut-geo'), geoList = $('.cut-geo-list'), actionsEl = $('.cut-actions');
   dupBtn.addEventListener('click', () => onDuplicate());
+  $('.cut-ok').addEventListener('click', () => onOk());
+  $('.cut-cancel').addEventListener('click', () => onCancel());
   geoList.addEventListener('pointerleave', () => onHoverShape(null));
-  const setGeoOff = (btn, why) => { btn.classList.toggle('is-disabled', Boolean(why)); if (why) btn.setAttribute('aria-disabled', 'true'); else btn.removeAttribute('aria-disabled'); setOffReason(btn, why || null); };
   const leadModesWrap = $('.cut-lead-modes'), leadRadiusInput = $('.cut-lead-radius'), leadSweepInput = $('.cut-lead-sweep'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'), leadPosState = $('.cut-pos-state'); // TASK 775 / 778
   // TASK 810: Roughing's machining boundary rows: the Boundary and Tool choices, the picked shape (Pick), the Offset (empty / Reset = calculated)
   const boundaryKindsWrap = $('.cut-boundary-kinds'), boundaryToolsWrap = $('.cut-boundary-tools'), boundaryOffsetInput = $('.cut-boundary-offset'), boundaryState = $('.cut-boundary-state'), boundaryPickBtn = $('.cut-boundary-pick');
@@ -460,7 +459,7 @@ export function createCutPanel(hostEl, opts = {}) {
     opt.dataset.hint = choiceId(param, id);
   };
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [], mode: null, typeWhy: null };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [], mode: null };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop, clearPop];
@@ -482,20 +481,18 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // ── cut-type dropdown (SP1f) ──
   const closeMenu = () => { menu.hidden = true; syncOpenState(); };
-  // TASK S2: every type is listed; one the card's shapes cannot take is greyed with its reason as its tooltip (aria-disabled, not `disabled`: it keeps the tooltip; 813's
-  // pattern): model.typeWhy(id) = the reason or null (an open line and a region type; a Contour without a part; the Stock and several shapes: cut-plan.js typeRefusal)
+  // TASK S2 (owner ruling turn 2716): every type is listed and offered, never greyed; a pick the shapes cannot take is TOLD in the card's note area (prepare-stage.js:
+  // cut-plan.js typeRefusal, the one rule)
   function buildMenu() {
     menu.innerHTML = '';
     for (const id of MENU_ORDER) {
       const t = cutTypeById(id); if (!t) continue;
-      const why = current.typeWhy ? current.typeWhy(id) : null;
       const opt = document.createElement('button');
       opt.type = 'button';
-      opt.className = 'cut-type-opt' + (id === current.cutType ? ' is-current' : '') + (why ? ' is-disabled' : '');
+      opt.className = 'cut-type-opt' + (id === current.cutType ? ' is-current' : '');
       opt.setAttribute('role', 'option'); opt.dataset.id = id;
       optionBody(opt, iconSvg(t), 'cutType', id);
-      if (why) { opt.setAttribute('aria-disabled', 'true'); setOffReason(opt, why); }
-      else opt.addEventListener('click', () => { closeMenu(); onPickType(id); });
+      opt.addEventListener('click', () => { closeMenu(); onPickType(id); });
       menu.appendChild(opt);
     }
   }
@@ -857,32 +854,17 @@ export function createCutPanel(hostEl, opts = {}) {
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
     applyTabs(); // TASK 810: last, on the rows the card logic shows
-    // TASK S2: the SHAPE card (a shape picked, no operation active) edits nothing: its rows show in their place, greyed, until a type makes an operation (813's pattern)
-    if (current.mode === 'shape') for (const row of rowsEl.querySelectorAll('.cut-row')) if (row.style.display !== 'none') greyRow(row, 'Pick a type first: the settings belong to an operation.');
-  };
-  // a row greyed in place with its reason (as place() does for the rows the card logic names)
-  const greyRow = (row, why) => {
-    row.classList.add('is-off'); row.dataset.off = ''; row.setAttribute('aria-disabled', 'true');
-    for (const part of row.children) { if (part.classList.contains('cut-field-label')) setOffReason(part, why); else part.setAttribute('inert', ''); }
-  };
-  // a row back to live (the data-param rows: place() handles the data-row ones)
-  const liveRow = (row) => {
-    row.classList.remove('is-off'); delete row.dataset.off; row.removeAttribute('aria-disabled');
-    for (const part of row.children) { if (part.classList.contains('cut-field-label')) setOffReason(part, null); else part.removeAttribute('inert'); }
+    // TASK S2 (owner turn 2717): with shapes selected and no operation open the card is the type menu only: no rows, no tabs
+    const typeOnly = current.mode === 'shape';
+    rowsEl.hidden = typeOnly;
+    if (typeOnly) tabsEl.hidden = true;
   };
   // TASK S2: the header, the chips, the Geometry row and a Contour's part line of the card in hand (see above)
   function renderOpParts(model) {
     const op = model.mode === 'op';
     headRow.hidden = !op; opHead.textContent = op ? model.title : '';
-    const chips = model.mode === 'shape' && Array.isArray(model.chips) && model.chips.length ? model.chips : [];
-    chipsEl.hidden = !chips.length;
-    chipList.replaceChildren(...chips.map((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'cut-preset cut-chip'; b.dataset.op = c.opId; b.textContent = c.label; b.addEventListener('click', () => onChip(c.opId)); return b; }));
-    geoEl.hidden = !op;
-    const g = (op && model.geometry) || {};
-    hints.opAddShapes.setId(g.adding ? 'opDone' : 'opAddShapes'); // its label and tooltip: Add shapes | Done
-    geoAdd.classList.toggle('is-active', Boolean(g.adding)); geoAdd.setAttribute('aria-pressed', String(Boolean(g.adding)));
-    setGeoOff(geoAdd, g.addWhy);
-    geoList.replaceChildren(...(g.shapes || []).map(({ key, label }) => { // one row per shape: its words and an X that takes it out of the operation
+    geoEl.hidden = !op; actionsEl.hidden = !op;
+    geoList.replaceChildren(...((op && model.shapes) || []).map(({ key, label }) => { // one row per shape: its words and an X that takes it out of the operation
       const row = document.createElement('div'); row.className = 'cut-geo-shape'; row.dataset.key = key;
       const name = document.createElement('span'); name.className = 'cut-geo-name'; name.textContent = label;
       const x = document.createElement('button'); x.type = 'button'; x.className = 'cut-geo-x'; x.dataset.hint = 'opRemoveShape'; x.textContent = '\u2715'; x.setAttribute('aria-label', `Take ${label} out of this operation`);
@@ -896,12 +878,12 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { mode: null, typeWhy: null, kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { mode: null, kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, leadIn: false, leadInRadius: null, leadInSweep: null, leadInLength: null, leadInSide: 'outside', leadInAt: null, leadInInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
       leadIn: rec.leadIn === true, leadInRadius: rec.leadInRadius ?? null, leadInSweep: rec.leadInSweep ?? null, leadInLength: rec.leadInLength ?? null, leadInSide: rec.leadInSide === 'inside' ? 'inside' : 'outside', leadInAt: rec.leadInAt ?? null, leadInInfo: model.leadIn || null, // TASK 775 / 778
-      mode: model.mode || null, typeWhy: typeof model.typeWhy === 'function' ? model.typeWhy : null, // TASK S2: 'op' | 'shape'; why a type is greyed in the menu
+      mode: model.mode || null, // TASK S2: 'op' (an open operation) | 'shape' (shapes selected: the type menu only)
       wallSideFree: model.wallSideFree === true, // TASK S2: a Contour's Wall side applies (a shape whose model does not say it)
       levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)
       boundaryCtx: { hasStock: Boolean(model.boundary && model.boundary.hasStock), picking: Boolean(model.boundary && model.boundary.picking) }, // TASK 810: does the design have a Stock; is a boundary Pick on
@@ -909,7 +891,6 @@ export function createCutPanel(hostEl, opts = {}) {
       walls: model.walls || null, // TASK 810: a Contour's walls { shown, value (in effect), defaultId }
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
-    for (const row of rowsEl.querySelectorAll('.cut-row[data-param], .cut-row[data-row="cutterShape"]')) liveRow(row); // TASK S2: the shape card greys them (renderFields)
     renderOpParts(model);
     const t = current.cutType ? cutTypeById(current.cutType) : null;
     curLabel.textContent = t ? hintLabel(choiceId('cutType', t.id)) : 'Select type';

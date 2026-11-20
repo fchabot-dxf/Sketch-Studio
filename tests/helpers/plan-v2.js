@@ -10,7 +10,8 @@
 // The document a write starts from is the app's store as it is (an edit the test made through the app is kept): its records in file order, plus each region a
 // shape in no operation still has (its slope / levels and imported depth).
 import { applyShaperDoc } from '../../apps/shaper/src/shaper-doc.js';
-import { planRecords, getPlanRecord, getCutRecord, recordOf, resolveEntry } from '../../apps/shaper/src/cut-plan.js';
+import { planRecords, getPlanRecord, getCutRecord, recordOf, resolveEntry, contourKeyOf, lastContour } from '../../apps/shaper/src/cut-plan.js';
+import { defaultCutRecord } from '../../apps/shaper/src/shaper.js';
 import { opKeyOf } from '../../apps/shaper/src/operations.js';
 import { memberOf, regionKeys, regionOf, storeOps, planKeyOf } from '../../apps/shaper/src/operations-store.js';
 import { getStock } from '../../apps/shaper/src/stock.js';
@@ -76,3 +77,8 @@ export const storedOpKeys = () => storeOps().map((op) => { const ref = op.geomet
 
 /** Load `plan` (a Map or [[key, record], ...]: a v2 plan) for the sketch `state` (through applyShaperDoc), then return fn(): a derivation of that plan. */
 export function withPlan(state, plan, fn) { V2_PLAN.use(state).load([...plan]); return fn(); }
+
+/** TASK S2: the v2 document's CONTOUR record of the part `key`, as the part card's Contour row added it before S2 (the last Contour settings: cut-plan.js lastContour),
+ *  written through V2_PLAN (loaded: migrateContours gives the Contour its part's depth, walls and wall side as its own values). The row also set a Roughing part's
+ *  allowance; a test that needs an allowance sets it itself. */
+export function addContourV2(key) { V2_PLAN.set(contourKeyOf(key), { ...defaultCutRecord(), ...lastContour(), cutType: 'contour' }); }

@@ -39,7 +39,12 @@ export function constraintTargets(c, shapes = []) {
   if (Array.isArray(c.shapes)) c.shapes.forEach((s) => shapeIds.add(s));
   for (const k of ['shape', 'line', 'circle']) if (c[k]) shapeIds.add(c[k]);
   if (!shapeIds.size) {
-    for (const s of shapes) if (Array.isArray(s.joints) && s.joints.some((j) => joints.has(j))) shapeIds.add(s.id);
+    // a joints-only constraint (vertical / horizontal ...) binds the shape holding ALL its joints (task 820: the line a-b, not an arc that
+    // merely shares an end); only when no one shape holds them all (a coincident of two shapes' points) does any shape with one of them count
+    const has = (s, pred) => Array.isArray(s.joints) && pred(s);
+    const holdsAll = joints.size ? shapes.filter((s) => has(s, (x) => [...joints].every((j) => x.joints.includes(j)))) : [];
+    const picked = holdsAll.length ? holdsAll : shapes.filter((s) => has(s, (x) => x.joints.some((j) => joints.has(j))));
+    picked.forEach((s) => shapeIds.add(s.id));
   }
   return { joints, shapes: shapeIds };
 }

@@ -21,10 +21,11 @@ addable before geometry is assigned to it?", then "Lets make a pallette of ops".
   an empty operation of that type appears, selected, ready for shapes. Drag a button onto a shape: the operation
   appears with that shape in it.
 - **My lineups:** set up a few operations once (for example a 1/4 in Roughing + a 1/8 in ball-nose Contour + an
-  Outside cut with tabs), save them as a lineup, and later apply the whole lineup to any part in one click. Your lineups
+  Outside cut with tabs), save them as a lineup, and later apply the whole lineup to any part in one click (always as NEW operations). Your lineups
   follow you to your other devices through Google Drive, like your other settings.
-- **Today's quick way still works:** click a shape, pick a cut type in the card. The shape goes into an operation of
-  that type.
+- **The quick way is a standard shortcut (owner turns 2682-2684):** click geometry first, then pick an operation type.
+  It ALWAYS creates a NEW operation of that type holding the selected shape(s) and leaves it selected, so further clicks
+  on shapes add them to it. It never joins an operation you used before.
 - **Editing an operation edits all its shapes.** The card says so ("Pocket 2 · 3 shapes: a change applies to all 3")
   and has a "Make its own operation" button for when one shape must differ. Today a changed depth quietly makes a new
   row; with this, the row stays where you put it in the list.
@@ -55,15 +56,14 @@ addable before geometry is assigned to it?", then "Lets make a pallette of ops".
  └──────────────────────────────────────────┘
 ```
 
-**Two questions for you** (everything else has a default I chose that is easy to change later; section 7 lists them)
+**Owner rulings since the first draft** (turns 2682-2684; they answer the two questions this note first asked)
 
-1. **Quick way, which operation?** You click a shape and pick "Pocket". Should it join the Pocket operation you used
-   last (it then takes that operation's depth and bit; the card says which one it joined), or should it always start a
-   new Pocket operation? *My suggestion: join the last one used; "Make its own operation" is one click away.*
-2. **Lineup on several parts:** you apply your lineup to part A, then to part B. Should part B join the operations
-   the lineup made for part A (one Roughing for both parts: fewer bit changes), or get its own copy of each operation
-   (one Roughing per part: each part cut start to finish)? *My suggestion: join, with "as new operations" in the
-   lineup's menu for the other case.*
+1. **Quick way:** click geometry first, then an operation type = a NEW operation holding the selected shape(s), left
+   selected; further shape clicks add to it. No "join the last-used operation".
+2. **Lineups:** applying a lineup ALWAYS creates NEW operations (to a second part too). No joining, no "as new
+   operations" variant.
+
+Everything else has a default I chose that is easy to change later; section 7 lists them.
 
 ---
 
@@ -112,8 +112,7 @@ addable before geometry is assigned to it?", then "Lets make a pallette of ops".
       },
       "geometry": [                       // the shapes it cuts
         { "key": "loop:loop_a-b-c", "seq": 1 }   // seq = the file order (1.6); "at" = a dragged lead-in position (1.4)
-      ],
-      "lineup": { "id": "lu-3", "slot": 0 }      // optional: made by a lineup (section 4.5)
+      ]
     }
   ],
   "regions": {                            // per geometry key; written only when there is something to keep
@@ -345,15 +344,18 @@ migrated: they derive nothing today and a geometry needs no record to exist.
   Add shapes / Remove / Make its own operation. Changing the type is allowed when every shape can take the new type
   (greyed with the reason otherwise).
 - **Shape card** (a shape clicked, no operation active): a row of chips, one per operation the shape is in
-  ("1 Roughing", "2 Contour"): a chip makes that operation active; below them the quick flow's "Add a cut" type menu.
+  ("1 Roughing", "2 Contour"): a chip makes that operation active; below them the quick flow's type menu (4.4).
   With no operation yet, the card looks like today's (type menu first).
 
-### 4.4 The quick flow (today's way, kept)
+### 4.4 The quick flow: the standard shortcut "geometry first, then a type" (owner turns 2682-2684)
 
-Click a shape (or several), pick a type in the card's menu = the shapes go into an operation of that type: **the type's
-last-used operation** (owner question 1; the alternative is always a new one). The card then shows that operation and
-says "Added to Pocket 2". If the shape is already in an operation of that type, picking the type does nothing new. A
-Stock pick keeps today's one-Stock move (`prepare-view.js:829-838`).
+Click a shape (or several), then pick a type in the card's menu (or a palette button, 4.1): **a NEW operation of that
+type is created, holding the selected shape(s), and it is left selected (the active operation)**. Clicking more shapes
+then adds them to it (Add shapes mode, 4.2); there is no "join the type's last-used operation" and no search for an
+existing operation to reuse. The card shows the new operation ("Pocket 2 · 1 shape"). If the shape is already in an
+operation of that type, picking the type still makes a new one (a shape may be in several operations, 1.2); the
+bin and "Make its own operation" are how the user cleans up. A Stock pick keeps today's one-Stock move
+(`prepare-view.js:829-838`).
 
 ### 4.5 My lineups
 
@@ -364,11 +366,10 @@ Stock pick keeps today's one-Stock move (`prepare-view.js:829-838`).
   settings base mm, declared fields only (1.5), no geometry. A setting that names geometry (task 810's Boundary = Shape)
   is saved as "Shape (pick when applied)": the applied operation shows its existing refusal note until a shape is picked.
 - **Save:** in the Operations list, select the rows (or none = all), `My lineups ▾ > Save these as a lineup…`, a name.
-- **Apply:** select the shape(s), `My lineups ▾ > <name>`: one operation per slot, in the lineup's order, each with
-  the selected shapes, placed by the default-order rule. With no shape selected: the operations appear empty. A second
-  apply to another part joins the operations that same lineup made in this document (matched by the stored
-  `lineup: { id, slot }` link, never by comparing settings), owner question 2; `as new operations` in the menu does the
-  other. Applying a lineup is ONE undo step.
+- **Apply:** select the shape(s), `My lineups ▾ > <name>`: one NEW operation per lineup entry, in the lineup's order, each with
+  the selected shapes, placed by the default-order rule (owner turns 2682-2684: applying ALWAYS creates new operations,
+  to a second part too; nothing is joined, so an operation stores no link to the lineup that made it). With no shape
+  selected: the operations appear empty. Applying a lineup is ONE undo step.
 - **Manage:** rename, delete, re-save (overwrite) in the same menu. No other settings screen.
 
 ---
@@ -393,7 +394,7 @@ Stock pick keeps today's one-Stock move (`prepare-view.js:829-838`).
 | **S1** | the operations + regions store, the migration, `planEntries` and every reader of section 2 switched; the UI behaves EXACTLY as today: a field edit on selected shapes moves them into the operation with the resulting settings (found or new, keeping their `seq`), so the list and the files are today's | the migration corpus of section 3 (byte-identical (a)-(e)); every existing test passes, adjusted only where it pokes `CUT_PLAN` directly (they load a v2 sidecar through `applyShaperDoc` instead: the real migration path, no test-only code) | L: ~1,000 lines app, ~60 test files adjusted, 1 new corpus test |
 | **S2** | operation first: empty operations, the active operation, Add shapes mode, the operation card (edits all its shapes) and the shape card (chips, Make its own operation), multi-membership, Contour as its own type in the menus (the Contour row and the allowance coupling removed), the quick flow (4.4), the bin deletes the operation | node + live (desktop 1280, phone 390): add empty, add / remove shapes, a shape in Roughing + Contour, edit = all shapes, make its own, undo / redo of each, save + reload | L: ~700 lines, 2 new test files |
 | **S3** | the palette (4.1, 4.2): click, drag (mouse, touch hold), keyboard, greyed with reasons, phone sheet `+` | live desktop + phone: click = empty selected, drag onto a shape, drop on nothing = nothing, 0 px layout shift (805 probe), 44 px targets | M: ~400 lines, 1 live test |
-| **S4** | My lineups (4.5): store synced by part, save / apply / join / as new / rename / delete | node: save, apply to 1 and 2 parts, join by link, units, sync merge per lineup; live: menu on desktop + phone | M: ~400 lines, 2 test files |
+| **S4** | My lineups (4.5): store synced by part, save / apply (always new operations) / rename / delete | node: save, apply to 1 and 2 parts (new operations each time), units, sync merge per lineup; live: menu on desktop + phone | M: ~400 lines, 2 test files |
 
 Order with the queue: S0 now (small); 810 when dispatched (before S2); S1; 798; S2; S3; S4; then 801 and 806 / SA-15
 follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live tests; the advisor's merge gate).
@@ -413,7 +414,7 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
 
 ---
 
-## 7. Risks, decided defaults, open questions
+## 7. Risks and decided defaults
 
 **Risks**
 
@@ -436,15 +437,11 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
 - No per-shape overrides; Depth "From model"; dragged lead-in on the shape; "Make its own operation" (1.4).
 - File order = the order memberships were made; the list order never changes the file (TURN 743 ruling).
 - Lineups per user, synced to Drive per lineup; not per document (4.5).
+- The quick way (geometry first, then a type) and applying a lineup ALWAYS create new operations (owner turns 2682-2684, 4.4 / 4.5).
 - A Fusion import groups its regions into operations as today's derivation does, with Depth "From model"; an update
   never puts a region back into an existing operation (SA-15).
 - Stock stays a one-shape "Not cut" operation, reachable from the card's type menu, not in the palette (the owner's
   palette list has no Stock).
-
-**Open questions for the owner** (the two at the top of this note)
-
-1. Quick flow: join the type's last-used operation, or always a new one?
-2. Lineup applied to a second part: join the operations it made for the first part, or a new copy per part?
 
 ---
 

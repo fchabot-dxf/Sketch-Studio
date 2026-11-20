@@ -16,7 +16,8 @@ import { captureSelections, applySelections, getSelections } from './selection-l
 
 // TASK 774: 2 = written under the SAME-SKETCH hole rule of derived faces (commit 27c00a4); a document below 2 (or a sidecar without a version) was
 // saved under the old rule: applyShaperDoc keeps its cuts' holes from other sketches (cut-plan.js keepHolesFromOtherSketches).
-const DOC_VERSION = 2;
+// TASK 812: exported: the document buffer opens a document of a HIGHER version but never writes over it (design-canvas.js hostVersion).
+export const DOC_VERSION = 2;
 const SAME_SKETCH_HOLES_VERSION = 2;
 
 /** The cut-plan part: ONE capture used by the persisted document AND by the shared undo snapshots (TASK 463). */

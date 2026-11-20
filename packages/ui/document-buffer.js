@@ -131,11 +131,15 @@ export function mergeTabBuffers(stored, mine, base, app) {
 }
 
 /**
- * createDocumentBuffer({ state, app, hostName, getHostData, session, onRestored, showDesign, store, pollMs, onStatusChange, canvas, doc, win })
+ * createDocumentBuffer({ state, app, hostName, getHostData, hostVersion, session, onRestored, showDesign, store, pollMs, onStatusChange, canvas, doc, win })
  *   state: the live sketch state to persist/restore (same shape #core/document.js expects).
  *   app: the app id ('sketchstudio' | 'shaper' | 'penplotter'), stored on the design (who saved it last).
  *   hostName / getHostData: OPTIONAL — if given, getHostData() is called at save time and embedded
  *     under doc.hosts[hostName] (e.g. penplotter's pens/toolpaths). Omit for a host with no side-car data of its own.
+ *   hostVersion: OPTIONAL (TASK 812) — the highest `version` of its own sidecar this host can read. A document whose hosts[hostName].version is ABOVE it (made by a
+ *     newer version of the app) is opened but NEVER written over: no autosave, no Save / Save as over a file, nothing to Drive (a write would drop what this
+ *     version does not know); its sidecar rides on VERBATIM in the working buffer and in copies; onRestored gets `newer: true` (the host shows its one notice).
+ *     Omit for a host whose sidecar has no version.
  *   session: OPTIONAL { capture() -> data, restore(data | undefined), stored?(data) -> data } — the host's IN-MEMORY per-design data that is not in
  *     the document (e.g. Pen Plotter's toolpath undo stacks): captured when a tab is put aside, restored when it comes back; restore(undefined)
  *     = a design that has none yet (reset). Omit for a host with nothing of that kind. stored(data) (TASK 684): the part of it the open-tabs working
@@ -167,7 +171,7 @@ export function mergeTabBuffers(stored, mine, base, app) {
  * exactly while it has changes not written to the file. saveHome() writes it there (the handle, else the picker again, else a download). The buffer keeps the
  * file NAME across a reload, never the handle (a page-memory object).
  */
-export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, showDesign = null, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
+export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, showDesign = null, store = getProjectStore(), pollMs = 1500, hostVersion = null, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
   // ---- the ACTIVE tab's live binding (an inactive tab keeps the same fields in its record) ----
   let lastSig = null;     // the document signature last written (or loaded): a different one = something to save
   let boundId = null;     // the stored design this buffer reads from / writes to; null = an unsaved Untitled (never written)
@@ -179,6 +183,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let defaultHostSig = null; // TASK 687: getHostData() snapshot of an un-sidecar'd host right after onRestored; matching it writes no default sidecar
   let fileHome = null;    // TASK 759: { name, handle } of an unbound design whose home is a file on this device; null = no file home
   let saveOk = true;      // the last autosave of the bound design succeeded
+  let held = null;        // TASK 812: the shown document's own sidecar, verbatim, when a NEWER version of this host made it (hostVersion): never written over
   let bufferOk = true;    // the last local working-buffer write succeeded (beforeunload arms on failure)
   let lastBufSig = null;  // JSON string of last successfully persisted open-tabs buffer
   let driveChanged = false; // TASK 766: another device changed the bound design on Drive (store conflict): its version waits for the user's choice (loadDriveVersion)
@@ -264,7 +269,15 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   // TASK 602: the save state is also written on the canvas (data-save-state): a host without a status text (SketchStudio: its tab dot shows it) and the
   // live tests read it there
   const notify = (s) => { if (canvas) canvas.dataset.saveState = s; try { onStatusChange && onStatusChange(s); } catch (_) {} };
+  /** TASK 812: the host's sidecar of `hosts` (a copy) when its version is above `hostVersion`, else null. */
+  const newerSidecar = (hosts) => {
+    const h = hostName && hostVersion != null && hosts && hosts[hostName];
+    return h && Number(h.version) > hostVersion ? JSON.parse(JSON.stringify(h)) : null;
+  };
+  const NEWER_MESSAGE = "Made by a newer version of the app: reload to edit.";
   const restored = (out) => {
+    held = newerSidecar(out.hosts); // before the host reads it and before anything of this document is written
+    if (held) out = { ...out, newer: true };
     try { if (showDesign && OPENING_REASONS.has(out.reason)) showDesign(); onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); } // TASK 706: Design first (its canvas has its size for the fit)
     return out;
   };
@@ -277,6 +290,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
   function ownHostEntry() {
     if (!hostName || typeof getHostData !== 'function') return {};
+    if (held) return { [hostName]: held }; // TASK 812: a newer version's sidecar is carried on exactly as it came
     const data = getHostData();
     if (!hasOwnSidecar && defaultHostSig !== null && hostDataSig(data) === defaultHostSig) return {};
     hasOwnSidecar = true;
@@ -338,6 +352,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
 
   async function poll() {
     const bufPromise = saveWorkingBuffer();
+    if (held) { await bufPromise; return; } // TASK 812: a document of a newer version is never written over (the working buffer above keeps its sidecar verbatim)
     if (!boundId) { await bufPromise; return; } // THE SAVE RULE: an unsaved Untitled lives only in the working buffer above
     const target = boundId; // the design this signature belongs to (the buffer may be rebound while the write is in flight)
     let doc, sig;
@@ -533,6 +548,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   /** Save as: on an unsaved Untitled, the FIRST NAMED SAVE (it is stored under `newName`, and autosaves from then on); on a stored design,
    *  a copy under `newName` that becomes the bound one (`projectId` picks which app folder on Drive; `overwriteId` overwrites an existing design in place). */
   async function saveAs(newName, { projectId = undefined, overwriteId = undefined } = {}) {
+    if (held && overwriteId) throw new Error(NEWER_MESSAGE); // TASK 812: never over another design
     if (overwriteId) {
       if (boundId && boundId !== overwriteId) await flush();
       const doc = fullDoc();
@@ -612,6 +628,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   async function saveToFile(newName, seam = browserFileSeam) {
     const n = String(newName == null ? '' : newName).trim();
     if (!n) throw new Error('A design needs a name.');
+    if (held) throw new Error(NEWER_MESSAGE); // TASK 812: the picker may name the very file it came from
     const r = await seam.save(fileText(n), projectFileName(n));
     if (!r) return null;
     if (boundId) await flush(); // the stored design keeps everything up to now
@@ -630,6 +647,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
    *  null (the picker was cancelled: nothing changed). */
   async function saveHome(seam = browserFileSeam) {
     if (!fileHome) throw new Error('This design has no file on this device to save to.');
+    if (held) throw new Error(NEWER_MESSAGE); // TASK 812
     const sig = fullSigNow();
     const text = fileText(name);
     let r = null, route = 'write-back';

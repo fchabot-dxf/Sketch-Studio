@@ -8,7 +8,7 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, STOCK_TYPE_ID, effectiveCutRecord, contourAllowed } from './shaper.js'; // SP1f: cut-type declarations + gating; TASK 792: where a Contour may be added
-import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
+import { keyOf, parseKey, getCutRecord, getPlanRecord, planRecords, fileShape, setFieldFor, deriveKeyFootprints, planOwnedLoops, stockKeyOf, lastStepDepth, rememberStepDepth, lastAdaptiveSteps, rememberAdaptiveSteps, lastStepDeviation, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
   lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary,
@@ -214,7 +214,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
   const onSelectionChange = opts.onSelectionChange || (() => {});
   const onNotice = opts.onNotice || (() => {}); // TASK 472: a transient one-line notice (the Stock role moved)
-  const onCommitField = opts.onCommitField || ((key, field, value) => { setFieldFor(key, field, value); refreshLook(); }); // TASK 778: dragging the lead-in handle commits ONE undo step via prepare-stage
+  const onCommitField = opts.onCommitField || ((key, field, value) => { setFieldFor(key, field, value, state); refreshLook(); }); // TASK 778: dragging the lead-in handle commits ONE undo step via prepare-stage
   svgEl.innerHTML = ''; // clean re-mount
   // TASK 777: push ONE declaration of the travel dash pattern to CSS custom properties on svgEl so .sk-travel and @keyframes sk-march share TRAVEL_STYLE
   applyTravelStyle(svgEl);
@@ -367,7 +367,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // derived once per change of that key list, and part of every look's signature (assigning a hole's cut changes its plate's look).
   let owned = { keys: null, set: null };
   const ownedNow = () => {
-    const keys = [...CUT_PLAN].filter(([, r]) => r && r.cutType).map(([k]) => k).sort().join(' ');
+    const keys = planRecords().filter(([, r]) => r && r.cutType).map(([k]) => k).sort().join(' ');
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
@@ -487,7 +487,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), travels, leadHandles };
   };
-  const getLook = (key, rec) => { const sig = sigOf(rec) + (isContourKey(key) ? '#' + sigOf(CUT_PLAN.get(partKeyOf(key)) || {}) : ''); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
+  const getLook = (key, rec) => { const sig = sigOf(rec) + (isContourKey(key) ? '#' + sigOf(getPlanRecord(partKeyOf(key)) || {}) : ''); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
   // TASK 455: the SAME state model for every cut type — idle: only the svg line; hover: dark band + bold white boundary +
   // dashed tool path + depth chip; selected: teal band + bold mint boundary + the same path/chip; selected+hover: selected with
@@ -500,12 +500,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const renderCuts = () => {
     let out = '';
-    for (const [key, rec] of CUT_PLAN) { if (!(rec && rec.cutType)) continue; const st = stateOf(key); if (st) out += `<g class="sk-st-${st}">${getLook(key, rec).region}</g>`; }
+    for (const [key, rec] of planRecords()) { if (!(rec && rec.cutType)) continue; const st = stateOf(key); if (st) out += `<g class="sk-st-${st}">${getLook(key, rec).region}</g>`; }
     cutG.innerHTML = out;
   };
   const renderToolpaths = () => {
     let out = '';
-    for (const [key, rec] of CUT_PLAN) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
+    for (const [key, rec] of planRecords()) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
     toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g><g class="sk-travel-arrows-layer"></g>';
     lastZoomK = null;
     renderStepAndArrows();
@@ -527,7 +527,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const phase = entry.rasterIdx >= 0 && entry.rasterIdx % 2 === 1 ? 0.72 : 0.5;
       for (const a of arrowsAlongPath(entry.t.path, entry.t.closed, { spacing, minLen, phase })) dByKind[entry.kind] += dartSeg(a, dims, k);
     };
-    for (const [key, rec] of CUT_PLAN) {
+    for (const [key, rec] of planRecords()) {
       if (!(rec && rec.cutType && stateOf(key))) continue;
       const look = getLook(key, rec);
       if (look.travels) for (const entry of look.travels) pushArrows(entry);
@@ -559,7 +559,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       return;
     }
     let out = '';
-    for (const [key, rec] of CUT_PLAN) {
+    for (const [key, rec] of planRecords()) {
       if (!(rec && rec.cutType && selection.has(key))) continue;
       const look = getLook(key, rec);
       for (const h of look.leadHandles || []) {
@@ -591,7 +591,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const lastChip = new Map();
   const renderChips = () => {
     let out = '';
-    for (const [key, rec] of CUT_PLAN) {
+    for (const [key, rec] of planRecords()) {
       if (!(rec && rec.cutType && stateOf(key))) continue;
       const look = getLook(key, rec);
       if (!look.anchor && !(look.toolPaths && look.toolPaths.length)) continue;
@@ -605,13 +605,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       out += depthChip(at.x, at.y, look.depth, ck);
     }
     // TASK 472: the Stock loop always carries its label (it is the board): "STOCK <thickness>" just above the loop's top-left corner
-    const sk = stockKeyOf(CUT_PLAN);
+    const sk = stockKeyOf();
     if (sk) {
       const spec = resolveTargetKey(parseKey(sk), state, loops, loopPolys);
       const poly = spec && !spec.invalid && spec.outer ? loopPolys[spec.outer] : null;
       if (poly && poly.length >= 3) {
         const x0 = Math.min(...poly.map((p) => p.x)), y0 = Math.min(...poly.map((p) => p.y));
-        const t = Number(CUT_PLAN.get(sk).cutDepth), set = CUT_PLAN.get(sk).cutDepth !== 'unset' && Number.isFinite(t);
+        const t = Number(getPlanRecord(sk).cutDepth), set = getPlanRecord(sk).cutDepth !== 'unset' && Number.isFinite(t);
         const txt = 'STOCK ' + (set ? lengthText(t, { show: 'unit' }) : '(thickness unset)');
         out += `<text class="sk-stock-label" x="${x0}" y="${y0 - 2.5}">${txt}</text>`;
       }
@@ -621,7 +621,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // idle guide lines are the one coloured exception: thin blue
   const shapeIdsOfType = (cutType) => {
     const ids = new Set();
-    for (const [key, rec] of CUT_PLAN) {
+    for (const [key, rec] of planRecords()) {
       if (!(rec && rec.cutType === cutType)) continue;
       const { kind, id } = parseKey(key);
       const addLoop = (lid) => { const l = loopById.get(lid); if (l) for (const e of (l.edges || [])) ids.add(e); };
@@ -645,7 +645,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   let heightLists = [];
   const renderHeightMap = () => {
     const lists = [];
-    for (const rec of CUT_PLAN.values()) if (rec && hasLevels(rec) && !lists.includes(rec.levels)) lists.push(rec.levels);
+    for (const [, rec] of planRecords()) if (rec && hasLevels(rec) && !lists.includes(rec.levels)) lists.push(rec.levels);
     if (lists.length === heightLists.length && lists.every((l, i) => l === heightLists[i])) return;
     heightLists = lists;
     heightG.innerHTML = lists.map((l) => levelsHeightMap(l)).filter(Boolean)
@@ -656,7 +656,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     renderCuts(); renderToolpaths(); renderChips(); renderHandles(); refreshEdgeClasses();
     // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');
-    if (legend) { let any = false; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType && stateOf(key) && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
+    if (legend) { let any = false; for (const [key, rec] of planRecords()) if (rec && rec.cutType && stateOf(key) && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
   };
 
   const renderSelection = () => {
@@ -667,7 +667,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const renderHover = () => {
     // Show the hover highlight UNLESS that target is already selected (selected style wins — no double-draw).
     const k = hovered ? targetKey(hovered) : null;
-    const rec = k ? CUT_PLAN.get(k) : null;
+    const rec = k ? getPlanRecord(k) : null;
     hoverG.innerHTML = (hovered && !selection.has(k)) ? targetMarkup(hovered, 'sk-hl ' + (rec && rec.cutType ? 'sk-hl-hover-cut' : 'sk-hl-hover')) : '';
     refreshLook();
   };
@@ -696,7 +696,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       e.stopPropagation(); e.preventDefault();
       const wp = screenToWorld(svgEl, e.clientX, e.clientY);
       if (!wp) return;
-      const rec = CUT_PLAN.get(leadDrag.key);
+      const rec = getPlanRecord(leadDrag.key);
       const res = rec ? leadInDragAt(leadDrag.loop, effectiveCutRecord(rec), state, wp, leadDrag.holes) : null; // TASK 787: the part's holes kept clear, as in the export
       if (res && res.leadIn) {
         leadDrag.previewLead = res.leadIn;
@@ -741,7 +741,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (handleEl && (e.button == null || e.button === 0)) {
       const key = handleEl.getAttribute('data-lead-key');
       const pl = key ? profileLoopsForTarget(parseKey(key)) : null;
-      const rec = key ? CUT_PLAN.get(key) : null;
+      const rec = key ? getPlanRecord(key) : null;
       if (pl && pl.outer && rec) {
         e.stopPropagation(); e.preventDefault();
         try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}
@@ -860,10 +860,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         const targets = [...selection.values()].filter((t) => t.kind !== 'chain');
         const t = targets[targets.length - 1];
         if (!t) return null;
-        const prev = stockKeyOf(CUT_PLAN), mine = targetKey(t);
-        if (prev && prev !== mine) { setFieldFor(prev, 'cutType', null); onNotice('Stock moved to this loop (there is one Stock per document)'); }
+        const prev = stockKeyOf(), mine = targetKey(t);
+        if (prev && prev !== mine) { setFieldFor(prev, 'cutType', null, state); onNotice('Stock moved to this loop (there is one Stock per document)'); }
         else if (!prev) onNotice('This closed loop is now the Stock: the board in Export');
-        lastRec = setFieldFor(mine, 'cutType', STOCK_TYPE_ID);
+        lastRec = setFieldFor(mine, 'cutType', STOCK_TYPE_ID, state);
         refreshLook();
         return lastRec;
       }
@@ -871,15 +871,16 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         if (t.kind === 'chain' && ct && ct.targetKind !== 'path') continue;
         const k = targetKey(t);
         if (t.kind === CONTOUR_KIND && !(ct && ct.targetKind === 'finish')) continue; // TASK 792: a part's Contour record stays a Contour
+        const r = { ...getCutRecord(k) }; // TASK S1: the resulting record, filed once (cut-plan.js fileShape: the shape moves into the operation of its settings)
         if (ct && ct.levelsOp === 'roughing') { // TASK 714 / 792: a record with no step depth yet takes the last one used (and the last adaptive choice and resolution, TASK 717);
           // the allowance is 0 while the part has no Contour, else the declared finish allowance (owner ruling, turn 2512)
-          if (!(Number(CUT_PLAN.get(k) && CUT_PLAN.get(k).stepDepth) > 0)) setFieldFor(k, 'stepDepth', lastStepDepth());
-          if (typeof CUT_PLAN.get(k).adaptiveSteps !== 'boolean') setFieldFor(k, 'adaptiveSteps', lastAdaptiveSteps());
-          if (!(Number(CUT_PLAN.get(k).stepDeviation) > 0)) setFieldFor(k, 'stepDeviation', lastStepDeviation());
-          setFieldFor(k, 'finishAllowance', contourOf(k) ? lastFinishAllowance() : 0);
+          if (!(Number(r.stepDepth) > 0)) r.stepDepth = lastStepDepth();
+          if (typeof r.adaptiveSteps !== 'boolean') r.adaptiveSteps = lastAdaptiveSteps();
+          if (!(Number(r.stepDeviation) > 0)) r.stepDeviation = lastStepDeviation();
+          r.finishAllowance = contourOf(k) ? lastFinishAllowance() : 0;
         }
-        lastRec = setFieldFor(k, 'cutType', cutType);
-        if (contourOf(k) && !contourAllowed(CUT_PLAN.get(k))) setContour(k, false); // TASK 792: a part whose new type takes no Contour loses it
+        lastRec = fileShape(k, { ...r, cutType }, state);
+        if (contourOf(k) && !contourAllowed(getCutRecord(k))) setContour(k, false, state); // TASK 792: a part whose new type takes no Contour loses it
       }
       refreshLook();
       return lastRec;
@@ -900,33 +901,33 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (field === 'rasterAngle') value = rememberRasterAngle(value);
       let lastRec = null;
       for (const t of selection.values()) {
-        const k = targetKey(t);
-        if (field === 'contour') { if (!isContourKey(k) && contourAllowed(CUT_PLAN.get(k))) lastRec = setContour(k, value === true); continue; } // TASK 792: add / remove the part's Contour (its own record)
+        const k = targetKey(t), patch = {}; // TASK S1: the fields this edit sets with it (filed once with the edited field)
+        if (field === 'contour') { if (!isContourKey(k) && contourAllowed(getCutRecord(k))) lastRec = setContour(k, value === true, state); continue; } // TASK 792: add / remove the part's Contour (its own record)
         if (isContourKey(k)) rememberContour(field, value); // TASK 792: the next Contour starts from this one's bit / shape / step
         if (field === 'clearing' && value !== 'freehand') { // TASK 745: the Morphed spiral only where it is possible (never a silent fallback); a pocket set to a computed
           // clearing without its own values takes the last ones set (or the declared defaults)
-          if (value === 'morphed') { const av = clearingAvailability(k, CUT_PLAN.get(k) || {}, state, loops, loopPolys); if (!av || av.morphed) continue; }
-          const r = CUT_PLAN.get(k) || {};
-          if (!(Number(r.stepover) > 0)) setFieldFor(k, 'stepover', lastStepover());
-          if (!(r.finishAllowance != null && Number(r.finishAllowance) >= 0)) setFieldFor(k, 'finishAllowance', lastFinishAllowance());
-          if (typeof r.loop !== 'boolean') setFieldFor(k, 'loop', lastLoop()); // TASK 750: the last Loop set (off until set)
-          if (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null) setFieldFor(k, 'rasterAngle', lastRasterAngle());
+          if (value === 'morphed') { const av = clearingAvailability(k, getPlanRecord(k) || {}, state, loops, loopPolys); if (!av || av.morphed) continue; }
+          const r = getPlanRecord(k) || {};
+          if (!(Number(r.stepover) > 0)) patch.stepover = lastStepover();
+          if (!(r.finishAllowance != null && Number(r.finishAllowance) >= 0)) patch.finishAllowance = lastFinishAllowance();
+          if (typeof r.loop !== 'boolean') patch.loop = lastLoop(); // TASK 750: the last Loop set (off until set)
+          if (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null) patch.rasterAngle = lastRasterAngle();
         }
         if (field === 'leadIn' && value === true) { // TASK 778: Radius / Sweep / Length / Position start calculated (null); Side takes lastLeadInSide()
-          const r = CUT_PLAN.get(k) || {};
-          if (!Object.hasOwn(r, 'leadInRadius')) setFieldFor(k, 'leadInRadius', null);
-          if (!Object.hasOwn(r, 'leadInSweep')) setFieldFor(k, 'leadInSweep', null);
-          if (!Object.hasOwn(r, 'leadInLength')) setFieldFor(k, 'leadInLength', null);
-          if (!Object.hasOwn(r, 'leadInAt')) setFieldFor(k, 'leadInAt', null);
-          if (r.leadInSide !== 'outside' && r.leadInSide !== 'inside') setFieldFor(k, 'leadInSide', lastLeadInSide());
+          const r = getPlanRecord(k) || {};
+          if (!Object.hasOwn(r, 'leadInRadius')) patch.leadInRadius = null;
+          if (!Object.hasOwn(r, 'leadInSweep')) patch.leadInSweep = null;
+          if (!Object.hasOwn(r, 'leadInLength')) patch.leadInLength = null;
+          if (!Object.hasOwn(r, 'leadInAt')) patch.leadInAt = null;
+          if (r.leadInSide !== 'outside' && r.leadInSide !== 'inside') patch.leadInSide = lastLeadInSide();
         }
         if (field === 'holdPart' && value !== 'off') { // TASK 742: a record turned to Tabs / Onion skin without its own values takes the last ones set (or the unit's defaults)
-          const r = CUT_PLAN.get(k) || {};
-          if (!(r.tabCount === 'auto' || Number(r.tabCount) >= 1)) setFieldFor(k, 'tabCount', lastTabCount());
-          if (!(Number(r.tabWidth) > 0)) setFieldFor(k, 'tabWidth', lastTabWidth());
-          if (!(Number(r.holdThickness) > 0)) setFieldFor(k, 'holdThickness', lastHoldThickness());
+          const r = getPlanRecord(k) || {};
+          if (!(r.tabCount === 'auto' || Number(r.tabCount) >= 1)) patch.tabCount = lastTabCount();
+          if (!(Number(r.tabWidth) > 0)) patch.tabWidth = lastTabWidth();
+          if (!(Number(r.holdThickness) > 0)) patch.holdThickness = lastHoldThickness();
         }
-        lastRec = setFieldFor(k, field, value);
+        lastRec = fileShape(k, { ...getCutRecord(k), ...patch, [field]: value }, state); // TASK S1: the resulting record, filed once
       }
       refreshLook();
       return lastRec;

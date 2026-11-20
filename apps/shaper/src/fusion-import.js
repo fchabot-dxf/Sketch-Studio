@@ -11,13 +11,13 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { makeProfile, directlyContainedLoops } from '#core/profile-model.js';
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
-import { CUT_PLAN, keyOf } from './cut-plan.js';
+import { keyOf, fileShape, setRegionSource } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
+import { storeOps, regionKeys, applyStore, memberOf } from './operations-store.js'; // TASK S1: the operations + regions store
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
 import { ringWalk, readLevels } from '#core/stepped-cut.js'; // TASK 792: readLevels (a part's material sections, the payload's `levels`)
 import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design's STL source goes with it (an STL import sets its own after)
 import { DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 794: the stock thickness of a design that starts over, when the payload has none
-import { setOpOrder } from './operations.js';
 import { getSelections, setSelections } from './selection-list.js'; // TASK 795: the selection list
 import { buildEntry, keepSettings, priorRecords, dropSelectionGeometry } from './selection-edit.js';
 
@@ -173,11 +173,12 @@ export function selectionDesignName(source) {
  * (`deserializeDocument(emptyDocument())`), and the selection lands alone in a new named active sketch. Undo gives the previous design
  * back with its cut plan (the snapshot is taken before the reset); redo the new one. To combine things the user selects them together
  * in the add-in's dialog: one payload. A payload with nothing importable changes nothing.
- * Deduplicates shared curves across outer regions and hole loops, populates `CUT_PLAN` and `stock.thickness`, fits the view, and
+ * Deduplicates shared curves across outer regions and hole loops, populates the plan (TASK S1: the operations store, grouped as the list groups them; each region's
+ * imported type / depth as its source) and `stock.thickness`, fits the view, and
  * refreshes Prepare. Called by the Fusion palette (main.js, Fusion mode) and, TASK 790, by Open STL (stl-import.js: #core/stl-slice.js makes the same
  * payload from an STL); the normal Import SVG / DXF is #ui/sketch-import.js.
  */
-export function importFusionSelection(payload, { controller, prepare = null, plan = CUT_PLAN, onImport = null } = {}) {
+export function importFusionSelection(payload, { controller, prepare = null, onImport = null } = {}) {
   let data = payload;
   if (typeof data === 'string') {
     try { data = JSON.parse(data); } catch (e) { return { ok: false, message: `Invalid selection_data JSON: ${e.message}` }; }
@@ -273,15 +274,16 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
   // empty design): the stock thickness and the operation order are this part's own (TASK 794).
   const selectionId = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : null;
   const prior = selectionId ? getSelections().find((e) => e.id === selectionId) || null : null;
-  const priorRecs = priorRecords(prior, plan);
-  const fresh = !selectionId || (!prior && st.shapes.length === 0 && plan.size === 0);
+  const priorRecs = priorRecords(prior);
+  const planEmpty = !storeOps().length && !regionKeys().length;
+  const fresh = !selectionId || (!prior && st.shapes.length === 0 && planEmpty);
   // TASK 712: the selection replaces the design (see the doc comment): the empty document, and no cut-plan record.
-  const replaced = !selectionId && (st.shapes.length > 0 || plan.size > 0);
+  const replaced = !selectionId && (st.shapes.length > 0 || !planEmpty);
   if (!selectionId) {
     deserializeDocument(emptyDocument(), st);
-    plan.clear();
+    applyStore(null); // TASK S1: no operation, no region
     setStlSource(null); // TASK 790: so is the STL it came from (an STL import, stl-import.js, sets the new one once this returns)
-  } else if (prior) dropSelectionGeometry(st, prior, plan);
+  } else if (prior) dropSelectionGeometry(st, prior);
 
   const sketch = addSketch(st, sourceName);
   activateSketch(st, sketch.id);
@@ -338,7 +340,9 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     } else {
       key = keyOf('loop', m.outerLoop.id);
     }
-    plan.set(key, buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings), levelsOf(m.reg)));
+    const rec = buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings), levelsOf(m.reg));
+    setRegionSource(key, rec); // TASK S1: what the import said (a Depth of 'model' follows it)
+    fileShape(key, rec, st);
     cutKeys.push(key); cutInfo.set(key, m.reg);
   }
 
@@ -359,8 +363,10 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
     const matchedChain = newChains.find((c) => (c.shapes || []).some((s) => sidSet.has(s.id)));
     if (!matchedChain) continue;
     const key = keyOf('chain', matchedChain.id);
-    if (!plan.has(key)) {
-      plan.set(key, buildCutRecord(cr.chain, warnings));
+    if (!cutKeys.includes(key) && !memberOf(key)) {
+      const rec = buildCutRecord(cr.chain, warnings);
+      setRegionSource(key, rec);
+      fileShape(key, rec, st);
       cutKeys.push(key); cutInfo.set(key, cr.chain);
     }
   }
@@ -368,13 +374,13 @@ export function importFusionSelection(payload, { controller, prepare = null, pla
   // TASK 795: the selection's entry in the list (an update keeps the settings of the regions still there)
   const stockThickness = data.stock && data.stock.thicknessMm != null ? Number(data.stock.thicknessMm) : null;
   const thicknessMm = stockThickness != null && Number.isFinite(stockThickness) && stockThickness > 0 ? stockThickness : null;
-  const entry = buildEntry({ data, sourceName, regionCount: regions.length, sketch, shapes: built.shapes, cutKeys, cutInfo, plan, thicknessMm });
-  keepSettings(entry, priorRecs, plan);
+  const entry = buildEntry({ data, sourceName, regionCount: regions.length, sketch, shapes: built.shapes, cutKeys, cutInfo, thicknessMm });
+  keepSettings(entry, priorRecs, st);
   setSelections(selectionId ? upsert(getSelections(), entry) : [entry]);
 
   // Stock thickness (TASK 794): a fresh start takes this part's (the app's default when the payload has none) and its own operation order; an add to a design that has
   // parts keeps the order and the stock never gets thinner than the thickest part (or than the user set it).
-  if (fresh) { setStock({ ...getStock(), thickness: thicknessMm != null ? thicknessMm : DEFAULT_STOCK.thickness }); setOpOrder([]); }
+  if (fresh) setStock({ ...getStock(), thickness: thicknessMm != null ? thicknessMm : DEFAULT_STOCK.thickness }); // TASK S1: its operations are the ones this import made
   else if (thicknessMm != null) setStock({ ...getStock(), thickness: Math.max(getStock().thickness, thicknessMm) });
 
   if (controller.svg) {

@@ -3,12 +3,13 @@
 // cut-plan edit is ONE step of the shared sketch history (TASK 463), the cut plan riding in the shared undo snapshots (`hostSnapshot`), the Ctrl+Z / Ctrl+Y keys
 // while Prepare shows, and what the document buffer does with Prepare after a restore. Moved out of main.js unchanged; the page keeps its own views
 // (Review, the info panel) and passes what only it has as options.
-import { capturePrepare, applyPrepare } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper; TASK 743: + the operation order
+import { capturePrepare, applyPrepare, comparablePrepare } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper; TASK S1: the operations store
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { CUT_PLAN, cutPlanEntries, setFieldFor, cutPlanNotice, stockKeyOf } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice) // SP1j-4: the shared cut-plan store; TASK 761: the reconciliation's notice
-import { planOperations, setOpOrder } from './operations.js'; // TASK 743: the operations (derived) and their order (the one stored fact)
+import { setFieldFor, cutPlanNotice, stockKeyOf } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice
+import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
+import { reorderOps } from './operations-store.js'; // TASK S1: the list order is the stored operations' order
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 
 /**
@@ -44,15 +45,16 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   SettingsManager.subscribe((setting) => { if (setting === null || setting === 'DOC_UNIT' || isPrecisionKey(setting)) refreshCutPanel(); });
   // TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second
-  // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset).
+  // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset). TASK S1: compared without the
+  // regions (shaper-doc.js comparablePrepare: an edit never changes them; the rose's levels are ~1.6 MB of text).
   function cutEdit(apply) {
     const designController = getController();
     const st = designController && designController.state;
-    const before = JSON.stringify(capturePrepare());
+    const before = comparablePrepare(capturePrepare());
     if (st) st.saveState('cut plan edit');
     const n = st ? st.history.length : 0;
     apply();
-    if (st && JSON.stringify(capturePrepare()) === before) st.discardSnapshotAt(n);
+    if (st && comparablePrepare(capturePrepare()) === before) st.discardSnapshotAt(n);
     refreshCutPanel();
   }
   const cutPanel = createCutPanel(panelEl, {
@@ -73,21 +75,22 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       refreshCutPanel();
     },
   });
-  // TASK 743: the operations of the plan (derived: operations.js) in the document's order; a reorder is ONE undo step (cutEdit: the snapshot carries the order);
-  // a tap on an operation selects its regions (the card then edits them all, as a shift-selection does)
-  const opsOf = () => { const c = getController(); return c ? planOperations(c.state, cutPlanEntries()) : []; };
+  // TASK 743: the operations (TASK S1: stored, operations.js describeOperations) in the document's order; a reorder is ONE undo step (cutEdit: the snapshot carries
+  // the store); a tap on an operation selects its regions (the card then edits them all, as a shift-selection does)
+  const opsOf = () => { const c = getController(); return c ? describeOperations(c.state) : []; };
   const isPicked = (op) => Boolean(prepareView) && prepareView.selection.size === op.records.length && op.records.every((r) => prepareView.selection.has(r.planKey));
   const opList = createOpList(opsEl, {
     getOps: opsOf,
-    onMove: (keys) => cutEdit(() => setOpOrder(keys)),
+    onMove: (keys) => cutEdit(() => reorderOps(keys)),
     onPick: (op) => { if (prepareView) prepareView.setSelection(op.records.map((r) => r.pick || r.target)); }, // TASK 792: a Contour operation selects its own records (`contour:<key>`)
     isPicked,
     // TASK 745: the bin of an operation UNASSIGNS every region / path of it: each record's cut type is cleared (cut-plan.js setFieldFor(key, 'cutType', null),
-    // the path the Stock move already takes to unassign a loop), ONE undo step for the whole operation (cutEdit: the snapshot carries the plan and the order,
-    // so Undo brings it back in its place); the selection clears when it was that operation. The sketch is never touched.
+    // the path the Stock move already takes to unassign a loop: TASK S1, the shapes leave the operation, which goes), ONE undo step for the whole operation
+    // (cutEdit: the snapshot carries the store, so Undo brings it back in its place); the selection clears when it was that operation. The sketch is never touched.
     onDelete: (op) => cutEdit(() => {
       const picked = isPicked(op);
-      for (const r of op.records) setFieldFor(r.planKey, 'cutType', null);
+      const st = getController() && getController().state;
+      for (const r of op.records) setFieldFor(r.planKey, 'cutType', null, st);
       if (prepareView) { if (picked) prepareView.setSelection([]); prepareView.refreshLook(); }
     }),
   });
@@ -152,7 +155,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const st = designController.state; // TASK 761: the stored plan's legacy edge records are reconciled where the document is read (shaper-doc.js applyShaperDoc), not here
     prepareView = mountPrepareView(st, canvasEl, {
       onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(),
-      onCommitField: (key, field, value) => cutEdit(() => { setFieldFor(key, field, value); if (prepareView) prepareView.refreshLook(); }), // TASK 778: dragging the lead-in handle commits ONE undo step
+      onCommitField: (key, field, value) => cutEdit(() => { setFieldFor(key, field, value, st); if (prepareView) prepareView.refreshLook(); }), // TASK 778: dragging the lead-in handle commits ONE undo step
     });
     if (pendingRemovedNotice) { prepareNotice(pendingRemovedNotice); pendingRemovedNotice = null; } // TASK 741: once, on the first mount after the restore
     prepareSig = geomSig(st);

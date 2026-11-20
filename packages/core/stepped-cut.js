@@ -31,6 +31,7 @@ import { deriveProfileCuts } from './profile-model.js';
 import { applyHoldPart } from './hold-part.js'; // TASK 742: tabs / onion skin on a plain Outside / Inside cut
 import { applyPocketClearing } from './pocket-clearing.js'; // TASK 745: a plain Pocket's programmed clearing (Spiral / Raster / Morphed spiral)
 import { applyLeadIn } from './lead-in.js'; // TASK 775: an On line outline's lead-in leg
+import { smoothRegions, smoothRing, intersectSmoothed, ringPathD, smoothingOf } from './level-smooth.js'; // TASK 809: Smoothing, a toolpath setting of Roughing / Contour
 
 /** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet. */
 export const STEP_DEPTH = Object.freeze({ defaultMm: 1 });
@@ -749,33 +750,70 @@ export function levelsRoughing(levels, { outer, step, depth, toolDia, allowance 
 }
 
 /**
- * levelsContour(levels, { step, depth }) -> { steps: [{ depth, loops: [{ polygon:[{x,y}], outer }] }], paths, zMax, error } — Contour from a levels list
- * (header, path 1): a level every `step` (LEVELS.contourStepMm when missing) down to `depth`; its loops = the boundary of the cumulative material there
- * (outer = an outer loop: Outside cut; else a hole in the material: Inside cut). A loop the next deeper level has too (within SAME_OUTLINE_TOL_MM) is
- * cut there, not here (the same outline over consecutive levels = ONE path at the deepest of them: a vertical wall once, at its bottom); a level left
- * with no loop is no level. `paths` = every loop in cutting order, DEPTH-FIRST PER AREA (areas = the connected pieces of the deepest material):
- * [{ depth, level, polygon, outer, box }].
+ * levelsContour(levels, { step, depth, smoothing }) -> { steps: [{ depth, loops: [{ polygon:[{x,y}], outer }], outline }], paths, zMax, error } — Contour from a
+ * levels list (header, path 1): a level every `step` (LEVELS.contourStepMm when missing) down to `depth`; its loops = the boundary of the cumulative
+ * material there (outer = an outer loop: Outside cut; else a hole in the material: Inside cut). A loop the next deeper level has too (within
+ * SAME_OUTLINE_TOL_MM) is cut there, not here (the same outline over consecutive levels = ONE path at the deepest of them: a vertical wall once, at its
+ * bottom); a level left with no loop is no level. `paths` = every loop in cutting order, DEPTH-FIRST PER AREA (areas = the connected pieces of the
+ * deepest material): [{ depth, level, polygon, outer, box, ring }].
+ * TASK 809: `smoothing` (base mm, 0 = off) = the Contour's Smoothing: each level's material is then its SMOOTHED material (smoothedSections), its loops
+ * the smoothed rings (`ring`: #core/level-smooth.js, `polygon` its sampled curve); the same rule of the same outline (on the smoothed loops) and order.
  */
-export function levelsContour(levels, { step, depth } = {}) {
+export function levelsContour(levels, { step, depth, smoothing = 0 } = {}) {
   if (!Array.isArray(levels) || !levels.length) return { steps: [], paths: [], zMax: null, error: 'no levels' };
   const st = levelStack(levels), zMax = st.zs[st.zs.length - 1];
   const D = Number(depth) > 0 && depth !== true ? Number(depth) : zMax;
   const s = Number(step) > 0 ? Number(step) : LEVELS.contourStepMm;
-  const key = ['C', s, D].join('|');
+  const tol = Number(smoothing) > 0 ? Number(smoothing) : 0;
+  const key = ['C', s, D, tol].join('|');
   if (st.memo.has(key)) return st.memo.get(key);
   const depths = depthList(s, D), per = depths.map((d) => sectionAt(st, Math.min(d, zMax)));
-  const loopsAt = per.map((i) => regionLoops(st.cumulative[i]));
+  const smoothed = tol > 0 ? smoothedSections(st, per, tol) : null;
+  const loopsAt = per.map((i) => (smoothed ? smoothed.get(i) : regionLoops(st.cumulative[i])));
   const steps = [], items = [];
   depths.forEach((d, k) => {
     const next = k + 1 < depths.length ? loopsAt[k + 1] : null;
     const loops = !next ? loopsAt[k] : per[k] === per[k + 1] ? [] : loopsAt[k].filter((l) => !next.some((q) => q.outer === l.outer && sameOutline(l.polygon, q.polygon)));
     if (!loops.length) return;
-    for (const l of loops) items.push({ depth: d, level: steps.length, polygon: l.polygon, outer: l.outer, box: boxOf(l.polygon) });
-    steps.push({ depth: d, loops });
+    for (const l of loops) items.push({ depth: d, level: steps.length, polygon: l.polygon, outer: l.outer, box: boxOf(l.polygon), ring: l.ring || null });
+    steps.push({ depth: d, loops, outline: loopsAt[k] }); // TASK 809: outline = every loop of the level (those cut deeper too: the material it nests in)
   });
   const deepest = st.cumulative[per[per.length - 1]] || [];
   const out = { steps, paths: depthFirstPerArea(items, deepest.map((g) => boxOfRing(g.outer))), zMax, error: null };
   st.memo.set(key, out);
+  return out;
+}
+// TASK 809: the SMOOTHED MATERIAL of each section a Contour cuts (`per`: the sections, any order), deepest first: S_i = the section's cumulative
+// material smoothed (#core/level-smooth.js smoothRegions: each loop fitted, outer minus holes, one union), then INTERSECTED with the next deeper
+// section's smoothed material (intersectSmoothed: a level's loops never cross the next level's; where they meet they share the deeper curve). A loop
+// of section i that IS a loop of the next deeper section (the same outline, SAME_OUTLINE_TOL_MM: a vertical wall) takes that loop's fitted ring, so
+// the same wall is the same curve at both levels (and the rule of the same outline still finds it). -> Map(section -> [{ polygon, outer, ring }]).
+function smoothedSections(st, per, tol) {
+  const memoKey = 'S|' + tol;
+  let bySection = st.memo.get(memoKey);
+  if (!bySection) { bySection = new Map(); st.memo.set(memoKey, bySection); }
+  const used = [...new Set(per)].sort((a, b) => b - a);
+  const out = new Map();
+  let deeper = null; // the next deeper used section's entry: { below, regions (smoothed), fits: [{ outer, poly, ring }], loops }
+  for (const i of used) {
+    let entry = bySection.get(i);
+    if (!entry || entry.below !== deeper) { // made on the same deeper entry (that one made on its own: the chain is the same)
+      const fits = [];
+      const fit = (ring, isOuter) => {
+        const poly = ptsOf(ring);
+        const same = deeper && deeper.fits.find((f) => f.outer === isOuter && sameOutline(poly, f.poly));
+        const sm = same ? same.ring : smoothRing(ring, tol);
+        fits.push({ outer: isOuter, poly, ring: sm });
+        return sm;
+      };
+      const own = smoothRegions(st.cumulative[i], tol, { fit });
+      const regions = deeper ? intersectSmoothed(own, deeper.regions, tol, st.cumulative[i]) : own;
+      entry = { below: deeper, regions, fits, loops: regions.flatMap((g) => [{ polygon: ptsOf(g.outer.poly), outer: true, ring: g.outer }, ...g.holes.map((h) => ({ polygon: ptsOf(h.poly), outer: false, ring: h }))]) };
+      bySection.set(i, entry);
+    }
+    out.set(i, entry.loops);
+    deeper = entry;
+  }
   return out;
 }
 
@@ -783,9 +821,9 @@ export function levelsContour(levels, { step, depth } = {}) {
 // comes from `centers` / `sweep`, #core/profile-model deriveCutFootprint: Clipper offsets, so a wavy part outline or an island narrower than the bit is
 // drawn too, where the simple-loop #core/polygon-offset returns nothing); `terrace` = its level { index, count, depth, label } as a stepped cut's ──
 const lazy = (o, name, make) => { let v; Object.defineProperty(o, name, { enumerable: true, configurable: true, get: () => (v === undefined ? (v = make()) : v) }); return o; };
-function levelPocketCut(reg, rec, terrace) {
+function levelPocketCut(reg, rec, terrace, smoothD = null) { // TASK 809: smoothD = the smoothed region's path (its rings' cubics), reg its sampled rings
   const outerPoly = ptsOf(reg.outer), holePolys = reg.holes.map(ptsOf);
-  const d = [outerPoly, ...holePolys].map(polyToPathD).join(' '); // Clipper winds a hole opposite to its outer (TASK 786's rule holds)
+  const d = smoothD || [outerPoly, ...holePolys].map(polyToPathD).join(' '); // Clipper winds a hole opposite to its outer (TASK 786's rule holds)
   const r = (Number(rec.toolDia) || 0) / 2, margin = (Number(rec.cutOffset) || 0) + (Number(rec.autoOffset) || 0); // the pocket footprint's rule (TASK 452)
   const cut = { kind: 'profile', cutType: 'pocket', isCompound: true, isHole: false, outerPoly, holePolys, outerOffsetSide: -1, holeOffsetSide: 1,
     rec: { ...rec, cutType: 'pocket', cutDepth: terrace.depth }, d, geom: { tag: 'path', a: `d="${d}"` }, terrace };
@@ -815,11 +853,11 @@ function reduceRing(ring, tol) {
   const out = pts.filter((_, k) => keep[k]);
   return out.length >= 3 ? [...out, out[0]] : ring;
 }
-function levelContourCut(polygon, outer, rec, terrace) {
+function levelContourCut(polygon, outer, rec, terrace, ring = null) { // TASK 809: ring = the smoothed ring (its cubics are the path), polygon its sampled curve
   const cutType = outer ? 'exterior' : 'interior', side = outer ? 1 : -1;
   const r = (Number(rec.toolDia) || 0) / 2, off = Number(rec.cutOffset) || 0;
   const cut = { kind: 'loop', polygon, cutType, offsetSide: side, isHole: !outer, isCompound: false, rec: { ...rec, cutType, cutDepth: terrace.depth },
-    geom: { tag: 'path', a: `d="${polyToPathD(polygon)}"` }, terrace };
+    geom: { tag: 'path', a: `d="${ring && ring.segs ? ringPathD(ring.segs) : polyToPathD(polygon)}"` }, terrace };
   const memo = new Map();
   lazy(cut, 'centers', () => (r > 0 ? offsetPolygonRound(polygon.map((p) => [p.x, p.y]), side * (r + off), LEVELS.drawTolMm).map((ring) => ({ points: ptsOf(reduceRing(ring, LEVELS.drawTolMm)), closed: true })) : []));
   cut.sweep = (w) => { // the band the bit sweeps along its centre path (hold-part sweeper's rule, at the drawing tolerance)
@@ -829,23 +867,40 @@ function levelContourCut(polygon, outer, rec, terrace) {
   return cut;
 }
 
+// TASK 809: a Roughing's paths SMOOTHED at tol (#core/level-smooth.js smoothRegions: each pocket element's rings fitted, its outer minus its holes):
+// per path, its pocket elements [{ reg: { outer, holes } (the sampled curves, Clipper's ring form), d (the cubics' path) }]. Made once per Roughing
+// result and tolerance (both never mutated). A pocket element narrower than about the tolerance may vanish.
+const SMOOTHED_ROUGHING = new WeakMap(); // levelsRoughing result -> Map(tol -> per path list)
+function smoothedRoughing(R, tol) {
+  let byTol = SMOOTHED_ROUGHING.get(R);
+  if (!byTol) { byTol = new Map(); SMOOTHED_ROUGHING.set(R, byTol); }
+  if (!byTol.has(tol)) {
+    byTol.set(tol, R.paths.map((p) => p.regions.flatMap((reg) => smoothRegions([reg], tol).map((g) => ({
+      reg: { outer: g.outer.poly, holes: g.holes.map((h) => h.poly) }, d: [g.outer, ...g.holes].map((r) => ringPathD(r.segs)).join(' '),
+    })))));
+  }
+  return byTol.get(tol);
+}
+
 // deriveCuts for a record with `levelsOp` (header). The record carries `levels` and / or `slope` (a Contour: its part's, with `baseDepth` / `baseType`).
 function deriveLevelsCuts(target, rec, state, loops, loopPolys, ownedLoops) {
   const op = rec.levelsOp;
   const depth = op === 'contour' ? rec.baseDepth : rec.cutDepth;
   const label = (rec.slope && rec.slope.label) || null;
   const work = { ...levelsWorkRecord(rec), cutDepth: depth };
-  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth']) delete work[k]; // `slope` stays: the stepped engine reads it
+  for (const k of ['levelsOp', 'levels', 'terraceAs', 'baseType', 'baseDepth', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing']) delete work[k]; // `slope` stays: the stepped engine reads it
   if (hasLevels(rec)) { // path 1
     const plain = deriveProfileCuts(target, { ...work, cutType: 'pocket' }, state, loops, loopPolys, ownedLoops).find((c) => c.isCompound);
     if (!plain) return [];
     delete work.slope;
+    const tol = smoothingOf(op, rec.smoothing); // TASK 809: the operation's Smoothing (0 = its polylines)
     if (op === 'contour') { // its paths in cutting order (depth-first per area)
-      const T = levelsContour(rec.levels, { step: rec.stepDepth, depth });
-      return T.paths.map((p) => levelContourCut(p.polygon, p.outer, work, { index: p.level, count: T.steps.length, depth: p.depth, undercutBelow: null, label }));
+      const T = levelsContour(rec.levels, { step: rec.stepDepth, depth, smoothing: tol });
+      return T.paths.map((p) => levelContourCut(p.polygon, p.outer, work, { index: p.level, count: T.steps.length, depth: p.depth, undercutBelow: null, label }, p.ring));
     }
     const R = levelsRoughing(rec.levels, { outer: plain.outerPoly, step: rec.stepDepth, depth, toolDia: rec.toolDia, allowance: roughingAllowance(rec), layout: roughLayout(rec), minWidth: rec.minTerraceWidth });
-    return R.paths.flatMap((p) => p.regions.map((reg) => levelPocketCut(reg, work, { index: p.level, count: R.steps.length, depth: p.depth, undercutBelow: null, label, islands: R.steps[p.level].islands, small: R.steps[p.level].small })));
+    const S = tol > 0 ? smoothedRoughing(R, tol) : null;
+    return R.paths.flatMap((p, i) => (S ? S[i] : p.regions.map((reg) => ({ reg, d: null }))).map(({ reg, d }) => levelPocketCut(reg, work, { index: p.level, count: R.steps.length, depth: p.depth, undercutBelow: null, label, islands: R.steps[p.level].islands, small: R.steps[p.level].small }, d)));
   }
   const as = levelsCutAs(rec);
   if (rec.slope) { // path 2: THE stepped engine (allowance 0: the stepped cut of 714 byte for byte)

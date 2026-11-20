@@ -9,6 +9,8 @@
 // exceeds tolerance it SPLITS there, computes a tangent at the split, and recurses on both halves. Each returned
 // segment is ready to become a #core bezier via makeBezier (endpoints -> joints, c1/c2 -> [x,y] data).
 // Degenerate: <2 points -> []; exactly 2 -> one straight line-cubic.
+// TASK 809: its steps are exported too (bezier, chordLengthParameterize, generateBezier, newtonRaphson; {x,y} points, [p0,c1,c2,p3] cubics): #core/level-smooth
+// fits a relief's level outlines with them (its own tangents, corners and a sampled error check). fitCubic itself is unchanged.
 
 const MAX_ITER = 4;   // Newton-Raphson reparameterization passes before giving up + splitting a run
 const EPS = 1e-12;
@@ -28,7 +30,7 @@ const B2 = (u) => 3 * u * u * (1 - u);
 const B3 = (u) => u * u * u;
 
 // Evaluate a cubic [p0,c1,c2,p3] (control points {x,y}) at parameter t.
-function bezier(bez, t) {
+export function bezier(bez, t) {
   const [p0, c1, c2, p3] = bez, b0 = B0(t), b1 = B1(t), b2 = B2(t), b3 = B3(t);
   return { x: p0.x * b0 + c1.x * b1 + c2.x * b2 + p3.x * b3, y: p0.y * b0 + c1.y * b1 + c2.y * b2 + p3.y * b3 };
 }
@@ -46,7 +48,7 @@ function bezierPrimePrime(bez, t) {
 }
 
 // Normalized cumulative chord length -> initial parameter values in [0,1].
-function chordLengthParameterize(points) {
+export function chordLengthParameterize(points) {
   const u = [0];
   for (let i = 1; i < points.length; i++) u[i] = u[i - 1] + len(sub(points[i], points[i - 1]));
   const total = u[u.length - 1] || 1;
@@ -54,7 +56,7 @@ function chordLengthParameterize(points) {
 }
 
 // Least-squares fit a single cubic through `points` at parameters `u`, honoring the endpoint tangents.
-function generateBezier(points, u, leftTangent, rightTangent) {
+export function generateBezier(points, u, leftTangent, rightTangent) {
   const n = points.length, p0 = points[0], p3 = points[n - 1];
   let c00 = 0, c01 = 0, c11 = 0, x0 = 0, x1 = 0;
   for (let i = 0; i < n; i++) {
@@ -77,7 +79,7 @@ function generateBezier(points, u, leftTangent, rightTangent) {
 }
 
 // One Newton-Raphson step improving a point's parameter along the curve.
-function newtonRaphson(bez, point, u) {
+export function newtonRaphson(bez, point, u) {
   const d = sub(bezier(bez, u), point), d1 = bezierPrime(bez, u), d2 = bezierPrimePrime(bez, u);
   const den = dot(d1, d1) + dot(d, d2);
   if (Math.abs(den) < EPS) return u;

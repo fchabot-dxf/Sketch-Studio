@@ -7,7 +7,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUT_TYPES } from '../apps/shaper/src/shaper.js';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
-import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -48,7 +47,7 @@ await (async () => {
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
     await evalJs(`(async () => {
       const { findLoops, findOpenChains } = await import('/packages/core/loop-finder.js');
-      const { V2_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+      const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
       const st = window.__designController.state;
       for (const k of [...st.joints.keys()]) st.joints.delete(k);
       st.shapes.length = 0; st.constraints.length = 0; V2_PLAN.clear();
@@ -135,14 +134,14 @@ await (async () => {
     assert.deepStrictEqual(card.bitPresets, ['.02', '⅛', '¼', '½']);
     assert.deepStrictEqual(card.presets, ['Off', 'Tabs', 'Onion skin', 'Auto', '.02', '⅛', '¼', '½'], 'an Outside card: the Hold part choice (TASK 742), the greyed Tab count Auto (TASK 813) and the bit presets');
     const popOpen = (sel) => waitFor(`(() => { const e = document.querySelector('${sel}'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; })()`, sel + ' open');
-    const planHas = (cond) => waitFor(`import('/apps/shaper/src/cut-plan.js').then(({ V2_PLAN }) => [...V2_PLAN.values()].some((r) => r.cutType === 'exterior' && (${cond})))`, 'exterior cut record: ' + cond);
+    const planHas = (cond) => waitFor(`import('/tests/helpers/plan-v2.js').then(({ V2_PLAN }) => [...V2_PLAN.values()].some((r) => r.cutType === 'exterior' && (${cond})))`, 'exterior cut record: ' + cond);
     await clickEl('.cut-type-trigger'); await popOpen('.cut-type-menu');
     const typeRows = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => ({ id: o.dataset.id, icon: !!o.querySelector('svg.cut-ic'), current: o.classList.contains('is-current'), disabled: o.classList.contains('is-disabled') }))`);
     assert.ok(typeRows.every((o) => o.icon), 'every type row has an icon');
     assert.deepStrictEqual(typeRows.filter((o) => o.current).map((o) => o.id), ['exterior'], 'the current type is highlighted');
     // ── 4. TASK 455 amendments: hover boundary, chip rides the path, popovers to the LEFT, offset presets, cutter shape ──
     const rectOf = (sel) => evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 }; })()`);
-    const planRec = (kind, idx) => evalJs(`(async () => { const { V2_PLAN } = await import('/apps/shaper/src/cut-plan.js'); return JSON.stringify([...V2_PLAN.entries()]); })()`).then((j) => JSON.parse(j));
+    const planRec = (kind, idx) => evalJs(`(async () => { const { V2_PLAN } = await import('/tests/helpers/plan-v2.js'); return JSON.stringify([...V2_PLAN.entries()]); })()`).then((j) => JSON.parse(j));
     await click(away.x, away.y);
     // hover boundary: bold white #F6F7F9, 3px
     await move(targets.outside.x, targets.outside.y);

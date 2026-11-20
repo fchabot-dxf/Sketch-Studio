@@ -270,7 +270,7 @@ try {
     assert.ok(/^Inside/.test(rowsText(await list())[0]), label + ': row 1 is the Inside operation');
     await clickEl(await rowSel(1, '.ops-del'));
     await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length === 4`, label + ': the operation is gone');
-    const holes = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [${JSON.stringify(keys[1])}, ${JSON.stringify(keys[4])}].map((k) => m.V2_PLAN.get(k).cutType))`);
+    const holes = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [${JSON.stringify(keys[1])}, ${JSON.stringify(keys[4])}].map((k) => m.V2_PLAN.get(k) && m.V2_PLAN.get(k).cutType))`); // TASK S1: binned, they are in no operation (get: null)
     assert.deepStrictEqual(holes, [null, null], label + ': both holes unassigned');
     await shot(`${D}-ops-after-delete.png`, '#prepare-ops', phone ? 1 : 2);
     const file2 = await download();

@@ -1,4 +1,3 @@
-import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 // tests/polish-757-tray.js — TASK 757: what the two live tests (polish-757-live / polish-757-phone-live) share: the tray they draw and the Settings select
 // measure. Both are PAGE functions (the tests send their source text to the page: evalJs(`(${fn})()`)), so they use only what the page has.
 export const PHONE = { width: 390, height: 844 };
@@ -8,7 +7,7 @@ export const PHONE = { width: 390, height: 844 };
 // allowance, and a dish (circle r 44.45 at (300,100)) as a Stepped pocket over a cove slope (adaptive: many close outlines). Returns the planned types.
 export async function drawTray() {
   const { findLoops } = await import('/packages/core/loop-finder.js');
-  const { V2_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
+  const { V2_PLAN, keyOf } = await import('/tests/helpers/plan-v2.js');
   const { POCKET_CLEARING } = await import('/packages/core/pocket-clearing.js');
   const st = window.__designController.state;
   for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k);

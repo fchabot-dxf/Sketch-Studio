@@ -54,7 +54,7 @@ const harness = (app) => {
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const warn = () => [...doc.querySelectorAll('.cut-note-warn')].map((d) => [d.textContent, d.title]);
   const set = (cls, text) => { const inp = q(cls); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
-  const rows = () => [...doc.querySelectorAll('.cut-row')].filter((r) => r.style.display !== 'none').map((r) => r.dataset.row || r.dataset.param);
+  const rows = () => [...doc.querySelectorAll('.cut-row')].filter((r) => r.style.display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param);
   return { q, clickAt, pick, note, warn, set, rows };
 };
 const recAt = (cutType) => [...CUT_PLAN.entries()].find(([, r]) => r.cutType === cutType);

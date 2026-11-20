@@ -5,6 +5,7 @@
 import { hintLabel, hintText } from './param-hints.js';
 import { installCursorTooltip } from '#ui/cursor-tooltip.js';
 
+const offReasons = new WeakMap(); // element -> why its row does not apply now (TASK 813); set by setOffReason
 const contexts = new WeakMap(); // element -> the context its hint function reads ({ loop, roughing, online, contour ... }); set by refresh()
 
 /**
@@ -25,9 +26,15 @@ export function bindHint({ el, id = el.dataset.hint, ctx = {}, iconOnly = false 
   };
 }
 
-/** The hint text of an element that has data-hint, in its context now. */
+/** TASK 813: a row that does not apply now stays in its place, greyed: its label's tooltip starts with the reason (null = the row applies). */
+export function setOffReason(el, reason) {
+  if (reason) offReasons.set(el, reason); else offReasons.delete(el);
+}
+
+/** The hint text of an element that has data-hint, in its context now (after the reason, while its row is greyed). */
 export function hintFor(el) {
-  return hintText(el.dataset.hint, contexts.get(el) || {});
+  const text = hintText(el.dataset.hint, contexts.get(el) || {}), why = offReasons.get(el);
+  return why ? `${why}${/[.!?]$/.test(why) ? '' : '.'} ${text}` : text;
 }
 
 /** The Review toolbar's buttons have their own element-anchored tooltip (#ui mountTooltip with a title and the text): they are not this one's. */

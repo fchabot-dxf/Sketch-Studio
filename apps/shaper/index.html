@@ -255,7 +255,7 @@
     }
     .simexport-hub-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; border-radius: 6px; padding: 10px 18px; font: 14px system-ui, sans-serif; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
     .simexport-hub-btn:hover { border-color: var(--sk-selection, #4c9aff); color: #fff; }
-    .simexport-status { color: #9aa0a6; font-size: 13px; min-height: 18px; margin: 0; text-align: center; }
+    .simexport-status { color: #9aa0a6; font-size: 13px; line-height: 1.4; height: 4.2em; overflow-y: auto; margin: 0; text-align: center; } /* TASK 813: a slot of its own, three lines, scrolling when longer: a status line never pushes the Export card */
     /* SP1a: Prepare renders the shared sketch geometry (edges only, joints hidden) into its own canvas. */
     /* TASK 455: the Prepare look (Shaper Studio): ONE token block for the Prepare canvas AND the cut card (the card sits inside
        #view-prepare, so it inherits them). Colours are advisor-SAMPLED from the owner's Studio screenshots unless marked (~). */
@@ -574,12 +574,11 @@
     .cut-pop[hidden] { display: none; }
     .cut-type-menu, .cut-shape-pop { width: 134px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .cut-shape-pop { width: 164px; }
-    /* TASK 745: the Clearing popover: each pattern with its icon, a choice the region cannot take greyed with its reason under it */
+    /* TASK 745: the Clearing popover: each pattern with its icon, a choice the region cannot take greyed, its reason in its tooltip (TASK 813) */
     .cut-clear-pop { width: 176px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
     .cut-clear-pop .cut-type-opt { height: auto; min-height: 30px; flex-wrap: wrap; row-gap: 2px; padding: 5px 10px; }
     .cut-clear-pop .cut-type-opt span { text-transform: none; }
     .cut-clear-pop .cut-clear-name { flex: 1; min-width: 0; line-height: 1.2; }
-    .cut-clear-pop .cut-clear-why { flex: 0 0 100%; font-size: 11px; line-height: 1.3; }
     .cut-row[data-row="rasterAngle"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     @media (max-width: 640px), (pointer: coarse) {
       .cut-clear-pop { width: 128px; padding: 8px; gap: 4px; }
@@ -592,8 +591,11 @@
       .cut-type-menu, .cut-shape-pop, .cut-clear-pop { width: min(176px, calc(100vw - 262px)); min-width: 0; padding: 8px; gap: 4px; } /* TASK 770: the phone card is 236 px: 128 px are left of it at 390 */
     }
     .cut-type-menu, .cut-shape-pop, .cut-clear-pop { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; } /* TASK 770: a menu taller than the panel scrolls (cut-panel.js keepOnScreen) */
-    .cut-note { font-size: 11px; line-height: 1.4; color: var(--sk-prep-unit); padding: 0 12px; }
-    .cut-note[hidden] { display: none; }
+    /* TASK 813: the card's notes (turns, leftover, warnings) are an AREA OF THEIR OWN at the foot of the card, three lines high always, scrolling inside when longer: a note
+       appearing or going never moves a row. A row that does not apply to the settings stays in its place, greyed and inert (cut-panel.js place); its label's tooltip says why. */
+    .cut-note { box-sizing: content-box; flex: 0 0 auto; height: 4.2em; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; font-size: 11px; line-height: 1.4; color: var(--sk-prep-unit); padding: 0 12px; }
+    .cut-row.is-off > :not(.cut-field-label), .cut-row.is-off .cut-check { opacity: 0.4; }
+    .cut-row.is-off .cut-field-label { opacity: 0.7; cursor: not-allowed; }
     .cut-note-warn { color: var(--sk-warning, #f59e0b); }
     .cut-type-opt { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border-radius: 6px; background: var(--sk-prep-field-bg); color: var(--sk-prep-chip-text); font-size: 14px; cursor: pointer; }
     .cut-type-opt .cut-ic { width: 16px; height: 16px; }

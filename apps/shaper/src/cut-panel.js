@@ -13,7 +13,7 @@ import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off
 import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from '#core/settings-manager.js';
 import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, unitNumber } from '#core/units.js';
-import { bindHint } from './hint.js'; // TASK 805: a row's label and its tooltip (the cursor tooltip is installed once by main.js)
+import { bindHint, setOffReason } from './hint.js'; // TASK 805: a row's label and its tooltip (the cursor tooltip is installed once by main.js)
 import { hintLabel, choiceId } from './param-hints.js'; // TASK 770: THE table of every row's label and hint
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
@@ -336,7 +336,6 @@ export function createCutPanel(hostEl, opts = {}) {
           <span class="cut-unit">mm</span>
         </div>
       </div>
-      <div class="cut-note" hidden></div>
       <div class="cut-row" data-param="cutOffset">
         <button type="button" class="cut-field-label" data-hint="cutOffset"></button>
         <div class="cut-inline cut-box cut-offset-box">
@@ -361,6 +360,7 @@ export function createCutPanel(hostEl, opts = {}) {
         </button>
       </div>
     </div>
+    <div class="cut-note"></div>
     <div class="cut-pop cut-type-menu" role="listbox" hidden></div>
     <div class="cut-pop cut-offset-pop" hidden></div>
     <div class="cut-pop cut-shape-pop" role="listbox" hidden></div>
@@ -409,7 +409,6 @@ export function createCutPanel(hostEl, opts = {}) {
   for (const [f, b] of Object.entries(calcBars)) b.reset.addEventListener('click', () => onSetField(f, null));
   // TASK 810: the tab bar of a Roughing / Contour card (CARD_TABS): a tab = its name (the table's label; its hint the tooltip) and a dot when one of its rows holds a changed value
   const tabsEl = $('.cut-tabs');
-  const offsetRow = $('.cut-row[data-param="cutOffset"]'); // the note's place among the rows of an untabbed card (just before it)
   let activeTab = CARD_TABS[0].id; // the tab shown; kept while the page lives (another Roughing / Contour card opens on the same tab)
   const tabButtons = {};
   for (const t of CARD_TABS) {
@@ -602,9 +601,9 @@ export function createCutPanel(hostEl, opts = {}) {
       const why = c.id === 'morphed' && current.clearingInfo && current.clearingInfo.morphed ? (CLEARING_REFUSED[current.clearingInfo.morphed] || current.clearingInfo.morphed) : null;
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt cut-clear-opt' + (c.id === current.clearing ? ' is-current' : '') + (why ? ' is-disabled' : '');
-      opt.setAttribute('role', 'option'); opt.dataset.clearing = c.id; opt.disabled = Boolean(why);
+      opt.setAttribute('role', 'option'); opt.dataset.clearing = c.id;
       optionBody(opt, iconSvg(c), 'clearing', c.id, 'cut-clear-name');
-      if (why) { opt.title = why; const r = document.createElement('span'); r.className = 'cut-clear-why'; r.textContent = why; opt.appendChild(r); }
+      if (why) { opt.setAttribute('aria-disabled', 'true'); setOffReason(opt, why); } // TASK 813: greyed; its reason is its tooltip (not `disabled`: it keeps the tooltip), no line under it
       else opt.addEventListener('click', () => { closePops(null); onSetField('clearing', c.id); });
       clearPop.appendChild(opt);
     }
@@ -656,18 +655,29 @@ export function createCutPanel(hostEl, opts = {}) {
   });
   stepperFor('leadInLength', leadLengthInput, 'lead-in length', { box: leadLengthInput.closest('.cut-box') });
 
+  // TASK 813: a row's state on this card: false = the card has no such row (another operation / target); true = shown; a string = shown IN ITS PLACE but greyed and inert (it
+  // does not apply to the current settings), the string its reason: the start of its label's tooltip. So changing a setting never moves the rows below it.
+  const place = (name, state) => {
+    const row = card.querySelector(`.cut-row[data-row="${name}"]`), off = typeof state === 'string' ? state : null;
+    row.style.display = state === false ? 'none' : '';
+    row.classList.toggle('is-off', Boolean(off));
+    if (off) { row.dataset.off = ''; row.setAttribute('aria-disabled', 'true'); } else { delete row.dataset.off; row.removeAttribute('aria-disabled'); }
+    for (const part of row.children) {
+      if (part.classList.contains('cut-field-label')) setOffReason(part, off);
+      else if (part.classList.contains('cut-check')) { part.querySelector('input').disabled = Boolean(off); setOffReason(part.querySelector('[data-hint]'), off); }
+      else part.toggleAttribute('inert', Boolean(off)); // the label stays live: it carries the tooltip
+    }
+  };
   const syncCalcBar = (f, isCalculated) => { calcBars[f].tag.hidden = !isCalculated; calcBars[f].reset.hidden = isCalculated; }; // a calculated value: its tag, else Reset to calculated
   const boundaryOffsetBase = () => { const b = boundaryOf(current.record); return b.offset != null ? b.offset : boundaryCalcOffset({ ...(current.record || {}), levelsOp: 'roughing' }); }; // TASK 810
   // TASK 810: show the active tab's rows of a Roughing / Contour card (the rows the card logic shows, CARD_TABS), the dots, and the panel's fixed height (the tallest tab's
   // rows, measured: every tab is laid out once, the rows area then keeps that height as its flex basis, shrinking and scrolling only where the panel is shorter). The card
-  // note sits under the panel on a tabbed card (the same in every tab), in its place among the rows otherwise. An untabbed card: every row as the card logic left it.
+  // note is under the rows on every card (TASK 813: an area of its own, fixed height). An untabbed card: every row as the card logic left it.
   const rowKey = (row) => row.dataset.row || row.dataset.param;
   function applyTabs() {
     const tabbed = tabbedType(current.cutType);
     const rows = [...rowsEl.children].filter((el) => el.classList.contains('cut-row'));
     rowsEl.style.flex = '';
-    if (tabbed && noteEl.parentNode === rowsEl) card.insertBefore(noteEl, rowsEl.nextSibling);
-    if (!tabbed && noteEl.parentNode !== rowsEl) rowsEl.insertBefore(noteEl, offsetRow);
     tabsEl.hidden = !tabbed;
     if (!tabbed) { for (const r of rows) delete r.dataset.offTab; return; }
     const op = cutTypeById(current.cutType).levelsOp, rec = current.record || {};
@@ -701,23 +711,26 @@ export function createCutPanel(hostEl, opts = {}) {
     const declares = (p) => Boolean(curDecl && (curDecl.params || []).includes(p));
     const partLevels = Boolean(current.record && Array.isArray(current.record.levels) && current.record.levels.length); // TASK 792: a part with levels: Roughing steps every Step depth (adaptive stepping reads a slope's rings)
     const adaptive = declares('adaptiveSteps') && !partLevels && current.adaptiveSteps === true; // TASK 717: the Resolution row replaces the Step depth row
-    card.querySelector('.cut-row[data-row="adaptiveSteps"]').style.display = declares('adaptiveSteps') && !partLevels ? '' : 'none';
-    card.querySelector('.cut-row[data-row="stepDepth"]').style.display = declares('stepDepth') && !adaptive ? '' : 'none';
-    card.querySelector('.cut-row[data-row="stepDeviation"]').style.display = declares('stepDeviation') && adaptive ? '' : 'none';
+    place('adaptiveSteps', declares('adaptiveSteps') && !partLevels);
+    // TASK 813: Step depth and Resolution both stay in place: the one Adaptive stepping does not use is greyed
+    place('stepDepth', declares('stepDepth') ? !adaptive || 'Adaptive stepping sets the steps: set its Resolution instead.' : false);
+    place('stepDeviation', declares('stepDeviation') ? adaptive || 'Turn Adaptive stepping on to set its Resolution.' : false);
     adaptiveInput.checked = adaptive;
     stepInput.value = fieldText(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
     const deviation = Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm;
     deviationInput.value = lengthText(deviation, { show: 'field', fractions: false }); // 0.1 mm = 0.0039 in: a tolerance finer than 1/64, always decimals
     // TASK 742: Hold part, for a type that declares it (a plain Outside / Inside): the choice, then the Tabs rows (count, width, thickness) or the Onion skin row (thickness)
     const hold = declares('holdPart') ? (current.holdPart === 'tabs' || current.holdPart === 'skin' ? current.holdPart : 'off') : null;
-    card.querySelector('.cut-row[data-row="holdPart"]').style.display = hold ? '' : 'none';
-    card.querySelector('.cut-row[data-row="tabCount"]').style.display = hold === 'tabs' ? '' : 'none';
-    card.querySelector('.cut-row[data-row="tabWidth"]').style.display = hold === 'tabs' ? '' : 'none';
-    card.querySelector('.cut-row[data-row="holdThickness"]').style.display = (hold === 'tabs' && tabsHaveThickness(current.cutType)) || hold === 'skin' ? '' : 'none'; // TASK 775: an On line cut's tabs are uncut gaps (no thickness)
+    // TASK 813: the rows of a Hold part choice stay in place, greyed, while it does not use them
+    const tabsOnly = hold === 'tabs' || 'Choose Tabs in Hold part to set this.';
+    place('holdPart', Boolean(hold));
+    place('tabCount', hold ? tabsOnly : false);
+    place('tabWidth', hold ? tabsOnly : false);
+    place('holdThickness', !hold ? false : (hold === 'tabs' && tabsHaveThickness(current.cutType)) || hold === 'skin' || (hold === 'tabs' ? 'On a line the tabs are uncut gaps: they have no thickness.' : 'Choose Tabs or Onion skin in Hold part to set this.')); // TASK 775: an On line cut's tabs are uncut gaps (no thickness)
     hints.tabWidth.refresh({ online: Boolean(hold) && !tabsHaveThickness(current.cutType) });
     hints.holdThickness.setId(hold === 'skin' ? 'skinThickness' : 'holdThickness'); // TASK 770: the row is the skin's thickness with Onion skin
     renderPresets(holdModesWrap, hold ? HOLD_PRESETS : [], 'holdPart', hold); // hidden rows keep no preset buttons
-    renderPresets(countPresetsWrap, hold === 'tabs' ? COUNT_PRESETS : [], 'tabCount', Number(current.tabCount) >= 1 ? Number(current.tabCount) : 'auto');
+    renderPresets(countPresetsWrap, hold ? COUNT_PRESETS : [], 'tabCount', Number(current.tabCount) >= 1 ? Number(current.tabCount) : 'auto');
     countInput.value = Number(current.tabCount) >= 1 ? String(Math.floor(Number(current.tabCount))) : '';
     countInput.placeholder = current.hold && current.hold.requested >= 1 && !(Number(current.tabCount) >= 1) ? `Auto (${current.hold.requested})` : 'Auto';
     tabWidthInput.value = fieldText(fieldBase('tabWidth'));
@@ -725,26 +738,28 @@ export function createCutPanel(hostEl, opts = {}) {
     // TASK 745: the Clearing choice of a type that declares it (the plain Pocket), then the rows of a computed pattern (Raster: + its angle)
     const clearing = declares('clearing') ? (CLEARING_CHOICES.some((c) => c.id === current.clearing) ? current.clearing : 'freehand') : null;
     const computed = Boolean(clearing) && clearing !== 'freehand';
-    card.querySelector('.cut-row[data-row="clearing"]').style.display = clearing ? '' : 'none';
-    for (const row of ['stepover', 'loop']) card.querySelector(`.cut-row[data-row="${row}"]`).style.display = computed ? '' : 'none';
+    // TASK 813: Freehand has no passes: the rows of a computed pattern stay in place, greyed, while Freehand is chosen
+    const patternOnly = computed || 'Freehand has no passes: choose Spiral or Raster in Clearing to set this.';
+    place('clearing', Boolean(clearing));
+    for (const row of ['stepover', 'loop']) place(row, clearing ? patternOnly : false);
     const roughing = declares('finishAllowance') && !declares('clearing'); // TASK 792: Roughing's allowance row (a Pocket shows it with a computed clearing)
-    card.querySelector('.cut-row[data-row="finishAllowance"]').style.display = computed || roughing ? '' : 'none';
+    place('finishAllowance', roughing ? true : clearing ? patternOnly : false);
     // TASK 792: the part's Contour (Off | On), where its type takes one (shaper.js contourAllowed); On: "Edit contour" shows the Contour's own card
     const contourRow = Boolean(current.contour && current.contour.allowed);
-    card.querySelector('.cut-row[data-row="contour"]').style.display = contourRow ? '' : 'none';
+    place('contour', contourRow);
     renderPresets(contourModesWrap, contourRow ? CONTOUR_PRESETS : [], 'contour', Boolean(current.contour && current.contour.on));
     contourEditBtn.hidden = !(contourRow && current.contour.on);
     hints.stepDepth.refresh({ contour: current.kind === 'contour' });
     // TASK 792 (owner turn 2604): Roughing's Layout (Terraces | Nested), for a part with levels (a sloped region's Roughing is the stepped cut)
     const layoutRow = declares('roughLayout') && Boolean(current.record && Array.isArray(current.record.levels) && current.record.levels.length);
-    card.querySelector('.cut-row[data-row="roughLayout"]').style.display = layoutRow ? '' : 'none';
+    place('roughLayout', layoutRow);
     renderPresets(layoutModesWrap, layoutRow ? LAYOUT_PRESETS : [], 'roughLayout', current.record && current.record.roughLayout === 'nested' ? 'nested' : 'terraces');
-    card.querySelector('.cut-row[data-row="minTerraceWidth"]').style.display = layoutRow && !(current.record && current.record.roughLayout === 'nested') ? '' : 'none'; // the Terraces layout's row
+    place('minTerraceWidth', layoutRow ? !(current.record && current.record.roughLayout === 'nested') || 'Only the Terraces layout has bands to leave: choose Terraces in Layout to set this.' : false); // the Terraces layout's row
     minTerraceInput.value = fieldText(fieldBase('minTerraceWidth'));
     // TASK 810: Roughing's machining boundary (a part with levels, as the Layout): Boundary, the picked Shape (with Shape), Tool, Offset (calculated while unset)
     const b = boundaryOf(current.record), boundaryRows = declares('boundary') && layoutRow;
-    for (const row of ['boundary', 'boundaryTool', 'boundaryOffset']) card.querySelector(`.cut-row[data-row="${row}"]`).style.display = boundaryRows ? '' : 'none';
-    card.querySelector('.cut-row[data-row="boundaryShape"]').style.display = boundaryRows && b.kind === 'shape' ? '' : 'none';
+    for (const row of ['boundary', 'boundaryTool', 'boundaryOffset']) place(row, boundaryRows);
+    place('boundaryShape', boundaryRows ? b.kind === 'shape' || 'Choose Shape in Boundary to pick a shape.' : false);
     renderPresets(boundaryKindsWrap, boundaryRows ? boundaryPresets(current.boundaryCtx.hasStock) : [], 'boundary', b.kind);
     renderPresets(boundaryToolsWrap, boundaryRows ? BOUNDARY_TOOL_PRESETS : [], 'boundaryTool', b.tool);
     boundaryState.textContent = current.boundaryCtx.picking ? 'click a closed shape' : b.shape ? 'picked' : 'none picked';
@@ -754,37 +769,37 @@ export function createCutPanel(hostEl, opts = {}) {
     syncCalcBar('boundaryOffset', b.offset == null);
     // TASK 810: the Heights of a Roughing / Contour (any part): Top, Bottom (empty = the surface / the part's depth, shown greyed), Floor allowance
     const heights = tabbedType(current.cutType), hr = current.record || {};
-    for (const row of ['topDepth', 'bottomDepth', 'floorAllowance']) card.querySelector(`.cut-row[data-row="${row}"]`).style.display = heights ? '' : 'none';
+    for (const row of ['topDepth', 'bottomDepth', 'floorAllowance']) place(row, heights);
     topInput.value = Number(hr.topDepth) > 0 ? fieldText(Number(hr.topDepth)) : ''; topInput.placeholder = fieldText(0);
     bottomInput.value = Number(hr.bottomDepth) > 0 ? fieldText(Number(hr.bottomDepth)) : ''; bottomInput.placeholder = Number(current.partDepth) > 0 ? fieldText(Number(current.partDepth)) : '';
     floorInput.value = fieldText(fieldBase('floorAllowance'));
     syncCalcBar('topDepth', !(Number(hr.topDepth) > 0));
     // TASK 810: a Contour's which walls, where its part's walls come from levels or slope rings (a drawn region's Contour is its one wall); the choice in effect shown
     const wallsRow = current.kind === 'contour' && Boolean(current.walls && current.walls.shown);
-    card.querySelector('.cut-row[data-row="walls"]').style.display = wallsRow ? '' : 'none';
+    place('walls', wallsRow);
     renderPresets($('.cut-walls'), wallsRow ? WALLS_PRESETS : [], 'walls', wallsRow ? current.walls.value : null);
     syncCalcBar('bottomDepth', !(Number(hr.bottomDepth) > 0));
-    card.querySelector('.cut-row[data-row="smoothing"]').style.display = declares('smoothing') && current.levels ? '' : 'none'; // TASK 809: an operation on a part with levels (an STL)
+    place('smoothing', declares('smoothing') && Boolean(current.levels)); // TASK 809: an operation on a part with levels (an STL)
     smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.05 mm = 0.002 in: a tolerance, always decimals
-    card.querySelector('.cut-row[data-row="rasterAngle"]').style.display = clearing === 'raster' ? '' : 'none';
+    place('rasterAngle', clearing ? clearing === 'raster' || 'Only Raster has an angle: choose Raster in Clearing to set this.' : false);
     const choice = CLEARING_CHOICE(clearing || 'freehand');
     clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));
     const pct = Number(current.stepover) > 0 ? Number(current.stepover) : POCKET_CLEARING.stepoverPct.default;
     stepoverInput.value = String(Math.round(pct * 100) / 100);
-    stepoverLen.textContent = computed ? `= ${lengthText((pct / 100) * (Number(current.toolDia) || 0), { show: 'unit', fractions: false })}` : '';
+    stepoverLen.textContent = clearing ? `= ${lengthText((pct / 100) * (Number(current.toolDia) || 0), { show: 'unit', fractions: false })}` : '';
     allowanceInput.value = fieldText(fieldBase('finishAllowance'));
     loopInput.checked = computed && current.loop === true;
     hints.finishAllowance.refresh({ loop: current.loop === true, roughing }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js); TASK 792: on a Roughing, the Contour
     // TASK 775 / 778: the Lead-in row on an On line OUTLINE ONLY (a closed loop, not an open line; not with Tabs; pockets get a start mark, never lead-in).
     // On: Radius, Sweep, Length (each showing calculated tag or Reset to calculated), Side, Position (calculated | moved + Reset to calculated).
-    const leadRow = declares('leadIn') && current.kind !== 'chain' && hold !== 'tabs';
-    const leadOn = leadRow && current.leadIn === true;
-    card.querySelector('.cut-row[data-row="leadIn"]').style.display = leadRow ? '' : 'none';
-    for (const row of ['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInSide', 'leadInAt']) {
-      card.querySelector(`.cut-row[data-row="${row}"]`).style.display = leadOn && declares(row) ? '' : 'none';
-    }
-    renderPresets(leadModesWrap, leadRow ? LEAD_PRESETS : [], 'leadIn', current.leadIn === true);
-    renderPresets(leadSidesWrap, leadOn && declares('leadInSide') ? SIDE_PRESETS : [], 'leadInSide', current.leadInSide);
+    // TASK 813: the row stays in place with a reason where this target cannot take it (an open line, Tabs); its rows stay in place, greyed, while Lead-in is Off
+    const leadDecl = declares('leadIn');
+    const leadWhy = !leadDecl ? null : current.kind === 'chain' ? 'A lead-in needs a closed line: this one is open.' : hold === 'tabs' ? 'Not with Tabs: the line is cut in pieces.' : null;
+    const leadOn = leadDecl && !leadWhy && current.leadIn === true;
+    place('leadIn', leadDecl ? leadWhy || true : false);
+    for (const row of ['leadInRadius', 'leadInSweep', 'leadInLength', 'leadInSide', 'leadInAt']) place(row, declares(row) ? leadOn || leadWhy || 'Turn Lead-in On to set this.' : false);
+    renderPresets(leadModesWrap, leadDecl ? LEAD_PRESETS : [], 'leadIn', current.leadIn === true);
+    renderPresets(leadSidesWrap, declares('leadInSide') ? SIDE_PRESETS : [], 'leadInSide', current.leadInSide);
     leadRadiusInput.value = fieldText(fieldBase('leadInRadius'));
     const sweepVal = current.leadInSweep != null && Number.isFinite(Number(current.leadInSweep)) ? Number(current.leadInSweep) : (current.leadInInfo && Number.isFinite(Number(current.leadInInfo.sweep)) ? Number(current.leadInInfo.sweep) : LEAD_IN.sweep.defaultDeg);
     leadSweepInput.value = String(Math.round(sweepVal * 100) / 100);
@@ -798,7 +813,7 @@ export function createCutPanel(hostEl, opts = {}) {
     calcBars.leadInAt.reset.hidden = !posMoved;
     const angle = Number.isFinite(Number(current.rasterAngle)) && current.rasterAngle !== null ? Number(current.rasterAngle) : POCKET_CLEARING.rasterAngle;
     angleInput.value = String(Math.round(angle * 100) / 100);
-    renderPresets(anglePresetsWrap, clearing === 'raster' ? ANGLE_PRESETS : [], 'rasterAngle', angle);
+    renderPresets(anglePresetsWrap, clearing ? ANGLE_PRESETS : [], 'rasterAngle', angle);
     noteEl.innerHTML = '';
     for (const line of current.note) { // a line is text, or { text, warn, title }: `warn` (the part of text to flag) is shown in the warning colour
       const item = typeof line === 'string' ? { text: line } : line, d = document.createElement('div');
@@ -808,7 +823,6 @@ export function createCutPanel(hostEl, opts = {}) {
       } else d.textContent = item.text;
       noteEl.appendChild(d);
     }
-    noteEl.hidden = !current.note.length;
     const curType = current.cutType ? cutTypeById(current.cutType) : null;
     hints.cutDepth.setId((curType && curType.depthParam) || 'cutDepth'); // TASK 472 / 770: a Stock's depth row is its Thickness (its own table entry)
     const off = Number(current.cutOffset) || 0;
@@ -819,8 +833,8 @@ export function createCutPanel(hostEl, opts = {}) {
     bitInput.value = fieldText(dia);
     renderPresets(presetsWrap, BIT_PRESETS, 'toolDia', dia);
     // hidden rows keep no preset buttons
-    renderPresets(stepPresetsWrap, declares('stepDepth') && !adaptive ? presetsFor(current.kind === 'contour' ? CONTOUR_STEP_PRESETS : STEP_PRESETS) : [], 'stepDepth', Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
-    renderPresets(deviationPresetsWrap, adaptive ? RESOLUTION_PRESETS : [], 'stepDeviation', deviation);
+    renderPresets(stepPresetsWrap, declares('stepDepth') ? presetsFor(current.kind === 'contour' ? CONTOUR_STEP_PRESETS : STEP_PRESETS) : [], 'stepDepth', Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
+    renderPresets(deviationPresetsWrap, declares('stepDeviation') ? RESOLUTION_PRESETS : [], 'stepDeviation', deviation);
     const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
     const shapeName = hintLabel(choiceId('cutterShape', shape.id));
     shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${angleText(Number(current.cutterAngle) || 90, { show: 'deg' })}` : shapeName;

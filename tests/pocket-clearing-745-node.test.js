@@ -253,7 +253,7 @@ const harness = (app) => {
   const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
-  const shown = (row) => q(`.cut-row[data-row="${row}"]`).style.display !== 'none';
+  const shown = (row) => { const r = q(`.cut-row[data-row="${row}"]`); return r.style.display !== 'none' && !('off' in r.dataset); }; // TASK 813: a row that does not apply stays in place, greyed (data-off): not shown as an applicable row
   const step = (row, d) => pressEl(`.cut-row[data-row="${row}"] .cut-step[data-d="${d}"]`);
   const ops = () => [...doc.querySelectorAll('#prepare-ops .ops-row')].map((r) => `${r.querySelector('.ops-name').textContent} | ${r.querySelector('.ops-sub').textContent}`);
   return { q, pressEl, clickAt, pick, clearing, note, typed, shown, step, ops };
@@ -329,7 +329,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     h.pick('pocket'); h.typed('.cut-depth', '6'); h.typed('.cut-bit', '6');
     h.pressEl('.cut-clear-trigger');
     const spiralOpt = h.q('.cut-clear-opt[data-clearing="morphed"]');
-    eq([spiralOpt.disabled, spiralOpt.classList.contains('is-disabled'), spiralOpt.querySelector('.cut-clear-why').textContent], [true, true, 'has islands: use Spiral or Raster'], 'the island pocket: Morphed spiral greyed with its reason');
+    eq([spiralOpt.getAttribute('aria-disabled'), spiralOpt.classList.contains('is-disabled'), spiralOpt.querySelector('.cut-clear-why'), hintFor(spiralOpt).startsWith('has islands: use Spiral or Raster.')], ['true', true, null, true], 'the island pocket: Morphed spiral greyed, its reason is its tooltip (TASK 813: no line under it)');
     ok(!h.q('.cut-clear-opt[data-clearing="linked"]').disabled, 'the island pocket: Spiral is never disabled');
     h.pressEl('.cut-clear-opt[data-clearing="linked"]');
     const kI = keyAt(st, 5, 5);

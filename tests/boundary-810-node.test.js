@@ -140,7 +140,7 @@ const payload = () => ({
     const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
     const pc = doc.getElementById('prepare-canvas');
     const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
-    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
+    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const tabs = () => [...doc.querySelectorAll('.cut-tab')].filter((b) => !b.hidden).map((b) => b.dataset.tab + (b.classList.contains('is-active') ? '*' : '') + (b.querySelector('.cut-tab-dot').hidden ? '' : '.'));
     const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
     const setField = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
@@ -265,7 +265,7 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     const pressEl = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
     const pc = doc.getElementById('prepare-canvas');
     const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
-    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
+    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
     const setField = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
     const els = (type) => [...shaperSvgOf(st, cutPlanEntries()).matchAll(/<path [^>]*\/>/g)].map((x) => x[0]).filter((x) => new RegExp(`shaper:cutType="(${type})"`).test(x));
@@ -326,7 +326,7 @@ eq([wallsDefault({ slope: {}, baseType: 'exterior' }), wallsDefault({ slope: {},
     app.modes.showMode('prepare');
     const st = app.state, doc = app.document, q = (s2) => doc.querySelector(s2);
     const pressEl = (s2) => { const e = q(s2); assert(e, s2 + ' not found'); app.press(e); };
-    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
+    const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const contourEls = () => [...shaperSvgOf(st, cutPlanEntries()).matchAll(/<path [^>]*\/>|<circle [^>]*\/>/g)].map((x) => x[0]).filter((x) => /shaper:toolDia="3\.175 mm"/.test(x) && /shaper:cutType="(outside|inside)"/.test(x));
     const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/sa7-slope/01-chamfer-outline.json', import.meta.url), 'utf8'));
     importFusionSelection(fx, { controller: app.controller, prepare: app.prepare });

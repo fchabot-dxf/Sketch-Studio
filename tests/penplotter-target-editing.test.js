@@ -19,6 +19,7 @@ import { mountToolpathStage } from '../apps/penplotter/src/toolpath-stage.js';
     appendChild() {},
     append() {},
     addEventListener() {},
+    options: [], querySelector: () => ({ disabled: false }), // the Document dialog's Paper select (TASK 827)
     onclick: null,
     onchange: null,
   });
@@ -51,6 +52,7 @@ import { mountToolpathStage } from '../apps/penplotter/src/toolpath-stage.js';
     getElementById: (id) => getEl('#' + id),
     createElement: () => dummyEl(),
     createElementNS: () => dummyEl(),
+    head: dummyEl(), documentElement: dummyEl(), defaultView: dummyEl(), // the shared cursor tooltip (TASK 827, the Document dialog's hints) installs into these
   };
 
   initLayers();

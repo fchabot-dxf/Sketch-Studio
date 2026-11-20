@@ -38,7 +38,7 @@ try {
     await sleep(200);
   };
   const centre = async (sel) => {
-    const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect();
+    const p = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect();
       const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const hit = document.elementFromPoint(x, y);
       return { x, y, w: r.width, h: r.height, onTop: !!hit && (hit === e || e.contains(hit)) }; })()`);
     assert.ok(p && p.onTop, `${sel} is on screen and not covered: ${JSON.stringify(p)}`);
@@ -100,7 +100,7 @@ try {
     // a plain Pocket: none of the stepped rows (Adaptive stepping, Step depth, Resolution) shows
     assert.deepStrictEqual(await evalJs(`['adaptiveSteps', 'stepDepth', 'stepDeviation'].map((r) => getComputedStyle(document.querySelector('.cut-row[data-row="' + r + '"]')).display)`), ['none', 'none', 'none'], label + ': a plain Pocket has no stepped rows');
     // every stepper target on the card: size, and the card fits
-    const sizes = await evalJs(`[...document.querySelectorAll('.cut-card .cut-step, .cut-card .cut-flip')].map((b) => { const r = b.getBoundingClientRect(); return [b.className + ':' + (b.dataset.d || ''), Math.round(r.width), Math.round(r.height)]; }).filter((x) => x[1] > 0)`); // the hidden Step depth / Resolution rows have no box
+    const sizes = await evalJs(`[...document.querySelectorAll('.cut-card .cut-step, .cut-card .cut-flip')].filter((b) => !b.closest('[data-off]')).map((b) => { const r = b.getBoundingClientRect(); return [b.className + ':' + (b.dataset.d || ''), Math.round(r.width), Math.round(r.height)]; }).filter((x) => x[1] > 0)`); // the hidden Step depth / Resolution rows have no box
     assert.strictEqual(sizes.length, 7, 'depth, offset, bit: six steppers + the flip'); console.log(label + ' card targets: ' + JSON.stringify(sizes));
     for (const [n, w, h] of sizes) assert.ok(w >= touchMin && h >= touchMin, `${label} ${n}: ${w} x ${h} (>= ${touchMin})`);
     const fit = await evalJs(`(() => { const c = document.querySelector('.cut-card').getBoundingClientRect(); const bx = [...document.querySelectorAll('.cut-card .cut-box')].map((b) => b.scrollWidth - b.clientWidth);

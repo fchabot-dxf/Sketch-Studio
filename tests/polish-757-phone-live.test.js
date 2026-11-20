@@ -74,7 +74,7 @@ try {
   await waitFor(`!!document.querySelector('#prepare-canvas .sk-edge') && !!document.getElementById('prepare-canvas').getScreenCTM()`, 'prepare view drawn');
   await evalJs(`window.__prepareView.setView({ x: 60, y: 20, w: 140 })`); await sleep(200); // zoomed so a finger's tap is clearly on the part (between the slot and the pocket)
   { const p = await toScreen(60, 20); await press(p.x, p.y); }
-  await waitFor(`!document.querySelector('.cut-row[data-row="tabCount"]').hidden && document.querySelector('.cut-row[data-row="tabCount"]').style.display !== 'none'`, 'the tab count row (phone)');
+  await waitFor(`!document.querySelector('.cut-row[data-row="tabCount"]').hidden && document.querySelector('.cut-row[data-row="tabCount"]').style.display !== 'none' && !('off' in document.querySelector('.cut-row[data-row="tabCount"]').dataset)`, 'the tab count row (phone)');
   const fit = await evalJs(`(() => { const i = document.querySelector('.cut-tab-count'), cs = getComputedStyle(i), c = document.createElement('canvas').getContext('2d');
     c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily; const box = i.closest('.cut-box'), card = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect();
     return { placeholder: i.placeholder, room: i.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), longest: c.measureText('Auto (99)').width, boxOverflow: box.scrollWidth - box.clientWidth, cardRight: card.right, vw: innerWidth }; })()`);

@@ -80,7 +80,7 @@ const openStage = async (id) => {
   await sleep(300);
 };
 const tab = async (id) => { await clickEl(`.cut-tab[data-tab="${id}"]`); await waitFor(`document.querySelector('.cut-tab[data-tab="${id}"]').classList.contains('is-active')`, `the ${id} tab`); await sleep(120); };
-const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-rows .cut-row')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row || r.dataset.param)`);
+const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-rows .cut-row')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => (r.dataset.row || r.dataset.param) + ('off' in r.dataset ? ':off' : ''))`); // TASK 813: a row that does not apply stays in place, greyed (:off)
 const OUTSIDE = ['#prepare-panel', '#prepare-panel .cut-card', '#prepare-panel .cut-field', '#prepare-panel .cut-tabs', '#prepare-panel .cut-rows', '#prepare-panel .cut-note', '#prepare-ops', '#prepare-dir-legend', '#prepare-canvas'];
 const snap = () => evalJs(`(() => { const out = {}; const r2 = (n) => Math.round(n * 100) / 100;
   for (const sel of ${JSON.stringify(OUTSIDE)}) [...document.querySelectorAll(sel)].forEach((e, i) => { const b = e.getBoundingClientRect(); out[sel + '#' + i] = [r2(b.left), r2(b.top), r2(b.width), r2(b.height)].join(','); });
@@ -118,7 +118,7 @@ async function phase() {
   }
   console.log(`${device}: layout probe: ${Object.keys(base).length} boxes unchanged over 6 tab switches; card ${base['#prepare-panel .cut-card#0']}`);
   await tab('geometry');
-  assert.deepStrictEqual(await rows(), ['boundary', 'boundaryTool', 'boundaryOffset', 'cutOffset'], `${device}: the Geometry tab`);
+  assert.deepStrictEqual(await rows(), ['boundary', 'boundaryShape:off', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth:off', 'cutOffset'], `${device}: the Geometry tab (the Boundary shape and the Min terrace width greyed in place)`);
   assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.cut-boundary-kinds .cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '') + (b.getAttribute('aria-disabled') ? ':greyed' : ''))`),
     ['Silhouette*', 'Bounding box', 'Stock:greyed', 'Shape'], `${device}: Boundary: Silhouette, the Stock greyed (no Stock)`);
   // the 3D Review and the Paths view with the Silhouette
@@ -139,7 +139,7 @@ async function phase() {
   await pressWorld(PART_PTS, 'the part');
   await tab('geometry');
   await clickEl('.cut-boundary-kinds .cut-preset[data-value="shape"]');
-  await waitFor(`!!document.querySelector('.cut-row[data-row="boundaryShape"]') && getComputedStyle(document.querySelector('.cut-row[data-row="boundaryShape"]')).display !== 'none'`, `${device}: the Boundary shape row`);
+  await waitFor(`!!document.querySelector('.cut-row[data-row="boundaryShape"]') && !('off' in document.querySelector('.cut-row[data-row="boundaryShape"]').dataset)`, `${device}: the Boundary shape row`);
   assert.strictEqual(await evalJs(`[...document.querySelectorAll('.cut-note div')].map((d) => d.textContent).join(' | ')`), 'Roughing: nothing to cut: no boundary shape yet: press Pick, then click a closed shape', `${device}: the note says why nothing is cut`);
   await shot('shape-none.png', '#prepare-panel .cut-card');
   await clickEl('.cut-boundary-pick');

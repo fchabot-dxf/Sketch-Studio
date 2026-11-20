@@ -43,7 +43,7 @@ export function probe(t) {
       return { text: b.textContent, left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height), position: cs.position, pointerEvents: cs.pointerEvents,
         parent: b.parentNode.tagName, vw: innerWidth, vh: innerHeight }; })()`),
     snap: () => evalJs(`(() => { const out = {}; const r2 = (n) => Math.round(n * 100) / 100;
-      for (const sel of ${JSON.stringify(SNAP_SELECTORS)}) [...document.querySelectorAll(sel)].forEach((e, i) => { const b = e.getBoundingClientRect(); out[sel + '#' + i] = [r2(b.left), r2(b.top), r2(b.width), r2(b.height)].join(','); });
+      for (const sel of ${JSON.stringify(SNAP_SELECTORS)}) [...document.querySelectorAll(sel)].forEach((e, i) => { const b = e.getBoundingClientRect(), sc = e.parentElement && e.parentElement.closest('.cut-rows'); out[sel + '#' + i] = [r2(b.left), r2(b.top + (sc && (b.width || b.height) ? sc.scrollTop : 0)), r2(b.width), r2(b.height)].join(','); }); // TASK 813: a row's box is where it sits in the card's rows (the rows scroll on a short screen: scrolling is not a move)
       return out; })()`),
     movedBoxes(a, b) {
       const keys = new Set([...Object.keys(a), ...Object.keys(b)]);

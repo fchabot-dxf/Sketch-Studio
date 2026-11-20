@@ -115,7 +115,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
       st.saveState('draw');
       return st.shapes.length; })()`);
     const card = () => evalJs(`({ type: document.querySelector('.cut-type-cur').textContent, clearing: document.querySelector('.cut-clear-cur').textContent,
-      rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="finishAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.row),
+      rows: [...document.querySelectorAll('.cut-row[data-row="stepover"], .cut-row[data-row="finishAllowance"], .cut-row[data-row="loop"], .cut-row[data-row="rasterAngle"]')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row),
       loop: document.querySelector('.cut-loop').checked,
       stepover: document.querySelector('.cut-stepover').value, len: document.querySelector('.cut-stepover-len').textContent, note: [...document.querySelectorAll('.cut-note div')].map((d) => d.textContent) })`);
     const look = () => evalJs(`({ paths: document.querySelectorAll('#prepare-toolpath-group .sk-clear-path').length, cleanup: document.querySelectorAll('#prepare-toolpath-group .sk-clear-cleanup').length,

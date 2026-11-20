@@ -16972,3 +16972,4 @@ Task 810 (owner turns 2656-2658, 2688; Claude Opus subagent, worktree boundary-8
 
 ## TURN 820
 constraintTargets (packages/ui/geometry-labels.js): a joints-only constraint now binds the shape(s) holding ALL its joints; any-joint fallback only when none does. New tests/constraint-targets-820.test.js; tests/glyph-pick-hover-live.test.js BOUND now [rE2] (was the 3 lines touching r2/r3).
+Follow-up: 4-joint constraints (parallel, perpendicular, equal of two lines) resolve per pair [j0,j1] [j2,j3]; new live tests/keyhole-constraint-highlight-820-live.test.js (before/after screenshots in .evidence/820).

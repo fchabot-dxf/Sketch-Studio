@@ -19,7 +19,10 @@ assert.deepStrictEqual(ids({ type: 'vertical', joints: ['cc', 'cr'] }), ['circ']
 // no shape holds all the joints: today's any-joint fallback
 assert.deepStrictEqual(ids({ type: 'coincident', joints: ['p', 'r'] }), ['left'], 'coincident of one shape own two joints');
 assert.deepStrictEqual(ids({ type: 'coincident', joints: ['s', 'cc'] }), ['circ', 'right', 'bottom'].sort(), 'coincident of two separate shapes lights both');
-assert.deepStrictEqual(ids({ type: 'parallel', joints: ['p', 'r', 'q', 's'] }), ['arc', 'bottom', 'left', 'right'], 'four joints over two lines: any-joint fallback');
+// 4 joints: resolved per pair
+assert.deepStrictEqual(ids({ type: 'parallel', joints: ['p', 'r', 'q', 's'] }), ['left', 'right'], 'parallel of two lines lights those 2 lines, never the arc');
+assert.deepStrictEqual(ids({ type: 'perpendicular', joints: ['q', 's', 'r', 's'] }), ['bottom', 'right'], 'perpendicular per pair');
+assert.deepStrictEqual(ids({ type: 'equal', joints: ['c', 'p', 'q', 's'] }), ['arc', 'right'], 'equal of an arc radius and a line');
 // a constraint naming its shape is untouched
 assert.deepStrictEqual(ids({ type: 'pointOnLine', joint: 'p', shape: 'right' }), ['right']);
 assert.deepStrictEqual(constraintTargets(null, shapes).shapes.size, 0);

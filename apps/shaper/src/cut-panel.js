@@ -6,7 +6,8 @@
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED } from './cut-plan.js';
-import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT } from '#core/stepped-cut.js';
+import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, hasLevels } from '#core/stepped-cut.js';
+import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
 import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choice (Off | On) and its sides
 import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from '#core/settings-manager.js';
@@ -52,6 +53,7 @@ const STEPPERS = {
   stepover:      { step: { mm: 5, in: 5 }, min: POCKET_CLEARING.stepoverPct.min, max: POCKET_CLEARING.stepoverPct.max },
   finishAllowance: { step: { mm: 0.1, in: 0.005 }, min: 0 },
   minTerraceWidth: { step: { mm: 0.5, in: 1 / 32 }, min: 0 }, // TASK 792: Roughing's Min terrace width (0 = rough every band)
+  smoothing:     { step: { mm: 0.01, in: 0.0005 }, min: 0 }, // TASK 809: Roughing / Contour's Smoothing tolerance (0 = off)
   rasterAngle:   { step: { mm: 15, in: 15 }, min: 0, max: 180 },
   // TASK 775 / 778: the tangential arc lead-in: radius (min = bit radius), sweep (15-180 deg, step 15), optional straight length (min 0)
   leadInRadius:  { step: { mm: 0.5, in: 1 / 32 }, positive: true },
@@ -141,6 +143,13 @@ export function createCutPanel(hostEl, opts = {}) {
         <button type="button" class="cut-field-label" data-hint="minTerraceWidth"></button>
         <div class="cut-inline cut-box">
           <input type="text" class="cut-num cut-min-terrace" inputmode="decimal">
+          <span class="cut-unit">mm</span>
+        </div>
+      </div>
+      <div class="cut-row" data-row="smoothing">
+        <button type="button" class="cut-field-label" data-hint="smoothing"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-smoothing" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
       </div>
@@ -276,6 +285,8 @@ export function createCutPanel(hostEl, opts = {}) {
   const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
   const contourModesWrap = $('.cut-contour-modes'), contourEditBtn = $('.cut-contour-edit'), layoutModesWrap = $('.cut-layout-modes'), minTerraceInput = $('.cut-min-terrace'); // TASK 792
   minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
+  const smoothingInput = $('.cut-smoothing'); // TASK 809
+  smoothingInput.addEventListener('change', () => { const n = parseUnit(smoothingInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('smoothing', n); else renderFields(); });
   contourEditBtn.textContent = hintLabel('contourEdit'); contourEditBtn.dataset.hint = 'contourEdit';
   contourEditBtn.addEventListener('click', () => onEditContour());
   const leadModesWrap = $('.cut-lead-modes'), leadRadiusInput = $('.cut-lead-radius'), leadSweepInput = $('.cut-lead-sweep'), leadLengthInput = $('.cut-lead-length'), leadSidesWrap = $('.cut-lead-sides'), leadPosState = $('.cut-pos-state'); // TASK 775 / 778
@@ -371,6 +382,7 @@ export function createCutPanel(hostEl, opts = {}) {
     : field === 'holdThickness' ? (Number(current.holdThickness) > 0 ? Number(current.holdThickness) : holdDefaults(docUnit()).thickness)
     : field === 'finishAllowance' ? (current.finishAllowance != null && Number(current.finishAllowance) >= 0 ? Number(current.finishAllowance) : declaresOf(current.cutType, 'clearing') ? allowanceDefault(docUnit()) : 0) // TASK 745; TASK 792: a Roughing without one has 0
     : field === 'minTerraceWidth' ? (Number(current.record && current.record.minTerraceWidth) > 0 ? Number(current.record.minTerraceWidth) : 0) // TASK 792
+    : field === 'smoothing' ? smoothingOf((cutTypeById(current.cutType) || {}).levelsOp, current.record ? current.record.smoothing : undefined) // TASK 809: unset = the operation's default
     : field === 'leadInRadius' ? (current.leadInRadius != null && Number(current.leadInRadius) > 0 ? Number(current.leadInRadius) : (current.leadInInfo && Number(current.leadInInfo.radius) > 0 ? Number(current.leadInInfo.radius) : Number(current.toolDia) || 0)) // TASK 778: null = calculated by derivation
     : field === 'leadInLength' ? (current.leadInLength != null && Number(current.leadInLength) >= 0 ? Number(current.leadInLength) : (current.leadInInfo && Number(current.leadInInfo.length) >= 0 ? Number(current.leadInInfo.length) : 0)) // TASK 778: null = calculated (0)
     : (Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm);
@@ -472,6 +484,7 @@ export function createCutPanel(hostEl, opts = {}) {
   unitless('rasterAngle', angleInput, 'raster angle');
   stepperFor('finishAllowance', allowanceInput, 'finish allowance', { box: allowanceInput.closest('.cut-box') });
   stepperFor('minTerraceWidth', minTerraceInput, 'min terrace width', { box: minTerraceInput.closest('.cut-box') }); // TASK 792
+  stepperFor('smoothing', smoothingInput, 'smoothing', { box: smoothingInput.closest('.cut-box') }); // TASK 809
   // TASK 778: the tangential arc lead-in fields: Radius (doc unit, min bit radius on stepper, empty resets to calculated), Sweep (15-180 deg, step 15), Length (>= 0, straight part before arc)
   leadRadiusInput.addEventListener('change', () => {
     const raw = leadRadiusInput.value.trim();
@@ -555,6 +568,8 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets(layoutModesWrap, layoutRow ? LAYOUT_PRESETS : [], 'roughLayout', current.record && current.record.roughLayout === 'nested' ? 'nested' : 'terraces');
     card.querySelector('.cut-row[data-row="minTerraceWidth"]').style.display = layoutRow && !(current.record && current.record.roughLayout === 'nested') ? '' : 'none'; // the Terraces layout's row
     minTerraceInput.value = fieldText(fieldBase('minTerraceWidth'));
+    card.querySelector('.cut-row[data-row="smoothing"]').style.display = declares('smoothing') && current.levels ? '' : 'none'; // TASK 809: an operation on a part with levels (an STL)
+    smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.02 mm = 0.0008 in: a tolerance, always decimals
     card.querySelector('.cut-row[data-row="rasterAngle"]').style.display = clearing === 'raster' ? '' : 'none';
     const choice = CLEARING_CHOICE(clearing || 'freehand');
     clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));
@@ -626,6 +641,7 @@ export function createCutPanel(hostEl, opts = {}) {
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
       leadIn: rec.leadIn === true, leadInRadius: rec.leadInRadius ?? null, leadInSweep: rec.leadInSweep ?? null, leadInLength: rec.leadInLength ?? null, leadInSide: rec.leadInSide === 'inside' ? 'inside' : 'outside', leadInAt: rec.leadInAt ?? null, leadInInfo: model.leadIn || null, // TASK 775 / 778
       contour: model.contour || null, // TASK 792: { allowed, on }
+      levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)
       record: rec, note: Array.isArray(model.note) ? model.note : [] };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;

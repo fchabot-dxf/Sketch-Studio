@@ -155,7 +155,7 @@ async function phase(what) {
   await clickEl('.cut-type-opt[data-id="roughing"]');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': Roughing set', 60000);
   timings[what].roughing = Date.now() - t0;
-  assert.deepStrictEqual(await rows(), ['cutDepth', 'finishAllowance', 'contour', 'roughLayout', 'minTerraceWidth', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width; no adaptive stepping)');
+  assert.deepStrictEqual(await rows(), ['cutDepth', 'finishAllowance', 'contour', 'roughLayout', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], what + ': the Roughing card of a part with levels (Layout, Min terrace width, TASK 809 Smoothing; no adaptive stepping)');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0 (no Contour yet)');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-contour-modes .is-active').textContent`), 'Off', what + ': Contour Off');
   await clickEl('.cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]');
@@ -179,7 +179,7 @@ async function phase(what) {
   await clickEl('.cut-contour-edit');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour'`, what + ': the Contour card');
   assert.deepStrictEqual([await rows(), await evalJs(`[document.querySelector('.cut-step-depth').value, document.querySelector('.cut-bit').value, document.querySelector('.cut-shape-cur').textContent]`)],
-    [['stepDepth', 'toolDia', 'cutterShape'], ['0.25', '3.175', 'ball nose']], what + ': the Contour card: step 0.25, 1/8 in, ball nose');
+    [['smoothing', 'stepDepth', 'toolDia', 'cutterShape'], ['0.25', '3.175', 'ball nose']], what + ': the Contour card: (TASK 809: its Smoothing) step 0.25, 1/8 in, ball nose');
   await shot(`${what}-contour-card.png`, '#prepare-panel .cut-card');
   await shot(`${what}-prepare.png`);
   const r = await review(what);

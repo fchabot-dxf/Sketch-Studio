@@ -287,8 +287,9 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     const all = els('pocket');
     clickAt(30, -30);
     pressEl('.cut-tab[data-tab="heights"]');
-    eq(rows(), ['topDepth', 'bottomDepth', 'floorAllowance'], 'the Heights tab: Top, Bottom, Floor allowance (TASK S2: the Depth row greyed: it is the Bottom)');
-    eq([q('.cut-top-depth').value, q('.cut-top-depth').placeholder, q('.cut-bottom-depth').value, q('.cut-bottom-depth').placeholder, q('.cut-floor-allowance').value], ['', '0', '', String(+D.toFixed(3)), '0'], 'the defaults: the surface, the depth of the part (greyed), no floor allowance');
+    eq(rows(), ['cutDepth', 'topDepth', 'floorAllowance'], 'the Heights tab: Depth, Top, Floor allowance (TASK S2, owner turn 2740: no Bottom row: the Depth is the one depth)');
+    eq([q('.cut-top-depth').value, q('.cut-top-depth').placeholder, q('.cut-floor-allowance').value], ['', '0', '0'], 'the defaults: the surface, no floor allowance');
+    ok(q('.cut-depth').value === '' ? q('.cut-depth').placeholder === 'From model' : q('.cut-depth').value === String(+D.toFixed(3)), 'the Depth: From model (or the part\u2019s depth): ' + q('.cut-depth').value);
     const keyBefore = opKeyOf(rec);
     const n0 = st.history.length;
     setField('.cut-top-depth', '3');
@@ -300,18 +301,18 @@ eq(levelsBand({ topDepth: 5, bottomDepth: 5 }, 7).empty, true, 'Top = Bottom: an
     ok([...doc.querySelectorAll('.cut-tab')].find((b) => b.dataset.tab === 'heights').querySelector('.cut-tab-dot').hidden === false, 'the Heights tab shows its dot');
     pressEl('.cut-row[data-row="topDepth"] .cut-calc-reset');
     eq([V2_PLAN.get(key).topDepth, els('pocket'), opKeyOf(V2_PLAN.get(key))], [null, all, keyBefore], 'Reset to surface: every path again, the key of before');
-    setField('.cut-bottom-depth', '5');
+    setField('.cut-depth', '5'); // TASK S2 (owner turn 2740): a typed Depth = the cut stops there (810's Bottom)
     const b5 = els('pocket').map(depthOf);
-    ok(Math.max(...b5) === 5 && b5.every((d) => d <= 5), 'Bottom 5: no path deeper, the last level at 5: ' + [...new Set(b5)].join(','));
+    ok(Math.max(...b5) === 5 && b5.every((d) => d <= 5), 'Depth 5: no path deeper, the last level at 5: ' + [...new Set(b5)].join(','));
     setField('.cut-floor-allowance', '0.5');
     const f = els('pocket').map(depthOf);
-    ok(Math.max(...f) === 4.5, 'Bottom 5 + floor allowance 0.5: the deepest level at 4.5');
+    ok(Math.max(...f) === 4.5, 'Depth 5 + floor allowance 0.5: the deepest level at 4.5');
     setField('.cut-top-depth', '6');
-    eq(els('pocket').length, 0, 'Top 6 under a 4.5 bottom: nothing cut');
-    ok(note().includes('Roughing: nothing to cut: no level between the Top and the Bottom (less the floor allowance)'), 'the note says why: ' + JSON.stringify(note()));
-    setField('.cut-top-depth', ''); setField('.cut-bottom-depth', ''); setField('.cut-floor-allowance', '0');
+    eq(els('pocket').length, 0, 'Top 6 under a 4.5 depth: nothing cut');
+    ok(note().includes('Roughing: nothing to cut: no level between the Top and the Depth (less the floor allowance)'), 'the note says why: ' + JSON.stringify(note()));
+    setField('.cut-top-depth', ''); setField('.cut-depth', ''); setField('.cut-floor-allowance', '0');
     eq(els('pocket'), all, 'all cleared: the default export');
-    // the Contour: its own Heights (Bottom = its part's depth)
+    // the Contour: its own Heights (TASK S2: its own Depth)
     addContourV2(key);
     const call = els('outside|inside'), rough = els('pocket'); // (TASK S2: adding the Contour no longer sets the Roughing's allowance)
     const crec = V2_PLAN.get(contourKeyOf(key));

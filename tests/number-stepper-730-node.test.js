@@ -54,14 +54,14 @@ try {
   const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   const typed = (cls, v) => editStep(app, () => typedRaw(cls, v)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   eq([...doc.querySelectorAll('.cut-card .cut-step')].map((b) => b.getAttribute('aria-label')),
-    ['Decrease depth', 'Increase depth', 'Decrease top', 'Increase top', 'Decrease bottom', 'Increase bottom', 'Decrease floor allowance', 'Increase floor allowance', 'Decrease stepover', 'Increase stepover', 'Decrease finish allowance', 'Increase finish allowance', 'Decrease boundary offset', 'Increase boundary offset', 'Decrease min terrace width', 'Increase min terrace width', 'Decrease smoothing', 'Increase smoothing', 'Decrease lead-in radius', 'Increase lead-in radius', 'Decrease lead-in sweep', 'Increase lead-in sweep', 'Decrease lead-in length', 'Increase lead-in length', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type); TASK 775 / 778: the lead-in radius / sweep / length
+    ['Decrease depth', 'Increase depth', 'Decrease top', 'Increase top', 'Decrease floor allowance', 'Increase floor allowance', 'Decrease stepover', 'Increase stepover', 'Decrease finish allowance', 'Increase finish allowance', 'Decrease boundary offset', 'Increase boundary offset', 'Decrease min terrace width', 'Increase min terrace width', 'Decrease smoothing', 'Increase smoothing', 'Decrease lead-in radius', 'Increase lead-in radius', 'Decrease lead-in sweep', 'Increase lead-in sweep', 'Decrease lead-in length', 'Increase lead-in length', 'Decrease raster angle', 'Increase raster angle', // TASK 745: the programmed pocket's rows (hidden for a stepped type); TASK 775 / 778: the lead-in radius / sweep / length
       'Decrease step depth', 'Increase step depth', 'Decrease resolution', 'Increase resolution',
       'Decrease tab count', 'Increase tab count', 'Decrease tab width', 'Increase tab width', 'Decrease thickness', 'Increase thickness', // TASK 742: the Hold part rows (hidden for a stepped type)
       'Decrease offset', 'Increase offset', 'Decrease bit diameter', 'Increase bit diameter'],
     'a − / + pair on depth, step depth, resolution, the Hold part rows, offset and bit diameter');
 
-  // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps. TASK S2: on a flat type (a Roughing's Depth is its Heights' Bottom, its Depth row greyed): the
-  // operation made a Pocket for these presses, then a Roughing again
+  // depth: unset -> 0.5; ONE undo step per press; - at 0 clamps. TASK S2: on a flat type (a Roughing's Depth emptied is From model, not unset): the operation made a
+  // Pocket for these presses, then a Roughing again
   pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="pocket"]');
   typed('.cut-depth', ''); // a stepped pocket arrives with its slope's depth: clear it to unset
   eq(rec().cutDepth, 'unset', 'depth cleared');

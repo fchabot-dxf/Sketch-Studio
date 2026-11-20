@@ -4,10 +4,10 @@
 //   operations: [{ id, type, on, settings, geometry: [{ key, seq, at? }] }]   array order = the Operations list order (no separate opOrder)
 //     id        'op-<n>', stable for life (the preview's data-op, the list rows)
 //     on        TASK 798: the Operations list's tick (true for every new / migrated operation; false = left out of the views and the file: setOpsOn)
-//     type      a CUT_TYPES id ('contour' = a part's Contour: its refs are the PARTS' keys, cut-plan.js resolveEntry gives it its part's depth, type, slope, levels)
+//     type      a CUT_TYPES id ('contour': TASK S2, a plain operation with its own settings; its memberships are named `contour:<key>` in Prepare)
 //     settings  the operation's settings, base mm, today's record field names (no cutType, no region data, no leadInAt); cutDepth 'model' = each shape's
 //               own imported depth (regions[key].source.cutDepth)
-//     geometry  the shapes it cuts: `seq` = the FILE order (one counter per document, nextSeq: a new membership takes the next number, a moved one keeps its
+//     geometry  the shapes it cuts (TASK S2: possibly none: an EMPTY operation; a shape may be in several operations): `seq` = the FILE order (one counter per document, nextSeq: a new membership takes the next number, a moved one keeps its
 //               own), `at` = a dragged lead-in position on that shape's outline (today's leadInAt)
 //   regions: { [geometry key]: { slope?, levels?, source? } }  the data that belongs to a GEOMETRY whatever operations use it (entries replaced, never mutated:
 //            undo snapshots share them by reference); source = { cutType, cutDepth } as the import gave them

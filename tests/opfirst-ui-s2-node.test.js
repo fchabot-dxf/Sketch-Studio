@@ -9,7 +9,7 @@
 //  6. the list: a row tap selects (its shapes); the SELECTED row alone shows Edit, Duplicate, X (in that order); a tap on another row moves them; a double-click opens;
 //  7. Edit + changes + Cancel = the operation as it was, no undo entry; Duplicate + Cancel = no copy; Duplicate + OK = the copy right after (the user's order), one step;
 //  8. in the open card: a shape row's X takes the shape out; a type change (refused with its line: the Stock and two shapes);
-//  9. (owner rulings turns 2713, 2730-2732) the CONTOUR is a plain operation: its own Depth (its Heights' Bottom; the Depth row greyed, showing it) and Wall side;
+//  9. (owner rulings turns 2713, 2740) the CONTOUR is a plain operation: its own Depth (the one live Depth row: From model or a stop depth; no Bottom row) and Wall side;
 //     editing a Roughing's depth does not move it; no allowance coupling;
 // 10. the bin: of the open operation = Cancel + delete; of another operation while one is open = OK first; Undo while open = Cancel; leaving Prepare = OK;
 // 11. an EMPTY operation is listed "no shapes yet: click shapes to add", saved (version 4) and read back; an edited operation keeps its place in the user's order;
@@ -56,7 +56,7 @@ try {
   const shapes = () => (q('.cut-geo').hidden ? null : qa('.cut-geo-shape').map((r) => `${nameOf(r.dataset.key)}: ${r.querySelector('.cut-geo-name').textContent}`));
   const xOf = (n) => q(`.cut-geo-shape[data-key="${K[n]}"] .cut-geo-x`);
   const card = () => (q('.cut-card').hidden ? 'hidden' : !q('.cut-actions').hidden ? 'open' : q('.cut-rows').hidden && head() === null ? 'type menu' : 'other');
-  const rowState = (name) => { const r = q(`.cut-row[data-row="${name}"], .cut-row[data-param="${name}"]`); return r.style.display === 'none' || 'offTab' in r.dataset ? 'none' : 'off' in r.dataset ? 'greyed' : 'live'; };
+  const rowState = (name) => { const r = q(`.cut-row[data-row="${name}"], .cut-row[data-param="${name}"]`); return !r ? 'absent' : r.style.display === 'none' || 'offTab' in r.dataset ? 'none' : 'off' in r.dataset ? 'greyed' : 'live'; };
   const tab = (id) => { const b = q(`.cut-tab[data-tab="${id}"]`); if (!b.classList.contains('is-active')) app.press(b); };
   const note = () => qa('.cut-note div').map((d) => d.textContent);
   const items = () => app.prepare.opList.inspect().items.filter((i) => i.id);
@@ -166,14 +166,14 @@ try {
   pressEl(`#prepare-ops .ops-row[data-id="${outId}"] .ops-pick`); app.press(rowBtn(outId, 'ops-del')); // C free again
   clickAt('none'); clickAt('C'); pick('roughing');
   eq(storeOps().find((o) => o.type === 'roughing').settings.finishAllowance, 0, '9: a new Roughing\'s allowance starts at 0 (the Roughing default with no Contour)');
-  tab('heights'); typed('.cut-bottom-depth', '8'); pressEl('.cut-ok');
+  tab('heights'); typed('.cut-depth', '8'); pressEl('.cut-ok');
   const roughId = storeOps().find((o) => o.type === 'roughing').id;
   clickAt('C'); pick('contour');
   const contourId = openId();
   tab('heights');
-  eq([rowState('cutDepth'), q('.cut-depth').value], ['greyed', 'From model'], '9: the Depth row of the Contour: greyed in place, showing its Bottom (one setting, owner turn 2732)');
-  typed('.cut-bottom-depth', '5');
-  eq(q('.cut-depth').value, 'stops at 5', '9: its own depth (the Bottom): 5 mm; the greyed Depth row shows it');
+  eq([rowState('cutDepth'), q('.cut-depth').value, q('.cut-depth').placeholder, rowState('bottomDepth')], ['live', '', 'From model', 'absent'], '9: the Contour’s ONE depth: the live Depth row, From model (owner turn 2740: no Bottom row)');
+  typed('.cut-depth', '5');
+  eq(q('.cut-depth').value, '5', '9: its own depth: 5 mm (the cut stops there)');
   tab('geometry');
   eq(rowState('wallSide'), 'live', '9: and its own Wall side (C is a drawn shape: its model does not say the side)');
   pressEl('.cut-row[data-row="wallSide"] .cut-preset[data-value="outside"]');
@@ -181,7 +181,7 @@ try {
   eq([storeOps().find((o) => o.id === contourId).settings.wallSide, storeOps().find((o) => o.id === roughId).settings.finishAllowance], ['outside', 0], '9: Wall side stored on the Contour; the Roughing\'s allowance untouched');
   const cOf = () => planEntries().filter((e) => e.target.id === K.C.slice(5)).map((e) => [e.rec.cutType, e.rec.cutType === 'contour' ? e.rec.baseDepth : e.rec.cutDepth]);
   pressEl(`#prepare-ops .ops-row[data-id="${roughId}"] .ops-pick`); app.press(rowBtn(roughId, 'ops-edit'));
-  tab('heights'); typed('.cut-bottom-depth', '12'); pressEl('.cut-ok');
+  tab('heights'); typed('.cut-depth', '12'); pressEl('.cut-ok');
   eq(cOf(), [['roughing', 12], ['contour', 5]], '9: editing the Roughing\'s depth does not move the Contour');
   clickAt('C');
   eq(items().filter((i) => i.picked).map((i) => i.id).sort(), [roughId, contourId].sort(), '9: a click on C (in Roughing + Contour): exactly those 2 rows highlighted');
@@ -193,23 +193,23 @@ try {
   // 10. the bin while open; Undo while open; leaving Prepare
   const s10 = JSON.stringify(captureStore()), h10 = hist();
   pressEl(`#prepare-ops .ops-row[data-id="${roughId}"] .ops-pick`); app.press(rowBtn(roughId, 'ops-edit'));
-  tab('heights'); typed('.cut-bottom-depth', '2');
+  tab('heights'); typed('.cut-depth', '2');
   app.press(rowBtn(roughId, 'ops-del'));
   eq([openId(), storeOps().some((o) => o.id === roughId), hist() - h10], [null, false, 1], '10: the bin of the open operation: Cancel, then the delete (one undo step)');
   eq(cOf(), [['contour', 5]], '10: C stays in its Contour, which still cuts at its own depth');
   app.undo();
   eq(JSON.stringify(captureStore()), s10, '10: Undo: the Roughing back, as it was before it was opened');
   pressEl(`#prepare-ops .ops-row[data-id="${roughId}"] .ops-pick`); app.press(rowBtn(roughId, 'ops-edit'));
-  tab('heights'); typed('.cut-bottom-depth', '2');
+  tab('heights'); typed('.cut-depth', '2');
   pressEl(`#prepare-ops .ops-row[data-id="${pocketId}"] .ops-pick`); // a tap on another row: OK first
   eq([openId(), storeOps().find((o) => o.id === roughId).settings.cutDepth, hist() - h10], [null, 2, 1], '10: a tap on another row = OK on the open one (one undo step)');
   app.undo();
   pressEl(`#prepare-ops .ops-row[data-id="${roughId}"] .ops-pick`); app.press(rowBtn(roughId, 'ops-edit'));
-  tab('heights'); typed('.cut-bottom-depth', '2');
+  tab('heights'); typed('.cut-depth', '2');
   app.undo();
   eq([openId(), JSON.stringify(captureStore())], [null, s10], '10: Undo while open = Cancel');
   pressEl(`#prepare-ops .ops-row[data-id="${roughId}"] .ops-pick`); app.press(rowBtn(roughId, 'ops-edit'));
-  tab('heights'); typed('.cut-bottom-depth', '2');
+  tab('heights'); typed('.cut-depth', '2');
   app.modes.showMode('design');
   eq([openId(), storeOps().find((o) => o.id === roughId).settings.cutDepth, hist() - h10], [null, 2, 1], '10: leaving Prepare = OK');
   app.undo(); app.modes.showMode('prepare');
@@ -234,7 +234,7 @@ try {
   // 12. a Fusion import while an operation is open
   const h12 = hist(), n12 = storeOps().length;
   pressEl(`#prepare-ops .ops-row[data-id="${contourId}"] .ops-pick`); app.press(rowBtn(contourId, 'ops-edit'));
-  tab('heights'); typed('.cut-bottom-depth', '7');
+  tab('heights'); typed('.cut-depth', '7');
   const line = (x1, y1, x2, y2) => ({ type: 'line', x1, y1, x2, y2 });
   const sq = (x0, y0, x1, y1) => ({ closed: true, segments: [line(x0, y0, x1, y0), line(x1, y0, x1, y1), line(x1, y1, x0, y1), line(x0, y1, x0, y0)] });
   const res = importFusionSelection({ action: 'selection_data', version: 1, units: 'mm', coordSystem: { yAxis: 'up', frame: 'plane-2d' }, source: { name: 'Body1' }, selectionId: 'sel-s2',

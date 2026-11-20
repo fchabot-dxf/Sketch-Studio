@@ -114,7 +114,7 @@ export const ROUGHING_REFUSED = {
   'no-shape': 'no boundary shape yet: press Pick, then click a closed shape',
   'shape-gone': 'the boundary shape is no longer in the design',
   'no-room': 'the boundary leaves no room for the bit',
-  band: 'no level between the Top and the Bottom (less the floor allowance)', // the Heights (Roughing and Contour)
+  band: 'no level between the Top and the Depth (less the floor allowance)', // the Heights (Roughing and Contour); TASK S2: the Depth (810's Bottom row is gone)
 };
 /** TASK 810: rename the keys of a STORED v2 plan map (`rename`: old key -> new key) and drop some (`remove`), in place, the map's order kept: the records AND every
  *  reference to a key a record holds (`boundaryShape`). The v2 migration's (shaper-doc.js); the store renames through renameGeometry. */

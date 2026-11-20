@@ -62,7 +62,7 @@ const clickEl = async (sel) => {
   await press(p.x, p.y);
 };
 const openStage = async (id) => { // desktop: the header's stage tab; a phone: the drawer's stage button
-  if (touch) { await clickEl('.sk-sidebar-handle'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); }
+  if (touch) { await clickEl('.sk-sidebar-chevron'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); }
   else await clickEl(`.sk-header-tab[data-tab="${id}"]`);
   await waitFor(`!document.getElementById('view-${id}').hidden`, `the ${id} stage`);
 };
@@ -70,7 +70,7 @@ const openStl = async (what) => {
   await evalJs('delete window.showOpenFilePicker');
   await send('DOM.getDocument', { depth: 0 });
   await send('Page.setInterceptFileChooserDialog', { enabled: true });
-  await clickEl(touch ? '.sk-sidebar-handle' : '.sk-sidebar-btn');
+  await clickEl(touch ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, what + ': the drawer opens'); await sleep(300);
   const chooser = once('Page.fileChooserOpened');
   await clickEl('[data-action="open-stl"]');

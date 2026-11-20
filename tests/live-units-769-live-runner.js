@@ -91,7 +91,7 @@ try {
     if (H.design) { // Shaper: its Design stage (the header tab on a desktop; on a phone, no header bar: the drawer's stage row, task 619)
       for (let i = 0; i < 5 && !(await evalJs(`!!document.querySelector('.sk-sidebar-stage.active[data-tab="design"], .sk-header-tab.active[data-tab="design"]')`)); i++) {
         if (phone) {
-          await click(await evalJs(`(() => { const r = document.querySelector('.sk-sidebar-handle').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+          await click(await evalJs(`(() => { const r = document.querySelector('.sk-sidebar-chevron').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
           await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer'); await sleep(300);
           await click(await evalJs(`(() => { const r = document.querySelector('.sk-sidebar-stage[data-tab="design"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
         } else await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);

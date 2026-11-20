@@ -92,7 +92,7 @@ const clickWorld = async (x, y) => {
 const activeStage = () => evalJs(`(() => { const e = document.querySelector('.sk-sidebar-stage.active') || document.querySelector('.sk-header-tab.active'); return e ? e.dataset.tab : null; })()`);
 const openDrawer = async () => {
   if (await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) return;
-  await clickEl(phone ? '.sk-sidebar-handle' : '.sk-sidebar-btn');
+  await clickEl(phone ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
 };
 const openStage = async (id) => {

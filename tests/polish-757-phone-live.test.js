@@ -38,7 +38,7 @@ try {
   const openMode = async (mode) => {
     for (let i = 0; i < 5; i++) {
       if (await activeStage() === mode) break;
-      if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-handle');
+      if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-chevron');
       await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
       await clickEl(`.sk-sidebar-stage[data-tab="${mode}"]`); await sleep(400);
     }
@@ -52,7 +52,7 @@ try {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await resetBufferLive(cdp);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?analytics=off`, 10000);
-  await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper app ready (phone)');
+  await waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper app ready (phone)');
   await evalJs(`localStorage.setItem('shaper-review-view', '3d')`);
   await setting('DOC_UNIT', 'in'); await setting('INCH_DISPLAY', 'decimal');
 

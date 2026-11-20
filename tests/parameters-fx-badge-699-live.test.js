@@ -67,7 +67,7 @@ await (async () => {
     return { x: l, y: t, width: r - l, height: b - t }; })()`);
   const openShaper = async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
-    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-handle')`, 'Shaper to load');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-chevron')`, 'Shaper to load');
     for (let i = 0; i < 5; i++) { const on = await evalJs(`(() => { const t = document.querySelector('.sk-header-tab.active'); return !t || t.dataset.tab === 'design'; })()`); if (on) break; await press('.sk-header-tab[data-tab="design"]'); }
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab');
     await waitForApp('design-canvas');

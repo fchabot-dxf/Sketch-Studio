@@ -19,6 +19,7 @@ function setupMockDom() {
       innerHTML: '',
       children,
       dataset: {},
+      classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } }, // TASK 819: app-footer.js marks the footer where a Design surface shows
       viewBox: {
         baseVal: {
           x: -60, y: -45, width: 120, height: 90,

@@ -88,7 +88,7 @@ await (async () => {
       pointer = touch;
       await fresh();
       // the first screen, as the owner sees it
-      const first = { stage: await activeStage(), header: await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), handle: await rectOf('.sk-sidebar-handle'),
+      const first = { stage: await activeStage(), header: await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), handle: await rectOf('.sk-sidebar-chevron'),
         canvas: await rectOf('#design-canvas'), scroll: await scroll() };
       console.log(tag + 'first screen ' + JSON.stringify(first));
       assert.strictEqual(first.stage, 'design', tag + 'a fresh Shaper opens on Design (TASK 706: was Explore)');
@@ -97,7 +97,7 @@ await (async () => {
 
       for (const st of STAGES) {
         // the stage switch: a real tap on the handle opens the drawer; its stage buttons are on screen and 44 px; a tap shows the stage
-        await press('.sk-sidebar-handle', tag + 'the drawer handle');
+        await press('.sk-sidebar-chevron', tag + 'the drawer handle');
         await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, tag + 'the drawer opens');
         await sleep(300);
         const btns = await evalJs(`[...document.querySelectorAll('.sk-sidebar-stage')].map((b) => { const r = b.getBoundingClientRect(); return { id: b.dataset.tab, left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }; })`);
@@ -126,7 +126,7 @@ await (async () => {
       }
 
       // a template opened from Prepare shows (in Design)
-      await press('.sk-sidebar-handle', tag + 'the drawer handle'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, tag + 'the drawer opens'); await sleep(300);
+      await press('.sk-sidebar-chevron', tag + 'the drawer handle'); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, tag + 'the drawer opens'); await sleep(300);
       await press('.sk-sidebar-stage[data-tab="prepare"]', tag + 'Prepare'); await sleep(400);
       assert.strictEqual(await activeStage(), 'prepare', tag + 'on Prepare');
       await openTemplate('rounded-rectangle', tag);

@@ -99,7 +99,7 @@ try {
   await checkPhoneModal('phone 390x844 (+)');
 
   // Open from New design in drawer menu
-  await tapEl('.sk-sidebar-handle');
+  await tapEl('.sk-sidebar-chevron');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'drawer open');
   await sleep(250);
   await tapEl('[data-action="new-design"]');
@@ -112,7 +112,7 @@ try {
   await checkPhoneModal('phone short 390x640 (+)', 'phone-640');
 
   // Also check sk-tp-small (Save as file dialog) stays centered & compact on 390x640
-  await tapEl('.sk-sidebar-handle');
+  await tapEl('.sk-sidebar-chevron');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'drawer open for save-as');
   await sleep(250);
   await tapEl('[data-action="save-as"]');

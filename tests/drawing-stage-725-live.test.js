@@ -90,7 +90,7 @@ const drawingInfo = () => evalJs(`(() => {
     grid: svg.querySelectorAll('#infinite-grid, pattern, defs').length,
     joints: w.querySelectorAll('.joint-handle').length,
     ribbon: rendered('#toolsRibbon'), browser: rendered('.sk-browser') || rendered('.sk-browser-corner-btn'), footer: rendered('footer.sk-statusbar'),
-    handle: rendered('.sk-sidebar-handle'), header: rendered('.sk-header'), doctabs: [...document.querySelectorAll('.sk-doctabs')].some((e) => { const r = e.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + 5, r.top + r.height / 2); return r.height > 0 && hit && e.contains(hit); }),
+    handle: rendered('.sk-sidebar-chevron'), header: rendered('.sk-header'), doctabs: [...document.querySelectorAll('.sk-doctabs')].some((e) => { const r = e.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + 5, r.top + r.height / 2); return r.height > 0 && hit && e.contains(hit); }),
     buttons: [...v.querySelectorAll('button')].filter((b) => b.getClientRects().length).map((b) => b.id),
     over: [...over].sort(),
     viewBox: svg.getAttribute('viewBox'),
@@ -217,7 +217,7 @@ try {
     return { shownTop, actions: visible(v.querySelector('.sk-drawing-actions')), title: visible(t) ? t.textContent : null,
       svgW: svg.style.width, svgH: svg.style.height, page: (document.getElementById('sk-drawing-page') || {}).textContent || null,
       geoStroke: getComputedStyle(geo).stroke, labelFill: getComputedStyle(lab).fill, bg: getComputedStyle(v).backgroundColor,
-      chrome: [...document.querySelectorAll('.sk-header, .sk-sidebar, .sk-sidebar-handle, .sk-doctabs, #notification-container, #toolsRibbon, footer')].filter(visible).length,
+      chrome: [...document.querySelectorAll('.sk-header, .sk-sidebar, .sk-sidebar-chevron, .sk-doctabs, #notification-container, #toolsRibbon, footer')].filter(visible).length,
       labels: svg.querySelectorAll('.dim-label').length, scale: v.dataset.printScale, orientation: v.dataset.printOrientation };
   })()`);
   console.log('print media: ' + JSON.stringify(pm));
@@ -283,7 +283,7 @@ try {
   const phoneBefore = await storedDoc(designId);
   assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-header')).display`), 'none', 'phone Design: no header row (the steps are in the drawer)');
   await shot('design-phone.png');
-  await tapEl('.sk-sidebar-handle');
+  await tapEl('.sk-sidebar-chevron');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'phone: the drawer opens');
   await sleep(300);
   await tapEl('.sk-sidebar-stage[data-tab="drawing"]');
@@ -326,7 +326,7 @@ try {
   const dp1 = await designInfo();
   assert.deepStrictEqual(dp1, dp0, 'phone: Design is as it was (its view too)');
   assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-header')).display`), 'none', 'phone Design: the header row is gone again');
-  assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-sidebar-handle')).display`), 'flex', 'phone Design: the drawer handle is back');
+  assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-sidebar-chevron')).display`), 'flex', 'phone Design: the drawer handle is back');
 
   console.log('drawing-stage-725-live: ok');
 } finally {

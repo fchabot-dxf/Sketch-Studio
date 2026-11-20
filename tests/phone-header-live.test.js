@@ -23,7 +23,7 @@ await (async () => {
     ];
     const measure = () => evalJs(`(() => { const h = document.querySelector('header.sk-header'); const hr = h.getBoundingClientRect(); const vw = window.innerWidth;
       const controls = [...h.querySelectorAll('button, input, a, select')].map((e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return { id: (e.id || e.className || e.tagName).toString().slice(0, 30), text: (e.textContent || '').trim().slice(0, 12), shown: r.width > 0 && r.height > 0 && cs.visibility !== 'hidden', left: r.left, right: r.right, top: r.top, bottom: r.bottom, h: r.height, w: r.width }; }).filter((c) => c.shown);
-      const handle = document.querySelector('.sk-sidebar-handle'); const har = handle ? handle.getBoundingClientRect() : null;
+      const handle = document.querySelector('.sk-sidebar-chevron'); const har = handle ? handle.getBoundingClientRect() : null;
       const strip = document.querySelector('.sk-doctabs'); const sr = strip ? strip.getBoundingClientRect() : null;
       return { vw, hdrDisplay: getComputedStyle(h).display, hdrLeft: hr.left, hdrRight: hr.right, hdrH: hr.height, scrollW: document.documentElement.scrollWidth, bodyScrollW: document.body.scrollWidth, controls,
         handle: har ? { left: har.left, right: har.right, top: har.top, bottom: har.bottom, w: har.width, h: har.height } : null,

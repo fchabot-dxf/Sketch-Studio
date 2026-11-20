@@ -19,6 +19,7 @@
 // createDocumentTabs({ getBuffer, store, actions, onChange, doc }) -> { el, refresh, note, destroy }
 //   getBuffer(): the host's document buffer (it may not exist yet: the strip is empty until it does)
 //   actions: { activateTab(key), closeTab(key) -> false when the user cancelled, newDesign() }  (project-actions.js: the same declaration the menu uses)
+//   leading: OPTIONAL element placed first in the strip (TASK 819: the sidebar's chevron, app-sidebar.js)
 //   onChange(): called when the active design / the tab names changed (the sidebar follows the active tab's name, status and the page title)
 // Accessibility: role=tablist "Open designs"; the arrow keys move between tabs (Home / End jump), Enter / Space activate, Delete closes.
 // Every width: ONE line; when the tabs reach their minimum width the line scrolls sideways and the active tab is scrolled into view (no second row).
@@ -104,7 +105,7 @@ function injectStyles() {
   stylesInjected = true;
 }
 
-export function createDocumentTabs({ getBuffer, store, actions, onChange = () => {}, doc = globalThis.document, pollMs = 500, activity = createDocumentActivity(), signedIn = () => true, onRefresh = () => {} } = {}) {
+export function createDocumentTabs({ getBuffer, store, actions, onChange = () => {}, doc = globalThis.document, pollMs = 500, activity = createDocumentActivity(), signedIn = () => true, onRefresh = () => {}, leading = null } = {}) {
   injectStyles();
   const el = doc.createElement('div');
   el.className = 'sk-doctabs'; // the row has its fixed height from the first paint (nothing below it moves when the tabs appear); the tabs are drawn once the stored design has restored
@@ -112,7 +113,7 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   const msg = doc.createElement('span'); msg.className = 'sk-doctabs-msg'; msg.setAttribute('role', 'status');
   const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'sk-doctab-new'; plus.title = 'New design in a new tab'; plus.setAttribute('aria-label', 'New design in a new tab'); plus.textContent = '+';
   plus.addEventListener('click', () => run('new', null, () => actions.newDesign()));
-  el.append(plus, msg);
+  el.append(...(leading ? [leading] : []), plus, msg); // TASK 819: `leading` = the host's drawer chevron, the strip's first child (left of the first tab)
   let names = new Map();     // stored design id -> its current name (a rename happens in the store; the buffer's copy is not updated)
   let shown = '';            // the signature of what is drawn: the strip is rebuilt only when it changes
   let lastActive = null;     // `${key}|${designId}|${name}` of the active tab, to tell the sidebar when it changed

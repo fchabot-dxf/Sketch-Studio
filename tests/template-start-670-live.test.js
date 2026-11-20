@@ -48,7 +48,7 @@ await (async () => {
   const boxLevels = (horizontal) => S(`JSON.stringify((() => { const p = [...s.joints.values()].map((j) => ({ x: j.x, y: -j.y })); const side = (q) => ${horizontal ? 'q.y' : 'q.x'}, along = (q) => ${horizontal ? 'q.x' : 'q.y'};
     const t0 = Math.min(...p.filter((q) => side(q) > 1e-6).map(side)); return [...new Set(p.filter((q) => Math.abs(side(q) - t0) < 1e-6).map((q) => Math.round(along(q) * 1e4) / 1e4))].sort((a, b) => a - b); })())`).then(JSON.parse);
   const openMenu = async () => {
-    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-chevron')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
   };
   const startOf = async (id) => {
@@ -59,7 +59,7 @@ await (async () => {
   const dontSave = async () => { await sleep(300); const has = await evalJs(`[...document.querySelectorAll('.sk-tp-backdrop [role="dialog"] button')].some((b) => /Don.t save/.test(b.textContent))`); if (has) { await press('.sk-tp-backdrop [role="dialog"] button:nth-of-type(2)').catch(() => {}); } };
   const openShaper = async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
-    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-handle')`, 'Shaper to load');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-chevron')`, 'Shaper to load');
     for (let i = 0; i < 5; i++) { const on = await evalJs(`(() => { const t = document.querySelector('.sk-header-tab.active'); return !t || t.dataset.tab === 'design'; })()`); if (on) break; await press('.sk-header-tab[data-tab="design"]'); }
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab');
     await waitForApp('design-canvas');
@@ -150,7 +150,7 @@ await (async () => {
 
     // the same picker on SketchStudio's LIGHT theme (the glyph colours are the theme's tokens)
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 10000);
-    await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-handle')`, 'SketchStudio to load'); await sleep(600);
+    await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-chevron')`, 'SketchStudio to load'); await sleep(600);
     await startOf('right-angle-corner');
     await press(cornerSel('joint', 'H-Through'));
     assert.strictEqual((await cornerChoices('joint')).length, 3, 'SketchStudio: the picker expands');

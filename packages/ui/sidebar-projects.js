@@ -171,7 +171,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       },
       onPress: () => { saveNow().catch(fail); },
     });
-    tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName,
+    tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName, leading: sidebar.chevron,
       activity, signedIn, onRefresh: (list) => { shownTabs = list; saveButton.refresh(); } });
     overlay = mountLoadingOverlay({ activity, below: () => tabStrip.el });
   }

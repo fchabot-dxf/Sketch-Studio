@@ -50,9 +50,11 @@ function injectStyles() {
    tool rail (no background, only the buttons take the pointer) and reserves no height: the canvas keeps its share. */
 @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
   :root { --sk-footer-h: 0px; --sk-rail-w: 161px; --sk-footer-btn-w: ${FOOTER_PHONE_MIN_W}px; } /* TASK 776: nine buttons (with Save and the account) must end before a host's right-hand panel (Pen Plotter's starts 244 px from the right edge): 44 px high, FOOTER_PHONE_MIN_W wide */ /* the tool-ribbon rail's width (24 px handle room + 2 + 88 two columns of icons + 44 section dropdown strip + 2 + 1 border; TASK 676) */
-  body .sk-footer, body .sk-statusbar { position: fixed !important; left: calc(var(--sk-rail-w) + var(--sk-canvas-edge, 0px)); right: 0; bottom: calc(var(--sk-canvas-edge, 0px) + var(--sk-canvas-inset, 8px)); height: var(--sk-footer-btn-h); padding: 0 var(--sk-canvas-inset, 8px) !important; gap: 6px; background: transparent !important; border: 0 !important; box-shadow: none !important; pointer-events: none; z-index: 30; }
+  body .sk-footer, body .sk-statusbar { position: fixed !important; left: 0; right: 0; bottom: var(--sk-canvas-inset, 8px); height: var(--sk-footer-btn-h); padding: 0 var(--sk-canvas-inset, 8px) !important; gap: 6px; background: transparent !important; border: 0 !important; box-shadow: none !important; pointer-events: none; z-index: 30; }
   body .sk-footer, body .sk-statusbar { justify-content: flex-start !important; } /* one cluster at the bottom-left, clear of a host's own right-hand panel (Pen Plotter's Design panel) */
   body .sk-footer-end { margin-left: 0; }
+  /* TASK 819: tucked in the lower-left corner of the screen (8 px in, 8 px up) in every stage; where a Design surface shows (refresh() sets sk-footer-rail) the tool rail is on the left, so the cluster sits inside the canvas frame, right of the rail, as before */
+  body .sk-footer.sk-footer-rail, body .sk-statusbar.sk-footer-rail { left: calc(var(--sk-rail-w) + var(--sk-canvas-edge, 0px)); bottom: calc(var(--sk-canvas-edge, 0px) + var(--sk-canvas-inset, 8px)); }
   body .sk-footer .sk-history-btn, body .sk-footer .sk-footer-btn, body .sk-statusbar .sk-history-btn, body .sk-statusbar .sk-footer-btn, body .sk-footer .sk-save, body .sk-footer .sk-account, body .sk-statusbar .sk-save, body .sk-statusbar .sk-account { pointer-events: auto; background: var(--sk-header-bg, #f1f5f9); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 }
 .sk-footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 8px; box-sizing: border-box;
@@ -286,6 +288,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
     if (paramsBtn) paramsBtn.hidden = !hasSketch;
     syncParams();
     recenterBtn.hidden = !shown;
+    el.classList.toggle('sk-footer-rail', shown); // TASK 819: a Design surface shows = the tool rail shows (the short viewport's footer sits right of it)
     lastSig = sigOf();
   };
 

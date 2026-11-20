@@ -94,7 +94,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
       for (let i = 0; i < 5; i++) {
         if (await activeStage() === mode) return;
         if (phone) {
-          if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-handle');
+          if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await clickEl('.sk-sidebar-chevron');
           await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'the drawer opens'); await sleep(300);
           await clickEl(`.sk-sidebar-stage[data-tab="${mode}"]`);
         } else await clickEl(`.sk-header-tab[data-tab="${mode}"]`);
@@ -183,7 +183,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
       await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection') && !document.getElementById('view-prepare').hidden`, 'the Fusion Prepare bar');
     } else {
       await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-      if (phone) await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'shaper app ready (phone)');
+      if (phone) await waitFor(`!!document.querySelector('.sk-sidebar-chevron')`, 'shaper app ready (phone)');
       else await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper app ready');
       await setUnit(phone ? 'in' : 'mm');
     }

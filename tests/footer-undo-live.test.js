@@ -118,7 +118,7 @@ await (async () => {
         } else assert(!ft.sk || !ft.sk.vis, tag + 'landscape: the SKETCHES box floats on the canvas, no drawer button');
         await shot(`${L.tag}-${name}-footer.png`, { x: 0, y: ft.fr.top - 2, width: L.w, height: L.h - ft.fr.top + 2 });
         // the app menu (a real tap on the peeking handle) opens fully inside the screen
-        const handleC = await centerOf('.sk-sidebar-handle');
+        const handleC = await centerOf('.sk-sidebar-chevron');
         assert(handleC, tag + 'peeking drawer handle exists');
         await tap(handleC.x, handleC.y);
         const menu = await evalJs(`(() => { const d = document.querySelector('.sk-sidebar.open'); if (!d) return null; const r = d.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, vw: innerWidth, vh: innerHeight }; })()`);

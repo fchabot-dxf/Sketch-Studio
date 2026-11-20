@@ -34,7 +34,7 @@ await (async () => {
     await pointer(c.x, c.y);
   };
   const openMenu = async () => {
-    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-chevron')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger');
     await pointer(c.x, c.y);
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
@@ -57,7 +57,7 @@ await (async () => {
   };
   const openShaper = async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
-    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-handle')`, 'Shaper to load');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"], .sk-sidebar-chevron')`, 'Shaper to load');
     for (let i = 0; i < 5; i++) {
       const on = await evalJs(`(() => { const t = document.querySelector('.sk-header-tab.active'); return !t || t.dataset.tab === 'design'; })()`);
       if (on) break;

@@ -3,7 +3,7 @@
 // TASK 696: each app is its own website, so the drawer links to no other app (the GO TO section is gone).
 //
 // DECLARED per host — the sidebar never knows host specifics:
-//   createAppSidebar({ current, docName, actions }) → { el, open, close, toggle, isOpen, setDocName, setActions, destroy }
+//   createAppSidebar({ current, docName, actions }) → { el, chevron, open, close, toggle, isOpen, setDocName, setActions, destroy }
 //     current  the host's app id (names the header button)
 //     docName  the document name shown at the top (a string)
 //     actions  a plain DECLARED array a project store can extend later:
@@ -51,6 +51,7 @@ export const SIDEBAR_ICONS = {
   log: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h10M4 9h10M4 13.5h6"/></svg>',
   // TASK 733: a puzzle piece = an add-in (the Shaper sidebar's "Fusion add-in")
   addin: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5V4a2 2 0 0 1 4 0v.5h3.5V8H14a2 2 0 0 0 0 4h.5v3.5H11V15a2 2 0 0 0-4 0v.5H3.5V12H4a2 2 0 0 0 0-4h-.5V4.5z"/></svg>',
+  chevron: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l5 5-5 5"/></svg>',
   debug: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l4 4-4 4M9.5 13H14"/></svg>',
 };
 
@@ -74,7 +75,7 @@ function injectStyles() {
 /* TASK 602: a menu taller than the screen (a phone in landscape: 360 px) scrolls under a finger instead of cutting its last entries off */
 .sk-sidebar-content { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
 .sk-sidebar-stages { display: none; }
-.sk-sidebar-handle { display: none; }
+.sk-sidebar-chevron { display: none; }
 @media (max-width: 640px), ${SHORT_VIEWPORT_QUERY} {
   .sk-sidebar-stages { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 12px 10px; border-bottom: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
   .sk-sidebar-stage { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 12px;
@@ -82,12 +83,12 @@ function injectStyles() {
     cursor: pointer; font: 600 13px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; }
   .sk-sidebar-stage:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
   .sk-sidebar-stage.active { background: var(--sk-selection, var(--sk-sidebar-accent, #2c65ff)); border-color: transparent; color: #fff; }
-  .sk-sidebar-handle { display: flex; align-items: center; justify-content: center; position: absolute; left: 100%;   top: 33%; transform: translateY(-50%);
-      width: 24px; height: 72px; padding: 0; border-left: 0; border-top: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35));
-    border-right: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); border-bottom: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35));
-    border-radius: 0 10px 10px 0; background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); color: var(--sk-sidebar-fg, var(--sk-header-fg, #1e293b));
-    box-shadow: 2px 0 8px rgba(0,0,0,0.22); visibility: visible; pointer-events: auto; cursor: grab; touch-action: none; }
-  .sk-sidebar-grip { width: 4px; height: 28px; border-radius: 2px; background: currentColor; opacity: 0.45; pointer-events: none; }
+  /* TASK 819: the phone door of the drawer: a chevron at the start of the document tab strip (document-tabs.js mounts it as its first child; it stays at the strip's left edge while the tabs scroll) */
+  .sk-sidebar-chevron { display: flex; align-items: center; justify-content: center; position: sticky; left: 0; z-index: 2; flex: 0 0 44px; width: 44px; height: var(--sk-doctabs-h, 30px);
+    margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--sk-doctab-strip, var(--sk-header-bg, #fff)); color: var(--sk-header-fg, #334155); cursor: pointer; }
+  .sk-sidebar-chevron svg { transition: transform 0.18s ease; }
+  .sk-sidebar-chevron[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .sk-sidebar-chevron:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; }
 }
 .sk-sidebar-top { padding: 16px 16px 8px; }
 .sk-sidebar-doc { font-size: 17px; font-weight: 600; margin: 0 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -146,12 +147,12 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   el.innerHTML = `<span class="sk-sidebar-burger" aria-hidden="true">&#9776;</span><span class="sk-sidebar-name">${cur ? cur.name : 'App'}</span>`;
 
   const backdrop = document.createElement('div'); backdrop.className = 'sk-sidebar-backdrop'; backdrop.hidden = true;
-  const drawer = document.createElement('aside'); drawer.className = 'sk-sidebar'; drawer.setAttribute('role', 'dialog'); // aria-modal only while open (TASK 783): the peeking handle inside it keeps the focus when it closes, and is not an overlay then
+  const drawer = document.createElement('aside'); drawer.className = 'sk-sidebar'; drawer.setAttribute('role', 'dialog'); // aria-modal only while open (TASK 783): the chevron in the tab strip keeps the focus when it closes, and is not an overlay then
   drawer.setAttribute('aria-label', 'App menu');
   const content = document.createElement('div'); content.className = 'sk-sidebar-content';
-  const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'sk-sidebar-handle'; handle.setAttribute('aria-label', 'Open menu'); handle.setAttribute('aria-expanded', 'false'); handle.title = 'Menu';
-  handle.innerHTML = '<span class="sk-sidebar-grip" aria-hidden="true"></span>';
-  drawer.append(content, handle);
+  const chevron = document.createElement('button'); chevron.type = 'button'; chevron.className = 'sk-sidebar-chevron'; chevron.setAttribute('aria-label', 'Open menu'); chevron.setAttribute('aria-expanded', 'false'); chevron.title = 'Menu';
+  chevron.innerHTML = SIDEBAR_ICONS.chevron; // TASK 819: mounted by the host at the start of the document tab strip (the phone breakpoints only show it)
+  drawer.append(content);
   document.body.append(backdrop, drawer);
 
   const enabledOf = (a) => (typeof a.enabled === 'function' ? !!a.enabled() : a.enabled !== false);
@@ -336,7 +337,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     if (isOpenFlag) return;
     isOpenFlag = true; viewId = 'main'; message = null; render();
     backdrop.hidden = false; drawer.classList.add('open'); drawer.setAttribute('aria-modal', 'true'); el.setAttribute('aria-expanded', 'true');
-    handle.setAttribute('aria-expanded', 'true'); handle.setAttribute('aria-label', 'Close menu');
+    chevron.setAttribute('aria-expanded', 'true'); chevron.setAttribute('aria-label', 'Close menu');
     document.addEventListener('keydown', onKey, true);
     firstFocus();
   }
@@ -346,75 +347,15 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     isOpenFlag = false;
     if (askSettle) askSettle(null); // closing the drawer cancels an open question
     drawer.classList.remove('open'); drawer.removeAttribute('aria-modal'); el.setAttribute('aria-expanded', 'false');
-    handle.setAttribute('aria-expanded', 'false'); handle.setAttribute('aria-label', 'Open menu');
+    chevron.setAttribute('aria-expanded', 'false'); chevron.setAttribute('aria-label', 'Open menu');
     document.removeEventListener('keydown', onKey, true);
-    try { if (typeof getComputedStyle === 'function' && getComputedStyle(handle).display !== 'none') handle.focus(); else el.focus(); } catch (_) {}
+    try { if (chevron.isConnected && typeof getComputedStyle === 'function' && getComputedStyle(chevron).display !== 'none') chevron.focus(); else el.focus(); } catch (_) {}
   }
   const toggle = () => (isOpenFlag ? close() : open());
   el.addEventListener('click', toggle);
   backdrop.addEventListener('click', close);
 
-  // Peeking phone drawer handle: tap (pointerup when !dragged, plus click for keyboard/programmatic) OR drag horizontally (never edge-swipe).
-  let pointerToggle = false;
-  let pointerTimer = null;
-  const markPointerHandled = () => {
-    pointerToggle = true;
-    clearTimeout(pointerTimer);
-    pointerTimer = setTimeout(() => { pointerToggle = false; }, 400);
-  };
-  handle.addEventListener('click', () => {
-    if (pointerToggle) { pointerToggle = false; clearTimeout(pointerTimer); return; }
-    toggle();
-  });
-  handle.addEventListener('pointerdown', (e) => {
-    if (e.button && e.button !== 0) return;
-    pointerToggle = false;
-    clearTimeout(pointerTimer);
-    const pid = e.pointerId;
-    const startX = e.clientX;
-    const w = drawer.getBoundingClientRect().width || 280;
-    const wasOpen = isOpenFlag;
-    const startTx = wasOpen ? 0 : -w;
-    let dragged = false;
-    try { handle.setPointerCapture(pid); } catch (_) {}
-    const move = (ev) => {
-      if (ev.pointerId !== pid) return;
-      const dx = ev.clientX - startX;
-      if (!dragged && Math.abs(dx) > 4) {
-        dragged = true;
-        if (!wasOpen) { viewId = 'main'; message = null; render(); }
-        drawer.style.transition = 'none';
-        drawer.style.visibility = 'visible';
-        backdrop.hidden = false;
-      }
-      if (!dragged) return;
-      const tx = Math.max(-w, Math.min(0, startTx + dx));
-      drawer.style.transform = `translateX(${tx}px)`;
-    };
-    const end = (ev) => {
-      if (ev.pointerId !== pid) return;
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-      try { if (handle.hasPointerCapture && handle.hasPointerCapture(pid)) handle.releasePointerCapture(pid); } catch (_) {}
-      drawer.style.transition = '';
-      drawer.style.visibility = '';
-      drawer.style.transform = '';
-      markPointerHandled();
-      if (!dragged) {
-        if (ev.type === 'pointerup') toggle();
-        return;
-      }
-      const dx = ev.clientX - startX;
-      const tx = Math.max(-w, Math.min(0, startTx + dx));
-      const shouldOpen = !wasOpen ? (tx > -w * 0.65 || dx > 40) : !(tx < -w * 0.35 || dx < -40);
-      if (shouldOpen) open();
-      else close();
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-  });
+  chevron.addEventListener('click', toggle);
 
   function setActiveStage(id) {
     curStage = id;
@@ -422,7 +363,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   }
 
   return {
-    el, open, close, toggle, isOpen: () => isOpenFlag,
+    el, chevron, open, close, toggle, isOpen: () => isOpenFlag,
     // updates the heading in place: a full re-render would reset an open view (e.g. the Projects browser back to its first level)
     setDocName(n) { name = n; const h = content.querySelector('h2.sk-sidebar-doc'); if (h) h.textContent = n; },
     /** Repaint the status line in place (the store's state changed). */
@@ -430,6 +371,6 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     setActiveStage,
     showView, notify, ask, registerView(id, def) { viewDefs[id] = def; },
     setActions(a) { acts = Array.isArray(a) ? a : []; if (isOpenFlag) render(); },
-    destroy() { close(); try { el.remove(); backdrop.remove(); drawer.remove(); } catch (_) {} },
+    destroy() { close(); try { el.remove(); chevron.remove(); backdrop.remove(); drawer.remove(); } catch (_) {} },
   };
 }

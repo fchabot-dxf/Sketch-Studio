@@ -98,7 +98,7 @@ await (async () => {
     }
   };
   const openMenu = async () => {
-    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-handle')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const c = await evalJs(`(() => { const e = [...document.querySelectorAll('.sk-sidebar-btn, .sk-sidebar-chevron')].find((x) => x.getClientRects().length > 0); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     assert(c, 'menu trigger not found'); await pointer(c.x, c.y); await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, 'sidebar open');
   };
   const expectedOrder = ['blank', ...TEMPLATES.map((t) => t.id)];
@@ -175,7 +175,7 @@ await (async () => {
     // ---- the other three hosts: the same item, the same modal ----
     for (const host of ['shaper', 'penplotter', 'trace']) {
       await navigate(url(host), 10000);
-      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-handle')`, host + ': menu');
+      await waitFor(`!!document.querySelector('.sk-sidebar-btn, .sk-sidebar-chevron')`, host + ': menu');
       await sleep(600);
       await openMenu(); await press('[data-action="templates"]');
       await waitFor(`!!document.querySelector('.sk-tp-card')`, host + ': the modal');

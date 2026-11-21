@@ -59,9 +59,10 @@ export function toolOf(rec) {
   const dia = Number(rec.toolDia) > 0 ? round6(rec.toolDia) : 0;
   const tapered = isTaperedCutter(shape); // TASK 842: a tapered bit's tool is also its cone (taper per side, shank)
   const angle = shape === 'vbit' ? Number(rec.cutterAngle) || 90 : tapered ? round6(Number(rec.taperAngle) || 0) : null;
+  const corner = shape === 'bowl' ? round6(Number(rec.cornerRadius) || 0) : null; // TASK 852: a bowl bit's corner radius makes another tool
   const shank = tapered ? round6(Number(rec.shankDia) || 0) : null;
   const name = typeof rec.bitName === 'string' && rec.bitName ? rec.bitName : null; // TASK 842: a table bit's name (its copy in the record): two bits of one size are two tools
-  const tool = { key: `${shape}|${dia}|${angle ?? ''}${tapered ? `|${shank}` : ''}${name ? `|${name}` : ''}`, shape, dia, angle, ...(tapered ? { shank } : {}), ...(name ? { name } : {}) };
+  const tool = { key: `${shape}|${dia}|${angle ?? ''}${tapered ? `|${shank}` : ''}${corner != null ? `|c${corner}` : ''}${name ? `|${name}` : ''}`, shape, dia, angle, ...(tapered ? { shank } : {}), ...(corner != null ? { corner } : {}), ...(name ? { name } : {}) };
   return { ...tool, label: toolName(tool) };
 }
 

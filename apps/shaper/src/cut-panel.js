@@ -559,7 +559,7 @@ export function createCutPanel(hostEl, opts = {}) {
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt' + (sh.id === current.cutterShape ? ' is-current' : ''); opt.dataset.shape = sh.id;
       optionBody(opt, iconSvg(sh), 'cutterShape', sh.id);
-      const pick = () => (isTaperedCutter(current.cutterShape) ? onSetFields({ cutterShape: sh.id, taperAngle: undefined, shankDia: undefined }) : onSetField('cutterShape', sh.id)); // TASK 842: leaving a tapered shape drops its cone
+      const pick = () => (isTaperedCutter(current.cutterShape) ? onSetFields({ cutterShape: sh.id, taperAngle: undefined, shankDia: undefined }) : current.cutterShape === 'bowl' ? onSetFields({ cutterShape: sh.id, cornerRadius: undefined }) : onSetField('cutterShape', sh.id)); // TASK 842: leaving a tapered shape drops its cone; TASK 852: leaving a bowl drops its corner radius
       opt.addEventListener('click', () => { pick(); if (sh.id === 'vbit') { current.cutterShape = 'vbit'; buildShapePop(); } else closePops(null); }); // a V-bit pick stays open to show its angles
       shapePop.appendChild(opt);
       if (sh.id === 'vbit' && current.cutterShape === 'vbit') {
@@ -811,7 +811,7 @@ export function createCutPanel(hostEl, opts = {}) {
     place('bit', hasBit);
     if (hasBit) { const why = picked ? 'Set by the picked bit: pick Custom in Bit to type your own' : true; place('toolDia', why); place('cutterShape', why); }
     bitIc.innerHTML = iconSvg(shape);
-    bitCur.textContent = picked ? `${bitRec.bitName}${bitOfRecord(bitRec, getBits()) ? '' : ' (not in your tool table)'}` : hintLabel('bitCustom');
+    bitCur.textContent = picked ? `${bitRec.bitName}${bitOfRecord(bitRec, getBits()) ? '' : ' (not in My bits)'}` : hintLabel('bitCustom');
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
     applyTabs(); // TASK 810: last, on the rows the card logic shows (TASK S3: the card is the open operation's only: a selection shows no card)

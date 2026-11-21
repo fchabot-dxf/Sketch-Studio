@@ -9,6 +9,9 @@ import { checkOriginRules, formatOriginRuleWarning } from '#core/origin-rules.js
 import { exportEncoding } from './shaper.js'; // TASK 803: the cut types' encoding, injected into the check like the exporter's
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
+import { getProjectStore, createProjectStore, createMemoryAdapter } from '#ui/project-store.js'; // TASK 855: Fusion mode uses in-memory workspace store; legacy browser buffer offered once
+import { deserializeDocument } from '#core/document.js';
+import { applyShaperDoc } from './shaper-doc.js';
 import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, mountShaperBrowser, shaperBufferOptions, applyShaperUnitDefault } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
@@ -16,7 +19,7 @@ import { createToolTableWindow } from './tool-table-window.js'; // TASK 842: the
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
-import { FUSION_ACTIONS, isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { FUSION_ACTIONS, LEGACY_FUSION_OFFERED_KEY, isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
 import { createFusionToolpathsSync } from './fusion-toolpaths.js'; // TASK 799: live toolpaths in Fusion
 import { getSelections } from './selection-list.js'; // TASK 795 / 799: selections and their 3D frames
 import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 795: the selection list's X and Clear all
@@ -635,7 +638,7 @@ const prepare = createPrepareStage({
   leadGroups: [{ label: 'Insert', buttons: [{ id: 'prepare-insert-stl', label: hintLabel('insertStlTool'), hint: hintText('insertStlTool'),
     svg: `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${STL_INSERT_MARKUP}</svg>`, onClick: () => insertStlFromToolbar() }] }],
   openToolTable: () => toolTableWindow.open(), // TASK 842: the cut card's "Edit tool table..."
-  onPlanChange: () => { if (fusionToolpaths) fusionToolpaths.notify(); }, // TASK 799: automatic Fusion toolpath overlay sync
+  onPlanChange: () => { if (fusionToolpaths) fusionToolpaths.notify(); if (fusionUi) fusionUi.notifyProjectChanged(); }, // TASK 799 / 855: automatic Fusion toolpath & project sync
   ...(fusionMode ? {
     onSelectInFusion: (op) => fusionUi && fusionUi.selectForOperation(op),
     showSelectInFusion: (op) => Boolean(fusionUi && fusionUi.canSelectForOperation(op)),
@@ -654,6 +657,7 @@ const afterSelectionImport = () => {
   history.refresh();
   if (modes.current() === 'review') enterReview(designController.state);
   if (fusionToolpaths) fusionToolpaths.notify();
+  if (fusionUi) fusionUi.notifyProjectChanged();
 };
 // TASK 790: Open STL (the drawer entry above) and the STL card at the top of Prepare's right column (stl-import.js, declared once: the node test kit calls it too)
 const stlImporter = createStlImporter({ ensureSketch, getController: () => designController, prepare, panelEl: document.getElementById('prepare-panel'),
@@ -719,6 +723,7 @@ function ensureSketch() {
   // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the tab's stage state
   docBuffer = createDocumentBuffer(shaperBufferOptions({
     controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
+    ...(fusionMode ? { store: createProjectStore({ adapter: createMemoryAdapter(), legacySource: async () => null, channel: null }) } : {}),
     session: createShaperSession({ prepare }), // shaper-session.js: Prepare selection + view
     showDesign: () => modes.showDesign(), // TASK 706: a design the user opens (new / Open / Open from file) is shown in Design
     refreshViews: () => { if (infoPanel) infoPanel.refresh(); },
@@ -827,6 +832,7 @@ for (const b of document.querySelectorAll('#review-view-switch button')) {
     reviewViewMode = b.dataset.view;
     try { localStorage.setItem(REVIEW_VIEW_KEY, reviewViewMode); } catch (err) { dbg.warn('shaper', 'REVIEW_VIEW_KEY write failed', err && err.message); }
     showReviewViewMode();
+    if (fusionUi) fusionUi.notifyProjectChanged();
     enterReview(designController.state);
   });
 }
@@ -867,9 +873,9 @@ async function enterReview(st) {
 }
 {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,
-    onChange: () => { if (reviewViewMode !== '3d') enterReview(designController.state); else if (reviewView) { exportSim.refresh(reviewSig(designController.state)); reviewView.refresh(reviewSig(designController.state)); } } }); // TASK 583 (stock-card.js): the thickness field of the Review card; TASK 817: the 2D file is made again (in the background); TASK 801: the simulation's board is the new one
+    onChange: () => { if (fusionUi) fusionUi.notifyProjectChanged(); if (reviewViewMode !== '3d') enterReview(designController.state); else if (reviewView) { exportSim.refresh(reviewSig(designController.state)); reviewView.refresh(reviewSig(designController.state)); } } }); // TASK 583 (stock-card.js): the thickness field of the Review card; TASK 817: the 2D file is made again (in the background); TASK 801: the simulation's board is the new one
   showStockThickness = stockCard.show;
-  SettingsManager.subscribe((key) => { if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && modes.current() === 'review' && designController) enterReview(designController.state); });
+  SettingsManager.subscribe((key) => { if (fusionUi) fusionUi.notifyProjectChanged(); if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && modes.current() === 'review' && designController) enterReview(designController.state); });
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
   document.getElementById('review-fit').addEventListener('click', () => (reviewViewMode !== '3d' ? exportPreview.fit() : reviewView && reviewView.fit())); // TASK 718: Fit frames the view shown
@@ -898,6 +904,7 @@ function setReviewLook(next) {
   try { localStorage.setItem(REVIEW_LOOK_KEY, JSON.stringify(reviewLook)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY write failed', err && err.message); }
   showReviewLook();
   if (reviewView) reviewView.setLook(reviewLook);
+  if (fusionUi) fusionUi.notifyProjectChanged();
 }
 showReviewLook();
 document.getElementById('review-look-select').addEventListener('change', (e) => setReviewLook({ ...reviewLook, id: e.target.value }));
@@ -914,10 +921,89 @@ function nameAfterSelection(name) {
   if (docBuffer.isStored()) return;
   docBuffer.rename(name).catch((err) => dbg.warn('shaper', 'naming the design after the Fusion selection failed', err && err.message));
 }
+async function maybeOfferLegacyBrowserWork(ctx) {
+  if (!ctx || ctx.project || ctx.hasSelection) return;
+  try {
+    if (localStorage.getItem(LEGACY_FUSION_OFFERED_KEY) === '1') return;
+    const buf = await getProjectStore().readBuffer();
+    const tabs = buf && Array.isArray(buf.tabs) ? buf.tabs : [];
+    const candidate = tabs.find((t) => {
+      const sh = t && t.doc && t.doc.hosts && t.doc.hosts.shaper;
+      return sh && ((Array.isArray(sh.operations) && sh.operations.length > 0) || (Array.isArray(sh.cutPlan) && sh.cutPlan.length > 0));
+    });
+    if (!candidate) return;
+    localStorage.setItem(LEGACY_FUSION_OFFERED_KEY, '1');
+    const noticeEl = document.getElementById('prepare-notice');
+    if (!noticeEl) return;
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.id = 'btn-fusion-open-legacy';
+    openBtn.className = 'sk-wait-action';
+    openBtn.textContent = "Open the panel's previous work";
+    openBtn.addEventListener('click', () => {
+      deserializeDocument(candidate.doc, designController.state);
+      applyShaperDoc(candidate.doc.hosts.shaper, designController.state);
+      prepare.afterRestore();
+      afterSelectionImport();
+      noticeEl.hidden = true;
+    });
+    const dismissBtn = document.createElement('button');
+    dismissBtn.type = 'button';
+    dismissBtn.id = 'btn-fusion-dismiss-legacy';
+    dismissBtn.className = 'sk-wait-action';
+    dismissBtn.style.marginLeft = '6px';
+    dismissBtn.textContent = 'Dismiss';
+    dismissBtn.addEventListener('click', () => { noticeEl.hidden = true; });
+    noticeEl.classList.remove('is-error');
+    noticeEl.replaceChildren('Previous browser work is available. ', openBtn, dismissBtn);
+    noticeEl.hidden = false;
+  } catch (err) {
+    dbg.warn('shaper', 'legacy browser work check failed', err && err.message);
+  }
+}
+
 if (fusionMode) {
   fusionUi = mountFusionPrepareBar({
     viewPrepareEl: VIEWS.prepare,
     noticeEl: document.getElementById('prepare-notice'),
+    getController: () => designController,
+    prepare,
+    captureLook: () => ({ reviewLook, reviewViewMode }),
+    onRestoreLook: ({ reviewLook: rl, reviewViewMode: rv }) => {
+      if (rl) setReviewLook(rl);
+      if (rv === '2d' || rv === 'paths' || rv === '3d') {
+        reviewViewMode = rv;
+        showReviewViewMode();
+      }
+    },
+    onDesignContextChange: (ctx) => {
+      showStockThickness();
+      if (infoPanel) infoPanel.refresh();
+      history.refresh();
+      if (modes.current() === 'review') enterReview(designController.state);
+      if (fusionToolpaths) fusionToolpaths.notify();
+      if (ctx && typeof ctx.docName === 'string' && ctx.docName.trim()) {
+        nameAfterSelection(ctx.docName.trim().replace(/\s+v\d+$/, ''));
+      }
+      maybeOfferLegacyBrowserWork(ctx);
+    },
+    onLegacyAddin: () => {
+      docBuffer.stop();
+      docBuffer = createDocumentBuffer(shaperBufferOptions({
+        controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
+        session: createShaperSession({ prepare }),
+        showDesign: () => modes.showDesign(),
+        refreshViews: () => { if (infoPanel) infoPanel.refresh(); },
+        afterSidecar: (restore) => {
+          prepare.afterRestore(restore);
+          stlImporter.reimportOld();
+          showStockThickness();
+          if (modes.current() === 'review') enterReview(designController.state);
+        },
+      }));
+      docBuffer.restore();
+      docBuffer.start();
+    },
     onSelectionData: (payload, meta) => {
       ensureSketch();
       const res = importFusionSelection(payload, {
@@ -944,8 +1030,8 @@ if (fusionMode) {
     getSelections,
     onSpin: fusionUi.setSyncing,
   });
-  window.addEventListener('pagehide', () => fusionToolpaths.clearNow());
-  window.addEventListener('beforeunload', () => fusionToolpaths.clearNow());
+  window.addEventListener('pagehide', () => { fusionUi.flushProjectSave(); fusionToolpaths.clearNow(); });
+  window.addEventListener('beforeunload', () => { fusionUi.flushProjectSave(); fusionToolpaths.clearNow(); });
   showMode(initMode);
   fusionUi.bootPing();
   fusionToolpaths.notify();

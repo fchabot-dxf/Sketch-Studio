@@ -10,17 +10,25 @@
 //   together).
 
 import { dbg } from '#core/debug.js';
+import { deserializeDocument } from '#core/document.js';
+import { DEFAULT_STOCK } from '#core/relief-model.js';
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
-import { getSelections, onSelectionsChange, selectionRowsOf } from './selection-list.js'; // TASK 795 / 795c: the selection list the Prepare bar shows
-import { storeOps, regionOf } from './operations-store.js';
+import { emptyDocument } from '#ui/project-store.js';
+import { getSelections, setSelections, onSelectionsChange, selectionRowsOf } from './selection-list.js'; // TASK 795 / 795c: the selection list the Prepare bar shows
+import { storeOps, regionOf, captureStore, applyStore, renameGeometry } from './operations-store.js';
 import { partKeyOf } from './cut-plan.js';
 import { STOCK_TYPE_ID } from './shaper.js';
+import { getStock, setStock } from './stock.js';
+import { loadBits, saveBits } from './tool-table.js';
+import { forget as forgetPaths } from './op-paths.js';
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
 export const DEFAULT_ADSK_POLL_MS = 200;
 export const DEFAULT_ADSK_WAIT_TIMEOUT_MS = 15000;
+export const PROJECT_SAVE_DEBOUNCE_MS = 2000; // TASK 855 / SA-19: debounced write to Fusion Design attribute
+export const LEGACY_FUSION_OFFERED_KEY = 'shaper-fusion-legacy-offered'; // TASK 855: one-time offer of pre-855 browser work
 
 // Map Fusion 360 `unitsManager.defaultLengthUnits` values to supported app units (`UNITS = ['mm', 'cm', 'in']`).
 export const FUSION_UNIT_MAP = Object.freeze({
@@ -56,9 +64,93 @@ export const FUSION_ACTIONS = Object.freeze({
   CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12 / SA-15): { selectionId, group? } | { selectionId: 'all' }
   RESTORE_SELECTION: 'restore_selection', // TASK 795c (SA-15): { selectionId, tokens? } restores the cleared token list on Undo/Redo
   SELECT_FOR_OPERATION: 'select_for_operation', // TASK 806 (SA-16): { opKey, label, tokens, keepTokens }
+  DESIGN_CONTEXT: 'design_context', // TASK 855 (SA-19): { docToken, designKey, docName, lengthUnits?, hasSelection, project }
+  REQUEST_SELECTION: 'request_selection', // TASK 855 (SA-19): { docToken? } re-requests remembered selection on open/switch
+  SAVE_PROJECT: 'save_project', // TASK 855 (SA-19): { docToken, designKey, project } saves workspace in Design attribute
+  PROJECT_SAVED: 'project_saved', // TASK 855 (SA-19): { docToken, designKey } confirms minted/saved designKey
   TOOLPATHS: 'toolpaths', // TASK 799 (SA-13): live bit-centre toolpaths overlay in Fusion
   TOOLPATHS_CLEAR: 'toolpaths_clear', // TASK 799 (SA-13): clears the Fusion toolpaths overlay
 });
+
+/**
+ * Capture the Shaper palette's Fusion-mode project for `shaper-addin/project` attribute (TASK 855 / SA-19).
+ * Excludes imported geometry (`joints`, `shapes`, `profiles`), heavy `slope`/`levels` arrays, `payloadSig`, and undo history.
+ */
+export function captureFusionProject({ reviewLook = null, reviewViewMode = null } = {}) {
+  const { operations, regions, nextSeq, listOrder } = captureStore();
+  const slimRegions = {};
+  for (const [k, reg] of Object.entries(regions || {})) {
+    if (!reg || typeof reg !== 'object') continue;
+    const entry = {};
+    if (reg.source && typeof reg.source === 'object') entry.source = { ...reg.source };
+    if (Array.isArray(reg.sources) && reg.sources.length) entry.sources = [...reg.sources];
+    if (Object.keys(entry).length) slimRegions[k] = entry;
+  }
+  const selections = getSelections().map((e) => ({
+    id: e.id,
+    fusion: e.fusion === true,
+    kind: e.kind || '',
+    name: e.name || '',
+    text: e.text || '',
+    cutKeys: Array.isArray(e.cutKeys) ? [...e.cutKeys] : [],
+    base: e.base ? { ...e.base } : {},
+    sigs: e.sigs ? { ...e.sigs } : {},
+    thicknessMm: e.thicknessMm ?? null,
+    regionCount: e.regionCount ?? 0,
+    ...(Array.isArray(e.items) && e.items.length ? { items: e.items } : {}),
+  }));
+  return {
+    version: 1,
+    operations,
+    nextSeq,
+    listOrder,
+    regions: slimRegions,
+    stock: getStock(),
+    prepareSettings: {
+      docUnit: SettingsManager.get('DOC_UNIT'),
+      toolTable: loadBits(),
+      ...(reviewLook ? { reviewLook } : {}),
+      ...(reviewViewMode ? { reviewViewMode } : {}),
+    },
+    selections,
+  };
+}
+
+/**
+ * Replace the palette's live workspace with `project` (or an empty workspace when `project` is null).
+ * Clears undo/redo history; when `hasSelection` is true, `selections` metadata (`cutKeys`, `base`, `sigs`)
+ * stays ready for `importFusionSelection`'s 795c canonical `regionSig` remapping when `selection_data` arrives.
+ */
+export function applyFusionProject(project, { controller = null, prepare = null, hasSelection = false, onRestoreLook = null } = {}) {
+  const st = controller && controller.state;
+  if (st) {
+    deserializeDocument(emptyDocument(), st);
+    if (Array.isArray(st.history)) st.history.length = 0;
+    if (Array.isArray(st.redoStack)) st.redoStack.length = 0;
+  }
+  forgetPaths();
+  if (!project || typeof project !== 'object') {
+    applyStore(null);
+    setSelections([], { sync: false });
+    setStock({ ...DEFAULT_STOCK });
+  } else {
+    setStock(project.stock && typeof project.stock === 'object' ? { ...DEFAULT_STOCK, ...project.stock } : { ...DEFAULT_STOCK });
+    const ps = project.prepareSettings && typeof project.prepareSettings === 'object' ? project.prepareSettings : {};
+    if (typeof ps.docUnit === 'string' && UNITS.includes(ps.docUnit)) {
+      SettingsManager.set('DOC_UNIT', ps.docUnit, { persist: false });
+    }
+    if (Array.isArray(ps.toolTable)) saveBits(ps.toolTable);
+    if (typeof onRestoreLook === 'function' && (ps.reviewLook || ps.reviewViewMode)) onRestoreLook(ps);
+    applyStore(project);
+    setSelections(Array.isArray(project.selections) ? project.selections : [], { sync: false });
+    if (!hasSelection) {
+      const staleKeys = new Set(storeOps().flatMap((o) => o.geometry.map((r) => r.key)));
+      if (staleKeys.size) renameGeometry(new Map(), staleKeys, { keepEmpty: true });
+    }
+  }
+  if (!hasSelection && prepare && typeof prepare.afterRestore === 'function') prepare.afterRestore();
+  if (st && typeof st._notifyHistory === 'function') st._notifyHistory();
+}
 
 export function isStlOperation(op) {
   if (!op || !Array.isArray(op.shapes) || op.shapes.length === 0) return false;
@@ -154,6 +246,8 @@ export function createFusionBridge({
   onNotice = () => {},
   onError = () => {},
   onSelectionData = () => {},
+  onDesignContext = () => {},
+  onProjectSaved = () => {},
   onMessage = () => {},
 } = {}) {
   let lastSelection = null;
@@ -231,13 +325,24 @@ export function createFusionBridge({
         documentName: docName,
         fusionVersion: typeof data.fusionVersion === 'string' ? data.fusionVersion : '',
         lengthUnits: mappedUnit,
+        projectBridge: Boolean(data.projectBridge),
       });
+      return 'OK';
+    }
+
+    if (action === FUSION_ACTIONS.DESIGN_CONTEXT) {
+      onDesignContext(data);
+      return 'OK';
+    }
+
+    if (action === FUSION_ACTIONS.PROJECT_SAVED) {
+      onProjectSaved(data);
       return 'OK';
     }
 
     if (action === FUSION_ACTIONS.ERROR) {
       const recAct = typeof data.receivedAction === 'string' ? data.receivedAction : '';
-      if (recAct === FUSION_ACTIONS.TOOLPATHS || recAct === FUSION_ACTIONS.TOOLPATHS_CLEAR) {
+      if (recAct === FUSION_ACTIONS.TOOLPATHS || recAct === FUSION_ACTIONS.TOOLPATHS_CLEAR || recAct === FUSION_ACTIONS.SAVE_PROJECT || recAct === FUSION_ACTIONS.REQUEST_SELECTION) {
         dbg.warn('fusion', `Older add-in ignored ${recAct}`, data);
         return 'OK';
       }
@@ -303,6 +408,13 @@ export function mountFusionPrepareBar({
   onRemoveSelection = () => {}, // TASK 795: (id) the row's X
   onClearSelections = () => {}, // TASK 795: Clear all
   onStatusChange = () => {}, // TASK 799: notified on pong / connection state changes
+  onDesignContextChange = () => {}, // TASK 855: notified after design_context workspace swap
+  onLegacyAddin = () => {}, // TASK 855: notified when an older add-in replies pong without projectBridge
+  getController = null,
+  prepare = null,
+  captureLook = null,
+  onRestoreLook = null,
+  saveDebounceMs = PROJECT_SAVE_DEBOUNCE_MS,
   globalTarget = (typeof window !== 'undefined' ? window : null),
   pollIntervalMs = DEFAULT_ADSK_POLL_MS,
   waitTimeoutMs = DEFAULT_ADSK_WAIT_TIMEOUT_MS,
@@ -381,12 +493,56 @@ export function mountFusionPrepareBar({
   let onIncomingAction = () => {};
   let highlighted = null; // the selection id last sent in highlight_selection (null: none)
   let pendingClear = null; // TASK 795c: { selectionId, group } awaiting re-sent selection_data from add-in
+  let projectBridgeActive = false;
+  let currentDocToken = null;
+  let currentDesignKey = null;
+  let lastSavedProjectSig = '';
+  let saveTimer = null;
+  let switchingContext = false;
+  let pendingInitialSelection = false;
+
+  const projectNow = () => captureFusionProject(typeof captureLook === 'function' ? captureLook() : {});
+  const clearSaveTimer = () => {
+    if (saveTimer !== null) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+  };
+  const flushProjectSave = () => {
+    clearSaveTimer();
+    if (!projectBridgeActive || switchingContext || pendingInitialSelection || !bridge.canSend()) return false;
+    const proj = projectNow();
+    const sig = JSON.stringify(proj);
+    if (sig === lastSavedProjectSig) return false;
+    lastSavedProjectSig = sig;
+    bridge.send(FUSION_ACTIONS.SAVE_PROJECT, {
+      docToken: currentDocToken,
+      designKey: currentDesignKey,
+      project: proj,
+    });
+    return true;
+  };
+  const notifyProjectChanged = () => {
+    if (!projectBridgeActive || switchingContext || pendingInitialSelection) return;
+    const sig = JSON.stringify(projectNow());
+    if (sig === lastSavedProjectSig) {
+      clearSaveTimer();
+      return;
+    }
+    clearSaveTimer();
+    saveTimer = setTimeout(() => { flushProjectSave(); }, saveDebounceMs);
+  };
 
   const bridge = createFusionBridge({
     globalTarget,
     onStatus: (text, info) => {
       statusEl.textContent = text;
       statusEl.dataset.state = 'connected';
+      if (info && info.projectBridge) {
+        projectBridgeActive = true;
+      } else if (info && !info.projectBridge && !projectBridgeActive) {
+        onLegacyAddin();
+      }
       onStatusChange(info);
     },
     onNotice: (text) => {
@@ -399,11 +555,56 @@ export function mountFusionPrepareBar({
       showNotice(text, true);
     },
     onSelectionData: (data) => {
+      const wasInitial = pendingInitialSelection && !(data && data.assign);
+      pendingInitialSelection = false;
       const clearGroup = (pendingClear && data && data.selectionId === pendingClear.selectionId)
         ? pendingClear.group
         : null;
       pendingClear = null;
-      return onSelectionData(data, { clearGroup });
+      const res = onSelectionData(data, { clearGroup });
+      if (wasInitial) {
+        lastSavedProjectSig = JSON.stringify(projectNow());
+      } else {
+        notifyProjectChanged();
+      }
+      return res;
+    },
+    onDesignContext: (data) => {
+      if (saveTimer !== null && currentDocToken && data && data.docToken !== currentDocToken) {
+        flushProjectSave();
+      }
+      clearSaveTimer();
+      projectBridgeActive = true;
+      switchingContext = true;
+      currentDocToken = data && typeof data.docToken === 'string' && data.docToken ? data.docToken : null;
+      currentDesignKey = data && typeof data.designKey === 'string' && data.designKey ? data.designKey : null;
+      const docName = data && typeof data.docName === 'string' ? data.docName.trim() : '';
+      const mappedUnit = mapFusionLengthUnit(data && data.lengthUnits);
+      if (mappedUnit) SettingsManager.set('DOC_UNIT', mappedUnit, { persist: false });
+      const hasSel = Boolean(data && data.hasSelection);
+      pendingInitialSelection = hasSel;
+      applyFusionProject(data && data.project ? data.project : null, {
+        controller: typeof getController === 'function' ? getController() : null,
+        prepare,
+        hasSelection: hasSel,
+        onRestoreLook,
+      });
+      lastSavedProjectSig = JSON.stringify(projectNow());
+      switchingContext = false;
+      statusEl.textContent = docName ? `Connected to Fusion: ${docName}` : 'Connected to Fusion';
+      statusEl.dataset.state = 'connected';
+      renderList();
+      onDesignContextChange(data);
+      if (hasSel && bridge.canSend()) {
+        bridge.send(FUSION_ACTIONS.REQUEST_SELECTION, currentDocToken ? { docToken: currentDocToken } : {});
+      }
+    },
+    onProjectSaved: (data) => {
+      if (data && typeof data.designKey === 'string' && data.designKey) {
+        if (!data.docToken || data.docToken === currentDocToken) {
+          currentDesignKey = data.designKey;
+        }
+      }
     },
     onMessage: (action) => { onIncomingAction(action); },
   });
@@ -488,6 +689,7 @@ export function mountFusionPrepareBar({
       }
     }
     renderList();
+    notifyProjectChanged();
   });
   renderList();
 
@@ -592,8 +794,12 @@ export function mountFusionPrepareBar({
     bootPing: () => sendBootPingOnce(),
     canSelectForOperation,
     selectForOperation,
+    notifyProjectChanged,
+    flushProjectSave,
+    isProjectBridgeActive: () => projectBridgeActive,
     listEl,
     destroy: () => {
+      clearSaveTimer();
       stopList();
       stopWaiting();
       bridge.destroy();

@@ -29,10 +29,11 @@ export const RIBBON_OPTIONS = Object.freeze({ profiles: true, appId: 'shaper' })
  * page re-mounts once the cut plan is back (restore = the buffer's onRestored payload; TASK 741: its removedVcarves is Prepare's one-time notice). session: createShaperSession() (TASK 605). No header status text (TASK 605: the tab dot shows it).
  * showDesign(): TASK 706, the mode router's (modes.js): a design the user opens (new / Open / Open from file) is shown in Design (document-buffer.js).
  */
-export function shaperBufferOptions({ controller, canvas, session = null, refreshViews = () => {}, afterSidecar = () => {}, showDesign = null }) {
+export function shaperBufferOptions({ controller, canvas, session = null, refreshViews = () => {}, afterSidecar = () => {}, showDesign = null, store = undefined }) {
   return {
     state: controller.state,
     app: 'shaper', canvas, showDesign,
+    ...(store ? { store } : {}),
     onRestored: (restore) => {
       const { hosts, reason } = restore;
       try {

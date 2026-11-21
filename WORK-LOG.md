@@ -17525,3 +17525,17 @@ THE 835 MERGE GATE RED (the advisor's merge onto origin/main with task 801 Expor
 - origin/main merged (da55aa4..); the local npm-install package-lock.json was restored to HEAD first (main now carries the same @resvg/resvg-js entry; a copy kept in the scratchpad) so the merge could run; no stash.
 - Live, alone from PowerShell: export-sim-801-live desktop "ok" + phone "ok", ui-fixes-774-live "ok", selection-list-795-live "[1280x800] ok / [390x844] ok / ok" (no hover race this run).
 - Not changed, noted: export-sim-801-perf-live prints "steps (passes, ring, wall)" for its dense Raster (a log line, no assertion): it now counts 3.
+
+## TURN 855
+Per-design Shaper project stored inside the Fusion Design attribute (`shaper-addin/project`) in Fusion mode (`?host=fusion`), paired with SA-19 (`docs/OPERATIONS-MODEL.md §13`).
+- **Per-design workspace & zero IndexedDB workspace writes (`design-canvas.js`, `fusion-bridge.js`, `main.js`)**:
+  - `shaperBufferOptions` accepts optional `store`; in Fusion mode (`?host=fusion`), `main.js` passes `createProjectStore({ adapter: createMemoryAdapter(), legacySource: async () => null, channel: null })` so workspace edits never write to the browser's shared IndexedDB (`openTabsBuffer`).
+  - If an older add-in replies `pong` without `projectBridge: true`, `onLegacyAddin` falls back to `getProjectStore()`.
+  - When `design_context` arrives with `project: null` and `hasSelection: false` and pre-855 Shaper work exists in `getProjectStore().readBuffer()`, `maybeOfferLegacyBrowserWork` offers `"Open the panel's previous work"` once in `#prepare-notice` (guarded by `localStorage` `'shaper-fusion-legacy-offered'`).
+- **Protocol & 795c `regionSig` remapping (`fusion-bridge.js`, `main.js`)**:
+  - Declared `FUSION_ACTIONS.DESIGN_CONTEXT`, `REQUEST_SELECTION`, `SAVE_PROJECT`, `PROJECT_SAVED`, and `PROJECT_SAVE_DEBOUNCE_MS = 2000`.
+  - `captureFusionProject` serializes `{ version: 1, operations, nextSeq, listOrder, regions (source + sources only), stock, prepareSettings (docUnit, toolTable, reviewLook, reviewViewMode), selections (without shapeIds/sketchId/payloadSig/contentSig) }` (realistic 10-op project: ~8.5 KB; undo history omitted).
+  - `applyFusionProject` wipes the live sketch/operations/selections/undo stack and loads `project` (or an empty workspace when `null`). When `hasSelection` is `true`, the palette sends `request_selection { docToken }` and `importFusionSelection` maps stored operations onto freshly extracted regions via 795c's canonical `regionSig` without emitting a spurious `save_project` on open.
+  - Pending debounced `save_project` is flushed for the outgoing `docToken` on document switch and on `pagehide` / `beforeunload`.
+- **Tests & evidence**:
+  - Added fail-first `tests/perdesign-855-node.test.js` (`32 checks`) and `tests/perdesign-855-live.test.js` (desktop `1280x800` + phone `390x844`; `.evidence/855/perdesign-desktop.png`, `.evidence/855/perdesign-phone.png`), updated `tests/fusion-mode-663-node.test.js` (`64 checks`).

@@ -77,7 +77,9 @@ try {
   ok(!q('#prepare-ribbon .sk-ribbon-group[data-section="operations"]').hasAttribute('data-fixed') && q('#prepare-ribbon .sk-ribbon-group[data-section="recalculate"]').hasAttribute('data-fixed'),
     '1: the Operations section is a ribbon section as in Design (what does not fit is in its dropdown); Recalculate is fixed (always shown)');
   ok(!bar.querySelector('#btn-lock') && !bar.querySelector('[data-tool]'), '1: no sketcher tool, no Lock');
-  ok(bar.classList.contains('sk-ribbon-vertical'), '1: a vertical ribbon (a column at the left edge away from a phone)');
+  const opsSec = q('#prepare-ribbon .sk-ribbon-group[data-section="operations"]'), recSec = q('#prepare-ribbon .sk-ribbon-group[data-section="recalculate"]');
+  eq([opsSec.querySelector('button.sk-ribbon-group-label').textContent, recSec.querySelector('div.sk-ribbon-group-label').textContent], ['Operations', 'Recalculate'],
+    '1: the sections named as Design\u2019s are (the Operations name is its dropdown button; Recalculate a plain name)');
   ok(qa('#prepare-ribbon .sk-ribbon-btn').every((b) => b.tagName === 'BUTTON' && b.type === 'button'), '1: native buttons (Tab focuses, Enter / Space press: the ribbon\'s keyboard)');
   eq([...q('#design-ribbon .sk-ribbon').querySelectorAll('.sk-ribbon-btn')].map((b) => b.id).filter((id) => RIBBON_TOOLS.some((t) => (t.id || (t.tool ? 'tool-' + t.tool : 'action-' + t.action)) === id)).length,
     RIBBON_TOOLS.length, '1: Design\'s ribbon keeps every built-in button');
@@ -93,6 +95,12 @@ try {
   eq(hist() - h0, 1, '2: OK = one undo step');
   clickAt('none');
   eq(card(), 'hidden', '2: nothing selected, nothing open: no card');
+  // (advisor, seen on 9781ff8: the empty card also showed for a row tap and for several selected rows) a row tap, then another row with Ctrl: no card
+  pressEl(`#prepare-ops .ops-row .ops-pick`);
+  eq(card(), 'hidden', '2: a tap on a row of the list: no card (its shapes selected)');
+  { const b = q('#prepare-ops .ops-row .ops-pick'); b.dispatchEvent(new app.window.MouseEvent('click', { bubbles: true, ctrlKey: true })); }
+  eq(card(), 'hidden', '2: a Ctrl-click on a row: no card');
+  clickAt('none');
   h0 = hist();
   pressEl('#op-type-interior');
   eq([card(), head(), ops()], ['open', 'Inside 2 · no shapes yet', ['pocket:A', 'interior:']], '2: Inside with nothing selected: a NEW EMPTY Inside, OPEN');

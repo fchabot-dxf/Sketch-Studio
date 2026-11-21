@@ -350,24 +350,25 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (r.line) prepareNotice(r.line);
   }
 
-  // TASK S3 (owner turns 2944-2950): the OPERATIONS TOOLBAR = Design's shared tool ribbon (#ui/tool-ribbon.js), its own instance with Prepare's buttons: one per
-  // operation type, from THE declaration (CUT_TYPES, in its order; a button's icon is the type's own, its name and tooltip the type's param-hints entry), then (a
-  // section of its own, fixed: the divider) Recalculate. A column at the left edge; a bar along the top on a phone held upright, the rail on the short viewport (the
-  // ribbon's own layouts there). The Operations section is a ribbon section as Design's are: what does not fit (a phone held upright) is in its name's dropdown, never
-  // lost; the user's in-bar ticks and order are kept per app (appId 'shaper-prepare', #ui/ribbon-layout.js), the declaration's order until the user changes it.
+  // TASK S3 (owner turns 2944-2950; placement: the owner's choice A, "Ok ribbon"): the OPERATIONS TOOLBAR = Design's shared tool ribbon (#ui/tool-ribbon.js), its own
+  // instance with Prepare's buttons, in Design's place and style (a bar across the top; the rail on the short viewport): one button per operation type, from THE
+  // declaration (CUT_TYPES, in its order; a button's icon is the type's own, its name and tooltip the type's param-hints entry), then (a fixed section of its own:
+  // the divider) Recalculate. The sections' names show as Design's do ("OPERATIONS", "RECALCULATE"). The Operations section is a ribbon section as Design's are: what
+  // does not fit (a phone held upright) is in its name's dropdown, never lost; the user's in-bar ticks and order are kept per app (appId 'shaper-prepare',
+  // #ui/ribbon-layout.js), the declaration's order until the user changes it.
   let ribbon = null, placeRibbon = () => {};
   if (ribbonEl) {
     const cutIcon = (icon) => `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${icon}</svg>`;
     ribbon = createToolRibbon({
-      appId: 'shaper-prepare', sketchTools: false, vertical: true,
+      appId: 'shaper-prepare', sketchTools: false,
       extraGroups: [
-        { key: 'operations', label: 'Operations', buttons: CUT_TYPES.map((t) => ({ id: `op-type-${t.id}`, label: hintLabel(choiceId('cutType', t.id)), hint: hintText(choiceId('cutType', t.id)), svg: cutIcon(t.icon), onClick: () => addOperation(t.id) })) },
-        { key: 'recalculate', label: 'Recalculate', fixed: true, buttons: [{ id: 'op-recalculate', label: hintLabel('opRecalculate'), hint: hintText('opRecalculate'), svg: cutIcon(RECALC_ICON), onClick: () => recalculateButton() }] },
+        { label: 'Operations', buttons: CUT_TYPES.map((t) => ({ id: `op-type-${t.id}`, label: hintLabel(choiceId('cutType', t.id)), hint: hintText(choiceId('cutType', t.id)), svg: cutIcon(t.icon), onClick: () => addOperation(t.id) })) },
+        { label: 'Recalculate', fixed: true, buttons: [{ id: 'op-recalculate', label: hintLabel('opRecalculate'), hint: hintText('opRecalculate'), svg: cutIcon(RECALC_ICON), onClick: () => recalculateButton() }] },
       ],
     });
     ribbon.render(ribbonEl);
-    // its frame (apps/shaper/index.html #prepare-ribbon-frame) follows the ribbon as laid out: a column (its width moves the overlays at the left edge) or a bar (its height
-    // moves the ones at the top)
+    // its frame (apps/shaper/index.html #prepare-ribbon-frame) follows the ribbon as laid out: the bar (its height moves the overlays at the top: the Operations list, the
+    // cut card, the notice) or the short viewport's rail (its width moves the ones at the left edge: the Operations list, the direction legend)
     const frame = ribbonEl.parentElement, view = frame && frame.parentElement, win = ribbonEl.ownerDocument.defaultView;
     const place = () => {
       const column = win.getComputedStyle(ribbon.el).flexDirection === 'column';

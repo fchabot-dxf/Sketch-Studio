@@ -68,8 +68,7 @@
       --sk-doctabs-bg: var(--sk-header-bg);
     }
     /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
-    :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
-    @media (max-width: 640px) { :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-ribbon-bg); } } /* TASK S3: a narrow window: the operations toolbar is the bar directly below the strip (as Design's ribbon) */
+    /* TASK S3: Prepare's surface below the strip is its operations toolbar, a tool ribbon as Design's: the default (TASK 737 declared the canvas grey before it) */
     :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); --sk-doctab-surface-fg: var(--sk-header-bg); } /* TASK 754: a light surface, so the active tab's title is dark */
     #design-view, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
@@ -292,22 +291,16 @@
       --sk-prep-leftover: #FF5A36;        /* TASK 745: a programmed pocket's leftover (material the bit does not reach): an orange-red that reads on the band (not sampled) */
     }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; background: var(--sk-prep-bg); }
-    /* TASK S3: the OPERATIONS TOOLBAR (prepare-stage.js: Design's shared tool ribbon with Prepare's own buttons) lies OVER the canvas, so the canvas never moves: a
-       column at the left edge (the view's height; on the short viewport above its floating footer, --sk-footer-clear) on a desktop / tablet and on the short viewport
-       (the ribbon's rail); a bar along the top on a phone held upright (the ribbon's own bar). data-dir and the two sizes on #view-prepare are set by prepare-stage.js
-       from the ribbon as laid out: --sk-prep-ribbon-w (a column; 0 for a bar) moves the overlays at the left edge (the Operations list, the direction legend) right of
-       it, --sk-prep-ribbon-h (a bar; 0 for a column) the ones at the top (the cut card, the notice) below it. Its border is the rail's own on the short viewport
-       (:where = no specificity: the ribbon's rail rule draws the same line there). */
-    #prepare-ribbon-frame { position: absolute; left: 0; top: 0; bottom: var(--sk-footer-clear, 0px); z-index: 6; display: flex; background: var(--sk-ribbon-bg); } /* z 6: under the cut card's popovers (the card, z 6, comes later in the page) */
-    #prepare-ribbon-frame[data-dir="row"] { right: 0; bottom: auto; }
+    /* TASK S3: the OPERATIONS TOOLBAR (prepare-stage.js: Design's shared tool ribbon with Prepare's own buttons) in Design's place: a bar across the top of the view
+       (the rail on the short viewport, as Design's), lying OVER the canvas so the canvas never moves. data-dir and the two sizes on #view-prepare are set by
+       prepare-stage.js from the ribbon as laid out: --sk-prep-ribbon-h (the bar; 0 for the rail) moves the overlays at the top (the Operations list, the cut card, the
+       notice) below it, --sk-prep-ribbon-w (the rail; 0 for the bar) the ones at the left edge (the Operations list, the direction legend) right of it. The bar's
+       border is the one Design's ribbon host has (#design-ribbon); the rail's is the ribbon's own (its short-viewport rule). */
+    #prepare-ribbon-frame { position: absolute; left: 0; right: 0; top: 0; z-index: 6; display: flex; background: var(--sk-ribbon-bg); } /* z 6: under the cut card's popovers (the card, z 6, comes later in the page) */
+    #prepare-ribbon-frame[data-dir="column"] { right: auto; bottom: var(--sk-footer-clear, 0px); }
     #view-prepare.is-fusion #prepare-ribbon-frame { top: var(--sk-fusion-bar-h, 44px); }
-    #prepare-ribbon { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-    :where(#prepare-ribbon) { border-right: 1px solid var(--sk-ribbon-sep); }
-    :where(#prepare-ribbon-frame[data-dir="row"] > #prepare-ribbon) { flex: 1 1 auto; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep); }
-    .sk-edge { fill: none; stroke: var(--sk-prep-geo); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-    .sk-edge.sk-edge-guide { stroke: var(--sk-prep-guide); }
-    .sk-edge.sk-edge-stock { stroke: var(--sk-prep-stock); stroke-width: 1.75; stroke-dasharray: 7 3.5; }
-    .sk-stock-label { fill: var(--sk-prep-stock); font-family: system-ui, sans-serif; font-size: 5px; font-weight: 600; letter-spacing: 0.04em; }
+    #prepare-ribbon { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    #prepare-ribbon-frame[data-dir="row"] > #prepare-ribbon { border-bottom: 1px solid #1f2937; }
     #prepare-notice { position: absolute; left: 50%; top: calc(12px + var(--sk-prep-ribbon-h, 0px)); transform: translateX(-50%); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
     #prepare-notice[hidden] { display: none; }
     #prepare-notice.is-error { background: #3f1518; color: #fecaca; border-color: #ef4444; }
@@ -537,9 +530,9 @@
        legend; its rows scroll), a folding bar along the bottom on a phone (open: up to 55 % of the view; the cut card then ends above the bar).
        Rows: a drag grip, the number, the operation (type · depths, regions · steps / tabs), and (TASK 745) a delete bin (44 px on a phone); no arrow buttons:
        a mouse drags the grip, a finger holds then drags the row (the list keeps native scrolling: no touch-action none), the keyboard moves a focused grip. */
-    #prepare-ops { position: absolute; top: 12px; left: calc(12px + var(--sk-prep-ribbon-w, 0px)); width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
+    #prepare-ops { position: absolute; top: calc(12px + var(--sk-prep-ribbon-h, 0px)); left: calc(12px + var(--sk-prep-ribbon-w, 0px)); width: 288px; max-height: calc(100% - 52px - var(--sk-prep-ribbon-h, 0px)); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
       background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
-    #view-prepare.is-fusion #prepare-ops { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); max-height: calc(100% - var(--sk-fusion-bar-h, 44px) - 52px); }
+    #view-prepare.is-fusion #prepare-ops { top: calc(var(--sk-fusion-bar-h, 44px) + 12px + var(--sk-prep-ribbon-h, 0px)); max-height: calc(100% - var(--sk-fusion-bar-h, 44px) - 52px - var(--sk-prep-ribbon-h, 0px)); }
     .ops-header { display: flex; align-items: center; flex: 0 0 auto; }
     .ops-head { all: unset; box-sizing: border-box; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
     .ops-count { min-width: 20px; text-align: center; background: var(--sk-prep-field-bg); color: var(--sk-prep-unit); border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; }

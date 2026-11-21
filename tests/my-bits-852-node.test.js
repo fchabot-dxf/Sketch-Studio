@@ -18,6 +18,8 @@ import { storeOps } from '../apps/shaper/src/operations-store.js';
 import { toolOf } from '../apps/shaper/src/operations.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
+import { buildRelief } from '#core/relief-model.js';
+import { V2_PLAN } from './helpers/plan-v2.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
@@ -170,6 +172,23 @@ try {
   eq(q('.cut-bit-cur').textContent, '1/8 bowl (not in My bits)', 'a copy whose bit is no longer in My bits');
   eq(rec().cornerRadius, IN('1/32'), 'its copy is kept');
   app.prepare.cancel();
+  // TASK 852b: the BUILT mesh of a 1/2 in bowl (3/16 in corner = 4.7625 mm) pocket 8 mm deep: the rounded zone is the bottom 4.76 mm of the wall and 4.76 mm in from the wall,
+  // INTO the floor (the owner saw sharp steps: the old 6 uniform steps left the last 1.9 mm of the quarter circle a vertical wall)
+  {
+    const K = [...V2_PLAN.keys()][0];
+    V2_PLAN.set(K, { ...V2_PLAN.get(K), cutDepth: 8, ...recordFieldsOf({ id: 'z', name: 'z', type: 'bowl', unit: 'in', diameter: IN('1/2'), cornerRadius: IN('3/16') }) });
+    const rel = buildRelief({ stock: { thickness: 19.05 }, items: planReliefItems(st) });
+    const box = (reg) => { const xs = reg.outer.map((q) => q[0]); return [Math.min(...xs), Math.max(...xs)]; };
+    const L = rel.levels.map((l) => ({ depth: l.depth, x0: box(l.regions[0])[0] }));
+    const wall = L[L.length - 1].x0 - 0 ; // the floor's inset at the deepest level
+    const c = IN('3/16');
+    eq(L[L.length - 1].depth, 8, 'the floor is at the cut depth');
+    const span = L[L.length - 1].x0 - L[0].x0; // the wall -> the flat floor, in the plan
+    ok(span <= c + 1e-6 && span >= c - Math.sqrt(2 * c * 0.075) - 1e-6, `the rounded zone spans ${span.toFixed(3)} mm in from the wall: the 3/16 in corner radius (${c.toFixed(3)}) less its first step`);
+    ok(L[0].depth >= 8 - c - 0.1 && L[0].depth <= 8 - c + 0.1, `the widest terrace is at ${L[0].depth.toFixed(3)} mm: within 0.1 of floor - corner radius (${(8 - c).toFixed(3)}); the wall above it is the vertical part`);
+    let tallest = 0; for (let i = 1; i < L.length; i++) tallest = Math.max(tallest, L[i].depth - L[i - 1].depth);
+    ok(tallest < 0.2, `no step of the corner is taller than 0.2 mm (the tallest is ${tallest.toFixed(3)} mm); wall ${wall.toFixed(2)}`);
+  }
   console.log('5 operation: ok');
 } finally {
   SettingsManager.set(TOOL_TABLE_KEY, null, { persist: 'local' });

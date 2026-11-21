@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { buildRelief, reliefDepth, DEFAULT_STOCK, meshArea, createReliefCache } from '#core/relief-model.js';
 import { regionsFromRings, unionRegions, diffRegions } from '#core/plot/clip.js';
 import { deriveCutFootprint, deriveCutFootprintAt } from '#core/profile-model.js';
-import { cutterTerraces, cutterProfile, terraceCount, TERRACE_STEP_MM } from '#core/cutter-profile.js';
+import { cutterTerraces, cutterProfile, terraceCount, terracesPerItem, TERRACE_BUDGET, TERRACE_STEP_MM } from '#core/cutter-profile.js';
 import { withPlan } from './helpers/plan-v2.js'; // TASK S1: a plan loaded as a v2 document (applyShaperDoc)
 import { planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { findLoops } from '#core/loop-finder.js';
@@ -223,6 +223,7 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   }
   assert.ok(depthAtPoint(groove('vbit', 10, 4, 60), 50, 51) < depthAtPoint(groove('vbit', 10, 4, 90), 50, 51), 'a 60 deg V is narrower: its depth falls faster with distance than a 90 deg V');
 
+  assert.strictEqual(terracesPerItem(381), 7, 'TASK 852b: a 381-item relief gets its share of the terrace budget'); assert.strictEqual(terracesPerItem(1), TERRACE_BUDGET, 'one item: the full count (terraceCount caps it)');
   // an END MILL stays flat; budgets
   const flat = groove('endmill', 6, 4);
   assert.strictEqual(flat.levels.length, 1, 'end mill = one level');

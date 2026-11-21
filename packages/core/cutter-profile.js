@@ -101,6 +101,15 @@ export const TERRACE_STEP_MM = 0.05;
 export const TERRACE_MAX = 64;
 const TERRACE_MIN = 2;
 
+/**
+ * The whole model's terrace budget: the relief model unions every terrace of every item, so its build time grows with (items x terraces). TERRACE_BUDGET is the
+ * most terraces all the shaped items of one model may have between them (about what the old fixed 6 per item cost on a 381-item relief); `terracesPerItem(n)` is
+ * each of n items' share (never below TERRACE_BUDGET_MIN). A model of a few shaped cuts gets the full terraceCount; a big relief gets a coarser one.
+ */
+export const TERRACE_BUDGET = 3000;
+export const TERRACE_BUDGET_MIN = 6;
+export const terracesPerItem = (items) => (items > 0 ? Math.max(TERRACE_BUDGET_MIN, Math.floor(TERRACE_BUDGET / items)) : TERRACE_MAX);
+
 /** How many terraces a groove gets: its drop from the centre to the widest edge (H) over TERRACE_STEP_MM, between TERRACE_MIN and TERRACE_MAX; 0 for none. */
 export function terraceCount(shape, toolDia, angle, depth, taper = null) {
   const p = cutterProfile(shape, toolDia, angle, depth, taper);

@@ -16,7 +16,7 @@
 // Every face is flat-shaded with its true outward normal, wound counter-clockwise seen from outside.
 import { regionsFromRings, unionRegions, diffRegions, intersectRegions } from './plot/clip.js';
 import earcut from './plot/vendor/earcut.js';
-import { cutterTerraces, isShapedCutter } from './cutter-profile.js';
+import { cutterTerraces, terraceCount, terracesPerItem, isShapedCutter } from './cutter-profile.js';
 
 // Declared stock (all BASE mm, like cutDepth). width/height null = derived from the design bounds + margin on every side.
 export const DEFAULT_STOCK = Object.freeze({ thickness: 19.05, width: null, height: null, margin: 12.7 });
@@ -177,7 +177,7 @@ function emitWalls(m, quads, depths) {
 // open hole), less the parts cut Outside inside it; `part` = what an Outside cut encloses (a part: it stays). A held cut (tabs / onion skin) keeps its piece;
 // a programmed pocket's wall and islands (they carry its `clearing`) and a level of a stepped cut (`terrace`) are not cut-outs.
 const SIDE = { interior: 'in', inside: 'in', exterior: 'out', outside: 'out' };
-function itemPieces(it, rule) {
+function itemPieces(it, rule, perItem) {
   const freed = [], part = [];
   for (const fp of it.footprints || []) {
     if (!fp || fp.clearing || fp.terrace || !Array.isArray(fp.center) || fp.center.length < 3) continue;
@@ -185,9 +185,9 @@ function itemPieces(it, rule) {
     if (side === 'in' && rule.through && !fp.hold) freed.push(...regionsFromRings([toRing(fp.center)], 'nonzero'));
     else if (side === 'out' && (rule.through || fp.hold)) part.push(...regionsFromRings([toRing(fp.center)], 'nonzero'));
   }
-  return { ...cutPieces(it, rule), freed, part };
+  return { ...cutPieces(it, rule, perItem), freed, part };
 }
-function cutPieces(it, rule) {
+function cutPieces(it, rule, perItem = Infinity) {
   const bounds = [Infinity, -Infinity, Infinity, -Infinity];
   const ringSets = [];
   for (const fp of it.footprints || []) {
@@ -198,7 +198,7 @@ function cutPieces(it, rule) {
   const shape = it.shape && it.shape.cutterShape;
   if (!rule.through && isShapedCutter(shape) && typeof it.footprintsAt === 'function') {
     const pieces = [];
-    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, it.shape)) { // TASK 842: a tapered bit's cone (taperAngle, shankDia) rides on the item's shape
+    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, it.shape, Math.min(terraceCount(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, it.shape), perItem))) { // TASK 852b: the declared count, within the model's terrace budget // TASK 842: a tapered bit's cone (taperAngle, shankDia) rides on the item's shape
       const rs = [];
       for (const fp of it.footprintsAt(t.halfWidth) || []) rs.push(...regionsFromRings((fp.rings || []).filter((g) => g.length >= 3).map(toRing), fp.fillRule));
       if (rs.length) pieces.push({ depth: t.depth, regions: rs });
@@ -269,6 +269,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
 
   const b = bounds ? { ...bounds } : { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
   const pending = [], freed = [], parts = []; // TASK 839: the through Inside cuts' freed pieces, the Outside cuts' parts
+  const perItem = terracesPerItem(items.filter((it) => it.shape && isShapedCutter(it.shape.cutterShape) && typeof it.footprintsAt === 'function').length); // TASK 852b: each shaped item's share of the terrace budget
   for (const it of items) {
     const sm = (it.footprints || []).find((fp) => fp && fp.clearing && fp.clearing.role === 'start' && fp.clearing.point);
     if (sm) { // TASK 778: a programmed pocket's start mark (guide: never cuts wood; drawn as a 3D target at the derived point)
@@ -280,8 +281,8 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
     const programmed = (it.footprints || []).some((fp) => fp && fp.clearing);
     const rule = reliefDepth(programmed ? 'pocket' : it.cutType, it.cutDepth, T);
     if (rule.kind === 'skip') { skipped.push({ key: it.key, cutType: it.cutType, reason: rule.reason }); continue; }
-    const ik = C ? `${it.sig}|${rule.through ? 'T' : 'N'}${rule.depthUnset ? 'u' : ''}|${rule.through ? '' : rule.depth}` : '';
-    const r = memoC('item', ik, () => itemPieces(it, rule));
+    const ik = C ? `${it.sig}|${rule.through ? 'T' : 'N'}${rule.depthUnset ? 'u' : ''}|${rule.through ? '' : rule.depth}|${perItem}` : '';
+    const r = memoC('item', ik, () => itemPieces(it, rule, perItem));
     b.minX = Math.min(b.minX, r.bounds[0]); b.maxX = Math.max(b.maxX, r.bounds[1]); b.minY = Math.min(b.minY, r.bounds[2]); b.maxY = Math.max(b.maxY, r.bounds[3]);
     if (!r.pieces.length) { skipped.push({ key: it.key, cutType: it.cutType, reason: 'nothing-cut' }); continue; }
     if (r.markPoint && !unsetThrough.includes(it.key)) { // one mark per cut (a profile's holes share its key), ON the cut

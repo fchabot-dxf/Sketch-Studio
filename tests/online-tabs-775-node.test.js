@@ -6,7 +6,11 @@
 //  4. LOOP WORDING: no "ends where it starts" left in apps/shaper or packages/core; Prepare draws no dot on a closed loop.
 //  5. BYTE-IDENTICAL without the new options: tests/fixtures/leadin-775-before.json (written by origin/main 5e79336's own code, tests/helpers/leadin-775-digest.js;
 //     TASK 786: the download / preview facets re-written by the 786 exporter, every change explained in WORK-LOG TURN 786: the page grown to hold every written
-//     element, the start mark stroke-only, a mixed-kind hole wound opposite; operations and 3D footprints unchanged).
+//     element, the start mark stroke-only, a mixed-kind hole wound opposite; operations and 3D footprints unchanged). TASK 847 (C): Node arc fallback fixed
+//     (847-C): #core/curve-kinds.js sampleArc without an SVG DOM gives an arc's two ends, not [centre, end]; re-written BY NAME, the facets that read those
+//     samples (relief 40, download 7, preview 7) of the 6 drawings with arcs whose facets changed: owner-trapezoid.document.json,
+//     angle-dimension/owner-trapezoid-angle.json, drag/owner-two-arcs-575.json, dxf/close-path-760-gap.dxf, dxf/fusion-sketch4.dxf,
+//     fusion/real-solid-plate-711.json; every drawing without an arc unchanged (WORK-LOG TURN 847).
 //  6. The app (node kit): the cut card rows (On line's Hold part with no Tab thickness, no Lead-in row), ONE undo step each, the notes, the operations row,
 //     an open line, a programmed pocket's start mark, save + reload.
 import assert from 'node:assert';

@@ -6,6 +6,10 @@
 //     task) in tests/fixtures/bezier-loops-761/no-bezier-digest.json. `node tests/bezier-loops-761-node.test.js --write-digest` rewrites that file (only
 //     ever run on the base commit). TASK 786: its Shaper download facets (shaperOutside / shaperSpiral / shaperTabs / download) re-written by the 786 exporter,
 //     every change explained (WORK-LOG TURN 786): the page grown to hold every written element, the start mark stroke-only, a mixed-kind hole wound opposite.
+//     TASK 847 (C): Node arc fallback fixed (847-C): #core/curve-kinds.js sampleArc without an SVG DOM gives an arc's two ends, not [centre, end]. The facets
+//     that read those samples were re-written BY NAME for the 6 drawings with arcs whose facets changed (loopPolys of owner-trapezoid.document.json,
+//     angle-dimension/owner-trapezoid-angle.json, drag/owner-two-arcs-575.json, legacy-angles#1 owner-trapezoid-angle, dxf/fusion-sketch4.dxf,
+//     fusion/real-solid-plate-711.json; that last one's shaperOutside, download and relief too); every drawing without an arc is unchanged (WORK-LOG TURN 847).
 //  2. findLoops: a bezier is an EDGE; the angular sort at a node uses each curve's TANGENT there, the bounded test the curve's real area: line + bezier,
 //     bezier + bezier, arc + its chord, a lens of two arcs, bezier + line two-edge loops, a bezier outline with a hole, nesting; areas and orientation.
 //  3. ONE geometry per curve kind (#core/curve-kinds.js): containment / interior point on curved loops, the export's cubic `C` (round trip within 1e-6),

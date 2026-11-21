@@ -66,10 +66,12 @@ export function sampleArc(s, state, N = 24) {
   const [p1, p2, p3] = (s.joints || []).map((id) => state.joints.get(id));
   if (!p1 || !p2 || !p3) return [];
   const d = calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep });
-  if (typeof document === 'undefined' || !document.createElementNS) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
+  // TASK 847: the arc's two ENDS, start -> end (a CENTER arc's joints are [centre, start, end]: p2, p3; this returned the centre p1 for its start)
+  const ends = () => [{ x: p2.x, y: p2.y }, { x: p3.x, y: p3.y }];
+  if (typeof document === 'undefined' || !document.createElementNS) return ends();
   const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d);
   let len = 0; try { len = path.getTotalLength(); } catch (_) {}
-  if (!len) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
+  if (!len) return ends();
   const pts = [];
   for (let i = 0; i <= N; i++) { try { const pt = path.getPointAtLength((i / N) * len); pts.push({ x: pt.x, y: pt.y }); } catch (_) {} }
   return pts;

@@ -432,7 +432,7 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
   edited operation keeps its place in the list (today it moves); the bin deletes the operation, and its shapes stay in
   their other operations (today: unassigns the regions); Contour is a type in the menus, the Roughing card loses its
   Contour row and "Edit contour"; adding / removing a Contour no longer sets Roughing's allowance.
-- S3 (as built): the operations toolbar across the top of Prepare (Design's ribbon; the Operations card, the cut card and the notice start below it; on the short
+- S3 (as built): the operations toolbar across the top of Prepare (Design's ribbon; the Operations card and the notice start below it, the cut card on a phone; on the short
   viewport the rail at the left, the Operations card right of it); a click on a shape or a row shows no card (the selection-only type menu card is gone); a new
   operation is made from the toolbar (with nothing selected: an empty one); every Design edit marks EVERY operation out of date (section 11; the paths signature
   covers the whole sketch) instead of regenerating it, with Recalculate on the toolbar and the Export step's "n operations are out of date" line; Prepare's

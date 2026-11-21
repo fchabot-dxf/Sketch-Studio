@@ -6,6 +6,10 @@
 //   theme-color; the intro (<h1> + the description) first in <body>, out of flow; one meta description only.
 // The four approved icons (owner turns 2832-2905) are pinned by sha256: changing a drawing is a decision, not a side effect.
 // FAIL-FIRST kept: a page that already has a meta description, a registry app without a tile, a description over 155 characters: each is refused.
+// TASK 851 (owner turn 3171): an app may DECLARE its share image (registry ogImage: { src, alt }, a file of its own folder, 1200 x 630 PNG): Sketch's is a real
+// screenshot of its start screen (apps/sketchstudio/assets/og-image.png); its og:image / twitter:image / JSON-LD image name that file, no card is generated for it;
+// the other apps keep the generated card (og-image.png). robots.txt disallows the Pages Function routes (the top folders of functions/: /api/, /auth/ =
+// the Google sign-in callback); the intro carries a <noscript> line. FAIL-FIRST: a declared image that is missing, not a PNG or not 1200 x 630 is refused.
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -36,6 +40,9 @@ const APPROVED = { // sha256 of the approved final-icons/<id>.svg (the drawings 
 const pngSize = (b) => { assert.strictEqual(b.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', 'a PNG'); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
 const attr = (html, re) => { const m = html.match(re); assert.ok(m, `tag ${re} is in the page`); return m[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); };
 const meta = (html, key, val) => attr(html, new RegExp(`<meta ${key}="${val}" content="([^"]*)">`));
+const ogPathOf = (app) => (app.ogImage ? app.ogImage.src : 'og-image.png'); // TASK 851: the declared share image, else the generated card
+const FUNCTION_ROUTES = fs.readdirSync(path.join(REPO_ROOT, 'functions'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => `/${e.name}/`).sort();
+const NOSCRIPT = (app) => `${app.name} is a free web app: it runs in your browser, with nothing to install. Turn on JavaScript to use it.`;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'site-identity-829-'));
 try {
@@ -49,11 +56,17 @@ try {
     assert.ok(app.tagline && app.tile, `${app.id}: tagline and tile`);
     assert.strictEqual(app.icon.match(/<rect width='64' height='64' rx='14' fill='(#[0-9A-Fa-f]{6})'/)[1].toUpperCase(), app.tile.toUpperCase(), `${app.id}: the tile colour is the icon's own tile`);
     assert.ok(/viewBox='0 0 64 64'/.test(app.icon), `${app.id}: 64x64 viewBox`);
+    // TASK 851: Sketch declares a real screenshot as its share image; the others declare none (they keep the generated card)
+    if (app.id === 'sketchstudio') {
+      assert.strictEqual(app.ogImage && app.ogImage.src, 'assets/og-image.png', 'sketchstudio: ogImage.src is its own assets/og-image.png');
+      assert.ok(typeof app.ogImage.alt === 'string' && app.ogImage.alt.length > 20, 'sketchstudio: ogImage.alt says what the screenshot shows');
+      assert.deepStrictEqual(pngSize(fs.readFileSync(path.join(REPO_ROOT, 'apps', app.id, app.ogImage.src))), [1200, 630], 'sketchstudio: the screenshot in the repo is 1200 x 630');
+    } else assert.strictEqual(app.ogImage, undefined, `${app.id}: no declared share image (the generated card)`);
 
     // ---- the built site ----
     const out = path.join(tmp, app.id);
     const r = buildSite(app.id, out);
-    assert.deepStrictEqual(r.identity.slice().sort(), ['apple-touch-icon.png', 'favicon.ico', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest', 'og-image.png', 'robots.txt', 'sitemap.xml'], `${app.id}: the identity files written`);
+    assert.deepStrictEqual(r.identity.slice().sort(), ['apple-touch-icon.png', 'favicon.ico', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest', ...(app.ogImage ? [] : ['og-image.png']), 'robots.txt', 'sitemap.xml'], `${app.id}: the identity files written (no card for an app that declares its share image)`);
     const read = (f) => fs.readFileSync(path.join(out, f));
     assert.strictEqual(read('favicon.svg').toString('utf8'), app.icon, `${app.id}: favicon.svg is the registry's icon`);
     assert.strictEqual(sha(read('favicon.svg')), APPROVED[app.id], `${app.id}: favicon.svg is the approved file, byte for byte`);
@@ -67,12 +80,19 @@ try {
     assert.deepStrictEqual(pngSize(read('apple-touch-icon.png')), [180, 180], `${app.id}: apple-touch-icon 180`);
     assert.deepStrictEqual(pngSize(read('icon-192.png')), [192, 192], `${app.id}: icon-192`);
     assert.deepStrictEqual(pngSize(read('icon-512.png')), [512, 512], `${app.id}: icon-512`);
-    assert.deepStrictEqual(pngSize(read('og-image.png')), [1200, 630], `${app.id}: og-image 1200 x 630`);
+    assert.deepStrictEqual(pngSize(read(ogPathOf(app))), [1200, 630], `${app.id}: the share image ${ogPathOf(app)} is 1200 x 630`);
+    if (app.ogImage) {
+      assert.ok(read(app.ogImage.src).equals(fs.readFileSync(path.join(REPO_ROOT, 'apps', app.id, app.ogImage.src))), `${app.id}: the site's share image is the repo screenshot, byte for byte`);
+      assert.ok(!fs.existsSync(path.join(out, 'og-image.png')), `${app.id}: no generated card in the site`);
+    }
     const man = JSON.parse(read('manifest.webmanifest').toString('utf8'));
     assert.deepStrictEqual([man.name, man.short_name, man.theme_color, man.background_color, man.start_url], [appTitle(app.id), app.name, app.tile, app.tile, '/'], `${app.id}: manifest values = the declaration`);
     assert.deepStrictEqual(man.icons.map((i) => i.src), ['icon-192.png', 'icon-512.png', 'favicon.svg'], `${app.id}: manifest icons`);
     for (const i of man.icons) assert.ok(fs.existsSync(path.join(out, i.src)), `${app.id}: manifest icon ${i.src} exists`);
-    assert.strictEqual(read('robots.txt').toString('utf8'), `User-agent: *\nAllow: /\n\nSitemap: ${url}sitemap.xml\n`, `${app.id}: robots.txt allows all and names the sitemap`);
+    assert.deepStrictEqual(FUNCTION_ROUTES, ['/api/', '/auth/'], 'the Pages Function routes (functions/) are /api/ and /auth/');
+    assert.strictEqual(read('robots.txt').toString('utf8'), `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /auth/\n\nSitemap: ${url}sitemap.xml\n`, `${app.id}: robots.txt allows the site, disallows the Pages Function routes, names the sitemap`);
+    const disallowed = [...read('robots.txt').toString('utf8').matchAll(/^Disallow: (\S+)$/gm)].map((m) => m[1]);
+    assert.ok(disallowed.some((p) => '/auth/google/callback'.startsWith(p)), `${app.id}: robots.txt disallows the Google sign-in callback`);
     const sm = read('sitemap.xml').toString('utf8');
     assert.ok(sm.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">') && sm.trimEnd().endsWith('</urlset>'), `${app.id}: sitemap.xml is a urlset`);
     assert.deepStrictEqual([...sm.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]), id.SITE_PAGES.map((p) => `https://${host}${p}`), `${app.id}: sitemap lists the site's pages on its own host`);
@@ -91,22 +111,25 @@ try {
     assert.strictEqual((html.match(/<title>/g) || []).length, 1, `${app.id}: one <title>`);
     assert.strictEqual(meta(html, 'property', 'og:description'), app.description, `${app.id}: og:description`);
     assert.strictEqual(meta(html, 'property', 'og:url'), url, `${app.id}: og:url`);
-    assert.strictEqual(meta(html, 'property', 'og:image'), `${url}og-image.png`, `${app.id}: og:image is absolute`);
+    assert.strictEqual(meta(html, 'property', 'og:image'), `${url}${ogPathOf(app)}`, `${app.id}: og:image is absolute, the declared share image or the card`);
+    assert.strictEqual(meta(html, 'property', 'og:image:alt'), app.ogImage ? app.ogImage.alt : `${app.name}, part of ${SUITE_NAME}`, `${app.id}: og:image:alt`);
     assert.deepStrictEqual([meta(html, 'property', 'og:image:width'), meta(html, 'property', 'og:image:height')], ['1200', '630'], `${app.id}: og:image size`);
     assert.strictEqual(meta(html, 'name', 'twitter:card'), 'summary_large_image');
-    assert.strictEqual(meta(html, 'name', 'twitter:image'), `${url}og-image.png`);
+    assert.strictEqual(meta(html, 'name', 'twitter:image'), `${url}${ogPathOf(app)}`);
     assert.strictEqual(meta(html, 'name', 'twitter:description'), app.description);
     assert.deepStrictEqual(JSON.parse(attr(html, /<script type="application\/ld\+json">([^<]*)<\/script>/)),
       { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: appTitle(app.id), description: app.description, applicationCategory: 'DesignApplication', operatingSystem: 'Web browser',
-        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, url, image: `${url}og-image.png` }, `${app.id}: JSON-LD SoftwareApplication`);
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, url, image: `${url}${ogPathOf(app)}` }, `${app.id}: JSON-LD SoftwareApplication`);
     for (const l of ['<link rel="icon" href="favicon.svg" type="image/svg+xml">', '<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">', '<link rel="apple-touch-icon" href="apple-touch-icon.png">', '<link rel="manifest" href="manifest.webmanifest">']) assert.ok(html.includes(l), `${app.id}: ${l}`);
     // before any script runs: the head tags are above the first <script>/<link rel=stylesheet>? (they follow </title>, the page's first element after the metas)
     assert.ok(html.indexOf('<meta name="description"') < html.indexOf('<script'), `${app.id}: the tags are in the static head, before the page's first script`);
-    const intro = html.match(new RegExp(`<body[^>]*>\\s*<div id="${SEO_INTRO_ID}" style="([^"]*)"><h1[^>]*>([^<]*)</h1><p[^>]*>([^<]*)</p></div>`));
+    const intro = html.match(new RegExp(`<body[^>]*>\\s*<div id="${SEO_INTRO_ID}" style="([^"]*)"><h1[^>]*>([^<]*)</h1><p[^>]*>([^<]*)</p><noscript><p[^>]*>([^<]*)</p></noscript></div>`));
     assert.ok(intro, `${app.id}: the intro is the first thing in <body>`);
     assert.ok(/position:fixed/.test(intro[1]), `${app.id}: the intro is out of flow (position:fixed): it moves nothing`);
     assert.strictEqual(intro[3].replace(/&amp;/g, '&'), app.description, `${app.id}: the intro paragraph = the description`);
     assert.strictEqual(intro[2], app.seoTitle, `${app.id}: the intro <h1> = the seoTitle`);
+    assert.strictEqual(intro[4], NOSCRIPT(app), `${app.id}: the intro's <noscript> line`);
+    assert.strictEqual((html.match(/<noscript>/g) || []).length, 1, `${app.id}: one <noscript>`);
     // the tab, once the app runs, keeps today's title (applyAppIdentity is unchanged): appTitle, not the seoTitle
     assert.strictEqual(appTitle(app.id), `${app.name} · ${SUITE_NAME}`, `${app.id}: the running app's tab title stays appTitle`);
     assert.strictEqual(appTitle(app.id, 'My part'), `My part — ${app.name}`, `${app.id}: with a design open the tab shows its name`);
@@ -131,6 +154,18 @@ try {
   assert.throws(() => id.injectIdentity('<html><head></head><body></body></html>', a0, 'h.example'), /no <\/title>/, 'a page without <title> is refused');
   assert.throws(() => id.registryApp('nope'), /no app "nope"/);
   assert.ok(id.identityHead({ ...a0, description: 'a < b & "c"' }, 'h.example').includes('content="a &lt; b &amp; &quot;c&quot;"'), 'values are escaped');
+  // TASK 851: a declared share image is checked against the built site: missing, not a PNG, the wrong size, a path out of the site, no alt: each is refused
+  const fake = path.join(tmp, 'og-fail');
+  fs.mkdirSync(path.join(fake, 'assets'), { recursive: true });
+  const shot = { ...a0, ogImage: { src: 'assets/og-image.png', alt: 'A screenshot of the app' } };
+  assert.throws(() => id.declaredOgImage(shot, fake), /does not exist/, 'a declared share image that is not in the site is refused');
+  fs.writeFileSync(path.join(fake, 'assets', 'og-image.png'), 'not a png');
+  assert.throws(() => id.declaredOgImage(shot, fake), /not a PNG/, 'a declared share image that is not a PNG is refused');
+  fs.copyFileSync(path.join(tmp, 'shaper', 'icon-512.png'), path.join(fake, 'assets', 'og-image.png'));
+  assert.throws(() => id.declaredOgImage(shot, fake), /512 x 512.*1200 x 630/, 'a declared share image of the wrong size is refused');
+  assert.throws(() => id.declaredOgImage({ ...a0, ogImage: { src: '../x.png', alt: 'x' } }, fake), /inside the app folder/, 'a share image outside the app folder is refused');
+  assert.throws(() => id.declaredOgImage({ ...a0, ogImage: { src: 'assets/og-image.png' } }, fake), /alt/, 'a share image without alt text is refused');
+  assert.strictEqual(id.declaredOgImage({ ...a0, ogImage: undefined }, fake), null, 'no declaration: null (the card is generated)');
   console.log(`SITE-IDENTITY-829 OK (${SUITE_NAME}: ${APPS.length} apps)`);
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });

@@ -5,6 +5,9 @@
 // icon (-> favicon.svg, favicon.ico, apple-touch-icon.png, icon-192 / 512, the manifest, the share card), the tile colour (theme colour), the tagline
 // (share card), the seoTitle (the built page's static <title>, og:title, twitter:title and intro h1; the tab keeps appTitle once the app runs) and the description (meta description, Open Graph, JSON-LD, the About page). Nothing of it is copied by hand anywhere.
 //
+// TASK 851: an app may declare its own share image, `ogImage: { src, alt }` (a 1200 x 630 PNG of its app folder): the built site's og:image / twitter:image /
+// JSON-LD image name it instead of the generated card. Sketch's is a real screenshot of the app (captured from a locally served build; owner turn 3171).
+//
 // TASK 828: an app is listed on the About page (about.html, built by scripts/site-about.cjs) unless its entry says `about: false` (the one place).
 //
 // The suite is "Sketch Studio"; the apps are Sketch (the parametric CAD), Shaper, Pen Plotter, Trace.
@@ -20,6 +23,7 @@ export const APPS = [
     tagline: "Draw, dimension and constrain shapes. Export SVG and DXF.",
     seoTitle: "Sketch: Free Online 2D CAD with Constraints",
     description: "Free online 2D CAD with constraints: draw and dimension shapes, lay out woodworking jobs, work out sizes on site, and export SVG and DXF for CNC.",
+    ogImage: { src: "assets/og-image.png", alt: "The Sketch app in a browser: a 60 x 40 rectangle with a circle, dimensioned, in the Design tab" },
     icon: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' width='64' height='64'><clipPath id='cx'><rect width='64' height='64' rx='14'/></clipPath><rect width='64' height='64' rx='14' fill='#FFFFFF'/><g clip-path='url(#cx)'><path d='M0 8 H64 M8 0 V64 M0 16 H64 M16 0 V64 M0 24 H64 M24 0 V64 M0 32 H64 M32 0 V64 M0 40 H64 M40 0 V64 M0 48 H64 M48 0 V64 M0 56 H64 M56 0 V64' stroke='#c9ced6' stroke-width='1.3'/><path d='M16 15 H48' stroke='#4b5563' stroke-width='2.6'/><path d='M16 10 V20 M48 10 V20' stroke='#4b5563' stroke-width='2.2'/><path d='M16 15 l4 -2.6 v5.2 Z M48 15 l-4 -2.6 v5.2 Z' fill='#4b5563'/><path d='M16 26 H48 V50 H16 Z' fill='none' stroke='#3b82f6' stroke-width='4' stroke-linejoin='round'/><circle cx='16' cy='26' r='4.2' fill='#fff' stroke='#111' stroke-width='2.4'/><circle cx='48' cy='26' r='4.2' fill='#fff' stroke='#111' stroke-width='2.4'/><circle cx='16' cy='50' r='4.2' fill='#fff' stroke='#111' stroke-width='2.4'/><circle cx='48' cy='50' r='4.2' fill='#fff' stroke='#111' stroke-width='2.4'/></g><rect x='0.5' y='0.5' width='63' height='63' rx='13.5' fill='none' stroke='#d6d9de'/></svg>" },
   { id: "shaper", name: "Shaper", accent: "#1BE09E", tile: "#3F4145",
     tagline: "Turn a sketch into cuts for the Shaper Origin.",

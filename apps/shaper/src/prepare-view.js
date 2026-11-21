@@ -13,6 +13,7 @@ import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, pl
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
   CONTOUR_KIND, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
+import { cutLengthNote } from './tool-table.js'; // TASK 842: an operation deeper than its bit's cutting length (one note line)
 import { resultOf } from './op-paths.js'; // TASK 817: the generated paths by their signature (the open operation's: as opened, its Preview)
 import { holdMode, tabHandles, holdTabDragAt } from '#core/hold-part.js'; // TASK 822: draggable tabs (the hold's own layout, ONE pure derivation)
 import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
@@ -895,6 +896,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const note = [...steppedNoteItems(rec), ...levelsNoteItems(rec, levelsSummary(pk, rec, state, loops, loopPolys, own, peek)), // TASK 792: Roughing / Contour
       ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearingSummary(pk, rec, state, loops, loopPolys, own, peek))];
     const d = e ? (contour ? e.rec.baseDepth : e.rec.cutDepth) : null;
+    const deep = cutLengthNote(rec, Number(rec.cutDepth) > 0 ? Number(rec.cutDepth) : d, docUnit()); // TASK 842: deeper than the bit's cutting length: one plain line (never blocks)
+    if (deep) note.push({ text: deep });
     return { kind: parseKey(ref.key).kind, record: rec, note, hold, clearing: clearingAvailability(pk, rec, state, loops, loopPolys),
       levels: Boolean(e && hasLevels(e.rec)), partDepth: Number(d) > 0 ? Number(d) : null, // TASK 809: it (a Contour: its part) cuts a part's levels; TASK 810: the part's depth
       walls: contour && e ? { shown: Boolean(e.rec.slope || hasLevels(e.rec)), value: wallsOf(e.rec), defaultId: wallsDefault(e.rec) } : null }; // TASK 810: a Contour's walls

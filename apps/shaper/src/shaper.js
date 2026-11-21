@@ -159,13 +159,21 @@ export function defaultCutRecord() {
 // TASK 455: the CUTTER SHAPE (a cut-record field, NEVER exported: the Shaper SVG has no attribute for it; the 3D Review of task
 // 457 will read it): 'endmill' (flat, default) | 'ballnose' | 'vbit'. A V-bit's angle (`cutterAngle`) comes from the EXISTING
 // VBIT_PRESETS above (vbitHalfAngleTan stays the one V-bit helper). `icon` = 16x16 inner markup in currentColor.
+// TASK 842: the shapes are also the TOOL TABLE's bit TYPES (apps/shaper/src/tool-table.js): `fields` = the size fields a bit of that type has (the one
+// declaration the table's validation, its window and the card read): `diameter` (mm), `angle` (a V-bit's INCLUDED angle, degrees), `tipDiameter` /
+// `taperAngle` (degrees PER SIDE) / `shankDiameter` (a tapered bit: a cone from its tip, capped by its shank; #core/cutter-profile.js). `custom` = the card's
+// Custom bit can be this shape (its typed diameter + the shape popover); a tapered bit comes from the table only (its cone has fields the card has no rows for).
+// The two TAPERED shapes go into the cut record as cutterShape 'taperball' | 'taperflat', toolDia = the TIP diameter, + `taperAngle` and `shankDia`.
 export const CUTTER_SHAPES = [
-  { id: 'endmill', label: 'end mill', icon: "<path d='M6 1v12h6V1' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13h8' fill='none' stroke='currentColor' stroke-width='1.8'/>" },
-  { id: 'ballnose', label: 'ball nose', icon: "<path d='M6 1v10a3 3 0 0 0 6 0V1' fill='none' stroke='currentColor' stroke-width='1.5'/>" },
-  { id: 'vbit', label: 'V-bit', icon: "<path d='M5 1v8l4 7 4-7V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>" },
+  { id: 'endmill', label: 'end mill', custom: true, fields: ['diameter'], icon: "<path d='M6 1v12h6V1' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13h8' fill='none' stroke='currentColor' stroke-width='1.8'/>" },
+  { id: 'ballnose', label: 'ball nose', custom: true, fields: ['diameter'], icon: "<path d='M6 1v10a3 3 0 0 0 6 0V1' fill='none' stroke='currentColor' stroke-width='1.5'/>" },
+  { id: 'vbit', label: 'V-bit', custom: true, fields: ['diameter', 'angle'], icon: "<path d='M5 1v8l4 7 4-7V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>" },
+  { id: 'taperball', label: 'tapered ball nose', custom: false, fields: ['tipDiameter', 'taperAngle', 'shankDiameter'], icon: "<path d='M5 1v5l2.6 7.6a1.5 1.5 0 0 0 2.8 0L13 6V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>" },
+  { id: 'taperflat', label: 'tapered end mill', custom: false, fields: ['tipDiameter', 'taperAngle', 'shankDiameter'], icon: "<path d='M5 1v5l2.4 9h3.2L13 6V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M6.6 15h4.8' fill='none' stroke='currentColor' stroke-width='1.8'/>" },
 ];
 // DECLARED data: the quick bit-diameter presets of the cut card (VALUES are BASE mm; LABELS stay the imperial bit sizes, x 25.4 mm/in). TASK 743: also how
-// an operation names its bit ("¼″ end mill", apps/shaper/src/operations.js): moved here from cut-panel.js, unchanged.
+// an operation names its bit ("¼″ end mill", apps/shaper/src/operations.js): moved here from cut-panel.js, unchanged. TASK 842: they STAY the Custom bit's quick
+// picks (and its name); the tool table's first-use bits are their own list (tool-table.js DEFAULT_BITS).
 export const BIT_PRESETS = [
   { label: '.02', value: 0.508 },   // .02 in
   { label: '⅛', value: 3.175 },   // 1/8 in

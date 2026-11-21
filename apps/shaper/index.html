@@ -470,12 +470,13 @@
     #prepare-canvas.is-picking { cursor: crosshair; }
     #prepare-canvas.is-adding { cursor: copy; } /* TASK S2: Add shapes mode (a click puts a shape in / takes it out) */
     @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset, .cut-row[data-row="wallSide"] .cut-preset { height: 44px; } }
-    .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
-    .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
+    .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger, .cut-bit-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
+    .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open, .cut-bit-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-type-cur { text-transform: lowercase; }
-    .cut-type-cur, .cut-shape-cur, .cut-clear-cur { flex: 1; text-align: left; }
+    .cut-type-cur, .cut-shape-cur, .cut-clear-cur, .cut-bit-cur { flex: 1; text-align: left; }
+    .cut-bit-cur { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* TASK 842: a long bit name stays on one line */
     .cut-caret { flex: 0 0 auto; color: var(--sk-prep-chip-text); transition: transform 0.12s; }
-    .cut-type-trigger.is-open .cut-caret, .cut-shape-trigger.is-open .cut-caret, .cut-clear-trigger.is-open .cut-caret { transform: rotate(180deg); }
+    .cut-type-trigger.is-open .cut-caret, .cut-shape-trigger.is-open .cut-caret, .cut-clear-trigger.is-open .cut-caret, .cut-bit-trigger.is-open .cut-caret { transform: rotate(180deg); }
     .cut-ic { width: 18px; height: 18px; flex: 0 0 auto; color: var(--sk-prep-chip-text); }
     .cut-box { display: flex; align-items: center; box-sizing: border-box; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; overflow: hidden; }
     .cut-box:focus-within { box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
@@ -653,6 +654,47 @@
     .cut-shape-angles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding-top: 4px; }
     .cut-shape-angles .cut-preset { all: unset; box-sizing: border-box; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: var(--sk-prep-chip2); font-size: 11px; color: var(--sk-prep-chip-text); cursor: pointer; }
     .cut-shape-angles .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    /* TASK 842: the Bit menu (the tool table's bits: glyph, name, size; Custom; Edit tool table...), as the Clearing popover */
+    .cut-bit-pop { width: 210px; padding: 12px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+    .cut-bit-pop .cut-type-opt { height: auto; min-height: 30px; flex-wrap: wrap; row-gap: 1px; padding: 5px 10px; }
+    .cut-bit-pop .cut-type-opt span { text-transform: none; }
+    .cut-bit-pop .cut-opt-name { flex: 1; min-width: 0; line-height: 1.2; overflow-wrap: anywhere; }
+    .cut-bit-size { flex: 0 0 100%; padding-left: 26px; box-sizing: border-box; font-size: 11px; color: var(--sk-prep-unit); line-height: 1.2; }
+    .cut-bit-edit { all: unset; box-sizing: border-box; min-height: 30px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--sk-prep-field-bg); color: var(--sk-prep-chip-text); font-size: 13px; cursor: pointer; text-align: center; }
+    .cut-bit-edit:hover { background: var(--sk-prep-list-hover); }
+    @media (max-width: 640px), (pointer: coarse) {
+      .cut-bit-pop { width: min(210px, calc(100vw - 262px)); padding: 8px; gap: 4px; }
+      .cut-bit-pop .cut-type-opt, .cut-bit-edit { min-height: 44px; font-size: 13px; gap: 6px; padding: 4px 8px; }
+      .cut-bit-size { padding-left: 22px; }
+    }
+    /* TASK 842: the Tool table window (the Sync dialog's card, header and buttons: .sync-modal ...) */
+    .tt-modal { max-width: 520px; }
+    .tt-card { max-height: min(86vh, 760px); overflow-y: auto; }
+    .tt-list { display: flex; flex-direction: column; gap: 4px; }
+    .tt-list[hidden], .tt-form[hidden], .tt-list-actions[hidden] { display: none; }
+    .tt-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: #0b1020; border: 1px solid #232834; flex-wrap: wrap; }
+    .tt-glyph { width: 20px; height: 20px; color: #cbd5e1; flex: 0 0 auto; }
+    .tt-text { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .tt-row-name { color: #f3f4f6; font-size: 13px; overflow-wrap: anywhere; }
+    .tt-row-size { color: #9ca3af; font-size: 11px; overflow-wrap: anywhere; }
+    .tt-list-actions { display: flex; justify-content: flex-start; }
+    .tt-form { display: flex; flex-direction: column; gap: 10px; }
+    .tt-label { font-size: 12px; color: #9ca3af; }
+    .tt-types { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tt-type { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 6px; border: 1px solid #374151; color: #cbd5e1; font-size: 12px; cursor: pointer; }
+    .tt-type.is-active { border-color: #3b82f6; background: rgba(59,130,246,0.18); color: #fff; }
+    .tt-units { display: flex; gap: 6px; }
+    .tt-unit-btn { all: unset; box-sizing: border-box; min-width: 48px; padding: 5px 10px; text-align: center; border-radius: 6px; border: 1px solid #374151; color: #cbd5e1; font-size: 12px; cursor: pointer; }
+    .tt-unit-btn.is-active { border-color: #3b82f6; background: rgba(59,130,246,0.18); color: #fff; }
+    .tt-sizes { display: flex; flex-direction: column; gap: 10px; }
+    .tt-num { display: flex; align-items: center; gap: 6px; }
+    .tt-num input { flex: 1; min-width: 0; background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 8px 10px; color: #f3f4f6; font: 13px system-ui, sans-serif; }
+    .tt-unit { min-width: 22px; color: #9ca3af; font-size: 12px; }
+    .tt-notes { background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 8px 10px; color: #f3f4f6; font: 13px system-ui, sans-serif; resize: vertical; }
+    @media (max-width: 640px), (pointer: coarse) {
+      .tt-type, .tt-unit-btn, .tt-num input { min-height: 44px; }
+      .tt-row .sync-link-btn { flex: 1 1 0; }
+    }
   </style>
 </head>
 <body>

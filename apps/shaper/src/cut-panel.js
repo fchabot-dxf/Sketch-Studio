@@ -14,6 +14,8 @@ import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, unitNumber } from '#core/units.js';
 import { bindHint, setOffReason } from './hint.js'; // TASK 805: a row's label and its tooltip (the cursor tooltip is installed once by main.js)
 import { hintLabel, choiceId } from './param-hints.js'; // TASK 770: THE table of every row's label and hint
+import { bitOfRecord, bitSummary, recordFieldsOf, customFields } from './tool-table.js'; // TASK 842: the Bit row picks from the user's tool table
+import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's shape (from the table only)
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 // TASK 714: each STEPPED type right after its plain type; a stepped type is listed only when the target can take it (its record carries that slope).
@@ -79,7 +81,7 @@ const WALL_SIDE_PRESETS = CONTOUR_WALL_SIDES.map((w) => ({ hint: choiceId('wallS
 // (a row is its data-row or data-param). Each tab is a FIXED panel: the rows area keeps the height of the tallest tab (applyTabs), so switching tabs moves nothing outside
 // the card; a tab none of whose rows shows on this card is not offered. Every other cut type keeps its single card (no tab bar, every row in its place).
 const CARD_TABS = [
-  { id: 'tool', hint: 'tabTool', rows: ['toolDia', 'cutterShape'] },
+  { id: 'tool', hint: 'tabTool', rows: ['bit', 'toolDia', 'cutterShape'] }, // TASK 842: the Bit pick (the tool table) first
   { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth', 'walls', 'wallSide'] }, // TASK S2: a Contour's Wall side
   { id: 'heights', hint: 'tabHeights', rows: ['cutDepth', 'topDepth', 'floorAllowance'] }, // TASK S2 (owner turn 2740): 810's Bottom row is gone: the Depth is the one depth
   { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'smoothing'] }, // TASK S2: the Contour row is gone (Contour is an operation type)
@@ -134,6 +136,8 @@ export function createCutPanel(hostEl, opts = {}) {
   const onPreview = opts.onPreview || (() => {}); // TASK 817: the open operation's Preview (its paths with the card's settings now, in the background)
   const onHoverShape = opts.onHoverShape || (() => {}); // (geometry key | null): a shape row under the pointer
   const onPickBoundary = opts.onPickBoundary || (() => {}); // TASK 810: Roughing's boundary "Pick" (then a click on a closed shape in Prepare); pressed again while picking: cancel
+  const getBits = opts.getBits || (() => []); // TASK 842: the user's tool table (tool-table.js loadBits), read each time the Bit menu opens or the card renders
+  const onOpenToolTable = opts.onOpenToolTable || (() => {}); // TASK 842: the Bit menu's "Edit tool table..."
   hostEl.innerHTML = '';
 
   const card = document.createElement('div');
@@ -307,6 +311,12 @@ export function createCutPanel(hostEl, opts = {}) {
           <span class="cut-unit">mm</span>
         </div>
       </div>
+      <div class="cut-row" data-row="bit"><!-- TASK 842: the bit, picked from the user's tool table (or Custom: the two rows below) -->
+        <button type="button" class="cut-field-label" data-hint="toolBit"></button>
+        <button type="button" class="cut-bit-trigger" aria-haspopup="listbox" aria-expanded="false">
+          <span class="cut-bit-ic"></span><span class="cut-bit-cur"></span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
       <div class="cut-row" data-param="toolDia">
         <button type="button" class="cut-field-label" data-hint="toolDia"></button>
         <div class="cut-inline cut-box">
@@ -328,7 +338,8 @@ export function createCutPanel(hostEl, opts = {}) {
     <div class="cut-pop cut-type-menu" role="listbox" hidden></div>
     <div class="cut-pop cut-offset-pop" hidden></div>
     <div class="cut-pop cut-shape-pop" role="listbox" hidden></div>
-    <div class="cut-pop cut-clear-pop" role="listbox" hidden></div>`;
+    <div class="cut-pop cut-clear-pop" role="listbox" hidden></div>
+    <div class="cut-pop cut-bit-pop" role="listbox" hidden></div>`;
   hostEl.appendChild(card);
 
   const $ = (sel) => card.querySelector(sel);
@@ -339,6 +350,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const holdModesWrap = $('.cut-hold-modes'), countInput = $('.cut-tab-count'), countPresetsWrap = $('.cut-row[data-row="tabCount"] .cut-presets') /* the Auto button, inside the count box (a row of its own would push the card past a phone's screen) */, tabWidthInput = $('.cut-tab-width'), holdThicknessInput = $('.cut-hold-thickness'); // TASK 742
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
   const clearTrigger = $('.cut-clear-trigger'), clearPop = $('.cut-clear-pop'), clearIc = $('.cut-clear-ic'), clearCur = $('.cut-clear-cur'); // TASK 745
+  const bitTrigger = $('.cut-bit-trigger'), bitPop = $('.cut-bit-pop'), bitIc = $('.cut-bit-ic'), bitCur = $('.cut-bit-cur'); // TASK 842
   const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
   const layoutModesWrap = $('.cut-layout-modes'), minTerraceInput = $('.cut-min-terrace'); // TASK 792
   minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
@@ -418,11 +430,12 @@ export function createCutPanel(hostEl, opts = {}) {
   let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [], mode: null };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
-  const pops = [menu, offsetPop, shapePop, clearPop];
+  const pops = [menu, offsetPop, shapePop, clearPop, bitPop];
   const syncOpenState = () => {
     trigger.setAttribute('aria-expanded', String(!menu.hidden)); trigger.classList.toggle('is-open', !menu.hidden);
     shapeTrigger.setAttribute('aria-expanded', String(!shapePop.hidden)); shapeTrigger.classList.toggle('is-open', !shapePop.hidden);
     clearTrigger.setAttribute('aria-expanded', String(!clearPop.hidden)); clearTrigger.classList.toggle('is-open', !clearPop.hidden);
+    bitTrigger.setAttribute('aria-expanded', String(!bitPop.hidden)); bitTrigger.classList.toggle('is-open', !bitPop.hidden);
   };
   const closePops = (except) => { for (const p of pops) if (p !== except) p.hidden = true; syncOpenState(); };
   const openPop = (pop, anchor) => { closePops(pop); const row = anchor.closest('.cut-row, .cut-field') || anchor; pop.style.top = (row.offsetTop - (rowsEl.contains(row) ? rowsEl.scrollTop : 0)) + 'px'; pop.hidden = false; keepOnScreen(pop); syncOpenState(); };
@@ -542,11 +555,12 @@ export function createCutPanel(hostEl, opts = {}) {
   // cutter shape popover: flat / ball nose / V-bit rows; the V-bit row carries its angle presets (the EXISTING VBIT_PRESETS)
   const buildShapePop = () => {
     shapePop.innerHTML = '';
-    for (const sh of CUTTER_SHAPES) {
+    for (const sh of CUTTER_SHAPES.filter((x) => x.custom)) { // TASK 842: the shapes a Custom bit can be (a tapered bit comes from the tool table)
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt' + (sh.id === current.cutterShape ? ' is-current' : ''); opt.dataset.shape = sh.id;
       optionBody(opt, iconSvg(sh), 'cutterShape', sh.id);
-      opt.addEventListener('click', () => { onSetField('cutterShape', sh.id); if (sh.id === 'vbit') { current.cutterShape = 'vbit'; buildShapePop(); } else closePops(null); }); // a V-bit pick stays open to show its angles
+      const pick = () => (isTaperedCutter(current.cutterShape) ? onSetFields({ cutterShape: sh.id, taperAngle: undefined, shankDia: undefined }) : onSetField('cutterShape', sh.id)); // TASK 842: leaving a tapered shape drops its cone
+      opt.addEventListener('click', () => { pick(); if (sh.id === 'vbit') { current.cutterShape = 'vbit'; buildShapePop(); } else closePops(null); }); // a V-bit pick stays open to show its angles
       shapePop.appendChild(opt);
       if (sh.id === 'vbit' && current.cutterShape === 'vbit') {
         const row = document.createElement('div'); row.className = 'cut-shape-angles';
@@ -561,6 +575,32 @@ export function createCutPanel(hostEl, opts = {}) {
     }
   };
   shapeTrigger.addEventListener('click', (e) => { e.stopPropagation(); if (shapePop.hidden) { buildShapePop(); openPop(shapePop, shapeTrigger); } else closePops(null); });
+
+  // TASK 842: the BIT menu: every bit of the user's tool table (its type's glyph, its name, its size), then Custom (the Bit diameter / Cutter shape rows below), then
+  // "Edit tool table...". Picking a bit copies its settings into the operation (tool-table.js recordFieldsOf: ONE undo step with the rest of the session).
+  const buildBitPop = () => {
+    bitPop.innerHTML = '';
+    const rec = current.record || {};
+    for (const bit of getBits()) {
+      const opt = document.createElement('button');
+      opt.type = 'button'; opt.className = 'cut-type-opt cut-bit-opt' + (rec.bitId === bit.id ? ' is-current' : ''); opt.setAttribute('role', 'option'); opt.dataset.bit = bit.id;
+      opt.innerHTML = `${iconSvg(CUTTER_SHAPES.find((x) => x.id === bit.type))}<span class="cut-opt-name"></span><span class="cut-bit-size"></span>`;
+      opt.querySelector('.cut-opt-name').textContent = bit.name; opt.querySelector('.cut-bit-size').textContent = bitSummary(bit);
+      opt.addEventListener('click', () => { closePops(null); onSetFields(recordFieldsOf(bit)); });
+      bitPop.appendChild(opt);
+    }
+    const custom = document.createElement('button');
+    custom.type = 'button'; custom.className = 'cut-type-opt cut-bit-custom' + (rec.bitName ? '' : ' is-current'); custom.setAttribute('role', 'option'); custom.dataset.bit = '';
+    custom.innerHTML = `${iconSvg(CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0])}<span class="cut-opt-name"></span>`;
+    custom.querySelector('.cut-opt-name').textContent = hintLabel('bitCustom'); custom.dataset.hint = 'bitCustom';
+    custom.addEventListener('click', () => { closePops(null); if (rec.bitName || rec.bitId || rec.cutLength != null) onSetFields(customFields()); });
+    bitPop.appendChild(custom);
+    const edit = document.createElement('button');
+    edit.type = 'button'; edit.className = 'cut-bit-edit'; edit.dataset.hint = 'toolTableEdit'; edit.textContent = hintLabel('toolTableEdit');
+    edit.addEventListener('click', () => { closePops(null); onOpenToolTable(); });
+    bitPop.appendChild(edit);
+  };
+  bitTrigger.addEventListener('click', (e) => { e.stopPropagation(); if (bitPop.hidden) { buildBitPop(); openPop(bitPop, bitTrigger); } else closePops(null); });
 
   // TASK 745: the Clearing dropdown (the card's own popover widget, as the cut type / cutter shape): Freehand | Spiral (TASK 749) | Raster | Morphed spiral, each
   // with its pattern's icon; a choice the target cannot take (the Morphed spiral on a pocket with islands / a neck) stays listed, greyed, with its reason under it
@@ -764,7 +804,14 @@ export function createCutPanel(hostEl, opts = {}) {
     renderPresets(deviationPresetsWrap, declares('stepDeviation') ? RESOLUTION_PRESETS : [], 'stepDeviation', deviation);
     const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
     const shapeName = hintLabel(choiceId('cutterShape', shape.id));
-    shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${angleText(Number(current.cutterAngle) || 90, { show: 'deg' })}` : shapeName;
+    shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shapeName} ${angleText(Number(current.cutterAngle) || 90, { show: 'deg' })}` : isTaperedCutter(shape.id) ? `${shapeName} ${angleText(Number(current.record && current.record.taperAngle) || 0, { show: 'deg' })}` : shapeName; // TASK 842: a tapered bit's taper per side
+    // TASK 842: the Bit row (a type with a bit): the picked table bit's name (its copy in the operation: still named when it has left the table), or Custom; while a
+    // bit is picked, the Bit diameter and Cutter shape rows stay in their place, greyed (TASK 813), showing what the bit set
+    const hasBit = cutTypeHasParam(current.cutType, 'toolDia'), bitRec = current.record || {}, picked = hasBit && Boolean(bitRec.bitName);
+    place('bit', hasBit);
+    if (hasBit) { const why = picked ? 'Set by the picked bit: pick Custom in Bit to type your own' : true; place('toolDia', why); place('cutterShape', why); }
+    bitIc.innerHTML = iconSvg(shape);
+    bitCur.textContent = picked ? `${bitRec.bitName}${bitOfRecord(bitRec, getBits()) ? '' : ' (not in your tool table)'}` : hintLabel('bitCustom');
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
     // TASK S2 (owner turn 2717): with shapes selected and no operation open the card is the type menu only: no rows, no tabs (set BEFORE applyTabs measures the tabs)
@@ -820,6 +867,7 @@ export function createCutPanel(hostEl, opts = {}) {
     if (!menu.hidden) buildMenu();
     if (!shapePop.hidden) buildShapePop();
     if (!clearPop.hidden) buildClearPop();
+    if (!bitPop.hidden) buildBitPop();
     renderFields();
   };
 

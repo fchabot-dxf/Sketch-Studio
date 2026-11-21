@@ -13,6 +13,7 @@ import { reorderOps, setOpsOn, opById, regionOf, CONTOUR_TYPE } from './operatio
 import { cutTypeById, STOCK_TYPE_ID } from './shaper.js'; // TASK S2: a type's name; the Stock
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
 import { hold as holdPaths, retain as retainPaths, request as requestPaths, onChange as onPathsChange, isGenerating, hasResult } from './op-paths.js'; // TASK 817: the paths generated in the background
+import { loadBits, TOOL_TABLE_KEY } from './tool-table.js'; // TASK 842: the user's tool table (the card's Bit menu)
 
 /**
  * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, opsEl, ensureSketch, onViewChange })
@@ -31,7 +32,7 @@ export const NEWER_VERSION_NOTICE = 'Made by a newer version of the app: reload 
  *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
 export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
 
-export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ensureSketch = () => {}, onViewChange = () => {} }) {
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {} }) { // TASK 842: openToolTable = the page's Tool table window
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
@@ -115,7 +116,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
   // precision, TASK 775: the DOCUMENT UNIT, and a key-less change: settings loaded / reset / arriving from another device) rebuilds the card with its notes and
   // the operations list (refreshCutPanel refreshes both), exactly when the card's fields re-label (the stage lives as long as the page)
-  SettingsManager.subscribe((setting) => { if (setting === null || setting === 'DOC_UNIT' || isPrecisionKey(setting)) refreshCutPanel(); });
+  SettingsManager.subscribe((setting) => { if (setting === null || setting === 'DOC_UNIT' || isPrecisionKey(setting) || setting === TOOL_TABLE_KEY) refreshCutPanel(); }); // TASK 842: a changed tool table (the card's Bit row names its bit, or says it left the table)
   // TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second
   // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset). TASK S1: compared without the
@@ -235,6 +236,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onOk: () => commitSession(),
     onCancel: () => cancelSession(),
     onPreview: () => { if (previewState() !== 'busy') previewSession(); }, // TASK 817
+    getBits: () => loadBits(), // TASK 842: the Bit menu lists the user's tool table
+    onOpenToolTable: () => openToolTable(), // TASK 842: the Bit menu's "Edit tool table..."
     onHoverShape: (key) => { if (prepareView) prepareView.hoverKey(key); },
     // TASK 810: Roughing's boundary Pick: the next click on a closed shape in Prepare sets the open Roughing's `boundaryShape` (TASK S2: an edit of its session); pressed
     // again, a click on nothing, or Esc: cancelled, nothing changes; a click on an open line: the line says why

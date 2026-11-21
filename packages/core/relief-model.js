@@ -178,7 +178,7 @@ function itemPieces(it, rule) {
   const shape = it.shape && it.shape.cutterShape;
   if (!rule.through && isShapedCutter(shape) && typeof it.footprintsAt === 'function') {
     const pieces = [];
-    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, SHAPE_SLICES[shape])) {
+    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, SHAPE_SLICES[shape], it.shape)) { // TASK 842: a tapered bit's cone (taperAngle, shankDia) rides on the item's shape
       const rs = [];
       for (const fp of it.footprintsAt(t.halfWidth) || []) rs.push(...regionsFromRings((fp.rings || []).filter((g) => g.length >= 3).map(toRing), fp.fillRule));
       if (rs.length) pieces.push({ depth: t.depth, regions: rs });
@@ -229,8 +229,8 @@ const regionsArea = (rs) => rs.reduce((s, r) => s + Math.abs(area2(r.outer)) / 2
  *   stock   {thickness,width,height,margin,profile?} (defaults DEFAULT_STOCK); all base mm. profile = { outer, holes, sig? } closed rings: the
  *           board IS that profile (a Stock loop: any shape, holes allowed), extruded to the thickness; width/height/margin then do not apply
  *   items   [{ key, cutType:'outside'|'inside'|'pocket'|'online'|..., cutDepth: mm | 'unset', footprints:[{ rings:[[{x,y}]], fillRule }],
- *              shape?: { cutterShape, cutterAngle, toolDia }, footprintsAt?: (halfWidth) => footprints }]
- *              (shape + footprintsAt make a ball-nose / V-bit groove: terraces over its profile, see cutter-profile.js)
+ *              shape?: { cutterShape, cutterAngle, toolDia, taperAngle?, shankDia? }, footprintsAt?: (halfWidth) => footprints }]
+ *              (shape + footprintsAt make a ball-nose / V-bit / TASK 842 tapered groove: terraces over its profile, see cutter-profile.js)
  *   bounds  optional {minX,maxX,minY,maxY} of the design (joints); merged with the footprint rings for the derived size
  * Each mesh = { positions, normals, indices } (typed arrays). stats: triangles, per-group areas, skipped, unsetThrough, board ('rectangle' | 'profile' |
  * TASK 757 'none': nothing gives a board, stockBox null and every mesh empty).

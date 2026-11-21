@@ -86,6 +86,11 @@ async function run({ width, height }) {
     assert.ok((await sent()).includes('clear_selection:sel-A'), `[${label}] the X sent clear_selection(sel-A): ${JSON.stringify(await sent())}`);
     assert.ok(await evalJs(`!document.getElementById('btn-fusion-clear-selections')`), `[${label}] Clear all is hidden with one row`);
 
+    // the pointer stayed where A's X was, and row B moved up under it (a real hover: highlight_selection(sel-B)); move off the list and let that leave's
+    // highlight_selection(null) arrive, so only the Undo's own sends are counted below
+    await mouseTo(2, height - 2);
+    await waitFor(`!document.querySelector('.shaper-fusion-sel:hover') && window.__sent[window.__sent.length - 1].action === 'highlight_selection' && window.__sent[window.__sent.length - 1].selectionId === null`, 'the pointer left the list and highlight_selection(null) arrived');
+
     // the footer Undo: the row is back, nothing is sent
     await evalJs(`window.__sent.length = 0`);
     await click('#btn-undo');

@@ -168,13 +168,16 @@ console.log('spiral: ' + JSON.stringify(measured));
     }
     return { svg: kept.join('\n'), removed };
   };
-  let n = 0, exact = 0, withMark = 0, grown = 0;
+  let n = 0, exact = 0, withMark = 0, grown = 0, skippedRaster = 0;
   for (const [key, want] of Object.entries(MAIN.exports)) {
     const [name, pat, more, okey] = key.split('|');
     if (okey === 'grouped') continue; // TASK 802: there is no grouped download any more; its flat twin key is the check
     // TASK 804: the L's Morphed spiral walks each hollow-corner arc once (no fold back over it: the same path within 0.01 mm, checked against main's
     // points in tests/pocket-nocross-804-node.test.js) and the dumbbell is morphed per area (no longer refused): both changed on purpose
     if (pat === 'morphed' && (name === 'L' || name === 'dumbbell')) continue;
+    // TASK 835e (owner turn 3153): Raster with Loop off is ONE open zigzag per area now (its passes joined end to end): changed on purpose, checked in
+    // tests/pocket-raster-loop-835-node.test.js (the zigzags) and tests/pocket-clearing-745-node.test.js (the passes)
+    if (pat === 'raster') { skippedRaster++; continue; }
     const m = JSON.parse(more);
     const svg = exportOf(SHAPES[name](), POCKET({ clearing: pat, ...m }), {});
     const targetMd5 = m.passDepth > 0 ? MAIN.exports[[name, pat, JSON.stringify({ ...m, passDepth: null }), okey].join('|')] : want;
@@ -199,7 +202,8 @@ console.log('spiral: ' + JSON.stringify(measured));
     }
     n++;
   }
-  console.log(`byte-identical to origin/main ${MAIN.from}: ${n} downloads (${exact} exact, ${withMark} with ONLY 1 guide start-mark element added, ${grown} of them with the page grown to hold it)`);
+  ok(skippedRaster > 0, 'TASK 835e: the Raster downloads changed on purpose (the zigzag)');
+  console.log(`byte-identical to origin/main ${MAIN.from}: ${n} downloads (${exact} exact, ${withMark} with ONLY 1 guide start-mark element added, ${grown} of them with the page grown to hold it); ${skippedRaster} Raster downloads changed on purpose (TASK 835e)`);
 }
 
 // ── 4. an old document opens with today's values ──

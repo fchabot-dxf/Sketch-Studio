@@ -9,7 +9,7 @@ import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager, { createSettingsManager } from '#core/settings-manager.js';
 import { parse as parseUnit } from '#core/units.js';
-import { cutterHeightAt, cutterProfile, cutterTerraces, SHAPE_SLICES, isShapedCutter } from '#core/cutter-profile.js';
+import { cutterHeightAt, cutterProfile, cutterTerraces, terraceCount, TERRACE_STEP_MM, isShapedCutter } from '#core/cutter-profile.js';
 import { DEFAULT_BITS, validateBit, normalizeBit, loadBits, saveBits, recordFieldsOf, suggestBitName, bitNote, bitSummary, BIT_RECORD_FIELDS, TOOL_TABLE_KEY } from '../apps/shaper/src/tool-table.js';
 import { CUTTER_SHAPES } from '../apps/shaper/src/shaper.js';
 import { hintLabel, hintText } from '../apps/shaper/src/param-hints.js';
@@ -18,6 +18,8 @@ import { storeOps } from '../apps/shaper/src/operations-store.js';
 import { toolOf } from '../apps/shaper/src/operations.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
+import { buildRelief } from '#core/relief-model.js';
+import { V2_PLAN } from './helpers/plan-v2.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
@@ -103,7 +105,7 @@ const IN = (t) => parseUnit(t, 'in');
     const pb = cutterProfile('ballnose', D, 90, d), pw = cutterProfile('bowl', D, 90, d, { cornerRadius: r });
     near(pw.xMax, pb.xMax, 1e-9, `d ${d}: the same widest half-width`);
     for (const x of [0, 0.7, 1.9, Math.min(2.5, pb.xMax)]) near(pw.depthAt(x), pb.depthAt(x), 1e-9, `d ${d}: depth at ${x}`);
-    const tb = cutterTerraces('ballnose', D, 90, d), tw = cutterTerraces('bowl', D, 90, d, SHAPE_SLICES.bowl, { cornerRadius: r });
+    const tb = cutterTerraces('ballnose', D, 90, d), tw = cutterTerraces('bowl', D, 90, d, { cornerRadius: r });
     eq([tw.length, tw.every((t, i) => Math.abs(t.halfWidth - tb[i].halfWidth) < 1e-9 && Math.abs(t.depth - tb[i].depth) < 1e-9)], [tb.length, true], `d ${d}: the same terraces as the ball nose`);
   }
   // a real bowl: a deep cut = a flat floor at the depth out to r - c, then the corner rising to d - c at the edge
@@ -111,10 +113,20 @@ const IN = (t) => parseUnit(t, 'in');
   near(p.xMax, r, 1e-12, 'deep: as wide as the bit'); near(p.depthAt(r - c), 5, 1e-12, 'flat floor at the depth'); near(p.depthAt(r), 5 - c, 1e-12, 'the edge is a corner radius above the floor');
   const ps = cutterProfile('bowl', D, 90, 0.5, sh);
   near(ps.xMax, (r - c) + Math.sqrt(c * c - (c - 0.5) ** 2), 1e-12, 'shallow (less than the corner): only as wide as the corner reaches the surface');
-  const ter = cutterTerraces('bowl', D, 90, 5, SHAPE_SLICES.bowl, sh);
-  eq([ter[0].halfWidth, ter[0].depth], [r - c, 5], 'the first terrace: the flat floor, out to the corner');
-  ok(ter.length === SHAPE_SLICES.bowl + 1 && ter.every((t, i) => i === 0 || (t.depth < ter[i - 1].depth && t.halfWidth > ter[i - 1].halfWidth)), 'then the corner steps: wider = shallower');
-  near(ter[ter.length - 1].halfWidth, r, 1e-12, 'the last terrace reaches the bit edge');
+  // 852b: the corner is a SMOOTH surface: no step taller than TERRACE_STEP_MM, and the stepped floor follows the true bowl within one step across the whole width
+  for (const [bc, bd] of [[1.5, 5], [4.7625, 8], [0.5, 3], [3.175, 8]]) {
+    const bp = cutterProfile('bowl', 12.7, 90, bd, { cornerRadius: bc });
+    const ter = cutterTerraces('bowl', 12.7, 90, bd, { cornerRadius: bc });
+    ok(ter[0].depth === bd && ter.every((t, i) => i === 0 || (t.depth < ter[i - 1].depth && t.halfWidth > ter[i - 1].halfWidth)), `corner ${bc}: wider = shallower, the innermost at the depth`);
+    near(ter[ter.length - 1].halfWidth, bp.xMax, 1e-12, `corner ${bc}: the last terrace reaches the bit edge`);
+    const stepMax = Math.max(TERRACE_STEP_MM, (bd - bp.depthAt(bp.xMax)) / 64) * 1.5 + 1e-9; // the cap (64 terraces) binds on a corner taller than 3.2 mm
+    let tallest = 0; for (let i = 1; i < ter.length; i++) tallest = Math.max(tallest, ter[i - 1].depth - ter[i].depth);
+    ok(tallest <= stepMax, `corner ${bc}: the tallest step between terraces is ${tallest.toFixed(4)} mm (declared ${TERRACE_STEP_MM}, cap-bound ${stepMax.toFixed(3)})`);
+    const stepped = (x) => (ter.find((t) => x <= t.halfWidth + 1e-12) || { depth: 0 }).depth;
+    let worst = 0; for (let x = 0; x <= bp.xMax; x += bp.xMax / 4000) worst = Math.max(worst, Math.abs(stepped(x) - bp.depthAt(x)));
+    ok(worst <= stepMax, `corner ${bc}: the stepped floor is within ${worst.toFixed(4)} mm of the true profile`);
+  }
+  eq(terraceCount('bowl', 12.7, 90, 8, { cornerRadius: 4.7625 }), 64, 'the count is capped (the cap is stated in the WORK-LOG)');
   ok(isShapedCutter('bowl'), 'a bowl is a shaped cutter (terraced grooves)');
   console.log('4 bowl profile: ok');
 }
@@ -160,6 +172,23 @@ try {
   eq(q('.cut-bit-cur').textContent, '1/8 bowl (not in My bits)', 'a copy whose bit is no longer in My bits');
   eq(rec().cornerRadius, IN('1/32'), 'its copy is kept');
   app.prepare.cancel();
+  // TASK 852b: the BUILT mesh of a 1/2 in bowl (3/16 in corner = 4.7625 mm) pocket 8 mm deep: the rounded zone is the bottom 4.76 mm of the wall and 4.76 mm in from the wall,
+  // INTO the floor (the owner saw sharp steps: the old 6 uniform steps left the last 1.9 mm of the quarter circle a vertical wall)
+  {
+    const K = [...V2_PLAN.keys()][0];
+    V2_PLAN.set(K, { ...V2_PLAN.get(K), cutDepth: 8, ...recordFieldsOf({ id: 'z', name: 'z', type: 'bowl', unit: 'in', diameter: IN('1/2'), cornerRadius: IN('3/16') }) });
+    const rel = buildRelief({ stock: { thickness: 19.05 }, items: planReliefItems(st) });
+    const box = (reg) => { const xs = reg.outer.map((q) => q[0]); return [Math.min(...xs), Math.max(...xs)]; };
+    const L = rel.levels.map((l) => ({ depth: l.depth, x0: box(l.regions[0])[0] }));
+    const wall = L[L.length - 1].x0 - 0 ; // the floor's inset at the deepest level
+    const c = IN('3/16');
+    eq(L[L.length - 1].depth, 8, 'the floor is at the cut depth');
+    const span = L[L.length - 1].x0 - L[0].x0; // the wall -> the flat floor, in the plan
+    ok(span <= c + 1e-6 && span >= c - Math.sqrt(2 * c * 0.075) - 1e-6, `the rounded zone spans ${span.toFixed(3)} mm in from the wall: the 3/16 in corner radius (${c.toFixed(3)}) less its first step`);
+    ok(L[0].depth >= 8 - c - 0.1 && L[0].depth <= 8 - c + 0.1, `the widest terrace is at ${L[0].depth.toFixed(3)} mm: within 0.1 of floor - corner radius (${(8 - c).toFixed(3)}); the wall above it is the vertical part`);
+    let tallest = 0; for (let i = 1; i < L.length; i++) tallest = Math.max(tallest, L[i].depth - L[i - 1].depth);
+    ok(tallest < 0.2, `no step of the corner is taller than 0.2 mm (the tallest is ${tallest.toFixed(3)} mm); wall ${wall.toFixed(2)}`);
+  }
   console.log('5 operation: ok');
 } finally {
   SettingsManager.set(TOOL_TABLE_KEY, null, { persist: 'local' });

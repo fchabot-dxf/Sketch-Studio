@@ -240,7 +240,7 @@ export async function cardPhase(t, label) {
     // Spiral, Loop off: open lines + the Origin's inside cut
     await pickClearing('linked');
     const r1 = await rec(60, 10);
-    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.finishAllowance, r1.rasterAngle, r1.loop], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 0, false], label + ': Spiral with the defaults, Loop off');
+    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.finishAllowance, r1.rasterAngle, r1.loop], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 'auto', false], label + ': Spiral with the defaults, Loop off');
     const c1 = await card();
     console.log(label + ' spiral card: ' + JSON.stringify(c1));
     assert.deepStrictEqual([c1.rows, c1.loop], [['stepover', 'finishAllowance', 'loop'], false], label + ': Stepover, Finish allowance, Loop (off)');
@@ -371,18 +371,20 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
       await setLoop(true);
       assert.strictEqual((await rec(60, 10)).loop, true, label + ` ${pat}: Loop on stored`);
       const c = await card();
-      assert.ok(c.loop === true && /\+ wall: one closed loop, stepover/.test(c.note[0]) && c.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`), label + ` ${pat}: the note ${JSON.stringify(c.note)}`);
+      // TASK 835e: Raster's Loop = one closed loop per area (the rectangle: one), its finish the Origin's native inside cut (the Loop-off wording: no "same line")
+      const native = pat === 'raster';
+      assert.ok(c.loop === true && /\+ wall: one closed loop, stepover/.test(c.note[0]) && c.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`) === !native, label + ` ${pat}: the note ${JSON.stringify(c.note)}`);
       const l = await look();
-      assert.ok(l.paths === 1 && await markers() === 0, label + ` ${pat}: ONE closed line drawn, no dot (TASK 775: a closed loop has no start point)`);
+      assert.ok(l.paths >= 1 && await markers() === 0, label + ` ${pat}: the closed line drawn, no dot (TASK 775: a closed loop has no start point)`);
       if (pat === 'linked') await shot(`${D}-card-loop.png`, '#prepare-panel .cut-card', 2);
       await shotWorld(`${D}-loop-${pat}.png`, [0, 0, 120, 70]);
       const file = await download();
       fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-loop-${pat}-download.svg`), file);
       const els = fileElements(file);
       loopRuns[pat] = els.map((e) => [e[2], e[3], /Z$/.test(e[1]) ? 'closed' : 'open']);
-      assert.deepStrictEqual(loopRuns[pat], [['online', inch ? '0.250 in' : '6.000 mm', 'closed'], ['guide', undefined, 'open']], label + ` ${pat}: the download: ONE closed on-line path + 1 guide start mark (once: the Origin's AutoPass steps down), no inside element`);
-      const n = els[0][1].replace(/[MLZ]/g, ' ').trim().split(/\s+/);
-      assert.ok(n[0] === n[n.length - 2] && n[1] === n[n.length - 1], label + ` ${pat}: the path is closed (first point == last point)`);
+      const depthW = inch ? '0.250 in' : '6.000 mm';
+      assert.deepStrictEqual([...loopRuns[pat]].sort(), [['online', depthW, 'closed'], ...(native ? [['inside', depthW, 'closed']] : []), ['guide', undefined, 'open']].sort(), label + ` ${pat}: the download: ONE closed on-line path + 1 guide start mark (once: the Origin's AutoPass steps down)${native ? " + the Origin's inside cut (TASK 835e)" : ', no inside element'}`);
+      for (const e of els.filter((x) => x[2] === 'online')) { const n = e[1].replace(/[MLZ]/g, ' ').trim().split(/\s+/); assert.ok(n[0] === n[n.length - 2] && n[1] === n[n.length - 1], label + ` ${pat}: the path is closed (first point == last point)`); }
       await openMode('prepare'); await pickRect();
     }
     console.log(label + ' loop downloads: ' + JSON.stringify(loopRuns));
@@ -411,7 +413,8 @@ export async function fusionPhase(t) {
     await pickClearing(id);
     await setLoop(true);
     const c = await card();
-    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster 0°: \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: one closed loop,`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
+    // TASK 835e: Raster's Loop = one closed loop per area, its finish the Origin's native inside cut
+    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster auto \\(\\d+(?:\\.\\d+)?°\\): \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: ${id === 'raster' ? '(one closed loop|\\d+ closed loops)' : 'one closed loop'},`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
     const l = await look();
     assert.ok(l.paths >= 1, `Fusion ${id}: drawn`);
     const b = await evalJs(`(() => { const r = [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getBBox()); return [Math.min(...r.map((q) => q.x)) - 8, Math.min(...r.map((q) => q.y)) - 8, Math.max(...r.map((q) => q.x + q.width)) + 8, Math.max(...r.map((q) => q.y + q.height)) + 8]; })()`);
@@ -419,7 +422,7 @@ export async function fusionPhase(t) {
     const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => m.shaperSvgOf(window.__designController.state, C.planEntries())))`);
     const els = fileElements(svg).map((e) => e[2]);
     fusion[id] = els.reduce((o, k) => ({ ...o, [k]: (o[k] || 0) + 1 }), {});
-    assert.ok(els.filter((k) => k === 'online').length === 1 && els.filter((k) => k === 'guide').length === 1 && !els.includes('inside') && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is ONE closed on-line path + 1 guide start mark (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
+    assert.ok((id === 'raster' ? els.filter((k) => k === 'online').length >= 1 : els.filter((k) => k === 'online').length === 1) && els.filter((k) => k === 'guide').length === 1 && els.filter((k) => k === 'inside').length === (id === 'raster' ? 1 : 0) && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is closed on-line path(s) (one per area) + 1 guide start mark (TASK 835e: Raster + the Origin's inside cut on its wall) (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
     await clickWorld(60, -40);
   }
   console.log('Fusion exports: ' + JSON.stringify(fusion));

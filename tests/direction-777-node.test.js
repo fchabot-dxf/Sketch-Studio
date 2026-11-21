@@ -116,14 +116,17 @@ const travelFor = (g, loopIdx, rawRec) => {
   const passes = rast.travel.filter((t) => t.role === 'raster');
   const cleanups = rast.travel.filter((t) => t.role === 'cleanup');
   const walls = rast.travel.filter((t) => t.role === 'wall');
-  ok(passes.length >= 4, '3 raster: has multiple passes: ' + passes.length);
+  // TASK 835e (owner turn 3153): Loop off = ONE open zigzag per area (the passes joined end to end)
+  eq(passes.length, 1, '3 raster: one open zigzag (the rectangle: one area): ' + passes.length);
   eq([cleanups.length, walls.length], [1, 1], '3 raster: 1 cleanup ring + 1 wall');
-  ok(passes.every((p) => !p.closed && p.direction === 'forward'), '3 raster: passes are open forward paths');
-  // Verify alternating zigzag direction (+X then -X then +X ...)
-  for (let i = 0; i < passes.length; i++) {
-    const dx = passes[i].path.at(-1).x - passes[i].path[0].x;
+  ok(passes.every((p) => !p.closed && p.direction === 'forward'), '3 raster: the zigzag is an open forward path');
+  assertArrowsOnPath(passes[0], 'raster zigzag');
+  // Verify alternating zigzag direction (+X then -X then +X ...): its passes = its segments along X longer than a stepover
+  const runs = passes[0].path.slice(1).map((q, i) => [passes[0].path[i], q]).filter(([a, b]) => Math.abs(b.y - a.y) < 1e-6 && Math.abs(b.x - a.x) > base.toolDia * base.stepover / 100);
+  ok(runs.length >= 4, '3 raster: the zigzag holds several passes: ' + runs.length);
+  for (let i = 0; i < runs.length; i++) {
+    const dx = runs[i][1].x - runs[i][0].x;
     ok(i % 2 === 0 ? dx > 0 : dx < 0, `3 raster pass ${i}: zigzag dx=${dx.toFixed(2)}`);
-    assertArrowsOnPath(passes[i], `raster pass ${i}`);
   }
   eq(screenDir(cleanups[0].path), 'cw', '3 raster cleanup ring: CW');
   eq(screenDir(walls[0].path), 'cw', '3 raster finish wall: CW');

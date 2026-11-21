@@ -16,7 +16,7 @@
 // Every face is flat-shaded with its true outward normal, wound counter-clockwise seen from outside.
 import { regionsFromRings, unionRegions, diffRegions, intersectRegions } from './plot/clip.js';
 import earcut from './plot/vendor/earcut.js';
-import { cutterTerraces, isShapedCutter, SHAPE_SLICES } from './cutter-profile.js';
+import { cutterTerraces, terraceCount, terracesPerItem, isShapedCutter } from './cutter-profile.js';
 
 // Declared stock (all BASE mm, like cutDepth). width/height null = derived from the design bounds + margin on every side.
 export const DEFAULT_STOCK = Object.freeze({ thickness: 19.05, width: null, height: null, margin: 12.7 });
@@ -157,6 +157,35 @@ function wallQuads(levelRegions) {
 
 // Emit the wall quads at their heights. A wall faces into the removed region and its top is above its bottom, so the winding that
 // matches that normal is (a, c, b) + (a, d, c) (checked by the winding test for every mesh).
+// TASK 852c (shading only: the same triangles): the risers of a shaped cut's terraces (a step up to SMOOTH_RISER_MM tall) and the ledge corners they meet get a TILTED normal,
+// leaning up and toward the void by SMOOTH_TILT, summed per position over the risers meeting there, so the staircase shades as the one slope it stands for. A real wall
+// (a pocket's, a level's: taller than a step) and the vertices it alone touches keep their normals.
+const SMOOTH_RISER_MM = 0.3, SMOOTH_TILT = 0.55;
+// positions keyed by their coordinates in 1e-4 mm: a numeric hash (the bucket holds the exact integer triple, so a collision never merges two positions)
+const hashKey = (ix, iy, iz) => ((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) | 0;
+function stairSlot(map, x, y, z, make) {
+  const ix = Math.round(x * 1e4), iy = Math.round(y * 1e4), iz = Math.round(z * 1e4), h = hashKey(ix, iy, iz);
+  let bucket = map.get(h);
+  if (bucket) for (let i = 0; i < bucket.length; i++) { const e = bucket[i]; if (e.ix === ix && e.iy === iy && e.iz === iz) return e; }
+  if (!make) return null;
+  const e = { ix, iy, iz, ax: 0, az: 0 };
+  if (bucket) bucket.push(e); else map.set(h, [e]);
+  return e;
+}
+function smoothStairs(wall, floor) {
+  const acc = new Map(), P = wall.p, N = wall.n;
+  for (let q = 0; q + 12 <= P.length; q += 12) { // each wall quad is 4 vertices: a b c d (a, b on top)
+    if (P[q + 1] - P[q + 7] > SMOOTH_RISER_MM) continue;
+    for (let v = 0; v < 4; v++) { const o = q + v * 3, e = stairSlot(acc, P[o], P[o + 1], P[o + 2], true); e.ax += N[o]; e.az += N[o + 2]; }
+  }
+  if (!acc.size) return;
+  const tilt = (m, o, e) => { const L = Math.hypot(e.ax, e.az); if (L < 1e-6) return; const f = SMOOTH_TILT * Math.min(1, L) / L, nx = e.ax * f, nz = e.az * f, n = Math.hypot(nx, 1, nz); m.n[o] = nx / n; m.n[o + 1] = m.n[o + 1] < 0 ? -1 / n : 1 / n; m.n[o + 2] = nz / n; };
+  for (let q = 0; q + 12 <= P.length; q += 12) {
+    if (P[q + 1] - P[q + 7] > SMOOTH_RISER_MM) continue;
+    for (let v = 0; v < 4; v++) { const o = q + v * 3, e = stairSlot(acc, P[o], P[o + 1], P[o + 2], false); if (e) tilt(wall, o, e); }
+  }
+  for (let o = 0; o < floor.p.length; o += 3) { const e = stairSlot(acc, floor.p[o], floor.p[o + 1], floor.p[o + 2], false); if (e) tilt(floor, o, e); }
+}
 function emitWalls(m, quads, depths) {
   for (const q of quads) {
     const top = q.k0 === 0 ? 0 : -depths[q.k0 - 1], bot = -depths[q.k1];
@@ -177,7 +206,7 @@ function emitWalls(m, quads, depths) {
 // open hole), less the parts cut Outside inside it; `part` = what an Outside cut encloses (a part: it stays). A held cut (tabs / onion skin) keeps its piece;
 // a programmed pocket's wall and islands (they carry its `clearing`) and a level of a stepped cut (`terrace`) are not cut-outs.
 const SIDE = { interior: 'in', inside: 'in', exterior: 'out', outside: 'out' };
-function itemPieces(it, rule) {
+function itemPieces(it, rule, perItem) {
   const freed = [], part = [];
   for (const fp of it.footprints || []) {
     if (!fp || fp.clearing || fp.terrace || !Array.isArray(fp.center) || fp.center.length < 3) continue;
@@ -185,9 +214,9 @@ function itemPieces(it, rule) {
     if (side === 'in' && rule.through && !fp.hold) freed.push(...regionsFromRings([toRing(fp.center)], 'nonzero'));
     else if (side === 'out' && (rule.through || fp.hold)) part.push(...regionsFromRings([toRing(fp.center)], 'nonzero'));
   }
-  return { ...cutPieces(it, rule), freed, part };
+  return { ...cutPieces(it, rule, perItem), freed, part };
 }
-function cutPieces(it, rule) {
+function cutPieces(it, rule, perItem = Infinity) {
   const bounds = [Infinity, -Infinity, Infinity, -Infinity];
   const ringSets = [];
   for (const fp of it.footprints || []) {
@@ -198,7 +227,7 @@ function cutPieces(it, rule) {
   const shape = it.shape && it.shape.cutterShape;
   if (!rule.through && isShapedCutter(shape) && typeof it.footprintsAt === 'function') {
     const pieces = [];
-    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, SHAPE_SLICES[shape], it.shape)) { // TASK 842: a tapered bit's cone (taperAngle, shankDia) rides on the item's shape
+    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, it.shape, Math.min(terraceCount(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, it.shape), perItem))) { // TASK 852b: the declared count, within the model's terrace budget // TASK 842: a tapered bit's cone (taperAngle, shankDia) rides on the item's shape
       const rs = [];
       for (const fp of it.footprintsAt(t.halfWidth) || []) rs.push(...regionsFromRings((fp.rings || []).filter((g) => g.length >= 3).map(toRing), fp.fillRule));
       if (rs.length) pieces.push({ depth: t.depth, regions: rs });
@@ -269,6 +298,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
 
   const b = bounds ? { ...bounds } : { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
   const pending = [], freed = [], parts = []; // TASK 839: the through Inside cuts' freed pieces, the Outside cuts' parts
+  const perItem = terracesPerItem(items.filter((it) => it.shape && isShapedCutter(it.shape.cutterShape) && typeof it.footprintsAt === 'function').length); // TASK 852b: each shaped item's share of the terrace budget
   for (const it of items) {
     const sm = (it.footprints || []).find((fp) => fp && fp.clearing && fp.clearing.role === 'start' && fp.clearing.point);
     if (sm) { // TASK 778: a programmed pocket's start mark (guide: never cuts wood; drawn as a 3D target at the derived point)
@@ -280,8 +310,8 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
     const programmed = (it.footprints || []).some((fp) => fp && fp.clearing);
     const rule = reliefDepth(programmed ? 'pocket' : it.cutType, it.cutDepth, T);
     if (rule.kind === 'skip') { skipped.push({ key: it.key, cutType: it.cutType, reason: rule.reason }); continue; }
-    const ik = C ? `${it.sig}|${rule.through ? 'T' : 'N'}${rule.depthUnset ? 'u' : ''}|${rule.through ? '' : rule.depth}` : '';
-    const r = memoC('item', ik, () => itemPieces(it, rule));
+    const ik = C ? `${it.sig}|${rule.through ? 'T' : 'N'}${rule.depthUnset ? 'u' : ''}|${rule.through ? '' : rule.depth}|${perItem}` : '';
+    const r = memoC('item', ik, () => itemPieces(it, rule, perItem));
     b.minX = Math.min(b.minX, r.bounds[0]); b.maxX = Math.max(b.maxX, r.bounds[1]); b.minY = Math.min(b.minY, r.bounds[2]); b.maxY = Math.max(b.maxY, r.bounds[3]);
     if (!r.pieces.length) { skipped.push({ key: it.key, cutType: it.cutType, reason: 'nothing-cut' }); continue; }
     if (r.markPoint && !unsetThrough.includes(it.key)) { // one mark per cut (a profile's holes share its key), ON the cut
@@ -361,6 +391,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   });
   lap('floors');
   emitWalls(wall, memoC('wall', `${bx}|${rKey.join(';')}`, () => wallQuads(R)), depths); // the quads depend only on the level REGIONS, not on the depths
+  smoothStairs(wall, floor); // TASK 852c
   lap('walls');
   const throughR = depths.length && isThrough(depths[depths.length - 1], T) ? R[depths.length - 1] : [];
   emitFlat(bottom, memoC('flat', `bot|${bx}|${throughR.length ? rKey[depths.length - 1] : ''}`, () => flatTris(throughR.length ? diffRegions(rect, throughR) : rect)), -T, -1);

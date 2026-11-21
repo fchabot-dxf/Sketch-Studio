@@ -114,7 +114,7 @@ const SETTING_FIELDS = {
     if (pat === 'freehand') return undefined;
     const c = clearingSettings(eff);
     // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 812: the Loop's arm pitch (it changes the cuts: pocket-clearing.js; the default adds nothing)
-    return { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true, ...(c.pitch !== POCKET_CLEARING.loopPitch.default ? { loopPitch: round6(c.pitch) } : {}) } : {}) };
+    return { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: c.angle === 'auto' ? 'auto' : round6(c.angle) } : {}), ...(c.loop ? { loop: true, ...(c.pitch !== POCKET_CLEARING.loopPitch.default ? { loopPitch: round6(c.pitch) } : {}) } : {}) };
   },
 };
 

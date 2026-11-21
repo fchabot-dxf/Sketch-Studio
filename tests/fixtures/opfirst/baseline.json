@@ -2810,21 +2810,21 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "cam-paths-787-node__0007__6d58afa8": {
-   "a": "6e4bd71b58cfb1fbff351e0854fa770d",
-   "b": "82e949eb7325f98fa04734dd3a894508",
-   "c": "6188ae17fab8668d4617844d4489b87b",
+   "a": "f72b2097b49d21105afd81279a56f015",
+   "b": "1b55ad72ac2394102a04cf8790d02412",
+   "c": "db1274573f14eaa896e4836853568022",
    "d": "f25fc59e6a5dd95064561eca58c63891",
-   "dContent": "af6f619054f2519359382da2c4783e59",
+   "dContent": "ec3771b8b7c518ec08857303147674ff",
    "e": "c778eb2c800a07fe0b78a67cc9568877",
    "eNoId": "bfb480ad205af8eb6100bcc3e1a7f945",
    "f": "d751713988987e9331980363e24189ce"
   },
   "cam-paths-787-node__0008__d2d21b4d": {
-   "a": "e958fa26f80b97147c78393468d0cf26",
-   "b": "cebcf0960c2bb7b2d3357ca4ca3839ef",
-   "c": "b7a55cfb390fd2d443da5fc3431c62e1",
+   "a": "92a243c60a786fe48fc34b5d2f9d0193",
+   "b": "194e51b0e7e7d89613edcf53388a2474",
+   "c": "ce647664b096d898001d79b24d5cade6",
    "d": "ad2e97079d8069915aff425f0d1b53ac",
-   "dContent": "2606192168eb939ddf5b17d9bfebb875",
+   "dContent": "38719aa3e549a0d0da8940c918f097bd",
    "e": "a4e1bebdbe69afdddc9dedfd3110d2d3",
    "eNoId": "212726a2d683bbd18b51295a8c9be22d",
    "f": "d751713988987e9331980363e24189ce"
@@ -3870,11 +3870,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0008__07f32269": {
-   "a": "84fdcacaf41ad418c9cd82034b3d214a",
-   "b": "0b4f4f7a5a00889c6f061a8a93429875",
-   "c": "48d81796ea655d8243864291d634d059",
+   "a": "c3aca3f1d0d3598eaee2ac6fd59e0806",
+   "b": "dab14dffaa711f187d45d52d32aae491",
+   "c": "3bf391d148b95f8f71e2298bd39e7403",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "44144c71b085b780c9d867d0efd54c7b",
+   "dContent": "bc5251c15f8b05969f04799f3a8146a7",
    "e": "ac4390d84a1ba19aba46fd9c4280ec98",
    "eNoId": "ac30552d3f2b3c55abf3d6b5a32c4e4c",
    "f": "d751713988987e9331980363e24189ce"
@@ -4050,11 +4050,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0026__63de60f2": {
-   "a": "b5ade0d3507836e9c5e317e48d1f0cee",
-   "b": "a00114b5132678f6577cf339fdc7cf8c",
-   "c": "79e7a75d36f9ee19373395ac2c99e726",
+   "a": "0256b49aa2305007bd0b79592f5838aa",
+   "b": "35fb3490d9bb1f0297ed98de8627a117",
+   "c": "3960a532c81350172c9e769927571146",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "5f424d0082d99e88c521eec12ee89ef6",
+   "dContent": "b8d198d5a4b35350cdab8905c0c696cb",
    "e": "93552b8300f5b52bea8b420409b61abf",
    "eNoId": "cf7e52da373dcd624ace126de383ac3b",
    "f": "d751713988987e9331980363e24189ce"
@@ -4290,11 +4290,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0050__28408637": {
-   "a": "e303d2e4706a640af9b1bb9907e82d8c",
-   "b": "38bc251537574d460d21d25d46bcf4e4",
-   "c": "7ab14e96947877437ec8d56e24397294",
+   "a": "72ef1d0705d695b2e1a8216e1f19fc59",
+   "b": "9c55be1a719c0c93c99e47389f65bbcf",
+   "c": "1c2e81051e0656befb7b212062520387",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "340df5ad9d8e79c53168f28c75b216cf",
+   "dContent": "7eba555df00520a53fc391062a990db5",
    "e": "0e922356e914c1371949036917c66016",
    "eNoId": "3d47557f65c44282a8524d4626fc9ba8",
    "f": "d751713988987e9331980363e24189ce"
@@ -4530,11 +4530,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0074__3e03fa21": {
-   "a": "8cb3569ae47121e6bec21ea37d501333",
-   "b": "6b7f7f35aa1768fea11f64b50302f0e2",
-   "c": "f09baf96f225002b0ae096048b16185a",
+   "a": "67754293c10bdc7f67f7958d0ae9e381",
+   "b": "b072b6f6d549dfd72a8863e18afb7ca3",
+   "c": "5b5060c54f307c1f385aa2bb596fa4f0",
    "d": "7832d83bef7ba3e75c7a0c960b958834",
-   "dContent": "66ea4cd160c6e09d1713375767c6a1eb",
+   "dContent": "902186f65371507444d079afa6a477d3",
    "e": "5c4b8f82d32866046683a51f9501f40a",
    "eNoId": "2d3afcb5df11a8eebe35ae085d198f72",
    "f": "d751713988987e9331980363e24189ce"
@@ -4610,11 +4610,11 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0082__864222e2": {
-   "a": "861c414b1259d9c82502a7fc8fd28e7b",
-   "b": "cfb7e5626ff57140e6adc03e337d69ec",
-   "c": "bab855be1d3db28586552e242f02e3d7",
+   "a": "f4997db1d1b7c0256a51c9d9ab1cc161",
+   "b": "f1c8517b3472a17dc5a7ecf6960614c7",
+   "c": "ee1385240bbb8da95f2c1689d4f50b7f",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "c7f2482ba879f0025742cfec609b8f66",
+   "dContent": "3081c1c93d2463bef97e4ad85cb43981",
    "e": "e807735dd372978cea212a21a222939c",
    "eNoId": "9e14ce522465a0144859caa83477985c",
    "f": "d751713988987e9331980363e24189ce"
@@ -6080,21 +6080,21 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "matrix__kitchen-sink-reordered": {
-   "a": "8a9ce789a8fe103fdadaf72e01a3de7d",
-   "b": "7d17a4c90619329400bc8f28b0a7e0dc",
-   "c": "1e5d56991bc0932d1757c2ffae799945",
+   "a": "39180ac583a76c887574779ed66a2d17",
+   "b": "377aa561208d6ab3afcdf0a25d7bd48b",
+   "c": "264d68486d460522d4cfe46d591d2965",
    "d": "8053e55d8db8a50f68fcca0a9ea5ccf1",
-   "dContent": "d78628f381b39169cc72d13867a7528d",
+   "dContent": "3f0ec6aab3f3d120fb120b03a2abfec6",
    "e": "9fcaa3346421943e264e87b4b06dc084",
    "eNoId": "d8a8449cd8258f8e36a75b4f4d74e4ac",
    "f": "d751713988987e9331980363e24189ce"
   },
   "matrix__kitchen-sink": {
-   "a": "8a9ce789a8fe103fdadaf72e01a3de7d",
-   "b": "7d17a4c90619329400bc8f28b0a7e0dc",
-   "c": "1e5d56991bc0932d1757c2ffae799945",
+   "a": "39180ac583a76c887574779ed66a2d17",
+   "b": "377aa561208d6ab3afcdf0a25d7bd48b",
+   "c": "264d68486d460522d4cfe46d591d2965",
    "d": "8053e55d8db8a50f68fcca0a9ea5ccf1",
-   "dContent": "d78628f381b39169cc72d13867a7528d",
+   "dContent": "3f0ec6aab3f3d120fb120b03a2abfec6",
    "e": "3d272227530053068dc21693973e62a0",
    "eNoId": "2790e70b2293a464acb12b50c8d61327",
    "f": "d751713988987e9331980363e24189ce"
@@ -6230,21 +6230,21 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "matrix__pocket-raster-loop": {
-   "a": "51ab3000a6dab6cced62f2847042dc6a",
-   "b": "f3d91733f0beecf7aa5bc927595b1341",
-   "c": "66d3c87657b6635fcbb6f8085648ea37",
+   "a": "30a76d4f8faf401e7f4408f2a3c56360",
+   "b": "a8000b5044cbe5495784557ed23f0f88",
+   "c": "54c25a6d50c1dfeb649fa59262f76b53",
    "d": "63ef593dab3ee4c8b8612f968124fcc0",
-   "dContent": "92a60f2e3eaf34596b7d320f5ba135fa",
+   "dContent": "3e21c37ead3e632c24fd68d2378cee32",
    "e": "a5a9bd1e5f25f1dbaa9614d8fb93949f",
    "eNoId": "8a99b82957782f8908ba22f6f5071275",
    "f": "d751713988987e9331980363e24189ce"
   },
   "matrix__pocket-raster30": {
-   "a": "70571b5007189b3aecc6a75b79ebe9a2",
-   "b": "fef061d86b96f94aa0f0df71cf972a03",
-   "c": "8bd764dbf47c49bf9f2c6e1326d7d3d5",
+   "a": "09e55b07d35ccd62953e8fea8746e702",
+   "b": "ad7b63c0b3430a8b84adce61c264f842",
+   "c": "c8548b6c49f21dee33d707123ca2b10c",
    "d": "c964019b3ffde6e90b154798c1bf80de",
-   "dContent": "27fc2c8753c5b1076a1d645bf39272c5",
+   "dContent": "2e3df0db5434e7d3d98fcabfe02718c2",
    "e": "db62d99aceb736bcab57ca66c13bdefd",
    "eNoId": "6ea17a6bdd1a1a461ae682f11712f338",
    "f": "d751713988987e9331980363e24189ce"
@@ -7580,21 +7580,21 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-745-node__0007__93cbc909": {
-   "a": "882435307e74f28c8aa989e476c0eead",
-   "b": "22690be795b623a264b2d69de53680a3",
-   "c": "6af800c6807c594d754512fb22d39906",
+   "a": "07303406a7cba5f1d17bc0c805aa07a5",
+   "b": "db719ad08a1b87ad4a6080d605019bf1",
+   "c": "17bf0422c4edf92a13128936ac04545c",
    "d": "8e15fa760cfd0ec9ce411420bd0960bb",
-   "dContent": "cf108224f84079418a46cddd347ddb0f",
+   "dContent": "10436f1a1e5fd8493aba7842463862c5",
    "e": "2378ba2d0c69557a785c3a95411f5ffa",
    "eNoId": "923584078498f52da7fd803c9773c175",
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-745-node__0008__6b3c4d56": {
-   "a": "5f3a4b3ffb1f139eb5ea007e05173451",
-   "b": "90d2123c54068d591564eea23e8d8d1d",
-   "c": "410c8461447aa7f23143034c165a97f2",
+   "a": "dc9ab49f60a1f638580743805a7a9283",
+   "b": "d838c82cef924748f32c5a16fa407b88",
+   "c": "ada7f6109d2a02ea065f02daef0f5646",
    "d": "a87c91b5a18e060076dc1e9314db0458",
-   "dContent": "6ec01a6e5e34dbef95d17a652c885551",
+   "dContent": "9039414cf4d298b875a9d222d4a774fe",
    "e": "2f8e02918e1cb3df0bfa485b10840842",
    "eNoId": "4c14ef614e724f630c969c331263b5d7",
    "f": "d751713988987e9331980363e24189ce"
@@ -7870,21 +7870,21 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0006__fac2a3eb": {
-   "a": "9982af144be9c1a12575324f471c9b5d",
-   "b": "767b672204c68d83758f3a8916e91c91",
-   "c": "d3a4775507cfbb9cc1d49122e1df7110",
+   "a": "1bc4e8cfaf37b85d5e9864a452527c16",
+   "b": "918c57a92d578391c30f3dc868f1697a",
+   "c": "26673f98317e82d17a6749fd709bedfb",
    "d": "8968bf3bbfbb9ccb5f58372d2a94485b",
-   "dContent": "8179805c59afcee6f23e0607ff75f4df",
+   "dContent": "b709fda24e1ab1f8aca13505f987d50a",
    "e": "ca4da3c9a094be09cd52191d22a9a0c3",
    "eNoId": "7f6f035c06bf8abfbd2e76ec247751d4",
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0007__63a764a4": {
-   "a": "8dbcb0a87bffb4180dd988f59a091bfe",
-   "b": "251c5196a89e44227516a94297f6ec8f",
-   "c": "cd735d4fee927d81d64bc958c0421b50",
+   "a": "326eec7090eb1921e26e5be8d3fc2e1b",
+   "b": "88c6e4c2338369301c57334e88e08d16",
+   "c": "e21a42dc6c9744662987d54fb0b4d4c1",
    "d": "8de42324600ae18d76e6b7f499d715c5",
-   "dContent": "56844123f3f9409b1a6dc2ea9ad5c8dc",
+   "dContent": "9511c89fea5d1781210014aed9693f02",
    "e": "dc3db906d91c9aca2c45f739cffc6c06",
    "eNoId": "0bf54adc6b2b93e606211ac9ec5d0539",
    "f": "d751713988987e9331980363e24189ce"
@@ -7960,31 +7960,31 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0015__8f420626": {
-   "a": "4b5443f1d42b1564b5ebd25ccf7a18af",
-   "b": "fb5602ee0d0876086e65d0e4fa88dbc0",
-   "c": "6169af69825a22aa5136d4301542df23",
+   "a": "9e17c27884547afc5849f77adba0922d",
+   "b": "865c85c418372dc32b745db108067ebe",
+   "c": "49e525b1b40add06e449ce394924d229",
    "d": "7fc5f2ca03a64da3943d09cbff658cd7",
-   "dContent": "18681420bd348fe9cf36aed706b24224",
+   "dContent": "b5e038329cdc89ded77d7598d25cbf78",
    "e": "8b37bda3f023da9f8c2043cf5f81fa3a",
    "eNoId": "1fc9fa1bb4d0d5080ffe0723c988eb4a",
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0016__9a1d12cf": {
-   "a": "4b5443f1d42b1564b5ebd25ccf7a18af",
-   "b": "fb5602ee0d0876086e65d0e4fa88dbc0",
-   "c": "6169af69825a22aa5136d4301542df23",
+   "a": "9e17c27884547afc5849f77adba0922d",
+   "b": "865c85c418372dc32b745db108067ebe",
+   "c": "49e525b1b40add06e449ce394924d229",
    "d": "7fc5f2ca03a64da3943d09cbff658cd7",
-   "dContent": "18681420bd348fe9cf36aed706b24224",
+   "dContent": "b5e038329cdc89ded77d7598d25cbf78",
    "e": "8b37bda3f023da9f8c2043cf5f81fa3a",
    "eNoId": "1fc9fa1bb4d0d5080ffe0723c988eb4a",
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0017__07ce8763": {
-   "a": "4b5443f1d42b1564b5ebd25ccf7a18af",
-   "b": "fb5602ee0d0876086e65d0e4fa88dbc0",
-   "c": "6169af69825a22aa5136d4301542df23",
+   "a": "9e17c27884547afc5849f77adba0922d",
+   "b": "865c85c418372dc32b745db108067ebe",
+   "c": "49e525b1b40add06e449ce394924d229",
    "d": "7fc5f2ca03a64da3943d09cbff658cd7",
-   "dContent": "18681420bd348fe9cf36aed706b24224",
+   "dContent": "b5e038329cdc89ded77d7598d25cbf78",
    "e": "8b37bda3f023da9f8c2043cf5f81fa3a",
    "eNoId": "1fc9fa1bb4d0d5080ffe0723c988eb4a",
    "f": "d751713988987e9331980363e24189ce"
@@ -9154,6 +9154,19 @@
     "stock-loop-node__0002__a0075faf": "<path d=\"M 10 10 L 30 10 L 30 30 L 10 30 Z\" fill=\"#0068FF\" stroke=\"#0068FF\" shaper:cutType=\"guide\" shaper:cutDepth=\"12.700 mm\" shaper:cutOffset=\"0mm\" shaper:toolDia=\"3.175 mm\"/>"
    }
   },
+  "835": {
+   "why": "Raster + Loop cuts both ways now (task 835, owner turns 2990-2996: the boundary of a comb of every other strip joined by corridors, every pass cut once, the wall ring a balloon from the last point on the area's edge, the start near the middle; zero crossings; 835b: corridors a wall band from where passes end, on straight spines, a plain turn along the wall where passes are too short). Every corpus case with a Raster Loop record whose measurements changed has them re-measured here (on purpose); every other case and measurement is unchanged. TASK 835c (owner turn 3131: several closed paths per area, each a loop): per area its CLUSTERS (each the boundary of its own comb, its corridors on one straight spine near its middle), the wall ring and each island's ring a closed path of its own after them; the Raster Loop cases below re-measured again on purpose. TASK 835d (the owner's drawing, turns 3150 / 3160): per area ONE closed path again: its pieces (every pass one chord in each, cut perpendicular to the passes), each a serpentine over its passes + a return lane along one side, joined by links; the rings closed paths of their own; re-measured again on purpose.",
+   "cases": [
+    "cam-paths-787-node__0008__d2d21b4d",
+    "leadin-775-node__0008__07f32269",
+    "leadin-775-node__0026__63de60f2",
+    "leadin-775-node__0050__28408637",
+    "leadin-775-node__0074__3e03fa21",
+    "leadin-775-node__0082__864222e2",
+    "matrix__pocket-raster-loop",
+    "pocket-clearing-750-node__0007__63a764a4"
+   ]
+  },
   "847": {
    "why": "Node arc fallback fixed (847-C): #core/curve-kinds.js sampleArc without an SVG DOM returned [centre, end] for a CENTER arc; it returns the arc's two ends (start, end), the samples the comment promised (the page samples arcs with the SVG DOM, unchanged). Each case below has arcs; its measurements that read those samples (a, b, c, d, dContent as listed) re-measured here on purpose; every case without an arc, and every other measurement, is unchanged.",
    "cases": [
@@ -9513,6 +9526,29 @@
     "leadin-775-node__0082__864222e2",
     "matrix__pocket-raster-loop",
     "pocket-clearing-750-node__0007__63a764a4"
+   ]
+  },
+  "835e": {
+   "why": "Raster changed on purpose (task 835e): with Loop OFF the passes are ONE open zigzag per area (owner turn 3153: joined end to end along the wall or by a short hop inside the clearing, never outside it; AutoPass reverses at its ends), the clean-up ring and the finish as before; with Loop ON the finish is the Origin's native inside / outside cut (owner turn 3168), no ring path, and a loop may end with a straight closing leg back to its start over floor already swept (owner, 2026-11-21: the only place a crossing is allowed); two pieces never both run their lane along one cut. Every corpus case with a Raster record whose measurements changed has them re-measured here; every other case and measurement is unchanged.",
+   "cases": [
+    "cam-paths-787-node__0007__6d58afa8",
+    "cam-paths-787-node__0008__d2d21b4d",
+    "leadin-775-node__0008__07f32269",
+    "leadin-775-node__0026__63de60f2",
+    "leadin-775-node__0050__28408637",
+    "leadin-775-node__0074__3e03fa21",
+    "leadin-775-node__0082__864222e2",
+    "matrix__kitchen-sink",
+    "matrix__kitchen-sink-reordered",
+    "matrix__pocket-raster-loop",
+    "matrix__pocket-raster30",
+    "pocket-clearing-745-node__0007__93cbc909",
+    "pocket-clearing-745-node__0008__6b3c4d56",
+    "pocket-clearing-750-node__0006__fac2a3eb",
+    "pocket-clearing-750-node__0007__63a764a4",
+    "pocket-clearing-750-node__0015__8f420626",
+    "pocket-clearing-750-node__0016__9a1d12cf",
+    "pocket-clearing-750-node__0017__07ce8763"
    ]
   }
  }

@@ -150,6 +150,8 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
   const TIGHT = { cutType: 'pocket', cutDepth: 5, toolDia: 6.35, stepover: 40, finishAllowance: 1.5 };
   const cutsFor = (over) => deriveCuts(target, rec({ ...TIGHT, ...over }), st, loops, loopPolys, new Set());
   for (const clearing of ['linked', 'raster', 'morphed']) {
+    // TASK 835e: Raster's finish is the Origin's native inside cut, Loop on or off: with nothing to clear its Loop on IS its Loop off (the wall alone)
+    if (clearing === 'raster') { eq([cutsFor({ clearing, loop: true }), cutsFor({ clearing, loop: false })].map((cs) => cs.map((c) => c.clearing && c.clearing.role)), [['wall'], ['wall']], 'raster: nothing to clear: the wall as an Inside cut, Loop on or off (TASK 835e)'); continue; }
     const on = cutsFor({ clearing, loop: true });
     const loopsCut = on.filter((c) => c.kind === 'clearing');
     ok(loopsCut.length >= 1 && loopsCut.every((c) => c.clearing.role === 'loop' && c.centers[0].closed), `${clearing}, Loop on: the finish turn is cut as a closed loop`);

@@ -22,6 +22,9 @@
   "keywords": [],
   "author": "",
   "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": {
+    "node": ">=20.19"
+  },
   "type": "module",
   "imports": {
     "#core/*": "./packages/core/*",

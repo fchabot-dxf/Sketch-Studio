@@ -73,12 +73,12 @@ const PARAMS = {
   holdThickness: { label: 'Tab thickness', hint: 'How much wood each tab keeps, up from the bottom of the cut.' },
   skinThickness: { label: 'Skin thickness', hint: 'How thick the layer left at the bottom is.' }, // the holdThickness row with Onion skin
   cutOffset: { label: 'Offset', hint: 'Moves the cut this far from the line, toward its waste side: a part comes out bigger, a hole or pocket smaller. The arrows button switches the side. On line cuts ignore it.' },
-  toolBit: { label: 'Bit', hint: 'A bit from your tool table, or Custom to type its diameter and shape. The operation keeps its own copy of the bit, so changing or deleting the bit in the table later does not change this design.' }, // TASK 842
+  toolBit: { label: 'Bit', hint: 'A bit from My bits, or Custom to type its diameter and shape. The operation keeps its own copy of the bit, so changing or deleting the bit in My bits later does not change this design.' }, // TASK 842
   bitCustom: { label: 'Custom', hint: 'Type the bit diameter and pick the cutter shape yourself.' },
-  toolTableEdit: { label: 'Edit tool table…', hint: 'Add, change, duplicate or delete the bits of your tool table. It is saved for all your designs.' },
-  // ── TASK 842: the Tool table window ──
-  toolTable: { label: 'Tool table', hint: 'Your bits, for all your designs. Pick one in an operation’s Bit row; the operation keeps its own copy of it.' },
-  ttAdd: { label: 'Add bit', hint: 'A new bit: its name, its type and its sizes.' },
+  toolTableEdit: { label: 'Edit my bits…', hint: 'Add, change, duplicate or delete your bits. They are saved for all your designs.' },
+  // ── TASK 842 / 852: the My bits window ──
+  toolTable: { label: 'My bits', hint: 'Your bits, for all your designs. Pick one in an operation’s Bit row; the operation keeps its own copy of it.' },
+  ttAdd: { label: 'Add bit', hint: 'A new bit: pick its type, then its sizes and its name.' },
   ttName: { label: 'Name', hint: 'What the operations and the tool changes call it, e.g. “1/8 upcut”.' },
   ttType: { label: 'Type', hint: 'The shape of its tip. Each type has only the sizes it needs.' },
   ttUnit: { label: 'Unit', hint: 'The unit its sizes are typed and shown in, whatever the document uses. Fractions such as 1/8 or 1 1/2 work too.' },
@@ -86,11 +86,13 @@ const PARAMS = {
   ttAngle: { label: 'Angle', hint: 'The V-bit’s included angle: the whole V, tip to both sides.' },
   ttTipDiameter: { label: 'Tip diameter', hint: 'The diameter of the tip (twice the ball’s radius on a ball tip). It is written to the file as the bit diameter: the tip is what cuts on the line at the bottom of a cut.' },
   ttTaperAngle: { label: 'Taper angle (per side)', hint: 'How much each side of the cone leans from the bit’s axis.' },
+  ttCornerRadius: { label: 'Corner radius', hint: 'How round the bit’s lower corners are, up to half the diameter (half the diameter is a ball nose). The flat floor is the diameter minus two corner radii.' },
+  ttPickType: { label: 'Pick the bit’s type', hint: 'Each type is a template for a kind of bit: pick the one that matches yours, then fill in its sizes.' },
   ttShankDiameter: { label: 'Shank diameter', hint: 'Where the cone stops widening: the bit is never wider than its shank.' },
   ttCutLength: { label: 'Cutting length', hint: 'How deep the flutes reach. An operation deeper than this shows a note. Leave it empty if you do not know it.' },
   ttNotes: { label: 'Notes', hint: 'Anything you want to remember about this bit.' },
   ttCancel: { label: 'Cancel', hint: 'Back to the list without saving.' },
-  ttSave: { label: 'Save', hint: 'Saves the bit to your tool table.' },
+  ttSave: { label: 'Save', hint: 'Saves the bit to My bits.' },
   toolDia: { label: 'Bit diameter', hint: 'The bit you plan to use. It is written to the file, and the previews and programmed paths are drawn for it.' },
   cutterShape: { label: 'Cutter shape', hint: 'For the 3D preview and the operations list only: the Origin is not told the shape, so load the matching bit.' },
   // ── the Export step's side cards ──
@@ -111,6 +113,19 @@ const PARAMS = {
   reviewReset: { label: 'Reset', hint: 'Return the 3D camera to the default angled overview.' },
   reviewTop: { label: 'Top', hint: 'Look straight down from above at the workpiece and paths.' },
   reviewFit: { label: 'Fit', hint: 'Frame the entire board and all cuts inside the view.' },
+  // ── TASK 801 (owner turns 2555, 2608, 2667-2668): the Export step's Simulate panel (export-sim.js, over the view), VCarve's Preview toolpaths panel ──
+  simulate: { label: 'Simulate', hint: 'Plays the cuts in order on a virtual board, in the view shown (3D, 2D or Paths). The board keeps what each preview cut until Reset preview.' },
+  simOperation: { label: 'Operation', hint: 'The operation Preview selected cuts.' },
+  simPreviewSelected: { label: 'Preview selected', hint: 'Cuts the chosen operation into the board as it is now (after the earlier previews).' },
+  simPreviewAll: { label: 'Preview all', hint: 'Cuts every ticked operation into the board, in the Operations list order.' },
+  simReset: { label: 'Reset preview', hint: 'Back to the uncut board. After a reorder of the Operations list, Reset then Preview all shows the new order.' },
+  simPlay: { label: 'Play / Pause', hint: 'Plays or pauses the preview.' },
+  simPrev: { label: 'Previous operation', hint: 'Goes back to the start of this operation, or of the one before.' },
+  simNext: { label: 'Next operation', hint: 'Goes to the start of the next operation.' },
+  simSpeed: { label: 'Speed', hint: 'How fast the preview plays. At 1× every ticked operation together takes about 40 seconds.' },
+  simAnimate: { label: 'Animate', hint: 'Off: a preview shows its result at once, without playing.' },
+  simMore: { label: 'More', hint: 'The operation Preview selected cuts, Animate, Show passes and what the preview shows. Folded on a phone so the drawing stays in sight.' }, // TASK 801c
+  simPasses: { label: 'Show passes', hint: 'Shows each path the bit has cut as a see-through volume in its operation’s colour, from the board’s top to the path’s depth: where passes overlap, the colour is darker.' },
   syncFolder: { label: 'Destination Folder', hint: 'Sign in once to browse My Files folders, pick where the file uploads, or add a subfolder. Session stays in tab memory only.' },
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
@@ -170,8 +185,9 @@ const CHOICE_HINTS = {
     endmill: 'Flat tip: flat floors and square walls.',
     ballnose: 'Rounded tip: rounded grooves and soft floor edges.',
     vbit: 'Pointed tip, for V-grooves and chamfers. Pick its angle under it.',
-    taperball: 'A small rounded tip on a cone: fine 3D detail with a strong shank. Comes from the tool table.', // TASK 842
-    taperflat: 'A small flat tip on a cone: fine detail with a strong shank. Comes from the tool table.',
+    taperball: 'A small rounded tip on a cone: fine 3D detail with a strong shank. Comes from My bits.', // TASK 842
+    taperflat: 'A small flat tip on a cone: fine detail with a strong shank. Comes from My bits.',
+    bowl: 'Flat bottom with rounded corners (a corner radius): a flat floor and a softly rounded edge. Comes from My bits.', // TASK 852
   },
   holdPart: {
     off: 'Nothing holds it: the part comes free when the cut goes through.',

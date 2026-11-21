@@ -31,6 +31,8 @@ import { setPathsPort, workerPort } from './op-paths.js'; // TASK 817: the opera
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
 import { describeOperations } from './operations.js'; // TASK 798: the Export step's line about unticked operations
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
+import { mountExportSim } from './export-sim.js'; // TASK 801: the Export step's simulation (the Simulate panel over the view), one timeline for the three views
+import { SIM } from './cut-timeline.js'; // TASK 801: its one line under the controls
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
 import { forgetOldLogin } from './shaperhub-login.js'; // TASK 758: the app keeps no ShaperHub login; an earlier version's copy is deleted at start
@@ -153,7 +155,7 @@ const btnGenerateSvg = document.getElementById('btn-generate-svg');
 // TASK 805: the Export step's side cards take their labels from the table (param-hints.js); each label, and each Export button, shows its hint in the ONE tooltip at the cursor
 // (hint.js installHintTooltip: every element with data-hint). The Export title's hint lists the three ways out; each button carries its own entry.
 for (const e of document.querySelectorAll('#review-side [data-label], #shaper-sync-modal [data-label]')) e.textContent = hintLabel(e.dataset.label);
-for (const e of document.querySelectorAll('#review-side [data-hint]:not(.simexport-btn):not(.simexport-hub-btn), #prepare-dir-legend [data-hint], #sync-browser [data-hint], #shaper-sync-modal [data-hint]')) { if (!e.hasAttribute('data-label')) bindHint({ el: e }); } // a button's text is its data-label's (the loop above); only the labels are bound here
+for (const e of document.querySelectorAll('#review-side [data-hint]:not(.simexport-btn):not(.simexport-hub-btn), #review-sim [data-hint]:not(.sim-icon), #review-sim-toggle [data-hint], #prepare-dir-legend [data-hint], #sync-browser [data-hint], #shaper-sync-modal [data-hint]')) { if (!e.hasAttribute('data-label')) bindHint({ el: e }); } // a button's text is its data-label's (the loop above); only the labels are bound here (TASK 801: the Simulate panel's texts and its toggle's name take their label here too, from the table; its icon buttons keep their icons: their hint is the tooltip only)
 installHintTooltip(document);
 for (const b of document.querySelectorAll('#review-toolbar [data-hint]')) {
   const id = b.dataset.hint;
@@ -727,7 +729,7 @@ function ensureSketch() {
 modes = createModeRouter({
   views: VIEWS, stages: activeStages, defaultMode: activeStages[0].id,
   onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
-  afterShow: (mode) => { if (mode !== 'prepare') prepare.leave(); history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design; TASK S2: leaving Prepare = OK on the open operation
+  afterShow: (mode) => { if (mode !== 'review') exportSim.pause(); if (mode !== 'prepare') prepare.leave(); history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design; TASK S2: leaving Prepare = OK on the open operation
   enter: {
     prepare: prepare.enter,
     review: () => {
@@ -765,10 +767,42 @@ let reviewLook = normaliseLook(null);
 try { const s = localStorage.getItem(REVIEW_LOOK_KEY); if (s) reviewLook = normaliseLook(JSON.parse(s)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY read failed', err && err.message); }
 let reviewCall = 0;
 const preview2d = { sig: null, value: null }; // TASK 817: the 2D / Paths view's file (made in the background) and the Review signature it was made for
+// TASK 801: the preview copy of the plan `sig`, made ONCE for every reader (the 2D / Paths view, the simulation's timeline): a reader that asks while it is being made
+// waits for the same job, and the job's waiting / out-of-date line (export-payload.js whenGenerated) is said to every reader's `say` (a reader that joins later is told
+// the line said last)
+let previewJob = null; // { sig, promise, says, last }
+function previewCopy(sig, say) {
+  if (preview2d.sig === sig) return Promise.resolve(preview2d.value);
+  if (previewJob && previewJob.sig === sig) {
+    previewJob.says.add(say);
+    if (previewJob.last) say(...previewJob.last);
+    return previewJob.promise;
+  }
+  const job = { sig, says: new Set([say]), last: null };
+  previewJob = job;
+  job.promise = generateShaperSvgPayload({ preview: true, say: (text, action) => { job.last = [text, action]; for (const s of job.says) s(text, action); } }).then((p) => {
+    const value = p ? { svg: p.svg, ops: p.ops, bitPaths: p.bitPaths, simElements: p.simElements } : null;
+    if (previewJob === job) { preview2d.value = value; preview2d.sig = sig; previewJob = null; }
+    return value;
+  });
+  return job.promise;
+}
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
   getPreview: () => preview2d.value, // TASK 743: + the operations (display only); TASK 793: + the bit-centre paths (the Paths view); TASK 817: made in the background before the refresh (enterReview)
 });
+// TASK 801: the Simulate panel (export-sim.js): its timeline from the same preview copy, the 3D wood from the finished part's relief items (the ticked operations)
+const simEl = (id) => document.getElementById(id);
+document.getElementById('sim-note').textContent = SIM.note;
+const exportSim = mountExportSim({
+  els: { card: simEl('review-sim'), toggle: simEl('review-sim-toggle'), moreToggle: simEl('sim-more-toggle'), more: simEl('sim-more'), op: simEl('sim-op'), previewSel: simEl('sim-preview-sel'), previewAll: simEl('sim-preview-all'), reset: simEl('sim-reset'), play: simEl('sim-play'), prev: simEl('sim-prev'), next: simEl('sim-next'),
+    scrub: simEl('sim-scrub'), speed: simEl('sim-speed'), animate: simEl('sim-animate'), passes: simEl('sim-passes'), passesRow: simEl('sim-passes-row'), label: simEl('sim-label') },
+  ensure: (sig, say) => previewCopy(sig, say),
+  reliefItems: () => planReliefItems(designController.state, TICKED),
+  mode: () => reviewViewMode, flat: exportPreview, solid: () => reviewView,
+  reducedMotion: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
+});
+export const currentExportSim = () => exportSim; // read by the live tests through this module, as currentReviewView
 function showReviewViewMode() {
   const is2d = reviewViewMode !== '3d'; // TASK 793: 2D and Paths are the one flat view (export-preview.js), drawn two ways
   exportPreview.setMode(reviewViewMode === 'paths' ? 'paths' : '2d');
@@ -796,15 +830,16 @@ function showTickLine(st) {
 async function enterReview(st) {
   showTickLine(st);
   const call = ++reviewCall; // TASK 817: the last call wins (the views wait for the paths being generated and for the file made in the background)
+  exportSim.refresh(reviewSig(st)); // TASK 801: the simulation's timeline of this plan (the same preview copy; until it is there, or while an operation is out of date, no run)
   if (reviewViewMode !== '3d') { // TASK 718: the same trigger rebuilds the 2D view
     showStockThickness();
     const sig = reviewSig(st);
     if (sig !== preview2d.sig) {
-      const p = await generateShaperSvgPayload({ preview: true, say: sayIn(document.getElementById('review-2d-info')) });
+      await previewCopy(sig, sayIn(document.getElementById('review-2d-info'))); // TASK 801: the one job (the simulation reads the same copy)
       if (call !== reviewCall) return;
-      preview2d.value = p ? { svg: p.svg, ops: p.ops, bitPaths: p.bitPaths } : null; preview2d.sig = sig;
     }
     exportPreview.refresh(sig);
+    exportSim.render(); // TASK 801: the simulation shown in this view
     return;
   }
   const info = document.getElementById('review-info');
@@ -817,11 +852,12 @@ async function enterReview(st) {
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));
+    exportSim.render(); // TASK 801: the simulation shown in this view
   } catch (e) { info.textContent = 'Export failed: ' + e.message; throw e; }
 }
 {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,
-    onChange: () => { if (reviewViewMode !== '3d') enterReview(designController.state); else if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card; TASK 817: the 2D file is made again (in the background)
+    onChange: () => { if (reviewViewMode !== '3d') enterReview(designController.state); else if (reviewView) { exportSim.refresh(reviewSig(designController.state)); reviewView.refresh(reviewSig(designController.state)); } } }); // TASK 583 (stock-card.js): the thickness field of the Review card; TASK 817: the 2D file is made again (in the background); TASK 801: the simulation's board is the new one
   showStockThickness = stockCard.show;
   SettingsManager.subscribe((key) => { if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && modes.current() === 'review' && designController) enterReview(designController.state); });
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());

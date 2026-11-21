@@ -1,9 +1,9 @@
-// apps/shaper/src/tool-table.js — TASK 842 (owner turns 3079-3081: "What about a tool table"; "Ballnoses, tapered too"; "Mm or inches right?"): Shaper's TOOL
+// apps/shaper/src/tool-table.js — TASK 842 (TASK 852: shown to the user as "My bits"; the bit TYPES (CUTTER_SHAPES) are its templates; code names and the storage key stay) (owner turns 3079-3081: "What about a tool table"; "Ballnoses, tapered too"; "Mm or inches right?"): Shaper's TOOL
 // TABLE, the user's bit library. PURE model + its storage; the window is tool-table-window.js, the cut card's bit pick is cut-panel.js.
 //
 // A BIT = { id, name, type, unit, <the size fields of its type>, cutLength?, notes? }:
-//   type    a CUTTER_SHAPES id (shaper.js: end mill | ball nose | V-bit | tapered ball nose | tapered end mill); the type's `fields` declare its size fields:
-//           diameter (mm) | angle (a V-bit's INCLUDED angle, degrees) | tipDiameter, taperAngle (degrees PER SIDE), shankDiameter (a tapered bit)
+//   type    a CUTTER_SHAPES id (shaper.js: end mill | ball nose | bowl | V-bit | tapered ball nose | tapered end mill); the type's `fields` declare its size fields:
+//           diameter (mm) | cornerRadius (mm, a bowl bit: 0 < cornerRadius <= diameter / 2) | angle (a V-bit's INCLUDED angle, degrees) | tipDiameter, taperAngle (degrees PER SIDE), shankDiameter (a tapered bit)
 //   unit    'mm' | 'in': the unit the bit was ENTERED in, declared once per bit (the owner: a 1/4 in bit stays "1/4 in", a 6 mm bit "6 mm", whatever the
 //           document's unit). Every length is STORED in base mm, exactly as the units parser gives it (1/4 in = 0.25 x 25.4 mm), and shown in the bit's unit
 //           (bitLengthText: an inch size that is an exact 64th as a fraction, else decimals), the other unit in brackets in the list (bitSizeText).
@@ -11,8 +11,8 @@
 //   notes   free text, optional
 // THE TABLE is saved ONCE for all the user's designs: the per-user settings store (#core/settings-manager.js, key SHAPER_TOOL_TABLE = { v: 1, bits: [...] }),
 // which is this browser's local storage and, while the user is signed in, follows him to his other devices through his Google Drive (TASK 773: the key is a
-// synced setting). Nothing stored (first use) = DEFAULT_BITS. A DOCUMENT never refers to the table for its cuts: an operation that picks a bit takes a COPY of its
-// settings into its own record (recordFieldsOf: toolDia / cutterShape / cutterAngle / taperAngle / shankDia, + bitId / bitName / cutLength), so a design opens and
+// synced setting). Nothing stored (first use) = DEFAULT_BITS (the standard inch end mills; a stored table is never touched). A DOCUMENT never refers to the table for its cuts: an operation that picks a bit takes a COPY of its
+// settings into its own record (recordFieldsOf: toolDia / cutterShape / cutterAngle / cornerRadius / taperAngle / shankDia, + bitId / bitName / cutLength), so a design opens and
 // cuts the same after the bit is changed or deleted in the table.
 
 import { CUTTER_SHAPES } from './shaper.js';
@@ -23,7 +23,7 @@ export const TOOL_TABLE_KEY = 'SHAPER_TOOL_TABLE';
 export const TOOL_TABLE_VERSION = 1;
 export const BIT_UNITS = Object.freeze(['mm', 'in']);
 /** The cut-record fields a bit sets (recordFieldsOf): the bit's copy in an operation. */
-export const BIT_RECORD_FIELDS = Object.freeze(['bitId', 'bitName', 'toolDia', 'cutterShape', 'cutterAngle', 'taperAngle', 'shankDia', 'cutLength']);
+export const BIT_RECORD_FIELDS = Object.freeze(['bitId', 'bitName', 'toolDia', 'cutterShape', 'cutterAngle', 'cornerRadius', 'taperAngle', 'shankDia', 'cutLength']);
 /** The fields the card's Custom pick clears (the link to a table bit and its cutting length; the cutter itself stays as it is). */
 export const CUSTOM_CLEARS = Object.freeze(['bitId', 'bitName', 'cutLength']);
 const NAME_MAX = 60;
@@ -38,18 +38,11 @@ const isTapered = (type) => typeFields(type).includes('taperAngle');
 const len = (text, unit) => parseUnit(text, unit);
 
 /**
- * The bits a user starts with (first use: nothing stored): the common Origin bits, each in its natural unit. The V-bits are 1/4 in wide (their flute
- * diameter); the tapered ball nose has a 1/4 in shank (written in mm: the bit is a metric one, its tip 1 mm). No cutting length is assumed for any of them.
+ * The bits a user starts with (first use: nothing stored): the standard inch END MILLS (owner turn 3184: 1/16, 1/8, 1/4, 3/8, 1/2 in). Every other kind of bit
+ * (ball nose, bowl, V-bit, tapered) is a TYPE template: the user adds the sizes he owns (the window's Add bit). No cutting length is assumed.
  */
 export const DEFAULT_BITS = Object.freeze([
-  { id: 'em-1-8in', name: '1/8 in end mill', type: 'endmill', unit: 'in', diameter: len('1/8', 'in') },
-  { id: 'em-1-4in', name: '1/4 in end mill', type: 'endmill', unit: 'in', diameter: len('1/4', 'in') },
-  { id: 'em-3mm', name: '3 mm end mill', type: 'endmill', unit: 'mm', diameter: len('3', 'mm') },
-  { id: 'em-6mm', name: '6 mm end mill', type: 'endmill', unit: 'mm', diameter: len('6', 'mm') },
-  { id: 'bn-1-8in', name: '1/8 in ball nose', type: 'ballnose', unit: 'in', diameter: len('1/8', 'in') },
-  { id: 'vb-60', name: '60° V-bit', type: 'vbit', unit: 'in', diameter: len('1/4', 'in'), angle: 60 },
-  { id: 'vb-90', name: '90° V-bit', type: 'vbit', unit: 'in', diameter: len('1/4', 'in'), angle: 90 },
-  { id: 'tbn-1mm-3.5', name: '1 mm 3.5° tapered ball nose', type: 'taperball', unit: 'mm', tipDiameter: len('1', 'mm'), taperAngle: 3.5, shankDiameter: len('1/4', 'in') },
+  ...[['1-16', '1/16'], ['1-8', '1/8'], ['1-4', '1/4'], ['3-8', '3/8'], ['1-2', '1/2']].map(([id, f]) => ({ id: `em-${id}in`, name: `${f} in end mill`, type: 'endmill', unit: 'in', diameter: len(f, 'in') })),
 ].map((b) => Object.freeze(b)));
 
 /** A bit with ONLY the fields its type has (+ id, name, type, unit, cutLength, notes); anything else is dropped. Numbers stay as given (never rounded). */
@@ -76,6 +69,10 @@ export function validateBit(raw, others = []) {
   if (!t) { out.push('Pick the bit’s type.'); return out; }
   const has = (f) => t.fields.includes(f);
   if (has('diameter') && !positive(b.diameter)) out.push('The diameter must be more than 0.');
+  if (has('cornerRadius')) {
+    if (!positive(b.cornerRadius)) out.push('The corner radius must be more than 0.');
+    else if (positive(b.diameter) && b.cornerRadius > b.diameter / 2 * (1 + 1e-12)) out.push('The corner radius can be at most half the diameter.');
+  }
   if (has('angle') && !(positive(b.angle) && b.angle < 180)) out.push('The V-bit’s angle must be between 0° and 180°.');
   if (has('tipDiameter') && !positive(b.tipDiameter)) out.push('The tip diameter must be more than 0.');
   if (has('taperAngle') && !(positive(b.taperAngle) && b.taperAngle < 90)) out.push('The taper angle (per side) must be between 0° and 90°.');
@@ -93,7 +90,7 @@ export const bitToolDia = (bit) => (isTapered(bit.type) ? bit.tipDiameter : bit.
 /**
  * The cut-record fields an operation takes from a bit (its COPY of the bit): bitId, bitName, cutterShape = the type, toolDia (a tapered bit: its TIP diameter:
  * the Origin offsets an inside / outside cut by half the toolDia, and the tip is what cuts at the bottom of the cut, on the line; the cone above it is the
- * wall's draft), cutterAngle (a V-bit), taperAngle + shankDia (a tapered bit), cutLength (when set). A field the bit does not have is `undefined` (the
+ * wall's draft), cutterAngle (a V-bit), cornerRadius (a bowl bit), taperAngle + shankDia (a tapered bit), cutLength (when set). A field the bit does not have is `undefined` (the
  * operation's own field is removed: setOpFields), except cutterAngle, which only a V-bit sets.
  */
 export function recordFieldsOf(bit) {
@@ -101,6 +98,7 @@ export function recordFieldsOf(bit) {
   return {
     bitId: b.id, bitName: b.name, cutterShape: b.type, toolDia: bitToolDia(b),
     ...(b.type === 'vbit' ? { cutterAngle: b.angle } : {}),
+    cornerRadius: b.type === 'bowl' ? b.cornerRadius : undefined,
     taperAngle: tapered ? b.taperAngle : undefined,
     shankDia: tapered ? b.shankDiameter : undefined,
     cutLength: positive(b.cutLength) ? b.cutLength : undefined,
@@ -134,7 +132,28 @@ export const parseBitLength = (text, unit) => {
 export function bitSummary(bit) {
   const b = normalizeBit(bit);
   if (isTapered(b.type)) return `tip ${bitSizeText(b.tipDiameter, b.unit)}, ${angleText(b.taperAngle, { show: 'deg' })} per side`;
+  if (b.type === 'bowl') return `${bitSizeText(b.diameter, b.unit)}, ${bitSizeText(b.cornerRadius, b.unit)} corner`;
   return `${bitSizeText(b.diameter, b.unit)}${b.type === 'vbit' ? ` ${angleText(b.angle, { show: 'deg' })}` : ''}`;
+}
+
+/**
+ * The name the window suggests for a bit from its sizes ('' while a size is missing): "1/4 in end mill", "3 mm ball nose", "1/4 in bowl bit, 1/16 in corner",
+ * "1/4 in 60° V-bit", "1 mm 3.5° tapered ball nose". Lengths in the bit's unit (bitLengthText).
+ */
+export function suggestBitName(bit) {
+  const b = normalizeBit(bit), L = (mm) => `${bitLengthText(mm, b.unit)} ${b.unit}`, t = bitType(b.type);
+  if (!t || t.fields.some((f) => !positive(b[f]))) return '';
+  const label = b.type === 'bowl' ? 'bowl bit' : t.label;
+  if (b.type === 'bowl') return `${L(b.diameter)} ${label}, ${L(b.cornerRadius)} corner`;
+  if (isTapered(b.type)) return `${L(b.tipDiameter)} ${angleText(b.taperAngle, { show: 'deg' })} ${label}`;
+  if (b.type === 'vbit') return `${L(b.diameter)} ${angleText(b.angle, { show: 'deg' })} ${label}`;
+  return `${L(b.diameter)} ${label}`;
+}
+/** The one plain line the window shows under a bit's sizes when it is valid but another type fits better, else null: a bowl corner of half the diameter IS a ball nose. */
+export function bitNote(bit) {
+  const b = normalizeBit(bit);
+  return b.type === 'bowl' && positive(b.diameter) && positive(b.cornerRadius) && Math.abs(b.cornerRadius - b.diameter / 2) <= b.diameter * 1e-9
+    ? 'A corner radius of half the diameter is a ball nose: pick the Ball nose type for it.' : null;
 }
 
 // ── the stored table ──

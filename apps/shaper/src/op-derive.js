@@ -77,6 +77,23 @@ export function bitCentrePaths(state, written) {
   return out;
 }
 
+/** TASK 801: what the Export SIMULATION reads of each element of the file beside its travel (bitCentrePaths, `bitPaths` its result): its MEMBERSHIP (its entry's key,
+ *  '<op id>|<geometry key>': the 3D schedule) and its place among that membership's elements (`ord`: the exporter writes one element per cut, in the derivation's
+ *  order); and for a cut with NO travel (#core deriveCutTravel determines none: a Roughing level the Origin pockets, a plain On line cut) the derivation's own tool
+ *  paths (deriveCutFootprint's toolPaths: [{ points, closed }], in their drawn order: no cutting direction), so the timeline still plays it for its length. null for
+ *  an element of no entry (TASK 798's frame guide). */
+export function simElements(state, written, bitPaths) {
+  const seen = new Map(), travelled = new Set((bitPaths || []).map((b) => b.index));
+  return written.map(({ cut, entry }, index) => {
+    if (!entry || typeof entry.key !== 'string') return null;
+    const ord = seen.get(entry.key) || 0;
+    seen.set(entry.key, ord + 1);
+    if (!cut || travelled.has(index)) return { key: entry.key, ord };
+    const toolPaths = deriveCutFootprint([cut], cut.rec, state).flatMap((fp) => (fp.kind === 'guide' ? [] : fp.toolPaths || [])).filter((tp) => tp.points && tp.points.length >= 2).map((tp) => ({ points: tp.points, closed: Boolean(tp.closed) }));
+    return toolPaths.length ? { key: entry.key, ord, toolPaths } : { key: entry.key, ord };
+  });
+}
+
 // ── the big inputs, sent ONCE per worker (TASK 817). A job carries `{ $ref: id }` in their place: a record's `levels` (an STL part's sections, megabytes) and `slope`
 // (a Fusion region's rings), the sketch (`state`) and the export encoding. Both sides keep the value under its id, so the worker's #core memo caches (keyed by the
 // levels list itself) stay warm from one job to the next, and a result's records come back naming the main thread's own lists. ──
@@ -119,7 +136,7 @@ export function unpackResult(item, valueOf) {
  * localPort, runs the very same code on copies of its messages). Messages in:
  *   { refs: [[id, value]...] }   values a later job names (may ride on any message); { forget: [id...] } drops some
  *   { type: 'paths', id, target, rec, state, owned }   deriveItem of one plan item (`state` / `rec` fields by ref; `owned` = the owned loop ids)
- *   { type: 'export', id, args }   svgOf(args) (+ bitCentrePaths when args.preview) = { svg, bitPaths }
+ *   { type: 'export', id, args }   svgOf(args) (+ bitCentrePaths and TASK 801 simElements when args.preview) = { svg, bitPaths, simElements }
  *   { type: 'drop', ids }   queued jobs no longer wanted (a job already running finishes; its answer is ignored by the caller)
  * Messages out: { type, id, result } or { type: 'error', id, message, stack }. Jobs run one at a time, in order, each in its own `schedule`d turn, so a 'drop'
  * that arrives while one runs reaches the queue before the next starts.
@@ -148,7 +165,8 @@ export function createPathsServer({ post, schedule }) {
     return withArcSamples(state.arcSamples, () => {
       const written = a.preview ? [] : null;
       const svg = svgOf({ state, entries, encoding, docUnit: a.docUnit, preview: a.preview, written, frame });
-      return { svg, bitPaths: written ? bitCentrePaths(state, written) : null };
+      const bitPaths = written ? bitCentrePaths(state, written) : null;
+      return { svg, bitPaths, simElements: written ? simElements(state, written, bitPaths) : null };
     });
   }
   function next() {

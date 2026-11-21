@@ -782,10 +782,6 @@ export class NewtonSolver {
                 const arcRim = new Set(circShape.joints.slice(1));
                 if (arcRim.has(lineShape.joints[0])) params.sharedEnd = 'a';
                 else if (arcRim.has(lineShape.joints[1])) params.sharedEnd = 'b';
-                // TASK 847: a FILLET arc's row keeps the fillet from turning inside out (definitions.js filletTravel): its rims and stored sweep
-                if (params.sharedEnd && circShape.type === 'arc' && circShape.filletSharp) {
-                  params.fillet = { start: jointIndexMap.get(circShape.joints[1]), end: jointIndexMap.get(circShape.joints[2]), sweep: circShape.sweep };
-                }
                 // a circle's radius unknown or an arc's live |rim - centre| takes part in the row
                 const op = this._radiusOperand(circShape, jointIndexMap);
                 params.radiusAt = op.at; params.radius = op.radius; params.rimJoint = op.rim;

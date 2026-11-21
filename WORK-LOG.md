@@ -17516,6 +17516,7 @@ Implemented per-operation **Select in Fusion** in Shaper Prepare mode (`docs/OPE
   - `importFusionSelection` never skips `payloadSig` when `data.assign` is present, assigns matched keys (`sources` intersecting `assign.tokens`) to `opById(assign.opKey)` while preserving settings/ticks/order (keeping emptied ops EMPTY), and wires `makeClearToken` `redoPayloads` so Undo (`restore_selection { selectionId }`) and Redo (`restore_selection { selectionId, tokens }`) keep Fusion's persistent selection synchronized.
 - **Tests & evidence**:
   - Added fail-first `tests/opselect-806-node.test.js` (`28 checks`) and `tests/opselect-806-live.test.js` (`desktop 1280x800` + `phone 390x844`, `.evidence/806/opselect-desktop.png`, `.evidence/806/opselect-phone.png`).
+  - **Addendum (live Fusion review)**: `selection-list.js` `formatSummaryItem` / `saneItem` now prefer `summary.items[].detail` when present (matching SA-18 dialog wording `"<names> · 2 faces, 4 walls"`), falling back to `<count> <kind>` on older payloads (`opselect-806-node: 30 checks passed`).
 
 ## TURN 835f
 THE 835 MERGE GATE RED (the advisor's merge onto origin/main with task 801 Export Simulate): tests/export-sim-801-node.test.js "AssertionError: the raster pocket's passes are steps of their own (3)". Claude Opus subagent, worktree D:/APPS/Sketch-Studio.worktrees/rasterloop-835.

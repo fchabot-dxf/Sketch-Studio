@@ -33,8 +33,9 @@ export function formatSummaryItem(item) {
   const kind = String((item && item.kind) || '');
   const count = Number(item && item.count) || 0;
   const names = Array.isArray(item && item.names) ? item.names.map((n) => String(n || '').trim()).filter(Boolean) : [];
+  const rawDetail = typeof (item && item.detail) === 'string' ? item.detail.trim() : '';
   const [one, many] = SUMMARY_ITEM_WORDS[kind] || [kind || 'item', `${kind || 'item'}s`];
-  const detail = `${count} ${count === 1 ? one : many}`;
+  const detail = rawDetail || `${count} ${count === 1 ? one : many}`;
   return names.length ? `${names.join(', ')} · ${detail}` : detail;
 }
 
@@ -74,7 +75,8 @@ export function onSelectionsChange(fn) { LISTENERS.add(fn); return () => LISTENE
 function saneItem(it) {
   if (!it || typeof it !== 'object' || typeof it.kind !== 'string' || !it.kind) return null;
   const names = Array.isArray(it.names) ? it.names.map(String) : [];
-  return { kind: it.kind, count: Number.isFinite(Number(it.count)) ? Number(it.count) : 0, names };
+  const detail = typeof it.detail === 'string' && it.detail.trim() ? it.detail.trim() : '';
+  return { kind: it.kind, count: Number.isFinite(Number(it.count)) ? Number(it.count) : 0, names, ...(detail ? { detail } : {}) };
 }
 
 function sane(e) {

@@ -10,7 +10,6 @@
     "test": "node scripts/run-tests.js",
     "test:unit": "node scripts/run-tests.js",
     "test:shell": "node scripts/shell-smoke.cjs",
-    "build:inline": "node scripts/build-inline.cjs",
     "site:sketchstudio": "node scripts/build-site.cjs sketchstudio",
     "site:shaper": "node scripts/build-site.cjs shaper",
     "site:penplotter": "node scripts/build-site.cjs penplotter",
@@ -23,6 +22,9 @@
   "keywords": [],
   "author": "",
   "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": {
+    "node": ">=20.19"
+  },
   "type": "module",
   "imports": {
     "#core/*": "./packages/core/*",

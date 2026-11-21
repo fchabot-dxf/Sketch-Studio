@@ -50,7 +50,7 @@ can also be changed. There is no copy of the list here, so it cannot go stale.
 ## Where the plans live
 
 `ROADMAP.md` (the plan), `NEXT-SESSION.md` (the work in flight and the project principles), `WORK-LOG.md` (what each task did),
-`CONTEXT.md` (environment and gotchas), `AGENTS.md` (the rules for the people and agents working here).
+`AGENTS.md` (the rules for the people and agents working here).
 
 ## Websites: one per app
 
@@ -72,6 +72,7 @@ string kept (`/apps/shaper/?host=fusion` -> `/?host=fusion`: the Fusion add-in) 
 `npm run site:<app>` runs the same build. A direct-upload site is deployed from the REPO ROOT (`wrangler pages deploy dist --project-name <project>`):
 wrangler uploads the `functions/` folder of the directory it runs in (the Google sign-in routes), not one inside `dist/`.
 sketch-studio's site keeps the old links: `/shaper`, `/penplotter`, `/trace` and `/apps/<app>/*` redirect (302, query string kept) to the app's own site, at its root.
+The build needs Node 20.19 or newer (it loads the ES module app registry): `.node-version` pins 22.16.0 for the Git-connected Cloudflare build, and package.json `engines` says `>=20.19`.
 Check a built site the way Cloudflare serves it, locally, with no login and no deploy: `node tests/site-root-763-live.test.js` (it runs `wrangler pages dev`).
 
 Each Pages project needs the same three secrets (names only): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_KEY`.

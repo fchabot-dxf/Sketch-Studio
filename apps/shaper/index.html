@@ -176,12 +176,50 @@
     .review-look-colors button, .review-look-colors input[type="color"] { width: 32px; height: 32px; padding: 0; border: 2px solid #2f3646; border-radius: 6px; cursor: pointer; background: none; }
     .review-look-colors [aria-pressed="true"] { border-color: var(--sk-selection, #4c9aff); box-shadow: 0 0 0 1px var(--sk-selection, #4c9aff); }
     .review-stock input { width: 90px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
+    /* TASK 801: the Simulate panel over the view (export-sim.js) and the simulation in the 2D / Paths view (export-preview.js setSim) */
+    .review-stock #sim-op { min-width: 0; flex: 1; max-width: 200px; }
+    .sim-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .sim-btn { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 10px; font: 13px system-ui, sans-serif; cursor: pointer; }
+    .sim-btn:hover:not(:disabled) { border-color: var(--sk-selection, #4c9aff); color: #fff; }
+    .sim-btn:disabled, #sim-scrub:disabled, #review-sim select:disabled { opacity: 0.45; cursor: default; }
+    .sim-transport { display: flex; align-items: center; gap: 6px; }
+    .sim-transport .sim-icon { flex: 0 0 auto; width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+    .sim-transport select.sim-icon { width: auto; padding: 0 4px; }
+    #sim-scrub { flex: 1; min-width: 0; width: auto; padding: 0; background: none; border: 0; accent-color: var(--sk-selection, #4c9aff); }
+    #sim-play[data-state="play"] .sim-ic-pause, #sim-play[data-state="pause"] .sim-ic-play { display: none; }
+    .sim-opts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+    .review-stock label.sim-check { justify-content: flex-start; gap: 6px; cursor: pointer; }
+    .review-stock .sim-check input { width: auto; }
+    .sim-check[hidden], .sim-more[hidden] { display: none !important; }
+    .sim-more { display: flex; flex-direction: column; gap: 8px; }
+    .sim-toggle { position: absolute; top: 10px; right: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
+    .sim-toggle:hover, .sim-toggle[aria-expanded="true"] { border-color: var(--sk-selection, #4c9aff); color: #fff; }
+    .sim-toggle[aria-expanded="true"] { background: #24304a; }
+    .sim-panel { position: absolute; top: 52px; right: 10px; width: 300px; max-height: calc(100% - 62px - var(--sk-footer-clear, 0px)); overflow-y: auto; box-sizing: border-box; z-index: 3; padding: 12px; gap: 8px;
+      background: #0f1320; border: 1px solid #1f2535; border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
+    .sim-label { color: #e6e6e6; font-size: 13px; min-height: 1.4em; line-height: 1.4; }
+    #review-2d-canvas .rv2d-sim-todo { visibility: hidden; } /* 2D: not cut yet */
+    #review-2d[data-mode="paths"] #review-2d-canvas .rv2d-sim-todo { visibility: visible; opacity: 0.16; } /* Paths: faint */
+    #review-2d-canvas .rv2d-sim * { vector-effect: non-scaling-stroke; pointer-events: none; }
+    #review-2d-canvas .rv2d-sim-trail { fill: none; stroke: #ff2d95; stroke-width: 2.5px; stroke-linecap: round; stroke-linejoin: round; }
+    #review-2d-canvas .rv2d-sim-bit { fill: rgba(255, 45, 149, 0.28); stroke: #ff2d95; stroke-width: 1.5px; }
+    /* TASK 801d: a freehand pocket's EXAMPLE hand moves (sim-scribble.js): the pocket's colour (CUT_TYPES pocket #7F7F7F), dashed and lighter than a real path */
+    #review-2d-canvas .rv2d-sim-scribble { fill: none; stroke: #7F7F7F; stroke-width: 1.6px; stroke-dasharray: 5 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
     /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
        Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
        app-sidebar.js): the Review card forms ONE band under the canvas. Short landscape: Review keeps its desktop side
        panel (its canvas is already 64-71 % of 844 px). (TASK 706: Explore's tree / inspector rules went with it; TASK 741: so did the V-carve panel's.) */
     @media (max-width: 640px) {
       #view-review { flex-direction: column; }
+      /* TASK 801c: a COMPACT strip docked at the bottom of the view (its two rows + the label, at most 30 % of the view): the drawing it animates stays in sight; the
+         "more" fold (folded here) opens the rest over more of the view */
+      .sim-panel { top: auto; bottom: 6px; left: 6px; right: 6px; width: auto; max-height: 30%; padding: 6px 8px; gap: 4px; }
+      .sim-panel[data-open="true"] { max-height: 62%; }
+      .sim-panel .simexport-title { display: none; }
+      .sim-panel .sim-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 0; }
+      .sim-panel .sim-actions { flex-wrap: nowrap; gap: 4px; } .sim-panel .sim-actions .sim-btn { flex: 1 1 auto; padding: 4px 6px; min-width: 0; }
+      .sim-panel .sim-transport { gap: 4px; }
+      .sim-toggle-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* the icon only; the name stays for a screen reader */
       #review-side { width: auto; flex: 0 0 40%; border-left: 0; border-top: 1px solid #1f2535; }
       .rv2d-row, .rv2d-op { min-height: 40px; align-items: center; } /* TASK 718: a list row is a touch target (TASK 743: an operation header too) */
     }
@@ -531,6 +569,8 @@
       #prepare-panel .cut-card { width: 236px; }
       .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
       .review-stepbox input { height: 44px; box-sizing: border-box; }
+      .sim-btn { min-height: 44px; } .sim-transport .sim-icon { width: 44px; height: 44px; } .sim-check input { width: 22px; height: 22px; } /* TASK 801 */
+      .sim-toggle { width: 44px; height: 44px; padding: 0; justify-content: center; }
     }
     /* TASK 743: the OPERATIONS list (op-list.js): a card like the cut card, top-left of the Prepare view on a wide screen (it ends above the direction
        legend; its rows scroll), a folding bar along the bottom on a phone (open: up to 55 % of the view; the cut card then ends above the bar).
@@ -749,6 +789,17 @@
       <div id="review-2d" hidden><svg id="review-2d-canvas" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="The exported Shaper SVG"></svg><div id="review-2d-info"></div></div>
       <div id="review-toolbar"><div id="review-view-switch" role="group" aria-label="View"><button id="review-view-3d" type="button" data-view="3d" data-hint="reviewThreeD" aria-pressed="true">3D</button><button id="review-view-2d" type="button" data-view="2d" data-hint="reviewTwoD" aria-pressed="false">2D</button><button id="review-view-paths" type="button" data-view="paths" data-hint="reviewPaths" aria-pressed="false">Paths</button></div><button id="review-reset" type="button" data-hint="reviewReset">Reset</button><button id="review-top" type="button" data-hint="reviewTop">Top</button><button id="review-fit" type="button" data-hint="reviewFit">Fit</button></div>
       <div id="review-info"></div>
+      <!-- TASK 801: the SIMULATE panel (export-sim.js): VCarve's Preview toolpaths panel, over the view shown (its toggle at the view's top right; closed at first). Nothing of the side panel moves.
+           TASK 801c: the previews row, the transport row and the label always show; the Operation pick, Animate / Show passes and the explanation are behind its "more" fold
+           (disclosure.js: open on a wide screen, folded on a phone, where the panel is a compact strip docked at the bottom of the view: the drawing stays in sight) -->
+      <button id="review-sim-toggle" type="button" class="sim-toggle"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 2.5l9 5.5-9 5.5z" fill="currentColor"/></svg><span class="sim-toggle-text" data-hint="simulate"></span></button>
+      <div class="review-stock sim-panel" id="review-sim" hidden><h2 class="simexport-title"><span data-hint="simulate"></span></h2>
+        <div class="sim-actions"><button id="sim-preview-sel" type="button" class="sim-btn" data-hint="simPreviewSelected"></button><button id="sim-preview-all" type="button" class="sim-btn" data-hint="simPreviewAll"></button><button id="sim-reset" type="button" class="sim-btn" data-hint="simReset"></button></div>
+        <div class="sim-transport"><button id="sim-prev" type="button" class="sim-btn sim-icon" data-hint="simPrev" aria-label="Previous operation"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3v10" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M13 3L5 8l8 5z" fill="currentColor"/></svg></button><button id="sim-play" type="button" class="sim-btn sim-icon" data-hint="simPlay" data-state="play" aria-label="Play"><svg class="sim-ic-play" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 2.5l9 5.5-9 5.5z" fill="currentColor"/></svg><svg class="sim-ic-pause" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></svg></button><button id="sim-next" type="button" class="sim-btn sim-icon" data-hint="simNext" aria-label="Next operation"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3l8 5-8 5z" fill="currentColor"/><path d="M13 3v10" stroke="currentColor" stroke-width="1.8" fill="none"/></svg></button><input id="sim-scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Simulation time"><select id="sim-speed" aria-label="Speed" data-hint="simSpeed" class="sim-icon"></select><button id="sim-more-toggle" type="button" class="sim-btn sim-icon" data-hint="simMore" aria-label="More"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="3" cy="8" r="1.6" fill="currentColor"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><circle cx="13" cy="8" r="1.6" fill="currentColor"/></svg></button></div>
+        <div id="sim-label" class="sim-label" aria-live="polite"></div>
+        <div id="sim-more" class="sim-more"><label><span class="review-label-line"><span data-hint="simOperation" id="sim-op-label"></span></span> <select id="sim-op" aria-labelledby="sim-op-label"></select></label>
+          <div class="sim-opts"><label class="sim-check"><input type="checkbox" id="sim-animate"> <span data-hint="simAnimate"></span></label><label class="sim-check" id="sim-passes-row"><input type="checkbox" id="sim-passes"> <span data-hint="simPasses"></span></label></div>
+          <div id="sim-note" class="review-stock-note"></div></div></div>
     </div>
     <aside id="review-side">
     <div class="review-stock" id="review-cuts" hidden><h2 class="simexport-title"><span data-hint="reviewCuts"></span></h2>

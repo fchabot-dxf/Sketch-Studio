@@ -61,23 +61,6 @@ export function offsetPolygonRound(polygon, amount, arcTolMm = 0.005) {
     return sol.filter(r => r.length >= 3).map(fromClipper);
 }
 
-/** Boolean union of polygons into their combined outline. Each input is a closed ring [[x,y],...]. Returns the
- *  merged boundary as an array of closed rings in source units — usually one outer ring, plus extras for holes /
- *  disjoint pieces. */
-export function unionPolygons(polygons) {
-    const clipper = new ClipperLib.Clipper();
-    let added = 0;
-    for (const poly of polygons) {
-        const path = toClipper(poly);
-        if (path.length >= 3) { clipper.AddPath(path, ClipperLib.PolyType.ptSubject, true); added++; }
-    }
-    if (!added) return [];
-    const sol = new ClipperLib.Paths();
-    clipper.Execute(ClipperLib.ClipType.ctUnion, sol,
-        ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-    return sol.filter(r => r.length >= 3).map(fromClipper);
-}
-
 /** Concentric offsets of a closed polygon. Ring i is inset by `offset + i*spacing`, starting at i = 0 — so with
  *  offset 0 the FIRST ring is the outline itself. A negative offset starts OUTSIDE (overdraw/bleed). Returns an
  *  array of closed point-rings — MORE THAN ONE per step when the shape pinches and splits. Robust on concave
@@ -105,7 +88,7 @@ export function offsetRings(polygon, spacing, offset = 0, maxRings = 500) {
 }
 
 // ── REGIONS (TASK 459): a region is { outer, holes } — outer ring + the holes inside it, rings as [[x,y],...] explicitly
-// closed (the fromClipper form). unionPolygons above is a FLAT nonzero union with no nesting, which cannot say "this ring
+// closed (the fromClipper form). A FLAT nonzero union of rings has no nesting, which cannot say "this ring
 // is a hole" and would FILL the islands of an evenodd footprint (a pocket with an island). These helpers resolve a
 // footprint's own fillRule ONCE into regions, then do the booleans on canonically oriented regions (outer positive, holes
 // negative, so NonZero is exact for every later operation). Used by #core/relief-model (the 3D Review terraces).

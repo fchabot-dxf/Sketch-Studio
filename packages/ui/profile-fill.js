@@ -38,7 +38,3 @@ export function profileFillLoops(joints, shapes, constraints) {
   }
   return cache.fills;
 }
-
-export function profileFillPaths(joints, shapes, constraints) {
-  return profileFillLoops(joints, shapes, constraints).map((f) => f.d);
-}

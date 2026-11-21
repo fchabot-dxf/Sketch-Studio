@@ -1,9 +1,9 @@
 # ROADMAP — from "SketchStudio app" to "one brain, many shells"
 
 > Strategic plan. Durable. For *what to do this very next session*, read **NEXT-SESSION.md**.
-> This supersedes the solver sections of `CONTEXT.md` (which predates the platform pivot and
-> says "solver robustness ALL DONE" — that was a different, earlier backlog; see lineage note
-> in NEXT-SESSION.md).
+> This supersedes the solver sections of the old `CONTEXT.md` (June notes, removed in task 849;
+> it predated the platform pivot and said "solver robustness ALL DONE" — that was a different,
+> earlier backlog; see lineage note in NEXT-SESSION.md).
 
 ## The vision in one paragraph
 
@@ -99,7 +99,7 @@ PHASE 1 — Monorepo carve-out  ✅ COMPLETE  (load-safe SLICES, every commit 0 
   FINAL SHAPE: packages/core (brain + 12-test oracle, self-contained, no apps/ dep) · apps/sketchstudio
   (shell: index.html + main.js + ui/ + coords + debug-overlay) · apps/shaper (awaiting its shell logic) ·
   tests/ (shell+drag) · NO src/, NO shims, leak-clean (#core//#app/ aliases). App deployable, output `/`.
-  OPEN (deferred, not blockers): build-inline.cjs rewrite (documented feature, broken post-carve-out) ·
+  OPEN (deferred, not blockers): build-inline.cjs rewrite (documented feature, broken post-carve-out; removed in task 849 with smoke-test.cjs / validate-standalone.cjs) ·
   settings-manager → shell + injected-persistence seam (DEBT-1) · MERGE: confirm `_redirects` on preview.
   ▸ Consolidation: Shaper app moved INTO the repo at apps/shaper   ✅ committed (cda8c91)
   ▸ Slice 1 — core import-cleanup (in place, no moves), 3 commits, all advisor-BLESSED, oracle 12/12:
@@ -136,7 +136,7 @@ PHASE 1 — Monorepo carve-out  ✅ COMPLETE  (load-safe SLICES, every commit 0 
         ✅ (e18c29c)  — **the brain now lives at `packages/core`; apps/ are PEERS over it.**
       · SLICE C  co-locate the 12 oracle tests → `packages/core/tests`  🔄 in progress
       · SLICE D  loose ends (gated): `git rm solver-core.legacy.js` (dead) · rmdir empty `src/` ·
-        `scripts/build-inline.cjs` stale-ref fix · (settings-manager →shell + persistence seam = later, DEBT-1)
+        `scripts/build-inline.cjs` stale-ref fix (never done; the script was removed in task 849) · (settings-manager →shell + persistence seam = later, DEBT-1)
   (on branch carve-out; `src/` reduced to two empty dirs; brain at `packages/core`, shell at `apps/sketchstudio`)
   (on branch carve-out; shell fully under apps/sketchstudio/; src/ is core-only; nothing in packages/core yet)
 

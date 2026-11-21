@@ -16,7 +16,6 @@ import { setupPolygonTool, handlePolygonPointerDown, handlePolygonPointerMove, h
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
 import { refuseLiveInputClick } from '#ui/numeric-input-manager.js';
-import { newShapeId } from '#core/shape-id.js';
 
 // Local state for drawing tools
 let continueFrom = null;
@@ -196,28 +195,4 @@ export function resetDrawingState(state) {
     try { resetPolygonState(state); } catch(_) {}
     try { resetArcState(state); } catch(_) {}
     try { clearPreview(state); } catch(_) {}
-}
-
-/**
- * Helper function to create a circle shape
- * Note: Circles are created with two joints - center and radius point
- * @param {Map} joints - Joints map
- * @param {string} centerId - Center joint ID
- * @param {string} radiusPtId - Radius point joint ID
- * @param {Function} genJ - Function to generate new joint IDs
- * @returns {object} Circle shape object
- */
-export function makeCircle(joints, centerId, radiusPtId, genJ) {
-    const center = joints.get(centerId);
-    const radiusPt = joints.get(radiusPtId);
-    
-    if (!center || !radiusPt) {
-        return null;
-    }
-    
-    return {
-        id: newShapeId('circle_'),
-        type: 'circle',
-        joints: [centerId, radiusPtId]
-    };
 }

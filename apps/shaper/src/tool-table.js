@@ -24,9 +24,6 @@ export const TOOL_TABLE_VERSION = 1;
 export const BIT_UNITS = Object.freeze(['mm', 'in']);
 /** TASK 852d: default V-bit flat tip width (0.02 in = 0.508 mm) for new V-bits and read-time fallback for stored V-bits/records without one. */
 export const DEFAULT_VBIT_TIP_WIDTH_MM = 0.508;
-/** The length fields a bit may have (base mm) and its angle fields (degrees). */
-export const BIT_LENGTH_FIELDS = Object.freeze(['diameter', 'cornerRadius', 'tipWidth', 'tipDiameter', 'shankDiameter', 'cutLength']);
-export const BIT_ANGLE_FIELDS = Object.freeze(['angle', 'taperAngle']);
 /** The cut-record fields a bit sets (recordFieldsOf): the bit's copy in an operation. */
 export const BIT_RECORD_FIELDS = Object.freeze(['bitId', 'bitName', 'toolDia', 'cutterShape', 'cutterAngle', 'tipWidth', 'cornerRadius', 'taperAngle', 'shankDia', 'cutLength']);
 /** The fields the card's Custom pick clears (the link to a table bit and its cutting length; the cutter itself stays as it is). */

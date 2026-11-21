@@ -20,59 +20,6 @@ export function hitJointAtScreen(joints, svg, screenX, screenY, threshold=14){
   return best;
 }
 
-// Find line at screen position
-export function hitLineAtScreen(joints, shapes, svg, screenX, screenY, threshold=8){
-  const w = screenToWorld(svg, screenX, screenY);
-  let best = null, bestD = threshold;
-  for(const s of shapes){
-    if(s.type === 'line'){
-      const pts = resolveJoints(joints, s.joints);
-      if(!pts) continue;
-      const [a, b] = pts;
-      
-      const proj = projectPointOnSegment(w, a, b);
-      
-      // FIX: Convert the projected point back to screen space to check distance in pixels
-      const sc = worldToScreen(svg, proj);
-      const d = Math.hypot(sc.x - screenX, sc.y - screenY);
-      
-      if(d < bestD){ bestD = d; best = { shape: s, pt: proj }; }
-    }
-  }
-  return best;
-}
-
-// Find circle at screen position
-export function hitCircleAtScreen(joints, shapes, svg, screenX, screenY, threshold=10){
-  const w = screenToWorld(svg, screenX, screenY);
-  let best = null, bestD = threshold;
-  
-  for(const s of shapes){
-    if(s.type === 'circle'){
-      const center = joints.get(s.joints[0]);
-      if(!center) continue;
-      if(typeof s.radius !== 'number') continue;
-      const radius = s.radius;
-
-      const distToCenter = Math.hypot(w.x - center.x, w.y - center.y);
-
-      const dx = w.x - center.x;
-      const dy = w.y - center.y;
-      const len = Math.hypot(dx, dy);
-      const scale = len > 0.0001 ? radius / len : 0; 
-      const closestWorldPt = {
-        x: center.x + dx * scale,
-        y: center.y + dy * scale
-      };
-      const closestScreenPt = worldToScreen(svg, closestWorldPt);
-      const d = Math.hypot(closestScreenPt.x - screenX, closestScreenPt.y - screenY);
-
-      if(d < bestD){ bestD = d; best = { shape: s, pt: closestWorldPt }; }
-    }
-  }
-  return best;
-}
-
 // Find all joints in same coincident cluster
 export function findCoincidentCluster(jointId, constraints = []){
   const cluster = new Set([jointId]);

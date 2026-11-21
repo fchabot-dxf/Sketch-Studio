@@ -1,4 +1,4 @@
-import { createSketches, sketchOf, stampSketch, constraintSketch, entitiesInSketch, addSketch, activateSketch, hiddenSketchIds, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
+import { createSketches, sketchOf, stampSketch, constraintSketch, addSketch, activateSketch, hiddenSketchIds, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -27,7 +27,7 @@ import { createSketches, sketchOf, stampSketch, constraintSketch, entitiesInSket
     assert(stampSketch({}, {}).sketchId === 'sketch-1', 'no active → default');
   }
 
-  // 4. a fixture → every entity stamped sketch-1; a same-sketch constraint → its HOME; entitiesInSketch
+  // 4. a fixture → every entity stamped sketch-1; a same-sketch constraint → its HOME
   {
     const state = { ...createSketches(), joints: new Map(), shapes: [], constraints: [] };
     const mkJ = (id) => { state.joints.set(id, stampSketch({ x: 0, y: 0, fixed: false }, state)); return id; };
@@ -35,8 +35,6 @@ import { createSketches, sketchOf, stampSketch, constraintSketch, entitiesInSket
     const sh = stampSketch({ id: 'L', type: 'line', joints: ['a', 'b'] }, state); state.shapes.push(sh);
     assert(state.joints.get('a').sketchId === 'sketch-1' && sh.sketchId === 'sketch-1', 'all stamped sketch-1');
     assert(constraintSketch({ id: 'd1', type: 'distance', joints: ['a', 'b'], value: 50 }, state) === 'sketch-1', 'same-sketch constraint → home sketch-1');
-    const ein = entitiesInSketch(state, 'sketch-1');
-    assert(ein.joints.length === 2 && ein.shapes.length === 1, 'entitiesInSketch counts sketch-1');
     assert(constraintSketch({ joints: [] }, state) === null, 'no joints → null');
   }
 

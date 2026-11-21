@@ -2,7 +2,7 @@
 // Generate Shaper SVG / Download / Sync (main.js generateShaperSvgPayload), the Export step's 2D preview (export-preview.js) and the node tests
 // all serialize the cut plan through shaperSvgOf. Moved out of main.js unchanged (the loop polygons the host computes, the injected encoding, the
 // doc unit); `preview: true` asks the exporter for the PREVIEW copy (its data-step attributes, never in the downloaded file).
-import { svgOf, bitCentrePaths } from './op-derive.js'; // TASK 817: the file and the Paths view's travel, derived by the ONE module the background worker runs too
+import { svgOf, bitCentrePaths, simElements } from './op-derive.js'; // TASK 817: the file and the Paths view's travel, derived by the ONE module the background worker runs too
 import { exportJob, idle as pathsIdle, onRecalculate } from './op-paths.js'; // TASK 817: the page's export, made in the background (the worker's memo caches warm from the paths it generated)
 import { docUnit } from '#core/settings-manager.js';
 import { exportEncoding } from './shaper.js';            // injected as the exporter's encoding
@@ -51,13 +51,14 @@ function exportFileJob(state, { preview = false } = {}) {
   return { entries, ops: p.ops, args: { ...base, entries: p.entries } };
 }
 /** TASK 817: the Export step's file made in the BACKGROUND (op-paths.js exportJob: op-derive.js svgOf + bitCentrePaths in the paths worker, queued after the paths
- *  it is generating): resolves exportFileOf's { svg, entries } (preview: + ops and the Paths view's bitPaths instead of `written`), or null when nothing is ticked.
+ *  it is generating): resolves exportFileOf's { svg, entries } (preview: + ops and the Paths view's bitPaths instead of `written`, TASK 801 + `simElements`: op-derive.js
+ *  simElements), or null when nothing is ticked.
  *  The caller waits until nothing is generating first (main.js): the operations listed are then read off finished paths. */
 export async function exportFileInBackground(state, { preview = false } = {}) {
   const job = exportFileJob(state, { preview });
   if (!job) return null;
-  const { svg, bitPaths } = await exportJob(job.args);
-  return preview ? { svg, ops: job.ops, bitPaths, entries: job.entries } : { svg, entries: job.entries };
+  const { svg, bitPaths, simElements: sim } = await exportJob(job.args);
+  return preview ? { svg, ops: job.ops, bitPaths, simElements: sim, entries: job.entries } : { svg, entries: job.entries }; // TASK 801: + what the simulation reads of each element
 }
 /** TASK 817 (brief item 4): every operation's paths asked for (describeOperations reads them), then, while some are being generated, `say` gets ONE plain line ("Waiting
  *  for 2 operations to finish") and the wait goes on until none is: the Export step and the 3D Review read finished paths only. Resolves the number of waits.
@@ -109,7 +110,7 @@ function previewEntries(state, entries, frame) {
 
 // TASK 793: bitCentrePaths(state, written), the Export step's Paths view (the bit-centre travel of every element of the file), moved unchanged to op-derive.js
 // (TASK 817: the background export computes it next to the file); re-exported here for its callers.
-export { bitCentrePaths };
+export { bitCentrePaths, simElements }; // TASK 801: + what the simulation reads of each element (op-derive.js)
 
 /** TASK 798: the Export step's ONE line while an operation is unticked (phone-readable): "Exporting 2 of 4 operations (unticked: 3. Contour · 1 mm (⅛″ ball nose),
  *  4. Outside · 19 mm (¼″ end mill)). Place it with the same anchor as the earlier file." — `ops` = describeOperations(state) (every listed operation, with its `on` /

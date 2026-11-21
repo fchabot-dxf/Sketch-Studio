@@ -418,6 +418,43 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   return { stockBox: box, levels: depths.map((d, k) => ({ depth: d, through: isThrough(d, T), regions: R[k] })), meshes, marks, stats: { triangles, areas, skipped, unsetThrough, levels: depths.length, ms: (lap('mesh'), ms), cache: C ? { hits, misses } : null, outsideStock, partlyOutside, board: prof ? 'profile' : 'rectangle' } };
 }
 
+/**
+ * TASK 801 (owner turn 2608: "can the 3d sim show translucent color for path passes"): the SWEPT VOLUME of each item, for the Export simulation's "Show passes": the
+ * bit's footprint along its path (the item's own pieces, cutPieces: the same footprints buildRelief removes, a shaped bit's terraces too) from the board's top face
+ * down to the cut's depth, as a solid: per piece its region as a column (a shaped bit's terraces as disjoint columns: each wider terrace minus the narrower one
+ * inside it, at its own depth), a top face at y = 0, a floor at its depth and its walls. Items that remove nothing (a guide, a depth-unset pocket) add nothing.
+ * Returns ONE mesh for all the items, in their order: { positions, normals, indices, ends } (`ends[k]` = the index count after item k: drawing the first k items
+ * is a draw range, no rebuild). Not clipped to the board (a pass past the stock edge shows where the bit goes).
+ */
+export function sweptVolumes(items, { thickness } = {}) {
+  const T = Number(thickness) > 0 ? Number(thickness) : DEFAULT_STOCK.thickness;
+  const m = newMesh(), ends = [];
+  for (const it of items) {
+    const programmed = (it.footprints || []).some((fp) => fp && fp.clearing);
+    const rule = reliefDepth(programmed ? 'pocket' : it.cutType, it.cutDepth, T);
+    if (rule.kind === 'cut') {
+      let inner = null; // the narrower terrace already drawn (cutterTerraces: narrowest first)
+      for (const pc of cutPieces(it, rule).pieces) {
+        const d = pc.depth === null ? rule.depth : pc.depth;
+        const col = inner ? diffRegions(pc.regions, inner) : pc.regions;
+        inner = inner ? unionRegions(inner, pc.regions) : pc.regions;
+        if (!col.length || !(d > 0)) continue;
+        const tris = flatTris(col);
+        emitFlat(m, tris, 0, 1); emitFlat(m, tris, -d, -1);
+        for (const [x1, y1, x2, y2] of boundaryEdges(col)) {
+          const len = Math.hypot(x2 - x1, y2 - y1), nx = (y2 - y1) / len, nz = -(x2 - x1) / len; // outward: the removed region is on the left
+          const base = m.p.length / 3;
+          m.p.push(x1, 0, y1, x2, 0, y2, x2, -d, y2, x1, -d, y1);
+          for (let v = 0; v < 4; v++) m.n.push(nx, 0, nz);
+          m.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        }
+      }
+    }
+    ends.push(m.i.length);
+  }
+  return { ...finish(m), ends };
+}
+
 /** Total triangle area of a mesh (for tests and stats). */
 export function meshArea(g) {
   let s = 0; const P = g.positions, I = g.indices;

@@ -301,6 +301,10 @@
     #view-prepare.is-fusion #prepare-ribbon-frame { top: var(--sk-fusion-bar-h, 44px); }
     #prepare-ribbon { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     #prepare-ribbon-frame[data-dir="row"] > #prepare-ribbon { border-bottom: 1px solid #1f2937; }
+    .sk-edge { fill: none; stroke: var(--sk-prep-geo); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+    .sk-edge.sk-edge-guide { stroke: var(--sk-prep-guide); }
+    .sk-edge.sk-edge-stock { stroke: var(--sk-prep-stock); stroke-width: 1.75; stroke-dasharray: 7 3.5; }
+    .sk-stock-label { fill: var(--sk-prep-stock); font-family: system-ui, sans-serif; font-size: 5px; font-weight: 600; letter-spacing: 0.04em; }
     #prepare-notice { position: absolute; left: 50%; top: calc(12px + var(--sk-prep-ribbon-h, 0px)); transform: translateX(-50%); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
     #prepare-notice[hidden] { display: none; }
     #prepare-notice.is-error { background: #3f1518; color: #fecaca; border-color: #ef4444; }

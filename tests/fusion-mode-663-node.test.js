@@ -10,7 +10,7 @@ const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
 const eq = (a, b, msg) => { assert.strictEqual(a, b, msg); checks++; };
 const deepEq = (a, b, msg) => { assert.deepStrictEqual(a, b, msg); checks++; };
 
-// 1. Declared action names match add-in bridge.py (and SA-2 add_selection / selection_data + SA-13 toolpaths)
+// 1. Declared action names match add-in bridge.py (and SA-2 / SA-13 / SA-15)
 deepEq(FUSION_ACTIONS, {
   PING: 'ping',
   PONG: 'pong',
@@ -19,6 +19,7 @@ deepEq(FUSION_ACTIONS, {
   SELECTION_DATA: 'selection_data',
   HIGHLIGHT_SELECTION: 'highlight_selection',
   CLEAR_SELECTION: 'clear_selection',
+  RESTORE_SELECTION: 'restore_selection',
   TOOLPATHS: 'toolpaths',
   TOOLPATHS_CLEAR: 'toolpaths_clear',
 }, 'declared Fusion action names match protocol');

@@ -133,7 +133,7 @@ export function setRegion(key, region) {
  * `regions` and in any setting that holds a key (TASK 810's Roughing boundary shape, `boundaryShape`). The one place keys move. An operation this call empties is
  * removed (as before task S2: a stale shape dropped on load, a selection taken out); one that was already empty stays.
  */
-export function renameGeometry(rename, remove = new Set()) {
+export function renameGeometry(rename, remove = new Set(), { keepEmpty = false } = {}) {
   if (!rename.size && !remove.size) return;
   const to = (k) => [].concat(rename.get(k)); // TASK 832: a key may become SEVERAL (a shape split in pieces): its membership is one per piece
   const emptied = new Set(); // TASK S2: only an operation THIS call empties goes (an operation saved empty stays)
@@ -142,10 +142,10 @@ export function renameGeometry(rename, remove = new Set()) {
     op.geometry = op.geometry.filter((r) => !remove.has(r.key))
       .flatMap((r) => (rename.has(r.key) ? to(r.key).map((key, i) => (i ? { key, seq: r.seq } : { ...r, key })) : [r])) // the first piece keeps the dragged tabs
       .filter((r) => !seen.has(r.key) && seen.add(r.key)); // TASK 832: two shapes of one operation that became the same shape (merged): one membership
-    if (had && !op.geometry.length) emptied.add(op);
+    if (had && !op.geometry.length && !keepEmpty) emptied.add(op);
     if (typeof op.settings.boundaryShape === 'string' && rename.has(op.settings.boundaryShape)) op.settings = { ...op.settings, boundaryShape: to(op.settings.boundaryShape)[0] };
   }
-  S.ops = S.ops.filter((op) => !emptied.has(op));
+  if (emptied.size) S.ops = S.ops.filter((op) => !emptied.has(op));
   const regions = {};
   for (const [k, v] of Object.entries(S.regions)) {
     if (remove.has(k)) continue;

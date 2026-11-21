@@ -16,7 +16,7 @@ import { createToolTableWindow } from './tool-table-window.js'; // TASK 842: the
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
-import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { FUSION_ACTIONS, isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
 import { createFusionToolpathsSync } from './fusion-toolpaths.js'; // TASK 799: live toolpaths in Fusion
 import { getSelections } from './selection-list.js'; // TASK 795 / 799: selections and their 3D frames
 import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 795: the selection list's X and Clear all
@@ -913,13 +913,22 @@ if (fusionMode) {
   const fusionUi = mountFusionPrepareBar({
     viewPrepareEl: VIEWS.prepare,
     noticeEl: document.getElementById('prepare-notice'),
-    onSelectionData: (payload) => {
+    onSelectionData: (payload, meta) => {
       ensureSketch();
-      const res = importFusionSelection(payload, { controller: designController, prepare, onImport: afterSelectionImport });
+      const res = importFusionSelection(payload, {
+        controller: designController,
+        prepare,
+        onImport: afterSelectionImport,
+        clearGroup: meta && meta.clearGroup ? meta.clearGroup : null,
+      });
       if (res.ok && res.imported) { track('import:fusion'); nameAfterSelection(res.name); } // TASK 738; TASK 767
       return res;
     },
-    onRemoveSelection: (id) => removeSelection(designController, id, { prepare, onDone: afterSelectionImport }), // TASK 795
+    onRemoveSelection: (id, group) => (
+      group
+        ? fusionUi.bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, { selectionId: id, group })
+        : removeSelection(designController, id, { prepare, onDone: afterSelectionImport })
+    ), // TASK 795 / 795c
     onClearSelections: () => clearSelections(designController, { prepare, onDone: afterSelectionImport }),
     onStatusChange: () => { if (fusionToolpaths) fusionToolpaths.notify(); },
   });

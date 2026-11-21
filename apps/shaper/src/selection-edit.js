@@ -5,18 +5,31 @@
 import { removeGeometry } from '#core/delete-manager.js';
 import { getCutRecord, fileShape, settleOrder } from './cut-plan.js'; // TASK S1: a shape's record (its operation's, or its imported depth / region data), the one writer
 import { renameGeometry } from './operations-store.js';
-import { getSelections, setSelections, localSelectionId } from './selection-list.js';
+import { getSelections, setSelections, localSelectionId, makeClearToken } from './selection-list.js';
 import { dropStlSource } from './stl-source.js'; // TASK 841: one STL source per relief part
 
-const r4 = (n) => Math.round(Number(n) * 1e4) / 1e4;
-const GEOM = ['type', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r'];
-const segSig = (s) => GEOM.map((k) => (k === 'type' ? String((s && s.type) || '') : r4(s && s[k]))).join(',');
-const loopSig = (l) => (Array.isArray(l && l.segments) ? l.segments.map(segSig).sort().join(';') : '');
-/** A region's (or chain's) geometry as text: the same one again after a Fusion edit means "the same region": its outline and its holes in the payload's own numbers. */
+/** Canonical JSON (sorted object keys, undefined properties omitted): one comparator for SA-15 region & payload identity. */
+export function canonicalJson(val) {
+  if (Array.isArray(val)) return '[' + val.map((v) => (v === undefined ? 'null' : canonicalJson(v))).join(',') + ']';
+  if (val && typeof val === 'object') {
+    const keys = Object.keys(val).filter((k) => val[k] !== undefined).sort();
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalJson(val[k])).join(',') + '}';
+  }
+  return JSON.stringify(val);
+}
+
+/** A region's (or chain's) canonical identity (TASK 795c / SELECTION-BRIDGE.md 5.5): everything except `id` and `label`. */
 export function regionSig(reg) {
-  if (!reg) return '';
-  if (Array.isArray(reg.segments)) return 'chain|' + loopSig(reg);
-  return 'region|' + loopSig(reg.outer) + '|' + (Array.isArray(reg.holes) ? reg.holes.map(loopSig).sort().join('|') : '');
+  if (!reg || typeof reg !== 'object') return '';
+  const { id, label, ...rest } = reg;
+  return canonicalJson(rest);
+}
+
+/** Canonical digest of a selection_data payload (excluding `action`): used to make byte-identical re-sends a no-op. */
+export function payloadSig(data) {
+  if (!data || typeof data !== 'object') return '';
+  const { action, ...rest } = data;
+  return canonicalJson(rest);
 }
 
 /** The row's words: summary.text, else "<source.name> · N regions" (an old add-in sends no summary); an STL is its file name. */
@@ -47,12 +60,34 @@ export function buildEntry({ id: given = null, data, sourceName, regionCount, sk
     base[key] = { cutType: rec.cutType, cutDepth: rec.cutDepth };
     sigs[key] = regionSig(cutInfo.get(key));
   }
+  const items = data && data.summary && Array.isArray(data.summary.items) ? data.summary.items : [];
+  const pSig = data ? payloadSig(data) : '';
   return {
     id, fusion: typeof data.selectionId === 'string' && data.selectionId.length > 0, kind: (data.source && data.source.kind) || '',
     text: selectionText(data, sourceName, regionCount), name: sourceName, sketchId: sketch.id,
     shapeIds: shapes.map((s) => s.id), cutKeys: [...cutKeys], base, sigs, thicknessMm, regionCount,
+    ...(items.length ? { items } : {}),
+    ...(pSig ? { payloadSig: pSig } : {}),
     ...(data && data.frame && typeof data.frame === 'object' && !Array.isArray(data.frame) ? { frame: data.frame } : {}),
   };
+}
+
+/** Remove ONLY a selection's sketch, shapes, and combined profiles (without touching operations-store, used when same-id update already remapped ops). */
+export function dropPriorSketchOnly(st, entry) {
+  if (!st || !entry) return;
+  const profileIds = new Set();
+  for (const key of entry.cutKeys) if (key.startsWith('profile:')) profileIds.add(key.slice('profile:'.length));
+  if (Array.isArray(st.profiles) && profileIds.size) {
+    for (let i = st.profiles.length - 1; i >= 0; i--) if (profileIds.has(st.profiles[i].id)) st.profiles.splice(i, 1);
+  }
+  removeGeometry(st, entry.shapeIds, []);
+  if (st.selectedShapes && typeof st.selectedShapes.delete === 'function') for (const id of entry.shapeIds) st.selectedShapes.delete(id);
+  const sketches = Array.isArray(st.sketches) ? st.sketches : [];
+  const at = sketches.findIndex((s) => s.id === entry.sketchId);
+  if (at >= 0 && sketches.length > 1) {
+    sketches.splice(at, 1);
+    if (st.activeSketchId === entry.sketchId) st.activeSketchId = (sketches.find((s) => s.locked !== true) || sketches[0]).id;
+  }
 }
 
 /** An update of the same selectionId: a region that is still there (the same signature) keeps its record, the user's settings. What Fusion changed since the last
@@ -113,12 +148,14 @@ export function clearSelections(controller, { prepare = null, onDone = null } = 
   const st = controller && controller.state;
   const all = getSelections();
   if (!st || !all.length) return { ok: false, message: 'Nothing to clear' };
+  const sa15Ids = all.filter((e) => e.fusion && Array.isArray(e.items) && e.items.length > 0).map((e) => e.id);
+  const nextToken = sa15Ids.length ? makeClearToken({ restoreIds: sa15Ids, clearPayload: { selectionId: 'all' } }) : undefined;
   if (typeof st.saveState === 'function') st.saveState('clear selections', { host: true });
   for (const entry of all) {
     dropSelectionGeometry(st, entry);
     if (entry.kind === 'stl') dropStlSource(entry.id);
   }
-  setSelections([], { all: true });
+  setSelections([], { all: true, ...(nextToken ? { clearToken: nextToken } : {}) });
   if (prepare && typeof prepare.afterRestore === 'function') prepare.afterRestore();
   if (typeof onDone === 'function') onDone();
   return { ok: true, message: `Cleared ${all.length} selections` };

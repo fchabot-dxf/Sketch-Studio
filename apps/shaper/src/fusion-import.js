@@ -12,14 +12,14 @@ import { makeProfile, directlyContainedLoops } from '#core/profile-model.js';
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
 import { keyOf, fileShape, setRegionSource, setRegionFrame } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
-import { storeOps, regionKeys, applyStore, memberOf } from './operations-store.js'; // TASK S1: the operations + regions store
+import { storeOps, regionKeys, applyStore, memberOf, renameGeometry, setRegion } from './operations-store.js'; // TASK S1: the operations + regions store
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
 import { ringWalk, readLevels } from '#core/stepped-cut.js'; // TASK 792: readLevels (a part's material sections, the payload's `levels`)
 import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design's STL source goes with it (an STL import sets its own after)
 import { DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 794: the stock thickness of a design that starts over, when the payload has none
-import { getSelections, setSelections } from './selection-list.js'; // TASK 795: the selection list
-import { buildEntry, keepSettings, priorRecords, dropSelectionGeometry } from './selection-edit.js';
+import { getSelections, setSelections, makeClearToken } from './selection-list.js'; // TASK 795: the selection list
+import { buildEntry, dropPriorSketchOnly, regionSig, payloadSig } from './selection-edit.js';
 import { frameOf, placePoint, placeLevels, IDENTITY } from './relief-frame.js'; // TASK 841: a part with levels keeps its own frame (its levels follow it); an inserted STL is placed
 
 const upsert = (list, entry) => (list.some((e) => e.id === entry.id) ? list.map((e) => (e.id === entry.id ? entry : e)) : [...list, entry]);
@@ -184,7 +184,7 @@ export function selectionDesignName(source) {
  * there (cut-plan.js fileShape); `stock` = 'keep' (the stock thickness is not touched) | 'part' (it becomes the payload's) | null (as above: TASK 794);
  * `fit: false` = the view is left as it is. Every region with levels keeps its part's own FRAME (relief-frame.js: its levels follow its outline when it moves).
  */
-export function importFusionSelection(payload, { controller, prepare = null, onImport = null, addAs = null, place = null, join = true, stock = null, fit = true } = {}) {
+export function importFusionSelection(payload, { controller, prepare = null, onImport = null, addAs = null, place = null, join = true, stock = null, fit = true, clearGroup = null } = {}) {
   let data = payload;
   if (typeof data === 'string') {
     try { data = JSON.parse(data); } catch (e) { return { ok: false, message: `Invalid selection_data JSON: ${e.message}` }; }
@@ -195,14 +195,41 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   if (!st || !st.joints || !Array.isArray(st.shapes)) {
     return { ok: false, message: 'Cannot import selection: sketch state is not ready' };
   }
-  // TASK S2 (advisor turn 2722): an import is a deliberate action of its own (no edit session): an operation OPEN in Prepare is confirmed first (OK, its own undo step),
-  // so an import never lands inside an uncommitted session and a Cancel never undoes part of it
-  if (prepare && typeof prepare.ok === 'function') prepare.ok();
 
   const regions = Array.isArray(data.regions) ? data.regions : [];
   const chains = Array.isArray(data.chains) ? data.chains : [];
   const sourceName = (data.source && data.source.name && String(data.source.name).trim()) || 'selection';
   const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean).map(String) : [];
+
+  const selectionId = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : typeof addAs === 'string' && addAs ? addAs : null; // TASK 841: addAs
+  const prior = selectionId ? getSelections().find((e) => e.id === selectionId) || null : null;
+  const isSameIdUpdate = Boolean(data.selectionId && prior);
+  const pSig = payloadSig(data);
+
+  // TASK 795c: a byte-identical (canonically equal) payload on the same selectionId is a strict no-op
+  // (leaves plan, operations, stock, SVG export, and redoStack untouched).
+  if (isSameIdUpdate && prior.payloadSig && pSig === prior.payloadSig) {
+    return {
+      ok: true,
+      unchanged: true,
+      sketch: (st.sketches || []).find((s) => s.id === prior.sketchId) || null,
+      imported: 0,
+      joints: [],
+      shapes: [],
+      regionCount: regions.length,
+      chainCount: chains.length,
+      cutKeys: [...prior.cutKeys],
+      warnings,
+      name: selectionDesignName(data.source),
+      selectionId: prior.id,
+      replaced: false,
+      message: `Updated ${sourceName}: ${regions.length} regions, ${chains.length} chains`,
+    };
+  }
+
+  // TASK S2 (advisor turn 2722): an import is a deliberate action of its own (no edit session): an operation OPEN in Prepare is confirmed first (OK, its own undo step),
+  // so an import never lands inside an uncommitted session and a Cancel never undoes part of it
+  if (prepare && typeof prepare.ok === 'function') prepare.ok();
 
   const yUp = !(data.coordSystem && String(data.coordSystem.yAxis).toLowerCase() === 'down');
   const scale = UNIT_SCALE_MM[String(data.units || 'mm').toLowerCase()] || 1;
@@ -265,7 +292,38 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   }));
 
   const counts = `${regions.length} regions, ${chains.length} chains`;
+  const clearTok = isSameIdUpdate && clearGroup
+    ? makeClearToken({ restoreIds: [selectionId], clearPayload: { selectionId, group: clearGroup } })
+    : undefined;
   if (uniquePrims.length === 0) {
+    // TASK 795c: if an existing selection receives an empty same-id update (e.g. last row removed), clear its regions
+    // from operations (keeping emptied ops, EMPTY) and remove the empty selection entry without echoing clear_selection.
+    if (isSameIdUpdate) {
+      if (typeof st.saveState === 'function') st.saveState('update ' + sourceName, { host: true });
+      renameGeometry(new Map(), new Set(prior.cutKeys), { keepEmpty: true });
+      dropPriorSketchOnly(st, prior);
+      setSelections(getSelections().filter((e) => e.id !== selectionId), {
+        sync: false,
+        ...(clearTok ? { clearToken: clearTok } : {}),
+      });
+      if (prepare && typeof prepare.afterRestore === 'function') prepare.afterRestore();
+      if (typeof onImport === 'function') onImport({ sketch: null, shapes: [], joints: [], payload: data, warnings });
+      return {
+        ok: true,
+        sketch: null,
+        imported: 0,
+        joints: [],
+        shapes: [],
+        regionCount: 0,
+        chainCount: 0,
+        cutKeys: [],
+        warnings,
+        name: selectionDesignName(data.source),
+        selectionId,
+        replaced: false,
+        message: `Updated ${sourceName}: 0 regions, 0 chains`,
+      };
+    }
     return {
       ok: true,
       sketch: null,
@@ -286,9 +344,6 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   // TASK 795: a payload WITH a selectionId (the add-in's Add selection) is ADDED to the design (its entry in selection-list.js); the same id again updates that
   // selection in place; a payload without one (Open STL, an old add-in) REPLACES the design as before. `fresh` = the design starts over (a replace, or an add to an
   // empty design): the stock thickness and the operation order are this part's own (TASK 794).
-  const selectionId = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : typeof addAs === 'string' && addAs ? addAs : null; // TASK 841: addAs
-  const prior = selectionId ? getSelections().find((e) => e.id === selectionId) || null : null;
-  const priorRecs = priorRecords(data.selectionId ? prior : null); // TASK 841: an STL part sliced again (addAs) starts afresh, as a re-slice always did
   const planEmpty = !storeOps().length && !regionKeys().length;
   const fresh = !selectionId || (!prior && st.shapes.length === 0 && planEmpty);
   // TASK 712: the selection replaces the design (see the doc comment): the empty document, and no cut-plan record.
@@ -297,7 +352,11 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     deserializeDocument(emptyDocument(), st);
     applyStore(null); // TASK S1: no operation, no region
     setStlSource(null); // TASK 790: so is the STL it came from (an STL import, stl-import.js, sets the new one once this returns)
-  } else if (prior) dropSelectionGeometry(st, prior);
+  } else if (prior && !isSameIdUpdate) {
+    // TASK 841: STL re-slice via addAs replaces in place using the prior STL slot.
+    renameGeometry(new Map(), new Set(prior.cutKeys));
+    dropPriorSketchOnly(st, prior);
+  }
 
   const sketch = addSketch(st, sourceName);
   activateSketch(st, sketch.id);
@@ -340,7 +399,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   // If Fusion emitted a hole loop as its own standalone region (like a circle disk inside a rectangle in sketch mode),
   // keep the outer region as a derived `loop:<id>` rather than locking the hole inside `makeProfile`, so BOTH stay selectable in Prepare.
   const standaloneOuterIds = new Set(matchedRegions.map((m) => m.outerLoop && m.outerLoop.id).filter(Boolean));
-  const cutKeys = [], cutInfo = new Map(); // TASK 795: cutInfo: plan key -> the payload's region / chain it came from
+  const cutKeys = [], cutInfo = new Map(), builtRegions = new Map(); // TASK 795: cutInfo: plan key -> raw region / chain
 
   for (const m of matchedRegions) {
     if (!m.outerLoop) {
@@ -357,9 +416,19 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
       key = keyOf('loop', m.outerLoop.id);
     }
     const rec = buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings), levelsOf(m.reg));
-    setRegionSource(key, rec); // TASK S1: what the import said (a Depth of 'model' follows it)
-    fileShape(key, rec, st, { join });
-    if (rec.levels) setRegionFrame(key, frameOf(st, m.outerLoop.edges, localOf, at)); // TASK 841: the part's own frame: its levels follow its outline
+    const regData = {
+      source: { cutType: rec.cutType ?? null, cutDepth: rec.cutDepth ?? 'unset' },
+      ...(rec.slope ? { slope: rec.slope } : {}),
+      ...(rec.levels ? { levels: rec.levels } : {}),
+      ...(rec.levels ? { frame: frameOf(st, m.outerLoop.edges, localOf, at) } : {}),
+    };
+    if (!isSameIdUpdate) {
+      setRegionSource(key, rec); // TASK S1: what the import said (a Depth of 'model' follows it)
+      fileShape(key, rec, st, { join });
+      if (rec.levels) setRegionFrame(key, regData.frame); // TASK 841: the part's own frame: its levels follow its outline
+    } else {
+      builtRegions.set(key, regData);
+    }
     cutKeys.push(key); cutInfo.set(key, m.reg);
   }
 
@@ -382,18 +451,60 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     const key = keyOf('chain', matchedChain.id);
     if (!cutKeys.includes(key) && !memberOf(key)) {
       const rec = buildCutRecord(cr.chain, warnings);
-      setRegionSource(key, rec);
-      fileShape(key, rec, st, { join });
+      if (!isSameIdUpdate) {
+        setRegionSource(key, rec);
+        fileShape(key, rec, st, { join });
+      } else {
+        builtRegions.set(key, { source: { cutType: null, cutDepth: rec.cutDepth ?? 'unset' } });
+      }
       cutKeys.push(key); cutInfo.set(key, cr.chain);
     }
+  }
+
+  if (isSameIdUpdate) {
+    // TASK 795c (SELECTION-BRIDGE.md 5.5 rule 2): match regions/chains by canonical JSON except `id` and `label`.
+    // Same region -> keep ALL operations and settings (rename old key -> new key, keeping empty ops alive).
+    // Gone region -> removed from every operation (emptied operations stay listed, EMPTY).
+    // New region -> stored in regions only (default settings, in no operation).
+    const oldBySig = new Map();
+    for (const oldKey of prior.cutKeys) {
+      const s = prior.sigs && prior.sigs[oldKey];
+      if (!s) continue;
+      if (!oldBySig.has(s)) oldBySig.set(s, []);
+      oldBySig.get(s).push(oldKey);
+    }
+    const renameMap = new Map();
+    const matchedNew = new Set();
+    for (const newKey of cutKeys) {
+      const s = regionSig(cutInfo.get(newKey));
+      const queue = oldBySig.get(s);
+      if (queue && queue.length > 0) {
+        renameMap.set(queue.shift(), newKey);
+        matchedNew.add(newKey);
+      }
+    }
+    const goneKeys = new Set(prior.cutKeys.filter((k) => !renameMap.has(k)));
+    renameGeometry(renameMap, goneKeys, { keepEmpty: true });
+    for (const newKey of cutKeys) {
+      const regData = builtRegions.get(newKey);
+      if (!regData) continue;
+      if (matchedNew.has(newKey)) {
+        setRegion(newKey, regData);
+      } else {
+        setRegion(newKey, { ...regData, source: { cutType: null, cutDepth: regData.source ? regData.source.cutDepth : 'unset' } });
+      }
+    }
+    dropPriorSketchOnly(st, prior);
   }
 
   // TASK 795: the selection's entry in the list (an update keeps the settings of the regions still there)
   const stockThickness = data.stock && data.stock.thicknessMm != null ? Number(data.stock.thicknessMm) : null;
   const thicknessMm = stockThickness != null && Number.isFinite(stockThickness) && stockThickness > 0 ? stockThickness : null;
   const entry = buildEntry({ id: selectionId, data, sourceName, regionCount: regions.length, sketch, shapes: built.shapes, cutKeys, cutInfo, thicknessMm });
-  keepSettings(entry, priorRecs, st);
-  setSelections(selectionId ? upsert(getSelections(), entry) : [entry]);
+  setSelections(selectionId ? upsert(getSelections(), entry) : [entry], {
+    sync: !selectionId,
+    ...(clearTok ? { clearToken: clearTok } : {}),
+  });
 
   // Stock thickness (TASK 794): a fresh start takes this part's (the app's default when the payload has none) and its own operation order; an add to a design that has
   // parts keeps the order and the stock never gets thinner than the thickest part (or than the user set it). TASK 841: `stock` 'keep' / 'part' say it instead.

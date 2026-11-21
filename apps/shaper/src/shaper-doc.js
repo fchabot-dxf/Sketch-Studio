@@ -12,7 +12,7 @@ import { captureStore, applyStore, storeOps, membersOf, regionOf, removeRef, ins
 import { wallsOf, levelsBand } from '#core/stepped-cut.js'; // TASK S2: a Contour's walls in effect; the band a Roughing / Contour is cut down to
 import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 459): {thickness, width, height, margin}, base mm
 import { captureStl, applyStl, captureStlDoc, applyStlDoc } from './stl-source.js'; // TASK 790: the STL the design came from (or none)
-import { captureSelections, applySelections, getSelections } from './selection-list.js'; // TASK 795: the selection list
+import { captureSelections, applySelections, getSelections, getClearToken } from './selection-list.js'; // TASK 795: the selection list
 import { forget as forgetPaths } from './op-paths.js'; // TASK S3: a document read is not out of date (op-paths.js OUT OF DATE)
 
 // TASK 774: 2 = written under the SAME-SKETCH hole rule of derived faces (commit 27c00a4); a document below 2 (or a sidecar without a version) was
@@ -29,13 +29,13 @@ const OWN_CONTOUR_VERSION = 4; // TASK S2
 
 /** TASK 743: what one step of the shared undo history keeps of Prepare (prepare-stage.js hostSnapshot). TASK S1: the operations store (its regions shared by
  *  reference: never mutated). TASK 790: + the STL source (stl-source.js, without its mesh): undoing an STL import / a new Up or Units gives the previous one back (or none). */
-export const capturePrepare = () => ({ store: captureStore(), stl: captureStl(), selections: captureSelections(), stockThickness: getStock().thickness });
+export const capturePrepare = () => ({ store: captureStore(), stl: captureStl(), selections: captureSelections(), stockThickness: getStock().thickness, clearToken: getClearToken() });
 /** TASK S1: the part of a Prepare snapshot an edit compares (prepare-stage.js cutEdit): everything but the regions (the large levels: never changed by an edit). */
 export const comparablePrepare = (p) => JSON.stringify([p.store.operations, p.store.nextSeq, p.store.listOrder, p.stl, p.selections, p.stockThickness]);
 export function applyPrepare(p) {
   applyStore(p && p.store);
   applyStl(p && p.stl);
-  applySelections(p && p.selections); // TASK 795: the selection list, and the stock thickness an add set (TASK 794)
+  applySelections(p && p.selections, p && 'clearToken' in p ? p.clearToken : undefined); // TASK 795: the selection list, and the stock thickness an add set (TASK 794)
   if (p && Number.isFinite(p.stockThickness)) setStock({ ...getStock(), thickness: p.stockThickness });
 }
 

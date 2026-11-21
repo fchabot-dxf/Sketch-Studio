@@ -136,19 +136,22 @@ try {
   imp(A());
   eq(getStock().thickness, 12, '794: after Clear all the next part\'s thickness');
 
-  // ── 5. The same selectionId again updates in place ──
-  V2_PLAN.get(getSelections()[0].cutKeys[0]).toolDia = 9;
+  // ── 5. The same selectionId again updates in place (TASK 795c / SA-15: canonical JSON except id & label matches; changed depth/cutType arrives new & unassigned) ──
+  const holeKey0 = getSelections()[0].cutKeys[1];
+  V2_PLAN.get(holeKey0).toolDia = 9;
   const before = snap();
   h0 = st.history.length;
   const upd = A({ stock: { thicknessMm: 12 } });
-  upd.regions[0].depthMm = 15; // Fusion changed the outline's depth; the hole is the same
+  upd.regions[1].id = 'h_renamed';
+  upd.regions[1].label = 'Hole renamed';
+  upd.regions[0].depthMm = 15; // Changed depth -> NOT the same region under canonical identity: leaves old op empty, arrives unassigned
   const r4 = imp(upd);
   eq(r4.message, 'Updated Tray: 2 regions, 0 chains', 'the same id again says Updated');
   eq(st.history.length, h0 + 1, 'an update is ONE undo step');
   eq(ids(), ['sel-A'], 'still one row');
   eq(st.shapes.length, 5, 'the old regions are replaced, not piled up');
-  const outline = [...V2_PLAN.values()].find((r) => r.cutType === 'exterior');
-  eq([outline.toolDia, outline.cutDepth], [9, 15], 'the same region keeps the user\'s settings; what Fusion changed (the depth) follows Fusion');
+  const holeRec = [...V2_PLAN.values()].find((r) => r.cutType === 'interior');
+  eq([holeRec.toolDia, holeRec.cutDepth], [9, 12], 'the unchanged region (id/label shifted) keeps the user\'s settings and operation');
   st.undo();
   eq(snap().list, before.list, 'Undo of the update: the list');
   eq(snap().shapes, before.shapes, 'Undo of the update: the old shapes');
@@ -183,7 +186,7 @@ try {
   // ── 8. The cut type mapping is unchanged by the list (TASK 792: there is no stepped type any more: an unknown type is left unset) ──
   eq([mapFusionCutType('stepped-pocket'), mapFusionCutType('pocket'), mapFusionCutType('outside')], [null, 'pocket', 'exterior'], 'cutType mapping');
 
-  // ── 9. The rows of the Prepare bar: fake window.adsk.fusionSendData records what goes to Fusion ──
+  // ── 9. Legacy payloads without summary.items: one row per selection, immediate X removal ──
   setSelections([]); V2_PLAN.clear();
   const sent = [];
   const view = app.document.createElement('div'); app.document.body.append(view);
@@ -198,7 +201,9 @@ try {
   const rows = () => [...bar.listEl.querySelectorAll('.shaper-fusion-sel')];
   eq(rows().length, 0, 'no selection: no rows');
   ok(bar.listEl.hidden, 'the list is hidden while empty');
-  imp(A()); imp(B());
+  const legacyA = A({ summary: { mode: 'Single Solid Body', items: [], text: 'Tray · body' } });
+  const legacyB = B({ summary: { mode: 'Entire Sketch', items: [], text: 'Sketch2 · 4 lines' } });
+  imp(legacyA); imp(legacyB);
   eq(rows().map((r) => r.querySelector('.shaper-fusion-sel-text').textContent), ['Tray · body', 'Sketch2 · 4 lines'], 'one row per selection, its words');
   ok(bar.listEl.querySelector('#btn-fusion-clear-selections'), 'Clear all shows from two selections');
   rows()[0].dispatchEvent(new app.window.Event('mouseenter'));

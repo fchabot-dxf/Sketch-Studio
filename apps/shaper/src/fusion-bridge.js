@@ -12,7 +12,7 @@
 import { dbg } from '#core/debug.js';
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
-import { getSelections, onSelectionsChange } from './selection-list.js'; // TASK 795: the selection list the Prepare bar shows
+import { getSelections, onSelectionsChange, selectionRowsOf } from './selection-list.js'; // TASK 795 / 795c: the selection list the Prepare bar shows
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
@@ -39,6 +39,7 @@ export function mapFusionLengthUnit(raw) {
 }
 
 // Message action names (declared once; D:/APPS/shaper-addin/bridge.py holds the matching Python copy — keep both in sync).
+// SA-15 / TASK 795c contract: clear_selection { selectionId, group? } / restore_selection { selectionId }
 // SA-13 / TASK 799 contract:
 //   - toolpaths: { revision, frame: { units, yAxis, originMm, uAxis, vAxis, normal, topHeightMm }, paths: [{ op, cutType, color?, z, points: [[x, y], ...], closed }] }
 //   - toolpaths_clear: {}
@@ -49,9 +50,20 @@ export const FUSION_ACTIONS = Object.freeze({
   ADD_SELECTION: 'add_selection',
   SELECTION_DATA: 'selection_data',
   HIGHLIGHT_SELECTION: 'highlight_selection', // TASK 795 (SA-12): { selectionId | null } brightens one selection's overlay in Fusion (null: all back to their cut-type colours)
-  CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12): { selectionId | 'all' } deletes that selection's overlay (or every one)
+  CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12 / SA-15): { selectionId, group? } | { selectionId: 'all' }
+  RESTORE_SELECTION: 'restore_selection', // TASK 795c (SA-15): { selectionId } restores the cleared token list on Undo
   TOOLPATHS: 'toolpaths', // TASK 799 (SA-13): live bit-centre toolpaths overlay in Fusion
   TOOLPATHS_CLEAR: 'toolpaths_clear', // TASK 799 (SA-13): clears the Fusion toolpaths overlay
+});
+
+// Declared 16 px icons per SA-15 summary.items kind (mirrors shaper-addin/resources/kinds/<kind>.png).
+const SUMMARY_ITEM_ICONS = Object.freeze({
+  body: '<rect x="2.5" y="4" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 4V2.5h9v9H12" stroke="currentColor" stroke-width="1.3"/>',
+  face: '<rect x="2.5" y="2.5" width="11" height="11" rx="1" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.3"/>',
+  'sloped-face': '<path d="M4.5 3h7l2 10h-11z" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.3"/>',
+  sketch: '<rect x="2.5" y="2.5" width="11" height="11" rx="1" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2.2 1.5"/>',
+  profile: '<path d="M3 3h10v10H3z" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-width="1.3"/>',
+  curve: '<path d="M2.5 12.5C5 4 11 12 13.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
 });
 
 const KNOWN_ACTIONS = new Set(Object.values(FUSION_ACTIONS));
@@ -328,7 +340,7 @@ export function mountFusionPrepareBar({
 
   let onIncomingAction = () => {};
   let highlighted = null; // the selection id last sent in highlight_selection (null: none)
-
+  let pendingClear = null; // TASK 795c: { selectionId, group } awaiting re-sent selection_data from add-in
 
   const bridge = createFusionBridge({
     globalTarget,
@@ -340,45 +352,69 @@ export function mountFusionPrepareBar({
     onNotice: (text) => {
       showNotice(text, false);
     },
-    onError: (text) => {
+    onError: (text, detail) => {
+      if (detail && detail.receivedAction === FUSION_ACTIONS.CLEAR_SELECTION) pendingClear = null;
       if (!bridge.canSend()) statusEl.dataset.state = (waiting && !timedOut) ? 'waiting' : 'unavailable';
       else if (statusEl.dataset.state !== 'connected') statusEl.dataset.state = 'error';
       showNotice(text, true);
     },
-    onSelectionData,
+    onSelectionData: (data) => {
+      const clearGroup = (pendingClear && data && data.selectionId === pendingClear.selectionId)
+        ? pendingClear.group
+        : null;
+      pendingClear = null;
+      return onSelectionData(data, { clearGroup });
+    },
     onMessage: (action) => { onIncomingAction(action); },
   });
 
-  // TASK 795 (SA-12): only a selection the add-in sent (entry.fusion) has an overlay in Fusion; an STL's row or an old add-in's is the palette's alone.
+  // TASK 795 (SA-12) / TASK 795c (SA-15): only a selection the add-in sent (entry.fusion) has an overlay in Fusion.
   const sendHighlight = (id) => {
     if (highlighted === id) return;
     highlighted = id;
     if (bridge.canSend()) bridge.send(FUSION_ACTIONS.HIGHLIGHT_SELECTION, { selectionId: id });
   };
   const renderList = () => {
-    const rows = getSelections();
+    const rows = getSelections().flatMap(selectionRowsOf);
     listEl.hidden = rows.length === 0;
     const frag = document.createDocumentFragment();
-    for (const e of rows) {
+    for (const r of rows) {
       const row = document.createElement('div');
       row.className = 'shaper-fusion-sel';
-      row.dataset.selectionId = e.id;
+      row.dataset.selectionId = r.id;
+      if (r.group) row.dataset.group = r.group;
+      if (r.kind) row.dataset.kind = r.kind;
       row.tabIndex = 0;
+      const iconMarkup = r.kind && SUMMARY_ITEM_ICONS[r.kind];
+      let iconEl = null;
+      if (iconMarkup) {
+        iconEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        iconEl.setAttribute('class', 'shaper-fusion-sel-icon');
+        iconEl.setAttribute('viewBox', '0 0 16 16');
+        iconEl.setAttribute('fill', 'none');
+        iconEl.setAttribute('aria-hidden', 'true');
+        iconEl.innerHTML = iconMarkup;
+      }
       const text = document.createElement('span');
       text.className = 'shaper-fusion-sel-text';
-      text.textContent = e.text;
+      text.textContent = r.text;
       const x = document.createElement('button');
       x.type = 'button';
       x.className = 'shaper-fusion-sel-x';
       x.textContent = '✕';
-      x.title = `Remove ${e.text}`;
-      x.setAttribute('aria-label', `Remove ${e.text}`);
-      x.addEventListener('click', (ev) => { ev.stopPropagation(); onRemoveSelection(e.id); });
-      row.append(text, x);
-      if (e.fusion) {
-        row.addEventListener('mouseenter', () => sendHighlight(e.id));
+      x.title = `Remove ${r.text}`;
+      x.setAttribute('aria-label', `Remove ${r.text}`);
+      x.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (r.fusion && r.group) pendingClear = { selectionId: r.id, group: r.group };
+        onRemoveSelection(r.id, r.group);
+      });
+      if (iconEl) row.append(iconEl, text, x);
+      else row.append(text, x);
+      if (r.fusion) {
+        row.addEventListener('mouseenter', () => sendHighlight(r.id));
         row.addEventListener('mouseleave', () => sendHighlight(null));
-        row.addEventListener('focusin', () => sendHighlight(e.id));
+        row.addEventListener('focusin', () => sendHighlight(r.id));
         row.addEventListener('focusout', () => sendHighlight(null));
       }
       frag.append(row);
@@ -393,13 +429,21 @@ export function mountFusionPrepareBar({
       frag.append(clear);
     }
     listEl.replaceChildren(frag);
-    if (highlighted && !rows.some((e) => e.id === highlighted)) sendHighlight(null); // the highlighted row left the list: no mouseleave will come
+    if (highlighted && !rows.some((r) => r.id === highlighted)) sendHighlight(null); // the highlighted selection left the list: no mouseleave will come
   };
-  const stopList = onSelectionsChange(({ removed, all }) => {
-    const gone = removed.filter((e) => e.fusion);
-    if (gone.length && bridge.canSend()) {
-      if (all) bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, { selectionId: 'all' }); // Clear all
-      else for (const e of gone) bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, { selectionId: e.id }); // an X, an Undo / Redo of an add, a replace
+  const stopList = onSelectionsChange(({ removed, all, sync = true, restoreIds = null, redoClear = null }) => {
+    if (bridge.canSend()) {
+      if (Array.isArray(restoreIds) && restoreIds.length) {
+        for (const sid of restoreIds) bridge.send(FUSION_ACTIONS.RESTORE_SELECTION, { selectionId: sid });
+      } else if (redoClear) {
+        bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, redoClear);
+      } else if (sync !== false) {
+        const gone = removed.filter((e) => e.fusion);
+        if (gone.length) {
+          if (all) bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, { selectionId: 'all' }); // Clear all
+          else for (const e of gone) bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, { selectionId: e.id }); // an X, an Undo / Redo of an add, a replace
+        }
+      }
     }
     renderList();
   });

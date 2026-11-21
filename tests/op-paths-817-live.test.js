@@ -6,7 +6,8 @@
 //     then draws the paths of the card's settings; a later change: faded, "Preview" again;
 //  3. OK: the row spins (only that row; the 805 probe: nothing moves when the spinner appears), the page stays usable: a click on the canvas and a pan / pinch while it
 //     generates (their input delay measured in the page), the main thread's LONG TASKS during the generation (none over 100 ms; the numbers printed); the paths appear;
-//  4. an On line with Tabs, open: its paths as opened faint, its TAB HANDLES drawn (placed before OK; TASK 836: the lead-in of before is gone).
+//  4. an On line, open: its paths as opened faint, no new path; a change asks for no generation. (TASK 836: the lead-in, and its handle checked here, are gone. The
+//     open operation's TAB handles are checked in tests/op-paths-817-node.test.js case 4: this relief's outline, 720 short segments, takes no tab: refused, no handle.)
 // No console error, no page exception. Screenshots .evidence/817/ (the spinning row zoomed, the Preview button spinning, the open session).
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -163,20 +164,20 @@ try {
     await sleep(300);
     assert.ok(await solid() > 0 && await faint() === 0, D + ': the paths appear (drawn, not faint)');
     assert.ok(/levels/.test(await evalJs(`document.querySelector('${rowSel(rough)} .ops-sub').textContent`)), D + ': the row tells what it cuts');
-    // ── 4. an On line with Tabs, open: its paths as opened faint + its tab handles ──
+    // ── 4. an On line, open: its paths as opened faint, no new path; a change asks for nothing ──
     await listOpen(false);
     await clickEl('#prepare-panel .cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
     await clickEl('.cut-type-opt[data-id="online"]'); await sleep(200);
     await typeField('.cut-depth', '2');
-    await evalJs(`document.querySelector('.cut-row[data-row="holdPart"] .cut-preset[data-value="tabs"]').click()`); await sleep(200);
     await clickEl('#prepare-panel .cut-ok');
     await waitFor(`import('/apps/shaper/src/op-paths.js').then((m) => m.generatingCount() === 0)`, D + ': the On line generated', 60000);
     const online = await opIdOf('online');
     await openOpLive(t, online);
     await listOpen(false);
     assert.ok(await faint() > 0 && await solid() === 0, D + ': the open On line: its paths as opened, faint; no new path');
-    assert.ok(await evalJs(`document.querySelectorAll('#prepare-canvas .sk-tab-handle').length`) > 0, D + ': its tab handles are drawn (the tabs are placed before OK)');
-    await shot('4-open-online-handle.png', ['#prepare-canvas'], 1);
+    await typeField('.cut-depth', '3');
+    assert.ok(await generating() === 0 && await faint() > 0 && await solid() === 0, D + ': a change while open: no generation, the faint paths as opened, no new path');
+    await shot('4-open-online.png', ['#prepare-canvas'], 1);
     await clickEl('#prepare-panel .cut-cancel');
   };
 

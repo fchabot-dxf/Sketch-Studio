@@ -198,7 +198,7 @@ await (async () => {
 
     // cutter shape: the row sits below bit diameter; popover to the left with flat / ball / V-bit (+ the V-bit angle presets)
     const order = await evalJs(`[...document.querySelectorAll('.cut-rows .cut-row')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.param || r.dataset.row)`); // the rows shown (TASK 714: a stepped type's Step depth row is hidden here)
-    assert.deepStrictEqual(order, ['cutDepth', 'holdPart', 'cutOffset', 'toolDia', 'cutterShape'], 'cutter shape is directly below bit diameter (TASK 742: an Outside card has its Hold part row under the depth)');
+    assert.deepStrictEqual(order, ['cutDepth', 'holdPart', 'cutOffset', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, 'cutter shape is directly below bit diameter (TASK 742: an Outside card has its Hold part row under the depth)');
     await clickEl('.cut-shape-trigger'); await popOpen('.cut-shape-pop');
     const sp = await rectOf('.cut-shape-pop');
     assert.ok(sp && sp.right <= cardR.left, 'cutter shape popover opens to the LEFT');

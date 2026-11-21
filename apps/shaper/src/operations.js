@@ -28,6 +28,7 @@ import { smoothingOf } from '#core/level-smooth.js'; // TASK 809
 import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
 import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
+import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit (its tool key carries its cone)
 
 const round6 = (n) => Math.round(Number(n) * 1e6) / 1e6;
 const isSet = (d) => d != null && d !== 'unset' && Number.isFinite(Number(d));
@@ -41,8 +42,10 @@ export function lengthLabel(mm) {
   return `${lengthText(mm, { unit: u, show: 'field' })} ${u}`;
 }
 
-/** A tool's name: "¼″ end mill", "6 mm ball nose", "⅛″ 60° V-bit" (a bit of a BIT_PRESETS size goes by its fraction). */
+/** A tool's name: "¼″ end mill", "6 mm ball nose", "⅛″ 60° V-bit" (a bit of a BIT_PRESETS size goes by its fraction). TASK 842: a bit picked from the tool
+ *  table goes by its NAME ("1/8 upcut"); a tapered bit without one by its tip and its taper per side ("1 mm 3.5° tapered ball nose"). */
 function toolName(tool) {
+  if (tool.name) return tool.name;
   const preset = BIT_PRESETS.find((p) => Math.abs(p.value - tool.dia) < 1e-6);
   const size = tool.dia > 0 ? (preset ? `${preset.label}″` : lengthLabel(tool.dia)) : 'no bit size';
   return [size, tool.angle != null ? angleText(tool.angle, { show: 'deg' }) : null, CUTTER_SHAPES.find((s) => s.id === tool.shape).label].filter(Boolean).join(' ');
@@ -54,8 +57,11 @@ export function toolOf(rec) {
   if (!t || t.opRank === 0) return null;
   const shape = CUTTER_SHAPES.some((s) => s.id === rec.cutterShape) ? rec.cutterShape : 'endmill';
   const dia = Number(rec.toolDia) > 0 ? round6(rec.toolDia) : 0;
-  const angle = shape === 'vbit' ? Number(rec.cutterAngle) || 90 : null;
-  const tool = { key: `${shape}|${dia}|${angle ?? ''}`, shape, dia, angle };
+  const tapered = isTaperedCutter(shape); // TASK 842: a tapered bit's tool is also its cone (taper per side, shank)
+  const angle = shape === 'vbit' ? Number(rec.cutterAngle) || 90 : tapered ? round6(Number(rec.taperAngle) || 0) : null;
+  const shank = tapered ? round6(Number(rec.shankDia) || 0) : null;
+  const name = typeof rec.bitName === 'string' && rec.bitName ? rec.bitName : null; // TASK 842: a table bit's name (its copy in the record): two bits of one size are two tools
+  const tool = { key: `${shape}|${dia}|${angle ?? ''}${tapered ? `|${shank}` : ''}${name ? `|${name}` : ''}`, shape, dia, angle, ...(tapered ? { shank } : {}), ...(name ? { name } : {}) };
   return { ...tool, label: toolName(tool) };
 }
 

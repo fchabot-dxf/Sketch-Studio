@@ -66,7 +66,7 @@ try {
   const bar = q('#prepare-ribbon .sk-ribbon');
   ok(bar, '1: the toolbar is a tool ribbon (.sk-ribbon) in #prepare-ribbon');
   eq([...bar.querySelectorAll('.sk-ribbon-group')].map((g) => [g.dataset.section, [...g.querySelectorAll('.sk-ribbon-btn')].map((b) => b.id)]),
-    [['operations', CUT_TYPES.map((t) => `op-type-${t.id}`)], ['recalculate', ['op-recalculate']]],
+    [['operations', CUT_TYPES.map((t) => `op-type-${t.id}`)], ['recalculate', ['op-recalculate']], ['tools', ['op-tool-table']] /* TASK 842: then the Tools section (the Tool table) */],
     '1: one button per operation type in THE declaration\'s order (CUT_TYPES), then Recalculate in a section of its own (the divider)');
   eq(CUT_TYPES.map((t) => t.id), ['exterior', 'interior', 'pocket', 'online', 'guide', 'stock', 'roughing', 'contour'], '1: (the declaration\'s order: Outside, Inside, Pocket, On line, Guide, Stock, Roughing, Contour)');
   eq(CUT_TYPES.map((t) => q(`#op-type-${t.id} .sk-ribbon-lbl`).textContent), CUT_TYPES.map((t) => hintLabel(choiceId('cutType', t.id))), '1: each button\'s name is its type\'s param-hints label');

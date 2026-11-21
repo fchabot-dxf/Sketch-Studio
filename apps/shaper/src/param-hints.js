@@ -73,6 +73,24 @@ const PARAMS = {
   holdThickness: { label: 'Tab thickness', hint: 'How much wood each tab keeps, up from the bottom of the cut.' },
   skinThickness: { label: 'Skin thickness', hint: 'How thick the layer left at the bottom is.' }, // the holdThickness row with Onion skin
   cutOffset: { label: 'Offset', hint: 'Moves the cut this far from the line, toward its waste side: a part comes out bigger, a hole or pocket smaller. The arrows button switches the side. On line cuts ignore it.' },
+  toolBit: { label: 'Bit', hint: 'A bit from your tool table, or Custom to type its diameter and shape. The operation keeps its own copy of the bit, so changing or deleting the bit in the table later does not change this design.' }, // TASK 842
+  bitCustom: { label: 'Custom', hint: 'Type the bit diameter and pick the cutter shape yourself.' },
+  toolTableEdit: { label: 'Edit tool table…', hint: 'Add, change, duplicate or delete the bits of your tool table. It is saved for all your designs.' },
+  // ── TASK 842: the Tool table window ──
+  toolTable: { label: 'Tool table', hint: 'Your bits, for all your designs. Pick one in an operation’s Bit row; the operation keeps its own copy of it.' },
+  ttAdd: { label: 'Add bit', hint: 'A new bit: its name, its type and its sizes.' },
+  ttName: { label: 'Name', hint: 'What the operations and the tool changes call it, e.g. “1/8 upcut”.' },
+  ttType: { label: 'Type', hint: 'The shape of its tip. Each type has only the sizes it needs.' },
+  ttUnit: { label: 'Unit', hint: 'The unit its sizes are typed and shown in, whatever the document uses. Fractions such as 1/8 or 1 1/2 work too.' },
+  ttDiameter: { label: 'Diameter', hint: 'The cutting diameter. It is written to the file as the bit diameter.' },
+  ttAngle: { label: 'Angle', hint: 'The V-bit’s included angle: the whole V, tip to both sides.' },
+  ttTipDiameter: { label: 'Tip diameter', hint: 'The diameter of the tip (twice the ball’s radius on a ball tip). It is written to the file as the bit diameter: the tip is what cuts on the line at the bottom of a cut.' },
+  ttTaperAngle: { label: 'Taper angle (per side)', hint: 'How much each side of the cone leans from the bit’s axis.' },
+  ttShankDiameter: { label: 'Shank diameter', hint: 'Where the cone stops widening: the bit is never wider than its shank.' },
+  ttCutLength: { label: 'Cutting length', hint: 'How deep the flutes reach. An operation deeper than this shows a note. Leave it empty if you do not know it.' },
+  ttNotes: { label: 'Notes', hint: 'Anything you want to remember about this bit.' },
+  ttCancel: { label: 'Cancel', hint: 'Back to the list without saving.' },
+  ttSave: { label: 'Save', hint: 'Saves the bit to your tool table.' },
   toolDia: { label: 'Bit diameter', hint: 'The bit you plan to use. It is written to the file, and the previews and programmed paths are drawn for it.' },
   cutterShape: { label: 'Cutter shape', hint: 'For the 3D preview and the operations list only: the Origin is not told the shape, so load the matching bit.' },
   // ── the Export step's side cards ──
@@ -152,6 +170,8 @@ const CHOICE_HINTS = {
     endmill: 'Flat tip: flat floors and square walls.',
     ballnose: 'Rounded tip: rounded grooves and soft floor edges.',
     vbit: 'Pointed tip, for V-grooves and chamfers. Pick its angle under it.',
+    taperball: 'A small rounded tip on a cone: fine 3D detail with a strong shank. Comes from the tool table.', // TASK 842
+    taperflat: 'A small flat tip on a cone: fine detail with a strong shank. Comes from the tool table.',
   },
   holdPart: {
     off: 'Nothing holds it: the part comes free when the cut goes through.',

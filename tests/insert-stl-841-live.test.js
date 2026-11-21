@@ -106,7 +106,7 @@ async function phase(name) {
   assert.deepStrictEqual(before.ops.map((o) => o.type), ['exterior'], name + ': the plate is an Outside');
   // TASK 841: the toolbar's FIRST section is INSERT (its STL button)
   const groups = await evalJs(`[...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section + ':' + g.querySelector('.sk-ribbon-group-label').textContent)`);
-  assert.deepStrictEqual(groups, ['insert:Insert', 'operations:Operations', 'recalculate:Recalculate'], name + ': INSERT first in Prepare\'s toolbar');
+  assert.deepStrictEqual(groups, ['insert:Insert', 'operations:Operations', 'recalculate:Recalculate', 'tools:Tools'], name + ': INSERT first in Prepare\'s toolbar (TASK 842: Tools last)');
   // Insert STL (desktop: the toolbar's INSERT > STL; phone: the drawer's Insert STL…, next to Open STL…), the chooser answered with small.stl
   await evalJs('delete window.showOpenFilePicker'); // the <input type=file> path (as on a phone): the chooser can be intercepted
   await send('DOM.getDocument', { depth: 0 });

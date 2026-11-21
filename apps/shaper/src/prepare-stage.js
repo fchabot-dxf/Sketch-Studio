@@ -15,6 +15,7 @@ import { createOpList } from './op-list.js';                   // TASK 743: Prep
 import { hold as holdPaths, retain as retainPaths, request as requestPaths, onChange as onPathsChange, isGenerating, hasResult, recalculate as recalculatePaths, forget as forgetPaths, generatedSigs, isUpToDate } from './op-paths.js'; // TASK 817: the paths generated in the background
 import { createToolRibbon } from '#ui/tool-ribbon.js'; // TASK S3: the operations toolbar is Design's shared tool ribbon, with Prepare's own buttons
 import { hintLabel, hintText, choiceId } from './param-hints.js'; // TASK S3: a toolbar button's name and tooltip are its cut type's entry in THE table
+import { loadBits, TOOL_TABLE_KEY } from './tool-table.js'; // TASK 842: the user's tool table (the card's Bit menu)
 
 /**
  * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, opsEl, ribbonEl, ensureSketch, onViewChange })
@@ -35,12 +36,14 @@ export const NEWER_VERSION_NOTICE = 'Made by a newer version of the app: reload 
 export const UP_TO_DATE = 'All toolpaths are up to date.';
 export const SELECTED_UP_TO_DATE = 'The selected toolpaths are up to date.';
 // TASK S3: the Recalculate button's icon (18x18 inner markup in currentColor, as CUT_TYPES.icon): two arrows round a circle
+// TASK 842: the Tool table button's icon (18x18, currentColor): three bits standing in a rack (an end mill, a ball nose, a V-bit)
+const TOOL_TABLE_ICON = "<path d='M3 2.5v8h3v-8M7.5 2.5v7.5a1.5 1.5 0 0 0 3 0V2.5M12 2.5v6.5l1.5 3 1.5-3V2.5' fill='none' stroke='currentColor' stroke-width='1.3' stroke-linejoin='round'/><path d='M1.5 15.5h15' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/>";
 const RECALC_ICON = "<path d='M14.5 9a5.5 5.5 0 0 1-9.6 3.7' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M3.5 9a5.5 5.5 0 0 1 9.6-3.7' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M13.6 2.4v3.2h-3.2M4.4 15.6v-3.2h3.2' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/>";
 /** TASK 741: the one-time notice Prepare shows after a document that had V-carve regions was opened (#core/document.js deserializeDocument drops them and
  *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
 export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
 
-export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, leadGroups = [], ensureSketch = () => {}, onViewChange = () => {} }) {
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, leadGroups = [], ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {} }) { // TASK 842: openToolTable = the page's Tool table window
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
@@ -128,7 +131,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
   // precision, TASK 775: the DOCUMENT UNIT, and a key-less change: settings loaded / reset / arriving from another device) rebuilds the card with its notes and
   // the operations list (refreshCutPanel refreshes both), exactly when the card's fields re-label (the stage lives as long as the page)
-  SettingsManager.subscribe((setting) => { if (setting === null || setting === 'DOC_UNIT' || isPrecisionKey(setting)) refreshCutPanel(); });
+  SettingsManager.subscribe((setting) => { if (setting === null || setting === 'DOC_UNIT' || isPrecisionKey(setting) || setting === TOOL_TABLE_KEY) refreshCutPanel(); }); // TASK 842: a changed tool table (the card's Bit row names its bit, or says it left the table)
   // TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
   // state snapshots carry the cut plan through its generic `hostSnapshot` hook (below), so there is no second
   // history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset). TASK S1: compared without the
@@ -262,6 +265,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onOk: () => commitSession(),
     onCancel: () => cancelSession(),
     onPreview: () => { if (previewState() !== 'busy') previewSession(); }, // TASK 817
+    getBits: () => loadBits(), // TASK 842: the Bit menu lists the user's tool table
+    onOpenToolTable: () => openToolTable(), // TASK 842: the Bit menu's "Edit tool table..."
     onHoverShape: (key) => { if (prepareView) prepareView.hoverKey(key); },
     // TASK 810: Roughing's boundary Pick: the next click on a closed shape in Prepare sets the open Roughing's `boundaryShape` (TASK S2: an edit of its session); pressed
     // again, a click on nothing, or Esc: cancelled, nothing changes; a click on an open line: the line says why
@@ -375,6 +380,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
         ...leadGroups, // TASK 841: the page's sections first (INSERT: STL), the same section rules (its name's dropdown: in-bar ticks, reorder)
         { label: 'Operations', buttons: CUT_TYPES.map((t) => ({ id: `op-type-${t.id}`, label: hintLabel(choiceId('cutType', t.id)), hint: hintText(choiceId('cutType', t.id)), svg: cutIcon(t.icon), onClick: () => addOperation(t.id) })) },
         { label: 'Recalculate', fixed: true, buttons: [{ id: 'op-recalculate', label: hintLabel('opRecalculate'), hint: hintText('opRecalculate'), svg: cutIcon(RECALC_ICON), onClick: () => recalculateButton() }] },
+        // TASK 842: then (a fixed section of its own, as Recalculate: always shown, no dropdown) TOOLS: the Tool table window (the page's, main.js)
+        { label: 'Tools', fixed: true, buttons: [{ id: 'op-tool-table', label: hintLabel('toolTable'), hint: hintText('toolTable'), svg: cutIcon(TOOL_TABLE_ICON), onClick: () => openToolTable() }] },
       ],
     });
     ribbon.render(ribbonEl);

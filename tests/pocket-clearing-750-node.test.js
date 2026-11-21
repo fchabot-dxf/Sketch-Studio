@@ -1,7 +1,7 @@
 // tests/pocket-clearing-750-node.test.js — TASK 750: the programmed pocket's LOOP toggle (record field `loop`, any programmed pattern: Spiral, Raster, Morphed
 // spiral) and NO depth per pass (#core/pocket-clearing.js, the one derivation; apps/shaper/src/shaper-doc.js, the one place a stored document is normalised).
 //  1. rectangle, L, circle, island pocket, dumbbell (bit 6 mm, stepover 40 %, allowance 0.5 mm) x Spiral / Raster / Morphed spiral, Loop ON:
-//     closed paths (first point == last point), one per chain (Spiral 1 / 1 / 1 / 3 / 2, Raster (TASK 835c: its clusters + each ring its own) 2 / 2 / 2 / 4 / 4, Morphed 1 where it is possible; still refused
+//     closed paths (first point == last point), one per chain (Spiral 1 / 1 / 1 / 3 / 2, Raster (TASK 835d: one loop per area + each ring its own; the dumbbell's 4 mm neck the bit cannot pass: 2 areas, 2 wall rings) 2 / 2 / 2 / 3 / 4, Morphed 1 where it is possible; still refused
 //     with its reason on the island pocket and the dumbbell); the LAST turn of every loop is a finish turn, every point of it exactly the bit radius from
 //     the wall / island (0.01 mm); every turn / pass / clean-up ring of the Loop-OFF derivation is in a loop (vertex for vertex); the legs (links, steps,
 //     returns) inside the region the bit may sweep (R inset by r, 0.02 mm); the Spiral's crossings only at its anchors (each on a ring) and counted;
@@ -56,7 +56,7 @@ const LSHAPE = [[0, 0], [100, 0], [100, 40], [40, 40], [40, 100], [0, 100]];
 const ISLAND = [[40, 20], [60, 20], [60, 40], [40, 40]];
 const DUMBBELL = [[0, 0], [40, 0], [40, 18], [60, 18], [60, 0], [100, 0], [100, 40], [60, 40], [60, 22], [40, 22], [40, 40], [0, 40]];
 const SHAPES = { rectangle: () => polyState([RECT]), L: () => polyState([LSHAPE]), circle: () => polyState([], [['c', [50, 50], 30]]), island: () => polyState([RECT, ISLAND]), dumbbell: () => polyState([DUMBBELL]) };
-const LOOPS = { linked: { rectangle: 1, L: 1, circle: 1, island: 3, dumbbell: 2 }, raster: { rectangle: 2, L: 2, circle: 2, island: 4, dumbbell: 4 }, morphed: { rectangle: 1, L: 1, circle: 1 } };
+const LOOPS = { linked: { rectangle: 1, L: 1, circle: 1, island: 3, dumbbell: 2 }, raster: { rectangle: 2, L: 2, circle: 2, island: 3, dumbbell: 4 }, morphed: { rectangle: 1, L: 1, circle: 1 } };
 function area(pts) { let a = 0; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y; return a / 2; }
 const polysOf = (st) => { const by = new Map(st.shapes.map((s) => [s.id, s])); const lp = {}; for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by); return lp; };
 const outerLoopOf = (st) => { const loops = findLoops(st), lp = polysOf(st); return loops.reduce((a, l) => (Math.abs(area(lp[l.id])) > Math.abs(area(lp[a.id])) ? l : a), loops[0]); };
@@ -112,10 +112,10 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     const noFinish = [];
     for (const c of on.clear) {
       const last = c.turns.at(-1);
-      // TASK 835c: a Raster ring is a closed loop of its own (one finish turn, nothing else); a cluster's loop holds passes and the legs between them only
+      // TASK 835c: a Raster ring is a closed loop of its own (one finish turn, nothing else); an area's loop holds passes, links (835d) and the legs between
       if (pattern === 'raster') {
         const ring = c.turns.some((t) => t.kind === 'finish');
-        ok(ring ? c.turns.length === 1 : c.turns.every((t) => t.kind === 'pass'), `${tag}: loop ${c.index} is a ring alone or a cluster of passes (${JSON.stringify(c.turns.map((t) => t.kind))})`);
+        ok(ring ? c.turns.length === 1 : c.turns.every((t) => t.kind === 'pass' || t.kind === 'link'), `${tag}: loop ${c.index} is a ring alone or an area's loop of passes (${JSON.stringify(c.turns.map((t) => t.kind))})`);
       } else if (c.turns.some((t) => t.kind === 'finish')) eq(last.kind, 'finish', `${tag}: the last turn of loop ${c.index} is its finish turn`);
       else noFinish.push(`${tag} loop ${c.index}`); // a chain that ends deeper (749's rule): it never reaches a wall, its own outermost ring is its last turn
       for (const t of c.turns.filter((u) => u.kind === 'finish')) for (const p of c.points.slice(t.start, t.end + 1)) worstF = Math.max(worstF, Math.abs(reg.dist(p) - R));
@@ -129,7 +129,10 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     // TASK 835: a Raster loop runs along every pass ONCE, from the area's edge to the area's edge, but for the gaps where a corridor leaves it (each at most
     // half a stepover: the bit sweeps it)
     if (pattern === 'raster') {
-      const bad = (x) => !(x.twice <= 0.01 && x.ends <= 0.01 && x.gaps.every((g) => g <= S / 2 + 0.01)); // TASK 835c: no flush corridor, so no pass end left uncut
+      // TASK 835d: a pass end the lane's turn-in short of the wall (a stepover, at most r; two where a small piece's chord lies inside its turn-ins), a gap
+      // inside it a link's half stepover or a lane's turn-in at a cut (tests/pocket-raster-loop-835-node.test.js holds the exact rules)
+      const T = Math.min(S, R) + 0.07;
+      const bad = (x) => !(x.twice <= 0.1 && x.gaps.every((g) => g <= 2 * T + S / 2) && x.uncut.filter(([u, v]) => u <= 0.003 || v >= x.length - 0.003).every(([u, v]) => v - u <= 2 * T));
       const cov = passCoverage(on.clear, off.clear.filter((c) => c.role === 'raster').map((c) => c.points));
       ok(!cov.some(bad), `${tag}: every pass cut once, edge to edge, but for its corridor gaps (${JSON.stringify(cov.find(bad))})`);
     } else {
@@ -180,7 +183,7 @@ for (const [name, mk] of Object.entries(SHAPES)) {
       // TASK 804: with no allowance the L's innermost ring is a sliver whose morphed turn crossed itself at its tip (0.008 mm): refused, never cut crossing
       if (off0.refused === 'morphed area') { eq([on0.refused, name, pattern], ['morphed area', 'L', 'morphed'], `${tag}: allowance 0: refused (its turns would cross)`); }
       else {
-      const ringsOn0 = on0.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind !== 'pass').length, 0);
+      const ringsOn0 = on0.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind !== 'pass' && t.kind !== 'link').length, 0); // (TASK 835d: a Raster loop's links are no turns)
       const ringsOff0 = pattern === 'linked' ? off0.loops : pattern === 'raster' ? off0.cleanup : 1;
       eq(ringsOn0, ringsOff0, `${tag}: allowance 0: ${ringsOff0} turn(s), none written twice (the last ring IS the finish turn)`);
       }

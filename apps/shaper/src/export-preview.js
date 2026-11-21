@@ -170,7 +170,7 @@ export function previewRows(items, ops = []) {
 }
 
 /**
- * mountExportPreview({ canvas, list, info, getPreview, emptyText }) -> { refresh(sig), fit(), pickRow(i), inspect() }
+ * mountExportPreview({ canvas, list, info, getPreview, emptyText }) -> { refresh(sig), fit(), pickRow(i), inspect(), setMode, setSim (TASK 801) }
  *   canvas   the <svg> the file's elements are shown in (its viewBox is the view)
  *   list     the element the cut list is written in
  *   info     the one-line label (the picked element, or the element count; `emptyText` when there is no cut)
@@ -429,6 +429,8 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     showInfo();
     if (items.length && !viewState.view) fit();
     else renderArrows(true);
+    simLayer = null; shownTodo = []; // (it was in the group just replaced; its elements are new)
+    if (simView) { if (simView.states.length === items.length) applySim(); else simView = null; } // TASK 801: the simulation shown again after a redraw (another file: none)
     return inspect();
   }
 
@@ -459,8 +461,40 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), ...(r.clear ? { clear: r.clear.role } : {}), count: r.items.length })) })),
       picked: picked.length, label: mode === 'paths' ? shownLabel : info.textContent, view: viewState.view ? { ...viewState.view } : null,
       ...(mode === 'paths' ? { mode, bitCentre: top ? top.querySelectorAll('.rv2d-bit-center').length : 0, travelPaths: travels.length, darts: arrowCount } : {}),
+      sim: inspectSim(), // TASK 801
     };
   }
+  // ── TASK 801: the Export SIMULATION (export-sim.js; the one timeline: cut-timeline.js). setSim({ states, marker, trail }) shows the file as the timeline has cut it:
+  // `states[i]` = element i's state ('done' | 'active' | 'todo'; null = not cut: a guide, always shown). The 2D view hides what is not cut yet (the fills build up
+  // in cutting order); the Paths view draws it faint (its bit-centre line too), and the BIT (`marker`: { x, y, r } world mm, a circle of the bit's diameter to scale)
+  // at its point with the path it has travelled so far (`trail`: points) drawn solid. setSim(null) = the whole file, as before. Display only. ──
+  let simView = null, simLayer = null, shownTodo = []; // shownTodo[i]: element i is drawn as not cut (only the elements whose state changed are touched)
+  function applySim() {
+    for (const [i, it] of items.entries()) {
+      const todo = Boolean(simView) && simView.states[i] === 'todo';
+      if (todo === Boolean(shownTodo[i])) continue;
+      shownTodo[i] = todo;
+      it.el.classList.toggle('rv2d-sim-todo', todo);
+      for (const b of it.bits || []) b.classList.toggle('rv2d-sim-todo', todo);
+    }
+    if (simLayer) { simLayer.remove(); simLayer = null; }
+    if (!simView || !top || mode !== 'paths') return;
+    simLayer = doc.createElementNS(SVG_NS, 'g'); simLayer.setAttribute('class', 'rv2d-sim');
+    if (simView.trail && simView.trail.length > 1) {
+      const tr = doc.createElementNS(SVG_NS, 'path'); tr.setAttribute('class', 'rv2d-sim-trail'); tr.setAttribute('d', pointsD(simView.trail, false));
+      simLayer.appendChild(tr);
+    }
+    if (simView.marker) {
+      const c = doc.createElementNS(SVG_NS, 'circle'); c.setAttribute('class', 'rv2d-sim-bit');
+      c.setAttribute('cx', String(simView.marker.x)); c.setAttribute('cy', String(simView.marker.y)); c.setAttribute('r', String(simView.marker.r));
+      simLayer.appendChild(c);
+    }
+    top.appendChild(simLayer);
+  }
+  function setSim(view) { simView = view || null; applySim(); return inspectSim(); }
+  const inspectSim = () => (simView ? { todo: items.filter((it) => it.el.classList.contains('rv2d-sim-todo')).length, shown: items.length - items.filter((it) => it.el.classList.contains('rv2d-sim-todo')).length,
+    marker: simLayer && simLayer.querySelector('.rv2d-sim-bit') ? { ...simView.marker } : null, trail: simView.trail ? simView.trail.length : 0 } : null);
+
   /** TASK 793: '2d' | 'paths'. A change rebuilds the view at the next refresh (the same file, drawn the other way). */
   function setMode(next) {
     if (next !== '2d' && next !== 'paths') throw new Error(`export preview: no mode ${next}`);
@@ -468,5 +502,5 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     mode = next; lastSig = undefined;
     canvas.parentNode.setAttribute('data-mode', mode);
   }
-  return { refresh, fit, pickRow, inspect, setMode };
+  return { refresh, fit, pickRow, inspect, setMode, setSim };
 }

@@ -3,7 +3,7 @@
 // typed arrays in three.js BufferGeometry, lights it, and runs the orbit camera. three is imported DYNAMICALLY here, so it
 // downloads only when the Review tab first opens (it is vendored under packages/ui/vendor/three, pinned 0.170.0).
 // Render ON DEMAND (controls 'change' / rebuild / resize): no idle animation loop.
-import { buildRelief, createReliefCache } from '#core/relief-model.js';
+import { buildRelief, createReliefCache, sweptVolumes, DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 801: + the passes' swept volumes
 import { POCKET_CLEARING } from '#core/pocket-clearing.js'; // TASK 778: pocket start mark circle ratio (declared once)
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { reviewGridSpec, designCanvasColors, gridMaterialSource, GRID_FADE } from './review-grid.js';
@@ -128,7 +128,8 @@ export function planarUVs(positions, tile = TILE_MM, grainAlongX = false) {
 const GRID_SETTING_KEYS = new Set(['GRID_MODE', 'GRID_SIZE', 'GRID_MAJOR_STEP', 'INCH_GRID_DIVISIONS', 'INCH_GRID_MAJOR', 'DOC_UNIT', 'STYLE_TEMPLATE', 'STYLE_PRESETS']);
 
 /**
- * mountReviewView({ host, info, getInputs, look, designCanvas, emptyText }) -> Promise<{ refresh, reset, top, fit, setLook, inspect, screenOf, destroy, lastBuild, look }>
+ * mountReviewView({ host, info, getInputs, look, designCanvas, emptyText }) -> Promise<{ refresh, reset, top, fit, setLook, inspect, screenOf, destroy, setSim, lastBuild, look }>
+ *   (TASK 801: setSim = the Export simulation's wood and passes, see below)
  *   host       the element the canvas is appended to
  *   info       element receiving the one-line build summary (and the "not shown" notes)
  *   getInputs  () => { stock, items, bounds, notes? }  (see buildRelief; notes = extra info lines, TASK 714: the stepped cuts' steps / undercuts)
@@ -195,7 +196,7 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   }
   function setLook(next) { look = normaliseLook(next); applyLook(); render(); return look; }
   applyLook();
-  let group = null, box = null, lastBuild = null, lastSig = null;
+  let group = null, box = null, lastBuild = null, lastSig = null, lastRel = null; // lastRel: TASK 801, the finished part's build and inputs (the simulation's board)
   const reliefCache = createReliefCache();
 
   // TASK 754: the drafting grid = ONE plane at the board's underside (the plane the workpiece sits on), drawn by one shader
@@ -321,20 +322,10 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
   const top = () => place([0, 1, 0.0005]);             // straight down; screen-up = -Z, the same orientation as Prepare
   const fit = () => place(camera.position.clone().sub(controls.target).toArray());
 
-  function refresh(sig) {
-    applyGridLook(); // the Design canvas's tokens may have changed since the last visit (a style template)
-    if (sig !== undefined && sig === lastSig) { size(); render(); return lastBuild; }
-    const t0 = performance.now();
-    const inputs = getInputs();
-    const rel = buildRelief({ ...inputs, cache: reliefCache }); // the cache reuses the work of unchanged cuts / levels
+  // the board group of one buildRelief result (the finished part, or TASK 801 the simulation's wood): its meshes and marks, the grid under it. Returns whether it is the
+  // first board this view shows (the camera is placed then).
+  function showRelief(rel) {
     disposeGroup();
-    if (rel.stats.board === 'none') { // TASK 757: an empty design: no board, no grid, the Export step's empty-state message (the 2D view's) in the info
-      box = null; lastSig = sig;
-      lastBuild = { ms: performance.now() - t0, stages: rel.stats.ms, triangles: 0, levels: 0, skipped: rel.stats.skipped, unsetThrough: [], marks: 0, outsideStock: [], partlyOutside: [], board: 'none' };
-      size(); render();
-      showInfo([emptyText]);
-      return lastBuild;
-    }
     const T = rel.stockBox.thickness;
     group = new THREE.Group();
     const grainAlongX = rel.stockBox.maxX - rel.stockBox.minX >= rel.stockBox.maxY - rel.stockBox.minY;
@@ -355,6 +346,26 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
       gridMesh.scale.set(2 * GRID_FADE.to * R, 1, 2 * GRID_FADE.to * R);
       gridUniforms.uCentre.value.set(cx, cz); gridUniforms.uFadeFrom.value = GRID_FADE.from * R; gridUniforms.uFadeTo.value = GRID_FADE.to * R;
     }
+    return firstBuild;
+  }
+
+  function refresh(sig) {
+    applyGridLook(); // the Design canvas's tokens may have changed since the last visit (a style template)
+    if (sig !== undefined && sig === lastSig) { size(); render(); return lastBuild; }
+    const t0 = performance.now();
+    endSim(false); // TASK 801: a new plan: the simulation's wood and passes go (export-sim.js starts it again from the new timeline)
+    const inputs = getInputs();
+    const rel = buildRelief({ ...inputs, cache: reliefCache }); // the cache reuses the work of unchanged cuts / levels
+    disposeGroup();
+    if (rel.stats.board === 'none') { // TASK 757: an empty design: no board, no grid, the Export step's empty-state message (the 2D view's) in the info
+      box = null; lastSig = sig; lastRel = null;
+      lastBuild = { ms: performance.now() - t0, stages: rel.stats.ms, triangles: 0, levels: 0, skipped: rel.stats.skipped, unsetThrough: [], marks: 0, outsideStock: [], partlyOutside: [], board: 'none' };
+      size(); render();
+      showInfo([emptyText]);
+      return lastBuild;
+    }
+    const firstBuild = showRelief(rel);
+    lastRel = { rel, inputs };
     size();
     if (firstBuild) reset(); else render();
     const ms = performance.now() - t0;
@@ -388,12 +399,82 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     mountDisclosure({ host: info, head, body, open: infoOpen, onToggle: (open) => { infoOpen = open; } });
   }
 
+  // ── TASK 801: the Export SIMULATION's 3D (export-sim.js drives it; cut-timeline.js is the timeline). setSim({ key, items, passes, keepWood }) shows the WOOD left
+  // after the carved relief items (`items()`: the subset of the finished part's items, cut-timeline.js reliefSchedule) on the SAME board as the finished part (its box
+  // as the board's profile, so a subset never resizes it), built by buildRelief with the simulation's own cache; the last SIM_KEEP builds are kept by `key`, so
+  // stepping back and forth (the scrubber, the operation steps) shows a build again without rebuilding it (`keepWood`: the wood shown stays, only the passes follow).
+  // `passes` (owner turn 2608, "Show passes") = { key, show, ops: [{ id, color, items, count }] }: each operation's played paths as ONE translucent mesh (#core
+  // sweptVolumes of its items in timeline order; `count` = how many are drawn: a draw range, no rebuild), one colour per operation, overlapping passes stack darker.
+  // The scene is drawn again only when something changed. setSim(null) = the finished part again. ──
+  const SIM_KEEP = 8;
+  const simCache = createReliefCache(), simWood = new Map(); // key -> buildRelief result (most recent last)
+  let simOn = false, simKey = null, passKey = null, lastSim = null;
+  const passMeshes = new Map(); // op id -> { mesh, ends }
+  const passMaterials = new Map(); // colour -> material
+  function disposePasses() {
+    for (const { mesh } of passMeshes.values()) { scene.remove(mesh); mesh.geometry.dispose(); }
+    passMeshes.clear();
+  }
+  function passMaterial(color) {
+    if (!passMaterials.has(color)) passMaterials.set(color, new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }));
+    return passMaterials.get(color);
+  }
+  function simBoard() { // the finished part's board, as a profile when it is the derived rectangle (a subset of the cuts would derive a smaller one)
+    const { rel, inputs } = lastRel, b = rel.stockBox, stock = { ...DEFAULT_STOCK, ...(inputs.stock || {}) };
+    return stock.profile ? stock : { ...stock, profile: { outer: [[b.minX, b.minY], [b.maxX, b.minY], [b.maxX, b.maxY], [b.minX, b.maxY], [b.minX, b.minY]], holes: [], sig: `sim:${b.minX},${b.minY},${b.maxX},${b.maxY}` } };
+  }
+  function setSim(sim) {
+    if (!sim) { endSim(); return lastSim; }
+    if (!lastRel) return null; // no board (an empty design)
+    simOn = true;
+    const t0 = performance.now();
+    let built = false, changed = false;
+    if (sim.key !== simKey && !(sim.keepWood && simKey !== null)) { // keepWood: the wood shown stays (export-sim.js: a rebuild while playing waits its turn)
+      let rel = simWood.get(sim.key);
+      if (rel) simWood.delete(sim.key);
+      else { rel = buildRelief({ ...lastRel.inputs, stock: simBoard(), items: sim.items(), cache: simCache }); built = true; }
+      simWood.set(sim.key, rel);
+      while (simWood.size > SIM_KEEP) simWood.delete(simWood.keys().next().value);
+      showRelief(rel);
+      simKey = sim.key; changed = true;
+    }
+    const tWood = performance.now();
+    const p = sim.passes;
+    if (!p || p.key !== passKey) { if (passMeshes.size) changed = true; disposePasses(); passKey = p ? p.key : null; }
+    if (p) for (const op of p.ops) {
+      let pm = passMeshes.get(op.id);
+      if (!pm && p.show && op.count > 0) {
+        const v = sweptVolumes(op.items, { thickness: lastRel.rel.stockBox.thickness });
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(v.positions, 3));
+        g.setAttribute('normal', new THREE.BufferAttribute(v.normals, 3));
+        g.setIndex(new THREE.BufferAttribute(v.indices, 1));
+        const mesh = new THREE.Mesh(g, passMaterial(op.color));
+        mesh.name = 'passes'; mesh.renderOrder = 5; mesh.userData.op = op.id;
+        scene.add(mesh);
+        passMeshes.set(op.id, pm = { mesh, ends: v.ends });
+      }
+      if (!pm) continue;
+      const visible = p.show && op.count > 0, count = op.count > 0 ? pm.ends[Math.min(op.count, pm.ends.length) - 1] : 0;
+      if (visible !== pm.mesh.visible || count !== pm.mesh.geometry.drawRange.count) { pm.mesh.visible = visible; pm.mesh.geometry.setDrawRange(0, count); changed = true; }
+    }
+    if (changed) render();
+    lastSim = { key: simKey, built, woodMs: tWood - t0, passesMs: performance.now() - tWood, ms: performance.now() - t0 };
+    return lastSim;
+  }
+  function endSim(reshow = true) { // reshow false: the caller builds the board itself (refresh)
+    disposePasses(); passKey = null;
+    if (!simOn) return;
+    simOn = false; simKey = null; simWood.clear();
+    if (reshow && lastRel) { showRelief(lastRel.rel); render(); }
+  }
+
   const ro = new ResizeObserver(() => { size(); render(); });
   ro.observe(host);
   renderer.domElement.addEventListener('dblclick', fit);
 
   function destroy() {
-    ro.disconnect(); unsubscribeSettings(); controls.dispose(); disposeGroup(); faceMaterial.dispose(); edgeMaterial.dispose();
+    ro.disconnect(); unsubscribeSettings(); controls.dispose(); disposeGroup(); disposePasses(); for (const m of passMaterials.values()) m.dispose(); faceMaterial.dispose(); edgeMaterial.dispose();
     gridMesh.geometry.dispose(); gridMaterial.dispose();
     if (labelTexture) labelTexture.dispose();
     for (const tex of textures.values()) if (tex) tex.dispose();
@@ -415,6 +496,8 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
       background: '#' + scene.background.getHexString(),
       box: box && { minX: box.minX, maxX: box.maxX, minZ: box.minY, maxZ: box.maxY, y: -box.thickness }, // the board in scene axes (y = its underside)
       grid: gridSpec && { ...gridSpec, shown: gridMesh.visible, y: gridMesh.position.y, minorColor: '#' + gridUniforms.uMinorColor.value.getHexString(), majorColor: '#' + gridUniforms.uMajorColor.value.getHexString() },
+      sim: simOn ? { key: simKey, last: lastSim, triangles: group ? group.children.filter((o) => o.isMesh).reduce((n, o) => n + o.geometry.index.count / 3, 0) : 0,
+        passes: [...passMeshes.entries()].map(([id, pm]) => ({ op: id, visible: pm.mesh.visible, color: '#' + pm.mesh.material.color.getHexString(), drawn: pm.mesh.geometry.drawRange.count, items: pm.ends.length })) } : null, // TASK 801
     };
   };
   // screenOf([x, y, z]) -> { x, y } CSS px inside the canvas, where that world point is drawn (read by the tests)
@@ -422,5 +505,5 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     const v = new THREE.Vector3(x, y, z).project(camera);
     return { x: ((v.x + 1) / 2) * host.clientWidth, y: ((1 - v.y) / 2) * host.clientHeight };
   };
-  return { refresh, reset, top, fit, setLook, inspect, screenOf, destroy, get look() { return look; }, get lastBuild() { return lastBuild; } };
+  return { refresh, reset, top, fit, setLook, inspect, screenOf, destroy, setSim, get look() { return look; }, get lastBuild() { return lastBuild; } };
 }

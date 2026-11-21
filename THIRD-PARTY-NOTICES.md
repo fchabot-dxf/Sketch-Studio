@@ -1,7 +1,7 @@
 # Third-party notices
 
-Sketch Studio (the four apps and their shared packages) is free to use; its own code is not offered under an open-source licence
-(package.json: UNLICENSED). It includes or builds on the work below, each under its own licence, reproduced or pointed to here.
+Sketch Studio's own code (the four apps and their shared packages) is under the PolyForm Noncommercial License 1.0.0 (`LICENSE.md`: free for any
+noncommercial purpose). The third-party parts below keep their own licences, reproduced or pointed to here.
 
 ## shaper-sync (ShaperHub upload)
 

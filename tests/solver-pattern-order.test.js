@@ -21,6 +21,8 @@ import assert from 'node:assert';
 import { buildTemplate } from '#core/templates.js';
 import { deserializeDocument } from '#core/document.js';
 import { NewtonSolver } from '#core/solver/engine.js';
+import { Algebra } from '#core/solver/algebra.js';
+import { sceneJoints, sceneShapes } from '#core/reference-lines.js';
 import { patternDefaults } from '#core/pattern.js';
 import { ORIGIN_JOINT_ID, CONSTRAINT_TYPES as T, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import * as ops from '#core/tool-ops.js';
@@ -106,6 +108,48 @@ const CASES = [
   { name: 'circles 100', build: (d) => buildCircles(d, 100), limit: { fullSolve: 40 } },
   { name: 'rects 20x20', build: (d) => buildRects(d, 20, 20), limit: { fullSolve: 6500 } },
 ];
+// THE RANK PROBE gives the same answer in the new order (task 844): on a pattern sketch the envelope is factorised in the RCM order (perm set);
+// its pass / fail (the solve's undamped polish = rankDeficient, and each LM-damped step) must be the one of the unknowns' own order, which
+// the dense Cholesky reproduces (Algebra.choleskySolve: the same sums, the same EPS), and the two solutions agree up to rounding. Checked on
+// a well-constrained gear, the same gear with one dimension deleted (rank-deficient: both refuse) and the plain patterns, undamped and damped.
+function probeAgreement(name, build, drop) {
+  const doc = quiet(() => buildTemplate({ name, params: {}, build }));
+  const S = L.newSketch();
+  assert.ok(quiet(() => deserializeDocument(JSON.parse(JSON.stringify(doc)), S.state)).ok, `${name}: loads`);
+  if (drop) S.state.constraints.splice(S.state.constraints.findIndex(drop), 1);
+  const eng = new NewtonSolver(sceneJoints(S.state.joints), S.state.constraints, sceneShapes(S.state.shapes)); // with the axes, as the engine
+  const x = eng._pack(), { S: J, r, m, n } = eng._assemble(x);
+  const g = new Float64Array(n);
+  Algebra.atx(J, m, n, r, g);
+  const answers = [];
+  for (const damp of [0, 1e-3]) {
+    const E = Algebra.gram(J, m, n);
+    assert.ok(E.perm, `${name}: the pattern's envelope is factorised in the RCM order (n ${n})`);
+    if (damp) Algebra.addToDiag(E, damp + 1e-12);
+    const A = new Float64Array(n * n); // JᵀJ (+ damping) dense, rows of J ascending as gram sums them
+    for (let k = 0; k < m; ++k) for (let p = J.rowPtr[k]; p < J.rowPtr[k + 1]; ++p) for (let q = J.rowPtr[k]; q <= p; ++q) A[J.cols[p] * n + J.cols[q]] += J.vals[p] * J.vals[q];
+    if (damp) for (let i = 0; i < n; ++i) A[i * n + i] += damp + 1e-12;
+    const u = Float64Array.from(g, (v) => -v), v = Float64Array.from(u);
+    const okNew = Algebra.choleskySolveEnvelope(E, u), okOwn = Algebra.choleskySolve(A, n, v);
+    assert.strictEqual(okNew, okOwn, `${name}: the Cholesky ${damp ? 'damped' : 'undamped'} passes / fails alike in both orders (RCM ${okNew}, own ${okOwn})`);
+    if (okNew) {
+      let d = 0, s0 = 0; for (let i = 0; i < n; ++i) { d = Math.max(d, Math.abs(u[i] - v[i])); s0 = Math.max(s0, Math.abs(v[i])); }
+      assert.ok(d <= 1e-9 * Math.max(s0, 1e-12), `${name}: the two solutions agree up to rounding (max difference ${d}, max ${s0})`);
+    }
+    answers.push(okNew);
+  }
+  console.log(`${name}: n ${n}, rank probe (undamped) ${answers[0] ? 'passes' : 'refuses'}, damped ${answers[1] ? 'passes' : 'refuses'}, the same in both orders`);
+  return answers;
+}
+{
+  const gear = (d) => buildGear(d, 12);
+  assert.deepStrictEqual(probeAgreement('probe gear 12', gear), [true, true], 'the well-constrained gear: the polish passes (full rank)');
+  const [undamped] = probeAgreement('probe gear 12 minus a dimension', gear, (c) => c.type === 'distance' && !c.isRadius && !c.isDriven);
+  assert.strictEqual(undamped, false, 'one dimension deleted: rank-deficient, the undamped probe refuses in both orders');
+  probeAgreement('probe circles 30', (d) => buildCircles(d, 30));
+  probeAgreement('probe rects 8x8', (d) => buildRects(d, 8, 8));
+}
+
 const only = process.argv.slice(2);
 const failures = [];
 for (const c of CASES) {

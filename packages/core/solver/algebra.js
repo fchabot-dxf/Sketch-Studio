@@ -9,8 +9,9 @@
 // TASK 844: the envelope is built in a FILL-REDUCING ORDER. In the unknowns' own order (joint insertion order, #core/solver/engine.js _pack) a
 // row of JᵀJ reaches back to the earliest unknown it is coupled to; a pattern's rows tie every copy point to its SOURCE point (drawn first), so
 // every row reached column 0 and the envelope was the whole lower triangle: a dense O(n^3) Cholesky per solve. gram orders the unknowns by
-// Reverse Cuthill-McKee on the sparsity graph of JᵀJ (two unknowns are neighbours when a row of J touches both) and keeps that order when its
-// envelope is SMALLER than the unknowns' own order's, else the own order (then the arithmetic is exactly the one before task 844). The order
+// Reverse Cuthill-McKee on the sparsity graph of JᵀJ (two unknowns are neighbours when a row of J touches both) when the own order's envelope
+// is large (ORDER_MIN_N, ORDER_MIN_FILL: measured) and keeps that order when its envelope is SMALLER, else the own order (then the
+// arithmetic is exactly the one before task 844). The order
 // is internal to the factorisation: the envelope carries it (perm: position -> unknown) and choleskySolveEnvelope reads the right-hand side
 // and writes the solution through it, so every caller sees its own unknowns. P A Pᵀ is positive-definite exactly when A is (the same
 // matrix in another order); only the rounding, so a pivot's last digits, can differ.
@@ -84,21 +85,30 @@ function gramGraph(S, m, n) {
   return { ptr, adj: Int32Array.from(list) };
 }
 
-// The envelope of the graph's matrix in the order perm (position -> node; null: the nodes' own order): each position's first column, the
-// envelope's size below the diagonal (the sum of i - first[i]) and pos (node -> position; null for the own order).
+// The envelope of the graph's matrix in the order perm (position -> node): each position's first column, the envelope's size below the
+// diagonal (the sum of i - first[i]) and pos (node -> position).
 function envelopeOf(n, ptr, adj, perm) {
-  const pos = perm ? new Int32Array(n) : null;
-  if (perm) for (let i = 0; i < n; ++i) pos[perm[i]] = i;
+  const pos = new Int32Array(n);
+  for (let i = 0; i < n; ++i) pos[perm[i]] = i;
   const first = new Int32Array(n);
   let size = 0;
   for (let i = 0; i < n; ++i) {
-    const v = perm ? perm[i] : i;
+    const v = perm[i];
     let f = i;
-    for (let p = ptr[v]; p < ptr[v + 1]; ++p) { const c = perm ? pos[adj[p]] : adj[p]; if (c < f) f = c; }
+    for (let p = ptr[v]; p < ptr[v + 1]; ++p) { const c = pos[adj[p]]; if (c < f) f = c; }
     first[i] = f; size += i - f;
   }
   return { size, first, pos };
 }
+
+// TASK 844: when gram tries the Reverse Cuthill-McKee order: at least ORDER_MIN_N unknowns AND the own order's envelope at least
+// ORDER_MIN_FILL * n^2 (an average row at least n / 4 wide: half the lower triangle). Measured over every solver-using quick test (273
+// files, 2.4 million factorisations, both orders timed on the same matrices, WORK-LOG TURN 844): with fewer unknowns the ordering never
+// paid for itself (the new way 2.4x to 5.4x slower at every fill), nor on a sparser envelope (1.4x to 5.2x slower); on a fuller one with more
+// unknowns it wins (393 -> 275 ms at 65-128 unknowns, 69 -> 26 at 129-256, 334 -> 98 at 257-512; a pattern's full envelope: 23 s -> 12 ms).
+// Below the rule the arithmetic is exactly the one before task 844, the pass / fail of every Cholesky (the rank probe) included.
+const ORDER_MIN_N = 65;
+const ORDER_MIN_FILL = 1 / 4;
 
 export const Algebra = {
   // y = Jᵀx (J: m x n sparse rows, x: m) -> y: n
@@ -113,12 +123,25 @@ export const Algebra = {
   },
 
   // JᵀJ (n x n, symmetric) as an envelope matrix, from the sparse rows of J (m x n), in the fill-reducing order (task 844, above): perm
-  // (position -> unknown) when the Reverse Cuthill-McKee order has the smaller envelope, else null (the unknowns' own order).
+  // (position -> unknown) when the Reverse Cuthill-McKee order is tried (ORDER_MIN_N, ORDER_MIN_FILL) and has the smaller envelope, else
+  // null (the unknowns' own order, the arithmetic of before task 844).
   gram: function(S, m, n) {
     const { rowPtr, cols, vals } = S;
-    const { ptr, adj } = gramGraph(S, m, n);
-    const own = envelopeOf(n, ptr, adj, null), rcmPerm = reverseCuthillMcKee(n, ptr, adj), rcm = envelopeOf(n, ptr, adj, rcmPerm);
-    const useRcm = rcm.size < own.size, { first, pos } = useRcm ? rcm : own;
+    // the own order's envelope: each unknown's first column is the smallest column of a row it is in
+    let first = new Int32Array(n), pos = null, perm = null;
+    for (let i = 0; i < n; ++i) first[i] = i;
+    for (let k = 0; k < m; ++k) {
+      const p0 = rowPtr[k], p1 = rowPtr[k + 1];
+      if (p0 === p1) continue;
+      const c0 = cols[p0]; // the row's smallest column
+      for (let p = p0 + 1; p < p1; ++p) if (first[cols[p]] > c0) first[cols[p]] = c0;
+    }
+    let ownSize = 0;
+    for (let i = 0; i < n; ++i) ownSize += i - first[i];
+    if (n >= ORDER_MIN_N && ownSize >= ORDER_MIN_FILL * n * n) {
+      const { ptr, adj } = gramGraph(S, m, n), rcmPerm = reverseCuthillMcKee(n, ptr, adj), rcm = envelopeOf(n, ptr, adj, rcmPerm);
+      if (rcm.size < ownSize) { first = rcm.first; pos = rcm.pos; perm = rcmPerm; }
+    }
     const start = new Int32Array(n + 1);
     for (let i = 0; i < n; ++i) start[i + 1] = start[i] + (i - first[i] + 1);
     const env = new Float64Array(start[n]);
@@ -133,7 +156,7 @@ export const Algebra = {
         }
       }
     }
-    return { n, first, start, env, perm: useRcm ? rcmPerm : null };
+    return { n, first, start, env, perm };
   },
 
   // A[i][i] += alpha for every i (LM damping)

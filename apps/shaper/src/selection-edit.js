@@ -18,18 +18,35 @@ export function canonicalJson(val) {
   return JSON.stringify(val);
 }
 
-/** A region's (or chain's) canonical identity (TASK 795c / SELECTION-BRIDGE.md 5.5): everything except `id` and `label`. */
+/** TASK 795d: the identity a selection entry KEEPS of a value: a fixed-size digest of its canonical JSON (two 32-bit multiply-xor hashes + the length),
+ *  equal exactly when the canonical JSON is equal (a collision needs two different texts of the same length to share 64 hash bits). The entry once kept
+ *  the canonical JSON itself: an STL relief's entry was 11.8 MB (sigs 5.9 MB + payloadSig 4.9 MB), JSON-cloned by every getSelections() (the document
+ *  buffer's poll, every undo snapshot): main-thread long tasks while operation paths generate. */
+function identityOf(val) {
+  const text = canonicalJson(val);
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0') + ':' + text.length.toString(36);
+}
+
+/** A region's (or chain's) canonical identity (TASK 795c / SELECTION-BRIDGE.md 5.5): everything except `id` and `label` (kept as identityOf). */
 export function regionSig(reg) {
   if (!reg || typeof reg !== 'object') return '';
   const { id, label, ...rest } = reg;
-  return canonicalJson(rest);
+  return identityOf(rest);
 }
 
-/** Canonical digest of a selection_data payload (excluding `action`): used to make byte-identical re-sends a no-op. */
+/** Canonical identity of a selection_data payload (excluding `action`, kept as identityOf): used to make byte-identical re-sends a no-op. */
 export function payloadSig(data) {
   if (!data || typeof data !== 'object') return '';
   const { action, ...rest } = data;
-  return canonicalJson(rest);
+  return identityOf(rest);
 }
 
 /** The row's words: summary.text, else "<source.name> · N regions" (an old add-in sends no summary); an STL is its file name. */

@@ -1,9 +1,9 @@
 # ROADMAP — from "SketchStudio app" to "one brain, many shells"
 
 > Strategic plan. Durable. For *what to do this very next session*, read **NEXT-SESSION.md**.
-> This supersedes the solver sections of `CONTEXT.md` (which predates the platform pivot and
-> says "solver robustness ALL DONE" — that was a different, earlier backlog; see lineage note
-> in NEXT-SESSION.md).
+> This supersedes the solver sections of the old `CONTEXT.md` (June notes, removed in task 849;
+> it predated the platform pivot and said "solver robustness ALL DONE" — that was a different,
+> earlier backlog; see lineage note in NEXT-SESSION.md).
 
 ## The vision in one paragraph
 

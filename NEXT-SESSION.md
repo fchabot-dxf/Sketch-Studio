@@ -1124,7 +1124,7 @@ Append a WORK-LOG entry (repro, investigation trail, root cause, fix, live-verif
 `=== TANGENT-RADIUS-CONVERGENCE-FIX DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
 
 ---
-<!-- superseded (provenance): cycle 188 closed here (handoff.py done) after TANGENT-RADIUS-CONVERGENCE-FIX
+<!-- superseded (provenance): cycle 188 closed here (handoff.py done; the repo's handoff.py was removed in task 849) after TANGENT-RADIUS-CONVERGENCE-FIX
      landed and was independently re-verified (including catching and fixing a flawed assumption in the
      advisor's own breaker test — see WORK-LOG). New cycle starts below, user-reported (2026-08-27). -->
 
@@ -1777,7 +1777,7 @@ RETIRED t400 by owner ruling, see WORK-LOG TURN 400 (Frame Calc removed from Ske
 <!-- superseded (provenance) -->
 ## TASK — BATCH 3 (BURN-DOWN cont'd): STYLE-TOOL — per-shape STROKE color+width / FILL color, driving outline-pen / fill-pen. COMMIT PER ITEM (4 + a tiny 5th); verify each; pass back ONCE.
 
-**Foundation (LOCKED):** merged single-`#core`-store; invariant = **FREE ART BYPASSES THE SOLVER**. Plan = `PARITY-ROADMAP.md`.
+**Foundation (LOCKED):** merged single-`#core`-store; invariant = **FREE ART BYPASSES THE SOLVER**. Plan = `PARITY-ROADMAP.md` (removed in task 849; in git history).
 **MODEL (user-CONFIRMED, no other option): stroke color → the OUTLINE pen; fill color → the FILL pen.** Reference original =
 `SketchStudio/legacy pen plotter/app/js/style-panel.js` (stroke/fill/width/None). All plotter-side (`#core`/`#ui` untouched);
 `#core` stays pure — the style record is PLOTTER state, like `shapeColors` today.
@@ -1804,7 +1804,7 @@ shell-smoke 12/12; plot oracles green STANDALONE; Studio/Shaper unregressed; 0 c
 
 **DECISIONS RULED (advisor, turn 367):** keep `inheritPaint`/`penColorFor` (SHARED — core-import runs through them); keep
 `importSvgText` + its art-store helpers as the REFERENCE IMPLEMENTATION for the still-open S6 [D] Inkscape-layer-split decision —
-do not delete them in cleanup. Repo-local `handoff.py` was STALE (no `amendments`) — synced from the skill copy this turn; use either.
+do not delete them in cleanup. Repo-local `handoff.py` was STALE (no `amendments`) — synced from the skill copy this turn (the repo copy was removed in task 849; the skill copy remains).
 
 **AFTER Batch 3:** Batch 4 = transforms (scissors/rotate/scale/node as #core joint transforms — turnkey plan in WORK-LOG t344).
 Batch 5 = boolean union · cloud · responsive [D]. Remaining S8 bits (preset swatch popover, mixed-value cue) ride with Batch 5 polish.
@@ -1849,7 +1849,7 @@ Append a WORK-LOG entry ending with exactly `=== LAYOUT-UNIFY DONE — HOLD ===`
 <!-- superseded (provenance) -->
 ## S2 (DONE — Part1 `09bb06e`, Part2 `ec7253b`): op-editor type-gated (outline vs fill) + Draw-outline toggle + dynamic header + schema step; live op rows (hover/selected CSS + bidirectional row↔canvas cross-highlight via `renderArt({skipPanels})` / panel-only refresh). Verified: plot oracles 5/5 standalone, shell-smoke 12/12, additive `step:` #core touch only.
 
-> **QUEUED — the AUTHORITATIVE plan is now `PARITY-ROADMAP.md`** (exhaustive 125-feature audit, original vs merged, 2026-07-11).
+> **QUEUED — the AUTHORITATIVE plan is now `PARITY-ROADMAP.md` (removed in task 849; in git history)** (exhaustive 125-feature audit, original vs merged, 2026-07-11).
 > MERGE-1 (in flight) = its first slice. Then S2→S11, cheap-high-value first. Advisor dispatches one slice per turn from there.
 > **Correction folded in:** machine SETTINGS are NOT orphaned — they're wired in the **Export tab** (`mountExportStage →
 > installSettingsPanel`); only discoverability is weak. Earlier "settings orphaned / feeds not editable" was WRONG.

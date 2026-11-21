@@ -85,6 +85,52 @@ try {
     RIBBON_TOOLS.length, '1: Design\'s ribbon keeps every built-in button');
   ok(!q('#design-ribbon .sk-ribbon').classList.contains('sk-ribbon-vertical'), '1: Design\'s ribbon is not vertical');
 
+  // ── 1b. the Operations section's dropdown (TASK 647, as Design's sections): each type's "in the bar" box, the type (runs it), the hold-drag grip; Prepare's layout is
+  // saved under its OWN app key (RIBBON_LAYOUT.apps['shaper-prepare'].operations), never Design's (apps.shaper); Recalculate is fixed (no dropdown)
+  {
+    const layout = () => JSON.parse(JSON.stringify(SettingsManager.get('RIBBON_LAYOUT') || null));
+    const designBefore = JSON.stringify((layout() || { apps: {} }).apps.shaper || null);
+    const shown = () => qa('#prepare-ribbon .sk-ribbon-group[data-section="operations"] .sk-ribbon-btn').filter((b) => !b.hidden).map((b) => b.id.replace('op-type-', ''));
+    eq(shown(), CUT_TYPES.map((t) => t.id), '1b: by default every type is in the bar, in the declaration\'s order');
+    ok(!q('#prepare-ribbon .sk-ribbon-group[data-section="recalculate"] button.sk-ribbon-group-label'), '1b: Recalculate is fixed: no dropdown (always in the bar)');
+    const name = q('#prepare-ribbon .sk-ribbon-group[data-section="operations"] button.sk-ribbon-group-label');
+    app.press(name);
+    const menu = q('.sk-ribbon-sect-menu.show');
+    eq([...menu.querySelectorAll('.sk-ribbon-sect-row')].map((r) => r.dataset.id), CUT_TYPES.map((t) => `op-type-${t.id}`), '1b: the dropdown lists every type (box, the type, grip)');
+    const box = menu.querySelector('.sk-ribbon-sect-row[data-id="op-type-guide"] input[type="checkbox"]');
+    box.checked = false; box.dispatchEvent(new app.window.Event('change', { bubbles: true }));
+    eq(shown().includes('guide'), false, '1b: Guide unchecked: it leaves the bar');
+    eq(layout().apps['shaper-prepare'].operations.off, ['op-type-guide'], '1b: saved under Prepare\'s own key: RIBBON_LAYOUT.apps["shaper-prepare"].operations');
+    eq(JSON.stringify(layout().apps.shaper || null), designBefore, '1b: Design\'s layout (apps.shaper) untouched');
+    // the hold-drag grip: Contour to the top
+    const grip = menu.querySelector('.sk-ribbon-sect-row[data-id="op-type-contour"] .sk-ribbon-grip');
+    grip.dispatchEvent(new app.window.PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', button: 0, clientX: 5, clientY: 5 }));
+    await new Promise((r) => setTimeout(r, 380)); // (the hold: HOLD_MS)
+    app.window.dispatchEvent(new app.window.PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', clientX: 5, clientY: -20 }));
+    app.window.dispatchEvent(new app.window.PointerEvent('pointerup', { bubbles: true, pointerId: 7, pointerType: 'mouse', clientX: 5, clientY: -20 }));
+    eq(shown()[0], 'contour', '1b: Contour dragged to the top of its list: first in the bar');
+    eq(layout().apps['shaper-prepare'].operations.order[0], 'op-type-contour', '1b: the order saved under Prepare\'s key');
+    eq(JSON.stringify(layout().apps.shaper || null), designBefore, '1b: Design\'s layout still untouched');
+    // a type unchecked is still runnable from the dropdown
+    clickAt('A');
+    app.press(menu.querySelector('.sk-ribbon-sect-item[data-id="op-type-guide"]'));
+    eq([card(), head()], ['open', 'Guide 1 · 1 shape'], '1b: Guide (not in the bar) run from the dropdown: a new Guide of A, open');
+    pressEl('.cut-cancel');
+    // Design's own layout change leaves Prepare's alone
+    const prepBefore = JSON.stringify(layout().apps['shaper-prepare']);
+    app.press(q('#design-ribbon .sk-ribbon-group[data-section="inspect"] button.sk-ribbon-group-label'));
+    const dbox = q('.sk-ribbon-sect-menu.show .sk-ribbon-sect-row input[type="checkbox"]');
+    dbox.checked = !dbox.checked; dbox.dispatchEvent(new app.window.Event('change', { bubbles: true }));
+    eq(JSON.stringify(layout().apps['shaper-prepare']), prepBefore, '1b: a Design layout change leaves Prepare\'s untouched');
+    dbox.checked = !dbox.checked; dbox.dispatchEvent(new app.window.Event('change', { bubbles: true }));
+    // back to the declared layout (the rest of the test presses every type in the bar)
+    app.press(name);
+    app.press(q('.sk-ribbon-sect-menu.show .sk-ribbon-sect-reset'));
+    eq(shown(), CUT_TYPES.map((t) => t.id), '1b: Reset: the declared layout again');
+    app.document.body.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    clickAt('none');
+  }
+
   // ── 2. a shape click: NO card; the toolbar's buttons
   clickAt('A');
   eq(card(), 'hidden', '2: a click on A: NO card (owner: "dont understand why there a window with cut type when i select a path")');

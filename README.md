@@ -1,61 +1,70 @@
-"# Sketch Studio Unified
+# Sketch Studio
 
-A CAD-style 2D sketch application with constraint solving.
+One shared **Design tab** (a constraint-solving 2D sketcher) and four apps built on it. Browser-native ES modules and an import map, no
+bundler, no build step to run it.
 
-## Where this is heading
+| App | What it does | Steps (declared in) |
+|---|---|---|
+| **Sketch** (`apps/sketchstudio/`) | Draw, dimension and constrain shapes; export SVG and DXF. | Design, Drawing (`apps/sketchstudio/stages.js`) |
+| **Shaper** (`apps/shaper/`) | Turn a sketch into cuts for the Shaper Origin. Also runs inside a Fusion 360 palette (`?host=fusion`). | Design, Prepare, Export (`apps/shaper/src/modes.js`) |
+| **Pen Plotter** (`apps/penplotter/`) | Draw or import art, set pens and paper, export plotter files. | Design, Prepare, Export (`apps/penplotter/src/stages.js`) |
+| **Trace** (`apps/trace/`) | Turn a photo into SVG and DXF paths. | Trace, Design, Export (`apps/trace/src/stages.js`) |
 
-SketchStudio is becoming the **first shell of a parametric-CAD platform** — *one shared, headless
-"brain" (model · constraint solver · geometry · units · interaction) with many thin app shells*
-over it: SketchStudio itself, a **Shaper Origin** cut-path editor, and future apps
-(laser / 3D-print / other CNC). The constraint solver in this repo *is* that brain and is being
-**reused, not rewritten**. Browser-native ESM + import map, **no build step**. See **`ROADMAP.md`**
-for the full plan and **`NEXT-SESSION.md`** for the current work in flight.
+The names, taglines and icons of the four apps are declared once in `packages/ui/app-registry.js`.
+The plan and the principles (one reusable Design tab; declare, don't hand-roll) are in `ROADMAP.md` and `NEXT-SESSION.md`.
 
-## Fundamental Design Principle
-
-**Every shape has unique joints at each endpoint.** Connections between shapes are made via explicit **coincident constraints**, not by sharing joint objects.
-
-Example:
-- **Line 1:** `joint_A` → `joint_B`
-- **Line 2:** `joint_C` → `joint_D`
-- **Connection:** Coincident constraint between `joint_B` and `joint_C`
-
-This applies to all shapes (polylines, rectangles, circles, etc.). When drawing and snapping to an existing joint, a coincident constraint is automatically created to maintain the connection while keeping each shape's joints independent.
-
-## Quick Start
-
-Open `index.html` in a modern browser (Chrome/Edge/Firefox).
-
-> **Note:** ES modules require a web server. Use VS Code's \"Live Preview\" extension, or run a local server.
-
-### Styling
-
-The app uses Tailwind CSS via the official CDN (`<script src="https://cdn.tailwindcss.com">` in `index.html`). Tailwind compiles in the browser at page load — no local build step is required to develop or deploy.
-
-### Single-file offline build (optional)
-
-To produce a self-contained HTML file with all JS bundled inline (e.g. for emailing or running offline):
+## Run it locally
 
 ```
 npm install
-npm run build:inline
+node server.js
 ```
 
-Output: `output/sketch-studio-unified-v1.0.html`.
+`node server.js` serves the repo root on http://localhost:8000/ (`PORT` changes the port; a folder as the first argument serves that folder).
+`/` forwards to Sketch; the apps are at `/apps/sketchstudio/`, `/apps/shaper/`, `/apps/penplotter/` and `/apps/trace/`.
+It also answers `/api/shaper-upload` with the same code as the Pages Function. `npm install` is only needed for the tests and the site build.
+
+## Folder layout
+
+- `apps/` : one folder per app (its page, its own modules and styles).
+- `packages/core/` : the shared engine: model, constraints, solver, geometry, units, import / export. No DOM.
+- `packages/ui/` : the shared Design tab and UI: header, sidebar, ribbons, document tabs, settings, shortcuts, vendored libraries.
+- `tests/` : the tests (`*.test.js`); `tests/helpers/` is the shared test kit; `packages/core/tests/` holds the core's own.
+- `scripts/` : the test gate, the site build, audits and benches (`scripts/README.md`).
+- `functions/` : the Cloudflare Pages Functions (Google sign-in routes, `/api/shaper-upload`).
+- `analytics/` : the anonymous usage-count Worker (`analytics/README.md`).
+- `docs/` : design notes and audits (`docs/README.md`).
+- `assets/`, `about.html`, `privacy.html` : shared site files.
+
+## Tests
+
+`npm run gate:quick` runs every test that needs no browser; `npm run gate:live` runs the browser tests; `npm run gate:merge` runs what a
+branch affects. The tiers and the rules for running them are in `AGENTS.md` (the runner is `scripts/gate.cjs`).
+`tests/readme-848-node.test.js` checks that every file path and `npm run` command the READMEs name exists.
+
+## Keyboard shortcuts
+
+Every shortcut is declared in one table, `packages/ui/shortcuts.js`, and the app lists the ones it has in Settings > Shortcuts, where they
+can also be changed. There is no copy of the list here, so it cannot go stale.
+
+## Where the plans live
+
+`ROADMAP.md` (the plan), `NEXT-SESSION.md` (the work in flight and the project principles), `WORK-LOG.md` (what each task did),
+`CONTEXT.md` (environment and gotchas), `AGENTS.md` (the rules for the people and agents working here).
 
 ## Websites: one per app
 
 Each app is its own website (its own Cloudflare Pages project). The engine and every shared package stay ONE copy in this repo:
-`node scripts/build-site.cjs <app>` writes the app at the ROOT of its site (task 763: the address bar shows https://shaper-svg.pages.dev/):
-the files of `apps/<app>/` at the top of `dist/`, then `packages/`, the root files the app reaches (the glyph sheet), `privacy.html`, a `404.html`
-and that site's `_redirects`. No source file changes: the page's `../../packages/` links stop at the root, and the build checks every reference of
-the page lands on the same file as in the repo. No other app's folder is in a site (`tests/site-closure.test.js`, `tests/site-root-763.test.js`).
+`node scripts/build-site.cjs <app>` writes the app at the ROOT of its site (the address bar shows https://shaper-svg.pages.dev/):
+the files of `apps/<app>/` at the top of `dist/`, then `packages/`, the root files the app reaches (the glyph sheet), `privacy.html`, `about.html`,
+a 404 page and that site's `_redirects`. No source file changes: the page's relative links to `packages/` stop at the root, and the build checks every
+reference of the page lands on the same file as in the repo. No other app's folder is in a site (`tests/site-closure.test.js`, `tests/site-root-763.test.js`).
 The old addresses keep working: `/apps/<app>/`, `/apps/<app>/index.html` and any `/apps/<app>/<file>` forward (302) to `/` / `/<file>`, the query
 string kept (`/apps/shaper/?host=fusion` -> `/?host=fusion`: the Fusion add-in) and the `#hash` kept by the browser.
 
 | Site | Pages project | Build command | Output dir |
 |---|---|---|---|
-| https://sketch-studio.pages.dev (SketchStudio) | `sketch-studio` (Git-connected) | `node scripts/build-site.cjs sketchstudio` | `dist` |
+| https://sketch-studio.pages.dev (Sketch) | `sketch-studio` (Git-connected) | `node scripts/build-site.cjs sketchstudio` | `dist` |
 | https://shaper-svg.pages.dev | `shaper-svg` (direct upload) | `node scripts/build-site.cjs shaper` | `dist` |
 | https://sketch-plotter.pages.dev | `sketch-plotter` (direct upload) | `node scripts/build-site.cjs penplotter` | `dist` |
 | https://sketch-trace.pages.dev | `sketch-trace` (direct upload) | `node scripts/build-site.cjs trace` | `dist` |
@@ -72,96 +81,9 @@ In the Google Cloud console that client needs, for EACH site:
 - Authorized JavaScript origin: `https://<site>`
 
 Each site has its own browser storage: open tabs, settings and sign-in are per site; designs on Google Drive show on every site.
-Local development is unchanged: `node server.js` serves the repo root with all four apps.
 
-## File Structure
+## Licence
 
-```
-
-├── index.html          # Main app
-├── config.json         # Configuration values
-├── apply-config.ps1    # Script to apply config to source files
-├── config.html         # Visual config editor (optional)
-├── diagnostic-test.html # Diagnostic testing page
-├── test-import.html    # Module import testing
-├── server.js           # Local development server
-├── package.json        # Node.js dependencies
-├── TAILWIND.md         # Tailwind CSS documentation
-└── src/
-    ├── main.js         # App initialization & render loop
-    ├── ui-manager.js   # Toolbar & keyboard shortcuts
-    ├── svg-renderer.js # SVG rendering
-    ├── input-handler.js # Mouse/touch input handling
-    ├── snap-detection.js # Snap detection (joints, lines)
-    ├── constraint-solver.js # Constraint solver (Newton–Raphson / Levenberg–Marquardt)
-    ├── core-utils.js   # DEPRECATED - previously a re-export shim (use ./core/* modules directly)
-    ├── solver-core.js  # Core solver algorithms
-    ├── ui-manager-fixed.js # LEGACY - alternate UI manager (do not use)
-    └── ui/
-        ├── input-manager.js # Input management
-        └── input-handlers/
-            ├── drawing-tools.js # Drawing tool implementations
-            ├── selection-tools.js # Selection tools
-            ├── constraint-tools.js # Constraint tools
-            ├── pan-zoom.js # Pan & zoom controls
-            ├── dimension-input.js # Dimension input
-            ├── line-tool.js # Line drawing tool
-            ├── rect-tool.js # Rectangle drawing tool
-            ├── circle-tool.js # Circle drawing tool
-            ├── arc-tool.js # Arc drawing tool
-            └── linetool.js # LEGACY compatibility re-export (not used)
-    └── core/
-        ├── constants.js # Constants & configuration
-        ├── geometry.js # Geometry helpers
-        ├── constraints.js # Constraint definitions
-        ├── shapes.js # Shape definitions
-        └── joints.js # Joint definitions
-```
-
-## Configuration
-
-Edit `config.json` to customize colors, sizes, and behavior:
-
-```json
-{
-  \"snapping\": { \"snapPx\": 30, \"jointHitRadius\": 14 },
-  \"joints\": { \"radius\": 6, \"fillColor\": \"#ffffff\", ... },
-  \"shapes\": { \"strokeColor\": \"#2563eb\", ... },
-  ...
-}
-```
-
-Then run `apply-config.ps1` (right-click → Run with PowerShell) to apply changes.
-
-## Keyboard Shortcuts
-
-| Key | Tool |
-|-----|------|
-| L | Line |
-| R | Rectangle |
-| C | Circle |
-| S / V | Select |
-| O | Coincident constraint |
-| H | Horizontal/Vertical constraint |
-| P | Parallel constraint |
-| T | Perpendicular constraint |
-| D | Dimension |
-| Escape | Cancel current action |
-| Delete | Delete selected constraint (or clear all) |
-| Ctrl+Z | Undo last shape |
-
-## Features
-
-- **Drawing:** Line, rectangle, circle with polyline continuation
-- **Snapping:** Point-to-point, point-to-line with visual feedback
-- **Constraints:** Coincident, horizontal, vertical, parallel, perpendicular, distance, point-on-line
-- **Solver:** Newton–Raphson (Levenberg–Marquardt) maintains constraint satisfaction (default)
-- **Selection:** Click joints to select, shift-click for multi-select
-- **Constraint glyphs:** Visual indicators appear when selecting constrained joints
-- **Pan & Zoom:** Drag empty space to pan, scroll wheel to zoom
-
-## Notes
-
-- Origin is at (0,0) with red X-axis and green Y-axis
-- Right-click cancels polyline mode
-- Background turns light orange when snapping is active"
+Sketch Studio's own code is under the PolyForm Noncommercial License 1.0.0 (`LICENSE.md`). In plain words: you may use it for any noncommercial
+purpose, change it and share it, as long as you pass the licence on with it; you may not use it commercially without permission. The third-party
+parts bundled with it keep their own licences: see `THIRD-PARTY-NOTICES.md`.

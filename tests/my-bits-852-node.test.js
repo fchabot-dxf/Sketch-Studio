@@ -9,7 +9,7 @@ import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager, { createSettingsManager } from '#core/settings-manager.js';
 import { parse as parseUnit } from '#core/units.js';
-import { cutterHeightAt, cutterProfile, cutterTerraces, SHAPE_SLICES, isShapedCutter } from '#core/cutter-profile.js';
+import { cutterHeightAt, cutterProfile, cutterTerraces, terraceCount, TERRACE_STEP_MM, isShapedCutter } from '#core/cutter-profile.js';
 import { DEFAULT_BITS, validateBit, normalizeBit, loadBits, saveBits, recordFieldsOf, suggestBitName, bitNote, bitSummary, BIT_RECORD_FIELDS, TOOL_TABLE_KEY } from '../apps/shaper/src/tool-table.js';
 import { CUTTER_SHAPES } from '../apps/shaper/src/shaper.js';
 import { hintLabel, hintText } from '../apps/shaper/src/param-hints.js';
@@ -103,7 +103,7 @@ const IN = (t) => parseUnit(t, 'in');
     const pb = cutterProfile('ballnose', D, 90, d), pw = cutterProfile('bowl', D, 90, d, { cornerRadius: r });
     near(pw.xMax, pb.xMax, 1e-9, `d ${d}: the same widest half-width`);
     for (const x of [0, 0.7, 1.9, Math.min(2.5, pb.xMax)]) near(pw.depthAt(x), pb.depthAt(x), 1e-9, `d ${d}: depth at ${x}`);
-    const tb = cutterTerraces('ballnose', D, 90, d), tw = cutterTerraces('bowl', D, 90, d, SHAPE_SLICES.bowl, { cornerRadius: r });
+    const tb = cutterTerraces('ballnose', D, 90, d), tw = cutterTerraces('bowl', D, 90, d, { cornerRadius: r });
     eq([tw.length, tw.every((t, i) => Math.abs(t.halfWidth - tb[i].halfWidth) < 1e-9 && Math.abs(t.depth - tb[i].depth) < 1e-9)], [tb.length, true], `d ${d}: the same terraces as the ball nose`);
   }
   // a real bowl: a deep cut = a flat floor at the depth out to r - c, then the corner rising to d - c at the edge
@@ -111,10 +111,20 @@ const IN = (t) => parseUnit(t, 'in');
   near(p.xMax, r, 1e-12, 'deep: as wide as the bit'); near(p.depthAt(r - c), 5, 1e-12, 'flat floor at the depth'); near(p.depthAt(r), 5 - c, 1e-12, 'the edge is a corner radius above the floor');
   const ps = cutterProfile('bowl', D, 90, 0.5, sh);
   near(ps.xMax, (r - c) + Math.sqrt(c * c - (c - 0.5) ** 2), 1e-12, 'shallow (less than the corner): only as wide as the corner reaches the surface');
-  const ter = cutterTerraces('bowl', D, 90, 5, SHAPE_SLICES.bowl, sh);
-  eq([ter[0].halfWidth, ter[0].depth], [r - c, 5], 'the first terrace: the flat floor, out to the corner');
-  ok(ter.length === SHAPE_SLICES.bowl + 1 && ter.every((t, i) => i === 0 || (t.depth < ter[i - 1].depth && t.halfWidth > ter[i - 1].halfWidth)), 'then the corner steps: wider = shallower');
-  near(ter[ter.length - 1].halfWidth, r, 1e-12, 'the last terrace reaches the bit edge');
+  // 852b: the corner is a SMOOTH surface: no step taller than TERRACE_STEP_MM, and the stepped floor follows the true bowl within one step across the whole width
+  for (const [bc, bd] of [[1.5, 5], [4.7625, 8], [0.5, 3], [3.175, 8]]) {
+    const bp = cutterProfile('bowl', 12.7, 90, bd, { cornerRadius: bc });
+    const ter = cutterTerraces('bowl', 12.7, 90, bd, { cornerRadius: bc });
+    ok(ter[0].depth === bd && ter.every((t, i) => i === 0 || (t.depth < ter[i - 1].depth && t.halfWidth > ter[i - 1].halfWidth)), `corner ${bc}: wider = shallower, the innermost at the depth`);
+    near(ter[ter.length - 1].halfWidth, bp.xMax, 1e-12, `corner ${bc}: the last terrace reaches the bit edge`);
+    const stepMax = Math.max(TERRACE_STEP_MM, (bd - bp.depthAt(bp.xMax)) / 64) * 1.5 + 1e-9; // the cap (64 terraces) binds on a corner taller than 3.2 mm
+    let tallest = 0; for (let i = 1; i < ter.length; i++) tallest = Math.max(tallest, ter[i - 1].depth - ter[i].depth);
+    ok(tallest <= stepMax, `corner ${bc}: the tallest step between terraces is ${tallest.toFixed(4)} mm (declared ${TERRACE_STEP_MM}, cap-bound ${stepMax.toFixed(3)})`);
+    const stepped = (x) => (ter.find((t) => x <= t.halfWidth + 1e-12) || { depth: 0 }).depth;
+    let worst = 0; for (let x = 0; x <= bp.xMax; x += bp.xMax / 4000) worst = Math.max(worst, Math.abs(stepped(x) - bp.depthAt(x)));
+    ok(worst <= stepMax, `corner ${bc}: the stepped floor is within ${worst.toFixed(4)} mm of the true profile`);
+  }
+  eq(terraceCount('bowl', 12.7, 90, 8, { cornerRadius: 4.7625 }), 64, 'the count is capped (the cap is stated in the WORK-LOG)');
   ok(isShapedCutter('bowl'), 'a bowl is a shaped cutter (terraced grooves)');
   console.log('4 bowl profile: ok');
 }

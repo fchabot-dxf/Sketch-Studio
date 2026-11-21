@@ -157,6 +157,35 @@ function wallQuads(levelRegions) {
 
 // Emit the wall quads at their heights. A wall faces into the removed region and its top is above its bottom, so the winding that
 // matches that normal is (a, c, b) + (a, d, c) (checked by the winding test for every mesh).
+// TASK 852c (shading only: the same triangles): the risers of a shaped cut's terraces (a step up to SMOOTH_RISER_MM tall) and the ledge corners they meet get a TILTED normal,
+// leaning up and toward the void by SMOOTH_TILT, summed per position over the risers meeting there, so the staircase shades as the one slope it stands for. A real wall
+// (a pocket's, a level's: taller than a step) and the vertices it alone touches keep their normals.
+const SMOOTH_RISER_MM = 0.3, SMOOTH_TILT = 0.55;
+// positions keyed by their coordinates in 1e-4 mm: a numeric hash (the bucket holds the exact integer triple, so a collision never merges two positions)
+const hashKey = (ix, iy, iz) => ((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) | 0;
+function stairSlot(map, x, y, z, make) {
+  const ix = Math.round(x * 1e4), iy = Math.round(y * 1e4), iz = Math.round(z * 1e4), h = hashKey(ix, iy, iz);
+  let bucket = map.get(h);
+  if (bucket) for (let i = 0; i < bucket.length; i++) { const e = bucket[i]; if (e.ix === ix && e.iy === iy && e.iz === iz) return e; }
+  if (!make) return null;
+  const e = { ix, iy, iz, ax: 0, az: 0 };
+  if (bucket) bucket.push(e); else map.set(h, [e]);
+  return e;
+}
+function smoothStairs(wall, floor) {
+  const acc = new Map(), P = wall.p, N = wall.n;
+  for (let q = 0; q + 12 <= P.length; q += 12) { // each wall quad is 4 vertices: a b c d (a, b on top)
+    if (P[q + 1] - P[q + 7] > SMOOTH_RISER_MM) continue;
+    for (let v = 0; v < 4; v++) { const o = q + v * 3, e = stairSlot(acc, P[o], P[o + 1], P[o + 2], true); e.ax += N[o]; e.az += N[o + 2]; }
+  }
+  if (!acc.size) return;
+  const tilt = (m, o, e) => { const L = Math.hypot(e.ax, e.az); if (L < 1e-6) return; const f = SMOOTH_TILT * Math.min(1, L) / L, nx = e.ax * f, nz = e.az * f, n = Math.hypot(nx, 1, nz); m.n[o] = nx / n; m.n[o + 1] = m.n[o + 1] < 0 ? -1 / n : 1 / n; m.n[o + 2] = nz / n; };
+  for (let q = 0; q + 12 <= P.length; q += 12) {
+    if (P[q + 1] - P[q + 7] > SMOOTH_RISER_MM) continue;
+    for (let v = 0; v < 4; v++) { const o = q + v * 3, e = stairSlot(acc, P[o], P[o + 1], P[o + 2], false); if (e) tilt(wall, o, e); }
+  }
+  for (let o = 0; o < floor.p.length; o += 3) { const e = stairSlot(acc, floor.p[o], floor.p[o + 1], floor.p[o + 2], false); if (e) tilt(floor, o, e); }
+}
 function emitWalls(m, quads, depths) {
   for (const q of quads) {
     const top = q.k0 === 0 ? 0 : -depths[q.k0 - 1], bot = -depths[q.k1];
@@ -362,6 +391,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   });
   lap('floors');
   emitWalls(wall, memoC('wall', `${bx}|${rKey.join(';')}`, () => wallQuads(R)), depths); // the quads depend only on the level REGIONS, not on the depths
+  smoothStairs(wall, floor); // TASK 852c
   lap('walls');
   const throughR = depths.length && isThrough(depths[depths.length - 1], T) ? R[depths.length - 1] : [];
   emitFlat(bottom, memoC('flat', `bot|${bx}|${throughR.length ? rKey[depths.length - 1] : ''}`, () => flatTris(throughR.length ? diffRegions(rect, throughR) : rect)), -T, -1);

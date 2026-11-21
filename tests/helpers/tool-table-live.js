@@ -156,8 +156,12 @@ export async function toolTablePhase({ phone }) {
     await sleep(800);
     console.log('3D board: ' + await evalJs(`document.getElementById('review-info').textContent`));
     await shot(`852-bowl-3d${sfx}.png`, phone ? null : '#review-stage', phone ? 1 : 1.5);
-    const E852 = path.resolve('.evidence/852b'); fs.mkdirSync(E852, { recursive: true });
+    const E852 = path.resolve('.evidence/852c'); fs.mkdirSync(E852, { recursive: true });
     fs.copyFileSync(path.resolve('.evidence/842', `852-bowl-3d${sfx}.png`), path.join(E852, `852-bowl-3d${sfx}.png`));
+    for (let i = 0; i < 16; i++) { await t.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: at.x, y: at.y, deltaX: 0, deltaY: -120 }); await sleep(80); } // closer: the corner
+    await sleep(800);
+    await shot(`852-bowl-3d-close${sfx}.png`, phone ? null : '#review-stage', phone ? 1 : 1.5);
+    fs.copyFileSync(path.resolve('.evidence/842', `852-bowl-3d-close${sfx}.png`), path.join(E852, `852-bowl-3d-close${sfx}.png`));
     // the table persists across a reload
     const stored = await evalJs(`import('/apps/shaper/src/tool-table.js').then((m) => m.loadBits().map((b) => b.name + '|' + b.unit + '|' + (b.diameter ?? '') + '|' + (b.cutLength ?? '')))`);
     assert.ok(stored.includes('1/8 upcut|in|3.175|12.7'), 'stored exactly: ' + JSON.stringify(stored));

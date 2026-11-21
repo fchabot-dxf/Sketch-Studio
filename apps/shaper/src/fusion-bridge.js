@@ -29,6 +29,11 @@ export const DEFAULT_ADSK_POLL_MS = 200;
 export const DEFAULT_ADSK_WAIT_TIMEOUT_MS = 15000;
 export const PROJECT_SAVE_DEBOUNCE_MS = 2000; // TASK 855 / SA-19: debounced write to Fusion Design attribute
 export const LEGACY_FUSION_OFFERED_KEY = 'shaper-fusion-legacy-offered'; // TASK 855: one-time offer of pre-855 browser work
+// TASK 855c: the add-in that stores the project IN the Fusion design (SA-19) opens the palette with `&project=design`. Known at the first paint, so the
+// palette picks its workspace storage once, before anything is restored: that add-in -> per design (no browser storage); an older add-in (no parameter)
+// -> today's browser storage and tabs, unchanged.
+export const FUSION_PROJECT_PARAM = 'project';
+export const FUSION_PROJECT_PER_DESIGN = 'design';
 
 // Map Fusion 360 `unitsManager.defaultLengthUnits` values to supported app units (`UNITS = ['mm', 'cm', 'in']`).
 export const FUSION_UNIT_MAP = Object.freeze({
@@ -209,6 +214,14 @@ export function isFusionMode(locationOrSearch = typeof window !== 'undefined' ? 
     ? locationOrSearch
     : (locationOrSearch && typeof locationOrSearch.search === 'string' ? locationOrSearch.search : '');
   return new URLSearchParams(search).get(FUSION_HOST_PARAM) === FUSION_HOST_VALUE;
+}
+
+/** TASK 855c: true iff the palette was opened by an add-in that keeps the project in the Fusion design (`?host=fusion&project=design`). */
+export function isPerDesignProject(locationOrSearch = typeof window !== 'undefined' ? window.location : '') {
+  const search = typeof locationOrSearch === 'string'
+    ? locationOrSearch
+    : (locationOrSearch && typeof locationOrSearch.search === 'string' ? locationOrSearch.search : '');
+  return isFusionMode(search) && new URLSearchParams(search).get(FUSION_PROJECT_PARAM) === FUSION_PROJECT_PER_DESIGN;
 }
 
 function parsePayload(rawData) {
@@ -410,7 +423,6 @@ export function mountFusionPrepareBar({
   onClearSelections = () => {}, // TASK 795: Clear all
   onStatusChange = () => {}, // TASK 799: notified on pong / connection state changes
   onDesignContextChange = () => {}, // TASK 855: notified after design_context workspace swap
-  onLegacyAddin = () => {}, // TASK 855: notified when an older add-in replies pong without projectBridge
   getController = null,
   prepare = null,
   captureLook = null,
@@ -539,11 +551,7 @@ export function mountFusionPrepareBar({
     onStatus: (text, info) => {
       statusEl.textContent = text;
       statusEl.dataset.state = 'connected';
-      if (info && info.projectBridge) {
-        projectBridgeActive = true;
-      } else if (info && !info.projectBridge && !projectBridgeActive) {
-        onLegacyAddin();
-      }
+      if (info && info.projectBridge) projectBridgeActive = true;
       onStatusChange(info);
     },
     onNotice: (text) => {

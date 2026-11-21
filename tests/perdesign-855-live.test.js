@@ -141,8 +141,8 @@ async function run({ width, height, tag }) {
       await PS.getProjectStore().updateBuffer(() => ({ v: 2, activeKey: 'tab-legacy', tabs: [{ key: 'tab-legacy', name: 'LegacyWebDoc', designId: null, doc }] }));
     })`);
 
-    // 2. Open Fusion mode (?host=fusion)
-    await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`);
+    // 2. Open Fusion mode as the SA-19 add-in opens it (?host=fusion&project=design: the per-design workspace, TASK 855c)
+    await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion&project=design`);
     await waitForApp('design-canvas');
     await waitFor(`document.getElementById('btn-fusion-add-selection') && !document.getElementById('btn-fusion-add-selection').disabled`, 'fusion host ready');
 

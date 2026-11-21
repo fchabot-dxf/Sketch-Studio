@@ -19,7 +19,7 @@ import { createToolTableWindow } from './tool-table-window.js'; // TASK 842: the
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
-import { FUSION_ACTIONS, LEGACY_FUSION_OFFERED_KEY, isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { FUSION_ACTIONS, LEGACY_FUSION_OFFERED_KEY, isFusionMode, isPerDesignProject, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
 import { createFusionToolpathsSync } from './fusion-toolpaths.js'; // TASK 799: live toolpaths in Fusion
 import { getSelections } from './selection-list.js'; // TASK 795 / 799: selections and their 3D frames
 import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 795: the selection list's X and Clear all
@@ -62,6 +62,7 @@ let docBuffer = null; // TASK 474: the autosave buffer / project actions of this
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
 
 const fusionMode = isFusionMode();
+const perDesignProject = isPerDesignProject(); // TASK 855c: the SA-19 add-in keeps the workspace in the Fusion design; an older add-in: today's browser storage
 if (!fusionMode) getGoogleAccount().init();
 const activeStages = shaperStagesFor({ fusion: fusionMode });
 let initMode = null;
@@ -723,7 +724,7 @@ function ensureSketch() {
   // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the tab's stage state
   docBuffer = createDocumentBuffer(shaperBufferOptions({
     controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
-    ...(fusionMode ? { store: createProjectStore({ adapter: createMemoryAdapter(), legacySource: async () => null, channel: null }) } : {}),
+    ...(perDesignProject ? { store: createProjectStore({ adapter: createMemoryAdapter(), legacySource: async () => null, channel: null }) } : {}), // TASK 855c: decided at the first paint
     session: createShaperSession({ prepare }), // shaper-session.js: Prepare selection + view
     showDesign: () => modes.showDesign(), // TASK 706: a design the user opens (new / Open / Open from file) is shown in Design
     refreshViews: () => { if (infoPanel) infoPanel.refresh(); },
@@ -986,23 +987,6 @@ if (fusionMode) {
         nameAfterSelection(ctx.docName.trim().replace(/\s+v\d+$/, ''));
       }
       maybeOfferLegacyBrowserWork(ctx);
-    },
-    onLegacyAddin: () => {
-      docBuffer.stop();
-      docBuffer = createDocumentBuffer(shaperBufferOptions({
-        controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
-        session: createShaperSession({ prepare }),
-        showDesign: () => modes.showDesign(),
-        refreshViews: () => { if (infoPanel) infoPanel.refresh(); },
-        afterSidecar: (restore) => {
-          prepare.afterRestore(restore);
-          stlImporter.reimportOld();
-          showStockThickness();
-          if (modes.current() === 'review') enterReview(designController.state);
-        },
-      }));
-      docBuffer.restore();
-      docBuffer.start();
     },
     onSelectionData: (payload, meta) => {
       ensureSketch();

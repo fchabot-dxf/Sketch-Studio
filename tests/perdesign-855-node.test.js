@@ -5,7 +5,7 @@ import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
-import { FUSION_ACTIONS, mountFusionPrepareBar, PROJECT_SAVE_DEBOUNCE_MS, captureFusionProject, applyFusionProject } from '../apps/shaper/src/fusion-bridge.js';
+import { FUSION_ACTIONS, mountFusionPrepareBar, PROJECT_SAVE_DEBOUNCE_MS, captureFusionProject, applyFusionProject, isPerDesignProject } from '../apps/shaper/src/fusion-bridge.js';
 import { getSelections } from '../apps/shaper/src/selection-list.js';
 import { storeOps, opById, regionOf, setOpSettings, setRefTabsAt, setOpsOn } from '../apps/shaper/src/operations-store.js';
 import { createPrepareStage } from '../apps/shaper/src/prepare-stage.js';
@@ -225,8 +225,12 @@ try {
   fusionUi.bridge.handle('selection_data', JSON.stringify({ ...DOC_A_SEL, selectionId: 'sel-new', docToken: 'tok-new' }));
   ok(storeOps().length > 0 && getSelections().length === 1, "855b: the new design's own selection (its docToken) is applied");
 
-  // 6. Older add-in compatibility: pong without projectBridge calls onLegacyAddin and does not activate projectBridge
-  let legacyCalled = 0;
+  // 6. Older add-in compatibility (TASK 855c): the storage path is decided at the FIRST PAINT from the URL the add-in opens: the SA-19 add-in
+  // adds `&project=design` (per-design workspace); an older add-in does not (today's browser storage + tabs). A pong without projectBridge saves nothing.
+  eq(isPerDesignProject('?host=fusion&project=design'), true, '855c: the SA-19 add-in URL -> per-design workspace');
+  eq(isPerDesignProject({ search: '?project=design&host=fusion' }), true, '855c: Location-like, any order');
+  eq(isPerDesignProject('?host=fusion'), false, "855c: an older add-in's URL -> today's browser storage");
+  eq(isPerDesignProject('?project=design'), false, '855c: outside Fusion mode -> the web app, unchanged');
   const legacyUi = mountFusionPrepareBar({
     viewPrepareEl: app.document.createElement('div'),
     noticeEl: app.document.createElement('div'),
@@ -234,10 +238,8 @@ try {
       adsk: { fusionSendData: () => {} },
       location: { search: '?host=fusion' },
     },
-    onLegacyAddin: () => { legacyCalled++; },
   });
   legacyUi.bridge.handle('pong', JSON.stringify({ action: 'pong', fusionVersion: '2.0', documentName: 'OldDoc', lengthUnits: 'mm' }));
-  eq(legacyCalled, 1, 'pong without projectBridge invokes onLegacyAddin fallback');
   eq(legacyUi.isProjectBridgeActive(), false, 'projectBridge stays inactive for older add-in');
   legacyUi.destroy();
 } finally {

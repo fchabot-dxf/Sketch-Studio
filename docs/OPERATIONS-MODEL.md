@@ -328,7 +328,8 @@ checkbox and reorder feature" of Design's sections. The palette strip in the Ope
 - **Place and style: Design's.** A bar across the top of the Prepare view, right below the document tabs, where Design's ribbon is; icon over name on a
   desktop, icons only (44 px targets, names in the tooltip on a long press) on a phone held upright, the vertical rail at the left on the short viewport (a phone
   in landscape), all the ribbon's own layouts. It lies over the canvas (the canvas never moves); the Operations card starts 12 px below it (desktop 1280 x 800:
-  its top 169 px, 89 px before), the cut card and the notice too; on the short viewport the Operations card starts right of the rail. Prepare's document tab
+  its top 169 px, 89 px before) and the notice too; the cut card's column only where the bar's buttons reach under it (a phone held upright: 89 px lower; on a
+  desktop it keeps its place and height over the bar's empty end); on the short viewport the Operations card starts right of the rail. Prepare's document tab
   joins the toolbar below it, as Design's.
 - **The sections' dropdown (TASK 647, as Design's).** The OPERATIONS name opens the section's dropdown: every type with its "in the bar" box, the type itself (it
   runs, also when it is not in the bar), and its hold-drag grip (reorder); Reset. What does not fit (a phone held upright: 7 of the 8) is in the dropdown,

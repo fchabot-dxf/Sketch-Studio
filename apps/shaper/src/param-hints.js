@@ -84,6 +84,7 @@ const PARAMS = {
   ttUnit: { label: 'Unit', hint: 'The unit its sizes are typed and shown in, whatever the document uses. Fractions such as 1/8 or 1 1/2 work too.' },
   ttDiameter: { label: 'Diameter', hint: 'The cutting diameter. It is written to the file as the bit diameter.' },
   ttAngle: { label: 'Angle', hint: 'The V-bit’s included angle: the whole V, tip to both sides.' },
+  ttTipWidth: { label: 'Tip width', hint: 'The flat at the V\u2019s point (engraving bits have a tiny flat tip). Used to plan pocket clearing if you cut a pocket with it.' },
   ttTipDiameter: { label: 'Tip diameter', hint: 'The diameter of the tip (twice the ball’s radius on a ball tip). It is written to the file as the bit diameter: the tip is what cuts on the line at the bottom of a cut.' },
   ttTaperAngle: { label: 'Taper angle (per side)', hint: 'How much each side of the cone leans from the bit’s axis.' },
   ttCornerRadius: { label: 'Corner radius', hint: 'How round the bit’s lower corners are, up to half the diameter (half the diameter is a ball nose). The flat floor is the diameter minus two corner radii.' },
@@ -95,6 +96,8 @@ const PARAMS = {
   ttSave: { label: 'Save', hint: 'Saves the bit to My bits.' },
   toolDia: { label: 'Bit diameter', hint: 'The bit you plan to use. It is written to the file, and the previews and programmed paths are drawn for it.' },
   cutterShape: { label: 'Cutter shape', hint: 'For the 3D preview and the operations list only: the Origin is not told the shape, so load the matching bit.' },
+  vbitPocketNote: { label: 'V-bit pocket', hint: ({ passes, tip } = {}) => (passes != null && tip ? `V-bit pocket: ${passes} ${passes === 1 ? 'pass' : 'passes'} per depth with a ${tip} tip` : 'V-bit pocket: clearing passes per depth planned with the tip width.') },
+  pocketScallopNote: { label: 'Pocket floor', hint: ({ flat, scallop } = {}) => (flat != null && scallop != null ? `Flat width ${flat} per pass; scallop ${scallop} between passes` : 'Flat width each pass leaves and scallop height between passes at the current stepover.') },
   // ── the Export step's side cards ──
   stockThickness: { label: 'Thickness', hint: 'The thickness of your board, for the 3D preview only. It is not written to the file.' },
   material: { label: 'Material', hint: 'The look of the board in the 3D preview only.' },

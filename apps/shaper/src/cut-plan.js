@@ -8,16 +8,16 @@
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById, cutTypeHasParam, CUT_TYPES } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
-import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, hasLevels, roughingAllowance, roughLayout, boundaryOf } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary (TASK 817: the levels facts and the footprints are op-derive.js's)
+import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, hasLevels, roughingAllowance, roughLayout, boundaryOf, levelsCutAs } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary (TASK 817: the levels facts and the footprints are op-derive.js's)
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon, loopSuccessors } from '#core/loop-geometry.js'; // TASK 832: loopSuccessors (followDesign)
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
-import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
+import { POCKET_CLEARING, clearingPattern, clearingSettings, allowanceDefault, pocketRings, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's cone goes to the 3D Review with its shape
-import { BIT_RECORD_FIELDS } from './tool-table.js'; // TASK 842: the fields a bit sets in an operation (a Contour remembers them whole)
+import { BIT_RECORD_FIELDS, DEFAULT_VBIT_TIP_WIDTH_MM, vbitTipWidth } from './tool-table.js'; // TASK 842: the fields a bit sets in an operation (a Contour remembers them whole); TASK 852d: V-bit tipWidth
 import { loopsWithPolygons, deriveFootprints } from './op-derive.js'; // TASK 817: THE derivation, shared with the background worker (paths-worker.js)
 import { followReliefs } from './relief-frame.js'; // TASK 841: a part's levels follow the part (followDesign)
 import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn, isOutOfDate, followRenames } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
@@ -38,6 +38,7 @@ const sourceDepth = (key) => { const s = (regionOf(key) || {}).source; return s 
 export function recordOf(op, ref) {
   const r = { cutType: op.type, ...op.settings };
   if (r.cutDepth === 'model') r.cutDepth = sourceDepth(ref.key) ?? 'unset';
+  if (r.cutterShape === 'vbit' && (r.tipWidth == null || r.tipWidth === '')) r.tipWidth = DEFAULT_VBIT_TIP_WIDTH_MM; // TASK 852d: read-time default for old documents without tipWidth
   if (op.type !== CONTOUR_TYPE) { const reg = regionOf(ref.key); if (reg) { if (reg.slope) r.slope = reg.slope; if (reg.levels) r.levels = reg.levels; } }
   if (Array.isArray(ref.tabsAt)) r.tabsAt = [...ref.tabsAt]; // TASK 822: the shape's dragged tabs (#core/hold-part tabsAtOf)
   return r;
@@ -98,8 +99,22 @@ export const contourOf = (key) => getPlanRecord(contourKeyOf(key));
 /** A plan entry as the derivation takes it: { key, target, rec }. A Contour record gets its shape's target, and its record its own depth as `baseDepth` (TASK S2)
  *  and the shape's `slope` and `levels`. Every other record: its own key's target, its record as stored (TASK 810: a
  *  Roughing whose boundary is the Stock or a picked shape gets that shape's target as `boundaryTarget`: withBoundaryTarget). */
+/** TASK 852d: the area-clearing cut types ('pocket', or 'roughing' when it clears as a pocket). */
+export function isPocketType(rec) {
+  if (!rec || !rec.cutType) return false;
+  if (rec.cutType === 'pocket') return true;
+  if (rec.cutType === 'roughing') return levelsCutAs({ ...rec, levelsOp: 'roughing' }) === 'pocket';
+  return false;
+}
+/** TASK 852d: tool diameter used to plan / export a cut: a V-bit in a pocket-type cut plans with tipWidth (0.508 mm fallback); all others keep toolDia. */
+export function pocketToolDia(rec) {
+  if (!rec || rec.cutterShape !== 'vbit' || !isPocketType(rec)) return Number(rec && rec.toolDia) || 0;
+  return vbitTipWidth(rec);
+}
+const withPocketTool = (rec) => (rec && rec.cutterShape === 'vbit' && isPocketType(rec) ? { ...rec, toolDia: vbitTipWidth(rec) } : rec);
+
 export function resolveEntry(key, rec) {
-  if (!isContourKey(key)) return { key, target: parseKey(key), rec: withBoundaryTarget(rec) };
+  if (!isContourKey(key)) return { key, target: parseKey(key), rec: withPocketTool(withBoundaryTarget(rec)) };
   if (!rec) return null;
   const pk = partKeyOf(key), reg = regionOf(pk) || {};
   return { key, target: parseKey(pk), rec: { ...rec, baseDepth: rec.cutDepth, ...(reg.slope ? { slope: reg.slope } : {}), ...(reg.levels ? { levels: reg.levels } : {}) } };
@@ -144,7 +159,7 @@ export function renamePlanKeys(rename, remove, plan) {
 // cutDepth is stored 'model' while every shape of the
 // operation has an imported depth equal to it (normalizeDepth). Returns the shape's record now (null when it left every operation). `state` = the solved sketch
 // (a new operation's place reads the derived cuts' ranks).
-const memberKey = (planKey, rec) => { const e = resolveEntry(planKey, rec); return opKeyOf(e ? e.rec : rec); };
+const memberKey = (planKey, rec) => { const e = isContourKey(planKey) ? resolveEntry(planKey, rec) : null; return opKeyOf(e ? e.rec : withBoundaryTarget(rec)); };
 function normalizeDepth(op) {
   if (!op.geometry.length || op.settings.cutDepth === undefined) return;
   const d = recordOf(op, op.geometry[0]).cutDepth;
@@ -510,10 +525,20 @@ export function clearingSummary(key, storedRec, state, loops, loopPolys, owned, 
 /** TASK 745: why the Morphed spiral is not possible on a target ({ morphed: null | 'islands' | 'splits' | another refusal }) for its record's settings, or null
  *  for a target that is not a pocket region. */
 export function clearingAvailability(key, storedRec, state, loops, loopPolys) {
-  const rec = effectiveCutRecord(storedRec);
+  const rec = effectiveCutRecord(withPocketTool(storedRec));
   if (!rec || rec.cutType !== 'pocket') return null;
   const pocket = (deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys) || []).find((c) => c.isCompound);
-  return pocket ? { morphed: morphedBlocker(pocket, rec, state) } : null;
+  if (!pocket) return null;
+  if (rec.cutterShape === 'vbit') {
+    const rings = pocketRings(pocket, state);
+    if (!rings) return { morphed: 'outline' };
+    if (rings.holes.length) return { morphed: 'islands' };
+    const xs = rings.outer.map((p) => p[0]), ys = rings.outer.map((p) => p[1]);
+    const span = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    const st = clearingSettings(rec);
+    if (st.stepover > 0 && span / (2 * st.stepover) > 35) return { morphed: 'morphed vbit' };
+  }
+  return { morphed: morphedBlocker(pocket, rec, state) };
 }
 /** TASK 745: the words of a refusal / a disabled choice. */
 export const CLEARING_REFUSED = {
@@ -522,6 +547,7 @@ export const CLEARING_REFUSED = {
   area: 'the morphed turns of one area would cross each other: use Spiral or Raster',
   'morphed islands': 'has islands: use Spiral or Raster',
   'morphed area': 'the morphed turns of one area would cross each other: use Spiral or Raster',
+  'morphed vbit': 'too many narrow passes for Morphed spiral: use Spiral or Raster',
   'raster join': 'a raster pass cannot be joined to the next inside the pocket; cut as open passes + the wall',
   'loop cross': 'its way back would cross the turns on this shape; cut as open paths + the wall', // TASK 804: never a crossing loop
   'islands close': 'an island is closer to the wall or to another island than the bit: the finish pass would cut it',

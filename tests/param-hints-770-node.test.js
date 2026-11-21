@@ -158,6 +158,8 @@ for (const m of opListJs.matchAll(/id:\s*'([A-Za-z]+)'/g)) seen.add(m[1]);
 for (const m of opListJs.matchAll(/dataset\.hint = '([A-Za-z]+)'/g)) seen.add(m[1]); // TASK S3: a row's out-of-date mark (opOutOfDate)
 const stageJs = fs.readFileSync(new URL('../apps/shaper/src/prepare-stage.js', import.meta.url), 'utf8'); // TASK S3: the operations toolbar's Recalculate (its name and tooltip)
 for (const m of stageJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'\)/g)) seen.add(m[1]);
+const cutPanelJs = fs.readFileSync(new URL('../apps/shaper/src/cut-panel.js', import.meta.url), 'utf8'); // TASK 852d: V-bit / scallop bit notes
+for (const m of cutPanelJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'/g)) seen.add(m[1]);
 const stlCardJs = fs.readFileSync(new URL('../apps/shaper/src/stl-card.js', import.meta.url), 'utf8'); // TASK 790: the STL card's rows and title
 const toolTableJs = fs.readFileSync(new URL('../apps/shaper/src/tool-table-window.js', import.meta.url), 'utf8'); // TASK 842: the Tool table window's labels
 for (const m of toolTableJs.matchAll(/data-hint="([A-Za-z]+)"|hint: '([A-Za-z]+)'/g)) seen.add(m[1] || m[2]);

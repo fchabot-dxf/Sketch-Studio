@@ -8340,42 +8340,42 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "shaper-cut-undo-node__0005__2c4d77d4": {
-   "a": "372bba7ff50d786c027f63220f328990",
-   "b": "372bba7ff50d786c027f63220f328990",
-   "c": "1e11af443e09af9361942f7e8566936e",
-   "d": "4e05920b6780805d2645ce2fbbb948b8",
-   "dContent": "6ee769796105c906b43e8b61ad3480b1",
-   "e": "65c3db2a16c35783b7c1984d759f3a8a",
+   "a": "a139edcd649a969144417ca2d25746b8",
+   "b": "a139edcd649a969144417ca2d25746b8",
+   "c": "36c8c1794d9aacabd47274cac1c98fce",
+   "d": "372dd4fda51bc9d28217d2851bc8e4e7",
+   "dContent": "350f097f13c421b7669c31b54910fbbd",
+   "e": "715e444fa35409db5952f30feeeaa1fc",
    "eNoId": "5cfb3d481ee2120acb498e460a50a00f",
    "f": "d751713988987e9331980363e24189ce"
   },
   "shaper-cut-undo-node__0006__b98e1fec": {
-   "a": "372bba7ff50d786c027f63220f328990",
-   "b": "372bba7ff50d786c027f63220f328990",
-   "c": "1e11af443e09af9361942f7e8566936e",
-   "d": "64265a745f1b1f488d1bb13aa61c839a",
-   "dContent": "c0e2fa63ed87fa0e39c05eb6046f5b48",
-   "e": "dd7600d59269f039264d0150bf21c588",
+   "a": "a139edcd649a969144417ca2d25746b8",
+   "b": "a139edcd649a969144417ca2d25746b8",
+   "c": "36c8c1794d9aacabd47274cac1c98fce",
+   "d": "8b231e593a5c22878b1c8077b92dc649",
+   "dContent": "5be805968cf76b797910a6a78e689383",
+   "e": "9293cdd3ed3289591f34f7632a0db94c",
    "eNoId": "520d975a8f9a46094110964439a40090",
    "f": "d751713988987e9331980363e24189ce"
   },
   "shaper-cut-undo-node__0007__2878d45a": {
-   "a": "372bba7ff50d786c027f63220f328990",
-   "b": "372bba7ff50d786c027f63220f328990",
-   "c": "1e11af443e09af9361942f7e8566936e",
-   "d": "80460321a42afabf4c174a0d5e359aa4",
-   "dContent": "c0e2fa63ed87fa0e39c05eb6046f5b48",
-   "e": "dd7600d59269f039264d0150bf21c588",
+   "a": "a139edcd649a969144417ca2d25746b8",
+   "b": "a139edcd649a969144417ca2d25746b8",
+   "c": "36c8c1794d9aacabd47274cac1c98fce",
+   "d": "f42994ab1c3f8e75f58947fc18f0f32d",
+   "dContent": "5be805968cf76b797910a6a78e689383",
+   "e": "9293cdd3ed3289591f34f7632a0db94c",
    "eNoId": "520d975a8f9a46094110964439a40090",
    "f": "d751713988987e9331980363e24189ce"
   },
   "shaper-cut-undo-node__0008__841b04fd": {
-   "a": "548af3afb04bd57ff225da563768e65a",
-   "b": "548af3afb04bd57ff225da563768e65a",
-   "c": "44c5fd94264a679492ecf9d96eafd6f2",
-   "d": "9eea8dab12d6030a4e272bbd5361929c",
-   "dContent": "ed072227d28160f058307f193f13b774",
-   "e": "fb85254cba36d514449976147b869b0e",
+   "a": "a139edcd649a969144417ca2d25746b8",
+   "b": "a139edcd649a969144417ca2d25746b8",
+   "c": "36c8c1794d9aacabd47274cac1c98fce",
+   "d": "f42994ab1c3f8e75f58947fc18f0f32d",
+   "dContent": "5be805968cf76b797910a6a78e689383",
+   "e": "cd2f4aeac2723e880ac56ff7293346ce",
    "eNoId": "c276126a0e6c49ed521db40e73584400",
    "f": "d751713988987e9331980363e24189ce"
   },
@@ -9514,6 +9514,43 @@
     "matrix__pocket-raster-loop",
     "pocket-clearing-750-node__0007__63a764a4"
    ]
+  },
+  "852d": {
+   "why": "V-bit pocket now plans and exports with its flat tip width (0.508 mm default when absent in an older V-bit record) rather than its full conical diameter, changing shaper:toolDia, 2D sweep, bit-centre path, and 3D relief while Operations list / selection rows stay unchanged.",
+   "keys": {
+    "shaper-cut-undo-node__0005__2c4d77d4": [
+     "a",
+     "b",
+     "c",
+     "d",
+     "dContent",
+     "e"
+    ],
+    "shaper-cut-undo-node__0006__b98e1fec": [
+     "a",
+     "b",
+     "c",
+     "d",
+     "dContent",
+     "e"
+    ],
+    "shaper-cut-undo-node__0007__2878d45a": [
+     "a",
+     "b",
+     "c",
+     "d",
+     "dContent",
+     "e"
+    ],
+    "shaper-cut-undo-node__0008__841b04fd": [
+     "a",
+     "b",
+     "c",
+     "d",
+     "dContent",
+     "e"
+    ]
+   }
   }
  }
 }

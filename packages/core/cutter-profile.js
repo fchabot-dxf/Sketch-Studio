@@ -139,3 +139,24 @@ export function cutterTerraces(shape, toolDia, angle, depth, taper = null, count
   }
   return out;
 }
+
+/**
+ * TASK 852d: the flat bottom width each pass leaves and the scallop height between adjacent passes spaced by `stepover` (mm)
+ * for a ball-nose or bowl bit in a pocket: { flatWidth, scallopHeight } (mm), or null for shapes without a rounded-corner floor.
+ * A ball nose has cornerRadius = diameter / 2 (flatWidth = 0). A bowl bit has flatWidth = diameter - 2 * cornerRadius; when
+ * stepover <= flatWidth the flat bottoms meet (scallopHeight = 0), else they meet on the corner of radius c at half-gap
+ * delta = (stepover - flatWidth) / 2, giving h = c - sqrt(c^2 - delta^2) (capped at c when stepover >= diameter).
+ */
+export function pocketScallop(shape, toolDia, stepover, extra = null) {
+  const D = Number(toolDia), s = Number(stepover);
+  if (!(D > 0) || !(s > 0)) return null;
+  const r = D / 2;
+  let c;
+  if (shape === 'ballnose') c = r;
+  else if (shape === 'bowl') { const g = bowlCorner(D, extra); if (!g) return null; c = g.c; }
+  else return null;
+  const flatWidth = Math.max(0, D - 2 * c);
+  const delta = Math.max(0, (s - flatWidth) / 2);
+  const scallopHeight = delta >= c ? c : c - Math.sqrt(c * c - delta * delta);
+  return { flatWidth, scallopHeight };
+}

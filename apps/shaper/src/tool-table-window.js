@@ -5,7 +5,7 @@
 // (saveBits: the settings store). A length is parsed only when its field is changed (an untouched field keeps its exact stored value: no drift on a re-save).
 // Opened from the cut card's Bit menu ("Edit my bits...") and from Prepare's ribbon (TASK S3).
 import { CUTTER_SHAPES } from './shaper.js';
-import { loadBits, saveBits, validateBit, normalizeBit, newBitId, duplicateBit, bitSummary, suggestBitName, bitNote, bitLengthText, parseBitLength, typeFields, BIT_UNITS } from './tool-table.js';
+import { loadBits, saveBits, validateBit, normalizeBit, newBitId, duplicateBit, bitSummary, suggestBitName, bitNote, bitLengthText, parseBitLength, typeFields, BIT_UNITS, DEFAULT_VBIT_TIP_WIDTH_MM } from './tool-table.js';
 import { hintLabel, hintText } from './param-hints.js';
 import { bindHint } from './hint.js';
 import { docUnit } from '#core/settings-manager.js';
@@ -16,6 +16,7 @@ const FIELD_ROWS = [
   { field: 'diameter', hint: 'ttDiameter', kind: 'length' },
   { field: 'cornerRadius', hint: 'ttCornerRadius', kind: 'length' },
   { field: 'angle', hint: 'ttAngle', kind: 'angle' },
+  { field: 'tipWidth', hint: 'ttTipWidth', kind: 'length' },
   { field: 'tipDiameter', hint: 'ttTipDiameter', kind: 'length' },
   { field: 'taperAngle', hint: 'ttTaperAngle', kind: 'angle' },
   { field: 'shankDiameter', hint: 'ttShankDiameter', kind: 'length' },
@@ -93,7 +94,7 @@ export function createToolTableWindow({ doc = document, settings, onChange = () 
       const b = doc.createElement('button'); b.type = 'button'; b.className = 'tt-type' + (draft.type === t.id ? ' is-active' : ''); b.dataset.type = t.id;
       b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(draft.type === t.id));
       b.innerHTML = `${glyph(t.id)}<span></span>`; b.querySelector('span').textContent = hintLabel(`cutterShape:${t.id}`); b.dataset.hint = `cutterShape:${t.id}`; // its hint: the type's (the table's cutter shape entry)
-      b.addEventListener('click', () => { draft = { ...draft, type: t.id }; renderForm(); });
+      b.addEventListener('click', () => { draft = { ...draft, type: t.id, ...(t.id === 'vbit' && draft.tipWidth == null ? { tipWidth: DEFAULT_VBIT_TIP_WIDTH_MM } : {}) }; renderForm(); });
       return b;
     }));
     unitsEl.replaceChildren(...BIT_UNITS.map((u) => {
@@ -150,7 +151,7 @@ export function createToolTableWindow({ doc = document, settings, onChange = () 
       b.innerHTML = `${glyph(t.id)}<span class="tt-text"><span class="tt-template-name"></span><span class="tt-template-desc"></span></span>`;
       b.querySelector('.tt-template-name').textContent = hintLabel(`cutterShape:${t.id}`);
       b.querySelector('.tt-template-desc').textContent = hintText(`cutterShape:${t.id}`);
-      b.addEventListener('click', () => edit({ id: newBitId(bits), name: '', type: t.id, unit: docUnit() === 'in' ? 'in' : 'mm' }, true));
+      b.addEventListener('click', () => edit({ id: newBitId(bits), name: '', type: t.id, unit: docUnit() === 'in' ? 'in' : 'mm', ...(t.id === 'vbit' ? { tipWidth: DEFAULT_VBIT_TIP_WIDTH_MM } : {}) }, true));
       return b;
     }));
   }

@@ -5,7 +5,7 @@
 
 import { cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
-import { CLEARING_REFUSED, CONTOUR_DEFAULTS } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots)
+import { CLEARING_REFUSED, CONTOUR_DEFAULTS, pocketToolDia } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots); TASK 852d: V-bit pocket tip width
 import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
@@ -13,9 +13,9 @@ import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from 
 import { attachStepper } from './number-stepper.js';
 import { parse as parseUnit, unitNumber } from '#core/units.js';
 import { bindHint, setOffReason } from './hint.js'; // TASK 805: a row's label and its tooltip (the cursor tooltip is installed once by main.js)
-import { hintLabel, choiceId } from './param-hints.js'; // TASK 770: THE table of every row's label and hint
-import { bitOfRecord, bitSummary, recordFieldsOf, customFields } from './tool-table.js'; // TASK 842: the Bit row picks from the user's tool table
-import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's shape (from the table only)
+import { hintLabel, hintText, choiceId } from './param-hints.js'; // TASK 770: THE table of every row's label and hint
+import { bitOfRecord, bitSummary, recordFieldsOf, customFields, vbitTipWidth } from './tool-table.js'; // TASK 842: the Bit row picks from the user's tool table
+import { isTaperedCutter, pocketScallop } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's shape; TASK 852d: pocketScallop
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 // TASK 714: each STEPPED type right after its plain type; a stepped type is listed only when the target can take it (its record carries that slope).
@@ -316,6 +316,7 @@ export function createCutPanel(hostEl, opts = {}) {
         <button type="button" class="cut-bit-trigger" aria-haspopup="listbox" aria-expanded="false">
           <span class="cut-bit-ic"></span><span class="cut-bit-cur"></span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
+        <div class="cut-hint cut-bit-note" role="note" hidden></div>
       </div>
       <div class="cut-row" data-param="toolDia">
         <button type="button" class="cut-field-label" data-hint="toolDia"></button>
@@ -350,7 +351,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const holdModesWrap = $('.cut-hold-modes'), countInput = $('.cut-tab-count'), countPresetsWrap = $('.cut-row[data-row="tabCount"] .cut-presets') /* the Auto button, inside the count box (a row of its own would push the card past a phone's screen) */, tabWidthInput = $('.cut-tab-width'), holdThicknessInput = $('.cut-hold-thickness'); // TASK 742
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
   const clearTrigger = $('.cut-clear-trigger'), clearPop = $('.cut-clear-pop'), clearIc = $('.cut-clear-ic'), clearCur = $('.cut-clear-cur'); // TASK 745
-  const bitTrigger = $('.cut-bit-trigger'), bitPop = $('.cut-bit-pop'), bitIc = $('.cut-bit-ic'), bitCur = $('.cut-bit-cur'); // TASK 842
+  const bitTrigger = $('.cut-bit-trigger'), bitPop = $('.cut-bit-pop'), bitIc = $('.cut-bit-ic'), bitCur = $('.cut-bit-cur'), bitNoteEl = $('.cut-bit-note'); // TASK 842 / 852d
   const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
   const layoutModesWrap = $('.cut-layout-modes'), minTerraceInput = $('.cut-min-terrace'); // TASK 792
   minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
@@ -559,7 +560,7 @@ export function createCutPanel(hostEl, opts = {}) {
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt' + (sh.id === current.cutterShape ? ' is-current' : ''); opt.dataset.shape = sh.id;
       optionBody(opt, iconSvg(sh), 'cutterShape', sh.id);
-      const pick = () => (isTaperedCutter(current.cutterShape) ? onSetFields({ cutterShape: sh.id, taperAngle: undefined, shankDia: undefined }) : current.cutterShape === 'bowl' ? onSetFields({ cutterShape: sh.id, cornerRadius: undefined }) : onSetField('cutterShape', sh.id)); // TASK 842: leaving a tapered shape drops its cone; TASK 852: leaving a bowl drops its corner radius
+      const pick = () => (isTaperedCutter(current.cutterShape) ? onSetFields({ cutterShape: sh.id, taperAngle: undefined, shankDia: undefined }) : current.cutterShape === 'bowl' ? onSetFields({ cutterShape: sh.id, cornerRadius: undefined }) : current.cutterShape === 'vbit' && sh.id !== 'vbit' ? onSetFields({ cutterShape: sh.id, tipWidth: undefined }) : onSetField('cutterShape', sh.id)); // TASK 842: leaving a tapered shape drops its cone; TASK 852: leaving a bowl drops its corner radius; TASK 852d: leaving V-bit drops tipWidth
       opt.addEventListener('click', () => { pick(); if (sh.id === 'vbit') { current.cutterShape = 'vbit'; buildShapePop(); } else closePops(null); }); // a V-bit pick stays open to show its angles
       shapePop.appendChild(opt);
       if (sh.id === 'vbit' && current.cutterShape === 'vbit') {
@@ -606,8 +607,9 @@ export function createCutPanel(hostEl, opts = {}) {
   // with its pattern's icon; a choice the target cannot take (the Morphed spiral on a pocket with islands / a neck) stays listed, greyed, with its reason under it
   const buildClearPop = () => {
     clearPop.innerHTML = '';
+    const clearingInfo = typeof current.clearingInfo === 'function' ? current.clearingInfo() : current.clearingInfo;
     for (const c of CLEARING_CHOICES) {
-      const why = c.id === 'morphed' && current.clearingInfo && current.clearingInfo.morphed ? (CLEARING_REFUSED[current.clearingInfo.morphed] || current.clearingInfo.morphed) : null;
+      const why = c.id === 'morphed' && clearingInfo && clearingInfo.morphed ? (CLEARING_REFUSED[clearingInfo.morphed] || clearingInfo.morphed) : null;
       const opt = document.createElement('button');
       opt.type = 'button'; opt.className = 'cut-type-opt cut-clear-opt' + (c.id === current.clearing ? ' is-current' : '') + (why ? ' is-disabled' : '');
       opt.setAttribute('role', 'option'); opt.dataset.clearing = c.id;
@@ -771,7 +773,8 @@ export function createCutPanel(hostEl, opts = {}) {
     clearIc.innerHTML = iconSvg(choice); clearCur.textContent = hintLabel(choiceId('clearing', choice.id));
     const pct = Number(current.stepover) > 0 ? Number(current.stepover) : POCKET_CLEARING.stepoverPct.default;
     stepoverInput.value = String(Math.round(pct * 100) / 100);
-    stepoverLen.textContent = clearing ? `= ${lengthText((pct / 100) * (Number(current.toolDia) || 0), { show: 'unit', fractions: false })}` : '';
+    const planDia = pocketToolDia({ cutType: current.cutType, ...(current.record || {}), cutterShape: current.cutterShape, toolDia: current.toolDia });
+    stepoverLen.textContent = clearing ? `= ${lengthText((pct / 100) * planDia, { show: 'unit', fractions: false })}` : '';
     allowanceInput.value = fieldText(fieldBase('finishAllowance'));
     loopInput.checked = computed && current.loop === true;
     hints.finishAllowance.refresh({ loop: current.loop === true, roughing }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js); TASK 792: on a Roughing, the Contour
@@ -813,6 +816,24 @@ export function createCutPanel(hostEl, opts = {}) {
     bitIc.innerHTML = iconSvg(shape);
     bitCur.textContent = picked ? `${bitRec.bitName}${bitOfRecord(bitRec, getBits()) ? '' : ' (not in My bits)'}` : hintLabel('bitCustom');
     const u = docUnit();
+    let bitNote = '';
+    if (hasBit && clearing && clearing !== 'freehand') {
+      if (current.cutterShape === 'vbit') {
+        const s = current.clearingSum;
+        if (s && !s.refused) {
+          const passes = s.pattern === 'raster' ? s.passes : s.pattern === 'morphed' ? s.turns : s.loops;
+          if (passes > 0) bitNote = hintText('vbitPocketNote', { passes, tip: `${lengthText(vbitTipWidth(bitRec), { unit: u, show: 'field', fractions: false })} ${u}` });
+        }
+      } else if (current.cutterShape === 'ballnose' || current.cutterShape === 'bowl') {
+        const sc = pocketScallop(current.cutterShape, current.toolDia, (pct / 100) * (Number(current.toolDia) || 0), bitRec);
+        if (sc) {
+          const fmt = (mm) => `${lengthText(mm, { unit: u, show: 'field', fractions: false })} ${u}`;
+          bitNote = hintText('pocketScallopNote', { flat: fmt(sc.flatWidth), scallop: fmt(sc.scallopHeight) });
+        }
+      }
+    }
+    bitNoteEl.textContent = bitNote;
+    bitNoteEl.hidden = !bitNote;
     unitEls.forEach((el) => { el.textContent = u; });
     applyTabs(); // TASK 810: last, on the rows the card logic shows (TASK S3: the card is the open operation's only: a selection shows no card)
   };
@@ -846,7 +867,7 @@ export function createCutPanel(hostEl, opts = {}) {
     if (!model) { card.hidden = true; closeMenu(); current = { mode: null, kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
-      clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
+      clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, clearingSum: model.clearingSum || null, // TASK 745 / 852d
       mode: model.mode || null, // TASK S2: 'op' (an open operation; TASK S3: the selection-only 'shape' card is gone)
       wallSideFree: model.wallSideFree === true, // TASK S2: a Contour's Wall side applies (a shape whose model does not say it)
       depthFromModel: model.depthFromModel !== false, // TASK S2: a Roughing's / Contour's Depth from the model, or typed (the cut stops there)

@@ -154,7 +154,7 @@ export function mountExportSim({ els, ensure, reliefItems, mode, flat, solid, re
       rebuilds.push({ ms: Math.round(r.woodMs), run: doneRun.length }); if (rebuilds.length > FRAME_LOG) rebuilds.shift();
     }
   }
-  const passColorOf = (id) => { const op = data.ops.find((o) => o.id === id); return (op && cutTypeById(op.cutType) && cutTypeById(op.cutType).passColor) || '#888888'; };
+  const passColorOf = (id) => cutTypeById(data.ops.find((o) => o.id === id).cutType).passColor; // a cutting operation's type declares it (shaper.js CUT_TYPES)
 
   // the loop: one requestAnimationFrame while a run plays
   function frame(now) {

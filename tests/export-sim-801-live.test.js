@@ -103,6 +103,7 @@ try {
   ok(card.title === 'Simulate' && card.passesShown, 'the card title; Show passes is offered in 3D');
   ok(/not real time/.test(card.note) && /AutoPass/.test(card.note) && /depth passes are not animated/.test(card.note), `the one line under the controls: ${card.note}`);
   if (phone) ok(card.boxes.every(([w, h]) => h >= 44 && w >= 44), `touch-sized buttons: ${JSON.stringify(card.boxes)}`);
+  await evalJs(`document.getElementById('review-sim').scrollIntoView({ block: 'start' })`); await sleep(200); // the card is the last of the side panel
   await t.shot(`card-${D}.png`, '#review-sim', 2);
 
   // 2. 3D: Preview all plays
@@ -235,6 +236,7 @@ try {
   const ood = await evalJs(`({ text: document.getElementById('sim-label').textContent, btn: !!document.querySelector('#sim-label .sk-wait-action'), dis: document.getElementById('sim-preview-all').disabled })`);
   console.log(D, 'out of date', JSON.stringify(ood));
   ok(ood.btn && ood.dis && /operations? (is|are) out of date/.test(ood.text), `nothing plays stale paths: "${ood.text}" with Recalculate, the buttons off`);
+  await evalJs(`document.getElementById('review-sim').scrollIntoView({ block: 'start' })`); await sleep(200); // the card is the last of the side panel
   await t.shot(`card-out-of-date-${D}.png`, '#review-sim', 2);
   await clickEl('#sim-label .sk-wait-action');
   await waitFor(`!document.getElementById('sim-preview-all').disabled`, 'Recalculate: the card works again', 60000);

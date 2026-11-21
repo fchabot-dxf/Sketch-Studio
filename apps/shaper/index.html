@@ -764,14 +764,6 @@
       <div id="review-info"></div>
     </div>
     <aside id="review-side">
-    <!-- TASK 801: the Simulate card (export-sim.js): VCarve's Preview toolpaths panel, for the view shown -->
-    <div class="review-stock" id="review-sim"><h2 class="simexport-title"><span data-hint="simulate"></span></h2>
-      <label><span class="review-label-line"><span data-hint="simOperation" id="sim-op-label"></span></span> <select id="sim-op" aria-labelledby="sim-op-label"></select></label>
-      <div class="sim-actions"><button id="sim-preview-sel" type="button" class="sim-btn" data-label="simPreviewSelected" data-hint="simPreviewSelected"></button><button id="sim-preview-all" type="button" class="sim-btn" data-label="simPreviewAll" data-hint="simPreviewAll"></button><button id="sim-reset" type="button" class="sim-btn" data-label="simReset" data-hint="simReset"></button></div>
-      <div class="sim-transport"><button id="sim-prev" type="button" class="sim-btn sim-icon" data-hint="simPrev" aria-label="Previous operation"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3v10" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M13 3L5 8l8 5z" fill="currentColor"/></svg></button><button id="sim-play" type="button" class="sim-btn sim-icon" data-hint="simPlay" data-state="play" aria-label="Play"><svg class="sim-ic-play" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 2.5l9 5.5-9 5.5z" fill="currentColor"/></svg><svg class="sim-ic-pause" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></svg></button><button id="sim-next" type="button" class="sim-btn sim-icon" data-hint="simNext" aria-label="Next operation"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3l8 5-8 5z" fill="currentColor"/><path d="M13 3v10" stroke="currentColor" stroke-width="1.8" fill="none"/></svg></button><input id="sim-scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Simulation time"><select id="sim-speed" aria-label="Speed" data-hint="simSpeed" class="sim-icon"></select></div>
-      <div class="sim-opts"><label class="sim-check"><input type="checkbox" id="sim-animate"> <span data-hint="simAnimate"></span></label><label class="sim-check" id="sim-passes-row"><input type="checkbox" id="sim-passes"> <span data-hint="simPasses"></span></label></div>
-      <div id="sim-label" class="sim-label" aria-live="polite"></div>
-      <div id="sim-note" class="review-stock-note"></div></div>
     <div class="review-stock" id="review-cuts" hidden><h2 class="simexport-title"><span data-hint="reviewCuts"></span></h2>
       <div id="review-cuts-list" class="review-cuts-list"></div></div>
     <div class="review-stock" id="review-stock"><h2 class="simexport-title">Stock</h2>
@@ -792,6 +784,14 @@
       <p id="simexport-status" class="simexport-status"></p>
       <div data-feedback-slot></div><!-- TASK 830: the one "Enjoying Shaper?" card, #ui/feedback.js -->
     </div>
+    <!-- TASK 801: the Simulate card (export-sim.js): VCarve's Preview toolpaths panel, for the view shown (LAST in the side panel: the Cuts list, the Stock, the Look and the Export buttons keep their places) -->
+    <div class="review-stock" id="review-sim"><h2 class="simexport-title"><span data-hint="simulate"></span></h2>
+      <label><span class="review-label-line"><span data-hint="simOperation" id="sim-op-label"></span></span> <select id="sim-op" aria-labelledby="sim-op-label"></select></label>
+      <div class="sim-actions"><button id="sim-preview-sel" type="button" class="sim-btn" data-label="simPreviewSelected" data-hint="simPreviewSelected"></button><button id="sim-preview-all" type="button" class="sim-btn" data-label="simPreviewAll" data-hint="simPreviewAll"></button><button id="sim-reset" type="button" class="sim-btn" data-label="simReset" data-hint="simReset"></button></div>
+      <div class="sim-transport"><button id="sim-prev" type="button" class="sim-btn sim-icon" data-hint="simPrev" aria-label="Previous operation"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3v10" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M13 3L5 8l8 5z" fill="currentColor"/></svg></button><button id="sim-play" type="button" class="sim-btn sim-icon" data-hint="simPlay" data-state="play" aria-label="Play"><svg class="sim-ic-play" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 2.5l9 5.5-9 5.5z" fill="currentColor"/></svg><svg class="sim-ic-pause" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></svg></button><button id="sim-next" type="button" class="sim-btn sim-icon" data-hint="simNext" aria-label="Next operation"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3l8 5-8 5z" fill="currentColor"/><path d="M13 3v10" stroke="currentColor" stroke-width="1.8" fill="none"/></svg></button><input id="sim-scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Simulation time"><select id="sim-speed" aria-label="Speed" data-hint="simSpeed" class="sim-icon"></select></div>
+      <div class="sim-opts"><label class="sim-check"><input type="checkbox" id="sim-animate"> <span data-hint="simAnimate"></span></label><label class="sim-check" id="sim-passes-row"><input type="checkbox" id="sim-passes"> <span data-hint="simPasses"></span></label></div>
+      <div id="sim-label" class="sim-label" aria-live="polite"></div>
+      <div id="sim-note" class="review-stock-note"></div></div>
     </aside>
   </section>
 

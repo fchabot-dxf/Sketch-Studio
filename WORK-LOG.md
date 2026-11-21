@@ -17120,3 +17120,23 @@ Four bugs from the 838 showcase plate (12 x 8 in mounting plate; fixture `.evide
 - TESTS: NEW tests/relief-through-839-node.test.js (28 checks: the counterbore for freehand / spiral / raster pockets, a plain through hole open top and bottom, depth unset, a groove and a held hole keep the disc, a nested Outside part stands, a plate's hole opens, a through programmed pocket keeps its island); fails on origin/main ("0 !== 19.05"). NEW tests/review-notes-839-node.test.js (19 checks); fails with the pre-839 concatenation (`"Drawn for a 0.125 in bit: a smaller bit leaves ridges" is written once (two pockets)`, 2 !== 1).
 - BEHAVIOUR CHANGES: the Review info writes each shared line once; every through, unheld Inside cut (and an Outside profile's own holes) shows an open hole in 3D (fewer triangles: the plate 16327 -> 13803); a cut depth within 1e-9 mm of the board is `through` in reliefDepth (it was already drawn through).
 - Evidence (local) .evidence/839/: before-/after-item3-3d-counterbore.png, -item3-3d.png, -item2-info-crop.png, -item1-*.png, after-item4-phone-*.png, item2-before-node.txt, item3-before-node.txt, probe.mjs.
+
+## TURN 840
+Spur gear template (owner turn 3072). `packages/core/gear-geometry.js` (new, pure): standard full-depth involute tooth (addendum 1 m, dedendum 1.25 m). Each flank is TWO arcs S -> J -> A. All three points lie on the involute. Each arc's centre sits on its chord's bisector at the Chebyshev-best offset (golden section). J is placed by bisection where the two arcs' deviations are equal. The fit depends only on z and alpha, done at module 1. Backlash allowance = each flank turned (b/2)/rb into the tooth: exactly a b/2 normal offset of an involute.
+Under the base circle (rf < rb) the flank is a plain RADIAL line. Undercut is NOT generated; teeth stay 6..200.
+`packages/core/templates.js` 'spur-gear' (after bolt-circle): params teeth (count 6..200, 24), module (length 3; inch doc 1/8 in = DP 8, no second pitch system), pressure angle (choice '20' / '14.5', glyph 'pressure-angle' in packages/ui/template-glyphs.js: a rack tooth), bore (length 10, > 0: zero would leave a parameter nothing reads), backlash (length 0.1, allowZero, `docStep: { in: 0.001, cm: 0.01 }`: new optional spec field, else 1/16 in would make it 1.6 mm).
+Recipe, tools only:
+- tooth 0 drawn: Arc / Line tools for the right half; the tip arc; the left half held by Symmetric across the Y axis.
+- Circular Pattern (quantity z, 360 deg, round the origin) makes the other teeth.
+- z Coincidents join each tooth's left gap point to the next tooth's right one: ONE loop. The first join also sets where the gap's middle is.
+- pitch circle (construction) and bore.
+Dimensions: 11 at 24 teeth (10 when rf >= rb), all formulas of module / backlash / bore:
+- root, tip, pitch and bore radii, base radius;
+- the start S's angle from the axis, which carries the backlash;
+- the fitted shape (|cJ|, J off the ray to S, A off the ray to J, two arc radii, each k * module).
+Limits: bore < root diameter, backlash < the tip's thickness turn.
+Measured (tests/spur-gear-840-node): involute deviation worst 0.216 % of the module (0.0065 mm at module 3) over 6/12/24/60/200 x m 1/3/10 x both angles. Mesh at m 3: least clearance 24+24 20 deg 0.0931 mm with 0.1 backlash (-0.0071 with none); 17+60 0.0939; 12+36 0.0898; 6+24 20 deg OVERLAPS -0.0960 (no undercut). Full table in the REPORT.
+Built drawing (tests/spur-gear-840-doc-node): arcs == spurTooth to 1e-6; 2 loops (outline z x 9 curves + bore inside); pattern instances z-1; Outside + raster Pocket of the outline 0 crossings; inch doc module 0.125 in, backlash 0.004 in, bore 0.375 in.
+Live (tests/spur-gear-840-live): Sketch Studio + Shaper desktop and phone open it from the picker. Shaper Prepare Outside: the default 3/8 in tab is REFUSED ("no straight or curved stretch is long enough": a tab must fit inside one curve, and the longest curve at module 1/8 in is 4.2 mm). At module 3/8 in with 1/8 in tabs: 11 tabs; 3D builds.
+SOLVER COST (heads-up sent to the advisor; solver fix is its own task): the pattern rows tie every copy to the sources, which come first in joint insertion order, so JtJ's envelope is full and every solve is a dense Cholesky. Build: 12 teeth 0.34 s, 24 teeth 3.2 s, 36 teeth 20 s, 60 teeth 73 s. Consequence: templates-node runs about 104 s alone, past the gate's 90 s per-file limit.
+templates-live phone now waits for every card preview before reading labels (as its desktop half does). template-units-722 reads a spec's docStep.

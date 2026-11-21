@@ -207,6 +207,24 @@ try {
   const tenOpBytes = Buffer.byteLength(JSON.stringify(tenOpProject), 'utf8');
   ok(tenOpBytes > 1000 && tenOpBytes < 32 * 1024, `10-op project JSON is compact (${tenOpBytes} bytes)`);
 
+  // 5b. TASK 855b (advisor's Fusion check): a NEW design gets an empty workspace, and a selection extracted from ANOTHER
+  // design (its docToken is not the current design_context's: Fusion executed A's still-open Add to Shaper dialog after B
+  // was activated) is neither imported into it nor saved into it. The design's own selection (its docToken) is applied.
+  fusionUi.bridge.handle('design_context', JSON.stringify({
+    action: 'design_context', docToken: 'tok-new', designKey: null, docName: 'Untitled', hasSelection: false, project: null,
+  }));
+  eq(storeOps().length, 0, '855b: a new design starts with an empty workspace');
+  const noticeBefore = notice.textContent;
+  sent.length = 0;
+  fusionUi.bridge.handle('selection_data', JSON.stringify({ ...DOC_A_SEL, docToken: 'tok-A2' }));
+  eq(storeOps().length, 0, "855b: design A's late selection is not imported into the new design");
+  eq(getSelections().length, 0, "855b: no chip of design A in the new design");
+  eq(notice.textContent, noticeBefore, '855b: no "Added ..." notice for a selection of another design');
+  await new Promise((r) => setTimeout(r, 80));
+  eq(sent.filter(([a]) => a === 'save_project').length, 0, '855b: nothing is saved into the new design');
+  fusionUi.bridge.handle('selection_data', JSON.stringify({ ...DOC_A_SEL, selectionId: 'sel-new', docToken: 'tok-new' }));
+  ok(storeOps().length > 0 && getSelections().length === 1, "855b: the new design's own selection (its docToken) is applied");
+
   // 6. Older add-in compatibility: pong without projectBridge calls onLegacyAddin and does not activate projectBridge
   let legacyCalled = 0;
   const legacyUi = mountFusionPrepareBar({

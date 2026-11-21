@@ -221,6 +221,19 @@ async function run({ width, height, tag }) {
     assert.strictEqual(shapesCountB, 0, `[${label}] DocB has 0 sketch shapes`);
     assert.strictEqual(histCountB, 0, `[${label}] DocB cleared undo history`);
 
+    // 4b. TASK 855b (advisor's Fusion check): DocA's selection arriving AFTER the switch (Fusion executed A's still-open
+    // Add to Shaper dialog when the new document pre-empted it) names DocA (docToken tok-A): DocB stays empty, and after the
+    // debounce nothing at all is saved into DocB (no key, no project for a design nobody edited in Shaper).
+    await evalJs(`window.__sent.length = 0`);
+    await handleFusion('selection_data', { ...DOC_A_SELECTION, docToken: 'tok-A' });
+    await new Promise((r) => setTimeout(r, 2600));
+    const opsBLate = await opsInfo();
+    const selCountBLate = await evalJs(`document.querySelectorAll('#shaper-fusion-selections .shaper-fusion-sel').length`);
+    const savesB = await evalJs(`window.__sent.filter((m) => m.action === 'save_project').map((m) => m.docToken)`);
+    assert.strictEqual(opsBLate.length, 0, `[${label}] DocA's late selection_data is not imported into DocB`);
+    assert.strictEqual(selCountBLate, 0, `[${label}] no DocA chip in DocB`);
+    assert.deepStrictEqual(savesB, [], `[${label}] nothing saved into DocB (save_project docTokens: ${JSON.stringify(savesB)})`);
+
     // 5. Switch back to DocA (reopened on another PC / after switch, with Pocket 2 removed in the Fusion model)
     await evalJs(`window.__sent.length = 0`);
     await handleFusion('design_context', {
@@ -239,6 +252,7 @@ async function run({ width, height, tag }) {
     // Add-in responds with freshly extracted selection_data (Pocket 2 deleted in Fusion; Outline + Pocket 1 have fresh region ids)
     await handleFusion('selection_data', {
       ...DOC_A_SELECTION,
+      docToken: 'tok-A2',
       regions: [
         { ...DOC_A_SELECTION.regions[0], id: 'reg_fresh_0' },
         { ...DOC_A_SELECTION.regions[1], id: 'reg_fresh_1' },

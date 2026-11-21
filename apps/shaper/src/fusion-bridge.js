@@ -59,7 +59,7 @@ export const FUSION_ACTIONS = Object.freeze({
   PONG: 'pong',
   ERROR: 'error',
   ADD_SELECTION: 'add_selection',
-  SELECTION_DATA: 'selection_data',
+  SELECTION_DATA: 'selection_data', // TASK 855b (SA-19): carries the docToken of the design it was extracted from; applied only while that design is the current design_context
   HIGHLIGHT_SELECTION: 'highlight_selection', // TASK 795 (SA-12): { selectionId | null } brightens one selection's overlay in Fusion (null: all back to their cut-type colours)
   CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12 / SA-15): { selectionId, group? } | { selectionId: 'all' }
   RESTORE_SELECTION: 'restore_selection', // TASK 795c (SA-15): { selectionId, tokens? } restores the cleared token list on Undo/Redo
@@ -359,6 +359,7 @@ export function createFusionBridge({
       const chainCount = Array.isArray(data.chains) ? data.chains.length : 0;
       const srcName = (data.source && data.source.name && String(data.source.name).trim()) || 'selection';
       const res = onSelectionData(data);
+      if (res && res.ignored) return 'OK'; // TASK 855b: a selection of another design (mountFusionPrepareBar)
       if (res && res.ok === false) {
         const errMsg = res.message || 'Could not import selection';
         dbg.warn('fusion', errMsg, { count: regionCount });
@@ -555,6 +556,13 @@ export function mountFusionPrepareBar({
       showNotice(text, true);
     },
     onSelectionData: (data) => {
+      // TASK 855b: a selection names the design it was extracted from (docToken). One of ANOTHER design (it arrived after a
+      // switch, e.g. Fusion executed design A's still-open Add to Shaper dialog when a new document pre-empted it) is not
+      // this workspace's: never imported here, so never saved into this design. No docToken (an older add-in): applied.
+      if (projectBridgeActive && data && typeof data.docToken === 'string' && data.docToken !== currentDocToken) {
+        dbg.warn('fusion', 'selection_data of another design ignored', { docToken: data.docToken, current: currentDocToken, selectionId: data.selectionId });
+        return { ignored: true };
+      }
       const wasInitial = pendingInitialSelection && !(data && data.assign);
       pendingInitialSelection = false;
       const clearGroup = (pendingClear && data && data.selectionId === pendingClear.selectionId)

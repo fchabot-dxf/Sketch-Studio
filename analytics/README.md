@@ -2,7 +2,7 @@
 
 A tiny Cloudflare Worker (`sketch-analytics`, TASK 738) that collects **anonymous, cookieless** usage events from the four apps
 (Sketch, Shaper, Pen Plotter, Trace, on the web and in Shaper's Fusion 360 palette) and writes them to **Workers Analytics Engine**.
-Ported from the DDCS Studio worker (`DDCS-Studio/analytics`); it has its **own** dataset (`sketch_events`), D1 database and dashboard
+Ported from the DDCS Studio worker (a separate repo); it has its **own** dataset (`sketch_events`), D1 database and dashboard
 key, and the DDCS one is untouched.
 
 It answers: how many **visits**, to which **app**, from which **countries**, **web vs Fusion**, and which **features** get used

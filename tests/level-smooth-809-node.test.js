@@ -226,7 +226,7 @@ for (const [name, tris, tol] of [['the dome', M.dome(30), 0.02], ['the dome', M.
     ok(cubicsIn(svgOf()) > 0, 'undo: cubics again');
     // the part's Contour: its own Smoothing (0.05 by default: TASK 810, owner turn 2688). TASK S2: a Contour operation of its own: the shape picked, Contour in the type menu
     app.prepare.ok(); clickRaw(30, -30);
-    pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="contour"]');
+    pressEl('#op-type-contour'); // TASK S3: the operations toolbar's button (the quick flow: a NEW operation, open)
     eq(q('.cut-type-cur').textContent, 'Contour', 'the Contour card (a new Contour operation, open)');
     ok(rowShown('smoothing'), 'the Contour card: its Smoothing row (its part has levels)');
     eq(q('.cut-smoothing').value, '0.05', 'the Contour: 0.05 (its default)');

@@ -69,10 +69,9 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     const firstKey = getSelections().at(-1).cutKeys[0];
     eq(V2_PLAN.size, 0, 'the first selection: its region has no cut type, so it is in no operation (TASK S1; it was a record without a cut type)');
 
-    // the user sets the cut type on the first selection in Prepare (a click on the square, the type menu: Pocket)
+    // the user sets the cut type on the first selection in Prepare (a click on the square, then Pocket: TASK S3, the operations toolbar)
     clickAt(10, -10);
-    pressEl('.cut-type-trigger');
-    pressEl('.cut-type-opt[data-id="pocket"]');
+    pressEl('#op-type-pocket'); // TASK S3: the operations toolbar's button (the quick flow: a NEW operation, open)
     eq(V2_PLAN.get(firstKey).cutType, 'pocket', 'the user set Pocket on the first selection');
 
     const histBefore = st.history.length;

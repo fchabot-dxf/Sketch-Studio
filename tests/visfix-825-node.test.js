@@ -34,7 +34,7 @@ try {
   const K = Object.fromEntries(['SB', 'G1', 'G2', 'G3', 'P1', 'P2'].map((n) => [n, keyOf('loop', loops.find((l) => l.edges.includes(`${n}s0`)).id)]));
   app.modes.showMode('prepare');
   const pv = app.prepare.view();
-  const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? app.prepare.pickType(v) : pv.setOpField(f, v)); app.prepare.ok(); };
+  const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? (app.prepare.openId() ? app.prepare.pickType(v) : app.prepare.addOperation(v)) : pv.setOpField(f, v)); app.prepare.ok(); }; // TASK S3: a type with no operation open = the operations toolbar's button (addOperation)
   edit('SB', { cutType: 'stock' });
   edit('G1', { cutType: 'guide', cutDepth: 0 });
   edit('G2', { cutType: 'guide', cutDepth: 1.5, cutOffset: 1 });

@@ -94,8 +94,9 @@ export async function openBromont({ tag, drive: sharedDrive }) { // TASK 773: `d
     await waitFor(`!!window.__prepareView && !document.getElementById('view-prepare').hidden`, 'Prepare');
     const c = await toScreen(50, 150);
     await press(c.x, c.y);
-    await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the pocket\'s card');
-    await clickEl('#prepare-panel .cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu'); await clickEl('.cut-type-opt[data-id="pocket"]');
+    // TASK S3: the press selects the shape (no card); the operations toolbar's Pocket makes the operation, open (its card)
+    await waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('#prepare-panel .cut-card').hidden`, 'the shape selected (no card)');
+    await clickEl('#op-type-pocket'); await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the pocket\'s card');
     await clickEl('#prepare-panel .cut-clear-trigger'); await waitFor(`!document.querySelector('.cut-clear-pop').hidden`, 'the Clearing popover'); await clickEl('.cut-clear-opt[data-clearing="linked"]');
     await sleep(300);
     const z = await toScreen(50, 150);

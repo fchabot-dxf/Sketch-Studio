@@ -110,6 +110,17 @@ function trapezoidVariantGlyph(variant, active) {
   return boardsSvg(boards.map((b, k) => ({ points: [b.p1, b.p2, b.p3, b.p4], tone: k % 2 ? 'light' : 'dark' })), active);
 }
 
+// TASK 840: 'pressure-angle': the spur gear's pressure angle (#core/gear-geometry.js GEAR_PRESSURE_ANGLES) as the basic RACK draws it: two rack teeth
+// whose straight flanks lean that many degrees from the vertical (addendum 1, dedendum 1.25, a pi module pitch, half tooth and half gap on the
+// pitch line), light, on a dark strip of the rack's body.
+function rackGlyph(alphaDeg, active) {
+  const p = Math.PI * 10, h = 10, d = 12.5, t = Math.tan(Number(alphaDeg) * Math.PI / 180), body = 6; // module 10: the pitch line at y = 0, the tips at -h
+  const pts = [{ x: 0, y: d }];
+  for (let k = 0; k < 2; k++) { const c = p / 2 + k * p; pts.push({ x: c - p / 4 - d * t, y: d }, { x: c - p / 4 + h * t, y: -h }, { x: c + p / 4 - h * t, y: -h }, { x: c + p / 4 + d * t, y: d }); }
+  pts.push({ x: 2 * p, y: d });
+  return boardsSvg([{ points: pts, tone: 'light' }, { points: rect(0, d, 2 * p, body), tone: 'dark' }], active);
+}
+
 export const GLYPHS = Object.freeze({
   'corner-joint': (type, { active = false, corner } = {}) => {
     const T = 8, A = 32; // frame-calc's normalized proportions (its JointDiagram's 40 x 40 / 8 mini triangle)
@@ -133,4 +144,5 @@ export const GLYPHS = Object.freeze({
   'brace-br': braceGlyph('br'),
   'polygon-joint': (type, { active = false, corner }) => polygonJointGlyph(type, corner.interior, active, rotationOf(corner)),
   'trapezoid-variant': (variant, { active = false } = {}) => trapezoidVariantGlyph(variant, active),
+  'pressure-angle': (alphaDeg, { active = false } = {}) => rackGlyph(alphaDeg, active),
 });

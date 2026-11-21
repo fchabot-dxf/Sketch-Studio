@@ -2,7 +2,7 @@
 // tools of tests/helpers/pocket-live.js):
 //  1. Design: the ribbon's Bezier tool by taps: a tap (corner), a tap (corner), a one-finger DRAG (a smooth anchor), a tap back on the first anchor, the
 //     tool ended by Select; TASK 762: that tap on the first anchor closed the outline (the two ends coincident); the page's findLoops: ONE loop of 3 beziers;
-//  2. Prepare (from the drawer): a tap inside picks the region; Inside / Outside / Pocket are offered; Outside is taken (screenshots: the phone screen, and zoomed on the curve).
+//  2. Prepare (from the drawer): a tap inside picks the region; Inside / Outside / Pocket are offered (TASK S3: the operations toolbar's buttons); Outside is taken (screenshots: the phone screen, and zoomed on the curve).
 import assert from 'node:assert';
 import path from 'node:path';
 import { sleep } from './helpers/cdp-browser.js';
@@ -41,12 +41,10 @@ try {
   await openMode('prepare');
   await waitFor(`document.querySelectorAll('#prepare-world-group path[data-shape-id]').length === 3`, '2: Prepare draws the bezier edges');
   await clickWorld(L[0].inner.x, L[0].inner.y);
-  await waitFor(`!document.querySelector('.cut-card').hidden`, '2: a tap inside picks the region');
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-  out.menu = await evalJs(`Object.fromEntries([...document.querySelectorAll('.cut-type-menu .cut-type-opt')].map((o) => [o.dataset.id, !o.disabled]))`);
-  assert.deepStrictEqual([out.menu.interior, out.menu.exterior, out.menu.pocket], [true, true, true], '2: Inside / Outside / Pocket offered on the phone');
-  await clickEl('.cut-type-opt[data-id="exterior"]');
+  await waitFor(`window.__prepareView.selectedTargets().length === 1`, '2: a tap inside picks the region'); // TASK S3: a tap shows no card; the toolbar makes the operation
+  out.menu = await evalJs(`Object.fromEntries([...document.querySelectorAll('#prepare-ribbon [id^="op-type-"]')].map((o) => [o.id.slice(8), !o.disabled && !o.hidden]))`);
+  assert.deepStrictEqual([out.menu.interior, out.menu.exterior, out.menu.pocket], [true, true, true], '2: Inside / Outside / Pocket offered on the phone (the bar of the toolbar)');
+  await clickEl('#op-type-exterior');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Outside'`, '2: Outside taken');
   await sleep(300);
   await shot('phone-prepare-bezier-outside.png');

@@ -5,6 +5,7 @@
 // Screenshots to .evidence/804/. Used by tests/pocket-nocross-804-live.test.js and tests/pocket-nocross-804-phone-live.test.js.
 import assert from 'node:assert';
 import { pathCrossings } from '#core/path-crossings.js';
+import { selectedLive } from './prepare-open-live.js'; // TASK S3: a click on a shape with no operation only selects it (no card)
 
 const IN = 25.4;
 export const BOWTIE = [[0, 0], [3.2, 1.55], [6.4, 0], [6.4, 4.2], [3.2, 2.65], [0, 4.2]].map(([x, y]) => [x * IN, y * IN]);
@@ -35,7 +36,7 @@ export async function bowtiePhase(t, label) {
   await openMode('prepare');
   if (phone && !await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head'); // the folded bar keeps the card free
   await clickWorld(30, 53);
-  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the card');
+  await selectedLive(t, label + ': the bow-tie selected (TASK S3: no card before its operation exists)');
   await pickType('pocket');
   await typeField('.cut-depth', inch ? '0.125' : '3.175');
   await typeField('.cut-bit', inch ? '0.125' : '3.175');

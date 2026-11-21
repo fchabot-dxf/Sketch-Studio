@@ -1,4 +1,5 @@
 // tests/shaperhub-login-758-live.test.js — TASK 758: the Shaper Export step's "Sync to ShaperHub" sign-in keeps NO login of its own; the browser's
+// (TASK S3: the planned Pocket comes from Prepare's operations toolbar; a click on a shape shows no card.)
 // password manager does. In the real Shaper page (a fresh temporary profile), with EVERY request that is not to the test's own local server blocked
 // (Fetch domain: failRequest, counted) and /api/shaper-upload answered by a stub in this test (it never reaches a network):
 //  - a profile holding the old app-stored login (key shaper_hub_creds, fake values) no longer holds it after ONE load, and the fields are empty;
@@ -102,10 +103,10 @@ const shot = async (name, sel) => {
   console.log('screenshot ' + path.join(EVIDENCE_DIR, name));
 };
 const planSize = () => evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.planEntries().length)`);
+// TASK S3: a click on a shape only selects it (no card); the Pocket comes from Prepare's operations toolbar
+const selected = (label) => waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the shape selected (no card)');
 const pickPocket = async () => {
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-  await clickEl('.cut-type-opt[data-id="pocket"]');
+  await clickEl('#op-type-pocket');
   await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => m.planEntries().length > 0)`, 'a planned cut');
 };
 // the standalone app: a 120 x 70 rectangle, planned as a Pocket in Prepare
@@ -120,7 +121,7 @@ const planRectangle = async (label) => {
   await openStage('prepare');
   if (phone && !await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head'); // the folded bar keeps the card free
   await clickWorld(60, 10);
-  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the cut card');
+  await selected(label);
   await pickPocket();
 };
 const fields = () => evalJs(`({ email: document.getElementById('sync-email').value, password: document.getElementById('sync-password').value })`);
@@ -286,7 +287,7 @@ try {
     await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);
     await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, label + ': the Fusion selection imported');
     await clickWorld(60, -40);
-    await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the cut card');
+    await selected(label);
     await pickPocket();
   };
   await loadWithOldLogin(furl, 'fusion');

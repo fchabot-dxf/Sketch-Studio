@@ -30,18 +30,16 @@ try {
   assert(pc.children.length > 0, 'prepare canvas ready');
   const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
   const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
-  const pickType = (tid) => { pressEl('.cut-type-trigger'); assert(q(`.cut-type-opt[data-id="${tid}"]`), 'cut type menu open'); pressEl(`.cut-type-opt[data-id="${tid}"]`); };
+  const pickType = (tid) => { if (app.prepare.openId()) { pressEl('.cut-type-trigger'); assert(q(`.cut-type-opt[data-id="${tid}"]`), 'cut type menu open'); pressEl(`.cut-type-opt[data-id="${tid}"]`); } else pressEl(`#op-type-${tid}`); }; // TASK S3: no operation open = the operations toolbar
   const stockKey = () => stockKeyOf(V2_PLAN);
   const notice = () => { const e = doc.getElementById('prepare-notice'); return e && !e.hidden ? e.textContent : ''; };
 
-  // the menu: Stock beside the others, with its icon
+  // the operations toolbar (TASK S3; before it, the selection card's type menu): Stock beside the others, with its icon
   clickAt(100, 30);                      // inside A, outside B: selects the L loop
-  pressEl('.cut-type-trigger');
-  assert(doc.querySelectorAll('.cut-type-opt').length > 0, 'cut type menu open');
-  const opts = [...doc.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.disabled ? ':off' : '') + (o.querySelector('svg') ? ':icon' : ''));
-  console.log('menu:', JSON.stringify(opts));
-  assert.deepStrictEqual(opts, ['online:icon', 'guide:icon', 'interior:icon', 'pocket:icon', 'roughing:icon', 'contour:icon', 'exterior:icon', 'stock:icon'], 'Stock sits beside the other types with its icon (TASK 792: Roughing on every closed region; TASK S2: the Contour in the menus)');
-  pressEl('.cut-type-opt[data-id="stock"]');
+  const opts = [...doc.querySelectorAll('#prepare-ribbon .sk-ribbon-group[data-section="operations"] .sk-ribbon-btn')].map((o) => o.id.replace('op-type-', '') + (o.disabled ? ':off' : '') + (o.querySelector('svg') ? ':icon' : ''));
+  console.log('toolbar:', JSON.stringify(opts));
+  assert.deepStrictEqual(opts, ['exterior:icon', 'interior:icon', 'pocket:icon', 'online:icon', 'guide:icon', 'stock:icon', 'roughing:icon', 'contour:icon'], 'Stock sits beside the other types with its icon (TASK S3: the toolbar, in the order of the CUT_TYPES declaration; none greyed)');
+  pressEl('#op-type-stock');
   assert(!!stockKey(), 'the L loop becomes the Stock');
   const keyA = stockKey();
   assert.ok(keyA && keyA.startsWith('loop:'), 'the L loop is now the Stock: ' + keyA);

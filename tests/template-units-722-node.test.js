@@ -27,10 +27,15 @@ for (const t of TEMPLATES) {
   eq(defaultParams(t, 'mm'), mm, `${t.id}: mm defaults as authored`);
   for (const [k, spec] of Object.entries(t.params)) {
     if (paramKind(spec) !== 'length') { eq([inch[k], cm[k]], [mm[k], mm[k]], `${t.id}.${k}: a ${paramKind(spec)} does not change`); continue; }
-    ok(Math.abs(inch[k] * 16 - Math.round(inch[k] * 16)) < 1e-9 && inch[k] > 0, `${t.id}.${k}: ${inch[k]} in is a multiple of 1/16`);
-    ok(Math.abs(inch[k] - mm[k] / 25.4) <= 1 / 32 + 1e-9 || inch[k] === 1 / 16, `${t.id}.${k}: ${inch[k]} in is the nearest 1/16 of ${mm[k]} mm`);
-    ok(Math.abs(cm[k] * 10 - Math.round(cm[k] * 10)) < 1e-9 && Math.abs(cm[k] - mm[k] / 10) <= 0.05 + 1e-9, `${t.id}.${k}: ${cm[k]} cm is the nearest 0.1 of ${mm[k]} mm`);
+    const si = spec.docStep ? spec.docStep.in : 1 / 16, sc = spec.docStep ? spec.docStep.cm : 0.1; // TASK 840: a spec's own steps (docStep), else 1/16 in and 0.1 cm
+    ok(Math.abs(inch[k] / si - Math.round(inch[k] / si)) < 1e-6 && inch[k] > 0, `${t.id}.${k}: ${inch[k]} in is a multiple of ${si}`);
+    ok(Math.abs(inch[k] - mm[k] / 25.4) <= si / 2 + 1e-9 || inch[k] === si, `${t.id}.${k}: ${inch[k]} in is the nearest ${si} in of ${mm[k]} mm`);
+    ok(Math.abs(cm[k] / sc - Math.round(cm[k] / sc)) < 1e-6 && (Math.abs(cm[k] - mm[k] / 10) <= sc / 2 + 1e-9 || cm[k] === sc), `${t.id}.${k}: ${cm[k]} cm is the nearest ${sc} cm of ${mm[k]} mm`);
   }
+}
+{ // TASK 840: the spur gear's backlash allowance declares finer steps (0.1 mm -> 0.004 in, 0.01 cm), its module rounds as every length (3 mm -> 1/8 in)
+  const g = defaultParams(templateById('spur-gear'), 'in'), c = defaultParams(templateById('spur-gear'), 'cm');
+  eq([g.backlash, g.module, g.bore, c.backlash, c.module], [0.004, 0.125, 0.375, 0.01, 0.3], 'spur-gear defaults in an inch and a cm document');
 }
 eq([paramUnit({ label: 'a' }, 'in'), paramUnit({ label: 'a', kind: 'angle' }, 'in'), paramUnit({ label: 'a', kind: 'count' }, 'in'), paramUnit({ label: 'a' })], ['in', 'deg', '', 'mm'], 'paramUnit');
 

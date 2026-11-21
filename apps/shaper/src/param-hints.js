@@ -111,7 +111,7 @@ const PARAMS = {
   reviewReset: { label: 'Reset', hint: 'Return the 3D camera to the default angled overview.' },
   reviewTop: { label: 'Top', hint: 'Look straight down from above at the workpiece and paths.' },
   reviewFit: { label: 'Fit', hint: 'Frame the entire board and all cuts inside the view.' },
-  // ── TASK 801 (owner turns 2555, 2608, 2667-2668): the Export step's Simulate card (export-sim.js), VCarve's Preview toolpaths panel ──
+  // ── TASK 801 (owner turns 2555, 2608, 2667-2668): the Export step's Simulate panel (export-sim.js, over the view), VCarve's Preview toolpaths panel ──
   simulate: { label: 'Simulate', hint: 'Plays the cuts in order on a virtual board, in the view shown (3D, 2D or Paths). The board keeps what each preview cut until Reset preview.' },
   simOperation: { label: 'Operation', hint: 'The operation Preview selected cuts.' },
   simPreviewSelected: { label: 'Preview selected', hint: 'Cuts the chosen operation into the board as it is now (after the earlier previews).' },

@@ -1,4 +1,5 @@
-// apps/shaper/src/export-sim.js — TASK 801 (owner turns 2555, 2608, 2667-2668): the Export step's SIMULATION controls (the "Simulate" card) and the one loop that drives
+// apps/shaper/src/export-sim.js — TASK 801 (owner turns 2555, 2608, 2667-2668): the Export step's SIMULATION controls (the "Simulate" panel over the view, its toggle at the
+// view's top right, closed at first: nothing of the Export side panel moves) and the one loop that drives
 // the three views from ONE timeline (cut-timeline.js: built once per plan from the preview copy of the file, its operations and its bit-centre travel; the same
 // derivation Prepare, Paths and the file use). VCarve's PREVIEW TOOLPATHS panel: Preview selected / Preview all / Reset preview, Animate on / off, speed; Play / Pause,
 // the scrubber, step to the previous / next operation and the label "Operation 2 of 5 · Roughing · level 3 of 8" work within the current run.
@@ -17,6 +18,7 @@ import { parseShaperSvg, previewItems } from './export-preview.js';
 import { cutterProfile, isShapedCutter, isTaperedCutter } from '#core/cutter-profile.js';
 import { unitInfo } from '#core/units.js';
 import { cutTypeById } from './shaper.js';
+import { mountDisclosure } from './disclosure.js'; // the panel's toggle: the declared fold (the Operations sheet's), CLOSED at first
 
 const SCRUB_STEPS = 1000; // the scrubber's resolution (a run of any length)
 const MAX_FRAME_S = 0.5;  // a frame longer than this (the tab was hidden) moves the run by this much at most
@@ -42,7 +44,7 @@ export function markerRadius(tool, depth) {
 
 /**
  * mountExportSim({ els, ensure, reliefItems, mode, flat, solid, reducedMotion }) -> { refresh(sig), invalidate(), render(), inspect(), session }
- *   els          the card's elements: { card, op, previewSel, previewAll, reset, play, prev, next, scrub, speed, animate, passes, passesRow, label }
+ *   els          the panel's elements: { toggle (its button over the view), card (the panel), op, previewSel, previewAll, reset, play, prev, next, scrub, speed, animate, passes, passesRow, label }
  *   ensure       async (sig, say) => the preview copy { svg, ops, bitPaths, simElements } for this plan, or null (the page's: it waits for the paths and says why)
  *   reliefItems  () => the finished part's relief items (cut-plan.js planReliefItems of the ticked operations)
  *   mode         () => '3d' | '2d' | 'paths' (the view shown); flat = the 2D / Paths view (export-preview.js); solid = () => the 3D view (review-view.js) or null
@@ -51,6 +53,7 @@ export function mountExportSim({ els, ensure, reliefItems, mode, flat, solid, re
   const session = createPreviewSession({ animate: !reducedMotion });
   let data = null, dataSig, call = 0, raf = 0, last = 0, fullSched = null, runSched = null, schedRun = -1, woodKey = null, nextBuildAt = 0;
   const frames = [], rebuilds = [];
+  mountDisclosure({ host: els.toggle, head: els.toggle, body: els.card, open: false }); // over the view: open while the user simulates
   els.animate.checked = !reducedMotion;
   els.speed.replaceChildren(...SIM.speeds.map((x) => new Option(`${x}×`, String(x))));
 

@@ -82,6 +82,7 @@ try {
   await openStage('review');
   t0 = Date.now();
   await waitFor(`!document.getElementById('sim-preview-all').disabled`, 'the Simulate card ready', 300000);
+  await clickEl('#review-sim-toggle'); // the panel over the view (closed at first)
   console.log(`PERF the timeline ready (paths generated + the preview copy) in ${Date.now() - t0} ms: ${JSON.stringify((await sim()).ops)}`);
   await waitFor(`import('/apps/shaper/src/main.js').then((m) => !!(m.currentReviewView() && m.currentReviewView().lastBuild))`, 'the 3D built', 120000);
   const finished = await evalJs(`import('/apps/shaper/src/main.js').then((m) => m.currentReviewView().lastBuild)`);

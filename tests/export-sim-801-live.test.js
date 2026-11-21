@@ -1,6 +1,6 @@
 // tests/export-sim-801-live.test.js — TASK 801: the Export step's SIMULATION in the real Shaper page (desktop 1280 x 800 mouse; `phone` = 390 x 844 touch).
 //   A drawing with a plate (Outside) and its hole (Inside), a Raster pocket, a Spiral pocket and a plain On line square, as the page plans them (plan-v2.js).
-//   1. the Simulate card: its operations (the list's order), Preview selected / Preview all / Reset preview, Play / Pause, the scrubber, the speeds, prev / next, the
+//   1. the Simulate panel over the view (closed until its toggle is pressed): its operations (the list's order), Preview selected / Preview all / Reset preview, Play / Pause, the scrubber, the speeds, prev / next, the
 //      Animate and Show passes boxes (Show passes only in 3D), the note under the controls; touch-sized on a phone.
 //   2. 3D: Preview all plays (the time moves, the wood is rebuilt as paths end: fewer triangles cut than at the end), Pause stops it, a drag of the scrubber moves
 //      to that point (the label names the operation there), next / previous operation, Show passes draws translucent passes; 4 frames 1 s apart.
@@ -88,7 +88,10 @@ try {
   if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-3d');
 
   // 1. the card
-  await waitFor(`!document.getElementById('sim-preview-sel').disabled && document.getElementById('sim-op').options.length > 0`, 'the Simulate card is ready', 60000);
+  await waitFor(`!document.getElementById('sim-preview-sel').disabled && document.getElementById('sim-op').options.length > 0`, 'the Simulate panel is ready', 60000);
+  // the panel is over the view, closed at first (nothing of the Export side panel moves); its toggle at the view's top right opens it
+  ok(await evalJs(`document.getElementById('review-sim').hidden && document.getElementById('review-sim-toggle').getAttribute('aria-expanded') === 'false' && !document.getElementById('review-side').contains(document.getElementById('review-sim'))`), 'the panel is closed at first, over the view (not in the side panel)');
+  await clickEl('#review-sim-toggle'); await waitFor(`!document.getElementById('review-sim').hidden`, 'the panel opens');
   const s0 = await sim();
   console.log(D, 'card', JSON.stringify({ ops: s0.ops, label: s0.label, count: s0.count }));
   const listOrder = await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().filter((o) => o.on !== false).map((o) => o.id))`);
@@ -172,10 +175,12 @@ try {
   ok(f0.todo > f1.todo && f1.todo >= 0, `2D: the elements appear as it plays (hidden ${f0.todo} -> ${f1.todo})`);
   await clickEl('#sim-play');
   await scrubTo(0.55);
+  await clickEl('#review-sim-toggle'); // closed for the zoomed shot (the panel is over the view)
   await evalJs(`(() => { const s = document.getElementById('review-2d-canvas'); const r = s.getBoundingClientRect(); s.dispatchEvent(new WheelEvent('wheel', { clientX: r.left + r.width * 0.55, clientY: r.top + r.height * 0.4, deltaY: -360, bubbles: true })); })()`);
   await sleep(500);
   await t.shot(`2d-zoomed-${D}.png`, stageSel, phone ? 1 : 1.5);
   await clickEl('#review-fit'); await sleep(300);
+  await clickEl('#review-sim-toggle');
 
   // 4. Paths: the bit marker
   await clickEl('#review-view-paths');
@@ -196,6 +201,7 @@ try {
   console.log(D, 'Paths sequence', seqP);
   await clickEl('#sim-play');
   const bit = (await flat()).bit;
+  await clickEl('#review-sim-toggle'); // closed for the zoomed shot
   if (bit) {
     const scr = await evalJs(`(() => { const s = document.getElementById('review-2d-canvas'), p = s.createSVGPoint(); p.x = ${bit.x}; p.y = ${bit.y}; const q = p.matrixTransform(s.getScreenCTM()); return { x: q.x, y: q.y }; })()`);
     for (let i = 0; i < 6; i++) { await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: Math.round(scr.x), y: Math.round(scr.y), deltaX: 0, deltaY: -120 }); await sleep(60); }
@@ -203,6 +209,7 @@ try {
     await t.shot(`paths-zoomed-${D}.png`, stageSel, phone ? 1 : 1.5);
     await clickEl('#review-fit'); await sleep(300);
   }
+  await clickEl('#review-sim-toggle');
 
   // 5. the board keeps its state
   await clickEl('#sim-reset');
@@ -252,6 +259,7 @@ try {
     await setup();
     await openMode('review');
     await waitFor(`!document.getElementById('sim-preview-all').disabled`, 'the card after the reload', 60000);
+    await clickEl('#review-sim-toggle'); await waitFor(`!document.getElementById('review-sim').hidden`, 'the panel opens (a new page: closed)');
     ok((await evalJs(`document.getElementById('sim-animate').checked`)) === false, 'reduced motion: Animate starts off');
     await clickEl('#sim-preview-all');
     s = await sim();

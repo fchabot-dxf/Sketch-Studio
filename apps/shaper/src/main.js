@@ -31,7 +31,7 @@ import { setPathsPort, workerPort } from './op-paths.js'; // TASK 817: the opera
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
 import { describeOperations } from './operations.js'; // TASK 798: the Export step's line about unticked operations
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
-import { mountExportSim } from './export-sim.js'; // TASK 801: the Export step's simulation (the Simulate card), one timeline for the three views
+import { mountExportSim } from './export-sim.js'; // TASK 801: the Export step's simulation (the Simulate panel over the view), one timeline for the three views
 import { SIM } from './cut-timeline.js'; // TASK 801: its one line under the controls
 import { mountAppChrome } from '#ui/app-chrome.js';
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
@@ -155,7 +155,7 @@ const btnGenerateSvg = document.getElementById('btn-generate-svg');
 // TASK 805: the Export step's side cards take their labels from the table (param-hints.js); each label, and each Export button, shows its hint in the ONE tooltip at the cursor
 // (hint.js installHintTooltip: every element with data-hint). The Export title's hint lists the three ways out; each button carries its own entry.
 for (const e of document.querySelectorAll('#review-side [data-label], #shaper-sync-modal [data-label]')) e.textContent = hintLabel(e.dataset.label);
-for (const e of document.querySelectorAll('#review-side [data-hint]:not(.simexport-btn):not(.simexport-hub-btn):not(.sim-icon), #prepare-dir-legend [data-hint], #sync-browser [data-hint], #shaper-sync-modal [data-hint]')) { if (!e.hasAttribute('data-label')) bindHint({ el: e }); } // a button's text is its data-label's (the loop above); only the labels are bound here (TASK 801: the Simulate card's icon buttons keep their icons: their hint is the tooltip only)
+for (const e of document.querySelectorAll('#review-side [data-hint]:not(.simexport-btn):not(.simexport-hub-btn), #review-sim [data-hint]:not(.sim-icon), #review-sim-toggle [data-hint], #prepare-dir-legend [data-hint], #sync-browser [data-hint], #shaper-sync-modal [data-hint]')) { if (!e.hasAttribute('data-label')) bindHint({ el: e }); } // a button's text is its data-label's (the loop above); only the labels are bound here (TASK 801: the Simulate panel's texts and its toggle's name take their label here too, from the table; its icon buttons keep their icons: their hint is the tooltip only)
 installHintTooltip(document);
 for (const b of document.querySelectorAll('#review-toolbar [data-hint]')) {
   const id = b.dataset.hint;
@@ -791,11 +791,11 @@ const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
   getPreview: () => preview2d.value, // TASK 743: + the operations (display only); TASK 793: + the bit-centre paths (the Paths view); TASK 817: made in the background before the refresh (enterReview)
 });
-// TASK 801: the Simulate card (export-sim.js): its timeline from the same preview copy, the 3D wood from the finished part's relief items (the ticked operations)
+// TASK 801: the Simulate panel (export-sim.js): its timeline from the same preview copy, the 3D wood from the finished part's relief items (the ticked operations)
 const simEl = (id) => document.getElementById(id);
 document.getElementById('sim-note').textContent = SIM.note;
 const exportSim = mountExportSim({
-  els: { card: simEl('review-sim'), op: simEl('sim-op'), previewSel: simEl('sim-preview-sel'), previewAll: simEl('sim-preview-all'), reset: simEl('sim-reset'), play: simEl('sim-play'), prev: simEl('sim-prev'), next: simEl('sim-next'),
+  els: { card: simEl('review-sim'), toggle: simEl('review-sim-toggle'), op: simEl('sim-op'), previewSel: simEl('sim-preview-sel'), previewAll: simEl('sim-preview-all'), reset: simEl('sim-reset'), play: simEl('sim-play'), prev: simEl('sim-prev'), next: simEl('sim-next'),
     scrub: simEl('sim-scrub'), speed: simEl('sim-speed'), animate: simEl('sim-animate'), passes: simEl('sim-passes'), passesRow: simEl('sim-passes-row'), label: simEl('sim-label') },
   ensure: (sig, say) => previewCopy(sig, say),
   reliefItems: () => planReliefItems(designController.state, TICKED),

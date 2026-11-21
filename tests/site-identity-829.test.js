@@ -46,6 +46,14 @@ const NOSCRIPT = (app) => `${app.name} is a free web app: it runs in your browse
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'site-identity-829-'));
 try {
+  // TASK 851b: the build require()s the ES module app-registry.js (Node >= 20.19); the Git-connected Pages build reads the Node version from .node-version,
+  // so it cannot fall back to Node 18 (ERR_REQUIRE_ESM). package.json engines says the same floor.
+  const nodeVersionFile = path.join(REPO_ROOT, '.node-version');
+  assert.ok(fs.existsSync(nodeVersionFile), '.node-version exists at the repo root');
+  const nv = fs.readFileSync(nodeVersionFile, 'utf8').trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
+  assert.ok(nv, '.node-version names an exact version (major.minor.patch)');
+  assert.ok(+nv[1] > 20 || (+nv[1] === 20 && +nv[2] >= 19), `.node-version ${nv[0]} is >= 20.19 (require of an ES module)`);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).engines?.node, '>=20.19', 'package.json engines.node is >=20.19');
   assert.deepStrictEqual(APPS.map((a) => a.id), ['sketchstudio', 'shaper', 'penplotter', 'trace']);
   for (const app of APPS) {
     const host = SITE_HOST[app.id], url = `https://${host}/`;

@@ -15,7 +15,7 @@ import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { createSketchState as sketchState } from '#core/sketch-state.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { findLoops } from '#core/loop-finder.js';
-import { cutterProfile, cutterTerraces, vbitHalfAngleTan, SHAPE_SLICES } from '#core/cutter-profile.js';
+import { cutterProfile, cutterTerraces, vbitHalfAngleTan, terraceCount } from '#core/cutter-profile.js';
 import { planEntries, keyOf } from '../apps/shaper/src/cut-plan.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { removedVcarvesNotice } from '../apps/shaper/src/prepare-stage.js';
@@ -123,6 +123,6 @@ eq(vbitHalfAngleTan(undefined), Math.tan(Math.PI / 4), 'no angle = 90 deg (as be
   const p = cutterProfile('vbit', 6, 60, 4), t = Math.tan(Math.PI / 6);
   eq([p.shape, p.r, p.xMax], ['vbit', 3, Math.min(3, 4 * t)], 'the V groove: half-width = depth x tan(half angle), capped at the flute radius');
   eq(p.depthAt(1), 4 - 1 / t, 'its depth falls linearly from the line');
-  eq(cutterTerraces('vbit', 6, 60, 4).length, SHAPE_SLICES.vbit, 'its terraces (the 3D preview V walls)');
+  eq(cutterTerraces('vbit', 6, 60, 4).length, terraceCount('vbit', 6, 60, 4), 'its terraces (the 3D preview V walls)');
 }
 console.log(`vcarve-removed-741-node: ${checks} checks pass`);

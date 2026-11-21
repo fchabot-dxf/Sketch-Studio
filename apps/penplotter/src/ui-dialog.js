@@ -1,11 +1,11 @@
-// In-app replacements for window.prompt / window.confirm, which aren't
+// In-app replacements for window.prompt (and a pick-one list), which aren't
 // supported in some embedded webviews (e.g. the VS Code webview this app
 // runs in — calling them throws "prompt() is not supported").
 //
 //   await uiPrompt("Name:", "default")  → string | null   (null = cancelled)
-//   await uiConfirm("Sure?")            → true | false
+//   await uiChoose("Pick:", options)    → value | null
 //
-// Both render a small centered modal over a dimming backdrop. Enter = OK,
+// Each renders a small centered modal over a dimming backdrop. Enter = OK,
 // Escape / backdrop click / Cancel = dismiss.
 
 let current = null;
@@ -58,11 +58,6 @@ function dialog(message, { input, okLabel = "OK" } = {}) {
 /** Prompt for text. Resolves to the entered string, or null if cancelled. */
 export function uiPrompt(message, defaultValue = "") {
     return dialog(message, { input: defaultValue });
-}
-
-/** Yes/no confirmation. Resolves to true (OK) or false (cancel). */
-export function uiConfirm(message, okLabel = "OK") {
-    return dialog(message, { okLabel });
 }
 
 /** Pick one option from a list (radio-style, each with an optional colour

@@ -57,7 +57,6 @@ export function parseGlyphSheet(text, parser = new DOMParser()) {
 }
 
 export const getGlyph = (name) => (glyphs && glyphs.get(name)) || null;
-export const isGlyphSheetReady = () => !!glyphs;
 
 export function onGlyphSheetReady(fn) {
   if (glyphs) fn(); else readyHooks.push(fn);

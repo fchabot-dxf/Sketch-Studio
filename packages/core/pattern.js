@@ -215,8 +215,6 @@ function directionOperand(shapes, id, k) {
   const l = findShape(shapes, id);
   return l && l.type === 'line' ? { a: l.joints[0], b: l.joints[1] } : null;
 }
-/** The direction k of a stored pattern as the user reads it: 'X axis' / 'Y axis' (the default or a picked axis) or 'line'. */
-export const patternDirectionName = (c, k) => { const id = c.directions[k]; return !id ? (k ? 'Y axis' : 'X axis') : AXIS_DIRECTIONS[id] ? (id === 'ref_axis_x' ? 'X axis' : 'Y axis') : 'line'; };
 /** A picked direction as stored: the direction's own default axis is null (the default), another axis / a line its id. */
 export const patternDirectionPick = (k, id) => ((k === 0 && id === 'ref_axis_x') || (k === 1 && id === 'ref_axis_y') ? null : id);
 

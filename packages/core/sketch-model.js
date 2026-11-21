@@ -120,7 +120,6 @@ export function lockedSketchIds(state) {
   if (state && Array.isArray(state.sketches)) for (const s of state.sketches) if (s && s.locked === true) ids.add(s.id);
   return ids;
 }
-export function isSketchLocked(state, id) { return lockedSketchIds(state).has(id); }
 
 /**
  * Lock or unlock a sketch (one undo step). A LOCKED sketch stays visible and is still a snap target, but its shapes, points,

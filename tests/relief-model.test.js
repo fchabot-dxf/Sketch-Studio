@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { buildRelief, reliefDepth, DEFAULT_STOCK, meshArea, createReliefCache } from '#core/relief-model.js';
 import { regionsFromRings, unionRegions, diffRegions } from '#core/plot/clip.js';
 import { deriveCutFootprint, deriveCutFootprintAt } from '#core/profile-model.js';
-import { cutterTerraces, cutterProfile, SHAPE_SLICES } from '#core/cutter-profile.js';
+import { cutterTerraces, cutterProfile, terraceCount, TERRACE_STEP_MM } from '#core/cutter-profile.js';
 import { withPlan } from './helpers/plan-v2.js'; // TASK S1: a plan loaded as a v2 document (applyShaperDoc)
 import { planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { findLoops } from '#core/loop-finder.js';
@@ -184,7 +184,7 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   // the declared profile maths
   {
     const t = cutterTerraces('ballnose', 6, 90, 4);
-    assert.strictEqual(t.length, SHAPE_SLICES.ballnose); assert.strictEqual(t[0].depth, 4, 'innermost terrace = the cut depth');
+    assert.strictEqual(t.length, terraceCount('ballnose', 6, 90, 4), 'the declared count (TASK 852b: steps of at most TERRACE_STEP_MM)'); assert.strictEqual(t[0].depth, 4, 'innermost terrace = the cut depth');
     for (let i = 1; i < t.length; i++) assert.ok(t[i].depth < t[i - 1].depth && t[i].halfWidth > t[i - 1].halfWidth, 'wider = shallower');
     near(t[t.length - 1].halfWidth, 3, 1e-9, 'a deep-enough ball-nose reaches its radius');
   }
@@ -206,7 +206,7 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   {
     let worst = 0;
     for (let x = 0; x <= 2.95; x += 0.1) worst = Math.max(worst, Math.abs(depthAtPoint(ball, 50, 50 + x) - (1 + Math.sqrt(9 - x * x))));
-    assert.ok(worst < 1.1, 'within one terrace step of the true circle (worst ' + worst.toFixed(2) + ')');
+    assert.ok(worst < TERRACE_STEP_MM * 1.2, 'within one terrace step of the true circle (worst ' + worst.toFixed(2) + ')');
   }
 
   // V-BIT: the depth falls LINEARLY with distance from the line, slope = 1 / tan(halfAngle)
@@ -219,14 +219,14 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
     const mx = xs.reduce((a, c) => a + c, 0) / xs.length, md = ds.reduce((a, c) => a + c, 0) / ds.length;
     const slope = -xs.reduce((a, x, i) => a + (x - mx) * (ds[i] - md), 0) / xs.reduce((a, x) => a + (x - mx) * (x - mx), 0);
     near(slope, 1 / t, 0.12 / t, `vbit ${angle}: fitted slope ${slope.toFixed(2)} vs 1/tan(half) = ${(1 / t).toFixed(2)} (depth falls linearly with distance)`);
-    xs.forEach((x, i) => near(ds[i], depth - x / t, depth / SHAPE_SLICES.vbit * 1.01, `vbit ${angle}: depth at ${x.toFixed(2)} mm off the line`));
+    xs.forEach((x, i) => near(ds[i], depth - x / t, TERRACE_STEP_MM * 1.5, `vbit ${angle}: depth at ${x.toFixed(2)} mm off the line`));
   }
   assert.ok(depthAtPoint(groove('vbit', 10, 4, 60), 50, 51) < depthAtPoint(groove('vbit', 10, 4, 90), 50, 51), 'a 60 deg V is narrower: its depth falls faster with distance than a 90 deg V');
 
   // an END MILL stays flat; budgets
   const flat = groove('endmill', 6, 4);
   assert.strictEqual(flat.levels.length, 1, 'end mill = one level');
-  assert.ok(ball.stats.triangles < 3000 && ball.stats.levels === SHAPE_SLICES.ballnose, `ball groove budget: ${ball.stats.triangles} triangles, ${ball.stats.levels} levels`);
+  assert.ok(ball.stats.triangles < 12000 && ball.stats.levels === terraceCount('ballnose', 6, 90, 4), `ball groove budget: ${ball.stats.triangles} triangles, ${ball.stats.levels} levels`);
   console.log(`cutter shapes: end mill ${flat.stats.triangles} tris, ball ${ball.stats.triangles}, ${ball.stats.levels} levels`);
   // a through cut is cleared at full width (no terraces)
   const thru = buildRelief({ stock, bounds, items: [{ key: 't', cutType: 'inside', cutDepth: T, footprints: fp([rect(40, 40, 20, 20)]), shape: { cutterShape: 'ballnose', toolDia: 6 }, footprintsAt: () => { throw new Error('must not be asked'); } }] });
@@ -249,7 +249,7 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   assert.strictEqual(items.length, 1, 'one V-bit On Line cut = one item');
   assert.deepStrictEqual(items[0].shape, { cutterShape: 'vbit', cutterAngle: 90, toolDia: 6 }, 'the item carries the V-bit cutter shape');
   const rel = buildRelief({ stock, bounds, items });
-  assert.strictEqual(rel.stats.levels, SHAPE_SLICES.vbit, 'a V-bit groove = its V terraces');
+  assert.strictEqual(rel.stats.levels, terraceCount('vbit', 6, 90, 3), 'a V-bit groove = its V terraces');
   const depthAt = (x, y) => rel.levels.reduce((m, l) => (l.regions.some((g) => ptIn(g.outer, x, y) && !g.holes.some((h) => ptIn(h, x, y))) ? Math.max(m, l.depth) : m), 0);
   near(depthAt(20.01, 50), 3, 1e-6, 'the tip of the V is on the line, at the cut depth');
   assert.ok(depthAt(21.5, 50) < 3 && depthAt(21.5, 50) > 0, 'the depth falls away from the line (a V wall)');

@@ -16,7 +16,7 @@
 // Every face is flat-shaded with its true outward normal, wound counter-clockwise seen from outside.
 import { regionsFromRings, unionRegions, diffRegions, intersectRegions } from './plot/clip.js';
 import earcut from './plot/vendor/earcut.js';
-import { cutterTerraces, isShapedCutter, SHAPE_SLICES } from './cutter-profile.js';
+import { cutterTerraces, isShapedCutter } from './cutter-profile.js';
 
 // Declared stock (all BASE mm, like cutDepth). width/height null = derived from the design bounds + margin on every side.
 export const DEFAULT_STOCK = Object.freeze({ thickness: 19.05, width: null, height: null, margin: 12.7 });
@@ -198,7 +198,7 @@ function cutPieces(it, rule) {
   const shape = it.shape && it.shape.cutterShape;
   if (!rule.through && isShapedCutter(shape) && typeof it.footprintsAt === 'function') {
     const pieces = [];
-    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, SHAPE_SLICES[shape], it.shape)) { // TASK 842: a tapered bit's cone (taperAngle, shankDia) rides on the item's shape
+    for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, it.shape)) { // TASK 842: a tapered bit's cone (taperAngle, shankDia) rides on the item's shape
       const rs = [];
       for (const fp of it.footprintsAt(t.halfWidth) || []) rs.push(...regionsFromRings((fp.rings || []).filter((g) => g.length >= 3).map(toRing), fp.fillRule));
       if (rs.length) pieces.push({ depth: t.depth, regions: rs });

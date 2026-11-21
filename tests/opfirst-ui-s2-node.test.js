@@ -1,11 +1,11 @@
 // tests/opfirst-ui-s2-node.test.js — TASK S2 (docs/OPERATIONS-MODEL.md 4.2-4.4, section 6 S2; owner rulings turns 2710-2720): the OPERATION-FIRST Prepare on the Shaper node
 // page (the page's own Prepare stage, cut card and Operations list: tests/helpers/node-app.js), driven by clicks on the canvas and presses on the card / list, a drawn design
 // of three squares A, B, C and an open line L:
-//  1. a click on a shape only SELECTS it: the card shows the quick flow's type menu ONLY (no rows, no header), every type offered (never greyed);
-//  2. the QUICK FLOW: a type picked = a NEW operation holding the shape, created OPEN (header, Shapes, OK / Cancel); Cancel = nothing created, nothing in the undo stack;
+//  1. a click on a shape only SELECTS it: (TASK S3) NO card; the operations toolbar offers every type (never greyed);
+//  2. the QUICK FLOW (TASK S3: the toolbar's button): a type = a NEW operation holding the shape, created OPEN (header, Shapes, OK / Cancel); Cancel = nothing created, nothing in the undo stack;
 //  3. an OPEN operation: a click on a shape puts it in / takes it out; an open line is refused with ONE plain line in the card's note area; empty canvas pans; Esc = Cancel;
 //  4. edits PREVIEW live (the plan's entries) and OK makes the whole session ONE undo step (Undo: as before it; Redo: back);
-//  5. a click on a shape in operations: the type menu only; the rows of its operations highlighted (Roughing + Contour: exactly those 2 rows);
+//  5. a click on a shape in operations: no card (TASK S3); the rows of its operations highlighted (Roughing + Contour: exactly those 2 rows);
 //  6. the list: a row tap selects (its shapes); the SELECTED row alone shows Edit, Duplicate, X (in that order); a tap on another row moves them; a double-click opens;
 //  7. Edit + changes + Cancel = the operation as it was, no undo entry; Duplicate + Cancel = no copy; Duplicate + OK = the copy right after (the user's order), one step;
 //  8. in the open card: a shape row's X takes the shape out; a type change (refused with its line: the Stock and two shapes);
@@ -50,7 +50,7 @@ try {
   const clickAt = (n, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x: AT[n][0], y: AT[n][1] }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
   const pressEl = (s) => { const e = q(s); assert.ok(e, s + ' not found'); app.press(e); };
   const menu = () => { pressEl('.cut-type-trigger'); const out = qa('.cut-type-opt').map((o) => [o.dataset.id, o.getAttribute('aria-disabled') === 'true']); pressEl('.cut-type-trigger'); return out; };
-  const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
+  const pick = (id) => { if (app.prepare.openId()) { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); } else pressEl(`#op-type-${id}`); }; // TASK S3: an open operation: the card's type menu (a type change); none: the operations toolbar (a NEW operation, open)
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   const head = () => (q('.cut-op-headrow').hidden ? null : q('.cut-op-head').textContent);
   const nameOf = (key) => Object.keys(K).find((n) => K[n] === key);
@@ -72,8 +72,8 @@ try {
 
   // 1. a click only selects: the type menu only
   clickAt('A');
-  eq([card(), q('.cut-type-cur').textContent], ['type menu', 'Select type'], '1: a click on A: the card is the quick flow\'s type menu only (no rows, no header)');
-  eq(menu().filter(([, off]) => off).map(([id]) => id), [], '1: every type offered, the Contour too (never greyed)');
+  eq(card(), 'hidden', '1: a click on A: NO card (TASK S3: the selection-only type menu is gone; the operations toolbar makes a new operation)');
+  eq(qa('#prepare-ribbon .sk-ribbon-group[data-section="operations"] .sk-ribbon-btn').filter((b) => b.disabled).map((b) => b.id), [], '1: every type offered on the toolbar, the Contour too (never greyed)');
 
   // 2. the quick flow, and its Cancel
   const s0 = JSON.stringify(captureStore()), h0 = hist();
@@ -110,14 +110,14 @@ try {
 
   // 5. a click on a shape in an operation: the type menu only, its row highlighted
   clickAt('A');
-  eq([card(), rows()], ['type menu', ['Pocket · 6 mm | 2 regions *']], '5: a click on A (in the Pocket): the type menu only; the Pocket\'s row highlighted');
+  eq([card(), rows()], ['hidden', ['Pocket · 6 mm | 2 regions *']], '5: a click on A (in the Pocket): no card (TASK S3); the Pocket\'s row highlighted');
   eq(app.prepare.opList.inspectActions()[0].actions, [], '5: (a shape click selects no row: no row actions)');
 
   // 6. the list: a row tap selects; the selected row alone shows Edit, Duplicate, X; a double-click opens
   clickAt('none'); clickAt('C'); pick('exterior'); pressEl('.cut-ok');
   const outId = storeOps().find((o) => o.type === 'exterior').id;
   pressEl(`#prepare-ops .ops-row[data-id="${pocketId}"] .ops-pick`);
-  eq([pv().selectedTargets().length, openId(), card()], [2, null, 'type menu'], '6: a row tap selects its 2 shapes; nothing opens');
+  eq([pv().selectedTargets().length, openId(), card()], [2, null, 'hidden'], '6: a row tap selects its 2 shapes; nothing opens (TASK S3: no card)');
   eq(app.prepare.opList.inspectActions().map((i) => [i.id, i.actions]), [[pocketId, ['ops-edit', 'ops-dup', 'ops-del']], [outId, []]].sort((a, b) => nOf(a[0]) - nOf(b[0])), '6: the selected row alone shows Edit, Duplicate, X (in that order)');
   pressEl(`#prepare-ops .ops-row[data-id="${outId}"] .ops-pick`);
   eq(app.prepare.opList.inspectActions().map((i) => [i.id, i.actions.length]), [[pocketId, 0], [outId, 3]].sort((a, b) => nOf(a[0]) - nOf(b[0])), '6: a tap on another row moves them');
@@ -186,7 +186,7 @@ try {
   eq(cOf(), [['roughing', 12], ['contour', 5]], '9: editing the Roughing\'s depth does not move the Contour');
   clickAt('C');
   eq(items().filter((i) => i.picked).map((i) => i.id).sort(), [roughId, contourId].sort(), '9: a click on C (in Roughing + Contour): exactly those 2 rows highlighted');
-  eq(card(), 'type menu', '9: and the card is the type menu only');
+  eq(card(), 'hidden', '9: and no card (TASK S3)');
   pick('roughing');
   eq(storeOps().filter((o) => o.type === 'roughing').length, 2, '9: the quick flow on C again makes ANOTHER Roughing (never joins)');
   pressEl('.cut-cancel');

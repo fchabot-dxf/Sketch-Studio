@@ -3,7 +3,7 @@
 //  the snap marker is on the first anchor (state.snapTarget, the Line tool's snap; screenshot .evidence/762/shaper-closing-snap-marker.png); the click
 //  there: the anchor lands ON the first one (two joints there), ONE coincident ties them, the path ends, the page's findLoops returns ONE loop of the three
 //  beziers; Enter afterwards changes nothing;
-//  Prepare: a click inside picks the region and its type menu offers Inside, Outside and Pocket.
+//  Prepare: a click inside picks the region and the type menu (TASK S3: the operations toolbar) offers Inside, Outside and Pocket.
 import assert from 'node:assert';
 import { sleep } from './helpers/cdp-browser.js';
 import { openBezierPickPage, bezierToolFacts, ST } from './helpers/bezier-pick-live.js';
@@ -28,11 +28,8 @@ try {
     const svg = document.getElementById('prepare-canvas'), pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy; const s = pt.matrixTransform(svg.getScreenCTM()); return G.pointInPolygon(p, { x: cx, y: cy }) ? { x: s.x, y: s.y } : null; })`);
   assert.ok(inner, 'an inner point of the region');
   await t.click(inner);
-  await t.waitFor(`!document.querySelector('.cut-card').hidden`, 'a click inside picks the region (the cut card)');
-  const trig = await t.evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-type-trigger').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
-  await t.click(trig);
-  await t.waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-  out.menu = await t.evalJs(`Object.fromEntries([...document.querySelectorAll('.cut-type-menu .cut-type-opt')].map((o) => [o.dataset.id, !o.disabled]))`);
+  await t.waitFor(`window.__prepareView.selectedTargets().length === 1`, 'a click inside picks the region'); // TASK S3: a click shows no card; the operations toolbar offers the types
+  out.menu = await t.evalJs(`Object.fromEntries([...document.querySelectorAll('#prepare-ribbon [id^="op-type-"]')].map((o) => [o.id.slice(8), !o.disabled && !o.hidden]))`);
   assert.deepStrictEqual([out.menu.interior, out.menu.exterior, out.menu.pocket], [true, true, true], 'Inside, Outside and Pocket are offered: ' + JSON.stringify(out.menu));
   console.log(`bezier-pick-762-close-live: ALL CHECKS PASSED ${JSON.stringify(out)}`);
 } finally { await t.close(); }

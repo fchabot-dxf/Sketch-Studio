@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
-import { clickOpenLive, stepLive, previewLive, okLive } from './helpers/prepare-open-live.js';
+import { clickOpenLive, stepLive, previewLive, okLive, selectedLive, typeLive } from './helpers/prepare-open-live.js'; // TASK S3: a click selects (no card); the toolbar's Outside opens the new operation
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/840');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -144,11 +144,9 @@ try {
     const p = await evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const pt = svg.createSVGPoint(); pt.x = ${inside.x}; pt.y = ${inside.y}; const s = pt.matrixTransform(svg.getScreenCTM()); return { x: Math.round(s.x), y: Math.round(s.y) }; })()`);
     await press(p.x, p.y);
   });
-  await waitFor(`!document.querySelector('.cut-card').hidden`, 'B: a click inside the gear picks its region (the cut card)');
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'B: the type menu');
-  await clickEl('.cut-type-opt[data-id="exterior"]');
-  await waitFor(`document.querySelector('.cut-type-cur').textContent.toLowerCase().includes('outside')`, 'B: Outside picked');
+  await selectedLive(s2, 'B: a click inside the gear picks its region (TASK S3: selected, no card)');
+  await typeLive(s2, 'exterior'); // TASK S3: Prepare's toolbar: a new Outside of the gear's region, open
+  await waitFor(`!document.querySelector('.cut-card').hidden && document.querySelector('.cut-type-cur').textContent.toLowerCase().includes('outside')`, 'B: Outside picked (its card open)');
   // the depth typed (a real focus by click, select all, the text, the field's change): 1/2 in, Shaper's document being in inches
   const typeDepth = async (text) => {
     await clickEl('.cut-depth');

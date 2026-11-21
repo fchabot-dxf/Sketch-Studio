@@ -13,6 +13,7 @@ import { wallsOf, levelsBand } from '#core/stepped-cut.js'; // TASK S2: a Contou
 import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 459): {thickness, width, height, margin}, base mm
 import { captureStl, applyStl, captureStlDoc, applyStlDoc } from './stl-source.js'; // TASK 790: the STL the design came from (or none)
 import { captureSelections, applySelections, getSelections } from './selection-list.js'; // TASK 795: the selection list
+import { forget as forgetPaths } from './op-paths.js'; // TASK S3: a document read is not out of date (op-paths.js OUT OF DATE)
 
 // TASK 774: 2 = written under the SAME-SKETCH hole rule of derived faces (commit 27c00a4); a document below 2 (or a sidecar without a version) was
 // saved under the old rule: applyShaperDoc keeps its cuts' holes from other sketches (cut-plan.js keepHolesFromOtherSketches).
@@ -251,6 +252,7 @@ export function migrateHeights() {
  *  TASK 774: a document saved before the same-sketch hole rule (version below 2) keeps its cuts' holes from other sketches (keepHolesFromOtherSketches; its
  *  counts join the same notice). */
 export function applyShaperDoc(stored, state = null) {
+  forgetPaths(); // TASK S3: a document read: nothing of it is out of date (its operations are generated as they are read, as before)
   const d = dropLeadIn(stored); // TASK 836
   setStock(d && d.stock);
   applyStlDoc(d && d.stl); // TASK 790: the STL card's source (none for a design that did not come from an STL)

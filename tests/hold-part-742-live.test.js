@@ -2,6 +2,7 @@
 // 390 x 844 with real touch taps. A 200 x 100 mm plate with a 15 mm hole, Outside, depth 18 mm:
 //  * the card: Hold part Off | Tabs | Onion skin; Tabs -> count Auto (4), width 10 mm, thickness 2 mm (on the phone, a reloaded page in INCHES: 3/8 in,
 //    1/16 in); the note; count + -> 5, width + , thickness - ; every change redraws Prepare's tab marks (.sk-tab-mark) and gap strips (.sk-strip);
+//  * TASK S3: the Outside is made with the operations toolbar's button (a shape click shows no card);
 //  * Export 2D: the hole, 1 pass (outside, depth - thickness), N gap strips (inside, full depth) == the downloaded file, element by element; the list
 //    says "pass (tabs)" and "gaps"; every path of the file is closed; no data-* in the file;
 //  * Export 3D: the info lists the pass and the gaps, the board shows the tabs standing (screenshot);
@@ -160,10 +161,8 @@ try {
     await openMode('prepare');
     await waitFor(`!!document.getElementById('prepare-canvas').getScreenCTM() && document.getElementById('prepare-canvas').children.length > 0`, 'prepare canvas ready');
     await clickWorld(20, 20); // inside the plate, off the hole
-    await waitFor(`!document.querySelector('.cut-card').hidden`, 'the cut card');
-    await clickEl('#prepare-panel .cut-type-trigger');
-    await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-    await clickEl('.cut-type-opt[data-id="exterior"]');
+    await waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('.cut-card').hidden`, 'the plate selected (TASK S3: no card)');
+    await clickEl('#op-type-exterior'); // TASK S3: the operations toolbar's Outside: a new Outside of the plate, open
     await waitFor(`document.querySelector('.cut-type-cur').textContent.toLowerCase().includes('outside')`, 'Outside picked');
     const unit = await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.docUnit())`);
     await typeInto('.cut-depth', unit === 'in' ? '0.75' : '18');

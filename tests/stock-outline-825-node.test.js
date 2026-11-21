@@ -32,7 +32,7 @@ try {
   const K = Object.fromEntries(['SB', 'G1', 'G2', 'IN'].map((n) => [n, keyOf('loop', loops.find((l) => l.edges.includes(`${n}s0`)).id)]));
   app.modes.showMode('prepare');
   const pv = app.prepare.view();
-  const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? app.prepare.pickType(v) : pv.setOpField(f, v)); app.prepare.ok(); };
+  const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? (app.prepare.openId() ? app.prepare.pickType(v) : app.prepare.addOperation(v)) : pv.setOpField(f, v)); app.prepare.ok(); }; // TASK S3: a type with no operation open = the operations toolbar's button (addOperation)
   const files = () => elements(shaperSvgOf(st, planEntries())).map(kindOf);
 
   // B first (no Guides yet): the Stock + the unassigned rectangles inside it

@@ -3,10 +3,11 @@
 // all serialize the cut plan through shaperSvgOf. Moved out of main.js unchanged (the loop polygons the host computes, the injected encoding, the
 // doc unit); `preview: true` asks the exporter for the PREVIEW copy (its data-step attributes, never in the downloaded file).
 import { svgOf, bitCentrePaths } from './op-derive.js'; // TASK 817: the file and the Paths view's travel, derived by the ONE module the background worker runs too
-import { exportJob, idle as pathsIdle } from './op-paths.js'; // TASK 817: the page's export, made in the background (the worker's memo caches warm from the paths it generated)
+import { exportJob, idle as pathsIdle, onRecalculate } from './op-paths.js'; // TASK 817: the page's export, made in the background (the worker's memo caches warm from the paths it generated)
 import { docUnit } from '#core/settings-manager.js';
 import { exportEncoding } from './shaper.js';            // injected as the exporter's encoding
 import { describeOperations } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
+import { hintLabel } from './param-hints.js'; // TASK S3: the Recalculate action's name (the toolbar button's)
 import { planEntries } from './cut-plan.js'; // TASK 798: the ticked operations (the file) and the whole plan (its frame)
 import { shaperFileName } from '#core/shaper-cloud.js';   // TASK 767: the one name rule (the upload applies it too)
 import { UNTITLED } from '#ui/document-buffer.js';
@@ -59,11 +60,24 @@ export async function exportFileInBackground(state, { preview = false } = {}) {
   return preview ? { svg, ops: job.ops, bitPaths, entries: job.entries } : { svg, entries: job.entries };
 }
 /** TASK 817 (brief item 4): every operation's paths asked for (describeOperations reads them), then, while some are being generated, `say` gets ONE plain line ("Waiting
- *  for 2 operations to finish") and the wait goes on until none is: the Export step and the 3D Review read finished paths only. Resolves the number of waits. */
-export async function whenGenerated(state, say = () => {}) {
+ *  for 2 operations to finish") and the wait goes on until none is: the Export step and the 3D Review read finished paths only. Resolves the number of waits.
+ *  TASK S3 addition (owner turns 3046-3047, Fusion style): out-of-date paths are never used silently: while a TICKED operation is OUT OF DATE (op-paths.js) `say` gets
+ *  the line "2 operations are out of date" with the Recalculate action (`recalculate`: the stage's, the toolbar button's function; say(text, { label, run })) and the
+ *  wait goes on until a Recalculate, then for the paths it asks for. */
+export const outOfDateLine = (n) => `${n} operation${n === 1 ? ' is' : 's are'} out of date`;
+const nextRecalculate = () => new Promise((res) => { const off = onRecalculate(() => { off(); res(); }); });
+export async function whenGenerated(state, say = () => {}, { recalculate = null } = {}) {
   let waits = 0;
   for (;;) {
-    const n = describeOperations(state).filter((op) => op.pending).length;
+    const ops = describeOperations(state);
+    const stale = ops.filter((op) => op.outOfDate && op.on !== false).length;
+    if (stale) {
+      waits++;
+      say(outOfDateLine(stale), recalculate ? { label: hintLabel('opRecalculate'), run: () => recalculate(null) } : null);
+      await nextRecalculate();
+      continue;
+    }
+    const n = ops.filter((op) => op.pending).length;
     if (!n) return waits;
     waits++;
     say(`Waiting for ${n} operation${n === 1 ? '' : 's'} to finish`);
@@ -72,8 +86,8 @@ export async function whenGenerated(state, say = () => {}) {
 }
 /** TASK 817: THE page's export (Generate Shaper SVG, Download, Send to ShaperHub, the 2D / Paths views): it waits for the paths being generated (whenGenerated), then
  *  the file is made in the background from what is stored at that moment: never a stale or partial file. */
-export async function exportWhenGenerated(state, { preview = false, say = () => {} } = {}) {
-  await whenGenerated(state, say);
+export async function exportWhenGenerated(state, { preview = false, say = () => {}, recalculate = null } = {}) {
+  await whenGenerated(state, say, { recalculate });
   return exportFileInBackground(state, { preview });
 }
 

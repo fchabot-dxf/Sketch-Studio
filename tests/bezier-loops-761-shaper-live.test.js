@@ -3,7 +3,7 @@
 //  1. DESIGN: the Bezier tool draws three curves (a corner, a smooth anchor dragged, back on the first anchor); TASK 762: the click on the first anchor
 //     closes the outline (its two ends made coincident by the tool, as the Line tool does: the gap is 0) and ends the path; the page's own findLoops
 //     returns ONE loop of the three beziers (screenshot);
-//  2. PREPARE: a click inside picks the region; the type menu offers Inside, Outside and Pocket; Pocket with the Spiral clearing (Loop on): its tool paths are
+//  2. PREPARE: a click inside picks the region; the type menu (TASK S3: the operations toolbar) offers Inside, Outside and Pocket; Pocket with the Spiral clearing (Loop on): its tool paths are
 //     drawn, every point of them inside the curved region, some in the curve's bulge (screenshot, zoomed on the curve);
 //  3. EXPORT (Loop off: the finish is the inside cut on the wall): the downloaded Shaper SVG writes the outline with a cubic `C` per bezier, the control points the shapes';
 //     Export 3D builds; the pocket's footprint follows the curve (its ring has many vertices, not three chords) (screenshot).
@@ -66,13 +66,11 @@ try {
   const inner = await evalJs(`import('/packages/core/loop-geometry.js').then((G) => { const p = ${JSON.stringify(L.poly)}; const cx = p.reduce((s, q) => s + q.x, 0) / p.length, cy = p.reduce((s, q) => s + q.y, 0) / p.length; return G.pointInPolygon(p, { x: cx, y: cy }) ? { x: cx, y: cy } : null; })`);
   assert.ok(inner, '2: an inner point of the region');
   await clickWorld(inner.x, inner.y);
-  await waitFor(`!document.querySelector('.cut-card').hidden`, '2: a click inside picks the region (the cut card)');
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-  out.menu = await evalJs(`Object.fromEntries([...document.querySelectorAll('.cut-type-menu .cut-type-opt')].map((o) => [o.dataset.id, !o.disabled]))`);
-  assert.deepStrictEqual([out.menu.interior, out.menu.exterior, out.menu.pocket], [true, true, true], '2: Inside, Outside and Pocket are offered: ' + JSON.stringify(out.menu));
-  await shot('shaper-prepare-type-menu.png', ['.cut-type-menu'], 2);
-  await clickEl('.cut-type-opt[data-id="pocket"]');
+  await waitFor(`window.__prepareView.selectedTargets().length === 1`, '2: a click inside picks the region'); // TASK S3: a click shows no card; the toolbar makes the operation
+  out.menu = await evalJs(`Object.fromEntries([...document.querySelectorAll('#prepare-ribbon [id^="op-type-"]')].map((o) => [o.id.slice(8), !o.disabled && !o.hidden]))`);
+  assert.deepStrictEqual([out.menu.interior, out.menu.exterior, out.menu.pocket], [true, true, true], '2: Inside, Outside and Pocket are offered (the toolbar): ' + JSON.stringify(out.menu));
+  await shot('shaper-prepare-type-menu.png', ['#prepare-ribbon'], 2);
+  await clickEl('#op-type-pocket');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Pocket'`, 'Pocket picked');
   await typeField('.cut-depth', '6');
   await pickClearing('linked');

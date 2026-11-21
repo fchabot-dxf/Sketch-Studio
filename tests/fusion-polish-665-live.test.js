@@ -1,6 +1,7 @@
 // tests/fusion-polish-665-live.test.js — TASK 665: live CDP verification at 480x731 that
 // (1) pong.lengthUnits sets session DOC_UNIT (mm in cut card) without overwriting normal Shaper's saved preference, and
 // (2) Prepare frames the imported drawing clear of the floating cut card so no edge bbox intersects .cut-card.
+// TASK S3: a click on the rectangle only selects it (no card); the card opens for the Pocket the toolbar's button makes (#op-type-pocket: a new operation, open).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +20,13 @@ async function shot(name) {
   fs.writeFileSync(path.join(EVIDENCE_DIR, name), Buffer.from(data, 'base64'));
 }
 
+// TASK S3: a button of Prepare's operations toolbar, pressed where it is on screen (it must be uncovered)
+async function pressToolbar(id) {
+  const p = await evalJs(`(() => { const b = document.getElementById('${id}'); const r = b.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+    const hit = document.elementFromPoint(x, y); return { x, y, onTop: !!hit && b.contains(hit) }; })()`);
+  assert.ok(p.onTop, `#${id} is on screen and not covered: ${JSON.stringify(p)}`);
+  await click(p.x, p.y);
+}
 async function click(x, y) {
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 });
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
@@ -118,6 +126,8 @@ try {
     return { x: Math.round(p.x), y: Math.round(p.y) };
   })()`);
   await click(rectScreen.x, rectScreen.y);
+  await waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('#prepare-panel .cut-card').hidden`, 'the rectangle selected, no card (TASK S3)');
+  await pressToolbar('op-type-pocket');
   await waitFor(`!document.getElementById('prepare-panel').hidden && !document.querySelector('#prepare-panel .cut-card').hidden`, 'cut card open');
 
   const check = await evalJs(`(() => {
@@ -170,6 +180,8 @@ try {
     return { x: Math.round(p.x), y: Math.round(p.y) };
   })()`);
   await click(normalRectPt.x, normalRectPt.y);
+  // (the Pocket left open in the Fusion phase is open again here: TASK S2, the tab's open operation; TASK S3: with none open, the toolbar makes one for the selection)
+  if (await evalJs(`document.querySelector('#prepare-panel .cut-card').hidden`)) await pressToolbar('op-type-pocket');
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'normal Shaper cut card opens');
   const normalUnits = await evalJs(`[...document.querySelectorAll('#prepare-panel .cut-unit')].map((el) => el.textContent)`);
   assert.ok(normalUnits.every((u) => u === 'in'), `normal Shaper cut card shows saved DOC_UNIT=in: ${JSON.stringify(normalUnits)}`);

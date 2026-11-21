@@ -17,7 +17,7 @@ import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } fr
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { loopsWithPolygons, deriveFootprints } from './op-derive.js'; // TASK 817: THE derivation, shared with the background worker (paths-worker.js)
-import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
+import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn, isOutOfDate, followRenames } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
 export { loopsWithPolygons };
 
 export const keyOf = (kind, id) => kind + ':' + id;
@@ -282,13 +282,14 @@ export function newOperation(type, keys, state = null) {
   return op;
 }
 /** TASK S2: the STOCK pick keeps the one-Stock move of before (task 472): the Stock operation holds the shape `key` alone (a previous Stock operation goes; the shape's
- *  other operations are untouched). Returns { op, moved } (moved = another shape was the Stock); the Stock as it is when `key` already is it. */
+ *  other operations are untouched). Returns { op, moved } (moved = another shape was the Stock); the Stock as it is when `key` already is it. TASK S3: `key` null = an
+ *  EMPTY Stock (the toolbar's Stock with nothing selected: a shape click then puts one in), replacing the Stock as a type change to the Stock does (one per document). */
 export function setStock(key, state = null) {
   const prev = storeOps().find((op) => op.type === STOCK_TYPE_ID) || null;
-  if (prev && prev.geometry.length === 1 && prev.geometry[0].key === key) return { op: prev, moved: false };
+  if (key && prev && prev.geometry.length === 1 && prev.geometry[0].key === key) return { op: prev, moved: false };
   const moved = Boolean(prev && prev.geometry.length);
   if (prev) deleteOp(prev);
-  const draft = { type: STOCK_TYPE_ID, settings: settingsPart({ ...freshRecord(key), cutType: STOCK_TYPE_ID }), geometry: [{ key, seq: takeSeq() }] };
+  const draft = { type: STOCK_TYPE_ID, settings: settingsPart({ ...(key ? freshRecord(key) : defaultCutRecord()), cutType: STOCK_TYPE_ID }), geometry: key ? [{ key, seq: takeSeq() }] : [] };
   const op = placeNew(state, draft);
   settleOrder(state);
   return { op, moved };
@@ -837,6 +838,7 @@ export function followDesign(state) {
     if (next.length) rename.set(key, next.length === 1 ? keyOf('loop', next[0]) : next.map((n) => keyOf('loop', n)));
   }
   renameGeometry(rename);
+  followRenames(rename); // TASK S3: a renamed shape's memberships are out of date (generated for the shape before the edit), not new ones
   return rename.size;
 }
 // the stale chain / loop keys of a plan that move (rename) or go (remove): see reconcileCutPlan
@@ -948,14 +950,17 @@ export function pathsInputOf(key, storedRec) {
   const e = resolveEntry(key, storedRec);
   return e ? { target: e.target, rec: effectiveCutRecord(e.rec) } : null;
 }
-export function itemOf(key, storedRec, ctx, { request = true, opId = null } = {}) {
+export function itemOf(key, storedRec, ctx, { request = true, opId = null, item = null } = {}) {
   const input = pathsInputOf(key, storedRec);
   if (!input) return { paths: null, levels: null };
-  return lookupPaths(ctx, input.target, input.rec, { request, opId });
+  return lookupPaths(ctx, input.target, input.rec, { request, opId, item }); // TASK S3: `item` = the membership read (its out-of-date rule: op-paths.js)
 }
 export function pathsOf(key, storedRec, ctx, opts) { const it = itemOf(key, storedRec, ctx, opts); return it === undefined ? undefined : it.paths; }
 /** TASK 817: the generated paths of an entry already resolved (planEntries: { target, rec }), as pathsOf. */
 export function entryPathsOf(target, resolvedRec, ctx, opts) { const it = lookupPaths(ctx, target, effectiveCutRecord(resolvedRec), opts); return it === undefined ? undefined : it.paths; }
+/** TASK S3: whether a plan item (a membership: `item` = '<op id>|<geometry key>') is OUT OF DATE (op-paths.js): an entry resolved (planEntries), or a member item (planMemberItems). */
+export function entryOutOfDate(target, resolvedRec, ctx, item, opId = null) { return isOutOfDate(ctx, target, effectiveCutRecord(resolvedRec), item, opId); }
+export function itemOutOfDate(key, storedRec, ctx, item, opId = null) { const input = pathsInputOf(key, storedRec); return Boolean(input) && isOutOfDate(ctx, input.target, input.rec, item, opId); }
 /** TASK 817: the signature of a plan item's derivation (op-paths.js pathsSig), or null when it has no entry. */
 export function pathsSigOf(key, storedRec, ctx) {
   const input = pathsInputOf(key, storedRec);

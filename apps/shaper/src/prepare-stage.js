@@ -7,18 +7,21 @@ import { capturePrepare, applyPrepare, comparablePrepare } from './shaper-doc.js
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeTabsAt, followDesign, planMemberItems, pathsSigOf, pathsInputOf, settleWaiting, orderWaiting } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
+import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeTabsAt, followDesign, planMemberItems, pathsSigOf, pathsInputOf, settleWaiting, orderWaiting, pathsCtx } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
 import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
 import { reorderOps, setOpsOn, opById, regionOf, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
-import { cutTypeById, STOCK_TYPE_ID } from './shaper.js'; // TASK S2: a type's name; the Stock
+import { cutTypeById, STOCK_TYPE_ID, CUT_TYPES } from './shaper.js'; // TASK S2: a type's name; the Stock; TASK S3: the toolbar's buttons, one per type
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
-import { hold as holdPaths, retain as retainPaths, request as requestPaths, onChange as onPathsChange, isGenerating, hasResult } from './op-paths.js'; // TASK 817: the paths generated in the background
+import { hold as holdPaths, retain as retainPaths, request as requestPaths, onChange as onPathsChange, isGenerating, hasResult, recalculate as recalculatePaths, forget as forgetPaths, generatedSigs, isUpToDate } from './op-paths.js'; // TASK 817: the paths generated in the background
+import { createToolRibbon } from '#ui/tool-ribbon.js'; // TASK S3: the operations toolbar is Design's shared tool ribbon, with Prepare's own buttons
+import { hintLabel, hintText, choiceId } from './param-hints.js'; // TASK S3: a toolbar button's name and tooltip are its cut type's entry in THE table
 
 /**
- * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, opsEl, ensureSketch, onViewChange })
+ * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, opsEl, ribbonEl, ensureSketch, onViewChange })
  *   getController(): the mounted Design sketch controller (null before it exists). getMode(): the showing mode ('prepare' while Prepare shows).
  *   history: the Undo / Redo router (modes.js createShaperHistory); its runKey serves Ctrl+Z / Ctrl+Y while Prepare shows.
  *   panelEl / canvasEl / noticeEl: the cut card's host, the Prepare svg, the one-line notice. opsEl: TASK 743, the operations list's host (op-list.js). ensureSketch(): mounts the sketch (the page mounts it lazily).
+ *   ribbonEl: TASK S3, the operations toolbar's host (its parent is the frame that places it: apps/shaper/index.html #prepare-ribbon-frame); null = no toolbar.
  *   onViewChange(view): told when the Prepare view is (re)mounted (the page's dev / test seam). (TASK 761: no `notify` any more: the cut plan's notice is the one-time Prepare notice.)
  * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel, opList, pickType (TASK S2: the card's type pick) }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
  * mount() = (re)mount the Prepare view; enter(enteringMode) = the mode router's hook for entering Prepare (modes.js); view() = the mounted view or null;
@@ -27,11 +30,16 @@ import { hold as holdPaths, retain as retainPaths, request as requestPaths, onCh
 
 /** TASK 812: the one notice of a document a NEWER version of the app made (document-buffer.js hostVersion: it is opened, never written over). */
 export const NEWER_VERSION_NOTICE = 'Made by a newer version of the app: reload to edit.';
+/** TASK S3 addition: Recalculate's plain line when there is nothing to do (the brief's words), and when only the selected operations are up to date. */
+export const UP_TO_DATE = 'All toolpaths are up to date.';
+export const SELECTED_UP_TO_DATE = 'The selected toolpaths are up to date.';
+// TASK S3: the Recalculate button's icon (18x18 inner markup in currentColor, as CUT_TYPES.icon): two arrows round a circle
+const RECALC_ICON = "<path d='M14.5 9a5.5 5.5 0 0 1-9.6 3.7' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M3.5 9a5.5 5.5 0 0 1 9.6-3.7' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M13.6 2.4v3.2h-3.2M4.4 15.6v-3.2h3.2' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/>";
 /** TASK 741: the one-time notice Prepare shows after a document that had V-carve regions was opened (#core/document.js deserializeDocument drops them and
  *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
 export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
 
-export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ensureSketch = () => {}, onViewChange = () => {} }) {
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, ensureSketch = () => {}, onViewChange = () => {} }) {
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
@@ -64,8 +72,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
         title: `${typeName(op.type)} ${numberOf(ops, op.id)} \u00b7 ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes`}`,
         shapes: keys.map((key) => ({ key, label: pv.shapeLabel(key) })) };
     }
-    const t = pv.selectedTarget();
-    return t ? { mode: 'shape', kind: t.kind, record: { cutType: null }, note: lineItems } : null; // the quick flow's type menu only (owner turn 2717)
+    return null; // TASK S3 (owner: "dont understand why there a window with cut type when i select a path"): a selection shows no card (its operations' rows are lit)
   }
   const refreshCutPanel = () => {
     opsNow = getController() ? describeOperations(getController().state) : [];
@@ -84,6 +91,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     for (const it of planMemberItems()) { const s = pathsSigOf(it.planKey, it.rec, ctx); if (s) sigs.add(s); }
     for (const s of pv.openSignatures()) sigs.add(s);
     if (session && session.preview) for (const s of session.preview.sigs.values()) sigs.add(s);
+    for (const s of generatedSigs()) sigs.add(s); // TASK S3: an out-of-date operation's last paths (drawn faint) are kept
     retainPaths(sigs);
   }
   // TASK 817 (brief item 6): a row spins only once its operation has been generating for SPIN_AFTER_MS (a quick derivation finishes before: no flicker). `pendingSince`:
@@ -127,7 +135,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const before = comparablePrepare(capturePrepare());
     if (st) st.saveState('cut plan edit');
     const n = st ? st.history.length : 0;
-    apply();
+    withCarry(apply); // TASK S3: a Prepare edit never leaves another operation out of date
     if (st && comparablePrepare(capturePrepare()) === before) st.discardSnapshotAt(n);
     refreshCutPanel();
   }
@@ -151,7 +159,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   }
   let rowId = null; // TASK S2 (owner turn 2719): the SELECTED (tapped) row of the list: it alone shows Edit, Duplicate, X
   // Duplicate (the selected row's, the open card's): OK on the open operation first, then the copy is created OPEN (Cancel removes it)
-  function duplicateAndOpen(opId) { commitSession(); const op = opById(opId); if (!op || !prepareView) return; beginSession(); changed(); const copy = duplicateOperation(op, sketchState()); rowId = copy.id; openSession(copy.id); }
+  function duplicateAndOpen(opId) { commitSession(); const op = opById(opId); if (!op || !prepareView) return; beginSession(); changed(); let copy; withCarry(() => { copy = duplicateOperation(op, sketchState()); }); rowId = copy.id; openSession(copy.id); }
   // the list's Edit: open the operation (OK on another open one first); nothing when it is the open one
   function openForEdit(opId) { if (!prepareView || (session && session.opId === opId)) return; commitSession(); if (!opById(opId)) return; beginSession(); openSession(opId); }
   function openSession(opId) { session.opId = opId; session.preview = null; holdPaths(opId); line = null; prepareView.openOp(opId); prepareView.refreshLook(); refreshCutPanel(); }
@@ -159,7 +167,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (!session || !prepareView) return;
     line = null;
     changed();
-    apply();
+    withCarry(apply); // TASK S3 (817: "every other operation's paths are generated as ever")
     prepareView.syncActive(); prepareView.refreshLook();
     refreshCutPanel();
   }
@@ -168,6 +176,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const st = sketchState(), s0 = session;
     setSession(null); // TASK 817: OK asks for its paths (the refresh below reads them: generated in the background); the order that waited on them is settled when they are there
     if (!keep) applyPrepare(s0.pre);
+    else if (s0.opId) recalcOps([s0.opId]); // TASK S3: OK generates the operation (its inputs now): never out of date
     else if (st && orderWaiting()) settleWaiting(st); // (the in-process port of the node tests answers at once: settled here, inside the session's undo step)
     if (st && s0.n !== null && (!keep || comparablePrepare(capturePrepare()) === s0.before)) st.discardSnapshotAt(s0.n);
     line = null;
@@ -199,28 +208,41 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const fresh = now.length === p.sigs.size && now.every((it) => p.sigs.get(it.id) === pathsSigOf(it.planKey, it.rec, ctx)) && sigs.every((s) => hasResult(s));
     return fresh ? 'fresh' : 'stale';
   }
-  // a type picked in the card: on the OPEN operation it changes its type (refused with its line when one of its shapes cannot take it); with shapes selected it is the
-  // QUICK FLOW (4.4): ALWAYS a NEW operation holding the picked shapes that can take the type, created OPEN (Cancel removes it); none can: nothing is created, the
-  // line says why; some cannot: they are left out and the line says so. The Stock keeps the one-Stock move (task 472: the last closed shape picked).
+  // the Stock's one-line notice (task 472) when the shape `key` becomes the Stock
+  const stockNotice = (prevStock, key) => { if (prevStock && prevStock !== key) prepareNotice('Stock moved to this loop (there is one Stock per document)'); else if (!prevStock) prepareNotice('This closed loop is now the Stock: the board in Export'); };
+  // a type picked in the OPEN operation's card changes its type (refused with its line when one of its shapes cannot take it). TASK S3: a new operation is the
+  // toolbar's (addOperation below); the card shows only for an open operation.
   function pickType(id) {
     const pv = prepareView, st = sketchState();
-    if (!pv) return;
+    const op = session && pv ? pv.activeOp() : null;
+    if (!op) return;
     const prevStock = stockKeyOf();
-    const stockNotice = (key) => { if (prevStock && prevStock !== key) prepareNotice('Stock moved to this loop (there is one Stock per document)'); else if (!prevStock) prepareNotice('This closed loop is now the Stock: the board in Export'); };
-    const op = session && pv.activeOp();
-    if (op) {
-      const why = typeRefusal(id, op.geometry.map((r) => r.key));
-      if (why) { say(why); refreshCutPanel(); return; }
-      sessionEdit(() => { if (id === STOCK_TYPE_ID && op.geometry.length) stockNotice(op.geometry[0].key); changeOpType(op, id, st); });
-      return;
-    }
+    const why = typeRefusal(id, op.geometry.map((r) => r.key));
+    if (why) { say(why); refreshCutPanel(); return; }
+    sessionEdit(() => { if (id === STOCK_TYPE_ID && op.geometry.length) stockNotice(prevStock, op.geometry[0].key); changeOpType(op, id, st); });
+  }
+  // TASK S3 (owner turns 2944-2950; docs/OPERATIONS-MODEL.md 4.1-4.2): a button of the OPERATIONS TOOLBAR = ALWAYS a NEW operation of its type, created OPEN (S2's
+  // session: OK keeps it, Cancel removes it), holding the selected shapes that can take the type (the quick flow, 4.4), or EMPTY when nothing is selected (a click on a
+  // shape then puts it in). An open operation is confirmed first (OK, as any other action: S2); its shapes are the selection, so the new operation holds them. Never
+  // greyed: a pick none of the selected shapes can take creates NOTHING and the one plain line says why (cut-plan.js typeRefusal: in the open card's note area, else
+  // in Prepare's one-line notice: no card shows for a selection); some cannot: they are left out and the line says so. The Stock keeps the one-Stock move (the last
+  // closed shape picked; with nothing selected an empty Stock replaces the Stock, as a type change to the Stock does).
+  function addOperation(id) {
+    const pv = prepareView, st = sketchState();
+    if (!pv) return;
     const picked = pickedKeys();
     const fit = picked.filter((k) => !typeRefusal(id, [k])), out = picked.filter((k) => !fit.includes(k));
     const keys = id === STOCK_TYPE_ID ? fit.slice(-1) : fit;
-    if (!keys.length) { say(typeRefusal(id, picked)); refreshCutPanel(); return; }
+    if (picked.length && !keys.length) {
+      const why = typeRefusal(id, picked);
+      if (session) { say(why); refreshCutPanel(); } else prepareNotice(why);
+      return;
+    }
+    commitSession();
+    const prevStock = stockKeyOf();
     beginSession(); changed();
     let made;
-    if (id === STOCK_TYPE_ID) { stockNotice(keys[0]); made = setStock(keys[0], st).op; } else made = newOperation(id, keys, st);
+    withCarry(() => { if (id === STOCK_TYPE_ID) { if (keys.length) stockNotice(prevStock, keys[0]); made = setStock(keys[0] || null, st).op; } else made = newOperation(id, keys, st); });
     openSession(made.id);
     if (out.length) { say(`${typeRefusal(id, out)} (left out)`); refreshCutPanel(); }
   }
@@ -276,6 +298,93 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onTick: (ids, on) => { commitSession(); cutEdit(() => { setOpsOn(ids, on); if (prepareView) prepareView.refreshLook(); }); },
   });
 
+  // TASK S3 addition (owner turns 3046-3047, "Fusion style"; op-paths.js OUT OF DATE): an operation whose inputs changed since its paths were made (a Design edit, a
+  // change while it is closed) is not generated again by itself: its row shows the out-of-date mark and its last paths are drawn faint until it is RECALCULATED.
+  // recalcOps(ids) asks for these operations' paths with their inputs now (the rows spin as 817's); OK of an edit session calls it for its operation.
+  // A PREPARE edit (an edit session's change, a tick, a reorder, a delete, a new operation) changes other operations' inputs only through the plan they share (which loops
+  // the plan owns: a new Inside on a hole changes its plate's Outside): what was up to date before it is generated for its inputs after it (as 817 generated every
+  // change), never left out of date. Only a Design edit (or an Undo / Redo across one) makes an operation out of date. The open operation is OK's (recalcOps).
+  function upToDateNow() {
+    const st = sketchState();
+    if (!st) return null;
+    const ctx = prepareView ? prepareView.pathsContext() : pathsCtx(st), open = session ? session.opId : null;
+    return new Set(planMemberItems().filter((it) => { if (it.opId === open) return false; const i = pathsInputOf(it.planKey, it.rec); return i && isUpToDate(ctx, i.target, i.rec, it.id); }).map((it) => it.id));
+  }
+  function withCarry(apply) {
+    const before = upToDateNow();
+    apply();
+    const st = sketchState();
+    if (!before || !before.size || !st) return;
+    const ctx = prepareView ? prepareView.pathsContext() : pathsCtx(st), open = session ? session.opId : null;
+    const items = planMemberItems().filter((it) => before.has(it.id) && it.opId !== open).map((it) => ({ item: it.id, input: pathsInputOf(it.planKey, it.rec) }))
+      .filter((x) => x.input && !isUpToDate(ctx, x.input.target, x.input.rec, x.item));
+    if (items.length) recalculatePaths(ctx, items.map((x) => ({ item: x.item, ...x.input })));
+  }
+  function recalcOps(ids) {
+    const st = sketchState();
+    if (!st || !ids.length) return;
+    const ctx = prepareView ? prepareView.pathsContext() : pathsCtx(st);
+    const items = planMemberItems().filter((it) => ids.includes(it.opId)).map((it) => ({ item: it.id, input: pathsInputOf(it.planKey, it.rec) })).filter((x) => x.input);
+    recalculatePaths(ctx, items.map((x) => ({ item: x.item, ...x.input })));
+  }
+  /**
+   * recalculate(ids) — THE Recalculate (the toolbar's button, the Export step's action): the out-of-date operations among `ids` (null = every one). Returns
+   * { done: [ids] }, or { line } when there was nothing to do (the plain line: the button says it in Prepare's notice).
+   */
+  function recalculate(ids = null) {
+    const st = sketchState();
+    if (!st) return { line: UP_TO_DATE };
+    const out = describeOperations(st).filter((op) => op.outOfDate);
+    const todo = ids ? out.filter((op) => ids.includes(op.id)) : out;
+    if (!todo.length) return { line: out.length ? SELECTED_UP_TO_DATE : UP_TO_DATE };
+    recalcOps(todo.map((op) => op.id));
+    if (prepareView && getMode() === 'prepare') { prepareView.refreshLook(); refreshCutPanel(); }
+    return { done: todo.map((op) => op.id) };
+  }
+  // the toolbar's Recalculate: OK on an open operation first (as any other action); then the selected row, else the rows the selection lights, else every operation
+  function recalculateButton() {
+    const ops = opsOf(), lit = ops.filter(isPicked).map((op) => op.id);
+    const ids = rowId && ops.some((op) => op.id === rowId) ? [rowId] : lit.length ? lit : null;
+    commitSession();
+    const r = recalculate(ids);
+    if (r.line) prepareNotice(r.line);
+  }
+
+  // TASK S3 (owner turns 2944-2950; placement: the owner's choice A, "Ok ribbon"): the OPERATIONS TOOLBAR = Design's shared tool ribbon (#ui/tool-ribbon.js), its own
+  // instance with Prepare's buttons, in Design's place and style (a bar across the top; the rail on the short viewport): one button per operation type, from THE
+  // declaration (CUT_TYPES, in its order; a button's icon is the type's own, its name and tooltip the type's param-hints entry), then (a fixed section of its own:
+  // the divider) Recalculate. The sections' names show as Design's do ("OPERATIONS", "RECALCULATE"). The Operations section is a ribbon section as Design's are: what
+  // does not fit (a phone held upright) is in its name's dropdown, never lost; the user's in-bar ticks and order are kept per app (appId 'shaper-prepare',
+  // #ui/ribbon-layout.js), the declaration's order until the user changes it.
+  let ribbon = null, placeRibbon = () => {};
+  if (ribbonEl) {
+    const cutIcon = (icon) => `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${icon}</svg>`;
+    ribbon = createToolRibbon({
+      appId: 'shaper-prepare', sketchTools: false,
+      extraGroups: [
+        { label: 'Operations', buttons: CUT_TYPES.map((t) => ({ id: `op-type-${t.id}`, label: hintLabel(choiceId('cutType', t.id)), hint: hintText(choiceId('cutType', t.id)), svg: cutIcon(t.icon), onClick: () => addOperation(t.id) })) },
+        { label: 'Recalculate', fixed: true, buttons: [{ id: 'op-recalculate', label: hintLabel('opRecalculate'), hint: hintText('opRecalculate'), svg: cutIcon(RECALC_ICON), onClick: () => recalculateButton() }] },
+      ],
+    });
+    ribbon.render(ribbonEl);
+    // its frame (apps/shaper/index.html #prepare-ribbon-frame) follows the ribbon as laid out: the bar (its height moves the overlays at the top: the Operations list, the
+    // notice; the cut card's column only where the bar's buttons reach under it, a phone: --sk-prep-ribbon-hr, so on a desktop the card keeps its height) or the short
+    // viewport's rail (its width moves the ones at the left edge: the Operations list, the direction legend)
+    const frame = ribbonEl.parentElement, view = frame && frame.parentElement, win = ribbonEl.ownerDocument.defaultView;
+    const place = () => {
+      const column = win.getComputedStyle(ribbon.el).flexDirection === 'column';
+      frame.dataset.dir = column ? 'column' : 'row';
+      const r = frame.getBoundingClientRect();
+      view.style.setProperty('--sk-prep-ribbon-w', `${column ? Math.round(r.width) : 0}px`);
+      view.style.setProperty('--sk-prep-ribbon-h', `${column ? 0 : Math.round(r.height)}px`);
+      const reach = Math.max(0, ...[...ribbon.el.querySelectorAll('.sk-ribbon-group')].map((g) => g.getBoundingClientRect().right));
+      const under = !column && Boolean(panelEl) && reach > panelEl.getBoundingClientRect().left - 12;
+      view.style.setProperty('--sk-prep-ribbon-hr', `${under ? Math.round(r.height) : 0}px`);
+    };
+    if (frame && view) placeRibbon = place; // (also before Prepare's first fit: mountPrepare)
+    if (frame && view && typeof win.ResizeObserver === 'function') new win.ResizeObserver(place).observe(frame);
+  }
+
   // The geometry signature the mounted Prepare view was built from: an undo that changed only the cut plan just repaints it
   // (keeps selection + card); one that changed the sketch (e.g. undoing an SVG import) re-mounts it from the restored state.
   let prepareSig = null;
@@ -327,18 +436,26 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
 
   // TASK 743: the first fit keeps the drawing out from under the operations list (the card's panel is the fit's avoidEl): a narrow list (the desktop
   // side panel) costs the canvas its width on that side, a wide one (the phone's bottom bar) its height
+  // TASK S3: and out from under the operations toolbar (its column: the left; its bar: the top)
   function opsInset() {
     const c = canvasEl.getBoundingClientRect(), o = opsEl ? opsEl.getBoundingClientRect() : null;
-    if (!o || !(o.width > 0 && o.height > 0 && c.width > 0 && c.height > 0)) return undefined;
-    const gap = 12;
-    if (o.width < c.width / 2) return o.left - c.left < c.right - o.right ? { left: o.right - c.left + gap } : { right: c.right - o.left + gap };
-    return o.top - c.top < c.bottom - o.bottom ? { top: o.bottom - c.top + gap } : { bottom: c.bottom - o.top + gap };
+    if (!(c.width > 0 && c.height > 0)) return undefined;
+    const gap = 12, out = {};
+    const add = (side, v) => { out[side] = Math.max(out[side] || 0, v); };
+    if (o && o.width > 0 && o.height > 0) {
+      if (o.width < c.width / 2) { if (o.left - c.left < c.right - o.right) add('left', o.right - c.left + gap); else add('right', c.right - o.left + gap); }
+      else if (o.top - c.top < c.bottom - o.bottom) add('top', o.bottom - c.top + gap); else add('bottom', c.bottom - o.top + gap);
+    }
+    const frame = ribbonEl ? ribbonEl.parentElement : null, f = frame ? frame.getBoundingClientRect() : null;
+    if (f && f.width > 0 && f.height > 0) { if (frame.dataset.dir === 'row') add('top', f.bottom - c.top + gap); else add('left', f.right - c.left + gap); }
+    return Object.keys(out).length ? out : undefined;
   }
 
   // SP1a/SP1c: (re)mount the Prepare view on the shared Design sketch (no 2nd engine/RAF). TASK 460: also called after a document
   // restore so Prepare shows the restored geometry and cut plan.
   function mountPrepare() {
     ensureSketch();
+    placeRibbon(); // TASK S3: the toolbar's layout now (the first fit keeps the drawing out from under it: opsInset)
     const designController = getController();
     try { designController.engine.solve(500); } catch (_) {}
     if (prepareView) prepareView.destroy();
@@ -390,16 +507,20 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       const notes = [restore && restore.newer ? NEWER_VERSION_NOTICE : null, restore && restore.removedVcarves > 0 ? removedVcarvesNotice(restore.removedVcarves) : null, cutPlanNotice(restore && restore.cutPlan)].filter(Boolean);
       pendingRemovedNotice = notes.length ? notes.join(' · ') : null;
       setSession(null); line = null; // TASK S2: another document: no operation stays open (its undo point went with the history of the document left)
+      forgetPaths(); // TASK S3: another document (or an import): nothing of it is out of date, it is generated as it is read (as before)
       if (getMode() === 'prepare') mountPrepare();
       else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
     },
     cutPanel,
     opList,
-    pickType, // TASK S2: the card's type pick (the quick flow with shapes selected: a new operation, OPEN; a type change of the open operation)
+    pickType, // TASK S2: the card's type pick (a type change of the open operation)
+    addOperation, // TASK S3: the operations toolbar's button (a new operation, OPEN: the selection's, or empty)
+    ribbon: () => ribbon, // TASK S3: the operations toolbar (null without ribbonEl)
     // TASK S2: the edit session (the list's Edit, OK, Cancel; the test kit drives the same calls the buttons make)
     edit: openForEdit,
     ok: () => commitSession(), cancel: () => cancelSession(), openId: () => (session ? session.opId : null),
     preview: () => previewSession(), previewState, // TASK 817: the open operation's Preview (the test kit presses what the button presses)
+    recalculate, // TASK S3: THE Recalculate (the toolbar's button; the Export step's out-of-date line calls it)
     notice: prepareNotice, // TASK 790: Open STL's notice (stl-import.js)
   };
 }

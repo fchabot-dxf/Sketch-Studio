@@ -4,6 +4,7 @@
 // numbers are printed, the relief's own counts are not asserted).
 //  TASK 807: an STL opens as a RELIEF: ONE Roughing (Terraces) on its work area, ready; the run also switches the Layout to Nested and reviews it
 //  (screenshots <name>-nested-review-*.png) and prints the Operations count. `node tests/roughing-contour-792-live.test.js <file.stl> [name]`.
+//  TASK S3: a press on the outline shows no card (its row lit); the types are the operations toolbar's buttons (#op-type-<id>; on a phone one may be in its dropdown).
 //  DESKTOP 1280 x 800: the drawer's Open STL -> the part (already Roughing) -> TASK S2: the outline pressed: the type menu (Contour in it) -> the Roughing operation
 //   opened (its list row, Edit): its card (Depth, Finish allowance 0, Step depth, bit) -> the bit 1/4 in -> OK -> the outline, Contour in the type menu: a NEW Contour
 //   operation, open: its card (its Depth, step 0.25, 1/8 in, ball nose) -> OK -> the Operations list (two operations under two bit headings, the Contour after the
@@ -114,7 +115,15 @@ const pressOutline = async () => {
   assert.ok(p, 'a point of the outline on the canvas');
   console.log('outline press at ' + JSON.stringify(p));
   await press(p.x, p.y);
-  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the outline\'s card');
+  // TASK S3: a press SELECTS the outline and shows NO card: the rows of its operations are lit (the Roughing's)
+  await waitFor(`!!document.querySelector('#prepare-ops .ops-row.is-picked') && document.querySelector('#prepare-panel .cut-card').hidden`, 'the outline selected (its operation\'s row lit, no card)');
+};
+// TASK S3: the operations toolbar's button (on a phone held upright a type that does not fit is in the Operations section's dropdown)
+const toolbarPick = async (id) => {
+  if (await evalJs(`!document.getElementById('op-type-${id}').hidden`)) { await clickEl(`#op-type-${id}`); return; }
+  await clickEl('#prepare-ribbon .sk-ribbon-group[data-section="operations"] button.sk-ribbon-group-label');
+  await waitFor(`document.querySelector('.sk-ribbon-sect-menu').classList.contains('show')`, 'the Operations dropdown');
+  await clickEl(`.sk-ribbon-sect-item[data-id="op-type-${id}"]`);
 };
 const tab = async (id) => { await clickEl(`.cut-tab[data-tab="${id}"]`); await waitFor(`document.querySelector('.cut-tab[data-tab="${id}"]').classList.contains('is-active')`, `the ${id} tab`); }; // TASK 810: the Roughing / Contour cards are tabbed
 const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-rows .cut-row')].filter((r) => r.style.display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param)`);
@@ -152,13 +161,10 @@ async function phase(what) {
   assert.deepStrictEqual(hm, { images: 1, under: true, png: true, pe: 'none' }, what + ': the height map: one PNG under the edges and the cut layers, no pointer events');
   await waitFor(`document.getElementById('prepare-notice').hidden`, what + ': the import notice gone', 10000); // (it covers the canvas on a phone)
   await shot(`${what}-heightmap.png`, '#prepare-canvas');
-  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1-9.3): a press on the outline only SELECTS it: the card is the quick flow's type menu (every type, the Contour one of them)
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1-9.3): a press on the outline only SELECTS it; TASK S3: no card, the types are the operations toolbar's buttons (every type, the Contour one of them)
   await pressOutline();
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, what + ': the menu');
-  const menu = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id)`);
-  assert.deepStrictEqual(menu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, what + ': Roughing in the menu, after Pocket, then the Contour');
-  await clickEl('#prepare-panel .cut-type-trigger'); // closed again
+  const menu = await evalJs(`[...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group[data-section="operations"] .sk-ribbon-btn')].map((b) => b.id.replace('op-type-', ''))`);
+  assert.deepStrictEqual(menu, ['exterior', 'interior', 'pocket', 'online', 'guide', 'stock', 'roughing', 'contour'] /* TASK S3: CUT_TYPES' order */, what + ': the toolbar: every type, Roughing and Contour among them');
   // the STL's Roughing operation OPENED (its list row, then Edit): its card
   let t0 = Date.now();
   await openOpLive(t, await opOf('roughing'));
@@ -180,12 +186,10 @@ async function phase(what) {
   t0 = Date.now();
   await okLive(t); // OK: the Roughing's change confirmed (ONE undo step), its derivations rebuilt
   timings[what].roughingOk = Date.now() - t0;
-  // the CONTOUR, an operation of its own (TASK S2): the outline selected, Contour in the type menu = a NEW operation, open
+  // the CONTOUR, an operation of its own (TASK S2): the outline selected, the toolbar's Contour (TASK S3) = a NEW operation, open
   await pressOutline();
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, what + ': the menu again');
   t0 = Date.now();
-  await clickEl('.cut-type-opt[data-id="contour"]');
+  await toolbarPick('contour');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour' && !document.querySelector('#prepare-panel .cut-actions').hidden`, what + ': the new Contour operation, open', 60000);
   timings[what].contour = Date.now() - t0;
   const crows = await rows();

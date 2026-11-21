@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './cdp-browser.js';
 import { probe, tipProblems } from './tooltip-live.js';
-import { clickOpenLive, stepLive } from './prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { clickOpenLive, stepLive, typeLive, selectedLive } from './prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed; TASK S3: a new one from the toolbar
 
 const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
 
@@ -127,7 +127,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
     const look = () => evalJs(`({ paths: document.querySelectorAll('#prepare-toolpath-group .sk-clear-path').length, cleanup: document.querySelectorAll('#prepare-toolpath-group .sk-clear-cleanup').length,
       leftover: document.querySelectorAll('#prepare-cut-group .sk-leftover').length, band: document.querySelectorAll('#prepare-cut-group .sk-band').length,
       d: [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getAttribute('d').length).reduce((a, b) => a + b, 0) })`);
-    const pickType = async (id) => { await clickEl('#prepare-panel .cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu'); await clickEl(`.cut-type-opt[data-id="${id}"]`); };
+    const pickType = (id) => stepLive(raw, () => typeLive(raw, id)); // TASK S3: an open operation's type change (the card's menu), else the toolbar's new operation
     const typeFieldRaw = async (cls, v) => { await evalJs(`(() => { const i = document.querySelector('${cls}'); i.value = '${v}'; i.dispatchEvent(new Event('change')); })()`); await sleep(200); };
     const typeField = (cls, v) => stepLive(raw, () => typeFieldRaw(cls, v)); // TASK S2: its own step
     const openClearing = async () => { await clickEl('#prepare-panel .cut-clear-trigger'); await waitFor(`!document.querySelector('.cut-clear-pop').hidden`, 'the Clearing popover'); };
@@ -213,7 +213,7 @@ export async function setupPockets(t, label) {
     await openMode('prepare');
     if (phone && !await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await clickEl('#prepare-ops .ops-head'); // the folded bar keeps the card free
     // the rectangle pocket: Pocket, depth, bit 6 mm (1/4 in on the phone)
-    const pickRect = async () => { await clickWorld(60, 10); await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the card'); };
+    const pickRect = async () => { await clickWorld(60, 10); await selectedLive(t, label + ': the rectangle selected'); }; // TASK S3: a click shows no card (its operation, if any, is opened by clickWorld)
     await pickRect();
     await pickType('pocket');
     await typeField('.cut-depth', inch ? '0.25' : '6');

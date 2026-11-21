@@ -669,7 +669,7 @@
     .cut-shape-angles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding-top: 4px; }
     .cut-shape-angles .cut-preset { all: unset; box-sizing: border-box; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: var(--sk-prep-chip2); font-size: 11px; color: var(--sk-prep-chip-text); cursor: pointer; }
     .cut-shape-angles .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
-    /* TASK 842: the Bit menu (the tool table's bits: glyph, name, size; Custom; Edit tool table...), as the Clearing popover */
+    /* TASK 842: the Bit menu (the tool table's bits: glyph, name, size; Custom; Edit my bits...), as the Clearing popover */
     .cut-bit-pop { width: 210px; padding: 12px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
     .cut-bit-pop .cut-type-opt { height: auto; min-height: 30px; flex-wrap: wrap; row-gap: 1px; padding: 5px 10px; }
     .cut-bit-pop .cut-type-opt span { text-transform: none; }
@@ -682,7 +682,7 @@
       .cut-bit-pop .cut-type-opt, .cut-bit-edit { min-height: 44px; font-size: 13px; gap: 6px; padding: 4px 8px; }
       .cut-bit-size { padding-left: 22px; }
     }
-    /* TASK 842: the Tool table window (the Sync dialog's card, header and buttons: .sync-modal ...) */
+    /* TASK 842: the My bits window (the Sync dialog's card, header and buttons: .sync-modal ...) */
     .tt-modal { max-width: 520px; }
     .tt-card { max-height: min(86vh, 760px); overflow-y: auto; }
     .tt-list { display: flex; flex-direction: column; gap: 4px; }
@@ -693,6 +693,15 @@
     .tt-row-name { color: #f3f4f6; font-size: 13px; overflow-wrap: anywhere; }
     .tt-row-size { color: #9ca3af; font-size: 11px; overflow-wrap: anywhere; }
     .tt-list-actions { display: flex; justify-content: flex-start; }
+    /* TASK 852: Add bit's template list (the bit types: glyph, name, one-line description) and the note under a bit's sizes */
+    .tt-templates { display: flex; flex-direction: column; gap: 8px; }
+    .tt-templates[hidden], .tt-type-field[hidden], .tt-bit-note:empty { display: none; }
+    .tt-template-list { display: flex; flex-direction: column; gap: 4px; }
+    .tt-template { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: #0b1020; border: 1px solid #232834; cursor: pointer; }
+    .tt-template:hover, .tt-template:focus-visible { border-color: #3b82f6; }
+    .tt-template-name { color: #f3f4f6; font-size: 13px; }
+    .tt-template-desc { color: #9ca3af; font-size: 11px; overflow-wrap: anywhere; }
+    .tt-bit-note { font-size: 12px; color: #fbbf24; }
     .tt-form { display: flex; flex-direction: column; gap: 10px; }
     .tt-label { font-size: 12px; color: #9ca3af; }
     .tt-types { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -707,7 +716,7 @@
     .tt-unit { min-width: 22px; color: #9ca3af; font-size: 12px; }
     .tt-notes { background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 8px 10px; color: #f3f4f6; font: 13px system-ui, sans-serif; resize: vertical; }
     @media (max-width: 640px), (pointer: coarse) {
-      .tt-type, .tt-unit-btn, .tt-num input { min-height: 44px; }
+      .tt-type, .tt-template, .tt-unit-btn, .tt-num input { min-height: 44px; }
       .tt-row .sync-link-btn { flex: 1 1 0; }
     }
   </style>

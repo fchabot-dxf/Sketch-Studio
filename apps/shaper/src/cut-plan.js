@@ -1021,7 +1021,7 @@ export function planReliefItems(state, opts) {
     if (!stored || !stored.cutType || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
     const d = pathsOf(key, stored, ctx);
     if (!d) continue; // nothing to cut (TASK 817: or not generated yet)
-    const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia, ...(isTaperedCutter(stored.cutterShape) ? { taperAngle: stored.taperAngle, shankDia: stored.shankDia } : {}) }; // TASK 842: a tapered bit's cone (#core cutter-profile: the one profile)
+    const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia, ...(isTaperedCutter(stored.cutterShape) ? { taperAngle: stored.taperAngle, shankDia: stored.shankDia } : {}), ...(stored.cutterShape === 'bowl' ? { cornerRadius: stored.cornerRadius } : {}) }; // TASK 852: a bowl bit's corner radius // TASK 842: a tapered bit's cone (#core cutter-profile: the one profile)
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
     // TASK 817: a shaped cutter's other widths sweep the cuts again (#core deriveCutFootprintAt calls each cut's `sweep`, a function that does not cross from the worker):
     // they are derived from the main thread's own derivation of the same item (deriveKeyFootprints), made once, only when the 3D build asks for a width

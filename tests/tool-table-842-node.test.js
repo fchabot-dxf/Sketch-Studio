@@ -111,28 +111,25 @@ const IN = (t) => parseUnit(t, 'in');
 // ── 4. the stored table: defaults on first use, persists across a reload ──
 {
   eq(DEFAULT_BITS.map((b) => [b.name, b.type, b.unit, b.diameter ?? null, b.angle ?? null, b.tipDiameter ?? null, b.taperAngle ?? null, b.shankDiameter ?? null]), [
+    ['1/16 in end mill', 'endmill', 'in', IN('1/16'), null, null, null, null],
     ['1/8 in end mill', 'endmill', 'in', 3.175, null, null, null, null],
     ['1/4 in end mill', 'endmill', 'in', 6.35, null, null, null, null],
-    ['3 mm end mill', 'endmill', 'mm', 3, null, null, null, null],
-    ['6 mm end mill', 'endmill', 'mm', 6, null, null, null, null],
-    ['1/8 in ball nose', 'ballnose', 'in', 3.175, null, null, null, null],
-    ['60° V-bit', 'vbit', 'in', 6.35, 60, null, null, null],
-    ['90° V-bit', 'vbit', 'in', 6.35, 90, null, null, null],
-    ['1 mm 3.5° tapered ball nose', 'taperball', 'mm', null, null, 1, 3.5, 6.35],
-  ], 'the first-use bits (the exact list)');
+    ['3/8 in end mill', 'endmill', 'in', IN('3/8'), null, null, null, null],
+    ['1/2 in end mill', 'endmill', 'in', 12.7, null, null, null, null],
+  ], 'the first-use bits (TASK 852: the five inch end mills, the exact list)');
   ok(DEFAULT_BITS.every((b, i) => validateBit(b, DEFAULT_BITS.slice(0, i)).length === 0), 'every default bit is valid');
   const storage = memStorage();
   const s1 = createSettingsManager({ storage });
   eq(loadBits(s1).map((b) => b.id), DEFAULT_BITS.map((b) => b.id), 'nothing stored: the defaults');
   eq(s1.get(TOOL_TABLE_KEY), null, 'reading the table writes nothing');
-  const mine = [...loadBits(s1).filter((b) => b.id !== 'em-3mm'), { id: 'bit-9', name: '1/8 upcut', type: 'endmill', unit: 'in', diameter: IN('1/8'), cutLength: IN('1/2'), notes: 'Amana 46170' }];
+  const mine = [...loadBits(s1).filter((b) => b.id !== 'em-1-4in'), { id: 'bit-9', name: '1/8 upcut', type: 'endmill', unit: 'in', diameter: IN('1/8'), cutLength: IN('1/2'), notes: 'Amana 46170' }];
   saveBits(mine, s1);
   const s2 = createSettingsManager({ storage }); // the page reloaded (the same browser storage)
-  eq(loadBits(s2), mine.map(normalizeBit), 'the table after a reload: the same bits, the same exact values (3 mm deleted, 1/8 upcut added)');
+  eq(loadBits(s2), mine.map(normalizeBit), 'the table after a reload: the same bits, the same exact values (1/4 in deleted, 1/8 upcut added)');
   eq(saveBits([], s2).length, 0, 'every bit deleted');
   eq(loadBits(createSettingsManager({ storage })), [], 'an empty table stays empty (the defaults are for first use only)');
   assert.throws(() => saveBits([{ id: 'z', name: '', type: 'endmill', unit: 'mm', diameter: 1 }], s2), /invalid bit/, 'an invalid bit is never saved'); checks++;
-  eq(duplicateBit(mine[0], mine).name, '1/8 in end mill copy', 'Duplicate: a new name');
+  eq(duplicateBit(mine[0], mine).name, '1/16 in end mill copy', 'Duplicate: a new name');
   console.log('4 persistence: ok');
 }
 
@@ -141,8 +138,8 @@ const UPCUT = { id: 'bit-up', name: '1/8 upcut', type: 'endmill', unit: 'in', di
 const TBN = { id: 'bit-tbn', name: 'TBN 1mm', type: 'taperball', unit: 'mm', tipDiameter: 1, taperAngle: 3.5, shankDiameter: IN('1/4') };
 {
   // the record a bit sets (pure)
-  eq(recordFieldsOf(UPCUT), { bitId: 'bit-up', bitName: '1/8 upcut', cutterShape: 'endmill', toolDia: 3.175, taperAngle: undefined, shankDia: undefined, cutLength: 12.7 }, 'an end mill: its name, shape, diameter, cutting length (no cone)');
-  eq(recordFieldsOf(TBN), { bitId: 'bit-tbn', bitName: 'TBN 1mm', cutterShape: 'taperball', toolDia: 1, taperAngle: 3.5, shankDia: 6.35, cutLength: undefined }, 'a tapered bit: toolDia = its TIP, its cone');
+  eq(recordFieldsOf(UPCUT), { bitId: 'bit-up', bitName: '1/8 upcut', cutterShape: 'endmill', toolDia: 3.175, cornerRadius: undefined, taperAngle: undefined, shankDia: undefined, cutLength: 12.7 }, 'an end mill: its name, shape, diameter, cutting length (no cone)');
+  eq(recordFieldsOf(TBN), { bitId: 'bit-tbn', bitName: 'TBN 1mm', cutterShape: 'taperball', toolDia: 1, cornerRadius: undefined, taperAngle: 3.5, shankDia: 6.35, cutLength: undefined }, 'a tapered bit: toolDia = its TIP, its cone');
   eq(toolOf({ cutType: 'pocket', ...recordFieldsOf(UPCUT) }).label, '1/8 upcut', 'the tool is named by the bit');
   eq(toolOf({ cutType: 'pocket', toolDia: 3.175, cutterShape: 'endmill' }).label, '⅛″ end mill', 'a Custom bit: named as before');
   ok(toolOf({ cutType: 'pocket', ...recordFieldsOf(UPCUT) }).key !== toolOf({ cutType: 'pocket', toolDia: 3.175, cutterShape: 'endmill' }).key, 'two bits of one size, one named: two tools');
@@ -173,7 +170,7 @@ try {
   pressEl('.cut-bit-trigger');
   eq(qa('.cut-bit-opt').map((o) => o.querySelector('.cut-opt-name').textContent), [...DEFAULT_BITS.map((b) => b.name), '1/8 upcut', 'TBN 1mm'], 'the Bit menu: every bit of the table');
   eq(q('.cut-bit-opt[data-bit="bit-up"] .cut-bit-size').textContent, '1/8 in (3.175 mm)', 'each with its size in its own unit');
-  ok(q('.cut-bit-custom.is-current') && q('.cut-bit-edit'), 'then Custom (current) and Edit tool table...');
+  ok(q('.cut-bit-custom.is-current') && q('.cut-bit-edit'), 'then Custom (current) and Edit my bits...');
   pressEl('.cut-bit-opt[data-bit="bit-up"]');
   const opRec = () => storeOps().find((o) => o.type === 'pocket').settings;
   eq([opRec().bitId, opRec().bitName, opRec().toolDia, opRec().cutterShape, opRec().cutLength], ['bit-up', '1/8 upcut', 3.175, 'endmill', 12.7], 'picked: the operation holds the bit\'s copy');
@@ -189,7 +186,7 @@ try {
   saveBits([...DEFAULT_BITS, TBN]);
   eq(exportOf(), withBit, 'the bit deleted from the table: the design exports the same');
   app.prepare.edit(storeOps()[0].id);
-  eq(q('.cut-bit-cur').textContent, '1/8 upcut (not in your tool table)', 'its card still names the copy');
+  eq(q('.cut-bit-cur').textContent, '1/8 upcut (not in My bits)', 'its card still names the copy');
   app.prepare.cancel();
   const saved = JSON.parse(JSON.stringify(captureShaperDoc()));
   applyShaperDoc(saved, st);
@@ -246,7 +243,7 @@ try {
   console.log('6 tapered levels: ok');
   // TASK S3: the toolbar's TOOLS section (fixed, after Recalculate) holds the Tool table button
   eq([...doc.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section).slice(-2), ['recalculate', 'tools'], 'the Tools section is the toolbar\'s last, after Recalculate');
-  ok('fixed' in q('#prepare-ribbon .sk-ribbon-group[data-section="tools"]').dataset && q('#op-tool-table .sk-ribbon-lbl').textContent === 'Tool table', 'a fixed section (as Recalculate): its one button, Tool table');
+  ok('fixed' in q('#prepare-ribbon .sk-ribbon-group[data-section="tools"]').dataset && q('#op-tool-table .sk-ribbon-lbl').textContent === 'My bits', 'a fixed section (as Recalculate): its one button, My bits');
 } finally {
   saveBits(DEFAULT_BITS.map((b) => ({ ...b })));
   SettingsManager.set(TOOL_TABLE_KEY, null, { persist: 'local' });

@@ -11,10 +11,8 @@ import { cutTypeById, STOCK_TYPE_ID, effectiveCutRecord } from './shaper.js'; //
 import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, planMemberItems, pathsCtx, pathsOf, pathsSigOf, planOwnedLoops, stockKeyOf, rememberStepDepth, rememberAdaptiveSteps, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
-  lastLeadInSide, rememberLeadInSide, leadInNoteItems, leadInSummary,
   CONTOUR_KIND, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
-import { leadInDragAt } from '#core/lead-in.js'; // TASK 778: draggable lead-in junction (ONE pure derivation)
 import { resultOf } from './op-paths.js'; // TASK 817: the generated paths by their signature (the open operation's: as opened, its Preview)
 import { holdMode, tabHandles, holdTabDragAt } from '#core/hold-part.js'; // TASK 822: draggable tabs (the hold's own layout, ONE pure derivation)
 import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
@@ -211,7 +209,7 @@ function edgeStrokeMarkup(s, state, cls) {
 
 // ── Cut plan (SP1f; extracted to ./cut-plan.js in SP1j-4): the per-target store + its keyOf/getCutRecord/setFieldFor
 // now live in a shared module read by BOTH this look AND the SVG exporter. Behaviour unchanged — same Map. ──
-// TASK 798: the look (bands, tool paths, chips, lead-in handles, guide / Stock edges, height maps, the direction legend) shows the TICKED operations only
+// TASK 798: the look (bands, tool paths, chips, tab handles, guide / Stock edges, height maps, the direction legend) shows the TICKED operations only
 // (cut-plan.js planRecords' ticked filter, the one the export and the 3D Review read); an unticked operation's shapes are still picked and edited as before.
 const TICKED = Object.freeze({ ticked: true });
 
@@ -220,7 +218,6 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
   const onSelectionChange = opts.onSelectionChange || (() => {});
   const onNotice = opts.onNotice || (() => {}); // TASK 472: a transient one-line notice (the Stock role moved)
-  const onCommitLeadIn = opts.onCommitLeadIn || (() => {}); // TASK 778: dragging the lead-in handle commits ONE undo step via prepare-stage (TASK S2: (opId, geometry key, at))
   const onCommitTabs = opts.onCommitTabs || (() => {}); // TASK 822: dragging a tab handle: an edit of the open operation's session (opId, geometry key, tabsAt)
   const onToggleShape = opts.onToggleShape || (() => {}); // TASK S2: Add shapes mode: a click on a shape (opId, target); the stage puts it in / takes it out (one undo step)
   svgEl.innerHTML = ''; // clean re-mount
@@ -261,7 +258,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // TASK 455: the tool path + depth chip sit ABOVE the highlighted boundary (an On Line's black dashes ride on its bold mint line)
   const toolpathG = mkGroup('prepare-toolpath-group'); svgEl.appendChild(toolpathG);
   const chipG = mkGroup('prepare-chip-group');         svgEl.appendChild(chipG); // the depth chip rides on the tool path
-  const dragG = mkGroup('prepare-lead-drag-group');    svgEl.appendChild(dragG); // TASK 778: live preview while dragging the lead-in handle
+  const dragG = mkGroup('prepare-lead-drag-group');    svgEl.appendChild(dragG); // TASK 778 / 822: live preview while dragging a tab handle
   const handleG = mkGroup('prepare-handle-group');     svgEl.appendChild(handleG); // TASK 778: draggable junction handle (44 px hit area)
 
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
@@ -387,13 +384,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // TASK S2: one look per membership (planMemberItems: a shape in two operations has two). TASK 817: `derived` = its GENERATED paths (cut-plan.js pathsOf: the one
   // composition, deriveKeyFootprints, made in the background on OK; shared with the 3D Review)
   const computeLook = (it, derived) => {
-    if (!derived) return { region: '', path: '', toolPaths: [], leadHandles: [] };
+    if (!derived) return { region: '', path: '', toolPaths: [] };
     const { rec, footprints } = derived;
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
-    if (!ct) return { region: '', path: '', toolPaths: [], leadHandles: [] };
+    if (!ct) return { region: '', path: '', toolPaths: [] };
     // TASK 455: the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states. Every
     // type uses the same state model; only the SHAPE differs. A Guide is a line only (no band, dashes or chip).
-    if (ct.id === 'guide' || ct.id === STOCK_TYPE_ID) return { region: '', path: '', hasTravel: false, toolPaths: [], leadHandles: [] }; // a Guide / the Stock: a line only (the Stock has its label)
+    if (ct.id === 'guide' || ct.id === STOCK_TYPE_ID) return { region: '', path: '', hasTravel: false, toolPaths: [] }; // a Guide / the Stock: a line only (the Stock has its label)
     // TASK 447: the FOOTPRINT of the round bit (what it really removes) comes from ONE core derivation
     // (#core/profile-model deriveCutFootprint); this view only draws the rings it returns. Uncut material (corners the
     // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
@@ -401,29 +398,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const tpClass = isOnline ? 'sk-tp sk-tp-online' : 'sk-tp';
     let region = '', path = '', hasTravel = false, chip = null, startMark = null;
     const toolPaths = [];
-    const leadHandles = []; // TASK 778: draggable handles at On line lead-in junctions
     // TASK 449 / 777: travel marks (sparse slow marching dashes); TASK 757: a STEPPED cut's (a terrace's)
     // go to `stepped`, thinned at draw time (renderStepTravel: outlines closer on screen than TRAVEL_MIN_GAP_PX carry none).
     const stepped = [];
-    // TASK 775 / 777 / 778: a LEAD-IN ARC (from the one derivation): its path `lead.d`, a filled dot at its tip, a ring at the junction, and its draggable handle
-    const isActiveLead = (lead) => Boolean(lead && (lead.role === 'arc' || lead.role === 'leg') && Array.isArray(lead.legPoints) && lead.legPoints.length >= 2);
-    const addLeadLeg = (lead) => {
-      if (!isActiveLead(lead)) return;
-      const d = lead.d || toolPathD({ points: lead.legPoints, closed: false });
-      if (d) path += `<path class="sk-lead-leg" d="${d}"/>`;
-    };
-    const addLeadDots = (lead) => {
-      if (!isActiveLead(lead)) return;
-      const tip = lead.tip || lead.legPoints[0];
-      const j = lead.junction || lead.legPoints[lead.legPoints.length - 1];
-      path += `<circle class="sk-lead-end" cx="${j.x}" cy="${j.y}" r="1.2"/><circle class="sk-lead-tip" cx="${tip.x}" cy="${tip.y}" r="1.6"/>`;
-      if (lead.role === 'arc') leadHandles.push({ id: it.id, junction: j }); // TASK S2: the handle names its membership
-    };
     const addTravel = (fp, t) => {
       const d = toolPathD({ points: t.path, closed: t.closed });
       if (!d) return;
-      const cls = t.role === 'leadin' ? 'sk-travel sk-travel-lead'
-        : (t.role === 'online' || t.role === 'stroke') ? 'sk-travel sk-travel-online'
+      const cls = t.role === 'stroke' ? 'sk-travel sk-travel-online'
         : CLEAR_PATH_ROLES.has(t.role) ? 'sk-travel sk-travel-clear' : 'sk-travel';
       const markup = `<path class="${cls}" d="${d}"/>`;
       if (fp.terrace) stepped.push({ ring: t.path, markup });
@@ -480,7 +461,6 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         if (!chip && fp.anchor) chip = fp.anchor;
         continue;
       }
-      addLeadLeg(fp.leadIn); // TASK 775 / 778: an On line outline's lead-in arc (base curve under 777's travel dashes)
       const travel = deriveCutTravel([fp]);
       for (const t of travel) { addTravel(fp, t); hasTravel = true; }
       if (fp.kind === 'pocket') {
@@ -491,10 +471,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       } else if (fp.center && !travel.length) {
         path += polyMarkup(fp.center, tpClass);
       }
-      addLeadDots(fp.leadIn); // TASK 775 / 778: tip dot, junction ring, and draggable handle on top of travel marks
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map(), leadHandles };
+    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map() };
   };
   // TASK 817 (owner turns 2745-2748): a look is drawn from the GENERATED paths (op-paths.js: content-addressed, generated in the background on OK), cached per
   // membership under its paths' signature (+ the unit its chip is written in). Paths not generated yet: nothing is drawn (the look follows when they arrive: the stage
@@ -502,7 +481,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // and faint again (stale) after a later change in the card.
   let ctxNow = null;
   const viewCtx = () => { const o = ownedNow(); if (!ctxNow || ctxNow.ownedKeys !== o.keys) ctxNow = { ownedKeys: o.keys, ctx: pathsCtx(state, { loops, loopPolys, owned: o.set }) }; return ctxNow.ctx; };
-  const EMPTY_LOOK = Object.freeze({ region: '', path: '', toolPaths: [], leadHandles: [] });
+  const EMPTY_LOOK = Object.freeze({ region: '', path: '', toolPaths: [] });
   const lookAt = (it, sig, derived) => {
     const k = `${sig}|${docUnit()}`;
     let byItem = lookCache.get(it.id);
@@ -582,9 +561,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     stepLayer.innerHTML = stepOut;
     lastZoomK = k;
   };
-  // TASK 778: active handle drag { pointerId, key, loop, holes (TASK 787), startAt, lastGood, startJunction, previewLead, refused }; TASK 822: a TAB handle's drag is the
-  // same drag ({ tab: true, fromAt (the tab's centre when the drag began), point (the handle), previewCuts (the hold with the tab there), lastGood (every tab's centre) })
-  let leadDrag = null;
+  // TASK 822: the active TAB handle drag { pointerId, id, opId, key, rec, loop, fromAt (the tab's centre when the drag began), point (the handle), previewCuts (the hold
+  // with the tab there), lastGood (every tab's centre), refused }
+  let tabDrag = null;
   const handleMarkup = (id, p, k, extra = '', tabAt = null) => `<g class="sk-lead-handle${tabAt != null ? ' sk-tab-handle' : ''}${extra}" data-lead-key="${id}"${tabAt != null ? ` data-tab-at="${tabAt}"` : ''} transform="translate(${p.x} ${p.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`;
   // TASK 822: a membership's tab handles (where the hold's layout put its tabs); TASK 817: from its record NOW (the open operation's look is its paths as opened),
   // made once per record (its JSON)
@@ -600,29 +579,26 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const renderHandles = () => {
     const k = worldTolerance(svgEl, 1);
-    if (leadDrag) {
-      const j = leadDrag.tab ? leadDrag.point : leadDrag.previewLead && leadDrag.previewLead.junction ? leadDrag.previewLead.junction : leadDrag.startJunction;
-      handleG.innerHTML = j ? handleMarkup(leadDrag.id, j, k, ` is-dragging${leadDrag.refused ? ' is-refused' : ''}`, leadDrag.tab ? leadDrag.fromAt : null) : '';
+    if (tabDrag) {
+      const j = tabDrag.point;
+      handleG.innerHTML = j ? handleMarkup(tabDrag.id, j, k, ` is-dragging${tabDrag.refused ? ' is-refused' : ''}`, tabDrag.fromAt) : '';
       return;
     }
     let out = '';
-    const open = activeOp(); // TASK S2: a lead-in handle (TASK 822: a tab handle) is dragged in its operation's edit session only
-    // TASK 817: at the lead-in / the tabs the open operation's settings make NOW (cut-plan.js leadInSummary, #core hold-part tabHandles: the outline's own light
-    // derivations, read here while the card is open; its paths wait for OK), so they are adjusted before OK
+    const open = activeOp(); // TASK S2 / 822: a tab handle is dragged in its operation's edit session only
+    // TASK 817: at the tabs the open operation's settings make NOW (#core hold-part tabHandles: the outline's own light derivation, read here while the card is
+    // open; its paths wait for OK), so they are adjusted before OK
     for (const { it, open: isOpen } of drawnItems()) {
       if (!open || !isOpen || !selection.has(it.key)) continue;
-      const lead = leadInSummary(it.planKey, it.rec, state, loops, loopPolys, ownedNow().set);
-      if (lead && lead.role === 'arc' && lead.junction) out += handleMarkup(it.id, lead.junction, k);
       for (const h of tabHandlesOf(it)) out += handleMarkup(it.id, h.point, k, '', h.at);
     }
     handleG.innerHTML = out;
   };
   const renderDragPreview = () => {
-    toolpathG.classList.toggle('is-lead-dragging', Boolean(leadDrag && !leadDrag.tab));
-    toolpathG.classList.toggle('is-tab-dragging', Boolean(leadDrag && leadDrag.tab)); // TASK 822: the tabs and strips as they are fade; the dragged layout is drawn on top
-    if (leadDrag && leadDrag.tab) {
+    toolpathG.classList.toggle('is-tab-dragging', Boolean(tabDrag)); // TASK 822: the tabs and strips as they are fade; the dragged layout is drawn on top
+    if (tabDrag) {
       let out = '';
-      for (const c of leadDrag.previewCuts || []) {
+      for (const c of tabDrag.previewCuts || []) {
         if (!c.hold) continue;
         if (c.hold.role === 'pass' || c.hold.role === 'stroke') for (const d of c.hold.marks || []) out += `<path class="sk-tab-mark" d="${d}"/>`;
         if (c.hold.role === 'strip') out += `<path class="sk-strip" d="${c.hold.d}"/>`;
@@ -632,17 +608,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       renderHandles();
       return;
     }
-    if (!leadDrag || !leadDrag.previewLead) { dragG.innerHTML = ''; renderHandles(); return; }
-    const ld = leadDrag.previewLead;
-    const cls = leadDrag.refused ? ' is-refused' : '';
-    let out = '';
-    if (ld.d) out += `<path class="sk-lead-leg${cls}" d="${ld.d}"/>`;
-    if (ld.junction) out += `<circle class="sk-lead-end${cls}" cx="${ld.junction.x}" cy="${ld.junction.y}" r="1.2"/>`;
-    if (ld.tip) out += `<circle class="sk-lead-tip${cls}" cx="${ld.tip.x}" cy="${ld.tip.y}" r="1.6"/>`;
-    dragG.innerHTML = out;
+    dragG.innerHTML = '';
     renderHandles();
   };
-  const renderZoomed = () => { // what a zoom/resize changes (skipped on pure pan when k is unchanged): thinned stepped marks, chips, lead-in handle size
+  const renderZoomed = () => { // what a zoom/resize changes (skipped on pure pan when k is unchanged): thinned stepped marks, chips, tab handle size
     const k = worldTolerance(svgEl, 1);
     if (lastZoomK === null || Math.abs(k - lastZoomK) > 1e-9) { renderStepTravel(); renderChips(); renderHandles(); }
   };
@@ -741,38 +710,25 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     handlePanZoomWheel(e, svgEl, viewState);
     renderZoomed(); // TASK 731: the chip keeps its screen size across a zoom; TASK 757: the stepped travel marks re-thin
   };
-  const finishLeadDrag = (e, commit) => {
-    if (!leadDrag || (e && e.pointerId !== leadDrag.pointerId)) return false;
-    const d = leadDrag;
-    leadDrag = null;
+  const finishTabDrag = (e, commit) => {
+    if (!tabDrag || (e && e.pointerId !== tabDrag.pointerId)) return false;
+    const d = tabDrag;
+    tabDrag = null;
     try { if (e && svgEl.hasPointerCapture && svgEl.hasPointerCapture(e.pointerId)) svgEl.releasePointerCapture(e.pointerId); } catch (_) {}
     renderDragPreview();
-    if (d.tab) { if (commit && d.lastGood) onCommitTabs(d.opId, d.key, d.lastGood); return true; } // TASK 822: the last place the tab fitted (a refused spot never moves it)
-    if (commit && !d.refused && d.lastGood !== d.startAt && (d.lastGood != null) && (d.startAt == null || Math.abs(d.lastGood - d.startAt) > 1e-6)) {
-      onCommitLeadIn(d.opId, d.key, d.lastGood); // TASK S2: that membership's own position
-    }
+    if (commit && d.lastGood) onCommitTabs(d.opId, d.key, d.lastGood); // TASK 822: the last place the tab fitted (a refused spot never moves it)
     return true;
   };
   const onMove = (e) => {
-    if (leadDrag && e.pointerId === leadDrag.pointerId) {
+    if (tabDrag && e.pointerId === tabDrag.pointerId) {
       e.stopPropagation(); e.preventDefault();
       const wp = screenToWorld(svgEl, e.clientX, e.clientY);
       if (!wp) return;
-      const rec = leadDrag.rec;
-      if (leadDrag.tab) { // TASK 822: the tab goes to the outline's point nearest the pointer where its gap strips fit; elsewhere the handle shows refused and the tab stays
-        const res = holdTabDragAt(leadDrag.loop, effectiveCutRecord(rec), state, leadDrag.fromAt, wp);
-        if (res && res.ok) { leadDrag.lastGood = res.at; leadDrag.point = res.point; leadDrag.previewCuts = res.cuts; leadDrag.refused = false; }
-        else if (res) { leadDrag.point = res.point; leadDrag.refused = true; }
-        renderDragPreview();
-        return;
-      }
-      const res = rec ? leadInDragAt(leadDrag.loop, effectiveCutRecord(rec), state, wp, leadDrag.holes) : null; // TASK 787: the part's holes kept clear, as in the export
-      if (res && res.leadIn) {
-        leadDrag.previewLead = res.leadIn;
-        if (res.leadIn.role === 'arc') { leadDrag.lastGood = res.atFrac; leadDrag.refused = false; }
-        else { leadDrag.refused = true; }
-        renderDragPreview();
-      }
+      // TASK 822: the tab goes to the outline's point nearest the pointer where its gap strips fit; elsewhere the handle shows refused and the tab stays
+      const res = holdTabDragAt(tabDrag.loop, effectiveCutRecord(tabDrag.rec), state, tabDrag.fromAt, wp);
+      if (res && res.ok) { tabDrag.lastGood = res.at; tabDrag.point = res.point; tabDrag.previewCuts = res.cuts; tabDrag.refused = false; }
+      else if (res) { tabDrag.point = res.point; tabDrag.refused = true; }
+      renderDragPreview();
       return;
     }
     if (handlePanZoomPointerMove(e, svgEl, viewState)) { renderZoomed(); return; } // a pinch changes the zoom
@@ -782,7 +738,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     setHover(resolveTarget(wp));
     if (hovered) renderChips(); // the chip follows the cursor along the path
   };
-  const onLeave = () => { if (!leadDrag) { hoverPt = null; setHover(null); } };
+  const onLeave = () => { if (!tabDrag) { hoverPt = null; setHover(null); } };
   // TASK 810: a Roughing boundary PICK (prepare-stage.js): the next press on a closed shape (a loop or a combined profile) is handed to onPick as its plan key and the
   // selection stays as it is; a press on nothing or on an open path, Esc, or stopBoundaryPick() cancels. Either way onEnd is told once.
   let boundaryPick = null;
@@ -806,7 +762,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       endBoundaryPick();
       return;
     }
-    // TASK 778: dragging the selected cut's lead-in junction handle slides it along the outline and NEVER pans the view (mouse or touch)
+    // TASK 822: dragging a tab handle of the open operation slides the tab along the outline and NEVER pans the view (mouse or touch)
     const handleEl = e.target && e.target.closest ? e.target.closest('.sk-lead-handle') : null;
     if (handleEl && (e.button == null || e.button === 0)) {
       const id = handleEl.getAttribute('data-lead-key'); // TASK S2: '<op id>|<geometry key>'
@@ -820,19 +776,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}
         const h = tabHandles(pl.outer, effectiveCutRecord(rec), state).find((x) => String(x.at) === tabAt);
         const here = h ? holdTabDragAt(pl.outer, effectiveCutRecord(rec), state, Number(tabAt), h.point) : null; // the layout as it is: drawn until the tab is moved (a refused spot keeps showing it)
-        leadDrag = { tab: true, pointerId: e.pointerId, id, opId, key, rec, loop: pl.outer, fromAt: Number(tabAt), point: h ? h.point : screenToWorld(svgEl, e.clientX, e.clientY), lastGood: null, previewCuts: here ? here.cuts : null, refused: false };
-        renderDragPreview();
-        return;
-      }
-      if (pl && pl.outer && rec) {
-        e.stopPropagation(); e.preventDefault();
-        try { svgEl.setPointerCapture(e.pointerId); } catch (_) {}
-        const startLead = leadInSummary(planKeyOf(op, ref), rec, state, loops, loopPolys, ownedNow().set);
-        leadDrag = {
-          pointerId: e.pointerId, id, opId, key, rec, loop: pl.outer, holes: pl.holes,
-          startAt: rec.leadInAt ?? null, lastGood: rec.leadInAt ?? null,
-          startJunction: startLead ? startLead.junction : null, previewLead: startLead, refused: false,
-        };
+        tabDrag = { pointerId: e.pointerId, id, opId, key, rec, loop: pl.outer, fromAt: Number(tabAt), point: h ? h.point : screenToWorld(svgEl, e.clientX, e.clientY), lastGood: null, previewCuts: here ? here.cuts : null, refused: false };
         renderDragPreview();
         return;
       }
@@ -871,11 +815,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     onSelectionChange(t || selectedTarget()); // notify the cut panel (last clicked target, or selected target | null)
   };
   const onUp = (e) => {
-    if (finishLeadDrag(e, true)) return;
+    if (finishTabDrag(e, true)) return;
     handlePanZoomPointerUp(e, svgEl, viewState);
   };
   const onCancel = (e) => {
-    if (finishLeadDrag(e, false)) return;
+    if (finishTabDrag(e, false)) return;
     handlePanZoomPointerUp(e, svgEl, viewState);
   };
   svgEl.addEventListener('wheel', onWheel, { passive: false });
@@ -942,16 +886,16 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // the facts the card shows of one membership (`key` in `op`; no key: the operation's own settings, an empty operation)
   const factsOf = (op, key) => {
     const ref = key ? op.geometry.find((r) => r.key === key) : null;
-    if (!ref) return { kind: null, record: { cutType: op.type, ...op.settings }, note: [], hold: null, clearing: null, leadIn: null, levels: false, partDepth: null, walls: null };
+    if (!ref) return { kind: null, record: { cutType: op.type, ...op.settings }, note: [], hold: null, clearing: null, levels: false, partDepth: null, walls: null };
     const pk = planKeyOf(op, ref), rec = recordOf(op, ref), own = ownedNow().set, e = resolveEntry(pk, rec), contour = op.type === CONTOUR_TYPE;
-    const hold = holdSummary(pk, rec, state, loops, loopPolys, own), leadIn = leadInSummary(pk, rec, state, loops, loopPolys, own);
+    const hold = holdSummary(pk, rec, state, loops, loopPolys, own);
     // TASK 817: the levels / clearing notes read the GENERATED paths of these very settings (a peek: the open operation's edits are generated on OK or by its Preview),
-    // so they show as opened and after a Preview of the current settings; the tabs' and the lead-in's are read here (light outline derivations: the lead-in handle needs it)
+    // so they show as opened and after a Preview of the current settings; the tabs' are read here (a light outline derivation)
     const peek = { ctx: viewCtx(), request: false };
     const note = [...steppedNoteItems(rec), ...levelsNoteItems(rec, levelsSummary(pk, rec, state, loops, loopPolys, own, peek)), // TASK 792: Roughing / Contour
-      ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearingSummary(pk, rec, state, loops, loopPolys, own, peek)), ...leadInNoteItems(rec, leadIn)]; // TASK 775 / 778: an On line outline's lead-in arc
+      ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearingSummary(pk, rec, state, loops, loopPolys, own, peek))];
     const d = e ? (contour ? e.rec.baseDepth : e.rec.cutDepth) : null;
-    return { kind: parseKey(ref.key).kind, record: rec, note, hold, leadIn, clearing: clearingAvailability(pk, rec, state, loops, loopPolys),
+    return { kind: parseKey(ref.key).kind, record: rec, note, hold, clearing: clearingAvailability(pk, rec, state, loops, loopPolys),
       levels: Boolean(e && hasLevels(e.rec)), partDepth: Number(d) > 0 ? Number(d) : null, // TASK 809: it (a Contour: its part) cuts a part's levels; TASK 810: the part's depth
       walls: contour && e ? { shown: Boolean(e.rec.slope || hasLevels(e.rec)), value: wallsOf(e.rec), defaultId: wallsDefault(e.rec) } : null }; // TASK 810: a Contour's walls
   };
@@ -983,7 +927,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     stopBoundaryPick: () => endBoundaryPick(),
     refreshLook, // TASK 463: repaint after an undo/redo restored the cut plan
     /** TASK S2: set a field of the ACTIVE operation (every one of its shapes), with the remembered-defaults rules of before (a field's last value is the next
-     *  operation's start; a pattern / Hold part / Lead-in turned on without its own values takes the last ones). Returns the operation, or null (none active, or
+     *  operation's start; a pattern / Hold part turned on without its own values takes the last ones). Returns the operation, or null (none active, or
      *  the Morphed spiral where one of its shapes cannot take it: never a silent fallback). */
     setOpField(field, value) {
       const op = activeOp();
@@ -998,7 +942,6 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (field === 'stepover') value = rememberStepover(value); // TASK 745
       if (field === 'finishAllowance') value = rememberFinishAllowance(value);
       if (field === 'loop') value = rememberLoop(value); // TASK 750
-      if (field === 'leadInSide') value = rememberLeadInSide(value); // TASK 775 / 778: Side is remembered; Radius / Sweep / Length default to calculated (null)
       if (field === 'rasterAngle') value = rememberRasterAngle(value);
       if (contour) rememberContour(field, value); // TASK 792: the next Contour starts from this one's bit / shape / step
       const r = op.settings, patch = {};
@@ -1008,12 +951,6 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         if (!(r.finishAllowance != null && Number(r.finishAllowance) >= 0)) patch.finishAllowance = lastFinishAllowance();
         if (typeof r.loop !== 'boolean') patch.loop = lastLoop(); // TASK 750
         if (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null) patch.rasterAngle = lastRasterAngle();
-      }
-      if (field === 'leadIn' && value === true) { // TASK 778: Radius / Sweep / Length start calculated (null); Side takes lastLeadInSide()
-        if (!Object.hasOwn(r, 'leadInRadius')) patch.leadInRadius = null;
-        if (!Object.hasOwn(r, 'leadInSweep')) patch.leadInSweep = null;
-        if (!Object.hasOwn(r, 'leadInLength')) patch.leadInLength = null;
-        if (r.leadInSide !== 'outside' && r.leadInSide !== 'inside') patch.leadInSide = lastLeadInSide();
       }
       if (field === 'holdPart' && value !== 'off') { // TASK 742: Tabs / Onion skin without its own values take the last ones set (or the unit's defaults)
         if (!(r.tabCount === 'auto' || Number(r.tabCount) >= 1)) patch.tabCount = lastTabCount();

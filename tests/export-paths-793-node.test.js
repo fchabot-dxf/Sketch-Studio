@@ -1,12 +1,12 @@
 // tests/export-paths-793-node.test.js — TASK 793: the Export step's third view, "Paths". Pure (the mounted view is checked in export-paths-793-live.test.js).
 //  1. the Paths view's path list == the exported file's elements: for each drawing (a pocket with an island, an outside with tabs + a hole, an On line with a
-//     lead-in, programmed pockets (Spiral and Raster, Loop on and off), a Guide, a stepped pocket) the exporter's `written` list (export-payload.js
+//     plain On line, programmed pockets (Spiral and Raster, Loop on and off), a Guide, a stepped pocket) the exporter's `written` list (export-payload.js
 //     shaperPreviewOf, the list the page hands the view) has one { cut, entry } per element of the file, in the file's order: same count, same cut type,
 //     and the view's elements (export-preview.js previewItems on the parsed preview copy) carry the file's own d strings (the downloaded file read line by line).
 //  2. the bit-centre paths (export-payload.js bitCentrePaths): present for every outside / inside / pocket-wall / island element, none for a plain On line
 //     or a guide, and each one lies at the bit radius (+ the cut offset for an outside / inside) from the written path, measured to 0.01 mm. They are
 //     the same polylines Prepare's derivation gives (deriveKeyFootprints -> deriveCutTravel).
-//  3. the direction-bearing travel: a programmed pocket's clearing lines, a lead-in leg, the On-line loop and tab strokes are travel paths whose written
+//  3. the direction-bearing travel: a programmed pocket's clearing lines and tab strokes are travel paths whose written
 //     path IS the bit's (no second line: the view marks them only, export-preview.js BIT_ONLY_ROLES).
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -140,13 +140,10 @@ try {
     ok(written.every((w, i) => (w.cut.hold.role === 'pass') === withBits.has(i)), 'outside + tabs: the pass has a bit-centre path, a gap strip has none');
   }
 
-  // ── an On line with a lead-in arc, and a plain one ──
+  // ── a plain On line (TASK 836: the lead-in removed) ──
   {
     const st = polyState([RECT]);
     const [outer] = loopsBySize(st);
-    const lead = listIsFile('on line + lead-in', st, [{ target: tgt(outer), rec: ONLINE({ leadIn: true, leadInSide: 'outside' }) }]);
-    const roles = bitPathsOf(st, lead.written).flatMap((b) => b.travel.map((t) => t.role));
-    eq(roles, ['leadin', 'online'], 'on line + lead-in: the lead-in leg and the loop are travel paths (their own bit path)');
     const plain = listIsFile('on line', st, [{ target: tgt(outer), rec: ONLINE() }]);
     eq(bitPathsOf(st, plain.written), [], 'a plain On line: no travel is determined, no bit-centre path');
     const guide = listIsFile('guide', st, [{ target: tgt(outer), rec: GUIDE }]);

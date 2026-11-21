@@ -348,15 +348,8 @@
     /* TASK 745 / 777: a programmed pocket in Prepare: thin continuous guide under the clearing travel marks (clean-up ring dashed), leftover filled */
     .sk-clear-path { fill: none; stroke: var(--sk-prep-path); stroke-width: 1; stroke-opacity: 0.35; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
     .sk-clear-path.sk-clear-cleanup { stroke-dasharray: 4 2; }
-    /* TASK 775 / 778: a closed loop has no start point on the Origin: no dot on it. A LEAD-IN ARC: its curve (bold), the tip dot (start), the junction ring,
-       and the draggable handle at the junction (44 px hit circle; refused style during drag over a ROOM-failing spot). Pocket START MARK: crisp blue target. */
-    .sk-lead-leg { fill: none; stroke: var(--sk-prep-tab); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-    .sk-lead-tip { fill: var(--sk-prep-tab); stroke: #000; stroke-width: 1; vector-effect: non-scaling-stroke; }
-    .sk-lead-end { fill: #fff; stroke: #000; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-    .sk-lead-leg.is-refused { stroke: var(--sk-prep-leftover); stroke-dasharray: 4 3; }
-    .sk-lead-tip.is-refused { fill: var(--sk-prep-leftover); }
-    .sk-lead-end.is-refused { stroke: var(--sk-prep-leftover); }
-    #prepare-toolpath-group.is-lead-dragging .sk-lead-leg, #prepare-toolpath-group.is-lead-dragging .sk-lead-tip, #prepare-toolpath-group.is-lead-dragging .sk-lead-end { opacity: 0.25; }
+    /* TASK 778 / 822: a closed loop has no start point on the Origin: no dot on it. The draggable handle on the outline (a tab's: 44 px hit circle; refused
+       style while dragged over a spot where it does not fit). Pocket START MARK: crisp blue target. */
     #prepare-toolpath-group.is-tab-dragging .sk-tab-mark, #prepare-toolpath-group.is-tab-dragging .sk-strip { opacity: 0.25; } /* TASK 822: a tab handle's drag: the tabs as they were, faded under the dragged layout */
     .sk-lead-handle { cursor: grab; pointer-events: all; touch-action: none; }
     .sk-lead-handle.is-dragging { cursor: grabbing; }
@@ -378,8 +371,7 @@
        Motion is opt-in under prefers-reduced-motion: no-preference so reduced-motion users keep the still dashes (TASK 821: Prepare draws no arrowheads; .sk-travel-arrows is the Export Paths view only). */
     .sk-travel { fill: none; stroke: var(--sk-prep-path); stroke-width: 2; stroke-opacity: 0.95; vector-effect: non-scaling-stroke; stroke-dasharray: calc(var(--sk-travel-dash) * 1px) calc(var(--sk-travel-gap) * 1px); stroke-linecap: butt; }
     .sk-travel-clear { stroke-width: 1.5; stroke-opacity: 0.9; }
-    .sk-travel-online, .sk-travel-lead { stroke: var(--sk-prep-path-online); }
-    .sk-travel-lead { stroke-width: 1.8; }
+    .sk-travel-online { stroke: var(--sk-prep-path-online); }
     @media (prefers-reduced-motion: no-preference) { .sk-travel { animation: sk-march var(--sk-travel-duration) linear infinite; } }
     @keyframes sk-march { from { stroke-dashoffset: 0; } to { stroke-dashoffset: calc(var(--sk-travel-period) * -1px); } }
     .sk-travel-arrows { fill: var(--sk-prep-path); stroke: none; pointer-events: none; }
@@ -597,20 +589,13 @@
     .cut-row[data-row="holdPart"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
     .cut-row[data-row="holdPart"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
-    /* TASK 775 / 778: Lead-in Off | On and its Side Outside | Inside: the Hold part choice's look; calculated tags & Reset to calculated buttons; 44 px targets on a phone */
-    .cut-row[data-row="leadIn"] .cut-presets, .cut-row[data-row="leadInSide"] .cut-presets { grid-template-columns: auto auto 1fr; margin-top: 0; }
-    .cut-row[data-row="leadIn"] .cut-presets .cut-preset, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset { font-size: 12px; padding: 0 9px; white-space: nowrap; background: var(--sk-prep-field-bg); }
-    .cut-row[data-row="leadIn"] .cut-presets .cut-preset.is-active, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
     .cut-calc-bar { display: flex; align-items: center; gap: 8px; padding: 4px 12px 0; font-size: 11px; }
-    .cut-pos-bar { padding-top: 0; }
     .cut-calc-tag { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px; background: var(--sk-prep-chip2); color: var(--sk-prep-unit); font-size: 10px; letter-spacing: 0.02em; }
     .cut-calc-tag[hidden], .cut-calc-reset[hidden] { display: none; }
-    .cut-pos-state.is-moved { color: var(--sk-prep-tab); }
     .cut-calc-reset { all: unset; box-sizing: border-box; font: 600 11px system-ui, sans-serif; color: var(--sk-prep-guide); cursor: pointer; padding: 2px 4px; border-radius: 4px; }
     .cut-calc-reset:hover, .cut-calc-reset:focus-visible { text-decoration: underline; outline: none; }
     .cut-calc-reset:focus-visible { outline: 2px solid var(--sk-prep-focus); outline-offset: 1px; }
     @media (max-width: 640px), (pointer: coarse) {
-      .cut-row[data-row="leadIn"] .cut-presets .cut-preset, .cut-row[data-row="leadInSide"] .cut-presets .cut-preset { height: 44px; min-width: 44px; }
       .cut-calc-reset { min-height: 44px; display: inline-flex; align-items: center; padding: 0 6px; font-size: 12px; }
     }
     .cut-presets.cut-in-box { display: flex; margin: 0; height: 100%; flex: 0 0 auto; }

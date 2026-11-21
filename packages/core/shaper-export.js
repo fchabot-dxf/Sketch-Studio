@@ -54,7 +54,7 @@ function arcSeg(shape, fromPos, toPos, state) {
 
 // Bounding box of the page: the drawing (joint positions + circle extents (center ± r)), the datum triangle at the origin when there is one,
 // and TASK 786 EVERY WRITTEN ELEMENT by the geometry it draws (elementBox): a cut's derived geometry outside the drawing (tabs' gap strips,
-// a pocket's start mark, a stepped cut's larger rings, a lead-in arc and its tip) and arc / cubic bulges by their true extremes (#core/path-d).
+// a pocket's start mark, a stepped cut's larger rings) and arc / cubic bulges by their true extremes (#core/path-d).
 // The drawing's own extent is kept so a file whose elements already lay inside it keeps its viewBox. Empty → 0,0,0,0.
 function boundsOf(state, datumExtent, written = []) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -171,7 +171,7 @@ function datumPolygon(datum) {
 //                                             Origin). Without it (the default) both come from `entries`: the string is byte-identical to before.
 //                                             A PARTIAL file (the frame holds more entries than `entries`) of a plan with NO exportFirst element (no Stock)
 //                                             also gets the FRAME GUIDE (advisor turn 2705, option b): a rectangle = the drawn extent of the whole
-//                                             plan's file (the union of every element's box, elementBox: arcs / lead-ins / tabs' strips by their true
+//                                             plan's file (the union of every element's box, elementBox: arcs / tabs' strips by their true
 //                                             extremes; no stroke width), written FIRST with the exportFirst type's encoding (the Stock guide's, task
 //                                             774) and no cut parameters of its own: the full file and every partial one then have the same 9-anchor box
 //                                             on the Origin, read as the page or as the drawn extent. A plan with a Stock: its Stock guide is that box.
@@ -192,8 +192,6 @@ function holdData(hold) {
   if (hold.role === 'stroke') return ` data-hold="stroke ${hold.index + 1}/${hold.count}"`; // TASK 775: an On line cut's tabs: its open strokes
   return '';
 }
-// TASK 778: the PREVIEW copy's data-lead of a cut written with a lead-in arc (#core/lead-in): "in". Never in the downloaded file.
-const leadData = (leadIn) => (leadIn && leadIn.role === 'arc' ? ' data-lead="in"' : '');
 // TASK 745: the PREVIEW copy's data-clear of a programmed pocket's cut (#core/pocket-clearing): "linked k/N" (TASK 749: Spiral line k of N) | "raster k/N" | "cleanup k/N" | "morphed" | "loop k/N" (TASK 750) |
 // "wall" | "island k/N" | "start" (TASK 778: the pocket start mark guide); a refused clearing or none: nothing. Never in the downloaded file.
 function clearData(cl) {
@@ -276,7 +274,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
         } else if (cut.loop) {
           geom = loopGeom(cut.loop, state, shapeById);
         }
-        const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) + leadData(cut.leadIn) : ''))
+        const data = (options.previewData && cut.terrace ? ` data-step="${cut.terrace.index + 1}/${cut.terrace.count}"` : (options.previewData ? holdData(cut.hold) + clearData(cut.clearing) : ''))
           + (options.previewData && typeof e.op === 'string' ? ` data-op="${e.op.replace(/[&<>"]/g, '')}"` : ''); // TASK 743
         const paint = isMark(cut) ? colorAttrs({ ...c, fill: exportForm('guide').markFill }) : colorAttrs(c); // TASK 786: a mark is the guide drawn as its outline (the rules' guide.markFill)
         if (geom) (c.exportFirst ? firstItems : items).push({ common: paint + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a + data, meta: { cut, entry: e }, first: Boolean(c.exportFirst) });

@@ -7,7 +7,7 @@ import { capturePrepare, applyPrepare, comparablePrepare } from './shaper-doc.js
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeLeadInAt, setShapeTabsAt, followDesign, planMemberItems, pathsSigOf, pathsInputOf, settleWaiting, orderWaiting } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
+import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeTabsAt, followDesign, planMemberItems, pathsSigOf, pathsInputOf, settleWaiting, orderWaiting } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
 import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
 import { reorderOps, setOpsOn, opById, regionOf, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
 import { cutTypeById, STOCK_TYPE_ID } from './shaper.js'; // TASK S2: a type's name; the Stock
@@ -346,7 +346,6 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     followDesign(st); // TASK 832: the operations follow the Design edits made since (a shape filleted, snapped, split: its operations cut it as it is now)
     prepareView = mountPrepareView(st, canvasEl, {
       onSelectionChange: () => { line = null; rowId = null; refreshCutPanel(); }, onNotice: prepareNotice, avoidEl: panelEl, inset: opsInset(), // TASK S2: a canvas selection: no row is the selected one
-      onCommitLeadIn: (opId, key, at) => sessionEdit(() => { const op = opById(opId); if (op) setShapeLeadInAt(op, key, at, st); }), // TASK 778: dragging the open operation's lead-in handle (TASK S2: an edit of its session, that membership's)
       onCommitTabs: (opId, key, tabsAt) => sessionEdit(() => { const op = opById(opId); if (op) setShapeTabsAt(op, key, tabsAt, st); }), // TASK 822: dragging one of its tabs (that membership's tabsAt)
       // TASK S2: while an operation is open, a click on a shape puts it in, or takes it out when it is in it (an edit of its session); a shape the type cannot take is
       // not added: the card's line says why (cut-plan.js typeRefusal); Esc = Cancel

@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import './node-app.js';
 import { loadCase, md5, canonical } from './opfirst-measure.js';
-import { TABS_PLACED_822 } from './opfirst-corpus.js'; // the cases whose files changed on purpose since the baseline (task 822)
+import { TABS_PLACED_822, LEAD_IN_REMOVED_836 } from './opfirst-corpus.js'; // the cases whose files changed on purpose since the baseline (tasks 822, 836)
 import { nodeWorkerPort } from './node-paths-worker.js';
 import { applyShaperDoc } from '../../apps/shaper/src/shaper-doc.js';
 import { planMemberItems, pathsInputOf, pathsCtx, loopsWithPolygons, planOwnedLoops } from '../../apps/shaper/src/cut-plan.js';
@@ -63,9 +63,10 @@ export async function runPathsCorpus(part, parts) {
       const bg = await exportFileInBackground(state);
       if (!bg) continue;
       const base = baseline[c.name];
-      if (TABS_PLACED_822.has(c.name)) { // changed on purpose by task 822 (its refused tabs are placed now): the worker's files = the main thread's own, directly
+      const changed = TABS_PLACED_822.has(c.name) ? 'task 822' : LEAD_IN_REMOVED_836.has(c.name) ? 'task 836' : null;
+      if (changed) { // changed on purpose (822: its refused tabs are placed now; 836: its lead-in dropped on load): the worker's files = the main thread's own, directly
         const pm = exportFileOf(state, { preview: true }), pb = await exportFileInBackground(state, { preview: true });
-        eq([bg.svg, pb.svg, canonical(pb.bitPaths)], [exportFileOf(state).svg, pm.svg, canonical(bitCentrePaths(state, pm.written))], `${c.name}: (task 822's changed case) the worker's file, preview and Paths = the main thread's`);
+        eq([bg.svg, pb.svg, canonical(pb.bitPaths)], [exportFileOf(state).svg, pm.svg, canonical(bitCentrePaths(state, pm.written))], `${c.name}: (${changed}'s changed case) the worker's file, preview and Paths = the main thread's`);
         files++;
         continue;
       }

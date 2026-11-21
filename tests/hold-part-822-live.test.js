@@ -2,7 +2,7 @@
 // the owner's keyhole (circle R 0.375 in + a 0.313 in wide stem 1.375 in long), Inside, depth 0.156 in, Tabs 5 x 0.063 in wide / thick, 1/8 in bit.
 //  * the tabs are PLACED (before: "tabs refused: the outline is too tight for the gap strips here"): 5 tab marks, 5 gap strips, all on the circle; the note says
 //    they were placed where a gap strip fits;
-//  * the tab HANDLES show only while the operation is open (the lead-in handle's style, a 44 px target); a real drag slides a tab along the circle: while
+//  * the tab HANDLES show only while the operation is open (the drag handle's style, a 44 px target); a real drag slides a tab along the circle: while
 //    dragging, the 5 tabs and their strips are redrawn in the drag layer (the old ones faded); dropped, the tab is there (stored on the shape: tabsAt), the
 //    marks / strips redrawn, the count row shows 5 (not Auto); into the stem the handle shows refused and the tab does not move; OK closes: no handle.
 // Zoomed screenshots to .evidence/822/.

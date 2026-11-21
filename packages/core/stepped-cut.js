@@ -30,7 +30,6 @@ import { num, polyToPathD, compoundPathD } from './loop-geometry.js';
 import { deriveProfileCuts } from './profile-model.js';
 import { applyHoldPart } from './hold-part.js'; // TASK 742: tabs / onion skin on a plain Outside / Inside cut
 import { applyPocketClearing } from './pocket-clearing.js'; // TASK 745: a plain Pocket's programmed clearing (Spiral / Raster / Morphed spiral)
-import { applyLeadIn } from './lead-in.js'; // TASK 775: an On line outline's lead-in leg
 import { smoothRegions, smoothRing, intersectSmoothed, ringPathD, smoothingOf } from './level-smooth.js'; // TASK 809: Smoothing, a toolpath setting of Roughing / Contour
 
 /** The step depth a stepped cut takes (base mm): `defaultMm` when a record has none yet. */
@@ -461,12 +460,10 @@ export function steppedTerraces(slope, { kind = 'pocket', step, depth, deviation
  * A stepped record never holds its part (holdMode is 'off' for it).
  * TASK 745: then through #core/pocket-clearing applyPocketClearing (a plain Pocket's programmed clearing; the same array when the record is Freehand).
  * A stepped pocket is never programmed (clearingPattern is 'freehand' for it).
- * TASK 775: then through #core/lead-in applyLeadIn (an On line outline's lead-in leg; the same array when the record has none). A programmed pocket's
- * lead-in legs are made by its clearing plan (Loop on).
  */
 export function deriveCuts(target, rec, state, loops, loopPolys, ownedLoops) {
   if (rec && rec.levelsOp) return deriveLevelsCuts(target, rec, state, loops, loopPolys, ownedLoops); // TASK 792: Roughing / Contour
-  if (!rec || !rec.terraceAs) return applyLeadIn(applyPocketClearing(applyHoldPart(deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoops), rec, state), rec, state), rec, state); // TASK 742 / 745 / 775: unchanged unless the record holds its part / programs its pocket / has a lead-in
+  if (!rec || !rec.terraceAs) return applyPocketClearing(applyHoldPart(deriveProfileCuts(target, rec, state, loops, loopPolys, ownedLoops), rec, state), rec, state); // TASK 742 / 745: unchanged unless the record holds its part / programs its pocket
   const { terraceAs, slope, ...rest } = rec;
   if (!slope) return [];
   const plain = deriveProfileCuts(target, { ...rest, cutType: terraceAs }, state, loops, loopPolys, ownedLoops);

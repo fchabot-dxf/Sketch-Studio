@@ -43,7 +43,7 @@ export function attachStepper(input, spec, { unit, toDoc, read, commit }, { labe
     const step = stepIn(spec, unit());
     const rawMin = typeof spec.min === 'function' ? spec.min() : spec.min;
     // spec.positive with no min: the value only stays > 0: the smallest allowed value is the smallest positive multiple of the step, and a − at or below it stays.
-    // TASK 787: a declared min (the Lead-in Radius: the bit radius) wins: the − clamps to it (it stopped at one step above it)
+    // TASK 787: a declared min wins: the − clamps to it (it stopped at one step above it)
     if (spec.positive && rawMin == null && cur != null && dir < 0 && cur <= step + EPS) return;
     const rawMax = typeof spec.max === 'function' ? spec.max() : spec.max;
     const next = nextValue(cur, dir, step, rawMin != null ? toDoc(rawMin) : spec.positive ? step : -Infinity, rawMax == null ? Infinity : toDoc(rawMax));

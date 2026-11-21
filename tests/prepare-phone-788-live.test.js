@@ -75,11 +75,11 @@ try {
   assert.ok(pop.left >= 0 && pop.right <= 390 && pop.top >= 0 && pop.bottom <= 844, '9a: the offset popover is fully on screen: ' + JSON.stringify(pop));
   assert.ok(pop.right <= card0.left, '9a: and left of the cut card, not over it');
 
-  // (b) the legend (its box and every child's box) does not overlap the cut card: a tall card (On-line with a Lead-in) reaches down to it
+  // (b) the legend (its box and every child's box) does not overlap the cut card: a tall card (On-line with Tabs: TASK 836, the Lead-in it used is gone) reaches down to it
   await evalJs(`document.querySelector('.cut-offset').blur()`);
   await clickEl('.cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="online"]');
-  await clickEl('.cut-row[data-row="leadIn"] .cut-preset[data-value="true"]');
+  await clickEl('.cut-row[data-row="holdPart"] .cut-preset[data-value="tabs"]');
   await preview(); // TASK 817: the On line's paths drawn (its legend)
   await sleep(300);
   const card = await box('#prepare-panel .cut-card');

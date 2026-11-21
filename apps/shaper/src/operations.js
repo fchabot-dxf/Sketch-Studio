@@ -26,7 +26,6 @@ import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout, boundaryOf, ROUGH_BOUNDARY, wallsDefault } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809
 import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
-import { outlineLeadIn, leadInSettings } from '#core/lead-in.js'; // TASK 775: an On line outline's lead-in is one of its settings
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
 import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 
@@ -107,13 +106,8 @@ const SETTING_FIELDS = {
     const pat = clearingPattern(eff);
     if (pat === 'freehand') return undefined;
     const c = clearingSettings(eff);
-    // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 778: pockets have no lead-in; TASK 812: the Loop's arm pitch (it changes the cuts: pocket-clearing.js; the default adds nothing)
+    // TASK 750: no step-downs here; Loop on adds `loop` (off adds nothing); TASK 812: the Loop's arm pitch (it changes the cuts: pocket-clearing.js; the default adds nothing)
     return { pattern: pat, stepover: round6(c.stepoverPct), allowance: round6(c.allowance), ...(pat === 'raster' ? { angle: round6(c.angle) } : {}), ...(c.loop ? { loop: true, ...(c.pitch !== POCKET_CLEARING.loopPitch.default ? { loopPitch: round6(c.pitch) } : {}) } : {}) };
-  },
-  leadIn: (rec, eff) => { // TASK 778: an On line outline's tangential arc lead-in (Off adds nothing)
-    if (!outlineLeadIn(eff)) return undefined;
-    const l = leadInSettings(eff);
-    return { radius: l.radius != null ? round6(l.radius) : 'calc', sweep: l.sweep != null ? round6(l.sweep) : 'calc', length: l.length != null ? round6(l.length) : 'calc', side: l.side, ...(l.at != null ? { at: round6(l.at) } : {}) };
   },
 };
 
@@ -213,11 +207,6 @@ function describe(op) {
     const words = [...new Set(sums.filter((c) => c.role !== 'refused').map((c) => clearingWords(c.summary)))];
     const refused = sums.filter((c) => c.role === 'refused').length;
     detail = [words.join('; '), refused ? `refused on ${refused}: cut as Freehand` : null].filter(Boolean).join(', ') || null;
-  }
-  if (s.leadIn) { // TASK 775 / 778: the row says "lead-in arc" (+ how many were refused, from the derivation)
-    const refused = op.records.filter((r) => r.cuts.some((c) => c.leadIn && c.leadIn.role === 'refused')).length;
-    const words = `lead-in arc ${s.leadIn.side}${refused ? ` (refused on ${refused})` : ''}`;
-    detail = (detail ? detail + ', ' : '') + words;
   }
   if (s.offset) detail = (detail ? detail + ', ' : '') + `offset ${len(s.offset)}`;
   if (op.cutType !== 'stock' && !op.tool && s.bit > 0 && Math.abs(s.bit - defaultCutRecord().toolDia) > 1e-6) detail = (detail ? detail + ', ' : '') + `bit ${len(s.bit)}`; // TASK 825 (V4): a Guide's own bit (it is no tool heading: a Guide is not cut) when it is not the default one

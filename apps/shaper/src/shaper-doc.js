@@ -7,7 +7,6 @@
 // Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
 
 import { reconcileCutPlan, reconcileStore, keepHolesFromOtherSketches, v2PlanEntries, isContourKey, partKeyOf, settingsPart, recordOf } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once; TASK 774; TASK S1
-import { migrateLeadInRecord } from '#core/lead-in.js'; // TASK 778: 775 straight-leg record -> arc of Radius = old length, Length = 0
 import { opKeyOf, settingsOf, migrationOrder } from './operations.js'; // TASK S1: the v2 records grouped into operations as the list showed them
 import { captureStore, applyStore, storeOps, membersOf, regionOf, removeRef, insertOp, setOpSettings, setOpsOn, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the operations + regions store; TASK S2: the Contours' own values (migrateContours)
 import { wallsOf, levelsBand } from '#core/stepped-cut.js'; // TASK S2: a Contour's walls in effect; the band a Roughing / Contour is cut down to
@@ -67,16 +66,35 @@ function withClearingNow(rec) {
   if (OLD_STEPPED.includes(rec.cutType)) rec = { ...rec, cutType: 'roughing' }; // TASK 792
   const { passDepth, wallAllowance, ...now } = rec;
   if (wallAllowance !== undefined && now.finishAllowance === undefined) now.finishAllowance = wallAllowance;
-  const mapped = Object.hasOwn(OLD_CLEARING, now.clearing) ? { ...now, clearing: OLD_CLEARING[now.clearing] } : now;
-  return migrateLeadInRecord(mapped);
+  return Object.hasOwn(OLD_CLEARING, now.clearing) ? { ...now, clearing: OLD_CLEARING[now.clearing] } : now;
 }
 const opKeyNow = (k) => (typeof k === 'string'
   ? k.replace(/"pattern":"(concentric|spiral)"/, (m, v) => `"pattern":"${OLD_CLEARING[v]}"`)
     .replace(/"stepped-(pocket|inside|outside)"/, '"roughing"') // TASK 792: the stepped types are Roughing
     .replace(/,"passDepth":(null|-?[\d.eE+-]+)/, '')
-    .replace(/,"leadIn":("bit"|-?[\d.eE+-]+)/, '') // TASK 778: pocket clearing no longer has lead-in
-    .replace(/"leadIn":\{"length":("bit"|-?[\d.eE+-]+),"side":"(outside|inside)"\}/, (m, len, side) => `"leadIn":{"radius":${len === '"bit"' ? '"calc"' : len},"sweep":"calc","length":"calc","side":"${side}"}`)
   : k);
+
+// TASK 836 (owner ruling 2026-11-20: lead-ins removed from the app): a stored document's lead-in is DROPPED here, the one read of a stored Shaper document, before
+// anything reads it: every `leadIn*` field (leadIn, leadInSide, leadInRadius, leadInSweep, leadInLength, leadInAt) of a version 2 record and of a version 3 / 4
+// operation's settings, a membership's dragged lead-in position (`at`), and the `"leadIn":...` part of a stored operation key (an On line outline's, or a
+// pocket's of before 778). An On line outline that had one is cut as the plain closed loop. The document is not changed in place (the caller's object).
+const LEAD_IN_KEY = /^leadIn/;
+const LEAD_IN_IN_KEY = /(,"leadIn":(\{[^{}]*\}|"[^"]*"|-?[\d.eE+-]+|true|false|null))|("leadIn":(\{[^{}]*\}|"[^"]*"|-?[\d.eE+-]+|true|false|null),?)/g;
+const noLeadIn = (rec) => (rec && typeof rec === 'object' && Object.keys(rec).some((k) => LEAD_IN_KEY.test(k)) ? Object.fromEntries(Object.entries(rec).filter(([k]) => !LEAD_IN_KEY.test(k))) : rec);
+function dropLeadIn(d) {
+  if (!d || typeof d !== 'object') return d;
+  const out = { ...d };
+  if (Array.isArray(d.cutPlan)) out.cutPlan = d.cutPlan.map((e) => (Array.isArray(e) ? [e[0], noLeadIn(e[1]), ...e.slice(2)] : e));
+  if (Array.isArray(d.opOrder)) out.opOrder = d.opOrder.map((k) => (typeof k === 'string' ? k.replace(LEAD_IN_IN_KEY, '') : k));
+  if (Array.isArray(d.operations)) {
+    out.operations = d.operations.map((op) => (op && typeof op === 'object' ? {
+      ...op,
+      ...(op.settings ? { settings: noLeadIn(op.settings) } : {}),
+      ...(Array.isArray(op.geometry) ? { geometry: op.geometry.map((r) => (r && typeof r === 'object' && Object.hasOwn(r, 'at') ? Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'at')) : r)) } : {}),
+    } : op));
+  }
+  return out;
+}
 
 /**
  * migrateV2(plan, storedOrder, state, selections) — TASK S1, docs/OPERATIONS-MODEL.md section 3: a version 2 plan (a Map of records, mapped to today's values and
@@ -88,7 +106,7 @@ const opKeyNow = (k) => (typeof k === 'string'
  *  4. inside a group, a record whose declared settings (settingsOf) differ from the first's becomes its own operation right after it (`splits`: 0 by construction
  *     since the declared table is the key, TASK 812); a record whose OTHER settings differ takes the first's (one settings set per operation, advisor ruling 4:
  *     counted in `hiddenLost`);
- *  5. leadInAt moves to the shape's ref (`at`); Depth becomes 'model' where every shape of the operation has an imported depth equal to it (`model`);
+ *  5. Depth becomes 'model' where every shape of the operation has an imported depth equal to it (`model`);
  *  6. list order = the stored order (operations.js migrationOrder: orderOps over today's operations, a Guide key of before 'S1' standing for every Guide operation);
  *     a group none of whose records derives a cut (stale) goes after them;
  *  7. ids op-1 ... op-n in list order; on: true.
@@ -133,9 +151,8 @@ export function migrateV2(plan, storedOrder, state, selections) {
   const byKey = new Map(ops.map((o) => [o.key, o]));
   const operations = order.map((k, i) => {
     const o = byKey.get(k);
-    const geometry = o.members.map(({ entry, rec }) => ({ key: partKeyOf(entry.key), seq: seqOf.get(entry.key), ...(!isContourKey(entry.key) && Object.hasOwn(rec, 'leadInAt') ? { at: rec.leadInAt } : {}) }));
+    const geometry = o.members.map(({ entry }) => ({ key: partKeyOf(entry.key), seq: seqOf.get(entry.key) }));
     const settings = { ...o.settings };
-    delete settings.leadInAt;
     const d = settings.cutDepth;
     if (o.type !== 'contour' && d !== undefined && d !== 'unset' && Number.isFinite(Number(d)) && geometry.every((g) => regions[g.key] && regions[g.key].source && Number(regions[g.key].source.cutDepth) === Number(d))) { settings.cutDepth = 'model'; report.model++; }
     return { id: `op-${i + 1}`, type: o.type, on: true, settings, geometry };
@@ -233,7 +250,8 @@ export function migrateHeights() {
  *  returns its counts (the page's one notice, cut-plan.js cutPlanNotice), or null without a state.
  *  TASK 774: a document saved before the same-sketch hole rule (version below 2) keeps its cuts' holes from other sketches (keepHolesFromOtherSketches; its
  *  counts join the same notice). */
-export function applyShaperDoc(d, state = null) {
+export function applyShaperDoc(stored, state = null) {
+  const d = dropLeadIn(stored); // TASK 836
   setStock(d && d.stock);
   applyStlDoc(d && d.stl); // TASK 790: the STL card's source (none for a design that did not come from an STL)
   if (d && Number(d.version) >= OPERATIONS_VERSION) {

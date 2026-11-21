@@ -111,7 +111,7 @@ Everything else has a default I chose that is easy to change later; section 7 li
         "roughLayout": "terraces", "smoothing": 0.1
       },
       "geometry": [                       // the shapes it cuts
-        { "key": "loop:loop_a-b-c", "seq": 1 }   // seq = the file order (1.6); "at" = a dragged lead-in position (1.4)
+        { "key": "loop:loop_a-b-c", "seq": 1 }   // seq = the file order (1.6); "tabsAt" = its dragged tabs (TASK 822; TASK 836: the lead-in "at" is gone)
       ]
     }
   ],
@@ -143,8 +143,7 @@ operation is placed by the default rule while `"default"`).
 | `stepDepth`, `adaptiveSteps`, `stepDeviation`, `finishAllowance`, `roughLayout`, `minTerraceWidth`, `smoothing` (`operations.js:77-84`) | operation `settings` | |
 | `holdPart`, `tabCount`, `tabWidth`, `holdThickness` (`operations.js:85-87`) | operation `settings` | |
 | `clearing`, `stepover`, `rasterAngle`, `loop`, `loopPitch` (`operations.js:88-89`, `packages/core/pocket-clearing.js:152-161`) | operation `settings` | |
-| `leadIn`, `leadInSide`, `leadInRadius`, `leadInSweep`, `leadInLength` (`operations.js:90`) | operation `settings` | |
-| `leadInAt` (a fraction along ONE outline, `packages/core/lead-in.js:20-21`, `:113-119`) | the geometry ref (`at`) | a position on that shape's own outline (1.4) |
+| `leadIn`, `leadInSide`, `leadInRadius`, `leadInSweep`, `leadInLength`, `leadInAt` | none (TASK 836: lead-ins removed; dropped on load, `apps/shaper/src/shaper-doc.js` dropLeadIn) | |
 | `slope` (`fusion-import.js:99`), `levels` (`:100`) | `regions[key]` | the shape's own geometry by height; every operation on it reads the same |
 | Fusion's `cutType` / `cutDepth` as the payload gave them (selection entry `base`, `apps/shaper/src/selection-edit.js:43-47`) | `regions[key].source` | lets "Depth: from model" follow a Fusion edit (1.4) |
 | `contour:<key>` record (`cut-plan.js:27-36`) | an ordinary `contour` operation whose geometry is the part's key | Contour is its own operation (owner decision c) |
@@ -162,7 +161,7 @@ shapes is cut with. Where shapes really need different values there are exactly 
    it follows a Fusion edit by itself (today that needs the `base` bookkeeping in `selection-edit.js:58-69`), and a shape
    without a model depth (drawn by hand) shows as "no model depth: type one" in the operation's note: a fact, not a
    guess. Contour's depth works the same way and replaces the borrowed `baseDepth`.
-2. **Per-shape placement** that only means something on one outline: the dragged lead-in position (`leadInAt`). It is
+2. **Per-shape placement** that only means something on one outline: the dragged lead-in position (`leadInAt`; TASK 836: removed, the dragged tabs `tabsAt` are the mechanism's one user). It is
    stored on the geometry ref and drawn as the handle on that shape, so it is visible where it applies; it is not a
    machining setting. (Today it is part of the operation key, so every dragged handle makes its own operation:
    `operations.js:90`; probe below.) *(Task 822: the dragged TABS are the second such placement: `tabsAt` on the geometry ref, section 10.)*
@@ -230,7 +229,7 @@ shape plus the operation id:
 
 ```
 { key: '<op id>|<geometry key>', opId, target: parseKey(geometry key), rec: recordOf(op, ref) }
-recordOf(op, ref) = { cutType: op.type, ...op.settings, ...regionData(ref.key), leadInAt: ref.at,
+recordOf(op, ref) = { cutType: op.type, ...op.settings, ...regionData(ref.key), tabsAt: ref.tabsAt,
                       cutDepth resolved ("model" -> regions[key].source.cutDepth), Contour: baseDepth / baseType from its settings }
 ```
 
@@ -657,8 +656,8 @@ thread), `prepare-stage.js` (the session, the Preview, the row spinner), `prepar
 - **Content-addressed.** A result is filed under the signature of everything it reads (target, effective record with its levels / slope by content hash,
   owned loops, sketch geometry). A view reads the signature of its inputs NOW, so a stale result is never shown; an Undo back to earlier inputs finds their
   result at once. A newer edit drops the queued jobs of older inputs (retain); a job already running finishes and is filed by its own inputs.
-- **The open operation** asks for nothing while it is open: its paths as opened are drawn FAINT (no arrows, no depth chip), its lead-in handle where the
-  current settings put it (cut-plan.js leadInSummary, light). The card's levels / clearing notes show for the settings as opened, or after a Preview of the
+- **The open operation** asks for nothing while it is open: its paths as opened are drawn FAINT (no arrows, no depth chip), its tab handles where the
+  current settings put them (#core hold-part tabHandles, light; task 836 removed the lead-in and its handle). The card's levels / clearing notes show for the settings as opened, or after a Preview of the
   current ones. OK = the session's one undo step, then the generation; the row spins after 150 ms (a quick derivation never flickers).
 - **Preview** (the card's action bar: Preview, Cancel, OK) asks for the open operation's paths with the card's settings now (the same job OK makes: OK
   then generates nothing new). A later change fades them and the button says Preview again. Never in the file, never in Undo; Cancel drops it.

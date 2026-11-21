@@ -1,28 +1,36 @@
 # scripts/
 
-Build and test helpers for Sketch-Studio. All paths are relative to the repository root.
+Tools for the repo. Run each from the repo root.
 
-## Available scripts
+## The test gate
 
-- **`run-tests.js`** — entry point for `npm test`. Runs every `*.test.js` file under `tests/`.
-- **`build-inline.cjs`** — bundles `src/` plus the compiled CSS into a single self-contained HTML file at `output/sketch-studio-unified-v1.0.html`. Useful for offline distribution.
-- **`smoke-test.cjs`** — quick post-build sanity check on the inlined HTML output.
-- **`validate-standalone.cjs`** — deeper validation of the standalone HTML (loads it in a headless context).
+- `scripts/gate.cjs` : the ONE test runner, in tiers (`npm run gate:quick`, `gate:live`, `gate:merge`, `gate`). The tiers and the rules are in
+  `AGENTS.md`; `node scripts/gate.cjs --list` shows each test's tier.
+- `scripts/run-tests.js` : `npm test`, a plain loop over `tests/*.test.js`, `packages/core/tests/*.test.js` and `tests/harness/*.test.js` in one process.
+- `scripts/shell-smoke.cjs` : `npm run test:shell`, a headless-browser smoke of the Sketch shell (the gate runs it too).
 
-## Usage
+## Websites
 
-From the repo root:
+- `scripts/build-site.cjs` : `node scripts/build-site.cjs <app>` (or `npm run site:<app>`) builds one app's site into `dist/` (see `README.md`, "Websites").
+  It uses `scripts/site-closure.cjs` (which files the app reaches), `scripts/site-identity.cjs` (favicons, manifest and share tags from
+  `packages/ui/app-registry.js`) and `scripts/site-about.cjs` (the About page).
 
-```
-npm test                # run the test suite
-npm run build:css       # compile Tailwind once
-npm run watch:css       # compile Tailwind on save (development)
-npm run build:inline    # produce output/sketch-studio-unified-v1.0.html
-npm run build           # build:css + build:inline
-```
+## Audits, reports and benches
 
-The build scripts assume the flat layout: `index.html` and `src/` at the repo root.
+- `scripts/constraint-audit.cjs`, `scripts/coverage-audit.cjs`, `scripts/coverage-properties.cjs` : print the tables of `docs/CONSTRAINT-AUDIT.md` and `docs/COVERAGE-AUDIT.md`.
+- `scripts/gen-origin-rules-index.mjs` : GENERATES `docs/ORIGIN-RULES.md` from `packages/core/origin-rules.js` (`--check` fails when the file is stale).
+- `scripts/replay-report.cjs` : rebuild a drawing from a pasted diagnostic report.
+- `scripts/solver-bench.mjs` : the solver's speed on large sketches.
+- `scripts/mobile-audit.mjs` : phone-size measurements through a headless browser.
+- `scripts/fusion-oracle/` : helpers that compare the solver with a running Fusion 360.
+- `scripts/test-shaper-live.js` : a manual check of the Shaper upload against the real service; it needs credentials kept outside the repo.
+
+## Old single-app build (broken)
+
+`scripts/build-inline.cjs`, `scripts/smoke-test.cjs` and `scripts/validate-standalone.cjs` (`npm run build:inline`) belong to the first single-page app:
+they read a root index page and a top-level source folder that no longer exist, so `npm run build:inline` fails with a missing-folder error (ENOENT). Nothing uses them.
 
 ## Deployment
 
-This project deploys via Cloudflare Pages connected to GitHub. Pushing to `main` triggers an automatic build (Cloudflare runs `npm run build:css`) and deploy. No local wrangler CLI or deploy script needed.
+Each app is a Cloudflare Pages site built by `scripts/build-site.cjs`; the Pages projects, deploy commands and secret names are in `README.md`
+("Websites: one per app").

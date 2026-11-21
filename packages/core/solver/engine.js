@@ -685,10 +685,13 @@ export class NewtonSolver {
       // Circular / rectangular pattern (task 658): ONE operand reader (#core/pattern.js patternOperands) -> params.patternOps with dense joint
       // indices (copy / source points, the centre, the direction lines' ends) and, for a circle copy's radius row, both radius operands (as offset).
       // Unresolved -> no rows (the Definition counted none).
+      // TASK 847: each pattern row is its own PART (params.rowParts, below): the frame (centre / direction lines) and that one row, with that row's
+      // operands only. One part per row of a pattern of thousands of rows: before, every row was emitted over ALL the pattern's operands from
+      // one row buffer per row (O(rows x operands) per assembly, and a dense buffer per row).
       if (isPatternConstraint(c)) {
         const ops = patternOperands(c, this.shapes);
-        const used = [], ats = [];
-        const J = (id) => { const i = jointIndexMap.get(id); used.push(i); return i; };
+        let used = [], ats = [], resolved = true;
+        const J = (id) => { const i = jointIndexMap.get(id); if (typeof i !== 'number') resolved = false; used.push(i); return i; };
         const R = (sid) => {
           const sh = shapeOf(sid), op = this._radiusOperand(sh, jointIndexMap);
           const centre = sh && sh.joints && sh.joints.length ? J(sh.joints[0]) : undefined;
@@ -696,20 +699,21 @@ export class NewtonSolver {
           if (typeof op.at === 'number') ats.push(op.at);
           return { at: op.at, radius: op.radius, rim: op.rim, centre };
         };
+        params.rowParts = [];
         if (ops) {
-          const m = { kind: ops.kind, rows: [] };
-          if (ops.centre !== undefined) m.centre = J(ops.centre);
-          if (ops.dirs) m.dirs = ops.dirs.map(d => (d.a !== undefined ? { a: J(d.a), b: J(d.b) } : { x: d.x, y: d.y }));
-          m.rows = ops.rows.map(r => {
+          const frame = { kind: ops.kind };
+          if (ops.centre !== undefined) frame.centre = J(ops.centre);
+          if (ops.dirs) frame.dirs = ops.dirs.map(d => (d.a !== undefined ? { a: J(d.a), b: J(d.b) } : { x: d.x, y: d.y }));
+          const frameUsed = used;
+          for (const r of ops.rows) {
+            used = frameUsed.slice(); ats = [];
             const o = { k: r.k, th: r.th, t: r.t };
             for (const key of ['q', 'p', 'cq', 'cs']) if (r[key] !== undefined) o[key] = J(r[key]);
             for (const key of ['off', 'src']) if (r[key] !== undefined) o[key] = R(r[key]);
-            return o;
-          });
-          params.patternOps = used.some(i => typeof i !== 'number') ? null : m;
-        } else params.patternOps = null;
-        params.joints = params.patternOps ? used : [];
-        params.radiiAt = ats;
+            params.rowParts.push({ patternOps: { ...frame, rows: [o] }, joints: used, radiiAt: ats });
+          }
+          if (!resolved) params.rowParts = [];
+        }
       }
 
       // Backwards compatibility: many constraints use `joint` + `shape` or `shapes` instead of `joints`.
@@ -844,25 +848,29 @@ export class NewtonSolver {
         continue;
       }
 
-      const e = def.computeError(params, densePositions);
-      if (Array.isArray(e)) {
-        // multi-row (coincident, midpoint, collinear: 2; symmetric: up to 4): one row buffer per row, added on first need
-        if (withJ) {
-          while (bufs.length < e.length) bufs.push(new Float64Array(denseLen));
-          operandsOf(params); def.computeJacobian(params, densePositions, bufs);
+      // TASK 847: a constraint whose rows fall into independent groups (a pattern: one group per row, above) gives them as params.rowParts, each
+      // a params of its own (its rows, its operands), emitted in order: the same rows, each over its own operands.
+      for (const part of (params.rowParts || [params])) {
+        const e = def.computeError(part, densePositions);
+        if (Array.isArray(e)) {
+          // multi-row (coincident, midpoint, collinear: 2; symmetric: up to 4): one row buffer per row, added on first need
+          if (withJ) {
+            while (bufs.length < e.length) bufs.push(new Float64Array(denseLen));
+            operandsOf(part); def.computeJacobian(part, densePositions, bufs);
+          }
+          for (let k = 0; k < e.length; ++k) {
+            r[row] = e[k] * wStruct;
+            if (withJ) emitRow(bufs[k]); else row++;
+          }
+          if (withJ) for (let k = e.length; k < bufs.length; ++k) for (let q = 0; q < nOps; ++q) bufs[k][ops[q]] = 0; // a buffer no row read
+        } else {
+          r[row] = e * wStruct;
+          if (withJ) {
+            operandsOf(part);
+            def.computeJacobian(part, densePositions, bufs[0]);
+            emitRow(bufs[0]);
+          } else row++;
         }
-        for (let k = 0; k < e.length; ++k) {
-          r[row] = e[k] * wStruct;
-          if (withJ) emitRow(bufs[k]); else row++;
-        }
-        if (withJ) for (let k = e.length; k < bufs.length; ++k) for (let q = 0; q < nOps; ++q) bufs[k][ops[q]] = 0; // a buffer no row read
-      } else {
-        r[row] = e * wStruct;
-        if (withJ) {
-          operandsOf(params);
-          def.computeJacobian(params, densePositions, bufs[0]);
-          emitRow(bufs[0]);
-        } else row++;
       }
     }
     for (let i = row; i < m; ++i) rowPtr[i + 1] = nnz;

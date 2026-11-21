@@ -20,11 +20,21 @@
 // per connected component, a breadth-first numbering from a pseudo-peripheral node (George-Liu: from the component's least-degree node, the
 // least-degree node of the last breadth-first level while that makes the level structure deeper), each node's unnumbered neighbours taken
 // by ascending degree (then index), the whole numbering reversed. -> perm (position -> node).
-function reverseCuthillMcKee(n, ptr, adj) {
+// TASK 847: hub (Uint8Array or null): the HUB nodes, numbered LAST (after the reversed numbering of the others, by ascending degree, then
+// index) and left out of the breadth-first search (a hub is never a neighbour, the others' degrees count only the others). A hub is a node
+// coupled to a large share of the graph: a pattern's SOURCE point, which every copy's row reads. Left in, it joins every copy to every
+// other within two steps, so the level structure is 2-3 levels deep and a level (the envelope's width) holds a large part of the sketch;
+// numbered last, the copies band along their own chain (the gear's ring of teeth) and each hub is one full row at the end.
+function reverseCuthillMcKee(n, ptr, adj, hub = null) {
   const deg = new Int32Array(n);
-  for (let v = 0; v < n; ++v) deg[v] = ptr[v + 1] - ptr[v];
+  for (let v = 0; v < n; ++v) {
+    if (!hub) { deg[v] = ptr[v + 1] - ptr[v]; continue; }
+    for (let p = ptr[v]; p < ptr[v + 1]; ++p) if (!hub[adj[p]]) ++deg[v];
+  }
   const less = (a, b) => deg[a] < deg[b] || (deg[a] === deg[b] && a < b);
   const order = new Int32Array(n), level = new Int32Array(n).fill(-1), done = new Uint8Array(n), queue = new Int32Array(n);
+  const hubs = [];
+  if (hub) for (let v = 0; v < n; ++v) if (hub[v]) { done[v] = 1; hubs.push(v); }
   // the breadth-first level structure from v over the nodes not yet numbered: -> { depth, end: the least-degree node of its last level,
   // least: the least-degree node reached }
   const levels = (v) => {
@@ -60,8 +70,22 @@ function reverseCuthillMcKee(n, ptr, adj) {
     }
   }
   const perm = new Int32Array(n);
-  for (let i = 0; i < n; ++i) perm[i] = order[n - 1 - i];
+  for (let i = 0; i < k; ++i) perm[i] = order[k - 1 - i];
+  hubs.sort((a, b) => (ptr[a + 1] - ptr[a]) - (ptr[b + 1] - ptr[b]) || a - b);
+  for (let i = 0; i < hubs.length; ++i) perm[k + i] = hubs[i];
   return perm;
+}
+
+// TASK 847: the hub nodes of the graph (reverseCuthillMcKee): degree above HUB_DEGREE times the median degree, or null when there is none.
+// Measured on the spur gear (task 840): the copies' unknowns have degree 7-19 (median 9-13), the source points' 50-250 (about 4 per tooth).
+const HUB_DEGREE = 3;
+function hubNodes(n, ptr) {
+  const deg = new Int32Array(n);
+  for (let v = 0; v < n; ++v) deg[v] = ptr[v + 1] - ptr[v];
+  const median = Math.max(1, Int32Array.from(deg).sort()[n >> 1]);
+  let hub = null;
+  for (let v = 0; v < n; ++v) if (deg[v] > HUB_DEGREE * median) (hub || (hub = new Uint8Array(n)))[v] = 1;
+  return hub;
 }
 
 // The sparsity graph of JᵀJ from the sparse rows S (m x n): CSR { ptr, adj }, the unknowns sharing a row with each unknown (itself left out).
@@ -139,8 +163,13 @@ export const Algebra = {
     let ownSize = 0;
     for (let i = 0; i < n; ++i) ownSize += i - first[i];
     if (n >= ORDER_MIN_N && ownSize >= ORDER_MIN_FILL * n * n) {
-      const { ptr, adj } = gramGraph(S, m, n), rcmPerm = reverseCuthillMcKee(n, ptr, adj), rcm = envelopeOf(n, ptr, adj, rcmPerm);
-      if (rcm.size < ownSize) { first = rcm.first; pos = rcm.pos; perm = rcmPerm; }
+      // TASK 847: the RCM order and, when the graph has hubs, the RCM order with the hubs last: the smallest envelope of the three is kept
+      const { ptr, adj } = gramGraph(S, m, n), hub = hubNodes(n, ptr);
+      let size = ownSize;
+      for (const h of hub ? [null, hub] : [null]) {
+        const p = reverseCuthillMcKee(n, ptr, adj, h), e = envelopeOf(n, ptr, adj, p);
+        if (e.size < size) { size = e.size; first = e.first; pos = e.pos; perm = p; }
+      }
     }
     const start = new Int32Array(n + 1);
     for (let i = 0; i < n; ++i) start[i + 1] = start[i] + (i - first[i] + 1);

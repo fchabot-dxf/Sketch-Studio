@@ -223,7 +223,7 @@ const harness = (app) => {
   const pressEl = (s) => editStep(app, () => pressElRaw(s)); // TASK S2: a change of the open operation = its own step (tests/helpers/prepare-open.js)
   const clickRaw = (x, y, o) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc, ...o }); };
   const clickAt = (x, y, o) => clickOpen(app, () => clickRaw(x, y, o)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
-  const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
+  const pick = (id) => { if (app.prepare.openId()) { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); } else pressEl(`#op-type-${id}`); }; // TASK S3: an open operation: the card's type menu (a type change); none: the operations toolbar (a NEW operation, open)
   const clearing = (id) => { pressEl('.cut-clear-trigger'); pressEl(`.cut-clear-opt[data-clearing="${id}"]`); };
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const typedRaw = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };

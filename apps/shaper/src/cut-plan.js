@@ -17,7 +17,7 @@ import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } fr
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { loopsWithPolygons, deriveFootprints } from './op-derive.js'; // TASK 817: THE derivation, shared with the background worker (paths-worker.js)
-import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn, isOutOfDate } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
+import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn, isOutOfDate, followRenames } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
 export { loopsWithPolygons };
 
 export const keyOf = (kind, id) => kind + ':' + id;
@@ -827,6 +827,7 @@ export function followDesign(state) {
     if (next.length) rename.set(key, next.length === 1 ? keyOf('loop', next[0]) : next.map((n) => keyOf('loop', n)));
   }
   renameGeometry(rename);
+  followRenames(rename); // TASK S3: a renamed shape's memberships are out of date (generated for the shape before the edit), not new ones
   return rename.size;
 }
 // the stale chain / loop keys of a plan that move (rename) or go (remove): see reconcileCutPlan

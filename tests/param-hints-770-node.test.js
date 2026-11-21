@@ -144,6 +144,9 @@ const opListJs = fs.readFileSync(new URL('../apps/shaper/src/op-list.js', import
 for (const m of html.matchAll(/data-(?:hint|label)="([A-Za-z]+)"/g)) seen.add(m[1]);
 for (const m of mainJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'\)/g)) seen.add(m[1]);
 for (const m of opListJs.matchAll(/id:\s*'([A-Za-z]+)'/g)) seen.add(m[1]);
+for (const m of opListJs.matchAll(/dataset\.hint = '([A-Za-z]+)'/g)) seen.add(m[1]); // TASK S3: a row's out-of-date mark (opOutOfDate)
+const stageJs = fs.readFileSync(new URL('../apps/shaper/src/prepare-stage.js', import.meta.url), 'utf8'); // TASK S3: the operations toolbar's Recalculate (its name and tooltip)
+for (const m of stageJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'\)/g)) seen.add(m[1]);
 const stlCardJs = fs.readFileSync(new URL('../apps/shaper/src/stl-card.js', import.meta.url), 'utf8'); // TASK 790: the STL card's rows and title
 for (const m of stlCardJs.matchAll(/data-hint="([A-Za-z]+)"|hintLabel\('([A-Za-z]+)'\)/g)) seen.add(m[1] || m[2]);
 for (const id of ['stockThickness', 'material', 'export', 'generateSvg', 'syncShaperHub', 'openShaperHub', 'download']) ok(seen.has(id), `the Export step / drawer renders ${id}`);

@@ -224,7 +224,7 @@ const harness = (app) => {
   const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
   const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const menu = () => { pressEl('.cut-type-trigger'); const ids = [...doc.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.disabled ? ':off' : '')); pressEl('.cut-type-trigger'); return ids; };
-  const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
+  const pick = (id) => { if (app.prepare.openId()) { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); } else pressEl(`#op-type-${id}`); }; // TASK S3: an open operation: the card's type menu (a type change); none: the operations toolbar (a NEW operation, open)
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((r) => r.style.display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param);
   const setFieldRaw = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };

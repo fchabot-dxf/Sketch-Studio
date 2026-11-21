@@ -44,7 +44,7 @@ try {
   app.modes.showMode('prepare');
   let pv = app.prepare.view();
   // TASK S2: the shape picked, its type (a NEW operation, open), its fields set in it, OK
-  const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? app.prepare.pickType(v) : pv.setOpField(f, v)); app.prepare.ok(); };
+  const edit = (k, o) => { app.prepare.ok(); pv.setSelection([target(K[k])]); for (const [f, v] of Object.entries(o)) (f === 'cutType' ? (app.prepare.openId() ? app.prepare.pickType(v) : app.prepare.addOperation(v)) : pv.setOpField(f, v)); app.prepare.ok(); }; // TASK S3: a type with no operation open = the operations toolbar's button (addOperation)
   edit('S', { cutType: 'stock' });
   edit('Q', { cutType: 'pocket', toolDia: 6.35, cutDepth: 6 });
   edit('H', { cutType: 'interior', toolDia: 6.35, cutDepth: 19 });

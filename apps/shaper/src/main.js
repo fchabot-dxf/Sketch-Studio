@@ -38,7 +38,7 @@ import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: pro
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
-import { createStlImporter, STL_ICON } from './stl-import.js'; // TASK 790: Open STL (sliced into the Fusion selection payload) + the STL card in Prepare
+import { createStlImporter, STL_ICON, STL_INSERT_ICON } from './stl-import.js'; // TASK 790: Open STL (sliced into the Fusion selection payload) + the STL card in Prepare; TASK 841: Insert STL
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
@@ -62,6 +62,20 @@ try { initMode = localStorage.getItem(MODE_KEY); } catch (err) { dbg.warn('shape
 try { forgetOldLogin(localStorage); } catch (err) { dbg.warn('shaper', 'removing the old stored ShaperHub login failed', err && err.message); }
 initMode = resolveInitialMode(initMode, { fusion: fusionMode }); // modes.js: a stored 'simexport' (TASK 459) is Review; a stored 'explore' (TASK 706) or none: Design
 
+// TASK 790 / 841: a drawer entry that picks an STL (`pick`: the importer's chooser + import) — Open STL and Insert STL, declared once each with it. A cancelled
+// chooser does nothing; a file that is not a readable STL is told in the drawer (the design unchanged); an import closes the drawer, then `after(res)`.
+function stlAction({ id, label, tooltip, icon, pick, after = () => {} }) {
+  return { id, label, icon, tooltip, keepOpen: true, onClick: async () => {
+    try {
+      const res = await pick();
+      if (!res) return; // the chooser was cancelled
+      if (!res.ok) { chrome.sidebar.notify(res.message, 'error'); return; } // not a readable STL: the design is unchanged
+      chrome.sidebar.close();
+      if (res.imported) after(res);
+    } catch (e) { chrome.sidebar.notify(e.message || String(e), 'error'); }
+  } };
+}
+
 const chrome = mountAppChrome({
   appId: 'shaper',
   host: fusionMode ? 'fusion' : 'web', // TASK 738: the analytics tell the Fusion 360 palette from the website
@@ -72,15 +86,12 @@ const chrome = mountAppChrome({
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
   hostActions: [
-    ...(fusionMode ? [] : [{ id: 'open-stl', label: hintLabel('openStl'), icon: STL_ICON, tooltip: hintText('openStl'), keepOpen: true, onClick: async () => { // TASK 790: Shaper only, not in the Fusion palette (its design comes from Fusion)
-      try {
-        const res = await stlImporter.pickAndOpen();
-        if (!res) return; // the chooser was cancelled
-        if (!res.ok) { chrome.sidebar.notify(res.message, 'error'); return; } // not a readable STL: the design is unchanged
-        chrome.sidebar.close();
-        if (res.imported) nameAfterSelection(res.name); // the design takes the file's name, as a Fusion selection's (TASK 767)
-      } catch (e) { chrome.sidebar.notify(e.message || String(e), 'error'); }
-    } }]),
+    // TASK 790: Shaper only, not in the Fusion palette (its design comes from Fusion); the design takes an opened file's name, as a Fusion selection's (TASK 767).
+    // TASK 841: Insert STL next to it (the design keeps its name)
+    ...(fusionMode ? [] : [
+      stlAction({ id: 'open-stl', label: hintLabel('openStl'), tooltip: hintText('openStl'), icon: STL_ICON, pick: () => stlImporter.pickAndOpen(), after: (res) => nameAfterSelection(res.name) }),
+      stlAction({ id: 'insert-stl', label: hintLabel('insertStl'), tooltip: hintText('insertStl'), icon: STL_INSERT_ICON, pick: () => stlImporter.pickAndInsert() }),
+    ]),
     { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: async () => { // TASK 770: from the table (the shared drawer shows a tooltip)
       const payload = await generateShaperSvgPayload({ say: (t) => groupStatus(t) }); // TASK 817: waits for the paths being generated
       if (!payload) { groupStatus(emptyExportText()); return; }
@@ -614,7 +625,8 @@ const afterSelectionImport = () => {
 };
 // TASK 790: Open STL (the drawer entry above) and the STL card at the top of Prepare's right column (stl-import.js, declared once: the node test kit calls it too)
 const stlImporter = createStlImporter({ ensureSketch, getController: () => designController, prepare, panelEl: document.getElementById('prepare-panel'),
-  showPrepare: () => modes.showMode('prepare'), afterImport: afterSelectionImport, notice: (text, isError) => prepare.notice(text, isError) });
+  showPrepare: () => modes.showMode('prepare'), afterImport: afterSelectionImport, notice: (text, isError) => prepare.notice(text, isError),
+  getView: () => (modes.current() === 'prepare' && prepare.view() ? prepare.view().view : designController.state.view) }); // TASK 841: an inserted STL lands in the view the user is looking at
 
 applyShaperUnitDefault(); // U3b (design-canvas.js, declared once: the node test kit calls it too)
 

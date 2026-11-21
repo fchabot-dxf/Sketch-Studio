@@ -104,6 +104,11 @@ export function dome(R = 30, lat = 24, lon = 64, cx = R, cy = R) {
   }
   return lofted({ outer, apex: [cx, cy, R] });
 }
+/** TASK 841: a small 40 x 30 x 12 block (z 0..12) with a 20 x 14 x 4 pocket at (8..28, 8..22): the Insert STL tests' part (off centre: a turn shows). */
+export const smallBlock = () => lofted({
+  outer: [{ z: 12, pts: rect(0, 0, 40, 30) }, { z: 0, pts: rect(0, 0, 40, 30) }],
+  cavities: [{ rings: [{ z: 12, pts: rect(8, 8, 28, 22) }, { z: 8, pts: rect(8, 8, 28, 22) }] }],
+});
 /** A 100 x 60 x 15 block with a DOVETAIL pocket: 40 x 20 at the top, 50 x 30 at its 6 mm floor (an undercut). */
 export const dovetailPocket = () => lofted({
   outer: [{ z: 15, pts: rect(0, 0, 100, 60) }, { z: 0, pts: rect(0, 0, 100, 60) }],

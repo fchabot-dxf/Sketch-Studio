@@ -158,7 +158,7 @@ try {
   }))()`);
   await evalJs(`document.querySelector('.sk-sidebar-backdrop').click()`);
   await waitFor(`!document.querySelector('.sk-sidebar').classList.contains('open')`, 'normal Shaper drawer close');
-  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'open-stl', 'download', 'fusion-addin', 'settings', 'log', 'about', 'feedback'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export; TASK 733: + the Fusion add-in download, hidden in Fusion mode; TASK 790: + Open STL, hidden in Fusion mode)');
+  assert.deepStrictEqual(normalSidebar.actions, ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'open-stl', 'insert-stl', 'download', 'fusion-addin', 'settings', 'log', 'about', 'feedback'], 'normal Shaper keeps full project/file sidebar actions (TASK 706: no Explore Open SVG / Export; TASK 733: + the Fusion add-in download, hidden in Fusion mode; TASK 790: + Open STL, hidden in Fusion mode; TASK 841: + Insert STL, the same)');
   assert.strictEqual(normalSidebar.hasDoc, true, 'normal Shaper keeps document name header');
   assert.strictEqual(normalSidebar.hasStatus, true, 'normal Shaper keeps storage/Drive status');
   assert.strictEqual(normalSidebar.hasAccount, false, 'normal Shaper: the drawer has no account row (TASK 776: the account is the avatar in the footer)');

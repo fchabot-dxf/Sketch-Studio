@@ -17,6 +17,7 @@ import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } fr
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { loopsWithPolygons, deriveFootprints } from './op-derive.js'; // TASK 817: THE derivation, shared with the background worker (paths-worker.js)
+import { followReliefs } from './relief-frame.js'; // TASK 841: a part's levels follow the part (followDesign)
 import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
 export { loopsWithPolygons };
 
@@ -155,6 +156,8 @@ function writeRegionData(key, rec) {
 }
 /** TASK S1: the imported cut type / depth of a geometry (regions[key].source: what Fusion / the STL said; a Depth of 'model' follows it). */
 export function setRegionSource(key, source) { setRegion(key, { ...(regionOf(key) || {}), source: source ? { cutType: source.cutType ?? null, cutDepth: source.cutDepth ?? 'unset' } : undefined }); }
+/** TASK 841: the part's own frame of a geometry with levels (relief-frame.js: its outline's points in the part's frame + where its levels are placed). */
+export function setRegionFrame(key, frame) { setRegion(key, { ...(regionOf(key) || {}), frame: frame || undefined }); }
 /** TASK S1 (advisor ruling turn 2702): while the user has never reordered the list (listOrder 'default'), it is re-sorted by the default rule after every change
  *  (operations.js defaultOrderIds), as before S1: the part-freeing Outside after the holes. A stored order ('stored') is left as it is. */
 export function settleOrder(state = null) {
@@ -194,12 +197,13 @@ export function settleWaiting(state) {
 }
 /** TASK 817: whether something waits for generated paths (settleWaiting has work). */
 export const orderWaiting = () => orderWaits || placing.size > 0;
-export function fileShape(planKey, rec, state = null) {
-  const out = fileShapeOnly(planKey, rec, state);
+// TASK 841: `join: false` = a shape that goes into an operation goes into a NEW one, never into another shape's (an inserted STL relief: its own Roughing)
+export function fileShape(planKey, rec, state = null, { join = true } = {}) {
+  const out = fileShapeOnly(planKey, rec, state, join);
   settleOrder(state);
   return out;
 }
-function fileShapeOnly(planKey, rec, state) {
+function fileShapeOnly(planKey, rec, state, join) {
   const contour = isContourKey(planKey), key = partKeyOf(planKey);
   if (!contour && rec) writeRegionData(key, rec);
   const cur = memberOf(planKey);
@@ -221,7 +225,7 @@ function fileShapeOnly(planKey, rec, state) {
     leaveOp(cur.op, cur.ref);
   } else seq = takeSeq();
   const ref = { key, seq, ...(tabsAt !== undefined ? { tabsAt: [...tabsAt] } : {}) };
-  const target = storeOps().find((op) => op.type === rec.cutType && op.geometry.length && !op.geometry.some((r) => r.key === key) && memberKey(planKeyOf(op, op.geometry[0]), recordOf(op, op.geometry[0])) === newKey);
+  const target = join && storeOps().find((op) => op.type === rec.cutType && op.geometry.length && !op.geometry.some((r) => r.key === key) && memberKey(planKeyOf(op, op.geometry[0]), recordOf(op, op.geometry[0])) === newKey);
   if (target) { addRef(target, ref); normalizeDepth(target); }
   else { const draft = { type: rec.cutType, settings, geometry: [ref] }; normalizeDepth(placeNew(state, draft)); }
   return getPlanRecord(planKey);
@@ -812,8 +816,14 @@ export function reconcileStore(state) {
  * sketch, run where the plan is read against a sketch that may have been edited since: Prepare built (prepare-stage.js mountPrepare), the Review entered
  * (main.js), an undo / redo step restored (prepare-stage.js restoreCutPlanFromHistory) and a document read (reconcileStore). Not an undo step of its own:
  * the next step's snapshot carries the followed keys.
+ * TASK 841: then a part's LEVELS follow the part (relief-frame.js followReliefs): a relief whose outline was moved / rotated since has its levels put where it is now.
  */
 export function followDesign(state) {
+  const moved = followKeys(state);
+  followReliefs(state, { keys: regionKeys(), regionOf, setRegion });
+  return moved;
+}
+function followKeys(state) {
   const keys = [...new Set([...storeOps().flatMap((op) => op.geometry.map((r) => r.key)), ...regionKeys()])].filter((k) => parseKey(k).kind === 'loop');
   if (!keys.length) return 0;
   const live = new Set(findLoops(state).map((l) => l.id));

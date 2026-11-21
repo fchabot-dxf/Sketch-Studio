@@ -67,8 +67,12 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const t = pv.selectedTarget();
     return t ? { mode: 'shape', kind: t.kind, record: { cutType: null }, note: lineItems } : null; // the quick flow's type menu only (owner turn 2717)
   }
+  // TASK 841: the shapes Prepare is about now (the open operation's, else the selected ones), told after every refresh (the STL card shows the relief among them)
+  const focusListeners = new Set();
+  const focusKeys = () => { const op = session && prepareView ? prepareView.activeOp() : null; return op ? op.geometry.map((r) => r.key) : pickedKeys(); };
   const refreshCutPanel = () => {
     opsNow = getController() ? describeOperations(getController().state) : [];
+    if (focusListeners.size) { const keys = focusKeys(); for (const fn of focusListeners) fn(keys); }
     cutPanel.update(cardModel(opsNow));
     opList.refresh();
     opList.reveal(); // TASK S2 (owner turn 2718): the first highlighted row in view (the list open), never opened
@@ -401,5 +405,6 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     ok: () => commitSession(), cancel: () => cancelSession(), openId: () => (session ? session.opId : null),
     preview: () => previewSession(), previewState, // TASK 817: the open operation's Preview (the test kit presses what the button presses)
     notice: prepareNotice, // TASK 790: Open STL's notice (stl-import.js)
+    onFocusChange: (fn) => { focusListeners.add(fn); return () => focusListeners.delete(fn); }, // TASK 841: the STL card follows the relief in focus (stl-import.js)
   };
 }

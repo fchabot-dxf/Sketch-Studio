@@ -17,7 +17,7 @@ addable before geometry is assigned to it?", then "Lets make a pallette of ops".
 - **One shape can be in several operations.** Roughing, Contour and later a rest pass can all use the same part.
 - **Contour is an operation of its own.** It is no longer a switch in the Roughing card, and adding or removing it no
   longer changes Roughing's wall allowance behind your back: the allowance is a plain Roughing setting.
-- **An operations palette** sits at the top of the Operations card: one button per operation type. Click a button:
+- **An operations palette** *(S3 as built: the operations toolbar on Design's tool ribbon, across the top: 4.1)* sits at the top of the Operations card: one button per operation type. Click a button:
   an empty operation of that type appears, selected, ready for shapes. Drag a button onto a shape: the operation
   appears with that shape in it.
 - **My lineups:** set up a few operations once (for example a 1/4 in Roughing + a 1/8 in ball-nose Contour + an
@@ -111,7 +111,7 @@ Everything else has a default I chose that is easy to change later; section 7 li
         "roughLayout": "terraces", "smoothing": 0.1
       },
       "geometry": [                       // the shapes it cuts
-        { "key": "loop:loop_a-b-c", "seq": 1 }   // seq = the file order (1.6); "at" = a dragged lead-in position (1.4)
+        { "key": "loop:loop_a-b-c", "seq": 1 }   // seq = the file order (1.6); "tabsAt" = its dragged tabs (TASK 822; TASK 836: the lead-in "at" is gone)
       ]
     }
   ],
@@ -143,8 +143,7 @@ operation is placed by the default rule while `"default"`).
 | `stepDepth`, `adaptiveSteps`, `stepDeviation`, `finishAllowance`, `roughLayout`, `minTerraceWidth`, `smoothing` (`operations.js:77-84`) | operation `settings` | |
 | `holdPart`, `tabCount`, `tabWidth`, `holdThickness` (`operations.js:85-87`) | operation `settings` | |
 | `clearing`, `stepover`, `rasterAngle`, `loop`, `loopPitch` (`operations.js:88-89`, `packages/core/pocket-clearing.js:152-161`) | operation `settings` | |
-| `leadIn`, `leadInSide`, `leadInRadius`, `leadInSweep`, `leadInLength` (`operations.js:90`) | operation `settings` | |
-| `leadInAt` (a fraction along ONE outline, `packages/core/lead-in.js:20-21`, `:113-119`) | the geometry ref (`at`) | a position on that shape's own outline (1.4) |
+| `leadIn`, `leadInSide`, `leadInRadius`, `leadInSweep`, `leadInLength`, `leadInAt` | none (TASK 836: lead-ins removed; dropped on load, `apps/shaper/src/shaper-doc.js` dropLeadIn) | |
 | `slope` (`fusion-import.js:99`), `levels` (`:100`) | `regions[key]` | the shape's own geometry by height; every operation on it reads the same |
 | Fusion's `cutType` / `cutDepth` as the payload gave them (selection entry `base`, `apps/shaper/src/selection-edit.js:43-47`) | `regions[key].source` | lets "Depth: from model" follow a Fusion edit (1.4) |
 | `contour:<key>` record (`cut-plan.js:27-36`) | an ordinary `contour` operation whose geometry is the part's key | Contour is its own operation (owner decision c) |
@@ -162,7 +161,7 @@ shapes is cut with. Where shapes really need different values there are exactly 
    it follows a Fusion edit by itself (today that needs the `base` bookkeeping in `selection-edit.js:58-69`), and a shape
    without a model depth (drawn by hand) shows as "no model depth: type one" in the operation's note: a fact, not a
    guess. Contour's depth works the same way and replaces the borrowed `baseDepth`.
-2. **Per-shape placement** that only means something on one outline: the dragged lead-in position (`leadInAt`). It is
+2. **Per-shape placement** that only means something on one outline: the dragged lead-in position (`leadInAt`; TASK 836: removed, the dragged tabs `tabsAt` are the mechanism's one user). It is
    stored on the geometry ref and drawn as the handle on that shape, so it is visible where it applies; it is not a
    machining setting. (Today it is part of the operation key, so every dragged handle makes its own operation:
    `operations.js:90`; probe below.) *(Task 822: the dragged TABS are the second such placement: `tabsAt` on the geometry ref, section 10.)*
@@ -230,7 +229,7 @@ shape plus the operation id:
 
 ```
 { key: '<op id>|<geometry key>', opId, target: parseKey(geometry key), rec: recordOf(op, ref) }
-recordOf(op, ref) = { cutType: op.type, ...op.settings, ...regionData(ref.key), leadInAt: ref.at,
+recordOf(op, ref) = { cutType: op.type, ...op.settings, ...regionData(ref.key), tabsAt: ref.tabsAt,
                       cutDepth resolved ("model" -> regions[key].source.cutDepth), Contour: baseDepth / baseType from its settings }
 ```
 
@@ -314,36 +313,43 @@ migrated: they derive nothing today and a geometry needs no record to exist.
 
 ## 4. The UI
 
-### 4.1 Where the palette lives (desktop and phone)
+### 4.1 Where the operation buttons live: the OPERATIONS TOOLBAR on Design's tool ribbon (task S3, owner turns 2944-2950 and the placement choice)
 
-- **Desktop:** in the Operations card (top left, 288 px: `apps/shaper/index.html:482`), a fixed strip between the header
-  and the rows. Two labelled rows of buttons, 32 px tall, icon (the cut types' own `CUT_TYPES.icon`) + short name:
-  `2D: Outside, Inside, Pocket, On line, Guide`, `3D: Roughing, Contour` (later `Rest`, `Drill`: a slot each is kept
-  in the strip now so adding them moves nothing), and a `My lineups ▾` button at the end of the 3D row. The strip stays
-  visible when the list is folded (it belongs to the header, not the fold's body: `op-list.js:41-47`).
-- **Phone (390 px):** the Operations card is the bottom sheet (folded 44 px bar, opens to 55 %: `index.html:510`,
-  `:515`). The palette is the sheet's first block when open: buttons 44 px tall (5 per row at 366 px = 73 px each), it
-  does not scroll with the rows. The folded bar gets one `+` button that opens the sheet at the palette.
-- **Layout never shifts:** the strip's height is fixed; a type that the current context cannot take is greyed with its
-  reason as a tooltip (TASK 805's cursor tooltip; long press on a phone), never hidden; the lineups menu is a popover
-  (`position: fixed`), never pushing rows; a new or emptied operation changes only the rows below. The 805 layout probe
-  (`tests/helpers/hints-live.js`) gets the strip and asserts 0 px shift when opening a menu, selecting, adding.
+*Owner ruling (task S3): "a tool bar with all the ops as buttons", "ok lets start with the design tool ribbon as a base"; of two placements shown side by side (a
+ribbon across the top, or a compact icon deck inside the Operations card) the owner chose the RIBBON ("Ok ribbon"), its section names kept as Design's, and "the
+checkbox and reorder feature" of Design's sections. The palette strip in the Operations card of the first draft (section 0's picture) is NOT built.*
 
-### 4.2 Click and drag
+- **One component, its own instance.** Prepare's toolbar is Design's shared tool ribbon (`packages/ui/tool-ribbon.js`, the one all four apps' Design tabs use),
+  created by `apps/shaper/src/prepare-stage.js` with Prepare's own buttons (`sketchTools: false`: none of the sketcher's sections; Design's ribbon is byte-identical,
+  before / after screenshots md5-equal). Shaper only.
+- **Its buttons, ONE declaration.** One button per operation type of `CUT_TYPES` (`apps/shaper/src/shaper.js`), in the declaration's order (Outside, Inside, Pocket,
+  On line, Guide, Stock, Roughing, Contour): the type's own icon, its name and its tooltip from the type's entry in `param-hints.js` (the type menu's words), in
+  a section named OPERATIONS; then RECALCULATE (section 11) in a fixed section of its own (the divider; always shown, no dropdown, as Design's Select).
+- **Place and style: Design's.** A bar across the top of the Prepare view, right below the document tabs, where Design's ribbon is; icon over name on a
+  desktop, icons only (44 px targets, names in the tooltip on a long press) on a phone held upright, the vertical rail at the left on the short viewport (a phone
+  in landscape), all the ribbon's own layouts. It lies over the canvas (the canvas never moves); the Operations card starts 12 px below it (desktop 1280 x 800:
+  its top 169 px, 89 px before) and the notice too; the cut card's column only where the bar's buttons reach under it (a phone held upright: 89 px lower; on a
+  desktop it keeps its place and height over the bar's empty end); on the short viewport the Operations card starts right of the rail. Prepare's document tab
+  joins the toolbar below it, as Design's.
+- **The sections' dropdown (TASK 647, as Design's).** The OPERATIONS name opens the section's dropdown: every type with its "in the bar" box, the type itself (it
+  runs, also when it is not in the bar), and its hold-drag grip (reorder); Reset. What does not fit (a phone held upright: 7 of the 8) is in the dropdown,
+  never lost. The user's layout is saved per user like Design's (`#ui/ribbon-layout.js`, the RIBBON_LAYOUT setting) under Prepare's OWN app key
+  `RIBBON_LAYOUT.apps['shaper-prepare'].operations` (Shaper's Design is `apps.shaper`): neither ever reads or writes the other's. Default: every type in the bar,
+  the declaration's order.
+- **Keyboard:** the buttons are the ribbon's native buttons (Tab, Enter / Space); no shortcut keys are declared for the operation types.
 
-- *(S2: the open / OK / Cancel model of 9.1 replaces the Add shapes mode below; S3 builds the palette on it.)*
-- **Click a palette button** = an empty operation of that type appears, placed by the 743 default-order rule
-  (`operations.js:10-20`), selected (active), its card open, in **Add shapes** mode: its row says "click shapes to add ·
-  Done"; a click on a shape adds it, a click on a shape already in it takes it out; Done or Esc ends the mode. With
-  shapes already selected when the button is clicked, they are its shapes at once (no Add mode). Settings start from the
-  remembered last values, as today (`cut-plan.js:45-48`, `:68-100`, `:233-241`).
-- **Drag a palette button onto a shape** = the operation is created with that shape (and with every selected shape when
-  the drop lands on one of them). Mouse / pen: the drag starts after 4 px (op-list's `DRAG_START_PX`); touch: press and
-  hold `HOLD_MS` = 350 ms, then drag (op-list's rule, so a swipe still scrolls). While dragging, a ghost icon follows the
-  pointer (`position: fixed`), the shape under it gets Prepare's hover highlight, a shape that cannot take the type shows
-  "not allowed" (an open chain under a region type: `shaper.js:177-178`). A drop on no shape creates nothing.
-- **Keyboard:** the buttons are focusable; Enter / Space = click.
-- **Later geometry from Fusion:** "Select in Fusion" on the operation row (task 806, Fusion mode only).
+### 4.2 A toolbar button (task S3; S2's open / OK / Cancel model, 9.1)
+
+- **With shapes selected** = a NEW operation of that type holding them, created OPEN (OK keeps it, Cancel removes it): the quick flow (4.4).
+- **With nothing selected** = a NEW EMPTY operation, created open; a click on a shape then puts it in (S2).
+- **An operation open** = OK on it first (as any other action, 9.1); its shapes are the selection, so the new operation holds them.
+- **Never greyed** (9.2): a pick none of the selected shapes can take creates NOTHING and the one plain line says why, in Prepare's one-line notice (no card
+  shows for a selection); some cannot: they are left out and the open card's line names them.
+- **The Stock** keeps the one-Stock move (the last closed shape picked); with nothing selected an EMPTY Stock replaces the Stock (as a type change to the Stock).
+- **No card for a selection** (owner: "dont understand why there a window with cut type when i select a path"): a shape click, a row tap (desktop and phone), a
+  Ctrl-click on a row show NO card; the selected shapes are highlighted and their operations' rows lit (S2). The selection-only "type menu" card of S2 is gone;
+  the card's type menu only changes the type of the OPEN operation.
+- (The drag of a button onto a shape and the greyed buttons of earlier drafts are not built: the owner's rulings above replace them.)
 
 ### 4.3 The cards
 
@@ -358,7 +364,7 @@ migrated: they derive nothing today and a geometry needs no record to exist.
 
 ### 4.4 The quick flow: the standard shortcut "geometry first, then a type" (owner turns 2682-2684)
 
-*(S2: the new operation is created OPEN, 9.1; Cancel removes it.)* Click a shape (or several), then pick a type in the card's menu (or a palette button, 4.1): **a NEW operation of that
+*(S2: the new operation is created OPEN, 9.1; Cancel removes it. S3: the type is the toolbar's button, 4.2; a selection shows no card.)* Click a shape (or several), then pick a type in the card's menu (or a palette button, 4.1): **a NEW operation of that
 type is created, holding the selected shape(s), and it is left selected (the active operation)**. Clicking more shapes
 then adds them to it (Add shapes mode, 4.2); there is no "join the type's last-used operation" and no search for an
 existing operation to reuse. The card shows the new operation ("Pocket 2 · 1 shape"). If the shape is already in an
@@ -402,7 +408,7 @@ bin and "Make its own operation" are how the user cleans up. A Stock pick keeps 
 | **S0** | (a) the version guard: an app that reads a Shaper sidecar with a `version` above its own opens it but never saves over it, with one notice ("made by a newer version of the app: reload to edit"); (b) the declared settings table `CUT_TYPES[].fields` (1.5), read by `settingsOf` and the card (`loopPitch` joins the key: no user-visible change today, no card row sets it) | node: a v3 sidecar is not overwritten by autosave / save; settingsOf = the table; every existing test unchanged | S: ~150 lines, 2 test files; deploy at least a few days before S1 |
 | **S1** | the operations + regions store, the migration, `planEntries` and every reader of section 2 switched; the UI behaves EXACTLY as today: a field edit on selected shapes moves them into the operation with the resulting settings (found or new, keeping their `seq`), so the list and the files are today's | the migration corpus of section 3 (byte-identical (a)-(e)); every existing test passes, adjusted only where it pokes `CUT_PLAN` directly (they load a v2 sidecar through `applyShaperDoc` instead: the real migration path, no test-only code) | L: ~1,000 lines app, ~60 test files adjusted, 1 new corpus test |
 | **S2** | *(as built: section 9)* operation first: empty operations, the active operation, Add shapes mode, the operation card (edits all its shapes) and the shape card (chips, Make its own operation), multi-membership, Contour as its own type in the menus (the Contour row and the allowance coupling removed), the quick flow (4.4), the bin deletes the operation | node + live (desktop 1280, phone 390): add empty, add / remove shapes, a shape in Roughing + Contour, edit = all shapes, make its own, undo / redo of each, save + reload | L: ~700 lines, 2 new test files |
-| **S3** | the palette (4.1, 4.2): click, drag (mouse, touch hold), keyboard, greyed with reasons, phone sheet `+` | live desktop + phone: click = empty selected, drag onto a shape, drop on nothing = nothing, 0 px layout shift (805 probe), 44 px targets | M: ~400 lines, 1 live test |
+| **S3** | *(as built: 4.1-4.2, section 11)* the operations toolbar on Design's tool ribbon (a bar across the top), its sections' boxes and reorder; no card for a selection; out of date + Recalculate (Fusion style) | node (tests/opbar-s3-node) + live (tests/opbar-s3-live: desktop 1280, phone 390 upright, 844 x 390): each button with a selection / nothing / an impossible pick, no card on a shape click or a row tap, the 805 probe (0 px), 44 px targets, the dropdown's boxes and reorder (saved under Prepare's key, survives a reload, Design's layout untouched), out of date / Recalculate / the Export line | as built |
 | **S4** | My lineups (4.5): store synced by part, save / apply (always new operations) / rename / delete | node: save, apply to 1 and 2 parts (new operations each time), units, sync merge per lineup; live: menu on desktop + phone | M: ~400 lines, 2 test files |
 
 Order with the queue: S0 now (small); 810 when dispatched (before S2); S1; 798; S2; S3; S4; then 801 and 806 / SA-15
@@ -426,7 +432,11 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
   edited operation keeps its place in the list (today it moves); the bin deletes the operation, and its shapes stay in
   their other operations (today: unassigns the regions); Contour is a type in the menus, the Roughing card loses its
   Contour row and "Edit contour"; adding / removing a Contour no longer sets Roughing's allowance.
-- S3: the palette strip in the Operations card (the card is ~80 px taller on desktop; on a phone the sheet shows it first).
+- S3 (as built): the operations toolbar across the top of Prepare (Design's ribbon; the Operations card and the notice start below it, the cut card on a phone; on the short
+  viewport the rail at the left, the Operations card right of it); a click on a shape or a row shows no card (the selection-only type menu card is gone); a new
+  operation is made from the toolbar (with nothing selected: an empty one); every Design edit marks EVERY operation out of date (section 11; the paths signature
+  covers the whole sketch) instead of regenerating it, with Recalculate on the toolbar and the Export step's "n operations are out of date" line; Prepare's
+  document tab takes the toolbar's colour.
 - S4: the lineups menu; a new synced settings key.
 
 ---
@@ -456,7 +466,7 @@ follow-up as briefed. Each stage ends with the AGENTS.md gate (quick + its live 
 - The quick way (geometry first, then a type) and applying a lineup ALWAYS create new operations (owner turns 2682-2684, 4.4 / 4.5).
 - A Fusion import groups its regions into operations as today's derivation does, with Depth "From model"; an update
   never puts a region back into an existing operation (SA-15).
-- Stock stays a one-shape "Not cut" operation, reachable from the card's type menu, not in the palette (the owner's
+- *(S3: the Stock is a toolbar button, the declaration's; 4.1.)* Stock stays a one-shape "Not cut" operation, reachable from the card's type menu, not in the palette (the owner's
   palette list has no Stock).
 
 ---
@@ -549,7 +559,7 @@ sections carry a pointer here). Code: `apps/shaper/src/prepare-stage.js` (the ed
 
 ### 9.2 Type buttons are never greyed; a refusal is told (turn 2716)
 
-Every type is offered in every menu (and the S3 palette). A pick the shapes cannot take is told in ONE plain line at the top
+Every type is offered in every menu (and the S3 toolbar). A pick the shapes cannot take is told in ONE plain line at the top
 of the card's note area (813's fixed area), e.g. "This open line can't be a Pocket: a pocket needs a closed shape". The
 rule is ONE function, `cut-plan.js typeRefusal(type, keys)` (the type's declared `targetKind`: a 'path' type on any shape,
 every other type on a closed one; the Stock one shape). What happens: a shape clicked into an open operation is NOT added;
@@ -642,3 +652,41 @@ An empty operation is saved and read back as it is; renameGeometry drops only an
   of the outline is too narrow for one", or "only n of m tabs fit: part of the outline is too narrow for a gap strip"). Only when no stretch fits is
   the hold refused (the line of before). On the 909-case corpus: 907 cases unchanged; the 2 cases of one drawing
   (`tests/fixtures/report/midpoint-move.json`, a 3077.8 mm Outside outline) whose tabs were refused get 21 tabs now.
+
+## 11. Task 817: toolpaths are generated on OK, in the background (owner turns 2745-2748)
+
+"In fusion a toolpath generate is on ok and allow to work still, spin wheel on item only" / "i guess we can adjust lead in only before and show path on ok" /
+"Or with toolpath open add a refresh button so we voluntarily calculate it?" / "Button in the op edit panel". Code: `apps/shaper/src/op-derive.js` (THE
+derivation of an operation's paths and of the file, worker-safe), `paths-worker.js` (the module worker), `op-paths.js` (the generated results on the main
+thread), `prepare-stage.js` (the session, the Preview, the row spinner), `prepare-view.js` (the open operation's look), `export-payload.js` (the export waits).
+
+- **One derivation, two places.** The main thread and the worker import the same module (op-derive.js: deriveFootprints / deriveItem, svgOf, bitCentrePaths;
+  #core by relative path, no DOM). The node tests run it in-process (op-paths.js localPort: the worker's server on structured copies) and in a real worker
+  thread (tests/helpers/node-paths-worker.js runs paths-worker.js). The page's arcs are sampled with its SVG DOM (#core curve-kinds sampleArc); a worker has
+  none, so a job carries the page's samples (arcSamplesOf) and the worker derives with exactly those (withArcSamples).
+- **Content-addressed.** A result is filed under the signature of everything it reads (target, effective record with its levels / slope by content hash,
+  owned loops, sketch geometry). A view reads the signature of its inputs NOW, so a stale result is never shown; an Undo back to earlier inputs finds their
+  result at once. A newer edit drops the queued jobs of older inputs (retain); a job already running finishes and is filed by its own inputs.
+- **The open operation** asks for nothing while it is open: its paths as opened are drawn FAINT (no arrows, no depth chip), its tab handles where the
+  current settings put them (#core hold-part tabHandles, light; task 836 removed the lead-in and its handle). The card's levels / clearing notes show for the settings as opened, or after a Preview of the
+  current ones. OK = the session's one undo step, then the generation; the row spins after 150 ms (a quick derivation never flickers).
+- **Preview** (the card's action bar: Preview, Cancel, OK) asks for the open operation's paths with the card's settings now (the same job OK makes: OK
+  then generates nothing new). A later change fades them and the button says Preview again. Never in the file, never in Undo; Cancel drops it.
+- **Export and the 3D Review wait** ("Waiting for 2 operations to finish"), then read finished paths; the page's file is made in the worker (svgOf).
+- **OUT OF DATE (task S3 addition, owner turns 3046-3047: "a recalculate button along the op buttons", "Fusion style"; this REPLACES the automatic regeneration
+  of a closed operation after its inputs changed).** Each membership remembers the signature it was last generated for (`op-paths.js` `generated`). A DESIGN
+  EDIT (or an Undo / Redo across one) generates nothing: the operations whose inputs changed are OUT OF DATE (with today's signature, which covers the whole
+  sketch, that is every operation after any Design edit): their row shows the out-of-date mark (`op-list.js` OUT_OF_DATE_SVG, a warning triangle; tooltip
+  "Out of date: press Recalculate.") and their last paths stay drawn FAINT (the open operation's look: no depth chip), never as current. A shape a Design edit
+  renamed (cut-plan.js followDesign) keeps its membership's generation: out of date, not new. A result already filed for the inputs now (an Undo back) is up
+  to date at once. UNCHANGED: OK of an edit session generates that operation; Preview; opening / reading a document, an import and an operation never
+  generated before are generated as before; a Prepare edit (a new operation, OK, a tick, a reorder, a delete) never leaves ANOTHER operation out of date (the
+  ones whose inputs it changed through the plan they share, e.g. a hole's new Inside and its plate's Outside, are generated as 817 did).
+- **RECALCULATE** (the toolbar's button after the operation types): the selected row's operation, else the rows the selection lights, else every out-of-date
+  operation (an open operation is confirmed first); their rows spin as above. Nothing to do: the plain line "All toolpaths are up to date." (a selection that
+  is up to date while others are not: "The selected toolpaths are up to date.").
+- **Export / 3D Review never use out-of-date paths**: while a ticked operation is out of date, the export area (the Generate status, the 2D view's line, the
+  3D info) says "n operations are out of date" with a Recalculate button (the same function as the toolbar's) and waits; the file is made after it.
+- **The default order** ranks a Roughing / Contour by its generated cuts: while they are generating (or it is open) it keeps the rank its last cuts gave and
+  is sorted again when they arrive; a new operation of unknown rank in a user-ordered list is placed again by the rule once, if nothing moved meanwhile. A
+  version 2 document being read is still ordered at once (derived on the main thread).

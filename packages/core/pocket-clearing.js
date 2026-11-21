@@ -114,11 +114,11 @@
 //  * LEFTOVER (never hidden): the part of R the bit does not sweep (the swept area of every clearing path at the record's bit radius + the finish
 //    pass), ignoring slivers thinner than 2 x sliverMm (the offsets' rounding); reported when over leftoverTolMm2, with how much of it the bit cannot
 //    reach at all (sharp inside corners, necks narrower than the bit: R minus R opened by r) and how much the pattern missed (a stepover too big).
-//  * START MARK (TASK 778, owner ruling: programmed pockets get no lead-in line): every programmed pocket (Spiral, Raster,
+//  * START MARK (TASK 778): every programmed pocket (Spiral, Raster,
 //    Morphed; Loop on AND off) returns `startPoint` = the first point the bit cuts in the clearing route (Spiral / Morphed: the middle of the innermost
 //    ring's longest edge; Raster: the start of the first pass, TASK 835 Loop on: its seam near the area's middle; always ON the route, never on an island; Loop off: the route's start end). Written into
 //    the exported SVG as a GUIDE (circle + cross, startMarkDiaMult x bit diameter across, never cut) and drawn in Prepare / Export 2D / Export 3D from
-//    the same derivation. A pocket record saved with `leadIn` true ignores it and shows the start mark.
+//    the same derivation.
 //  * The clearing paths depend on the record's bit diameter (written as toolDia on every path); the finish pass does not.
 import { offsetRegions, sweepPaths, clipOpenPaths, regionsArea, regionsFromRings, diffRegions, unionRegions, intersectRegions } from './plot/clip.js';
 import { loopWalk, walkPoints, sweeper } from './hold-part.js'; // TASK 775: sweeper moved to hold-part (an On line cut's strokes use it too)

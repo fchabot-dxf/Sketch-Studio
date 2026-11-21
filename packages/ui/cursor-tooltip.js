@@ -17,10 +17,11 @@ const CURSOR_OFFSET = { x: 14, y: 20 }; // the box's top-left from the pointer: 
 const FINGER_GAP_PX = 28; // a touch box ends this far above the finger (the finger and the hand cover what is below it)
 const EDGE_PX = 8;
 
-/** Where a box of width x height goes: near (x, y) offset by `offset`, kept inside the viewport; flipped to the other side of the point when it does not fit. */
-export function placeTooltip({ x, y, width, height, vw, vh, offset = CURSOR_OFFSET, edge = EDGE_PX }) {
+/** Where a box of width x height goes: near (x, y) offset by `offset`, kept inside the viewport; flipped to the other side of the point when it does not fit.
+ *  `flipX: false` (TASK 817c: the finger's box, already centred over the finger) never flips sideways: it is only kept on screen. */
+export function placeTooltip({ x, y, width, height, vw, vh, offset = CURSOR_OFFSET, edge = EDGE_PX, flipX = true }) {
   let left = x + offset.x;
-  if (left + width > vw - edge) left = x - offset.x - width; // no room on the right: to the left of the pointer
+  if (flipX && left + width > vw - edge) left = x - offset.x - width; // no room on the right: to the left of the pointer
   left = Math.max(edge, Math.min(vw - width - edge, left));
   let top = y + offset.y;
   if (top + height > vh - edge) top = y - offset.y - height; // no room below: above the pointer
@@ -97,7 +98,8 @@ export function installCursorTooltip({ doc = globalThis.document, selector, reso
       spot = placeTooltip({ x: r.left, y: r.bottom, width: br.width, height: br.height, vw, vh, offset: { x: 0, y: 6 } });
       if (spot.top < r.bottom && r.top - br.height - 6 >= EDGE_PX) spot.top = r.top - br.height - 6; // flipped by placeTooltip's clamp: keep it off the control
     } else if (at === 'finger') {
-      spot = placeTooltip({ x: pointer.x - br.width / 2, y: pointer.y - FINGER_GAP_PX - br.height, width: br.width, height: br.height, vw, vh, offset: { x: 0, y: 0 } });
+      // centred over the finger, then kept on screen (TASK 817c: a sideways flip put a box near the right edge wholly left of finger - width/2, far from the finger)
+      spot = placeTooltip({ x: pointer.x - br.width / 2, y: pointer.y - FINGER_GAP_PX - br.height, width: br.width, height: br.height, vw, vh, offset: { x: 0, y: 0 }, flipX: false });
     } else {
       spot = placeTooltip({ x: pointer.x, y: pointer.y, width: br.width, height: br.height, vw, vh });
     }

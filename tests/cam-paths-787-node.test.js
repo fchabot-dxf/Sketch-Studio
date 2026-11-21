@@ -1,17 +1,15 @@
 // tests/cam-paths-787-node.test.js — TASK 787: Shaper CAM path fixes from bug hunt 785 (no browser).
-//  1. (hunt bug 2) an INSIDE arc lead-in keeps clear of EVERY hole of the part (#core/lead-in ROOM rule): calculated Radius / Sweep reduced or refused when a
-//     hole is in the way, a typed radius crossing a hole refused 'room', a hole with its own record kept clear too, the Prepare drag (leadInDragAt) the same;
-//     no hole / a hole out of the way = the same lead-in as before.
+//  1. (hunt bug 2: the inside lead-in and the part's holes) TASK 836: removed with the lead-in.
 //  2. (hunt bug 3) Outside / Inside TABS with a cut offset: the tab the Origin leaves (each gap strip is an Inside cut it offsets by the bit radius + the
 //     record's offset ALL ROUND, its end caps too) is the typed width for offsets 0, -0.5 r, -r, -1.5 r, or the hold is refused with its note (+r).
 //  3. (hunt bug 5) the 3D model with a programmed pocket's start mark beside a depth-unset cut: no crash, the depth-unset label is its own mark.
 //  4. (hunt bug 7a) a tight Raster / Morphed spiral pocket (nothing to clear inside the finish allowance) with Loop on keeps its Loop (the finish turn alone,
 //     as the Spiral) and its start mark. (7b) a depth-UNSET programmed pocket with Loop off is not cut through in 3D: like any depth-unset pocket, not shown.
-//  5. (hunt bug 13) the − of a stepped field with a min AND `positive` (the Lead-in Radius: min = the bit radius) steps down to the min (mm and in).
+//  5. (hunt bug 13) a `positive` stepped field with no min (the bit diameter) keeps its rule: − stops at the smallest positive multiple of the step (TASK 836: its
+//     Lead-in Radius part, the one field with a min AND `positive`, removed with the lead-in).
 import assert from 'node:assert';
 import { deriveCuts } from '#core/stepped-cut.js';
-import { leadInDragAt, LEAD_IN } from '#core/lead-in.js';
-import { loopWalk, walkAt, HOLD_PART } from '#core/hold-part.js';
+import { HOLD_PART } from '#core/hold-part.js';
 import { polyArea } from '#core/loop-geometry.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { offsetPolygonRound } from '#core/plot/clip.js';
@@ -47,63 +45,6 @@ const sortedLoops = (st) => {
   return { loops, loopPolys };
 };
 const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
-
-// ── 1. (bug 2) the inside lead-in keeps clear of every hole ──
-{
-  const ONLINE = (over) => rec({ cutType: 'online', cutDepth: 5, toolDia: 6.35, leadIn: true, leadInSide: 'inside', ...over });
-  const leadOf = (st, r, owned = new Set()) => {
-    const { loops, loopPolys } = sortedLoops(st);
-    const cuts = deriveCuts({ kind: 'loop', id: loops[0].id }, r, st, loops, loopPolys, owned);
-    return { cuts, lead: cuts.find((c) => !c.isHole && c.leadIn).leadIn, loops, loopPolys };
-  };
-  // clearance of every lead-in point (J excluded) from a circle hole: its distance to the hole's edge minus h(P), the distance from the junction's tangent line
-  const holeClearance = (ld, [cx, cy, hr]) => Math.min(...ld.points.slice(0, -1).map((p) => {
-    const h = (p.x - ld.junction.x) * ld.normal.x + (p.y - ld.junction.y) * ld.normal.y;
-    return Math.hypot(p.x - cx, p.y - cy) - hr - h;
-  }));
-  const HOLE = [50, 50, 44]; // a 100 x 100 square with a hole whose edge comes 6 mm from the middle of each side
-  const withHole = partState([[0, 0, 100, 100]], [HOLE]);
-  const plain = partState([[0, 0, 100, 100]]);
-
-  // no hole: the calculated lead-in is one bit diameter at 90 degrees (unchanged)
-  const p0 = leadOf(plain, ONLINE()).lead;
-  eq([p0.role, p0.radius, p0.sweep], ['arc', 6.35, 90], 'no hole: calculated radius = the bit diameter, sweep 90');
-
-  // a hole 6 mm from the junction: the calculated values are reduced (6.35 at 90 deg would come within 0.11 mm of the hole at 6.35 mm from the line)
-  const c1 = leadOf(withHole, ONLINE()).lead;
-  ok(c1.role === 'refused' ? c1.error === 'room' : (c1.radius < 6.35 - 1e-9 || c1.sweep < 90), `hole in the way: the calculated lead-in is reduced or refused (got ${c1.role} R=${c1.radius} sweep=${c1.sweep})`);
-  if (c1.role === 'arc') ok(holeClearance(c1, HOLE) >= -LEAD_IN.roomTolMm, `reduced lead-in keeps the ROOM rule against the hole (clearance ${holeClearance(c1, HOLE).toFixed(3)} mm)`);
-
-  // a typed radius that would run across the hole: refused 'room' (it went 5.92 mm into the hole)
-  const t1 = leadOf(withHole, ONLINE({ leadInRadius: 15, leadInSweep: 90, leadInLength: 0 })).lead;
-  eq([t1.role, t1.error], ['refused', 'room'], 'typed radius 15 across the hole: refused room');
-  // the same typed radius without the hole: an arc
-  eq(leadOf(plain, ONLINE({ leadInRadius: 15, leadInSweep: 90, leadInLength: 0 })).lead.role, 'arc', 'typed radius 15, no hole: an arc');
-
-  // a hole with its OWN record (an Inside cut of its own): still a hole of the part, still kept clear
-  {
-    const { loops } = sortedLoops(withHole);
-    const t2 = leadOf(withHole, ONLINE({ leadInRadius: 15, leadInSweep: 90, leadInLength: 0 }), new Set([loops[1].id])).lead;
-    eq([t2.role, t2.error], ['refused', 'room'], 'a hole with its own record is kept clear too');
-  }
-
-  // a hole out of the way (small, in the middle): the same lead-in as without it (calculated and typed)
-  const small = partState([[0, 0, 100, 100]], [[50, 50, 5]]);
-  for (const over of [{}, { leadInRadius: 15, leadInSweep: 90, leadInLength: 0 }, { leadInSide: 'outside' }]) {
-    const a = leadOf(plain, ONLINE(over)).lead, b = leadOf(small, ONLINE(over)).lead;
-    eq([b.role, b.radius, b.sweep, b.d], [a.role, a.radius, a.sweep, a.d], `a hole out of the way changes nothing (${JSON.stringify(over)})`);
-  }
-
-  // the Prepare drag (leadInDragAt) keeps the hole clear the same way when given the part's holes
-  {
-    const { loops } = sortedLoops(withHole);
-    const typed = ONLINE({ leadInRadius: 15, leadInSweep: 90, leadInLength: 0 });
-    const drag = leadInDragAt(loops[0], typed, withHole, { x: 50, y: 0 }, [loops[1]]);
-    eq([drag.leadIn.role, drag.leadIn.error], ['refused', 'room'], 'drag to the middle of the side, hole in the way: refused room');
-    const dragPlain = leadInDragAt(sortedLoops(plain).loops[0], typed, plain, { x: 50, y: 0 });
-    eq(dragPlain.leadIn.role, 'arc', 'drag without the hole: an arc');
-  }
-}
 
 // ── 2. (bug 3) tabs keep their typed width whatever the cut offset ──
 // The measure is the Origin's: each gap strip is written as an INSIDE cut, which the Origin offsets inward by the bit radius + the record's offset all
@@ -249,7 +190,7 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
   eq(deep.levels.map((l) => [l.depth, l.through]), [[6, false]], 'a 6 mm programmed pocket, Loop off: one level at 6 mm, not through');
 }
 
-// ── 5. (bug 13) the Lead-in Radius − steps down to its min (the bit radius) with a .02 in bit, in mm and in inches ──
+// ── 5. (bug 13) a positive field with no min (the bit diameter): − stops at the smallest positive multiple of the step ──
 SettingsManager.set('DOC_UNIT', 'mm');
 SettingsManager.set('LENGTH_PRECISION', null);
 {
@@ -271,31 +212,9 @@ SettingsManager.set('LENGTH_PRECISION', null);
     pressEl('.sk-header-tab[data-tab="prepare"]');
     const pc = doc.getElementById('prepare-canvas'), p = worldToScreen(pc, { x: 10, y: 10 });
     app.click(Math.round(p.x), Math.round(p.y), { target: pc });
-    pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="online"]');
+    pressEl('#op-type-online'); // TASK S3: the operations toolbar's button (the quick flow: a NEW operation, open)
     typed('.cut-depth', '3');
-    pressEl('.cut-row[data-row="leadIn"] .cut-preset[data-value="true"]');
-    const key = [...V2_PLAN.keys()][0], radius = () => V2_PLAN.get(key).leadInRadius;
-    const minus = () => pressEl('.cut-row[data-row="leadInRadius"] .cut-step[data-d="-1"]');
-
-    // mm: a 0.508 mm (.02 in) bit: the calculated radius is the bit diameter 0.508; − gives 0.5, then the min 0.254 (it stopped at 0.5)
-    typed('.cut-bit', '0.508');
-    eq(q('.cut-lead-radius').value, '0.508', 'mm: calculated radius = the bit diameter');
-    minus(); near(radius(), 0.5, 1e-9, 'mm: − from 0.508 lands on 0.5 (the step)');
-    minus(); near(radius(), 0.254, 1e-9, 'mm: − from 0.5 lands on the min, the bit radius 0.254');
-    const h = st.history.length;
-    minus(); near(radius(), 0.254, 1e-9, 'mm: − at the min stays');
-    eq(st.history.length, h, 'mm: a press at the min adds no undo step');
-
-    // inches: the same bit (.02 in), radius typed .02 in: − gives the min .01 in (it stayed at .02 in)
-    SettingsManager.set('DOC_UNIT', 'in');
-    typed('.cut-lead-radius', '0.02');
-    near(radius(), 0.508, 1e-9, 'in: radius typed .02 in');
-    minus(); near(radius(), 0.254, 1e-9, 'in: − from .02 in lands on the min .01 in (the bit radius)');
-    const h2 = st.history.length;
-    minus(); near(radius(), 0.254, 1e-9, 'in: − at the min stays');
-    eq(st.history.length, h2, 'in: a press at the min adds no undo step');
-    SettingsManager.set('DOC_UNIT', 'mm');
-
+    const key = [...V2_PLAN.keys()][0];
     // a positive field with NO min (the bit diameter) keeps its rule: − stops at the smallest positive multiple of the step
     typed('.cut-bit', '0.5');
     const h3 = st.history.length;

@@ -1,6 +1,7 @@
 // apps/shaper/src/stl-card.js — TASK 790: the STL CARD of Prepare (a view, like stock-card.js): while the design came from an STL (stl-source.js) it
 // shows the file name, the Up side, the Units and the size the part was sliced at; a press on another Up side or unit calls onChange({ up } | { unit })
-// (stl-import.js slices it again and REPLACES the design, one undo step). No STL source: the card is hidden. It follows the source (stl-source.js). It sits above the cut card in Prepare's
+// (stl-import.js slices it again and REPLACES that part, one undo step; TASK 841: the card's source is the relief selected in Prepare, stl-source.js getStlSource).
+// No STL source: the card is hidden. It follows the source (stl-source.js). It sits above the cut card in Prepare's
 // right column (#prepare-panel) and folds like the Operations sheet (disclosure.js: open on a wide screen, folded on a phone). Built from the cut
 // card's own parts: its row labels (.cut-field-label, in .stl-row rows laid out as its .cut-row), its preset buttons (.cut-presets / .cut-preset), the one hint binding (hint.js bindHint: its hints are the cursor tooltip)
 // with the labels and hints of THE table (param-hints.js).

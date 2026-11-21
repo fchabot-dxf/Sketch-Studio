@@ -63,8 +63,6 @@ const STATES = [
   ...['freehand', 'linked', 'raster', 'morphed'].flatMap((c) => [{ cutType: 'pocket', clearing: c }, { cutType: 'pocket', clearing: c, loop: true }]),
   ...['off', 'tabs', 'skin'].flatMap((h) => [{ cutType: 'exterior', holdPart: h }, { cutType: 'interior', holdPart: h }]),
   ...['off', 'tabs', 'skin'].map((h) => ({ cutType: 'online', holdPart: h })), // TASK 775: On line takes the Hold part rows
-  { cutType: 'online', leadIn: true }, { cutType: 'online', leadIn: true, leadInSide: 'inside' }, // TASK 775: the Lead-in rows
-  ...['linked', 'raster', 'morphed'].map((c) => ({ cutType: 'pocket', clearing: c, loop: true, leadIn: true })),
   ...['pocket', 'inside', 'outside'].flatMap((k) => [{ cutType: 'roughing', slope: slope(k) }, { cutType: 'roughing', slope: slope(k), adaptiveSteps: true }]), // TASK 792: Roughing replaced the stepped types
   { cutType: 'pocket', slope: slope('pocket') }, { cutType: 'interior', slope: slope('inside') }, { cutType: 'exterior', slope: slope('outside') },
   { cutType: 'roughing' }, { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose' }, // TASK 792: a drawn region's Roughing, a part's Contour card
@@ -120,11 +118,22 @@ for (const { boundaryCtx, wallsCtx, ...record } of STATES) {
   }
 }
 for (const t of CUT_TYPES) ok(seen.has(choiceId('cutType', t.id)), `the cut type menu shows ${t.id}`);
+{ // TASK 842: the Bit menu: its Custom row and its "Edit tool table..." show their names, their tooltips are their hints (the table's bits are the user's own names)
+  panel.update({ kind: 'loop', boundary: { hasStock: false, picking: false }, record: { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6 } });
+  press(host.querySelector('.cut-bit-trigger'));
+  for (const id of ['bitCustom', 'toolTableEdit']) {
+    const el = host.querySelector(`.cut-bit-pop [data-hint="${id}"]`);
+    ok(el, `the Bit menu shows ${id}`);
+    eq([(el.querySelector('.cut-opt-name') || el).textContent, hintFor(el)], [hintLabel(id), hintText(id)], `${id}: its name and its hint`);
+    seen.add(id);
+  }
+  press(host.querySelector('.cut-bit-trigger'));
+}
 { // TASK S2: the OPEN operation's card: its Shapes (a row's X), Duplicate, OK / Cancel; a Contour's own Wall side (a drawn shape: its Geometry tab)
   panel.update({ mode: 'op', kind: 'loop', title: 'Contour 1 · 1 shape', shapes: [{ key: 'loop:a', label: 'Shape 40 × 40 mm' }], wallSideFree: true, boundary: { hasStock: false, picking: false }, record: { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose' } });
   press(host.querySelector('.cut-tab[data-tab="geometry"]'));
   const els = [...host.querySelectorAll('[data-hint]')].filter(visible);
-  for (const id of ['opShapes', 'opRemoveShape', 'opDuplicate', 'opOk', 'opCancel', 'wallSide', 'wallSide:inside', 'wallSide:outside']) {
+  for (const id of ['opShapes', 'opRemoveShape', 'opDuplicate', 'opPreview', 'opOk', 'opCancel', 'wallSide', 'wallSide:inside', 'wallSide:outside']) { // TASK 817: + Preview
     const el = els.find((e) => e.dataset.hint === id);
     ok(el, `the open operation's card shows ${id}`);
     eq(hintFor(el), hintText(id), `${id}: its tooltip is its hint`);
@@ -146,7 +155,13 @@ const opListJs = fs.readFileSync(new URL('../apps/shaper/src/op-list.js', import
 for (const m of html.matchAll(/data-(?:hint|label)="([A-Za-z]+)"/g)) seen.add(m[1]);
 for (const m of mainJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'\)/g)) seen.add(m[1]);
 for (const m of opListJs.matchAll(/id:\s*'([A-Za-z]+)'/g)) seen.add(m[1]);
+for (const m of opListJs.matchAll(/dataset\.hint = '([A-Za-z]+)'/g)) seen.add(m[1]); // TASK S3: a row's out-of-date mark (opOutOfDate)
+const stageJs = fs.readFileSync(new URL('../apps/shaper/src/prepare-stage.js', import.meta.url), 'utf8'); // TASK S3: the operations toolbar's Recalculate (its name and tooltip)
+for (const m of stageJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'\)/g)) seen.add(m[1]);
 const stlCardJs = fs.readFileSync(new URL('../apps/shaper/src/stl-card.js', import.meta.url), 'utf8'); // TASK 790: the STL card's rows and title
+const toolTableJs = fs.readFileSync(new URL('../apps/shaper/src/tool-table-window.js', import.meta.url), 'utf8'); // TASK 842: the Tool table window's labels
+for (const m of toolTableJs.matchAll(/data-hint="([A-Za-z]+)"|hint: '([A-Za-z]+)'/g)) seen.add(m[1] || m[2]);
+if (toolTableJs.includes('b.dataset.hint = `cutterShape:${t.id}`')) for (const sh of CUTTER_SHAPES) seen.add(choiceId('cutterShape', sh.id)); // its Type buttons: every cutter shape (the tapered ones are offered only there)
 for (const m of stlCardJs.matchAll(/data-hint="([A-Za-z]+)"|hintLabel\('([A-Za-z]+)'\)/g)) seen.add(m[1] || m[2]);
 for (const id of ['stockThickness', 'material', 'export', 'generateSvg', 'syncShaperHub', 'openShaperHub', 'download']) ok(seen.has(id), `the Export step / drawer renders ${id}`);
 const side = html.slice(html.indexOf('<aside id="review-side">'), html.indexOf('</aside>')); // the Export step's side cards (the Sync dialog's own title is not a label of the table)

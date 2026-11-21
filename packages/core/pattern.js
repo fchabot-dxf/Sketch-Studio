@@ -324,9 +324,13 @@ export function patternOperands(c, shapes) {
     if (ops.dirs.some((d) => !d)) return null;
   }
   const points = c.sources.points;
+  // TASK 847: the copies by id from ONE index (each was a scan of every shape, per copy: a solver assembly of a pattern of z copies grew with
+  // z x shapes); the first shape with that id, the one findShape returns
+  const byId = new Map();
+  for (const s of (shapes || [])) if (s && !byId.has(s.id)) byId.set(s.id, s);
   for (const inst of c.instances) {
     if (inst.joints.length !== points.length || inst.shapes.length !== src.length) return null;
-    const copies = inst.shapes.map((id) => findShape(shapes, id));
+    const copies = inst.shapes.map((id) => byId.get(id) || null);
     if (copies.some((s, si) => !s || s.type !== src[si].type)) return null;
     const tr = patternTransform(c, inst.at);
     points.forEach((p, k) => {

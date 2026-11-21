@@ -6,7 +6,7 @@
 //   apple-touch-icon.png       180 px, on the tile colour (iOS rounds / masks it itself)
 //   icon-192.png icon-512.png  rendered from that SVG (the manifest's icons)
 //   manifest.webmanifest       name, short_name, icons, theme_color and background_color = the tile colour
-//   og-image.png               the 1200 x 630 share card: the icon, the app name, the tagline
+//   og-image.png               the 1200 x 630 share card: the icon, the app name, the tagline, stacked in the centred 630 square
 //   robots.txt, sitemap.xml    allow all + Sitemap line; the site's pages
 // and the page's <head> block + the intro (an <h1> and the description) that identityHead / identityIntro put into the BUILT index.html:
 //   <meta name="description">, Open Graph (title, description, image, url, type=website, site_name), twitter:card=summary_large_image, <link rel="canonical">,
@@ -93,18 +93,33 @@ function wrap(text, max) {
   if (cur) lines.push(cur);
   return lines;
 }
-// the share card: the icon (its own markup, scaled), the app name, the tagline, the suite name
-function ogCardSvg(app, host) {
+// the share card: TASK 837 (owner turns 3048-3049): a phone feed (Facebook) crops the 1200 x 630 card to a centred SQUARE, so everything that means something
+// (the icon, the app name, the tagline, the site line) is stacked and centred inside the centred 630 x 630 square (x 285..915) with OG.margin to spare;
+// the sides of the card are the same dark background (OG.bg), empty by design. One function draws every app's card.
+const OG_SQUARE = { x0: (OG.width - OG.height) / 2, x1: (OG.width + OG.height) / 2, margin: 24 };
+const OG_ICON = 144, OG_NAME = 72, OG_TAG = 30, OG_TAG_LINE = 40, OG_SITE = 22;
+function ogContentSvg(app, host) {
+  const cx = OG.width / 2;
   const inner = app.icon.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
-  const scale = 5, x = 100, y = (OG.height - 64 * scale) / 2;
-  const lines = wrap(app.tagline, 26);
-  const tx = x + 64 * scale + 60;
-  const tspans = lines.map((l, i) => `<text x='${tx}' y='${352 + i * 48}' font-size='36' fill='#C9CDD3'>${esc(l)}</text>`).join('');
+  const room = OG_SQUARE.x1 - OG_SQUARE.x0 - 2 * OG_SQUARE.margin; // 582 px of text width
+  const lines = wrap(app.tagline, Math.floor(room / (OG_TAG * 0.52))); // a Segoe UI / Arial average glyph is under 0.52 em
+  if (lines.length > 2) throw new Error(`site-identity: the ${app.id} tagline needs ${lines.length} lines on the share card (2 at most)`);
+  const gap = 36, nameH = OG_NAME, tagH = lines.length * OG_TAG_LINE;
+  const total = OG_ICON + gap + nameH + gap / 2 + tagH + gap + OG_SITE;
+  let y = (OG.height - total) / 2;
+  const iconY = y; y += OG_ICON + gap + nameH * 0.8; // text baselines: cap height ~ 0.8 em
+  const nameY = y; y += nameH * 0.2 + gap / 2 + OG_TAG;
+  const tagY = y; y += tagH - OG_TAG_LINE + gap + OG_SITE;
+  const t = (yy, size, fill, text, w) => `<text x='${cx}' y='${yy.toFixed(1)}' text-anchor='middle' font-size='${size}'${w ? ` font-weight='${w}'` : ''} fill='${fill}'>${esc(text)}</text>`;
+  return `<g transform='translate(${cx - OG_ICON / 2} ${iconY.toFixed(1)}) scale(${OG_ICON / 64})'>${inner}</g>`
+    + t(nameY, OG_NAME, '#FFFFFF', app.name, 700)
+    + lines.map((l, i) => t(tagY + i * OG_TAG_LINE, OG_TAG, '#C9CDD3', l)).join('')
+    + t(tagY + (lines.length - 1) * OG_TAG_LINE + gap + OG_SITE, OG_SITE, '#8B9099', `${SUITE_NAME} · ${host}`);
+}
+// withBackground false: the content alone on a transparent card (the node test measures its bounding box from that)
+function ogCardSvg(app, host, withBackground = true) {
   return `<svg xmlns='http://www.w3.org/2000/svg' width='${OG.width}' height='${OG.height}' viewBox='0 0 ${OG.width} ${OG.height}' font-family='Segoe UI, Arial, DejaVu Sans, sans-serif'>`
-    + `<rect width='${OG.width}' height='${OG.height}' fill='${OG.bg}'/>`
-    + `<g transform='translate(${x} ${y}) scale(${scale})'>${inner}</g>`
-    + `<text x='${tx}' y='268' font-size='84' font-weight='700' fill='#FFFFFF'>${esc(app.name)}</text>${tspans}`
-    + `<text x='${tx}' y='${352 + lines.length * 48 + 40}' font-size='26' fill='#8B9099'>${esc(SUITE_NAME)} · ${esc(host)}</text></svg>`;
+    + (withBackground ? `<rect width='${OG.width}' height='${OG.height}' fill='${OG.bg}'/>` : '') + ogContentSvg(app, host) + `</svg>`;
 }
 
 const manifestOf = (app) => ({
@@ -114,7 +129,7 @@ const manifestOf = (app) => ({
 });
 
 const robotsOf = (host) => `User-agent: *\nAllow: /\n\nSitemap: https://${host}/sitemap.xml\n`;
-const SITE_PAGES = ['/', '/privacy']; // the root page and the privacy page (Pages serves privacy.html at /privacy)
+const SITE_PAGES = ['/', '/about', '/privacy']; // the root page, the About page and the privacy page (Pages serves about.html at /about, privacy.html at /privacy)
 const sitemapOf = (host) => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${SITE_PAGES.map((p) => `  <url><loc>https://${host}${p}</loc></url>`).join('\n')}\n</urlset>\n`;
 
 // ---- what goes into the built page ----
@@ -184,4 +199,4 @@ function writeIdentity(appId, out, host) {
   return files;
 }
 
-module.exports = { resolvePathLength, pathLengthOf, writeIdentity, injectIdentity, identityHead, identityIntro, jsonLd, manifestOf, robotsOf, sitemapOf, ogCardSvg, ico, registryApp, LINKED, OG, ICON_SIZES, ICO_SIZES, APPLE_SIZE, SITE_PAGES };
+module.exports = { resolvePathLength, pathLengthOf, writeIdentity, injectIdentity, identityHead, identityIntro, jsonLd, manifestOf, robotsOf, sitemapOf, ogCardSvg, OG_SQUARE, ico, registryApp, LINKED, OG, ICON_SIZES, ICO_SIZES, APPLE_SIZE, SITE_PAGES };

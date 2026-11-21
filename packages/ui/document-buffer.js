@@ -46,6 +46,8 @@ import { getProjectStore, emptyDocument } from '#ui/project-store.js';
 import { browserFileSeam, serializeProjectFile, parseProjectFile, projectFileName, designNameOfFile } from '#ui/project-file.js';
 import { homeOf } from '#ui/document-home.js'; // TASK 759: where a tab's design lives (Drive, a file on this device, or nowhere yet)
 import { track } from '#ui/analytics.js'; // TASK 738: a design saved under a name
+import { syncTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a read document's texts get their letters back (they are never stored)
+import { showNotification } from '#ui/notification-manager.js';
 
 /** T7 (owner ruling 2026-11-12): at most this many designs open at once (each tab keeps up to HISTORY_DEPTH undo steps in memory). */
 export const MAX_TABS = 10;
@@ -278,6 +280,9 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const restored = (out) => {
     held = newerSidecar(out.hosts); // before the host reads it and before anything of this document is written
     if (held) out = { ...out, newer: true };
+    // TASK 845: THE document read gives every text its letters (#core/document.js never stores them): at once when its font is loaded, else when it has
+    // downloaded (the canvas draws them on its next frame). Before the host's onRestored, so a host reading the drawing finds them when it can.
+    syncTextOutlines(state, { notify: showNotification }).then(null, (err) => showNotification(`A text's font could not be loaded: ${err.message}`, 'error'));
     try { if (showDesign && OPENING_REASONS.has(out.reason)) showDesign(); onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); } // TASK 706: Design first (its canvas has its size for the fit)
     return out;
   };

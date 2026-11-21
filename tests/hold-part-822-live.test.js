@@ -1,8 +1,9 @@
 // tests/hold-part-822-live.test.js — TASK 822 (owner turn 2771) in the real Shaper page, desktop 1280 x 800 (real mouse) and phone 390 x 844 (real touch), inches:
 // the owner's keyhole (circle R 0.375 in + a 0.313 in wide stem 1.375 in long), Inside, depth 0.156 in, Tabs 5 x 0.063 in wide / thick, 1/8 in bit.
+// TASK S3: the Inside is made with the operations toolbar's button (a shape click shows no card).
 //  * the tabs are PLACED (before: "tabs refused: the outline is too tight for the gap strips here"): 5 tab marks, 5 gap strips, all on the circle; the note says
 //    they were placed where a gap strip fits;
-//  * the tab HANDLES show only while the operation is open (the lead-in handle's style, a 44 px target); a real drag slides a tab along the circle: while
+//  * the tab HANDLES show only while the operation is open (the drag handle's style, a 44 px target); a real drag slides a tab along the circle: while
 //    dragging, the 5 tabs and their strips are redrawn in the drag layer (the old ones faded); dropped, the tab is there (stored on the shape: tabsAt), the
 //    marks / strips redrawn, the count row shows 5 (not Auto); into the stem the handle shows refused and the tab does not move; OK closes: no handle.
 // Zoomed screenshots to .evidence/822/.
@@ -129,10 +130,8 @@ try {
     await evalJs(`window.__prepareView.setView({ x: 0, y: ${(-L + R) / 2}, w: 160 })`);
     await sleep(200);
     await clickWorld(0, 0); // inside the circle: the keyhole
-    await waitFor(`!document.querySelector('.cut-card').hidden`, 'the card (type menu)');
-    await clickEl('#prepare-panel .cut-type-trigger');
-    await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-    await clickEl('.cut-type-opt[data-id="interior"]'); // the quick flow: a new Inside operation, open
+    await waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('.cut-card').hidden`, 'the keyhole selected (TASK S3: no card)');
+    await clickEl('#op-type-interior'); // TASK S3: the operations toolbar's Inside: a new Inside operation, open
     await waitFor(`document.querySelector('.cut-type-cur').textContent.toLowerCase().includes('inside')`, 'Inside picked');
     await typeInto('.cut-depth', '0.156');
     await clickEl('.cut-row[data-row="holdPart"] .cut-preset[data-value="tabs"]');

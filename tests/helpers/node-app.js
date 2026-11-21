@@ -55,6 +55,9 @@
 //     the page's state as appId = the host. The module is imported right after the page exists, so its key / pointer capture listens on THIS
 //     page's document (a module loads once per process: it listens on the first page a process opens).
 //   createNamedDesign(profile, app, name, document?): also stores a given document (the owner's file) as the current design.
+//   20. the paths port (TASK 817): the page generates the operations' paths in a module worker (main.js: op-paths.js setPathsPort(workerPort(paths-worker.js))); the
+//      kit leaves op-paths.js on its in-process port (localPort): the SAME server (op-derive.js createPathsServer) on structured copies of each job and answer, as
+//      crossing to the worker does, answering at once (a test of the waiting itself sets localPort({ async: true }) or a port of its own).
 // The host page script itself (main.js / sketch-stage.js) is not run: its page-only hooks (panels, Prepare, Review, the Freehand ribbon
 // button, the header) are absent; open() calls the declared pieces in the page script's order.
 
@@ -209,7 +212,7 @@ const HOSTS = {
     let controller = null, modes = null, ribbon = null, buffer = null, browser = null;
     const history = M.createShaperHistory({ getController: () => controller, getMode: () => modes.current() });
     const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(), history,
-      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice'), opsEl: doc.getElementById('prepare-ops') }); // TASK 743: the operations list, as the page passes it
+      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice'), opsEl: doc.getElementById('prepare-ops'), ribbonEl: doc.getElementById('prepare-ribbon') }); // TASK 743: the operations list; TASK S3: the operations toolbar (as the page passes them)
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
     // main.js (TASK 790): Open STL + the STL card at the top of Prepare's right column; afterImport = the page's afterSelectionImport without the Review (not mounted here)
     const stl = createStlImporter({ ensureSketch: () => ensureSketch(), getController: () => controller, prepare, panelEl: doc.getElementById('prepare-panel'),

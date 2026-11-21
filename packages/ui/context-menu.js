@@ -198,7 +198,9 @@ export function groupMenuItems(actions) {
   return [
     ...(g.group ? [{ id: 'grp-group', label: 'Group', onSelect: () => actions.group() }] : []),
     ...(g.ungroup.length ? [{ id: 'grp-ungroup', label: 'Ungroup', onSelect: () => actions.ungroup() }] : []),
-    ...(g.enter ? [{ id: 'grp-enter', label: 'Enter group', onSelect: () => actions.enterGroup() }] : []),
+    // TASK 845: ONE text selected: Edit text and Convert to shapes (its group is never entered: #core/group-model.js groupCommands().text)
+    ...(g.text && actions.editText ? [{ id: 'txt-edit', label: 'Edit text', onSelect: () => actions.editText() }, { id: 'txt-convert', label: 'Convert to shapes', onSelect: () => actions.convertText() }] : []),
+    ...(g.enter && !g.text ? [{ id: 'grp-enter', label: 'Enter group', onSelect: () => actions.enterGroup() }] : []),
     ...(g.leave ? [{ id: 'grp-leave', label: 'Leave group', onSelect: () => actions.leaveGroup() }] : []),
     // TASK 753: the one selected group's two locks, each showing its state (the box's padlocks are shortcuts to these): GROUP_LOCKS
     ...(g.enter && actions.groupLocks ? lockMenuItems(actions) : []),

@@ -1,7 +1,7 @@
 // tests/noshift-813-live.test.js — TASK 813 in the real page (Shaper, real mouse / touch input), desktop 1280 x 800 then a phone 390 x 844 (touch): NO LAYOUT SHIFTS in the cut card.
 // Task 805's layout probe (tests/helpers/tooltip-live.js snap / movedBoxes): every card row, field, box, the note, the panel, the Operations rows keep their boxes (0 px) while:
 //   * Outside: Hold part Tabs -> Onion skin -> Off (its rows stay in place, greyed);
-//   * On line: Lead-in On -> Off, then Hold part Tabs (Lead-in greys with its reason) -> Off;
+//   * On line: Hold part Tabs -> Off (TASK 836: its Lead-in rows removed with the lead-in);
 //   * Pocket: Clearing Spiral (a note with the turns, the leftover ... appears) -> Loop on -> off -> Raster -> Freehand (its rows stay in place);
 //   * a long note (more lines than the area shows) and no note: the note area keeps its box; the Prepare notice (an overlay) and the Export status line (a slot of its own).
 // A greyed row's label shows its reason in its tooltip (the probe's real hover / long press). No console error / page exception. Screenshots: .evidence/813/<device>-*.png.
@@ -11,6 +11,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { probe } from './helpers/tooltip-live.js';
+import { previewLive } from './helpers/prepare-open-live.js'; // TASK 817: the open operation's clearing note shows after its Preview (paths generated in the background)
 
 const EVIDENCE_DIR = path.resolve('.evidence/813');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -76,7 +77,14 @@ const openStage = async (id) => {
   await waitFor(`!document.getElementById('${id === 'design' ? 'design-view' : 'view-' + id}').hidden`, `the ${id} stage`);
   await sleep(300);
 };
+// TASK S3: with no operation open (no card: a shape click shows none) the operations toolbar's button makes the new operation, open; an open operation's type
+// changes in its card's type menu
 const pickType = async (id) => {
+  if (await evalJs(`document.querySelector('#prepare-panel .cut-card').hidden`)) {
+    await clickEl(`#op-type-${id}`);
+    await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the new operation open'); await sleep(250);
+    return;
+  }
   await clickEl('.cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
   await clickEl(`.cut-type-opt[data-id="${id}"]`);
   await waitFor(`document.querySelector('.cut-type-menu').hidden`, 'the menu closes'); await sleep(250);
@@ -121,17 +129,11 @@ async function phase() {
   const holdTip = await tooltipOf('.cut-row[data-row="tabCount"] .cut-field-label');
   assert.ok(holdTip && holdTip.startsWith('Choose Tabs in Hold part to set this.'), `${device}: the greyed Tab count row says why in its tooltip: ${JSON.stringify(holdTip)}`);
 
-  // ON LINE: Lead-in, Hold part Tabs
+  // ON LINE: Hold part Tabs (TASK 836: no Lead-in row)
   await pickType('online');
-  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn/.test(r)), ['leadIn', 'leadInRadius:off', 'leadInSweep:off', 'leadInLength:off', 'leadInSide:off', 'leadInAt:off'], `${device}: On line, Lead-in Off: its rows stay, greyed`);
-  await shot('online-leadin-off.png', '#prepare-panel .cut-card');
-  await noShift('On line: Lead-in On', () => preset('cut-lead-modes', 'true'));
-  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn/.test(r)), ['leadIn', 'leadInRadius', 'leadInSweep', 'leadInLength', 'leadInSide', 'leadInAt'], `${device}: Lead-in On: its rows are live`);
-  await shot('online-leadin-on.png', '#prepare-panel .cut-card');
-  await noShift('On line: Lead-in Off', () => preset('cut-lead-modes', 'false'));
+  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn/.test(r)), [], `${device}: On line: no Lead-in row`);
+  await shot('online-card.png', '#prepare-panel .cut-card');
   await noShift('On line: Hold part Tabs', () => preset('cut-hold-modes', 'tabs'));
-  assert.deepStrictEqual((await rowsOf()).filter((r) => /^leadIn(:|$)/.test(r) || r === 'leadIn:off'), ['leadIn:off'], `${device}: Tabs: the Lead-in row stays, greyed`);
-  assert.ok((await tooltipOf('.cut-row[data-row="leadIn"] .cut-field-label')).startsWith('Not with Tabs'), `${device}: Lead-in's tooltip says why`);
   await noShift('On line: Hold part Off', () => preset('cut-hold-modes', 'off'));
 
   // POCKET: Clearing, Loop, the note
@@ -144,12 +146,14 @@ async function phase() {
   assert.strictEqual(await evalJs(`document.querySelectorAll('.cut-note div').length`), 0, `${device}: Freehand: no note`);
   const noteBox0 = await evalJs(`(() => { const r = document.querySelector('.cut-note').getBoundingClientRect(); return [r.width, r.height]; })()`);
   assert.ok(noteBox0[1] > 30, `${device}: the note area is there with no note: ${noteBox0}`);
-  await noShift('Pocket: Clearing Spiral (the note appears)', () => pickClearing('linked'));
+  // TASK 817: the clearing note reads the open operation's generated paths: it appears with the Preview of the card's settings (made in the background)
+  const preview = () => previewLive({ clickEl, waitFor }, `${device}: the Preview`);
+  await noShift('Pocket: Clearing Spiral (the note appears)', async () => { await pickClearing('linked'); await preview(); });
   assert.ok(await evalJs(`document.querySelectorAll('.cut-note div').length`) >= 2, `${device}: Spiral: the note lines show`);
   assert.deepStrictEqual((await rowsOf()).filter((r) => /^(stepover|loop|finishAllowance|rasterAngle)/.test(r)), ['stepover', 'finishAllowance', 'loop', 'rasterAngle:off'], `${device}: Spiral: the pattern rows are live, the Raster angle greyed`);
   await shot('pocket-spiral.png', '#prepare-panel .cut-card');
   const loopNoteBefore = await evalJs(`document.querySelector('.cut-note').textContent`);
-  await noShift('Pocket: Loop on (the note changes)', () => clickEl('.cut-loop'));
+  await noShift('Pocket: Loop on (the note changes)', async () => { await clickEl('.cut-loop'); await preview(); });
   assert.notStrictEqual(await evalJs(`document.querySelector('.cut-note').textContent`), loopNoteBefore, `${device}: Loop changed the note`);
   await noShift('Pocket: Loop off', () => clickEl('.cut-loop'));
   await noShift('Pocket: Clearing Raster', () => pickClearing('raster'));

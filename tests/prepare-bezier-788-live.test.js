@@ -55,8 +55,9 @@ try {
   await sleep(150);
   const sel = await html('prepare-select-group');
   assert.ok(/<path[^>]*sk-hl-select/.test(sel), '10: a selected open bezier draws its select highlight: ' + sel.slice(0, 120));
-  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the quick flow: the card's type menu makes a NEW On line operation of the selection, OPEN; its Depth typed; OK
-  await evalJs(`(() => { document.querySelector('#prepare-panel .cut-type-trigger').click(); document.querySelector('#prepare-panel .cut-type-opt[data-id="online"]').click();
+  // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the quick flow makes a NEW On line operation of the selection, OPEN; its Depth typed; OK. TASK S3: the quick flow is the
+  // operations toolbar's On line button (the card's type menu only changes an open operation)
+  await evalJs(`(() => { document.getElementById('op-type-online').click();
     const d = document.querySelector('#prepare-panel .cut-depth'); d.value = '5'; d.dispatchEvent(new Event('change', { bubbles: true })); document.querySelector('#prepare-panel .cut-ok').click(); })()`);
   await sleep(250);
   const tp = await html('prepare-toolpath-group');

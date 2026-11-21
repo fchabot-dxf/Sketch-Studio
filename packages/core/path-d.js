@@ -1,5 +1,5 @@
 // packages/core/path-d.js — TASK 786: the ONE reader of the SVG path data #core WRITES (absolute `M x y`, `L x y`, `A r r 0 large sweep x y`,
-// `C x1 y1 x2 y2 x y`, `Z`: #core/loop-geometry, #core/curve-kinds, #core/stepped-cut, #core/hold-part, #core/pocket-clearing, #core/lead-in).
+// `C x1 y1 x2 y2 x y`, `Z`: #core/loop-geometry, #core/curve-kinds, #core/stepped-cut, #core/hold-part, #core/pocket-clearing).
 // PURE (no DOM). Two measures of a written path, exact (no sampling):
 //   pathSignedArea(d) — the signed area its closed sub-paths enclose (shoelace sign, world y down: > 0 = the angle INCREASES along the walk,
 //                       an SVG arc with sweep 1). An arc adds its chord + its circular segment; a cubic its exact Green's-theorem integral.

@@ -24,7 +24,7 @@
 //    fill) in its cut type's colour (CSS .rv2d-t-<cutType>, index.html), so every path the file writes shows; over it the BIT-CENTRE path of every cut
 //    (`getPreview().bitPaths`, export-payload.js bitCentrePaths = deriveCutFootprint + deriveCutTravel, the derivation Prepare draws): a thin dashed line for
 //    the cuts whose written path is the wall / outline the bit walks beside (outside, inside, a pocket's wall and islands); a programmed pocket's clearing
-//    lines, a lead-in arc, an On-line outline's loop and tab strokes ARE their own bit path (the file writes the centre), so only their direction marks are
+//    lines and tab strokes ARE their own bit path (the file writes the centre), so only their direction marks are
 //    added. Direction marks on every travel path: 777's sparse slow marching dashes (the one TRAVEL_STYLE, prepare-view.js) + static zoom-stable darts.
 //    A tap on a bit-centre line picks its element, as a tap on the element does.
 //  * Pan / zoom are the shared handlers (#ui/input-handlers/pan-zoom.js: wheel, pinch, drag; the same as Prepare). The first build
@@ -47,7 +47,7 @@ const OUTSIDE_STEP_OUTLINE = '#9a9a9a';     // their thin light outline (the fil
 const POCKET_OUTLINE = '#222';             // the thin outline every pocket gets (the file's pockets have none)
 const BIT_ONLY_ROLES = new Set(['outside', 'inside', 'wall', 'island']); // TASK 793: travel roles whose bit-centre path is NOT the written path (the others are written: their marks only)
 const CLEAR_KIND_ROLES = new Set(['linked', 'raster', 'cleanup', 'morphed', 'loop']);  // the dart size kinds of Prepare (prepare-view.js addTravel)
-const dartKind = (role) => (role === 'leadin' || role === 'online' || role === 'stroke' ? 'online' : CLEAR_KIND_ROLES.has(role) ? 'clear' : 'wall');
+const dartKind = (role) => (role === 'stroke' ? 'online' : CLEAR_KIND_ROLES.has(role) ? 'clear' : 'wall');
 const FIT_MARGIN = 0.06;   // empty space round the drawing on each side after fit(), a fraction of its size
 // TASK 757: the preview's one rule for a GUIDE (the Stock loop, a user's Guide): it marks, it never cuts, so it is drawn as its OUTLINE (the file's stroke, no
 // fill) BEHIND every cut. The file writes a guide filled (#0068FF fill + stroke, as Shaper Studio writes its guides); a user's Guide in the plan's order (TASK 774:
@@ -74,8 +74,7 @@ function paintOf(el, name) {
 }
 
 /** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap' | 'stroke' (TASK 775: an On line
- *  cut's tabs), k?, n? } | null, op: the operation id (TASK 743, data-op) | null, clear: TASK 745 { role, k?, n?, pass?, passes? } | null, lead: TASK 775 true when the
- *  element is written with a lead-in leg (data-lead) }. */
+ *  cut's tabs), k?, n? } | null, op: the operation id (TASK 743, data-op) | null, clear: TASK 745 { role, k?, n?, pass?, passes? } | null }. */
 export function previewItems(root) {
   return [...root.querySelectorAll('*')].filter((el) => SHAPE_TAGS.has(el.localName)).map((el) => {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
@@ -83,7 +82,7 @@ export function previewItems(root) {
     const hold = h ? (h[1] ? { kind: h[1] } : { kind: h[2], k: Number(h[3]), n: Number(h[4]) }) : null;
     const c = /^(linked|raster|cleanup|island|wall|morphed|loop|start)(?: (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745 (749: linked, morphed; 750: loop; 778: start mark)
     const clear = c ? { role: c[1], ...(c[2] ? { k: Number(c[2]), n: Number(c[3]) } : {}) } : null;
-    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear, lead: el.getAttribute('data-lead') === 'in' };
+    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear };
   });
 }
 /** TASK 745: a programmed pocket element's words: "spiral line 2 of 3" (TASK 749) | "raster pass 3 of 22" | "clean-up ring" | "morphed spiral" | "closed loop 1 of 2"
@@ -146,7 +145,7 @@ export const depthText = (depth) => {
   return lengthText(Number(m[1]) * u.f, { unit: u.name, show: m[2] ? 'unit' : 'bare' });
 };
 /** An element's label: "pocket · 7.333 mm · step 2 of 4" (the depth as the file writes it). */
-export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear, false), it.lead ? 'lead-in arc' : null].filter(Boolean).join(' · '); // TASK 778: "lead-in arc"
+export const itemLabel = (it) => [it.cutType || 'no cut type', depthText(it.depth) || 'depth unset', it.step ? `step ${it.step.k} of ${it.step.n}` : null, holdText(it.hold), clearText(it.clear, false)].filter(Boolean).join(' · ');
 
 /**
  * The list: TASK 743: one group per OPERATION of `ops` (operations.js describeOperations: their order; { op, count, types, rows }), then one per cut type for the
@@ -163,8 +162,8 @@ export function previewRows(items, ops = []) {
     if (!groups.has(gk)) groups.set(gk, { op: null, cutType: type, count: 0, types: new Set(), rows: new Map() });
     const g = groups.get(gk);
     g.count++; g.types.add(type);
-    const key = `${type}|${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}|${it.clear ? it.clear.role : ''}|${it.lead ? 'lead' : ''}`; // TASK 742: a held cut's gaps are one row; TASK 745: a programmed pocket's rings at one depth are one row; TASK 775: a lead-in is its own row
-    if (!g.rows.has(key)) g.rows.set(key, { cutType: type, depth: it.depth, step: it.step, hold: it.hold, clear: it.clear, lead: it.lead, items: [] });
+    const key = `${type}|${it.depth || ''}|${it.step ? it.step.k + '/' + it.step.n : ''}|${it.hold ? it.hold.kind : ''}|${it.clear ? it.clear.role : ''}`; // TASK 742: a held cut's gaps are one row; TASK 745: a programmed pocket's rings at one depth are one row
+    if (!g.rows.has(key)) g.rows.set(key, { cutType: type, depth: it.depth, step: it.step, hold: it.hold, clear: it.clear, items: [] });
     g.rows.get(key).items.push(it);
   }
   return [...groups.values()].filter((g) => g.count > 0).map((g) => ({ op: g.op, cutType: g.cutType, count: g.count, types: [...g.types], rows: [...g.rows.values()] }));
@@ -289,7 +288,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       }
       for (const row of g.rows) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'rv2d-row';
-        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true), clearText(row.clear, true), row.lead ? 'lead-in arc' : null].filter(Boolean).join(' · '); // TASK 778: a lead-in arc row says so
+        const t = doc.createElement('span'); t.textContent = [g.types.length > 1 ? row.cutType : null, depthText(row.depth) || 'depth unset', row.step ? `step ${row.step.k} of ${row.step.n}` : null, holdText(row.hold, true), clearText(row.clear, true)].filter(Boolean).join(' · ');
         const c = doc.createElement('span'); c.className = 'rv2d-count'; c.textContent = String(row.items.length);
         const shade = row.cutType === 'pocket' ? shading.shades.get(row.depth) : (row.cutType === 'outside' && row.step ? outsideShading.shades.get(row.depth) : (row.cutType === 'inside' && row.step ? insideShading.shades.get(row.depth) : null));
         if (shade) { const chip = doc.createElement('span'); chip.className = 'rv2d-chip'; chip.style.background = shade; b.append(chip); }
@@ -457,7 +456,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
   function inspect() {
     return {
       elements: items.length,
-      rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), ...(r.clear ? { clear: r.clear.role } : {}), ...(r.lead ? { lead: true } : {}), count: r.items.length })) })),
+      rows: rows.map((g) => ({ ...(g.op ? { op: g.op.id, label: g.op.label, heading: g.op.heading } : { cutType: g.cutType }), count: g.count, rows: g.rows.map((r) => ({ cutType: r.cutType, depth: r.depth, step: r.step ? `${r.step.k}/${r.step.n}` : null, ...(r.hold ? { hold: r.hold.kind } : {}), ...(r.clear ? { clear: r.clear.role } : {}), count: r.items.length })) })),
       picked: picked.length, label: mode === 'paths' ? shownLabel : info.textContent, view: viewState.view ? { ...viewState.view } : null,
       ...(mode === 'paths' ? { mode, bitCentre: top ? top.querySelectorAll('.rv2d-bit-center').length : 0, travelPaths: travels.length, darts: arrowCount } : {}),
     };

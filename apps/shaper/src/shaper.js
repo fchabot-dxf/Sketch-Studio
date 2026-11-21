@@ -41,19 +41,15 @@ const ATTR_PREFIX = exportForm('attrPrefix');
 //                 are CSS tokens in apps/shaper/index.html (--sk-prep-*), not hex fields on the record (the export fill/stroke stay).
 // TASK 742: HOLD PART (#core/hold-part.js): the plain Outside / Inside cuts declare its card rows: `holdPart` (Off | Tabs | Onion skin), and for
 // Tabs `tabCount` (Auto | a number) and `tabWidth`, for both `holdThickness` (the tab / skin thickness). Never written to the export as attributes
-// (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one derivation (deriveCuts).
+// (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one derivation (deriveCuts). On line also takes these rows
+// (its tabs are gaps left uncut, #core/hold-part tabsHaveThickness).
 const HOLD_PARAMS = ['holdPart', 'tabCount', 'tabWidth', 'holdThickness'];
 // TASK 745: the PROGRAMMED POCKET (#core/pocket-clearing.js): the plain Pocket declares its card rows: `clearing` (Freehand | Spiral | Raster | Morphed
 // spiral; TASK 749: Spiral replaced Concentric) and for a computed pattern `stepover` (% of the bit), `finishAllowance`, `loop` (TASK 750: the whole pocket as closed loops,
 // the finish turn in them; the step-downs are the Origin's Pass Depth / AutoPass) and, for Raster, `rasterAngle`.
 // Never written to the export as attributes (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one
 // derivation (deriveCuts), which writes a programmed pocket as on-line paths + the finish pass (an inside cut, islands as outside cuts).
-const CLEARING_PARAMS = ['clearing', 'stepover', 'finishAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern; TASK 778: pockets get a start mark, no lead-in row
-// TASK 775 / 778: the TANGENTIAL ARC LEAD-IN (#core/lead-in.js, On line outlines only): `leadIn` (Off | On: true | false), `leadInRadius` (base mm | null = calculated),
-// `leadInSweep` (degrees 15-180 | null = calculated), `leadInLength` (optional straight part before arc, base mm | null = calculated 0),
-// `leadInSide` (Outside | Inside: the waste side the arc sits on), `leadInAt` (junction position 0..1 | null = calculated). On line also takes the HOLD PART rows (742's declaration:
-// its tabs are gaps left uncut, #core/hold-part tabsHaveThickness). Never written to the export as attributes; the exporter cuts the record through the one derivation (deriveCuts).
-const LEAD_IN_PARAMS = ['leadIn', 'leadInRadius', 'leadInSweep', 'leadInLength', 'leadInSide', 'leadInAt'];
+const CLEARING_PARAMS = ['clearing', 'stepover', 'finishAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern; TASK 778: pockets get a start mark
 // TASK 812 (docs/OPERATIONS-MODEL.md 1.5): `fields` = the SETTINGS an operation of this type is made of, in the operation key's order: the ONE declaration of which settings
 // belong to which type (operations.js settingsOf reads it: each field's value is computed there, once; the cut card asks cutTypeHasField). [] = none (the Stock: one per
 // document). TASK S1 (advisor ruling 1): the Guide declares its Depth / Offset / Bit (its card rows, written to the file per element): Guides with different values
@@ -65,7 +61,7 @@ export const CUT_TYPES = [
   { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><rect x='5' y='5' width='8' height='8' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", opRank: 4, fields: ['depth', 'offset', 'hold'], params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
   { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><rect x='5.5' y='5.5' width='7' height='7' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='9' r='1.4' fill='currentColor'/>", opRank: 3, fields: ['depth', 'offset', 'hold'], params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS] },
   { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 4.5l9 9M13.5 4.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='1.5 1.5'/>", opRank: 2, fields: ['depth', 'offset', 'clearing'], params: ['cutDepth', 'cutOffset', 'toolDia', ...CLEARING_PARAMS], autoOffsetFraction: 0.25 },
-  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.4' stroke-dasharray='1.8 1.6'/><circle cx='16' cy='11' r='1.6' fill='currentColor'/>", opRank: 1, fields: ['depth', 'offset', 'hold', 'leadIn'], params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS, ...LEAD_IN_PARAMS], offsetMovesCut: false },
+  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.4' stroke-dasharray='1.8 1.6'/><circle cx='16' cy='11' r='1.6' fill='currentColor'/>", opRank: 1, fields: ['depth', 'offset', 'hold'], params: ['cutDepth', 'cutOffset', 'toolDia', ...HOLD_PARAMS], offsetMovesCut: false },
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide', icon: "<path d='M8 2h8v8M2 8v8h8' fill='none' stroke='currentColor' stroke-width='1.6'/>", opRank: 0, drawnOnly: true, fields: ['depth', 'offset', 'bit'], params: ['cutDepth', 'cutOffset', 'toolDia'] }, // TASK 814: `drawnOnly` = the Guide is drawn on the Origin's screen, never cut, so it does not own its loop (#core ownedLoopIds)
   // TASK 472: STOCK = the board itself, drawn as a closed profile in Design and marked here. NOT a cut: the Review extrudes it to its
   // thickness (the one depth row, relabelled: `depthParam` = its entry in param-hints.js, TASK 770). The EXPORT writes it as a GUIDE (owner: "ok guide then": Shaper's docs call a guide
@@ -163,13 +159,21 @@ export function defaultCutRecord() {
 // TASK 455: the CUTTER SHAPE (a cut-record field, NEVER exported: the Shaper SVG has no attribute for it; the 3D Review of task
 // 457 will read it): 'endmill' (flat, default) | 'ballnose' | 'vbit'. A V-bit's angle (`cutterAngle`) comes from the EXISTING
 // VBIT_PRESETS above (vbitHalfAngleTan stays the one V-bit helper). `icon` = 16x16 inner markup in currentColor.
+// TASK 842: the shapes are also the TOOL TABLE's bit TYPES (apps/shaper/src/tool-table.js): `fields` = the size fields a bit of that type has (the one
+// declaration the table's validation, its window and the card read): `diameter` (mm), `angle` (a V-bit's INCLUDED angle, degrees), `tipDiameter` /
+// `taperAngle` (degrees PER SIDE) / `shankDiameter` (a tapered bit: a cone from its tip, capped by its shank; #core/cutter-profile.js). `custom` = the card's
+// Custom bit can be this shape (its typed diameter + the shape popover); a tapered bit comes from the table only (its cone has fields the card has no rows for).
+// The two TAPERED shapes go into the cut record as cutterShape 'taperball' | 'taperflat', toolDia = the TIP diameter, + `taperAngle` and `shankDia`.
 export const CUTTER_SHAPES = [
-  { id: 'endmill', label: 'end mill', icon: "<path d='M6 1v12h6V1' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13h8' fill='none' stroke='currentColor' stroke-width='1.8'/>" },
-  { id: 'ballnose', label: 'ball nose', icon: "<path d='M6 1v10a3 3 0 0 0 6 0V1' fill='none' stroke='currentColor' stroke-width='1.5'/>" },
-  { id: 'vbit', label: 'V-bit', icon: "<path d='M5 1v8l4 7 4-7V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>" },
+  { id: 'endmill', label: 'end mill', custom: true, fields: ['diameter'], icon: "<path d='M6 1v12h6V1' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13h8' fill='none' stroke='currentColor' stroke-width='1.8'/>" },
+  { id: 'ballnose', label: 'ball nose', custom: true, fields: ['diameter'], icon: "<path d='M6 1v10a3 3 0 0 0 6 0V1' fill='none' stroke='currentColor' stroke-width='1.5'/>" },
+  { id: 'vbit', label: 'V-bit', custom: true, fields: ['diameter', 'angle'], icon: "<path d='M5 1v8l4 7 4-7V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>" },
+  { id: 'taperball', label: 'tapered ball nose', custom: false, fields: ['tipDiameter', 'taperAngle', 'shankDiameter'], icon: "<path d='M5 1v5l2.6 7.6a1.5 1.5 0 0 0 2.8 0L13 6V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>" },
+  { id: 'taperflat', label: 'tapered end mill', custom: false, fields: ['tipDiameter', 'taperAngle', 'shankDiameter'], icon: "<path d='M5 1v5l2.4 9h3.2L13 6V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M6.6 15h4.8' fill='none' stroke='currentColor' stroke-width='1.8'/>" },
 ];
 // DECLARED data: the quick bit-diameter presets of the cut card (VALUES are BASE mm; LABELS stay the imperial bit sizes, x 25.4 mm/in). TASK 743: also how
-// an operation names its bit ("¼″ end mill", apps/shaper/src/operations.js): moved here from cut-panel.js, unchanged.
+// an operation names its bit ("¼″ end mill", apps/shaper/src/operations.js): moved here from cut-panel.js, unchanged. TASK 842: they STAY the Custom bit's quick
+// picks (and its name); the tool table's first-use bits are their own list (tool-table.js DEFAULT_BITS).
 export const BIT_PRESETS = [
   { label: '.02', value: 0.508 },   // .02 in
   { label: '⅛', value: 3.175 },   // 1/8 in

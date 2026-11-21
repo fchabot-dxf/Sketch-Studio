@@ -2,6 +2,7 @@
 // 390 x 844 with real touch taps. A 200 x 100 mm plate with a 15 mm hole, Outside, depth 18 mm:
 //  * the card: Hold part Off | Tabs | Onion skin; Tabs -> count Auto (4), width 10 mm, thickness 2 mm (on the phone, a reloaded page in INCHES: 3/8 in,
 //    1/16 in); the note; count + -> 5, width + , thickness - ; every change redraws Prepare's tab marks (.sk-tab-mark) and gap strips (.sk-strip);
+//  * TASK S3: the Outside is made with the operations toolbar's button (a shape click shows no card);
 //  * Export 2D: the hole, 1 pass (outside, depth - thickness), N gap strips (inside, full depth) == the downloaded file, element by element; the list
 //    says "pass (tabs)" and "gaps"; every path of the file is closed; no data-* in the file;
 //  * Export 3D: the info lists the pass and the gaps, the board shows the tabs standing (screenshot);
@@ -13,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
-import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { clickOpenLive, stepLive, previewLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed; TASK 817: its paths drawn on its Preview
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/742');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -160,10 +161,8 @@ try {
     await openMode('prepare');
     await waitFor(`!!document.getElementById('prepare-canvas').getScreenCTM() && document.getElementById('prepare-canvas').children.length > 0`, 'prepare canvas ready');
     await clickWorld(20, 20); // inside the plate, off the hole
-    await waitFor(`!document.querySelector('.cut-card').hidden`, 'the cut card');
-    await clickEl('#prepare-panel .cut-type-trigger');
-    await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-    await clickEl('.cut-type-opt[data-id="exterior"]');
+    await waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('.cut-card').hidden`, 'the plate selected (TASK S3: no card)');
+    await clickEl('#op-type-exterior'); // TASK S3: the operations toolbar's Outside: a new Outside of the plate, open
     await waitFor(`document.querySelector('.cut-type-cur').textContent.toLowerCase().includes('outside')`, 'Outside picked');
     const unit = await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.docUnit())`);
     await typeInto('.cut-depth', unit === 'in' ? '0.75' : '18');
@@ -184,6 +183,7 @@ try {
       assert.deepStrictEqual(await note(), ['Outside: 4 tabs, 10 mm wide, 2 mm thick: 1 pass at 16 mm + 4 gaps at 18 mm', 'Gaps: cut the side against the part; the return leg is optional'], label + ': the note');
     }
     assert.strictEqual(fields.placeholder, 'Auto (4)', label + ': count Auto (4)');
+    await previewLive(s2Steps, label + ': the Preview of Tabs'); // TASK 817: the open operation's tab marks / strips are its paths: drawn on its Preview (generated in the background)
     assert.deepStrictEqual(await marks(), { tabs: 4, strips: 4, skin: 0 }, label + ': Prepare: 4 tab marks, 4 strips');
     // every hold target is reachable; on the phone >= 44 px and the card fits
     const targets = await evalJs(`[...document.querySelectorAll('.cut-row[data-row="holdPart"] .cut-preset, .cut-row[data-row="tabCount"] .cut-step, .cut-row[data-row="tabWidth"] .cut-step, .cut-row[data-row="holdThickness"] .cut-step')].map((b) => { const r = b.getBoundingClientRect(); return [b.textContent, Math.round(r.width), Math.round(r.height)]; })`);
@@ -205,6 +205,7 @@ try {
     await shot(`${D}-card-tabs.png`, '#prepare-panel .cut-card');
     // count + -> 5; width + (one step); thickness - (one step)
     await clickEl('.cut-row[data-row="tabCount"] .cut-step[data-d="1"]');
+    await previewLive(s2Steps, label + ': the Preview of 5 tabs');
     await waitFor(`document.querySelectorAll('#prepare-canvas .sk-tab-mark').length === 5`, label + ': 5 tab marks after count +');
     assert.strictEqual((await rec()).tabCount, 5, label + ': count 5');
     await clickEl('.cut-row[data-row="tabWidth"] .cut-step[data-d="1"]');
@@ -213,6 +214,7 @@ try {
     console.log(label + ' after +/-: ' + JSON.stringify(r2) + ' note: ' + JSON.stringify(await note()));
     if (unit === 'in') { assert.ok(Math.abs(r2.tabWidth - 25.4 * 7 / 16) < 1e-9 && Math.abs(r2.holdThickness - 25.4 * 3 / 64) < 1e-9, label + ': width 7/16 in, thickness 3/64 in'); }
     else { assert.ok(r2.tabWidth === 11 && r2.holdThickness === 1.5, label + ': width 11, thickness 1.5'); }
+    await previewLive(s2Steps, label + ': the Preview of the wider, thinner tabs');
     assert.deepStrictEqual(await marks(), { tabs: 5, strips: 5, skin: 0 }, label + ': Prepare: 5 tab marks, 5 strips');
     await shot(`${D}-prepare-tabs-5.png`, '#prepare-canvas');
     const pass = unit === 'in' ? '0.703 in' : '16.500 mm', full = unit === 'in' ? '0.750 in' : '18.000 mm';

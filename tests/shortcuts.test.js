@@ -104,6 +104,7 @@ const EXEMPT = {
   'packages/ui/input-handlers/live-dimension-input.js': [5, 'the on-canvas value boxes: Tab / Enter / Esc / Delete (and the legacy box Enter)'],
   'packages/ui/input-handlers/offset-tool.js': [2, 'the offset distance box: Enter / Esc'],
   'packages/ui/input-handlers/pattern-tool.js': [8, 'the Pattern window and its value boxes: Enter / Esc / arrow steps'],
+  'packages/ui/input-handlers/text-tool.js': [3, 'TASK 845: the text editor box: Esc = Cancel, Ctrl / Cmd + Enter (Enter in a one-line field) = OK; the textarea keeps Enter for a new line'],
   'packages/ui/mobile-drawer.js': [1, 'the mobile drawer: Esc closes it'],
   'packages/ui/numeric-input-manager.js': [5, 'the numeric value boxes: Enter / Esc / Tab'],
   'packages/ui/parameter-table.js': [2, 'the parameter table cells: Enter / Esc'],

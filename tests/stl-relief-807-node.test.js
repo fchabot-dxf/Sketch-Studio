@@ -208,13 +208,14 @@ const plan = () => [...V2_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`
       const paths = (svg.match(/<path /g) || []).length;
       ok(paths >= 2 && /shaper:cutType="pocket"/.test(svg), `the Shaper SVG: ${paths} pocket paths`);
       saved = await app.storedDoc();
-      eq(saved.hosts.shaper.stl.relief, true, 'the document marks its STL as a relief');
+      eq(saved.hosts.shaper.stl.map((s) => s.relief), [true], 'the document marks its STL as a relief (TASK 841: the list of its STL sources, one)');
     } finally { await app.close(); }
   }
   {
     // a design saved with an STL before 807: no relief mark, the per-feature records -> sliced again as a relief when opened
     const old = JSON.parse(JSON.stringify(saved));
-    delete old.hosts.shaper.stl.relief;
+    const { part, opened, relief, ...one } = old.hosts.shaper.stl[0]; // TASK 841: a document before 841 has ONE source (an object), with no part / opened
+    old.hosts.shaper.stl = one;
     const [key] = storedRecords(old.hosts.shaper)[0]; // TASK S1: the saved document is version 3; the design of before 807 is a version 2 one
     const { operations, regions, nextSeq, ...rest } = old.hosts.shaper;
     old.hosts.shaper = { ...rest, version: 2, cutPlan: [[key, { cutType: 'exterior', cutDepth: 19, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }]] };

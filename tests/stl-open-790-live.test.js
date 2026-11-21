@@ -5,7 +5,7 @@
 //   TASK 807: an STL opens as a RELIEF: ONE Roughing (Terraces) with its levels, ready to cut.
 //   1. the block (60 x 40 x 8 pocket, d12 through hole): the notice "Added block.stl: a relief, N levels", ONE Roughing to 19 mm, Prepare shows the
 //      STL card (file, Up +Z, Units mm, size 120 x 80 x 19 mm) above the cut card; Up -Z re-slices (notice "Replaced with ...", the card -Z); the
-//      footer's Undo puts +Z back.
+//      footer's Undo puts +Z back. (TASK S3: a click on the relief only selects it; its Roughing is opened from its row to show the cut card, then Cancel.)
 //   2. the 10-degree drafted pocket, as it opens: the 3D Review has 9 levels (8 terraces in the pocket + the band round the part at 19 mm);
 //      Generate Shaper SVG writes 9 pockets: 19, then 1..8 mm.
 //   3. the hemisphere dome, as it opens: the 3D Review has a level every 1 mm (the 0.03 mm band at 29 mm on the dome's foot only where wider than
@@ -25,6 +25,7 @@ import { resetBufferLive } from './helpers/reset-buffer.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js'; // a named design lives in the (fake, in-memory) Drive, as for a signed-in user
 import * as M from './helpers/stl-mesh.js';
+import { openOpLive } from './helpers/prepare-open-live.js'; // TASK S3: a click on the relief only selects it; its operation is opened to show its card
 
 const EVIDENCE_DIR = path.resolve('.evidence/790');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -129,11 +130,14 @@ try {
   assert.deepStrictEqual(await plan(), ['roughing@19'], '1: ONE Roughing to the full height');
   assert.deepStrictEqual(await card(), { name: 'block.stl', up: '+Z', unit: 'mm', size: '120 × 80 × 19 mm', open: 'true' }, '1: the STL card');
   assert.strictEqual(await evalJs(`(() => { const s = document.querySelector('#review-stock-thickness'); return s.value; })()`), '19', '1: the stock thickness = the height');
-  await clickWorld(60, -40); // the relief: the cut card shows under the STL card
-  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, '1: the cut card');
+  await clickWorld(60, -40); // the relief: selected (TASK S3: no card), then its Roughing OPENED (its row, Edit): its card shows under the STL card
+  await waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('#prepare-panel .cut-card').hidden`, '1: the relief selected (no card)');
+  await openOpLive({ evalJs, waitFor, clickEl }, await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().find((o) => o.type === 'roughing').id)`));
   const stack = await evalJs(`(() => { const a = document.querySelector('#prepare-panel .stl-card').getBoundingClientRect(), b = document.querySelector('#prepare-panel .cut-card').getBoundingClientRect(); return { stlBottom: Math.round(a.bottom), cutTop: Math.round(b.top), sameColumn: Math.abs(a.left - b.left) < 1 }; })()`);
   assert.ok(stack.sameColumn && stack.cutTop >= stack.stlBottom, '1: the cut card sits under the STL card: ' + JSON.stringify(stack));
   await shot('1-desktop-card.png', ['#prepare-panel .stl-card', '#prepare-panel .cut-card']);
+  await clickEl('#prepare-panel .cut-cancel'); // (TASK S3: closed again, nothing changed: the re-slice below is its own step)
+  await waitFor(`document.querySelector('#prepare-panel .cut-card').hidden`, '1: the card closed');
   await clickEl('.stl-ups .cut-preset[data-value="-Z"]');
   await waitFor(`/^Replaced with block\\.stl: a relief/.test(document.getElementById('prepare-notice').textContent)`, '1: -Z re-sliced');
   assert.deepStrictEqual([await plan(), (await card()).up], [['roughing@19'], '−Z'], '1: upside down: the relief, -Z');
@@ -176,7 +180,7 @@ try {
   await evalJs(CREATE_NAMED_DESIGN('shaper', 'STL 790'));
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000); await waitForApp('design-canvas'); await sleep(600);
   await openStl(BLOCK, '4');
-  await waitFor(`import('/packages/ui/project-store.js').then(async (m) => { const d = await m.getProjectStore().loadCurrent(); const h = d && d.document && d.document.hosts; return !!(h && h.shaper && h.shaper.stl && h.shaper.stl.name === 'block.stl'); })`, '4: autosaved with its STL', 15000);
+  await waitFor(`import('/packages/ui/project-store.js').then(async (m) => { const d = await m.getProjectStore().loadCurrent(); const h = d && d.document && d.document.hosts; return !!(h && h.shaper && Array.isArray(h.shaper.stl) && h.shaper.stl.length === 1 && h.shaper.stl[0].name === 'block.stl'); })`, '4: autosaved with its STL (TASK 841: the list of its STL sources)', 15000);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000); await waitForApp('design-canvas'); await sleep(800);
   if (await evalJs(`document.getElementById('view-prepare').hidden`)) await openStage('prepare');
   await waitFor(`!document.querySelector('#prepare-panel .stl-card').hidden`, '4: the card after the reload');

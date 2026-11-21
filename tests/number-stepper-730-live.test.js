@@ -1,6 +1,7 @@
 // tests/number-stepper-730-live.test.js — TASK 730: the − / + steppers in the real page, with real mouse clicks (desktop 1280 x 800) and real touch taps (phone 390 x 844):
 //   the Prepare cut card (Depth, Offset with its flip kept, Bit diameter with its presets kept) and the Review card (Stock thickness) (TASK 741: the V-carve panel's steppers went with V-carve).
 //   Each press changes its value by its step, clamps at its min, press-and-hold repeats, the targets are >= 44 px on the phone, nothing overflows at 390.
+//   TASK S3: the Pocket is made with Prepare's operations toolbar (a shape click shows no card).
 // Screenshots to EVIDENCE_DIR (or .evidence/730/): cut-card-desktop.png, review-stock-desktop.png, cut-card-phone.png, review-stock-phone.png.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -91,10 +92,9 @@ try {
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-card')).display`), 'none', label + ': no selection -> no cut card');
     await shot(`prepare-nothing-selected-${label}.png`);
     await clickWorld(0, -20); // the rectangle's top edge
-    await waitFor(`!document.querySelector('.cut-card').hidden`, 'the cut card shows for the selected loop');
-    await clickEl('#prepare-panel .cut-type-trigger');
-    await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-    await clickEl('.cut-type-opt[data-id="pocket"]');
+    // TASK S3: a shape click shows no card; the operations toolbar's Pocket makes the selected loop's new Pocket, open
+    await waitFor(`window.__prepareView.selectedTargets().length === 1 && document.querySelector('.cut-card').hidden`, 'the loop selected, no card');
+    await clickEl('#op-type-pocket');
     await waitFor(`document.querySelector('.cut-type-cur').textContent.toLowerCase().includes('pocket')`, 'Pocket picked');
 
     // a plain Pocket: none of the stepped rows (Adaptive stepping, Step depth, Resolution) shows

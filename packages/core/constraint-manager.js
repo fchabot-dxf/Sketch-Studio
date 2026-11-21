@@ -11,6 +11,7 @@ import { placeForCreation as placeByTable } from './creation-placement.js';
 import { reverseLineInAngleSectors } from './angle-sector.js';
 import { symmetricImpossible } from './symmetric.js';
 import { curveRefusal } from './curve-kinds.js'; // TASK 762: a point held on a curve kind that cannot hold one
+import { textConstraintRefusal } from './text.js'; // TASK 845: only a text's anchor point takes a constraint
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -156,7 +157,9 @@ export class ConstraintManager {
 
         // TASK 762: a point ON a curve whose kind cannot hold one (#core/curve-kinds.js CURVE_REFUSALS pointOnCurve: a Bezier, its control points are
         // shape data, not solver unknowns) is refused with the reason; the point stays where it was placed
-        const onCurveWhy = this.pointOnCurveRefusal(state, type, params);
+        // TASK 845: a constraint on a text's insides (a letter's curve or point, the text shape) is refused the same way: its letters are derived
+        // from the text (#core/text.js textConstraintRefusal); only its anchor point takes one
+        const onCurveWhy = this.pointOnCurveRefusal(state, type, params) || textConstraintRefusal(state, params);
         if (onCurveWhy) {
             notify(onCurveWhy, 'warning', 3500);
             dbg.warn('constraints', `[ConstraintManager] ${type} refused: ${onCurveWhy}`);

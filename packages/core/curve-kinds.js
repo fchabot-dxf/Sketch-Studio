@@ -41,14 +41,37 @@ export function num(n) {
 
 // Sample an arc shape into points (start→end) using the SAME path math the renderer uses (TRUE curve, not chord). Needs the DOM (the browser SVG
 // path API); in Node it degrades to the endpoints. (Moved here unchanged from #core/loop-geometry, which re-exports it.)
+// TASK 817: a computation can be handed the samples of a sketch's arcs instead (withArcSamples): a module WORKER has no SVG DOM, so the page samples its
+// arcs here, with the DOM (arcSamplesOf), hands the table over, and the worker's derivation reads exactly those points (the same polygons, the same file
+// as on the page). An arc the table lacks is an error there, never its endpoints in its place.
+let suppliedArcs = null; // { N, byId: { [shape id]: [{x, y}] } } while a withArcSamples computation runs
+/** The samples of every arc of `state` at N points (this function's: the DOM's where there is one), as withArcSamples takes them. */
+export function arcSamplesOf(state, N = 24) {
+  const byId = {};
+  for (const s of state.shapes || []) if (s && s.type === 'arc') byId[s.id] = sampleArc(s, state, N);
+  return { N, byId };
+}
+/** fn() with sampleArc reading `table` (arcSamplesOf's, or null: sampleArc as above). Returns fn's result. */
+export function withArcSamples(table, fn) {
+  const prev = suppliedArcs;
+  suppliedArcs = table || null;
+  try { return fn(); } finally { suppliedArcs = prev; }
+}
 export function sampleArc(s, state, N = 24) {
+  if (suppliedArcs) {
+    const pts = suppliedArcs.N === N ? suppliedArcs.byId[s.id] : undefined;
+    if (!pts) throw new Error(`arc samples not supplied for ${s.id} at ${N} points`);
+    return pts.map((p) => ({ x: p.x, y: p.y }));
+  }
   const [p1, p2, p3] = (s.joints || []).map((id) => state.joints.get(id));
   if (!p1 || !p2 || !p3) return [];
   const d = calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep });
-  if (typeof document === 'undefined' || !document.createElementNS) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
+  // TASK 847: the arc's two ENDS, start -> end (a CENTER arc's joints are [centre, start, end]: p2, p3; this returned the centre p1 for its start)
+  const ends = () => [{ x: p2.x, y: p2.y }, { x: p3.x, y: p3.y }];
+  if (typeof document === 'undefined' || !document.createElementNS) return ends();
   const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d);
   let len = 0; try { len = path.getTotalLength(); } catch (_) {}
-  if (!len) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
+  if (!len) return ends();
   const pts = [];
   for (let i = 0; i <= N; i++) { try { const pt = path.getPointAtLength((i / N) * len); pts.push({ x: pt.x, y: pt.y }); } catch (_) {} }
   return pts;
@@ -206,8 +229,24 @@ export const CURVE_REFUSALS = Object.freeze({
   }),
 });
 
-/** The reason `use` (a CURVE_REFUSALS key) refuses shape s, or null when the use takes it. */
+/** TASK 845: THE uses a TEXT's letter refuses (a curve or a point marked textOutline: #core/text.js; its letters are derived from the text, so a
+ *  tool may not reshape or constrain one alone), with the reason the notice gives. The same keys as CURVE_REFUSALS, plus Offset, Close path, Mirror
+ *  and the two patterns (their copies are tied to their sources by constraints a letter cannot take). A use not listed takes it: Select (the whole
+ *  text: hover, click, drag, the transform box, the hold menu), and the drawing tools, whose snap only lands on a letter's place
+ *  (#ui/input-manager.js toolSnap: a position snap, nothing tied). The text's ANCHOR point is no letter: it takes every point use. */
+const TEXT_LETTER = (what) => `${what}: not available on a text's letters (they are made from the text: double-click it to edit, or Convert to shapes to work on the curves)`;
+export const TEXT_OUTLINE_REFUSALS = Object.freeze(Object.fromEntries([
+  [TOOL_MODES.TRIM, 'Trim'], [TOOL_MODES.BREAK, 'Break'], [TOOL_MODES.CLOSE_PATH, 'Close path'], [TOOL_MODES.FILLET, 'Fillet'], [TOOL_MODES.OFFSET, 'Offset'],
+  [TOOL_MODES.MIRROR, 'Mirror'], [`${TOOL_MODES.MIRROR}:${MIRROR_STEPS.LINE}`, 'Mirror line'], [TOOL_MODES.CIRCULAR_PATTERN, 'Circular Pattern'],
+  [TOOL_MODES.RECTANGULAR_PATTERN, 'Rectangular Pattern'], [TOOL_MODES.DIMENSION, 'Dimension (its anchor point takes one)'],
+  [TOOL_MODES.COINCIDENT, 'Coincident (its anchor point takes one)'], [TOOL_MODES.HORIZONTAL_VERTICAL, 'Horizontal / Vertical'], [TOOL_MODES.PARALLEL, 'Parallel'],
+  [TOOL_MODES.PERPENDICULAR, 'Perpendicular'], [TOOL_MODES.COLLINEAR, 'Collinear'], [TOOL_MODES.TANGENT, 'Tangent'], [TOOL_MODES.EQUAL, 'Equal'],
+  [TOOL_MODES.MIDPOINT, 'Midpoint'], [TOOL_MODES.SYMMETRIC, 'Symmetric'], ['pointOnCurve', 'Point on curve'],
+].map(([use, what]) => [use, TEXT_LETTER(what)])));
+
+/** The reason `use` (a CURVE_REFUSALS key) refuses shape s, or null when the use takes it. TASK 845: a text's letter (s.textOutline, a curve or a
+ *  point) reads TEXT_OUTLINE_REFUSALS instead of its kind's. */
 export function curveRefusal(s, use) {
-  const r = s && CURVE_REFUSALS[s.type];
+  const r = s && (s.textOutline ? TEXT_OUTLINE_REFUSALS : CURVE_REFUSALS[s.type]);
   return (r && r[use]) || null;
 }

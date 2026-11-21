@@ -22,6 +22,8 @@ import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointer
 import { stepOutOfGroup, selectedGroups, pickOwner, selectUnit, shapesInGroup, enteredGroup, isInGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
 import { groupSelection, ungroupSelection, groupMenuActions } from '#ui/group-actions.js'; // TASK 756: THE group commands (keys + menus), every app
 import { beginClosePath, handleClosePathPointerDown, closePathMenuActions } from '#ui/close-path-actions.js'; // TASK 760: Close path (the tool, its menu entry), every app
+import { handleTextPointerDown, commitTextEditor, cancelTextEditor, textMenuActions } from '#ui/input-handlers/text-tool.js'; // TASK 845: the Text tool and its editor, every app
+import { watchTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a text's letters are rebuilt whenever its shape comes back without them (an undo)
 import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
 import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
@@ -270,6 +272,7 @@ export function setupInput(svg, state, opts = {}) {
     hostNotify = typeof opts.notify === 'function' ? opts.notify : showNotification; // TASK 756
     setupSelectionTools(svg, state);
     setupDrawingTools(svg, state);
+    watchTextOutlines(state, { notify: hostNotify }); // TASK 845
     setupConstraintTools(svg, state);
     setupBezierTool(svg, state);
     try { setupBreakTool(svg, state); } catch(_) {}  // TRACE-1
@@ -418,14 +421,17 @@ function nearestGridPoint(svg, e) {
 // TASK 577: the snap a tool gets. The tools that DRAW (a new shape's point) may snap to a locked or hidden sketch as a REFERENCE: the
 // pointer lands on its place (a position-only snap) and binds to nothing, so no point is shared and no constraint ties the new shape to
 // it. Every other tool (select, dimension, constraints, ...) searches only what is editable and visible.
-const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
+const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.TEXT];
+// TASK 845: a snap onto a TEXT's letter (its point or its curve: textOutline) is a POSITION only for a drawing tool, as a locked sketch's is: the point
+// lands there, nothing ties it (a letter takes no constraint: #core/text.js; the text's anchor is no letter and binds as any point does)
+const onTextLetter = (state, snap) => !!snap && (snap.type === 'joint' ? !!(state.joints.get(snap.targetId) || {}).textOutline : !!(snap.shape && snap.shape.textOutline));
 function toolSnap(state, svg, pt, excludeIds, boost, otherSketch = false) {
     const shapes = pickableShapes(state);
     const picked = pickScene(state, shapes);
     const scene = otherSketch ? otherSketchScene(state, picked) : (ACTIVE_SKETCH_SNAP_TOOLS.includes(state.currentTool) ? activeSketchScene(state, picked) : picked);
     if (!DRAW_SNAP_TOOLS.includes(state.currentTool)) return findSnap(scene.joints, scene.shapes, svg, pt, excludeIds, false, false, boost);
     const snap = findSnap(state.joints, shapes, svg, pt, excludeIds, false, false, boost);
-    return snapIsInert(scene.inert, snap) ? asPositionSnap(snap) : snap;
+    return snapIsInert(scene.inert, snap) || onTextLetter(state, snap) ? asPositionSnap(snap) : snap;
 }
 
 function updateSnapTarget(e, svg, state) {
@@ -433,7 +439,7 @@ function updateSnapTarget(e, svg, state) {
     const snapBoost = snapBoostFor(isTouch);
 
     // Determine if we need snap (active operation) or just hover (idle)
-    const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION].includes(state.currentTool);
+    const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION, TOOL_MODES.TEXT].includes(state.currentTool); // TASK 845: the Text tool's anchor snaps
     // BUG-1: a box-select MARQUEE must show ONLY the selection box — never a snap/coincident glyph. The marquee sets
     // state.active.type='marquee' (with NO state.drag), which would otherwise make needsSnap true → a leaked snapTarget
     // → the renderer's icon-coincident near a line. A marquee is NOT a drag-to-snap op, so exclude it.
@@ -692,7 +698,9 @@ function handlePointerDown(e, svg, state) {
 
     // TASK 762: a press on the BODY of a curve whose kind the tool has no maths for (#core/curve-kinds.js CURVE_REFUSALS: a Bezier for Trim, Break,
     // Fillet, Dimension and the constraint tools) is refused with the reason, the tool kept, nothing changed. (A dimension being placed, or a glyph / label under the pointer, takes the press.)
-    const refused = !hitJoint && !hitConstraint && hitShape && hitShape.shape && !state.placingConstraint ? curveRefusal(hitShape.shape, state.currentTool) : null;
+    // TASK 845: and a press on a TEXT's letter, its curve or its point (marked textOutline: the uses #core/curve-kinds.js TEXT_OUTLINE_REFUSALS lists)
+    const refusedOn = hitConstraint || state.placingConstraint ? null : (!hitJoint && hitShape && hitShape.shape) ? hitShape.shape : (hitJoint && hitJoint.j && hitJoint.j.textOutline ? hitJoint.j : null);
+    const refused = refusedOn ? curveRefusal(refusedOn, state.currentTool) : null;
     if (refused) { showNotification(refused, 'warning'); return true; }
 
     let handled = false;
@@ -715,6 +723,9 @@ function handlePointerDown(e, svg, state) {
             break;
         case TOOL_MODES.BEZIER:
             handled = handleBezierPointerDown(e, svg, state, w);
+            break;
+        case TOOL_MODES.TEXT: // TASK 845: the anchor where the press is (snapped like a drawing tool's point), then the editor
+            handled = handleTextPointerDown(e, svg, state, clickSnap || state.snapTarget, w, hostNotify);
             break;
         case TOOL_MODES.BREAK:  // TRACE-1
             try { handled = handleBreakPointerDown(e, svg, state, state.view); } catch(_) {}
@@ -1210,7 +1221,7 @@ export function sketchHistory(state) {
 // on a preselection first). TASK 740: every ribbon tool and constraint; the key runs switchToTool, which is what its ribbon button runs.
 export const TOOL_SHORTCUTS = Object.freeze({
     'tool.line': 'line', 'tool.rect': 'rect', 'tool.circle': 'circle', 'tool.arc': 'arc', // drawing tools
-    'tool.slot': TOOL_MODES.SLOT, 'tool.polygon': TOOL_MODES.POLYGON, 'tool.bezier': TOOL_MODES.BEZIER,
+    'tool.slot': TOOL_MODES.SLOT, 'tool.polygon': TOOL_MODES.POLYGON, 'tool.bezier': TOOL_MODES.BEZIER, 'tool.text': TOOL_MODES.TEXT, // TASK 845
     'tool.trim': TOOL_MODES.TRIM, 'tool.break': TOOL_MODES.BREAK, 'tool.fillet': TOOL_MODES.FILLET, 'tool.offset': TOOL_MODES.OFFSET, // modify
     'tool.closePath': TOOL_MODES.CLOSE_PATH, // TASK 760
     'tool.mirror': TOOL_MODES.MIRROR, 'tool.circularPattern': TOOL_MODES.CIRCULAR_PATTERN, 'tool.rectangularPattern': TOOL_MODES.RECTANGULAR_PATTERN,
@@ -1438,6 +1449,7 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
         moveToNewSketch: () => { const r = moveSelectionToNewSketch(state); if (!r.ok) showNotification('Cannot move to a new sketch: ' + r.reason + '.', 'warning'); },
         moveToSketch: (id) => { const r = moveSelectionToSketch(state, id); if (!r.ok) showNotification('Cannot move to that sketch: ' + r.reason + '.', 'warning'); },
         ...groupMenuActions(state, hostNotify), // TASK 756: Group / Ungroup / Enter group / Leave group
+        ...textMenuActions(state, () => canvasSvg || inputCtx.getCanvasSvg?.(), hostNotify), // TASK 845: Edit text / Convert to shapes (one text selected)
         ...closePathMenuActions(state, hostNotify), // TASK 760: Close path
     };
     const items = contextMenuItems(target.kind === 'dimension' || target.kind === 'constraint' ? target.kind : 'geometry', { target, actions });
@@ -1509,6 +1521,7 @@ export const showDimInput = showEditInput;
 
 // Helper: Switch the active tool programmatically with UI update fallback
 export function switchToTool(state, toolName) {
+    commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
     state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
     // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
     // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
@@ -1594,6 +1607,7 @@ export function handleDelete(state) {
 
 function handleEscape(state) {
     if (cancelTransformGesture(state)) return; // TASK 753: Esc during a box handle drag puts the group back (the selection stays)
+    cancelTextEditor(); // TASK 845: Esc while the text editor is open (the canvas had the keys) cancels the edit
     // If a dimension placement is in progress, cancel it and remove the temporary constraint
     try {
         if (state.currentTool === TOOL_MODES.DIMENSION) {

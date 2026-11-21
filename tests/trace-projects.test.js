@@ -56,7 +56,7 @@ await (async () => {
       ['Pen Plotter', '/apps/penplotter/index.html', `!!window.__sketch`],
       ['Trace', '/apps/trace/index.html', `!!document.getElementById('tab-edit')`],
     ];
-    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export', 'style', 'settings', 'log', 'debug', 'tune', 'fusion-addin', 'open-stl', 'feedback']); // each host's declared extras (hostActions): download/export/settings/tools moved into ☰ menu (TASK 602, 619); fusion-addin = Shaper's add-in download (TASK 733); open-stl = Shaper's Open STL (TASK 790)
+    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export', 'style', 'settings', 'log', 'debug', 'tune', 'fusion-addin', 'open-stl', 'insert-stl', 'feedback']); // each host's declared extras (hostActions): download/export/settings/tools moved into ☰ menu (TASK 602, 619); fusion-addin = Shaper's add-in download (TASK 733); open-stl = Shaper's Open STL (TASK 790), insert-stl its Insert STL (TASK 841)
     const menus = {};
     for (const [name, url, ready] of apps) {
       await goto(url);
@@ -68,9 +68,9 @@ await (async () => {
     const common = (m) => m.filter(([id]) => !EXTRAS.has(id));
     const base = common(menus['SketchStudio']);
     for (const name of Object.keys(menus)) assert.deepStrictEqual(common(menus[name]), base, name + ': the same File menu items, same order, same labels as SketchStudio');
-    assert.deepStrictEqual(base.map(([id]) => id), ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file'], 'the shared items (Save to Google Drive shows signed in only)');
-    assert.deepStrictEqual(menus['Trace'].slice(base.length).map(([id]) => id), ['download-svg', 'download-dxf', 'log', 'feedback'], 'Trace keeps its Download SVG / DXF + Log, then the shared Rate & feedback item (TASK 830), after the shared items');
-    console.log('File menus equal across the four apps; Trace extras:', JSON.stringify(menus['Trace'].slice(base.length)));
+    assert.deepStrictEqual(base.map(([id]) => id), ['new-design', 'templates', 'save', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'about'], 'the shared items (Save to Google Drive shows signed in only; TASK 828: About, the site item, last)');
+    assert.deepStrictEqual(menus['Trace'].map(([id]) => id).filter((id) => EXTRAS.has(id)), ['download-svg', 'download-dxf', 'log', 'feedback'], 'Trace keeps its Download SVG / DXF + Log, then the shared Rate & feedback item (TASK 830), after the shared items');
+    console.log('File menus equal across the four apps; Trace extras:', JSON.stringify(menus['Trace'].filter(([id]) => EXTRAS.has(id))));
 
     // ── B. Trace: import into Edit, parameters, Save as, reload ──────────────────────────────────────────────────────────────────────────────
     await loadTrace();

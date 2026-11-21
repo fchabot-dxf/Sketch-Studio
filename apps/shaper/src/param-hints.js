@@ -3,8 +3,7 @@
 // bindHint in hint.js) read every label AND every hint from here (TASK 805: a hint shows as a tooltip at the cursor, never as text in the card); no label text that this table has is left in the markup.
 //   label  the name shown on the card (a parameter) or in the menu row (a choice)
 //   hint   one or two short sentences in plain words: what it does and, where it matters, what the Origin does with it. A string, or a function of the
-//          card's context ({ loop, pocket, online }) when the sentence depends on another setting (Finish allowance follows the Loop box; TASK 775: Lead-in
-//          says where its leg goes, a pocket's or a line's; Tab width on an On line cut is a gap in the line). Never a length or a unit: the
+//          card's context ({ loop, pocket, online }) when the sentence depends on another setting (Finish allowance follows the Loop box; Tab width on an On line cut is a gap in the line). Never a length or a unit: the
 //          document may be inches or mm.
 //   items  the ids of the entries whose hints are listed under this one, one line each (the Hold part modes, the Export buttons)
 // CHOICES (a cut type, a clearing pattern, a cutter shape, a hold-part mode) take their LABEL from their own declaration (CUT_TYPES.menuLabel,
@@ -12,7 +11,6 @@
 // this table adds their hint. Their id here is `<parameter>:<choice id>` (choiceId below).
 import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
-import { LEAD_IN } from '#core/lead-in.js'; // TASK 775: the Lead-in choices (Off | On) and sides (Outside | Inside)
 import { ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule, a Contour's walls
 
 
@@ -35,6 +33,11 @@ const PARAMS = {
   opDuplicate: { label: 'Duplicate', hint: 'A copy of this operation, with the same type, settings and shapes, to change separately.' },
   opOk: { label: 'OK', hint: 'Keeps the changes: one step of Undo.' },
   opCancel: { label: 'Cancel', hint: 'Puts the operation back as it was when you opened it (Esc does the same).' },
+  // TASK 817 (owner turns 2745-2748): toolpaths are made on OK, in the background; Preview makes them for the card's settings now, on request
+  opPreview: { label: 'Preview', hint: 'Shows this operation’s paths with the settings in the card now (they are made in the background; the app stays usable). A later change fades them: press again to see the new ones. A preview is not saved, not exported and not a step of Undo; OK makes the paths.' },
+  // TASK S3 addition (owner turns 3046-3047, Fusion style): an operation whose inputs changed since its paths were made is OUT OF DATE (its row's mark) until Recalculate
+  opOutOfDate: { label: 'Out of date', hint: 'Out of date: press Recalculate.' },
+  opRecalculate: { label: 'Recalculate', hint: 'Makes the paths of the out-of-date operations again: the selected ones, or every one when none is selected. They are made in the background; the app stays usable.' },
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
   // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab
@@ -60,13 +63,6 @@ const PARAMS = {
   roughLayout: { label: 'Layout', hint: 'How the levels are cut. The Origin cuts every path from the surface down.', items: ['roughLayout:terraces', 'roughLayout:nested'] },
   // TASK 775 (owner ruling: a closed loop has no start point on the Origin): the 770 / owner wording
   loop: { label: 'Loop', hint: 'Joins the clearing and the last wall pass into one closed path. Every depth pass then cuts in the same direction; with Loop off, AutoPass runs back along the path, so the direction alternates. The wall is then exact only for the bit size set here.' },
-  // TASK 775 / 778: the TANGENTIAL ARC LEAD-IN rows (On line outlines only)
-  leadIn: { label: 'Lead-in', hint: 'Starts the closed line at the end of a tangential arc in the waste, so you plunge there. The path is then open: AutoPass runs back along it, so the cutting direction alternates.', items: LEAD_IN.modes.map((m) => `leadIn:${m.id}`) },
-  leadInRadius: { label: 'Radius', hint: 'The lead-in curves onto the line along this radius, so the bit joins the cut smoothly instead of turning a corner. Defaults to one bit diameter, reduced to fit (at least the bit radius).' },
-  leadInSweep: { label: 'Sweep', hint: 'How far the lead-in arc curves before meeting the line, in degrees (15° to 180°). Defaults to 90°, reduced if needed to fit.' },
-  leadInLength: { label: 'Length', hint: 'An optional straight line before the lead-in arc, tangent to its start. Defaults to 0 (arc only).' },
-  leadInSide: { label: 'Side', hint: 'Which side of the line the lead-in arc sits on: pick the waste side.', items: LEAD_IN.sides.map((m) => `leadInSide:${m.id}`) },
-  leadInAt: { label: 'Position', hint: 'Where the lead-in meets the line: defaults to the middle of the longest straight edge, or drag the handle on the outline to move it.' },
   rasterAngle: { label: 'Raster angle', hint: 'The direction of the back-and-forth passes: 0° runs left to right, 90° up and down.' },
   adaptiveSteps: { label: 'Adaptive stepping', hint: 'Places the steps by how far they may stray from the slope: more steps where it is nearly flat, fewer where it is steep.' },
   stepDepth: { label: 'Step depth', hint: ({ contour } = {}) => (contour ? 'How much deeper each contour pass goes. Smaller passes follow the slope more closely but take more cuts.' : 'How much deeper each step goes. Smaller steps follow the slope more closely but take more cuts.') }, // TASK 792: a Contour's fine step
@@ -77,6 +73,24 @@ const PARAMS = {
   holdThickness: { label: 'Tab thickness', hint: 'How much wood each tab keeps, up from the bottom of the cut.' },
   skinThickness: { label: 'Skin thickness', hint: 'How thick the layer left at the bottom is.' }, // the holdThickness row with Onion skin
   cutOffset: { label: 'Offset', hint: 'Moves the cut this far from the line, toward its waste side: a part comes out bigger, a hole or pocket smaller. The arrows button switches the side. On line cuts ignore it.' },
+  toolBit: { label: 'Bit', hint: 'A bit from your tool table, or Custom to type its diameter and shape. The operation keeps its own copy of the bit, so changing or deleting the bit in the table later does not change this design.' }, // TASK 842
+  bitCustom: { label: 'Custom', hint: 'Type the bit diameter and pick the cutter shape yourself.' },
+  toolTableEdit: { label: 'Edit tool table…', hint: 'Add, change, duplicate or delete the bits of your tool table. It is saved for all your designs.' },
+  // ── TASK 842: the Tool table window ──
+  toolTable: { label: 'Tool table', hint: 'Your bits, for all your designs. Pick one in an operation’s Bit row; the operation keeps its own copy of it.' },
+  ttAdd: { label: 'Add bit', hint: 'A new bit: its name, its type and its sizes.' },
+  ttName: { label: 'Name', hint: 'What the operations and the tool changes call it, e.g. “1/8 upcut”.' },
+  ttType: { label: 'Type', hint: 'The shape of its tip. Each type has only the sizes it needs.' },
+  ttUnit: { label: 'Unit', hint: 'The unit its sizes are typed and shown in, whatever the document uses. Fractions such as 1/8 or 1 1/2 work too.' },
+  ttDiameter: { label: 'Diameter', hint: 'The cutting diameter. It is written to the file as the bit diameter.' },
+  ttAngle: { label: 'Angle', hint: 'The V-bit’s included angle: the whole V, tip to both sides.' },
+  ttTipDiameter: { label: 'Tip diameter', hint: 'The diameter of the tip (twice the ball’s radius on a ball tip). It is written to the file as the bit diameter: the tip is what cuts on the line at the bottom of a cut.' },
+  ttTaperAngle: { label: 'Taper angle (per side)', hint: 'How much each side of the cone leans from the bit’s axis.' },
+  ttShankDiameter: { label: 'Shank diameter', hint: 'Where the cone stops widening: the bit is never wider than its shank.' },
+  ttCutLength: { label: 'Cutting length', hint: 'How deep the flutes reach. An operation deeper than this shows a note. Leave it empty if you do not know it.' },
+  ttNotes: { label: 'Notes', hint: 'Anything you want to remember about this bit.' },
+  ttCancel: { label: 'Cancel', hint: 'Back to the list without saving.' },
+  ttSave: { label: 'Save', hint: 'Saves the bit to your tool table.' },
   toolDia: { label: 'Bit diameter', hint: 'The bit you plan to use. It is written to the file, and the previews and programmed paths are drawn for it.' },
   cutterShape: { label: 'Cutter shape', hint: 'For the 3D preview and the operations list only: the Origin is not told the shape, so load the matching bit.' },
   // ── the Export step's side cards ──
@@ -101,12 +115,14 @@ const PARAMS = {
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
   // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
+  insertStlTool: { label: 'STL', hint: 'Insert STL: adds a 3D part (an STL file) as one more relief, its own Roughing, placed clear of the other shapes. Nothing else changes.' }, // TASK 841: the Prepare toolbar's INSERT section
   openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807
-  stlCard: { label: 'STL', hint: 'The 3D part this design was sliced from. Changing Up or Units slices it again and replaces the design; Undo brings the previous one back.' },
+  insertStl: { label: 'Insert STL…', hint: 'Adds a 3D part (an STL file) to the design as one more relief: its own Roughing, level by level, placed in the view clear of the other shapes. Nothing else changes, the board thickness included.' }, // TASK 841
+  stlCard: { label: 'STL', hint: 'The 3D part this relief was sliced from (the selected relief). Changing Up or Units slices it again and replaces that part where it is; Undo brings the previous one back.' }, // TASK 841: one per relief
   stlUp: { label: 'Up', hint: 'Which side of the part faces up, toward the bit. Only what can be reached from that side is cut.' },
   stlOrient: { label: 'Orient…', hint: 'Shows the part in 3D: click the face that sits on the bed (any face, any angle) and the part turns to rest on it. Done slices it again; Cancel leaves it as it was.' }, // TASK 808
   stlUnits: { label: 'Units', hint: 'What one unit in the STL file is: STL files do not say.' },
-  stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. The height is the board thickness too.' },
+  stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. An opened STL’s height is the board thickness too; an inserted one leaves the board as it is.' }, // TASK 841
 };
 
 /** The hints of the choices, by parameter then choice id (their labels are their own declarations': CHOICE_SOURCES). */
@@ -154,14 +170,8 @@ const CHOICE_HINTS = {
     endmill: 'Flat tip: flat floors and square walls.',
     ballnose: 'Rounded tip: rounded grooves and soft floor edges.',
     vbit: 'Pointed tip, for V-grooves and chamfers. Pick its angle under it.',
-  },
-  leadIn: { // TASK 775 / 778
-    off: 'A closed path: it has no start point, plunge anywhere on it.',
-    on: 'The path starts at the end of the lead-in arc, in the waste.',
-  },
-  leadInSide: {
-    outside: 'The lead-in arc curves in from outside the shape.',
-    inside: 'The lead-in arc curves in from inside the shape.',
+    taperball: 'A small rounded tip on a cone: fine 3D detail with a strong shank. Comes from the tool table.', // TASK 842
+    taperflat: 'A small flat tip on a cone: fine detail with a strong shank. Comes from the tool table.',
   },
   holdPart: {
     off: 'Nothing holds it: the part comes free when the cut goes through.',
@@ -175,8 +185,6 @@ const CHOICE_SOURCES = {
   clearing: CLEARING_CHOICES.map((c) => ({ id: c.id, label: c.label })),
   cutterShape: CUTTER_SHAPES.map((s) => ({ id: s.id, label: s.label })),
   holdPart: HOLD_PART.modes.map((m) => ({ id: m.id, label: m.label })),
-  leadIn: LEAD_IN.modes.map((m) => ({ id: m.id, label: m.label })), // TASK 775
-  leadInSide: LEAD_IN.sides.map((m) => ({ id: m.id, label: m.label })),
   roughLayout: ROUGH_LAYOUT.layouts.map((l) => ({ id: l.id, label: l.label })), // TASK 792: Roughing's layout
   boundary: ROUGH_BOUNDARY.kinds.map((k) => ({ id: k.id, label: k.label })), // TASK 810: Roughing's boundary
   boundaryTool: ROUGH_BOUNDARY.tools.map((t) => ({ id: t.id, label: t.label })), // TASK 810: its tool rule

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { blockRemote } from './helpers/block-remote.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
-import { openOpLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened to show its card
+import { openOpLive, previewLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened to show its card; TASK 817: its Preview
 
 const EVID = process.env.EVIDENCE_DIR ? path.resolve(process.env.EVIDENCE_DIR) : path.resolve('.evidence/788');
 const PREFIX = process.env.SHOT_PREFIX || 'after';
@@ -58,6 +58,9 @@ try {
   await waitFor(`!document.getElementById('view-prepare').hidden && !!window.__prepareView`, 'prepare ready');
   // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): the pocket's operation OPENED (its list row, then Edit) shows its card
   await openOpLive({ evalJs, waitFor, clickEl }, await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps()[0].id)`));
+  // TASK 817: an open operation's paths are drawn (with their travel arrows and the direction legend) once previewed: the card's Preview, generated in the background
+  const preview = () => previewLive({ clickEl, waitFor });
+  await preview();
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && !document.getElementById('prepare-dir-legend').hidden`, 'card and legend visible');
   await sleep(300);
 
@@ -72,11 +75,12 @@ try {
   assert.ok(pop.left >= 0 && pop.right <= 390 && pop.top >= 0 && pop.bottom <= 844, '9a: the offset popover is fully on screen: ' + JSON.stringify(pop));
   assert.ok(pop.right <= card0.left, '9a: and left of the cut card, not over it');
 
-  // (b) the legend (its box and every child's box) does not overlap the cut card: a tall card (On-line with a Lead-in) reaches down to it
+  // (b) the legend (its box and every child's box) does not overlap the cut card: a tall card (On-line with Tabs: TASK 836, the Lead-in it used is gone) reaches down to it
   await evalJs(`document.querySelector('.cut-offset').blur()`);
   await clickEl('.cut-type-trigger');
   await clickEl('.cut-type-opt[data-id="online"]');
-  await clickEl('.cut-row[data-row="leadIn"] .cut-preset[data-value="true"]');
+  await clickEl('.cut-row[data-row="holdPart"] .cut-preset[data-value="tabs"]');
+  await preview(); // TASK 817: the On line's paths drawn (its legend)
   await sleep(300);
   const card = await box('#prepare-panel .cut-card');
   const legend = await box('#prepare-dir-legend');

@@ -12,6 +12,7 @@ import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: aut
 import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, mountShaperBrowser, shaperBufferOptions, applyShaperUnitDefault } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
+import { createToolTableWindow } from './tool-table-window.js'; // TASK 842: the Tool table window (one per page)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
@@ -24,8 +25,9 @@ import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared s
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
-import { followDesign, planEntries, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes, planLeadInNotes, planLevelsNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes; TASK 775: planLeadInNotes
-import { bitCentrePaths, exportFileName, exportTickLine, exportFileOf } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name
+import { followDesign, planEntries, planReliefItems, planNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 839: planNotes = the Review's info lines (stepped, hold, clearing, levels)
+import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
+import { setPathsPort, workerPort } from './op-paths.js'; // TASK 817: the operations' paths are generated in the background (paths-worker.js)
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
 import { describeOperations } from './operations.js'; // TASK 798: the Export step's line about unticked operations
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
@@ -37,7 +39,7 @@ import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: pro
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
-import { createStlImporter, STL_ICON } from './stl-import.js'; // TASK 790: Open STL (sliced into the Fusion selection payload) + the STL card in Prepare
+import { createStlImporter, STL_ICON, STL_INSERT_ICON, STL_INSERT_MARKUP } from './stl-import.js'; // TASK 790: Open STL (sliced into the Fusion selection payload) + the STL card in Prepare; TASK 841: Insert STL
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
@@ -61,6 +63,20 @@ try { initMode = localStorage.getItem(MODE_KEY); } catch (err) { dbg.warn('shape
 try { forgetOldLogin(localStorage); } catch (err) { dbg.warn('shaper', 'removing the old stored ShaperHub login failed', err && err.message); }
 initMode = resolveInitialMode(initMode, { fusion: fusionMode }); // modes.js: a stored 'simexport' (TASK 459) is Review; a stored 'explore' (TASK 706) or none: Design
 
+// TASK 790 / 841: a drawer entry that picks an STL (`pick`: the importer's chooser + import) — Open STL and Insert STL, declared once each with it. A cancelled
+// chooser does nothing; a file that is not a readable STL is told in the drawer (the design unchanged); an import closes the drawer, then `after(res)`.
+function stlAction({ id, label, tooltip, icon, pick, after = () => {} }) {
+  return { id, label, icon, tooltip, keepOpen: true, onClick: async () => {
+    try {
+      const res = await pick();
+      if (!res) return; // the chooser was cancelled
+      if (!res.ok) { chrome.sidebar.notify(res.message, 'error'); return; } // not a readable STL: the design is unchanged
+      chrome.sidebar.close();
+      if (res.imported) after(res);
+    } catch (e) { chrome.sidebar.notify(e.message || String(e), 'error'); }
+  } };
+}
+
 const chrome = mountAppChrome({
   appId: 'shaper',
   host: fusionMode ? 'fusion' : 'web', // TASK 738: the analytics tell the Fusion 360 palette from the website
@@ -71,17 +87,14 @@ const chrome = mountAppChrome({
   importFile: (text, name) => shaperImporter.importFile(text, name),
   projects: !fusionMode, // TASK 663: single Fusion-mode switch for Projects/file/Drive sidebar + doc tabs; remove or set true to restore
   hostActions: [
-    ...(fusionMode ? [] : [{ id: 'open-stl', label: hintLabel('openStl'), icon: STL_ICON, tooltip: hintText('openStl'), keepOpen: true, onClick: async () => { // TASK 790: Shaper only, not in the Fusion palette (its design comes from Fusion)
-      try {
-        const res = await stlImporter.pickAndOpen();
-        if (!res) return; // the chooser was cancelled
-        if (!res.ok) { chrome.sidebar.notify(res.message, 'error'); return; } // not a readable STL: the design is unchanged
-        chrome.sidebar.close();
-        if (res.imported) nameAfterSelection(res.name); // the design takes the file's name, as a Fusion selection's (TASK 767)
-      } catch (e) { chrome.sidebar.notify(e.message || String(e), 'error'); }
-    } }]),
-    { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: () => { // TASK 770: from the table (the shared drawer shows a tooltip)
-      const payload = generateShaperSvgPayload();
+    // TASK 790: Shaper only, not in the Fusion palette (its design comes from Fusion); the design takes an opened file's name, as a Fusion selection's (TASK 767).
+    // TASK 841: Insert STL next to it (the design keeps its name)
+    ...(fusionMode ? [] : [
+      stlAction({ id: 'open-stl', label: hintLabel('openStl'), tooltip: hintText('openStl'), icon: STL_ICON, pick: () => stlImporter.pickAndOpen(), after: (res) => nameAfterSelection(res.name) }),
+      stlAction({ id: 'insert-stl', label: hintLabel('insertStl'), tooltip: hintText('insertStl'), icon: STL_INSERT_ICON, pick: () => stlImporter.pickAndInsert() }),
+    ]),
+    { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: async () => { // TASK 770: from the table (the shared drawer shows a tooltip)
+      const payload = await generateShaperSvgPayload({ say: (t) => groupStatus(t) }); // TASK 817: waits for the paths being generated
       if (!payload) { groupStatus(emptyExportText()); return; }
       download(designFileName(), payload.svg);
       const status = document.getElementById('simexport-status'); // TASK 803: the Origin-rules warning shows in the Export step's status line
@@ -96,6 +109,9 @@ const chrome = mountAppChrome({
 
 chrome.sidebar.registerView(ADDIN_VIEW_ID, fusionAddinView()); // TASK 733: the drawer view the Fusion add-in entry opens
 
+// TASK 817 (owner turns 2745-2748): the operations' paths (and the Shaper file) are generated in the BACKGROUND, in a module worker running the same derivation module
+// (op-derive.js) the node tests run in-process (op-paths.js): set before anything reads the plan
+setPathsPort(workerPort(new Worker(new URL('./paths-worker.js', import.meta.url), { type: 'module' })));
 const NO_CUTS = 'No cuts assigned — assign cut types in Prepare first.'; // the Export step's message with an empty plan (Generate, Download, the 2D view)
 // TASK 798: the message when the plan has operations but none is ticked (Generate, Download, Send to ShaperHub)
 const NOTHING_TICKED = "Every operation is unticked: tick one in Prepare's Operations list to export it.";
@@ -108,17 +124,26 @@ const TICKED = Object.freeze({ ticked: true }); // TASK 798: the ticked operatio
 // TASK 718: `preview: true` = the 2D view's copy of the same file (export-payload.js: plus its preview-only data-* attributes) and (TASK 743) the operations it lists
 // TASK 798: the file holds the TICKED operations (planEntries({ ticked: true })), on the WHOLE design's page and with its hole ownership (`frame`: every operation):
 // every export lines up on the Origin (one SVG = the ticked operations; owner ruling turn 2537)
-function generateShaperSvgPayload({ preview = false } = {}) {
+// TASK 817: the file waits for every operation whose paths are being generated (`say` = where the plain waiting line goes: "Waiting for 2 operations to finish"), then
+// it is made in the background too (export-payload.js exportFileInBackground): never a stale or partial file
+async function generateShaperSvgPayload({ preview = false, say = () => {} } = {}) {
   if (!planEntries(TICKED).length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  const p = exportFileOf(st, { preview }); // TASK 798: the ticked operations on the whole design's frame (export-payload.js, declared once)
+  const p = await exportWhenGenerated(st, { preview, say, recalculate: (ids) => prepare.recalculate(ids) }); // TASK 798: the ticked operations on the whole design's frame (export-payload.js, declared once); TASK S3: an out-of-date operation waits for Recalculate
   if (!p) return null;
   // TASK 803: every file that leaves the app (Generate, Download, Send to ShaperHub) is checked against the Origin rules (#core/origin-rules.js); a broken rule is a short warning, the file is still allowed
   const warning = preview ? '' : formatOriginRuleWarning(checkOriginRules(p.svg, { targets: ['origin', 'studio'], encoding: exportEncoding() }));
   return { ...p, state: st, warning };
 }
+// TASK 817: the plain waiting line in an element, after a turning ring (index.html .sk-wait-spin)
+// TASK S3: a line with an ACTION (the out-of-date operations' "Recalculate": { label, run }) is the text and the action's button, no ring (nothing is generating yet)
+const sayIn = (el) => (text, action = null) => {
+  if (!el) return;
+  if (action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-wait-action'; b.textContent = action.label; b.addEventListener('click', () => action.run()); el.replaceChildren(`${text}. `, b); return; }
+  const spin = document.createElement('span'); spin.className = 'sk-wait-spin'; spin.setAttribute('aria-hidden', 'true'); el.replaceChildren(spin, text);
+};
 
 // TASK 767: the name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync dialog's file name): the design's name
 // through the ONE rule (export-payload.js exportFileName). The design's name is the document tab's (in Fusion mode: the imported selection's, nameAfterSelection).
@@ -134,10 +159,13 @@ for (const b of document.querySelectorAll('#review-toolbar [data-hint]')) {
   const id = b.dataset.hint;
   mountTooltip({ target: b, getContent: () => ({ title: hintLabel(id), text: hintText(id) }) });
 }
+let generateCall = 0; // TASK S3: a press waiting for out-of-date operations is replaced by a later press (one file after the Recalculate)
 if (btnGenerateSvg) {
-  btnGenerateSvg.addEventListener('click', () => {
+  btnGenerateSvg.addEventListener('click', async () => {
     const status = document.getElementById('simexport-status');
-    const payload = generateShaperSvgPayload();
+    const call = ++generateCall;
+    const payload = await generateShaperSvgPayload({ say: sayIn(status) }); // TASK 817: waits for the paths being generated
+    if (call !== generateCall) return;
     if (!payload) { if (status) status.textContent = emptyExportText(); return; }
     const name = designFileName();
     download(name, payload.svg);
@@ -497,7 +525,7 @@ async function sendToShaperHub(mode) {
   if (sendBusy) return;
   const remotePath = mode === 'new' ? currentRemotePath : pendingQuestion ? pendingQuestion.path : null;
   if (remotePath == null) return;
-  const payload = generateShaperSvgPayload();
+  const payload = await generateShaperSvgPayload({ say: (t) => showSyncStatus('is-loading', t) }); // TASK 817: waits for the paths being generated
   if (!payload) {
     showSyncStatus('is-error', 'No cuts assigned in Prepare.');
     return;
@@ -592,11 +620,22 @@ let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thick
 // SP1c-f, TASK 463, TASK 472 (prepare-stage.js): the Prepare view, the cut-settings card, every cut-plan edit as ONE step of the shared history, the cut
 // plan in the sketch's undo snapshots, the Ctrl+Z / Ctrl+Y keys while Prepare shows, the one-line notice
 const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
+const toolTableWindow = createToolTableWindow(); // TASK 842: saved in the settings store; the cut card follows a change through its settings subscription (prepare-stage.js)
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
-  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), // TASK 743: the operations list
+  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), ribbonEl: document.getElementById('prepare-ribbon'), // TASK 743: the operations list; TASK S3: the operations toolbar
   ensureSketch, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
+  // TASK 841: the toolbar's INSERT section, first: STL = Insert STL (the drawer's entry, the same import); a file that is not a readable STL is said in Prepare's notice
+  leadGroups: [{ label: 'Insert', buttons: [{ id: 'prepare-insert-stl', label: hintLabel('insertStlTool'), hint: hintText('insertStlTool'),
+    svg: `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${STL_INSERT_MARKUP}</svg>`, onClick: () => insertStlFromToolbar() }] }],
+  openToolTable: () => toolTableWindow.open(), // TASK 842: the cut card's "Edit tool table..."
 });
+async function insertStlFromToolbar() {
+  try {
+    const res = await stlImporter.pickAndInsert();
+    if (res && !res.ok) prepare.notice(res.message, true); // cancelled (null): nothing; not a readable STL: the design is unchanged
+  } catch (e) { prepare.notice(e.message || String(e), true); }
+}
 // TASK 664 / 790: what the page refreshes after a selection replaced the design (a Fusion selection, an STL): the Review card's thickness, the panels, the history buttons, the Review
 const afterSelectionImport = () => {
   showStockThickness();
@@ -606,7 +645,8 @@ const afterSelectionImport = () => {
 };
 // TASK 790: Open STL (the drawer entry above) and the STL card at the top of Prepare's right column (stl-import.js, declared once: the node test kit calls it too)
 const stlImporter = createStlImporter({ ensureSketch, getController: () => designController, prepare, panelEl: document.getElementById('prepare-panel'),
-  showPrepare: () => modes.showMode('prepare'), afterImport: afterSelectionImport, notice: (text, isError) => prepare.notice(text, isError) });
+  showPrepare: () => modes.showMode('prepare'), afterImport: afterSelectionImport, notice: (text, isError) => prepare.notice(text, isError),
+  getView: () => (modes.current() === 'prepare' && prepare.view() ? prepare.view().view : designController.state.view) }); // TASK 841: an inserted STL lands in the view the user is looking at
 
 applyShaperUnitDefault(); // U3b (design-canvas.js, declared once: the node test kit calls it too)
 
@@ -710,7 +750,7 @@ const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
   // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
-  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(TICKED), ...planHoldNotes(st, TICKED), ...planClearingNotes(st, TICKED), ...planLeadInNotes(st, TICKED), ...planLevelsNotes(st, TICKED)] }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
+  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: planNotes(st, TICKED) }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing; TASK 839: assembled in ONE place (cut-plan.js planNotes: a line the same for every operation once)
 };
 const reviewSig = (st) => JSON.stringify([storeSignature(), getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
   SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
@@ -723,9 +763,11 @@ try { const v = localStorage.getItem(REVIEW_VIEW_KEY); if (v === '2d' || v === '
 const REVIEW_LOOK_KEY = 'shaper-review-look';
 let reviewLook = normaliseLook(null);
 try { const s = localStorage.getItem(REVIEW_LOOK_KEY); if (s) reviewLook = normaliseLook(JSON.parse(s)); } catch (err) { dbg.warn('shaper', 'REVIEW_LOOK_KEY read failed', err && err.message); }
+let reviewCall = 0;
+const preview2d = { sig: null, value: null }; // TASK 817: the 2D / Paths view's file (made in the background) and the Review signature it was made for
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
-  getPreview: () => { const p = generateShaperSvgPayload({ preview: true }); return p ? { svg: p.svg, ops: p.ops, bitPaths: bitCentrePaths(p.state, p.written) } : null; }, // TASK 743: + the operations (display only); TASK 793: + the bit-centre paths (the Paths view)
+  getPreview: () => preview2d.value, // TASK 743: + the operations (display only); TASK 793: + the bit-centre paths (the Paths view); TASK 817: made in the background before the refresh (enterReview)
 });
 function showReviewViewMode() {
   const is2d = reviewViewMode !== '3d'; // TASK 793: 2D and Paths are the one flat view (export-preview.js), drawn two ways
@@ -753,8 +795,21 @@ function showTickLine(st) {
 }
 async function enterReview(st) {
   showTickLine(st);
-  if (reviewViewMode !== '3d') { showStockThickness(); exportPreview.refresh(reviewSig(st)); return; } // TASK 718: the same trigger rebuilds the 2D view
+  const call = ++reviewCall; // TASK 817: the last call wins (the views wait for the paths being generated and for the file made in the background)
+  if (reviewViewMode !== '3d') { // TASK 718: the same trigger rebuilds the 2D view
+    showStockThickness();
+    const sig = reviewSig(st);
+    if (sig !== preview2d.sig) {
+      const p = await generateShaperSvgPayload({ preview: true, say: sayIn(document.getElementById('review-2d-info')) });
+      if (call !== reviewCall) return;
+      preview2d.value = p ? { svg: p.svg, ops: p.ops, bitPaths: p.bitPaths } : null; preview2d.sig = sig;
+    }
+    exportPreview.refresh(sig);
+    return;
+  }
   const info = document.getElementById('review-info');
+  await whenGenerated(st, sayIn(info), { recalculate: (ids) => prepare.recalculate(ids) }); // TASK 817: the 3D board is built from the generated paths (TASK S3: never out-of-date ones)
+  if (call !== reviewCall) return;
   try {
     if (!reviewView) {
       info.textContent = 'Loading 3D…';
@@ -766,7 +821,7 @@ async function enterReview(st) {
 }
 {
   const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,
-    onChange: () => { if (reviewViewMode !== '3d') exportPreview.refresh(reviewSig(designController.state)); else if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card
+    onChange: () => { if (reviewViewMode !== '3d') enterReview(designController.state); else if (reviewView) reviewView.refresh(reviewSig(designController.state)); } }); // TASK 583 (stock-card.js): the thickness field of the Review card; TASK 817: the 2D file is made again (in the background)
   showStockThickness = stockCard.show;
   SettingsManager.subscribe((key) => { if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && modes.current() === 'review' && designController) enterReview(designController.state); });
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());

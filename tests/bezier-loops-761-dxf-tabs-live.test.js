@@ -1,7 +1,7 @@
 // tests/bezier-loops-761-dxf-tabs-live.test.js — TASK 761: a DXF whose outline holds a SPLINE (3 lines + a cubic, as Fusion writes it) dropped on Shaper's
 // Design canvas (desktop 1280 x 800, real mouse; the page tools of tests/helpers/pocket-live.js):
 //  1. the import makes 3 lines + 1 bezier, and the page's findLoops ONE loop of them;
-//  2. Prepare: a click inside picks the region, Outside is offered and taken, 18 mm deep; Hold part -> Tabs: the tab marks and gap strips are drawn, one tab
+//  2. Prepare: a click inside picks the region, Outside is offered and taken (TASK S3: the operations toolbar's button), 18 mm deep; Hold part -> Tabs: the tab marks and gap strips are drawn, one tab
 //     on the curve (the bezier is one segment of the hold part's walk) (screenshot, zoomed on the curve);
 //  3. the download: the pass writes the outline with its cubic `C`; the gap strips are closed paths.
 import assert from 'node:assert';
@@ -41,12 +41,10 @@ try {
   await openMode('prepare');
   await waitFor(`document.querySelectorAll('#prepare-world-group [data-shape-id]').length === 4`, 'Prepare draws the 4 edges');
   await clickWorld((box[0] + box[2]) / 2, (box[1] + box[3]) / 2);
-  await waitFor(`!document.querySelector('.cut-card').hidden`, '2: a click inside picks the region');
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-  out.menu = await evalJs(`Object.fromEntries([...document.querySelectorAll('.cut-type-menu .cut-type-opt')].map((o) => [o.dataset.id, !o.disabled]))`);
-  assert.deepStrictEqual([out.menu.interior, out.menu.exterior, out.menu.pocket], [true, true, true], '2: Inside / Outside / Pocket offered');
-  await clickEl('.cut-type-opt[data-id="exterior"]');
+  await waitFor(`window.__prepareView.selectedTargets().length === 1`, '2: a click inside picks the region'); // TASK S3: a click shows no card; the toolbar makes the operation
+  out.menu = await evalJs(`Object.fromEntries([...document.querySelectorAll('#prepare-ribbon [id^="op-type-"]')].map((o) => [o.id.slice(8), !o.disabled]))`);
+  assert.deepStrictEqual([out.menu.interior, out.menu.exterior, out.menu.pocket], [true, true, true], '2: Inside / Outside / Pocket offered (the toolbar)');
+  await clickEl('#op-type-exterior');
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Outside'`, 'Outside picked');
   await typeField('.cut-depth', '18');
   await clickEl('.cut-row[data-row="holdPart"] .cut-preset[data-value="tabs"]');

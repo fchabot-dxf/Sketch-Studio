@@ -55,6 +55,7 @@ const CREATE = [
   { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon',  label: 'Polygon', shortcut: 'tool.polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
   { tool: TOOL_MODES.ARC,     icon: 'icon-tool-arc-cse',  label: 'Arc', shortcut: 'tool.arc' }, // single-mode in the source (no dropdown)
   { tool: TOOL_MODES.BEZIER,  icon: 'icon-tool-bezier',   label: 'Bezier', shortcut: 'tool.bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
+  { tool: TOOL_MODES.TEXT,    icon: 'icon-tool-text',     label: 'Text', shortcut: 'tool.text' }, // TASK 845: editable text (#ui/input-handlers/text-tool.js)
 ];
 // TRACE-1: Edit/modify tools — trim + break. No cursor-manager symbols yet; icons provided as SVG inline.
 const EDIT = [
@@ -300,16 +301,18 @@ const px = (v) => parseFloat(v) || 0;
  *   TASK 647: a section DECLARES { key, label, tools, fixed?, defaultInBar? }: fixed = always shown whole, no dropdown (Select); defaultInBar = how
  *     many of its first tools are "in the bar" by default (all when absent). Every other tool is in the section's dropdown (its name button).
  *   appId: the host's id (the one it gives app-chrome); the user's layout (checkboxes, order) is saved per appId (#ui/ribbon-layout.js).
- *   extraGroups: [{ label, defaultInBar?, buttons:[{ icon?|svg?, label?, title?, id?, event?, onClick? }] }] — host-appended sections.
+ *   extraGroups: [{ label, fixed?, defaultInBar?, buttons:[{ icon?|svg?, label?, title?, hint?, id?, event?, onClick? }] }] — host-appended sections.
+ *     TASK S3: `fixed` as a built-in section's (every button always shown, in its declared order, no dropdown).
+ *   sketchTools: TASK S3: false = none of the sketcher's sections (Select ... Constrain): the ribbon is the host's extraGroups only (Shaper Prepare's operations toolbar).
  *   on(name, detail): optional event hook ('tool' on a tool switch, 'rectMode', 'action' for extra buttons).
  *   (TASK 677: the Parameters window's opener moved from Inspect to the shared footer, #ui/app-footer.js; its opt-out is the footer's.)
  *   onToolClick(tool): optional host override — when given, a tool-button click (and a rect-variant select, after
  *     state.rectMode is set) calls THIS instead of the internal switchToTool, so a host (e.g. SketchStudio) routes
  *     tool activation to its OWN rich handler. When absent, the ribbon uses switchToTool (Shaper/standalone path).
  */
-export function createToolRibbon({ state, appId = 'default', extraGroups = [], on = null, onToolClick = null, profiles = false, notify = null } = {}) {
+export function createToolRibbon({ state, appId = 'default', extraGroups = [], on = null, onToolClick = null, profiles = false, notify = null, sketchTools = true } = {}) {
   injectStyles();
-  ensureIconSymbols(ICON_IDS);
+  if (sketchTools) ensureIconSymbols(ICON_IDS);
 
   const el = document.createElement('div'); el.className = 'sk-ribbon';
   const toolBtns = []; // { btn, tool } — for active-sync
@@ -429,13 +432,15 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
 
   // TASK 647: the sections, DECLARED (fixed / defaultInBar are data on the section, read by the one layout engine below).
   const SECTION_DECLS = [
-    { key: 'select', label: 'Select', fixed: true, tools: SELECT },
-    { key: 'create', label: 'Create', tools: CREATE },
-    { key: 'modify', label: 'Modify', defaultInBar: 1, tools: profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT }, // TRACE-1: trim + break (+ opt-in profile actions)
-    { key: 'inspect', label: 'Inspect', defaultInBar: 1, tools: INSPECT },
-    { key: 'constrain', label: 'Constrain', tools: [...CONSTRAIN, LOCK] },
+    ...(sketchTools ? [ // TASK S3: a host's own toolbar (sketchTools false) has none of the sketcher's sections
+      { key: 'select', label: 'Select', fixed: true, tools: SELECT },
+      { key: 'create', label: 'Create', tools: CREATE },
+      { key: 'modify', label: 'Modify', defaultInBar: 1, tools: profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT }, // TRACE-1: trim + break (+ opt-in profile actions)
+      { key: 'inspect', label: 'Inspect', defaultInBar: 1, tools: INSPECT },
+      { key: 'constrain', label: 'Constrain', tools: [...CONSTRAIN, LOCK] },
+    ] : []),
     // app-specific groups (Draw / …) appended by the host behave like the built-in ones
-    ...(extraGroups || []).map((g, i) => ({ key: String(g.label || 'group-' + i).toLowerCase(), label: g.label || '', defaultInBar: g.defaultInBar, buttons: g.buttons || [] })),
+    ...(extraGroups || []).map((g, i) => ({ key: String(g.label || 'group-' + i).toLowerCase(), label: g.label || '', fixed: Boolean(g.fixed), defaultInBar: g.defaultInBar, buttons: g.buttons || [] })),
   ];
 
   const sections = SECTION_DECLS.map((d) => {
@@ -647,9 +652,11 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   function refresh() {
     const cur = state && state.currentTool;
     toolBtns.forEach(({ btn, tool }) => btn.classList.toggle('active', tool === cur));
-    const lock = state ? selectionLockState(state) : { has: false, locked: false };
-    lockBtn.disabled = !lock.has;
-    lockBtn.setAttribute('aria-pressed', String(lock.locked));
+    if (lockBtn) { // (TASK S3: a ribbon without the sketcher's sections has no Lock)
+      const lock = state ? selectionLockState(state) : { has: false, locked: false };
+      lockBtn.disabled = !lock.has;
+      lockBtn.setAttribute('aria-pressed', String(lock.locked));
+    }
     // TASK 647: the active tool lives only in its section's dropdown -> the section's name is lit
     sections.forEach((sec) => { if (!sec.fixed) sec.nameEl.classList.toggle('active', sec.items.some((it) => it.tool && it.tool === cur && it.btn.hidden)); });
     syncRows();

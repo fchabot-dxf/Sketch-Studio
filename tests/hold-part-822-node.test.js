@@ -139,7 +139,7 @@ const harness = (app) => {
   const clickAt = (x, y) => { const p = worldToScreen(pc(), { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc() }); };
   const typed = (cls, v) => editStep(app, () => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); });
   const handles = () => qa('#prepare-canvas .sk-tab-handle').map((g) => { const m = /translate\(([-\d.e]+) ([-\d.e]+)\)/.exec(g.getAttribute('transform')); return { g, x: Number(m[1]), y: Number(m[2]), at: Number(g.getAttribute('data-tab-at')) }; });
-  // a pointer drag from a handle to world point `to` (the lead-in handle's drag of task 778, with the pointer)
+  // a pointer drag from a handle to world point `to` (the handle drag of task 778 / 822, with the pointer)
   const drag = (h, to, { moves = [to] } = {}) => {
     const p0 = worldToScreen(pc(), { x: h.x, y: h.y });
     h.g.dispatchEvent(new app.window.PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, button: 0, isPrimary: true, clientX: p0.x, clientY: p0.y }));
@@ -169,8 +169,8 @@ await createNamedDesign(profile, 'shaper', 'Tabs 822');
     drawKeyhole(app);
     st.saveState('draw the keyhole');
     h.pressRaw('.sk-header-tab[data-tab="prepare"]');
-    h.clickAt(0, 0); // inside the circle: the keyhole
-    h.pressEl('.cut-type-trigger'); h.pressEl('.cut-type-opt[data-id="interior"]'); // the quick flow: a new Inside operation, open
+    h.clickAt(0, -L / 2); // inside the keyhole, in its stem (TASK 847: Node arc fallback fixed (847-C): in Node an arc is sampled by its two ENDS, so the keyhole's polygon here is the stem; the circle's centre, the click before, was only inside while the fallback returned [centre, end])
+    h.pressEl('#op-type-interior'); // the quick flow (TASK S3: the operations toolbar): a new Inside operation, open
     opId = app.prepare.openId();
     ok(opId, 'an Inside operation, open');
     h.typed('.cut-depth', '0.156');
@@ -183,7 +183,7 @@ await createNamedDesign(profile, 'shaper', 'Tabs 822');
     ok(h.q('#prepare-canvas .sk-tab-handle .sk-lead-hit').getAttribute('r') === '22' && h.q('#prepare-canvas .sk-tab-handle').classList.contains('sk-lead-handle'), 'the lead-in handle\'s style (sk-lead-handle) and its 44 px target (r 22 px)');
     app.prepare.ok();
     eq(h.handles().length, 0, 'closed (OK): no tab handle');
-    h.clickAt(0, 0);
+    h.clickAt(0, -L / 2); // in the stem (TASK 847, above)
     eq(h.handles().length, 0, 'a click only selects: no tab handle');
     app.prepare.edit(opId);
     hs = h.handles();

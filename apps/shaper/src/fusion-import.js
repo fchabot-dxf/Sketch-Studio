@@ -11,7 +11,7 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { makeProfile, directlyContainedLoops } from '#core/profile-model.js';
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
-import { keyOf, fileShape, setRegionSource } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
+import { keyOf, fileShape, setRegionSource, setRegionFrame } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
 import { storeOps, regionKeys, applyStore, memberOf } from './operations-store.js'; // TASK S1: the operations + regions store
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
@@ -20,6 +20,7 @@ import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design
 import { DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 794: the stock thickness of a design that starts over, when the payload has none
 import { getSelections, setSelections } from './selection-list.js'; // TASK 795: the selection list
 import { buildEntry, keepSettings, priorRecords, dropSelectionGeometry } from './selection-edit.js';
+import { frameOf, placePoint, placeLevels, IDENTITY } from './relief-frame.js'; // TASK 841: a part with levels keeps its own frame (its levels follow it); an inserted STL is placed
 
 const upsert = (list, entry) => (list.some((e) => e.id === entry.id) ? list.map((e) => (e.id === entry.id ? entry : e)) : [...list, entry]);
 
@@ -177,8 +178,13 @@ export function selectionDesignName(source) {
  * imported type / depth as its source) and `stock.thickness`, fits the view, and
  * refreshes Prepare. Called by the Fusion palette (main.js, Fusion mode) and, TASK 790, by Open STL (stl-import.js: #core/stl-slice.js makes the same
  * payload from an STL); the normal Import SVG / DXF is #ui/sketch-import.js.
+ * TASK 841 (Insert STL, stl-import.js): `addAs` = the selection id to ADD the payload as (a new id: a new part; an id already in the list: that part replaced in
+ * place), as a payload's own selectionId does, but never sent to the add-in (fusion: false); `place` = the placement (relief-frame.js, a rotation + move) the
+ * payload's geometry and levels land at (default: where the payload says); `join: false` = its shapes go into NEW operations, never into one that is already
+ * there (cut-plan.js fileShape); `stock` = 'keep' (the stock thickness is not touched) | 'part' (it becomes the payload's) | null (as above: TASK 794);
+ * `fit: false` = the view is left as it is. Every region with levels keeps its part's own FRAME (relief-frame.js: its levels follow its outline when it moves).
  */
-export function importFusionSelection(payload, { controller, prepare = null, onImport = null } = {}) {
+export function importFusionSelection(payload, { controller, prepare = null, onImport = null, addAs = null, place = null, join = true, stock = null, fit = true } = {}) {
   let data = payload;
   if (typeof data === 'string') {
     try { data = JSON.parse(data); } catch (e) { return { ok: false, message: `Invalid selection_data JSON: ${e.message}` }; }
@@ -226,9 +232,14 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
 
   const tol = dedupTolerance(rawLists);
   const levelsMemo = new Map(); // TASK 792: one read per levels list (an STL's outlines share one), a warning when it does not read
+  const at = place || IDENTITY; // TASK 841: where the payload's part lands (its levels with it)
   const levelsOf = (reg) => {
     if (!reg || !Array.isArray(reg.levels)) return null;
-    if (!levelsMemo.has(reg.levels)) { const l = readLevels(reg.levels, { scale, yUp }); if (!l) warnings.push(`${reg.label || 'A region'}: its levels could not be read; imported without them`); levelsMemo.set(reg.levels, l); }
+    if (!levelsMemo.has(reg.levels)) {
+      const l = readLevels(reg.levels, { scale, yUp });
+      if (!l) warnings.push(`${reg.label || 'A region'}: its levels could not be read; imported without them`);
+      levelsMemo.set(reg.levels, l && place ? placeLevels(l, place) : l);
+    }
     return levelsMemo.get(reg.levels);
   };
   const uniquePrims = [];
@@ -275,9 +286,9 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   // TASK 795: a payload WITH a selectionId (the add-in's Add selection) is ADDED to the design (its entry in selection-list.js); the same id again updates that
   // selection in place; a payload without one (Open STL, an old add-in) REPLACES the design as before. `fresh` = the design starts over (a replace, or an add to an
   // empty design): the stock thickness and the operation order are this part's own (TASK 794).
-  const selectionId = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : null;
+  const selectionId = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : typeof addAs === 'string' && addAs ? addAs : null; // TASK 841: addAs
   const prior = selectionId ? getSelections().find((e) => e.id === selectionId) || null : null;
-  const priorRecs = priorRecords(prior);
+  const priorRecs = priorRecords(data.selectionId ? prior : null); // TASK 841: an STL part sliced again (addAs) starts afresh, as a re-slice always did
   const planEmpty = !storeOps().length && !regionKeys().length;
   const fresh = !selectionId || (!prior && st.shapes.length === 0 && planEmpty);
   // TASK 712: the selection replaces the design (see the doc comment): the empty document, and no cut-plan record.
@@ -298,8 +309,10 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     yUp,
   });
 
+  const localOf = new Map(built.joints.map((j) => [j.id, [j.x, j.y]])); // TASK 841: each new joint in the part's own frame (the payload's coordinates)
   for (const j of built.joints) {
-    const entry = { x: j.x, y: j.y };
+    const [x, y] = place ? placePoint(place, j.x, j.y) : [j.x, j.y];
+    const entry = { x, y };
     stampSketch(entry, st);
     st.joints.set(j.id, entry);
   }
@@ -345,7 +358,8 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     }
     const rec = buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings), levelsOf(m.reg));
     setRegionSource(key, rec); // TASK S1: what the import said (a Depth of 'model' follows it)
-    fileShape(key, rec, st);
+    fileShape(key, rec, st, { join });
+    if (rec.levels) setRegionFrame(key, frameOf(st, m.outerLoop.edges, localOf, at)); // TASK 841: the part's own frame: its levels follow its outline
     cutKeys.push(key); cutInfo.set(key, m.reg);
   }
 
@@ -369,7 +383,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     if (!cutKeys.includes(key) && !memberOf(key)) {
       const rec = buildCutRecord(cr.chain, warnings);
       setRegionSource(key, rec);
-      fileShape(key, rec, st);
+      fileShape(key, rec, st, { join });
       cutKeys.push(key); cutInfo.set(key, cr.chain);
     }
   }
@@ -377,16 +391,16 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   // TASK 795: the selection's entry in the list (an update keeps the settings of the regions still there)
   const stockThickness = data.stock && data.stock.thicknessMm != null ? Number(data.stock.thicknessMm) : null;
   const thicknessMm = stockThickness != null && Number.isFinite(stockThickness) && stockThickness > 0 ? stockThickness : null;
-  const entry = buildEntry({ data, sourceName, regionCount: regions.length, sketch, shapes: built.shapes, cutKeys, cutInfo, thicknessMm });
+  const entry = buildEntry({ id: selectionId, data, sourceName, regionCount: regions.length, sketch, shapes: built.shapes, cutKeys, cutInfo, thicknessMm });
   keepSettings(entry, priorRecs, st);
   setSelections(selectionId ? upsert(getSelections(), entry) : [entry]);
 
   // Stock thickness (TASK 794): a fresh start takes this part's (the app's default when the payload has none) and its own operation order; an add to a design that has
-  // parts keeps the order and the stock never gets thinner than the thickest part (or than the user set it).
-  if (fresh) setStock({ ...getStock(), thickness: thicknessMm != null ? thicknessMm : DEFAULT_STOCK.thickness }); // TASK S1: its operations are the ones this import made
-  else if (thicknessMm != null) setStock({ ...getStock(), thickness: Math.max(getStock().thickness, thicknessMm) });
+  // parts keeps the order and the stock never gets thinner than the thickest part (or than the user set it). TASK 841: `stock` 'keep' / 'part' say it instead.
+  if (stock === 'part' || (stock !== 'keep' && fresh)) setStock({ ...getStock(), thickness: thicknessMm != null ? thicknessMm : DEFAULT_STOCK.thickness }); // TASK S1: its operations are the ones this import made
+  else if (stock !== 'keep' && thicknessMm != null) setStock({ ...getStock(), thickness: Math.max(getStock().thickness, thicknessMm) });
 
-  if (controller.svg) {
+  if (controller.svg && fit) {
     fitToDrawing(controller.svg, Object.create(st, { shapes: { value: selectionId ? st.shapes : built.shapes } })); // an added selection: the view frames the whole design
   }
   if (prepare && typeof prepare.afterRestore === 'function') prepare.afterRestore();

@@ -224,7 +224,7 @@ const harness = (app) => {
   const clickRaw = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
   const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
   const menu = () => { pressEl('.cut-type-trigger'); const ids = [...doc.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.disabled ? ':off' : '')); pressEl('.cut-type-trigger'); return ids; };
-  const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
+  const pick = (id) => { if (app.prepare.openId()) { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); } else pressEl(`#op-type-${id}`); }; // TASK S3: an open operation: the card's type menu (a type change); none: the operations toolbar (a NEW operation, open)
   const note = () => [...doc.querySelectorAll('.cut-note div')].map((d) => d.textContent);
   const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((r) => r.style.display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row || r.dataset.param);
   const setFieldRaw = (sel, text) => { const inp = q(sel); inp.value = text; inp.dispatchEvent(new app.window.Event('change')); };
@@ -302,7 +302,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     ok(E.filter((e) => e.type === 'inside').every((e) => e.dia === '3.175 mm'), 'with the Contour\'s bit');
     // the Contour operation's own card (TASK S2: its own Depth; its Wall side greyed: the slope says the side)
     h.openContour(pk2);
-    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['cutDepth', 'topDepth', 'floorAllowance', 'walls', 'stepDepth', 'toolDia', 'cutterShape']], 'Edit contour: the Contour card (TASK 810: its Heights, its Walls, then its step, bit, cutter shape)');
+    eq([h.q('.cut-type-cur').textContent, h.rows()], ['Contour', ['cutDepth', 'topDepth', 'floorAllowance', 'walls', 'stepDepth', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */], 'Edit contour: the Contour card (TASK 810: its Heights, its Walls, then its step, bit, cutter shape)');
     eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'], 'its menu offers every type (TASK S2: a type change of the operation)');
     h.setField('.cut-step-depth', '1');
     eq([V2_PLAN.get(ck).stepDepth, planEntries().filter((e) => e.planKey === ck).length], [1, 1], 'its step is its own (1 mm)');
@@ -318,7 +318,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     h.clickAt(60, -40);
     h.pick('roughing');
     eq([V2_PLAN.get(pk2).cutType, V2_PLAN.get(pk2).finishAllowance], ['roughing', 0], 'Roughing on a part that has a Contour: allowance 0, its own default (the Contour sets nothing)');
-    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'the Roughing card: depth, TASK 810 its Heights (Top, Bottom, Floor allowance), allowance, Contour, adaptive, step, offset, bit, shape');
+    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, 'the Roughing card: depth, TASK 810 its Heights (Top, Bottom, Floor allowance), allowance, Contour, adaptive, step, offset, bit, shape');
     h.setField('.cut-finish-allowance', '0.5');
     h.contour(false);
     eq([contourOf(pk2), V2_PLAN.get(pk2).finishAllowance], [null, 0.5], 'the Contour removed: the allowance stays 0.5 (TASK S2)');

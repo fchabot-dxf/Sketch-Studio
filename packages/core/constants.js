@@ -114,6 +114,7 @@ export const TOOL_MODES = {
   POLYGON: 'polygon', // TASK 483: regular polygon (N plain lines + equal constraints); N = POLYGON_SIDES
   ARC: 'arc',
   BEZIER: 'bezier',
+  TEXT: 'text', // TASK 845: click the text's anchor (baseline start), type it in the inline box (#ui/input-handlers/text-tool.js, #core/text.js)
   TRIM: 'trim',   // TRACE-1: trim a line/polyline segment at intersections
   BREAK: 'break', // TRACE-1: split a line at a clicked point
   CLOSE_PATH: 'closePath', // TASK 760: join the two free ends of an open outline (#core/close-path.js); beside Break in Modify

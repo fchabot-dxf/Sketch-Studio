@@ -305,7 +305,8 @@ export function findOpenChains(state, loops) {
   }
 
   const shapes = state.shapes || [];
-  const candidateShapes = shapes.filter((s) => s && s.id && !loopEdgeIds.has(s.id) && !s.isConstruction); // TASK 478: construction is never a chain either
+  // TASK 478: construction is never a chain either. TASK 845: nor a TEXT shape (#core/text.js: its one joint is its anchor; its letters are the curves)
+  const candidateShapes = shapes.filter((s) => s && s.id && !loopEdgeIds.has(s.id) && !s.isConstruction && s.type !== 'text');
   if (!candidateShapes.length) return [];
 
   const node = buildNodeMap(state);

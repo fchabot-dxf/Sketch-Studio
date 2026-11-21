@@ -63,8 +63,10 @@ export function serializeDocument(state, { hosts } = {}) {
     geometry: {
       // Array of [id, {x,y,fixed,...}] pairs — the SAME shape tests/harness/sketch.js's load() already
       // accepts as one of its input forms, and trivially JSON-safe (a Map is not).
-      joints: Array.from(state.joints.entries()).map(([id, j]) => [id, withoutDragTarget(j)]),
-      shapes: state.shapes.map((s) => ({ ...withoutDragTarget(s), joints: s.joints ? [...s.joints] : [] })),
+      // TASK 845: a text's LETTERS (shapes and joints marked textOutline, #core/text.js) are derived from the text and never stored: the text
+      // shape is (its string, font, style, anchor); its letters are rebuilt from it when the document is read (#ui/text-fonts.js syncTextOutlines)
+      joints: Array.from(state.joints.entries()).filter(([, j]) => !(j && j.textOutline)).map(([id, j]) => [id, withoutDragTarget(j)]),
+      shapes: state.shapes.filter((s) => !(s && s.textOutline)).map((s) => ({ ...withoutDragTarget(s), joints: s.joints ? [...s.joints] : [] })),
       constraints: state.constraints.map((c) => ({
         ...c,
         joints: c.joints ? [...c.joints] : undefined,

@@ -81,6 +81,9 @@ const DEFAULT_SETTINGS = {
     // Task 747: the user's own keyboard shortcuts ({ v: 1, keys: { <shortcut id>: [combo...] } }), ONLY the ids the user changed ([] = no key).
     // Read and written only by #ui/shortcuts.js (it validates the shape on read); local, shared by all four apps, never in a document.
     SHORTCUT_KEYS: { v: 1, keys: {} },
+    // Task 842: Shaper's TOOL TABLE, the user's bit library ({ v: 1, bits: [...] }); null = the table's first-use bits. Read and written only by
+    // apps/shaper/src/tool-table.js (it validates every bit on read); per user, for all his designs (a design keeps a copy of each bit it uses), never in a document.
+    SHAPER_TOOL_TABLE: null,
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,
@@ -138,6 +141,8 @@ export const SYNCED_SETTING_KEYS = Object.freeze([
     'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR', 'INACTIVE_SKETCH_OPACITY',
     // The user's own data kept as settings: the chosen template, his presets, his keyboard shortcuts, his favourite templates
     'STYLE_TEMPLATE', 'STYLE_PRESETS', 'SHORTCUT_KEYS', 'TEMPLATE_FAVOURITES',
+    // Task 842: Shaper's tool table (his bits follow him like his shortcuts do)
+    'SHAPER_TOOL_TABLE',
     // TASK 773b (owner turn 2364: "per account"): the tool-ribbon layout, synced PER APP (SYNCED_BY_PART below)
     'RIBBON_LAYOUT',
 ]);

@@ -224,8 +224,8 @@ export function piecesPoints(pieces) {
   return [...pieces.flatMap((s) => segSamples(s)), pointAt(last, segLen(last))];
 }
 
-/** Nearest point on walk `w` to world point `pt`: { frac (0..1), s, point, dist }. Used when dragging a handle along the outline in Prepare: the lead-in junction
- *  (TASK 778, #core/lead-in) and a tab (TASK 822, holdTabDragAt). */
+/** Nearest point on walk `w` to world point `pt`: { frac (0..1), s, point, dist }. Used when dragging a tab's handle along the outline in Prepare (TASK 822,
+ *  holdTabDragAt). */
 export function nearestWalkFrac(w, pt) {
   let best = null;
   const offer = (i, u, q) => {
@@ -520,7 +520,7 @@ function holdCuts(cuts, rec, state, sink) {
 
 /** The area a bit sweeps along tool-centre paths, at any radius (memoised per radius): `centers` = [{ points: [{x,y}], closed }] -> sweep(radius) =
  *  open rings [{x,y}[]] (outer contours and holes). #core/profile-model deriveCutFootprint draws a cut that carries `sweep` + `centers` with it
- *  (TASK 745's programmed pocket; TASK 775 moved it here from pocket-clearing.js, unchanged: an On line cut's strokes and lead-in use it too). */
+ *  (TASK 745's programmed pocket; TASK 775 moved it here from pocket-clearing.js, unchanged: an On line cut's strokes use it too). */
 export function sweeper(centers) {
   const memo = new Map();
   return (rr) => {
@@ -592,7 +592,7 @@ const heldOwn = (cuts) => (cuts || []).find((c) => c.hold && c.hold.mode === 'ta
 
 /**
  * holdTabDragAt(outerLoop, rec, state, fromAt, worldPt) -> { at, ok, point, cuts } | null — TASK 822: evaluate dragging the tab whose centre is at perimeter fraction
- * `fromAt` (one of tabHandles' `at`) to world point `worldPt` (ONE derivation, as #core/lead-in leadInDragAt; Prepare never lays tabs out itself). The tab goes to
+ * `fromAt` (one of tabHandles' `at`) to world point `worldPt` (ONE derivation; Prepare never lays tabs out itself). The tab goes to
  * the outline's point nearest `worldPt` (`point`); `at` = every tab's centre then (sorted perimeter fractions: the shape's `tabsAt` to store), `cuts` = the hold's
  * cuts with them (the preview: the pass's marks, the strips). ok = false when the tab cannot be there (its gap strips do not fit, it is too near a corner or
  * another tab: the layout would move or drop it): the caller keeps the tab where it was. null when the record makes no tabs.

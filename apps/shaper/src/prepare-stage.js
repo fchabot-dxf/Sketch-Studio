@@ -368,7 +368,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     });
     ribbon.render(ribbonEl);
     // its frame (apps/shaper/index.html #prepare-ribbon-frame) follows the ribbon as laid out: the bar (its height moves the overlays at the top: the Operations list, the
-    // cut card, the notice) or the short viewport's rail (its width moves the ones at the left edge: the Operations list, the direction legend)
+    // notice; the cut card's column only where the bar's buttons reach under it, a phone: --sk-prep-ribbon-hr, so on a desktop the card keeps its height) or the short
+    // viewport's rail (its width moves the ones at the left edge: the Operations list, the direction legend)
     const frame = ribbonEl.parentElement, view = frame && frame.parentElement, win = ribbonEl.ownerDocument.defaultView;
     const place = () => {
       const column = win.getComputedStyle(ribbon.el).flexDirection === 'column';
@@ -376,6 +377,9 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       const r = frame.getBoundingClientRect();
       view.style.setProperty('--sk-prep-ribbon-w', `${column ? Math.round(r.width) : 0}px`);
       view.style.setProperty('--sk-prep-ribbon-h', `${column ? 0 : Math.round(r.height)}px`);
+      const reach = Math.max(0, ...[...ribbon.el.querySelectorAll('.sk-ribbon-group')].map((g) => g.getBoundingClientRect().right));
+      const under = !column && Boolean(panelEl) && reach > panelEl.getBoundingClientRect().left - 12;
+      view.style.setProperty('--sk-prep-ribbon-hr', `${under ? Math.round(r.height) : 0}px`);
     };
     if (frame && view) placeRibbon = place; // (also before Prepare's first fit: mountPrepare)
     if (frame && view && typeof win.ResizeObserver === 'function') new win.ResizeObserver(place).observe(frame);

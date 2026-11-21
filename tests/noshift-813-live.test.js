@@ -77,7 +77,14 @@ const openStage = async (id) => {
   await waitFor(`!document.getElementById('${id === 'design' ? 'design-view' : 'view-' + id}').hidden`, `the ${id} stage`);
   await sleep(300);
 };
+// TASK S3: with no operation open (no card: a shape click shows none) the operations toolbar's button makes the new operation, open; an open operation's type
+// changes in its card's type menu
 const pickType = async (id) => {
+  if (await evalJs(`document.querySelector('#prepare-panel .cut-card').hidden`)) {
+    await clickEl(`#op-type-${id}`);
+    await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the new operation open'); await sleep(250);
+    return;
+  }
   await clickEl('.cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
   await clickEl(`.cut-type-opt[data-id="${id}"]`);
   await waitFor(`document.querySelector('.cut-type-menu').hidden`, 'the menu closes'); await sleep(250);

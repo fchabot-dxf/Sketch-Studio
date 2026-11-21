@@ -8,6 +8,7 @@
 //   still serves the four apps on ONE origin, where the buffer is shared: each next app is opened by its address after the page wrote its tabs.
 //   A Trace photo-tracing document (mouse): its traced drawing (Send to Editor) shows in SketchStudio and Shaper; back in Trace it opens in Edit with the drawing,
 //   the photo is gone (it is never stored, TASK 567: only Trace's page memory holds it).
+// TASK S3: the Pocket comes from Prepare's operations toolbar (#op-type-pocket); a press on a loop only selects it.
 // EVIDENCE_DIR (optional): cropped screenshots of the tab row in each app.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -89,9 +90,9 @@ await (async () => {
         const c = centreOf(doc);
         const p = await evalJs(`import('/packages/ui/coords.js').then((m) => { const p = m.worldToScreen(document.getElementById('prepare-canvas'), ${JSON.stringify(c)}); return { x: Math.round(p.x), y: Math.round(p.y) }; })`);
         await pressAt(p);
-        await press('.cut-type-trigger');
-        await waitFor(`!!document.querySelector('.cut-type-opt[data-id="pocket"]')`, `${mode}: the cut type menu (${what})`);
-        await press('.cut-type-opt[data-id="pocket"]');
+        // TASK S3: the press selects the loop (no card); the operations toolbar's Pocket makes the operation
+        await waitFor(`!!window.__prepareView && window.__prepareView.selectedTargets().length === 1`, `${mode}: the loop selected (${what})`);
+        await press('#op-type-pocket');
         await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'pocket'))`, `${mode}: a Pocket on ${what}`);
       };
 

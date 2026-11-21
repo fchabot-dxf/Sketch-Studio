@@ -66,7 +66,8 @@ await (async () => {
       const stripBg = rgb(getComputedStyle(strip).backgroundColor);
       const label = (e) => e.tagName + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\\s+/).join('.') : '');
       const under = [0.3, 0.5, 0.7].map((f) => { // the surface just below the strip, under the active tab
-        let e = document.elementFromPoint(ar.left + f * ar.width, sr.bottom + 1);
+        // TASK S3: Shaper Prepare's operations toolbar laid out as a COLUMN lies over the canvas's left edge (a panel over the surface, as the Operations list): the surface is what is under it
+        let e = document.elementsFromPoint(ar.left + f * ar.width, sr.bottom + 1).find((x) => !x.closest('#prepare-ribbon-frame[data-dir="column"]'));
         if (e && e.closest('button, input, select')) e = e.closest('button, input, select').parentElement;
         while (e && rgb(getComputedStyle(e).backgroundColor)[3] === 0) e = e.parentElement;
         return e ? { el: label(e), bg: rgb(getComputedStyle(e).backgroundColor) } : null;

@@ -355,7 +355,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // section of its own, fixed: the divider) Recalculate. A column at the left edge; a bar along the top on a phone held upright, the rail on the short viewport (the
   // ribbon's own layouts there). The Operations section is a ribbon section as Design's are: what does not fit (a phone held upright) is in its name's dropdown, never
   // lost; the user's in-bar ticks and order are kept per app (appId 'shaper-prepare', #ui/ribbon-layout.js), the declaration's order until the user changes it.
-  let ribbon = null;
+  let ribbon = null, placeRibbon = () => {};
   if (ribbonEl) {
     const cutIcon = (icon) => `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${icon}</svg>`;
     ribbon = createToolRibbon({
@@ -376,6 +376,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       view.style.setProperty('--sk-prep-ribbon-w', `${column ? Math.round(r.width) : 0}px`);
       view.style.setProperty('--sk-prep-ribbon-h', `${column ? 0 : Math.round(r.height)}px`);
     };
+    if (frame && view) placeRibbon = place; // (also before Prepare's first fit: mountPrepare)
     if (frame && view && typeof win.ResizeObserver === 'function') new win.ResizeObserver(place).observe(frame);
   }
 
@@ -430,18 +431,26 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
 
   // TASK 743: the first fit keeps the drawing out from under the operations list (the card's panel is the fit's avoidEl): a narrow list (the desktop
   // side panel) costs the canvas its width on that side, a wide one (the phone's bottom bar) its height
+  // TASK S3: and out from under the operations toolbar (its column: the left; its bar: the top)
   function opsInset() {
     const c = canvasEl.getBoundingClientRect(), o = opsEl ? opsEl.getBoundingClientRect() : null;
-    if (!o || !(o.width > 0 && o.height > 0 && c.width > 0 && c.height > 0)) return undefined;
-    const gap = 12;
-    if (o.width < c.width / 2) return o.left - c.left < c.right - o.right ? { left: o.right - c.left + gap } : { right: c.right - o.left + gap };
-    return o.top - c.top < c.bottom - o.bottom ? { top: o.bottom - c.top + gap } : { bottom: c.bottom - o.top + gap };
+    if (!(c.width > 0 && c.height > 0)) return undefined;
+    const gap = 12, out = {};
+    const add = (side, v) => { out[side] = Math.max(out[side] || 0, v); };
+    if (o && o.width > 0 && o.height > 0) {
+      if (o.width < c.width / 2) { if (o.left - c.left < c.right - o.right) add('left', o.right - c.left + gap); else add('right', c.right - o.left + gap); }
+      else if (o.top - c.top < c.bottom - o.bottom) add('top', o.bottom - c.top + gap); else add('bottom', c.bottom - o.top + gap);
+    }
+    const frame = ribbonEl ? ribbonEl.parentElement : null, f = frame ? frame.getBoundingClientRect() : null;
+    if (f && f.width > 0 && f.height > 0) { if (frame.dataset.dir === 'row') add('top', f.bottom - c.top + gap); else add('left', f.right - c.left + gap); }
+    return Object.keys(out).length ? out : undefined;
   }
 
   // SP1a/SP1c: (re)mount the Prepare view on the shared Design sketch (no 2nd engine/RAF). TASK 460: also called after a document
   // restore so Prepare shows the restored geometry and cut plan.
   function mountPrepare() {
     ensureSketch();
+    placeRibbon(); // TASK S3: the toolbar's layout now (the first fit keeps the drawing out from under it: opsInset)
     const designController = getController();
     try { designController.engine.solve(500); } catch (_) {}
     if (prepareView) prepareView.destroy();

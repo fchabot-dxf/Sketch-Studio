@@ -25,8 +25,11 @@ export const MIN_PER_SECTION_PREFERRED = 2;
 export const MIN_PER_SECTION = 1;
 const HOLD_MS = 300;      // a press on a grip held this long (without moving HOLD_SLOP px) starts the reorder drag; a move before it is a scroll
 const HOLD_SLOP = 6;
-// TASK 647: a PHONE held upright (the icon-only bar below); TASK S3: also where a vertical ribbon is a bar again (createToolRibbon `vertical`). Declared once: the stylesheet and the JS read it.
+// TASK 647: a PHONE held upright (the icon-only bar below). Declared once: the stylesheet reads it.
 const PHONE_UPRIGHT_QUERY = '(pointer: coarse) and (max-width: 640px)';
+// TASK S3: where a VERTICAL ribbon (createToolRibbon `vertical`) is the bar again: a NARROW window (a phone held upright, or a narrow desktop window / palette: the
+// phone's width, with a mouse too) and the short viewport (the rail)
+const NARROW_QUERY = '(max-width: 640px)';
 
 // Rect variants (the dropdown) — sets state.rectMode + swaps the rect button's icon/label, like ui-manager.
 const RECT_VARIANTS = [
@@ -188,8 +191,8 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
   text-decoration: underline; cursor: pointer; }
 /* TASK S3: a VERTICAL ribbon (createToolRibbon({ vertical: true }): Shaper Prepare's operations toolbar, a column at the left edge of its view): the same buttons
    (icon over label, at least as wide as the bar's, wider for a long label; the finger sizes below on a touch screen), one column per section; as on the rail, a
-   section's name is the caret strip beside its tools (its name is the dropdown's header) and a fixed section has none. The class is set only while neither phone
-   layout applies: a phone held upright keeps the bar, the short viewport the rail (both below), as every ribbon there. */
+   section's name is the caret strip beside its tools (its name is the dropdown's header) and a fixed section has none. The class is set only while the window is
+   neither narrow (<= 640 px, any pointer: the bar, as every ribbon there) nor short (the rail below). */
 .sk-ribbon.sk-ribbon-vertical { flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; height: 100%; padding: 4px; } /* the host's height: the fit counts what the column holds */
 .sk-ribbon-vertical .sk-ribbon-group { flex-direction: row; align-items: stretch; padding: 4px 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
 .sk-ribbon-vertical .sk-ribbon-group:last-child { border-bottom: 0; }
@@ -319,8 +322,8 @@ const px = (v) => parseFloat(v) || 0;
  *   extraGroups: [{ label, key?, fixed?, defaultInBar?, buttons:[{ icon?|svg?, label?, title?, hint?, id?, event?, onClick? }] }] — host-appended sections
  *     (TASK S3: `key` = the section's key (default: its label, lower case); `fixed` as a built-in section's: every button always shown, in its declared order, no dropdown).
  *   sketchTools: TASK S3: false = none of the sketcher's sections (Select ... Constrain): the ribbon is the host's extraGroups only (Shaper Prepare's operations toolbar).
- *   vertical: TASK S3: true = a column (the host places it at a left edge) away from a phone; a phone keeps the ribbon's phone layouts (upright: the bar; the short
- *     viewport: the rail). For fixed sections (a non-fixed section's name and dropdown are laid out for the bar and the rail).
+ *   vertical: TASK S3: true = a column (the host places it at a left edge) in a window wider than 640 px that is not short; a narrow window keeps the bar, the
+ *     short viewport the rail (the ribbon's own layouts there). A section's name is the caret strip beside its tools, its dropdown opens beside the column.
  *   on(name, detail): optional event hook ('tool' on a tool switch, 'rectMode', 'action' for extra buttons).
  *   (TASK 677: the Parameters window's opener moved from Inspect to the shared footer, #ui/app-footer.js; its opt-out is the footer's.)
  *   onToolClick(tool): optional host override — when given, a tool-button click (and a rect-variant select, after
@@ -332,8 +335,8 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   if (sketchTools) ensureIconSymbols(ICON_IDS);
 
   const el = document.createElement('div'); el.className = 'sk-ribbon';
-  // TASK S3: a vertical ribbon is a column while neither phone layout applies (the stylesheet's .sk-ribbon-vertical); a rotation / resize re-checks it
-  const phoneQueries = vertical && typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? [PHONE_UPRIGHT_QUERY, SHORT_VIEWPORT_QUERY].map((q) => window.matchMedia(q)) : [];
+  // TASK S3: a vertical ribbon is a column while the window is neither narrow nor short (the stylesheet's .sk-ribbon-vertical); a rotation / resize re-checks it
+  const phoneQueries = vertical && typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? [NARROW_QUERY, SHORT_VIEWPORT_QUERY].map((q) => window.matchMedia(q)) : [];
   const syncVertical = () => el.classList.toggle('sk-ribbon-vertical', vertical && phoneQueries.every((m) => !m.matches));
   phoneQueries.forEach((m) => m.addEventListener('change', syncVertical));
   syncVertical();

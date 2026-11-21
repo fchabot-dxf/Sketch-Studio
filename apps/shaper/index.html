@@ -69,6 +69,7 @@
     }
     /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
     :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
+    @media (max-width: 640px) { :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-ribbon-bg); } } /* TASK S3: a narrow window: the operations toolbar is the bar directly below the strip (as Design's ribbon) */
     :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); --sk-doctab-surface-fg: var(--sk-header-bg); } /* TASK 754: a light surface, so the active tab's title is dark */
     #design-view, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
@@ -297,7 +298,7 @@
        from the ribbon as laid out: --sk-prep-ribbon-w (a column; 0 for a bar) moves the overlays at the left edge (the Operations list, the direction legend) right of
        it, --sk-prep-ribbon-h (a bar; 0 for a column) the ones at the top (the cut card, the notice) below it. Its border is the rail's own on the short viewport
        (:where = no specificity: the ribbon's rail rule draws the same line there). */
-    #prepare-ribbon-frame { position: absolute; left: 0; top: 0; bottom: var(--sk-footer-clear, 0px); z-index: 7; display: flex; background: var(--sk-ribbon-bg); }
+    #prepare-ribbon-frame { position: absolute; left: 0; top: 0; bottom: var(--sk-footer-clear, 0px); z-index: 6; display: flex; background: var(--sk-ribbon-bg); } /* z 6: under the cut card's popovers (the card, z 6, comes later in the page) */
     #prepare-ribbon-frame[data-dir="row"] { right: 0; bottom: auto; }
     #view-prepare.is-fusion #prepare-ribbon-frame { top: var(--sk-fusion-bar-h, 44px); }
     #prepare-ribbon { display: flex; flex-direction: column; min-width: 0; min-height: 0; }

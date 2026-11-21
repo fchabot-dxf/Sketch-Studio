@@ -1,6 +1,6 @@
 // tests/opfirst-ui-s2-live.test.js — TASK S2 (docs/OPERATIONS-MODEL.md section 9: the owner's rulings turns 2709-2734) in the real Shaper page, desktop 1280 x 800 (a real
 // mouse) and phone 390 x 844 (real touch), three drawn squares A, B, C and an open line L:
-//  * a click on a shape only SELECTS it: the card is the quick flow's type menu only; the Operations rows of its operations are highlighted (C in Roughing + Contour:
+//  * a click on a shape only SELECTS it: (TASK S3) NO card, the operations toolbar offers every type; the Operations rows of its operations are highlighted (C in Roughing + Contour:
 //    exactly those 2 rows); every type offered (the Contour too: never greyed);
 //  * the quick flow: a type = a NEW operation, OPEN (its header, its Shapes, OK / Cancel); a click puts a shape in / takes it out; an open line is refused with one
 //    line in the card's note area; OK = ONE undo step (the footer Undo / Redo); Cancel = nothing created, nothing in the undo stack;
@@ -18,7 +18,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { probe, tipProblems } from './helpers/tooltip-live.js';
-import { okLive, openOpLive } from './helpers/prepare-open-live.js';
+import { okLive, openOpLive, typeLive } from './helpers/prepare-open-live.js';
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/S2');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -102,7 +102,7 @@ try {
   const note = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-note div')].map((d) => d.textContent)`);
   const rows = () => evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => ({ id: r.dataset.id, picked: r.classList.contains('is-picked'), acts: [...r.querySelectorAll('.ops-act')].map((b) => b.classList[1]), h: Math.round(r.getBoundingClientRect().height * 100) / 100,
     actBox: [...r.querySelectorAll('.ops-act')].map((b) => { const q = b.getBoundingClientRect(); return [Math.round(q.width), Math.round(q.height)]; }) }))`);
-  const pickType = async (id) => { await clickEl('#prepare-panel .cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu'); await clickEl(`.cut-type-opt[data-id="${id}"]`); await sleep(200); };
+  const pickType = async (id) => { await typeLive(t, id); await sleep(200); }; // TASK S3: a new operation = the operations toolbar's button; an open operation's type = its card's menu
   const typeField = async (cls, v) => { await evalJs(`(() => { const i = document.querySelector('${cls}'); i.value = '${v}'; i.dispatchEvent(new Event('change')); })()`); await sleep(200); };
   const tab = async (id) => { if (!await evalJs(`document.querySelector('.cut-tab[data-tab="${id}"]').classList.contains('is-active')`)) await clickEl(`.cut-tab[data-tab="${id}"]`); };
   // THE 805 LAYOUT PROBE: the boxes OUTSIDE the card (the canvas, the Operations list's bar, the footer's Undo / Redo, the header / drawer handle)
@@ -119,15 +119,13 @@ try {
     const ref = await outside();
     console.log(label + ' outside boxes: ' + JSON.stringify(ref));
 
-    // a click only selects: the type menu only; every type offered
+    // a click only selects: (TASK S3) no card; every type offered by the operations toolbar, none greyed
     await clickWorld(0, 20);
-    assert.strictEqual(await cardState(), 'type menu', label + ': a click on A: the card is the type menu only');
-    await sameOutside(ref, label + ': the card appears for a selection');
-    await clickEl('#prepare-panel .cut-type-trigger');
-    const menu = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.getAttribute('aria-disabled') === 'true' ? ':off' : ''))`);
-    assert.deepStrictEqual(menu, ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'], label + ': every type offered, the Contour too, none greyed');
-    await shot(`${D}-1-selection-type-menu-contour.png`, ['#prepare-panel .cut-card', '.cut-type-menu'], 2);
-    await clickEl('#prepare-panel .cut-type-trigger'); // close
+    assert.strictEqual(await cardState(), 'hidden', label + ': a click on A: no card (TASK S3)');
+    await sameOutside(ref, label + ': a selection');
+    const menu = await evalJs(`[...document.querySelectorAll('#prepare-ribbon [id^="op-type-"]')].map((o) => o.id.slice(8) + (o.disabled || o.getAttribute('aria-disabled') === 'true' ? ':off' : ''))`);
+    assert.deepStrictEqual(menu, ['exterior', 'interior', 'pocket', 'online', 'guide', 'stock', 'roughing', 'contour'], label + ': every type offered by the toolbar (CUT_TYPES order), the Contour too, none greyed');
+    await shot(`${D}-1-selection-toolbar.png`, ['#prepare-ribbon'], 2);
 
     // the quick flow and its Cancel
     const s0 = await store(), h0 = await hist();
@@ -156,7 +154,7 @@ try {
     await waitFor(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().length === 1 && m.storeOps()[0].geometry.length === 2)`, label + ': Redo: the Pocket of A and B again');
     const pocketId = (await ops())[0].id;
 
-    // Roughing + Contour on C; a click on C: exactly those 2 rows highlighted, the card the type menu only
+    // Roughing + Contour on C; a click on C: exactly those 2 rows highlighted, no card
     await clickWorld(120, 20); await pickType('roughing');
     await tab('heights'); await typeField('.cut-depth', '8'); await okLive(t);
     await clickWorld(120, 20);
@@ -182,7 +180,7 @@ try {
     await clickWorld(120, 20);
     await listOpen(true);
     const r2 = await rows();
-    assert.deepStrictEqual([r2.filter((r) => r.picked).map((r) => r.id).sort(), await cardState()], [[contourId, roughId].sort(), 'type menu'], label + ': a click on C (in Roughing + Contour): exactly those 2 rows highlighted; the card the type menu only');
+    assert.deepStrictEqual([r2.filter((r) => r.picked).map((r) => r.id).sort(), await cardState()], [[contourId, roughId].sort(), 'hidden'], label + ': a click on C (in Roughing + Contour): exactly those 2 rows highlighted; no card (TASK S3)');
     assert.ok(r2.every((r) => r.acts.length === 0), label + ': (a shape click selects no row: no row actions)');
     await shot(`${D}-5-two-rows-highlighted.png`, '#prepare-ops', 2);
 

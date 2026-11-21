@@ -39,6 +39,9 @@ export function mapFusionLengthUnit(raw) {
 }
 
 // Message action names (declared once; D:/APPS/shaper-addin/bridge.py holds the matching Python copy — keep both in sync).
+// SA-13 / TASK 799 contract:
+//   - toolpaths: { revision, frame: { units, yAxis, originMm, uAxis, vAxis, normal, topHeightMm }, paths: [{ op, cutType, color?, z, points: [[x, y], ...], closed }] }
+//   - toolpaths_clear: {}
 export const FUSION_ACTIONS = Object.freeze({
   PING: 'ping',
   PONG: 'pong',
@@ -47,6 +50,8 @@ export const FUSION_ACTIONS = Object.freeze({
   SELECTION_DATA: 'selection_data',
   HIGHLIGHT_SELECTION: 'highlight_selection', // TASK 795 (SA-12): { selectionId | null } brightens one selection's overlay in Fusion (null: all back to their cut-type colours)
   CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12): { selectionId | 'all' } deletes that selection's overlay (or every one)
+  TOOLPATHS: 'toolpaths', // TASK 799 (SA-13): live bit-centre toolpaths overlay in Fusion
+  TOOLPATHS_CLEAR: 'toolpaths_clear', // TASK 799 (SA-13): clears the Fusion toolpaths overlay
 });
 
 const KNOWN_ACTIONS = new Set(Object.values(FUSION_ACTIONS));
@@ -128,15 +133,15 @@ export function createFusionBridge({
     const body = JSON.stringify(bodyObj);
     try {
       const ret = globalTarget.adsk.fusionSendData(action, body);
-      if (ret && typeof ret.then === 'function') {
-        ret.then(undefined, (err) => {
+      const promise = (ret && typeof ret.then === 'function')
+        ? ret.then(undefined, (err) => {
           reportError(`Fusion send failed for ${action}: ${err && err.message ? err.message : String(err)}`);
-        });
-      }
-      return { ok: true, action, body };
+        })
+        : Promise.resolve();
+      return { ok: true, action, body, promise };
     } catch (err) {
       reportError(`Fusion send failed for ${action}: ${err && err.message ? err.message : String(err)}`);
-      return { ok: false, reason: err && err.message ? err.message : String(err) };
+      return { ok: false, reason: err && err.message ? err.message : String(err), promise: Promise.resolve() };
     }
   }
 
@@ -179,6 +184,11 @@ export function createFusionBridge({
     }
 
     if (action === FUSION_ACTIONS.ERROR) {
+      const recAct = typeof data.receivedAction === 'string' ? data.receivedAction : '';
+      if (recAct === FUSION_ACTIONS.TOOLPATHS || recAct === FUSION_ACTIONS.TOOLPATHS_CLEAR) {
+        dbg.warn('fusion', `Older add-in ignored ${recAct}`, data);
+        return 'OK';
+      }
       const msg = (typeof data.message === 'string' && data.message)
         || (typeof data.error === 'string' && data.error)
         || 'Unknown Fusion error';
@@ -240,6 +250,7 @@ export function mountFusionPrepareBar({
   onSelectionData = () => {},
   onRemoveSelection = () => {}, // TASK 795: (id) the row's X
   onClearSelections = () => {}, // TASK 795: Clear all
+  onStatusChange = () => {}, // TASK 799: notified on pong / connection state changes
   globalTarget = (typeof window !== 'undefined' ? window : null),
   pollIntervalMs = DEFAULT_ADSK_POLL_MS,
   waitTimeoutMs = DEFAULT_ADSK_WAIT_TIMEOUT_MS,
@@ -262,13 +273,22 @@ export function mountFusionPrepareBar({
   statusEl.setAttribute('role', 'status');
   statusEl.setAttribute('aria-live', 'polite');
 
+  // TASK 799 (SA-13): loading wheel shown while live toolpaths are recomputed / debounced / sent / drawn in Fusion.
+  const spinEl = document.createElement('span');
+  spinEl.id = 'shaper-fusion-spin';
+  spinEl.className = 'shaper-fusion-spin';
+  spinEl.hidden = true;
+  spinEl.setAttribute('role', 'status');
+  spinEl.setAttribute('aria-label', 'Updating toolpaths in Fusion');
+  spinEl.title = 'Updating toolpaths in Fusion…';
+
   // TASK 795: the SELECTION LIST: one row per selection in the design (its words, an X), Clear all from 2 on. A row hovered or focused is highlighted in Fusion.
   const listEl = document.createElement('div');
   listEl.id = 'shaper-fusion-selections';
   listEl.className = 'shaper-fusion-list';
   listEl.hidden = true;
 
-  bar.append(addBtn, statusEl, listEl);
+  bar.append(addBtn, statusEl, spinEl, listEl);
   viewPrepareEl.insertBefore(bar, viewPrepareEl.firstChild);
   // TASK 795: the cards under the bar (the notice, the cut card, the operations list) sit below it whatever height the selection list gives it (index.html reads the variable)
   new document.defaultView.ResizeObserver(() => viewPrepareEl.style.setProperty('--sk-fusion-bar-h', `${bar.offsetHeight}px`)).observe(bar);
@@ -312,9 +332,10 @@ export function mountFusionPrepareBar({
 
   const bridge = createFusionBridge({
     globalTarget,
-    onStatus: (text) => {
+    onStatus: (text, info) => {
       statusEl.textContent = text;
       statusEl.dataset.state = 'connected';
+      onStatusChange(info);
     },
     onNotice: (text) => {
       showNotice(text, false);
@@ -460,10 +481,18 @@ export function mountFusionPrepareBar({
   }
   syncAvailability();
 
+  const setSyncing = (busy) => {
+    const on = Boolean(busy);
+    spinEl.hidden = !on;
+    bar.dataset.syncing = on ? 'true' : 'false';
+  };
+
   return {
     bar,
     addBtn,
     statusEl,
+    spinEl,
+    setSyncing,
     bridge,
     syncAvailability,
     bootPing: () => sendBootPingOnce(),

@@ -51,6 +51,7 @@ export function buildEntry({ id: given = null, data, sourceName, regionCount, sk
     id, fusion: typeof data.selectionId === 'string' && data.selectionId.length > 0, kind: (data.source && data.source.kind) || '',
     text: selectionText(data, sourceName, regionCount), name: sourceName, sketchId: sketch.id,
     shapeIds: shapes.map((s) => s.id), cutKeys: [...cutKeys], base, sigs, thicknessMm, regionCount,
+    ...(data && data.frame && typeof data.frame === 'object' && !Array.isArray(data.frame) ? { frame: data.frame } : {}),
   };
 }
 

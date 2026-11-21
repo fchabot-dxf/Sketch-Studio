@@ -31,6 +31,7 @@ function sane(e) {
     name: String(e.name || ''), sketchId: typeof e.sketchId === 'string' ? e.sketchId : null,
     shapeIds: list(e.shapeIds), cutKeys: list(e.cutKeys), base: map(e.base), sigs: map(e.sigs),
     thicknessMm: Number.isFinite(e.thicknessMm) ? e.thicknessMm : null, regionCount: Number.isFinite(e.regionCount) ? e.regionCount : 0,
+    ...(e.frame && typeof e.frame === 'object' && !Array.isArray(e.frame) ? { frame: clone(e.frame) } : {}),
   };
 }
 

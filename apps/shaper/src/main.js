@@ -17,6 +17,8 @@ import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's 
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, shaperStagesFor, resolveInitialMode, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583 + 663: the mode router, declared once
 import { isFusionMode, mountFusionPrepareBar } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
+import { createFusionToolpathsSync } from './fusion-toolpaths.js'; // TASK 799: live toolpaths in Fusion
+import { getSelections } from './selection-list.js'; // TASK 795 / 799: selections and their 3D frames
 import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 795: the selection list's X and Clear all
 import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + the plan + stock
 import { dbg } from '#core/debug.js';
@@ -623,6 +625,7 @@ let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thick
 // plan in the sketch's undo snapshots, the Ctrl+Z / Ctrl+Y keys while Prepare shows, the one-line notice
 const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
 const toolTableWindow = createToolTableWindow(); // TASK 842: saved in the settings store; the cut card follows a change through its settings subscription (prepare-stage.js)
+let fusionToolpaths = null; // TASK 799: set in fusionMode below; notified on every Prepare change
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
   panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), ribbonEl: document.getElementById('prepare-ribbon'), // TASK 743: the operations list; TASK S3: the operations toolbar
@@ -631,6 +634,7 @@ const prepare = createPrepareStage({
   leadGroups: [{ label: 'Insert', buttons: [{ id: 'prepare-insert-stl', label: hintLabel('insertStlTool'), hint: hintText('insertStlTool'),
     svg: `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${STL_INSERT_MARKUP}</svg>`, onClick: () => insertStlFromToolbar() }] }],
   openToolTable: () => toolTableWindow.open(), // TASK 842: the cut card's "Edit tool table..."
+  onPlanChange: () => { if (fusionToolpaths) fusionToolpaths.notify(); }, // TASK 799: automatic Fusion toolpath overlay sync
 });
 async function insertStlFromToolbar() {
   try {
@@ -644,6 +648,7 @@ const afterSelectionImport = () => {
   if (infoPanel) infoPanel.refresh();
   history.refresh();
   if (modes.current() === 'review') enterReview(designController.state);
+  if (fusionToolpaths) fusionToolpaths.notify();
 };
 // TASK 790: Open STL (the drawer entry above) and the STL card at the top of Prepare's right column (stl-import.js, declared once: the node test kit calls it too)
 const stlImporter = createStlImporter({ ensureSketch, getController: () => designController, prepare, panelEl: document.getElementById('prepare-panel'),
@@ -916,9 +921,20 @@ if (fusionMode) {
     },
     onRemoveSelection: (id) => removeSelection(designController, id, { prepare, onDone: afterSelectionImport }), // TASK 795
     onClearSelections: () => clearSelections(designController, { prepare, onDone: afterSelectionImport }),
+    onStatusChange: () => { if (fusionToolpaths) fusionToolpaths.notify(); },
   });
+  fusionToolpaths = createFusionToolpathsSync({
+    bridge: fusionUi.bridge,
+    getState: () => designController && designController.state,
+    getOpenOpId: () => prepare.openId(),
+    getSelections,
+    onSpin: fusionUi.setSyncing,
+  });
+  window.addEventListener('pagehide', () => fusionToolpaths.clearNow());
+  window.addEventListener('beforeunload', () => fusionToolpaths.clearNow());
   showMode(initMode);
   fusionUi.bootPing();
+  fusionToolpaths.notify();
 } else {
   showMode(initMode);
 }

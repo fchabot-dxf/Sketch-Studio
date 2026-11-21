@@ -360,6 +360,9 @@
     .shaper-fusion-status[data-state="connecting"] { color: #cbd5e1; }
     .shaper-fusion-status[data-state="unavailable"] { color: #fcd34d; }
     .shaper-fusion-status[data-state="error"] { color: #fca5a5; }
+    /* TASK 799 (SA-13): live toolpaths sync loading wheel in the Fusion bar (hidden when idle). */
+    .shaper-fusion-spin { display: inline-block; width: 14px; height: 14px; margin-left: auto; flex: 0 0 auto; border-radius: 50%; border: 2px solid rgba(76, 154, 255, 0.25); border-top-color: #4c9aff; border-right-color: #4c9aff; animation: sk-spin 0.8s linear infinite; }
+    .shaper-fusion-spin[hidden] { display: none; }
     /* TASK 795: the selection list under Add selection: one row per selection (its words + an X), Clear all from two on. */
     .shaper-fusion-list { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
     .shaper-fusion-list[hidden] { display: none; }

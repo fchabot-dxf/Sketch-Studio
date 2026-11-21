@@ -149,9 +149,17 @@ try {
   await evalJs(`window.fusionJavaScriptHandler.handle('error', JSON.stringify({ action: 'error', receivedAction: 'toolpaths', message: "Unknown action: 'toolpaths'" }))`);
   assert.strictEqual(await evalJs(`document.getElementById('prepare-notice').hidden`), true, 'older add-in Unknown action error for toolpaths stays hidden');
 
-  // Remove selection via X button -> design empties -> toolpaths_clear sent!
+  // Remove selection via X button -> add-in echoes empty selection_data -> design empties -> toolpaths_clear sent!
   await evalJs(`window.adsk._sent.length = 0`);
   await evalJs(`document.querySelector('.shaper-fusion-sel-x').click()`);
+  await waitFor(`window.adsk._sent.some((m) => m.action === 'clear_selection')`, 'clear_selection sent');
+  await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', JSON.stringify({
+    action: 'selection_data', version: 1, selectionId: 'sel-live-799',
+    summary: { mode: 'Single Solid Body', items: [], text: '' },
+    units: 'mm', coordSystem: { yAxis: 'up', frame: 'plane-2d' },
+    source: { kind: 'unsupported', name: '', documentName: 'TrayDoc v1' },
+    stock: null, regions: [], chains: [], warnings: [],
+  }))`);
   await waitFor(`window.adsk._sent.some((m) => m.action === 'toolpaths_clear')`, 'toolpaths_clear sent when design empties');
   const clears = await evalJs(`window.adsk._sent.map((m) => m.action)`);
   assert.ok(clears.includes('clear_selection') && clears.includes('toolpaths_clear'), 'both clear_selection and toolpaths_clear sent');

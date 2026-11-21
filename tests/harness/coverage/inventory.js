@@ -58,6 +58,7 @@ const TOOL_SOLVER_ROLE = {
   slot: 'creates straight or arc slots (real lines + makeArc caps + construction center + tangent/parallel/midpoint/pointOnLine + diameter width dim, #core/slot.js)',
   circle: 'creates a circle shape (1 joint, radius is shape data)', polygon: 'creates N sides + N radii + equal constraints',
   arc: 'creates an arc (3 joints + equal radius)', bezier: 'creates bezier shapes (2 joints, control points are data)',
+  text: 'creates ONE text shape whose anchor joint is a plain point; its derived letters (lines / beziers in its rigid group) take no constraint (task 845, #core/text.js)',
   trim: 'splits / removes segments: rewrites shapes, joints and constraints', break: 'splits a line: new joint, constraints migrate',
   closePath: 'joins the two free ends of an open chain: a coincident (gap <= 0.01 mm, the end moved onto the other) or ONE line + two coincidents (task 760, #core/close-path.js)',
   fillet: 'creates an arc + virtual sharp + tangents + radius dim',

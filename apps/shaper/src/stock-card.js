@@ -23,7 +23,12 @@ export function createStockCard({ input: thick, noteEl: note, getController, onC
   };
   show();
   const apply = (v) => {
-    if (v != null && v > 0) setStockField('thickness', v);
+    if (v != null && v > 0 && Math.abs(v - getStock().thickness) > 1e-9) {
+      const dc = getController();
+      const st = dc && dc.state;
+      if (st && typeof st.saveState === 'function') st.saveState('stock thickness', { host: true });
+      setStockField('thickness', v);
+    }
     show();
     onChange();
   };

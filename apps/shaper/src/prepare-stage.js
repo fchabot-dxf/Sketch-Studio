@@ -43,7 +43,7 @@ const RECALC_ICON = "<path d='M14.5 9a5.5 5.5 0 0 1-9.6 3.7' fill='none' stroke=
  *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
 export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
 
-export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, leadGroups = [], ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {} }) { // TASK 842: openToolTable = the page's Tool table window
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, leadGroups = [], ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {}, onPlanChange = () => {}, onSelectInFusion = null, showSelectInFusion = (op) => op.tickable !== false }) { // TASK 842: openToolTable = the page's Tool table window; TASK 799: onPlanChange = live Fusion toolpaths sync; TASK 806: per-op Select in Fusion
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
@@ -90,6 +90,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     keepWanted();
     spinLater(opsNow);
     opsNow = null;
+    onPlanChange();
   };
   // TASK 817: the plan's paths now (every membership's signature, the open operation's as opened and its Preview's): any other job still queued is superseded (dropped)
   function keepWanted() {
@@ -126,6 +127,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       const st = sketchState();
       if (st && orderWaiting()) settleWaiting(st);
       if (prepareView && getMode() === 'prepare') { prepareView.refreshLook(); refreshCutPanel(); }
+      else onPlanChange();
     }, 0);
   });
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
@@ -292,6 +294,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onPick: (op) => { commitSession(); line = null; if (prepareView) prepareView.setSelection(op.shapes.map((k) => { const i = k.indexOf(':'); return { kind: k.slice(0, i), id: k.slice(i + 1) }; })); rowId = op.id; opList.refresh(); },
     onEdit: (op) => { rowId = op.id; openForEdit(op.id); },
     onDuplicate: (op) => duplicateAndOpen(op.id),
+    ...(onSelectInFusion ? { onSelectInFusion: (op) => { commitSession(); onSelectInFusion(op); }, showSelectInFusion } : {}),
     isPicked,
     isSelected: (op) => op.id === rowId,
     isOpen: (op) => Boolean(session && session.opId === op.id),
@@ -416,7 +419,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (session && session.n !== null) { setSession(null); line = null; if (prepareView) prepareView.closeOp(); }
     else if (session && !opById(session.opId)) { setSession(null); if (prepareView) prepareView.closeOp(); }
     const designController = getController();
-    if (getMode() !== 'prepare' || !designController) return;
+    if (getMode() !== 'prepare' || !designController) { onPlanChange(); return; }
     if (prepareView && geomSig(designController.state) === prepareSig) { prepareView.syncActive(); prepareView.refreshLook(); refreshCutPanel(); }
     else mountPrepare();
   }
@@ -527,7 +530,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       setSession(null); line = null; // TASK S2: another document: no operation stays open (its undo point went with the history of the document left)
       forgetPaths(); // TASK S3: another document (or an import): nothing of it is out of date, it is generated as it is read (as before)
       if (getMode() === 'prepare') mountPrepare();
-      else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
+      else { if (prepareView) { prepareView.destroy(); prepareView = null; } onPlanChange(); } // re-mounted from the restored state on next entry
     },
     cutPanel,
     opList,

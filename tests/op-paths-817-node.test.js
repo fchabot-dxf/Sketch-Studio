@@ -65,7 +65,7 @@ try {
   const AT = { A: [0, 20], B: [80, 20], C: [140, 20] };
   const clickAt = (n) => { const pc = doc.getElementById('prepare-canvas'); const p = worldToScreen(pc, { x: AT[n][0], y: AT[n][1] }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };
   const pressEl = (s) => { const e = typeof s === 'string' ? q(s) : s; assert.ok(e, s + ' not found'); app.press(e); };
-  const pick = (id) => { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); };
+  const pick = (id) => { if (app.prepare.openId()) { pressEl('.cut-type-trigger'); pressEl(`.cut-type-opt[data-id="${id}"]`); } else pressEl(`#op-type-${id}`); }; // TASK S3: an open operation: the card's type menu (a type change); none: the operations toolbar (a NEW operation, open)
   const typed = (cls, v) => { const i = q(cls); i.value = v; i.dispatchEvent(new app.window.Event('change')); };
   const row = (id) => q(`#prepare-ops .ops-row[data-id="${id}"]`);
   const spinning = (id) => Boolean(row(id) && row(id).classList.contains('is-generating') && row(id).querySelector('.ops-spin'));

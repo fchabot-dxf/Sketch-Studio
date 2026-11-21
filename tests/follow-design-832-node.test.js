@@ -1,6 +1,7 @@
 // tests/follow-design-832-node.test.js — TASK 832 (owner turns 2955-2965: "NOTHING TO CUT AFTER SIMPLY SNAPPING THE SHAPE ONTO ANOTHER"; "this makes the toolpath out of
 // date, but not nothing to cut, simple recalc"): an operation's shapes FOLLOW the Design edits made to them, on the Shaper node page (tests/helpers/node-app.js),
-// through the page's own Prepare (its type pick, field edits, OK; entering Prepare = cut-plan.js followDesign, then the derivation).
+// through the page's own Prepare (its type pick, field edits, OK; entering Prepare = cut-plan.js followDesign, then the derivation). TASK S3: a Design edit makes them out
+// of date: the test presses Recalculate after each (the owner's "simple recalc").
 //  1. THE OWNER'S CASE: three identical 25.4 mm squares, each in its own Pocket (0.125 / 0.25 / 0.375 in), stacked exactly by snapping a corner of each onto the
 //     first one's corner, that corner snapped to the ORIGIN: each Pocket cuts its own square at its own depth (#core/loop-finder.js: shapes that overlap and share
 //     one node are traversed per block, each its own loop; before: no loop at all, every Pocket "1 shape: nothing to cut"); two stacked, then the third;
@@ -64,13 +65,16 @@ const app = await open({ host: 'shaper' });
 try {
   const st = app.state;
   const pv = () => app.prepare.view();
-  const toPrepare = () => { app.modes.showMode('design'); app.modes.showMode('prepare'); };
+  // TASK S3 (owner turns 3046-3047, Fusion style): a Design edit makes the operations OUT OF DATE (not regenerated): back in Prepare the test presses Recalculate (nothing
+  // selected: every one), the owner's "simple recalc" (task 832); section 1 asserts the out-of-date state before it
+  const toPrepareOnly = () => { app.modes.showMode('design'); app.modes.showMode('prepare'); };
+  const toPrepare = () => { toPrepareOnly(); app.prepare.recalculate(); };
   const solve = () => app.engine.solve(500);
   // the page's own steps: shapes picked + a type = a NEW operation, its fields set, OK
   const make = (keys, type, fields = {}) => {
     app.prepare.ok();
     pv().setSelection(keys.map((k) => { const i = k.indexOf(':'); return { kind: k.slice(0, i), id: k.slice(i + 1) }; }));
-    app.prepare.pickType(type);
+    app.prepare.addOperation(type); // TASK S3: the operations toolbar's button (a NEW operation of the selection, open)
     for (const [f, v] of Object.entries(fields)) pv().setOpField(f, v);
     app.prepare.ok();
     return storeOps()[storeOps().length - 1].id;
@@ -97,7 +101,9 @@ try {
     app.modes.showMode('design');
     st.saveState('drag points'); snap(st, c[0], ORIGIN_JOINT_ID); solve();
     st.saveState('drag points'); snap(st, c[1], c[0]); solve();
-    toPrepare();
+    toPrepareOnly();
+    eq(opsNow().map((o) => [o.outOfDate, o.records.length]), ids.map(() => [true, 0]), '1: TASK S3: the Design edit: every Pocket OUT OF DATE, nothing generated (until Recalculate)');
+    app.prepare.recalculate();
     const at = (j) => { const p = st.joints.get(j); return [Math.round(p.x * 1000) / 1000, Math.round(p.y * 1000) / 1000]; };
     eq([at(c[0]), at(c[1])], [[0, 0], [0, 0]], '1: the first square on the origin, the second snapped onto it');
     eq(ids.map(cutOf), keys.map((k, i) => ({ regions: '1 region', targets: [k], depth: depths[i] })), '1: TWO stacked squares (a shared corner): each Pocket still cuts its own square at its own depth');

@@ -35,6 +35,9 @@ const PARAMS = {
   opCancel: { label: 'Cancel', hint: 'Puts the operation back as it was when you opened it (Esc does the same).' },
   // TASK 817 (owner turns 2745-2748): toolpaths are made on OK, in the background; Preview makes them for the card's settings now, on request
   opPreview: { label: 'Preview', hint: 'Shows this operation’s paths with the settings in the card now (they are made in the background; the app stays usable). A later change fades them: press again to see the new ones. A preview is not saved, not exported and not a step of Undo; OK makes the paths.' },
+  // TASK S3 addition (owner turns 3046-3047, Fusion style): an operation whose inputs changed since its paths were made is OUT OF DATE (its row's mark) until Recalculate
+  opOutOfDate: { label: 'Out of date', hint: 'Out of date: press Recalculate.' },
+  opRecalculate: { label: 'Recalculate', hint: 'Makes the paths of the out-of-date operations again: the selected ones, or every one when none is selected. They are made in the background; the app stays usable.' },
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
   // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab

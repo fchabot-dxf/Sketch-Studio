@@ -52,12 +52,16 @@ try {
   openMode('prepare');
   const loops = findLoops(app.state).map((l) => l.edges.length).join(',');
   assert.strictEqual(loops, '4,6,6,4', 'four closed loops through shared joints (construction lines do not split them): ' + loops);
-  // a closed profile is SELECTABLE in Prepare: click inside the filleted rectangle (DXF -0.99..1.04 in x, 1.21..2.33 in y) -> the cut card appears
+  // a closed profile is SELECTABLE in Prepare: click inside the filleted rectangle (DXF -0.99..1.04 in x, 1.21..2.33 in y) -> it is selected (TASK S3: no card for a
+  // selection); the operations toolbar's Pocket then makes an operation of it, its card open
   const pc = doc.getElementById('prepare-canvas');
   const pt = worldToScreen(pc, { x: 0.02 * 25.4, y: -1.85 * 25.4 });
   app.click(Math.round(pt.x), Math.round(pt.y), { target: pc });
+  assert.strictEqual(app.prepare.view().selectedTargets().length, 1, 'clicking inside the imported loop selects it');
+  app.press(q('#op-type-pocket'));
   const trig = q('.cut-type-trigger');
-  assert.strictEqual(!!(trig && !trig.closest('[hidden]')), true, 'selecting the imported loop shows the cut card');
+  assert.strictEqual(!!(trig && !trig.closest('[hidden]')), true, 'a Pocket of the selected imported loop: its cut card');
+  app.prepare.cancel();
 
   // the Shaper Fusion add-in SVG (arcs): cut types from the grey fills, depths in cm, the compound path = a profile with a hole, real arcs
   openMode('design');

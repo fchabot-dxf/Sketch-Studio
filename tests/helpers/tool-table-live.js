@@ -58,6 +58,14 @@ export async function toolTablePhase({ phone }) {
     await shot(`842-window-added${sfx}.png`, '#tool-table-modal .tt-card', phone ? 2 : 1.5);
     await clickElRaw('#tool-table-modal .tt-close');
     await waitFor(`!document.getElementById('tool-table-modal').open`, 'the window closes');
+    // TASK 842 + S3: the toolbar's TOOLS section (fixed, last, after Recalculate) opens the same window
+    assert.ok(await evalJs(`(() => { const b = document.getElementById('op-tool-table'), g = b && b.closest('.sk-ribbon-group'); return !!b && !b.hidden && g.dataset.section === 'tools' && 'fixed' in g.dataset; })()`), 'the Tool table button: in the toolbar's fixed Tools section');
+    assert.ok(await evalJs(`(() => { const gs = [...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section); return gs.indexOf('tools') === gs.length - 1 && gs.indexOf('recalculate') === gs.length - 2; })()`), 'Tools is the toolbar's last section, after Recalculate');
+    await shot(`842-ribbon-tools${sfx}.png`, '#prepare-ribbon', 2);
+    await clickElRaw('#op-tool-table');
+    await waitFor(`document.getElementById('tool-table-modal').open && document.querySelectorAll('#tool-table-modal .tt-row').length === 9`, 'the toolbar opens the Tool table (9 bits)');
+    await clickElRaw('#tool-table-modal .tt-close');
+    await waitFor(`!document.getElementById('tool-table-modal').open`, 'the window closes again');
     // PICK it in the operation
     await clickElRaw('#prepare-panel .cut-bit-trigger');
     await waitFor(`!document.querySelector('.cut-bit-pop').hidden`, 'the Bit menu');

@@ -170,7 +170,7 @@ await createNamedDesign(profile, 'shaper', 'Tabs 822');
     st.saveState('draw the keyhole');
     h.pressRaw('.sk-header-tab[data-tab="prepare"]');
     h.clickAt(0, 0); // inside the circle: the keyhole
-    h.pressEl('.cut-type-trigger'); h.pressEl('.cut-type-opt[data-id="interior"]'); // the quick flow: a new Inside operation, open
+    h.pressEl('#op-type-interior'); // the quick flow (TASK S3: the operations toolbar): a new Inside operation, open
     opId = app.prepare.openId();
     ok(opId, 'an Inside operation, open');
     h.typed('.cut-depth', '0.156');

@@ -37,12 +37,13 @@ export function pathPoints(d) {
 function tools(t) {
   const { evalJs, waitFor, clickEl, clickWorld } = t;
   const D = t.phone ? 'phone' : 'desktop';
-  // centre the Prepare view on a world point (left of the card on a phone), then tap / click it: the target's card
+  // centre the Prepare view on a world point (left of the card on a phone), then tap / click it: the target SELECTED (TASK S3: a shape with no operation shows no card;
+  // pocket-live.js clickWorld opens the operation of a shape that has one; a new one is the toolbar's, pickType)
   const pick = async (x, y, w = 160) => {
     await evalJs(`window.__prepareView.setView({ x: ${x} + ${t.phone ? 0.22 : 0} * ${w}, y: ${y}, w: ${w} })`);
     await sleep(200);
     await clickWorld(x, y);
-    await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, `the card at ${x}, ${y}`);
+    await waitFor(`window.__prepareView.selectedTargets().length > 0`, `the shape at ${x}, ${y} selected`);
   };
   const rows = () => evalJs(`[...document.querySelectorAll('#prepare-panel .cut-row[data-row]')].filter((r) => getComputedStyle(r).display !== 'none' && !('off' in r.dataset)).map((r) => r.dataset.row)`);
   const note = () => evalJs(`[...document.querySelectorAll('.cut-note div')].sort((a, b) => !!a.querySelector('.cut-note-warn') - !!b.querySelector('.cut-note-warn')).map((d) => d.textContent)`); // TASK 825: the card lists its warning lines FIRST; read the facts first, the warnings after (a stable sort), as these tests were written

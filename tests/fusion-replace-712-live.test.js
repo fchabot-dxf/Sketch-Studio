@@ -1,7 +1,7 @@
 // tests/fusion-replace-712-live.test.js — TASK 712 (owner ruling "Replace"): in the Fusion palette (Shaper ?host=fusion, window.adsk stubbed,
 // selection_data through window.fusionJavaScriptHandler.handle) a selection REPLACES what the palette shows. Run at the palette's size (480 x 731)
 // and on a desktop (1280 x 800), mouse:
-//   1. a first selection; the user sets Pocket on it in the Prepare cut card (real clicks);
+//   1. a first selection; the user sets Pocket on it (real clicks; TASK S3: the plate clicked, then the operations toolbar's Pocket);
 //   2. a second selection: only it shows (Prepare edges, sketches, V2_PLAN), the notice says "Replaced with ...";
 //   3. the footer Undo (a real click): the first selection with its Pocket; Ctrl+Y (a real key): the second again;
 //   4. ONE payload with a body's regions AND sketch chains lands as one plan;
@@ -108,10 +108,10 @@ async function run({ width, height, pileUp }) {
     console.log(`[${label}] first:`, JSON.stringify(first));
     assert.deepStrictEqual([first.notice, first.sketches, first.plan], ['Added Test plate: 1 regions, 0 chains', ['Sketch 1', 'Test plate'], []], `[${label}] the first selection (TASK S1: its region has no cut type, so it is in no operation)`);
     await clickWorld(20, -15);
-    await waitFor(`!!document.querySelector('#prepare-panel .cut-card') && !document.querySelector('#prepare-panel .cut-card').hidden`, 'the cut card for the plate');
-    await clickEl('#prepare-panel .cut-type-trigger');
-    await waitFor(`!!document.querySelector('.cut-type-opt[data-id="pocket"]') && document.querySelector('.cut-type-opt[data-id="pocket"]').getBoundingClientRect().width > 0`, 'the cut type menu');
-    await clickEl('.cut-type-opt[data-id="pocket"]');
+    // TASK S3: a shape click shows no card; the operations toolbar's Pocket makes the new operation (open) holding the plate
+    await waitFor(`window.__prepareView && window.__prepareView.selectedTargets().length === 1`, 'the plate selected');
+    await clickEl('#op-type-pocket');
+    await waitFor(`!!document.querySelector('#prepare-panel .cut-card') && !document.querySelector('#prepare-panel .cut-card').hidden`, 'the Pocket open in its card');
     await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].some((r) => r.cutType === 'pocket'))`, 'Pocket set on the plate');
 
     // 2. the second selection replaces it

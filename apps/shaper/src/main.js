@@ -25,7 +25,7 @@ import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared s
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
-import { followDesign, planEntries, planReliefItems, planSteppedNotes, planHoldNotes, planClearingNotes, planLevelsNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 745: planClearingNotes
+import { followDesign, planEntries, planReliefItems, planNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 839: planNotes = the Review's info lines (stepped, hold, clearing, levels)
 import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
 import { setPathsPort, workerPort } from './op-paths.js'; // TASK 817: the operations' paths are generated in the background (paths-worker.js)
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
@@ -120,14 +120,19 @@ async function generateShaperSvgPayload({ preview = false, say = () => {} } = {}
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  const p = await exportWhenGenerated(st, { preview, say }); // TASK 798: the ticked operations on the whole design's frame (export-payload.js, declared once)
+  const p = await exportWhenGenerated(st, { preview, say, recalculate: (ids) => prepare.recalculate(ids) }); // TASK 798: the ticked operations on the whole design's frame (export-payload.js, declared once); TASK S3: an out-of-date operation waits for Recalculate
   if (!p) return null;
   // TASK 803: every file that leaves the app (Generate, Download, Send to ShaperHub) is checked against the Origin rules (#core/origin-rules.js); a broken rule is a short warning, the file is still allowed
   const warning = preview ? '' : formatOriginRuleWarning(checkOriginRules(p.svg, { targets: ['origin', 'studio'], encoding: exportEncoding() }));
   return { ...p, state: st, warning };
 }
 // TASK 817: the plain waiting line in an element, after a turning ring (index.html .sk-wait-spin)
-const sayIn = (el) => (text) => { if (!el) return; const spin = document.createElement('span'); spin.className = 'sk-wait-spin'; spin.setAttribute('aria-hidden', 'true'); el.replaceChildren(spin, text); };
+// TASK S3: a line with an ACTION (the out-of-date operations' "Recalculate": { label, run }) is the text and the action's button, no ring (nothing is generating yet)
+const sayIn = (el) => (text, action = null) => {
+  if (!el) return;
+  if (action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-wait-action'; b.textContent = action.label; b.addEventListener('click', () => action.run()); el.replaceChildren(`${text}. `, b); return; }
+  const spin = document.createElement('span'); spin.className = 'sk-wait-spin'; spin.setAttribute('aria-hidden', 'true'); el.replaceChildren(spin, text);
+};
 
 // TASK 767: the name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync dialog's file name): the design's name
 // through the ONE rule (export-payload.js exportFileName). The design's name is the document tab's (in Fusion mode: the imported selection's, nameAfterSelection).
@@ -143,10 +148,13 @@ for (const b of document.querySelectorAll('#review-toolbar [data-hint]')) {
   const id = b.dataset.hint;
   mountTooltip({ target: b, getContent: () => ({ title: hintLabel(id), text: hintText(id) }) });
 }
+let generateCall = 0; // TASK S3: a press waiting for out-of-date operations is replaced by a later press (one file after the Recalculate)
 if (btnGenerateSvg) {
   btnGenerateSvg.addEventListener('click', async () => {
     const status = document.getElementById('simexport-status');
+    const call = ++generateCall;
     const payload = await generateShaperSvgPayload({ say: sayIn(status) }); // TASK 817: waits for the paths being generated
+    if (call !== generateCall) return;
     if (!payload) { if (status) status.textContent = emptyExportText(); return; }
     const name = designFileName();
     download(name, payload.svg);
@@ -604,7 +612,7 @@ const history = createShaperHistory({ getController: () => designController, get
 const toolTableWindow = createToolTableWindow(); // TASK 842: saved in the settings store; the cut card follows a change through its settings subscription (prepare-stage.js)
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
-  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), // TASK 743: the operations list
+  panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), ribbonEl: document.getElementById('prepare-ribbon'), // TASK 743: the operations list; TASK S3: the operations toolbar
   ensureSketch, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
   openToolTable: () => toolTableWindow.open(), // TASK 842: the cut card's "Edit tool table..."
 });
@@ -721,7 +729,7 @@ const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
   // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
-  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: [...planSteppedNotes(TICKED), ...planHoldNotes(st, TICKED), ...planClearingNotes(st, TICKED), ...planLevelsNotes(st, TICKED)] }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing
+  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: planNotes(st, TICKED) }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing; TASK 839: assembled in ONE place (cut-plan.js planNotes: a line the same for every operation once)
 };
 const reviewSig = (st) => JSON.stringify([storeSignature(), getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
   SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
@@ -779,7 +787,7 @@ async function enterReview(st) {
     return;
   }
   const info = document.getElementById('review-info');
-  await whenGenerated(st, sayIn(info)); // TASK 817: the 3D board is built from the generated paths
+  await whenGenerated(st, sayIn(info), { recalculate: (ids) => prepare.recalculate(ids) }); // TASK 817: the 3D board is built from the generated paths (TASK S3: never out-of-date ones)
   if (call !== reviewCall) return;
   try {
     if (!reviewView) {

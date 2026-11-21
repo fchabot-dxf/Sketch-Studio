@@ -39,7 +39,7 @@ try {
     onStatus: (_t, meta) => { lastMeta = meta; },
   });
 
-  // Import a rectangle and select it so Prepare cut card is open
+  // Import a rectangle and select it so Prepare cut card is open (TASK S3: through a new operation of it)
   importFusionSelection({
     source: { kind: 'sketch', name: 'UnitPlate' },
     units: 'mm',
@@ -63,7 +63,9 @@ try {
   const loop = pv.loops[0];
   ok(loop, 'imported loop exists in Prepare');
   pv.setSelection([{ kind: 'loop', id: loop.id, loop }]);
-  eq(document.getElementById('prepare-panel').hidden, false, 'cut card opens for selected loop');
+  app.prepare.addOperation('pocket'); // TASK S3: a selection shows no card: a new operation of it (the operations toolbar's Pocket) opens the cut card
+  eq(document.getElementById('prepare-panel').hidden, false, 'cut card opens for the new operation of the selected loop');
+  eq(document.querySelector('#prepare-panel .cut-card').hidden, false, '(TASK S3: the card itself shows)');
   eq(document.querySelector('#prepare-panel .cut-unit').textContent, 'in', 'cut card initially uses saved DOC_UNIT=in');
 
   // pong with lengthUnits: 'mm' updates DOC_UNIT & open cut card WITHOUT modifying localStorage

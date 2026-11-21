@@ -2,7 +2,7 @@
 // The fixture (a 30 x 20 mm plate 0.08 mm short of closed + an open engraving zigzag) is dropped on the Design canvas:
 //  1. PREPARE BEFORE: the plate is an open chain: a click on its edge picks it; TASK S2 (owner turn 2716): the cut-type menu offers every type (never greyed),
 //     a pick of Inside, Outside or Pocket makes NO operation and the card's note says why in one plain line, On line makes one (Cancel removes it); a click
-//     inside it picks nothing (no region);
+//     inside it picks nothing (no region); TASK S3: the types are the operations toolbar's buttons (a click shows no card), the refusal line is Prepare's notice;
 //  2. DESIGN: Shift+C, a click on the plate's edge closes it: ONE line, in the plate's own group (the import's "plate" group, not entered: one rigid
 //     block with the whole file: nothing is entered), only two coincidents added; findLoops (the page's own #core module on the page's state) returns the plate as a loop;
 //  3. PREPARE AFTER: a click inside the plate picks the region; the type menu's Inside is enabled; picking it makes the card's type Inside (screenshot).
@@ -18,12 +18,8 @@ else {
   const state = (js) => evalJs(`(() => { const st = window.__designController.state; ${js} })()`);
   const stage = async (id) => { await t.click(await evalJs(`(() => { const r = document.querySelector('.sk-header-tab[data-tab="${id}"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`)); await sleep(500); };
   const prepAt = (x, y) => evalJs(`(() => { const svg = document.getElementById('prepare-canvas'); const p = svg.createSVGPoint(); p.x = ${x}; p.y = ${y}; const s = p.matrixTransform(svg.getScreenCTM()); return { x: s.x, y: s.y }; })()`);
-  const cardShown = () => evalJs(`(() => { const c = document.querySelector('#prepare-panel .cut-card'); return !!c && !c.hidden && c.getBoundingClientRect().height > 0; })()`);
-  const typeMenu = async () => {
-    await t.click(await evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-type-trigger').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
-    await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-    return evalJs(`Object.fromEntries([...document.querySelectorAll('.cut-type-menu .cut-type-opt')].map((o) => [o.dataset.id, !o.disabled]))`);
-  };
+  const cardShown = () => evalJs(`window.__prepareView.selectedTargets().length > 0`); // TASK S3: a click shows no card: what it picked is the canvas selection
+  const typeMenu = () => evalJs(`Object.fromEntries([...document.querySelectorAll('#prepare-ribbon [id^="op-type-"]')].map((o) => [o.id.slice(8), !o.disabled && !o.hidden]))`); // TASK S3: the operations toolbar
   try {
     const base = await t.open();
     // 1. Prepare before
@@ -35,19 +31,18 @@ else {
     assert.ok(await cardShown(), '1: a click on the plate\'s edge picks the open chain');
     out.menuBefore = await typeMenu();
     assert.deepStrictEqual([out.menuBefore.interior, out.menuBefore.exterior, out.menuBefore.pocket, out.menuBefore.online], [true, true, true, true], '1: on the open chain: every type offered, none greyed (TASK S2, owner turn 2716): ' + JSON.stringify(out.menuBefore));
-    await t.shot('shaper-prepare-before-open-chain.png', await evalJs(`(() => { const r = document.querySelector('.cut-type-menu').getBoundingClientRect(); return { x: r.left - 10, y: r.top - 10, width: r.width + 20, height: r.height + 20 }; })()`));
-    // TASK S2: a closed-only type picked for the open chain: no operation, the plain refusal line in the card's note; On line: a new operation, open
+    await t.shot('shaper-prepare-before-open-chain.png', await evalJs(`(() => { const r = document.querySelector('#prepare-ribbon').getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width + 10, height: Math.min(r.height, 600) }; })()`));
+    // TASK S2: a closed-only type picked for the open chain: no operation, the plain refusal line (TASK S3: Prepare's notice, no card shows); On line: a new operation, open
     const nOps = () => evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().length)`);
     const pickOpt = async (id) => {
-      if (await evalJs(`document.querySelector('.cut-type-menu').hidden`)) await typeMenu();
-      await t.click(await evalJs(`(() => { const r = document.querySelector('.cut-type-menu .cut-type-opt[data-id="${id}"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+      await t.click(await evalJs(`(() => { const r = document.getElementById('op-type-${id}').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
       await sleep(200);
     };
     const n0 = await nOps();
     out.refused = {};
     for (const [id, name] of [['pocket', 'Pocket'], ['interior', 'Inside'], ['exterior', 'Outside']]) {
       await pickOpt(id);
-      const note = await evalJs(`[...document.querySelectorAll('#prepare-panel .cut-note div')].map((d) => d.textContent).join(' | ')`);
+      const note = await evalJs(`document.getElementById('prepare-notice').hidden ? '' : document.getElementById('prepare-notice').textContent`);
       out.refused[id] = note;
       assert.strictEqual(await nOps(), n0, `1: ${name} on the open chain: no operation made`);
       assert.strictEqual(note, `This open line can\u2019t be ${name === 'Inside' || name === 'Outside' ? 'an' : 'a'} ${name}: ${name === 'Inside' || name === 'Outside' ? 'an' : 'a'} ${name.toLowerCase()} needs a closed shape`, `1: ${name}: the plain refusal line: ${note}`);
@@ -82,7 +77,7 @@ else {
     assert.ok(await cardShown(), '3: a click inside the closed plate picks its region');
     out.menuAfter = await typeMenu();
     assert.strictEqual(out.menuAfter.interior, true, '3: Inside is enabled: ' + JSON.stringify(out.menuAfter));
-    await t.click(await evalJs(`(() => { const r = document.querySelector('.cut-type-menu .cut-type-opt[data-id="interior"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+    await pickOpt('interior');
     out.type = await evalJs(`document.querySelector('#prepare-panel .cut-type-cur').textContent`);
     assert.strictEqual(out.type, 'Inside', '3: the plate takes an Inside cut');
     await t.shot('shaper-prepare-after-inside-cut.png', await evalJs(`(() => { const svg = document.getElementById('prepare-canvas').getBoundingClientRect(), c = document.querySelector('#prepare-panel').getBoundingClientRect(); const x = Math.max(0, Math.min(svg.left, c.left)); return { x, y: svg.top, width: Math.min(innerWidth, Math.max(svg.right, c.right)) - x, height: Math.min(svg.height, 700), scale: 1 }; })()`));

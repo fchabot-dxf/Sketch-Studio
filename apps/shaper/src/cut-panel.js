@@ -357,8 +357,8 @@ export function createCutPanel(hostEl, opts = {}) {
   const smoothingInput = $('.cut-smoothing'); // TASK 809
   smoothingInput.addEventListener('change', () => { const n = parseUnit(smoothingInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('smoothing', n); else renderFields(); });
   // TASK S2 (owner rulings turns 2710-2717): the OPEN operation's card: its header ("Pocket 2 · 3 shapes") with Duplicate, its Shapes (one row each with an X that takes
-  // it out), its rows (810's tabs, 813's layout), the note area, OK / Cancel. With shapes selected and no operation open: the quick flow's type menu only (+ the note
-  // area for a refusal's line).
+  // it out), its rows (810's tabs, 813's layout), the note area, OK / Cancel. (TASK S3: with shapes selected and no operation open there is no card: the quick flow's
+  // type menu that card held is the operations toolbar now, prepare-stage.js.)
   const headRow = $('.cut-op-headrow'), opHead = $('.cut-op-head'), dupBtn = $('.cut-op-dup'), geoEl = $('.cut-geo'), geoList = $('.cut-geo-list'), actionsEl = $('.cut-actions');
   dupBtn.addEventListener('click', () => onDuplicate());
   $('.cut-ok').addEventListener('click', () => onOk());
@@ -814,11 +814,7 @@ export function createCutPanel(hostEl, opts = {}) {
     bitCur.textContent = picked ? `${bitRec.bitName}${bitOfRecord(bitRec, getBits()) ? '' : ' (not in your tool table)'}` : hintLabel('bitCustom');
     const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
-    // TASK S2 (owner turn 2717): with shapes selected and no operation open the card is the type menu only: no rows, no tabs (set BEFORE applyTabs measures the tabs)
-    const typeOnly = current.mode === 'shape';
-    rowsEl.hidden = typeOnly;
-    applyTabs(); // TASK 810: last, on the rows the card logic shows
-    if (typeOnly) tabsEl.hidden = true;
+    applyTabs(); // TASK 810: last, on the rows the card logic shows (TASK S3: the card is the open operation's only: a selection shows no card)
   };
   // TASK S2: the header, the chips, the Geometry row and a Contour's part line of the card in hand (see above)
   function renderOpParts(model) {
@@ -851,7 +847,7 @@ export function createCutPanel(hostEl, opts = {}) {
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
       clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
-      mode: model.mode || null, // TASK S2: 'op' (an open operation) | 'shape' (shapes selected: the type menu only)
+      mode: model.mode || null, // TASK S2: 'op' (an open operation; TASK S3: the selection-only 'shape' card is gone)
       wallSideFree: model.wallSideFree === true, // TASK S2: a Contour's Wall side applies (a shape whose model does not say it)
       depthFromModel: model.depthFromModel !== false, // TASK S2: a Roughing's / Contour's Depth from the model, or typed (the cut stops there)
       levels: model.levels === true || hasLevels(rec), // TASK 809: the operation cuts a part's levels (its Smoothing row; a Contour's are its part's: model.levels)

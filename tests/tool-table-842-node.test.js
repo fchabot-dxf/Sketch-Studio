@@ -166,7 +166,7 @@ try {
   const rowState = (name) => { const r = q(`.cut-row[data-row="${name}"], .cut-row[data-param="${name}"]`); return r.style.display === 'none' ? 'none' : 'off' in r.dataset ? 'greyed' : 'live'; };
   const exportOf = () => shaperSvgOf(st, planEntries());
   const toolDiaAttrs = (svg) => [...svg.matchAll(/shaper:toolDia="([^"]+)"/g)].map((m) => m[1]);
-  pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="pocket"]'); // the quick flow: a new Pocket, open
+  pressEl('#op-type-pocket'); // TASK S3: the toolbar's Pocket: a new Pocket of the selected shape, open
   typed('.cut-depth', '20');
   eq([q('.cut-bit-cur').textContent, rowState('bit'), rowState('toolDia'), rowState('cutterShape')], ['Custom', 'live', 'live', 'live'], 'a new operation: Custom (today\'s typed bit), its rows live');
   const before = exportOf();
@@ -244,6 +244,9 @@ try {
   ok(contourDia.length > 0 && contourDia.every((d) => d === '1.000 mm'), 'its passes are written with the tip diameter: ' + JSON.stringify([...new Set(contourDia)]));
   eq(describeOperations(st, planEntries()).filter((o) => o.tool).map((o) => o.heading), ['Change to TBN 1mm', 'Change to TBN 1mm'], 'both operations under the bit\'s tool change');
   console.log('6 tapered levels: ok');
+  // TASK S3: the toolbar's TOOLS section (fixed, after Recalculate) holds the Tool table button
+  eq([...doc.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section).slice(-2), ['recalculate', 'tools'], 'the Tools section is the toolbar\'s last, after Recalculate');
+  ok('fixed' in q('#prepare-ribbon .sk-ribbon-group[data-section="tools"]').dataset && q('#op-tool-table .sk-ribbon-lbl').textContent === 'Tool table', 'a fixed section (as Recalculate): its one button, Tool table');
 } finally {
   saveBits(DEFAULT_BITS.map((b) => ({ ...b })));
   SettingsManager.set(TOOL_TABLE_KEY, null, { persist: 'local' });

@@ -35,13 +35,11 @@ try {
   const pc = doc.getElementById('prepare-canvas');
   const inside = worldToScreen(pc, { x: 30, y: 20 });
   app.click(Math.round(inside.x), Math.round(inside.y), { target: pc }); // select the loop
-  assert(!q('.cut-card').hidden, 'the cut card shows the selected loop');
+  assert(q('.cut-card').hidden && app.prepare.view().selectedTargets().length === 1, 'the loop is selected (TASK S3: a selection shows no card)');
 
   // ── cut TYPE: one step, Ctrl+Z (on Prepare) removes it, Ctrl+Y brings it back ──
   let h0 = hist();
-  pressEl('.cut-type-trigger');
-  assert(q('.cut-type-opt[data-id="pocket"]'), 'the cut type menu');
-  pressEl('.cut-type-opt[data-id="pocket"]');
+  pressEl('#op-type-pocket'); // TASK S3: the operations toolbar's Pocket (a NEW operation of the selection, open)
   assert.strictEqual(hist(), h0 + 1, 'picking a cut type is ONE history step');
   assert.deepStrictEqual(recs().map((r) => r.cutType), ['pocket']);
   ctrl('z');
@@ -50,7 +48,7 @@ try {
   ctrl('y');
   assert.strictEqual(hist(), h0 + 1);
   assert.deepStrictEqual(recs().map((r) => r.cutType), ['pocket'], 'Ctrl+Y brings it back');
-  assert.strictEqual(q('.cut-card').hidden, false, 'the selection and the card survive an undo that only changed the plan');
+  assert.strictEqual(app.prepare.view().selectedTargets().length, 1, 'the selection survives an undo that only changed the plan (TASK S3: a selection shows no card: its card was the type menu)');
 
   // ── DEPTH: change -> undo -> old depth ──
   app.prepare.edit(storeOps()[0].id); // TASK S2: the operation opened (the list's Edit): its depth is edited in its card

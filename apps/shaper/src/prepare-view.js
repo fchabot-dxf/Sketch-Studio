@@ -8,13 +8,13 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, STOCK_TYPE_ID, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations
-import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, planMemberItems, pathsCtx, pathsOf, pathsSigOf, planOwnedLoops, stockKeyOf, rememberStepDepth, rememberAdaptiveSteps, rememberStepDeviation, steppedNoteItems,
+import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, planMemberItems, pathsCtx, pathsOf, pathsSigOf, itemOutOfDate, planOwnedLoops, stockKeyOf, rememberStepDepth, rememberAdaptiveSteps, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
   CONTOUR_KIND, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
 import { cutLengthNote } from './tool-table.js'; // TASK 842: an operation deeper than its bit's cutting length (one note line)
-import { resultOf } from './op-paths.js'; // TASK 817: the generated paths by their signature (the open operation's: as opened, its Preview)
+import { resultOf, staleOf } from './op-paths.js'; // TASK 817: the generated paths by their signature (the open operation's: as opened, its Preview)
 import { holdMode, tabHandles, holdTabDragAt } from '#core/hold-part.js'; // TASK 822: draggable tabs (the hold's own layout, ONE pure derivation)
 import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
 import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height map, drawn under the cut lines
@@ -491,11 +491,15 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (!look) { look = computeLook(it, derived); byItem.set(k, look); while (byItem.size > 3) byItem.delete(byItem.keys().next().value); }
     return look;
   };
+  // TASK S3: { look, faint }: an OUT-OF-DATE membership (its inputs changed since it was generated: op-paths.js) draws its last generated paths FAINT (the open
+  // operation's faint look: no depth chip), never as current
   const getLook = (it) => {
     const ctx = viewCtx(), sig = pathsSigOf(it.planKey, it.rec, ctx);
-    if (sig === null) return EMPTY_LOOK;
-    const d = pathsOf(it.planKey, it.rec, ctx, { opId: it.opId }); // a miss asks for it (generated in the background)
-    return d === undefined ? EMPTY_LOOK : lookAt(it, sig, d);
+    if (sig === null) return { look: EMPTY_LOOK, faint: false };
+    const d = pathsOf(it.planKey, it.rec, ctx, { opId: it.opId, item: it.id }); // a miss asks for it (generated in the background), unless it is out of date
+    if (d !== undefined) return { look: lookAt(it, sig, d), faint: false };
+    const was = itemOutOfDate(it.planKey, it.rec, ctx, it.id, it.opId) ? staleOf(it.id) : null, r = was ? resultOf(was) : undefined;
+    return r === undefined ? { look: EMPTY_LOOK, faint: false } : { look: lookAt(it, was, r.paths), faint: true };
   };
   let preview = null; // the stage's Preview of the open operation: { sigs: Map(membership id -> signature) } (setPreview)
   const openSigs = new Map(); // the open operation's memberships -> their signature when it was opened (its paths as they were: drawn faint)
@@ -529,7 +533,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const st = stateOf(it.key);
       if (!st || (op && selection.has(it.key) && it.opId !== op.id)) continue;
       if (op && it.opId === op.id) { const o = openLookOf(it); out.push({ it, st, look: o ? o.look : EMPTY_LOOK, faint: Boolean(o && o.faint), open: true }); continue; }
-      out.push({ it, st, look: getLook(it), faint: false, open: false });
+      const g = getLook(it); out.push({ it, st, look: g.look, faint: g.faint, open: false });
     }
     return out;
   };

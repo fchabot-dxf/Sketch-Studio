@@ -42,7 +42,7 @@ const rows = (st) => describeOperations(st).map((o) => `${o.rowText} | ${o.regio
 // TASK S2: the page's own steps: shapes picked + a type = a NEW operation, open; the fields set in it; OK. editOp: the operation of a shape opened, changed, OK.
 const flows = (app, K) => {
   const pv = () => app.prepare.view();
-  const fields = (o) => { for (const [f, v] of Object.entries(o)) if (f === 'cutType') app.prepare.pickType(v); else pv().setOpField(f, v); };
+  const fields = (o) => { for (const [f, v] of Object.entries(o)) if (f === 'cutType') { if (app.prepare.openId()) app.prepare.pickType(v); else app.prepare.addOperation(v); } else pv().setOpField(f, v); }; // TASK S3: no operation open: the operations toolbar's button
   return {
     make: (keys, o) => { app.prepare.ok(); pv().setSelection(keys.map((k) => target(K[k]))); fields(o); app.prepare.ok(); },
     editOp: (k, o) => { app.prepare.ok(); app.prepare.edit(membersOf(K[k])[0].op.id); fields(o); app.prepare.ok(); },

@@ -9,12 +9,13 @@ import { pocketScallop } from '#core/cutter-profile.js';
 import { CUTTER_SHAPES, exportEncoding } from '../apps/shaper/src/shaper.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { PARAM_HINTS, hintLabel, hintText } from '../apps/shaper/src/param-hints.js';
+import { hintFor } from '../apps/shaper/src/hint.js';
 import {
   DEFAULT_VBIT_TIP_WIDTH_MM, BIT_RECORD_FIELDS, TOOL_TABLE_KEY,
   validateBit, normalizeBit, loadBits, saveBits, recordFieldsOf, vbitTipWidth,
 } from '../apps/shaper/src/tool-table.js';
 import { createToolTableWindow } from '../apps/shaper/src/tool-table-window.js';
-import { planEntries, keyOf, getPlanRecord, clearingSummary, pocketToolDia } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, keyOf, getPlanRecord, clearingSummary, clearingAvailability, CLEARING_REFUSED, pocketToolDia } from '../apps/shaper/src/cut-plan.js';
 import { storeOps } from '../apps/shaper/src/operations-store.js';
 import { describeOperations, toolOf } from '../apps/shaper/src/operations.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
@@ -122,6 +123,8 @@ try {
   };
   addRect('A', 0, 0, 60, 60);
   addRect('B', 80, 0, 40, 30);
+  addRect('C', 140, 0, 40, 30);
+  addRect('H', 154, 10, 12, 10);
   st.joints.set('Lj0', { x: 0, y: 80, sketchId: 'sketch-1' });
   st.joints.set('Lj1', { x: 60, y: 80, sketchId: 'sketch-1' });
   st.shapes.push({ id: 'Ls0', type: 'line', joints: ['Lj0', 'Lj1'], sketchId: 'sketch-1' });
@@ -239,11 +242,22 @@ try {
   const onRaw = exportShaperSVG({ state: st, entries: [{ target: onEntry.target, rec: { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 90 } }], encoding: exportEncoding(), docUnit: 'mm', options: {} });
   eq(shaperSvgOf(st, [onEntry]), onRaw, 'On-line V-bit export is byte-identical');
 
-  // Non-V-bit pocket export is byte-identical
+  // Non-V-bit pocket export is byte-identical & Clearing dropdown matches eager clearingAvailability (enabled on plain pocket)
   const pocketOp = storeOps().find((o) => o.type === 'pocket');
   app.prepare.edit(pocketOp.id);
   pressEl('.cut-bit-trigger');
   pressEl('.cut-bit-opt[data-bit="em-quarter"]');
+  pressEl('.cut-clear-trigger');
+  const emAvail = clearingAvailability(pocketOp.geometry[0].key, { cutType: 'pocket', ...storeOps().find((o) => o.id === pocketOp.id).settings }, st);
+  eq(emAvail, { morphed: null }, 'plain end-mill pocket allows Morphed');
+  const plainOpts = [...doc.querySelectorAll('.cut-clear-opt')].map((el) => ({ id: el.dataset.clearing, disabled: el.getAttribute('aria-disabled') === 'true' || el.classList.contains('is-disabled') }));
+  eq(plainOpts, [
+    { id: 'freehand', disabled: false },
+    { id: 'linked', disabled: false },
+    { id: 'raster', disabled: false },
+    { id: 'morphed', disabled: Boolean(emAvail.morphed) },
+  ], 'Clearing dropdown enables all 4 choices on plain end-mill pocket');
+  pressEl('.cut-clear-trigger');
   app.prepare.ok();
   const emEntry = planEntries().find((e) => e.rec.cutType === 'pocket');
   const emRaw = exportShaperSVG({ state: st, entries: [{ target: emEntry.target, rec: { ...emEntry.rec, tipWidth: undefined, bitId: undefined, bitName: undefined } }], encoding: exportEncoding(), docUnit: 'mm', options: {} });
@@ -254,14 +268,40 @@ try {
   app.prepare.edit(opB.id);
   pressEl('.cut-type-trigger');
   pressEl('.cut-type-opt[data-id="pocket"]');
+  pressEl('.cut-bit-trigger');
+  pressEl('.cut-bit-opt[data-bit="em-quarter"]');
   pressEl('.cut-clear-trigger');
   pressEl('.cut-clear-opt[data-clearing="raster"]');
+  pressEl('.cut-bit-trigger');
+  pressEl('.cut-bit-opt[data-bit="vb-quarter"]');
   app.prepare.ok();
   const opBRaster = storeOps().find((o) => o.id === opB.id);
   const sumRaster = clearingSummary(opBRaster.geometry[0].key, { cutType: 'pocket', ...opBRaster.settings }, st);
   eq(sumRaster.passes, 140, '40x30 1/4 in V-bit Raster pocket has 140 passes');
   app.prepare.edit(opB.id);
   eq(q('.cut-row[data-row="bit"] .cut-bit-note').textContent, 'V-bit pocket: 140 passes per depth with a 0.508 mm tip', 'Raster V-bit pocket note shows 140 passes');
+  app.prepare.cancel();
+
+  // Clearing dropdown on a non-V-bit pocket with an island hole disables Morphed identically to eager clearingAvailability
+  const pC = worldToScreen(pc, { x: 140, y: 15 });
+  app.click(Math.round(pC.x), Math.round(pC.y), { target: pc });
+  pressEl('#op-type-pocket');
+  typed('.cut-depth', '3');
+  pressEl('.cut-bit-trigger');
+  pressEl('.cut-bit-opt[data-bit="em-quarter"]');
+  pressEl('.cut-clear-trigger');
+  const opC = storeOps().find((o) => o.type === 'pocket' && o.id !== pocketOp.id && o.id !== opBRaster.id);
+  const islAvail = clearingAvailability(opC.geometry[0].key, { cutType: 'pocket', ...opC.settings }, st);
+  eq(islAvail, { morphed: 'islands' }, 'island pocket refuses Morphed');
+  const islOpts = [...doc.querySelectorAll('.cut-clear-opt')].map((el) => ({ id: el.dataset.clearing, disabled: el.getAttribute('aria-disabled') === 'true' || el.classList.contains('is-disabled') }));
+  eq(islOpts, [
+    { id: 'freehand', disabled: false },
+    { id: 'linked', disabled: false },
+    { id: 'raster', disabled: false },
+    { id: 'morphed', disabled: true },
+  ], 'Clearing dropdown disables Morphed on island pocket identically to eager clearingAvailability');
+  const morphedOpt = doc.querySelector('.cut-clear-opt[data-clearing="morphed"]');
+  ok(morphedOpt && hintFor(morphedOpt).includes(CLEARING_REFUSED.islands), 'Morphed refusal tooltip includes CLEARING_REFUSED.islands');
   app.prepare.cancel();
 
   console.log('3 record, planning, exports, notes: ok');

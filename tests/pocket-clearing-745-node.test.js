@@ -116,7 +116,11 @@ for (const [name, mk] of Object.entries(SHAPES)) {
   for (const angle of [0, 45, 90]) {
     const ras = planClearing(reg.rings, settings('raster', { rasterAngle: angle }));
     eq(ras.refused, null, `${name}: Raster ${angle} is programmed`);
-    const passes = ras.clear.filter((c) => c.role === 'raster'), cleanup = ras.clear.filter((c) => c.role === 'cleanup');
+    // TASK 835e: the passes are joined into open zigzags (one per area where every join can be made); the passes themselves: plan.passLines (their offset
+    // across the passes, as rasterPasses gives it)
+    const passes = ras.passLines.map((l) => ({ points: l.points, closed: false, offset: l.offset })), cleanup = ras.clear.filter((c) => c.role === 'cleanup');
+    const zz = ras.clear.filter((c) => c.role === 'raster');
+    ok(zz.length >= 1 && zz.every((c) => !c.closed) && zz.reduce((n, c) => n + c.turns.filter((t) => t.kind === 'pass').length, 0) >= passes.length, `${name} raster ${angle}: ${zz.length} open zigzag(s) holding the ${passes.length} passes (a pass a cut between pieces splits: two chords; each pass once: tests/pocket-raster-loop-835-node.test.js)`);
     ok(passes.length > 0 && passes.length === ras.passes && cleanup.length === ras.cleanup && cleanup.length >= 1, `${name} raster ${angle}: ${passes.length} passes + ${cleanup.length} clean-up ring(s)`);
     ok(passes.every((c) => !c.closed && c.points.length === 2), `${name} raster ${angle}: each pass is one open straight path`);
     let worstIn = Infinity;
@@ -232,7 +236,8 @@ const elementsOf = (svg) => {
   ok(fps.every((f) => f.clearing && (f.clearing.role === 'start' ? f.kind === 'guide' && f.rings.length === 0 : f.rings.length > 0)), 'every footprint carries its clearing role (cut paths sweep; start mark is a guide)');
   // Raster + spiral export: open paths + start mark guide
   const ras = elementsOf(exportOf(SHAPES.rectangle(), POCKET({ clearing: 'raster' })));
-  ok(ras.filter((e) => e.cutType === 'online').length === results.rectangle.ras.passes + 1 && ras.filter((e) => e.cutType === 'online' && !/Z$/.test(e.d)).length === results.rectangle.ras.passes && ras.at(-1).cutType === 'guide', 'Raster: open on-line passes + closed clean-up ring + start mark guide');
+  // TASK 835e: Loop off = ONE open zigzag (the rectangle: one area) + the closed clean-up ring + the start mark
+  ok(ras.filter((e) => e.cutType === 'online').length === 2 && ras.filter((e) => e.cutType === 'online' && !/Z$/.test(e.d)).length === 1 && ras.at(-1).cutType === 'guide', 'Raster: ONE open on-line zigzag + closed clean-up ring + start mark guide');
   const spx = elementsOf(exportOf(SHAPES.L(), POCKET({ clearing: 'morphed' })));
   eq(spx.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', false], ['inside', true], ['guide', false]], 'Morphed spiral: ONE open on-line path, the wall, then the start mark guide');
   const refused = elementsOf(exportOf(SHAPES.island(), POCKET({ clearing: 'morphed' })));

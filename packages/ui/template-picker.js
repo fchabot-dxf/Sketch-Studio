@@ -10,7 +10,7 @@
 //   openTemplatePicker() -> Promise of { blank: true } | { template, document, name } | null (Esc, a press outside, the X: no new design)
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
-import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, parseParam, defaultParams, templateCorners, fitCorners } from '#core/templates.js';
+import { TEMPLATES, TemplateRefusal, buildTemplate, paramKind, paramUnit, paramRefusal, paramActive, parseParam, defaultParams, templateCorners, fitCorners, presetText, presetTitle } from '#core/templates.js';
 import SettingsManager, { docUnit, lengthText, angleText } from '#core/settings-manager.js';
 import { basePer } from '#core/units.js';
 import { dbg } from '#core/debug.js';
@@ -422,6 +422,17 @@ function injectStyles() {
   border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.45)); }
 .sk-tp-input[aria-invalid="true"] { border-color: var(--sk-error, #e5484d); }
 .sk-tp-unit { width: 30px; opacity: 0.75; }
+/* TASK 843: a length's standard-size chips, on their own line under the field; a group's name on its cards */
+.sk-tp-field.sk-tp-has-presets { flex-wrap: wrap; row-gap: 4px; }
+.sk-tp-presets { flex-basis: 100%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.sk-tp-preset { font: inherit; font-size: 12.5px; min-height: 32px; min-width: 44px; padding: 0 10px; border-radius: 16px; cursor: pointer; color: inherit; background: rgba(127,127,127,0.08);
+  border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); touch-action: manipulation; }
+.sk-tp-preset:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
+.sk-tp-preset[aria-pressed="true"] { border-color: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff));
+  background: color-mix(in srgb, var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)) 12%, transparent); }
+.sk-tp-preset:focus-visible { outline: 2px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); outline-offset: 1px; }
+@media (pointer: coarse) { .sk-tp-preset { min-height: 44px; } }
+.sk-tp-group { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.65; }
 .sk-tp-err { color: var(--sk-error, #e5484d); font-size: 12.5px; min-height: 1em; }
 .sk-tp-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .sk-tp-btn { font: inherit; min-height: 44px; min-width: 88px; padding: 0 16px; border-radius: 8px; cursor: pointer; color: inherit; background: transparent;
@@ -508,12 +519,15 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       const x = document.createElement('button'); x.type = 'button'; x.className = 'sk-tp-x'; x.dataset.action = 'close'; x.setAttribute('aria-label', 'Close'); x.textContent = '×'; x.addEventListener('click', () => finish(null));
       h.appendChild(x); return h;
     };
-    const card = (id, name, desc, previewNode) => {
+    // TASK 843: a template of a GROUP (#core/templates.js `group`, e.g. "Door hardware") says it on its card, over its name (the grid stays one
+    // continuous grid, task 721: no heading row; the bank keeps a group's templates together)
+    const card = (id, name, desc, previewNode, group = null) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-tp-card'; b.dataset.template = id;
       const p = document.createElement('div'); p.className = 'sk-tp-prev'; p.appendChild(previewNode);
       const n = document.createElement('div'); n.className = 'sk-tp-name'; n.textContent = name;
       const d = document.createElement('div'); d.className = 'sk-tp-desc'; d.textContent = desc;
-      b.append(p, n, d); return b;
+      if (group) { const g = document.createElement('div'); g.className = 'sk-tp-group'; g.textContent = group; b.dataset.group = group; b.append(p, g, n, d); } else b.append(p, n, d);
+      return b;
     };
 
     const starSvg = () => {
@@ -541,7 +555,8 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     for (const t of templates) {
       const preview = defaultDocs.get(t)?.has(unit) ? renderTemplatePreview(defaultDocs.get(t).get(unit), { unit }) : document.createElement('div');
       const wrap = document.createElement('div'); wrap.className = 'sk-tp-item'; wrap.dataset.template = t.id;
-      const c = card(t.id, t.name, t.description, preview);
+      if (t.group) wrap.dataset.group = t.group;
+      const c = card(t.id, t.name, t.description, preview, t.group);
       c.addEventListener('click', () => startView(t, c));
       const star = document.createElement('button');
       star.type = 'button'; star.className = 'sk-tp-star'; star.dataset.template = t.id;
@@ -693,10 +708,31 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
           input.value = kind === 'length' ? lengthText(values[k] * basePer(unit), { unit, show: 'field' }) : String(values[k]);
           // TASK 722: a count is a whole-number spinner; a length / angle is TEXT (it accepts "1/8 in", 3", 38mm: parseParam, the shared expression parser)
           if (kind === 'count') { input.type = 'number'; input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.type = 'text'; input.inputMode = 'decimal'; input.autocomplete = 'off'; }
-          input.addEventListener('input', () => { values[k] = parseParam(spec, input.value, unit); clearError(); changed(); });
           const unitLabel = document.createElement('span'); unitLabel.className = 'sk-tp-unit'; unitLabel.textContent = paramUnit(spec, unit);
           row.append(label, input, unitLabel);
           inputs.set(k, input);
+          // TASK 843: a length's standard sizes (#core/templates.js `presets`): one chip each under its field (the size in the document's unit; an inch
+          // standard's metric equivalent in a mm / cm document); a press sets the field to that size exactly (the field stays the value, editable).
+          let syncPresets = () => {};
+          if (kind === 'length' && Array.isArray(spec.presets)) {
+            row.classList.add('sk-tp-has-presets');
+            const chips = document.createElement('div'); chips.className = 'sk-tp-presets'; chips.setAttribute('role', 'group'); chips.setAttribute('aria-label', `${spec.label}: standard sizes`);
+            const inUnit = (mm) => Math.round(mm / basePer(unit) * 1e6) / 1e6;
+            const buttons = spec.presets.map((pr, i) => {
+              const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-tp-preset'; b.dataset.preset = String(i);
+              b.textContent = presetText(pr, unit); b.title = presetTitle(pr); b.setAttribute('aria-label', `${spec.label} ${presetTitle(pr)}`);
+              b.addEventListener('click', () => {
+                values[k] = inUnit(pr.mm);
+                input.value = lengthText(values[k] * basePer(unit), { unit, show: 'field' });
+                input.removeAttribute('aria-invalid'); syncPresets(); clearError(); changed(true);
+              });
+              chips.appendChild(b); return b;
+            });
+            syncPresets = () => buttons.forEach((b, i) => b.setAttribute('aria-pressed', Math.abs(values[k] - inUnit(spec.presets[i].mm)) < 1e-6 ? 'true' : 'false'));
+            syncPresets();
+            row.appendChild(chips);
+          }
+          input.addEventListener('input', () => { values[k] = parseParam(spec, input.value, unit); syncPresets(); clearError(); changed(); });
         }
         fields.appendChild(row);
       }

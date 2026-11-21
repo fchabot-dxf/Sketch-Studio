@@ -21,6 +21,9 @@
 // the existing parameter -> dimension -> solve path.
 // COUNT / CHOICE params (and a length declared `atOpen`) are chosen in the start modal only: they change the topology (how many boards, which joint)
 // or a value no dimension carries (a pattern's spacing), so a user parameter could not drive them and none is made.
+// TASK 843: a template may name its `group` (the picker says it on its cards); a length may list its standard sizes (`presets`: [{ text, mm, note? }],
+// the start view's chips) and may be a cut DEPTH (`depth: true`, with `atOpen`: read only by the cuts the recipe declares, d.cut, which the document
+// carries in hosts.template.cuts for Shaper).
 
 import { serializeDocument } from '#core/document.js';
 import { userToWorldY, worldToUserY, basePer, BASE } from '#core/units.js';
@@ -102,6 +105,7 @@ const LABEL_AWAY = 10; // where a recipe drops a linear dimension's label (mm fr
 function drawing() {
   const state = ops.newSketchState();
   let ox = 0, oy = 0, swap = false;
+  const cuts = []; // TASK 843: the cuts the recipe declares (d.cut)
   const across = { horizontal: 'vertical', vertical: 'horizontal' };
   const d = {
     state,
@@ -156,10 +160,16 @@ function drawing() {
     angle(l1, l2, at, text) { const [x, y] = d.w(at[0], at[1]); return ops.dimension(state, { lines: [l1, l2] }, { x, y }, text); },
     /** A text typed into an existing dimension's box (a double click on its label). */
     type(c, text) { return ops.typeDimension(state, c, text); },
-    /** The drawing as a document: the linear labels dragged to the placement rule's lanes, then the one save path. */
+    /**
+     * TASK 843: the CUT the recipe declares for these shapes (shape ids): `cutType` in the Shaper file's words ('inside' | 'pocket' | 'guide'),
+     * `cutDepth` in mm (none for a guide). Not part of the drawing: it rides in the document's `hosts.template.cuts` (finish), which only
+     * Shaper reads (apps/shaper/src/cut-import.js applyTemplateCuts), so the template opens there with its operations ready.
+     */
+    cut(shapes, cutType, cutDepth) { cuts.push({ shapes: [...shapes], cutType, ...(cutDepth !== undefined ? { cutDepth: R(cutDepth) } : {}) }); },
+    /** The drawing as a document: the linear labels dragged to the placement rule's lanes, then the one save path (+ the declared cuts, TASK 843). */
     finish() {
       placeDimensions(state.joints, state.shapes, state.constraints);
-      return serializeDocument(state);
+      return serializeDocument(state, cuts.length ? { hosts: { template: { cuts } } } : undefined);
     },
   };
   return d;
@@ -922,6 +932,234 @@ const triangleLimits = (v, u) => {
   return len >= rest ? refusal(param, `${label} is too long for the other two sides: use less than ${below(rest, u)}.`) : null;
 };
 
+// ── TASK 843: DOOR HARDWARE (owner turns 3083-3084: "Template for locksmiths"), cut DIRECTLY on the door or the frame with the Origin (not router
+// jigs: no bushing offset). One group in the picker (`group`, template-picker.js shows it on each card). Authored in INCHES (the US door-hardware
+// standards, `inches`: exact, 1 in = 25.4 mm); a mm document shows their metric equivalents. Every size is a LENGTH param (a user parameter driving
+// its dimensions); the standard sizes are its `presets` (the start view's chips: one press sets the field, and the size stays editable after open).
+// A cut DEPTH is a length declared `depth: true` (and `atOpen`: no dimension carries it): only the declared cuts read it (d.cut: the bores = Inside /
+// Pocket, the recesses = Pocket at their depth, the door edge / faces / screw marks = Guide), so the template opens in Shaper with its operations
+// ready. Each standard number's SOURCE is written beside it (manufacturer-neutral: ANSI/BHMA A115 / A156 door preparation, or "common"; no brand's
+// drawing). Views: FACE = the door's face, its lock edge vertical on the origin's Y axis, the door to the left; EDGE = the door's edge, its
+// thickness across (X), the door's height along Y; the deadbolt is both, the edge view unfolded to the right of the edge line (a door-prep template's
+// usual layout).
+const INCH_MM = 25.4;
+/** A door-hardware size as written in inches ('2-3/8', '7/8', '4') -> { text, mm, note } (mm exact). */
+export function inches(text, note = '') {
+  const m = /^(?:(\d+)-)?(\d+)(?:\/(\d+))?$/.exec(text);
+  if (!m) throw new Error(`inches: "${text}" is not a size in inches`);
+  const value = (m[1] ? Number(m[1]) : 0) + (m[3] ? Number(m[2]) / Number(m[3]) : Number(m[2]));
+  return { text, mm: R(value * INCH_MM), ...(note ? { note } : {}) };
+}
+/** A preset's chip text in the document's `unit`: inch = its standard size (2-3/8"); mm / cm = the metric equivalent, then the inch size. */
+export function presetText(preset, unit = BASE) {
+  if (unit === 'in') return `${preset.text}"`;
+  const step = unit === 'cm' ? 100 : 10;
+  return `${Math.round(preset.mm / basePer(unit) * step) / step} (${preset.text}")`;
+}
+/** Its full name (the chip's tooltip): "2-3/8 in = 60.3 mm, residential". */
+export const presetTitle = (preset) => `${preset.text} in = ${Math.round(preset.mm * 10) / 10} mm${preset.note ? `, ${preset.note}` : ''}`;
+// a length param authored in inches: its default and its presets (the first preset is the default unless `def` says)
+const sized = (label, presets, extra = {}) => {
+  const list = presets.map((p) => (typeof p === 'string' ? inches(p) : p));
+  return { label, default: (extra.def ? inches(extra.def) : list[0]).mm, ...(list.length > 1 || extra.def ? { presets: list } : {}), ...Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'def')) };
+};
+/** TASK 843: the corners of a plate's recess. 'round' on the latch / deadbolt faceplate = the full 1/2 in radius ends of a 1 in plate (the Slot tool). */
+export const RECESS_CORNERS = Object.freeze([{ value: 'square', label: 'Square corners' }, { value: 'round', label: 'Round corners' }]);
+const DOOR = 'Door hardware';
+
+// the four edges of a Rect tool rectangle as the user sees them (Y up: the larger world y is the user's bottom)
+function rectEdges(d, rc) {
+  const line = (id) => d.state.shapes.find((s) => s.id === id), P = (j) => d.state.joints.get(j);
+  const level = (id) => { const [a, b] = line(id).joints.map(P); return Math.abs(a.y - b.y) < 1e-9; };
+  const hs = rc.lines.filter(level), vs = rc.lines.filter((id) => !level(id));
+  const [top, bottom] = hs.sort((a, b) => P(line(a).joints[0]).y - P(line(b).joints[0]).y);
+  const [left, right] = vs.sort((a, b) => P(line(a).joints[0]).x - P(line(b).joints[0]).x);
+  return { top, bottom, left, right, line };
+}
+/**
+ * A RECESS (a plate's mortise, a pocket) w x h about the user point [cx, cy], held by the joint `at`: its middle (anchor 'centre') or the middle
+ * of its left edge (anchor 'left', a hinge leaf open to the door's face). corners 'square' = the Rect tool; 'round' = the Rect tool and the
+ * Fillet tool on the `rounded` corners (each fillet's own radius dimension, rText); 'full' = full round ends (the Slot tool, centre to centre, its
+ * width = w). The width (wText, unless null: another dimension fixes it) and the height (hText) are dimensioned. -> { shapes, left, right }.
+ */
+function recess(d, at, cx, cy, w, h, { wText, hText, corners = 'square', r = 0, rText, rounded = ['tl', 'tr', 'br', 'bl'], anchor = 'centre' }) {
+  const before = new Set(d.state.shapes.map((s) => s.id));
+  let left = null, right = null;
+  if (corners === 'full') {
+    const c1 = d.pt(cx, cy - (h - w) / 2), c2 = d.pt(cx, cy + (h - w) / 2);
+    const built = ops.slot(d.state, c1, c2, w);
+    d.type(d.state.constraints.find((k) => k.type === T.DISTANCE && k.isRadius && k.shape === built.meta.e1.id), wText); // the Slot tool's own width
+    d.v(c1, c2); d.midpoint(c1, c2, at);
+    d.dim(c1, c2, 'vertical', 1, `${hText} - ${wText}`);
+  } else {
+    const [x0, y0] = d.w(cx - w / 2, cy - h / 2), [x1, y1] = d.w(cx + w / 2, cy + h / 2);
+    const rc = ops.rect(d.state, x0, y0, x1, y1); // first click = the user's bottom-left corner, the second the top-right
+    const e = rectEdges(d, rc);
+    ({ left, right } = e);
+    if (wText) d.dim(...e.line(e.top).joints, 'horizontal', 1, wText);
+    d.dim(...e.line(e.left).joints, 'vertical', -1, hText);
+    const sharp = { bl: rc.c1, tr: rc.c3 }, ends = e.line(e.left).joints.slice();
+    if (corners === 'round') for (const k of rounded) {
+      const [a, b] = { tl: [e.top, e.left], tr: [e.top, e.right], br: [e.bottom, e.right], bl: [e.bottom, e.left] }[k];
+      const f = ops.fillet(d.state, a, b, r);
+      d.type(d.state.constraints.find((c) => c.isRadius && c.shape === f.arc), rText);
+      if (k in sharp) sharp[k] = f.V; // the corner as it was (the Fillet tool's virtual sharp): what the anchor holds (a midpoint follows the line, not the corner)
+    }
+    if (anchor === 'left') d.midpoint(ends[0], ends[1], at); // (the left corners are never rounded with this anchor)
+    else d.midpoint(sharp.bl, sharp.tr, at);
+  }
+  return { shapes: d.state.shapes.filter((s) => !before.has(s.id) && !s.isConstruction).map((s) => s.id), left, right }; // (the Slot tool's construction centre line is not cut)
+}
+// a vertical guide line at user x from y = +len to y = -len (the Line tool), plumb
+function plumbLine(d, x, len) { const s = d.line([x, len], [x, -len]); d.vl(s); return s; }
+const AXIS_X = AXIS_SNAP_TARGETS['axis-x'].shapeId, AXIS_Y = AXIS_SNAP_TARGETS['axis-y'].shapeId;
+const symmetric = (d, p, q, axis) => ops.constrain(d.state, T.SYMMETRIC, { joints: [p, q], line: axis }); // the Symmetric tool: p, q, then the axis
+// a GUIDE line at user x centred on the X axis: its two ends symmetric about the X axis (so it is plumb), its length dimensioned (lenText)
+function axisGuide(d, x, len, lenText) {
+  const s = d.line([x, len], [x, -len]);
+  symmetric(d, s.a, s.b, AXIS_X);
+  d.dim(s.a, s.b, 'vertical', 1, lenText);
+  return s;
+}
+// the two DOOR FACES of an edge view centred on the origin: guide lines `door_thickness` apart, symmetric about the Y axis, 2 x len long (lenText)
+function faceLines(d, thick, len, lenText) {
+  const a = axisGuide(d, -thick / 2, len, lenText), b = d.line([thick / 2, len], [thick / 2, -len]);
+  symmetric(d, a.a, b.a, AXIS_Y); symmetric(d, a.b, b.b, AXIS_Y);
+  d.gap(a.id, b.id, 1, 'door_thickness');
+  return [a.id, b.id];
+}
+// the door EDGE of a face view: a plumb guide line centred on the origin, 2 x the face bore long
+function edgeLine(d, faceBore) {
+  const s = plumbLine(d, 0, faceBore);
+  d.midpoint(s.a, s.b, ORIGIN_JOINT_ID);
+  d.dim(s.a, s.b, 'vertical', 1, '2 * face_bore');
+  return s;
+}
+// the FACE BORE (the cross bore) `backset` from the door edge, on the X axis (the door to the left)
+function drawFaceBore(d, p) {
+  const c = d.circle(-p.backset, 0, p.faceBore / 2);
+  d.h(ORIGIN_JOINT_ID, c.c);
+  d.dim(c.c, ORIGIN_JOINT_ID, 'horizontal', -1, 'backset');
+  d.radius(c.id, 'face_bore / 2', p.faceBore * 0.4);
+  return c;
+}
+// the EDGE BORE and the FACEPLATE recess round it, centred on the door thickness (user [cx, 0])
+function latchEdge(d, cx, p) {
+  const bore = d.circle(cx, 0, p.edgeBore / 2);
+  if (cx === 0) d.anchor(bore.c); // the edge view alone: centred on the origin
+  else { d.h(ORIGIN_JOINT_ID, bore.c); d.dim(ORIGIN_JOINT_ID, bore.c, 'horizontal', 1, 'door_thickness / 2'); } // unfolded beside the edge line
+  d.radius(bore.id, 'edge_bore / 2', p.edgeBore * 0.4);
+  const plate = recess(d, bore.c, cx, 0, p.faceplateWidth, p.faceplateHeight, { wText: 'faceplate_width', hText: 'faceplate_height', corners: p.corners === 'round' ? 'full' : 'square' });
+  d.cut([bore.id], 'pocket', p.backset); // a blind bore into the edge, to the cross bore's centre
+  d.cut(plate.shapes, 'pocket', p.plateThickness); // the faceplate flush with the edge
+}
+
+// 1. CYLINDRICAL LOCKSET, face view: the face bore at the backset from the door edge + the edge line as a guide. ANSI/BHMA A115.2 (bored lock
+// preparation): 2-1/8 in face bore, 2-3/8 in (residential) or 2-3/4 in (commercial) backset; doors 1-3/8 in (interior) or 1-3/4 in. The bore is an
+// Inside cut through the door (its depth = the door thickness).
+function buildLocksetFace(d, p) {
+  const edge = edgeLine(d, p.faceBore), bore = drawFaceBore(d, p);
+  d.cut([bore.id], 'inside', p.doorThickness);
+  d.cut([edge.id], 'guide');
+}
+// 2. LATCH EDGE BORE + FACEPLATE MORTISE, edge view (ANSI/BHMA A115.2): the 1 in (or 7/8 in) edge bore centred on the door thickness, the faceplate
+// recess round it, 1 x 2-1/4 in (residential) or 1-1/8 x 2-1/4 in (commercial), square or round (full 1/2 in radius) corners, 1/8 in deep (the plate's
+// thickness); the bore is cut to the backset (it meets the face bore's centre). The two door faces are guides.
+function buildLatchEdge(d, p) {
+  latchEdge(d, 0, p);
+  d.cut(faceLines(d, p.doorThickness, p.faceplateHeight, '2 * faceplate_height'), 'guide');
+}
+// 3. STRIKE PLATE MORTISE, frame view: the strike's recess (common 1-1/4 x 2-3/4 in; ANSI A115 standard strike 1-1/4 x 4-7/8 in), square or round
+// corners, 1/16 in deep (the plate), and the deeper latch / box hole inside it (common 3/4 x 1-1/4 in; 5/8 in deep = a 1/2 in latch throw + 1/8 in,
+// or 1-1/8 in for a 1 in deadbolt throw). Both centred on the latch's centre (the origin); the door stop's face, a guide, half the door thickness
+// away (the latch is in the middle of the closed door).
+function buildStrike(d, p) {
+  const plate = recess(d, ORIGIN_JOINT_ID, 0, 0, p.strikeWidth, p.strikeHeight, { wText: 'strike_width', hText: 'strike_height', corners: p.corners, r: p.cornerRadius, rText: 'corner_radius' });
+  const hole = recess(d, ORIGIN_JOINT_ID, 0, 0, p.holeWidth, p.holeHeight, { wText: 'hole_width', hText: 'hole_height' });
+  const stop = axisGuide(d, -p.doorThickness / 2, p.strikeHeight, '2 * strike_height');
+  d.dim(stop.a, ORIGIN_JOINT_ID, 'horizontal', 1, 'door_thickness / 2', true);
+  d.cut(plate.shapes, 'pocket', p.strikeThickness);
+  d.cut(hole.shapes, 'pocket', p.holeDepth);
+  d.cut([stop.id], 'guide');
+}
+// 4. DEADBOLT, face + edge (ANSI/BHMA A115.2 bored preparation, the deadbolt's sizes: 2-1/8 in face bore, 1 in edge bore, 2-3/8 / 2-3/4 in backset,
+// faceplate 1 x 2-1/4 in): the face view (the face bore, the edge line) and, unfolded to the right of the edge line, the edge view (the edge bore
+// and the faceplate centred on the door thickness, the other face a guide).
+function buildDeadbolt(d, p) {
+  const edge = edgeLine(d, p.faceBore), bore = drawFaceBore(d, p);
+  const other = plumbLine(d, p.doorThickness, p.faceBore);
+  d.h(edge.a, other.a); d.h(edge.b, other.b);
+  d.gap(edge.id, other.id, 1, 'door_thickness');
+  latchEdge(d, p.doorThickness / 2, p);
+  d.cut([bore.id], 'inside', p.doorThickness);
+  d.cut([edge.id, other.id], 'guide');
+}
+// 5. HINGE MORTISE, edge view: the leaf's recess open to the door face on the origin's Y axis, the hinge's height (3, 3-1/2, 4, 4-1/2 in: the
+// ANSI/BHMA A156.1 butt sizes), across the edge to the SETBACK from the other face (common 1/4 in), square or round corners (1/4 in or 5/8 in radius:
+// the common hinge corners) on the leaf's free edge, 1/8 in deep (the leaf's thickness: set it to your hinge). The screw holes as guide marks: three
+// on the leaf's centre line, the outer two `screw_inset` from the ends (a common layout, not a standard: check your hinge). The other face is a guide.
+function buildHingeMortise(d, p) {
+  const H = p.hingeHeight, W = p.doorThickness - p.setback, round = p.corners === 'round';
+  const leaf = recess(d, ORIGIN_JOINT_ID, W / 2, 0, W, H, { wText: null, hText: 'hinge_height', corners: p.corners, r: p.cornerRadius, rText: 'corner_radius', rounded: ['tr', 'br'], anchor: 'left' });
+  const face = axisGuide(d, p.doorThickness, H, '2 * hinge_height');
+  d.gap(leaf.left, face.id, 1, 'door_thickness');
+  d.gap(leaf.right, face.id, -1, 'setback');
+  const yo = H / 2 - p.screwInset, hr = p.screwHole / 2;
+  const mid = d.circle(W / 2, 0, hr), top = d.circle(W / 2, yo, hr), bot = d.circle(W / 2, -yo, hr);
+  d.h(ORIGIN_JOINT_ID, mid.c); d.v(mid.c, top.c); d.v(mid.c, bot.c); d.equal(mid.id, top.id); d.equal(mid.id, bot.id);
+  d.dim(ORIGIN_JOINT_ID, mid.c, 'horizontal', -1, '(door_thickness - setback) / 2');
+  d.dim(mid.c, top.c, 'vertical', 1, 'hinge_height / 2 - screw_inset'); d.dim(bot.c, mid.c, 'vertical', 1, 'hinge_height / 2 - screw_inset');
+  d.radius(mid.id, 'screw_hole / 2', round ? 4 : 3);
+  d.cut(leaf.shapes, 'pocket', p.leafThickness);
+  d.cut([mid.id, top.id, bot.id, face.id], 'guide');
+}
+// 6. MORTISE LOCK POCKET, edge view (ANSI/BHMA A156.13 mortise locks; door preparation ANSI/BHMA A115.1): the faceplate (front) recess 1-1/4 x 8 in,
+// 1/8 in deep, and the deep body pocket inside it, centred on the door thickness (common 1 x 6 in, 4 in deep: check your lock's case). The two door
+// faces are guides.
+function buildMortiseLock(d, p) {
+  const plate = recess(d, ORIGIN_JOINT_ID, 0, 0, p.faceplateWidth, p.faceplateHeight, { wText: 'faceplate_width', hText: 'faceplate_height' });
+  const body = recess(d, ORIGIN_JOINT_ID, 0, 0, p.pocketWidth, p.pocketHeight, { wText: 'pocket_width', hText: 'pocket_height' });
+  d.cut(plate.shapes, 'pocket', p.frontThickness);
+  d.cut(body.shapes, 'pocket', p.pocketDepth);
+  d.cut(faceLines(d, p.doorThickness, p.faceplateHeight, '2 * faceplate_height'), 'guide');
+}
+// their limits: only the values that make no drawing (a size that only looks wrong, a plate wider than the door, still draws)
+const roundEndsLimits = (v, u) => (v.corners === 'round' && v.faceplateHeight <= v.faceplateWidth
+  ? refusal('faceplateHeight', `Faceplate height is too small for round ends on this width: use more than ${above(v.faceplateWidth, u)}.`) : null);
+const strikeLimits = (v, u) => {
+  const side = Math.min(v.strikeWidth, v.strikeHeight);
+  return v.corners === 'round' && 2 * v.cornerRadius >= side ? refusal('cornerRadius', `Corner radius is too big for this strike: use less than ${below(side / 2, u)}.`) : null;
+};
+const hingeLimits = (v, u) => {
+  if (v.setback >= v.doorThickness) return refusal('setback', `Setback is too big for this door thickness: use less than ${below(v.doorThickness, u)}.`);
+  if (v.screwInset >= v.hingeHeight / 2) return refusal('screwInset', `Screw inset is too big for this hinge: use less than ${below(v.hingeHeight / 2, u)}.`);
+  const most = Math.min(v.hingeHeight / 2, v.doorThickness - v.setback);
+  return v.corners === 'round' && v.cornerRadius >= most ? refusal('cornerRadius', `Corner radius is too big for this hinge: use less than ${below(most, u)}.`) : null;
+};
+const DOORS = ['1-3/8', '1-3/4'], BACKSETS = [inches('2-3/8', 'residential'), inches('2-3/4', 'commercial')];
+const depthParam = (label, presets, extra = {}) => sized(label, presets, { atOpen: true, depth: true, ...extra });
+const cornersChoice = { label: 'Corners', default: 'square', kind: 'choice', options: RECESS_CORNERS, glyph: 'recess-corners' };
+const DOOR_TEMPLATES = [
+  { id: 'lockset-face-bore', group: DOOR, name: 'Lockset face bore', description: 'Cylindrical lockset, face view: the 2-1/8 in bore at a 2-3/8 in backset from the door edge (a guide); cut through the door.',
+    params: { backset: sized('Backset', BACKSETS), faceBore: sized('Face bore', ['2-1/8']), doorThickness: depthParam('Door thickness (bore depth)', DOORS) },
+    dimensions: 3, build: buildLocksetFace },
+  { id: 'latch-edge-prep', group: DOOR, name: 'Latch edge bore + faceplate', description: 'Edge view: the 1 in edge bore and the 1 x 2-1/4 in faceplate recess, centred on a 1-3/4 in door; the faces are guides.',
+    params: { doorThickness: sized('Door thickness', DOORS, { def: '1-3/4' }), edgeBore: sized('Edge bore', ['1', '7/8']), faceplateWidth: sized('Faceplate width', [inches('1', 'residential'), inches('1-1/8', 'commercial')]), faceplateHeight: sized('Faceplate height', ['2-1/4']), corners: cornersChoice, plateThickness: depthParam('Faceplate depth', ['1/8']), backset: depthParam('Edge bore depth (backset)', BACKSETS) },
+    dimensions: 5, limits: roundEndsLimits, build: buildLatchEdge },
+  { id: 'strike-mortise', group: DOOR, name: 'Strike plate mortise', description: 'Frame view: a 1-1/4 x 2-3/4 in strike recess, 1/16 in deep, with a 5/8 in deep latch hole; the door stop is a guide.',
+    params: { strikeWidth: sized('Strike width', ['1-1/4']), strikeHeight: sized('Strike height', [inches('2-3/4', 'common'), inches('4-7/8', 'ANSI A115 strike')]), holeWidth: sized('Latch hole width', ['3/4']), holeHeight: sized('Latch hole height', ['1-1/4']), corners: cornersChoice, cornerRadius: sized('Corner radius', ['1/4', '1/2'], { when: { corners: 'round' } }), doorThickness: sized('Door thickness', DOORS, { def: '1-3/4' }), strikeThickness: depthParam('Strike depth', ['1/16']), holeDepth: depthParam('Latch hole depth', [inches('5/8', 'latch, 1/2 in throw'), inches('1-1/8', 'deadbolt, 1 in throw')]) },
+    dimensions: 6, limits: strikeLimits, build: buildStrike },
+  { id: 'deadbolt-bores', group: DOOR, name: 'Deadbolt (face + edge)', description: 'The 2-1/8 in face bore at a 2-3/8 in backset and, unfolded beside the edge line, the 1 in edge bore and the 1 x 2-1/4 in faceplate.',
+    params: { backset: sized('Backset', BACKSETS), faceBore: sized('Face bore', ['2-1/8']), edgeBore: sized('Edge bore', ['1']), doorThickness: sized('Door thickness', DOORS, { def: '1-3/4' }), faceplateWidth: sized('Faceplate width', [inches('1', 'residential'), inches('1-1/8', 'commercial')]), faceplateHeight: sized('Faceplate height', ['2-1/4']), corners: cornersChoice, plateThickness: depthParam('Faceplate depth', ['1/8']) },
+    dimensions: 8, limits: roundEndsLimits, build: buildDeadbolt },
+  { id: 'hinge-mortise', group: DOOR, name: 'Hinge mortise', description: 'Edge view: a 3-1/2 in hinge leaf recess, 1/4 in from the far face of a 1-3/8 in door, 1/8 in deep; screw holes as guide marks.',
+    params: { hingeHeight: sized('Hinge height', ['3', '3-1/2', '4', '4-1/2'], { def: '3-1/2' }), doorThickness: sized('Door thickness', DOORS), setback: sized('Setback from the face', ['1/4']), corners: cornersChoice, cornerRadius: sized('Corner radius', ['1/4', '5/8'], { when: { corners: 'round' } }), screwInset: sized('Screw inset from the ends', ['1/2']), screwHole: sized('Screw mark diameter', ['1/8']), leafThickness: depthParam('Leaf thickness (depth)', ['1/8']) },
+    dimensions: 8, limits: hingeLimits, build: buildHingeMortise },
+  { id: 'mortise-lock-pocket', group: DOOR, name: 'Mortise lock pocket', description: 'Edge view: the 1-1/4 x 8 in front recess, 1/8 in deep, round a 1 x 6 in body pocket 4 in deep, centred on a 1-3/4 in door.',
+    params: { doorThickness: sized('Door thickness', ['1-3/4', '2-1/4']), faceplateWidth: sized('Front width', ['1-1/4']), faceplateHeight: sized('Front height', ['8']), pocketWidth: sized('Pocket width', ['1']), pocketHeight: sized('Pocket height', ['6']), frontThickness: depthParam('Front depth', ['1/8']), pocketDepth: depthParam('Pocket depth', ['4']) },
+    dimensions: 6, build: buildMortiseLock },
+];
+
 export const TEMPLATES = [
   { id: 'slot', name: 'Slot', description: 'A straight slot with round ends: 10 mm wide, the two end centres 30 mm apart (40 mm overall).', params: { length: { label: 'Length', default: 40 }, width: { label: 'Width', default: 10 } }, dimensions: 2, limits: slotLimits, build: buildSlot },
   { id: 'rounded-rectangle', name: 'Rounded rectangle', description: '60 by 40 mm with four 5 mm corner radii, all equal.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, radius: { label: 'Corner radius', default: 5 } }, dimensions: 6, limits: roundedRectLimits, build: buildRoundedRect },
@@ -948,6 +1186,8 @@ export const TEMPLATES = [
   { id: 'trapezoid-frame', name: 'Trapezoid frame', description: 'A trapezoid frame of 38 mm boards: 600 mm at the bottom, 300 at the top, 250 tall, a joint at each corner.', params: { variant: { label: 'Shape', default: 'isosceles', kind: 'choice', options: TRAPEZOID_VARIANTS, glyph: 'trapezoid-variant' }, bottomWidth: { label: 'Bottom width', default: 600 }, topWidth: { label: 'Top width', default: 300 }, height: { label: 'Height', default: 250 }, setbackLeft: { label: 'Left setback', default: 100, when: { variant: 'scalene' } }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 7, build: buildTrapezoidFrame, corners: trapezoidCorners },
   { id: 'parallelogram-frame', name: 'Parallelogram frame', description: 'A parallelogram frame of 38 mm boards: a 600 mm base, 300 mm sides at 60 degrees, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, side: { label: 'Side', default: 300 }, angle: { label: 'Angle', default: 60, kind: 'angle' }, thickness: { label: 'Board thickness', default: 38 }, joint: { label: 'Corner joint', default: 'Miter', kind: 'choice', perCorner: true, options: POLYGON_JOINT_TYPES, glyph: 'polygon-joint' } }, dimensions: 7, limits: parallelogramLimits, build: buildParallelogramFrame, corners: parallelogramCorners },
   { id: 'triangle-frame', name: 'Triangle frame', description: 'A frame of 38 mm boards on any triangle: a 600 mm base, 500 and 400 mm sides, a joint at each corner.', params: { base: { label: 'Base', default: 600 }, leftSide: { label: 'Left side', default: 500 }, rightSide: { label: 'Right side', default: 400 }, thickness: { label: 'Board thickness', default: 38 }, jointA: { label: 'Bottom-left joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.bl, glyph: 'brace-bl' }, jointB: { label: 'Bottom-right joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.br, glyph: 'brace-br' }, jointC: { label: 'Top joint', default: 'Miter', kind: 'choice', options: BRACE_JOINTS.top, glyph: 'brace-top' } }, dimensions: 6, limits: triangleLimits, build: buildTriangleFrame, corners: triangleCorners },
+  // TASK 843
+  ...DOOR_TEMPLATES,
 ];
 
 // TASK 722: a length default (authored in mm) as the document's unit says it: an inch document rounds to the nearest 1/16 in (38 mm -> 1.5 in,

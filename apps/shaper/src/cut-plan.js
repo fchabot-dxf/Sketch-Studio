@@ -1051,8 +1051,10 @@ export function planStockProfile(state) {
  *    the loops inside it are its HOLES, and the plan gets ONE explicit combined profile ('profile:<id>', makeProfile) with the record: a
  *    pocket with a hole, not two separate pockets (the island must stay uncut); subpaths outside the outer keep their own loop record;
  *  - an open chain keeps today's rule (On Line / Guide, or any record with a depth).
+ * TASK 843: `descOf(shape)` names the element a shape came from (default: its `descId`, the import's); a template's declared cuts name their shapes by id
+ * (cut-import.js applyTemplateCuts), so they connect through this same rule.
  */
-export function assignImportedCuts(state, cutRecordByDesc) {
+export function assignImportedCuts(state, cutRecordByDesc, descOf = (sh) => sh.descId) {
   if (!cutRecordByDesc || cutRecordByDesc.size === 0) return 0;
   const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
   const { loops } = loopsWithPolygons(state);
@@ -1060,7 +1062,7 @@ export function assignImportedCuts(state, cutRecordByDesc) {
   const byDesc = new Map(); // descId -> [loop] (loops whose edges all come from that one element)
   for (const loop of loops) {
     const ids = new Set();
-    for (const e of (loop.edges || [])) { const sh = shapeById.get(e); if (sh && sh.descId) ids.add(sh.descId); }
+    for (const e of (loop.edges || [])) { const sh = shapeById.get(e); const d = sh && descOf(sh); if (d) ids.add(d); }
     if (ids.size !== 1) continue;
     const d = [...ids][0];
     if (!cutRecordByDesc.has(d)) continue;
@@ -1081,8 +1083,9 @@ export function assignImportedCuts(state, cutRecordByDesc) {
   }
   for (const c of findOpenChains(state, loops)) {
     for (const sh of (c.shapes || [])) {
-      if (!sh.descId || !cutRecordByDesc.has(sh.descId)) continue;
-      const rec = cutRecordByDesc.get(sh.descId);
+      const d = descOf(sh);
+      if (!d || !cutRecordByDesc.has(d)) continue;
+      const rec = cutRecordByDesc.get(d);
       if (rec.cutType === 'online' || rec.cutType === 'guide' || (rec.cutDepth != null && rec.cutDepth !== 'unset')) {
         const chainKey = keyOf('chain', c.id);
         if (!memberOf(chainKey)) { fileShape(chainKey, { ...rec, cutType: rec.cutType || 'online' }, state); n++; }

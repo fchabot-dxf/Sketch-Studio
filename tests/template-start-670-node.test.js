@@ -10,6 +10,7 @@ import assert from 'node:assert';
 import { open, createProfile } from './helpers/node-app.js';
 import { TEMPLATES, buildTemplate, paramKind, paramUnit, templateById, templateCorners } from '#core/templates.js';
 import { buildParameterRows } from '#ui/parameter-table.js';
+import { lengthText } from '#core/settings-manager.js';
 
 const profile = await createProfile();
 const app = await open({ host: 'shaper', profile, sidebar: true });
@@ -44,7 +45,7 @@ try {
         continue;
       }
       const input = row.querySelector('input');
-      assert.ok(input && input.type === (paramKind(spec) === 'count' ? 'number' : 'text') && input.value === String(spec.default), `${t.id}: ${k} prefilled with ${spec.default}`);
+      assert.ok(input && input.type === (paramKind(spec) === 'count' ? 'number' : 'text') && input.value === (paramKind(spec) === 'length' ? lengthText(spec.default, { unit: 'mm', show: 'field' }) : String(spec.default)), `${t.id}: ${k} prefilled with ${spec.default}`); // TASK 728: a length shows through the one length-format decider (1.5875 mm -> 1.59; the value stays exact)
       assert.strictEqual(row.querySelector('label').htmlFor, input.id, `${t.id}: ${k}'s label names its box`);
       assert.strictEqual(row.querySelector('.sk-tp-unit').textContent, paramUnit(spec), `${t.id}: ${k} unit`);
       if (paramKind(spec) === 'count') assert.ok(input.step === '1' && input.min === String(spec.min) && input.max === String(spec.max), `${t.id}: ${k} a whole-number spinner ${spec.min}..${spec.max}`);

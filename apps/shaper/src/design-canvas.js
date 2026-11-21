@@ -6,6 +6,7 @@
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { SAME_TAB_REASONS } from '#ui/document-buffer.js'; // TASK 766: the same tab shown again keeps its view
 import { captureShaperDoc, applyShaperDoc, DOC_VERSION } from './shaper-doc.js';
+import { applyTemplateCuts } from './cut-import.js'; // TASK 843: a template's declared cuts
 import SettingsManager from '#core/settings-manager.js';
 import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 
@@ -43,6 +44,7 @@ export function shaperBufferOptions({ controller, canvas, session = null, refres
       // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable). No sidecar (an old buffer): defaults.
       // TASK 761: reconciled with the restored sketch's regions there (shaper-doc.js applyShaperDoc); its counts ride to afterSidecar as `cutPlan` (the notice).
       const cutPlan = applyShaperDoc(hosts && hosts.shaper, controller.state);
+      if (!(hosts && hosts.shaper)) applyTemplateCuts(controller.state, hosts && hosts.template); // TASK 843: a template's declared cuts, until Shaper has its own part
       afterSidecar({ ...restore, cutPlan });
     },
     hostName: 'shaper', getHostData: captureShaperDoc, hostVersion: DOC_VERSION, // TASK 812 (a sidecar of a higher version is opened, never written over: document-buffer.js); TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)

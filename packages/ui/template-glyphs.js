@@ -34,6 +34,7 @@
 // turns QuadJointGlyph (TrapezoidCanvasView.js: rotation = the corner's outward direction + 90 degrees, so the glyph's vertex points out of the
 // drawing); 'corner-joint' / 'box-corner-joint' draw the corner's own orientation (cornerBoards' hx / vy = the inward directions, from `out`);
 // the brace glyphs are frame-calc's JointDiagram as they are (frame-calc's oblique triangle shows them unturned too).
+// 'recess-corners' (TASK 843): a door-hardware plate's recess with square or round corners: a tall plate outline in the lighter tone.
 // 'trapezoid-variant': the trapezoid frame's shape (#core/frame-geometry.js TRAPEZOID_VARIANTS): a small frame of four mitered boards from THE
 // per-vertex engine on that variant's trapezoid (mapTrapezoidVertices, computeEffectiveOffset), the same viewBox rule, stroke and colouring.
 
@@ -70,6 +71,9 @@ function boardsSvg(boards, active, viewBox = centeredViewBox(boards.map((b) => b
 }
 
 const rect = (x, y, w, h) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+// TASK 843: a rectangle with round corners of radius r, as a polygon (8 steps per quarter circle)
+const roundedRect = (x, y, w, h, r) => [[x + w - r, y + r, -90], [x + w - r, y + h - r, 0], [x + r, y + h - r, 90], [x + r, y + r, 180]]
+  .flatMap(([cx, cy, a0]) => Array.from({ length: 9 }, (_, k) => { const a = (a0 + k * 90 / 8) * Math.PI / 180; return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }; }));
 
 // frame-calc JointDiagram: one corner's two boards of the normalized brace
 const braceGlyph = (corner) => (type, { active = false } = {}) => {
@@ -133,4 +137,5 @@ export const GLYPHS = Object.freeze({
   'brace-br': braceGlyph('br'),
   'polygon-joint': (type, { active = false, corner }) => polygonJointGlyph(type, corner.interior, active, rotationOf(corner)),
   'trapezoid-variant': (variant, { active = false } = {}) => trapezoidVariantGlyph(variant, active),
+  'recess-corners': (corners, { active = false } = {}) => boardsSvg([{ points: corners === 'round' ? roundedRect(0, 0, 20, 32, 6) : rect(0, 0, 20, 32), tone: 'light' }], active),
 });

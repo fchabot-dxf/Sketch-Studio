@@ -264,16 +264,17 @@ const CUT_TYPE_ALIASES = {
   guide: 'guide',
 };
 
+/** TASK 843: a cut type as the Shaper file writes it ('inside', 'pocket', 'guide', ...: any alias above) -> its CUT_TYPES id, or null. The one reading of
+ *  that vocabulary (an imported element's shaper:cutType, a template's declared cuts: cut-import.js applyTemplateCuts). */
+export const cutTypeId = (name) => (name == null ? null : CUT_TYPE_ALIASES[String(name).trim().toLowerCase()] || null);
+
 // Extract a cut record from an incoming SVG element (e.g. from Fusion 360 Shaper utility).
 // Numeric fields are parsed to BASE mm per docUnit; unstated toolDia defaults to 1/8" (3.175 mm).
 export function extractCutRecord(el, docUnit = 'mm') {
   if (!el) return null;
   const rawType = getShaperAttr(el, 'cutType');
   let cutType = null;
-  if (rawType) {
-    const normalized = String(rawType).trim().toLowerCase();
-    cutType = CUT_TYPE_ALIASES[normalized] || null;
-  }
+  if (rawType) cutType = cutTypeId(rawType);
   if (!cutType) {
     cutType = classify(el);
   }

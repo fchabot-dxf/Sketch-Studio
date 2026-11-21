@@ -58,6 +58,11 @@ const sig = (S) => JSON.stringify([...S.state.joints.values()].map((j) => [Math.
 for (const t of TEMPLATES) {
   const base = sig(solved(t));
   for (const [k, v] of Object.entries(t.params)) {
+    if (v.depth) { // TASK 843: a cut DEPTH changes no geometry: it changes the template's declared cuts (what Shaper opens with)
+      const cuts = (params) => JSON.stringify(buildTemplate(t, params).hosts.template.cuts.map((c) => c.cutDepth));
+      assert.notStrictEqual(cuts({ [k]: v.default * 1.3 }), cuts({}), `${t.id}: depth ${k} changes its cuts' depth`);
+      continue;
+    }
     const val = v.kind === 'choice' ? v.options.find((o) => o.value !== v.default).value : v.kind === 'count' ? v.default - 1 : v.default * 1.3; // TASK 670: declared kinds
     const S = solved(t, { ...v.when, [k]: val }); // TASK 674: a param that applies only with some choices (`when`) is changed with them
     assert.notStrictEqual(sig(S), v.when ? sig(solved(t, v.when)) : base, `${t.id}: param ${k} changes the geometry`);

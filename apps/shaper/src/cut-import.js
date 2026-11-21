@@ -5,7 +5,7 @@
 // line and panel refresh.
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 import { docUnit } from '#core/settings-manager.js';
-import { extractCutRecord } from './shaper.js';
+import { extractCutRecord, cutTypeId, defaultCutRecord } from './shaper.js';
 import { assignImportedCuts } from './cut-plan.js';
 
 /**
@@ -45,6 +45,25 @@ export function importShaperFile(designController, text, fileName, getDocUnit, {
       return n ? `${n} cut${n === 1 ? '' : 's'} kept` : null;
     },
   });
+}
+
+/**
+ * TASK 843: a TEMPLATE's declared cuts (#core/templates.js: the document's hosts.template.cuts, [{ shapes: [shape ids], cutType: the Shaper file's word,
+ * cutDepth: mm }]) connected to the plan through the import's own rule (cut-plan.js assignImportedCuts: a closed loop of those shapes = its region, an
+ * open chain = its On line / Guide), each record the default one with its type and depth. Run when a design WITHOUT a Shaper part opens (design-canvas.js
+ * onRestored): a template started here, or in another app and opened here for the first time; once Shaper has saved its own part, that part is the plan.
+ * Returns how many cuts were assigned.
+ */
+export function applyTemplateCuts(state, template) {
+  const cuts = template && Array.isArray(template.cuts) ? template.cuts : [];
+  const recordOf = new Map(), cutOf = new Map(); // 'cut:<index>' -> its record; shape id -> its cut's name
+  cuts.forEach((c, i) => {
+    const cutType = cutTypeId(c && c.cutType);
+    if (!cutType || !Array.isArray(c.shapes)) return;
+    recordOf.set(`cut:${i}`, { ...defaultCutRecord(), cutType, cutDepth: Number.isFinite(c.cutDepth) ? c.cutDepth : 'unset' });
+    for (const id of c.shapes) cutOf.set(id, `cut:${i}`);
+  });
+  return assignImportedCuts(state, recordOf, (sh) => cutOf.get(sh.id));
 }
 
 /**

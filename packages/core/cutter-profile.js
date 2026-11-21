@@ -24,6 +24,8 @@ export function vbitHalfAngleTan(angle) {
   return Math.tan((halfAngle * Math.PI) / 180);
 }
 
+// z-slices per groove (the triangle cost is ~ slices x the groove's ring count). 6 reads as a round bottom, 5 as a clean V.
+export const SHAPE_SLICES = Object.freeze({ ballnose: 6, vbit: 5, taperball: 6, taperflat: 5, bowl: 6 }); // bowl: the corner's slices (its flat floor is one more terrace)
 
 /** TASK 842: is this shape a TAPERED bit (a cone from its tip, capped by its shank: `taper` = { taperAngle, shankDia })? */
 export const isTaperedCutter = (shape) => shape === 'taperball' || shape === 'taperflat';
@@ -92,41 +94,23 @@ export function cutterProfile(shape, toolDia, angle, depth, taper = null) {
   return null;
 }
 
-/**
- * TASK 852b (owner: the bowl's rounded corner "looks like stepped"): the terraces of a shaped groove are placed by a declared HEIGHT TOLERANCE, not a fixed
- * count: TERRACE_STEP_MM is the tallest a step may be (the stepped surface then stands within a step of the true profile), up to TERRACE_MAX terraces (a
- * deeper groove would need more than the 3D view can afford: there each step is H / TERRACE_MAX high, said in the WORK-LOG).
- */
-export const TERRACE_STEP_MM = 0.05;
-export const TERRACE_MAX = 64;
-const TERRACE_MIN = 2;
-
-/** How many terraces a groove gets: its drop from the centre to the widest edge (H) over TERRACE_STEP_MM, between TERRACE_MIN and TERRACE_MAX; 0 for none. */
-export function terraceCount(shape, toolDia, angle, depth, taper = null) {
+/** The terraces of a shaped groove: [{ halfWidth, depth }] from the narrowest (deepest) to the widest (shallowest). TASK 842: `taper` = a tapered bit's cone. */
+export function cutterTerraces(shape, toolDia, angle, depth, n = SHAPE_SLICES[shape] || 1, taper = null) {
   const p = cutterProfile(shape, toolDia, angle, depth, taper);
-  if (!p) return 0;
-  const H = Number(depth) - p.depthAt(p.xMax);
-  return Math.min(TERRACE_MAX, Math.max(TERRACE_MIN, Math.ceil(H / TERRACE_STEP_MM)));
-}
-
-/**
- * The terraces of a shaped groove: [{ halfWidth, depth }] from the narrowest (deepest) to the widest (shallowest). TASK 842: `taper` = a tapered bit's cone.
- * TASK 852b: the terraces are EQUAL STEPS IN HEIGHT: terrace j reaches out to where the profile has dropped j H / n (bisection on the one profile function, so the
- * steep rim of a ball or bowl gets as fine steps as its flat middle), cut to the depth at the middle of its band (the innermost at the true depth): the step is
- * H / n high. `count` defaults to terraceCount.
- */
-export function cutterTerraces(shape, toolDia, angle, depth, taper = null, count = terraceCount(shape, toolDia, angle, depth, taper)) {
-  const p = cutterProfile(shape, toolDia, angle, depth, taper), n = count;
-  if (!p || !(n >= 1)) return [];
-  const d = Number(depth), H = d - p.depthAt(p.xMax), out = [];
-  for (let j = 1; j <= n; j++) {
-    let e = p.xMax;
-    if (j < n) { // the widest x where the profile has dropped at most j H / n (the drop never decreases with x)
-      let lo = 0, hi = p.xMax;
-      for (let it = 0; it < 48; it++) { const m = (lo + hi) / 2; if (d - p.depthAt(m) <= (H * j) / n) lo = m; else hi = m; }
-      e = lo;
+  if (!p) return [];
+  const out = [];
+  if (shape === 'bowl') { // TASK 852: the flat floor out to r - c is one terrace at the depth, then n steps over the corner (c = r: no floor, the ball nose's own steps)
+    const x0 = p.r - taper.cornerRadius, w = p.xMax - Math.max(0, x0);
+    if (x0 > 1e-12 && p.xMax >= x0) out.push({ halfWidth: x0, depth: Number(depth) });
+    for (let j = 1; j <= n; j++) {
+      const lo = Math.max(0, x0);
+      out.push({ halfWidth: lo + (w * j) / n, depth: j === 1 && !(x0 > 1e-12) ? Number(depth) : Math.max(1e-6, p.depthAt(lo + (w * (j - 0.5)) / n)) });
     }
-    out.push({ halfWidth: e, depth: j === 1 ? d : Math.max(1e-6, d - (H * (j - 0.5)) / n) });
+    return out;
+  }
+  for (let j = 1; j <= n; j++) {
+    const e = (p.xMax * j) / n, mid = (p.xMax * (j - 0.5)) / n;
+    out.push({ halfWidth: e, depth: j === 1 ? Number(depth) : Math.max(1e-6, p.depthAt(mid)) });
   }
   return out;
 }

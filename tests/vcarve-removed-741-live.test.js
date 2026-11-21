@@ -11,7 +11,7 @@ import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js'; // saving is Google Drive only: an in-memory fake Drive (no real Google call)
 import { findLoops } from '#core/loop-finder.js';
-import { terraceCount } from '#core/cutter-profile.js';
+import { SHAPE_SLICES } from '#core/cutter-profile.js';
 
 // the old design: a 60 x 40 rectangle whose loop was V-carved (a region picked in the removed Vcarve stage), and nothing in its cut plan
 const joints = [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }]], shapes = [];
@@ -114,7 +114,7 @@ await (async () => {
     await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the 3D board is built', 20000);
     const build = await evalJs(`import('/apps/shaper/src/main.js').then((m) => { const b = m.currentReviewView().lastBuild; return { levels: b.levels, triangles: b.triangles }; })`);
     console.log(label + ' V-bit groove build: ' + JSON.stringify(build));
-    assert.strictEqual(build.levels, terraceCount('vbit', 6.35, 60, 3), label + ': the V-bit groove is ' + terraceCount('vbit', 6.35, 60, 3) + ' terraces (its V walls), not one flat floor');
+    assert.strictEqual(build.levels, SHAPE_SLICES.vbit, label + ': the V-bit groove is ' + SHAPE_SLICES.vbit + ' terraces (its V walls), not one flat floor');
     await press('#review-top', label + ': Top'); await sleep(600); // render settle before the screenshot
     await shot(`vbit-3d-top-${label}.png`, '#review-canvas-host', 0);
     await press('#review-reset', label + ': Reset'); await sleep(600);

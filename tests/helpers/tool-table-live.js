@@ -156,7 +156,7 @@ export async function toolTablePhase({ phone }) {
     await sleep(800);
     console.log('3D board: ' + await evalJs(`document.getElementById('review-info').textContent`));
     await shot(`852-bowl-3d${sfx}.png`, phone ? null : '#review-stage', phone ? 1 : 1.5);
-    const E852 = path.resolve('.evidence/852b'); fs.mkdirSync(E852, { recursive: true });
+    const E852 = path.resolve('.evidence/852'); fs.mkdirSync(E852, { recursive: true });
     fs.copyFileSync(path.resolve('.evidence/842', `852-bowl-3d${sfx}.png`), path.join(E852, `852-bowl-3d${sfx}.png`));
     // the table persists across a reload
     const stored = await evalJs(`import('/apps/shaper/src/tool-table.js').then((m) => m.loadBits().map((b) => b.name + '|' + b.unit + '|' + (b.diameter ?? '') + '|' + (b.cutLength ?? '')))`);

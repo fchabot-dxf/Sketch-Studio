@@ -9,7 +9,8 @@ import { launchBrowser, sleep, sendRealKey } from './cdp-browser.js';
 import { installFakeDriveSession } from './fake-drive-session.js';
 import { resetBufferLive } from './reset-buffer.js';
 import { pressRibbonTool } from './ribbon-tool.js';
-import { openPocketPage } from './pocket-live.js'; // the Shaper page tools (Prepare: a click on a shape, the type menu, the plan, the download)
+import { openPocketPage } from './pocket-live.js'; // the Shaper page tools (Prepare: a click on a shape, the type, the plan, the download)
+import { selectedLive, okLive } from './prepare-open-live.js'; // TASK S3: a click on a shape only selects it; the toolbar's type makes the operation
 
 export const HOSTS = {
   sketchstudio: { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', canvas: '#svgCanvas', canvasId: 'svgCanvas', show: null, state: null },
@@ -149,7 +150,7 @@ export async function shaperTextPhase({ phone }) {
     if (phone && !await evalJs(`document.querySelector('#prepare-ops .ops-body').hidden`)) await t.clickEl('#prepare-ops .ops-head');
     // the o's ring: picked with its counter, Pocket
     await t.clickWorld(geo.ring.x, geo.ring.y);
-    await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the card for the o');
+    await selectedLive(t, label + ': the o selected');
     await t.pickType('pocket');
     await sleep(500);
     const r = await t.rec(geo.ring.x, geo.ring.y);
@@ -159,13 +160,14 @@ export async function shaperTextPhase({ phone }) {
     await t.shotWorld(phone ? 'shaper-phone-1-pocket.png' : 'shaper-1-pocket.png', [geo.ring.x - 12, geo.ring.y - 12, geo.ring.x + 30, geo.ring.y + 12]);
     // the Hershey stroke: On line
     await t.clickWorld(geo.onStroke.x, geo.onStroke.y);
-    await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the card for the stroke');
+    await selectedLive(t, label + ': the stroke selected');
     await t.pickType('online');
     await sleep(500);
     out.online = await evalJs(`import('/tests/helpers/plan-v2.js').then((C) => [...C.V2_PLAN.keys()].filter((k) => C.V2_PLAN.get(k).cutType === 'online'))`);
     assert.ok(out.online.length === 1 && out.online[0].startsWith('chain:'), label + ': the stroke On line (an open chain): ' + out.online);
     // the file: the pocket's path is the o with its counter (two sub-paths)
     if (!phone) {
+      await okLive(t); // the open operation kept (its paths generated)
       const svg = await t.download();
       const pocket = [...svg.matchAll(/<path [^>]*>/g)].map((m) => m[0]).find((p) => /pocket/i.test(p));
       const d = pocket && (pocket.match(/ d="([^"]+)"/) || [])[1];

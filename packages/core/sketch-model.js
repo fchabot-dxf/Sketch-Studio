@@ -95,15 +95,6 @@ export function visibleScene(state) {
   return { joints, shapes, constraints };
 }
 
-// All entity ids in a sketch: { joints:[id…], shapes:[id…] }.
-export function entitiesInSketch(state, id) {
-  const joints = [], shapes = [];
-  const J = state && state.joints;
-  if (J && typeof J.forEach === 'function') J.forEach((j, jid) => { if (sketchOf(j) === id) joints.push(jid); });
-  if (state && Array.isArray(state.shapes)) for (const s of state.shapes) if (sketchOf(s) === id) shapes.push(s.id);
-  return { joints, shapes };
-}
-
 // ───────────────────────── TASK 577: sketches as LAYERS — lock, move to sketch, reorder, show only ─────────────────────────
 // Everything a host's Design tab does with sketches goes through these functions (the panel and the canvas context menu call the
 // SAME ones). Each action that changes the document records ONE undo step (state.saveState, the shared snapshot that already carries

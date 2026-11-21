@@ -539,30 +539,6 @@ export function reconcileKeptDimensions(state, before = [], { unit = 'mm' } = {}
   return { kept, dropped };
 }
 
-// ── freezeReferencesTo (decision O10) ──
-// A DIMENSION is about to disappear while formulas read its name: every formula that reads any of `removedNames` is replaced by the
-// canonical text of its CURRENT value, so nothing moves. A dimension has no formula after that (a plain number), a user parameter
-// gets "<value> <unit>". Call it BEFORE the removal (the values are evaluated with the dimensions still present).
-// Mutates state.parameters and the dimensions' `expression`; → { ok:true, frozen:[names] } | { ok:false, ... } (nothing changed).
-export function freezeReferencesTo(state, removedNames, { unit = 'mm' } = {}) {
-  const model = modelOf(state);
-  const ev = evaluateModel(model, unit);
-  if (!ev.graph || !ev.graph.ok) return ev;
-  const gone = new Set(removedNames.map(foldName));
-  const hit = ev.graph.nodes.filter((n) => !gone.has(n.key) && n.deps.some((k) => gone.has(k)));
-  for (const n of hit) if (ev.errors.has(n.key)) return { ...ev.errors.get(n.key), ok: false, node: n.name };
-  for (const n of hit) {
-    const q = ev.values.get(n.key);
-    if (n.type === 'parameter') {
-      const p = (state.parameters || []).find((x) => x.name === n.name);
-      p.expression = numberText(q.v, p.unit);
-    } else {
-      writeEntry({ c: n.ref.c, slot: n.ref.slot }, { expression: null });
-    }
-  }
-  return { ok: true, frozen: hit.map((n) => n.name) };
-}
-
 // ── display text (TASK 535 slice 3: the canvas hint, the autocomplete rows and the parameter table all use THESE) ──
 // a base value (mm / degrees) as text in `unit` ('' = a plain count); 1 decimal for lengths and angles like the canvas labels, up to 4 for a count.
 // show (TASK 728, a length's form, see lengthText): 'field' = the number for a cell / row that prints the unit beside it (default), 'bare' = the number

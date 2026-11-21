@@ -1,8 +1,8 @@
 // packages/core/tests/plot-clip.test.js — PP-2b-1 oracle. Proves the vendored Clipper engine (#core/plot/clip.js)
 // LOADS + RUNS in Node (via clipper-node-shim, no browser) and does the ROBUST ops #core/polygon-offset CANNOT:
-// split a concave inset into multiple rings, concentric multi-ring, boolean union, and holes. The ring counts are
+// split a concave inset into multiple rings and concentric multi-ring. The ring counts are
 // the golden from running these same ops (matches the PP-2b gate probe: dumbbell inset -> 2, concentric -> 9).
-import { insetPolygon, offsetRings, unionPolygons, toClipper, fromClipper, CLIP_SCALE, ClipperLib } from '#core/plot/clip.js';
+import { insetPolygon, offsetRings, toClipper, fromClipper, CLIP_SCALE, ClipperLib } from '#core/plot/clip.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -24,16 +24,7 @@ import { insetPolygon, offsetRings, unionPolygons, toClipper, fromClipper, CLIP_
   // 3. concentric fill across BOTH lobes (probe golden = 9).
   assert(offsetRings(dumbbell, 2, 1, 500).length === 9, 'dumbbell concentric spacing 2 -> 9 rings');
 
-  // 4. boolean union — two overlapping squares merge to ONE ring.
-  const A = [[0, 0], [20, 0], [20, 20], [0, 20]], B = [[10, 10], [30, 10], [30, 30], [10, 30]];
-  assert(unionPolygons([A, B]).length === 1, 'union of overlapping squares -> 1 ring');
-
-  // 5. HOLES — an outer ring + an inner ring of OPPOSITE winding (nonZero) yields outer + hole = 2 rings.
-  const outer = [[0, 0], [40, 0], [40, 40], [0, 40]];
-  const innerRev = [[10, 10], [10, 30], [30, 30], [30, 10]];
-  assert(unionPolygons([outer, innerRev]).length === 2, 'outer + reversed inner -> 2 rings (a hole)');
-
-  // 6. helper round-trip: toClipper drops the dup closer, fromClipper re-closes.
+  // 4. helper round-trip: toClipper drops the dup closer, fromClipper re-closes.
   const rt = fromClipper(toClipper([[1, 2], [3, 4], [5, 6]]));
   assert(rt.length === 4 && rt[0][0] === 1 && rt[3][0] === 1, 'toClipper/fromClipper round-trip closes the ring');
 

@@ -717,3 +717,21 @@ Clicking **Select in Fusion** on operation `op`:
   4. Replace `target.geometry` with that list while preserving `target`'s `type`, `settings`, `ticked`, `color`, `customName`, and list position. If `0` geometry refs match, `target` remains in the operations list marked `EMPTY` (never deleted). Other operations keep their existing refs (apart from global `renameGeometry` renames/removals for removed persistent entities).
   5. Both Undo and Redo record a single history step in the palette: Undo restores the pre-edit operation state and sends `restore_selection { selectionId }` to Fusion when persistent selection tokens changed; Redo restores the post-edit state and syncs Fusion's persistent selection (`restore_selection { selectionId, tokens }`) so palette and Fusion stay aligned.
 
+---
+
+## 13. Task 855 / SA-19: Per-Design Fusion Workspace & Attribute Persistence
+
+Moves Fusion-mode palette state out of shared browser IndexedDB storage and stores it per Fusion design inside the `.f3d` (`shaper-addin/project` design attribute).
+
+### 13.1 Workspace Isolation & Browser Storage
+- **Web mode (`!isFusionMode()`)**: 100% unchanged (`getProjectStore()`, shared tabs, Google Drive).
+- **Older add-in fallback**: if `pong` does not advertise `projectBridge: true`, Fusion mode preserves existing browser workspace behavior.
+- **SA-19 Fusion mode (`projectBridge: true`)**: uses `createMemoryAdapter()` so browser IndexedDB (`openTabsBuffer` / `my-designs`) is never read as active state or overwritten.
+- **Legacy pre-855 browser work**: when switching onto a Fusion design that has `project === null` and non-empty pre-existing Shaper work exists in browser storage, offer it **once** in Prepare's notice bar (`"Open the panel's previous work"` + Dismiss, guarded by a one-time `localStorage` flag `shaper-fusion-legacy-offered`) so nothing is silently lost and web-mode storage is never mutated.
+
+### 13.2 Serialization, Debounce & Region Remapping
+- `captureFusionProject()` serializes `{ version: 1, operations, nextSeq, listOrder, regions (source + sources only, no slope/levels), stock, prepareSettings, selections (id, fusion, kind, name, text, cutKeys, base, sigs, thicknessMm, regionCount, items — no shapeIds/sketchId/payloadSig/contentSig) }`. Undo/redo history is **never** persisted.
+- Debounced write (`PROJECT_SAVE_DEBOUNCE_MS = 2000`): schedules `save_project` only when the project signature differs from the last saved/loaded baseline for the current `docToken`, flushing any pending dirty state for the previous `docToken` before switching when `design_context` arrives.
+- On `design_context`: swaps workspace to `project` (or fresh empty workspace if `null`), resets undo/redo stacks, applies stock/settings/operations/selections metadata, and sends `request_selection { docToken }`. When `selection_data` arrives, `importFusionSelection` treats matching `selectionId` entries via 795c canonical `regionSig` identity (`renameGeometry(..., { keepEmpty: true })` + `keepSettings`) so operations, settings, `tabsAt`, and order attach to freshly extracted geometry, while removed model regions leave their operations `EMPTY`.
+
+

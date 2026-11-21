@@ -122,6 +122,7 @@ const PARAMS = {
   simNext: { label: 'Next operation', hint: 'Goes to the start of the next operation.' },
   simSpeed: { label: 'Speed', hint: 'How fast the preview plays. At 1× every ticked operation together takes about 40 seconds.' },
   simAnimate: { label: 'Animate', hint: 'Off: a preview shows its result at once, without playing.' },
+  simMore: { label: 'More', hint: 'The operation Preview selected cuts, Animate, Show passes and what the preview shows. Folded on a phone so the drawing stays in sight.' }, // TASK 801c
   simPasses: { label: 'Show passes', hint: 'Shows each path the bit has cut as a see-through volume in its operation’s colour, from the board’s top to the path’s depth: where passes overlap, the colour is darker.' },
   syncFolder: { label: 'Destination Folder', hint: 'Sign in once to browse My Files folders, pick where the file uploads, or add a subfolder. Session stays in tab memory only.' },
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },

@@ -44,7 +44,7 @@ export function markerRadius(tool, depth) {
 
 /**
  * mountExportSim({ els, ensure, reliefItems, mode, flat, solid, reducedMotion }) -> { refresh(sig), invalidate(), render(), inspect(), session }
- *   els          the panel's elements: { toggle (its button over the view), card (the panel), op, previewSel, previewAll, reset, play, prev, next, scrub, speed, animate, passes, passesRow, label }
+ *   els          the panel's elements: { toggle (its button over the view), card (the panel), moreToggle + more (TASK 801c: its fold), op, previewSel, previewAll, reset, play, prev, next, scrub, speed, animate, passes, passesRow, label }
  *   ensure       async (sig, say) => the preview copy { svg, ops, bitPaths, simElements } for this plan, or null (the page's: it waits for the paths and says why)
  *   reliefItems  () => the finished part's relief items (cut-plan.js planReliefItems of the ticked operations)
  *   mode         () => '3d' | '2d' | 'paths' (the view shown); flat = the 2D / Paths view (export-preview.js); solid = () => the 3D view (review-view.js) or null
@@ -54,6 +54,7 @@ export function mountExportSim({ els, ensure, reliefItems, mode, flat, solid, re
   let data = null, dataSig, call = 0, raf = 0, last = 0, fullSched = null, runSched = null, schedRun = -1, woodKey = null, nextBuildAt = 0;
   const frames = [], rebuilds = [];
   mountDisclosure({ host: els.toggle, head: els.toggle, body: els.card, open: false }); // over the view: open while the user simulates
+  mountDisclosure({ host: els.card, head: els.moreToggle, body: els.more }); // TASK 801c: its "more" (the Operation pick, the boxes, the note): the declared fold's rule, open on a wide screen, folded on a phone
   els.animate.checked = !reducedMotion;
   els.speed.replaceChildren(...SIM.speeds.map((x) => new Option(`${x}×`, String(x))));
 

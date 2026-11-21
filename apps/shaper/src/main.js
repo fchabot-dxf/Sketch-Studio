@@ -795,7 +795,7 @@ const exportPreview = mountExportPreview({
 const simEl = (id) => document.getElementById(id);
 document.getElementById('sim-note').textContent = SIM.note;
 const exportSim = mountExportSim({
-  els: { card: simEl('review-sim'), toggle: simEl('review-sim-toggle'), op: simEl('sim-op'), previewSel: simEl('sim-preview-sel'), previewAll: simEl('sim-preview-all'), reset: simEl('sim-reset'), play: simEl('sim-play'), prev: simEl('sim-prev'), next: simEl('sim-next'),
+  els: { card: simEl('review-sim'), toggle: simEl('review-sim-toggle'), moreToggle: simEl('sim-more-toggle'), more: simEl('sim-more'), op: simEl('sim-op'), previewSel: simEl('sim-preview-sel'), previewAll: simEl('sim-preview-all'), reset: simEl('sim-reset'), play: simEl('sim-play'), prev: simEl('sim-prev'), next: simEl('sim-next'),
     scrub: simEl('sim-scrub'), speed: simEl('sim-speed'), animate: simEl('sim-animate'), passes: simEl('sim-passes'), passesRow: simEl('sim-passes-row'), label: simEl('sim-label') },
   ensure: (sig, say) => previewCopy(sig, say),
   reliefItems: () => planReliefItems(designController.state, TICKED),

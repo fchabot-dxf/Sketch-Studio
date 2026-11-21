@@ -73,6 +73,12 @@ async function setup() {
   })()`);
 }
 const stageSel = phone ? null : '#review-stage';
+// TASK 801c: the panel's "more" fold opened / closed with its own button (the Operation pick, Animate, Show passes)
+async function setMore(open) {
+  if ((await evalJs(`!document.getElementById('sim-more').hidden`)) === open) return;
+  await clickEl('#sim-more-toggle');
+  await waitFor(`!document.getElementById('sim-more').hidden === ${open}`, `the "more" fold ${open ? 'opens' : 'closes'}`);
+}
 // four frames 1 s apart while it plays (each copied to .evidence/801 as it is made)
 async function sequence(name) {
   const at = [];
@@ -92,6 +98,13 @@ try {
   // the panel is over the view, closed at first (nothing of the Export side panel moves); its toggle at the view's top right opens it
   ok(await evalJs(`document.getElementById('review-sim').hidden && document.getElementById('review-sim-toggle').getAttribute('aria-expanded') === 'false' && !document.getElementById('review-side').contains(document.getElementById('review-sim'))`), 'the panel is closed at first, over the view (not in the side panel)');
   await clickEl('#review-sim-toggle'); await waitFor(`!document.getElementById('review-sim').hidden`, 'the panel opens');
+  // TASK 801c: the "more" fold (the Operation pick, Animate / Show passes, the note): open on a wide screen, folded on a phone, where the panel is a compact strip
+  // docked at the bottom of the view (at most 30 % of it: the drawing stays in sight)
+  const geo = await evalJs(`(() => { const st = document.getElementById('review-stage').getBoundingClientRect(), p = document.getElementById('review-sim').getBoundingClientRect();
+    return { more: !document.getElementById('sim-more').hidden, stageTop: st.top, stageH: st.height, top: p.top, h: p.height, bottomGap: st.bottom - p.bottom, title: getComputedStyle(document.querySelector('#review-sim .simexport-title')).display }; })()`);
+  console.log(D, 'panel', JSON.stringify(geo));
+  ok(geo.more === !phone, `the "more" fold is ${phone ? 'folded' : 'open'} at first`);
+  if (phone) ok(geo.h <= 0.3 * geo.stageH + 1 && geo.bottomGap < 12 && geo.top - geo.stageTop >= 0.69 * geo.stageH && geo.title === 'none', `phone: a compact strip docked at the bottom of the view, at most 30 % of it (${Math.round(geo.h)} of ${Math.round(geo.stageH)} px)`);
   const s0 = await sim();
   console.log(D, 'card', JSON.stringify({ ops: s0.ops, label: s0.label, count: s0.count }));
   const listOrder = await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().filter((o) => o.on !== false).map((o) => o.id))`);
@@ -145,7 +158,7 @@ try {
   ok(w15.key !== w100.key, `the wood changes with the time: ${w15.key} -> ${w100.key}`);
   const finished = await evalJs(`import('/apps/shaper/src/main.js').then((m) => m.currentReviewView().lastBuild.triangles)`);
   ok(w100.triangles === finished, `at the end of Preview all the wood is the finished part (${w100.triangles} = ${finished} triangles)`);
-  await clickEl('#sim-passes');
+  await setMore(true); await clickEl('#sim-passes'); await setMore(!phone);
   await sleep(500);
   const passes = await view3d();
   console.log(D, 'passes', JSON.stringify(passes.passes));
@@ -159,7 +172,7 @@ try {
   const p40 = await view3d();
   ok(p40.passes.some((p) => p.drawn < passes.passes.find((q) => q.op === p.op).drawn) || p40.passes.length < passes.passes.length, 'the passes follow the timeline (fewer drawn part way)');
   await t.shot(`3d-passes-40-${D}.png`, stageSel, 1);
-  await clickEl('#sim-passes');
+  await setMore(true); await clickEl('#sim-passes'); await setMore(!phone);
 
   // 3. 2D: the same run
   await clickEl('#review-view-2d');
@@ -219,7 +232,7 @@ try {
   const fr = await flat();
   const guides = await evalJs(`[...document.querySelectorAll('#review-2d-canvas .rv2d-doc path, #review-2d-canvas .rv2d-doc circle')].filter((e) => e.getAttribute('shaper:cutType') === 'guide' && !e.classList.contains('rv2d-sim-todo')).length`);
   ok(fr.todo === fr.els - guides && guides >= 1, `2D after Reset: every cut hidden, only the guides shown (${fr.todo} of ${fr.els} hidden, ${guides} guides: the spiral pocket's start mark)`);
-  await clickEl('#sim-animate'); // Animate off: a preview shows its result at once
+  await setMore(true); await clickEl('#sim-animate'); await setMore(!phone); // Animate off: a preview shows its result at once
   const raster = s0.ops.find((o) => /raster/i.test(o.text)) || s0.ops[0];
   await evalJs(`document.getElementById('sim-op').value = ${JSON.stringify(raster.id)}; document.getElementById('sim-op').dispatchEvent(new Event('change'))`);
   await clickEl('#sim-preview-sel');
@@ -231,7 +244,7 @@ try {
   s = await sim();
   ok(JSON.stringify(s.carved) === JSON.stringify([raster.id]) && s.run[0].id === plate.id, `the board keeps the pocket while the plate is previewed on it: carved ${s.carved}`);
   await t.shot(`2d-kept-${D}.png`, stageSel, 1);
-  await clickEl('#sim-animate');
+  await setMore(true); await clickEl('#sim-animate'); await setMore(!phone);
 
   // 6. OUT OF DATE: a Design edit, back to Export
   await openMode('design');

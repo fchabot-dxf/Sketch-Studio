@@ -32,7 +32,6 @@ function injectStyles() {
 }
 
 export function closeContextMenu() { if (current) current.close(); }
-export function isContextMenuOpen() { return !!current; }
 
 // TASK 562: how far from a FINGER the menu opens (px): the pressed item stays visible beside it.
 const TOUCH_GAP = 40;

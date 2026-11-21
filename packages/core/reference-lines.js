@@ -19,8 +19,6 @@ const JOINT_BY_ID = new Map(REFERENCE_JOINTS.map(j => [j.id, j]));
 export const isReferenceShapeId = (id) => SHAPE_BY_ID.has(id);
 export const isReferenceJointId = (id) => JOINT_BY_ID.has(id);
 export const referenceShape = (id) => SHAPE_BY_ID.get(id) || null;
-// The axis snap type ('axis-x' / 'axis-y') of a reserved shape id, or null.
-export const axisOfShapeId = (id) => (SHAPE_BY_ID.get(id) || {}).axis || null;
 
 // A constraint that names an axis (shape / shapes / line / circle fields, or a dimension's shapes).
 export function constraintReferencesAxis(c) {

@@ -79,9 +79,6 @@ export const state = {
     currentProject: { id: null, name: null },
 };
 
-/** Default fill settings applied to new and imported layers. */
-export const DEFAULT_FILL = { pattern: "none", angle: 45, spacing: 2.0 };
-
 const MM_PER_IN = 25.4;
 /** STYLE-5: the document size as a display string in the CURRENT unit — "200 × 150 mm" / "7.87 × 5.91 in".
  *  Declared HERE (state owns doc + docUnit, and this module imports nothing app-side, so no cycle) because the app

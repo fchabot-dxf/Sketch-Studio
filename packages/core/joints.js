@@ -71,21 +71,6 @@ export function findNearbyJoint(jointsMap, pt, excludeId, eps = 0.01) {
 }
 
 /**
- * Create a new joint at the specified position
- * @param {Map} jointsMap - Map to add joint to
- * @param {Function} genJ - Function to generate joint ID
- * @param {number} x - X coordinate
- * @param {number} y - Y coordinate
- * @param {boolean} fixed - Whether joint is fixed
- * @returns {string} New joint ID
- */
-export function createJoint(jointsMap, genJ, x, y, fixed = false) {
-    const id = genJ();
-    jointsMap.set(id, { x, y, fixed });
-    return id;
-}
-
-/**
  * Get all joints that are coincident with the given joint (through constraints)
  * @param {string} jointId - Starting joint ID
  * @param {Array} constraints - Array of constraints
@@ -203,17 +188,4 @@ export function computeTrueVertexSet(shapes) {
 
     _trueVertexCache.set(shapes, s);
     return s;
-}
-
-/**
- * Convenience check: returns true when the given joint id is a defining vertex
- * according to the current set of shapes.
- * @param {Array} shapes
- * @param {string} jointId
- * @returns {boolean}
- */
-export function isTrueVertex(shapes, jointId) {
-    if (!jointId) return false;
-    const set = computeTrueVertexSet(shapes || []);
-    return set.has(jointId);
 }

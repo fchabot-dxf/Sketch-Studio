@@ -187,13 +187,6 @@ export function uncombineProfile(state, profileId) {
 }
 
 /**
- * List all profiles on state.
- */
-export function profilesOf(state) {
-  return (state && Array.isArray(state.profiles)) ? state.profiles : [];
-}
-
-/**
  * Purely resolve all stored combined profiles against the current sketch geometry.
  * Writes NOTHING into state or state.profiles.
  *

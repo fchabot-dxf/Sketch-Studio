@@ -467,7 +467,8 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
   // ── TASK 801: the Export SIMULATION (export-sim.js; the one timeline: cut-timeline.js). setSim({ states, marker, trail }) shows the file as the timeline has cut it:
   // `states[i]` = element i's state ('done' | 'active' | 'todo'; null = not cut: a guide, always shown). The 2D view hides what is not cut yet (the fills build up
   // in cutting order); the Paths view draws it faint (its bit-centre line too), and the BIT (`marker`: { x, y, r } world mm, a circle of the bit's diameter to scale)
-  // at its point with the path it has travelled so far (`trail`: points) drawn solid. setSim(null) = the whole file, as before. Display only. ──
+  // at its point with the path it has travelled so far (`trail`: points) drawn solid; TASK 801d `scribble` = the example hand moves of a freehand pocket so far
+  // (lists of points), drawn in their own style. setSim(null) = the whole file, as before. Display only. ──
   let simView = null, simLayer = null, shownTodo = []; // shownTodo[i]: element i is drawn as not cut (only the elements whose state changed are touched)
   function applySim() {
     for (const [i, it] of items.entries()) {
@@ -480,6 +481,11 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     if (simLayer) { simLayer.remove(); simLayer = null; }
     if (!simView || !top || mode !== 'paths') return;
     simLayer = doc.createElementNS(SVG_NS, 'g'); simLayer.setAttribute('class', 'rv2d-sim');
+    for (const line of simView.scribble || []) { // TASK 801d: a freehand pocket's example hand moves, in their own declared style (index.html .rv2d-sim-scribble)
+      if (line.length < 2) continue;
+      const sc = doc.createElementNS(SVG_NS, 'path'); sc.setAttribute('class', 'rv2d-sim-scribble'); sc.setAttribute('d', pointsD(line, false));
+      simLayer.appendChild(sc);
+    }
     if (simView.trail && simView.trail.length > 1) {
       const tr = doc.createElementNS(SVG_NS, 'path'); tr.setAttribute('class', 'rv2d-sim-trail'); tr.setAttribute('d', pointsD(simView.trail, false));
       simLayer.appendChild(tr);
@@ -493,7 +499,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
   }
   function setSim(view) { simView = view || null; applySim(); return inspectSim(); }
   const inspectSim = () => (simView ? { todo: items.filter((it) => it.el.classList.contains('rv2d-sim-todo')).length, shown: items.length - items.filter((it) => it.el.classList.contains('rv2d-sim-todo')).length,
-    marker: simLayer && simLayer.querySelector('.rv2d-sim-bit') ? { ...simView.marker } : null, trail: simView.trail ? simView.trail.length : 0 } : null);
+    marker: simLayer && simLayer.querySelector('.rv2d-sim-bit') ? { ...simView.marker } : null, trail: simView.trail ? simView.trail.length : 0, scribble: simLayer ? simLayer.querySelectorAll('.rv2d-sim-scribble').length : 0 } : null);
 
   /** TASK 793: '2d' | 'paths'. A change rebuilds the view at the next refresh (the same file, drawn the other way). */
   function setMode(next) {

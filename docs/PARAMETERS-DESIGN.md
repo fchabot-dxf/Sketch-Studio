@@ -293,7 +293,7 @@ expression is kept. Ours refuses the same cases, keeps the previous expression, 
 - AS BUILT (task 709, O10 owner ruling 1905): a dimension that disappears while formulas use its name is KEPT as a value (see O10); the
   freeze below is the superseded design, kept for the record.
 - (superseded) A dimension disappears (deleted, or its geometry deleted / trimmed) while formulas use its name: O10 freeze. Mechanism, in ONE
-  function `freezeReferencesTo(state, removedNames)` in parameters.js: each dependent formula is replaced by the canonical text
+  function `freezeReferencesTo(state, removedNames)` in parameters.js (never called after O10; removed in task 849): each dependent formula is replaced by the canonical text
   of its CURRENT value (a dimension: its `value` with the unit; a user parameter: its evaluated value), so nothing moves.
   It must run where a dimension can be removed. The user-facing deletes go through `deleteConstraints` / `deleteShapes` /
   `deleteJoints` (delete-manager.js:21/61/123); the other splice sites (list in the seam table) are audited in slice 6: each that

@@ -132,13 +132,18 @@ export function mountExportSim({ els, ensure, reliefItems, mode, flat, solid, re
       const s = run ? elementStateAt(run, i, v.t) : null;
       return s || 'todo';
     });
-    let marker = null, trail = null;
+    let marker = null, trail = null, scribble = null;
     if (run && v.t < run.total && mode() === 'paths') {
-      const step = run.steps[stepIndexAt(run, v.t)];
+      const at = stepIndexAt(run, v.t), step = run.steps[at];
       const p = step && pointOnStep(step, v.t);
-      if (p) { marker = { ...p, r: markerRadius(run.ops[step.op].tool, depthMm(data.items[step.element].depth)) }; trail = travelledOf(step, v.t); }
+      if (p) { marker = { ...p, r: markerRadius(run.ops[step.op].tool, depthMm(data.items[step.element].depth)) }; trail = step.role === 'scribble' ? null : travelledOf(step, v.t); }
+      if (step) { // TASK 801d: the example hand moves of the pocket being cut, as far as they went (their own style: export-preview.js)
+        const e = run.elements.get(step.element), lines = [];
+        for (let k = e.first; k <= Math.min(at, e.last); k++) { const s = run.steps[k]; if (s.role === 'scribble') lines.push(k === at ? travelledOf(s, v.t) : s.path); }
+        if (lines.length) scribble = lines;
+      }
     }
-    return { states, marker, trail };
+    return { states, marker, trail, scribble };
   }
   function render3d(v, s) {
     schedules(v);

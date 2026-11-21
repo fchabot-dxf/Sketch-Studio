@@ -8,13 +8,18 @@
 //   TIME is travel LENGTH (mm): each step lasts as long as its path is long (a closed path with its closing segment). An element with no travel (#core deriveCutTravel
 //   determines none: a Roughing level the Origin pockets, a plain On line cut) plays along the derivation's own tool paths (op-derive.js simElements: deriveCutFootprint's
 //   toolPaths) in their drawn order, role 'toolpath', with NO direction; one with neither is a step of length 0 at its place. Guides (the Stock, a pocket's start
-//   mark) are never cut: they are in no step and always shown.
+//   mark) are never cut: they are in no step and always shown. TASK 801d: a FREEHAND pocket (the Origin's own Pocket, cleared by hand) first plays an EXAMPLE of hand
+//   moves (sim-scribble.js; steps of role 'scribble', the label says so), then its wall pass: the simulation's only, never in the file or the generated paths.
 //   THE PREVIEW SESSION (createPreviewSession) is VCarve's PREVIEW TOOLPATHS panel (owner turns 2667-2668): "Preview selected" carves one operation into the CURRENT
 //   virtual board, "Preview all" every ticked operation in the list order, "Reset preview" = the uncut board; the board KEEPS what earlier previews carved (until Reset),
 //   a new preview first finishes the one in progress. The scrubber / steps / play work within the current run. Before the first preview (or after the plan changed) the
 //   session is INACTIVE: the views show the finished part as before.
 // The Origin is guided by hand and cuts each path in AutoPass depth passes: the simulation shows ORDER and DIRECTION, not real time (SIM.note); depth passes are not
 // animated, each path is shown at its final depth.
+
+import { scribble, SCRIBBLE } from './sim-scribble.js'; // TASK 801d: a freehand pocket's example hand moves (the simulation's only)
+import { sweptPath } from '#core/polygon-offset.js';
+import { cutTypeById } from './shaper.js'; // TASK 801d: the pocket's automatic offset (CUT_TYPES autoOffsetFraction) // TASK 801d: their footprint in the 3D (the one swept-bit geometry)
 
 /** The simulation's declared values: the speeds (x), the seconds the WHOLE file (every ticked operation) plays in at 1x (a run of some of them takes its share), the
  *  frame budget a 3D rebuild is measured against, and the one line under the controls. */
@@ -38,6 +43,13 @@ function cumulative(pts, closed) {
   return c;
 }
 const isCut = (it) => it.cutType && it.cutType !== 'guide';
+/** TASK 801d: an element the Origin clears BY HAND: written as a pocket with no programmed clearing (data-clear), no level (data-step) and no hold. */
+export const isFreehandPocket = (it) => it.cutType === 'pocket' && !it.clear && !it.step && !it.hold;
+const SCRIBBLES = new WeakMap(); // a wall path (the same array every build of one plan) -> its scribble's passes (made once: deterministic anyway)
+function scribbleOf(wallPath, islandPaths, dia, margin) {
+  if (!SCRIBBLES.has(wallPath)) SCRIBBLES.set(wallPath, scribble({ outer: wallPath, holes: islandPaths, dia, margin }).passes);
+  return SCRIBBLES.get(wallPath);
+}
 
 /**
  * buildTimeline({ items, ops, bitPaths, members, only }) -> { ops, steps, elements, total, count }
@@ -68,6 +80,17 @@ export function buildTimeline({ items, ops, bitPaths, elements = null, only = nu
       const first = out.steps.length, t0 = t;
       const level = it.step ? { k: it.step.k, n: it.step.n } : null;
       if (!travel.length) out.steps.push({ op: k, element: i, travel: -1, role: null, direction: null, path: null, closed: false, len: 0, cum: null, t0: t, t1: t, level });
+      // TASK 801d: a FREEHAND pocket (the Origin's own Pocket: written as a pocket, no programmed clearing, no level / hold) is cleared by hand before its wall pass:
+      // its example hand moves (sim-scribble.js, from its wall and island bit-centre paths) play first, each pass a step of role 'scribble' (no direction)
+      const wall = travel.find((tr) => tr.role === 'wall');
+      if (wall && isFreehandPocket(it) && op.tool && op.tool.dia > 0) {
+        const margin = (Number(op.settings && op.settings.offset) || 0) + (cutTypeById('pocket').autoOffsetFraction || 0) * op.tool.dia; // the clearing's distance from the wall (#core deriveCutFootprint stage 1)
+        scribbleOf(wall.path, travel.filter((tr) => tr.role === 'island').map((tr) => tr.path), op.tool.dia, margin).forEach((p, n) => {
+          const len = lengthOf(p.points, false);
+          out.steps.push({ op: k, element: i, travel: null, scribble: n, role: 'scribble', direction: null, path: p.points, closed: false, len, cum: cumulative(p.points, false), t0: t, t1: t + len, level });
+          t += len;
+        });
+      }
       travel.forEach((tr, j) => {
         const len = lengthOf(tr.path, tr.closed);
         out.steps.push({ op: k, element: i, travel: j, role: tr.role, direction: tr.direction, path: tr.path, closed: Boolean(tr.closed), len, cum: cumulative(tr.path, tr.closed), t0: t, t1: t + len, level });
@@ -119,7 +142,7 @@ export function labelAt(tl, t) {
   const i = stepIndexAt(tl, t);
   if (i < 0) return '';
   const s = tl.steps[i], op = tl.ops[s.op];
-  return [`Operation ${op.n} of ${tl.count}`, op.label, s.level ? `level ${s.level.k} of ${s.level.n}` : null].filter(Boolean).join(' · ');
+  return [`Operation ${op.n} of ${tl.count}`, s.role === 'scribble' ? `${op.label} (${SCRIBBLE.words})` : op.label, s.level ? `level ${s.level.k} of ${s.level.n}` : null].filter(Boolean).join(' · '); // TASK 801d: the example hand moves say so
 }
 
 /** The state of an element of the run at `t`: 'done' (cut), 'active' (being cut) or 'todo'; an element that is not in the run: null. A zero-length element is done
@@ -156,15 +179,30 @@ export function reliefSchedule(tl, reliefItems) {
     byMember.get(e.member.key)[e.member.ord] = e;
   }
   const opOf = new Map(tl.ops.map((o) => [o.id, o]));
-  const out = [];
+  const out = [], itemOf = new Map(); // element -> its relief item (TASK 801d: a freehand pocket's scribble carves at its depth)
   for (const item of reliefItems) {
     const op = opOf.get(item.opId);
     if (!op) continue;
     const own = (byMember.get(item.member) || []).filter(Boolean);
     const e = (byMember.get(item.member) || [])[item.ord] || own[own.length - 1] || null;
     out.push(e ? { item, opId: item.opId, time: e.t1, t0: e.t0 } : { item, opId: item.opId, time: op.t1, t0: op.t0 });
+    if (e && !itemOf.has(e)) itemOf.set(e, item);
+  }
+  // TASK 801d: a freehand pocket's example hand moves carve as they play: each pass the bit's footprint along it (#core sweptPath) at the pocket's depth, carved at the
+  // pass's end; the pocket's own item still carves at its element's end, so the end is exactly the finished part
+  for (const [e, item] of itemOf) {
+    for (let k = e.first; k <= e.last; k++) {
+      const s = tl.steps[k];
+      if (s.role !== 'scribble') continue;
+      out.push({ item: scribbleItem(item, s, tl.ops[s.op].tool.dia / 2), opId: item.opId, time: s.t1, t0: s.t0 });
+    }
   }
   return out.sort((a, b) => a.time - b.time);
+}
+const SCRIBBLE_ITEMS = new WeakMap(); // a scribble pass's points -> its relief item (made once)
+function scribbleItem(item, step, r) {
+  if (!SCRIBBLE_ITEMS.has(step.path)) SCRIBBLE_ITEMS.set(step.path, { key: item.key, opId: item.opId, member: item.member, ord: item.ord, sig: `${item.sig}|scribble ${step.scribble}`, cutType: 'pocket', cutDepth: item.cutDepth, footprints: [{ rings: sweptPath(step.path, r), fillRule: 'nonzero' }], scribble: true });
+  return SCRIBBLE_ITEMS.get(step.path);
 }
 
 /**

@@ -18,9 +18,9 @@ Design notes, audits and guides. The repo overview is `README.md` at the repo ro
 These were written when the app was one page with a top-level source folder (it is gone: the code is now in `apps/`, `packages/core/` and
 `packages/ui/`). They have NOT been re-checked against today's layout; read them for ideas and vocabulary, and trust the code.
 
-- `docs/architecture/` : `docs/architecture/APP_MAP.md`, `docs/architecture/EXPORT_GUIDE.md`, `docs/architecture/EXPORT_HANDLING_GUIDE.md`, `docs/architecture/SKETCH STUDIO TERMINOLOGY.md`, `docs/architecture/SOLVER_WALKTHROUGH.md`,
+- `docs/architecture/` : `docs/architecture/EXPORT_GUIDE.md`, `docs/architecture/SKETCH STUDIO TERMINOLOGY.md`, `docs/architecture/SOLVER_WALKTHROUGH.md`,
   `docs/architecture/UI_SHELL.md` (the shared dock-panel design, closest to current).
 - `docs/features/` : `docs/features/sketch guide.md`, `docs/features/constraints.md`.
-- `docs/development/` : `docs/development/PERFORMANCE_ANALYSIS.md`, `docs/development/REFACTORING_UPDATE_LOG.md`, `docs/development/solver categories.md`.
+- `docs/development/` : `docs/development/solver categories.md`.
 - `docs/ai/` : older notes for AI agents; the current rules are in `AGENTS.md`.
 - `docs/archive/` : `docs/archive/cad dev tech guide.md`.

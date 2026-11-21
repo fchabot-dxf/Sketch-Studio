@@ -203,6 +203,8 @@
     #review-2d-canvas .rv2d-sim * { vector-effect: non-scaling-stroke; pointer-events: none; }
     #review-2d-canvas .rv2d-sim-trail { fill: none; stroke: #ff2d95; stroke-width: 2.5px; stroke-linecap: round; stroke-linejoin: round; }
     #review-2d-canvas .rv2d-sim-bit { fill: rgba(255, 45, 149, 0.28); stroke: #ff2d95; stroke-width: 1.5px; }
+    /* TASK 801d: a freehand pocket's EXAMPLE hand moves (sim-scribble.js): the pocket's colour (CUT_TYPES pocket #7F7F7F), dashed and lighter than a real path */
+    #review-2d-canvas .rv2d-sim-scribble { fill: none; stroke: #7F7F7F; stroke-width: 1.6px; stroke-dasharray: 5 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
     /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
        Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
        app-sidebar.js): the Review card forms ONE band under the canvas. Short landscape: Review keeps its desktop side

@@ -1460,7 +1460,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     if (Array.isArray(s.joints)) {
       for (const jid of s.joints) { if (jid) curveJoints.add(jid); }
     }
-    if (s.type === 'circle' && s.joints && s.joints[0]) {
+    if ((s.type === 'circle' || s.type === 'text') && s.joints && s.joints[0]) { // TASK 845: a text's anchor shows like a centre (the point it takes constraints at)
       centerJoints.add(s.joints[0]);
       centerClusters.add(getClusterLeader(s.joints[0]));
     }
@@ -1590,7 +1590,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
     const isCenter = centerJoints.has(id) || (leader === id && centerClusters.has(leader));
     const isLone = !curveJoints.has(id) && !(clusterMembers.get(leader) || []).some((m) => curveJoints.has(m));
-    const isOpenEnd = (clusterEndCount.get(leader) || 0) === 1 && !onCurveClusters.has(leader);
+    const isOpenEnd = (clusterEndCount.get(leader) || 0) === 1 && !onCurveClusters.has(leader) && !j.textOutline; // TASK 845: a single-line font's stroke ends are no open ends
     if (!isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd, isCenter, isLone, isHiddenFollower })) continue;
 
     // Hover only makes a hidden point appear (isPointVisible); a hovered visible point differs from rest only by a 100% black ring. Selected: same 100% black ring, blue-tint fill.

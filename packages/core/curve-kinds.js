@@ -227,8 +227,24 @@ export const CURVE_REFUSALS = Object.freeze({
   }),
 });
 
-/** The reason `use` (a CURVE_REFUSALS key) refuses shape s, or null when the use takes it. */
+/** TASK 845: THE uses a TEXT's letter refuses (a curve or a point marked textOutline: #core/text.js; its letters are derived from the text, so a
+ *  tool may not reshape or constrain one alone), with the reason the notice gives. The same keys as CURVE_REFUSALS, plus Offset, Close path, Mirror
+ *  and the two patterns (their copies are tied to their sources by constraints a letter cannot take). A use not listed takes it: Select (the whole
+ *  text: hover, click, drag, the transform box, the hold menu), and the drawing tools, whose snap only lands on a letter's place
+ *  (#ui/input-manager.js toolSnap: a position snap, nothing tied). The text's ANCHOR point is no letter: it takes every point use. */
+const TEXT_LETTER = (what) => `${what}: not available on a text's letters (they are made from the text: double-click it to edit, or Convert to shapes to work on the curves)`;
+export const TEXT_OUTLINE_REFUSALS = Object.freeze(Object.fromEntries([
+  [TOOL_MODES.TRIM, 'Trim'], [TOOL_MODES.BREAK, 'Break'], [TOOL_MODES.CLOSE_PATH, 'Close path'], [TOOL_MODES.FILLET, 'Fillet'], [TOOL_MODES.OFFSET, 'Offset'],
+  [TOOL_MODES.MIRROR, 'Mirror'], [`${TOOL_MODES.MIRROR}:${MIRROR_STEPS.LINE}`, 'Mirror line'], [TOOL_MODES.CIRCULAR_PATTERN, 'Circular Pattern'],
+  [TOOL_MODES.RECTANGULAR_PATTERN, 'Rectangular Pattern'], [TOOL_MODES.DIMENSION, 'Dimension (its anchor point takes one)'],
+  [TOOL_MODES.COINCIDENT, 'Coincident (its anchor point takes one)'], [TOOL_MODES.HORIZONTAL_VERTICAL, 'Horizontal / Vertical'], [TOOL_MODES.PARALLEL, 'Parallel'],
+  [TOOL_MODES.PERPENDICULAR, 'Perpendicular'], [TOOL_MODES.COLLINEAR, 'Collinear'], [TOOL_MODES.TANGENT, 'Tangent'], [TOOL_MODES.EQUAL, 'Equal'],
+  [TOOL_MODES.MIDPOINT, 'Midpoint'], [TOOL_MODES.SYMMETRIC, 'Symmetric'], ['pointOnCurve', 'Point on curve'],
+].map(([use, what]) => [use, TEXT_LETTER(what)])));
+
+/** The reason `use` (a CURVE_REFUSALS key) refuses shape s, or null when the use takes it. TASK 845: a text's letter (s.textOutline, a curve or a
+ *  point) reads TEXT_OUTLINE_REFUSALS instead of its kind's. */
 export function curveRefusal(s, use) {
-  const r = s && CURVE_REFUSALS[s.type];
+  const r = s && (s.textOutline ? TEXT_OUTLINE_REFUSALS : CURVE_REFUSALS[s.type]);
   return (r && r[use]) || null;
 }

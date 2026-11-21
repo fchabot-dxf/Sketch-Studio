@@ -63,10 +63,10 @@ const mid = (app, id) => { const st = app.state, s = st.shapes.find((x) => x.id 
     const st = app.state, said = [];
     const notify = (m, level) => said.push(level + ': ' + m);
     select(st, rIds);
-    eq(groupCommands(st), { group: false, ungroup: ['group-1'], enter: 'group-1', leave: false }, 'one whole group selected: Ungroup / Enter group (not Group: one thing)');
+    eq(groupCommands(st), { group: false, ungroup: ['group-1'], enter: 'group-1', leave: false, text: null }, 'one whole group selected: Ungroup / Enter group (not Group: one thing); TASK 845: no text');
     eq(groupSelection(st, notify), null, 'Group refuses one thing');
     select(st, [...rIds, ...qIds, 'S']);
-    eq(groupCommands(st), { group: true, ungroup: ['group-1', 'group-2'], enter: null, leave: false }, 'two groups + a line: Group, Ungroup (both), no Enter');
+    eq(groupCommands(st), { group: true, ungroup: ['group-1', 'group-2'], enter: null, leave: false, text: null }, 'two groups + a line: Group, Ungroup (both), no Enter');
     const h0 = st.history.length;
     const g = groupSelection(st, notify);
     eq([g.name, names(st), st.history.length - h0], ['Group 3', ['R<Group 3', 'Q<Group 3', 'Group 3'], 1], 'Group: the two groups nested whole, the line a member; ONE undo step');

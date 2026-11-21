@@ -55,6 +55,7 @@ const CREATE = [
   { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon',  label: 'Polygon', shortcut: 'tool.polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
   { tool: TOOL_MODES.ARC,     icon: 'icon-tool-arc-cse',  label: 'Arc', shortcut: 'tool.arc' }, // single-mode in the source (no dropdown)
   { tool: TOOL_MODES.BEZIER,  icon: 'icon-tool-bezier',   label: 'Bezier', shortcut: 'tool.bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
+  { tool: TOOL_MODES.TEXT,    icon: 'icon-tool-text',     label: 'Text', shortcut: 'tool.text' }, // TASK 845: editable text (#ui/input-handlers/text-tool.js)
 ];
 // TRACE-1: Edit/modify tools — trim + break. No cursor-manager symbols yet; icons provided as SVG inline.
 const EDIT = [

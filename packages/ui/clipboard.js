@@ -30,6 +30,8 @@ import { commitDimensionEdits } from '#core/dimension-seams.js';
 import { isPatternConstraint, patternRefs, remapPattern } from '#core/pattern.js';
 import { matchShortcut } from '#ui/shortcuts.js'; // TASK 727: the clipboard keys are declared there
 import { copyGroups, wholeGroupsOf, enteredGroup } from '#core/group-model.js'; // TASK 756: a pasted copy of a whole user group is a group
+import { syncTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a pasted text gets its letters (the clipboard, a document, never carries them)
+import { showNotification } from '#ui/notification-manager.js';
 
 // ── DECLARED: the clipboard format and the paste step ──
 export const CLIPBOARD_FORMAT = 'sketch-studio/geometry';
@@ -146,6 +148,7 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
     // TASK 756: the copy of a whole user group is a group, in the group the user has entered (the paste lands where the user works, as its
     // shapes land in the active sketch); a clipboard copied before task 756 carries no groups: its copy is loose, as it was
     copyGroups(state, { shapes: g.shapes, groups: g.groups || [] }, copies, { parentId: enteredGroup(state) });
+    syncTextOutlines(state, { onlyMissing: true, notify: showNotification }).then(null, (err) => showNotification(`A pasted text's font could not be loaded: ${err.message}`, 'error')); // TASK 845: in its own group (just made)
     // constraints: ids remapped, the name dropped (addConstraint gives a dimension the next free dN), positions that are data moved
     const before = state.constraints.length;
     const renamed = new Map(); // old dimension name -> the pasted dimension's name (task 694: a pasted pattern's values too)

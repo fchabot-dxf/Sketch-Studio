@@ -33,7 +33,8 @@ for (const app of APPS) {
   const full = ogCardSvg(app, HOST);
   assert.ok(full.includes(`<rect width='1200' height='630' fill='${OG.bg}'/>`), `${app.id}: the background fills the whole card`);
   const head = identityHead(app, HOST);
-  for (const m of ['og:image" content="https://' + HOST + '/og-image.png"', 'og:image:width" content="1200"', 'og:image:height" content="630"', 'twitter:card" content="summary_large_image"', 'twitter:image" content="https://' + HOST + '/og-image.png"']) assert.ok(head.includes(m), `${app.id}: meta ${m}`);
+  const og = app.ogImage ? app.ogImage.src : 'og-image.png'; // TASK 851: an app that declares its share image (Sketch: a screenshot) names it, not the card
+  for (const m of ['og:image" content="https://' + HOST + '/' + og + '"', 'og:image:width" content="1200"', 'og:image:height" content="630"', 'twitter:card" content="summary_large_image"', 'twitter:image" content="https://' + HOST + '/' + og + '"']) assert.ok(head.includes(m), `${app.id}: meta ${m}`);
   console.log(`${app.id}: content x ${b.x0}..${b.x1}, y ${b.y0}..${b.y1}`);
   if (evidence) {
     fs.mkdirSync(evidence, { recursive: true });

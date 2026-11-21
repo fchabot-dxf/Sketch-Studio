@@ -6,6 +6,8 @@
 //   * no console error / page exception while the app loads.
 // Evidence (.evidence/829/): per app the desktop (1280 x 800) and phone (390 x 844) screenshots, a "tab strip" sheet of the favicon at 16 / 32 px beside the app's title
 // on a light and a dark strip, and the og card rendered from the built site.
+// TASK 851: with JavaScript OFF the intro's <noscript> line shows under the description (and still takes no room: it is inside the out-of-flow intro); the
+// share image is the one og:image names (Sketch: its declared screenshot assets/og-image.png, 1200 x 630; the others: the generated og-image.png card).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -47,11 +49,13 @@ await (async () => {
       // ---- JavaScript OFF: the static page, the intro, no room taken ----
       await send('Emulation.setScriptExecutionDisabled', { value: true });
       await navigate(`${origin}/`, 15000);
-      const intro = JSON.parse(await evalJs(`(() => { const d = document.getElementById('${SEO_INTRO_ID}'); if (!d) return JSON.stringify(null); const r = d.getBoundingClientRect(); return JSON.stringify({ h1: d.querySelector('h1').textContent, p: d.querySelector('p').textContent, position: getComputedStyle(d).position, w: r.width, h: r.height }); })()`));
+      const intro = JSON.parse(await evalJs(`(() => { const d = document.getElementById('${SEO_INTRO_ID}'); if (!d) return JSON.stringify(null); const r = d.getBoundingClientRect(); return JSON.stringify({ h1: d.querySelector('h1').textContent, p: d.querySelector('p').textContent, position: getComputedStyle(d).position, w: r.width, h: r.height, noscript: (() => { const n = d.querySelector('noscript p'); if (!n) return null; const b = n.getBoundingClientRect(); return { text: n.textContent, h: b.height, below: b.top >= d.querySelector('h1 + p').getBoundingClientRect().bottom }; })() }); })()`));
       assert.ok(intro, `${app.id}: the intro is in the static page (no JavaScript ran)`);
       assert.strictEqual(intro.position, 'fixed', `${app.id}: the intro is out of flow`);
       assert.ok(intro.w > 100 && intro.h > 20, `${app.id}: the intro is visible without JavaScript (${intro.w} x ${intro.h})`);
       assert.ok(intro.h1 === app.seoTitle && intro.p === app.description, `${app.id}: the intro is the seoTitle and description`);
+      assert.ok(intro.noscript && intro.noscript.h > 10 && intro.noscript.below, `${app.id}: with JavaScript off the <noscript> line shows under the description (${JSON.stringify(intro.noscript)})`);
+      assert.ok(intro.noscript.text.startsWith(`${app.name} is a free web app`), `${app.id}: the <noscript> line names the app`);
       assert.strictEqual(await evalJs(`document.title`), app.seoTitle, `${app.id}: the static page's <title> is the seoTitle (before the app runs)`);
       const withIntro = await boxes();
       await evalJs(`document.getElementById('${SEO_INTRO_ID}').style.display = 'none'`);
@@ -86,7 +90,7 @@ await (async () => {
       // ---- the tab strip sheet and the og card, from the built site ----
       const strip = (bg, fg) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:${bg};color:${fg};font:13px Segoe UI,Arial,sans-serif;border-radius:8px 8px 0 0;width:300px"><img src="favicon.svg" width="16" height="16"><img src="favicon.ico" width="16" height="16"><span>${appTitle(app.id)}</span></div>`;
       fs.writeFileSync(path.join(out, '__sheet.html'), `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#d9dce1;font:13px Segoe UI,Arial"><div style="padding:16px 16px 0">${strip('#ffffff', '#222')}</div><div style="padding:16px 16px 0">${strip('#2b2d31', '#eee')}</div>`
-        + `<div style="padding:16px;display:flex;gap:16px;align-items:flex-end"><img src="favicon.svg" width="32" height="32"><img src="favicon.svg" width="64" height="64"><img src="apple-touch-icon.png" width="90"><img src="icon-192.png" width="96"></div><div style="padding:0 16px 16px"><img src="og-image.png" width="600" style="border:1px solid #888"></div></body>`);
+        + `<div style="padding:16px;display:flex;gap:16px;align-items:flex-end"><img src="favicon.svg" width="32" height="32"><img src="favicon.svg" width="64" height="64"><img src="apple-touch-icon.png" width="90"><img src="icon-192.png" width="96"></div><div style="padding:0 16px 16px"><img src="${app.ogImage ? app.ogImage.src : 'og-image.png'}" width="600" style="border:1px solid #888"></div></body>`);
       await send('Emulation.setDeviceMetricsOverride', { width: 700, height: 560, deviceScaleFactor: 2, mobile: false });
       await navigate(`${origin}/__sheet.html`, 15000);
       await sleep(400);

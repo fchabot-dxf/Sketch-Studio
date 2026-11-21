@@ -11,7 +11,7 @@ import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
-import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
+import { SHORT_VIEWPORT_QUERY } from '#ui/short-viewport.js';
 import { loadSection, saveSection, defaultSection, onRibbonLayoutChange, sameSection } from '#ui/ribbon-layout.js';
 import { titleWithShortcut, shortcutHint, onShortcutsChange } from '#ui/shortcuts.js'; // TASK 740: each button's title shows its key, read from THE declaration (TASK 747: and follows the user's keys)
 import { mountTooltip } from '#ui/hint.js';
@@ -187,13 +187,19 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
 .sk-ribbon-sect-reset { border: 0; background: transparent; padding: 6px; font: 600 11px system-ui, sans-serif; color: var(--sk-selection, #3B82F6);
   text-decoration: underline; cursor: pointer; }
 /* TASK S3: a VERTICAL ribbon (createToolRibbon({ vertical: true }): Shaper Prepare's operations toolbar, a column at the left edge of its view): the same buttons
-   (icon over label, the finger sizes below on a touch screen), one column; a fixed section has no name row (as on the rail). The class is set only while neither
-   phone layout applies: a phone held upright keeps the bar, the short viewport the rail (both below), as every ribbon there. */
-.sk-ribbon.sk-ribbon-vertical { flex-direction: column; align-items: center; padding: 4px; }
-.sk-ribbon-vertical .sk-ribbon-group { padding: 4px 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
+   (icon over label, at least as wide as the bar's, wider for a long label; the finger sizes below on a touch screen), one column per section; as on the rail, a
+   section's name is the caret strip beside its tools (its name is the dropdown's header) and a fixed section has none. The class is set only while neither phone
+   layout applies: a phone held upright keeps the bar, the short viewport the rail (both below), as every ribbon there. */
+.sk-ribbon.sk-ribbon-vertical { flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; height: 100%; padding: 4px; } /* the host's height: the fit counts what the column holds */
+.sk-ribbon-vertical .sk-ribbon-group { flex-direction: row; align-items: stretch; padding: 4px 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
 .sk-ribbon-vertical .sk-ribbon-group:last-child { border-bottom: 0; }
 .sk-ribbon-vertical .sk-ribbon-btns { flex-direction: column; }
+.sk-ribbon-vertical .sk-ribbon-btn { width: auto; min-width: 48px; padding: 0 4px; }
+.sk-ribbon-vertical .sk-ribbon-group-label { margin: 0; }
+.sk-ribbon-vertical button.sk-ribbon-group-label { position: relative; font-size: 0; min-width: 14px; min-height: 44px; padding: 0; }
+.sk-ribbon-vertical button.sk-ribbon-group-label::after { position: absolute; left: 50%; margin-left: -3px; top: 50%; margin-top: -2px; }
 .sk-ribbon-vertical .sk-ribbon-group[data-fixed] .sk-ribbon-group-label { display: none; }
+.sk-ribbon-sect-menu.sk-ribbon-vertical-menu .sk-ribbon-sect-head { display: block; }
 /* TASK 562: a finger. Buttons >= 44 px (here 62 x 60), labels >= 12 px, menu rows 44 px. Desktop (a mouse) is untouched. */
 @media (pointer: coarse) {
   .sk-ribbon-btn { width: 62px; height: 60px; }
@@ -263,12 +269,12 @@ const GRIP_SVG = '<svg viewBox="0 0 12 16" aria-hidden="true"><g fill="currentCo
 
 // TASK 607 / 647: THE placement of a ribbon popover (the Rect variants menu, a section dropdown): from its anchor's rect, kept inside the
 // viewport: below the anchor in the bar, beside the RAIL (the ribbon `edge`, not just the anchor: the rail has a column of section names right of
-// the icons) in the short-viewport rail.
+// the icons) in the short-viewport rail. TASK S3: beside any ribbon laid out as a column (the rail, a vertical ribbon): the ribbon's own direction says it.
 function placePopover(menu, anchor, edge) {
   const r = anchor.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, pad = 4;
   menu.style.maxHeight = (vh - 2 * pad) + 'px';
   const w = menu.offsetWidth, h = menu.offsetHeight;
-  const beside = isShortViewport();
+  const beside = getComputedStyle(edge).flexDirection === 'column';
   const left = beside ? Math.max(r.right, edge.getBoundingClientRect().right) + pad : r.left, top = beside ? r.top : r.bottom + 2;
   menu.style.left = Math.round(Math.max(pad, Math.min(left, vw - w - pad))) + 'px';
   menu.style.top = Math.round(Math.max(pad, Math.min(top, vh - h - pad))) + 'px';
@@ -560,6 +566,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (openSec === sec) { sectPop.close(); return; }
     sectPop.close();
     openSec = sec; fillSection(sec);
+    sectMenu.classList.toggle('sk-ribbon-vertical-menu', el.classList.contains('sk-ribbon-vertical')); // TASK S3: its name strip has no text: the dropdown shows the name
     sec.nameEl.setAttribute('aria-expanded', 'true');
     sectPop.open(sec.nameEl);
     if (byKeyboard) { const first = sectMenu.querySelector('.sk-ribbon-sect-item'); if (first) first.focus(); }

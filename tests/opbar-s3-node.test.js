@@ -1,7 +1,7 @@
 // tests/opbar-s3-node.test.js — TASK S3 (owner turns 2944-2950; docs/OPERATIONS-MODEL.md 4.1-4.2) and its ADDITION (owner turns 3046-3047, "Fusion style"; section 11) on
 // the Shaper node page (tests/helpers/node-app.js: the page's own Prepare stage, its operations toolbar, card and list), a drawn design of two squares A, B and an open line L:
 //  1. THE TOOLBAR is Design's shared tool ribbon (#ui/tool-ribbon.js), Prepare's own instance: one button per operation type from THE declaration (CUT_TYPES, in its
-//     order: its icon, its param-hints name and tooltip), then Recalculate in a section of its own (the divider); no sketcher section, no Lock; Design's ribbon unchanged;
+//     order: its icon, its param-hints name and tooltip), then Recalculate in a fixed section of its own (the divider); no sketcher section, no Lock; Design's ribbon keeps its buttons;
 //  2. a SHAPE CLICK shows NO card (its operations' rows are lit); a button with shapes selected = a NEW operation of that type holding them, OPEN (OK / Cancel); with
 //     nothing selected = a NEW EMPTY operation, open (a shape click then puts the shape in); an impossible pick (a Pocket of an open line) creates NOTHING and the one plain
 //     line says why (Prepare's notice: no card shows); some fit = the rest are left out (the card's line); an open operation is confirmed (OK) first and its shapes are
@@ -74,7 +74,8 @@ try {
   const declared = (icon) => [...icon.matchAll(/<(\w+)[^>]*?\s(?:d|x|cx)='([^']*)'/g)].map((m) => `${m[1]} ${m[2]}`);
   ok(CUT_TYPES.every((t) => drawn(q(`#op-type-${t.id} svg.sk-ribbon-ic`)).join('|') === declared(t.icon).join('|')), '1: each button\'s icon is its type\'s own (CUT_TYPES.icon)');
   eq(q('#op-recalculate .sk-ribbon-lbl').textContent, 'Recalculate', '1: Recalculate');
-  ok(bar.querySelectorAll('[data-fixed]').length === 2 && !bar.querySelector('button.sk-ribbon-group-label'), '1: both sections fixed: every button shown, no dropdown');
+  ok(!q('#prepare-ribbon .sk-ribbon-group[data-section="operations"]').hasAttribute('data-fixed') && q('#prepare-ribbon .sk-ribbon-group[data-section="recalculate"]').hasAttribute('data-fixed'),
+    '1: the Operations section is a ribbon section as in Design (what does not fit is in its dropdown); Recalculate is fixed (always shown)');
   ok(!bar.querySelector('#btn-lock') && !bar.querySelector('[data-tool]'), '1: no sketcher tool, no Lock');
   ok(bar.classList.contains('sk-ribbon-vertical'), '1: a vertical ribbon (a column at the left edge away from a phone)');
   ok(qa('#prepare-ribbon .sk-ribbon-btn').every((b) => b.tagName === 'BUTTON' && b.type === 'button'), '1: native buttons (Tab focuses, Enter / Space press: the ribbon\'s keyboard)');

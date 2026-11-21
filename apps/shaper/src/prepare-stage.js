@@ -352,15 +352,16 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
 
   // TASK S3 (owner turns 2944-2950): the OPERATIONS TOOLBAR = Design's shared tool ribbon (#ui/tool-ribbon.js), its own instance with Prepare's buttons: one per
   // operation type, from THE declaration (CUT_TYPES, in its order; a button's icon is the type's own, its name and tooltip the type's param-hints entry), then (a
-  // section of its own: the divider) Recalculate. A column at the left edge; a bar along the top on a phone held upright, the rail on the short viewport (the
-  // ribbon's own layouts there).
+  // section of its own, fixed: the divider) Recalculate. A column at the left edge; a bar along the top on a phone held upright, the rail on the short viewport (the
+  // ribbon's own layouts there). The Operations section is a ribbon section as Design's are: what does not fit (a phone held upright) is in its name's dropdown, never
+  // lost; the user's in-bar ticks and order are kept per app (appId 'shaper-prepare', #ui/ribbon-layout.js), the declaration's order until the user changes it.
   let ribbon = null;
   if (ribbonEl) {
     const cutIcon = (icon) => `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${icon}</svg>`;
     ribbon = createToolRibbon({
       appId: 'shaper-prepare', sketchTools: false, vertical: true,
       extraGroups: [
-        { key: 'operations', label: 'Operations', fixed: true, buttons: CUT_TYPES.map((t) => ({ id: `op-type-${t.id}`, label: hintLabel(choiceId('cutType', t.id)), hint: hintText(choiceId('cutType', t.id)), svg: cutIcon(t.icon), onClick: () => addOperation(t.id) })) },
+        { key: 'operations', label: 'Operations', buttons: CUT_TYPES.map((t) => ({ id: `op-type-${t.id}`, label: hintLabel(choiceId('cutType', t.id)), hint: hintText(choiceId('cutType', t.id)), svg: cutIcon(t.icon), onClick: () => addOperation(t.id) })) },
         { key: 'recalculate', label: 'Recalculate', fixed: true, buttons: [{ id: 'op-recalculate', label: hintLabel('opRecalculate'), hint: hintText('opRecalculate'), svg: cutIcon(RECALC_ICON), onClick: () => recalculateButton() }] },
       ],
     });

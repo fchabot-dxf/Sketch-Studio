@@ -193,6 +193,7 @@ await (async () => {
     await navigate(url('sketchstudio'), 10000);
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 1 && !!document.querySelector('.sk-doctab-new')`, 'phone: the strip');
     await press('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'phone: modal');
+    await cards(); // TASK 840: the labels are read once every card's preview is drawn (as on the desktop: a recipe can take seconds, the spur gear's pattern)
     const box = await evalJs(`(() => { const r = document.querySelector('.sk-tp-panel').getBoundingClientRect(); const c = [...document.querySelectorAll('.sk-tp-card')].map((e) => Math.round(e.getBoundingClientRect().top)); return { w: r.width, h: r.height, perRow: c.filter((t) => t === c[0]).length }; })()`);
     assert(box.w === 390 && box.h === 844, 'phone: the modal is full-screen ' + JSON.stringify(box));
     assert.strictEqual(box.perRow, 2, 'phone: two cards per row');

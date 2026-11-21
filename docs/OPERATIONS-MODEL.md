@@ -690,3 +690,30 @@ thread), `prepare-stage.js` (the session, the Preview, the row spinner), `prepar
 - **The default order** ranks a Roughing / Contour by its generated cuts: while they are generating (or it is open) it keeps the rank its last cuts gave and
   is sorted again when they arrive; a new operation of unknown rank in a user-ordered list is placed again by the rule once, if nothing moved meanwhile. A
   version 2 document being read is still ordered at once (derived on the main thread).
+
+---
+
+## 12. Task 806 / SA-16: Select in Fusion per Operation
+
+Lets the operator re-select Fusion entities for a single operation directly from its row in the operations list, without rebuilding unrelated operations or losing their settings.
+
+### 12.1 Row Action & Visibility
+- In **Fusion mode** (`isFusion()`), every non-Stock, non-STL operation row (`!op.stl && op.tickable !== false`) exposes a **Select in Fusion** action (works even when the operation is currently EMPTY so an emptied or newly created op can be populated from Fusion).
+- In **web mode** (outside Fusion), on the **Stock** entry, and on **STL** operations (`op.stl === true`), the action is hidden so non-Fusion users and non-B-Rep entries see zero UI change.
+
+### 12.2 Request Payload (`select_for_operation`)
+Clicking **Select in Fusion** on operation `op`:
+1. Collects `tokens`: the ordered unique `sources` tokens attached to every geometry key referenced by `op.geometry` (`region.sources` / `chain.sources`, deduplicated).
+2. Collects `keepTokens`: the ordered unique `sources` tokens attached to geometry keys referenced by **other** operations (`other.id !== op.id && other.tickable !== false && !other.stl`), so removing an entity from `op` never drops it from Fusion's persistent selection while another operation still uses it.
+3. Sends `{ action: 'select_for_operation', opKey: op.id, label: op.label, tokens, keepTokens }` over the Fusion bridge.
+
+### 12.3 Applying `selection_data.assign` on Return
+- Every region/chain carries its `sources` array through selection storage and prepare-history snapshots; `regionSig` ignores `id`, `label`, and `sources` so matching shapes retain their identity and settings even when a pocket/wall picks up or drops a face token.
+- `importFusionSelection` never short-circuits on `payloadSig` when `data.assign` is present, because an assignment update may change only `assign` or assign an existing geometry set to a specific operation.
+- When `selection_data` arrives with `assign: { opKey, tokens }`:
+  1. The imported regions/chains reconcile the Fusion selection pool (updating geometry entries, renaming matched signatures, preserving `sources`).
+  2. Look up `target = opById(assign.opKey)`.
+  3. Build the new geometry ref list for `target`: every imported geometry key whose `sources` intersects `assign.tokens` (`sources.some(t => tokenSet.has(t))`). (If `assign.tokens` is empty, the new ref list is `[]`.)
+  4. Replace `target.geometry` with that list while preserving `target`'s `type`, `settings`, `ticked`, `color`, `customName`, and list position. If `0` geometry refs match, `target` remains in the operations list marked `EMPTY` (never deleted). Other operations keep their existing refs (apart from global `renameGeometry` renames/removals for removed persistent entities).
+  5. Both Undo and Redo record a single history step in the palette: Undo restores the pre-edit operation state and sends `restore_selection { selectionId }` to Fusion when persistent selection tokens changed; Redo restores the post-edit state and syncs Fusion's persistent selection (`restore_selection { selectionId, tokens }`) so palette and Fusion stay aligned.
+

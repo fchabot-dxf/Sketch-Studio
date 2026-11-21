@@ -1,7 +1,6 @@
 // tests/prepare-look.test.js — TASK 455: Prepare looks like Shaper Studio. ONE state model for every cut type (idle: only the svg line;
 // hover / selected: band + boundary + dashed tool path + depth chip), colours only as --sk-prep-* tokens (no hex in the view / card /
 // cut-type preview fields), the card look. Headless Edge, real mouse events.
-// TASK S3: the 'empty spot' clicked to deselect is right of Prepare's operations toolbar (it lies over the canvas's left edge).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -87,9 +86,8 @@ await (async () => {
                edgeStroke: getComputedStyle(document.querySelector('#prepare-canvas .sk-edge')).stroke, edgeWidth: getComputedStyle(document.querySelector('#prepare-canvas .sk-edge')).strokeWidth,
                guideEdges: q('.sk-edge-guide'), bg: getComputedStyle(document.getElementById('prepare-canvas')).backgroundColor };
     })()`);
-    // an empty spot inside the Prepare canvas, near its bottom-left corner (from its rect: the app footer, TASK 618, is below it; TASK S3: right of the operations
-    // toolbar, which lies over the canvas's left edge)
-    const away = await evalJs(`(() => { const r = document.getElementById('prepare-canvas').getBoundingClientRect(), f = document.getElementById('prepare-ribbon-frame').getBoundingClientRect(); return { x: Math.round(Math.max(r.left, f.right) + 10), y: Math.round(r.bottom - 20) }; })()`);
+    // an empty spot inside the Prepare canvas, near its bottom-left corner (from its rect: the app footer, TASK 618, is below it)
+    const away = await evalJs(`(() => { const r = document.getElementById('prepare-canvas').getBoundingClientRect(); return { x: Math.round(r.left + 10), y: Math.round(r.bottom - 20) }; })()`);
     // idle: ONLY the svg line (thin white), the guide the one blue exception
     await move(away.x, away.y);
     let sIdle = await snap();

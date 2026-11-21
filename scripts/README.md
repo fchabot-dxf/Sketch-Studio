@@ -25,11 +25,6 @@ Tools for the repo. Run each from the repo root.
 - `scripts/fusion-oracle/` : helpers that compare the solver with a running Fusion 360.
 - `scripts/test-shaper-live.js` : a manual check of the Shaper upload against the real service; it needs credentials kept outside the repo.
 
-## Old single-app build (broken)
-
-`scripts/build-inline.cjs`, `scripts/smoke-test.cjs` and `scripts/validate-standalone.cjs` (`npm run build:inline`) belong to the first single-page app:
-they read a root index page and a top-level source folder that no longer exist, so `npm run build:inline` fails with a missing-folder error (ENOENT). Nothing uses them.
-
 ## Deployment
 
 Each app is a Cloudflare Pages site built by `scripts/build-site.cjs`; the Pages projects, deploy commands and secret names are in `README.md`

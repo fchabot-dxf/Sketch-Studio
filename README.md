@@ -50,7 +50,7 @@ can also be changed. There is no copy of the list here, so it cannot go stale.
 ## Where the plans live
 
 `ROADMAP.md` (the plan), `NEXT-SESSION.md` (the work in flight and the project principles), `WORK-LOG.md` (what each task did),
-`CONTEXT.md` (environment and gotchas), `AGENTS.md` (the rules for the people and agents working here).
+`AGENTS.md` (the rules for the people and agents working here).
 
 ## Websites: one per app
 

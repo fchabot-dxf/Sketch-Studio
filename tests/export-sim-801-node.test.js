@@ -104,7 +104,13 @@ try {
   near(tl.total, tl.steps.reduce((a, s) => a + s.len, 0), 1e-6, 'the total = the sum of the lengths');
   for (let i = 1; i < tl.steps.length; i++) near(tl.steps[i].t0, tl.steps[i - 1].t1, 1e-9, `step ${i} starts where ${i - 1} ends`);
   const raster = tl.ops.find((o) => typeOf(o.id) === 'pocket');
-  ok(raster.last - raster.first + 1 >= 5, `the raster pocket's passes are steps of their own (${raster.last - raster.first + 1})`);
+  // TASK 835e: a Raster pocket with Loop off writes ONE open zigzag per area (its passes joined end to end), then the clean-up ring and the wall: the timeline
+  // plays one step per written path, so the zigzag is ONE step, and it plays its passes in order along its path
+  const rSteps = tl.steps.slice(raster.first, raster.last + 1);
+  eq(rSteps.map((s) => [s.role, s.closed]), [['raster', false], ['cleanup', true], ['wall', true]], 'the raster pocket (Loop off): one open zigzag, the clean-up ring, the wall: a step each');
+  const zz = rSteps[0].path, passes = [];
+  for (let i = 1; i < zz.length; i++) if (Math.abs(zz[i].y - zz[i - 1].y) < 1e-6) passes.push({ y: zz[i].y, dx: zz[i].x - zz[i - 1].x });
+  ok(passes.length >= 5 && passes.every((q, i) => i === 0 || (q.y > passes[i - 1].y && Math.sign(q.dx) === -Math.sign(passes[i - 1].dx))), `the zigzag step plays the passes in order: each one further on, every other the other way (${passes.length} passes)`);
   const runR = timelineOf(st, new Set([raster.id])).tl;
   near(runR.total, raster.t1 - raster.t0, 1e-6, 'a run of one operation = its share of the file');
   eq([runR.ops[0].n, runR.count], [raster.n, 4], 'its number stays the file\'s ("Operation n of 4")');

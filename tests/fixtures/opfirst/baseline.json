@@ -2820,13 +2820,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "cam-paths-787-node__0008__d2d21b4d": {
-   "a": "bd5416221dacf36500b7e339fd8fa055",
-   "b": "c03827cc7eb7b6d692b998c76342417b",
-   "c": "86d9c38bfa5944388987f6bdcf3af0d5",
+   "a": "97b8661249cc6057f5611d9acdc0ad46",
+   "b": "f5ea9026da522cd4b0eaa1eba3c07cfe",
+   "c": "cd6f1cecef209e312a8f5bc73f533af2",
    "d": "ad2e97079d8069915aff425f0d1b53ac",
-   "dContent": "19d5e1bdf6c1c2190f5451c8a90db320",
+   "dContent": "04f382d174cd4dc5a9134223a7da00db",
    "e": "a4e1bebdbe69afdddc9dedfd3110d2d3",
-   "eNoId": "212726a2d683bbd18b51295a8c9be22d",
+   "eNoId": "b8f1b4383e1c0f603ca44ca99b7d6aee",
    "f": "d751713988987e9331980363e24189ce"
   },
   "cam-paths-787-node__0009__63e01000": {
@@ -3870,13 +3870,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0008__07f32269": {
-   "a": "c03e5ec12638ffcf3d9c9925e674742a",
-   "b": "3ab28d46cae9181db56768da5f0bac43",
-   "c": "b2706ed5f5bc718ccf0c349a20e3a7cf",
+   "a": "383e060541bde4591615c56719096c32",
+   "b": "8a31629cb15c6115747d75780e4d1b2d",
+   "c": "8cbb68ef00861b8f1d5b68b5d9ce1c66",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "10a09002a12d7e64bd6c5a8d1ae567e9",
+   "dContent": "7612301007fe26e73a8056be9f2cd4c0",
    "e": "ac4390d84a1ba19aba46fd9c4280ec98",
-   "eNoId": "ac30552d3f2b3c55abf3d6b5a32c4e4c",
+   "eNoId": "fb20edfe69748d27f45e1f24641da073",
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0009__4d43d2fd": {
@@ -4050,13 +4050,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0026__63de60f2": {
-   "a": "0a551b333c32090ccea368f3732ac893",
-   "b": "ef64c9fa3fcb3452ac7591d6d9b25f86",
-   "c": "e11660772096e168f96800a61b3c9b2f",
+   "a": "f5d008b0ce3c392e40248b60dc8f6caa",
+   "b": "f034cbdc54ac3dd4c220e93a6a09eefa",
+   "c": "ee14404b9319c8be10159cff52f6e610",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "5a0070d4ac3fe0ac320f981b8d7d37f2",
+   "dContent": "a6fa8cf0f4dae49c6b53403336fe2347",
    "e": "93552b8300f5b52bea8b420409b61abf",
-   "eNoId": "cf7e52da373dcd624ace126de383ac3b",
+   "eNoId": "2cbef1556ef5cc7ea7a3956e40ca1057",
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0027__82ca8a4e": {
@@ -4290,13 +4290,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0050__28408637": {
-   "a": "7055efbcd576df114219e1988eebaab1",
-   "b": "404b6cd88d9ab8ec9bc34dc1dfa1b01d",
-   "c": "d60439440ac142990c4b2365221a5191",
+   "a": "2d2e04c31024afeaeeb9f9216e18745b",
+   "b": "4ff4a82f00f2e758840d42178c58cc6f",
+   "c": "933f08b712c7e67d8c3eb73bb71461aa",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "dcd9e4f38d796bf97801d95f49bccebe",
+   "dContent": "9fe65b119122c6ab6e7b9c972dc38489",
    "e": "0e922356e914c1371949036917c66016",
-   "eNoId": "3d47557f65c44282a8524d4626fc9ba8",
+   "eNoId": "da542f5383b767b04877af10adf36e54",
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0051__5e3d896f": {
@@ -4530,13 +4530,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0074__3e03fa21": {
-   "a": "3a6bc216d2737ce1d2976e54f35ebbcd",
-   "b": "1736b98d70ae63f7956c0fd0c010ffa1",
-   "c": "87882375c49054fa4a3492ed7063a96d",
+   "a": "34a99877b3eca0be951157adc706829d",
+   "b": "7f94826724bdcacd9fb724356966d45d",
+   "c": "f359c08b7510b62be3ae521ddc9e686f",
    "d": "7832d83bef7ba3e75c7a0c960b958834",
-   "dContent": "887833ede00d51aca0397841b5924035",
+   "dContent": "946c546e7874985bc8b13444a7475d95",
    "e": "5c4b8f82d32866046683a51f9501f40a",
-   "eNoId": "2d3afcb5df11a8eebe35ae085d198f72",
+   "eNoId": "14e1c99cfdcf74c4987234ec76ef9c5c",
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0075__3e24ef4e": {
@@ -4610,13 +4610,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0082__864222e2": {
-   "a": "b2eafd24bc932ffc735d7ef21214fbf2",
-   "b": "3cbd3120bd40247717ae5719cd1a0562",
-   "c": "872a3bb2c7fed5ce63addc05e321286c",
+   "a": "98531329124a1c1b5d44a0ae79ed22f5",
+   "b": "313f477fb8eb2720f2fb0aee5859e184",
+   "c": "f3716af158cccfe62829279a21984680",
    "d": "40dfe097897ce9b893e3b8b62ec77fa3",
-   "dContent": "aa500692de5d3852dc819e742100539b",
+   "dContent": "ff65a33f71afd538e1c06c1cdbef5911",
    "e": "e807735dd372978cea212a21a222939c",
-   "eNoId": "9e14ce522465a0144859caa83477985c",
+   "eNoId": "09b8fc2ef3d87a52d3a3e7003b0a2dd6",
    "f": "d751713988987e9331980363e24189ce"
   },
   "leadin-775-node__0083__8a2c791a": {
@@ -6230,13 +6230,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "matrix__pocket-raster-loop": {
-   "a": "134c42268df9c08e5590e87f7d1a6c12",
-   "b": "af1ec2a3db0e4aebaf29c20e253f4487",
-   "c": "c95d29455c6b3864aa86e3bd026a3ed2",
+   "a": "d83e8b0862a2cf16a61225871122e472",
+   "b": "e89e1ed9b41dd7d966cdf669f593255f",
+   "c": "90953ec807a69cd2c0f946d6373f0041",
    "d": "63ef593dab3ee4c8b8612f968124fcc0",
-   "dContent": "e20db2fab34a663ce7a101f1495c3602",
+   "dContent": "d9dc03eea3f38427f3fd20ffe3984c10",
    "e": "a5a9bd1e5f25f1dbaa9614d8fb93949f",
-   "eNoId": "8a99b82957782f8908ba22f6f5071275",
+   "eNoId": "735e399084632af45a7010851fc0d6a1",
    "f": "d751713988987e9331980363e24189ce"
   },
   "matrix__pocket-raster30": {
@@ -7880,13 +7880,13 @@
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0007__63a764a4": {
-   "a": "fd759e0c41af11c97a357aaf3514b104",
-   "b": "21a64d9f6e50d7644cb44302dbfc573c",
-   "c": "330075bae3a3fdc65c00d8598a75f2de",
+   "a": "a425b045f5ee1b8be52e9fddf5f1629b",
+   "b": "fa704947e599e421a532093f3ebbe297",
+   "c": "d588b09b86d866c597d22da7c5d2c6c0",
    "d": "8de42324600ae18d76e6b7f499d715c5",
-   "dContent": "7dc87c08b16c320badf0ceed14c3544f",
+   "dContent": "f7595031887577236f1aa2b4825babd9",
    "e": "dc3db906d91c9aca2c45f739cffc6c06",
-   "eNoId": "0bf54adc6b2b93e606211ac9ec5d0539",
+   "eNoId": "7e443d2b609b7fc2d7d5151fdfb7dc50",
    "f": "d751713988987e9331980363e24189ce"
   },
   "pocket-clearing-750-node__0008__6d16673e": {
@@ -9155,7 +9155,7 @@
    }
   },
   "835": {
-   "why": "Raster + Loop cuts both ways now (task 835, owner turns 2990-2996: the boundary of a comb of every other strip joined by corridors, every pass cut once, the wall ring a balloon from the last point on the area's edge, the start near the middle; zero crossings; 835b: corridors a wall band from where passes end, on straight spines, a plain turn along the wall where passes are too short). Every corpus case with a Raster Loop record whose measurements changed has them re-measured here (on purpose); every other case and measurement is unchanged.",
+   "why": "Raster + Loop cuts both ways now (task 835, owner turns 2990-2996: the boundary of a comb of every other strip joined by corridors, every pass cut once, the wall ring a balloon from the last point on the area's edge, the start near the middle; zero crossings; 835b: corridors a wall band from where passes end, on straight spines, a plain turn along the wall where passes are too short). Every corpus case with a Raster Loop record whose measurements changed has them re-measured here (on purpose); every other case and measurement is unchanged. TASK 835c (owner turn 3131: several closed paths per area, each a loop): per area its CLUSTERS (each the boundary of its own comb, its corridors on one straight spine near its middle), the wall ring and each island's ring a closed path of its own after them; the Raster Loop cases below re-measured again on purpose.",
    "cases": [
     "cam-paths-787-node__0008__d2d21b4d",
     "leadin-775-node__0008__07f32269",

@@ -74,39 +74,44 @@
 //       IN on X1, X3, X5, ..., then OUT on the rings between (..., X4, X2), then X0, then close X0 -> X1 (one step). A step from Xi to Xj runs through
 //       the anchors between (|i - j| - 1 crossings). One closed loop per line (749's chain rule: an island's finish turn is in the line that reaches it;
 //       a turn no line reaches is a loop of its own).
-//     - Raster (TASK 835, owner turns 2990-2996: a loop that CUTS BOTH WAYS, no long air run, the start in the middle; ZERO crossings): per area of A0
-//       ONE closed path = the boundary of a COMB, walked once. The STRIPS between consecutive pass lines (and the margins beyond the first / last
-//       line), each cut into CELLS (the connected pieces of the area between the two lines), alternate: the comb HOLDS every other strip's cells, the
-//       others are BAYS. Held cells are joined by CORRIDORS: a band half a stepover wide (narrower where two short passes overlap less), perpendicular
-//       to the passes, across a bay from a held cell to the held cell beyond. TASK 835b (owner turn 3021: no jog at the wall): a corridor stands at
-//       least the WALL BAND (a bit diameter + a stepover) from where its two passes end, along them, and the corridors share STRAIGHT SPINES (the area's
-//       middle line wherever it fits, then the fewest more lines, each in the middle of what its corridors share: e.g. one per bow-tie wing, near its
-//       square outer wall since the wing narrows to its tip); where two passes are too short for that (a wing's tip, a round cap, a narrow neck) the
-//       corridor is FLUSH: the part of the bay within one corridor width of the wall, on the side the two passes end the most square: a PLAIN TURN (the
-//       bay's passes end a corridor width from the wall and join by one link along it; the held strips' ends run on along the wall). The corridors a
-//       spanning tree (Kruskal: clear of the band nearest the middle first, then flush on a square wall, then flush on any wall) so the comb is ONE
-//       region with no hole (both parities tried, the shorter loop kept). Every pass then has the comb on one side and a bay on the other, so the comb's boundary runs along EVERY pass exactly once (split where a
-//       corridor leaves it: the bit sweeps that gap); between passes it runs a hairpin along the area's edge or a corridor side (one stepover). A
-//       boundary of one region crosses nothing, by construction. On a convex area the corridors line up into one spine through the middle:
+//     - Raster (TASK 835, owner turns 2990-2996: a loop that CUTS BOTH WAYS, no long air run, the start in the middle; ZERO crossings; TASK 835c, owner
+//       turn 3131: "multiple cluster of path if they can stay loops"): per area of A0 SEVERAL closed paths, each a closed loop. The STRIPS between
+//       consecutive pass lines (and the margins beyond the first / last line), each cut into CELLS (the connected pieces of the area between the two
+//       lines), alternate: the combs HOLD every other strip's cells, the others are BAYS; every pass has a held cell on one side and a bay on the other.
+//       The held cells are grouped into CLUSTERS; a cluster's held cells are joined by CORRIDORS (a band half a stepover wide, narrower where the bit
+//       would not sweep the gap it leaves, perpendicular to the passes, across a bay) on ONE straight SPINE, so its comb is ONE region with no hole and
+//       its boundary, walked once, runs along each of its passes exactly once (split where a corridor leaves it: the bit sweeps that gap); between
+//       passes a hairpin along the area's edge or a corridor side (one stepover). A boundary of one region crosses nothing, by construction, and the
+//       combs of two clusters never touch (a bay lies between them). TASK 835b (owner turn 3021: no jog at the wall): a corridor stands at least the WALL
+//       BAND (a bit diameter + a stepover) from where its two passes end, along them; a bay too short for that is NOT crossed (835c: no flush turn):
+//       the cells on its two sides are in two clusters. THE CLUSTERS: (1) the BOUSTROPHEDON cells: a cell continues the one below it where ONE pass
+//       lies between them and neither has another pass on that side (a new one where a pass line's number of pieces through the area changes: a
+//       wing, a neck, round an island, a U's arms); (2) along each, the FEWEST runs of its held cells that keep THE MERGE RULE (a tie: the smaller sum
+//       of spine offsets); (3) neighbouring clusters of two boustrophedon cells merged across the corridor between their ends wherever the merged one
+//       keeps the rule, the smallest spine offset first. THE MERGE RULE: the cluster's spine is the point of its corridors' common room nearest its
+//       MIDDLE m (the u of its held cells' centroid) and lies within a QUARTER of its mean width W (its passes' mean length) of m: the spine in the
+//       middle half (and every corridor's sides inside the area there). On a convex area that is one cluster, one spine through the middle:
 //            ______________________
 //           |__________  __________|   a held strip: its two passes, a hairpin at each wall; the lower pass split where the corridor leaves
 //            __________||__________    the corridor (||) across the bay (no path inside a bay) to the next held strip
-//           |__________  __________|   ... and so on: the walk goes down one side of the spine and back up the other, every pass cut once,
-//                                      each after at most one of its neighbours (as the plain zigzag cuts), the corridor sides a stepover each
-//       The SEAM (the first point, the start mark: the plunge) is a pass point near the area's middle (its centroid when that lies two stepovers inside
-//       it, else the point of its deepest inset nearest the centroid). The pass cut LAST before the seam has both neighbours cut already, so with a stepover up to half the
-//       bit the closing stretch (from the last point on the area's edge to the seam) cuts nothing, on ANY closed path: of the seams near the middle and
-//       both ways round, the one with the shortest closing stretch is taken. The WALL RING (the finish turn round the region of R inset by r the area
-//       lies in) is a BALLOON (a step of the allowance out, the ring whole, the same step back) from the LAST point on the area's edge before the seam:
-//       every pass is cut by then, so none runs in the ring's sweep; each island's ring a balloon from its last point next to it; a balloon starts back
-//       the way the path came (else its two strands would swap sides); the first candidate where nothing crosses (THE crossing check,
-//       #core/path-crossings, over the whole path, no exception). A wall ring another area already cut whole: not again (that area's loop is its comb
-//       alone); a ring no area reaches: a loop of its own. No clean-up ring (the wall ring's sweep covers the passes' scallops). WHY NOT "out on the
-//       odd passes, back on the even ones" (the advisor's first sketch): an odd pass joined at both ends closes the strip it bounds on that side, so an
-//       even pass lies in a bay with ONE mouth and the way back would have to come out the way it went in (a crossing or the pass walked twice); and
-//       with a stepover up to half the bit the odd passes alone (two stepovers apart) already clear everything, the even passes would all be air.
-//       Refused ('loop cross', cut as open paths + the separate wall; the note says so) only where no comb closes crossing-free; a pass in no area:
-//       'raster join'. (Measured: WORK-LOG TURN 835.)
+//           |__________  __________|   ... and so on: the walk goes down one side of the spine and back up the other, every pass cut once
+//       A bow-tie: the neck's rows one cluster (its spine at the neck), each wing a cluster with its spine near the wing's middle, the rows of its tip
+//       where that spine no longer reaches the next ones, and each held strip too short for any corridor its own loop.
+//       The SEAM (the first point, the start mark: the plunge) of a cluster's loop is a pass point near the middle of its held cells and the bays it crosses (their centroid when that lies two
+//       stepovers inside them, else the point of their deepest inset nearest the centroid); of the
+//       seams near the middle (the pass point nearest it, and the corners where a pass meets a corridor within two stepovers of that) and both ways
+//       round, the one whose CLOSING STRETCH (from the last point on the area's edge back to the seam) is shortest. THE RINGS (the wall's ring = the
+//       finish turn round the region of R inset by r, each island's): each its OWN closed loop (no balloon, no step, no junction), started where a ring
+//       cut on its own always starts (finishTurnLoop: the middle of its longest edge). ORDER: the clusters NEAREST-NEXT (the first the one whose start is
+//       nearest the middle of the first area (its centroid when that lies two stepovers inside it, else the point of its deepest inset nearest the
+//       centroid), then each time the one whose start is nearest the last start), then the rings nearest-next (the islands' too: every ring after every
+//       cluster, so the clearing next to it is gone and it takes the allowance skin only). Each closed path is its own plunge per depth pass. No
+//       clean-up ring (the rings' sweep covers the passes' scallops). THE crossing check (#core/path-crossings) runs over all the paths, no exception.
+//       WHY NOT "out on the odd passes, back on the even ones" (the advisor's first sketch): an odd pass joined at both ends closes the strip it bounds on
+//       that side, so an even pass lies in a bay with ONE mouth and the way back would have to come out the way it went in (a crossing or the pass
+//       walked twice); and with a stepover up to half the bit the odd passes alone (two stepovers apart) already clear everything, the even passes
+//       would all be air. Refused ('loop cross', cut as open paths + the separate wall; the note says so) only where no comb closes crossing-free; a
+//       pass in no area: 'raster join'. (Measured: WORK-LOG TURNS 835, 835b, 835c.)
 //     - Morphed spiral: the spiral as it is (the gap between neighbouring turns stays the stepover), then the finish turn (a step of the allowance out
 //       from where the closing turn ends and back), then the RETURN leg straight down the chain of turn starts (each step one stepover, along the chain
 //       of nearest points every turn starts on) to the first point. Chosen over two interleaved arms at twice the pitch: the spiral's geometry is
@@ -116,7 +121,7 @@
 //    reach at all (sharp inside corners, necks narrower than the bit: R minus R opened by r) and how much the pattern missed (a stepover too big).
 //  * START MARK (TASK 778): every programmed pocket (Spiral, Raster,
 //    Morphed; Loop on AND off) returns `startPoint` = the first point the bit cuts in the clearing route (Spiral / Morphed: the middle of the innermost
-//    ring's longest edge; Raster: the start of the first pass, TASK 835 Loop on: its seam near the area's middle; always ON the route, never on an island; Loop off: the route's start end). Written into
+//    ring's longest edge; Raster: the start of the first pass, TASK 835 Loop on: the first loop's seam (835c: the cluster whose start is nearest the area's middle); always ON the route, never on an island; Loop off: the route's start end). Written into
 //    the exported SVG as a GUIDE (circle + cross, startMarkDiaMult x bit diameter across, never cut) and drawn in Prepare / Export 2D / Export 3D from
 //    the same derivation.
 //  * The clearing paths depend on the record's bit diameter (written as toolDia on every path); the finish pass does not.
@@ -589,13 +594,6 @@ function loopBuilder() {
 }
 const inRing = (p, ring) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], q = ring[j]; if ((a.y > p.y) !== (q.y > p.y) && p.x < ((q.x - a.x) * (p.y - a.y)) / (q.y - a.y) + a.x) c = !c; } return c; };
 const inRegion = (p, g) => inRing(p, toXY(g.outer)) && !g.holes.some((h) => inRing(p, toXY(h)));
-// a straight segment inside `regions` (grown by 0.01 mm by the caller: a segment along their edge counts as inside)
-function segmentInside(a, b, regions) {
-  const L = Math.hypot(b.x - a.x, b.y - a.y);
-  if (L < 1e-6) return true;
-  const got = clipOpenPaths([[[a.x, a.y], [b.x, b.y]]], regions).reduce((t, piece) => t + pathLength(piece.map(([x, y]) => P(x, y)), false), 0);
-  return got >= L - 2e-3;
-}
 // ── TASK 804: THE GRADUAL LOOP (see THE RULES): per chain, a double spiral of exact offset levels with its transitions side by side ──
 // a point ON a closed loop (open {x,y}[]): { i, t, p } on its segment i -> i + 1
 const onLoop = (pts, i, t) => { const a = pts[i], b = pts[(i + 1) % pts.length]; return { i, t, p: P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) }; };
@@ -784,14 +782,14 @@ function gradualLoops(seqs, alone, R, s, pitch, bridges = []) {
   return out;
 }
 
-/** TASK 835: THE RASTER'S LOOP (see THE RULES): per area of A0 ONE closed path that CUTS BOTH WAYS: the boundary of the COMB (every other strip
- *  between two passes, joined by short corridors across the strips between) walked once, the wall ring and each island's ring a BALLOON on it; zero
- *  crossings; it starts on the pass nearest the area's middle. A ring no area reaches is a loop of its own. { loops: [builder], refused: null |
+/** TASK 835 / 835c: THE RASTER'S LOOP (see THE RULES): per area of A0 its CLUSTERS, each ONE closed path that CUTS BOTH WAYS (the boundary of its
+ *  comb: every other strip between two passes, joined by short corridors on ONE straight spine near the cluster's middle, walked once), then every ring
+ *  (the wall's, each island's) a closed path of its own; zero crossings. ORDER: the clusters nearest-next (each from where the one before started),
+ *  the first the one whose start is nearest the middle of the first area; then the rings nearest-next. { loops: [builder], refused: null |
  *  'raster join' | 'loop cross' } */
 function rasterLoops(A0, pieces, Rr, s, r, a, angleDeg) {
-  const loops = [], owned = new Set(); // owned: 'region:contour' of a ring already cut whole
   const rings = Rr.map((G) => [G.outer, ...G.holes].map(toXY)); // per region of Rr: its wall ring, then its islands' rings
-  const near = a + 0.01; // a step to a ring is the allowance long (+ the offsets' rounding)
+  const near = a + 0.01; // a point of the area's edge lies the allowance from a ring (+ the offsets' rounding)
   const th = (angleDeg * Math.PI) / 180, U = P(Math.cos(th), -Math.sin(th)), N = P(-U.y, U.x); // the passes' frame (as rasterPasses)
   const frame = { uOf: (p) => p.x * U.x + p.y * U.y, nOf: (p) => p.x * N.x + p.y * N.y, at: (u, n) => P(U.x * u + N.x * n, U.y * u + N.y * n), N };
   // the region (of A0, of Rr) a pass lies in: the one holding a point of it (its middle, else a quarter of the way: a pass along an island's edge has its
@@ -804,27 +802,47 @@ function rasterLoops(A0, pieces, Rr, s, r, a, angleDeg) {
   };
   const inArea = pieces.map((pc) => holding(A0, pc));
   if (inArea.includes(-1)) return { loops: [], refused: 'raster join' }; // a pass in no area (not met on the test shapes): refused, never dropped
+  const clusters = [];
+  let from = null; // where the cut starts: the middle of the first area with passes
   for (const [gk, g] of A0.entries()) {
     const pcs = pieces.filter((_, i) => inArea[i] === gk);
-    if (!pcs.length) { // an area no pass reaches: its contours are its clean-up rings, each a loop of its own (with no allowance they are the finish turns: below)
-      if (a > 0) for (const pts of [g.outer, ...g.holes].map(toXY).filter((q) => q.length >= 3)) { const b = loopBuilder(); b.turn(loopFrom(pts, ringStart(pts)), 'cleanup'); loops.push(b); }
+    if (!pcs.length) { // an area no pass reaches: its contours are its clean-up rings, each a loop of its own (with no allowance they are the rings: below)
+      if (a > 0) for (const pts of [g.outer, ...g.holes].map(toXY).filter((q) => q.length >= 3)) { const b = loopBuilder(); b.turn(loopFrom(pts, ringStart(pts)), 'cleanup'); clusters.push(b); }
       continue;
     }
     const gi = holding(Rr, pcs[0]); // the region of Rr round the area
     if (gi < 0) return { loops: [], refused: 'loop cross' };
-    const centre = areaCentre(g, s);
     let best = null;
-    for (const parity of [0, 1]) { // which strips the comb holds (the other ones are the bays): both tried, the shorter loop kept
-      const comb = rasterComb(g, pcs, parity, s, r, frame, centre);
-      const got = comb && combLoop(comb, rings[gi], gi, owned, near, loops, centre, s);
-      if (got && (!best || got.length < best.length)) best = got;
+    for (const parity of [0, 1]) { // which strips the combs hold (the other ones are the bays): both tried, the fewest clusters kept (a tie: the shorter)
+      const comb = rasterComb(g, pcs, parity, s, r, frame);
+      const got = comb ? comb.clusters.map((cl) => combLoop(cl, comb, rings[gi], near, s)) : null;
+      if (!got || got.some((b) => !b) || pathCrossings(got.map((b) => ({ points: b.pts, closed: true }))).count) continue;
+      const length = got.reduce((t, b) => t + pathLength(b.pts, false), 0);
+      if (!best || got.length < best.got.length || (got.length === best.got.length && length < best.length)) best = { got, length };
     }
-    if (!best) return { loops: [], refused: 'loop cross' }; // no comb whose loop crosses nothing: refused, never cut crossing
-    for (const k of best.owns) owned.add(k);
-    loops.push(best.b);
+    if (!best) return { loops: [], refused: 'loop cross' }; // no comb whose loops cross nothing: refused, never cut crossing
+    if (!from) from = areaCentre(g, s);
+    clusters.push(...best.got);
   }
-  rings.forEach((rs, gi) => rs.forEach((F, c) => { if (!owned.has(`${gi}:${c}`)) loops.push(finishTurnLoop(F)); })); // a ring no area cut: a loop of its own
+  // THE RINGS (835c, owner turn 3131): each its own closed loop, cut after the clusters (the clearing next to it is gone: it takes the allowance skin only),
+  // started where a ring cut on its own always starts (finishTurnLoop: the middle of its longest edge)
+  const ordered = nearestNext(clusters, from || (clusters.length ? clusters[0].pts[0] : null));
+  const ringLoops = nearestNext(rings.flat().map(finishTurnLoop), ordered.length ? ordered[ordered.length - 1].pts[0] : null);
+  const loops = [...ordered, ...ringLoops];
+  if (pathCrossings(loops.map((b) => ({ points: b.pts, closed: true }))).count) return { loops: [], refused: 'loop cross' }; // THE crossing check, all paths
   return { loops, refused: null };
+}
+// TASK 835c: closed loops (builders) in NEAREST-NEXT order: from `at`, the loop whose start (its first point) is nearest, then the nearest to that start, ...
+function nearestNext(list, at) {
+  const left = list.slice(), out = [];
+  let q = at;
+  while (left.length) {
+    let k = 0;
+    if (q) for (let i = 1; i < left.length; i++) if (Math.hypot(left[i].pts[0].x - q.x, left[i].pts[0].y - q.y) < Math.hypot(left[k].pts[0].x - q.x, left[k].pts[0].y - q.y) - 1e-9) k = i;
+    const [b] = left.splice(k, 1);
+    out.push(b); q = b.pts[0];
+  }
+  return out;
 }
 // TASK 835: the middle of an area of A0 (a region): its centroid where that lies inside it at least two stepovers from its edge (the bow-tie's neck), else
 // the point of its deepest inset nearest the centroid (an annulus, a U whose centroid falls in the gap or next to its edge, a dumbbell's thin neck)
@@ -842,14 +860,29 @@ function areaCentre(g, s) {
   const q = toXY(last.reduce((m, e) => (regionsArea([e]) > regionsArea([m]) ? e : m)).outer); // (round an island: a thin ring)
   return q.reduce((m, p) => (Math.hypot(p.x - c.x, p.y - c.y) < Math.hypot(m.x - c.x, m.y - c.y) ? p : m)); // its point nearest the centroid
 }
+// TASK 835c: a region's area and the first moments of its area in the passes' frame (u along the passes, n across): { A, Mu, Mx, My }
+function regionMoments(g, uOf) {
+  let A = 0, Mu = 0, Mx = 0, My = 0;
+  for (const ring of [g.outer, ...g.holes]) {
+    const pts = toXY(ring);
+    let a = 0, mu = 0, mx = 0, my = 0;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const p = pts[j], q = pts[i], f = p.x * q.y - q.x * p.y; // the frame is a rotation: the area and the u moment are the same in x, y
+      a += f; mu += (uOf(p) + uOf(q)) * f; mx += (p.x + q.x) * f; my += (p.y + q.y) * f;
+    }
+    const sg = ring === g.outer ? Math.sign(a) || 1 : -(Math.sign(a) || 1); // the outer counts, a hole takes away
+    A += (sg * a) / 2; Mu += (sg * mu) / 6; Mx += (sg * mx) / 6; My += (sg * my) / 6;
+  }
+  return { A, Mu, Mx, My };
+}
 // TASK 835: THE COMB of one area g of A0 for its passes `pcs`: the STRIPS between consecutive pass lines (and the margins beyond the first / last line),
-// each cut into its CELLS (the connected pieces of the area between the two lines); the comb holds the cells of every other strip (`parity`: the strips
-// whose index from the first margin is odd (0) / even (1)) and CORRIDORS across the cells between: a band one corridor wide (w) perpendicular to the
-// passes from a held cell across a bay cell to the held cell beyond (where the two passes it crosses overlap, as near the area's middle as they allow);
-// the corridors a spanning tree (Kruskal, the nearest the middle first), so the comb is ONE region with no hole. Every pass then has the comb on one side
-// and a bay on the other: the comb's boundary runs along every pass exactly once (split where a corridor leaves it). { pts (its boundary, open {x,y}[]),
-// rowOf (the pass line index a point lies on, or null), w (the corridor width) } or null (a held cell no corridor reaches, or the comb has a hole)
-function rasterComb(g, pcs, parity, s, r, F, centre) {
+// each cut into its CELLS (the connected pieces of the area between the two lines); the combs hold the cells of every other strip (`parity`: the strips
+// whose index from the first margin is odd (0) / even (1)); every pass then has a held cell on one side and a bay on the other. TASK 835c (owner turn
+// 3131: several closed paths per area, each a loop): the held cells are grouped into CLUSTERS (see THE RULES: the boustrophedon cells, split where one
+// spine near the middle no longer reaches, then merged where it still does), each joined by CORRIDORS on its ONE straight spine across the bays between
+// its cells; each cluster's comb is one region with no hole, its boundary runs along each of its passes once. { clusters: [{ pts (the comb's boundary,
+// open {x,y}[]), centre (the middle of its held cells and the bays it crosses: areaCentre) }], rowOf (the pass line index a point lies on, or null), w (the corridor width) } or null (a comb with a hole)
+function rasterComb(g, pcs, parity, s, r, F) {
   const { uOf, nOf, at, N } = F;
   const kmin = Math.min(...pcs.map((p) => p.line)), kmax = Math.max(...pcs.map((p) => p.line));
   const c0 = pcs[0].offset, l0 = pcs[0].line, cOf = (j) => c0 + (j - l0) * s;
@@ -874,69 +907,113 @@ function rasterComb(g, pcs, parity, s, r, F, centre) {
   });
   // the corridor width: half a stepover, narrower where the bit would not sweep the gap it leaves in the two passes (a stepover over a bit radius)
   const wCover = 2 * Math.sqrt(Math.max(0, r * r - Math.max(0, s - r) ** 2));
-  const w = Math.max(0.02, Math.min(s / 2, 0.9 * wCover)), xc = uOf(centre);
+  const w = Math.max(0.02, Math.min(s / 2, 0.9 * wCover));
   // TASK 835b (owner turn 3021: no jog at the wall): a corridor stands at least the WALL BAND (a bit diameter + a stepover) from where its two passes end,
-  // along them (no stub of a pass between a corridor and the wall); where the passes are too short for that, FLUSH: the part of the bay within one
-  // corridor width of the wall, on the side its two passes end the most square (a plain turn: the bay's passes end one corridor width from the wall and
-  // join along it, the held strips' ends run on along the wall)
+  // along them (no stub of a pass between a corridor and the wall): its ROOM [l, h] (where its middle may go). TASK 835c: a bay with no room is not crossed
+  // (no flush turn): the cells on its two sides belong to two clusters
   const band = 2 * r + s, grown = offsetRegions([g], 0.01);
-  const wallBand = diffRegions([g], offsetRegions([g], -w, POCKET_CLEARING.chordTolMm));
   const cand = [];
   cells.forEach((q, qi) => {
     if (q.held) return;
     const lower = ends.filter((e) => e.line === q.j && e.above === qi && e.below >= 0 && cells[e.below].held);
     const upper = ends.filter((e) => e.line === q.j + 1 && e.below === qi && e.above >= 0 && cells[e.above].held);
     for (const A of lower) for (const B of upper) {
-      const lo = Math.max(A.u0, B.u0), hi = Math.min(A.u1, B.u1);
-      const we = Math.min(w, (hi - lo) / 2); // narrower where the two passes overlap less (a short pass near a tip)
-      if (we < 0.01) continue;
-      const room = []; // where the corridor's middle may go: at least the wall band from where either pass ends, along it
-      { const l = lo + band + we / 2, h = hi - band - we / 2; if (h >= l) room.push([l, h]); }
-      cand.push({ a: A.below, b: B.above, q: qi, j: q.j, w: we, lo, hi, room, sideL: Math.abs(A.u0 - B.u0), sideR: Math.abs(A.u1 - B.u1) });
+      const lo = Math.max(A.u0, B.u0), hi = Math.min(A.u1, B.u1), l = lo + band + w / 2, h = hi - band - w / 2;
+      if (h >= l) cand.push({ a: A.below, b: B.above, q: qi, j: q.j, l, h });
     }
   });
-  // THE SPINES: the corridors clear of the wall band share as few straight lines as possible: the middle line first (every corridor whose room holds it), then the fewest
-  // more lines (greedy stabbing by the rooms' right ends), each moved to the middle of what its corridors share
-  const rooms = cand.flatMap((c) => c.room), spines = [];
-  if (rooms.some(([l, h]) => xc >= l && xc <= h)) spines.push(xc);
-  for (const [l, h] of rooms.filter(([l, h]) => !(xc >= l && xc <= h)).sort((x, y) => x[1] - y[1] || x[0] - y[0])) {
-    if (spines.some((x) => x >= l && x <= h)) continue;
-    const shared = rooms.filter(([a, b]) => a <= h && b >= h && !(xc >= a && xc <= b) && !spines.some((x) => x >= a && x <= b));
-    spines.push((Math.max(...shared.map(([a]) => a)) + h) / 2);
+  // a corridor's two sides cross its bay inside the area (a notch between the passes would cut them): a side at u does unless a piece of the area's edge
+  // lies inside the strip over u (the u ranges of those pieces: once per bay)
+  const edges = grown.flatMap((e) => [e.outer, ...e.holes]);
+  const blocked = new Map();
+  const fits = (c, x) => {
+    if (!blocked.has(c.q)) blocked.set(c.q, clipOpenPaths(edges, rect(uLo, uHi, cOf(c.j) + 1e-3, cOf(c.j + 1) - 1e-3)).map((pc) => { const u = pc.map(([px, py]) => uOf(P(px, py))); return [Math.min(...u), Math.max(...u)]; }));
+    return [x - w / 2, x + w / 2].every((u) => blocked.get(c.q).every(([l, h]) => u < l - 1e-6 || u > h + 1e-6));
+  };
+  // per held cell: its area and u moment, and the passes it is cut along (their lengths: the cluster's mean width)
+  const stat = cells.map((c, ci) => {
+    if (!c.held) return null;
+    const m = regionMoments(c.g, uOf), mine = ends.filter((e) => e.below === ci || e.above === ci);
+    return { A: m.A, Mu: m.Mu, len: mine.reduce((t, e) => t + e.u1 - e.u0, 0), cnt: mine.length };
+  });
+  // A CLUSTER = held cells in a chain along the passes' normal, one corridor between each two, ALL on ONE spine x: { cells, cors, A, Mu, len, cnt, l, h, x, off }.
+  // THE MERGE RULE: its spine is the point of its corridors' common room nearest its MIDDLE m (the u of its held cells' centroid), and it lies within a
+  // QUARTER of its mean width W (its passes' mean length) of m (the spine in the middle half); every corridor's sides inside the area there
+  const judge = (k) => {
+    if (!k.cors.length) return { ...k, x: null, off: 0 };
+    if (k.l > k.h) return null;
+    const m = k.Mu / k.A, W = k.cnt ? k.len / k.cnt : 0, x = Math.min(k.h, Math.max(k.l, m)), off = Math.abs(x - m);
+    if (off > W / 4 + 1e-9 || !k.cors.every((c) => fits(c, x))) return null;
+    return { ...k, x, off };
+  };
+  const join = (X, e, Y) => ({ cells: [...X.cells, ...Y.cells], cors: [...X.cors, e, ...Y.cors], A: X.A + Y.A, Mu: X.Mu + Y.Mu, len: X.len + Y.len, cnt: X.cnt + Y.cnt,
+    l: Math.max(X.l, e.l, Y.l), h: Math.min(X.h, e.h, Y.h) });
+  const single = (ci) => ({ cells: [ci], cors: [], ...stat[ci], l: -Infinity, h: Infinity, x: null, off: 0 });
+  // THE BOUSTROPHEDON CELLS: a cell continues the one below it where ONE pass lies between them and neither has another pass on that side (a new one where a
+  // pass line's number of pieces through the area changes: a wing, a neck, round an island, a U's arms); each a chain of cells, every other one held
+  const under = cells.map(() => 0), over = cells.map(() => 0);
+  for (const e of ends) { if (e.above >= 0) under[e.above]++; if (e.below >= 0) over[e.below]++; }
+  const up = cells.map((_, ci) => { if (over[ci] !== 1) return -1; const e = ends.find((x) => x.below === ci); return e.above >= 0 && under[e.above] === 1 ? e.above : -1; });
+  const hasDown = new Set(up.filter((u) => u >= 0));
+  const corOf = (a, q, b) => cand.find((c) => c.a === a && c.q === q && c.b === b);
+  let clusters = [];
+  cells.forEach((_, start) => {
+    if (hasDown.has(start)) return;
+    const chain = [];
+    for (let ci = start; ci >= 0; ci = up[ci]) chain.push(ci);
+    const H = chain.filter((ci) => cells[ci].held);
+    if (!H.length) return;
+    // per pair of neighbouring held cells of the chain: the corridor across the bay between them (none: no room)
+    const cor = H.slice(0, -1).map((a, i) => { const ia = chain.indexOf(a); return chain[ia + 2] === H[i + 1] ? corOf(a, chain[ia + 1], H[i + 1]) : undefined; });
+    // the FEWEST clusters along the chain by the merge rule (dynamic programming over its runs; a tie: the smaller sum of spine offsets)
+    const best = [{ n: 0, off: 0, from: -1, k: null }];
+    for (let q = 0; q < H.length; q++) {
+      let run = single(H[q]), pick = null;
+      for (let p = q; p >= 0; p--) {
+        if (p < q) { const e = cor[p]; if (!e) break; run = join(single(H[p]), e, run); if (run.l > run.h) break; }
+        const k = judge(run);
+        if (!k) continue;
+        const n = best[p].n + 1, off = best[p].off + k.off;
+        if (!pick || n < pick.n || (n === pick.n && off < pick.off - 1e-9)) pick = { n, off, from: p, k };
+      }
+      best.push(pick);
+    }
+    const runs = [];
+    for (let q = H.length; q > 0; q = best[q].from) runs.unshift(best[q].k);
+    clusters.push(...runs);
+  });
+  // then neighbouring clusters (of two boustrophedon cells) merged across the corridor between their ends wherever the merged one keeps the rule, the
+  // smallest spine offset first
+  for (;;) {
+    let pick = null;
+    for (const e of cand) {
+      const X = clusters.find((k) => k.cells[k.cells.length - 1] === e.a), Y = clusters.find((k) => k.cells[0] === e.b);
+      if (!X || !Y || X === Y) continue;
+      const k = judge(join(X, e, Y));
+      if (k && (!pick || k.off < pick.k.off - 1e-9)) pick = { X, Y, k };
+    }
+    if (!pick) break;
+    clusters = [...clusters.filter((k) => k !== pick.X && k !== pick.Y), pick.k];
   }
-  const edges = [];
-  for (const c of cand) {
-    const xs = spines.filter((x) => c.room.some(([l, h]) => x >= l - 1e-9 && x <= h + 1e-9)).sort((x, y) => Math.abs(x - xc) - Math.abs(y - xc));
-    const x = xs.find((v) => [v - c.w / 2, v + c.w / 2].every((u) => segmentInside(at(u, cOf(c.j)), at(u, cOf(c.j + 1)), grown)));
-    if (x !== undefined) { edges.push({ ...c, x0: x - c.w / 2, x1: x + c.w / 2, flush: false, cost: Math.abs(x - xc) }); continue; }
-    // FLUSH: along the wall where the two passes end the most square (their ends' offset along the pass smaller); one whose wall is not square (the ends
-    // more than a stepover apart: a round cap, a neck's mouth) only where nothing else joins the comb
-    const left = c.sideL <= c.sideR, off = Math.min(c.sideL, c.sideR), mid = (c.lo + c.hi) / 2;
-    edges.push({ ...c, x0: left ? uLo : mid, x1: left ? mid : uHi, flush: true, cost: (off <= s ? 1e6 : 1e9) + off });
+  // each cluster's comb: its held cells and its corridors (each clipped to its bay and the two held cells it joins, never another part of the area)
+  const corridor = (c, x) => intersectRegions(rect(x - w / 2, x + w / 2, cOf(c.j) - d, cOf(c.j + 1) + d), unionRegions([cells[c.q].g], [cells[c.a].g], [cells[c.b].g]));
+  const out = [];
+  for (const k of clusters.sort((x, y) => cells[x.cells[0]].j - cells[y.cells[0]].j || uOf(toXY(cells[x.cells[0]].g.outer)[0]) - uOf(toXY(cells[y.cells[0]].g.outer)[0]))) {
+    const T = unionRegions(...k.cells.map((i) => [cells[i].g]), ...k.cors.map((c) => corridor(c, k.x)));
+    if (T.length !== 1 || T[0].holes.length) return null;
+    const whole = unionRegions(...k.cells.map((i) => [cells[i].g]), ...k.cors.map((c) => [cells[c.q].g])); // its held cells and the bays it crosses
+    out.push({ pts: toXY(T[0].outer), centre: areaCentre(whole.reduce((m, e) => (regionsArea([e]) > regionsArea([m]) ? e : m)), s) });
   }
-  const held = cells.map((c, i) => (c.held ? i : -1)).filter((i) => i >= 0);
-  const root = cells.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
-  const tree = [];
-  for (const e of edges.sort((x, y) => x.cost - y.cost || x.j - y.j || x.x0 - y.x0)) { const fa = find(e.a), fb = find(e.b); if (fa !== fb) { root[fa] = fb; tree.push(e); } }
-  if (new Set(held.map(find)).size !== 1) return null;
-  // each corridor clipped to its bay and the two held cells it joins (never another part of the area); a flush one to the wall band
-  const corridor = (e) => { const k = intersectRegions(rect(e.x0, e.x1, cOf(e.j) - d, cOf(e.j + 1) + d), unionRegions([cells[e.q].g], [cells[e.a].g], [cells[e.b].g])); return e.flush ? intersectRegions(k, wallBand) : k; };
-  const T = unionRegions(...held.map((i) => [cells[i].g]), ...tree.map(corridor));
-  if (T.length !== 1 || T[0].holes.length) return null;
-  const pts = toXY(T[0].outer);
   const rowOf = (p) => { const k = Math.round((nOf(p) - c0) / s) + l0; return k >= kmin && k <= kmax && Math.abs(nOf(p) - cOf(k)) < 0.003 ? k : null; };
-  return { pts, rowOf, w };
+  return { clusters: out, rowOf, w };
 }
-// TASK 835: the closed loop round a comb, from its SEAM: a point of a pass near the area's middle. The way back to the seam ends on the pass cut LAST,
-// and with a stepover up to half the bit both its neighbours are cut by then: that stretch (from the last point on the area's edge to the seam) cuts
-// nothing, whatever the path; so of the seams near the middle (the pass point nearest it, and the corners where a pass meets a corridor within two
-// stepovers of that) and both ways round, the one whose closing stretch is SHORTEST is taken (a tie: the nearest the middle). The wall ring is a balloon
-// (a step out, the ring whole, the same step back) from the LAST point on the area's edge before the seam (every pass is cut by then, so no pass runs in
-// the ring's sweep), unless another area already cut it whole; each island's ring a balloon from its last point next to it; each balloon started back
-// the way the path came, the first candidate where nothing crosses (THE crossing check). { b (builder), length, owns } or null
-function combLoop(comb, rs, gi, owned, near, done, centre, s) {
+// TASK 835: the closed loop round a cluster's comb, from its SEAM: a point of a pass near the cluster's middle (835c: of its held cells and the bays it crosses, areaCentre). The way
+// back to the seam ends on the pass cut LAST: of the seams near the middle (the pass point nearest it, and the corners where a pass meets a corridor
+// within two stepovers of that) and both ways round, the one whose CLOSING STRETCH (from the last point on the area's edge back to the seam) is SHORTEST
+// is taken (a tie: the nearest the middle). A builder, or null (a comb with no pass)
+function combLoop(cl, comb, rs, near, s) {
   const rowAt = (pts, i) => { const k = comb.rowOf(pts[i]); return k !== null && k === comb.rowOf(pts[(i + 1) % pts.length]); };
-  const base = comb.pts, nb = base.length, edge = base.map((p) => rs.some((H) => nearestOnLoop(H, p).d <= near)); // on the area's edge (next to a ring)
+  const base = cl.pts, nb = base.length, centre = cl.centre, edge = base.map((p) => rs.some((H) => nearestOnLoop(H, p).d <= near)); // on the area's edge
   let p0 = null;
   base.forEach((p, i) => { if (rowAt(base, i)) { const q = base[(i + 1) % nb], f = distToSeg(centre, p, q); if (!p0 || f.d < p0.d - 1e-9) p0 = { i, d: f.d, p: P(p.x + (q.x - p.x) * f.t, p.y + (q.y - p.y) * f.t) }; } });
   if (!p0) return null;
@@ -953,56 +1030,17 @@ function combLoop(comb, rs, gi, owned, near, done, centre, s) {
     for (let j = seq.length - 1; j >= 0; j--) { const q = seq[(j + 1) % seq.length].p; close += Math.hypot(seq[j].p.x - q.x, seq[j].p.y - q.y); if (seq[j].edge) break; }
     if (!pick || close < pick.close - 1e-6 || (Math.abs(close - pick.close) <= 1e-6 && c.d < pick.d - 1e-9)) pick = { close, d: c.d, seq };
   }
-  const pts = pick.seq.map((x) => x.p);
-  const n = pts.length;
-  const rows = pts.map((_, i) => rowAt(pts, i));
-  const others = done.map((b) => ({ points: b.pts, closed: true }));
-  const build = (ins) => { // the loop's items with the balloons `ins` ([{ i, H, Q, dir }]) at their points
-    const items = [];
-    let run = [pts[0]], kind = null;
-    const flush = () => { if (run.length > 1) items.push(kind ? { kind: 'pass', pts: run } : { kind: null, pts: items.length ? run.slice(1) : run }); run = [run[run.length - 1]]; }; // (a first leg keeps the seam)
-    for (let i = 0; i < n; i++) {
-      const k = rows[i], q = pts[(i + 1) % n];
-      if (run.length > 1 && k !== kind) flush();
-      kind = k; run.push(q);
-      const here = (i + 1) % n ? ins.filter((x) => x.i === i + 1) : [];
-      if (here.length) {
-        flush();
-        for (const x of here) items.push({ kind: null, pts: [x.Q.p] }, { kind: 'finish', pts: walkLoop(x.H, x.Q, x.Q, x.dir) }, { kind: null, pts: [q] });
-      }
-    }
-    flush();
-    return items;
-  };
-  const crosses = (ins) => pathCrossings([{ points: assemble(build(ins)).pts, closed: true }, ...others]).count > 0;
-  const balloon = (ins, H, order) => { // the first balloon onto ring H (from the points `order`) where nothing crosses, or null
-    for (const i of order.slice(0, 24)) {
-      const p = pts[i], prev = pts[i - 1], next = pts[(i + 1) % n], Q = onRing(H, p), h0 = H[Q.i], h1 = H[(Q.i + 1) % H.length];
-      const along = (u, v) => ((v.x - u.x) * (h1.x - h0.x) + (v.y - u.y) * (h1.y - h0.y)) / (Math.hypot(v.x - u.x, v.y - u.y) || 1);
-      const pref = along(prev, p) + along(p, next) > 0 ? -1 : 1; // back the way the path came, away from where it goes on
-      for (const dir of [pref, -pref]) { const t = [...ins, { i, H, Q, dir }]; if (!crosses(t)) return t; }
-    }
-    return null;
-  };
-  const nearOf = (H) => pts.map((p, i) => (i && nearestOnLoop(H, p).d <= near ? i : -1)).filter((i) => i > 0).reverse(); // the last first
-  let ins = [];
-  const owns = [];
-  if (!owned.has(`${gi}:0`)) { // THE WALL RING
-    const got = balloon(ins, rs[0], nearOf(rs[0]));
-    if (!got) return null;
-    ins = got; owns.push(`${gi}:0`);
+  const pts = pick.seq.map((x) => x.p), n = pts.length;
+  const items = []; // the loop's items: its passes (on a pass line) and the legs between
+  let run = [pts[0]], kind = null;
+  const flush = () => { if (run.length > 1) items.push(kind !== null ? { kind: 'pass', pts: run } : { kind: null, pts: items.length ? run.slice(1) : run }); run = [run[run.length - 1]]; }; // (a first leg keeps the seam)
+  for (let i = 0; i < n; i++) {
+    const k = comb.rowOf(pts[i]) !== null && comb.rowOf(pts[i]) === comb.rowOf(pts[(i + 1) % n]) ? comb.rowOf(pts[i]) : null;
+    if (run.length > 1 && k !== kind) flush();
+    kind = k; run.push(pts[(i + 1) % n]);
   }
-  for (let c = 1; c < rs.length; c++) { // THE ISLANDS' RINGS
-    if (owned.has(`${gi}:${c}`)) continue;
-    const cand = nearOf(rs[c]);
-    if (!cand.length) continue; // no point of this comb next to it: another area's, or a loop of its own (rasterLoops)
-    const got = balloon(ins, rs[c], cand);
-    if (!got) return null;
-    ins = got; owns.push(`${gi}:${c}`);
-  }
-  if (!ins.length && crosses(ins)) return null;
-  const b = assemble(build(ins));
-  return { b, length: pathLength(b.pts, false), owns };
+  flush();
+  return assemble(items);
 }
 // TASK 804b: a closed loop ({ points, turns }) cut at every turn's start and end into pieces (its turns and the legs between), for its sweep: a piece
 // that ends where it began (a ring walked whole) is swept as a closed ring (an open path whose ends meet is not swept whole by Clipper's offset)

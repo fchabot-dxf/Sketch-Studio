@@ -153,10 +153,12 @@ export async function pocketPhase(t, label, { patterns = ['linked', 'raster', 'm
     await setLoop(true);
     assert.strictEqual(await count('circle'), 0, label + ` ${pat}: a closed loop: no dot (no start point)`);
     assert.strictEqual(await count('.sk-pocket-start'), 1, label + ` ${pat}: 1 pocket start mark target in Prepare`);
-    assert.ok(/\+ wall: one closed loop,/.test((await note())[0]), label + ` ${pat}: the note says one closed loop, nothing about where it starts: ` + (await note())[0]);
+    // TASK 835c: Raster's Loop = its clusters + the wall ring, each a closed loop of its own (the rectangle: one cluster + the ring = 2)
+    const nLoops = pat === 'raster' ? 2 : 1;
+    assert.ok((nLoops === 1 ? /\+ wall: one closed loop,/ : /\+ wall: 2 closed loops,/).test((await note())[0]), label + ` ${pat}: the note says ${nLoops} closed loop(s), nothing about where it starts: ` + (await note())[0]);
     const els = fileElements(await pageSvg());
     const online = els.filter((e) => e[2] === 'online'), guides = els.filter((e) => e[2] === 'guide');
-    assert.ok(online.length === 1 && /Z$/.test(online[0][1]) && guides.length === 1, label + ` ${pat}: ONE closed on-line loop + 1 guide start mark`);
+    assert.ok(online.length === nLoops && online.every((e) => /Z$/.test(e[1])) && guides.length === 1, label + ` ${pat}: ${nLoops} closed on-line loop(s) + 1 guide start mark`);
     await shotWorld(`${D}-prepare-pocket-${pat}-startmark.png`, [-6, -6, 106, 66], 2);
   }
   await shot(`${D}-card-pocket-startmark.png`, '#prepare-panel .cut-card', 2);

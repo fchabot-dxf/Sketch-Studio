@@ -168,7 +168,8 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   const changed804 = new Set(['spiralLoop', 'morphedLoop']);
   // TASK 804b: Raster + Loop is the zero-crossing loop now (the wall ring whole, no clean-up ring): its download, preview and 3D footprints changed on
   // purpose (checked in tests/pocket-nocross-804-node.test.js); its Operations list did not (TASK 835: the loop that cuts both ways changed them again,
-  // tests/pocket-raster-loop-835-node.test.js; the Operations list still the same)
+  // tests/pocket-raster-loop-835-node.test.js; the Operations list still the same). TASK 835c (owner turn 3131: several closed paths per area, the ring
+  // its own): the Operations row's loop count changed too ("+ wall: 2 closed loops"): every rasterLoop facet changed on purpose, checked there
   const changed804b = new Set(['rasterLoop']);
   let guideWordsDiffer = false; // (the digest of a set without that Guide's row stays the same)
   const GUIDE_DEPTH_WORDS_825 = new Set(['dxf/close-path-760-gap.dxf', 'dxf/fusion-sketch4.dxf', 'dxf/part-mm.dxf', 'pattern-params-694-old.document.json', 'pre-577-two-sketches.document.json']); // TASK 825 (V4): a Guide with a depth lists it in its row
@@ -176,9 +177,8 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   // are PLACED now (kept off the narrow stretches, tests/hold-part-822-node.test.js): its download, preview, Operations row and 3D changed on purpose
   const changed822 = (name, set) => name === 'report/midpoint-move.json' && set === 'tabs';
   for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) {
-    if (changed804.has(set)) continue;
+    if (changed804.has(set) || changed804b.has(set)) continue;
     if (changed822(name, set)) { ok(now[name][set].download !== facets.download, `${name} ${set}: its refused tabs are placed now (TASK 822)`); n++; continue; }
-    if (changed804b.has(set)) { eq(now[name][set].ops, facets.ops, `${name} ${set}: the operations identical to origin/main 5e79336`); n++; continue; }
     if (GUIDE_DEPTH_WORDS_825.has(name)) { const { ops: o1, ...r1 } = now[name][set], { ops: o2, ...r2 } = facets; eq(r1, r2, `${name} ${set}: download, preview copy and 3D footprints identical to origin/main 5e79336`); guideWordsDiffer ||= o1 !== o2; n += 4; continue; }
     eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length;
   }

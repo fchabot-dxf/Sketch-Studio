@@ -7,7 +7,7 @@ import { open } from './helpers/node-app.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { FUSION_ACTIONS, mountFusionPrepareBar } from '../apps/shaper/src/fusion-bridge.js';
 import { regionSig } from '../apps/shaper/src/selection-edit.js';
-import { getSelections, setSelections } from '../apps/shaper/src/selection-list.js';
+import { getSelections, setSelections, formatSummaryItem } from '../apps/shaper/src/selection-list.js';
 import { storeOps, opById, setOpSettings, regionOf, insertOp } from '../apps/shaper/src/operations-store.js';
 import { createPrepareStage } from '../apps/shaper/src/prepare-stage.js';
 import { CUT_TYPES } from '../apps/shaper/src/shaper.js';
@@ -24,6 +24,8 @@ const rectSegs = (x, y, w, h) => [
 ];
 
 eq(FUSION_ACTIONS.SELECT_FOR_OPERATION, 'select_for_operation', 'declared select_for_operation action');
+eq(formatSummaryItem({ kind: 'face', count: 6, names: ['CLAUDE_TEST_tray'], detail: '2 faces, 4 walls' }), 'CLAUDE_TEST_tray · 2 faces, 4 walls', 'formatSummaryItem prefers detail when present');
+eq(formatSummaryItem({ kind: 'sloped-face', count: 4, names: ['Tray'] }), 'Tray · 4 sloped faces', 'formatSummaryItem falls back to count+kind when detail absent');
 
 // regionSig ignores `sources` alongside `id` and `label`
 const regA = { id: 'reg_0', label: 'Pocket 1 (8mm)', sources: ['tok-floor'], cutType: 'pocket', depthMm: 8, through: false, outer: { closed: true, segments: rectSegs(10, 10, 20, 15) }, holes: [] };

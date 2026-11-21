@@ -45,3 +45,15 @@ SOFTWARE.
 
 `packages/core/plot/vendor/clipper.js` : the Clipper library by Angus Johnson (JavaScript port) : Boost Software Licence 1.0. The licence
 notice is in the header of that file.
+
+## opentype.js
+
+`packages/ui/vendor/opentype/` : opentype.js 1.3.4 (npm `opentype.js@1.3.4`, `dist/opentype.module.js`, unmodified), https://opentype.js.org : MIT
+licence. Its licence file is kept beside it: `packages/ui/vendor/opentype/LICENSE`. The Text tool reads its outline fonts with it.
+
+## The Text tool's fonts
+
+`packages/ui/vendor/fonts/` : the fonts the Text tool offers, each with its licence file in its folder (sources and pins: `packages/ui/vendor/fonts/README.txt`):
+Inter, Roboto, Merriweather, Oswald, Anton, Bebas Neue, Pacifico (SIL Open Font License 1.1) and Roboto Slab (Apache License 2.0), the Fontsource
+"latin" WOFF files; the Hershey fonts (Simplex, Duplex, Complex, Script, Italic; the Hershey Fonts notice in `hershey/LICENSE`, the hersheytext package's
+MIT licence in `hershey/LICENSE-hersheytext`); Relief SingleLine (SIL Open Font License 1.1, `relief/OFL.txt`).

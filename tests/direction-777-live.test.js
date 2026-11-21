@@ -153,7 +153,8 @@ try {
   await setZoom(170, 22.5, 110); await sleep(120);
   await clickWorld(170, 22.5); await move(away.x, away.y);
   const sRast = await inspect();
-  assert.ok(sRast.travelClear >= 10 && sRast.travel === sRast.travelClear + 1, 'raster pocket: clearing passes + cleanup + finish wall all marked: ' + JSON.stringify(sRast));
+  // TASK 835e: Loop off = ONE open zigzag (the rectangle: one area) + the clean-up ring, + the finish wall
+  assert.ok(sRast.travelClear === 2 && sRast.travel === sRast.travelClear + 1, 'raster pocket: the zigzag + cleanup + finish wall all marked: ' + JSON.stringify(sRast));
   assert.strictEqual(sRast.arrows, 0, 'raster pocket: no arrowheads'); assert.strictEqual(sRast.arrowLayerKids, 0, 'raster pocket: no .sk-travel-arrows-layer children');
   assert.ok(sRast.note.includes('AutoPass runs back along it on the next pass'), 'raster Loop off: AutoPass reverse line in card note');
   await shot('desktop-raster-pocket.png', await canvasClip());

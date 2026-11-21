@@ -93,7 +93,7 @@ try {
   await evalJs(`window.__prepareView.setView({ x: 55, y: 22.5, w: 120 })`); await sleep(150);
   await tapWorld(30, 22.5);
   const sRast = await inspect();
-  assert.ok(sRast.travelClear >= 10 && sRast.arrows === 0, 'phone raster: clearing + wall travel, no arrowheads (TASK 821)');
+  assert.ok(sRast.travelClear === 2 && sRast.arrows === 0, 'phone raster: clearing (TASK 835e: ONE zigzag + the clean-up ring) + wall travel, no arrowheads (TASK 821)');
   assert.strictEqual(sRast.dasharray, '8px, 28px', 'phone: 8px 28px dash pattern');
   assert.strictEqual(sRast.anim, 'sk-march', 'phone: animation running');
   assert.ok(sRast.overflowX <= 0 && sRast.cardFits, 'phone raster: no layout overflow');

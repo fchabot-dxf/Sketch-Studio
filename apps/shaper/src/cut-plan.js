@@ -16,6 +16,8 @@ import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs /
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
+import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's cone goes to the 3D Review with its shape
+import { BIT_RECORD_FIELDS } from './tool-table.js'; // TASK 842: the fields a bit sets in an operation (a Contour remembers them whole)
 import { loopsWithPolygons, deriveFootprints } from './op-derive.js'; // TASK 817: THE derivation, shared with the background worker (paths-worker.js)
 import { lookup as lookupPaths, pathsContext, pathsSig as pathsSigFn, isOutOfDate, followRenames } from './op-paths.js'; // TASK 817: the GENERATED paths (on OK, in the background)
 export { loopsWithPolygons };
@@ -235,7 +237,13 @@ export function setFieldFor(key, field, value, state = null) { return fileShape(
 export const CONTOUR_DEFAULTS = Object.freeze({ toolDia: 3.175, cutterShape: 'ballnose', cutterAngle: 90, stepDepth: LEVELS.contourStepMm }); // TASK 810: declared (the card's tab dots read what a Contour starts with)
 let lastContourV = { ...CONTOUR_DEFAULTS };
 export const lastContour = () => ({ ...lastContourV });
-export function rememberContour(field, value) { if (field in lastContourV && value != null) lastContourV = { ...lastContourV, [field]: value }; return lastContour(); }
+// TASK 842: the bit a Contour picked from the tool table is remembered WHOLE (its copy: name, shape, tip, cone, cutting length); a field the bit does not have
+// (undefined) is forgotten, so the next Contour never mixes two bits
+export function rememberContour(field, value) {
+  if (BIT_RECORD_FIELDS.includes(field) && value === undefined) { const { [field]: _gone, ...rest } = lastContourV; lastContourV = { ...CONTOUR_DEFAULTS, ...rest }; return lastContour(); }
+  if ((field in lastContourV || BIT_RECORD_FIELDS.includes(field)) && value != null) lastContourV = { ...lastContourV, [field]: value };
+  return lastContour();
+}
 // ── TASK S2 (docs/OPERATIONS-MODEL.md 4.2-4.4, section 6 S2): the OPERATION-FIRST writers. Prepare edits OPERATIONS: the active operation's settings are every one
 // of its shapes' (no per-shape regrouping any more: an edited operation keeps its id, tick and place), shapes are added to / taken out of an operation, a shape in
 // several operations has one membership per operation, the quick flow (a type picked for selected shapes) ALWAYS makes a NEW operation, the bin deletes the
@@ -312,7 +320,7 @@ export function setOpFields(op, patch, state = null) {
   // TASK S2 (owner turns 2730-2731): a Depth set back to the model (null: a Roughing's / Contour's Bottom emptied or Reset) = 'model' where every shape has an imported
   // depth, else unset (a part's own levels / slope depth)
   if (Object.hasOwn(rest, 'cutDepth') && rest.cutDepth === null) rest.cutDepth = op.geometry.length && op.geometry.every((r) => sourceDepth(r.key) !== undefined) ? 'model' : 'unset';
-  if (Object.keys(rest).length) setOpSettings(op, { ...op.settings, ...rest });
+  if (Object.keys(rest).length) setOpSettings(op, Object.fromEntries(Object.entries({ ...op.settings, ...rest }).filter(([, v]) => v !== undefined))); // TASK 842: a field set to undefined is removed (a bit's fields the next bit does not have)
   if (Object.hasOwn(rest, 'tabCount')) for (const ref of op.geometry) if (Object.hasOwn(ref, 'tabsAt')) setRefTabsAt(ref, undefined); // TASK 822
   if (Object.hasOwn(rest, 'cutDepth')) normalizeDepth(op);
   settleOrder(state);
@@ -1003,7 +1011,7 @@ export function planReliefItems(state, opts) {
     if (!stored || !stored.cutType || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
     const d = pathsOf(key, stored, ctx);
     if (!d) continue; // nothing to cut (TASK 817: or not generated yet)
-    const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
+    const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia, ...(isTaperedCutter(stored.cutterShape) ? { taperAngle: stored.taperAngle, shankDia: stored.shankDia } : {}) }; // TASK 842: a tapered bit's cone (#core cutter-profile: the one profile)
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
     // TASK 817: a shaped cutter's other widths sweep the cuts again (#core deriveCutFootprintAt calls each cut's `sweep`, a function that does not cross from the worker):
     // they are derived from the main thread's own derivation of the same item (deriveKeyFootprints), made once, only when the 3D build asks for a width

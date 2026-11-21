@@ -161,7 +161,7 @@ const payload = () => ({
     clickAt(5, -5); // the part, outside the window and the boss
     eq(q('.cut-type-cur').textContent, 'Roughing', 'the part\'s Roughing card');
     eq(tabs(), ['tool*.', 'geometry', 'heights', 'passes.'], 'its tabs: Tool (shown; a dot: the 1/4 in bit is not the default 1/8), Geometry, Heights, Passes (a dot: Nested, Smoothing 0)');
-    eq(rows(), ['toolDia', 'cutterShape'], 'the Tool tab: the bit and its shape');
+    eq(rows(), ['bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, 'the Tool tab: the bit and its shape');
     pressEl('.cut-tab[data-tab="geometry"]');
     eq(rows(), ['boundary', 'boundaryTool', 'boundaryOffset', 'cutOffset'], 'the Geometry tab: Boundary, Tool, Boundary offset, Offset (Nested: no Min terrace width)');
     eq([...doc.querySelectorAll('.cut-boundary-kinds .cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '') + (b.getAttribute('aria-disabled') ? ':off' : '')),

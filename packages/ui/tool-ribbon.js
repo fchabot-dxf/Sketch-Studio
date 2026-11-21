@@ -25,6 +25,8 @@ export const MIN_PER_SECTION_PREFERRED = 2;
 export const MIN_PER_SECTION = 1;
 const HOLD_MS = 300;      // a press on a grip held this long (without moving HOLD_SLOP px) starts the reorder drag; a move before it is a scroll
 const HOLD_SLOP = 6;
+// TASK 647: a PHONE held upright (the icon-only bar below); TASK S3: also where a vertical ribbon is a bar again (createToolRibbon `vertical`). Declared once: the stylesheet and the JS read it.
+const PHONE_UPRIGHT_QUERY = '(pointer: coarse) and (max-width: 640px)';
 
 // Rect variants (the dropdown) — sets state.rectMode + swaps the rect button's icon/label, like ui-manager.
 const RECT_VARIANTS = [
@@ -184,6 +186,14 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
 .sk-ribbon-sect-foot { display: flex; justify-content: flex-end; padding: 2px 6px 0; border-top: 1px solid var(--sk-ribbon-sep, #e2e8f0); margin-top: 4px; }
 .sk-ribbon-sect-reset { border: 0; background: transparent; padding: 6px; font: 600 11px system-ui, sans-serif; color: var(--sk-selection, #3B82F6);
   text-decoration: underline; cursor: pointer; }
+/* TASK S3: a VERTICAL ribbon (createToolRibbon({ vertical: true }): Shaper Prepare's operations toolbar, a column at the left edge of its view): the same buttons
+   (icon over label, the finger sizes below on a touch screen), one column; a fixed section has no name row (as on the rail). The class is set only while neither
+   phone layout applies: a phone held upright keeps the bar, the short viewport the rail (both below), as every ribbon there. */
+.sk-ribbon.sk-ribbon-vertical { flex-direction: column; align-items: center; padding: 4px; }
+.sk-ribbon-vertical .sk-ribbon-group { padding: 4px 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
+.sk-ribbon-vertical .sk-ribbon-group:last-child { border-bottom: 0; }
+.sk-ribbon-vertical .sk-ribbon-btns { flex-direction: column; }
+.sk-ribbon-vertical .sk-ribbon-group[data-fixed] .sk-ribbon-group-label { display: none; }
 /* TASK 562: a finger. Buttons >= 44 px (here 62 x 60), labels >= 12 px, menu rows 44 px. Desktop (a mouse) is untouched. */
 @media (pointer: coarse) {
   .sk-ribbon-btn { width: 62px; height: 60px; }
@@ -197,7 +207,7 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
 }
 /* TASK 647: a PHONE held upright: icon-only tool buttons (the label stays in the button, visually hidden: still the accessible name),
    44 x 44 targets, tighter spacing; each section's name row is a 44 px tall dropdown button; the fixed Select section has no name row. */
-@media (pointer: coarse) and (max-width: 640px) {
+@media ${PHONE_UPRIGHT_QUERY} {
   .sk-ribbon { gap: 0; padding: 0; }
   .sk-ribbon-group { padding: 0 1px; }
   .sk-ribbon-btns { gap: 0; }
@@ -300,18 +310,27 @@ const px = (v) => parseFloat(v) || 0;
  *   TASK 647: a section DECLARES { key, label, tools, fixed?, defaultInBar? }: fixed = always shown whole, no dropdown (Select); defaultInBar = how
  *     many of its first tools are "in the bar" by default (all when absent). Every other tool is in the section's dropdown (its name button).
  *   appId: the host's id (the one it gives app-chrome); the user's layout (checkboxes, order) is saved per appId (#ui/ribbon-layout.js).
- *   extraGroups: [{ label, defaultInBar?, buttons:[{ icon?|svg?, label?, title?, id?, event?, onClick? }] }] — host-appended sections.
+ *   extraGroups: [{ label, key?, fixed?, defaultInBar?, buttons:[{ icon?|svg?, label?, title?, hint?, id?, event?, onClick? }] }] — host-appended sections
+ *     (TASK S3: `key` = the section's key (default: its label, lower case); `fixed` as a built-in section's: every button always shown, in its declared order, no dropdown).
+ *   sketchTools: TASK S3: false = none of the sketcher's sections (Select ... Constrain): the ribbon is the host's extraGroups only (Shaper Prepare's operations toolbar).
+ *   vertical: TASK S3: true = a column (the host places it at a left edge) away from a phone; a phone keeps the ribbon's phone layouts (upright: the bar; the short
+ *     viewport: the rail). For fixed sections (a non-fixed section's name and dropdown are laid out for the bar and the rail).
  *   on(name, detail): optional event hook ('tool' on a tool switch, 'rectMode', 'action' for extra buttons).
  *   (TASK 677: the Parameters window's opener moved from Inspect to the shared footer, #ui/app-footer.js; its opt-out is the footer's.)
  *   onToolClick(tool): optional host override — when given, a tool-button click (and a rect-variant select, after
  *     state.rectMode is set) calls THIS instead of the internal switchToTool, so a host (e.g. SketchStudio) routes
  *     tool activation to its OWN rich handler. When absent, the ribbon uses switchToTool (Shaper/standalone path).
  */
-export function createToolRibbon({ state, appId = 'default', extraGroups = [], on = null, onToolClick = null, profiles = false, notify = null } = {}) {
+export function createToolRibbon({ state, appId = 'default', extraGroups = [], on = null, onToolClick = null, profiles = false, notify = null, sketchTools = true, vertical = false } = {}) {
   injectStyles();
-  ensureIconSymbols(ICON_IDS);
+  if (sketchTools) ensureIconSymbols(ICON_IDS);
 
   const el = document.createElement('div'); el.className = 'sk-ribbon';
+  // TASK S3: a vertical ribbon is a column while neither phone layout applies (the stylesheet's .sk-ribbon-vertical); a rotation / resize re-checks it
+  const phoneQueries = vertical && typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? [PHONE_UPRIGHT_QUERY, SHORT_VIEWPORT_QUERY].map((q) => window.matchMedia(q)) : [];
+  const syncVertical = () => el.classList.toggle('sk-ribbon-vertical', vertical && phoneQueries.every((m) => !m.matches));
+  phoneQueries.forEach((m) => m.addEventListener('change', syncVertical));
+  syncVertical();
   const toolBtns = []; // { btn, tool } — for active-sync
   const menus = [];    // TASK 607: popovers on document.body, removed in destroy()
   const retitles = []; // TASK 747: each button's title setter, run again when a shortcut's key changes
@@ -429,13 +448,15 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
 
   // TASK 647: the sections, DECLARED (fixed / defaultInBar are data on the section, read by the one layout engine below).
   const SECTION_DECLS = [
-    { key: 'select', label: 'Select', fixed: true, tools: SELECT },
-    { key: 'create', label: 'Create', tools: CREATE },
-    { key: 'modify', label: 'Modify', defaultInBar: 1, tools: profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT }, // TRACE-1: trim + break (+ opt-in profile actions)
-    { key: 'inspect', label: 'Inspect', defaultInBar: 1, tools: INSPECT },
-    { key: 'constrain', label: 'Constrain', tools: [...CONSTRAIN, LOCK] },
+    ...(sketchTools ? [ // TASK S3: a host's own toolbar (sketchTools false) has none of the sketcher's sections
+      { key: 'select', label: 'Select', fixed: true, tools: SELECT },
+      { key: 'create', label: 'Create', tools: CREATE },
+      { key: 'modify', label: 'Modify', defaultInBar: 1, tools: profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT }, // TRACE-1: trim + break (+ opt-in profile actions)
+      { key: 'inspect', label: 'Inspect', defaultInBar: 1, tools: INSPECT },
+      { key: 'constrain', label: 'Constrain', tools: [...CONSTRAIN, LOCK] },
+    ] : []),
     // app-specific groups (Draw / …) appended by the host behave like the built-in ones
-    ...(extraGroups || []).map((g, i) => ({ key: String(g.label || 'group-' + i).toLowerCase(), label: g.label || '', defaultInBar: g.defaultInBar, buttons: g.buttons || [] })),
+    ...(extraGroups || []).map((g, i) => ({ key: g.key || String(g.label || 'group-' + i).toLowerCase(), label: g.label || '', fixed: Boolean(g.fixed), defaultInBar: g.defaultInBar, buttons: g.buttons || [] })),
   ];
 
   const sections = SECTION_DECLS.map((d) => {
@@ -647,9 +668,11 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   function refresh() {
     const cur = state && state.currentTool;
     toolBtns.forEach(({ btn, tool }) => btn.classList.toggle('active', tool === cur));
-    const lock = state ? selectionLockState(state) : { has: false, locked: false };
-    lockBtn.disabled = !lock.has;
-    lockBtn.setAttribute('aria-pressed', String(lock.locked));
+    if (lockBtn) { // (TASK S3: a ribbon without the sketcher's sections has no Lock)
+      const lock = state ? selectionLockState(state) : { has: false, locked: false };
+      lockBtn.disabled = !lock.has;
+      lockBtn.setAttribute('aria-pressed', String(lock.locked));
+    }
     // TASK 647: the active tool lives only in its section's dropdown -> the section's name is lit
     sections.forEach((sec) => { if (!sec.fixed) sec.nameEl.classList.toggle('active', sec.items.some((it) => it.tool && it.tool === cur && it.btn.hidden)); });
     syncRows();
@@ -676,6 +699,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     refresh,
     destroy: () => {
       offShortcuts(); offLayout();
+      phoneQueries.forEach((m) => m.removeEventListener('change', syncVertical));
       if (unlistenHistory) unlistenHistory();
       sectPop.close();
       [...tips, ...sectTips].forEach((t) => t.destroy());

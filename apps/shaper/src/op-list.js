@@ -27,6 +27,9 @@ const DRAG_START_PX = 4;    // a grip press (mouse / pen) that moves less than t
 export const HOLD_MS = 350; // a touch held this long without moving lifts the row
 const SCROLL_SLOP_PX = 8;   // a touch that moves more than this before the hold is a scroll
 const GRIP_SVG = '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.4"/><circle cx="7" cy="3" r="1.4"/><circle cx="3" cy="8" r="1.4"/><circle cx="7" cy="8" r="1.4"/><circle cx="3" cy="13" r="1.4"/><circle cx="7" cy="13" r="1.4"/></g></svg>';
+// TASK S3 addition (owner turns 3046-3047, Fusion style): the OUT-OF-DATE mark of a row (op.outOfDate: its inputs changed since its paths were made): a warning-style
+// triangle with an exclamation mark, declared once; its tooltip is the table's (param-hints.js opOutOfDate)
+export const OUT_OF_DATE_SVG = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.6L13 12.4H1z" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.2" stroke-linejoin="round"/><path d="M7 5.4v3.4" stroke="#111" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="10.6" r="0.9" fill="#111"/></svg>';
 const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their label = aria-label and tooltip)
   { cls: 'ops-edit', glyph: '\u270E', words: (n) => `Edit operation ${n}`, call: 'onEdit' },
   { cls: 'ops-dup', glyph: '\u29C9', words: (n) => `Duplicate operation ${n}`, call: 'onDuplicate' },
@@ -42,6 +45,7 @@ const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their l
  *   isSelected(op) TASK S2: whether it is the selected row (its actions show)
  *   isOpen(op)     TASK S2: whether it is the operation open in the card
  *   isGenerating(op) TASK 817: whether its paths are being generated (its row spins: a ring over its number, in the number's own box, so nothing moves)
+ *   (TASK S3: an operation with op.outOfDate shows the out-of-date mark after its text, its tooltip the table's opOutOfDate)
  *   onEdit(op) / onDuplicate(op) / onDelete(op)   TASK S2: the selected row's actions (TASK 745: the delete)
  *   onTick(ids, on) TASK 798: a row's or a heading's checkbox (the operation ids, ticked or not)
  */
@@ -201,6 +205,12 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       const sub = doc.createElement('span'); sub.className = 'ops-sub'; sub.textContent = [op.regions, op.detail].filter(Boolean).join(' · ');
       text.append(name, sub);
       pick.append(num, text);
+      if (op.outOfDate) { // TASK S3: the out-of-date mark, after the text (the row's height never changes)
+        row.classList.add('is-out-of-date');
+        const mark = doc.createElement('span'); mark.className = 'ops-stale'; mark.dataset.hint = 'opOutOfDate'; mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', `Operation ${i + 1}: out of date, press Recalculate`); mark.innerHTML = OUT_OF_DATE_SVG;
+        bindHint({ el: mark, iconOnly: true });
+        pick.append(mark);
+      }
       pick.addEventListener('click', () => onPick(op));
       pick.addEventListener('dblclick', () => onEdit(op)); // TASK S2: a double-click opens it too
       // TASK S2: the selected row alone shows its actions, beside its text
@@ -232,7 +242,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
   const inspect = () => ({
     open: fold.open,
     items: [...body.children].map((el) => (el.classList.contains('ops-tool') ? { heading: el.textContent }
-      : el.classList.contains('ops-row') ? { id: el.dataset.id, text: el.querySelector('.ops-name').textContent, sub: el.querySelector('.ops-sub').textContent, picked: el.classList.contains('is-picked') } : { empty: el.textContent })),
+      : el.classList.contains('ops-row') ? { id: el.dataset.id, text: el.querySelector('.ops-name').textContent, sub: el.querySelector('.ops-sub').textContent, picked: el.classList.contains('is-picked'), ...(el.classList.contains('is-out-of-date') ? { outOfDate: true } : {}) } : { empty: el.textContent })),
   });
   /** TASK S2: each row's actions (the selected row's Edit, Duplicate, X): [{ id, actions: ['ops-edit', ...] }] (tests). */
   const inspectActions = () => [...body.querySelectorAll('.ops-row')].map((el) => ({ id: el.dataset.id, actions: [...el.querySelectorAll('.ops-act')].map((b) => b.classList[1]) }));

@@ -212,7 +212,7 @@ const HOSTS = {
     let controller = null, modes = null, ribbon = null, buffer = null, browser = null;
     const history = M.createShaperHistory({ getController: () => controller, getMode: () => modes.current() });
     const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(), history,
-      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice'), opsEl: doc.getElementById('prepare-ops') }); // TASK 743: the operations list, as the page passes it
+      panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice'), opsEl: doc.getElementById('prepare-ops'), ribbonEl: doc.getElementById('prepare-ribbon') }); // TASK 743: the operations list; TASK S3: the operations toolbar (as the page passes them)
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
     // main.js (TASK 790): Open STL + the STL card at the top of Prepare's right column; afterImport = the page's afterSelectionImport without the Review (not mounted here)
     const stl = createStlImporter({ ensureSketch: () => ensureSketch(), getController: () => controller, prepare, panelEl: doc.getElementById('prepare-panel'),

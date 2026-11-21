@@ -10,8 +10,8 @@
 //
 // Adopted by the dimension field (U2) + the Shaper cut params (U3); INERT until then.
 
-import { parseInput, evaluate } from '#core/expression.js';
-import { exportForm } from '#core/origin-rules.js'; // TASK 803: the shaper:* length format is the Origin / Studio rules' (paramFormat)
+import { parseInput, evaluate } from './expression.js'; // TASK 817: relative, as every other #core module: a module worker (apps/shaper paths-worker.js) has no import map
+import { exportForm } from './origin-rules.js'; // TASK 803: the shaper:* length format is the Origin / Studio rules' (paramFormat); TASK 817: relative (see above)
 
 export const BASE = 'mm'; // 1 world unit = 1 mm
 

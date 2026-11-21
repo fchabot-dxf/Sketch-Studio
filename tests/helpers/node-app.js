@@ -55,6 +55,9 @@
 //     the page's state as appId = the host. The module is imported right after the page exists, so its key / pointer capture listens on THIS
 //     page's document (a module loads once per process: it listens on the first page a process opens).
 //   createNamedDesign(profile, app, name, document?): also stores a given document (the owner's file) as the current design.
+//   20. the paths port (TASK 817): the page generates the operations' paths in a module worker (main.js: op-paths.js setPathsPort(workerPort(paths-worker.js))); the
+//      kit leaves op-paths.js on its in-process port (localPort): the SAME server (op-derive.js createPathsServer) on structured copies of each job and answer, as
+//      crossing to the worker does, answering at once (a test of the waiting itself sets localPort({ async: true }) or a port of its own).
 // The host page script itself (main.js / sketch-stage.js) is not run: its page-only hooks (panels, Prepare, Review, the Freehand ribbon
 // button, the header) are absent; open() calls the declared pieces in the page script's order.
 

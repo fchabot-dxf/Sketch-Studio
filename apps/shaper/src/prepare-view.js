@@ -8,11 +8,12 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, STOCK_TYPE_ID, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations
-import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, planMemberItems, deriveKeyFootprints, planOwnedLoops, stockKeyOf, rememberStepDepth, rememberAdaptiveSteps, rememberStepDeviation, steppedNoteItems,
+import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, planMemberItems, pathsCtx, pathsOf, pathsSigOf, planOwnedLoops, stockKeyOf, rememberStepDepth, rememberAdaptiveSteps, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
   CONTOUR_KIND, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
+import { resultOf } from './op-paths.js'; // TASK 817: the generated paths by their signature (the open operation's: as opened, its Preview)
 import { holdMode, tabHandles, holdTabDragAt } from '#core/hold-part.js'; // TASK 822: draggable tabs (the hold's own layout, ONE pure derivation)
 import { hasLevels, wallsOf, wallsDefault } from '#core/stepped-cut.js'; // TASK 792: a record that carries a part's levels; TASK 810: a Contour's walls
 import { levelsHeightMap } from '#core/height-map.js'; // TASK 792: its height map, drawn under the cut lines
@@ -371,7 +372,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
 
   // SP1h5: per-target cut LOOK = the CUTTER PATH, cached by (cutType,toolDia,cutOffset,cutDepth,docUnit).
-  const lookCache = new Map(); // targetKey → { sig, region, path }
+  const lookCache = new Map(); // membership id -> Map(paths signature|unit -> look) (TASK 817: a few per membership: the open operation shows its paths as opened, its Preview)
   // TASK 711: which loops have their own record (a hole with one is not cut again by its enclosing target) follows the ASSIGNED keys:
   // derived once per change of that key list, and part of every look's signature (assigning a hole's cut changes its plate's look).
   let owned = { keys: null, set: null };
@@ -380,10 +381,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (owned.keys !== keys) owned = { keys, set: planOwnedLoops(state, loops, loopPolys) };
     return owned;
   };
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${rec.stepDepth}|${rec.adaptiveSteps}|${rec.stepDeviation}|${rec.holdPart}|${rec.tabCount}|${rec.tabWidth}|${rec.holdThickness}|${rec.clearing}|${rec.stepover}|${rec.finishAllowance}|${rec.rasterAngle}|${rec.loop}|${rec.tabsAt}|${rec.roughLayout}|${rec.minTerraceWidth}|${rec.smoothing}|${rec.boundary}|${rec.boundaryShape}|${rec.boundaryTool}|${rec.boundaryOffset}|${rec.topDepth}|${rec.bottomDepth}|${rec.floorAllowance}|${rec.walls}|${rec.wallSide}|${docUnit()}|${ownedNow().keys}`; // TASK 810: its boundary, heights and walls; TASK 714 / 717: a stepped cut's look follows its step depth / adaptive resolution; TASK 742: its Hold part; TASK 745: its Clearing
-  const computeLook = (it) => { // TASK S2: one look per membership (planMemberItems: a shape in two operations has two)
-    const key = it.planKey, storedRec = it.rec;
-    const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys, ownedNow().set); // the ONE composition (cut-plan.js), shared with the 3D Review
+  // TASK S2: one look per membership (planMemberItems: a shape in two operations has two). TASK 817: `derived` = its GENERATED paths (cut-plan.js pathsOf: the one
+  // composition, deriveKeyFootprints, made in the background on OK; shared with the 3D Review)
+  const computeLook = (it, derived) => {
     if (!derived) return { region: '', path: '', toolPaths: [] };
     const { rec, footprints } = derived;
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
@@ -475,7 +475,39 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map() };
   };
-  const getLook = (it) => { const sig = sigOf(it.rec); const hit = lookCache.get(it.id); if (hit && hit.sig === sig) return hit; const look = computeLook(it); look.sig = sig; lookCache.set(it.id, look); return look; }; // TASK S2: cached per membership (a Contour reads its own settings only)
+  // TASK 817 (owner turns 2745-2748): a look is drawn from the GENERATED paths (op-paths.js: content-addressed, generated in the background on OK), cached per
+  // membership under its paths' signature (+ the unit its chip is written in). Paths not generated yet: nothing is drawn (the look follows when they arrive: the stage
+  // repaints). The OPEN operation (openLookOf) draws no new paths until OK: its paths as it was opened, FAINT; its Preview (the stage's setPreview) drawn as any look,
+  // and faint again (stale) after a later change in the card.
+  let ctxNow = null;
+  const viewCtx = () => { const o = ownedNow(); if (!ctxNow || ctxNow.ownedKeys !== o.keys) ctxNow = { ownedKeys: o.keys, ctx: pathsCtx(state, { loops, loopPolys, owned: o.set }) }; return ctxNow.ctx; };
+  const EMPTY_LOOK = Object.freeze({ region: '', path: '', toolPaths: [] });
+  const lookAt = (it, sig, derived) => {
+    const k = `${sig}|${docUnit()}`;
+    let byItem = lookCache.get(it.id);
+    if (!byItem) { byItem = new Map(); lookCache.set(it.id, byItem); }
+    let look = byItem.get(k);
+    if (!look) { look = computeLook(it, derived); byItem.set(k, look); while (byItem.size > 3) byItem.delete(byItem.keys().next().value); }
+    return look;
+  };
+  const getLook = (it) => {
+    const ctx = viewCtx(), sig = pathsSigOf(it.planKey, it.rec, ctx);
+    if (sig === null) return EMPTY_LOOK;
+    const d = pathsOf(it.planKey, it.rec, ctx, { opId: it.opId }); // a miss asks for it (generated in the background)
+    return d === undefined ? EMPTY_LOOK : lookAt(it, sig, d);
+  };
+  let preview = null; // the stage's Preview of the open operation: { sigs: Map(membership id -> signature) } (setPreview)
+  const openSigs = new Map(); // the open operation's memberships -> their signature when it was opened (its paths as they were: drawn faint)
+  const openLookOf = (it) => {
+    const ctx = viewCtx(), cur = pathsSigOf(it.planKey, it.rec, ctx);
+    const pv = preview && preview.sigs ? preview.sigs.get(it.id) || null : null;
+    const at = (sig) => { if (!sig) return null; const r = resultOf(sig); return r === undefined ? null : lookAt(it, sig, r.paths); };
+    if (pv && pv === cur) { const l = at(cur); if (l) return { look: l, faint: false }; } // the Preview of these very settings
+    const stale = at(pv);
+    if (stale) return { look: stale, faint: true }; // a Preview made before a later change
+    const was = at(openSigs.get(it.id));
+    return was ? { look: was, faint: true } : null; // its paths as it was opened
+  };
 
   // TASK 455: the SAME state model for every cut type — idle: only the svg line; hover: dark band + bold white boundary +
   // dashed tool path + depth chip; selected: teal band + bold mint boundary + the same path/chip; selected+hover: selected with
@@ -488,24 +520,26 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   // TASK S2: the memberships the look draws, each with its state: a selected / hovered shape's every operation; while an operation is active, its shapes show
   // only its own (a shape it shares with another operation shows that one when it is hovered and not one of the active operation's shapes)
+  // TASK 817: each with its look and whether it is drawn faint (the open operation's, see openLookOf); `open` = a membership of the open operation
   const drawnItems = () => {
     const op = activeOp(), out = [];
     for (const it of planMemberItems(TICKED)) {
       if (!(it.rec && it.rec.cutType)) continue;
       const st = stateOf(it.key);
       if (!st || (op && selection.has(it.key) && it.opId !== op.id)) continue;
-      out.push({ it, st });
+      if (op && it.opId === op.id) { const o = openLookOf(it); out.push({ it, st, look: o ? o.look : EMPTY_LOOK, faint: Boolean(o && o.faint), open: true }); continue; }
+      out.push({ it, st, look: getLook(it), faint: false, open: false });
     }
     return out;
   };
   const renderCuts = () => {
     let out = '';
-    for (const { it, st } of drawnItems()) out += `<g class="sk-st-${st}">${getLook(it).region}</g>`;
+    for (const { st, look, faint } of drawnItems()) out += `<g class="sk-st-${st}${faint ? ' sk-faint' : ''}">${look.region}</g>`;
     cutG.innerHTML = out;
   };
   const renderToolpaths = () => {
     let out = '';
-    for (const { it } of drawnItems()) out += getLook(it).path;
+    for (const { look, faint } of drawnItems()) out += faint ? `<g class="sk-faint">${look.path}</g>` : look.path;
     toolpathG.innerHTML = out + '<g class="sk-travel-steps"></g>';
     lastZoomK = null;
     renderStepTravel();
@@ -517,10 +551,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const k = worldTolerance(svgEl, 1);
     const minGap = k * TRAVEL_MIN_GAP_PX;
     let stepOut = '';
-    for (const { it } of drawnItems()) {
-      const look = getLook(it);
+    for (const { look, faint } of drawnItems()) {
       if (look.stepped && look.stepped.length) {
-        for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) stepOut += look.stepped[i].markup;
+        let marks = '';
+        for (const i of thinTravel(look.stepped.map((t) => t.ring), minGap, look.steppedGaps)) marks += look.stepped[i].markup;
+        stepOut += faint ? `<g class="sk-faint">${marks}</g>` : marks; // TASK 817: the open operation's paths as opened (or a stale Preview): faint
       }
     }
     stepLayer.innerHTML = stepOut;
@@ -530,13 +565,17 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // with the tab there), lastGood (every tab's centre), refused }
   let tabDrag = null;
   const handleMarkup = (id, p, k, extra = '', tabAt = null) => `<g class="sk-lead-handle${tabAt != null ? ' sk-tab-handle' : ''}${extra}" data-lead-key="${id}"${tabAt != null ? ` data-tab-at="${tabAt}"` : ''} transform="translate(${p.x} ${p.y}) scale(${k})"><circle class="sk-lead-hit" r="22"/><circle class="sk-lead-knob" r="6"/></g>`;
-  // TASK 822: a membership's tab handles (where the hold's layout put its tabs), computed once per look (the look is re-made when its record changes)
-  const tabHandlesOf = (it, look) => {
-    if (!look.tabHandles) {
-      const rec = effectiveCutRecord(it.rec), pl = holdMode(rec) === 'tabs' ? profileLoopsForTarget(parseKey(it.key)) : null;
-      look.tabHandles = pl && pl.outer ? tabHandles(pl.outer, rec, state) : [];
-    }
-    return look.tabHandles;
+  // TASK 822: a membership's tab handles (where the hold's layout put its tabs); TASK 817: from its record NOW (the open operation's look is its paths as opened),
+  // made once per record (its JSON)
+  const tabCache = new Map(); // membership id -> { key, handles }
+  const tabHandlesOf = (it) => {
+    const key = JSON.stringify(it.rec, (k, v) => (k === 'levels' || k === 'slope' ? undefined : v));
+    const hit = tabCache.get(it.id);
+    if (hit && hit.key === key) return hit.handles;
+    const rec = effectiveCutRecord(it.rec), pl = holdMode(rec) === 'tabs' ? profileLoopsForTarget(parseKey(it.key)) : null;
+    const handles = pl && pl.outer ? tabHandles(pl.outer, rec, state) : [];
+    tabCache.set(it.id, { key, handles });
+    return handles;
   };
   const renderHandles = () => {
     const k = worldTolerance(svgEl, 1);
@@ -547,10 +586,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     }
     let out = '';
     const open = activeOp(); // TASK S2 / 822: a tab handle is dragged in its operation's edit session only
-    for (const { it } of drawnItems()) {
-      if (!open || it.opId !== open.id || !selection.has(it.key)) continue;
-      const look = getLook(it);
-      for (const h of tabHandlesOf(it, look)) out += handleMarkup(it.id, h.point, k, '', h.at);
+    // TASK 817: at the tabs the open operation's settings make NOW (#core hold-part tabHandles: the outline's own light derivation, read here while the card is
+    // open; its paths wait for OK), so they are adjusted before OK
+    for (const { it, open: isOpen } of drawnItems()) {
+      if (!open || !isOpen || !selection.has(it.key)) continue;
+      for (const h of tabHandlesOf(it)) out += handleMarkup(it.id, h.point, k, '', h.at);
     }
     handleG.innerHTML = out;
   };
@@ -582,8 +622,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const lastChip = new Map();
   const renderChips = () => {
     let out = '';
-    for (const { it } of drawnItems()) {
-      const look = getLook(it);
+    for (const { it, look, faint } of drawnItems()) {
+      if (faint) continue; // TASK 817: a faint look (the open operation's paths as opened, a stale Preview) has no depth chip
       if (!look.anchor && !(look.toolPaths && look.toolPaths.length)) continue;
       const hov = hovered && targetKey(hovered) === it.key && hoverPt;
       const near = hov ? nearestPointOnPaths(look.toolPaths, hoverPt) : null;
@@ -646,7 +686,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     renderCuts(); renderToolpaths(); renderChips(); renderHandles(); refreshEdgeClasses();
     // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');
-    if (legend) legend.hidden = !drawnItems().some(({ it }) => getLook(it).hasTravel);
+    if (legend) legend.hidden = !drawnItems().some(({ look }) => look.hasTravel); // TASK 817: a faint look's dashes march too (faintly): the legend explains them
   };
 
   const renderSelection = () => {
@@ -823,8 +863,14 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     showOpen(Boolean(op));
     renderSelection(); renderHover();
   };
-  const openOp = (opId) => { active = opById(opId) ? { opId } : null; syncActive(); };
-  const closeOp = () => { active = null; showOpen(false); };
+  // TASK 817: opening keeps each membership's signature as it is now (its paths as opened, drawn faint while it is open); closing drops them and the Preview
+  const openOp = (opId) => {
+    active = opById(opId) ? { opId } : null;
+    openSigs.clear(); preview = null;
+    if (active) { const ctx = viewCtx(); for (const it of planMemberItems()) if (it.opId === opId) openSigs.set(it.id, pathsSigOf(it.planKey, it.rec, ctx)); }
+    syncActive();
+  };
+  const closeOp = () => { active = null; openSigs.clear(); preview = null; showOpen(false); };
 
   // TASK S2: a shape's words in the operation card's list: what it is and its size in the document unit ("Shape 40 × 40 mm", "Open line 160 × 0 mm")
   const KIND_WORDS = { loop: 'Shape', profile: 'Combined shape', chain: 'Open line' };
@@ -843,8 +889,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (!ref) return { kind: null, record: { cutType: op.type, ...op.settings }, note: [], hold: null, clearing: null, levels: false, partDepth: null, walls: null };
     const pk = planKeyOf(op, ref), rec = recordOf(op, ref), own = ownedNow().set, e = resolveEntry(pk, rec), contour = op.type === CONTOUR_TYPE;
     const hold = holdSummary(pk, rec, state, loops, loopPolys, own);
-    const note = [...steppedNoteItems(rec), ...levelsNoteItems(rec, levelsSummary(pk, rec, state, loops, loopPolys, own)), // TASK 792: Roughing / Contour
-      ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearingSummary(pk, rec, state, loops, loopPolys, own))];
+    // TASK 817: the levels / clearing notes read the GENERATED paths of these very settings (a peek: the open operation's edits are generated on OK or by its Preview),
+    // so they show as opened and after a Preview of the current settings; the tabs' are read here (a light outline derivation)
+    const peek = { ctx: viewCtx(), request: false };
+    const note = [...steppedNoteItems(rec), ...levelsNoteItems(rec, levelsSummary(pk, rec, state, loops, loopPolys, own, peek)), // TASK 792: Roughing / Contour
+      ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearingSummary(pk, rec, state, loops, loopPolys, own, peek))];
     const d = e ? (contour ? e.rec.baseDepth : e.rec.cutDepth) : null;
     return { kind: parseKey(ref.key).kind, record: rec, note, hold, clearing: clearingAvailability(pk, rec, state, loops, loopPolys),
       levels: Boolean(e && hasLevels(e.rec)), partDepth: Number(d) > 0 ? Number(d) : null, // TASK 809: it (a Contour: its part) cuts a part's levels; TASK 810: the part's depth
@@ -864,6 +913,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null), // a shape's record in its first operation (else a fresh one)
     // TASK S2: the active operation and its Add shapes mode; the facts and the shapes' words the card shows
     activeOp, openOp, closeOp, syncActive,
+    setPreview: (p) => { preview = p; refreshLook(); }, // TASK 817: the open operation's Preview ({ sigs: Map(membership id -> signature) }, or null)
+    pathsContext: () => viewCtx(), // TASK 817: this view's reading pass (the stage's Preview asks for the open operation's paths in it)
+    openSignatures: () => [...openSigs.values()].filter(Boolean), // TASK 817: the open operation's paths as it was opened (kept while it is open)
     factsOf, shapeLabel,
     hoverKey: (key) => { hoverPt = null; setHover(key ? parseKey(key) : null); }, // TASK S2: the card's shape row under the pointer shows its shape on the canvas
     startBoundaryPick({ onPick, onRefuse = null, onEnd = () => {} }) { // TASK 810: see boundaryPick above

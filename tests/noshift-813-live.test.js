@@ -11,6 +11,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { probe } from './helpers/tooltip-live.js';
+import { previewLive } from './helpers/prepare-open-live.js'; // TASK 817: the open operation's clearing note shows after its Preview (paths generated in the background)
 
 const EVIDENCE_DIR = path.resolve('.evidence/813');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -138,12 +139,14 @@ async function phase() {
   assert.strictEqual(await evalJs(`document.querySelectorAll('.cut-note div').length`), 0, `${device}: Freehand: no note`);
   const noteBox0 = await evalJs(`(() => { const r = document.querySelector('.cut-note').getBoundingClientRect(); return [r.width, r.height]; })()`);
   assert.ok(noteBox0[1] > 30, `${device}: the note area is there with no note: ${noteBox0}`);
-  await noShift('Pocket: Clearing Spiral (the note appears)', () => pickClearing('linked'));
+  // TASK 817: the clearing note reads the open operation's generated paths: it appears with the Preview of the card's settings (made in the background)
+  const preview = () => previewLive({ clickEl, waitFor }, `${device}: the Preview`);
+  await noShift('Pocket: Clearing Spiral (the note appears)', async () => { await pickClearing('linked'); await preview(); });
   assert.ok(await evalJs(`document.querySelectorAll('.cut-note div').length`) >= 2, `${device}: Spiral: the note lines show`);
   assert.deepStrictEqual((await rowsOf()).filter((r) => /^(stepover|loop|finishAllowance|rasterAngle)/.test(r)), ['stepover', 'finishAllowance', 'loop', 'rasterAngle:off'], `${device}: Spiral: the pattern rows are live, the Raster angle greyed`);
   await shot('pocket-spiral.png', '#prepare-panel .cut-card');
   const loopNoteBefore = await evalJs(`document.querySelector('.cut-note').textContent`);
-  await noShift('Pocket: Loop on (the note changes)', () => clickEl('.cut-loop'));
+  await noShift('Pocket: Loop on (the note changes)', async () => { await clickEl('.cut-loop'); await preview(); });
   assert.notStrictEqual(await evalJs(`document.querySelector('.cut-note').textContent`), loopNoteBefore, `${device}: Loop changed the note`);
   await noShift('Pocket: Loop off', () => clickEl('.cut-loop'));
   await noShift('Pocket: Clearing Raster', () => pickClearing('raster'));

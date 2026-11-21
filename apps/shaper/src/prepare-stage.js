@@ -7,11 +7,12 @@ import { capturePrepare, applyPrepare, comparablePrepare } from './shaper-doc.js
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import SettingsManager, { isPrecisionKey } from '#core/settings-manager.js';
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
-import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeTabsAt, followDesign } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
+import { cutPlanNotice, stockKeyOf, keyOf, typeRefusal, newOperation, setStock, changeOpType, addShapeToOp, removeShapeFromOp, duplicateOperation, deleteOperation, setShapeTabsAt, followDesign, planMemberItems, pathsSigOf, pathsInputOf, settleWaiting, orderWaiting } from './cut-plan.js'; // TASK 810: stockKeyOf (the Boundary's Stock choice); TASK 761: the reconciliation's notice; TASK S2: the operation writers
 import { describeOperations } from './operations.js'; // TASK 743 / S1: the stored operations, described
 import { reorderOps, setOpsOn, opById, regionOf, CONTOUR_TYPE } from './operations-store.js'; // TASK S1: the list order is the stored operations' order; TASK 798: the ticks
 import { cutTypeById, STOCK_TYPE_ID } from './shaper.js'; // TASK S2: a type's name; the Stock
 import { createOpList } from './op-list.js';                   // TASK 743: Prepare's operations list
+import { hold as holdPaths, retain as retainPaths, request as requestPaths, onChange as onPathsChange, isGenerating, hasResult } from './op-paths.js'; // TASK 817: the paths generated in the background
 
 /**
  * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, opsEl, ensureSketch, onViewChange })
@@ -59,7 +60,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       // TASK S2 (owner turn 2713): a Contour's own Wall side matters on a shape whose model does not say it (no slope, no levels: a drawn shape)
       const wallSideFree = op.type === CONTOUR_TYPE && (!n || keys.some((k) => { const r = regionOf(k) || {}; return !r.slope && !(Array.isArray(r.levels) && r.levels.length); }));
       const depthFromModel = !(Number(op.settings.cutDepth) > 0); // TASK S2: the Depth from the model ('model' / unset) or a typed value (a Roughing's / Contour's Bottom)
-      return { mode: 'op', ...f, note: [...lineItems, ...f.note], boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, opId: op.id, wallSideFree, depthFromModel,
+      return { mode: 'op', ...f, note: [...lineItems, ...f.note], boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, opId: op.id, wallSideFree, depthFromModel, preview: previewState(),
         title: `${typeName(op.type)} ${numberOf(ops, op.id)} \u00b7 ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes`}`,
         shapes: keys.map((key) => ({ key, label: pv.shapeLabel(key) })) };
     }
@@ -71,8 +72,46 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     cutPanel.update(cardModel(opsNow));
     opList.refresh();
     opList.reveal(); // TASK S2 (owner turn 2718): the first highlighted row in view (the list open), never opened
+    keepWanted();
+    spinLater(opsNow);
     opsNow = null;
   };
+  // TASK 817: the plan's paths now (every membership's signature, the open operation's as opened and its Preview's): any other job still queued is superseded (dropped)
+  function keepWanted() {
+    const pv = prepareView, st = sketchState();
+    if (!pv || !st) return;
+    const ctx = pv.pathsContext(), sigs = new Set();
+    for (const it of planMemberItems()) { const s = pathsSigOf(it.planKey, it.rec, ctx); if (s) sigs.add(s); }
+    for (const s of pv.openSignatures()) sigs.add(s);
+    if (session && session.preview) for (const s of session.preview.sigs.values()) sigs.add(s);
+    retainPaths(sigs);
+  }
+  // TASK 817 (brief item 6): a row spins only once its operation has been generating for SPIN_AFTER_MS (a quick derivation finishes before: no flicker). `pendingSince`:
+  // operation id -> when it was first seen generating; the list is refreshed when the first of them reaches the delay
+  const SPIN_AFTER_MS = 150;
+  const pendingSince = new Map();
+  let spinTimer = null;
+  function spinLater(ops) {
+    const now = Date.now(), seen = new Set();
+    for (const op of ops) if (op.pending && !(session && session.opId === op.id)) { seen.add(op.id); if (!pendingSince.has(op.id)) pendingSince.set(op.id, now); }
+    for (const id of [...pendingSince.keys()]) if (!seen.has(id)) pendingSince.delete(id);
+    const waits = [...pendingSince.values()].map((t) => t + SPIN_AFTER_MS - now).filter((ms) => ms > 0);
+    clearTimeout(spinTimer); spinTimer = null;
+    if (waits.length) spinTimer = setTimeout(() => { spinTimer = null; opList.refresh(); }, Math.min(...waits) + 5);
+  }
+  const isSpinning = (op) => Boolean(op.pending) && pendingSince.has(op.id) && Date.now() - pendingSince.get(op.id) >= SPIN_AFTER_MS;
+  // TASK 817: a result that arrived from the worker: what waited for it (the list order), then the views (one repaint for a burst of answers)
+  let repaintQueued = false;
+  onPathsChange(() => {
+    if (repaintQueued) return;
+    repaintQueued = true;
+    setTimeout(() => {
+      repaintQueued = false;
+      const st = sketchState();
+      if (st && orderWaiting()) settleWaiting(st);
+      if (prepareView && getMode() === 'prepare') { prepareView.refreshLook(); refreshCutPanel(); }
+    }, 0);
+  });
   // TASK 724: the card's notes are text built through the one length formatter when the card is updated: a change of what that formatter reads (the display
   // precision, TASK 775: the DOCUMENT UNIT, and a key-less change: settings loaded / reset / arriving from another device) rebuilds the card with its notes and
   // the operations list (refreshCutPanel refreshes both), exactly when the card's fields re-label (the stage lives as long as the page)
@@ -96,10 +135,13 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // TASK S2: the EDIT SESSION of the open operation: the state before it is kept (`pre`); its first change takes the undo point of that state (the same pre-edit
   // snapshot as cutEdit: changed()), its changes then go to the store with no history (they preview live); OK keeps the undo point (dropped when nothing changed in
   // the end), Cancel puts the state back and drops it. Opening and cancelling with no change touch no history (Redo is kept).
-  let session = null; // { opId, pre (capturePrepare), before (comparable), n (the history length after its undo point; null before its first change) }
+  let session = null; // { opId, pre (capturePrepare), before (comparable), n (the history length after its undo point; null before its first change), preview (TASK 817) }
+  // TASK 817 (owner turns 2745-2746): while an operation is OPEN its edits are not generated (no new paths until OK; the Preview asks for them): its requests are
+  // held (op-paths.js hold: set when it opens, openSession); every other operation's paths are generated as ever
+  const setSession = (s) => { session = s; if (!s) holdPaths(null); };
   function beginSession() {
     const pre = capturePrepare();
-    session = { opId: null, pre, before: comparablePrepare(pre), n: null };
+    setSession({ opId: null, pre, before: comparablePrepare(pre), n: null, preview: null });
   }
   function changed() { // before a change of the session: its undo point, once
     const st = sketchState();
@@ -112,7 +154,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   function duplicateAndOpen(opId) { commitSession(); const op = opById(opId); if (!op || !prepareView) return; beginSession(); changed(); const copy = duplicateOperation(op, sketchState()); rowId = copy.id; openSession(copy.id); }
   // the list's Edit: open the operation (OK on another open one first); nothing when it is the open one
   function openForEdit(opId) { if (!prepareView || (session && session.opId === opId)) return; commitSession(); if (!opById(opId)) return; beginSession(); openSession(opId); }
-  function openSession(opId) { session.opId = opId; line = null; prepareView.openOp(opId); prepareView.refreshLook(); refreshCutPanel(); }
+  function openSession(opId) { session.opId = opId; session.preview = null; holdPaths(opId); line = null; prepareView.openOp(opId); prepareView.refreshLook(); refreshCutPanel(); }
   function sessionEdit(apply) {
     if (!session || !prepareView) return;
     line = null;
@@ -124,8 +166,9 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   function endSession(keep) {
     if (!session) return;
     const st = sketchState(), s0 = session;
-    session = null;
+    setSession(null); // TASK 817: OK asks for its paths (the refresh below reads them: generated in the background); the order that waited on them is settled when they are there
     if (!keep) applyPrepare(s0.pre);
+    else if (st && orderWaiting()) settleWaiting(st); // (the in-process port of the node tests answers at once: settled here, inside the session's undo step)
     if (st && s0.n !== null && (!keep || comparablePrepare(capturePrepare()) === s0.before)) st.discardSnapshotAt(s0.n);
     line = null;
     if (prepareView) { prepareView.closeOp(); prepareView.setSelection([]); prepareView.refreshLook(); } // the card closes
@@ -133,6 +176,29 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   }
   const commitSession = () => endSession(true);
   const cancelSession = () => endSession(false);
+  // TASK 817 addendum (owner turns 2747-2748): PREVIEW the open operation: its paths with the card's settings NOW, generated in the background like OK's (the same
+  // job: what OK then makes is this very result), drawn on the canvas; a later change in the card fades them (stale, prepare-view.js openLookOf) and the button is
+  // "Preview" again; Cancel / OK drop it. Never exported, never in Undo (it is only a generated result, filed by its signature).
+  function previewSession() {
+    const pv = prepareView, op = session && pv ? pv.activeOp() : null;
+    if (!op) return;
+    const items = planMemberItems().filter((it) => it.opId === op.id).map((it) => ({ it, input: pathsInputOf(it.planKey, it.rec) })).filter((x) => x.input);
+    const sigs = requestPaths(pv.pathsContext(), items.map((x) => x.input));
+    session.preview = { sigs: new Map(items.map((x, i) => [x.it.id, sigs[i]])) };
+    pv.setPreview(session.preview);
+    refreshCutPanel();
+  }
+  // the Preview button's state: idle (none), busy (generating), fresh (drawn: the card's settings now), stale (changed since: drawn faded)
+  function previewState() {
+    const p = session && session.preview, pv = prepareView;
+    if (!p || !pv) return 'idle';
+    const sigs = [...p.sigs.values()];
+    if (sigs.some((s) => isGenerating(s))) return 'busy';
+    const ctx = pv.pathsContext();
+    const now = planMemberItems().filter((it) => it.opId === session.opId);
+    const fresh = now.length === p.sigs.size && now.every((it) => p.sigs.get(it.id) === pathsSigOf(it.planKey, it.rec, ctx)) && sigs.every((s) => hasResult(s));
+    return fresh ? 'fresh' : 'stale';
+  }
   // a type picked in the card: on the OPEN operation it changes its type (refused with its line when one of its shapes cannot take it); with shapes selected it is the
   // QUICK FLOW (4.4): ALWAYS a NEW operation holding the picked shapes that can take the type, created OPEN (Cancel removes it); none can: nothing is created, the
   // line says why; some cannot: they are left out and the line says so. The Stock keeps the one-Stock move (task 472: the last closed shape picked).
@@ -168,6 +234,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onDuplicate: () => { if (session) duplicateAndOpen(session.opId); },
     onOk: () => commitSession(),
     onCancel: () => cancelSession(),
+    onPreview: () => { if (previewState() !== 'busy') previewSession(); }, // TASK 817
     onHoverShape: (key) => { if (prepareView) prepareView.hoverKey(key); },
     // TASK 810: Roughing's boundary Pick: the next click on a closed shape in Prepare sets the open Roughing's `boundaryShape` (TASK S2: an edit of its session); pressed
     // again, a click on nothing, or Esc: cancelled, nothing changes; a click on an open line: the line says why
@@ -196,6 +263,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     isPicked,
     isSelected: (op) => op.id === rowId,
     isOpen: (op) => Boolean(session && session.opId === op.id),
+    isGenerating: (op) => isSpinning(op), // TASK 817: its paths are generating (shown after SPIN_AFTER_MS)
     // TASK S2: the bin DELETES the operation (its shapes stay in their other operations), ONE undo step (cutEdit: Undo brings it back in its place); the open operation's
     // bin = Cancel, then the delete (an operation the session created is gone with the Cancel). The sketch is never touched.
     onDelete: (op) => {
@@ -218,8 +286,8 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (restored) followDesign(restored.state); // TASK 832: the restored step's operations on its sketch (a step saved before they were followed)
     // TASK S2: Undo while an operation is open: with changes, it undoes the session's own undo point (= Cancel: the operation as opened, closed); with none, it is the
     // plain Undo of the step before, and the operation stays open (its card shows the restored values; gone: closed)
-    if (session && session.n !== null) { session = null; line = null; if (prepareView) prepareView.closeOp(); }
-    else if (session && !opById(session.opId)) { session = null; if (prepareView) prepareView.closeOp(); }
+    if (session && session.n !== null) { setSession(null); line = null; if (prepareView) prepareView.closeOp(); }
+    else if (session && !opById(session.opId)) { setSession(null); if (prepareView) prepareView.closeOp(); }
     const designController = getController();
     if (getMode() !== 'prepare' || !designController) return;
     if (prepareView && geomSig(designController.state) === prepareSig) { prepareView.syncActive(); prepareView.refreshLook(); refreshCutPanel(); }
@@ -246,7 +314,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     if (s.view) prepareView.setView(s.view);
     // TASK S2: the operation that was open is open again (its card, as 766 keeps the open card), with a session of its own (the restored document is the one
     // Cancel returns to); gone from the restored document: only the selection comes back
-    if (s.open && opById(s.open)) { session = null; beginSession(); openSession(s.open); }
+    if (s.open && opById(s.open)) { setSession(null); beginSession(); openSession(s.open); }
     else prepareView.setSelection(s.selection);
   }
   const captureSession = () => (prepareView
@@ -321,7 +389,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       // applyShaperDoc): the same one-time notice, the next time Prepare mounts (now, when Prepare shows)
       const notes = [restore && restore.newer ? NEWER_VERSION_NOTICE : null, restore && restore.removedVcarves > 0 ? removedVcarvesNotice(restore.removedVcarves) : null, cutPlanNotice(restore && restore.cutPlan)].filter(Boolean);
       pendingRemovedNotice = notes.length ? notes.join(' · ') : null;
-      session = null; line = null; // TASK S2: another document: no operation stays open (its undo point went with the history of the document left)
+      setSession(null); line = null; // TASK S2: another document: no operation stays open (its undo point went with the history of the document left)
       if (getMode() === 'prepare') mountPrepare();
       else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
     },
@@ -331,6 +399,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     // TASK S2: the edit session (the list's Edit, OK, Cancel; the test kit drives the same calls the buttons make)
     edit: openForEdit,
     ok: () => commitSession(), cancel: () => cancelSession(), openId: () => (session ? session.opId : null),
+    preview: () => previewSession(), previewState, // TASK 817: the open operation's Preview (the test kit presses what the button presses)
     notice: prepareNotice, // TASK 790: Open STL's notice (stl-import.js)
   };
 }

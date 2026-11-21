@@ -122,7 +122,7 @@ for (const t of CUT_TYPES) ok(seen.has(choiceId('cutType', t.id)), `the cut type
   panel.update({ mode: 'op', kind: 'loop', title: 'Contour 1 · 1 shape', shapes: [{ key: 'loop:a', label: 'Shape 40 × 40 mm' }], wallSideFree: true, boundary: { hasStock: false, picking: false }, record: { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose' } });
   press(host.querySelector('.cut-tab[data-tab="geometry"]'));
   const els = [...host.querySelectorAll('[data-hint]')].filter(visible);
-  for (const id of ['opShapes', 'opRemoveShape', 'opDuplicate', 'opOk', 'opCancel', 'wallSide', 'wallSide:inside', 'wallSide:outside']) {
+  for (const id of ['opShapes', 'opRemoveShape', 'opDuplicate', 'opPreview', 'opOk', 'opCancel', 'wallSide', 'wallSide:inside', 'wallSide:outside']) { // TASK 817: + Preview
     const el = els.find((e) => e.dataset.hint === id);
     ok(el, `the open operation's card shows ${id}`);
     eq(hintFor(el), hintText(id), `${id}: its tooltip is its hint`);

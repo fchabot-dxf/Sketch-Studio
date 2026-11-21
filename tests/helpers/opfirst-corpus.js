@@ -55,12 +55,12 @@ const GUIDE_DEPTH_WORDS = new Set([
 // TASK 822: tabs are kept off the stretches where a gap strip does not fit (#core/hold-part tabLayout `fit`) instead of refusing the whole hold: the cases whose
 // Outside tabs were REFUSED ('strip': a tab of the even spread landed where its strip did not fit) and are now PLACED (the drawing tests/fixtures/report/
 // midpoint-move.json, its 3077.8 mm outline: 21 tabs). Their file, preview, Paths, 3D and Operations row change on purpose; every other case is unchanged
-const TABS_PLACED_822 = new Set(['bezier-loops-761-node__0028__64ea064e', 'leadin-775-node__0071__64ea064e']);
+export const TABS_PLACED_822 = new Set(['bezier-loops-761-node__0028__64ea064e', 'leadin-775-node__0071__64ea064e']);
 // TASK 836 (owner ruling 2026-11-20: lead-ins removed from the app): REBASED BY NAME: the 42 cases whose stored sidecar holds an On line record with a lead-in on
 // (exactly those: checked below). Their lead-in fields are dropped on load (apps/shaper/src/shaper-doc.js dropLeadIn), so the On line outline is cut as the plain
 // closed loop: their download, preview, Paths view, 3D items and Operations row change on purpose (3 of them, whose lead-in was refused and so already cut closed:
 // only their 3D items' lead-in data and their Operations row's "refused" words); the selection list (f) is unchanged. Every other case stays byte-identical.
-const LEAD_IN_REMOVED_836 = new Set([
+export const LEAD_IN_REMOVED_836 = new Set([
   'cam-paths-787-node__0012__4cee22ef', 'cam-paths-787-node__0013__901ccb52', 'cam-paths-787-node__0014__88ba5db9', 'cam-paths-787-node__0015__e0016b8e',
   'cam-paths-787-node__0016__3e27a71b', 'cam-paths-787-node__0017__fe991460', 'cam-paths-787-node__0018__951f046e', 'leadin-775-node__0173__826b35f3',
   'leadin-775-node__0174__123b3f43', 'leadin-775-node__0175__071f7735', 'leadin-775-node__0176__ea330ef5', 'leadin-775-node__0177__bc97e118',

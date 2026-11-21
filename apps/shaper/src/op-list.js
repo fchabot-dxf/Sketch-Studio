@@ -41,10 +41,11 @@ const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their l
  *   isPicked(op)   TASK S2: whether one of its shapes is selected (the row is highlighted)
  *   isSelected(op) TASK S2: whether it is the selected row (its actions show)
  *   isOpen(op)     TASK S2: whether it is the operation open in the card
+ *   isGenerating(op) TASK 817: whether its paths are being generated (its row spins: a ring over its number, in the number's own box, so nothing moves)
  *   onEdit(op) / onDuplicate(op) / onDelete(op)   TASK S2: the selected row's actions (TASK 745: the delete)
  *   onTick(ids, on) TASK 798: a row's or a heading's checkbox (the operation ids, ticked or not)
  */
-export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, isSelected = () => false, isOpen = () => false, onEdit = () => {}, onDuplicate = () => {}, onDelete = () => {}, onTick = () => {} }) {
+export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, isSelected = () => false, isOpen = () => false, isGenerating = () => false, onEdit = () => {}, onDuplicate = () => {}, onDelete = () => {}, onTick = () => {} }) {
   if (!hostEl) return { refresh() {}, reveal() {}, inspect: () => null, inspectActions: () => null, inspectTicks: () => null };
   const calls = { onEdit, onDuplicate, onDelete };
   const doc = hostEl.ownerDocument;
@@ -194,6 +195,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       });
       const pick = doc.createElement('button'); pick.type = 'button'; pick.className = 'ops-pick'; pick.title = `${i + 1}. ${op.label}`;
       const num = doc.createElement('span'); num.className = 'ops-num'; num.textContent = String(i + 1);
+      if (isGenerating(op)) { row.classList.add('is-generating'); const spin = doc.createElement('span'); spin.className = 'ops-spin'; spin.setAttribute('role', 'img'); spin.setAttribute('aria-label', `Operation ${i + 1}: generating its paths`); num.append(spin); } // TASK 817
       const text = doc.createElement('span'); text.className = 'ops-text';
       const name = doc.createElement('span'); name.className = 'ops-name'; name.textContent = op.rowText;
       const sub = doc.createElement('span'); sub.className = 'ops-sub'; sub.textContent = [op.regions, op.detail].filter(Boolean).join(' · ');

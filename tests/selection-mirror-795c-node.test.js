@@ -6,7 +6,7 @@ import { open } from './helpers/node-app.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { FUSION_ACTIONS, mountFusionPrepareBar } from '../apps/shaper/src/fusion-bridge.js';
 import { getSelections, setSelections } from '../apps/shaper/src/selection-list.js';
-import { clearSelections } from '../apps/shaper/src/selection-edit.js';
+import { clearSelections, regionSig, payloadSig } from '../apps/shaper/src/selection-edit.js';
 import { getStock, setStock } from '../apps/shaper/src/stock.js';
 import { storeOps, setOpSettings, opById, memberOf, CONTOUR_TYPE } from '../apps/shaper/src/operations-store.js';
 import { getCutRecord, planEntries } from '../apps/shaper/src/cut-plan.js';
@@ -264,6 +264,28 @@ try {
   eq(st.shapes.length, 0, 'empty same-id selection_data clears geometry');
   ok(opById(outsideOpId) && opById(outsideOpId).geometry.length === 0, 'empty selection_data keeps empty operations');
   eq(sent, [], 'empty selection_data from add-in does not echo clear_selection back');
+  // TASK 795d: a selection entry keeps a FIXED-SIZE identity of each region and of the payload (the 795c rule, canonical JSON minus
+  // id / label, compared as a digest), never the geometry itself: an STL relief's entry was 11.8 MB (sigs 5.9 MB + payloadSig 4.9 MB),
+  // JSON-cloned by every getSelections() (the document buffer's poll, the undo snapshots) = main-thread long tasks during op-path generation.
+  const ring = Array.from({ length: 4000 }, (_, k) => {
+    const t0 = (2 * Math.PI * k) / 4000, t1 = (2 * Math.PI * (k + 1)) / 4000;
+    return { type: 'line', x1: 50 + 40 * Math.cos(t0), y1: 50 + 40 * Math.sin(t0), x2: 50 + 40 * Math.cos(t1), y2: 50 + 40 * Math.sin(t1) };
+  });
+  const bigRegion = { id: 'reg_big', label: 'Disc', cutType: 'pocket', depthMm: 5, through: false, outer: { closed: true, segments: ring }, holes: [] };
+  const bigPayload = { ...mkPayload(), selectionId: 'sel-795d-big', regions: [bigRegion] };
+  imp(bigPayload);
+  const bigEntry = getSelections().find((e) => e.id === 'sel-795d-big');
+  const idBytes = Object.values(bigEntry.sigs).join('').length + bigEntry.payloadSig.length, payloadBytes = JSON.stringify(bigPayload).length;
+  ok(idBytes < 200, `795d: the identities (sigs + payloadSig) of a ${payloadBytes}-byte payload take ${idBytes} characters in its entry (fixed size, not its geometry)`);
+  eq(regionSig({ ...bigRegion, id: 'other', label: 'Renamed' }), regionSig(bigRegion), "795d: id / label are not part of a region's identity");
+  ok(regionSig({ ...bigRegion, depthMm: 6 }) !== regionSig(bigRegion), '795d: any other difference is (a depth)');
+  ok(regionSig({ ...bigRegion, outer: { closed: true, segments: ring.map((sg, k) => (k === 1234 ? { ...sg, x2: sg.x2 + 0.001 } : sg)) } }) !== regionSig(bigRegion), '795d: any other difference is (one coordinate)');
+  eq(payloadSig({ ...bigPayload, action: 'x' }), payloadSig(bigPayload), '795d: the payload identity ignores action');
+  ok(payloadSig({ ...bigPayload, warnings: ['w'] }) !== payloadSig(bigPayload), '795d: and sees any other difference');
+  sent.length = 0;
+  const shapesBefore = st.shapes.length;
+  imp(bigPayload);
+  eq(st.shapes.length, shapesBefore, '795d: the same payload again is still a no-op');
 } finally {
   bar.destroy();
   await app.close();

@@ -25,11 +25,11 @@ import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js';
   assert(near(Math.min(...xs), 5) && near(Math.max(...xs), 15), 'circle x-bounds [5,15]');
   assert(near(Math.min(...ys), 5) && near(Math.max(...ys), 15), 'circle y-bounds [5,15]');
 
-  // arc -> delegates to the EXISTING sampler. In Node (no DOM) sampleArc degrades to [p1, p3]; the browser samples
-  // the true curve (that path is exercised by the live end-to-end verify, not here). Assert the degradation shape.
+  // arc -> delegates to the EXISTING sampler. In Node (no DOM) sampleArc degrades to the arc's two ends (start, end; TASK 847: it returned
+  // [centre, end] before); the browser samples the true curve (that path is exercised by the live end-to-end verify, not here).
   const arc = coreShapeToPolyline({ type: 'arc', joints: ['ac', 'as', 'ae'], subType: 'CENTER' }, joints);
   assert(arc.length === 2, 'arc -> 2 points in Node (DOM-less sampleArc degradation, no 2nd sampler)');
-  assert(JSON.stringify(arc) === '[[0,0],[0,10]]', 'arc Node endpoints = [center, end] (sampleArc p1,p3)');
+  assert(JSON.stringify(arc) === '[[10,0],[0,10]]', 'arc Node endpoints = [start, end] (sampleArc p2, p3)');
 
   // guards: missing joint / unknown type / bad input -> [].
   assert(coreShapeToPolyline({ type: 'line', joints: ['a', 'zzz'] }, joints).length === 0, 'missing joint -> []');

@@ -155,7 +155,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     eq(h.menu().filter((id) => id.startsWith('stepped')), [], 'a vertical pocket offers no stepped type');
     eq(CUT_TYPES.filter((t) => t.slopeKind).length, 0, 'no stepped type is declared (TASK 792: Roughing replaced them)');
     h.pick('pocket');
-    eq(h.rows(), ['cutDepth', 'clearing', 'cutOffset', 'toolDia', 'cutterShape'], 'a plain Pocket: no Adaptive stepping, Step depth or Resolution row (TASK 745: its Clearing row, Freehand)');
+    eq(h.rows(), ['cutDepth', 'clearing', 'cutOffset', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, 'a plain Pocket: no Adaptive stepping, Step depth or Resolution row (TASK 745: its Clearing row, Freehand)');
 
     // the R3 floor fillet (03), Stepped pocket: OFF by default = 716
     V2_PLAN.clear();
@@ -165,7 +165,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     h.pick('roughing');
     const r0 = V2_PLAN.get(pk);
     eq([r0.stepDepth, r0.adaptiveSteps, r0.stepDeviation], [1, false, 0.25], 'a new stepped record: step 1 mm, Adaptive stepping OFF, resolution Medium (0.25 mm) ready');
-    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; OFF: the checkbox, then the Step depth row (no Resolution row); TASK 792: Roughing\'s allowance and Contour rows');
+    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDepth', 'cutOffset', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, 'TASK 810: + the Heights rows; OFF: the checkbox, then the Step depth row (no Resolution row); TASK 792: Roughing\'s allowance and Contour rows');
     eq([h.q('.cut-adaptive').checked, h.q('.cut-row[data-row="adaptiveSteps"] .cut-check').textContent.trim()], [false, 'Adaptive stepping'], 'the checkbox reads "Adaptive stepping", unchecked');
     eq([h.q('.cut-row[data-row="stepDeviation"]').dataset.off !== undefined, h.q('.cut-row[data-row="stepDepth"]').dataset.off !== undefined], [true, false], 'TASK 813: the Resolution row stays in place, greyed (inert), while Adaptive stepping is off; the Step depth row is live');
     eq(h.note(), ['Pocket 1 (8mm): 4 steps, 5 to 8 mm · outlines 0.172–2.236 mm apart'], 'OFF: the 716 note');
@@ -183,7 +183,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     const hist = app.state.history.length;
     h.check(true);
     eq([V2_PLAN.get(pk).adaptiveSteps, lastAdaptiveSteps(), app.state.history.length], [true, true, hist + 1], 'checked: stored on the record, remembered, ONE undo step');
-    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDeviation', 'cutOffset', 'toolDia', 'cutterShape'], 'TASK 810: + the Heights rows; ON: the Resolution row in place of the Step depth row');
+    eq(h.rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'adaptiveSteps', 'stepDeviation', 'cutOffset', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, 'TASK 810: + the Heights rows; ON: the Resolution row in place of the Step depth row');
     eq([h.q('.cut-row[data-row="stepDeviation"] .cut-field-label').textContent, h.q('.cut-step-deviation').value, h.presets('stepDeviation'), h.presets('stepDepth').length], ['Resolution', '0.25', ['Coarse', 'Medium*', 'Fine'], 4], 'Resolution 0.25 mm, presets Coarse / Medium (active) / Fine; the Step depth row stays in place, greyed (TASK 813)');
     const medium = depthsOf(adaptive(slopeOf('03-pocket-floor-fillet', 'pocket'), 'pocket', 0.25, 8));
     const noteMedium = h.note();

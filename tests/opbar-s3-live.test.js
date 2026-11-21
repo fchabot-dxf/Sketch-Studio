@@ -121,7 +121,7 @@ try {
       return { dir: f.dataset.dir, top: r.top, stripBottom: strip.bottom, left: r.left, width: Math.round(r.width), height: Math.round(r.height), btns, opsTop: ops.top, opsLeft: ops.left,
         groups: [...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section + ':' + g.querySelector('.sk-ribbon-group-label').textContent) }; })()`);
     console.log(`${D} toolbar: ${JSON.stringify(bar)} (Design's ribbon top, height: ${designRibbon})`);
-    assert.deepStrictEqual(bar.groups, ['operations:Operations', 'recalculate:Recalculate'], D + ': the operation types, then Recalculate; named as Design\'s sections are');
+    assert.deepStrictEqual(bar.groups, ['operations:Operations', 'recalculate:Recalculate', 'tools:Tools'] /* TASK 842: then the Tools section */, D + ': the operation types, then Recalculate (TASK 842: then Tools); named as Design\'s sections are');
     const ids = bar.btns.map((b) => b[0]);
     assert.deepStrictEqual(ids.filter((id) => id.startsWith('op-type-')), TYPES.map((t) => `op-type-${t}`).filter((id) => ids.includes(id)), D + ': the types in the declaration\'s order');
     assert.ok(ids.includes('op-recalculate'), D + ': Recalculate shown');

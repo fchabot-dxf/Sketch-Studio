@@ -13,7 +13,7 @@
 //   TASK 738: the site's copy of packages/ui/analytics.js carries the build time as BUILD (stampBuild: the analytics `version`); every other file is a plain copy
 //   _redirects       this site's Cloudflare Pages rules (siteRedirects below: the old /apps/<app>/ addresses forward to the root)
 //   TASK 829: the site's identity, generated from the app registry (scripts/site-identity.cjs): favicon.svg / .ico, apple-touch-icon.png, icon-192 / 512.png,
-//                    manifest.webmanifest, og-image.png, robots.txt, sitemap.xml; and the built index.html gets its <head> tags (description, Open Graph, canonical,
+//                    manifest.webmanifest, og-image.png (TASK 851: or the app's declared share image, registry ogImage), robots.txt, sitemap.xml; and the built index.html gets its <head> tags (description, Open Graph, canonical,
 //                    JSON-LD, icon links) and a small intro. Search engines: the preview deployments (*.pages.dev) are not indexed by Pages itself (see NOTE below).
 //   404.html         NOT_FOUND_PAGE below: an unknown address stays a 404 (without it Pages answers every unknown path with the app's index.html)
 // No source file changes: the page's own references (src/main.js, styles/main.css, downloads/...) are relative to the app folder, which is now the

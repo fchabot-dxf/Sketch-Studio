@@ -6,9 +6,11 @@
 //   apple-touch-icon.png       180 px, on the tile colour (iOS rounds / masks it itself)
 //   icon-192.png icon-512.png  rendered from that SVG (the manifest's icons)
 //   manifest.webmanifest       name, short_name, icons, theme_color and background_color = the tile colour
-//   og-image.png               the 1200 x 630 share card: the icon, the app name, the tagline, stacked in the centred 630 square
-//   robots.txt, sitemap.xml    allow all + Sitemap line; the site's pages
-// and the page's <head> block + the intro (an <h1> and the description) that identityHead / identityIntro put into the BUILT index.html:
+//   og-image.png               the 1200 x 630 share card: the icon, the app name, the tagline, stacked in the centred 630 square; NOT written for an app
+//                              that declares its own share image (TASK 851: registry ogImage { src, alt }, a 1200 x 630 PNG of the app folder, e.g. Sketch's
+//                              real screenshot apps/sketchstudio/assets/og-image.png): the tags then name that file (declaredOgImage checks it)
+//   robots.txt, sitemap.xml    allow all but the Pages Function routes (TASK 851: Disallow each top folder of functions/) + Sitemap line; the site's pages
+// and the page's <head> block + the intro (an <h1>, the description and a <noscript> line) that identityHead / identityIntro put into the BUILT index.html:
 //   <meta name="description">, Open Graph (title, description, image, url, type=website, site_name), twitter:card=summary_large_image, <link rel="canonical">,
 //   the JSON-LD SoftwareApplication, the favicon / apple-touch / manifest links and theme-color.
 // They are injected into the built page, not written in apps/<app>/index.html: the repo page is also served as is (development, tests) where these files
@@ -25,6 +27,8 @@ const ICON_SIZES = [192, 512];
 const ICO_SIZES = [16, 32, 48];
 const APPLE_SIZE = 180;
 const OG = { width: 1200, height: 630, bg: '#1F2023', alt: (name) => `${name}, part of ${SUITE_NAME}` };
+const OG_CARD = 'og-image.png'; // the generated share card's site path
+const FUNCTIONS_DIR = path.resolve(__dirname, '..', 'functions'); // the Pages Functions deployed with every site (build-site.cjs, top comment)
 // the files of an identity the built page LINKS (the closure of the built page reaches these; checkRootLayout does not count them as repo-page references)
 const LINKED = ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png', 'manifest.webmanifest'];
 
@@ -128,20 +132,49 @@ const manifestOf = (app) => ({
   icons: [...ICON_SIZES.map((s) => ({ src: `icon-${s}.png`, sizes: `${s}x${s}`, type: 'image/png', purpose: 'any' })), { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
 });
 
-const robotsOf = (host) => `User-agent: *\nAllow: /\n\nSitemap: https://${host}/sitemap.xml\n`;
+// TASK 851: the Pages Function routes are not pages: functions/<dir>/... answers /<dir>/... on every site (the Google sign-in /auth/google/{start|callback|
+// token|logout}, /api/shaper-upload). robots.txt disallows each top folder of functions/. A FILE at the top of functions/ (a route or middleware at the
+// site's top) is not handled: refused, not guessed.
+function functionRoutes(dir = FUNCTIONS_DIR) {
+  return fs.readdirSync(dir, { withFileTypes: true }).map((e) => {
+    if (!e.isDirectory()) throw new Error(`site-identity: functions/${e.name} is a file at the top of functions/; robots.txt only handles route folders`);
+    return `/${e.name}/`;
+  }).sort();
+}
+const robotsOf = (host, disallow = functionRoutes()) => `User-agent: *\nAllow: /\n${disallow.map((p) => `Disallow: ${p}\n`).join('')}\nSitemap: https://${host}/sitemap.xml\n`;
 const SITE_PAGES = ['/', '/about', '/privacy']; // the root page, the About page and the privacy page (Pages serves about.html at /about, privacy.html at /privacy)
 const sitemapOf = (host) => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${SITE_PAGES.map((p) => `  <url><loc>https://${host}${p}</loc></url>`).join('\n')}\n</urlset>\n`;
+
+// ---- the share image ----
+// TASK 851 (owner turn 3171): an app may declare its own share image in the registry, ogImage: { src, alt }: src is a file of its app folder (apps/<app>/<src>,
+// at <src> in its site: the root layout puts the app folder at the top), a 1200 x 630 PNG; alt says what it shows. Sketch's is a real screenshot of its start
+// screen. Without a declaration the generated card (OG_CARD) is the share image. -> the site path of the declared image (checked in the built site), or null.
+function declaredOgImage(app, out) {
+  const d = app.ogImage;
+  if (d == null) return null;
+  if (typeof d.src !== 'string' || !d.src || d.src.startsWith('/') || d.src.includes('\\') || d.src.split('/').includes('..')) throw new Error(`site-identity: the ${app.id} ogImage.src "${d.src}" must be a path inside the app folder (e.g. assets/og-image.png)`);
+  if (typeof d.alt !== 'string' || !d.alt) throw new Error(`site-identity: the ${app.id} ogImage has no alt text`);
+  const file = path.join(out, ...d.src.split('/'));
+  if (!fs.existsSync(file)) throw new Error(`site-identity: the ${app.id} share image ${d.src} does not exist in the built site (apps/${app.id}/${d.src})`);
+  const b = fs.readFileSync(file);
+  if (b.length < 24 || b.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error(`site-identity: the ${app.id} share image ${d.src} is not a PNG`);
+  const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+  if (w !== OG.width || h !== OG.height) throw new Error(`site-identity: the ${app.id} share image ${d.src} is ${w} x ${h}; a share image is ${OG.width} x ${OG.height}`);
+  return d.src;
+}
+const ogPathOf = (app) => (app.ogImage ? app.ogImage.src : OG_CARD);
+const ogAltOf = (app) => (app.ogImage ? app.ogImage.alt : OG.alt(app.name));
 
 // ---- what goes into the built page ----
 function jsonLd(app, host) {
   return {
     '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: appTitle(app.id), description: app.description,
     applicationCategory: 'DesignApplication', operatingSystem: 'Web browser', offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-    url: `https://${host}/`, image: `https://${host}/og-image.png`,
+    url: `https://${host}/`, image: `https://${host}/${ogPathOf(app)}`,
   };
 }
 function identityHead(app, host) {
-  const url = `https://${host}/`, image = `https://${host}/og-image.png`, title = esc(app.seoTitle), desc = esc(app.description);
+  const url = `https://${host}/`, image = `https://${host}/${ogPathOf(app)}`, title = esc(app.seoTitle), desc = esc(app.description);
   return [
     `<meta name="description" content="${desc}">`,
     `<link rel="canonical" href="${url}">`,
@@ -158,7 +191,7 @@ function identityHead(app, host) {
     `<meta property="og:image" content="${image}">`,
     `<meta property="og:image:width" content="${OG.width}">`,
     `<meta property="og:image:height" content="${OG.height}">`,
-    `<meta property="og:image:alt" content="${esc(OG.alt(app.name))}">`,
+    `<meta property="og:image:alt" content="${esc(ogAltOf(app))}">`,
     `<meta name="twitter:card" content="summary_large_image">`,
     `<meta name="twitter:title" content="${title}">`,
     `<meta name="twitter:description" content="${desc}">`,
@@ -168,8 +201,10 @@ function identityHead(app, host) {
 }
 // A small <h1> + the description, the first thing in <body>. It is OUT OF FLOW (position: fixed), so it moves nothing; the app removes it as it starts
 // (applyAppIdentity in app-registry.js, called at each app's boot). A crawler or a reader without JavaScript sees it.
+// TASK 851: + a <noscript> line (a browser with JavaScript off shows it under the description; with JavaScript on it is never shown).
+const noscriptLine = (app) => `${app.name} is a free web app: it runs in your browser, with nothing to install. Turn on JavaScript to use it.`;
 function identityIntro(app) {
-  return `<div id="${SEO_INTRO_ID}" style="position:fixed;left:0;top:0;right:0;padding:16px 20px;font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:#8B9099;pointer-events:none"><h1 style="margin:0 0 6px;font-size:20px;font-weight:700">${esc(app.seoTitle)}</h1><p style="margin:0">${esc(app.description)}</p></div>`;
+  return `<div id="${SEO_INTRO_ID}" style="position:fixed;left:0;top:0;right:0;padding:16px 20px;font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:#8B9099;pointer-events:none"><h1 style="margin:0 0 6px;font-size:20px;font-weight:700">${esc(app.seoTitle)}</h1><p style="margin:0">${esc(app.description)}</p><noscript><p style="margin:6px 0 0">${esc(noscriptLine(app))}</p></noscript></div>`;
 }
 function injectIdentity(html, app, host) {
   if (/<meta\s+name=["']description["']/i.test(html)) throw new Error(`site-identity: the ${app.id} page already has a meta description (it comes from the registry only)`);
@@ -191,7 +226,7 @@ function writeIdentity(appId, out, host) {
   files.push(put('apple-touch-icon.png', png(app.icon, APPLE_SIZE, { background: app.tile })));
   for (const s of ICON_SIZES) files.push(put(`icon-${s}.png`, png(app.icon, s)));
   files.push(put('manifest.webmanifest', JSON.stringify(manifestOf(app), null, 2) + '\n'));
-  files.push(put('og-image.png', png(ogCardSvg(app, host), OG.width)));
+  if (!declaredOgImage(app, out)) files.push(put(OG_CARD, png(ogCardSvg(app, host), OG.width))); // TASK 851: a declared share image replaces the card
   files.push(put('robots.txt', robotsOf(host)));
   files.push(put('sitemap.xml', sitemapOf(host)));
   const page = path.join(out, 'index.html');
@@ -199,4 +234,4 @@ function writeIdentity(appId, out, host) {
   return files;
 }
 
-module.exports = { resolvePathLength, pathLengthOf, writeIdentity, injectIdentity, identityHead, identityIntro, jsonLd, manifestOf, robotsOf, sitemapOf, ogCardSvg, OG_SQUARE, ico, registryApp, LINKED, OG, ICON_SIZES, ICO_SIZES, APPLE_SIZE, SITE_PAGES };
+module.exports = { resolvePathLength, pathLengthOf, writeIdentity, injectIdentity, identityHead, identityIntro, jsonLd, manifestOf, robotsOf, functionRoutes, sitemapOf, ogCardSvg, declaredOgImage, OG_SQUARE, ico, registryApp, LINKED, OG, ICON_SIZES, ICO_SIZES, APPLE_SIZE, SITE_PAGES };

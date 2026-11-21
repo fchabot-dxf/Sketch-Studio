@@ -53,7 +53,9 @@ async function run({ width, height }) {
   };
   const select = (payload) => evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(JSON.stringify(payload))})`);
   try {
-    await send('Page.addScriptToEvaluateOnNewDocument', { source: `if (new URLSearchParams(location.search).get('host') === 'fusion') { window.__sent = []; window.adsk = { fusionSendData(action, body) { window.__sent.push(JSON.parse(body)); } }; }` });
+    // window.__sent = what the selection list sends. TASK 799's live toolpaths sync ('toolpaths' / 'toolpaths_clear', debounced after every import / plan
+    // change, checked by fusion-toolpaths-799-*) is a separate channel: left out, so it can never land inside these exact-sends checks (795d: 1 run in 7 did).
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: `if (new URLSearchParams(location.search).get('host') === 'fusion') { window.__sent = []; window.adsk = { fusionSendData(action, body) { const m = JSON.parse(body); if (m.action !== 'toolpaths' && m.action !== 'toolpaths_clear') window.__sent.push(m); } }; }` });
     await navigate(url);
     await waitForApp('design-canvas');
     await waitFor(`!!document.getElementById('btn-fusion-add-selection') && !document.getElementById('view-prepare').hidden`, 'the Fusion Prepare bar');

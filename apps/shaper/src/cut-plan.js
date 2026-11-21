@@ -1010,6 +1010,8 @@ const cutsSig = (cuts, state) => cuts.map((c) => [c.kind, c.cutType, c.offsetSid
  * footprint: [{ key, cutType, cutDepth, footprints:[fp], shape, footprintsAt }], via deriveKeyFootprints / deriveCutFootprintAt
  * (the same derivation at another cutter half-width). Stale keys derive to nothing, as in the exporter. TASK 798: `opts` = planRecords' { ticked } (the 3D Review
  * shows the ticked operations); the hole ownership stays the whole plan's (planOwnedLoops), so a ticked cut is derived exactly as with everything ticked.
+ * TASK 801: each item also names its operation (`opId`), its membership (`member`: '<op id>|<geometry key>', planEntries' key) and its place among that membership's
+ * footprints (`ord`): the Export simulation carves it when the timeline passes its element (cut-timeline.js reliefSchedule). buildRelief reads none of them.
  */
 export function planReliefItems(state, opts) {
   const { loops, loopPolys } = loopsWithPolygons(state);
@@ -1017,7 +1019,7 @@ export function planReliefItems(state, opts) {
   const ctx = pathsCtx(state, { loops, loopPolys, owned }); // TASK 817: the generated paths (the Review waits until nothing is generating: main.js)
   const items = [];
 
-  for (const [key, stored] of planRecords(opts)) {
+  for (const { id: member, opId, planKey: key, rec: stored } of planMemberItems(opts)) { // TASK 801: the memberships (planRecords' order), so each item names its operation
     if (!stored || !stored.cutType || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
     const d = pathsOf(key, stored, ctx);
     if (!d) continue; // nothing to cut (TASK 817: or not generated yet)
@@ -1029,7 +1031,7 @@ export function planReliefItems(state, opts) {
     const atW = (w) => { if (!at.has(w)) { if (!own) own = deriveKeyFootprints(key, stored, state, loops, loopPolys, owned); at.set(w, deriveCutFootprintAt(own.cuts, own.rec, state, w)); } return at.get(w); };
     const geo = d.rec.levelsOp ? sigHash(cutsSig(d.cuts, state)) : cutsSig(d.cuts, state); // TASK 792: a Roughing / Contour hashes its geometry ONCE (254 contour passes re-stringified it per item); every other record's signature is the one before 792
     const recSig = d.rec.levelsOp ? sigHash(d.rec.levels ? { ...d.rec, levels: levelsSig(d.rec.levels) } : d.rec) : d.rec; // TASK 792: the same for its record (its part's sections by their own hash, made once per list)
-    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, recSig, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : fp.hold && fp.hold.depth != null ? fp.hold.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth; TASK 742: a held cut's pass / gap strip at its own
+    d.footprints.forEach((fp, i) => items.push({ key, opId, member, ord: i, sig: sigHash([i, recSig, geo]), cutType: fp.cutType, cutDepth: fp.terrace ? fp.terrace.depth : fp.hold && fp.hold.depth != null ? fp.hold.depth : d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) })); // TASK 714: a terrace at its own depth; TASK 742: a held cut's pass / gap strip at its own
   }
   return items;
 }

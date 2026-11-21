@@ -103,6 +103,8 @@ export function setOpsOn(ids, on) {
 }
 /** Replace an operation's settings. */
 export function setOpSettings(op, settings) { op.settings = { ...settings }; bump(); }
+/** Replace an operation's geometry refs array cleanly (bumps store version/index). */
+export function setOpGeometry(op, refs) { op.geometry = refs.map((r) => ({ ...r })); bump(); }
 /** TASK 822: set / clear (undefined) a membership's dragged tab centres (a NEW array: undo snapshots share the refs' values by reference). */
 export function setRefTabsAt(ref, tabsAt) {
   if (tabsAt === undefined) delete ref.tabsAt; else ref.tabsAt = [...tabsAt];

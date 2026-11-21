@@ -626,6 +626,7 @@ let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thick
 const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
 const toolTableWindow = createToolTableWindow(); // TASK 842: saved in the settings store; the cut card follows a change through its settings subscription (prepare-stage.js)
 let fusionToolpaths = null; // TASK 799: set in fusionMode below; notified on every Prepare change
+let fusionUi = null; // TASK 806: set in fusionMode below; lets operation rows open Select in Fusion
 const prepare = createPrepareStage({
   getController: () => designController, getMode: () => modes.current(), history,
   panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), ribbonEl: document.getElementById('prepare-ribbon'), // TASK 743: the operations list; TASK S3: the operations toolbar
@@ -635,6 +636,10 @@ const prepare = createPrepareStage({
     svg: `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${STL_INSERT_MARKUP}</svg>`, onClick: () => insertStlFromToolbar() }] }],
   openToolTable: () => toolTableWindow.open(), // TASK 842: the cut card's "Edit tool table..."
   onPlanChange: () => { if (fusionToolpaths) fusionToolpaths.notify(); }, // TASK 799: automatic Fusion toolpath overlay sync
+  ...(fusionMode ? {
+    onSelectInFusion: (op) => fusionUi && fusionUi.selectForOperation(op),
+    showSelectInFusion: (op) => Boolean(fusionUi && fusionUi.canSelectForOperation(op)),
+  } : {}),
 });
 async function insertStlFromToolbar() {
   try {
@@ -910,7 +915,7 @@ function nameAfterSelection(name) {
   docBuffer.rename(name).catch((err) => dbg.warn('shaper', 'naming the design after the Fusion selection failed', err && err.message));
 }
 if (fusionMode) {
-  const fusionUi = mountFusionPrepareBar({
+  fusionUi = mountFusionPrepareBar({
     viewPrepareEl: VIEWS.prepare,
     noticeEl: document.getElementById('prepare-notice'),
     onSelectionData: (payload, meta) => {

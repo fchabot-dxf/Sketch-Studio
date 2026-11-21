@@ -17376,3 +17376,15 @@ Sketch-Studio palette side of SA-15 ("One Persistent Selection per Design") in F
 - **Tests & evidence**:
   - Updated `tests/fusion-mode-663-node.test.js` (`RESTORE_SELECTION`), `tests/selection-list-795-node.test.js` (canonical identity + legacy empty-`items` split), and `tests/fusion-toolpaths-799-live.test.js` (stub echoes empty SA-15 `selection_data` on X so `toolpaths_clear` fires).
   - Added fail-first `tests/selection-mirror-795c-node.test.js` (`45 checks`) and `tests/selection-mirror-795c-live.test.js` (desktop `1280x800` + phone `390x844`; `.evidence/795c/mirror-{two-rows,after-x}-{1280x800,390x844}.png`).
+
+## TURN 806
+Implemented per-operation **Select in Fusion** in Shaper Prepare mode (`docs/OPERATIONS-MODEL.md §12`).
+- **UI & visibility (`op-list.js`, `prepare-stage.js`, `main.js`, `fusion-bridge.js`)**:
+  - Added `FUSION_ACTIONS.SELECT_FOR_OPERATION = 'select_for_operation'`, `isStlOperation(op)`, and `buildSelectForOperationPayload(op)` collecting the op's `tokens` and `keepTokens` from all other non-Stock ops.
+  - Added `.ops-fusion-sel` action button on selected operation rows ONLY in Fusion mode and ONLY for non-Stock, non-STL operations (`!op.tickable === false && !isStlOperation(op)`), including EMPTY operations; completely hidden in web mode, on Stock, and on STL ops.
+- **Payload & Undo/Redo sync (`operations-store.js`, `selection-edit.js`, `selection-list.js`, `fusion-import.js`)**:
+  - `regionSig` ignores `sources` alongside `id` and `label`; imported regions/chains persist `sources` inside `operations-store` region data (`setOpGeometry` helper bumps store version/index cleanly).
+  - `importFusionSelection` never skips `payloadSig` when `data.assign` is present, assigns matched keys (`sources` intersecting `assign.tokens`) to `opById(assign.opKey)` while preserving settings/ticks/order (keeping emptied ops EMPTY), and wires `makeClearToken` `redoPayloads` so Undo (`restore_selection { selectionId }`) and Redo (`restore_selection { selectionId, tokens }`) keep Fusion's persistent selection synchronized.
+- **Tests & evidence**:
+  - Added fail-first `tests/opselect-806-node.test.js` (`28 checks`) and `tests/opselect-806-live.test.js` (`desktop 1280x800` + `phone 390x844`, `.evidence/806/opselect-desktop.png`, `.evidence/806/opselect-phone.png`).
+

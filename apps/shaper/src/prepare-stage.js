@@ -43,7 +43,7 @@ const RECALC_ICON = "<path d='M14.5 9a5.5 5.5 0 0 1-9.6 3.7' fill='none' stroke=
  *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
 export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
 
-export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, leadGroups = [], ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {}, onPlanChange = () => {} }) { // TASK 842: openToolTable = the page's Tool table window; TASK 799: onPlanChange = live Fusion toolpaths sync
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, leadGroups = [], ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {}, onPlanChange = () => {}, onSelectInFusion = null, showSelectInFusion = (op) => op.tickable !== false }) { // TASK 842: openToolTable = the page's Tool table window; TASK 799: onPlanChange = live Fusion toolpaths sync; TASK 806: per-op Select in Fusion
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
@@ -294,6 +294,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     onPick: (op) => { commitSession(); line = null; if (prepareView) prepareView.setSelection(op.shapes.map((k) => { const i = k.indexOf(':'); return { kind: k.slice(0, i), id: k.slice(i + 1) }; })); rowId = op.id; opList.refresh(); },
     onEdit: (op) => { rowId = op.id; openForEdit(op.id); },
     onDuplicate: (op) => duplicateAndOpen(op.id),
+    ...(onSelectInFusion ? { onSelectInFusion: (op) => { commitSession(); onSelectInFusion(op); }, showSelectInFusion } : {}),
     isPicked,
     isSelected: (op) => op.id === rowId,
     isOpen: (op) => Boolean(session && session.opId === op.id),

@@ -30,14 +30,16 @@ const GRIP_SVG = '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="t
 // TASK S3 addition (owner turns 3046-3047, Fusion style): the OUT-OF-DATE mark of a row (op.outOfDate: its inputs changed since its paths were made): a warning-style
 // triangle with an exclamation mark, declared once; its tooltip is the table's (param-hints.js opOutOfDate)
 export const OUT_OF_DATE_SVG = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.6L13 12.4H1z" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.2" stroke-linejoin="round"/><path d="M7 5.4v3.4" stroke="#111" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="10.6" r="0.9" fill="#111"/></svg>';
+const FUSION_SEL_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 5V2.5H5M11 2.5h2.5V5M13.5 11v2.5H11M5 13.5H2.5V11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.2 5.2l5 4.2-2.4.5.9 2.3-1.2.5-.9-2.3-1.4 1.6z" fill="currentColor"/></svg>';
 const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their label = aria-label and tooltip)
+  { cls: 'ops-fusion-sel', svg: FUSION_SEL_SVG, words: (n) => `Select in Fusion for operation ${n}`, call: 'onSelectInFusion', show: true },
   { cls: 'ops-edit', glyph: '\u270E', words: (n) => `Edit operation ${n}`, call: 'onEdit' },
   { cls: 'ops-dup', glyph: '\u29C9', words: (n) => `Duplicate operation ${n}`, call: 'onDuplicate' },
   { cls: 'ops-del', glyph: '\u2715', words: (n) => `Delete operation ${n} (its shapes stay in their other operations)`, call: 'onDelete' },
 ];
 
 /**
- * createOpList(hostEl, { getOps, onMove, onPick, isPicked, isSelected, isOpen, onEdit, onDuplicate, onDelete, onTick }) -> { refresh(), reveal(), inspect(), inspectActions(), inspectTicks(), setOpen(open) }
+ * createOpList(hostEl, { getOps, onMove, onPick, isPicked, isSelected, isOpen, onEdit, onDuplicate, onDelete, onTick, onSelectInFusion, showSelectInFusion }) -> { refresh(), reveal(), inspect(), inspectActions(), inspectTicks(), setOpen(open) }
  *   getOps()       the operations, in order (operations.js describeOperations)
  *   onMove(keys)   a reorder: the operation keys in their new order
  *   onPick(op)     a tap on an operation (TASK S2: it selects it)
@@ -49,9 +51,9 @@ const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their l
  *   onEdit(op) / onDuplicate(op) / onDelete(op)   TASK S2: the selected row's actions (TASK 745: the delete)
  *   onTick(ids, on) TASK 798: a row's or a heading's checkbox (the operation ids, ticked or not)
  */
-export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, isSelected = () => false, isOpen = () => false, isGenerating = () => false, onEdit = () => {}, onDuplicate = () => {}, onDelete = () => {}, onTick = () => {} }) {
+export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => false, isSelected = () => false, isOpen = () => false, isGenerating = () => false, onEdit = () => {}, onDuplicate = () => {}, onDelete = () => {}, onTick = () => {}, onSelectInFusion = null, showSelectInFusion = (op) => op.tickable !== false }) {
   if (!hostEl) return { refresh() {}, reveal() {}, inspect: () => null, inspectActions: () => null, inspectTicks: () => null };
-  const calls = { onEdit, onDuplicate, onDelete };
+  const calls = { onEdit, onDuplicate, onDelete, onSelectInFusion };
   const doc = hostEl.ownerDocument;
   const win = doc.defaultView;
   hostEl.classList.add('ops-panel');
@@ -214,8 +216,9 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       pick.addEventListener('click', () => onPick(op));
       pick.addEventListener('dblclick', () => onEdit(op)); // TASK S2: a double-click opens it too
       // TASK S2: the selected row alone shows its actions, beside its text
-      const acts = isSelected(op) ? ACTIONS.map((a) => {
-        const b = doc.createElement('button'); b.type = 'button'; b.className = `ops-act ${a.cls}`; b.textContent = a.glyph;
+      const acts = isSelected(op) ? ACTIONS.filter((a) => !a.show || Boolean(onSelectInFusion && showSelectInFusion(op))).map((a) => {
+        const b = doc.createElement('button'); b.type = 'button'; b.className = `ops-act ${a.cls}`;
+        if (a.svg) b.innerHTML = a.svg; else b.textContent = a.glyph;
         b.title = a.words(i + 1); b.setAttribute('aria-label', b.title);
         b.addEventListener('click', () => calls[a.call](op));
         return b;

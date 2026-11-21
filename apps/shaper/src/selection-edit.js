@@ -18,10 +18,10 @@ export function canonicalJson(val) {
   return JSON.stringify(val);
 }
 
-/** A region's (or chain's) canonical identity (TASK 795c / SELECTION-BRIDGE.md 5.5): everything except `id` and `label`. */
+/** A region's (or chain's) canonical identity (TASK 795c / SA-16): everything except `id`, `label`, and `sources`. */
 export function regionSig(reg) {
   if (!reg || typeof reg !== 'object') return '';
-  const { id, label, ...rest } = reg;
+  const { id, label, sources, ...rest } = reg;
   return canonicalJson(rest);
 }
 
@@ -62,12 +62,14 @@ export function buildEntry({ id: given = null, data, sourceName, regionCount, sk
   }
   const items = data && data.summary && Array.isArray(data.summary.items) ? data.summary.items : [];
   const pSig = data ? payloadSig(data) : '';
+  const cSig = data ? payloadSig({ ...data, assign: undefined }) : '';
   return {
     id, fusion: typeof data.selectionId === 'string' && data.selectionId.length > 0, kind: (data.source && data.source.kind) || '',
     text: selectionText(data, sourceName, regionCount), name: sourceName, sketchId: sketch.id,
     shapeIds: shapes.map((s) => s.id), cutKeys: [...cutKeys], base, sigs, thicknessMm, regionCount,
     ...(items.length ? { items } : {}),
     ...(pSig ? { payloadSig: pSig } : {}),
+    ...(cSig ? { contentSig: cSig } : {}),
     ...(data && data.frame && typeof data.frame === 'object' && !Array.isArray(data.frame) ? { frame: data.frame } : {}),
   };
 }

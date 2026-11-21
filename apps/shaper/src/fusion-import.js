@@ -12,7 +12,7 @@ import { makeProfile, directlyContainedLoops } from '#core/profile-model.js';
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
 import { keyOf, fileShape, setRegionSource, setRegionFrame } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
-import { storeOps, regionKeys, applyStore, memberOf, renameGeometry, setRegion } from './operations-store.js'; // TASK S1: the operations + regions store
+import { storeOps, regionKeys, applyStore, memberOf, opById, renameGeometry, regionOf, setRegion, setOpGeometry, takeSeq, deleteOp } from './operations-store.js'; // TASK S1: the operations + regions store
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
 import { ringWalk, readLevels } from '#core/stepped-cut.js'; // TASK 792: readLevels (a part's material sections, the payload's `levels`)
@@ -27,6 +27,14 @@ const upsert = (list, entry) => (list.some((e) => e.id === entry.id) ? list.map(
 const UNIT_SCALE_MM = { mm: 1, cm: 10, in: 25.4, inch: 25.4, inches: 25.4 };
 const edgesKey = (ids) => [...new Set((ids || []).filter(Boolean))].sort().join('|');
 const samePt = (a, b, tol) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tol;
+const sourcesOf = (item) => {
+  if (!item || !Array.isArray(item.sources)) return [];
+  const out = [], seen = new Set();
+  for (const t of item.sources) {
+    if (typeof t === 'string' && t && !seen.has(t)) { seen.add(t); out.push(t); }
+  }
+  return out;
+};
 
 /** Map Fusion `cutType` ('outside' | 'inside' | 'pocket' | 'online' | 'guide') from declared CUT_TYPES. */
 export function mapFusionCutType(raw, warnings = null) {
@@ -207,8 +215,8 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   const pSig = payloadSig(data);
 
   // TASK 795c: a byte-identical (canonically equal) payload on the same selectionId is a strict no-op
-  // (leaves plan, operations, stock, SVG export, and redoStack untouched).
-  if (isSameIdUpdate && prior.payloadSig && pSig === prior.payloadSig) {
+  // (leaves plan, operations, stock, SVG export, and redoStack untouched), unless carrying SA-16 `assign`.
+  if (isSameIdUpdate && prior.payloadSig && pSig === prior.payloadSig && !data.assign) {
     return {
       ok: true,
       unchanged: true,
@@ -292,9 +300,19 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   }));
 
   const counts = `${regions.length} regions, ${chains.length} chains`;
-  const clearTok = isSameIdUpdate && clearGroup
-    ? makeClearToken({ restoreIds: [selectionId], clearPayload: { selectionId, group: clearGroup } })
-    : undefined;
+  const cSig = payloadSig({ ...data, assign: undefined });
+  let clearTok;
+  if (isSameIdUpdate && clearGroup) {
+    clearTok = makeClearToken({ restoreIds: [selectionId], clearPayload: { selectionId, group: clearGroup } });
+  } else if (isSameIdUpdate && data.assign && cSig !== (prior.contentSig || '')) {
+    const persistentTokens = Array.isArray(data.assign.persistentTokens)
+      ? data.assign.persistentTokens
+      : [...new Set([...regions, ...chains].flatMap(sourcesOf))];
+    clearTok = makeClearToken({
+      restoreIds: [selectionId],
+      redoPayloads: [{ action: 'restore_selection', payload: { selectionId, tokens: persistentTokens } }],
+    });
+  }
   if (uniquePrims.length === 0) {
     // TASK 795c: if an existing selection receives an empty same-id update (e.g. last row removed), clear its regions
     // from operations (keeping emptied ops, EMPTY) and remove the empty selection entry without echoing clear_selection.
@@ -401,6 +419,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   const standaloneOuterIds = new Set(matchedRegions.map((m) => m.outerLoop && m.outerLoop.id).filter(Boolean));
   const cutKeys = [], cutInfo = new Map(), builtRegions = new Map(); // TASK 795: cutInfo: plan key -> raw region / chain
 
+  const priorOpIds = data.assign ? new Set(storeOps().map((o) => o.id)) : null;
   for (const m of matchedRegions) {
     if (!m.outerLoop) {
       if (m.reg && m.reg.label) warnings.push(`Could not match closed loop for "${m.reg.label}"`);
@@ -416,8 +435,10 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
       key = keyOf('loop', m.outerLoop.id);
     }
     const rec = buildCutRecord(m.reg, warnings, slopeFromRegion(m.reg, { scale, yUp }, warnings), levelsOf(m.reg));
+    const sources = sourcesOf(m.reg);
     const regData = {
       source: { cutType: rec.cutType ?? null, cutDepth: rec.cutDepth ?? 'unset' },
+      ...(sources.length ? { sources } : {}),
       ...(rec.slope ? { slope: rec.slope } : {}),
       ...(rec.levels ? { levels: rec.levels } : {}),
       ...(rec.levels ? { frame: frameOf(st, m.outerLoop.edges, localOf, at) } : {}),
@@ -426,6 +447,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
       setRegionSource(key, rec); // TASK S1: what the import said (a Depth of 'model' follows it)
       fileShape(key, rec, st, { join });
       if (rec.levels) setRegionFrame(key, regData.frame); // TASK 841: the part's own frame: its levels follow its outline
+      if (sources.length) setRegion(key, { ...(regionOf(key) || {}), sources });
     } else {
       builtRegions.set(key, regData);
     }
@@ -451,11 +473,16 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     const key = keyOf('chain', matchedChain.id);
     if (!cutKeys.includes(key) && !memberOf(key)) {
       const rec = buildCutRecord(cr.chain, warnings);
+      const sources = sourcesOf(cr.chain);
       if (!isSameIdUpdate) {
         setRegionSource(key, rec);
         fileShape(key, rec, st, { join });
+        if (sources.length) setRegion(key, { ...(regionOf(key) || {}), sources });
       } else {
-        builtRegions.set(key, { source: { cutType: null, cutDepth: rec.cutDepth ?? 'unset' } });
+        builtRegions.set(key, {
+          source: { cutType: null, cutDepth: rec.cutDepth ?? 'unset' },
+          ...(sources.length ? { sources } : {}),
+        });
       }
       cutKeys.push(key); cutInfo.set(key, cr.chain);
     }
@@ -495,6 +522,29 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
       }
     }
     dropPriorSketchOnly(st, prior);
+  }
+
+  // SA-16 / TASK 806: when `assign` targets an operation, replace its geometry refs with every imported shape
+  // produced by `assign.tokens` (preserving settings/ticks/order, keeping it EMPTY when 0 match).
+  if (data.assign && typeof data.assign === 'object' && typeof data.assign.opKey === 'string') {
+    const targetOp = opById(data.assign.opKey);
+    if (targetOp) {
+      const tokenSet = new Set(Array.isArray(data.assign.tokens) ? data.assign.tokens : []);
+      const assignedKeys = cutKeys.filter((k) => sourcesOf(cutInfo.get(k)).some((t) => tokenSet.has(t)));
+      const prevByKey = new Map(targetOp.geometry.map((r) => [r.key, r]));
+      const assignedSet = new Set(assignedKeys);
+      setOpGeometry(targetOp, assignedKeys.map((k) => prevByKey.get(k) || { key: k, seq: takeSeq() }));
+      if (!isSameIdUpdate && priorOpIds) {
+        for (const op of [...storeOps()]) {
+          if (op === targetOp || priorOpIds.has(op.id)) continue;
+          const remaining = op.geometry.filter((r) => !assignedSet.has(r.key));
+          if (remaining.length !== op.geometry.length) {
+            if (remaining.length) setOpGeometry(op, remaining);
+            else deleteOp(op);
+          }
+        }
+      }
+    }
   }
 
   // TASK 795: the selection's entry in the list (an update keeps the settings of the regions still there)

@@ -13,6 +13,9 @@ import { dbg } from '#core/debug.js';
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
 import { getSelections, onSelectionsChange, selectionRowsOf } from './selection-list.js'; // TASK 795 / 795c: the selection list the Prepare bar shows
+import { storeOps, regionOf } from './operations-store.js';
+import { partKeyOf } from './cut-plan.js';
+import { STOCK_TYPE_ID } from './shaper.js';
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
@@ -51,10 +54,47 @@ export const FUSION_ACTIONS = Object.freeze({
   SELECTION_DATA: 'selection_data',
   HIGHLIGHT_SELECTION: 'highlight_selection', // TASK 795 (SA-12): { selectionId | null } brightens one selection's overlay in Fusion (null: all back to their cut-type colours)
   CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12 / SA-15): { selectionId, group? } | { selectionId: 'all' }
-  RESTORE_SELECTION: 'restore_selection', // TASK 795c (SA-15): { selectionId } restores the cleared token list on Undo
+  RESTORE_SELECTION: 'restore_selection', // TASK 795c (SA-15): { selectionId, tokens? } restores the cleared token list on Undo/Redo
+  SELECT_FOR_OPERATION: 'select_for_operation', // TASK 806 (SA-16): { opKey, label, tokens, keepTokens }
   TOOLPATHS: 'toolpaths', // TASK 799 (SA-13): live bit-centre toolpaths overlay in Fusion
   TOOLPATHS_CLEAR: 'toolpaths_clear', // TASK 799 (SA-13): clears the Fusion toolpaths overlay
 });
+
+export function isStlOperation(op) {
+  if (!op || !Array.isArray(op.shapes) || op.shapes.length === 0) return false;
+  const stlKeys = new Set(getSelections().filter((e) => e.kind === 'stl').flatMap((e) => e.cutKeys.map(partKeyOf)));
+  if (!stlKeys.size) return false;
+  return op.shapes.every((k) => stlKeys.has(partKeyOf(k)));
+}
+
+export function buildSelectForOperationPayload(op) {
+  if (!op || !op.id) return null;
+  const tokens = [], seenTok = new Set();
+  for (const k of (Array.isArray(op.shapes) ? op.shapes : [])) {
+    const reg = regionOf(partKeyOf(k));
+    const srcs = reg && Array.isArray(reg.sources) ? reg.sources : [];
+    for (const t of srcs) {
+      if (typeof t === 'string' && t && !seenTok.has(t)) { seenTok.add(t); tokens.push(t); }
+    }
+  }
+  const keepTokens = [], seenKeep = new Set();
+  for (const other of storeOps()) {
+    if (other.id === op.id || other.type === STOCK_TYPE_ID) continue;
+    for (const ref of (other.geometry || [])) {
+      const reg = regionOf(partKeyOf(ref.key));
+      const srcs = reg && Array.isArray(reg.sources) ? reg.sources : [];
+      for (const t of srcs) {
+        if (typeof t === 'string' && t && !seenKeep.has(t)) { seenKeep.add(t); keepTokens.push(t); }
+      }
+    }
+  }
+  return {
+    opKey: op.id,
+    label: op.label || op.rowText || op.id,
+    tokens,
+    keepTokens,
+  };
+}
 
 // Declared 16 px icons per SA-15 summary.items kind (mirrors shaper-addin/resources/kinds/<kind>.png).
 const SUMMARY_ITEM_ICONS = Object.freeze({
@@ -431,10 +471,12 @@ export function mountFusionPrepareBar({
     listEl.replaceChildren(frag);
     if (highlighted && !rows.some((r) => r.id === highlighted)) sendHighlight(null); // the highlighted selection left the list: no mouseleave will come
   };
-  const stopList = onSelectionsChange(({ removed, all, sync = true, restoreIds = null, redoClear = null }) => {
+  const stopList = onSelectionsChange(({ removed, all, sync = true, restoreIds = null, redoClear = null, redoPayloads = null }) => {
     if (bridge.canSend()) {
       if (Array.isArray(restoreIds) && restoreIds.length) {
         for (const sid of restoreIds) bridge.send(FUSION_ACTIONS.RESTORE_SELECTION, { selectionId: sid });
+      } else if (Array.isArray(redoPayloads) && redoPayloads.length) {
+        for (const p of redoPayloads) bridge.send(p.action, p.payload);
       } else if (redoClear) {
         bridge.send(FUSION_ACTIONS.CLEAR_SELECTION, redoClear);
       } else if (sync !== false) {
@@ -531,6 +573,14 @@ export function mountFusionPrepareBar({
     bar.dataset.syncing = on ? 'true' : 'false';
   };
 
+  const canSelectForOperation = (op) => Boolean(op && op.tickable !== false && !isStlOperation(op));
+  const selectForOperation = (op) => {
+    if (!canSelectForOperation(op) || !syncAvailability()) return { ok: false, reason: 'unavailable' };
+    const payload = buildSelectForOperationPayload(op);
+    if (!payload) return { ok: false, reason: 'invalid operation' };
+    return bridge.send(FUSION_ACTIONS.SELECT_FOR_OPERATION, payload);
+  };
+
   return {
     bar,
     addBtn,
@@ -540,6 +590,8 @@ export function mountFusionPrepareBar({
     bridge,
     syncAvailability,
     bootPing: () => sendBootPingOnce(),
+    canSelectForOperation,
+    selectForOperation,
     listEl,
     destroy: () => {
       stopList();

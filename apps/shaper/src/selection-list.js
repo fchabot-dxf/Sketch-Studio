@@ -58,12 +58,13 @@ export function selectionRowsOf(entry) {
 /** The list, a copy (in the order the selections were added). */
 export const getSelections = () => LIST.map(clone);
 export const getClearToken = () => (clearToken ? clone(clearToken) : null);
-export function makeClearToken({ restoreIds, clearPayload }) {
+export function makeClearToken({ restoreIds = [], clearPayload = null, redoPayloads = null }) {
   return {
     id: ++clearSeq,
     parentId: clearToken ? clearToken.id : null,
     restoreIds: [...restoreIds],
-    clearPayload: clone(clearPayload),
+    clearPayload: clearPayload ? clone(clearPayload) : null,
+    ...(Array.isArray(redoPayloads) && redoPayloads.length ? { redoPayloads: clone(redoPayloads) } : {}),
   };
 }
 
@@ -88,12 +89,13 @@ function sane(e) {
     thicknessMm: Number.isFinite(e.thicknessMm) ? e.thicknessMm : null, regionCount: Number.isFinite(e.regionCount) ? e.regionCount : 0,
     ...(items.length ? { items } : {}),
     ...(typeof e.payloadSig === 'string' && e.payloadSig ? { payloadSig: e.payloadSig } : {}),
+    ...(typeof e.contentSig === 'string' && e.contentSig ? { contentSig: e.contentSig } : {}),
     ...(e.frame && typeof e.frame === 'object' && !Array.isArray(e.frame) ? { frame: clone(e.frame) } : {}),
   };
 }
 
 /** Replace the whole list (entries that are not objects with an id are dropped). Listeners hear which entries left it. */
-export function setSelections(next, { all = false, sync = true, clearToken: nextToken = undefined, restoreIds = null, redoClear = null } = {}) {
+export function setSelections(next, { all = false, sync = true, clearToken: nextToken = undefined, restoreIds = null, redoClear = null, redoPayloads = null } = {}) {
   const fresh = (Array.isArray(next) ? next : []).map(sane).filter(Boolean);
   const kept = new Set(fresh.map((e) => e.id));
   const removed = LIST.filter((e) => !kept.has(e.id)).map(clone);
@@ -101,7 +103,7 @@ export function setSelections(next, { all = false, sync = true, clearToken: next
   LIST.push(...fresh);
   if (nextToken !== undefined) clearToken = nextToken ? clone(nextToken) : null;
   for (const fn of LISTENERS) {
-    fn({ removed, all: Boolean(all) && removed.length > 0, sync, restoreIds, redoClear });
+    fn({ removed, all: Boolean(all) && removed.length > 0, sync, restoreIds, redoClear, redoPayloads });
   }
   return getSelections();
 }
@@ -110,7 +112,7 @@ export function setSelections(next, { all = false, sync = true, clearToken: next
 export const captureSelections = () => getSelections();
 export function applySelections(list, targetToken = undefined) {
   const cur = clearToken;
-  let restoreIds = null, redoClear = null, sync = true;
+  let restoreIds = null, redoClear = null, redoPayloads = null, sync = true;
   if (targetToken !== undefined) {
     const curId = cur ? cur.id : null;
     const tgtId = targetToken ? targetToken.id : null;
@@ -118,9 +120,10 @@ export function applySelections(list, targetToken = undefined) {
       restoreIds = [...cur.restoreIds];
       sync = false;
     } else if (targetToken && targetToken.parentId === curId) {
-      redoClear = clone(targetToken.clearPayload);
+      if (targetToken.clearPayload) redoClear = clone(targetToken.clearPayload);
+      if (Array.isArray(targetToken.redoPayloads)) redoPayloads = clone(targetToken.redoPayloads);
       sync = false;
     }
   }
-  return setSelections(list, { sync, clearToken: targetToken, restoreIds, redoClear });
+  return setSelections(list, { sync, clearToken: targetToken, restoreIds, redoClear, redoPayloads });
 }

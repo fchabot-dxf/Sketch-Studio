@@ -47,10 +47,11 @@ export const CLOSE_PATH_UNDO_LABEL = 'close path';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** THE pick rule of the command: a curve of the ACTIVE sketch (a locked / hidden one is out), not a reference curve. */
+/** THE pick rule of the command: a curve of the ACTIVE sketch (a locked / hidden one is out), not a reference curve, not a TEXT's letter (TASK 845:
+ *  a single-line font's strokes are open on purpose and derived from the text: never closed, never marked as open ends). */
 export function closePathPick(state) {
   const inert = inertEntities(state);
-  return (s) => !!s && !s.reference && activeSketchPick(state, s, inert);
+  return (s) => !!s && !s.reference && !s.textOutline && activeSketchPick(state, s, inert);
 }
 
 // The topology of one chain (ids): its free ends in walk order ([{ node, joint, shape }]), the most curve ends meeting at one point, the shapes.

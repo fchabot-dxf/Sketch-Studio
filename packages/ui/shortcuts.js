@@ -57,6 +57,8 @@ export const SHORTCUTS = Object.freeze([
   tool('tool.polygon', 'p', 'Polygon', 'Tools', false), // Shift+P = Parameters
   tool('tool.arc', 'a', 'Arc'),
   tool('tool.bezier', 'b', 'Bezier', 'Tools', false),   // Shift+B = Break
+  // TASK 845: every letter is taken (T is Perpendicular, E Equal, X Coincident; and their Shift+ forms with them): F8, Inkscape's Text tool key
+  { id: 'tool.text', label: 'Text', group: 'Tools', hosts: ALL, scope: 'canvas', keys: [{ key: 'F8', mod: false, alt: false }] },
   tool('tool.trim', 'w', 'Trim'),            // Fusion's T is our Perpendicular; no free letter in the name
   tool('tool.break', 'b', 'Break', 'Tools', true),      // B is Bezier
   tool('tool.closePath', 'c', 'Close path', 'Tools', true), // TASK 760: C is Circle (no free letter: every letter is taken)

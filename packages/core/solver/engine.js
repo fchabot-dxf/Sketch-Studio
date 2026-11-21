@@ -21,23 +21,25 @@ export function hasRadiusUnknown(s) {
 // TASK 752: and the control points of every bezier (shape data, not unknowns: a rigid block's solve carries them with the block, _unpack;
 // the carry writes NEW arrays, so keeping the arrays is the snapshot).
 export function snapshotSolverState(joints, shapes, constraints) {
-  const pos = new Map(), radii = new Map(), scalars = new Map(), controls = new Map();
+  const pos = new Map(), radii = new Map(), scalars = new Map(), controls = new Map(), texts = new Map();
   for (const [id, j] of joints) pos.set(id, { x: j.x, y: j.y });
   for (const s of (shapes || [])) if (hasRadiusUnknown(s)) radii.set(s, s.radius);
   for (const s of (shapes || [])) if (s && s.type === 'bezier') controls.set(s, [s.c1, s.c2]);
+  for (const s of (shapes || [])) if (s && s.type === 'text') texts.set(s, [s.rotation, s.size, s.letterSpacing]); // TASK 845: what a transform writes on a text (#core/text.js transformText)
   for (const c of (constraints || [])) {
     const def = c && Definitions[c.type];
     if (def && typeof def.scalarUnknown === 'function' && !c.isDriven && !c.driven && def.scalarUnknown(c, shapes)) {
       scalars.set(c, c.value);
     }
   }
-  return { pos, radii, scalars, controls };
+  return { pos, radii, scalars, controls, texts };
 }
 export function restoreSolverState(joints, shapes, snap) {
   for (const [id, j] of joints) { const p = snap.pos.get(id); if (p) { j.x = p.x; j.y = p.y; } }
   for (const [s, r] of snap.radii) s.radius = r;
   if (snap.scalars) for (const [c, v] of snap.scalars) c.value = v;
   if (snap.controls) for (const [s, [c1, c2]] of snap.controls) { s.c1 = c1; s.c2 = c2; }
+  if (snap.texts) for (const [s, [rotation, size, letterSpacing]] of snap.texts) { s.rotation = rotation; s.size = size; s.letterSpacing = letterSpacing; }
 }
 
 // TASK 752: move a bezier's two control points (shape data) by (dx, dy): new arrays, so a snapshot holding the old ones keeps them.

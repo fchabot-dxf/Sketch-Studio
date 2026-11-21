@@ -57,7 +57,8 @@ function showCoincidentGlyphsForCluster(state, cluster){
 import { selectPick, applyHoverPriority } from '#ui/hover-manager.js';
 import { findConnectedChain } from '#core/loop-finder.js'; // TASK 588: the double-click chain
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
-import { selectUnit, shapesInGroup, enteredGroup, enterGroup, leaveGroups, isInGroup, stepOutOfGroup, groupIndex, pickOwner } from '#core/group-model.js'; // TASK 751: user groups, one level at a time
+import { selectUnit, shapesInGroup, enteredGroup, enterGroup, leaveGroups, isInGroup, stepOutOfGroup, groupIndex, pickOwner, textOfGroup } from '#core/group-model.js'; // TASK 751: user groups, one level at a time
+import { openTextEditor } from '#ui/input-handlers/text-tool.js'; // TASK 845: a double click on a text edits it
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MASKING HELPER (Rigid Drag Logic)
@@ -369,11 +370,14 @@ function selectAndDrag(e, svg, state, ids, hitShape) {
 // import, behaves the same:
 //  - the second press of a double click (`second`) ENTERS the group one level (#core/group-model.js enterGroup); that press then selects what
 //    it is on at the new level (a child group, or the curve itself at the innermost level, where the next double click is TASK 588's chain);
+//    TASK 845: on a TEXT's group (textOfGroup) it opens the text editor instead (#ui/input-handlers/text-tool.js openTextEditor);
 //  - Shift toggles the WHOLE group in the selection (added: the press drags the selection; removed: no drag);
 //  - otherwise the press selects the whole group and drags it (startGroupDrag, the existing group drag); when the group is already part
 //    of a larger selection the press drags that whole selection and a click without a move selects the group alone (as TASK 588).
 function pressGroup(e, svg, state, gid, ownerId, second) {
     const inert = inertEntities(state);
+    const text = second ? textOfGroup(state, gid) : null;
+    if (text) return openTextEditor(state, svg, text); // TASK 845: a TEXT's group is never entered: the double click / double tap opens its editor
     if (second) {
         enterGroup(state, gid);
         dbg.log('selection', '[selection-tools] group entered', { gid });

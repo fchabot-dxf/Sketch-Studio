@@ -18,6 +18,7 @@ import { getCoincidentJoints } from './joints.js';
 import { measureResidual } from './constraint-verifier.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { SolverConfig } from './solver-config.js';
+import { transformText } from './text.js'; // TASK 845: a text's baseline turns and its size scales with its group
 
 // THE effect of a rotate / a uniform scale on a constraint whose operands are ALL inside the group (design audit section 2.2, approved),
 // as data. Row key = effectKey(c).
@@ -76,7 +77,8 @@ export function transformPoint(p, { pivot, angle = 0, scale = 1 }) {
 }
 
 /** THE geometry rewrite: the shapes `shapeIds` (a group's: shapesInGroup, its nested groups included) through the op. Each joint they use once,
- *  a circle's radius x scale, a bezier's control points (new arrays: an undo snapshot keeps the old ones). -> { joints: [ids], shapes }. */
+ *  a circle's radius x scale, a bezier's control points (new arrays: an undo snapshot keeps the old ones), a text's rotation / size / letter
+ *  spacing (TASK 845: #core/text.js transformText). -> { joints: [ids], shapes }. */
 export function transformShapes(state, shapeIds, op) {
   const ids = new Set(shapeIds || []);
   const shapes = ((state && state.shapes) || []).filter((s) => s && ids.has(s.id));
@@ -87,6 +89,7 @@ export function transformShapes(state, shapeIds, op) {
   for (const s of shapes) {
     if (s.type === 'circle' && Number.isFinite(s.radius)) s.radius *= (op.scale ?? 1);
     if (s.type === 'bezier') { if (Array.isArray(s.c1)) s.c1 = tp(s.c1); if (Array.isArray(s.c2)) s.c2 = tp(s.c2); }
+    if (s.type === 'text') transformText(s, op); // TASK 845: its letters are member curves (rewritten above); the text's own rotation / size follow
   }
   return { joints: [...joints], shapes };
 }

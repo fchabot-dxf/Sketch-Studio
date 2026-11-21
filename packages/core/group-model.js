@@ -374,6 +374,8 @@ export function enteredShapes(state) {
 //   ungroup  the groups Ungroup dissolves, one level each: the group a click on a selected curve selects (selectUnit), else the curve's own group
 //   enter    the ONE group the selection is (selectedGroups, nothing else selected), else null
 //   leave    a group is entered
+//   text     TASK 845: the text shape when that ONE group is a TEXT's group (textOfGroup), else null. A text's group is never entered (a double
+//            click edits the text: Enter group is not offered) nor ungrouped (Convert to shapes ends a text): it is left out of `ungroup`.
 export function groupCommands(state) {
   const ix = indexOf(state);
   const sel = (state && state.selectedShapes instanceof Set) ? state.selectedShapes : new Set();
@@ -386,5 +388,14 @@ export function groupCommands(state) {
     if (g) ungroupIds.add(g);
   }
   const whole = selectedGroups(state);
-  return { group: units.size >= 2, ungroup: [...ungroupIds], enter: whole.length === 1 && units.size === 1 ? whole[0] : null, leave: !!enteredGroup(state) };
+  const enter = whole.length === 1 && units.size === 1 ? whole[0] : null;
+  const text = enter ? textOfGroup(state, enter) : null;
+  return { group: units.size >= 2, ungroup: [...ungroupIds].filter((g) => !textOfGroup(state, g)), enter, leave: !!enteredGroup(state), text: text ? text.id : null };
+}
+
+// TASK 845: the TEXT shape (#core/text.js: { type: 'text' }) that is a direct member of group `gid`, or null. A group holding one is that text's
+// group: the text and its derived letters, one rigid block like every group.
+export function textOfGroup(state, gid) {
+  if (!gid) return null;
+  return ((state && state.shapes) || []).find((s) => s && s.type === 'text' && s.userGroupId === gid) || null;
 }

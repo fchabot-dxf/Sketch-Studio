@@ -26,8 +26,8 @@ export function groupSelection(state, notify = () => {}) {
 
 /** Ungroup: each group the selection holds (groupCommands().ungroup) is dissolved ONE level. One undo step. -> how many were dissolved. */
 export function ungroupSelection(state, notify = () => {}) {
-  const gids = groupCommands(state).ungroup;
-  if (!gids.length) { notify('No group on the selection', 'warning'); return 0; }
+  const cmds = groupCommands(state), gids = cmds.ungroup;
+  if (!gids.length) { notify(cmds.text ? 'A text is one object: Convert to shapes (its menu) turns it into curves' : 'No group on the selection', 'warning'); return 0; } // TASK 845
   if (typeof state.saveState === 'function') state.saveState('ungroup');
   for (const gid of gids) ungroup(state, gid);
   notify(`Ungrouped ${gids.length} group${gids.length === 1 ? '' : 's'}`, 'success');
@@ -36,8 +36,8 @@ export function ungroupSelection(state, notify = () => {}) {
 
 /** Enter group: the one selected group becomes the entered level (what a double click on it does); nothing stays selected. -> the group id or null. */
 export function enterSelectedGroup(state) {
-  const gid = groupCommands(state).enter;
-  if (!gid) return null;
+  const { enter: gid, text } = groupCommands(state);
+  if (!gid || text) return null; // TASK 845: a text's group is never entered (its editor opens instead)
   enterGroup(state, gid);
   clearSelection(state);
   return gid;

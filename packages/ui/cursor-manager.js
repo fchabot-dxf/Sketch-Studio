@@ -177,6 +177,11 @@ const ICONS = {
         viewBox: '0 0 24 24',
         content: `<path d="M3 19 C 7 4, 17 4, 21 19" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><line x1="3" y1="19" x2="7" y2="4" stroke="var(--icon-accent, #ef4444)" stroke-width="1"/><line x1="21" y1="19" x2="17" y2="4" stroke="var(--icon-accent, #ef4444)" stroke-width="1"/><circle cx="3" cy="19" r="2" fill="currentColor"/><circle cx="21" cy="19" r="2" fill="currentColor"/><circle cx="7" cy="4" r="1.5" fill="var(--icon-accent, #ef4444)"/><circle cx="17" cy="4" r="1.5" fill="var(--icon-accent, #ef4444)"/>`
     },
+    // TASK 845: the Text tool: a serif T on its baseline (accent), the point a click places
+    'icon-tool-text': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M5 6V4h14v2M12 4v15M9 19h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M3 21h18" stroke="var(--icon-accent, #ef4444)" stroke-width="1.4" stroke-dasharray="2 1.6"/>`
+    },
     // TASK 585: the Mirror tool (ribbon only, no cursor entry): a dashed mirror line (accent) between a shape and its mirror image
     'icon-tool-mirror': {
         viewBox: '0 0 24 24',
@@ -209,6 +214,7 @@ const TOOL_CURSOR_MAP = {
     [TOOL_MODES.POLYGON]: 'icon-tool-polygon',
     [TOOL_MODES.ARC]: 'icon-tool-arc-cse',
     [TOOL_MODES.BEZIER]: 'icon-tool-bezier',
+    [TOOL_MODES.TEXT]: 'icon-tool-text', // TASK 845
     [TOOL_MODES.DIMENSION]: 'icon-tool-dim',
     [TOOL_MODES.COINCIDENT]: 'icon-coincident',
     [TOOL_MODES.HORIZONTAL_VERTICAL]: 'icon-hv',

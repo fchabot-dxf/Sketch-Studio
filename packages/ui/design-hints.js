@@ -12,6 +12,7 @@ export const RIBBON_HINTS = Object.freeze({
   polygon: 'Click a centre point, then a vertex; type the side count into the live box.',
   arc: 'Click start, end, and a bulge point on the rim to draw a circular arc.',
   bezier: 'Click for sharp corners, drag for smooth tangent handles, and click the start point to close.',
+  text: 'Click where the text starts (its baseline), type it, then choose the font, size and spacing. Double-click a text to edit it.',
   trim: 'Click a line or curve segment to cut it back to the nearest intersection.',
   break: 'Click a line or curve where you want to split it into two connected pieces.',
   closePath: 'Join the two open ends of an outline into a closed shape.',

@@ -20,6 +20,7 @@ deepEq(FUSION_ACTIONS, {
   HIGHLIGHT_SELECTION: 'highlight_selection',
   CLEAR_SELECTION: 'clear_selection',
   RESTORE_SELECTION: 'restore_selection',
+  SELECT_FOR_OPERATION: 'select_for_operation',
   TOOLPATHS: 'toolpaths',
   TOOLPATHS_CLEAR: 'toolpaths_clear',
 }, 'declared Fusion action names match protocol');

@@ -29,8 +29,6 @@ const bump = () => { version++; index = null; };
 
 /** The stored operations, in list order (live objects: read them, change them only through this module). */
 export const storeOps = () => S.ops;
-/** The store's change counter (a cache key for readers). */
-export const storeVersion = () => version;
 /** The region data of a geometry key, or null. */
 export const regionOf = (key) => S.regions[key] || null;
 /** Every region key. */

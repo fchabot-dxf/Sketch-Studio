@@ -89,10 +89,6 @@ export function setFilletRadius(val) {
   if (!isNaN(num) && num > 0) currentRadius = num;
 }
 
-export function getFilletRadius() {
-  return currentRadius;
-}
-
 // ---- pick / hover -------------------------------------------------------------------------------------------
 
 // The pick filter (task 577, 659): the shared active-sketch rule (#core/sketch-model.js activeSketchPick). A curve of another sketch is not a pick at all

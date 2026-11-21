@@ -79,27 +79,6 @@ export function angleBetween(from, to) {
 }
 
 /**
- * Calculate the angle between two points (in degrees)
- * @param {object} from - Starting point {x, y}
- * @param {object} to - Ending point {x, y}
- * @returns {number} Angle in degrees
- */
-export function angleBetweenDegrees(from, to) {
-    return Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI;
-}
-
-/**
- * Check if two points are approximately equal (within tolerance)
- * @param {object} p1 - First point {x, y}
- * @param {object} p2 - Second point {x, y}
- * @param {number} tolerance - Maximum allowed distance
- * @returns {boolean} True if points are within tolerance
- */
-export function pointsEqual(p1, p2, tolerance = 0.001) {
-    return getDist(p1, p2) < tolerance;
-}
-
-/**
  * Calculate midpoint between two points
  * @param {object} p1 - First point {x, y}
  * @param {object} p2 - Second point {x, y}

@@ -22,9 +22,6 @@ import SettingsManager, { lengthText, angleText } from '#core/settings-manager.j
 export const TOOL_TABLE_KEY = 'SHAPER_TOOL_TABLE';
 export const TOOL_TABLE_VERSION = 1;
 export const BIT_UNITS = Object.freeze(['mm', 'in']);
-/** The length fields a bit may have (base mm) and its angle fields (degrees). */
-export const BIT_LENGTH_FIELDS = Object.freeze(['diameter', 'cornerRadius', 'tipDiameter', 'shankDiameter', 'cutLength']);
-export const BIT_ANGLE_FIELDS = Object.freeze(['angle', 'taperAngle']);
 /** The cut-record fields a bit sets (recordFieldsOf): the bit's copy in an operation. */
 export const BIT_RECORD_FIELDS = Object.freeze(['bitId', 'bitName', 'toolDia', 'cutterShape', 'cutterAngle', 'cornerRadius', 'taperAngle', 'shankDia', 'cutLength']);
 /** The fields the card's Custom pick clears (the link to a table bit and its cutting length; the cutter itself stays as it is). */

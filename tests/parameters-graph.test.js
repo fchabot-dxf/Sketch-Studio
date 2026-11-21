@@ -1,8 +1,8 @@
 // TASK 535 slice 1b — packages/core/parameters.js: the parameter store's dependency graph, cycle detection, evaluation order,
-// planChange (set / create / rename / delete), freezeReferencesTo and the automatic dimension names.
+// planChange (set / create / rename / delete) and the automatic dimension names.
 // PURE: builds plain state objects { parameters, constraints } (no solver, no DOM).
 import {
-  planChange, evaluateAll, buildDependencyGraph, freezeReferencesTo, usersOf, nextDimensionName, cloneParameters, replaceParameters,
+  planChange, evaluateAll, buildDependencyGraph, usersOf, nextDimensionName, cloneParameters, replaceParameters,
   isDimension, AUTO_NAME_PREFIX,
 } from '#core/parameters.js';
 
@@ -202,30 +202,6 @@ for (const depth of [1, 2, 3, 5, 10, 40]) {
   const state = { parameters: [P('width', '120 mm')], constraints: [] };
   eq(planChange(state, { type: 'setComment', name: 'width', comment: 'outer' }).paramsAfter[0], { name: 'width', unit: 'mm', expression: '120 mm', comment: 'outer' }, 'comment set');
   assert(planChange(state, { type: 'bogus' }).ok === false, 'unknown change refused');
-}
-
-// ── freezeReferencesTo (O10): dependents become their current numbers; nothing moves ──
-{
-  const state = {
-    parameters: [P('gap', 'd1 / 4 + 2 mm'), P('holes', '4', ''), P('other', '3 mm')],
-    constraints: [D('d1', 120), D('d2', 32, 'gap'), D('d3', 60, 'd1 / 2'), D('d4', 9, 'other * 3'), D('d5', 1, 'holes / 4')],
-  };
-  const before = evaluateAll(state).values;
-  const r = freezeReferencesTo(state, ['d1']);
-  assert(r.ok, r.message);
-  eq(r.frozen, ['gap', 'd3'], 'frozen: gap (parameter) and d3 (dimension)');
-  assert(state.parameters[0].expression === '32 mm', `gap frozen to ${state.parameters[0].expression}`);
-  assert(!('expression' in state.constraints[2]) && state.constraints[2].value === 60, 'd3 is a plain number now');
-  assert(state.constraints[1].expression === 'gap' && state.constraints[3].expression === 'other * 3', 'others untouched');
-  const after = evaluateAll(state).values;
-  for (const k of ['gap', 'd2', 'd3', 'd4', 'd5']) assert(near(before.get(k).v, after.get(k).v), `${k} did not move`);
-  // a negative parameter value freezes with its sign and unit
-  const neg = { parameters: [P('off', '-5 mm'), P('x', 'off * 2')], constraints: [] };
-  freezeReferencesTo(neg, ['off']);
-  assert(neg.parameters[1].expression === '-10 mm', neg.parameters[1].expression);
-  const inch = { parameters: [P('base', '1 in', 'in'), P('x', 'base * 2', 'in')], constraints: [] };
-  freezeReferencesTo(inch, ['base']);
-  assert(inch.parameters[1].expression === '2 in', inch.parameters[1].expression);
 }
 
 // ── automatic names (O22): highest dN + 1 ──

@@ -79,17 +79,6 @@ export function makeShapeElement(shape) {
     return el;
 }
 
-export function shapeToSvgString(s) {
-    switch (s.type) {
-        case "line":     return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}"/>`;
-        case "rect":     return `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/>`;
-        case "ellipse":  return `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${s.rx}" ry="${s.ry}"/>`;
-        case "polyline": return `<polyline points="${s.points.map(p => p[0] + "," + p[1]).join(" ")}"/>`;
-        case "path":     return `<path d="${s.d}"/>`;
-    }
-    return "";
-}
-
 export function translateShape(s, dx, dy) {
     switch (s.type) {
         case "line":     s.x1 += dx; s.y1 += dy; s.x2 += dx; s.y2 += dy; break;

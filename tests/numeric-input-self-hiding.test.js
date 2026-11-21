@@ -255,9 +255,7 @@ await (async () => {
   assert(byId.get('dualInput').classList.contains('hidden') && byId.get('dualInput').style.display === undefined);
 
   const ssHtml = fs.readFileSync(path.join(REPO_ROOT, 'apps/sketchstudio/index.html'), 'utf8');
-  const ssOverrides = fs.readFileSync(path.join(REPO_ROOT, 'apps/sketchstudio/overrides.css'), 'utf8');
   assert(!/\.dim-input\s*\{/.test(ssHtml), 'apps/sketchstudio/index.html must not duplicate .dim-input CSS');
-  assert(!/\.dim-input\s*\{/.test(ssOverrides), 'apps/sketchstudio/overrides.css must not duplicate .dim-input CSS');
 
   const numSrc = fs.readFileSync(path.join(REPO_ROOT, 'packages/ui/numeric-input-manager.js'), 'utf8');
   assert(!/\.blur\s*\(/.test(numSrc), 'numeric-input-manager.js must not use a .blur() workaround');

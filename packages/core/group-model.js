@@ -220,27 +220,12 @@ export function ungroup(state, gid) {
   return true;
 }
 
-// renameGroup(state, gid, name) → rename the group entry.
-export function renameGroup(state, gid, name) {
-  if (!state || !Array.isArray(state.groups)) return false;
-  const g = state.groups.find((x) => x.id === gid); if (!g) return false;
-  g.name = name; return true;
-}
-
 // shapesInGroup(state, gid) → the shape ids in the group: its own members and those of its child groups (TASK 751: nested).
 export function shapesInGroup(state, gid) { return indexOf(state).shapesOf(gid); }
 
 // childGroups(state, gid) → the ids of the groups directly inside `gid` (null: the top-level groups), in list order.
 export function childGroups(state, gid) {
   return ((state && state.groups) || []).filter((g) => (g.parentId || null) === (gid || null)).map((g) => g.id);
-}
-
-// loopsInGroup(loops, state, gid) → the loop ids whose ALL edge-shapes carry the group's `userGroupId` (a fully
-// grouped loop).
-export function loopsInGroup(loops, state, gid) {
-  const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
-  return (loops || []).filter((l) => Array.isArray(l.edges) && l.edges.length &&
-    l.edges.every((eid) => { const s = shapeById.get(eid); return s && groupOf(s) === gid; })).map((l) => l.id);
 }
 
 // TASK 751: the PIECES of an imported drawing (`shapes`, already in `state`), in the order of their first shape: a piece is

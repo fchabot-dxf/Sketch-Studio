@@ -1,5 +1,5 @@
 import { deepStrictEqual } from 'node:assert';
-import { makeProfile, uncombineProfile, validateCombine, profileForLoop, profileForShape, profilesOf, resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, directlyContainedLoops, cloneProfiles } from '#core/profile-model.js';
+import { makeProfile, uncombineProfile, validateCombine, profileForLoop, profileForShape, resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, directlyContainedLoops, cloneProfiles } from '#core/profile-model.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { draw } from '../packages/ui/svg-renderer.js';
 import { findLoops } from '#core/loop-finder.js';
@@ -106,7 +106,7 @@ import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
     assert(prof.outer === val.outerLoop.id, 'stores outer loop id');
     assert(prof.inners.length === 1 && prof.inners[0] === val.innerLoops[0].id, 'stores inner loop id');
     assert(!('invalid' in prof) && !('invalidReason' in prof) && !('d' in prof), 'stored profile holds no transient view fields');
-    assert(profilesOf(state).length === 1, 'profilesOf lists profile');
+    assert(state.profiles.length === 1, 'the profile is stored');
 
     assert(profileForLoop(val.outerLoop.id, state)?.id === 'profile-1', 'profileForLoop finds by outer');
     assert(profileForLoop(val.innerLoops[0].id, state)?.id === 'profile-1', 'profileForLoop finds by inner');
@@ -115,7 +115,7 @@ import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
 
     const uncombined = uncombineProfile(state, prof.id);
     assert(uncombined, 'uncombineProfile returns true');
-    assert(profilesOf(state).length === 0, 'profilesOf is empty after uncombine');
+    assert(state.profiles.length === 0, 'no profile stored after uncombine');
   }
 
   // 3. Undo / Redo integration (no transient fields in snapshots)

@@ -280,8 +280,6 @@ export async function commitTransform(state, gid, op, { undo = state.captureUndo
 export const TRANSFORM_INPUT_ID = 'tbox-input';
 let openBox = null;
 function closeInput() { if (openBox && openBox.el.parentNode) openBox.el.parentNode.removeChild(openBox.el); openBox = null; }
-/** Is the typed angle / scale box open (tests, the Done check)? */
-export function transformInputOpen() { return !!openBox; }
 
 /** The op a typed text asks for, or { error }. Rotate: degrees, counter-clockwise ("30", "-45°"). Scale: a percent ("150", "150%") or a WIDTH
  *  with its unit ("80 mm", "3 in": the box's width becomes it). */

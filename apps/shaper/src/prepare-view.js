@@ -897,12 +897,15 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // TASK 817: the levels / clearing notes read the GENERATED paths of these very settings (a peek: the open operation's edits are generated on OK or by its Preview),
     // so they show as opened and after a Preview of the current settings; the tabs' are read here (a light outline derivation)
     const peek = { ctx: viewCtx(), request: false };
+    const clearSum = clearingSummary(pk, rec, state, loops, loopPolys, own, peek);
+    const clearAv = clearingAvailability(pk, rec, state, loops, loopPolys);
     const note = [...steppedNoteItems(rec), ...levelsNoteItems(rec, levelsSummary(pk, rec, state, loops, loopPolys, own, peek)), // TASK 792: Roughing / Contour
-      ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearingSummary(pk, rec, state, loops, loopPolys, own, peek))];
+      ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearSum)];
     const d = e ? (contour ? e.rec.baseDepth : e.rec.cutDepth) : null;
     const deep = cutLengthNote(rec, Number(rec.cutDepth) > 0 ? Number(rec.cutDepth) : d, docUnit()); // TASK 842: deeper than the bit's cutting length: one plain line (never blocks)
     if (deep) note.push({ text: deep });
-    return { kind: parseKey(ref.key).kind, record: rec, note, hold, clearing: clearingAvailability(pk, rec, state, loops, loopPolys),
+    return { kind: parseKey(ref.key).kind, record: rec, note, hold, clearing: clearAv,
+      rasterResolved: clearSum && clearSum.pattern === 'raster' ? (Number.isFinite(clearSum.angle) ? clearSum.angle : Number(clearSum.settings && clearSum.settings.angle)) : (clearAv && Number.isFinite(clearAv.autoAngle) ? clearAv.autoAngle : null),
       levels: Boolean(e && hasLevels(e.rec)), partDepth: Number(d) > 0 ? Number(d) : null, // TASK 809: it (a Contour: its part) cuts a part's levels; TASK 810: the part's depth
       walls: contour && e ? { shown: Boolean(e.rec.slope || hasLevels(e.rec)), value: wallsOf(e.rec), defaultId: wallsDefault(e.rec) } : null }; // TASK 810: a Contour's walls
   };
@@ -957,7 +960,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         if (!(Number(r.stepover) > 0)) patch.stepover = lastStepover();
         if (!(r.finishAllowance != null && Number(r.finishAllowance) >= 0)) patch.finishAllowance = lastFinishAllowance();
         if (typeof r.loop !== 'boolean') patch.loop = lastLoop(); // TASK 750
-        if (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null) patch.rasterAngle = lastRasterAngle();
+        if (r.rasterAngle !== 'auto' && (!Number.isFinite(Number(r.rasterAngle)) || r.rasterAngle === null)) patch.rasterAngle = lastRasterAngle();
       }
       if (field === 'holdPart' && value !== 'off') { // TASK 742: Tabs / Onion skin without its own values take the last ones set (or the unit's defaults)
         if (!(r.tabCount === 'auto' || Number(r.tabCount) >= 1)) patch.tabCount = lastTabCount();

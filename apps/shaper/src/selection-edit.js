@@ -6,7 +6,7 @@ import { removeGeometry } from '#core/delete-manager.js';
 import { getCutRecord, fileShape, settleOrder } from './cut-plan.js'; // TASK S1: a shape's record (its operation's, or its imported depth / region data), the one writer
 import { renameGeometry } from './operations-store.js';
 import { getSelections, setSelections, localSelectionId } from './selection-list.js';
-import { setStlSource } from './stl-source.js';
+import { dropStlSource } from './stl-source.js'; // TASK 841: one STL source per relief part
 
 const r4 = (n) => Math.round(Number(n) * 1e4) / 1e4;
 const GEOM = ['type', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r'];
@@ -39,8 +39,8 @@ export function priorRecords(entry) {
 }
 
 /** Build the entry of a selection just imported: its shapes, its plan keys (cutInfo: key -> the payload's region / chain), what Fusion said of each. */
-export function buildEntry({ data, sourceName, regionCount, sketch, shapes, cutKeys, cutInfo, thicknessMm }) {
-  const id = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : localSelectionId();
+export function buildEntry({ id: given = null, data, sourceName, regionCount, sketch, shapes, cutKeys, cutInfo, thicknessMm }) {
+  const id = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : given || localSelectionId(); // TASK 841: `given` = the id the import adds it as (Insert STL)
   const base = {}, sigs = {};
   for (const key of cutKeys) {
     const rec = getCutRecord(key);
@@ -100,7 +100,7 @@ export function removeSelection(controller, id, { prepare = null, onDone = null 
   if (!st || !entry) return { ok: false, message: 'No such selection' };
   if (typeof st.saveState === 'function') st.saveState('remove selection', { host: true });
   dropSelectionGeometry(st, entry);
-  if (entry.kind === 'stl') setStlSource(null); // an STL's row is its source: the STL card goes with it
+  if (entry.kind === 'stl') dropStlSource(entry.id); // an STL's row is its source: the STL card goes with it (TASK 841: that part's only)
   setSelections(getSelections().filter((e) => e.id !== id));
   if (prepare && typeof prepare.afterRestore === 'function') prepare.afterRestore();
   if (typeof onDone === 'function') onDone();
@@ -115,7 +115,7 @@ export function clearSelections(controller, { prepare = null, onDone = null } = 
   if (typeof st.saveState === 'function') st.saveState('clear selections', { host: true });
   for (const entry of all) {
     dropSelectionGeometry(st, entry);
-    if (entry.kind === 'stl') setStlSource(null);
+    if (entry.kind === 'stl') dropStlSource(entry.id);
   }
   setSelections([], { all: true });
   if (prepare && typeof prepare.afterRestore === 'function') prepare.afterRestore();

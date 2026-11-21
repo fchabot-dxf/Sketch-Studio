@@ -121,7 +121,7 @@ try {
       return { dir: f.dataset.dir, top: r.top, stripBottom: strip.bottom, left: r.left, width: Math.round(r.width), height: Math.round(r.height), btns, opsTop: ops.top, opsLeft: ops.left,
         groups: [...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section + ':' + g.querySelector('.sk-ribbon-group-label').textContent) }; })()`);
     console.log(`${D} toolbar: ${JSON.stringify(bar)} (Design's ribbon top, height: ${designRibbon})`);
-    assert.deepStrictEqual(bar.groups, ['operations:Operations', 'recalculate:Recalculate', 'tools:Tools'] /* TASK 842: then the Tools section */, D + ': the operation types, then Recalculate (TASK 842: then Tools); named as Design\'s sections are');
+    assert.deepStrictEqual(bar.groups, ['insert:Insert', 'operations:Operations', 'recalculate:Recalculate', 'tools:Tools'] /* TASK 841: Insert first; TASK 842: then the Tools section */, D + ': Insert (TASK 841), the operation types, then Recalculate (TASK 842: then Tools); named as Design\'s sections are');
     const ids = bar.btns.map((b) => b[0]);
     assert.deepStrictEqual(ids.filter((id) => id.startsWith('op-type-')), TYPES.map((t) => `op-type-${t}`).filter((id) => ids.includes(id)), D + ': the types in the declaration\'s order');
     assert.ok(ids.includes('op-recalculate'), D + ': Recalculate shown');
@@ -134,7 +134,12 @@ try {
       if (D === 'desktop') assert.ok(Math.abs(bar.opsTop - (bar.top + bar.height + 12)) <= 1, D + `: the Operations card starts 12 px below the toolbar (top ${bar.opsTop})`);
     }
     if (D !== 'desktop') assert.ok(bar.btns.every(([, w, h]) => w >= 44 && h >= 44), D + ': 44 px targets: ' + JSON.stringify(bar.btns));
-    assert.ok(TYPES.every((t) => ids.includes(`op-type-${t}`)) || D === 'phone', D + ': every type in the bar');
+    // TASK 841 + 842: with INSERT first and Tools last, the short viewport's rail no longer holds every type: the ones that do not fit are in the Operations section's
+    // dropdown (the ribbon's rule: never lost), as on a phone held upright; the desktop bar holds them all
+    assert.ok(TYPES.every((t) => ids.includes(`op-type-${t}`)) || D !== 'desktop', D + ': every type in the bar');
+    const inSection = await evalJs(`[...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group[data-section="operations"] .sk-ribbon-btn')].map((b) => b.id)`);
+    assert.deepStrictEqual(inSection, TYPES.map((t) => `op-type-${t}`), D + ': every type is in the Operations section (in the bar or its dropdown)');
+    if (D === 'landscape') console.log(`${D}: in the Operations dropdown: ${JSON.stringify(TYPES.filter((t) => !ids.includes(`op-type-${t}`)))}`);
     await shot(`${D}-1-toolbar.png`);
     await shot(`${D}-1-toolbar-zoom.png`, '#prepare-ribbon-frame', D === 'desktop' ? 2 : 1);
     if (D === 'landscape') { // the short viewport: a type works from the rail

@@ -39,7 +39,8 @@ export function applyPrepare(p) {
   if (p && Number.isFinite(p.stockThickness)) setStock({ ...getStock(), thickness: p.stockThickness });
 }
 
-/** The persisted Shaper document (what createDocumentBuffer's getHostData returns). TASK 790: `stl` only when the design came from an STL. */
+/** The persisted Shaper document (what createDocumentBuffer's getHostData returns). TASK 790: `stl` only when the design came from an STL (TASK 841: the list of
+ *  its STL sources, one per relief part: stl-source.js captureStlDoc). */
 export function captureShaperDoc() {
   const stl = captureStlDoc();
   const selections = getSelections(); // TASK 795: only when there are some (a design without selections writes the same bytes as before)
@@ -255,7 +256,7 @@ export function applyShaperDoc(stored, state = null) {
   forgetPaths(); // TASK S3: a document read: nothing of it is out of date (its operations are generated as they are read, as before)
   const d = dropLeadIn(stored); // TASK 836
   setStock(d && d.stock);
-  applyStlDoc(d && d.stl); // TASK 790: the STL card's source (none for a design that did not come from an STL)
+  applyStlDoc(d && d.stl, d && d.selections); // TASK 790: the STL card's source (none for a design that did not come from an STL); TASK 841: a list, one per relief part
   if (d && Number(d.version) >= OPERATIONS_VERSION) {
     applyStore(d);
     applySelections(d && d.selections); // TASK 795: the selection list (none for a design that was not built from selections)

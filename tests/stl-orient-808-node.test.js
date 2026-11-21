@@ -163,16 +163,16 @@ const slice = (tris, o = {}) => { const r = sliceStl(tris, { name: 'part.stl', .
   const o = rotationForFloor(faceOf(tilted, turn([1, 0.3, 0], 30).fn(0, 0, -1)).normal);
   const key = rememberMesh(tilted);
   setStlSource({ name: 'tilted.stl', up: o.up, rotation: o.rotation, floor: o.floor, unit: 'mm', triangles: tilted.length / 9, sizeMm: { x: 120, y: 80, z: 19 }, key });
-  const doc = JSON.parse(JSON.stringify(captureStlDoc()));
+  const [doc] = JSON.parse(JSON.stringify(captureStlDoc())); // TASK 841: the document keeps a list (one source per relief part)
   eq([doc.up, doc.rotation, doc.floor], [null, o.rotation, o.floor], 'the document keeps the rotation, the picked normal, and no Up side');
   setStlSource(null);
-  applyStlDoc(doc);
+  applyStlDoc([doc]);
   const back = getStlSource();
   eq([back.up, back.rotation, back.floor], [null, o.rotation, o.floor], 'the stored rotation round-trips');
   eq(getStlSource().rotation === back.rotation, false, 'getStlSource hands out a copy');
   // a preset: the document says its Up side and the rotation is the preset's
   setStlSource({ name: 'p.stl', up: '+Y', unit: 'mm', triangles: 12, sizeMm: { x: 1, y: 1, z: 1 }, key: rememberMesh(flatBlock) });
-  const d2 = JSON.parse(JSON.stringify(captureStlDoc()));
+  const [d2] = JSON.parse(JSON.stringify(captureStlDoc()));
   eq([d2.up, d2.rotation, 'floor' in d2], ['+Y', [...UP_ROTATIONS['+Y']], false], 'a preset: its Up side, its rotation, no picked normal');
   // a document before 808: `up` only
   const old = { name: 'old.stl', up: '-X', unit: 'in', sizeMm: { x: 1, y: 2, z: 3 }, mesh: d2.mesh, relief: true };

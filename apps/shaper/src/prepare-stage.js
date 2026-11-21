@@ -23,6 +23,7 @@ import { loadBits, TOOL_TABLE_KEY } from './tool-table.js'; // TASK 842: the use
  *   history: the Undo / Redo router (modes.js createShaperHistory); its runKey serves Ctrl+Z / Ctrl+Y while Prepare shows.
  *   panelEl / canvasEl / noticeEl: the cut card's host, the Prepare svg, the one-line notice. opsEl: TASK 743, the operations list's host (op-list.js). ensureSketch(): mounts the sketch (the page mounts it lazily).
  *   ribbonEl: TASK S3, the operations toolbar's host (its parent is the frame that places it: apps/shaper/index.html #prepare-ribbon-frame); null = no toolbar.
+ *   leadGroups: TASK 841, the page's own toolbar sections put at its START, as declared ribbon sections ({ label, buttons }: the INSERT section's STL).
  *   onViewChange(view): told when the Prepare view is (re)mounted (the page's dev / test seam). (TASK 761: no `notify` any more: the cut plan's notice is the one-time Prepare notice.)
  * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel, opList, pickType (TASK S2: the card's type pick) }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
  * mount() = (re)mount the Prepare view; enter(enteringMode) = the mode router's hook for entering Prepare (modes.js); view() = the mounted view or null;
@@ -42,7 +43,7 @@ const RECALC_ICON = "<path d='M14.5 9a5.5 5.5 0 0 1-9.6 3.7' fill='none' stroke=
  *  counts them). Shown in Prepare's one-line notice (#prepare-notice, prepareNotice below: the TASK 472 mechanism), the next time Prepare mounts. */
 export const removedVcarvesNotice = (n) => `This design had ${n === 1 ? 'a V-carve region' : `${n} V-carve regions`}; V-carve was removed. Pick a cut type for ${n === 1 ? 'it' : 'them'} (V-bit cutter shape for a V-groove).`;
 
-export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {} }) { // TASK 842: openToolTable = the page's Tool table window
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, opsEl = null, ribbonEl = null, leadGroups = [], ensureSketch = () => {}, onViewChange = () => {}, openToolTable = () => {} }) { // TASK 842: openToolTable = the page's Tool table window
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   let boundaryPicking = false; // TASK 810: a Roughing boundary Pick is on (the next click on a closed shape in Prepare picks it)
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it. TASK 743: the operations list follows the same
@@ -77,8 +78,12 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     }
     return null; // TASK S3 (owner: "dont understand why there a window with cut type when i select a path"): a selection shows no card (its operations' rows are lit)
   }
+  // TASK 841: the shapes Prepare is about now (the open operation's, else the selected ones), told after every refresh (the STL card shows the relief among them)
+  const focusListeners = new Set();
+  const focusKeys = () => { const op = session && prepareView ? prepareView.activeOp() : null; return op ? op.geometry.map((r) => r.key) : pickedKeys(); };
   const refreshCutPanel = () => {
     opsNow = getController() ? describeOperations(getController().state) : [];
+    if (focusListeners.size) { const keys = focusKeys(); for (const fn of focusListeners) fn(keys); }
     cutPanel.update(cardModel(opsNow));
     opList.refresh();
     opList.reveal(); // TASK S2 (owner turn 2718): the first highlighted row in view (the list open), never opened
@@ -328,7 +333,9 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   function recalcOps(ids) {
     const st = sketchState();
     if (!st || !ids.length) return;
-    const ctx = prepareView ? prepareView.pathsContext() : pathsCtx(st);
+    // TASK 841: the mounted view's reading pass only while Prepare shows (it was read when Prepare was mounted): a Recalculate from the Export step's line after a
+    // Design edit (Prepare left mounted, not shown) reads the sketch NOW, so what it generates is up to date for the sketch as it is
+    const ctx = prepareView && getMode() === 'prepare' ? prepareView.pathsContext() : pathsCtx(st);
     const items = planMemberItems().filter((it) => ids.includes(it.opId)).map((it) => ({ item: it.id, input: pathsInputOf(it.planKey, it.rec) })).filter((x) => x.input);
     recalculatePaths(ctx, items.map((x) => ({ item: x.item, ...x.input })));
   }
@@ -339,6 +346,9 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   function recalculate(ids = null) {
     const st = sketchState();
     if (!st) return { line: UP_TO_DATE };
+    // TASK 841: the plan read against the sketch NOW first (cut-plan.js followDesign: renamed shapes, and a moved relief's LEVELS put where its outline is): a
+    // Recalculate pressed from the Export step's line, with Prepare never entered since the Design move, generates from the part where it is, never where it was
+    followDesign(st);
     const out = describeOperations(st).filter((op) => op.outOfDate);
     const todo = ids ? out.filter((op) => ids.includes(op.id)) : out;
     if (!todo.length) return { line: out.length ? SELECTED_UP_TO_DATE : UP_TO_DATE };
@@ -367,6 +377,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     ribbon = createToolRibbon({
       appId: 'shaper-prepare', sketchTools: false,
       extraGroups: [
+        ...leadGroups, // TASK 841: the page's sections first (INSERT: STL), the same section rules (its name's dropdown: in-bar ticks, reorder)
         { label: 'Operations', buttons: CUT_TYPES.map((t) => ({ id: `op-type-${t.id}`, label: hintLabel(choiceId('cutType', t.id)), hint: hintText(choiceId('cutType', t.id)), svg: cutIcon(t.icon), onClick: () => addOperation(t.id) })) },
         { label: 'Recalculate', fixed: true, buttons: [{ id: 'op-recalculate', label: hintLabel('opRecalculate'), hint: hintText('opRecalculate'), svg: cutIcon(RECALC_ICON), onClick: () => recalculateButton() }] },
         // TASK 842: then (a fixed section of its own, as Recalculate: always shown, no dropdown) TOOLS: the Tool table window (the page's, main.js)
@@ -529,5 +540,6 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     preview: () => previewSession(), previewState, // TASK 817: the open operation's Preview (the test kit presses what the button presses)
     recalculate, // TASK S3: THE Recalculate (the toolbar's button; the Export step's out-of-date line calls it)
     notice: prepareNotice, // TASK 790: Open STL's notice (stl-import.js)
+    onFocusChange: (fn) => { focusListeners.add(fn); return () => focusListeners.delete(fn); }, // TASK 841: the STL card follows the relief in focus (stl-import.js)
   };
 }

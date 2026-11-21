@@ -180,7 +180,7 @@ try {
   await evalJs(CREATE_NAMED_DESIGN('shaper', 'STL 790'));
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000); await waitForApp('design-canvas'); await sleep(600);
   await openStl(BLOCK, '4');
-  await waitFor(`import('/packages/ui/project-store.js').then(async (m) => { const d = await m.getProjectStore().loadCurrent(); const h = d && d.document && d.document.hosts; return !!(h && h.shaper && h.shaper.stl && h.shaper.stl.name === 'block.stl'); })`, '4: autosaved with its STL', 15000);
+  await waitFor(`import('/packages/ui/project-store.js').then(async (m) => { const d = await m.getProjectStore().loadCurrent(); const h = d && d.document && d.document.hosts; return !!(h && h.shaper && Array.isArray(h.shaper.stl) && h.shaper.stl.length === 1 && h.shaper.stl[0].name === 'block.stl'); })`, '4: autosaved with its STL (TASK 841: the list of its STL sources)', 15000);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000); await waitForApp('design-canvas'); await sleep(800);
   if (await evalJs(`document.getElementById('view-prepare').hidden`)) await openStage('prepare');
   await waitFor(`!document.querySelector('#prepare-panel .stl-card').hidden`, '4: the card after the reload');

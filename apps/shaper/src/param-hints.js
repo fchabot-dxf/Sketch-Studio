@@ -115,12 +115,14 @@ const PARAMS = {
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
   // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
+  insertStlTool: { label: 'STL', hint: 'Insert STL: adds a 3D part (an STL file) as one more relief, its own Roughing, placed clear of the other shapes. Nothing else changes.' }, // TASK 841: the Prepare toolbar's INSERT section
   openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807
-  stlCard: { label: 'STL', hint: 'The 3D part this design was sliced from. Changing Up or Units slices it again and replaces the design; Undo brings the previous one back.' },
+  insertStl: { label: 'Insert STL…', hint: 'Adds a 3D part (an STL file) to the design as one more relief: its own Roughing, level by level, placed in the view clear of the other shapes. Nothing else changes, the board thickness included.' }, // TASK 841
+  stlCard: { label: 'STL', hint: 'The 3D part this relief was sliced from (the selected relief). Changing Up or Units slices it again and replaces that part where it is; Undo brings the previous one back.' }, // TASK 841: one per relief
   stlUp: { label: 'Up', hint: 'Which side of the part faces up, toward the bit. Only what can be reached from that side is cut.' },
   stlOrient: { label: 'Orient…', hint: 'Shows the part in 3D: click the face that sits on the bed (any face, any angle) and the part turns to rest on it. Done slices it again; Cancel leaves it as it was.' }, // TASK 808
   stlUnits: { label: 'Units', hint: 'What one unit in the STL file is: STL files do not say.' },
-  stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. The height is the board thickness too.' },
+  stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. An opened STL’s height is the board thickness too; an inserted one leaves the board as it is.' }, // TASK 841
 };
 
 /** The hints of the choices, by parameter then choice id (their labels are their own declarations': CHOICE_SOURCES). */

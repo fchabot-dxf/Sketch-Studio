@@ -205,7 +205,7 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
       app.stl.openFile(M.binaryStl(M.draftedPocket(10)), 'drafted.stl');
       harness(app).pressEl('.stl-units .cut-preset[data-value="mm"]'); // the current unit: nothing happens
       const d = await app.storedDoc();
-      const s = d.hosts.shaper.stl;
+      const [s] = d.hosts.shaper.stl; // TASK 841: a list of STL sources (one per relief part)
       eq([s.name, s.up, s.unit, s.triangles, s.sizeMm], ['drafted.stl', '+Z', 'mm', 28, { x: 120, y: 80, z: 19 }], 'the document stores the STL source');
       eq([...meshFromBase64(s.mesh)], [...M.draftedPocket(10)], '... with its mesh');
     } finally { await app.close(); }

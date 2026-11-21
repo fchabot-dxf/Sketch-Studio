@@ -32,9 +32,6 @@ const ALIGN_LABELS = { left: 'Align left', center: 'Align centre', right: 'Align
 
 let session = null; // { state, svg, text, isNew, snapshot, original, snap, el, parts, stopOutside, notify }
 
-/** True while the text editor is open. */
-export const textEditorOpen = () => !!session;
-
 const styleOf = (t) => Object.fromEntries(['text', ...TEXT_STYLE_KEYS].map((k) => [k, t[k]]));
 const sameStyle = (a, b) => ['text', ...TEXT_STYLE_KEYS].every((k) => a[k] === b[k]);
 

@@ -40,8 +40,6 @@ const SAME = 1e-9;     // two points closer than this (base mm) are one
 export const isText = (s) => !!s && s.type === TEXT_TYPE;
 /** A shape or joint that is a text's derived letter (never stored, never picked alone). */
 export const isTextOutline = (e) => !!(e && e.textOutline);
-/** The text shape of the group `gid` (#core/group-model.js textOfGroup), re-exported for the UI. */
-export { textOfGroup };
 /** The text of a shape: the text itself, or the text whose letter it is (same group), else null. */
 export function textOf(state, shape) {
   if (isText(shape)) return shape;

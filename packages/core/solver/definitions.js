@@ -2,7 +2,6 @@ import { angleSectorOf } from '../angle-sector.js';
 import { symmetricRowCount } from '../symmetric.js';
 import { offsetRowCount, offsetRowValues } from '../offset.js';
 import { patternRowCount, patternRowValues } from '../pattern.js';
-import { arcSweepInfo } from '../geometry.js';
 
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
 // positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
@@ -190,27 +189,6 @@ function patternJacobian(params, positions, outRows) {
     const gpx = co * gax + si * gay, gpy = -si * gax + co * gay;
     addGrad(row, r.q, gwx, gwy); addGrad(row, r.cq, -gwx, -gwy); addGrad(row, r.p, gpx, gpy); addGrad(row, r.cs, -gpx, -gpy);
   }
-}
-
-// TASK 847: a FILLET arc never turns inside out. Its tangent row at a shared end (the line ends on the arc's rim joint P) is zero when the radius
-// R = P - C is perpendicular to the line, on EITHER side of it: the side the fillet rounds (the line runs into the arc, one smooth curve) and the
-// mirrored one, a cusp (the line runs into P and the arc runs back out of it, its centre on the outside of the corner: task 846's D-shaped slot,
-// whose free fillet radii took a dimension's move and one crossed through zero to the outside). The arc's own direction (#core/geometry.js
-// arcSweepInfo: its stored sweep, else the short way, as it is drawn) says which: its travel at P, t = dir (-Ry, Rx), continues the line's
-// travel d (from the line's far end F into P when P is the arc's start, out of P to F when P is its end) when
-//   T = sigma dir (R x d) / |d| > 0      (sigma = +1 at the arc's start, -1 at its end; |T| = |R| cos psi, psi the angle from d to t).
-// The row's value s = R . u / |u| = +-|R| sin psi. Where T >= 0 the residual is s, exactly the row before; where T < 0 (the cusp side) it
-// continues monotonically, 2 sgn(s) |R| - s (the angle row's continuation, task 553): continuous at T = 0 (|s| = |R| there) and never zero
-// on that side, so the only zeros are the smooth fillet (and a zero radius, a collapse every refusal rule already names).
-// params.fillet = { start, end, sweep }: the fillet arc's rim joints (dense indices) and its stored sweep (engine.js, for an arc with
-// filletSharp); absent for every other tangent row. -> T (its sign is what matters).
-function filletTravel(params, positions, cI, pI, fI) {
-  const f = params.fillet;
-  const cx = positions[cI*2], cy = positions[cI*2+1];
-  const dir = arcSweepInfo({ x: cx, y: cy }, { x: positions[f.start*2], y: positions[f.start*2+1] }, { x: positions[f.end*2], y: positions[f.end*2+1] }, { sweep: f.sweep }).dir;
-  const sigma = pI === f.start ? 1 : -1;
-  const rx = positions[pI*2] - cx, ry = positions[pI*2+1] - cy, dx = positions[pI*2] - positions[fI*2], dy = positions[pI*2+1] - positions[fI*2+1];
-  return sigma * dir * (rx * dy - ry * dx) / (Math.hypot(dx, dy) || 1e-12);
 }
 
 // TASK 789: the direction a distance between two joints ON each other is differentiated along (see distance computeJacobian): a 3-4-5 unit vector.
@@ -599,12 +577,7 @@ export const Definitions = {
       if (params.sharedEnd) {
         // Endpoint tangency: the shared joint P is the touch point, so (P - C) ⟂ line direction.
         const px = params.sharedEnd === 'a' ? ax : bx, py = params.sharedEnd === 'a' ? ay : by;
-        const s = ((px - cx) * ux + (py - cy) * uy) / lu;
-        // TASK 847: a fillet arc's cusp side continues the row (filletTravel)
-        if (params.fillet && filletTravel(params, positions, cI, params.sharedEnd === 'a' ? aI : bI, params.sharedEnd === 'a' ? bI : aI) < 0) {
-          return 2 * (s < 0 ? -1 : 1) * Math.hypot(px - cx, py - cy) - s;
-        }
-        return s;
+        return ((px - cx) * ux + (py - cy) * uy) / lu;
       }
       const r = radiusValue(positions, params.radiusAt, params.radius, params.rimJoint, cI);
       return Math.abs(cross / lu) - r;
@@ -644,22 +617,14 @@ export const Definitions = {
         const wpx = positions[pI*2] - cx, wpy = positions[pI*2+1] - cy;
         const g = wpx * ux + wpy * uy;
         const lu3 = lu * lu * lu;
-        // TASK 847: on a fillet arc's cusp side the row is 2 sgn(s) |R| - s (filletTravel): -ds plus 2 sgn(s) d|R|
-        const far = params.fillet && filletTravel(params, positions, cI, pI, params.sharedEnd === 'a' ? bI : aI) < 0;
-        const k = far ? -1 : 1;
         const add = (idx, dwx, dwy, dux, duy) => addGrad(outRow, idx,
-          k * ((dwx * ux + wpx * dux) / lu - g * (ux * dux) / lu3),
-          k * ((dwy * uy + wpy * duy) / lu - g * (uy * duy) / lu3));
+          (dwx * ux + wpx * dux) / lu - g * (ux * dux) / lu3,
+          (dwy * uy + wpy * duy) / lu - g * (uy * duy) / lu3);
         // x and y components are independent: variable x moves (dw,du) along x only.
         add(cI, -1, -1, 0, 0);
         add(pI, 1, 1, 0, 0);
         add(aI, 0, 0, -1, -1);
         add(bI, 0, 0, 1, 1);
-        if (far) {
-          const rr = Math.hypot(wpx, wpy) || 1e-12, f2 = 2 * (g / lu < 0 ? -1 : 1) / rr;
-          addGrad(outRow, pI, f2 * wpx, f2 * wpy);
-          addGrad(outRow, cI, -f2 * wpx, -f2 * wpy);
-        }
         return;
       }
       const s = cross / lu;

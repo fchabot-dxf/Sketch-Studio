@@ -3,16 +3,16 @@
 // radii), then its position dimension changed 4.3 -> 3.95 in. The solve took the 0.35 in move into the free radii: 0.052 / 0.064 / 0.298 / 0.324 in,
 // and two fillets crossed through zero radius to the OUTSIDE of their corners (centre outside the slot, the line running into the arc and the arc
 // running back out: a cusp), the loop crossing itself (846: D-shaped in 2D, no cut in 3D).
-// THE rule (#core/solver/definitions.js tangent, filletTravel): a fillet arc's tangent row at its shared end has no zero on the cusp side, so a
-// solve can only land on the smooth fillet. Here the move then cannot be taken by the radii without a fillet going through zero; the least-change
-// solve ends against that and does not converge, so the edit is REFUSED (the existing plain line: "conflicts with ...") and the slot and its
-// four R 0.1 fillets stay exactly as they were. With the radius dimensions kept, the same edit moves the slot (846's keepR build).
-// Also: the row itself (continuous where the cusp side begins, never zero on it, the same row as before on the smooth side) and its derivative.
+// THE rule (#core/solver/engine.js _filletTurnedOut, _resultValid, _keepsFillets): a result that turns out a fillet that was smooth at the solve's
+// start is no solution. The solve tries once more from the start, refusing every step that would turn a fillet out; a smooth answer found then
+// is kept, else the solve ends not converged (or, if even that end turns one out, rejected: nothing moves). Here no answer keeps the fillets
+// smooth (the free radii are the cheapest unknowns to move, and every way they take the move crosses one through zero), so the edit is REFUSED
+// (the existing plain line: "conflicts with ...") and the slot and its four R 0.1 fillets stay exactly as they were. With the radius
+// dimensions kept, the same edit moves the slot (846's keepR).
 import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import * as ops from '#core/tool-ops.js';
 import { commitDimensionEdit } from '#core/dimension-seams.js';
-import { Definitions } from '#core/solver/definitions.js';
 
 let checks = 0;
 const ok = (c, m) => { assert.ok(c, m); checks++; };
@@ -73,37 +73,30 @@ function build({ keepRadii }) {
   ok(after.every((f) => Math.abs(f.r - 0.1 * IN) < 1e-6 && f.inner), `four smooth R 0.1 in fillets (${after.map((f) => (f.r / IN).toFixed(3)).join(' / ')})`);
 }
 
-// 3. the row: a fillet's tangent row at its shared end. Dense layout: 0 the arc's centre C, 1 the line's far end F, 2 the line's shared end = the
-// arc's start A, 3 the arc's end E. The line runs F (0, 0) -> A (8, 0). R = A - C; the arc E = C + (-Ry, Rx) turns 90 degrees counter-clockwise
-// from A, so it runs on from the line (smooth) when Ry < 0 (C above the line) and back out of A (a cusp) when Ry > 0.
+// 3. the rule itself, on a plain solve (no edit walk, no giving way): the 0.35 in move solved at once from the pose before it. origin/main's solve
+// put two fillets outside their corners and called it converged (error 6.4e-7). Now that result is invalid: the solve tries once more from the
+// start refusing every step that turns a fillet out, finds no answer that keeps them smooth, and says so (not converged); every fillet stays
+// smooth with a positive radius.
 {
-  const tangent = Definitions.tangent;
-  const P = { joints: [0, 1, 2], sharedEnd: 'b', fillet: { start: 2, end: 3 } }, OLD = { joints: [0, 1, 2], sharedEnd: 'b' };
-  const pose = (rx, ry) => [8 - rx, -ry, 0, 0, 8, 0, 8 - rx - ry, -ry + rx]; // C, F, A, E for R = (rx, ry)
-  const val = (pos, p = P) => tangent.computeError(p, Float64Array.from(pos));
-  const row = (pos) => { const out = new Float64Array(pos.length); tangent.computeJacobian(P, Float64Array.from(pos), out); return out; };
-  ok(Math.abs(val(pose(0, -2))) < 1e-12, `the smooth fillet (C 2 above A) satisfies the row (${val(pose(0, -2))})`);
-  const near = pose(0.3, -1.7);
-  ok(Object.is(val(near), val(near, OLD)), `on the smooth side the row is the row before task 847 (${val(near)} vs ${val(near, OLD)})`);
-  const cusp = pose(0, 2);
-  ok(Math.abs(val(cusp, OLD)) < 1e-12, `the cusp (C 2 below A) satisfies the row before task 847 (${val(cusp, OLD)})`);
-  ok(Math.abs(val(cusp) - 4) < 1e-12, `the cusp does not satisfy the fillet row (${val(cusp)} = 2 |R| - s, |R| = 2, s = 0)`);
-  // never zero on the cusp side: R = 2 (cos a, sin a), 0 < a < 180 degrees
-  let least = Infinity;
-  for (let k = 1; k < 180; k++) { const a = k * Math.PI / 180; least = Math.min(least, Math.abs(val(pose(2 * Math.cos(a), 2 * Math.sin(a))))); }
-  ok(least >= 2 - 1e-9, `no zero on the cusp side (the least |row| over the poses ${least}, |R| = 2)`);
-  // continuous where the cusp side begins (C on the line: R along it, either way)
-  for (const a0 of [0, Math.PI]) {
-    const below = val(pose(2 * Math.cos(a0 - 1e-9), 2 * Math.sin(a0 - 1e-9))), above = val(pose(2 * Math.cos(a0 + 1e-9), 2 * Math.sin(a0 + 1e-9)));
-    ok(Math.abs(below - above) < 1e-6, `continuous at ${a0 ? 180 : 0} degrees (${below} vs ${above})`);
-  }
-  // the derivative, both sides, against central differences (every coordinate, the line's far end and the arc's end included)
-  for (const [name, pos] of [['smooth side', near], ['cusp side', pose(0.7, 1.6).map((v, i) => v + 0.01 * i)]]) {
-    const J = row(pos);
-    let err = 0;
-    for (let k = 0; k < pos.length; k++) { const p = pos.slice(), m = pos.slice(); p[k] += 1e-6; m[k] -= 1e-6; err = Math.max(err, Math.abs((val(p) - val(m)) / 2e-6 - J[k])); }
-    ok(err < 1e-6, `${name}: the row's derivative matches central differences (worst ${err})`);
-  }
+  const { S, dx, fil, corner } = build({ keepRadii: false });
+  dx.value = 3.95 * IN;
+  const res = quiet(() => S.engine.solve(L.ITER));
+  const after = fillets(S, fil, { x: corner().x + 0.15 * IN, y: 4.65 * IN });
+  console.log(`plain solve of the move: converged ${res.converged}, error ${res.error.toExponential(2)}; fillets ${after.map((f) => 'R ' + (f.r / IN).toFixed(3) + (f.inner ? '' : ' INVERTED')).join(' / ')}`);
+  ok(res.converged === false, `the move cannot be solved with the fillets smooth: not converged (${JSON.stringify({ converged: res.converged, rejected: res.rejected })})`);
+  ok(after.every((f) => f.inner && f.r > 0), `and no fillet turned out (${after.map((f) => (f.r / IN).toFixed(3) + (f.inner ? '' : ' inverted')).join(' / ')})`);
+}
+
+// 4. an edit the fillets can follow is kept as before: the same slot, radii free, its width edited 0.3 -> 0.5 in. (Where origin/main's first
+// result turned a fillet out but a smooth answer exists, the second try finds it: task 486's fillet-corner-dimension-drives, its top width
+// 40 -> 15.7 between two filleted corners, origin/main kept the right fillet turned out; now both stay smooth.)
+{
+  const { S, fil, corner } = build({ keepRadii: false });
+  const w = S.state.constraints.find((c) => c.type === 'distance' && c.dimMode === 'horizontal' && Math.abs(c.value - 0.3 * IN) < 1e-9);
+  const res = quiet(() => commitDimensionEdit(S.state, w, 0.5 * IN));
+  const after = fillets(S, fil, { x: corner().x + 0.25 * IN, y: 4.65 * IN });
+  ok(!res.reverted, `free radii, width 0.3 -> 0.5 in: the edit is kept (${JSON.stringify(res)})`);
+  ok(after.every((f) => f.inner && f.r > 0), `every fillet smooth (${after.map((f) => (f.r / IN).toFixed(3) + (f.inner ? '' : ' inverted')).join(' / ')})`);
 }
 
 console.log(`fillet-no-invert-847-node.test.js: ok (${checks} checks)`);

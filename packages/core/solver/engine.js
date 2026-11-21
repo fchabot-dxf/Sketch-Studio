@@ -7,6 +7,7 @@ import { isPointLineDistance } from '../geometry.js';
 import { symmetricOperands } from '../symmetric.js';
 import { offsetOperands } from '../offset.js';
 import { patternOperands, isPatternConstraint } from '../pattern.js';
+import { arcSweepInfo } from '../geometry.js';
 import { rigidBlocks } from '../group-model.js';
 
 // THE declaration of the solver's non-joint unknown (task 515, like Fusion and PlaneGCS): a CIRCLE is one centre joint plus a `radius`,
@@ -64,6 +65,19 @@ export function reachableDirections(N, k, grad) {
   let dir = null;
   if (rank === 1) { const v = aa >= bb ? [aa, ab] : [ab, bb], l = Math.hypot(v[0], v[1]); dir = [v[0] / l, v[1] / l]; }
   return { fx, fy, rank, dir };
+}
+
+// TASK 847: whether a fillet arc runs on smoothly from its line at a shared end (_filletTurnedOut). The arc's own direction (#core/geometry.js
+// arcSweepInfo: its stored sweep, else the short way, as it is drawn) gives its travel at the shared point P, t = dir (-Ry, Rx) (R = P - C); the
+// line's travel d runs from its far end F into P when P is the arc's start, out of P to F when P is its end; smooth when they agree:
+//   T = sigma dir (R x d) / |d| > 0     (sigma = +1 at the arc's start, -1 at its end; |T| = |R| cos(the angle from d to t))
+// a = { start, end, sweep, centre } (dense joint indices of the arc), p / f: the shared point, the line's far end; positions: the dense array.
+function filletTravel(a, positions, p, f) {
+  const cx = positions[a.centre*2], cy = positions[a.centre*2+1];
+  const dir = arcSweepInfo({ x: cx, y: cy }, { x: positions[a.start*2], y: positions[a.start*2+1] }, { x: positions[a.end*2], y: positions[a.end*2+1] }, { sweep: a.sweep }).dir;
+  const sigma = p === a.start ? 1 : -1;
+  const rx = positions[p*2] - cx, ry = positions[p*2+1] - cy, dx = positions[p*2] - positions[f*2], dy = positions[p*2+1] - positions[f*2+1];
+  return sigma * dir * (rx * dy - ry * dx) / (Math.hypot(dx, dy) || 1e-12);
 }
 
 // One assembly (_assemble): the residuals r (m), the sparse Jacobian rows S (Algebra's form, null for a residuals-only assembly) and, on
@@ -341,7 +355,49 @@ export class NewtonSolver {
     this._mark = new Uint8Array(x.length);
     this._touched = new Int32Array(x.length);
     this._ops = new Int32Array(16);
+    // TASK 847: the pack's start point (a fillet smooth there must be smooth in the result: _filletTurnedOut)
+    this._packX = x; this._fillets = null;
     return x;
+  }
+
+  // TASK 847: does the point x turn a FILLET inside out? A fillet arc (filletSharp, #core/fillet.js applyFillet) is SMOOTH where every line
+  // joined to it at a shared end (its own tangent rows, { line, circle }) runs on into the arc (filletTravel > 0). The tangent row there is zero
+  // with the arc's centre on EITHER side of the line: the smooth fillet, and its mirror, a cusp (the line runs into the shared point and the arc
+  // runs back out of it, its centre outside the corner: task 846's D-shaped slot, whose free fillet radii took a dimension's move and two of them
+  // crossed through zero radius to the outside). A solve whose result turns out a fillet that was smooth at its start is no solution: it is
+  // REJECTED like an invalid scalar (solve: nothing moves, converged false). A fillet a document already has turned out (an owner file saved
+  // that way, task 486's trapezoid), or half turned out (a perturbed start), is not judged: such a solve is exactly the one before task 847.
+  _filletTurnedOut(x) {
+    if (!this._fillets) {
+      // once per pack: each fillet's joins (dense indices) and the fillets smooth at the start point
+      const byId = new Map(), arcs = new Map(), J = (id) => this._jointIndex.get(id);
+      for (const s of this.shapes) if (s && !byId.has(s.id)) byId.set(s.id, s);
+      for (const c of this.constraints) {
+        if (!c || c.type !== 'tangent' || !c.line || !c.circle || c.isDriven || c.driven) continue;
+        const arc = byId.get(c.circle), line = byId.get(c.line);
+        if (!arc || arc.type !== 'arc' || !arc.filletSharp || !line || line.type !== 'line' || !Array.isArray(line.joints)) continue;
+        const k = line.joints.findIndex(j => arc.joints.indexOf(j) > 0);
+        if (k < 0 || k > 1) continue;
+        if (!arcs.has(arc.id)) arcs.set(arc.id, { start: J(arc.joints[1]), end: J(arc.joints[2]), sweep: arc.sweep, centre: J(arc.joints[0]), joins: [] });
+        arcs.get(arc.id).joins.push({ p: J(line.joints[k]), f: J(line.joints[1 - k]) });
+      }
+      const pos0 = arcs.size ? this._positionsFromVector(this._packX) : null;
+      this._fillets = [...arcs.values()].filter(a => a.joins.every(j => filletTravel(a, pos0, j.p, j.f) > 0));
+    }
+    if (!this._fillets.length) return false;
+    const pos = this._positionsFromVector(x);
+    return this._fillets.some(a => a.joins.some(j => !(filletTravel(a, pos, j.p, j.f) > 0)));
+  }
+
+  // THE validity of a solve's result (rejected otherwise: nothing moves): every free scalar unknown valid, no fillet turned out (TASK 847)
+  _resultValid(x) {
+    return this._scalarsValid(x) && !this._filletTurnedOut(x);
+  }
+
+  // TASK 847: a step may be taken: always, except in the solve's second try after its first result turned a fillet out (_filletGuard, solve),
+  // where a point that turns a fillet out is no better than the one before (like a step that raised the cost)
+  _keepsFillets(x) {
+    return !this._filletGuard || !this._filletTurnedOut(x);
   }
 
   // Unpack solution vector back into joints map
@@ -782,10 +838,6 @@ export class NewtonSolver {
                 const arcRim = new Set(circShape.joints.slice(1));
                 if (arcRim.has(lineShape.joints[0])) params.sharedEnd = 'a';
                 else if (arcRim.has(lineShape.joints[1])) params.sharedEnd = 'b';
-                // TASK 847: a FILLET arc's row keeps the fillet from turning inside out (definitions.js filletTravel): its rims and stored sweep
-                if (params.sharedEnd && circShape.type === 'arc' && circShape.filletSharp) {
-                  params.fillet = { start: jointIndexMap.get(circShape.joints[1]), end: jointIndexMap.get(circShape.joints[2]), sweep: circShape.sweep };
-                }
                 // a circle's radius unknown or an arc's live |rim - centre| takes part in the row
                 const op = this._radiusOperand(circShape, jointIndexMap);
                 params.radiusAt = op.at; params.radius = op.radius; params.rimJoint = op.rim;
@@ -1064,7 +1116,7 @@ export class NewtonSolver {
         for (let j = 0; j < n; ++j) xNew[j] = x[j] - alpha * g[j];
         const { r: rNew } = this._assemble(xNew, { jacobian: false });
         let costNew = 0; for (let i = 0; i < rNew.length; ++i) costNew += rNew[i] * rNew[i]; costNew *= 0.5;
-        if (costNew < cost - 1e-4 * alpha * gNorm2) {
+        if (costNew < cost - 1e-4 * alpha * gNorm2 && this._keepsFillets(xNew)) {
           // swap x ↔ xNew (avoid re-alloc)
           const tmp = x; x = xNew; xNew = tmp;
           cost = costNew;
@@ -1151,7 +1203,7 @@ export class NewtonSolver {
         const pre = this._preRelax(x, full.asm);
         x = pre.x;
         if (pre.converged) {
-          if (!this._scalarsValid(x)) {
+          if (!this._resultValid(x)) {
             x = new Float64Array(x0);
           } else {
             // Even a converged pre-pass deserves the rank check — the user may
@@ -1207,7 +1259,7 @@ export class NewtonSolver {
         try { console.log('[NewtonSolver] iter=', k, 'cost=', cost.toExponential(), 'costNew=', costNew.toExponential(), 'lambda=', lambda.toExponential(), 'maxStep=', maxStep.toExponential()); } catch(_) {}
       }
 
-      if (costNew < cost) {
+      if (costNew < cost && this._keepsFillets(xCand)) {
         // Accept step
         x = xCand; lastCost = costNew; lambda = Math.max(this.config.lambdaInit, lambda * this.config.lambdaDown);
       } else {
@@ -1239,13 +1291,22 @@ export class NewtonSolver {
         for (let i = 0; i < n; ++i) xPolish[i] = x[i] + dx[i];
         const rPolish = this._assemble(xPolish, { jacobian: false }).r;
         let costPolish = 0.0; for (let i = 0; i < rPolish.length; ++i) costPolish += rPolish[i] * rPolish[i]; costPolish *= 0.5;
-        if (costPolish < 0.5 * finalError * finalError) {
+        if (costPolish < 0.5 * finalError * finalError && this._keepsFillets(xPolish)) {
           x = xPolish; finalError = Math.sqrt(2 * costPolish);
         }
       }
     } catch (_) { /* fail-open: polishing is optional */ }
 
-    if (!this._scalarsValid(x)) {
+    if (!this._resultValid(x)) {
+      // TASK 847: the result turned a fillet out (its scalars are valid): ONE more try from the start, every step that would turn a fillet out
+      // refused (_keepsFillets), so the solve can find the smooth answer where there is one (the drawing as Fusion keeps it); a second
+      // turned-out result is rejected below. Only a solve whose first result is invalid reaches this: every other solve is as before.
+      if (!this._filletGuard && this._scalarsValid(x)) {
+        this._unpack(x0);
+        if (cleanup) cleanup();
+        this._filletGuard = true;
+        try { return this.solve(iter, options); } finally { this._filletGuard = false; }
+      }
       const { r: r0 } = this._assemble(x0, { jacobian: false });
       let s0 = 0; for (let i = 0; i < r0.length; ++i) s0 += r0[i] * r0[i];
       const err0 = Math.sqrt(s0);

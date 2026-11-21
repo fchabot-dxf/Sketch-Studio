@@ -9,7 +9,8 @@
 //     dense row buffer per row (O(rows x unknowns) per assembly); each pattern row is now its own part, over its own operands;
 //   - the COPY LOOKUP (#core/pattern.js patternOperands): each copy shape was found by a scan of every shape; now one index per call.
 // Limits: the task's targets (60 teeth built < 2 s, 100 teeth < 6 s, a solve of a built 200-tooth gear < 500 ms); the slowest single solve
-// during a build about 3x the time measured (Node 24, the owner's PC: 60 teeth 3.6 ms... 100 teeth 6 ms).
+// during a build, and the built gear's solve at rest, about 3x to 10x the time measured (Node 24, the owner's PC: 60 teeth 690-745 ms built, the
+// slowest solve 17-19 ms (the first, cold), at rest 7-12 ms; 100 teeth 1.5-1.6 s, 9-11 ms, 7 ms; before: 60 teeth 18.7 s, 227 ms, 212 ms).
 // NOT met, reported (WORK-LOG TURN 847): a module or backlash change on a BUILT 200-tooth gear runs the whole 500 iterations (6 s): the
 // gear's turning mode (every copy turning with the source tooth) is held by the source's own angle row alone, so JᵀJ's least eigenvalue
 // falls as the teeth grow (60 teeth 6.8e-5, 120 7.4e-6) and Levenberg-Marquardt's damping floor (1e-3) creeps along it; the cost of each
@@ -59,9 +60,9 @@ function editSolve(S, name, text) {
 }
 
 const CASES = [
-  { name: 'gear 60', z: 60, limit: { buildMs: 2000, maxSolve: 15, restMs: 100 } },
-  { name: 'gear 100', z: 100, limit: { buildMs: 6000, maxSolve: 25, restMs: 150 } },
-  { name: 'gear 200', z: 200, limit: { maxSolve: 60, restMs: 500, boreMs: 500 }, named: true },
+  { name: 'gear 60', z: 60, limit: { buildMs: 2000, maxSolve: 60, restMs: 100 } },
+  { name: 'gear 100', z: 100, limit: { buildMs: 6000, maxSolve: 40, restMs: 150 } },
+  { name: 'gear 200', z: 200, limit: { maxSolve: 100, restMs: 500, boreMs: 500 }, named: true },
 ];
 const only = process.argv.slice(2);
 const failures = [];

@@ -41,7 +41,7 @@ export function createToolTableWindow({ doc = document, settings, onChange = () 
       <form class="tt-form" hidden novalidate>
         <div class="sync-field"><label for="tt-name" data-hint="ttName"></label><input id="tt-name" class="tt-name" type="text" maxlength="60" autocomplete="off"></div>
         <div class="sync-field"><span class="tt-label" data-hint="ttType"></span><div class="tt-types" role="radiogroup"></div></div>
-        <div class="sync-field"><span class="tt-label" data-hint="ttUnit"></span><div class="tt-units cut-presets" role="radiogroup"></div></div>
+        <div class="sync-field"><span class="tt-label" data-hint="ttUnit"></span><div class="tt-units" role="radiogroup"></div></div>
         <div class="tt-sizes"></div>
         <div class="sync-field"><label for="tt-cutlength" data-hint="ttCutLength"></label><div class="tt-num"><input id="tt-cutlength" class="tt-cutlength" type="text" inputmode="decimal" autocomplete="off"><span class="tt-unit"></span></div></div>
         <div class="sync-field"><label for="tt-notes" data-hint="ttNotes"></label><textarea id="tt-notes" class="tt-notes" rows="2"></textarea></div>
@@ -89,7 +89,7 @@ export function createToolTableWindow({ doc = document, settings, onChange = () 
       return b;
     }));
     unitsEl.replaceChildren(...BIT_UNITS.map((u) => {
-      const b = doc.createElement('button'); b.type = 'button'; b.className = 'cut-preset tt-unit-btn' + (draft.unit === u ? ' is-active' : ''); b.dataset.unit = u; b.textContent = u;
+      const b = doc.createElement('button'); b.type = 'button'; b.className = 'tt-unit-btn' + (draft.unit === u ? ' is-active' : ''); b.dataset.unit = u; b.textContent = u;
       b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(draft.unit === u));
       b.addEventListener('click', () => { draft = { ...draft, unit: u }; renderForm(); }); // re-labels the same stored sizes in the other unit (never resizes the bit)
       return b;

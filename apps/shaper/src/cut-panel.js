@@ -58,10 +58,10 @@ const STEPPERS = {
   boundaryOffset: { step: { mm: 0.25, in: 1 / 64 } }, // TASK 810: Roughing's boundary offset (signed: no min, as the cut offset)
   topDepth:      { step: { mm: 0.5, in: 1 / 32 }, min: 0 }, // TASK 810: the Heights (depths below the surface; 0 = the surface)
   floorAllowance: { step: { mm: 0.1, in: 0.005 }, min: 0 },
-  rasterAngle:   { step: { mm: 15, in: 15 }, min: 0, max: 180 },
+  rasterAngle:   { step: { mm: 15, in: 15 }, min: POCKET_CLEARING.rasterAngle.min, max: POCKET_CLEARING.rasterAngle.max },
 };
-// TASK 745: the Raster angle presets (degrees)
-const ANGLE_PRESETS = [{ label: '0\u00b0', value: 0 }, { label: '45\u00b0', value: 45 }, { label: '90\u00b0', value: 90 }];
+// TASK 745: the Raster angle presets (degrees); TASK 853: Auto first
+const ANGLE_PRESETS = [{ label: 'Auto', value: 'auto' }, { label: '0\u00b0', value: 0 }, { label: '45\u00b0', value: 45 }, { label: '90\u00b0', value: 90 }];
 const CLEARING_CHOICE = (id) => CLEARING_CHOICES.find((c) => c.id === id) || CLEARING_CHOICES[0];
 // TASK 742: the Hold part choice (#core HOLD_PART.modes: Off | Tabs | Onion skin) and the count's Auto, as preset buttons (the ONE preset widget)
 const HOLD_PRESETS = HOLD_PART.modes.map((m) => ({ hint: choiceId('holdPart', m.id), label: hintLabel(choiceId('holdPart', m.id)), value: m.id }));
@@ -254,7 +254,7 @@ export function createCutPanel(hostEl, opts = {}) {
       <div class="cut-row" data-row="rasterAngle">
         <button type="button" class="cut-field-label" data-hint="rasterAngle"></button>
         <div class="cut-inline cut-box">
-          <input type="text" class="cut-num cut-raster-angle" inputmode="decimal">
+          <input type="text" class="cut-num cut-raster-angle" inputmode="decimal" aria-label="Raster angle">
           <span class="cut-unit-fixed">\u00b0</span>
         </div>
         <div class="cut-presets cut-angle-presets"></div>
@@ -351,7 +351,7 @@ export function createCutPanel(hostEl, opts = {}) {
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit (TASK 745: % and \u00b0 are .cut-unit-fixed)
   const clearTrigger = $('.cut-clear-trigger'), clearPop = $('.cut-clear-pop'), clearIc = $('.cut-clear-ic'), clearCur = $('.cut-clear-cur'); // TASK 745
   const bitTrigger = $('.cut-bit-trigger'), bitPop = $('.cut-bit-pop'), bitIc = $('.cut-bit-ic'), bitCur = $('.cut-bit-cur'); // TASK 842
-  const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), anglePresetsWrap = $('.cut-angle-presets');
+  const stepoverInput = $('.cut-stepover'), stepoverLen = $('.cut-stepover-len'), allowanceInput = $('.cut-finish-allowance'), loopInput = $('.cut-loop'), angleInput = $('.cut-raster-angle'), angleUnit = $('.cut-row[data-row="rasterAngle"] .cut-unit-fixed'), anglePresetsWrap = $('.cut-angle-presets');
   const layoutModesWrap = $('.cut-layout-modes'), minTerraceInput = $('.cut-min-terrace'); // TASK 792
   minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
   const smoothingInput = $('.cut-smoothing'); // TASK 809
@@ -427,7 +427,7 @@ export function createCutPanel(hostEl, opts = {}) {
     opt.dataset.hint = choiceId(param, id);
   };
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [], mode: null };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, rasterResolved: null, clearingInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [], mode: null };
 
   // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
   const pops = [menu, offsetPop, shapePop, clearPop, bitPop];
@@ -622,8 +622,13 @@ export function createCutPanel(hostEl, opts = {}) {
   stepoverInput.addEventListener('change', () => { const n = Number(stepoverInput.value.trim().replace('%', '')); if (Number.isFinite(n) && n >= POCKET_CLEARING.stepoverPct.min && n <= POCKET_CLEARING.stepoverPct.max) onSetField('stepover', n); else renderFields(); });
   allowanceInput.addEventListener('change', () => { const n = parseUnit(allowanceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('finishAllowance', n); else renderFields(); });
   loopInput.addEventListener('change', () => onSetField('loop', loopInput.checked)); // TASK 750: the card's toggle widget (as Adaptive stepping)
-  angleInput.addEventListener('change', () => { const n = Number(angleInput.value.trim().replace('\u00b0', '')); if (Number.isFinite(n)) onSetField('rasterAngle', ((n % 180) + 180) % 180); else renderFields(); });
-  const unitless = (field, input, label) => attachStepper(input, STEPPERS[field], { unit: () => 'mm', toDoc: (n) => n, read: () => (Number.isFinite(Number(current[field])) && current[field] !== null ? Number(current[field]) : field === 'stepover' ? POCKET_CLEARING.stepoverPct.default : POCKET_CLEARING.rasterAngle), commit: (n) => onSetField(field, n) }, { label, box: input.closest('.cut-box') });
+  angleInput.addEventListener('change', () => {
+    const raw = angleInput.value.trim().toLowerCase().replace('\u00b0', '');
+    if (raw === '' || raw === 'auto') { onSetField('rasterAngle', 'auto'); return; }
+    const n = Number(raw);
+    if (Number.isFinite(n)) onSetField('rasterAngle', ((n % 180) + 180) % 180); else renderFields();
+  });
+  const unitless = (field, input, label) => attachStepper(input, STEPPERS[field], { unit: () => 'mm', toDoc: (n) => n, read: () => (field === 'rasterAngle' && current.rasterAngle === 'auto' ? (current.rasterResolved ?? null) : Number.isFinite(Number(current[field])) && current[field] !== null ? Number(current[field]) : field === 'stepover' ? POCKET_CLEARING.stepoverPct.default : POCKET_CLEARING.rasterAngle.fallback), commit: (n) => onSetField(field, n) }, { label, box: input.closest('.cut-box') });
   unitless('stepover', stepoverInput, 'stepover');
   unitless('rasterAngle', angleInput, 'raster angle');
   stepperFor('finishAllowance', allowanceInput, 'finish allowance', { box: allowanceInput.closest('.cut-box') });
@@ -775,9 +780,12 @@ export function createCutPanel(hostEl, opts = {}) {
     allowanceInput.value = fieldText(fieldBase('finishAllowance'));
     loopInput.checked = computed && current.loop === true;
     hints.finishAllowance.refresh({ loop: finishInLoop(clearing, current.loop === true), roughing }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js); TASK 792: on a Roughing, the Contour; TASK 835e: a Raster loop's wall is the Origin's inside cut
-    const angle = Number.isFinite(Number(current.rasterAngle)) && current.rasterAngle !== null ? Number(current.rasterAngle) : POCKET_CLEARING.rasterAngle;
-    angleInput.value = String(Math.round(angle * 100) / 100);
-    renderPresets(anglePresetsWrap, clearing ? ANGLE_PRESETS : [], 'rasterAngle', angle);
+    const angleAuto = current.rasterAngle === 'auto';
+    const angle = !angleAuto && Number.isFinite(Number(current.rasterAngle)) && current.rasterAngle !== null ? Number(current.rasterAngle) : POCKET_CLEARING.rasterAngle.fallback;
+    angleInput.value = angleAuto ? '' : String(Math.round(angle * 100) / 100);
+    angleInput.placeholder = angleAuto && Number.isFinite(current.rasterResolved) ? `Auto (${angleText(current.rasterResolved, { show: 'deg' })})` : angleAuto ? 'Auto' : '';
+    angleUnit.hidden = angleAuto;
+    renderPresets(anglePresetsWrap, clearing ? ANGLE_PRESETS : [], 'rasterAngle', angleAuto ? 'auto' : angle);
     noteEl.innerHTML = '';
     // TASK 825 (V1): the WARNING lines come first (the area is three lines high, always: a warning at the foot was hidden below the fold), then the facts
     const noteItems = current.note.map((line) => (typeof line === 'string' ? { text: line } : line));
@@ -843,10 +851,10 @@ export function createCutPanel(hostEl, opts = {}) {
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { mode: null, kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, clearingInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [] }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { mode: null, kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90, stepDepth: null, adaptiveSteps: false, stepDeviation: null, holdPart: 'off', tabCount: 'auto', tabWidth: null, holdThickness: null, hold: null, clearing: 'freehand', stepover: null, finishAllowance: null, loop: false, rasterAngle: null, rasterResolved: null, clearingInfo: null, boundaryCtx: { hasStock: false, picking: false }, record: null, note: [] }; return; }
     const rec = model.record || {};
     current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90, stepDepth: rec.stepDepth, adaptiveSteps: rec.adaptiveSteps === true, stepDeviation: rec.stepDeviation, holdPart: rec.holdPart || 'off', tabCount: rec.tabCount ?? 'auto', tabWidth: rec.tabWidth, holdThickness: rec.holdThickness, hold: model.hold || null,
-      clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, clearingInfo: model.clearing || null, // TASK 745
+      clearing: rec.clearing || 'freehand', stepover: rec.stepover ?? null, finishAllowance: rec.finishAllowance ?? null, loop: rec.loop === true, rasterAngle: rec.rasterAngle ?? null, rasterResolved: model.rasterResolved ?? null, clearingInfo: model.clearing || null, // TASK 745; TASK 853: rasterResolved
       mode: model.mode || null, // TASK S2: 'op' (an open operation; TASK S3: the selection-only 'shape' card is gone)
       wallSideFree: model.wallSideFree === true, // TASK S2: a Contour's Wall side applies (a shape whose model does not say it)
       depthFromModel: model.depthFromModel !== false, // TASK S2: a Roughing's / Contour's Depth from the model, or typed (the cut stops there)

@@ -547,6 +547,7 @@
     .cut-inline .cut-num { flex: 1; width: auto; padding-left: 10px; }
     .cut-num::selection { background: var(--sk-prep-select-text); }
     .cut-unit, .cut-unit-fixed { color: var(--sk-prep-unit); font-size: 11px; flex: 0 0 auto; }
+    .cut-unit-fixed[hidden] { display: none; }
     .cut-inline .cut-unit, .cut-inline .cut-unit-fixed { padding-right: 10px; }
     .cut-hint { font-size: 11px; color: var(--sk-prep-unit); padding: 4px 12px 0; }
     /* TASK 805: a hint is a TOOLTIP AT THE CURSOR (packages/ui/cursor-tooltip.js: a fixed, pointer-events-none overlay; src/hint.js), never text in the card: nothing here
@@ -667,7 +668,7 @@
     .cut-clear-pop .cut-type-opt { height: auto; min-height: 30px; flex-wrap: wrap; row-gap: 2px; padding: 5px 10px; }
     .cut-clear-pop .cut-type-opt span { text-transform: none; }
     .cut-clear-pop .cut-clear-name { flex: 1; min-width: 0; line-height: 1.2; }
-    .cut-row[data-row="rasterAngle"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cut-row[data-row="rasterAngle"] .cut-presets .cut-preset { font-size: 12px; }
     @media (max-width: 640px), (pointer: coarse) {
       .cut-clear-pop { width: 128px; padding: 8px; gap: 4px; }
       .cut-clear-pop .cut-type-opt { min-height: 40px; font-size: 13px; gap: 6px; padding: 4px 8px; }

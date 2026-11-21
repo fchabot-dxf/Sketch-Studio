@@ -32,7 +32,8 @@
 //       order they end, deepest first (inside out). The note says how many lines and why ("the pocket narrows" / "the pocket has islands"). Never
 //       refused (a pocket the bit fits always has rings).
 //     - Raster: straight passes one stepover apart at the Raster angle (degrees, counterclockwise ON SCREEN from the sketch's X axis: 0 = left /
-//       right, 90 = up / down; an absolute angle, so the card says what the file has), centred across A0 (the outer margins between s / 2 and s),
+//       right, 90 = up / down; an absolute angle, so the card says what the file has; TASK 853: 'auto' resolves per pocket to the long side of the
+//       minimum-area bounding rectangle of its outer boundary, keeping 0°/90° when no edge improves the area by > 0.5 %), centred across A0 (the outer margins between s / 2 and s),
 //       clipped to A0 (an island cuts a pass into pieces). TASK 835e (owner turn 3153): joined end to end into ONE OPEN ZIGZAG per area of A0
 //       (rasterZigzags; AutoPass reverses at its two ends): the area's pieces (THE PIECES below: every pass one chord in each), each line by line,
 //       every other chord the other way, the pieces one after the other; between two chords THE JOIN: straight inside the area, or straight to its edge,
@@ -151,8 +152,8 @@ export const POCKET_CLEARING = Object.freeze({
   stepoverPct: Object.freeze({ default: 40, min: 1, max: 100 }),
   /** finish allowance left for the finish pass, base mm by document unit family (record field `finishAllowance`): 0.5 mm / 0.02 in */
   finishAllowance: Object.freeze({ mm: 0.5, in: 0.508 }),
-  /** raster angle, degrees (record field `rasterAngle`) */
-  rasterAngle: 0,
+  /** raster angle, degrees (record field `rasterAngle`): 'auto' (long side of the pocket's minimum-area bounding rectangle) or a number (0 fallback for legacy records) */
+  rasterAngle: Object.freeze({ default: 'auto', fallback: 0, min: 0, max: 180 }),
   /** the feed the card's time estimate assumes (mm per minute: a steady hand-guided pace on the Origin) */
   feedMmPerMin: 1000,
   /** uncut area (mm²) at or below this is not reported; slivers thinner than 2 x sliverMm (mm) are the offsets' rounding, not uncut material */
@@ -205,7 +206,8 @@ export function clearingSettings(rec) {
   const toolDia = Number(rec && rec.toolDia) > 0 ? Number(rec.toolDia) : 0;
   const pct = Number(rec && rec.stepover) > 0 ? Math.min(S.max, Math.max(S.min, Number(rec.stepover))) : S.default;
   const allowance = rec && rec.finishAllowance != null && Number.isFinite(Number(rec.finishAllowance)) && Number(rec.finishAllowance) >= 0 ? Number(rec.finishAllowance) : POCKET_CLEARING.finishAllowance.mm;
-  const angle = rec && Number.isFinite(Number(rec.rasterAngle)) && rec.rasterAngle !== null && rec.rasterAngle !== '' ? Number(rec.rasterAngle) : POCKET_CLEARING.rasterAngle;
+  const rawAngle = rec && rec.rasterAngle;
+  const angle = rawAngle === 'auto' ? 'auto' : (Number.isFinite(Number(rawAngle)) && rawAngle !== null && rawAngle !== '' ? Number(rawAngle) : POCKET_CLEARING.rasterAngle.fallback);
   const LP = POCKET_CLEARING.loopPitch, lp = Number(rec && rec.loopPitch);
   return { pattern: clearingPattern(rec), toolDia, r: toolDia / 2, stepoverPct: pct, stepover: (pct / 100) * toolDia, allowance, offset: Number(rec && rec.cutOffset) || 0, angle,
     loop: Boolean(rec && rec.loop === true), pitch: lp > 0 ? Math.min(LP.max, Math.max(LP.min, lp)) : LP.default };
@@ -263,6 +265,45 @@ function ringLevels(R, d0, s) {
 }
 
 // ── raster passes ──
+/** TASK 853: Auto raster angle (degrees in [0, 180), ON SCREEN CCW from +X): the long side of the minimum-area bounding rectangle of `outer`
+ *  (closed [[x,y],...] ring or {x,y}[] points), falling back to 0° / 90° when no hull edge beats the axis-aligned box by > 0.5 % (circles, regular polygons). */
+export function autoRasterAngle(outer) {
+  const raw = (Array.isArray(outer) ? outer : []).map((q) => (Array.isArray(q) ? [q[0], q[1]] : [q.x, q.y]));
+  if (raw.length > 1 && Math.hypot(raw[0][0] - raw[raw.length - 1][0], raw[0][1] - raw[raw.length - 1][1]) < 1e-9) raw.pop();
+  if (raw.length < 3) return POCKET_CLEARING.rasterAngle.fallback;
+  const sorted = raw.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const pt of sorted) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], pt) <= 0) lo.pop(); lo.push(pt); }
+  for (let i = sorted.length - 1; i >= 0; i--) { const pt = sorted[i]; while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], pt) <= 0) hi.pop(); hi.push(pt); }
+  const hull = [...lo.slice(0, -1), ...hi.slice(0, -1)];
+  if (hull.length < 3) return POCKET_CLEARING.rasterAngle.fallback;
+  const boxAt = (ux, uy) => {
+    const nx = -uy, ny = ux;
+    let u0 = Infinity, u1 = -Infinity, n0 = Infinity, n1 = -Infinity;
+    for (const [x, y] of hull) {
+      const u = x * ux + y * uy, n = x * nx + y * ny;
+      if (u < u0) u0 = u; if (u > u1) u1 = u;
+      if (n < n0) n0 = n; if (n > n1) n1 = n;
+    }
+    return { w: u1 - u0, h: n1 - n0, area: (u1 - u0) * (n1 - n0) };
+  };
+  const b0 = boxAt(1, 0);
+  const axisAngle = b0.h > b0.w + 1e-6 ? 90 : 0;
+  let best = null;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    if (L < 1e-9) continue;
+    const ux = dx / L, uy = dy / L, nx = -uy, ny = ux, box = boxAt(ux, uy);
+    const lx = box.w >= box.h - 1e-6 ? ux : nx, ly = box.w >= box.h - 1e-6 ? uy : ny;
+    let deg = ((Math.atan2(-ly, lx) * 180) / Math.PI % 180 + 180) % 180;
+    deg = Math.round(deg * 1e4) / 1e4;
+    if (deg >= 180) deg = 0;
+    if (!best || box.area < best.area - 1e-9 || (Math.abs(box.area - best.area) <= 1e-9 && deg < best.angle)) best = { area: box.area, angle: deg };
+  }
+  return !best || best.area >= b0.area * (1 - 0.005) ? axisAngle : best.angle;
+}
+
 function rasterPasses(A0, s, angleDeg) {
   const th = (angleDeg * Math.PI) / 180;
   const u = P(Math.cos(th), -Math.sin(th)); // ON SCREEN counterclockwise from +X (world y points down)
@@ -1276,7 +1317,7 @@ function computePlan({ outer, holes }, st) {
   if (regionsArea(withoutSlivers(diffRegions(finishSwept, R))) > FINISH_TOL_MM2) return { ...base, wall, islands, refused: 'islands close' };
   // the clearing
   const d0 = r + a;
-  let clear = [], levels = 0, loops = 0, lines = 0, linesWhy = null, passes = 0, cleanup = 0, turns = 0, morphedBlocked = null, passLines = null;
+  let clear = [], levels = 0, loops = 0, lines = 0, linesWhy = null, passes = 0, cleanup = 0, turns = 0, morphedBlocked = null, passLines = null, rasterAngle = null;
   const needRings = pattern === 'linked' || pattern === 'morphed';
   const L = needRings ? ringLevels(R, d0, s) : [];
   if (needRings) {
@@ -1333,18 +1374,19 @@ function computePlan({ outer, holes }, st) {
       if (!loopRefused) built = [...done, ...finishLoops.filter((_, c) => !used.has(c)).map(finishTurnLoop)];
     }
   } else if (pattern === 'raster') {
+    rasterAngle = st.angle === 'auto' ? autoRasterAngle(outer) : st.angle;
     const A0 = offsetRegions(R, -d0, POCKET_CLEARING.chordTolMm);
-    const pieces = A0.length ? rasterPasses(A0, s, st.angle) : [];
+    const pieces = A0.length ? rasterPasses(A0, s, rasterAngle) : [];
     passes = pieces.length;
     passLines = pieces.map((l) => ({ points: l.points, offset: l.offset }));
     // TASK 835e: the passes as ONE open zigzag per area (rasterZigzags), its chords 'pass' turns
-    const zz = A0.length ? rasterZigzags(A0, pieces, s, st.angle) : [];
+    const zz = A0.length ? rasterZigzags(A0, pieces, s, rasterAngle) : [];
     zz.forEach((z, i) => clear.push({ points: z.points, closed: false, role: 'raster', index: i + 1, count: zz.length, turns: z.turns }));
     const ring0 = contoursOf(A0);
     cleanup = ring0.length;
     ring0.forEach((pts, i) => clear.push({ points: pts, closed: true, role: 'cleanup', level: 0, index: i + 1, count: ring0.length }));
     if (st.loop && A0.length) {
-      const rl = rasterLoops(A0, pieces, Rr, s, r, a, st.angle, finishSwept); // (the native finish cuts after the loop: what a closing leg may count on)
+      const rl = rasterLoops(A0, pieces, Rr, s, r, a, rasterAngle, finishSwept); // (the native finish cuts after the loop: what a closing leg may count on)
       if (rl.refused) loopRefused = rl.refused; else built = rl.loops;
       linesWhy = holes.length ? 'islands' : A0.length > 1 ? 'splits' : null;
     }
@@ -1386,7 +1428,7 @@ function computePlan({ outer, holes }, st) {
   const finishLength = nativeFinish ? [...wall, ...islands.flat()].reduce((t, pts) => t + pathLength(pts, true), 0) : 0;
   return { pattern, clear, levels, loops, passes, cleanup, turns, wall, islands, swept, leftover: { area, unreachable, missed: Math.max(0, area - unreachable), regions: leftR }, length, finishLength, lines, linesWhy,
     loop, loopCount: loop ? clear.length : 0, loopCrossings, loopExtra, loopStep, loopRefused, startPoint, morphedBlocked, refused: null,
-    ...(pattern === 'raster' ? { nativeFinish, passLines } : {}) }; // TASK 835e: Raster: its finish the native cuts (finishInLoop); its passes one by one
+    ...(pattern === 'raster' ? { ...(st.angle === 'auto' ? { angle: rasterAngle } : {}), nativeFinish, passLines } : {}) }; // TASK 835e: Raster: its finish the native cuts (finishInLoop); its passes one by one; TASK 853: resolved angle for 'auto'
 }
 
 /** A pocket cut's region rings ({ outer, holes }: closed [[x,y],...], arcs exact to chordTolMm) from its loops (#core/hold-part loopWalk), or null. */

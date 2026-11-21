@@ -1,6 +1,6 @@
-// tests/helpers/wave-relief.js — TASK 801: a generated RELIEF for the Export simulation's measures (never an owner's STL): a closed height field, a smooth wave
+// tests/fixtures/wave-relief.js — TASK 801: a generated RELIEF for the Export simulation's measures (never an owner's STL): a closed height field, a smooth wave
 // surface z = base + amp * (0.5 + 0.25 sin(2 pi x / wx) + 0.25 cos(2 pi y / wy)) over a size x size mm square, n x n cells (2 n^2 top triangles), its four sides down
-// to z = 0 and a bottom fan from its centre. waveRelief({ n: 320 }) is ~205 000 triangles. Written as binary STL by tests/helpers/stl-mesh.js binaryStl.
+// to z = 0 and a bottom fan from its centre. waveRelief({ n: 320 }) is ~205 000 triangles. Written as binary STL by tests/helpers/stl-mesh.js binaryStl (in the test, never committed as a file).
 export function waveRelief({ n = 320, size = 120, base = 4, amp = 12, wx = 60, wy = 45 } = {}) {
   const h = (x, y) => base + amp * (0.5 + 0.25 * Math.sin((2 * Math.PI * x) / wx) + 0.25 * Math.cos((2 * Math.PI * y) / wy));
   const step = size / n, P = (i, j) => [i * step, j * step, h(i * step, j * step)];

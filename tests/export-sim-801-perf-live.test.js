@@ -1,5 +1,5 @@
 // tests/export-sim-801-perf-live.test.js — TASK 801: the Export simulation's COST, measured in the real Shaper page (desktop 1280 x 800; headless Edge, swiftshader
-// WebGL: a software renderer, so the frame times are an upper bound of a real GPU's). Nothing here is an owner's file: the relief is GENERATED (tests/helpers/wave-relief.js,
+// WebGL: a software renderer, so the frame times are an upper bound of a real GPU's). Nothing here is an owner's file: the relief is GENERATED (tests/fixtures/wave-relief.js,
 // a smooth wave height field of ~208 000 triangles) and opened through the drawer's Open STL; the raster pocket is drawn here.
 //   A. the wave relief: its Roughing (as opened) + a Contour; Export 3D, Preview all at 4x: the frame times (requestAnimationFrame intervals while it plays) and the
 //      3D rebuild cost per step (review-view.js setSim: buildRelief of the carved items), then with Show passes (the swept volumes: their first build and the frames);
@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import * as M from './helpers/stl-mesh.js';
-import { waveRelief } from './helpers/wave-relief.js';
+import { waveRelief } from './fixtures/wave-relief.js';
 
 const EVIDENCE_DIR = path.resolve('.evidence/801');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });

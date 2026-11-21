@@ -1,4 +1,4 @@
-// tests/insert-stl-841-live.test.js — TASK 841: INSERT STL in the real Shaper page (web mode), the STL built in the test (tests/helpers/stl-mesh.js smallBlock:
+// tests/insert-stl-841-live.test.js — TASK 841: INSERT STL in the real Shaper page (web mode), the STL built in the test (smallBlock below, from tests/helpers/stl-mesh.js lofted:
 // a 40 x 30 x 12 block with a pocket; never an owner's file), inserted through the drawer's "Insert STL…" and the real file chooser (<input type=file>:
 // Page.setInterceptFileChooserDialog + DOM.setFileInputFiles), real mouse clicks / touches:
 //  DESKTOP 1280 x 800 and PHONE 390 x 844 (touch), each from an empty design (resetBufferLive):
@@ -14,12 +14,17 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import * as M from './helpers/stl-mesh.js';
+// the Insert STL tests' part: a 40 x 30 x 12 block (z 0..12) with a 20 x 14 x 4 pocket at (8..28, 8..22), off centre (a turn shows); built here, never an owner's file
+const smallBlock = () => M.lofted({
+  outer: [{ z: 12, pts: M.rect(0, 0, 40, 30) }, { z: 0, pts: M.rect(0, 0, 40, 30) }],
+  cavities: [{ rings: [{ z: 12, pts: M.rect(8, 8, 28, 22) }, { z: 8, pts: M.rect(8, 8, 28, 22) }] }],
+});
 
 const EVIDENCE_DIR = path.resolve('.evidence/841');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-841-'));
 const SMALL = path.join(tmp, 'small.stl');
-fs.writeFileSync(SMALL, M.binaryStl(M.smallBlock()));
+fs.writeFileSync(SMALL, M.binaryStl(smallBlock()));
 
 const cdp = await launchBrowser({ tag: '841-insert', width: 1280, height: 800 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }

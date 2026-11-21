@@ -19,6 +19,11 @@ import { findLoops } from '#core/loop-finder.js';
 import { transformShapes } from '#core/transform.js';
 import { computeGeometryBounds } from '#core/geometry-bounds.js';
 import * as M from './helpers/stl-mesh.js';
+// the Insert STL tests' part: a 40 x 30 x 12 block (z 0..12) with a 20 x 14 x 4 pocket at (8..28, 8..22), off centre (a turn shows); built here, never an owner's file
+const smallBlock = () => M.lofted({
+  outer: [{ z: 12, pts: M.rect(0, 0, 40, 30) }, { z: 0, pts: M.rect(0, 0, 40, 30) }],
+  cavities: [{ rings: [{ z: 12, pts: M.rect(8, 8, 28, 22) }, { z: 8, pts: M.rect(8, 8, 28, 22) }] }],
+});
 import { storeOps, regionOf, applyStore, captureStore, opById } from '../apps/shaper/src/operations-store.js';
 import { captureShaperDoc, applyShaperDoc, applyPrepare } from '../apps/shaper/src/shaper-doc.js';
 import { keyOf, planEntries } from '../apps/shaper/src/cut-plan.js';
@@ -31,7 +36,7 @@ let checks = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
 const ok = (c, m) => { assert.ok(c, m); checks++; };
 SettingsManager.set('DOC_UNIT', 'mm', { persist: false });
-const SMALL = M.binaryStl(M.smallBlock()), DOME = M.binaryStl(M.dome(30, 16, 48)), BLOCK = M.binaryStl(M.blockPocketHole());
+const SMALL = M.binaryStl(smallBlock()), DOME = M.binaryStl(M.dome(30, 16, 48)), BLOCK = M.binaryStl(M.blockPocketHole());
 const J = (v) => JSON.stringify(v);
 const near = (a, b, tol, m) => { ok(Math.abs(a - b) <= tol, `${m}: ${a} vs ${b}`); };
 

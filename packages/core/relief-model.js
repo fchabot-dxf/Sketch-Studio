@@ -24,6 +24,8 @@ export const DEFAULT_STOCK = Object.freeze({ thickness: 19.05, width: null, heig
 // Unset-depth labels closer than this share one label (the labels are screen-sized, so nearer cuts would overprint).
 const MARK_MERGE_MM = 10;
 const finite = (v) => Number.isFinite(Number(v)) && v !== null && v !== '' && v !== true;
+// A cut that reaches the board's bottom is THROUGH: within this tolerance (TASK 839: a 3/4 in depth typed in inches is 19.049999999999997 mm, the 3/4 in board 19.05)
+const isThrough = (d, T) => d >= T - 1e-9;
 
 /** How one cut item enters the model: { kind: 'cut', depth, through, depthUnset } or { kind: 'skip', reason }. */
 export function reliefDepth(cutTypeIn, cutDepth, T) {
@@ -32,7 +34,7 @@ export function reliefDepth(cutTypeIn, cutDepth, T) {
   if (cutType === 'outside' || cutType === 'inside') {
     if (unset) return { kind: 'cut', depth: T, through: true, depthUnset: true };   // a cut-out with no depth = through
     const d = Number(cutDepth);
-    if (d < 0 || d >= T) return { kind: 'cut', depth: T, through: true, depthUnset: false }; // negative: through (UNVERIFIED vs the Origin)
+    if (d < 0 || isThrough(d, T)) return { kind: 'cut', depth: T, through: true, depthUnset: false }; // negative: through (UNVERIFIED vs the Origin)
     if (d === 0) return { kind: 'skip', reason: 'zero-depth' };
     return { kind: 'cut', depth: d, through: false, depthUnset: false };
   }
@@ -40,7 +42,7 @@ export function reliefDepth(cutTypeIn, cutDepth, T) {
     if (unset) return { kind: 'skip', reason: 'no-depth' };                          // never guess a pocket / groove depth
     const d = Number(cutDepth);
     if (d <= 0) return { kind: 'skip', reason: 'no-depth' };
-    return d >= T ? { kind: 'cut', depth: T, through: true, depthUnset: false } : { kind: 'cut', depth: d, through: false, depthUnset: false };
+    return isThrough(d, T) ? { kind: 'cut', depth: T, through: true, depthUnset: false } : { kind: 'cut', depth: d, through: false, depthUnset: false };
   }
   return { kind: 'skip', reason: 'unsupported' };                                    // Guide is never cut
 }
@@ -99,9 +101,13 @@ function regionBox(r) {
   if (!b) { b = [Infinity, Infinity, -Infinity, -Infinity]; for (const p of r.outer) { if (p[0] < b[0]) b[0] = p[0]; if (p[1] < b[1]) b[1] = p[1]; if (p[0] > b[2]) b[2] = p[0]; if (p[1] > b[3]) b[3] = p[1]; } BBOX.set(r, b); }
   return b;
 }
-function near(list, of) {
+const boxOf = (regions) => { // TASK 839: the bounding box of a region list
   const t = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const r of of) { const b = regionBox(r); if (b[0] < t[0]) t[0] = b[0]; if (b[1] < t[1]) t[1] = b[1]; if (b[2] > t[2]) t[2] = b[2]; if (b[3] > t[3]) t[3] = b[3]; }
+  for (const r of regions) { const b = regionBox(r); if (b[0] < t[0]) t[0] = b[0]; if (b[1] < t[1]) t[1] = b[1]; if (b[2] > t[2]) t[2] = b[2]; if (b[3] > t[3]) t[3] = b[3]; }
+  return t;
+};
+function near(list, of) {
+  const t = boxOf(of);
   return list.filter((r) => { const b = regionBox(r); return b[0] <= t[2] && b[2] >= t[0] && b[1] <= t[3] && b[3] >= t[1]; });
 }
 
@@ -167,7 +173,21 @@ function emitWalls(m, quads, depths) {
 // (not a through cut, which the bit clears at full width) = TERRACES over its profile; the footprint at each half-width comes from the
 // caller's `footprintsAt` (profile-model.deriveCutFootprintAt: the same derivation). The full-width regions are only built when needed.
 // A piece with depth null takes the cut's own rule depth (so a through cut's regions do not depend on the stock thickness).
+// TASK 839: + `freed` = the material a THROUGH Inside cut encloses (inside its bit-centre path): it drops out, so buildRelief removes it with the cut (TASK 459's
+// open hole), less the parts cut Outside inside it; `part` = what an Outside cut encloses (a part: it stays). A held cut (tabs / onion skin) keeps its piece;
+// a programmed pocket's wall and islands (they carry its `clearing`) and a level of a stepped cut (`terrace`) are not cut-outs.
+const SIDE = { interior: 'in', inside: 'in', exterior: 'out', outside: 'out' };
 function itemPieces(it, rule) {
+  const freed = [], part = [];
+  for (const fp of it.footprints || []) {
+    if (!fp || fp.clearing || fp.terrace || !Array.isArray(fp.center) || fp.center.length < 3) continue;
+    const side = SIDE[fp.cutType || it.cutType];
+    if (side === 'in' && rule.through && !fp.hold) freed.push(...regionsFromRings([toRing(fp.center)], 'nonzero'));
+    else if (side === 'out' && (rule.through || fp.hold)) part.push(...regionsFromRings([toRing(fp.center)], 'nonzero'));
+  }
+  return { ...cutPieces(it, rule), freed, part };
+}
+function cutPieces(it, rule) {
   const bounds = [Infinity, -Infinity, Infinity, -Infinity];
   const ringSets = [];
   for (const fp of it.footprints || []) {
@@ -248,7 +268,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   const memoC = (map, key, make) => { if (C) { if (C[map].has(key)) hits++; else misses++; } return memo(C, touched, map, key, make); };
 
   const b = bounds ? { ...bounds } : { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
-  const pending = [];
+  const pending = [], freed = [], parts = []; // TASK 839: the through Inside cuts' freed pieces, the Outside cuts' parts
   for (const it of items) {
     const sm = (it.footprints || []).find((fp) => fp && fp.clearing && fp.clearing.role === 'start' && fp.clearing.point);
     if (sm) { // TASK 778: a programmed pocket's start mark (guide: never cuts wood; drawn as a 3D target at the derived point)
@@ -271,6 +291,16 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
       if (near) near.keys.push(it.key); else marks.push({ key: it.key, keys: [it.key], kind: 'depth-unset', point: pt });
     }
     r.pieces.forEach((pc, j) => pending.push({ key: it.key, id: `${ik}#${j}`, depth: pc.depth === null ? rule.depth : pc.depth, regions: pc.regions }));
+    if (r.freed.length) freed.push({ key: it.key, id: `${ik}#freed`, depth: rule.depth, regions: r.freed });
+    if (r.part.length) parts.push({ id: ik, regions: r.part, box: boxOf(r.part) });
+  }
+  // TASK 839: a through Inside cut's freed piece (itemPieces) drops out: removed at the cut's depth, less every part cut Outside that lies inside it
+  for (const f of freed) {
+    const fb = boxOf(f.regions);
+    const inner = parts.filter((p) => p.box[0] >= fb[0] && p.box[1] >= fb[1] && p.box[2] <= fb[2] && p.box[3] <= fb[3]
+      && regionsArea(intersectRegions(p.regions, f.regions)) >= 0.999 * regionsArea(p.regions));
+    const regions = inner.length ? diffRegions(f.regions, unionRegions(...inner.map((p) => p.regions))) : f.regions;
+    if (regions.length) pending.push({ key: f.key, id: `${f.id}${inner.map((p) => `-${p.id}`).join('')}`, depth: f.depth, regions });
   }
 
   lap('footprints');
@@ -324,7 +354,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   const top = newMesh(), floor = newMesh(), wall = newMesh(), bottom = newMesh(), side = newMesh();
   emitFlat(top, memoC('flat', `top|${bx}|${depths.length ? rKey[0] : ''}`, () => flatTris(depths.length ? diffRegions(rect, R[0]) : rect)), 0, 1);
   depths.forEach((d, k) => {
-    const through = d >= T - 1e-9;
+    const through = isThrough(d, T);
     // floor_k = R_k minus R_k+1 = E_k minus R_k+1; only the deeper regions near E_k can matter (a bbox pre-filter keeps each Clipper
     // call small: a through-cut kerf far away is in every level and would otherwise be re-processed 29 times).
     if (!through) emitFlat(floor, memoC('flat', `fl|${bx}|${eKey[k]}|${k + 1 < depths.length ? rKey[k + 1] : ''}`, () => flatTris(k + 1 < depths.length ? diffRegions(E[k], near(R[k + 1], E[k])) : E[k])), -d, 1);
@@ -332,7 +362,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   lap('floors');
   emitWalls(wall, memoC('wall', `${bx}|${rKey.join(';')}`, () => wallQuads(R)), depths); // the quads depend only on the level REGIONS, not on the depths
   lap('walls');
-  const throughR = depths.length && depths[depths.length - 1] >= T - 1e-9 ? R[depths.length - 1] : [];
+  const throughR = depths.length && isThrough(depths[depths.length - 1], T) ? R[depths.length - 1] : [];
   emitFlat(bottom, memoC('flat', `bot|${bx}|${throughR.length ? rKey[depths.length - 1] : ''}`, () => flatTris(throughR.length ? diffRegions(rect, throughR) : rect)), -T, -1);
   if (prof) { // the board's own edge, outward (away from the material), from the top face down to the bottom
     for (const e of boundaryEdges(rect)) {
@@ -354,7 +384,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   const triangles = Object.values(meshes).reduce((s, g) => s + g.indices.length / 3, 0);
   const areas = {};
   for (const [k, g] of Object.entries(meshes)) areas[k] = meshArea(g);
-  return { stockBox: box, levels: depths.map((d, k) => ({ depth: d, through: d >= T - 1e-9, regions: R[k] })), meshes, marks, stats: { triangles, areas, skipped, unsetThrough, levels: depths.length, ms: (lap('mesh'), ms), cache: C ? { hits, misses } : null, outsideStock, partlyOutside, board: prof ? 'profile' : 'rectangle' } };
+  return { stockBox: box, levels: depths.map((d, k) => ({ depth: d, through: isThrough(d, T), regions: R[k] })), meshes, marks, stats: { triangles, areas, skipped, unsetThrough, levels: depths.length, ms: (lap('mesh'), ms), cache: C ? { hits, misses } : null, outsideStock, partlyOutside, board: prof ? 'profile' : 'rectangle' } };
 }
 
 /** Total triangle area of a mesh (for tests and stats). */

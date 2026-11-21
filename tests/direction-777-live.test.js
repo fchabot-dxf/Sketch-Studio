@@ -1,4 +1,5 @@
 // tests/direction-777-live.test.js — TASK 777: clearer cutting direction marks in Shaper Prepare (DESKTOP 1280x800).
+// TASK S3: the Raster switch is made on the view (no edit session): the operation is out of date, Recalculate generates it before the second bench.
 // Checks:
 //  1. Every determined toolpath kind carries sparse slow dashes (8px 28px, 5s = 7.2 px/s), NO arrowheads (TASK 821):
 //     Outside, Inside, Raster pocket (passes + cleanup + wall), Spiral pocket (linked + wall), Pocket Loop,
@@ -280,6 +281,10 @@ try {
   // Switch the same 400x400 pocket to dense Raster (~108 passes at 60% stepover = 3.6mm)
   // TASK S2: the pocket's operation set to Raster (the open operation's field: prepare-view.js setOpField), then the shape selected again
   await evalJs(`import('/apps/shaper/src/operations-store.js').then((S) => { const pv = window.__prepareView, sel = pv.selectedTargets(); pv.openOp(S.storeOps()[0].id); pv.setOpField('clearing', 'raster'); pv.closeOp(); pv.setSelection(sel); })`);
+  // TASK S3 (out of date, Fusion style): the field was set on the view directly (no edit session, so no OK to generate it): the operation is out of date until Recalculate
+  assert.ok(await evalJs(`(() => { const r = document.querySelector('#prepare-ops .ops-row'); return !!r && r.classList.contains('is-out-of-date'); })()`), 'the pocket changed outside an edit session: out of date (TASK S3)');
+  await evalJs(`document.getElementById('op-recalculate').click()`);
+  await waitFor(`import('/apps/shaper/src/op-paths.js').then((m) => m.generatingCount() === 0)`, 'Recalculate: the Raster generated', 120000);
   await sleep(200);
   const bRast = await measurePan('dense Raster');
   assert.ok(bRast.passes >= 60, 'dense Raster (60+ passes) measured: ' + bRast.passes);

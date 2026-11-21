@@ -3,6 +3,7 @@
 // onto that corner (real mouse: the snap makes the coincident), so the three squares sit exactly on top of each other; back in Prepare, each Pocket still cuts its
 // own square at its own depth: its row reads "1 region" (before task 832: "1 shape: nothing to cut", no path drawn) and its paths are drawn. The rules and the
 // edit matrix are tests/follow-design-832-node.test.js. With EVIDENCE_DIR set, the screenshots go there.
+// TASK S3: the Design edit leaves the three Pockets OUT OF DATE (their rows marked); Recalculate (the toolbar) makes their paths, then the checks above hold.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -96,6 +97,12 @@ await (async () => {
 
     await openMode('prepare');
     await waitFor(`document.querySelectorAll('#prepare-ops .ops-row').length >= 3`, 'three operations listed');
+    // TASK S3 (out of date, Fusion style; the owner's words for this task: "this makes the toolpath out of date, but not nothing to cut, simple recalc"): the Design
+    // edit generated nothing: the three Pockets are out of date; Recalculate (the toolbar's button, nothing selected: every one) makes their paths
+    const stale = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].filter((r) => /Pocket/.test(r.textContent) && r.classList.contains('is-out-of-date') && !!r.querySelector('.ops-stale')).length`);
+    assert.strictEqual(stale, 3, 'stacked: the three Pockets are out of date (the row mark) after the Design edit');
+    await clickEl('#op-recalculate');
+    await waitFor(`import('/apps/shaper/src/op-paths.js').then((m) => m.generatingCount() === 0 && !document.querySelector('#prepare-ops .ops-row.is-out-of-date'))`, 'Recalculate: every Pocket generated, no mark', 120000);
     const after = await rows();
     console.log('rows stacked:', JSON.stringify(after));
     const shotStacked = await shot('832-prepare-stacked.png', { x: 0, y: 40, width: 1400, height: 700 });

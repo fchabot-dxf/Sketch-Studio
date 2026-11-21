@@ -8,6 +8,7 @@
 //     generates (their input delay measured in the page), the main thread's LONG TASKS during the generation (none over 100 ms; the numbers printed); the paths appear;
 //  4. an On line, open: its paths as opened faint, no new path; a change asks for no generation. (TASK 836: the lead-in, and its handle checked here, are gone. The
 //     open operation's TAB handles are checked in tests/op-paths-817-node.test.js case 4: this relief's outline, 720 short segments, takes no tab: refused, no handle.)
+// TASK S3: the On line is made with Prepare's operations toolbar (the card's type menu only changes an open operation).
 // No console error, no page exception. Screenshots .evidence/817/ (the spinning row zoomed, the Preview button spinning, the open session).
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -16,7 +17,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { probe } from './helpers/tooltip-live.js';
-import { openOpLive } from './helpers/prepare-open-live.js';
+import { openOpLive, typeLive } from './helpers/prepare-open-live.js';
 import * as M from './helpers/stl-mesh.js';
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/817');
@@ -166,8 +167,7 @@ try {
     assert.ok(/levels/.test(await evalJs(`document.querySelector('${rowSel(rough)} .ops-sub').textContent`)), D + ': the row tells what it cuts');
     // ── 4. an On line, open: its paths as opened faint, no new path; a change asks for nothing ──
     await listOpen(false);
-    await clickEl('#prepare-panel .cut-type-trigger'); await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'the type menu');
-    await clickEl('.cut-type-opt[data-id="online"]'); await sleep(200);
+    await typeLive(t, 'online'); await sleep(200); // TASK S3: the row's shapes selected, the operations toolbar's On line: their new On line, open
     await typeField('.cut-depth', '2');
     await clickEl('#prepare-panel .cut-ok');
     await waitFor(`import('/apps/shaper/src/op-paths.js').then((m) => m.generatingCount() === 0)`, D + ': the On line generated', 60000);

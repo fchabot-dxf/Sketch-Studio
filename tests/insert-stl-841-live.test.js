@@ -67,13 +67,19 @@ const clickWorld = async (x, y) => {
   await press(p.x, p.y);
 };
 const notice = () => evalJs(`document.getElementById('prepare-notice').textContent`);
+// a toolbar button (TASK S3): in the bar, or (not in the bar: a phone) its row in its section's dropdown
+const pressToolbar = async (id, section) => {
+  if (await evalJs(`!document.getElementById(${JSON.stringify(id)}).hidden`)) { await clickEl('#' + id); return; }
+  await clickEl(`#prepare-ribbon .sk-ribbon-group[data-section="${section}"] button.sk-ribbon-group-label`);
+  await clickEl(`.sk-ribbon-sect-menu.show .sk-ribbon-sect-item[data-id="${id}"]`);
+};
 const openDrawer = async (what) => {
   await clickEl(touch ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, what + ': the drawer opens'); await sleep(300);
 };
 const openStage = async (id) => {
   if (touch) { await openDrawer('stage ' + id); await clickEl(`.sk-sidebar-stage[data-tab="${id}"]`); } else await clickEl(`.sk-header-tab[data-tab="${id}"]`);
-  await waitFor(`!document.getElementById('view-${id}').hidden`, `the ${id} stage`);
+  await waitFor(`!document.getElementById(${JSON.stringify(id === 'design' ? 'design-view' : `view-${id}`)}).hidden`, `the ${id} stage`);
   await sleep(300);
 };
 // the page's state, read through its own modules
@@ -91,25 +97,32 @@ async function phase(name) {
   // the plate (drawn in Design: the page's own rectangle op), then an Outside on it in Prepare (a click inside, the type menu, OK)
   await evalJs(`import('/packages/core/tool-ops.js').then((m) => { const st = window.__designController.state; st.saveState('draw'); m.rect(st, 0, -60, 100, 0); window.__designController.engine.solve(500); })`);
   await openStage('prepare');
-  await clickWorld(80, -10);
-  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, name + ': the plate picked');
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, name + ': the type menu');
-  await clickEl('.cut-type-opt[data-id="exterior"]');
-  await waitFor(`document.querySelector('.cut-type-cur') && document.querySelector('.cut-type-cur').textContent === 'Outside'`, name + ': Outside');
+  // TASK S3: a click inside selects the plate; the toolbar's Outside = a new Outside of it, open; OK
+  await clickWorld(80, -10); await sleep(200);
+  await pressToolbar('op-type-exterior', 'operations');
+  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && !!document.querySelector('#prepare-panel .cut-ok')`, name + ': the new Outside, open');
   await clickEl('#prepare-panel .cut-ok'); await sleep(300);
   const before = await facts();
   assert.deepStrictEqual(before.ops.map((o) => o.type), ['exterior'], name + ': the plate is an Outside');
-  // the drawer's Insert STL…, the chooser answered with small.stl
+  // TASK 841: the toolbar's FIRST section is INSERT (its STL button)
+  const groups = await evalJs(`[...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section + ':' + g.querySelector('.sk-ribbon-group-label').textContent)`);
+  assert.deepStrictEqual(groups, ['insert:Insert', 'operations:Operations', 'recalculate:Recalculate'], name + ': INSERT first in Prepare\'s toolbar');
+  // Insert STL (desktop: the toolbar's INSERT > STL; phone: the drawer's Insert STL…, next to Open STL…), the chooser answered with small.stl
   await evalJs('delete window.showOpenFilePicker'); // the <input type=file> path (as on a phone): the chooser can be intercepted
   await send('DOM.getDocument', { depth: 0 });
   await send('Page.setInterceptFileChooserDialog', { enabled: true });
-  await openDrawer(name);
-  assert.strictEqual(await evalJs(`document.querySelector('[data-action="insert-stl"]').textContent.trim()`), 'Insert STL…', name + ': the entry');
-  const order = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-action]')].map((e) => e.dataset.action).filter((a) => a.endsWith('-stl'))`);
-  assert.deepStrictEqual(order, ['open-stl', 'insert-stl'], name + ': Insert STL next to Open STL');
   const chooser = once('Page.fileChooserOpened');
-  await clickEl('[data-action="insert-stl"]');
+  if (touch) {
+    await openDrawer(name);
+    assert.strictEqual(await evalJs(`document.querySelector('[data-action="insert-stl"]').textContent.trim()`), 'Insert STL…', name + ': the entry');
+    const order = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-action]')].map((e) => e.dataset.action).filter((a) => a.endsWith('-stl'))`);
+    assert.deepStrictEqual(order, ['open-stl', 'insert-stl'], name + ': Insert STL next to Open STL');
+    await clickEl('[data-action="insert-stl"]');
+  } else {
+    assert.strictEqual(await evalJs(`document.getElementById('prepare-insert-stl').textContent.trim()`), 'STL', name + ': the toolbar\'s INSERT > STL');
+    await shot(`${name}-0-toolbar-insert.png`, '#prepare-ribbon-frame');
+    await pressToolbar('prepare-insert-stl', 'insert');
+  }
   const ch = await Promise.race([chooser, sleep(5000).then(() => null)]);
   assert.ok(ch, name + ': the file chooser opened');
   await send('DOM.setFileInputFiles', { files: [SMALL], backendNodeId: ch.backendNodeId });
@@ -145,6 +158,26 @@ async function phase(name) {
     await shot(`${name}-2-review-top.png`, '#review-canvas-host');
     await clickEl('#review-reset'); await sleep(600);
     await shot(`${name}-3-review-angled.png`, '#review-canvas-host');
+    // the part moved in Design (+20, +10: one undo step): out of date (TASK S3), the Review waits with Recalculate; Recalculate = the levels where the part is now
+    const levelsAt = () => evalJs(`import('/apps/shaper/src/operations-store.js').then((O) => O.regionOf(${JSON.stringify(after.part.keys[0])}).levels.flatMap((lv) => lv.loops.flatMap((f) => f)))`);
+    const lv0 = await levelsAt();
+    await openStage('design');
+    await evalJs(`import('/apps/shaper/src/selection-list.js').then((S) => { const st = window.__designController.state, e = S.getSelections().find((x) => x.kind === 'stl'); st.saveState('move');
+      for (const j of new Set(st.shapes.filter((s) => e.shapeIds.includes(s.id)).flatMap((s) => s.joints))) { const p = st.joints.get(j); p.x += 20; p.y += 10; } })`);
+    assert.deepStrictEqual(await levelsAt(), lv0, name + ': right after the move: the levels as they were');
+    await openStage('review');
+    await waitFor(`/out of date/.test(document.getElementById('review-info').textContent) && !!document.querySelector('#review-info .sk-wait-action')`, name + ': the Review waits: out of date, with Recalculate', 30000);
+    const line = await evalJs(`document.getElementById('review-info').textContent`);
+    console.log(`${name}: after the move: ${JSON.stringify(line)}`);
+    await shot(`${name}-4-review-out-of-date.png`, '#review-info');
+    await clickEl('#review-info .sk-wait-action');
+    await waitFor(`/Roughing: \\d+ levels?/.test(document.getElementById('review-info').textContent)`, name + ': Recalculate: the Review built again', 60000);
+    const lv1 = await levelsAt();
+    const worst = lv0.reduce((w, v, i) => Math.max(w, Math.abs(lv1[i] - v - (i % 2 ? 10 : 20))), 0);
+    assert.ok(lv1.length === lv0.length && worst <= 2e-6, `${name}: Recalculate: every level point moved by exactly (+20, +10) (worst ${worst} mm)`);
+    await sleep(600);
+    await clickEl('#review-top'); await sleep(600);
+    await shot(`${name}-5-review-moved-top.png`, '#review-canvas-host');
   } else {
     await clickEl('#review-top'); await sleep(600);
     await shot(`${name}-2-review.png`);

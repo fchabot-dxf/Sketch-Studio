@@ -34,6 +34,7 @@ import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygon
 import { resolveDimEndpoints, linearDimFrame, linearParamsToPoint, projectDimLabel } from '#core/dim-label.js';
 import { arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 import * as ops from '#core/tool-ops.js';
+import { spurTooth, GEAR_PRESSURE_ANGLES } from '#core/gear-geometry.js';
 
 const R = (v) => Math.round(v * 1e6) / 1e6;
 const T = CONSTRAINT_TYPES;
@@ -415,6 +416,76 @@ function buildBoltCircle(d, p) {
   const chords = d.poly(centres, true, true); // construction chords between the hole centres
   d.equalChain(chords.map((s) => s.id)); d.equalChain(holes); d.v(ORIGIN_JOINT_ID, centres[0]);
   d.radius(outer.id, 'outer_radius', 6); d.radius(bolt.id, 'bolt_radius', 6); d.radius(holes[0], 'hole_radius', 4);
+}
+
+// TASK 840: SPUR GEAR (#core/gear-geometry.js spurTooth: a standard full-depth involute tooth, its flank two arcs fitted to the involute, the
+// backlash allowance a turn of each flank into the tooth). The centre on the origin, tooth 0 pointing up (+Y). ONE tooth is drawn with the
+// tools, from the middle of the gap on its right round to the middle of the gap on its left: the right half (root arc G -> F, the radial line
+// F -> B up to the base circle when the root is under it, the flank's two arcs S -> J -> A) and the tip arc A -> A', then the left half drawn the
+// same way and held to the right one by the Symmetric tool across the Y axis. The Circular Pattern tool (quantity = teeth, 360 deg, round the
+// origin) makes the other teeth, and each tooth's left gap point is made Coincident with the next tooth's right one: ONE closed outline (the
+// first of those joins also sets where the gap's middle is). The bore is a circle on the origin, the pitch circle a construction circle.
+// DIMENSIONS, every one a formula of the user parameters (`module`, `backlash`, `bore`; the teeth and the pressure angle are chosen at open: the
+// flank's arcs are fitted for them): the root, tip and pitch radii, the bore, the base radius (radial case: B on the base circle), the angle
+// of the flank's start S from the tooth's axis (it carries the backlash), and the involute's shape as fitted: J's radius and its distance off the
+// ray to S, A's distance off the ray to J, the two arcs' radii (k * module: the tooth scales with the module). In an inch document the module is a length like
+// every other (3 mm opens as 1/8 in, which is diametral pitch 8): no second pitch system. Under the base circle the flank is a plain radial line
+// (no undercut is generated: tests/spur-gear-840-node.test.js reports the small pinions' mesh clearance).
+function buildSpurGear(d, p) {
+  const z = Math.round(num(p.teeth, 24)), m = num(p.module, 3), bore = num(p.bore, 10), b = num0(p.backlash, 0.1);
+  const alpha = Number(GEAR_PRESSURE_ANGLES.some((o) => o.value === p.pressureAngle) ? p.pressureAngle : GEAR_PRESSURE_ANGLES[0].value);
+  const g = spurTooth({ teeth: z, module: m, pressureAngle: alpha, backlash: b }), { rp, rb, ra, rf } = g.circles;
+  const k = (x) => String(Number((x / m).toPrecision(10))), deg = (x) => String(Number(x.toPrecision(10)));
+  const AXIS_Y = AXIS_SNAP_TARGETS['axis-y'].shapeId;
+  const at = (r, a) => [r * Math.sin(a * Math.PI / 180), r * Math.cos(a * Math.PI / 180)]; // a label point: radius r, a deg right of the axis
+  const c = d.pt(0, 0);
+  d.anchor(c);
+  // the two halves: side = 1 the right one, -1 its mirror (the arcs counter-clockwise as the user sees them, so the left ones run backwards)
+  const half = (side) => {
+    const P = (q) => d.pt(side * q.x, q.y), h = { G: P(g.G), F: P(g.F), J: P(g.J), A: P(g.A), C1: P(g.C1), C2: P(g.C2) };
+    h.root = side > 0 ? d.arc(c, h.G, h.F) : d.arc(c, h.F, h.G);
+    if (g.radial) { h.foot = d.line(h.F, [side * g.B.x, g.B.y]); h.S = h.foot.b; } else h.S = h.F;
+    h.arc1 = side > 0 ? d.arc(h.C1, h.S, h.J) : d.arc(h.C1, h.J, h.S);
+    h.arc2 = side > 0 ? d.arc(h.C2, h.J, h.A) : d.arc(h.C2, h.A, h.J);
+    return h;
+  };
+  const R = half(1);
+  const L = half(-1);
+  const tip = d.arc(c, R.A, L.A);
+  // the right half's rules and dimensions
+  if (g.radial) d.on(c, R.foot.id); // the radial line runs through the centre
+  // construction rays from the centre to S (its angle from the tooth's axis) and to J
+  const toS = d.line(c, R.S, true).id, toJ = d.line(c, R.J, true);
+  d.radius(R.root, `(${z} - 2.5) * module / 2`, rf * 0.8);
+  d.radius(tip, `(${z} + 2) * module / 2`, ra * 1.1);
+  if (g.radial) {
+    const base = d.circle(0, 0, rb, true);
+    d.anchor(base.c); d.on(R.S, base.id);
+    d.radius(base.id, `${z} * module * cos(${alpha} deg) / 2`, rb * 0.6);
+  }
+  const psiS0 = g.psiS + g.delta * 180 / Math.PI; // the start's angle without the backlash
+  d.angle(AXIS_Y, toS, at(rf * 0.7, g.psiS / 2), `${deg(psiS0)} deg - backlash / (${z} * module * cos(${alpha} deg)) * 1 rad`);
+  d.dim(c, R.J, 'aligned', 1, `${k(Math.hypot(g.J.x, g.J.y))} * module`, true);
+  // J off the start ray, A off J's ray: point-to-line distances (k * module: the turn by the backlash moves the flank as one piece)
+  const off = (q, from) => Math.abs(q.x * from.y - q.y * from.x) / Math.hypot(from.x, from.y), label = (q) => { const [x, y] = d.w(q.x + 2, q.y); return { x, y }; };
+  ops.dimension(d.state, { point: R.J, line: toS }, label(g.J), `${k(off(g.J, g.S))} * module`);
+  ops.dimension(d.state, { point: R.A, line: toJ.id }, label(g.A), `${k(off(g.A, g.J))} * module`);
+  d.radius(R.arc1, `${k(g.rho1)} * module`, g.rho1 * 0.5);
+  d.radius(R.arc2, `${k(g.rho2)} * module`, g.rho2 * 0.5);
+  // the left half: the mirror of the right one (the Symmetric tool, point by point, across the Y axis)
+  for (const key of ['F', 'S', 'J', 'A', 'C1', 'C2', 'G']) if (key !== 'S' || g.radial) ops.constrain(d.state, T.SYMMETRIC, { joints: [R[key], L[key]], line: AXIS_Y });
+  // the pitch circle (construction) and the bore, on the centre
+  const pitch = d.circle(0, 0, rp, true);
+  d.anchor(pitch.c);
+  d.radius(pitch.id, `${z} * module / 2`, rp * 1.15);
+  const hole = d.circle(0, 0, bore / 2);
+  d.anchor(hole.c);
+  d.radius(hole.id, 'bore / 2', bore / 2 + 2);
+  // the other teeth: the Circular Pattern tool, then each left gap point joined to the next tooth's right one (ONE outline)
+  const unit = [R.root, ...(g.radial ? [R.foot.id] : []), R.arc1, R.arc2, tip, L.arc2, L.arc1, ...(g.radial ? [L.foot.id] : []), L.root];
+  const pat = ops.pattern(d.state, T.CIRCULAR_PATTERN, { shapes: unit, joints: [] }, { ...patternDefaults(T.CIRCULAR_PATTERN), centre: ORIGIN_JOINT_ID, quantity: z, angle: 360, symmetric: false });
+  const lead = (j) => pat.sources.points.indexOf(j), copyOf = (j, i) => (i === 0 ? j : pat.instances.find((x) => x.at[0] === i).joints[lead(j)]);
+  for (let i = 0; i < z; i++) d.coincident(copyOf(L.G, i), copyOf(R.G, (i + 1) % z));
 }
 
 function buildFingerEdge(d, p) {
@@ -863,6 +934,7 @@ const triangleCorners = (p) => {
  *                       TASK 674: `perCorner: true` = a joint per corner: one option (every corner) or a list, one per corner of corners();
  *                       TASK 693: `optionLabel(option, values)` optionally derives the picker's displayed/accessible label from `values`
  *                       while keeping stored `option.value` unchanged (used by box-frame Horizontal layout).
+ * TASK 840: a length may declare `docStep: { in, cm }`, the steps its default rounds to in an inch / cm document (else 1/16 in, 0.1 cm).
  * TASK 674: `when: { key: value }` = the param applies only while those choices hold (the scalene trapezoid's setback): otherwise it makes no
  * user parameter, is not asked in the start modal and the recipe does not read it.
  * `dimensions` is what the editor shows: the number of driving dimensions the drawing carries at its defaults (a test asserts it).
@@ -914,6 +986,14 @@ const benchSeatLimits = (v, u) => {
   if (v.gap >= maxGap) return refusal('gap', `Gap is too big for ${v.slats} slats, this inner radius and sweep angle: use less than ${below(maxGap, u)}.`);
   return null;
 };
+// TASK 840: the bore must leave the gear a ring (under the root circle); the backlash must leave the tooth a tip (the turn of each flank under
+// the tip's half angle without it)
+const spurGearLimits = (v, u) => {
+  const z = Math.round(v.teeth), rf = (z / 2 - 1.25) * v.module;
+  if (v.bore >= 2 * rf) return refusal('bore', `Bore diameter is too big for this module and ${z} teeth: use less than ${below(2 * rf, u)}.`);
+  const g = spurTooth({ teeth: z, module: v.module, pressureAngle: Number(v.pressureAngle), backlash: 0 }), most = 2 * g.circles.rb * Math.atan2(g.A.x, g.A.y);
+  return v.backlash >= most ? refusal('backlash', `Backlash allowance is too big for this module and ${z} teeth: use less than ${below(most, u)}.`) : null;
+};
 const parallelogramLimits = (v) => (v.angle >= 180 ? refusal('angle', 'Angle is too big: use less than 180 deg.') : null);
 const triangleLimits = (v, u) => {
   const sides = [['base', 'Base', v.base], ['leftSide', 'Left side', v.leftSide], ['rightSide', 'Right side', v.rightSide]];
@@ -931,6 +1011,8 @@ export const TEMPLATES = [
   { id: 'arrow', name: 'Arrow', description: 'A straight arrow: 40 mm by 10 mm shaft and a 20 mm long, 30 mm wide head.', params: { shaftLength: { label: 'Shaft length', default: 40 }, shaftWidth: { label: 'Shaft width', default: 10 }, headLength: { label: 'Head length', default: 20 }, headWidth: { label: 'Head width', default: 30 } }, dimensions: 4, build: buildArrow },
   { id: 'l-bracket', name: 'L-bracket', description: 'A 60 by 50 mm L-bracket, 10 mm thick, with two 5 mm holes.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 50 }, thickness: { label: 'Thickness', default: 10 }, holeDiameter: { label: 'Hole diameter', default: 5 } }, dimensions: 9, limits: lBracketLimits, build: buildLBracket },
   { id: 'bolt-circle', name: 'Bolt circle', description: 'A 60 mm disc with six 6 mm holes on a 40 mm bolt circle.', params: { outerRadius: { label: 'Disc radius', default: 30 }, boltRadius: { label: 'Bolt circle radius', default: 20 }, holeRadius: { label: 'Hole radius', default: 3 } }, dimensions: 3, build: buildBoltCircle },
+  // TASK 840
+  { id: 'spur-gear', name: 'Spur gear', description: 'A 24-tooth involute spur gear: module 3 (72 mm pitch diameter), 20 degree pressure angle, a 10 mm bore, 0.1 mm backlash allowance for wood. One tooth and a circular pattern.', params: { teeth: { label: 'Teeth', default: 24, kind: 'count', min: 6, max: 200 }, module: { label: 'Module', default: 3 }, pressureAngle: { label: 'Pressure angle', default: '20', kind: 'choice', options: GEAR_PRESSURE_ANGLES, glyph: 'pressure-angle' }, bore: { label: 'Bore diameter', default: 10 }, backlash: { label: 'Backlash allowance', default: 0.1, allowZero: true, docStep: { in: 0.001, cm: 0.01 } } }, dimensions: 11, limits: spurGearLimits, build: buildSpurGear },
   { id: 'finger-edge', name: 'Finger-joint edge', description: 'The tabbed edge of a box panel: five 10 mm tabs, 5 mm deep.', params: { tabWidth: { label: 'Tab width', default: 10 }, gapWidth: { label: 'Gap width', default: 10 }, depth: { label: 'Depth', default: 5 } }, dimensions: 3, build: buildFingerEdge },
   { id: 'dog-bone-pocket', name: 'Dog-bone pocket', description: 'A 60 by 40 mm pocket with a diagonal dog-bone relief in each corner for a 1/4 inch (6.35 mm) bit.', params: { width: { label: 'Width', default: 60 }, height: { label: 'Height', default: 40 }, bitDiameter: { label: 'Bit diameter', default: 6.35 } }, dimensions: 6, build: buildDogBone },
   { id: 't-slot', name: 'T-slot', description: 'A T-track slot profile: 19 mm wide and 9.5 mm deep over a 25 mm wide slot, 16 mm deep in all.', params: { topWidth: { label: 'Top width', default: 19 }, topDepth: { label: 'Top depth', default: 9.5 }, bottomWidth: { label: 'Bottom width', default: 25 }, totalDepth: { label: 'Total depth', default: 16 } }, dimensions: 4, build: buildTSlot },
@@ -952,10 +1034,12 @@ export const TEMPLATES = [
 
 // TASK 722: a length default (authored in mm) as the document's unit says it: an inch document rounds to the nearest 1/16 in (38 mm -> 1.5 in,
 // 600 mm -> 23.625 in), a cm one to 0.1 cm; mm is as authored. A length that would round to nothing keeps one step (1/16 in, 0.1 cm).
+// TASK 840: a length spec may declare its own steps, `docStep: { in, cm }` (the spur gear's 0.1 mm backlash allowance: 1/16 in would be 1.6 mm, so
+// it rounds to 0.001 in, 0.01 cm); a spec without one takes STEP.
 const STEP = { in: 1 / 16, cm: 0.1 };
-const toDocUnit = (mm, unit) => (STEP[unit] ? Math.max(STEP[unit], R(Math.round(mm / basePer(unit) / STEP[unit]) * STEP[unit])) : mm);
+const toDocUnit = (mm, unit, steps = STEP) => (steps[unit] ? Math.max(steps[unit], R(Math.round(mm / basePer(unit) / steps[unit]) * steps[unit])) : mm);
 /** The default parameters of a template: { key: default } (a length in the document's `unit`, rounded as above; counts, angles and choices as authored). */
-export const defaultParams = (t, unit = BASE) => Object.fromEntries(Object.entries(t.params).map(([k, v]) => [k, paramKind(v) === 'length' ? toDocUnit(v.default, unit) : v.default]));
+export const defaultParams = (t, unit = BASE) => Object.fromEntries(Object.entries(t.params).map(([k, v]) => [k, paramKind(v) === 'length' ? toDocUnit(v.default, unit, v.docStep || STEP) : v.default]));
 /** `values` (a length in the document's `unit`) with every length in mm, the unit a recipe, its limits and its corners are authored in. */
 export const toMm = (t, values, unit = BASE) => Object.fromEntries(Object.entries(values).map(([k, v]) => [k, t.params[k] && paramKind(t.params[k]) === 'length' ? R(Number(v) * basePer(unit)) : v]));
 

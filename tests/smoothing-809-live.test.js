@@ -5,6 +5,7 @@
 //   written path of the Roughing is cubics (C), zoomed screenshot -> back in Prepare, typed 0 in Smoothing (one undo step): the Paths view's paths are
 //   straight segments only (no C), the same zoom, screenshot -> the footer's Undo: 0.1 again -> Contour On, Edit contour: its card's Smoothing 0.05 (TASK 810, owner turn 2688; was 0.02).
 //  PHONE 390 x 844 (touch): Open STL -> a tap on the relief: the card's Smoothing row on the screen, 0.1.
+//  TASK S3: a press on the relief only selects it (no card); the Contour comes from Prepare's operations toolbar (#op-type-contour).
 // No console error / page exception. Screenshots (.evidence/809/<name>-*.png).
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -91,7 +92,8 @@ const pressOutline = async () => {
     return null; })`);
   assert.ok(p, 'a point of the outline on the canvas');
   await press(p.x, p.y);
-  await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, 'the relief\'s card');
+  // TASK S3: the press SELECTS the relief (its operation's row lit) and shows no card
+  await waitFor(`!!document.querySelector('#prepare-ops .ops-row.is-picked') && document.querySelector('#prepare-panel .cut-card').hidden`, 'the relief selected (no card)');
 };
 // TASK S2 (docs/OPERATIONS-MODEL.md 9.1): a press on the outline only selects it; the relief's Roughing operation is OPENED (its list row, then Edit) to show its card
 const t = { evalJs, waitFor, clickEl };
@@ -175,9 +177,7 @@ try {
   await waitFor(`import('/tests/helpers/plan-v2.js').then((m) => [...m.V2_PLAN.values()].find((x) => x.levels).smoothing === undefined)`, 'desktop: undo', 30000);
   // the part's Contour: its own Smoothing (0.05: TASK 810, owner turn 2688); TASK S2: the outline selected, Contour in the type menu = a NEW operation, open
   await pressOutline();
-  await clickEl('#prepare-panel .cut-type-trigger');
-  await waitFor(`!document.querySelector('.cut-type-menu').hidden`, 'desktop: the type menu');
-  await clickEl('.cut-type-opt[data-id="contour"]');
+  await clickEl('#op-type-contour'); // TASK S3: the operations toolbar's Contour (desktop: every type in the column)
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Contour' && !document.querySelector('#prepare-panel .cut-actions').hidden`, 'desktop: the Contour card', 60000);
   await passesTab();
   assert.deepStrictEqual([await rowShown('smoothing'), await smoothingValue()], [true, '0.05'], 'desktop: the Contour card: Smoothing 0.05 (its default)');

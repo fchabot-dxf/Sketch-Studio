@@ -220,7 +220,7 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
       app.press(rowOf(/^Inside/).querySelector('.ops-pick'));
       eq([...app.prepare.view().selection.keys()].sort(), [K.ha, K.hb].sort(), 'a tap selects the operation\'s regions');
       ok(rowOf(/^Inside/).classList.contains('is-picked'), 'its row is marked');
-      eq([app.document.querySelector('.cut-type-cur').textContent, app.document.querySelector('.cut-rows').hidden], ['Select type', true], 'TASK S2: a tap only selects: the card is the type menu of the quick flow (the Edit button of the row opens the operation)');
+      eq(app.document.querySelector('#prepare-panel .cut-card').hidden, true, 'TASK S2 / S3: a tap only selects: no card (the Edit button of the row opens the operation)');
       app.press(rowOf(/^Inside/).querySelector('.ops-edit'));
       eq(app.document.querySelector('.cut-type-cur').textContent, 'Inside', 'its Edit opens the operation: its card');
       app.prepare.cancel();

@@ -212,7 +212,7 @@ SettingsManager.set('LENGTH_PRECISION', null);
     pressEl('.sk-header-tab[data-tab="prepare"]');
     const pc = doc.getElementById('prepare-canvas'), p = worldToScreen(pc, { x: 10, y: 10 });
     app.click(Math.round(p.x), Math.round(p.y), { target: pc });
-    pressEl('.cut-type-trigger'); pressEl('.cut-type-opt[data-id="online"]');
+    pressEl('#op-type-online'); // TASK S3: the operations toolbar's button (the quick flow: a NEW operation, open)
     typed('.cut-depth', '3');
     const key = [...V2_PLAN.keys()][0];
     // a positive field with NO min (the bit diameter) keeps its rule: − stops at the smallest positive multiple of the step

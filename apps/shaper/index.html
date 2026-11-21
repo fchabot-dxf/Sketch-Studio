@@ -68,7 +68,7 @@
       --sk-doctabs-bg: var(--sk-header-bg);
     }
     /* TASK 737: per stage, the surface directly below the strip (document-tabs.js; html[data-sk-stage] is set by app-chrome.js). Design: the tool ribbon (the default). */
-    :root[data-sk-stage="prepare"] { --sk-doctab-surface: var(--sk-prep-bg); }
+    /* TASK S3: Prepare's surface below the strip is its operations toolbar, a tool ribbon as Design's: the default (TASK 737 declared the canvas grey before it) */
     :root[data-sk-stage="review"] { --sk-doctab-surface: var(--shaper-review-bg); --sk-doctab-surface-fg: var(--sk-header-bg); } /* TASK 754: a light surface, so the active tab's title is dark */
     #design-view, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
@@ -291,11 +291,22 @@
       --sk-prep-leftover: #FF5A36;        /* TASK 745: a programmed pocket's leftover (material the bit does not reach): an orange-red that reads on the band (not sampled) */
     }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; background: var(--sk-prep-bg); }
+    /* TASK S3: the OPERATIONS TOOLBAR (prepare-stage.js: Design's shared tool ribbon with Prepare's own buttons) in Design's place: a bar across the top of the view
+       (the rail on the short viewport, as Design's), lying OVER the canvas so the canvas never moves. data-dir and the two sizes on #view-prepare are set by
+       prepare-stage.js from the ribbon as laid out: --sk-prep-ribbon-h (the bar; 0 for the rail) moves the overlays at the top (the Operations list, the notice) below
+       it, --sk-prep-ribbon-hr the cut card's column only where the bar's buttons reach under it (a phone; on a desktop the card lies over the bar's empty end and keeps
+       its height), --sk-prep-ribbon-w (the rail; 0 for the bar) the ones at the left edge (the Operations list, the direction legend) right of it. The bar's
+       border is the one Design's ribbon host has (#design-ribbon); the rail's is the ribbon's own (its short-viewport rule). */
+    #prepare-ribbon-frame { position: absolute; left: 0; right: 0; top: 0; z-index: 6; display: flex; background: var(--sk-ribbon-bg); } /* z 6: under the cut card's popovers (the card, z 6, comes later in the page) */
+    #prepare-ribbon-frame[data-dir="column"] { right: auto; bottom: var(--sk-footer-clear, 0px); }
+    #view-prepare.is-fusion #prepare-ribbon-frame { top: var(--sk-fusion-bar-h, 44px); }
+    #prepare-ribbon { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    #prepare-ribbon-frame[data-dir="row"] > #prepare-ribbon { border-bottom: 1px solid #1f2937; }
     .sk-edge { fill: none; stroke: var(--sk-prep-geo); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
     .sk-edge.sk-edge-guide { stroke: var(--sk-prep-guide); }
     .sk-edge.sk-edge-stock { stroke: var(--sk-prep-stock); stroke-width: 1.75; stroke-dasharray: 7 3.5; }
     .sk-stock-label { fill: var(--sk-prep-stock); font-family: system-ui, sans-serif; font-size: 5px; font-weight: 600; letter-spacing: 0.04em; }
-    #prepare-notice { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
+    #prepare-notice { position: absolute; left: 50%; top: calc(12px + var(--sk-prep-ribbon-h, 0px)); transform: translateX(-50%); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
     #prepare-notice[hidden] { display: none; }
     #prepare-notice.is-error { background: #3f1518; color: #fecaca; border-color: #ef4444; }
     /* TASK 663: Fusion-mode bar inside Prepare (mounted in JS only when ?host=fusion). */
@@ -321,10 +332,10 @@
     .shaper-fusion-sel-x:hover, .shaper-fusion-clear:hover { background: #3b3f47; color: #fff; }
     .shaper-fusion-clear { border: 1px solid #464950; height: 30px; }
     @media (max-width: 640px), (pointer: coarse) { .shaper-fusion-sel-x, .shaper-fusion-clear { min-width: 36px; height: 36px; } .shaper-fusion-sel { min-height: 38px; } }
-    #view-prepare.is-fusion #prepare-notice { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); pointer-events: auto; }
-    #view-prepare.is-fusion #prepare-panel { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); z-index: 8; } /* TASK 795: below the bar, whatever height the selection list gives it (fusion-bridge.js sets the variable); above the notice (z 6, wider than the room beside the card) so an open cut-type menu is never covered by it */
+    #view-prepare.is-fusion #prepare-notice { top: calc(var(--sk-fusion-bar-h, 44px) + 12px + var(--sk-prep-ribbon-h, 0px)); pointer-events: auto; }
+    #view-prepare.is-fusion #prepare-panel { top: calc(var(--sk-fusion-bar-h, 44px) + 12px + var(--sk-prep-ribbon-hr, 0px)); z-index: 8; } /* TASK 795: below the bar, whatever height the selection list gives it (fusion-bridge.js sets the variable); above the notice (z 6, wider than the room beside the card) so an open cut-type menu is never covered by it */
     @media (max-width: 640px) {
-      #view-prepare.is-fusion #prepare-notice { left: 12px; transform: none; max-width: calc(100% - 236px); }
+      #view-prepare.is-fusion #prepare-notice { left: calc(12px + var(--sk-prep-ribbon-w, 0px)); transform: none; max-width: calc(100% - 236px - var(--sk-prep-ribbon-w, 0px)); }
     }
     .sk-hl { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
     .sk-hl-select { stroke: var(--sk-prep-geo-selected); stroke-width: 2.25; }
@@ -377,9 +388,9 @@
     .sk-travel-arrows { fill: var(--sk-prep-path); stroke: none; pointer-events: none; }
     .sk-travel-arrows-clear { fill-opacity: 0.9; }
     .sk-travel-arrows-online { fill: var(--sk-prep-path-online); }
-    #prepare-dir-legend { position: absolute; left: 12px; bottom: 10px; z-index: 5; /* TASK 805: under the cut card and its menus (z 6): its label takes the pointer for its tooltip */ max-width: calc(100% - 240px); color: #9aa0a6; font: 12px system-ui, sans-serif; pointer-events: none; }
+    #prepare-dir-legend { position: absolute; left: calc(12px + var(--sk-prep-ribbon-w, 0px)); bottom: 10px; z-index: 5; /* TASK 805: under the cut card and its menus (z 6): its label takes the pointer for its tooltip */ max-width: calc(100% - 240px); color: #9aa0a6; font: 12px system-ui, sans-serif; pointer-events: none; }
     #prepare-dir-legend [data-hint] { pointer-events: auto; }
-    #prepare-panel { position: absolute; top: 12px; right: 12px; width: 232px; z-index: 6; pointer-events: none; }
+    #prepare-panel { position: absolute; top: calc(12px + var(--sk-prep-ribbon-hr, 0px)); right: 12px; width: 232px; z-index: 6; pointer-events: none; }
     /* TASK 742: the panel ends 12 px above the view's bottom and a card taller than that scrolls its rows (the type field and the popovers stay put),
        so every row of a long card (a stepped cut, an Outside with Tabs) stays reachable on a short screen; a card that fits is unchanged */
     #prepare-panel { bottom: 12px; display: flex; flex-direction: column; align-items: stretch; }
@@ -524,9 +535,9 @@
        legend; its rows scroll), a folding bar along the bottom on a phone (open: up to 55 % of the view; the cut card then ends above the bar).
        Rows: a drag grip, the number, the operation (type · depths, regions · steps / tabs), and (TASK 745) a delete bin (44 px on a phone); no arrow buttons:
        a mouse drags the grip, a finger holds then drags the row (the list keeps native scrolling: no touch-action none), the keyboard moves a focused grip. */
-    #prepare-ops { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100% - 52px); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
+    #prepare-ops { position: absolute; top: calc(12px + var(--sk-prep-ribbon-h, 0px)); left: calc(12px + var(--sk-prep-ribbon-w, 0px)); width: 288px; max-height: calc(100% - 52px - var(--sk-prep-ribbon-h, 0px)); z-index: 7; box-sizing: border-box; display: flex; flex-direction: column;
       background: var(--sk-prep-card-bg); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); color: var(--sk-prep-chip-text); font: 13px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
-    #view-prepare.is-fusion #prepare-ops { top: calc(var(--sk-fusion-bar-h, 44px) + 12px); max-height: calc(100% - var(--sk-fusion-bar-h, 44px) - 52px); }
+    #view-prepare.is-fusion #prepare-ops { top: calc(var(--sk-fusion-bar-h, 44px) + 12px + var(--sk-prep-ribbon-h, 0px)); max-height: calc(100% - var(--sk-fusion-bar-h, 44px) - 52px - var(--sk-prep-ribbon-h, 0px)); }
     .ops-header { display: flex; align-items: center; flex: 0 0 auto; }
     .ops-head { all: unset; box-sizing: border-box; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
     .ops-count { min-width: 20px; text-align: center; background: var(--sk-prep-field-bg); color: var(--sk-prep-unit); border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
@@ -548,7 +559,11 @@
     @keyframes sk-spin { to { transform: rotate(360deg); } }
     /* TASK 817: the Export step's waiting line ("Waiting for 2 operations to finish"): the same turning ring, before its text */
     .sk-wait-spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border-radius: 50%; border: 2px solid transparent; border-top-color: currentColor; border-right-color: currentColor; animation: sk-spin 0.8s linear infinite; }
+    /* TASK S3: the out-of-date line's Recalculate (export-payload.js whenGenerated): the line's own action, 44 px tall on a touch screen */
+    .sk-wait-action { font: 600 12px system-ui, sans-serif; color: #fff; background: #2c65ff; border: 1px solid #4c9aff; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+    @media (pointer: coarse) { .sk-wait-action { min-height: 44px; padding: 0 14px; font-size: 14px; } }
     .ops-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+    .ops-stale { flex: 0 0 auto; display: flex; align-items: center; margin-left: auto; padding: 0 2px; } /* TASK S3: the out-of-date mark (op-list.js OUT_OF_DATE_SVG; its tooltip: hover / long press) */
     /* TASK S2: one line each (the full words are the row's tooltip): the selected row's actions appearing beside the text never change its height */
     .ops-name { font-size: 13px; font-weight: 600; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ops-sub { font-size: 11px; line-height: 1.3; color: var(--sk-prep-unit); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -567,7 +582,7 @@
     .ops-tick input:disabled { cursor: default; opacity: 0.6; }
     .ops-row.is-off .ops-pick { opacity: 0.45; }
     @media (max-width: 640px) {
-      #prepare-ops, #view-prepare.is-fusion #prepare-ops { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 55%; }
+      #prepare-ops, #view-prepare.is-fusion #prepare-ops { top: auto; bottom: 12px; left: calc(12px + var(--sk-prep-ribbon-w, 0px)); right: 12px; width: auto; max-height: 55%; }
       .ops-head { height: 44px; }
       .ops-row { min-height: 48px; }
       .ops-grip { flex-basis: 44px; }
@@ -670,6 +685,8 @@
        select + the cut-settings card (#prepare-panel, mounted by main.js). -->
   <section id="view-prepare" hidden>
     <svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+    <!-- TASK S3: the operations toolbar (Design's shared tool ribbon, its own buttons: prepare-stage.js); its frame holds it over the canvas's left edge -->
+    <div id="prepare-ribbon-frame"><div id="prepare-ribbon"></div></div>
     <div id="prepare-panel"></div>
     <div id="prepare-ops"></div>
     <div id="prepare-notice" hidden></div>

@@ -30,6 +30,8 @@ import { keyOf, planEntries } from '../apps/shaper/src/cut-plan.js';
 import { getSelections } from '../apps/shaper/src/selection-list.js';
 import { getStlSources, getStlSource } from '../apps/shaper/src/stl-source.js';
 import { getStock, setStock } from '../apps/shaper/src/stock.js';
+import { describeOperations } from '../apps/shaper/src/operations.js';
+
 import { INSERT_PLACE } from '../apps/shaper/src/stl-import.js';
 
 let checks = 0;
@@ -50,7 +52,7 @@ try {
   const make = (keys, type, fields = {}) => {
     app.prepare.ok();
     pv().setSelection(keys.map((k) => { const i = k.indexOf(':'); return { kind: k.slice(0, i), id: k.slice(i + 1) }; }));
-    app.prepare.pickType(type);
+    app.prepare.addOperation(type); // TASK S3: the operations toolbar's button (a NEW operation of the selection, open)
     for (const [f, v] of Object.entries(fields)) pv().setOpField(f, v);
     app.prepare.ok();
     return storeOps()[storeOps().length - 1].id;
@@ -190,10 +192,19 @@ try {
   {
     const e = entryOf('dome.stl'), key = keyOfPart(e), lv0 = regionOf(key).levels, b = partBox(e);
     const pivot = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
+    const roughOf = () => describeOperations(st).find((o) => o.shapes.includes(key) && opById(o.id).type === 'roughing');
+    eq(roughOf().outOfDate, false, '4: its Roughing up to date before the move');
     moveTurn(e, -55, 20, -45, pivot);
-    eq(regionOf(key).levels, lv0, '4: right after the move: the levels as they were (out of date)');
+    eq(regionOf(key).levels, lv0, '4: right after the move: the levels as they were');
+    eq(roughOf().outOfDate, true, '4: TASK S3: the Design move marks its Roughing OUT OF DATE');
+    // the Export step's line (Prepare never entered since the move): its Recalculate is the stage's, from Design
+    eq(app.modes.current(), 'design', '4: still in Design');
+    app.prepare.recalculate(null);
+    const w = expectMoved(lv0, regionOf(key).levels, -55, 20, -45, pivot, '4: Recalculate (from Design, as the Export line presses it)');
+    eq(roughOf().outOfDate, false, '4: Recalculate: its Roughing up to date, generated from the levels where the part is');
+    const entry = planEntries({ ticked: true }).find((x) => x.planKey === key);
+    ok(entry && entry.rec.levels === regionOf(key).levels, '4: the export reads the moved levels');
     toPrepare();
-    const w = expectMoved(lv0, regionOf(key).levels, -55, 20, -45, pivot, '4: Prepare entered');
     console.log(`ROW inserted part moved -55, 20 + turned -45 deg | levels follow | worst ${w.toExponential(2)} mm`);
     app.modes.showMode('design'); st.undo(); toPrepare();
     expectMoved(lv0, regionOf(key).levels, 0, 0, 0, pivot, '4: Undo');

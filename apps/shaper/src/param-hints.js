@@ -35,6 +35,9 @@ const PARAMS = {
   opCancel: { label: 'Cancel', hint: 'Puts the operation back as it was when you opened it (Esc does the same).' },
   // TASK 817 (owner turns 2745-2748): toolpaths are made on OK, in the background; Preview makes them for the card's settings now, on request
   opPreview: { label: 'Preview', hint: 'Shows this operation’s paths with the settings in the card now (they are made in the background; the app stays usable). A later change fades them: press again to see the new ones. A preview is not saved, not exported and not a step of Undo; OK makes the paths.' },
+  // TASK S3 addition (owner turns 3046-3047, Fusion style): an operation whose inputs changed since its paths were made is OUT OF DATE (its row's mark) until Recalculate
+  opOutOfDate: { label: 'Out of date', hint: 'Out of date: press Recalculate.' },
+  opRecalculate: { label: 'Recalculate', hint: 'Makes the paths of the out-of-date operations again: the selected ones, or every one when none is selected. They are made in the background; the app stays usable.' },
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
   // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab
@@ -94,6 +97,7 @@ const PARAMS = {
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
   // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
+  insertStlTool: { label: 'STL', hint: 'Insert STL: adds a 3D part (an STL file) as one more relief, its own Roughing, placed clear of the other shapes. Nothing else changes.' }, // TASK 841: the Prepare toolbar's INSERT section
   openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807
   insertStl: { label: 'Insert STL…', hint: 'Adds a 3D part (an STL file) to the design as one more relief: its own Roughing, level by level, placed in the view clear of the other shapes. Nothing else changes, the board thickness included.' }, // TASK 841
   stlCard: { label: 'STL', hint: 'The 3D part this relief was sliced from (the selected relief). Changing Up or Units slices it again and replaces that part where it is; Undo brings the previous one back.' }, // TASK 841: one per relief

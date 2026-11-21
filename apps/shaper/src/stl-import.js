@@ -30,8 +30,9 @@ import { openOrientView } from './orient-view.js'; // TASK 808: the Orient view 
 /** The drawer entry's icon: a cube (18 x 18, the drawer's stroke style). */
 export const STL_ICON = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5l5.5 3v7L9 15.5l-5.5-3v-7zM3.5 5.5L9 8.5l5.5-3M9 8.5v7"/></svg>';
 
-/** TASK 841: Insert STL's icon: the cube, smaller, with a plus. */
-export const STL_INSERT_ICON = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 5l4.5 2.5v5.5L7.5 15.5 3 13V7.5zM3 7.5L7.5 10 12 7.5M7.5 10v5.5M14.5 1.5v5M12 4h5"/></svg>';
+/** TASK 841: Insert STL's icon: the cube, smaller, with a plus (its 18 x 18 inner markup: the Prepare toolbar's button; the whole svg: the drawer). */
+export const STL_INSERT_MARKUP = '<path d="M7.5 5l4.5 2.5v5.5L7.5 15.5 3 13V7.5zM3 7.5L7.5 10 12 7.5M7.5 10v5.5M14.5 1.5v5M12 4h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
+export const STL_INSERT_ICON = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none">${STL_INSERT_MARKUP}</svg>`;
 
 /** Shaper's file pick for Open STL: an STL, read as bytes (binary or ASCII STL). */
 export const STL_FILE_PICK = Object.freeze({ description: 'STL 3D part', mime: 'model/stl', exts: Object.freeze(['.stl']), binary: true });

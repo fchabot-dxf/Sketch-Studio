@@ -4,7 +4,7 @@
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
 import { cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
-import { POCKET_CLEARING, allowanceDefault } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
+import { POCKET_CLEARING, allowanceDefault, finishInLoop } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED, CONTOUR_DEFAULTS, pocketToolDia } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots); TASK 852d: V-bit pocket tip width
 import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
@@ -777,7 +777,7 @@ export function createCutPanel(hostEl, opts = {}) {
     stepoverLen.textContent = clearing ? `= ${lengthText((pct / 100) * planDia, { show: 'unit', fractions: false })}` : '';
     allowanceInput.value = fieldText(fieldBase('finishAllowance'));
     loopInput.checked = computed && current.loop === true;
-    hints.finishAllowance.refresh({ loop: current.loop === true, roughing }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js); TASK 792: on a Roughing, the Contour
+    hints.finishAllowance.refresh({ loop: finishInLoop(clearing, current.loop === true), roughing }); // TASK 766 / 770: who takes the finish allowance off depends on Loop (param-hints.js); TASK 792: on a Roughing, the Contour; TASK 835e: a Raster loop's wall is the Origin's inside cut
     const angle = Number.isFinite(Number(current.rasterAngle)) && current.rasterAngle !== null ? Number(current.rasterAngle) : POCKET_CLEARING.rasterAngle;
     angleInput.value = String(Math.round(angle * 100) / 100);
     renderPresets(anglePresetsWrap, clearing ? ANGLE_PRESETS : [], 'rasterAngle', angle);

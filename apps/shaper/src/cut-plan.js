@@ -13,7 +13,7 @@ import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon, loopSuccessors } from '#core/loop-geometry.js'; // TASK 832: loopSuccessors (followDesign)
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
-import { POCKET_CLEARING, clearingPattern, clearingSettings, allowanceDefault, pocketRings, morphedBlocker } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
+import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker, finishInLoop } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's cone goes to the 3D Review with its shape
@@ -528,17 +528,7 @@ export function clearingAvailability(key, storedRec, state, loops, loopPolys) {
   const rec = effectiveCutRecord(withPocketTool(storedRec));
   if (!rec || rec.cutType !== 'pocket') return null;
   const pocket = (deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys) || []).find((c) => c.isCompound);
-  if (!pocket) return null;
-  if (rec.cutterShape === 'vbit') {
-    const rings = pocketRings(pocket, state);
-    if (!rings) return { morphed: 'outline' };
-    if (rings.holes.length) return { morphed: 'islands' };
-    const xs = rings.outer.map((p) => p[0]), ys = rings.outer.map((p) => p[1]);
-    const span = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-    const st = clearingSettings(rec);
-    if (st.stepover > 0 && span / (2 * st.stepover) > 35) return { morphed: 'morphed vbit' };
-  }
-  return { morphed: morphedBlocker(pocket, rec, state) };
+  return pocket ? { morphed: morphedBlocker(pocket, rec, state) } : null;
 }
 /** TASK 745: the words of a refusal / a disabled choice. */
 export const CLEARING_REFUSED = {
@@ -547,7 +537,6 @@ export const CLEARING_REFUSED = {
   area: 'the morphed turns of one area would cross each other: use Spiral or Raster',
   'morphed islands': 'has islands: use Spiral or Raster',
   'morphed area': 'the morphed turns of one area would cross each other: use Spiral or Raster',
-  'morphed vbit': 'too many narrow passes for Morphed spiral: use Spiral or Raster',
   'raster join': 'a raster pass cannot be joined to the next inside the pocket; cut as open passes + the wall',
   'loop cross': 'its way back would cross the turns on this shape; cut as open paths + the wall', // TASK 804: never a crossing loop
   'islands close': 'an island is closer to the wall or to another island than the bit: the finish pass would cut it',
@@ -597,7 +586,7 @@ export function clearingNoteItems(storedRec, sum) {
   const items = [{ text: `Pocket: ${clearingWords(sum)}, stepover ${f(st.stepover)} ${u}, ${pathWords} of path, about ${minutes < 1 ? 1 : Math.round(minutes)} min at ${feed}` }];
   // TASK 839: `once` = a line that says the same for every operation (the bit's, the Origin's): the 3D Review's info writes it once (planNotes)
   if (sum.clear.length) items.push({ text: `Drawn for a ${bit} bit: a smaller bit leaves ridges`, once: true });
-  if (sum.loop) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only`, once: true }); // TASK 750: the Origin does not offset an on-line path
+  if (finishInLoop(sum.pattern, sum.loop)) items.push({ text: `Wall cut in the same line: exact for a ${bit} bit only`, once: true }); // TASK 750: the Origin does not offset an on-line path (TASK 835e: a Raster loop's wall is the Origin's inside cut)
   if (sum.loopRefused) { const t = `Loop refused: ${CLEARING_REFUSED[sum.loopRefused] || sum.loopRefused}`; items.push({ text: t, warn: t, title: 'the pocket is cut with open paths + the Origin\'s inside cut on the wall' }); }
   items.push({ text: 'Depth passes: set Pass Depth or AutoPass on the Origin', once: true }); // TASK 750: the clearing is written once, at the full depth
   if (!sum.loop && Array.isArray(sum.clear) && sum.clear.some((c) => !c.closed)) items.push({ text: OPEN_PATH_AUTOPASS_NOTE, once: true }); // TASK 777: open clearing paths reverse on AutoPass

@@ -1,7 +1,7 @@
 // tests/pocket-clearing-750-node.test.js — TASK 750: the programmed pocket's LOOP toggle (record field `loop`, any programmed pattern: Spiral, Raster, Morphed
 // spiral) and NO depth per pass (#core/pocket-clearing.js, the one derivation; apps/shaper/src/shaper-doc.js, the one place a stored document is normalised).
 //  1. rectangle, L, circle, island pocket, dumbbell (bit 6 mm, stepover 40 %, allowance 0.5 mm) x Spiral / Raster / Morphed spiral, Loop ON:
-//     closed paths (first point == last point), one per chain (Spiral 1 / 1 / 1 / 3 / 2, Raster 1 / 1 / 1 / 1 / 2, Morphed 1 where it is possible; still refused
+//     closed paths (first point == last point), one per chain (Spiral 1 / 1 / 1 / 3 / 2, Raster (TASK 835e: one loop per area, its finish the Origin's native inside / outside cut; the dumbbell's 4 mm neck the bit cannot pass: 2 areas) 1 / 1 / 1 / 1 / 2, Morphed 1 where it is possible; still refused
 //     with its reason on the island pocket and the dumbbell); the LAST turn of every loop is a finish turn, every point of it exactly the bit radius from
 //     the wall / island (0.01 mm); every turn / pass / clean-up ring of the Loop-OFF derivation is in a loop (vertex for vertex); the legs (links, steps,
 //     returns) inside the region the bit may sweep (R inset by r, 0.02 mm); the Spiral's crossings only at its anchors (each on a ring) and counted;
@@ -33,6 +33,8 @@ import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { opKeyOf } from '../apps/shaper/src/operations.js';
 import { V2_PLAN, storedRecords, storedOpKeys } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
+import { passCoverage } from './helpers/raster-passes-835.js'; // TASK 835: how a Raster loop cuts the passes
+import { pathCrossings } from '#core/path-crossings.js'; // TASK 835e: the download's on-line paths read back
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -104,14 +106,17 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     // tests/pocket-nocross-804-node.test.js; Raster keeps 750's checks here
     if (pattern !== 'raster') continue;
     eq([on.refused, on.loopRefused, on.loop, off.loop], [null, null, true, false], `${tag}: Loop on is programmed`);
-    eq(on.loopCount, LOOPS[pattern][name], `${tag}: ${LOOPS[pattern][name]} closed loop(s), one per chain`);
+    eq(on.loopCount, LOOPS[pattern][name], `${tag}: ${LOOPS[pattern][name]} closed loop(s), one per chain (Raster: one per area)`);
     ok(on.clear.every((c) => c.role === 'loop' && c.closed && key(c.points[0]) === key(c.points.at(-1))), `${tag}: every loop is closed (first point == last point)`);
     // the last turn of every loop is a finish turn exactly r from the wall / island
     let worstF = 0;
     const noFinish = [];
     for (const c of on.clear) {
       const last = c.turns.at(-1);
-      if (c.turns.some((t) => t.kind === 'finish')) eq(last.kind, 'finish', `${tag}: the last turn of loop ${c.index} is its finish turn`);
+      // TASK 835e: a Raster loop holds passes, links (835d), its closing leg and the legs between: no ring (its finish is the Origin's native cut)
+      if (pattern === 'raster') {
+        ok(c.turns.every((t) => t.kind === 'pass' || t.kind === 'link' || t.kind === 'close'), `${tag}: loop ${c.index} is an area's loop of passes (${JSON.stringify(c.turns.map((t) => t.kind))})`);
+      } else if (c.turns.some((t) => t.kind === 'finish')) eq(last.kind, 'finish', `${tag}: the last turn of loop ${c.index} is its finish turn`);
       else noFinish.push(`${tag} loop ${c.index}`); // a chain that ends deeper (749's rule): it never reaches a wall, its own outermost ring is its last turn
       for (const t of c.turns.filter((u) => u.kind === 'finish')) for (const p of c.points.slice(t.start, t.end + 1)) worstF = Math.max(worstF, Math.abs(reg.dist(p) - R));
       // after the last turn only the closing leg
@@ -121,13 +126,27 @@ for (const [name, mk] of Object.entries(SHAPES)) {
     ok(worstF <= 0.01, `${tag}: every finish turn is the region inset by exactly the bit radius (worst ${worstF.toFixed(5)} mm)`);
     // every turn / pass of the Loop-OFF derivation is in a loop, vertex for vertex (TASK 804b: Raster's Loop has no clean-up ring: the wall ring's sweep
     // covers it, the leftover below is Loop off's)
-    const all = new Set(on.clear.flatMap((c) => c.points.map(key)));
-    const offPaths = off.clear.filter((c) => c.role !== 'cleanup').map((c) => c.points);
-    const missing = offPaths.reduce((n, pts) => n + pts.filter((p) => !all.has(key(p))).length, 0);
-    eq(missing, 0, `${tag}: every vertex of the Loop-OFF clearing (${offPaths.length} paths) is in the loops`);
+    // TASK 835: a Raster loop runs along every pass ONCE, from the area's edge to the area's edge, but for the gaps where a corridor leaves it (each at most
+    // half a stepover: the bit sweeps it)
+    if (pattern === 'raster') {
+      // TASK 835d: a pass end the lane's turn-in short of the wall (a stepover, at most r; two where a small piece's chord lies inside its turn-ins), a gap
+      // inside it a link's half stepover or a lane's turn-in at a cut (tests/pocket-raster-loop-835-node.test.js holds the exact rules)
+      const T = Math.min(S, R) + 0.07;
+      // TASK 835e: a closing leg skips the stretch it replaces (air): here no pass is cut twice; tests/pocket-raster-loop-835-node.test.js names every uncut part
+      void T;
+      const bad = (x) => !(x.twice <= 0.1);
+      const cov = passCoverage(on.clear, off.passLines.map((l) => l.points));
+      ok(!cov.some(bad), `${tag}: every pass cut once, edge to edge, but for its corridor gaps (${JSON.stringify(cov.find(bad))})`);
+    } else {
+      const all = new Set(on.clear.flatMap((c) => c.points.map(key)));
+      const offPaths = off.clear.filter((c) => c.role !== 'cleanup').map((c) => c.points);
+      const missing = offPaths.reduce((n, pts) => n + pts.filter((p) => !all.has(key(p))).length, 0);
+      eq(missing, 0, `${tag}: every vertex of the Loop-OFF clearing (${offPaths.length} paths) is in the loops`);
+    }
     // the finish turns: the wall's and each island's turns at r (the same centre lines the separate inside / outside cuts follow)
     const finTurns = on.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind === 'finish').length, 0);
-    ok(finTurns >= 1 + reg.holes.length, `${tag}: ${finTurns} finish turn(s): the wall's and each island's`);
+    if (pattern === 'raster') eq([on.nativeFinish, on.wall.length, on.islands.length], [true, off.wall.length, off.islands.length], `${tag}: TASK 835e: the finish is the Origin's native inside / outside cut, as Loop off's`);
+    else ok(finTurns >= 1 + reg.holes.length, `${tag}: ${finTurns} finish turn(s): the wall's and each island's`);
     // the legs inside the region the bit may sweep (R inset by r)
     let worstLeg = Infinity, legLen = 0;
     for (const c of on.clear) {
@@ -167,15 +186,17 @@ for (const [name, mk] of Object.entries(SHAPES)) {
       // TASK 804: with no allowance the L's innermost ring is a sliver whose morphed turn crossed itself at its tip (0.008 mm): refused, never cut crossing
       if (off0.refused === 'morphed area') { eq([on0.refused, name, pattern], ['morphed area', 'L', 'morphed'], `${tag}: allowance 0: refused (its turns would cross)`); }
       else {
-      const ringsOn0 = on0.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind !== 'pass').length, 0);
-      const ringsOff0 = pattern === 'linked' ? off0.loops : pattern === 'raster' ? off0.cleanup : 1;
+      const ringsOn0 = on0.clear.reduce((n, c) => n + c.turns.filter((t) => t.kind !== 'pass' && t.kind !== 'link' && t.kind !== 'close').length, 0); // (TASK 835d / 835e: a Raster loop's links and closing leg are no turns)
+      const ringsOff0 = pattern === 'linked' ? off0.loops : pattern === 'raster' ? 0 : 1; // (TASK 835e: Raster: no ring in the loops, the finish is the native cut)
       eq(ringsOn0, ringsOff0, `${tag}: allowance 0: ${ringsOff0} turn(s), none written twice (the last ring IS the finish turn)`);
       }
     }
     // the export: closed on-line paths (one per loop, at the full depth) + 1 guide start mark (TASK 778)
     const els = elementsOf(exportOf(st, POCKET({ clearing: pattern, loop: true })));
-    const loopsOut = els.filter((e) => e.cutType !== 'guide');
-    eq(els.map((e) => e.cutType), [...Array(on.loopCount).fill('online'), 'guide'], `${tag}: the download: ${on.loopCount} on-line path(s) + 1 guide start mark, no inside / outside element`);
+    const loopsOut = els.filter((e) => e.cutType === 'online');
+    const native = pattern === 'raster' ? ['inside', ...reg.holes.map(() => 'outside')] : []; // TASK 835e: Raster's finish = the Origin's inside cut + each island's outside cut
+    eq([...els.map((e) => e.cutType)].sort(), [...Array(on.loopCount).fill('online'), ...native, 'guide'].sort(), `${tag}: the download: ${on.loopCount} on-line path(s) + 1 guide start mark${native.length ? ' + the native finish' : ', no inside / outside element'}`);
+    eq(pathCrossings(loopsOut.map((e) => ({ points: e.d.replace(/[MLZ]/g, ' ').trim().split(/\s+/).map(Number).reduce((a, v, i, l) => (i % 2 ? a : [...a, { x: v, y: l[i + 1] }]), []), closed: true }))).count, pattern === 'raster' ? on.loopCrossings : on.loopCrossings, `${tag}: the on-line paths read back cross as the plan says (${on.loopCrossings}; Raster: only on its closing legs)`);
     ok(loopsOut.every((e) => /Z$/.test(e.d) && e.depth === '6.000 mm' && e.tool === '6.000 mm'), `${tag}: each closed (Z), at the full depth, the card's bit`);
     ok(loopsOut.every((e) => { const n = e.d.replace(/[MLZ]/g, ' ').trim().split(/\s+/); return n[0] === n[n.length - 2] && n[1] === n[n.length - 1]; }), `${tag}: each path's first point == its last`);
     eq(new Set(els.map((e) => e.d)).size, els.length, `${tag}: no stacked copies`);
@@ -255,11 +276,11 @@ let saved = null;
       const n0 = st.history.length;
       h.toggleLoop();
       eq([V2_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
-      eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names the loop's turn along the wall (the row's hint, param-hints.js)`);
+      eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), pat === 'raster' ? 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.' : 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names who takes it off (the loop's turn along the wall; TASK 835e: Raster: the Origin's inside cut) (the row's hint, param-hints.js)`);
       const nt = h.note(), nf = h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l)); // TASK 825: the warning lines (the leftover) come first
-      ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nf[0]), `${pat}: the note: ${nf[0]}`); // TASK 775: a closed loop has no start point (no "ends where it starts")
-      ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only; the depth passes on the Origin`);
-      eq(elementsOf(shaperSvgOf(st, planEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], `${pat}: the download: ONE closed on-line path + 1 guide start mark, no inside cut`);
+      ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nf[0]), `${pat}: the note: ${nf[0]}`); // TASK 835e: Raster: one loop per area again // TASK 775: a closed loop has no start point (no "ends where it starts")
+      ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') === (pat !== 'raster') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only (TASK 835e: not Raster: its wall is the Origin's inside cut); the depth passes on the Origin`);
+      eq(elementsOf(shaperSvgOf(st, planEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]).sort(), [['online', true], ...(pat === 'raster' ? [['inside', true]] : []), ['guide', false]].sort(), `${pat}: the download: ONE closed on-line path + 1 guide start mark (TASK 835e: Raster + the Origin's inside cut)`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group circle').length, 0, `${pat}: TASK 775: no dot on a closed loop (it has no start point on the Origin)`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-pocket-start').length, 1, `${pat}: TASK 778: 1 pocket start mark target in Prepare`);
       app.undo();

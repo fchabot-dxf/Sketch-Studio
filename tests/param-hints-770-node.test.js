@@ -11,6 +11,7 @@
 //  3. every entry is rendered somewhere: the card's rows / menus (2), the Export step's cards (index.html data-hint / data-label, filled by main.js) and the
 //     drawer's Download (main.js reads hintLabel('download') / hintText('download')).
 import assert from 'node:assert';
+import { finishInLoop } from '#core/pocket-clearing.js'; // TASK 835e: who takes the finish allowance off (a Raster loop's wall: the Origin's inside cut)
 import fs from 'node:fs';
 import { Window } from 'happy-dom';
 import { PARAM_HINTS, hintText, hintLabel, choiceId } from '../apps/shaper/src/param-hints.js';
@@ -86,7 +87,7 @@ for (const { boundaryCtx, wallsCtx, ...record } of STATES) {
     ok(PARAM_HINTS[id], `${name}: the row's entry ${id}`);
     seen.add(id);
     eq(trig.textContent, hintLabel(id), `${name} ${id}: the label is the table's`);
-    eq(hintFor(trig), hintText(id, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the tooltip text is the table's hint in the card's context`);
+    eq(hintFor(trig), hintText(id, { loop: finishInLoop(record.clearing, record.loop === true), pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' }), `${name} ${id}: the tooltip text is the table's hint in the card's context`);
     for (const c of row.querySelectorAll('[data-hint]')) { seen.add(c.dataset.hint); eq(c.textContent, hintLabel(c.dataset.hint), `${name}: the element ${c.dataset.hint} shows its name`); if (c !== trig) eq(hintFor(c), hintText(c.dataset.hint), `${name}: its tooltip is its hint`); }
   }
   for (const row of host.querySelectorAll('.cut-row[data-off]')) { // TASK 813: a greyed row stays in place: its label's tooltip is the reason, then the table's text

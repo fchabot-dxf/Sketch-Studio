@@ -96,7 +96,7 @@ function coverage(name, reg, plan) {
 
 // ── 1. the rules ──
 const settings = (pattern, more = {}) => ({ ...clearingSettings(POCKET({ clearing: pattern, ...more })), pattern });
-eq([POCKET_CLEARING.stepoverPct.default, POCKET_CLEARING.finishAllowance.mm, POCKET_CLEARING.finishAllowance.in, POCKET_CLEARING.rasterAngle, POCKET_CLEARING.feedMmPerMin], [40, 0.5, 0.508, 0, 1000], 'declared: stepover 40 %, allowance 0.5 mm / 0.02 in, raster 0 deg, the time at 1000 mm/min');
+eq([POCKET_CLEARING.stepoverPct.default, POCKET_CLEARING.finishAllowance.mm, POCKET_CLEARING.finishAllowance.in, POCKET_CLEARING.rasterAngle.default, POCKET_CLEARING.rasterAngle.fallback, POCKET_CLEARING.feedMmPerMin], [40, 0.5, 0.508, 'auto', 0, 1000], 'declared: stepover 40 %, allowance 0.5 mm / 0.02 in, raster auto (0 fallback), the time at 1000 mm/min');
 const results = {};
 for (const [name, mk] of Object.entries(SHAPES)) {
   const st = mk(), reg = regionOf(st);
@@ -299,7 +299,7 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     h.clearing('linked');
     eq(st.history.length, n0 + 1, 'Spiral: ONE undo step');
     const r = V2_PLAN.get(kR);
-    eq([r.clearing, r.stepover, r.finishAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 0, false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster 0 (no depth per pass field)');
+    eq([r.clearing, r.stepover, r.finishAllowance, r.loop, r.rasterAngle, 'passDepth' in r], ['linked', 40, 0.5, false, 'auto', false], 'the defaults: stepover 40 %, allowance 0.5 mm, Loop off, raster auto (no depth per pass field)');
     ok(h.shown('stepover') && h.shown('finishAllowance') && h.shown('loop') && !h.shown('rasterAngle') && !h.q('.cut-pass-depth'), 'Spiral: Stepover, Finish allowance, Loop (no Raster angle, no Depth per pass row)');
     eq([h.q('.cut-stepover').value, h.q('.cut-stepover-len').textContent, h.q('.cut-finish-allowance').value, h.q('.cut-loop').checked], ['40', '= 2.4 mm', '0.5', false], 'the fields: 40 % = 2.4 mm, 0.5, depth per pass empty (full depth)');
     eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.', 'TASK 766: the Finish allowance hint, Loop off');
@@ -327,8 +327,8 @@ await createNamedDesign(profile, 'shaper', 'Pocket 745');
     // Raster: + its angle row; presets
     h.clearing('raster');
     ok(h.shown('rasterAngle'), 'Raster: the Raster angle row');
-    eq([...h.q('.cut-angle-presets').querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['0°*', '45°', '90°'], 'angle presets 0 / 45 / 90, 0 active');
-    ok(/^Pocket: raster 0°: \d+ passes \+ 1 ring \+ wall/.test(facts(h.note())[0]), 'Raster note: ' + facts(h.note())[0]);
+    eq([...h.q('.cut-angle-presets').querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')), ['Auto*', '0°', '45°', '90°'], 'angle presets Auto / 0 / 45 / 90, Auto active');
+    ok(/^Pocket: raster auto \(0°\): \d+ passes \+ 1 ring \+ wall/.test(facts(h.note())[0]), 'Raster note: ' + facts(h.note())[0]);
     h.pressEl('.cut-angle-presets .cut-preset[data-value="45"]');
     eq(V2_PLAN.get(kR).rasterAngle, 45, 'preset 45');
     ok(/^Pocket: raster 45°/.test(facts(h.note())[0]), 'the note follows the angle');

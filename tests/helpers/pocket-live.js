@@ -240,7 +240,7 @@ export async function cardPhase(t, label) {
     // Spiral, Loop off: open lines + the Origin's inside cut
     await pickClearing('linked');
     const r1 = await rec(60, 10);
-    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.finishAllowance, r1.rasterAngle, r1.loop], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 0, false], label + ': Spiral with the defaults, Loop off');
+    assert.deepStrictEqual([r1.cutType, r1.clearing, r1.stepover, r1.finishAllowance, r1.rasterAngle, r1.loop], ['pocket', 'linked', 40, inch ? 0.508 : 0.5, 'auto', false], label + ': Spiral with the defaults, Loop off');
     const c1 = await card();
     console.log(label + ' spiral card: ' + JSON.stringify(c1));
     assert.deepStrictEqual([c1.rows, c1.loop], [['stepover', 'finishAllowance', 'loop'], false], label + ': Stepover, Finish allowance, Loop (off)');
@@ -414,7 +414,7 @@ export async function fusionPhase(t) {
     await setLoop(true);
     const c = await card();
     // TASK 835e: Raster's Loop = one closed loop per area, its finish the Origin's native inside cut
-    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster 0°: \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: ${id === 'raster' ? '(one closed loop|\\d+ closed loops)' : 'one closed loop'},`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
+    assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster auto \\(\\d+(?:\\.\\d+)?°\\): \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: ${id === 'raster' ? '(one closed loop|\\d+ closed loops)' : 'one closed loop'},`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
     const l = await look();
     assert.ok(l.paths >= 1, `Fusion ${id}: drawn`);
     const b = await evalJs(`(() => { const r = [...document.querySelectorAll('#prepare-toolpath-group .sk-clear-path')].map((p) => p.getBBox()); return [Math.min(...r.map((q) => q.x)) - 8, Math.min(...r.map((q) => q.y)) - 8, Math.max(...r.map((q) => q.x + q.width)) + 8, Math.max(...r.map((q) => q.y + q.height)) + 8]; })()`);

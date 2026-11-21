@@ -111,18 +111,21 @@ export function createMemoryAdapter() {
 }
 
 /**
- * THE way this module opens an IndexedDB database (`upgrade(db)` creates its stores). TASK 713: while the open is PENDING the page carries an
- * `unload` listener, which keeps the page out of the browser's back/forward cache. A page left in that moment (a fresh profile: creating the
- * database takes up to ~1 s) would otherwise be parked there frozen with its open half done; Chromium does not evict it, so every later open
- * of the database on the origin (every app page, in every app) would wait forever. Now that page is discarded on leave, its open is dropped
- * and the next page creates the database. The listener is removed as soon as the open settles: a page with an open database is cached as before.
+ * THE way this module opens an IndexedDB database (`upgrade(db)` creates its stores). TASK 713: while the open is PENDING the page is kept out of
+ * the browser's back/forward cache. A page left in that moment (a fresh profile: creating the database takes up to ~1 s) would otherwise be
+ * parked there frozen with its open half done; Chromium does not evict it, so every later open of the database on the origin (every app page,
+ * in every app) would wait forever. Now that page is discarded on leave, its open is dropped and the next page creates the database.
+ * TASK 801e: the page is kept out by holding a WEB LOCK (navigator.locks) while the open is pending: a page holding a lock is not cached. (TASK
+ * 713 used an `unload` listener; Edge 158 caches a page that has one, unload being deprecated: measured, a fresh profile left at once then
+ * waited forever on 3-4 of 6 loads, 0 of 10 with the lock.) The lock is released as soon as the open settles: a page with an open database
+ * is cached as before.
  */
 function openDatabase(name, version, upgrade) {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') { reject(new Error('indexedDB unavailable')); return; }
-    const keepOutOfBackForwardCache = () => {};
-    globalThis.addEventListener('unload', keepOutOfBackForwardCache);
-    const settled = () => globalThis.removeEventListener('unload', keepOutOfBackForwardCache);
+    let release = null, done = false; // the lock is granted a moment later: an open that settles first never holds it
+    if (globalThis.navigator && navigator.locks) navigator.locks.request(`sketch-studio: opening ${name}`, () => (done ? undefined : new Promise((free) => { release = free; })));
+    const settled = () => { done = true; if (release) release(); };
     const req = indexedDB.open(name, version);
     req.onupgradeneeded = () => upgrade(req.result);
     req.onsuccess = () => { settled(); resolve(req.result); };

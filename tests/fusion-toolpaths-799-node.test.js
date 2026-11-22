@@ -144,10 +144,11 @@ try {
   ok(pocketOp && outsideOp && insideOp && onlineOp, 'all 4 operation types present');
 
   const p1 = sent[0].payload.paths;
-  ok(p1.some((p) => p.op === pocketOp.id && p.cutType === 'pocket' && p.z === 8 && p.closed), 'pocket path at z=8');
-  ok(p1.some((p) => p.op === outsideOp.id && p.cutType === 'exterior' && p.z === 19 && p.closed), 'exterior path at z=19');
-  ok(p1.some((p) => p.op === insideOp.id && p.cutType === 'interior' && p.z === 19 && p.closed), 'interior hole path at z=19');
-  ok(p1.some((p) => p.op === onlineOp.id && p.cutType === 'online' && p.z === 2 && !p.closed), 'online path at z=2');
+  const pk1 = p1.filter((p) => p.op === pocketOp.id);
+  ok(pk1.some((p) => p.cutType === 'pocket' && p.z === 8 && p.closed && p.toolDia === 3.175 && p.clearing === 'freehand' && p.role === 'wall'), 'freehand pocket wall carries toolDia, clearing=freehand, role=wall');
+  ok(p1.some((p) => p.op === outsideOp.id && p.cutType === 'exterior' && p.z === 19 && p.closed && p.toolDia === 3.175 && p.clearing === undefined && p.role === 'outline'), 'exterior carries toolDia, no clearing, role=outline');
+  ok(p1.some((p) => p.op === insideOp.id && p.cutType === 'interior' && p.z === 19 && p.closed && p.toolDia === 3.175 && p.clearing === undefined && p.role === 'outline'), 'interior hole carries toolDia, no clearing, role=outline');
+  ok(p1.some((p) => p.op === onlineOp.id && p.cutType === 'online' && p.z === 2 && !p.closed && p.toolDia === 3.175 && p.clearing === undefined && p.role === 'outline'), 'online carries toolDia, no clearing, role=outline');
 
   const pressEl = (sel) => { const el = q(sel); assert.ok(el, sel + ' not found'); app.press(el); };
   const openOp = (id) => { pressEl(`#prepare-ops .ops-row[data-id="${id}"] .ops-pick`); pressEl(`#prepare-ops .ops-row[data-id="${id}"] .ops-edit`); };
@@ -166,8 +167,35 @@ try {
   eq(sent[0].payload.revision, 2, 'revision 2');
   const p2 = sent[0].payload.paths;
   const pocketPaths = p2.filter((p) => p.op === pocketOp.id);
-  ok(pocketPaths.some((p) => p.cutType === 'pocket' && p.z === 8), 'spiral clearing + wall paths included');
-  ok(pocketPaths.filter((p) => p.cutType === 'guide' && !p.closed && p.points.length === 2).length === 2, 'pocket start mark cross (2 open 2-pt strokes) included');
+  ok(pocketPaths.some((p) => p.cutType === 'pocket' && p.z === 8 && p.clearing === 'linked' && p.role === 'clearing'), 'spiral clearing path carries clearing=linked and role=clearing');
+  ok(pocketPaths.some((p) => p.cutType === 'pocket' && p.z === 8 && p.clearing === 'linked' && p.role === 'wall'), 'spiral finish wall carries clearing=linked and role=wall');
+  ok(pocketPaths.filter((p) => p.cutType === 'guide' && !p.closed && p.points.length === 2 && p.clearing === 'linked' && p.role === 'start').length === 2, 'pocket start mark cross (2 open 2-pt strokes) carries clearing=linked and role=start');
+
+  // Raster + Loop pocket -> role='loop' + clearing='raster'; V-bit pocket -> toolDia equals exported shaper:toolDia.
+  {
+    const { loops, loopPolys } = loopsWithPolygons(app.state);
+    const targetLoop = loops.find((l) => l.edges.length === 4);
+    const target = { kind: 'loop', id: targetLoop.id };
+    const rasterLoopRec = effectiveCutRecord({ ...defaultCutRecord(), cutType: 'pocket', cutDepth: 8, toolDia: 6.35, clearing: 'raster', loop: true });
+    const rlDerived = deriveFootprints(target, rasterLoopRec, app.state, loops, loopPolys, new Set());
+    const rlRes = buildToolpathsPayload({
+      items: [{ id: 'op-rl|loop:0', opId: 'op-rl', key: 'loop:0', rec: rasterLoopRec, derived: rlDerived }],
+      derivedOf: (it) => it.derived,
+      selections: [{ cutKeys: ['loop:0'], frame }],
+    });
+    ok(rlRes.paths.some((p) => p.clearing === 'raster' && p.role === 'loop' && p.toolDia === 6.35), 'raster+loop pocket emits clearing=raster, role=loop, toolDia=6.35');
+    ok(rlRes.paths.some((p) => p.clearing === 'raster' && p.role === 'wall' && p.toolDia === 6.35), 'raster+loop native finish wall emits role=wall');
+    ok(rlRes.paths.some((p) => p.clearing === 'raster' && p.role === 'start' && p.cutType === 'guide'), 'raster+loop start mark emits role=start');
+
+    const vbitRec = effectiveCutRecord({ ...defaultCutRecord(), cutType: 'pocket', cutDepth: 5, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 90, clearing: 'freehand' });
+    const vbDerived = deriveFootprints(target, vbitRec, app.state, loops, loopPolys, new Set());
+    const vbRes = buildToolpathsPayload({
+      items: [{ id: 'op-vb|loop:0', opId: 'op-vb', key: 'loop:0', rec: vbitRec, derived: vbDerived }],
+      derivedOf: (it) => it.derived,
+      selections: [{ cutKeys: ['loop:0'], frame }],
+    });
+    ok(vbRes.paths.every((p) => p.toolDia === vbDerived.rec.toolDia && p.clearing === 'freehand'), 'V-bit pocket sends exact exported toolDia and clearing=freehand');
+  }
 
   // Edit Outside -> Tabs + OK -> pass depth + tab gap strips included!
   sent.length = 0;

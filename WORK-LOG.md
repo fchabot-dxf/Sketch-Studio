@@ -17680,3 +17680,11 @@ Follow-up guards from advisor's live Fusion verification alongside shaper-addin 
 
 ## TURN 856b
 - tests/pocket-clearing-749-node.test.js no longer skips the MD5 check for non-refused morphed exports (only the 804 L/dumbbell skip stays); the 4 changed expected MD5s (rectangle and circle, morphed, flat) are in MORPHED_856, justified by the 0.02 mm equivalence test tests/pocket-morphed-perf-856-node.test.js. With MORPHED_856 emptied the test fails (rectangle|morphed|{"passDepth":null}|flat expected 87e91412869ba75b4bd05e621064d2c1); with it, `ok (1289 checks)`. gate:quick pass=563 fail=0.
+## TURN 858
+Added `toolDia`, `clearing`, and `role` to each path item in `buildToolpathsPayload` (`apps/shaper/src/fusion-toolpaths.js`) from the derived cut records (`derived.rec`) so the Fusion add-in's SA-21 cut-depth volumes know exact bit diameter, pocket clearing pattern, and path role without guessing.
+- `toolDia` (mm): from `derived.rec.toolDia` (fallback `rec.toolDia`), matching what `shaper-export.js` writes as `shaper:toolDia` (including V-bit pockets).
+- `clearing`: `clearingPattern(rec)` (`'freehand' | 'linked' | 'raster' | 'morphed'`, falling back to `'freehand'` if `fp.clearing.role === 'refused'`) on `pocket` cuts; omitted on non-pocket cuts.
+- `role`: mapped from `fp.clearing.role` (`'start'`, `'wall'`, `'island'`, `'cleanup'`, `'loop'`, with `'linked' | 'raster' | 'morphed'` mapped to `'clearing'`), freehand pocket (`'wall'` for `fp.wall` at index 0, `'island'` for island centers), `roughing`/`contour` level paths (`'clearing'`), and `exterior`/`interior`/`online` (`'outline'`).
+- Behaviour change for existing users: `toolpaths` messages now include `toolDia`, `role`, and (on pockets) `clearing` per path; older add-ins ignore unknown fields.
+- Tests: fail-first in `tests/fusion-toolpaths-799-node.test.js` (`freehand pocket wall carries toolDia, clearing=freehand, role=wall`); after changes `fusion-toolpaths-799-node: 47 checks passed` (covering Outside, Inside, On Line, freehand Pocket, Spiral, Raster+Loop, V-bit pocket, and 500k relief `8.4 ms`). Extended `tests/fusion-toolpaths-799-live.test.js`.
+

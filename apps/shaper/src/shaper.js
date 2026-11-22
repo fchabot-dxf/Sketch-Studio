@@ -123,17 +123,17 @@ export function cutTypeById(id) {
   return CUT_TYPES.find((t) => t.id === id) || null;
 }
 
-/** TASK 857 (owner turns 3253-3259): the 2D views' CUT BAND (the material a cut removes: its bit path +- r, r = the file's shaper:toolDia / 2; a pocket the Origin
- *  clears: its cleared area), drawn for the OPEN operation (Prepare) / the SELECTED one (the Export step's Paths view) in its type's passColor (the 3D Show
- *  passes' colour), and the 2D Simulate's dimmer trail (the material removed so far). ONE declaration: the opacity of ONE <g> per operation (overlapping
- *  passes do not get darker), pushed to the CSS (.sk-cutband / .rv2d-cutband / .rv2d-sim-band in index.html) by applyCutBandStyle. */
+/** TASK 857 (owner turns 3253-3259): the Export step's Paths view CUT BAND (the material a cut removes: its bit path +- r, r = the file's shaper:toolDia / 2; a pocket
+ *  the Origin clears: its cleared area), drawn for the SELECTED operation in its type's passColor (the 3D Show passes' colour), and the 2D Simulate's dimmer trail
+ *  (the material removed so far). ONE declaration: the opacity of ONE <g> per operation (overlapping passes do not get darker), pushed to the CSS (.rv2d-cutband /
+ *  .rv2d-sim-band in index.html) by applyCutBandStyle. */
 export const CUT_BAND_STYLE = Object.freeze({
-  opacity: 0.28,    // the open / selected operation's band (Prepare, Export Paths)
+  opacity: 0.28,    // the selected operation's band (Export Paths)
   simOpacity: 0.16, // the 2D Simulate's trail: dimmer
 });
 /** The band's colour of a cut type (its CUT_TYPES id): its passColor; null for a type that removes nothing (Guide, Stock). */
 export const cutBandColor = (id) => { const t = cutTypeById(id); return (t && t.passColor) || null; };
-/** Push CUT_BAND_STYLE onto an <svg> as the --sk-cut-band-* custom properties (Prepare's canvas and the Export step's view both call it). */
+/** Push CUT_BAND_STYLE onto an <svg> as the --sk-cut-band-* custom properties (the Export step's 2D / Paths view calls it). */
 export function applyCutBandStyle(svgEl) {
   if (!svgEl.style || typeof svgEl.style.setProperty !== 'function') return; // (as applyTravelStyle: a test's stub <svg> has no style)
   svgEl.style.setProperty('--sk-cut-band-opacity', String(CUT_BAND_STYLE.opacity));

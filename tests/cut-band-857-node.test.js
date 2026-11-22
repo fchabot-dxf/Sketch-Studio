@@ -107,70 +107,19 @@ try {
   // Trigger paths generation for all ops then settle
   for (const op of storeOps()) { selectRow(op.id); await generate(); }
 
-  // When NO operation is open: normal selection shows .sk-band, zero .sk-cutband
+  // Prepare ALREADY draws .sk-band from deriveCutFootprint: no .sk-cutband is added for idle/selected/open ops
   selectRow(outOp.id);
   await generate();
-  eq(qa('#prepare-cut-group .sk-cutband').length, 0, 'no open op: no .sk-cutband shown');
-  ok(qa('#prepare-cut-group .sk-band').length >= 1, 'no open op: normal .sk-band still renders');
+  eq(qa('#prepare-cut-group .sk-cutband').length, 0, 'Prepare selected (not open): no .sk-cutband');
+  ok(qa('#prepare-cut-group .sk-band').length >= 1, 'Prepare selected: normal .sk-band renders');
 
-  // Open Outside op: shows bit-wide cut band (rect bit path +- r = 3 around [0..60]x[0..40])
   openOp(outOp.id);
-  // TASK 817: an operation just opened draws its paths as they were, FAINT (until its Preview / OK): its band is part of that look, faint with it
-  console.log('Prepare Outside just opened: band faint =', !!q('#prepare-cut-group .sk-cutband').closest('.sk-faint'), ', paths faint =', !!q('#prepare-toolpath-group .sk-faint'));
-  eq(Boolean(q('#prepare-cut-group .sk-cutband').closest('.sk-faint')), Boolean(q('#prepare-toolpath-group .sk-faint')), 'Prepare: the band of the open operation is faint exactly when its paths are');
-  ok(qa('#prepare-cut-group .sk-st-sel .sk-band, #prepare-cut-group .sk-st-hot .sk-band').length >= 1, 'Prepare: the open operation keeps its existing selection band with its cut band underneath');
-  let cutBands = qa('#prepare-cut-group .sk-cutband');
-  eq(cutBands.length, 1, 'Prepare Outside open: exactly ONE .sk-cutband group');
-  eq(cutBands[0].getAttribute('data-op'), outOp.id, 'Prepare Outside: data-op matches open op');
-  eq(cutBands[0].style.color, cutBandColor('exterior'), 'Prepare Outside: colour matches exterior passColor');
-  const outStrokes = [...cutBands[0].querySelectorAll('.sk-cutband-stroke')];
-  eq(outStrokes.length, 1, 'Prepare Outside: 1 stroke path');
-  eq(outStrokes[0].getAttribute('stroke-width'), String(BIT), 'Prepare Outside: stroke-width == 2*r (6 mm)');
-  const outBox = bboxOfPathD(outStrokes[0].getAttribute('d'));
-  near(outBox.minX, -R, 0.05, 'Prepare Outside bit center minX == -r');
-  near(outBox.maxX, 60 + R, 0.05, 'Prepare Outside bit center maxX == 60 + r');
-  near(outBox.minY, -R, 0.05, 'Prepare Outside bit center minY == -r');
-  near(outBox.maxY, 40 + R, 0.05, 'Prepare Outside bit center maxY == 40 + r');
-  // z-order: #prepare-cut-group sits before #prepare-world-group and #prepare-toolpath-group
-  const children = [...doc.getElementById('prepare-canvas').children];
-  ok(children.indexOf(doc.getElementById('prepare-cut-group')) < children.indexOf(doc.getElementById('prepare-toolpath-group')),
-    'Prepare: cut-group (with .sk-cutband) is under toolpath-group');
+  eq(qa('#prepare-cut-group .sk-cutband').length, 0, 'Prepare Outside open: no .sk-cutband');
+  ok(qa('#prepare-cut-group .sk-st-sel .sk-band, #prepare-cut-group .sk-st-hot .sk-band').length >= 1, 'Prepare Outside open: existing .sk-band preserved');
 
-  // Open Inside circle op: bit center radius == 14 - 3 = 11, stroke-width == 6 (covers r in [8, 14])
-  openOp(inOp.id);
-  cutBands = qa('#prepare-cut-group .sk-cutband');
-  eq(cutBands.length, 1, 'Prepare Inside open: exactly ONE .sk-cutband group');
-  eq(cutBands[0].getAttribute('data-op'), inOp.id, 'Prepare Inside: data-op matches open op');
-  eq(cutBands[0].style.color, cutBandColor('interior'), 'Prepare Inside: colour matches interior passColor');
-  const inStrokes = [...cutBands[0].querySelectorAll('.sk-cutband-stroke')];
-  eq(inStrokes.length, 1, 'Prepare Inside: 1 stroke path');
-  eq(inStrokes[0].getAttribute('stroke-width'), String(BIT), 'Prepare Inside: stroke-width == 2*r (6 mm)');
-  const inBox = bboxOfPathD(inStrokes[0].getAttribute('d'));
-  near(inBox.maxX - inBox.minX, 2 * (14 - R), 0.1, 'Prepare Inside bit center diameter == 2*(14 - 3)');
-
-  // Open Freehand Pocket op: light fill of area cleared, no clearing stroke paths
   openOp(freeOp.id);
-  cutBands = qa('#prepare-cut-group .sk-cutband');
-  eq(cutBands.length, 1, 'Prepare Freehand Pocket open: ONE .sk-cutband group');
-  eq(cutBands[0].style.color, cutBandColor('pocket'), 'Prepare Freehand Pocket: colour matches pocket passColor');
-  ok(cutBands[0].querySelectorAll('.sk-cutband-fill').length >= 1, 'Prepare Freehand Pocket: filled cleared area');
-  eq(cutBands[0].querySelectorAll('.sk-cutband-stroke').length, 0, 'Prepare Freehand Pocket: no pass strokes');
-  const freeBox = bboxOfPathD([...cutBands[0].querySelectorAll('.sk-cutband-fill')].map((e) => e.getAttribute('d')).join(' '));
-  near(freeBox.minX, 130, 0.05, 'Prepare Freehand Pocket fill = the cleared area: minX = the wall'); near(freeBox.maxX, 190, 0.05, 'Prepare Freehand Pocket fill maxX = the wall');
-  near(freeBox.minY, 0, 0.05, 'Prepare Freehand Pocket fill minY = the wall'); near(freeBox.maxY, 40, 0.05, 'Prepare Freehand Pocket fill maxY = the wall');
-
-  // Open Programmed Raster Pocket: ALL passes wrapped inside ONE .sk-cutband group so overlaps don't darken
-  openOp(rasterOp.id);
-  cutBands = qa('#prepare-cut-group .sk-cutband');
-  eq(cutBands.length, 1, 'Prepare Raster Pocket open: ONE union .sk-cutband group for all overlapping passes');
-  ok(cutBands[0].querySelectorAll('.sk-cutband-stroke').length >= 2, 'Prepare Raster Pocket: multiple programmed pass strokes in the single union group');
-
-  // Open On-line op
-  openOp(onOp.id);
-  cutBands = qa('#prepare-cut-group .sk-cutband');
-  eq(cutBands.length, 1, 'Prepare On-line open: ONE .sk-cutband group');
-  eq(cutBands[0].style.color, cutBandColor('online'), 'Prepare On-line: colour matches online passColor');
-  eq(cutBands[0].querySelector('.sk-cutband-stroke').getAttribute('stroke-width'), String(BIT), 'Prepare On-line: stroke-width == 2*r');
+  eq(qa('#prepare-cut-group .sk-cutband').length, 0, 'Prepare Freehand Pocket open: no .sk-cutband');
+  ok(qa('#prepare-cut-group .sk-band').length >= 1, 'Prepare Freehand Pocket open: existing .sk-band preserved');
 
   // 3. Export Paths & 2D Simulate
   const svgCanvas = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -216,7 +165,8 @@ try {
   ok(bandEl.querySelectorAll('.rv2d-cutband-fill').length >= 1, 'Export Paths Freehand Pocket: light fill of cleared area');
   eq(bandEl.querySelectorAll('.rv2d-cutband-stroke').length, 0, 'Export Paths Freehand Pocket: no stroke passes');
   const expFreeBox = bboxOfPathD([...bandEl.querySelectorAll('.rv2d-cutband-fill')].map((e) => e.getAttribute('d')).join(' '));
-  eq([expFreeBox.minX, expFreeBox.maxX, expFreeBox.minY, expFreeBox.maxY].map((v) => Math.round(v * 100) / 100), [freeBox.minX, freeBox.maxX, freeBox.minY, freeBox.maxY].map((v) => Math.round(v * 100) / 100), 'Export Paths Freehand Pocket fill = the Prepare fill (the same cleared area)');
+  near(expFreeBox.minX, 130, 0.05, 'Export Paths Freehand Pocket fill minX == wall'); near(expFreeBox.maxX, 190, 0.05, 'Export Paths Freehand Pocket fill maxX == wall');
+  near(expFreeBox.minY, 0, 0.05, 'Export Paths Freehand Pocket fill minY == wall'); near(expFreeBox.maxY, 40, 0.05, 'Export Paths Freehand Pocket fill maxY == wall');
 
   ep.pickOp(rasterOp.id);
   ok(bandEl.querySelectorAll('.rv2d-cutband-stroke').length >= 2, 'Export Paths Raster Pocket: all programmed passes inside ONE .rv2d-cutband group');

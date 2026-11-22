@@ -7,7 +7,7 @@
 
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { cutTypeById, STOCK_TYPE_ID, effectiveCutRecord, cutBandColor, applyCutBandStyle } from './shaper.js'; // SP1f: cut-type declarations
+import { cutTypeById, STOCK_TYPE_ID, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations
 import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, planMemberItems, pathsCtx, pathsOf, pathsSigOf, itemOutOfDate, planOwnedLoops, stockKeyOf, rememberStepDepth, rememberAdaptiveSteps, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
   clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
@@ -224,7 +224,6 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   svgEl.innerHTML = ''; // clean re-mount
   // TASK 777: push ONE declaration of the travel dash pattern to CSS custom properties on svgEl so .sk-travel and @keyframes sk-march share TRAVEL_STYLE
   applyTravelStyle(svgEl);
-  applyCutBandStyle(svgEl);
 
   // Local view state for Prepare canvas, initialized by fitting to sketch extents
   const view = { x: 0, y: 0, w: 120, h: 90 };
@@ -386,26 +385,20 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // TASK S2: one look per membership (planMemberItems: a shape in two operations has two). TASK 817: `derived` = its GENERATED paths (cut-plan.js pathsOf: the one
   // composition, deriveKeyFootprints, made in the background on OK; shared with the 3D Review)
   const computeLook = (it, derived) => {
-    if (!derived) return { region: '', band: '', path: '', toolPaths: [] };
+    if (!derived) return { region: '', path: '', toolPaths: [] };
     const { rec, footprints } = derived;
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
-    if (!ct) return { region: '', band: '', path: '', toolPaths: [] };
+    if (!ct) return { region: '', path: '', toolPaths: [] };
     // TASK 455: the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states. Every
     // type uses the same state model; only the SHAPE differs. A Guide is a line only (no band, dashes or chip).
-    if (ct.id === 'guide' || ct.id === STOCK_TYPE_ID) return { region: '', band: '', path: '', hasTravel: false, toolPaths: [] }; // a Guide / the Stock: a line only (the Stock has its label)
+    if (ct.id === 'guide' || ct.id === STOCK_TYPE_ID) return { region: '', path: '', hasTravel: false, toolPaths: [] }; // a Guide / the Stock: a line only (the Stock has its label)
     // TASK 447: the FOOTPRINT of the round bit (what it really removes) comes from ONE core derivation
     // (#core/profile-model deriveCutFootprint); this view only draws the rings it returns. Uncut material (corners the
     // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
     const isOnline = ct.id === 'online';
     const tpClass = isOnline ? 'sk-tp sk-tp-online' : 'sk-tp';
-    const dia = Number(rec.toolDia) || 0; // TASK 857: the band's width = 2r = the record's toolDia, the field the exporter writes as shaper:toolDia
-    let region = '', band = '', path = '', hasTravel = false, chip = null, startMark = null;
+    let region = '', path = '', hasTravel = false, chip = null, startMark = null;
     const toolPaths = [];
-    const addBandStrokes = (tps) => {
-      if (!(dia > 0) || !tps || !tps.length) return;
-      const d = tps.map(toolPathD).filter(Boolean).join(' ');
-      if (d) band += `<path class="sk-cutband-stroke" stroke-width="${dia}" d="${d}"/>`;
-    };
     // TASK 449 / 777: travel marks (sparse slow marching dashes); TASK 757: a STEPPED cut's (a terrace's)
     // go to `stepped`, thinned at draw time (renderStepTravel: outlines closer on screen than TRAVEL_MIN_GAP_PX carry none).
     const stepped = [];
@@ -428,7 +421,6 @@ export function mountPrepareView(state, svgEl, opts = {}) {
           continue;
         }
         toolPaths.push(...(fp.toolPaths || []));
-        addBandStrokes(fp.toolPaths);
         if (cl.summary) { // the cut that carries the plan: the wall's (TASK 749: a Spiral's last line when its wall is in the line)
           if (cl.summary.swept && cl.summary.swept.length) region += `<path d="${regionsD(cl.summary.swept)}" fill-rule="evenodd" class="sk-band"/>`;
           if (cl.summary.leftover && cl.summary.leftover.regions.length) region += `<path d="${regionsD(cl.summary.leftover.regions)}" fill-rule="evenodd" class="sk-leftover"/>`;
@@ -457,12 +449,6 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-band"/>`;
         if (fp.kind === 'pocket') region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-pocket-marks" fill="url(#prepare-pocket-marks)"/>`;
       }
-      if (fp.kind === 'pocket') {
-        if (rings.length) band += `<path d="${rings.map(polyRingD).join(' ')}" fill-rule="${fp.fillRule}" class="sk-cutband-fill"/>`; // TASK 857: a pocket the Origin clears: its cleared area
-        if (finish.length) band += `<path d="${finish.map(polyRingD).join(' ')}" fill-rule="nonzero" class="sk-cutband-fill"/>`; // (+ its finish ring)
-      } else if (fp.kind !== 'guide') {
-        addBandStrokes(fp.toolPaths);
-      }
       // TASK 449 / 777: travel marks (one core derivation): sparse slow marching dashes (CSS animation, no RAF).
       toolPaths.push(...(fp.toolPaths || []));
       // TASK 742: a held cut: its tabs marked on the outline (an onion skin: the whole outline), each gap strip drawn as it is exported (its own
@@ -488,7 +474,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       }
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, band, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map() };
+    return { region, path, hasTravel, toolPaths, anchor: chip, startMark, depth: rec.cutDepth, stepped, steppedGaps: new Map() };
   };
   // TASK 817 (owner turns 2745-2748): a look is drawn from the GENERATED paths (op-paths.js: content-addressed, generated in the background on OK), cached per
   // membership under its paths' signature (+ the unit its chip is written in). Paths not generated yet: nothing is drawn (the look follows when they arrive: the stage
@@ -496,7 +482,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // and faint again (stale) after a later change in the card.
   let ctxNow = null;
   const viewCtx = () => { const o = ownedNow(); if (!ctxNow || ctxNow.ownedKeys !== o.keys) ctxNow = { ownedKeys: o.keys, ctx: pathsCtx(state, { loops, loopPolys, owned: o.set }) }; return ctxNow.ctx; };
-  const EMPTY_LOOK = Object.freeze({ region: '', band: '', path: '', toolPaths: [] });
+  const EMPTY_LOOK = Object.freeze({ region: '', path: '', toolPaths: [] });
   const lookAt = (it, sig, derived) => {
     const k = `${sig}|${docUnit()}`;
     let byItem = lookCache.get(it.id);
@@ -552,16 +538,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     return out;
   };
   const renderCuts = () => {
-    // TASK 857: the OPEN operation's memberships ADD its CUT BAND (computeLook `band`: ONE <g> for the operation, in its type's colour: overlaps do not darken)
-    // UNDER every existing element (`look.region` stays untouched); its faint paths' band faint too
-    const op = activeOp(), color = op ? cutBandColor(op.type) : null, band = { now: '', faint: '' };
     let out = '';
-    for (const { st, look, faint, open } of drawnItems()) {
-      if (open && look.band) band[faint ? 'faint' : 'now'] += look.band;
-      out += `<g class="sk-st-${st}${faint ? ' sk-faint' : ''}">${look.region}</g>`;
-    }
-    const bandG = (d) => (d && color ? `<g class="sk-cutband" data-op="${op.id}" style="color:${color}">${d}</g>` : '');
-    cutG.innerHTML = bandG(band.now) + (band.faint && color ? `<g class="sk-faint">${bandG(band.faint)}</g>` : '') + out;
+    for (const { st, look, faint } of drawnItems()) out += `<g class="sk-st-${st}${faint ? ' sk-faint' : ''}">${look.region}</g>`;
+    cutG.innerHTML = out;
   };
   const renderToolpaths = () => {
     let out = '';

@@ -135,6 +135,7 @@ export const CUT_BAND_STYLE = Object.freeze({
 export const cutBandColor = (id) => { const t = cutTypeById(id); return (t && t.passColor) || null; };
 /** Push CUT_BAND_STYLE onto an <svg> as the --sk-cut-band-* custom properties (Prepare's canvas and the Export step's view both call it). */
 export function applyCutBandStyle(svgEl) {
+  if (!svgEl.style || typeof svgEl.style.setProperty !== 'function') return; // (as applyTravelStyle: a test's stub <svg> has no style)
   svgEl.style.setProperty('--sk-cut-band-opacity', String(CUT_BAND_STYLE.opacity));
   svgEl.style.setProperty('--sk-cut-band-sim-opacity', String(CUT_BAND_STYLE.simOpacity));
 }

@@ -2,8 +2,11 @@
 //
 // Contract (matching D:/APPS/shaper-addin/docs/SELECTION-BRIDGE.md §6 and fusion-bridge.js):
 //   Palette -> Add-in:
-//     { action: 'toolpaths', revision, frame, paths: [{ op, cutType, color?, z, points: [[x, y], ...], closed }] }
+//     { action: 'toolpaths', revision, frame, paths: [{ op, cutType, toolDia, clearing?, role, z, points: [[x, y], ...], closed }] }
 //     { action: 'toolpaths_clear' }
+//     - toolDia (mm): operation bit diameter (same value encoded as shaper:toolDia).
+//     - clearing: 'freehand' | 'linked' | 'raster' | 'morphed' on pocket paths; omitted on non-pocket cuts.
+//     - role: 'wall' | 'island' | 'clearing' | 'cleanup' | 'loop' | 'outline' | 'start' (pocket start marks, walls, islands, clearing/level passes, loops, or outlines).
 //
 // Frame & coordinate convention:
 //   - Sketch-Studio #core world coordinates are in mm with Y-down.
@@ -14,7 +17,7 @@
 //   - One decimation tolerance (`TOOLPATH_DECIMATE_TOL_MM = 0.05` mm) and one debounce (`TOOLPATHS_DEBOUNCE_MS = 300` ms)
 //     are declared once here.
 
-import { simplifyPath, POCKET_CLEARING } from '#core/pocket-clearing.js';
+import { simplifyPath, POCKET_CLEARING, clearingPattern } from '#core/pocket-clearing.js';
 import { planMemberItems, pathsCtx, pathsInputOf, pathsSigOf } from './cut-plan.js';
 import { lookup as lookupPaths, resultOf, isOutOfDate, staleOf, isGenerating } from './op-paths.js';
 import { STOCK_TYPE_ID } from './shaper.js';
@@ -164,6 +167,30 @@ function pathCutType(fp, opType) {
   return String((fp && fp.cutType) || opType || 'online');
 }
 
+function pathToolDia(derivedRec, opRec) {
+  const raw = (derivedRec && derivedRec.toolDia != null) ? derivedRec.toolDia : (opRec && opRec.toolDia);
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function pathClearing(rec, fp) {
+  if (!rec || rec.cutType !== 'pocket') return undefined;
+  if (fp && fp.clearing && fp.clearing.role === 'refused') return 'freehand';
+  return clearingPattern(rec);
+}
+
+const CLEARING_ROLES = new Set(['wall', 'island', 'cleanup', 'loop', 'start']);
+const CLEARING_PASS_ROLES = new Set(['linked', 'raster', 'morphed']);
+
+function pathRole(fp, tpIdx, cutType) {
+  const r = fp && fp.clearing && fp.clearing.role;
+  if (CLEARING_ROLES.has(r)) return r;
+  if (CLEARING_PASS_ROLES.has(r)) return 'clearing';
+  if (fp && fp.kind === 'pocket') return fp.wall && tpIdx === 0 ? 'wall' : 'island';
+  if (cutType === 'roughing' || cutType === 'contour') return 'clearing';
+  return 'outline';
+}
+
 /**
  * Extract decimated 2D toolpaths (Fusion Y-up mm) and real Z depths from derived footprints.
  * Pure function so both the app and unit tests can verify exact payloads.
@@ -186,13 +213,15 @@ export function buildToolpathsPayload({
 
     const itemFrame = byKey.get(it.key);
     const frameOverride = itemFrame && JSON.stringify(itemFrame) !== topFrameJson ? itemFrame : null;
+    const toolDia = pathToolDia(derived.rec, rec);
 
     for (const fp of derived.footprints) {
       if (!fp) continue;
       const z = pathDepthMm(fp, derived.rec);
+      const clearing = pathClearing(rec, fp);
 
       if (fp.clearing && fp.clearing.role === 'start' && fp.clearing.point) {
-        const arm = (Number(fp.clearing.dia) || (Number(derived.rec && derived.rec.toolDia) || 3.175) * POCKET_CLEARING.startMarkDiaMult) / 2;
+        const arm = (Number(fp.clearing.dia) || (toolDia || 3.175) * POCKET_CLEARING.startMarkDiaMult) / 2;
         const cx = fp.clearing.point.x;
         const cy = fp.clearing.point.y;
         for (const seg of [
@@ -204,6 +233,9 @@ export function buildToolpathsPayload({
             paths.push({
               op: it.opId,
               cutType: 'guide',
+              toolDia,
+              ...(clearing !== undefined ? { clearing } : {}),
+              role: 'start',
               z,
               points: pts,
               closed: false,
@@ -217,7 +249,8 @@ export function buildToolpathsPayload({
       if (fp.kind === 'guide') continue;
       const cutType = pathCutType(fp, rec.cutType);
 
-      for (const tp of fp.toolPaths || []) {
+      for (let tpIdx = 0; tpIdx < (fp.toolPaths || []).length; tpIdx++) {
+        const tp = fp.toolPaths[tpIdx];
         if (!tp || !Array.isArray(tp.points)) continue;
         const closed = Boolean(tp.closed);
         const points = decimateToolpathPoints(tp.points, closed, tolMm);
@@ -225,6 +258,9 @@ export function buildToolpathsPayload({
         paths.push({
           op: it.opId,
           cutType,
+          toolDia,
+          ...(clearing !== undefined ? { clearing } : {}),
+          role: pathRole(fp, tpIdx, cutType),
           z,
           points,
           closed,

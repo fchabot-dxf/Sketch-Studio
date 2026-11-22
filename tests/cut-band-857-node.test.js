@@ -118,7 +118,7 @@ try {
   // TASK 817: an operation just opened draws its paths as they were, FAINT (until its Preview / OK): its band is part of that look, faint with it
   console.log('Prepare Outside just opened: band faint =', !!q('#prepare-cut-group .sk-cutband').closest('.sk-faint'), ', paths faint =', !!q('#prepare-toolpath-group .sk-faint'));
   eq(Boolean(q('#prepare-cut-group .sk-cutband').closest('.sk-faint')), Boolean(q('#prepare-toolpath-group .sk-faint')), 'Prepare: the band of the open operation is faint exactly when its paths are');
-  eq(qa('#prepare-cut-group .sk-st-sel .sk-band, #prepare-cut-group .sk-st-hot .sk-band').length, 0, 'Prepare: the open operation draws its cut band in place of its selection band');
+  ok(qa('#prepare-cut-group .sk-st-sel .sk-band, #prepare-cut-group .sk-st-hot .sk-band').length >= 1, 'Prepare: the open operation keeps its existing selection band with its cut band underneath');
   let cutBands = qa('#prepare-cut-group .sk-cutband');
   eq(cutBands.length, 1, 'Prepare Outside open: exactly ONE .sk-cutband group');
   eq(cutBands[0].getAttribute('data-op'), outOp.id, 'Prepare Outside: data-op matches open op');

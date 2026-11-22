@@ -157,7 +157,7 @@ export async function pocketPhase(t, label, { patterns = ['linked', 'raster', 'm
     assert.ok(/\+ wall: one closed loop,/.test((await note())[0]), label + ` ${pat}: the note says one closed loop, nothing about where it starts: ` + (await note())[0]);
     const els = fileElements(await pageSvg());
     const online = els.filter((e) => e[2] === 'online'), guides = els.filter((e) => e[2] === 'guide'), inside = els.filter((e) => e[2] === 'inside');
-    assert.ok(online.length === 1 && online.every((e) => /Z$/.test(e[1])) && guides.length === 1 && inside.length === (pat === 'raster' ? 1 : 0), label + ` ${pat}: ONE closed on-line loop + 1 guide start mark (TASK 835e: Raster + the Origin's inside cut)`);
+    assert.ok(online.length === 1 && online.every((e) => /Z$/.test(e[1])) && guides.length === 1 && inside.length === 1, label + ` ${pat}: ONE closed on-line loop + 1 guide start mark + the Origin's native inside cut (TASK 835e / 850)`);
     await shotWorld(`${D}-prepare-pocket-${pat}-startmark.png`, [-6, -6, 106, 66], 2);
   }
   await shot(`${D}-card-pocket-startmark.png`, '#prepare-panel .cut-card', 2);
@@ -169,8 +169,7 @@ export async function pocketPhase(t, label, { patterns = ['linked', 'raster', 'm
     await pickClearing('linked');
     await setLoop(true);
     const n = await note();
-    const loops = Number((/(\d+) closed loops/.exec(n[0]) || [])[1]);
-    assert.ok(loops > 1 && await count('.sk-pocket-start') === 1, label + `: the island pocket: ${loops} closed loops, 1 start mark on the selected pocket: ` + n[0]);
+    assert.ok(/\+ wall: one closed loop,/.test(n[0]) && await count('.sk-pocket-start') === 1, label + `: the island pocket: ONE closed loop (TASK 850), 1 start mark on the selected pocket: ` + n[0]);
     await shotWorld(`${D}-prepare-pocket-island-startmark.png`, [-6, 74, 106, 146], 2);
   }
   // an open line: the Hold part row

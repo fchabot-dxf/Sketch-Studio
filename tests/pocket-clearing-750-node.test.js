@@ -276,11 +276,11 @@ let saved = null;
       const n0 = st.history.length;
       h.toggleLoop();
       eq([V2_PLAN.get(kA).loop, st.history.length], [true, n0 + 1], `${pat}: Loop on, ONE undo step`);
-      eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), pat === 'raster' ? 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.' : 'Left on the walls by the clearing passes; the loop’s turn along the wall takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770: Loop on: the hint names who takes it off (the loop's turn along the wall; TASK 835e: Raster: the Origin's inside cut) (the row's hint, param-hints.js)`);
+      eq(hintFor(h.q('.cut-row[data-row="finishAllowance"] [data-hint]')), 'Left on the walls by the clearing passes; the Origin’s inside cut takes it off for a clean edge. 0 = none.', `${pat}: TASK 766 / 770 / 850: Loop on: the finish is the Origin's native inside cut for every pattern (the row's hint, param-hints.js)`);
       const nt = h.note(), nf = h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l)); // TASK 825: the warning lines (the leftover) come first
-      ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nf[0]), `${pat}: the note: ${nf[0]}`); // TASK 835e: Raster: one loop per area again // TASK 775: a closed loop has no start point (no "ends where it starts")
-      ok(nt.includes('Wall cut in the same line: exact for a 6 mm bit only') === (pat !== 'raster') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: exact for the card's bit only (TASK 835e: not Raster: its wall is the Origin's inside cut); the depth passes on the Origin`);
-      eq(elementsOf(shaperSvgOf(st, planEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]).sort(), [['online', true], ...(pat === 'raster' ? [['inside', true]] : []), ['guide', false]].sort(), `${pat}: the download: ONE closed on-line path + 1 guide start mark (TASK 835e: Raster + the Origin's inside cut)`);
+      ok(/\+ wall: one closed loop, stepover 2\.4 mm/.test(nf[0]), `${pat}: the note: ${nf[0]}`); // TASK 835e / 850: one loop per area // TASK 775: a closed loop has no start point (no "ends where it starts")
+      ok(!nt.includes('Wall cut in the same line: exact for a 6 mm bit only') && nt.includes('Depth passes: set Pass Depth or AutoPass on the Origin'), `${pat}: the note: native inside cut on the wall (no "same line"); the depth passes on the Origin`);
+      eq(elementsOf(shaperSvgOf(st, planEntries())).map((e) => [e.cutType, /Z$/.test(e.d)]).sort(), [['online', true], ['inside', true], ['guide', false]].sort(), `${pat}: the download: ONE closed on-line path + the Origin's inside cut + 1 guide start mark (TASK 835e / 850)`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group circle').length, 0, `${pat}: TASK 775: no dot on a closed loop (it has no start point on the Origin)`);
       eq(app.document.querySelectorAll('#prepare-toolpath-group .sk-pocket-start').length, 1, `${pat}: TASK 778: 1 pocket start mark target in Prepare`);
       app.undo();

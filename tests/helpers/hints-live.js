@@ -117,7 +117,7 @@ export async function hintsPhase(t, { fusion = false, part = 'all' } = {}) {
   assert.strictEqual(await evalJs(`document.querySelector('.cut-loop').checked`), false, D + ': Loop starts off');
   await checkTip(label('finishAllowance'), HINT.finishOff, 'Finish allowance, Loop off');
   await t.setLoop(true);
-  await checkTip(label('finishAllowance'), HINT.finishOn, 'Finish allowance, Loop on (the hint follows the card)', { shotName: `${D}-tooltip-finish-loop-on.png`, shotSels: ['#prepare-panel .cut-card'] });
+  await checkTip(label('finishAllowance'), HINT.finishOff, 'Finish allowance, Loop on (TASK 850: native finish cut on the wall)', { shotName: `${D}-tooltip-finish-loop-on.png`, shotSels: ['#prepare-panel .cut-card'] });
   await t.setLoop(false);
   }
 

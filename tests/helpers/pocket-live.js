@@ -302,8 +302,8 @@ async function threePockets(t, label, shots) {
     const cI = await card();
     console.log(label + ' island note: ' + JSON.stringify(cI.note));
     assert.strictEqual(cI.loop, true, label + ': the island pocket starts with the last Loop set (on)');
-    const islandLoops = Number((/\+ wall: (\d+) closed loops \(the pocket has islands\),/.exec(cI.note[0]) || [])[1]);
-    assert.ok(islandLoops > 1 && await markers() === 0, label + ': the island pocket: several closed loops, no dot on any (TASK 775), the note says why: ' + cI.note[0]);
+    const islandLoops = /\+ wall: one closed loop,/.test(cI.note[0]) ? 1 : 0;
+    assert.ok(islandLoops === 1 && (await look()).paths === 1 && await markers() === 0, label + ': the island pocket: ONE closed loop (TASK 850), no dot on any (TASK 775): ' + cI.note[0]);
     if (shots) await shotWorld(`${D}-loop-island-spiral.png`, [0, 90, 120, 150]);
   return { D, inch, islandLoops };
 }
@@ -311,7 +311,7 @@ async function threePockets(t, label, shots) {
 /** TASKS 745 / 749 / 750, the operations list of the three pockets (threePockets, with their screenshots). */
 export async function listsPhase(t, label) {
   const { phone, evalJs, shot, clickEl } = t;
-  const { D, islandLoops } = await threePockets(t, label, true);
+  const { D } = await threePockets(t, label, true);
     // the operations list
     if (phone) await clickEl('#prepare-ops .ops-head');
     const ops = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => r.querySelector('.ops-name').textContent + ' | ' + r.querySelector('.ops-sub').textContent)`);
@@ -320,8 +320,7 @@ export async function listsPhase(t, label) {
     // L and the island, the same settings, shared one)
     assert.strictEqual(ops.length, 3, label + ': 3 operations: the rectangle (Loop off), the L and the island (Loop on)');
     assert.ok(ops.some((t) => /^Pocket \(spiral\) · .* \| 1 region · spiral, \d+ turns in 1 line \+ wall$/.test(t)), label + ': the rectangle row');
-    assert.ok(ops.some((t) => /^Pocket \(spiral\) · .* \| 1 region · spiral, \d+ turns \+ wall: one closed loop$/.test(t)), label + ': the L row');
-    assert.ok(ops.some((t) => new RegExp(`^Pocket \\(spiral\\) · .* \\| 1 region · spiral, \\d+ turns \\+ wall: ${islandLoops} closed loops \\(the pocket has islands\\)$`).test(t)), label + ': the island row');
+    assert.strictEqual(ops.filter((t) => /^Pocket \(spiral\) · .* \| 1 region · spiral, \d+ turns \+ wall: one closed loop$/.test(t)).length, 2, label + ': the L and the island rows (each one closed loop, TASK 850)');
     await shot(`${D}-ops-list.png`, '#prepare-ops', 2);
     if (phone) await clickEl('#prepare-ops .ops-head');
 }
@@ -333,7 +332,7 @@ export async function exportPhase(t, label) {
     // Export 2D == the download, element by element
     const e2 = await export2d(label);
     console.log(label + ' 2D rows: ' + JSON.stringify(e2.rows));
-    assert.ok(e2.rows.some((t) => /· spiral lines \(1\)$/.test(t)) && e2.rows.some((t) => /· wall \(1\)$/.test(t)) && e2.rows.reduce((n, t) => n + Number((/· closed loops \((\d+)\)$/.exec(t) || [0, 0])[1]), 0) === 1 + islandLoops /* TASK S2: the quick flow makes a NEW operation per pocket: their closed loops on two rows */ && e2.rows.some((t) => /· start mark/.test(t)) && !e2.rows.some((t) => /· islands \(/.test(t)), label + ': 2D lists the spiral line, its wall, the closed loops, and the start marks');
+    assert.ok(e2.rows.some((t) => /· spiral lines \(1\)$/.test(t)) && e2.rows.filter((t) => /· wall \(1\)$/.test(t)).length === 3 && e2.rows.some((t) => /· islands \(1\)$/.test(t)) && e2.rows.reduce((n, t) => n + Number((/· closed loops \((\d+)\)$/.exec(t) || [0, 0])[1]), 0) === 1 + islandLoops /* TASK S2 / 850: the quick flow makes a NEW operation per pocket: 1 closed loop on the L + 1 on the island */ && e2.rows.some((t) => /· start mark/.test(t)), label + ': 2D lists the spiral line, each pocket\'s wall, the island\'s outside cut, the closed loops, and the start marks');
     await clickEl('#review-cuts-list .rv2d-row');
     const lab = await evalJs(`document.getElementById('review-2d-info').textContent`);
     console.log(label + ' 2D label: ' + lab);
@@ -345,7 +344,7 @@ export async function exportPhase(t, label) {
     assert.strictEqual(e2.count, fileElements(file).length, label + ': every element of the file is on the 2D canvas');
     assert.ok(!/data-/.test(file), label + ': no data-* in the download');
     const kinds = fileElements(file).map((e) => [e[2], /Z$/.test(e[1])]);
-    assert.deepStrictEqual(kinds.filter((k) => k[0] !== 'online' || !k[1]), [['online', false], ['inside', true], ['guide', false], ['guide', false], ['guide', false]], label + ': the download: the rectangle\'s open line + its inside cut + 3 guide start marks; no outside / pocket element');
+    assert.deepStrictEqual(kinds.filter((k) => k[0] !== 'online' || !k[1]), [['online', false], ['inside', true], ['guide', false], ['inside', true], ['guide', false], ['inside', true], ['outside', true], ['guide', false]], label + ': the download: the rectangle\'s open line + 3 native inside walls + 1 native outside island + 3 guide start marks; no pocket element');
     assert.strictEqual(kinds.filter((k) => k[0] === 'online' && k[1]).length, 1 + islandLoops, label + `: and ${1 + islandLoops} closed on-line loops (the L, the island pocket)`);
     // Export 3D: built, the cleared pockets
     if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-3d');
@@ -354,25 +353,25 @@ export async function exportPhase(t, label) {
     // the info's lines (TASK 757: on a phone the first line is the fold's header button and the others its body)
     const info = await evalJs(`[...document.querySelectorAll('#review-info > div:not(.review-info-body), #review-info .review-info-head > span, #review-info .review-info-body > div')].map((d) => d.textContent)`);
     console.log(label + ' 3D info: ' + JSON.stringify(info));
-    assert.ok(info.some((t) => /^Pocket: spiral, \d+ turns in 1 line \+ wall,/.test(t)) && info.some((t) => /^Pocket: spiral, \d+ turns \+ wall: one closed loop/.test(t)) && info.some((t) => /closed loops \(the pocket has islands\)/.test(t)), label + ': the 3D info says the clearing');
+    assert.ok(info.some((t) => /^Pocket: spiral, \d+ turns in 1 line \+ wall,/.test(t)) && info.filter((t) => /^Pocket: spiral, \d+ turns \+ wall: one closed loop/.test(t)).length === 2, label + ': the 3D info says the clearing');
     await shot(`${D}-export-3d.png`, '#review-canvas-host');
     await openMode('prepare');
 }
 
-/** TASK 750: Loop ON on the rectangle for `patterns` (Spiral, Raster, Morphed spiral: one closed line + its marker, the note, the download = ONE closed on-line
- *  path, no inside element), then (`off`) Spiral with Loop off again (the open line + the inside cut). */
+/** TASK 750 / 850: Loop ON on the rectangle for `patterns` (Spiral, Raster, Morphed spiral: one closed line + its marker, the note, the download = ONE closed on-line
+ *  path + the Origin's native inside cut), then (`off`) Spiral with Loop off again (the open line + the inside cut). */
 export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'morphed'], off = true } = {}) {
   const { openMode, shot, shotWorld, card, look, rec, pickClearing, setLoop, markers, download, fileElements, EVIDENCE_DIR } = t;
   const { D, inch, bitWords, pickRect } = await setupPockets(t, label);
-    // Loop ON for each pattern on the rectangle: one closed line, the note, the download = ONE closed on-line path, no inside cut
+    // Loop ON for each pattern on the rectangle: one closed line, the note, the download = ONE closed on-line path + the Origin's native inside cut
     const loopRuns = {};
     for (const pat of patterns) {
       await pickClearing(pat);
       await setLoop(true);
       assert.strictEqual((await rec(60, 10)).loop, true, label + ` ${pat}: Loop on stored`);
       const c = await card();
-      // TASK 835e: Raster's Loop = one closed loop per area (the rectangle: one), its finish the Origin's native inside cut (the Loop-off wording: no "same line")
-      const native = pat === 'raster';
+      // TASK 835e / 850: Loop = one closed loop per area (the rectangle: one), its finish the Origin's native inside cut (the Loop-off wording: no "same line")
+      const native = true;
       assert.ok(c.loop === true && /\+ wall: one closed loop, stepover/.test(c.note[0]) && c.note.includes(`Wall cut in the same line: exact for a ${bitWords} bit only`) === !native, label + ` ${pat}: the note ${JSON.stringify(c.note)}`);
       const l = await look();
       assert.ok(l.paths >= 1 && await markers() === 0, label + ` ${pat}: the closed line drawn, no dot (TASK 775: a closed loop has no start point)`);
@@ -383,7 +382,7 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
       const els = fileElements(file);
       loopRuns[pat] = els.map((e) => [e[2], e[3], /Z$/.test(e[1]) ? 'closed' : 'open']);
       const depthW = inch ? '0.250 in' : '6.000 mm';
-      assert.deepStrictEqual([...loopRuns[pat]].sort(), [['online', depthW, 'closed'], ...(native ? [['inside', depthW, 'closed']] : []), ['guide', undefined, 'open']].sort(), label + ` ${pat}: the download: ONE closed on-line path + 1 guide start mark (once: the Origin's AutoPass steps down)${native ? " + the Origin's inside cut (TASK 835e)" : ', no inside element'}`);
+      assert.deepStrictEqual([...loopRuns[pat]].sort(), [['online', depthW, 'closed'], ...(native ? [['inside', depthW, 'closed']] : []), ['guide', undefined, 'open']].sort(), label + ` ${pat}: the download: ONE closed on-line path + 1 guide start mark (once: the Origin's AutoPass steps down) + the Origin's inside cut (TASK 835e / 850)`);
       for (const e of els.filter((x) => x[2] === 'online')) { const n = e[1].replace(/[MLZ]/g, ' ').trim().split(/\s+/); assert.ok(n[0] === n[n.length - 2] && n[1] === n[n.length - 1], label + ` ${pat}: the path is closed (first point == last point)`); }
       await openMode('prepare'); await pickRect();
     }
@@ -398,8 +397,8 @@ export async function loopPhase(t, label, { patterns = ['linked', 'raster', 'mor
     await shotWorld(`${D}-loop-off-spiral.png`, [0, 0, 120, 70]);
 }
 
-/** TASK 750: Fusion mode: the imported drafted pocket with Loop on for Spiral, Raster and Morphed spiral: each one closed on-line path in the export, no inside
- *  element (the body's other region keeps its own cut). */
+/** TASK 750 / 850: Fusion mode: the imported drafted pocket with Loop on for Spiral, Raster and Morphed spiral: each one closed on-line path per area in the export +
+ *  the Origin's native inside cut (the body's other region keeps its own cut). */
 export async function fusionPhase(t) {
   const { evalJs, waitFor, setUnit, clickWorld, pickClearing, setLoop, card, look, shotWorld, shot, fileElements } = t;
   await setUnit('mm');
@@ -413,7 +412,7 @@ export async function fusionPhase(t) {
     await pickClearing(id);
     await setLoop(true);
     const c = await card();
-    // TASK 835e: Raster's Loop = one closed loop per area, its finish the Origin's native inside cut
+    // TASK 835e / 850: Loop = one closed loop per area, its finish the Origin's native inside cut
     assert.ok(new RegExp(`^Pocket: ${id === 'linked' ? 'spiral, \\d+ turns' : id === 'raster' ? 'raster auto \\(\\d+(?:\\.\\d+)?°\\): \\d+ passes \\+ 1 ring' : 'morphed spiral: \\d+ turns'} \\+ wall: ${id === 'raster' ? '(one closed loop|\\d+ closed loops)' : 'one closed loop'},`).test(c.note[0]), `Fusion ${id}: the note ${c.note[0]}`);
     const l = await look();
     assert.ok(l.paths >= 1, `Fusion ${id}: drawn`);
@@ -422,7 +421,7 @@ export async function fusionPhase(t) {
     const svg = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => m.shaperSvgOf(window.__designController.state, C.planEntries())))`);
     const els = fileElements(svg).map((e) => e[2]);
     fusion[id] = els.reduce((o, k) => ({ ...o, [k]: (o[k] || 0) + 1 }), {});
-    assert.ok((id === 'raster' ? els.filter((k) => k === 'online').length >= 1 : els.filter((k) => k === 'online').length === 1) && els.filter((k) => k === 'guide').length === 1 && els.filter((k) => k === 'inside').length === (id === 'raster' ? 1 : 0) && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is closed on-line path(s) (one per area) + 1 guide start mark (TASK 835e: Raster + the Origin's inside cut on its wall) (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
+    assert.ok((id === 'raster' ? els.filter((k) => k === 'online').length >= 1 : els.filter((k) => k === 'online').length === 1) && els.filter((k) => k === 'guide').length === 1 && els.filter((k) => k === 'inside').length === 1 && !els.includes('pocket') && fileElements(svg).filter((e) => e[2] === 'online').every((e) => /Z$/.test(e[1])), `Fusion ${id}: the pocket is closed on-line path(s) (one per area) + 1 guide start mark + the Origin's inside cut on its wall (TASK 835e / 850) (the body's other region keeps its own cut): ${JSON.stringify(fusion[id])}`);
     await clickWorld(60, -40);
   }
   console.log('Fusion exports: ' + JSON.stringify(fusion));

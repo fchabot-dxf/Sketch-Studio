@@ -162,9 +162,9 @@ const travelFor = (g, loopIdx, rawRec) => {
   ok(!mLine[0].closed && Math.hypot(mLine[0].path[0].x - center.x, mLine[0].path[0].y - center.y) < Math.hypot(mLine[0].path.at(-1).x - center.x, mLine[0].path.at(-1).y - center.y), '3 morphed: spirals inside-out');
   assertArrowsOnPath(mLine[0], 'morphed spiral');
 
-  // Loop ON: closed loop including finish turn
+  // Loop ON: closed loop travel + native inside finish wall (TASK 850)
   const lp = travelFor(g, 0, { ...base, clearing: 'linked', loop: true });
-  eq(lp.travel.map((t) => [t.role, t.closed]), [['loop', true]], '3 loop ON: closed loop travel');
+  eq(lp.travel.map((t) => [t.role, t.closed]), [['loop', true], ['wall', true]], '3 loop ON: closed loop + native finish wall travel');
   assertArrowsOnPath(lp.travel[0], 'pocket loop');
 }
 

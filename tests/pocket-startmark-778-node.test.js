@@ -99,11 +99,12 @@ const POCKET = (more = {}) => ({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, t
           ok(online.length >= 1 && online.every((e) => /Z$/.test(e.d)), `${name} ${pat} loop=true: pocket loop(s) remain closed with Z`);
         }
       }
-      // Spiral & Morphed: Loop ON startPoint === Loop OFF startPoint (both on innermost ring!)
+      // Spiral & Morphed: Loop ON startPoint matches the loop's first point (on an innermost ring; equals one of Loop OFF's deepest line starts, and Loop OFF's startPoint when 1 chain)
       if (pat === 'linked' || pat === 'morphed') {
-        const offSp = planClearing(rings, clearingSettings(POCKET({ clearing: pat, loop: false }))).startPoint;
-        const onSp = planClearing(rings, clearingSettings(POCKET({ clearing: pat, loop: true }))).startPoint;
-        near(dist(offSp, onSp), 0, 1e-6, `${name} ${pat}: Loop ON startPoint === Loop OFF startPoint (innermost ring)`);
+        const offPlan = planClearing(rings, clearingSettings(POCKET({ clearing: pat, loop: false })));
+        const onPlan = planClearing(rings, clearingSettings(POCKET({ clearing: pat, loop: true })));
+        near(dist(onPlan.startPoint, onPlan.clear[0].points[0]), 0, 1e-6, `${name} ${pat}: Loop ON startPoint === clear[0].points[0]`);
+        ok(offPlan.clear.some((c) => dist(onPlan.startPoint, c.points[0]) <= 1e-6), `${name} ${pat}: Loop ON startPoint is on a deepest Loop OFF line start (innermost ring)`);
       }
     }
   }

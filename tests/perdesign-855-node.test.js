@@ -225,6 +225,46 @@ try {
   fusionUi.bridge.handle('selection_data', JSON.stringify({ ...DOC_A_SEL, selectionId: 'sel-new', docToken: 'tok-new' }));
   ok(storeOps().length > 0 && getSelections().length === 1, "855b: the new design's own selection (its docToken) is applied");
 
+  // 5c. TASK 855d: cross-design guards & stale notice clearing
+  // (a) selectForOperation includes currentDocToken
+  sent.length = 0;
+  const activeOp = storeOps().find((o) => o.geometry.length > 0);
+  ok(activeOp, '855d: active op available for selectForOperation');
+  fusionUi.selectForOperation(activeOp);
+  const selOpMsg = sent.find(([a]) => a === 'select_for_operation');
+  ok(selOpMsg && selOpMsg[1].docToken === 'tok-new', `855d: select_for_operation carries docToken (got ${JSON.stringify(selOpMsg && selOpMsg[1])})`);
+
+  // (b) switching design clears any prior import / error #prepare-notice
+  ok(notice.hidden === false && notice.textContent.length > 0, '855d: pre-switch notice is populated before design switch');
+  fusionUi.bridge.handle('design_context', JSON.stringify({
+    action: 'design_context', docToken: 'tok-C', designKey: null, docName: 'DocC v1', hasSelection: false, project: null,
+  }));
+  eq(notice.hidden, true, '855d: design_context switch hides stale #prepare-notice');
+  eq(notice.textContent, '', '855d: design_context switch clears stale #prepare-notice text');
+
+  // (c) wrong_design error reply renders param-hints fusionSwitchDesign message cleanly
+  fusionUi.bridge.handle('error', JSON.stringify({
+    action: 'error',
+    receivedAction: 'select_for_operation',
+    code: 'wrong_design',
+    docName: 'DocA v1',
+    message: 'raw error',
+  }));
+  eq(notice.hidden, false, '855d: wrong_design shows #prepare-notice');
+  ok(notice.classList.contains('is-error'), '855d: wrong_design marks notice as error');
+  eq(notice.textContent, 'Switch back to DocA v1 in Fusion to edit this operation.', '855d: wrong_design uses Switch back to <doc> copy');
+
+  // (d) save_project refused when currentDocToken is null (no save on flush or notifyProjectChanged)
+  sent.length = 0;
+  fusionUi.bridge.handle('design_context', JSON.stringify({
+    action: 'design_context', docToken: null, designKey: null, docName: '', hasSelection: false, project: null,
+  }));
+  setStock({ ...getStock(), thickness: 22 });
+  fusionUi.notifyProjectChanged();
+  await new Promise((r) => setTimeout(r, 80));
+  eq(fusionUi.flushProjectSave(), false, '855d: flushProjectSave returns false without currentDocToken');
+  eq(sent.filter(([a]) => a === 'save_project').length, 0, '855d: never emits save_project when currentDocToken is null');
+
   // 6. Older add-in compatibility (TASK 855c): the storage path is decided at the FIRST PAINT from the URL the add-in opens: the SA-19 add-in
   // adds `&project=design` (per-design workspace); an older add-in does not (today's browser storage + tabs). A pong without projectBridge saves nothing.
   eq(isPerDesignProject('?host=fusion&project=design'), true, '855c: the SA-19 add-in URL -> per-design workspace');

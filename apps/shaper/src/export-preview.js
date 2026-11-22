@@ -35,6 +35,7 @@ import { unitInfo } from '#core/units.js';
 import { arrowsAlongPath } from '#core/profile-model.js';
 import { exportForm } from '#core/origin-rules.js'; // TASK 803: the attribute prefix and where a cut attribute lives (the element itself) are the Origin rules'
 import { TRAVEL_STYLE, TRAVEL_ARROW_SPACING_PX, DART_DIMS, dartSeg, applyTravelStyle } from './prepare-view.js'; // TASK 793: the ONE travel declaration + dart geometry
+import { cutBandColor, applyCutBandStyle } from './shaper.js'; // TASK 857: the ONE cut-band declaration (CUT_BAND_STYLE) and its colour (CUT_TYPES passColor)
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPE_TAGS = new Set(['path', 'circle', 'polygon', 'polyline', 'rect', 'ellipse', 'line']);
@@ -67,6 +68,11 @@ export function parseShaperSvg(text, doc = document) {
 function cutAttr(el, name) {
   return el.getAttribute(exportForm('attrPrefix') + name) || null;
 }
+/** A length as the file writes it ("6 mm", "0.25 in") in mm, or null (TASK 857: the one reader of the file's lengths: the bit's diameter here, export-sim.js the depth). */
+export function fileLengthMm(text) {
+  const m = /^(-?\d+(?:\.\d+)?)\s*(\S*)$/.exec(text || ''), u = m && unitInfo(m[2] || 'mm');
+  return m && u && u.kind === 'length' ? Number(m[1]) * u.f : null;
+}
 
 // TASK 743: a paint attribute (fill / stroke) of the element (TASK 802: its own), or null
 function paintOf(el, name) {
@@ -74,7 +80,8 @@ function paintOf(el, name) {
 }
 
 /** The drawn elements under `root`, in file order: { el, tag, cutType, depth, step: { k, n } | null, hold: { kind: 'pass' | 'skin' | 'gap' | 'stroke' (TASK 775: an On line
- *  cut's tabs), k?, n? } | null, op: the operation id (TASK 743, data-op) | null, clear: TASK 745 { role, k?, n?, pass?, passes? } | null }. */
+ *  cut's tabs), k?, n? } | null, op: the operation id (TASK 743, data-op) | null, clear: TASK 745 { role, k?, n?, pass?, passes? } | null, toolDia: TASK 857 the bit's
+ *  diameter the file encodes (shaper:toolDia) in mm | null }. */
 export function previewItems(root) {
   return [...root.querySelectorAll('*')].filter((el) => SHAPE_TAGS.has(el.localName)).map((el) => {
     const m = /^(\d+)\/(\d+)$/.exec(el.getAttribute('data-step') || '');
@@ -82,7 +89,7 @@ export function previewItems(root) {
     const hold = h ? (h[1] ? { kind: h[1] } : { kind: h[2], k: Number(h[3]), n: Number(h[4]) }) : null;
     const c = /^(linked|raster|cleanup|island|wall|morphed|loop|start)(?: (\d+)\/(\d+))?$/.exec(el.getAttribute('data-clear') || ''); // TASK 745 (749: linked, morphed; 750: loop; 778: start mark)
     const clear = c ? { role: c[1], ...(c[2] ? { k: Number(c[2]), n: Number(c[3]) } : {}) } : null;
-    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear };
+    return { el, tag: el.localName, cutType: cutAttr(el, 'cutType'), depth: cutAttr(el, 'cutDepth'), step: m ? { k: Number(m[1]), n: Number(m[2]) } : null, hold, op: el.getAttribute('data-op') || null, clear, toolDia: fileLengthMm(cutAttr(el, 'toolDia')) };
   });
 }
 /** TASK 745: a programmed pocket element's words: "spiral line 2 of 3" (TASK 749) | "raster pass 3 of 22" | "clean-up ring" | "morphed spiral" | "closed loop 1 of 2"
@@ -179,8 +186,10 @@ export function previewRows(items, ops = []) {
 export function mountExportPreview({ canvas, list, info, getPreview, emptyText }) {
   const doc = canvas.ownerDocument;
   let mode = '2d';           // TASK 793: '2d' (the file as the Origin fills it) | 'paths' (every written path as a stroke + the bit-centre paths)
-  let top = null, travels = [], arrowLayer = null, lastK = null; // TASK 793: the group holding layer + overlay, the travel paths to mark, the darts' <g>, the zoom they were drawn at
+  let top = null, bandLayer = null, simBandLayer = null, travels = [], arrowLayer = null, lastK = null; // TASK 793: the group holding layer + overlay; TASK 857: cut bands sit under layer
+  let bandCache = { bitPaths: new Map(), simElements: null, ops: [] };
   applyTravelStyle(canvas);
+  applyCutBandStyle(canvas);
   const viewState = { view: null, allowEmptyPan: true, _panZoom: { isPanning: false, lastPanPoint: null, lastTouchDistance: null, touchPoints: new Map(), isPinching: false, lastPinchCenter: null, lastPinchDistance: null } };
   setupPanZoom(canvas, viewState, { attachListeners: true });
   let shading = { shades: new Map(), lo: NaN, hi: NaN }, outsideShading = { shades: new Map() }, insideShading = { shades: new Map() };
@@ -222,12 +231,44 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     }
     info.replaceChildren(label, legend);
   }
+  // TASK 857: the SELECTED operation's CUT BAND (the material it removes), under the path lines: ONE <g> (.rv2d-cutband) in its type's colour, its opacity the one
+  // declaration's (overlaps do not darken). Each of its elements: a pocket the Origin clears (simElements `pocketArea`: a freehand pocket, a Roughing level) = its
+  // cleared area filled; any other = its bit-centre paths (the Paths view's travel; a cut with none: the derivation's tool paths, simElements `toolPaths`) stroked 2r
+  // wide, 2r = the element's shaper:toolDia. A Guide removes nothing. Only when the pick is one operation's (its row, or one of its elements).
+  const bandPath = (cls, d, attrs) => { const p = doc.createElementNS(SVG_NS, 'path'); p.setAttribute('class', cls); p.setAttribute('d', d); for (const [k, v] of Object.entries(attrs)) p.setAttribute(k, String(v)); return p; };
+  function renderCutBand() {
+    if (!bandLayer) return;
+    bandLayer.replaceChildren();
+    bandLayer.removeAttribute('data-op');
+    bandLayer.style.removeProperty('color');
+    const opId = mode === 'paths' && picked.length && picked.every((it) => it.op && it.op === picked[0].op) ? picked[0].op : null;
+    const op = opId && bandCache.ops.find((o) => o.id === opId), color = op ? cutBandColor(op.cutType) : null;
+    if (!color) return;
+    bandLayer.setAttribute('data-op', opId);
+    bandLayer.style.color = color;
+    for (const it of items) {
+      if (it.op !== opId || it.cutType === 'guide') continue;
+      const sim = bandCache.simElements ? bandCache.simElements[it.index] : null;
+      if (sim && sim.pocketArea) {
+        for (const a of sim.pocketArea) {
+          if (a.rings.length) bandLayer.appendChild(bandPath('rv2d-cutband-fill', a.rings.map((rg) => pointsD(rg, true)).join(' '), { 'fill-rule': a.fillRule }));
+          if (a.finishRings.length) bandLayer.appendChild(bandPath('rv2d-cutband-fill', a.finishRings.map((rg) => pointsD(rg, true)).join(' '), { 'fill-rule': 'nonzero' }));
+        }
+        continue;
+      }
+      if (!(it.toolDia > 0)) continue;
+      const bp = bandCache.bitPaths.get(it.index);
+      const ds = bp ? bp.travel.map((t) => pointsD(t.path, t.closed)) : sim && sim.toolPaths ? sim.toolPaths.map((tp) => pointsD(tp.points, tp.closed)) : [];
+      if (ds.length) bandLayer.appendChild(bandPath('rv2d-cutband-stroke', ds.join(' '), { 'stroke-width': it.toolDia }));
+    }
+  }
   function pick(its, label, rowIndex = -1) {
     for (const it of picked) { it.el.classList.remove('rv2d-picked'); for (const b of it.bits || []) b.classList.remove('rv2d-bit-picked'); }
     picked = its;
     for (const it of picked) { it.el.classList.add('rv2d-picked'); for (const b of it.bits || []) b.classList.add('rv2d-bit-picked'); }
     pickedLabel = its.length ? label : null;
     rowButtons.forEach((b, i) => b.setAttribute('aria-pressed', i === rowIndex ? 'true' : 'false'));
+    renderCutBand();
     showInfo();
   }
   const pickItem = (it) => (it ? pick([it], itemLabel(it), rowOf.findIndex((r) => r.items.includes(it))) : pick([], null));
@@ -236,6 +277,11 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     if (!row) return;
     if (row.op) { pick(row.items, `${row.op.label} · ${row.items.length} element${row.items.length === 1 ? '' : 's'}`, i); return; } // TASK 743: an operation
     pick(row.items, itemLabel(row.items[0]) + (row.items.length > 1 ? ` · ${row.items.length} elements` : ''), i);
+  }
+  function pickOp(opId) {
+    if (!opId) { pick([], null); return; }
+    const i = rowOf.findIndex((r) => r.op && r.op.id === opId);
+    if (i >= 0) pickRow(i);
   }
 
   const depthKey = (pick) => [...shading.shades.keys()].reduce((a, k) => (pick(parseFloat(k), parseFloat(a)) ? k : a));
@@ -356,17 +402,24 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     if (sig !== undefined && sig === lastSig) { if (fitPending) fit(); return inspect(); }
     lastSig = sig;
     if (top) top.remove();
-    top = null; travels = []; arrowLayer = null; lastK = null;
+    top = null; bandLayer = null; simBandLayer = null; travels = []; arrowLayer = null; lastK = null;
     layer = null; items = []; rows = []; shading = { shades: new Map(), lo: NaN, hi: NaN }; outsideShading = { shades: new Map() }; insideShading = { shades: new Map() }; byEl = new Map(); picked = []; pickedLabel = null;
+    bandCache = { bitPaths: new Map(), simElements: null, ops: [] };
+    simBandCache = { key: null, opGroups: new Map(), pathsByIndex: new Map(), count: 0, activeEl: null };
     const preview = getPreview();
     const text = preview && preview.svg;
     if (text) {
       const root = parseShaperSvg(text, doc);
       layer = doc.createElementNS(SVG_NS, 'g'); layer.setAttribute('class', 'rv2d-doc');
       for (const n of [...root.childNodes]) layer.appendChild(doc.importNode(n, true));
-      top = doc.createElementNS(SVG_NS, 'g'); top.appendChild(layer);
+      top = doc.createElementNS(SVG_NS, 'g');
+      bandLayer = doc.createElementNS(SVG_NS, 'g'); bandLayer.setAttribute('class', 'rv2d-cutband');
+      simBandLayer = doc.createElementNS(SVG_NS, 'g'); simBandLayer.setAttribute('class', 'rv2d-sim-bands');
+      top.append(bandLayer, simBandLayer, layer);
       canvas.appendChild(top);
       items = previewItems(layer);
+      items.forEach((it, idx) => { it.index = idx; });
+      bandCache = { bitPaths: new Map((preview.bitPaths || []).map((b) => [b.index, b])), simElements: preview.simElements || null, ops: preview.ops || [] };
       rows = previewRows(items, preview.ops); // TASK 743: the operations, in the user's order
       byEl = new Map(items.map((it) => [it.el, it]));
     }
@@ -470,6 +523,76 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
   // at its point with the path it has travelled so far (`trail`: points) drawn solid; TASK 801d `scribble` = the example hand moves of a freehand pocket so far
   // (lists of points), drawn in their own style. setSim(null) = the whole file, as before. Display only. ──
   let simView = null, simLayer = null, shownTodo = []; // shownTodo[i]: element i is drawn as not cut (only the elements whose state changed are touched)
+  // TASK 857 (owner turn 3259): the Paths view's simulation leaves a DIMMER bit-wide trail, the material removed so far (setSim `band`: { key: names the run and
+  // the operations carved before it, carved: [{ id, cutType, steps }], run: the timeline, doneSteps: the run's steps finished, active: { step, pts: its travelled
+  // part } | null }): ONE .rv2d-sim-band <g> per operation (the cut band's rule: its colour, CUT_BAND_STYLE simOpacity on the group: overlaps do not darken),
+  // under the path lines and the bright trail; each step a stroke 2r wide (its element's shaper:toolDia). Played forward only the new steps are added; scrubbed
+  // back, the steps after the time are removed.
+  let simBandCache = { key: null, opGroups: new Map(), pathsByIndex: new Map(), count: 0, activeEl: null };
+  const diaOf = (st) => { const it = items[st.element]; return it && it.cutType !== 'guide' && it.toolDia > 0 ? it.toolDia : 0; };
+  function applySimBands() {
+    if (!simBandLayer) return;
+    const b = simView && simView.band;
+    if (!b || mode !== 'paths') {
+      if (simBandCache.key !== null || simBandLayer.childNodes.length) {
+        simBandLayer.replaceChildren();
+        simBandCache = { key: null, opGroups: new Map(), pathsByIndex: new Map(), count: 0, activeEl: null };
+      }
+      return;
+    }
+    const makeGroup = (opId, cutType) => {
+      const color = cutBandColor(cutType);
+      if (!color) return null;
+      const g = doc.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'rv2d-sim-band'); g.setAttribute('data-op', opId); g.style.color = color;
+      simBandLayer.appendChild(g);
+      return g;
+    };
+    if (simBandCache.key !== b.key) {
+      simBandLayer.replaceChildren();
+      simBandCache = { key: b.key, opGroups: new Map(), pathsByIndex: new Map(), count: 0, activeEl: null };
+      for (const co of b.carved || []) {
+        const g = makeGroup(co.id, co.cutType);
+        if (!g) continue;
+        const byDia = new Map();
+        for (const st of co.steps) {
+          const dia = diaOf(st);
+          if (!dia || st.path.length < 2) continue;
+          if (!byDia.has(dia)) byDia.set(dia, []);
+          byDia.get(dia).push(pointsD(st.path, st.closed));
+        }
+        for (const [dia, ds] of byDia) g.appendChild(bandPath('rv2d-sim-band-stroke', ds.join(' '), { 'stroke-width': dia }));
+      }
+      if (b.run) {
+        b.run.ops.forEach((op, idx) => { const g = makeGroup(op.id, op.cutType); if (g) simBandCache.opGroups.set(idx, g); });
+      }
+    }
+    const target = b.run ? Math.max(0, Math.min(b.doneSteps, b.run.steps.length)) : 0;
+    if (target < simBandCache.count) {
+      for (let k = target; k < simBandCache.count; k++) {
+        const el = simBandCache.pathsByIndex.get(k);
+        if (el) { el.remove(); simBandCache.pathsByIndex.delete(k); }
+      }
+      simBandCache.count = target;
+    } else if (target > simBandCache.count) {
+      for (let k = simBandCache.count; k < target; k++) {
+        const st = b.run.steps[k], dia = diaOf(st), g = simBandCache.opGroups.get(st.op);
+        if (!dia || !g || st.path.length < 2) continue;
+        const p = bandPath('rv2d-sim-band-stroke', pointsD(st.path, st.closed), { 'stroke-width': dia });
+        g.appendChild(p);
+        simBandCache.pathsByIndex.set(k, p);
+      }
+      simBandCache.count = target;
+    }
+    const act = b.active, dia = act ? diaOf(act.step) : 0, g = act ? simBandCache.opGroups.get(act.step.op) : null;
+    if (!dia || !g || act.pts.length < 2) {
+      if (simBandCache.activeEl) { simBandCache.activeEl.remove(); simBandCache.activeEl = null; }
+      return;
+    }
+    if (!simBandCache.activeEl) simBandCache.activeEl = bandPath('rv2d-sim-band-stroke', '', {});
+    if (simBandCache.activeEl.parentNode !== g) g.appendChild(simBandCache.activeEl);
+    simBandCache.activeEl.setAttribute('stroke-width', String(dia));
+    simBandCache.activeEl.setAttribute('d', pointsD(act.pts, false));
+  }
   function applySim() {
     for (const [i, it] of items.entries()) {
       const todo = Boolean(simView) && simView.states[i] === 'todo';
@@ -478,6 +601,7 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
       it.el.classList.toggle('rv2d-sim-todo', todo);
       for (const b of it.bits || []) b.classList.toggle('rv2d-sim-todo', todo);
     }
+    applySimBands();
     if (simLayer) { simLayer.remove(); simLayer = null; }
     if (!simView || !top || mode !== 'paths') return;
     simLayer = doc.createElementNS(SVG_NS, 'g'); simLayer.setAttribute('class', 'rv2d-sim');
@@ -499,7 +623,8 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
   }
   function setSim(view) { simView = view || null; applySim(); return inspectSim(); }
   const inspectSim = () => (simView ? { todo: items.filter((it) => it.el.classList.contains('rv2d-sim-todo')).length, shown: items.length - items.filter((it) => it.el.classList.contains('rv2d-sim-todo')).length,
-    marker: simLayer && simLayer.querySelector('.rv2d-sim-bit') ? { ...simView.marker } : null, trail: simView.trail ? simView.trail.length : 0, scribble: simLayer ? simLayer.querySelectorAll('.rv2d-sim-scribble').length : 0 } : null);
+    marker: simLayer && simLayer.querySelector('.rv2d-sim-bit') ? { ...simView.marker } : null, trail: simView.trail ? simView.trail.length : 0, scribble: simLayer ? simLayer.querySelectorAll('.rv2d-sim-scribble').length : 0,
+    band: simBandLayer ? { groups: simBandLayer.querySelectorAll('.rv2d-sim-band').length, paths: simBandLayer.querySelectorAll('.rv2d-sim-band-stroke').length } : null } : null);
 
   /** TASK 793: '2d' | 'paths'. A change rebuilds the view at the next refresh (the same file, drawn the other way). */
   function setMode(next) {
@@ -508,5 +633,5 @@ export function mountExportPreview({ canvas, list, info, getPreview, emptyText }
     mode = next; lastSig = undefined;
     canvas.parentNode.setAttribute('data-mode', mode);
   }
-  return { refresh, fit, pickRow, inspect, setMode, setSim };
+  return { refresh, fit, pickRow, pickOp, inspect, setMode, setSim };
 }

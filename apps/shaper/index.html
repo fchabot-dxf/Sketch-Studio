@@ -205,6 +205,15 @@
     #review-2d-canvas .rv2d-sim-bit { fill: rgba(255, 45, 149, 0.28); stroke: #ff2d95; stroke-width: 1.5px; }
     /* TASK 801d: a freehand pocket's EXAMPLE hand moves (sim-scribble.js): the pocket's colour (CUT_TYPES pocket #7F7F7F), dashed and lighter than a real path */
     #review-2d-canvas .rv2d-sim-scribble { fill: none; stroke: #7F7F7F; stroke-width: 1.6px; stroke-dasharray: 5 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+    /* TASK 857: the CUT BAND (the material removed: the bit path +- r, a cleared pocket's area) of the open operation (Prepare), the selected one (Export Paths) and
+       the 2D Simulate's dimmer trail. ONE <g> per operation carries the colour (style color: its CUT_TYPES passColor) and the opacity (shaper.js CUT_BAND_STYLE, pushed
+       as --sk-cut-band-*): overlapping passes do not get darker. A band is a stroke 2r wide in world mm (stroke-width = the file's toolDia: no non-scaling-stroke). */
+    .sk-cutband, #review-2d-canvas .rv2d-cutband { pointer-events: none; opacity: var(--sk-cut-band-opacity); }
+    #review-2d-canvas .rv2d-sim-band { pointer-events: none; opacity: var(--sk-cut-band-sim-opacity); }
+    .sk-cutband-fill, #review-2d-canvas .rv2d-cutband-fill { fill: currentColor; stroke: none; }
+    .sk-cutband-stroke, #review-2d-canvas .rv2d-cutband-stroke, #review-2d-canvas .rv2d-sim-band-stroke {
+      fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; vector-effect: none;
+    }
     /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
        Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
        app-sidebar.js): the Review card forms ONE band under the canvas. Short landscape: Review keeps its desktop side

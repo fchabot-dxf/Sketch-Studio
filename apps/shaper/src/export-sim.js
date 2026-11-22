@@ -14,9 +14,8 @@
 // page's `ensure`) and no run: the simulation never plays stale paths. Reduced motion: no auto-play (Animate starts off, a preview goes straight to its end); the
 // scrubber, the steps and Play still work.
 import { buildTimeline, createPreviewSession, stepIndexAt, pointOnStep, travelledOf, elementStateAt, reliefSchedule, SIM } from './cut-timeline.js';
-import { parseShaperSvg, previewItems } from './export-preview.js';
+import { parseShaperSvg, previewItems, fileLengthMm } from './export-preview.js';
 import { cutterProfile, isShapedCutter, isTaperedCutter } from '#core/cutter-profile.js';
-import { unitInfo } from '#core/units.js';
 import { cutTypeById } from './shaper.js';
 import { mountDisclosure } from './disclosure.js'; // the panel's toggle: the declared fold (the Operations sheet's), CLOSED at first
 
@@ -26,11 +25,7 @@ const FRAME_LOG = 240;    // the frame times kept for inspect()
 const BUILD_SHARE = 0.25; // while a run PLAYS, the 3D wood is rebuilt at most this share of the time (after a rebuild of c ms, the next waits c / share - c ms): the
                           // frames in between stay free (the camera, the label, the scrubber); paused, scrubbed or stepped it is rebuilt at once
 
-// a depth as the file writes it ("6 mm", "0.25 in") in mm, or null
-function depthMm(text) {
-  const m = /^(-?\d+(?:\.\d+)?)\s*(\S*)$/.exec(text || ''), u = m && unitInfo(m[2] || 'mm');
-  return m && u && u.kind === 'length' ? Number(m[1]) * u.f : null;
-}
+const depthMm = fileLengthMm; // a depth as the file writes it ("6 mm", "0.25 in") in mm, or null (TASK 857: the one reader, export-preview.js)
 /** The bit marker's radius (mm) for an operation's tool at a path's depth: the bit's radius, or for a shaped bit its half-width where it meets the board (#core
  *  cutterProfile xMax: a shallow V-bit / ball-nose path is narrower than the bit). */
 export function markerRadius(tool, depth) {
@@ -76,7 +71,7 @@ export function mountExportSim({ els, ensure, reliefItems, mode, flat, solid, re
     if (!p) { els.label.textContent = 'No cuts to simulate'; render(); return; }
     const items = previewItems(parseShaperSvg(p.svg, els.card.ownerDocument));
     const make = (only) => buildTimeline({ items, ops: p.ops, bitPaths: p.bitPaths || [], elements: p.simElements || null, only });
-    data = { items, ops: p.ops, make, full: make(null), relief: null };
+    data = { items, ops: p.ops, make, full: make(null), relief: null, carved: { key: null, list: [] } };
     session.setTimeline(make);
     fillOps();
     render();
@@ -132,18 +127,27 @@ export function mountExportSim({ els, ensure, reliefItems, mode, flat, solid, re
       const s = run ? elementStateAt(run, i, v.t) : null;
       return s || 'todo';
     });
-    let marker = null, trail = null, scribble = null;
+    let marker = null, trail = null, scribble = null, band = null;
     if (run && v.t < run.total && mode() === 'paths') {
       const at = stepIndexAt(run, v.t), step = run.steps[at];
       const p = step && pointOnStep(step, v.t);
-      if (p) { marker = { ...p, r: markerRadius(run.ops[step.op].tool, depthMm(data.items[step.element].depth)) }; trail = step.role === 'scribble' ? null : travelledOf(step, v.t); }
+      if (p) {
+        marker = { ...p, r: markerRadius(run.ops[step.op].tool, depthMm(data.items[step.element].depth)) }; trail = step.role === 'scribble' ? null : travelledOf(step, v.t);
+        if (v.t > step.t0) band = { active: { step, pts: travelledOf(step, v.t) } }; // TASK 857: the step being cut, as far as it went
+      }
       if (step) { // TASK 801d: the example hand moves of the pocket being cut, as far as they went (their own style: export-preview.js)
         const e = run.elements.get(step.element), lines = [];
         for (let k = e.first; k <= Math.min(at, e.last); k++) { const s = run.steps[k]; if (s.role === 'scribble') lines.push(k === at ? travelledOf(s, v.t) : s.path); }
         if (lines.length) scribble = lines;
       }
     }
-    return { states, marker, trail, scribble };
+    if (mode() === 'paths') { // TASK 857: the material removed so far (export-preview.js setSim `band`): the operations carved before this run, and the run's finished steps
+      const key = `${dataSig}|${v.runId}|${[...v.carved].sort().join(',')}`;
+      if (data.carved.key !== key) data.carved = { key, list: data.full.ops.filter((o) => v.carved.has(o.id)).map((o) => ({ id: o.id, cutType: o.cutType, steps: data.full.steps.slice(o.first, o.last + 1) })) };
+      const doneSteps = !run || v.t <= 0 ? 0 : v.t >= run.total ? run.steps.length : stepIndexAt(run, v.t);
+      band = { key, carved: data.carved.list, run, doneSteps, active: band ? band.active : null };
+    }
+    return { states, marker, trail, scribble, band };
   }
   function render3d(v, s) {
     schedules(v);
@@ -178,9 +182,10 @@ export function mountExportSim({ els, ensure, reliefItems, mode, flat, solid, re
   function go() { if (!raf && session.view().playing) { last = 0; raf = requestAnimationFrame(frame); } }
   function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; last = 0; }
   const act = (fn) => () => { if (!data) return; fn(); render(); go(); };
-  els.previewSel.addEventListener('click', act(() => session.previewSelected(els.op.value)));
+  els.previewSel.addEventListener('click', act(() => { flat.pickOp(els.op.value); session.previewSelected(els.op.value); })); // TASK 857: the Simulate pick is the Paths view's selected operation (its cut band)
   els.previewAll.addEventListener('click', act(() => session.previewAll(data.full.ops.map((o) => o.id))));
   els.reset.addEventListener('click', act(() => { stop(); session.reset(); }));
+  els.op.addEventListener('change', () => flat.pickOp(els.op.value)); // TASK 857: (as above)
   els.play.addEventListener('click', act(() => { if (session.view().playing) { session.pause(); stop(); } else session.play(); }));
   els.prev.addEventListener('click', act(() => { stop(); session.stepOp(-1); }));
   els.next.addEventListener('click', act(() => { stop(); session.stepOp(1); }));

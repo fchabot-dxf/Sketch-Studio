@@ -168,6 +168,14 @@ console.log('spiral: ' + JSON.stringify(measured));
     }
     return { svg: kept.join('\n'), removed };
   };
+  // TASK 856: O(K) Morphed sampling changes simplifyPath vertex picks along interiors while keeping the same path within 0.02 mm Hausdorff
+  // (proved in tests/pocket-morphed-perf-856-node.test.js against the pre-856 fixture); update those expected MD5s rather than skipping the guard.
+  const MORPHED_856 = {
+    'rectangle|morphed|{"passDepth":null}|flat': '852db94de7f778789fd9c9bbb2d86e43',
+    'rectangle|morphed|{"stepover":55,"finishAllowance":1}|flat': '191ad42fad00a9b0e6c0d2cf3baec5d7',
+    'circle|morphed|{"passDepth":null}|flat': '22cd48db443b7f18f7b7e0703e5f761b',
+    'circle|morphed|{"stepover":55,"finishAllowance":1}|flat': 'b94fa962590613a5fe51959060d5859f',
+  };
   let n = 0, exact = 0, withMark = 0, grown = 0, skippedRaster = 0;
   for (const [key, want] of Object.entries(MAIN.exports)) {
     const [name, pat, more, okey] = key.split('|');
@@ -180,7 +188,8 @@ console.log('spiral: ' + JSON.stringify(measured));
     if (pat === 'raster') { skippedRaster++; continue; }
     const m = JSON.parse(more);
     const svg = exportOf(SHAPES[name](), POCKET({ clearing: pat, ...m }), {});
-    const targetMd5 = m.passDepth > 0 ? MAIN.exports[[name, pat, JSON.stringify({ ...m, passDepth: null }), okey].join('|')] : want;
+    const targetKey = m.passDepth > 0 ? [name, pat, JSON.stringify({ ...m, passDepth: null }), okey].join('|') : key;
+    const targetMd5 = MORPHED_856[targetKey] ?? (m.passDepth > 0 ? MAIN.exports[targetKey] : want);
     const isProgrammed = pat !== 'freehand' && !(pat === 'morphed' && (name === 'island' || name === 'dumbbell'));
     if (!isProgrammed) {
       eq(md5(svg), targetMd5, `${key}: byte-identical to origin/main (no start mark)`);

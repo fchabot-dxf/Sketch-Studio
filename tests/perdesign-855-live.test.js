@@ -180,6 +180,8 @@ async function run({ width, height, tag }) {
 
     await handleFusion('selection_data', DOC_A_SELECTION);
     await openOpsSheet();
+    const noticeAfterImport = await evalJs(`(() => { const n = document.getElementById('prepare-notice'); return { hidden: n.hidden, text: n.textContent }; })()`);
+    assert.ok(!noticeAfterImport.hidden && noticeAfterImport.text.length > 0, `[${label}] #prepare-notice shown after DocA import`);
 
     // Verify SA-18 / 806 chip wording ("TrayA · 2 faces, 4 walls")
     const chipText = await evalJs(`document.querySelector('#shaper-fusion-selections .shaper-fusion-sel-text')?.textContent`);
@@ -220,6 +222,8 @@ async function run({ width, height, tag }) {
     assert.strictEqual(selCountB, 0, `[${label}] DocB has 0 selection chips`);
     assert.strictEqual(shapesCountB, 0, `[${label}] DocB has 0 sketch shapes`);
     assert.strictEqual(histCountB, 0, `[${label}] DocB cleared undo history`);
+    const noticeAfterSwitchB = await evalJs(`(() => { const n = document.getElementById('prepare-notice'); return { hidden: n.hidden, text: n.textContent }; })()`);
+    assert.deepStrictEqual(noticeAfterSwitchB, { hidden: true, text: '' }, `[${label}] 855d: switching to DocB clears stale #prepare-notice`);
 
     // 4b. TASK 855b (advisor's Fusion check): DocA's selection arriving AFTER the switch (Fusion executed A's still-open
     // Add to Shaper dialog when the new document pre-empted it) names DocA (docToken tok-A): DocB stays empty, and after the
@@ -267,6 +271,21 @@ async function run({ width, height, tag }) {
     assert.ok(restoredP2 && restoredP2.count === 0 && restoredP2.on === false, `[${label}] deleted Pocket 2 kept as EMPTY unticked operation`);
 
     await shot(`perdesign-${tag}.png`);
+
+    // 5b. TASK 855d: wrong_design select_for_operation error renders friendly Switch back notice
+    await handleFusion('error', {
+      action: 'error',
+      receivedAction: 'select_for_operation',
+      code: 'wrong_design',
+      docName: 'TrayA v1',
+      message: 'raw',
+    });
+    const wrongDesignNotice = await evalJs(`(() => { const n = document.getElementById('prepare-notice'); return { hidden: n.hidden, err: n.classList.contains('is-error'), text: n.textContent }; })()`);
+    assert.deepStrictEqual(wrongDesignNotice, {
+      hidden: false,
+      err: true,
+      text: 'Switch back to TrayA v1 in Fusion to edit this operation.',
+    }, `[${label}] 855d: wrong_design error notice displayed in #prepare-notice`);
 
     // 6. Verify browser openTabsBuffer was NEVER overwritten by Fusion mode
     const webBufStillLegacy = await evalJs(`import('/packages/ui/project-store.js').then(async (PS) => {

@@ -5,6 +5,7 @@
 // Screenshots to .evidence/804/. Used by tests/pocket-nocross-804-live.test.js and tests/pocket-nocross-804-phone-live.test.js.
 import assert from 'node:assert';
 import { pathCrossings } from '#core/path-crossings.js';
+import { planClearing, clearingSettings, strayCrossings } from '#core/pocket-clearing.js';
 import { selectedLive } from './prepare-open-live.js'; // TASK S3: a click on a shape with no operation only selects it (no card)
 
 const IN = 25.4;
@@ -47,34 +48,40 @@ export async function bowtiePhase(t, label) {
     await pickClearing(clearing);
     await setLoop(loop);
     await waitFor(`document.querySelectorAll('#prepare-toolpath-group .sk-clear-path').length > 0`, label + ': ' + name + ' drawn');
-    const c = await card(), ps = await drawn(), x = pathCrossings(ps);
+    const c = await card(), ps = await drawn();
     assert.ok(noteRe.test(c.note[0]), `${label} ${name}: the note: ${c.note[0]}`);
     assert.strictEqual(ps.length, paths, `${label} ${name}: ${paths} path(s) drawn`);
-    assert.strictEqual(x.count, 0, `${label} ${name}: the drawn paths cross nowhere ${JSON.stringify(x.crossings.slice(0, 3))}`);
+    if (!loop) {
+      const x = pathCrossings(ps);
+      assert.strictEqual(x.count, 0, `${label} ${name}: the drawn paths cross nowhere ${JSON.stringify(x.crossings.slice(0, 3))}`);
+    } else {
+      assert.ok(ps.every((p) => p.closed), `${label} ${name}: every drawn loop is closed`);
+      const plan = planClearing({ outer: BOWTIE, holes: [] }, clearingSettings({ cutType: 'pocket', clearing, toolDia: 3.175, stepover: 40, finishAllowance: inch ? 0.02 * IN : 0.5, loop: true }));
+      const stray = strayCrossings(plan.clear);
+      assert.strictEqual(stray.length, 0, `${label} ${name}: zero crossings outside closing legs ${JSON.stringify(stray.slice(0, 3))}`);
+    }
     await shotWorld(`804-${D}-bowtie-${name}.png`, box, phone ? 2 : 1.5);
-    console.log(`${label} ${name}: ${ps.length} path(s), 0 crossings; note: ${c.note.join(' | ')}`);
+    console.log(`${label} ${name}: ${ps.length} path(s), 0 stray crossings; note: ${c.note.join(' | ')}`);
     return c;
   };
   const n2 = inch ? '0.05 in' : '1.27 mm';
   await step('spiral-loop-off', 'linked', false, new RegExp(`^Pocket: spiral, \\d+ turns in 2 lines \\(the pocket narrows: one per area\\) \\+ wall, stepover ${n2.replace('.', '\\.')}`), 2);
-  await step('spiral-loop-on', 'linked', true, /^Pocket: spiral, \d+ turns \+ wall: 2 closed loops \(the pocket narrows: one per area\), stepover/, 2);
-  // the download of the Spiral Loop: each element its own cut attributes (TASK 802), the written paths cross nowhere
+  await step('spiral-loop-on', 'linked', true, /^Pocket: spiral, \d+ turns \+ wall: one closed loop, stepover/, 1);
+  // the download of the Spiral Loop: each element its own cut attributes (TASK 802), 1 closed online loop + the Origin's native inside wall cut + 1 guide start mark (TASK 850)
   const svg = await download();
   const els = [...svg.matchAll(/<(path|circle|polygon)\s([^>]*)\/>/g)].map((m) => m[2]);
   const online = els.filter((a) => /shaper:cutType="online"/.test(a));
-  assert.strictEqual(online.length, 2, label + ': the download: 2 closed on-line paths');
+  const inside = els.filter((a) => /shaper:cutType="inside"/.test(a));
+  assert.strictEqual(online.length, 1, label + ': the download: 1 closed on-line path (TASK 850: one closed loop per area)');
+  assert.strictEqual(inside.length, 1, label + ': the download: 1 native inside wall cut (TASK 850)');
   assert.ok(online.every((a) => /shaper:cutDepth="0\.125 in"|shaper:cutDepth="3\.175 mm"/.test(a) && /shaper:toolDia="0\.125 in"|shaper:toolDia="3\.175 mm"/.test(a)), label + ': each with its own depth and bit: ' + online.map((a) => a.replace(/(?:^|\s)d="[^"]*"/, '')).join(' / '));
   const written = pathsOf(online.map((a) => /(?:^|\s)d="([^"]+)"/.exec(a)[1]));
-  assert.ok(written.every((p) => p.closed), label + ': both closed (Z)');
-  assert.strictEqual(pathCrossings(written).count, 0, label + ': the written paths cross nowhere');
+  assert.ok(written.every((p) => p.closed), label + ': closed (Z)');
   console.log(`${label}: download: ${online.map((a) => a.replace(/(?:^|\s)d="[^"]*"/, '').trim()).join(' / ')}`);
   await openMode('prepare');
   await clickWorld(30, 53); // the pocket again: its card
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden`, label + ': the card again');
   await step('morphed', 'morphed', false, /^Pocket: morphed spiral: \d+ turns in 3 paths \(the pocket narrows: one per area\) \+ wall/, 3);
-  // Morphed + Loop: one closed loop per area where its way back half way between the turns crosses nothing, else refused with its reason (the
-  // allowance decides on this shape: 0.5 mm closes, 0.02 in is refused; both are checked by tests/pocket-nocross-804-node.test.js's rule)
-  const c = await step('morphed-loop-on', 'morphed', true, /^Pocket: morphed spiral: \d+ turns( \+ wall: 3 closed loops \(the pocket narrows: one per area\),| in 3 paths \(the pocket narrows: one per area\) \+ wall,)/, 3);
-  const refused = c.note.includes('Loop refused: its way back would cross the turns on this shape; cut as open paths + the wall');
-  assert.ok(refused === / in 3 paths/.test(c.note[0]), label + ': Morphed + Loop: 3 closed loops, or refused with its reason: ' + c.note.join(' | '));
+  // TASK 850: Morphed + Loop is no longer refused for 'loop cross': ONE closed loop per area + the Origin's native inside wall cut
+  await step('morphed-loop-on', 'morphed', true, /^Pocket: morphed spiral: \d+ turns \+ wall: one closed loop, stepover/, 1);
 }

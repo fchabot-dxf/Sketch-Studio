@@ -172,9 +172,9 @@ console.log('spiral: ' + JSON.stringify(measured));
   for (const [key, want] of Object.entries(MAIN.exports)) {
     const [name, pat, more, okey] = key.split('|');
     if (okey === 'grouped') continue; // TASK 802: there is no grouped download any more; its flat twin key is the check
-    // TASK 804: the L's Morphed spiral walks each hollow-corner arc once (no fold back over it: the same path within 0.01 mm, checked against main's
-    // points in tests/pocket-nocross-804-node.test.js) and the dumbbell is morphed per area (no longer refused): both changed on purpose
-    if (pat === 'morphed' && (name === 'L' || name === 'dumbbell')) continue;
+    // TASK 804: L (fold fix) and dumbbell (per area) changed; TASK 856: O(K) Morphed sampling changes simplifyPath vertex picks within 0.02 mm
+    // Hausdorff (checked in tests/pocket-morphed-perf-856-node.test.js against pre-856 fixture); refused island stays exact byte-identical
+    if (pat === 'morphed' && name !== 'island') continue;
     // TASK 835e (owner turn 3153): Raster with Loop off is ONE open zigzag per area now (its passes joined end to end): changed on purpose, checked in
     // tests/pocket-raster-loop-835-node.test.js (the zigzags) and tests/pocket-clearing-745-node.test.js (the passes)
     if (pat === 'raster') { skippedRaster++; continue; }

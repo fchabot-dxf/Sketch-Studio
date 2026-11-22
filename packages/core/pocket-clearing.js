@@ -162,6 +162,9 @@ export const POCKET_CLEARING = Object.freeze({
   /** arcs sampled / rounded at this chord sagitta (mm); paths simplified to this deviation (mm) */
   chordTolMm: 0.005,
   pathTolMm: 0.01,
+  /** TASK 856: morphed spiral sampling bounds (mm) and corner-band width (in stepovers). Near vertices (`cornerMult * s`) and on short/curved segments
+   *  sample at `h = clamp(s / 10, minMm, maxMm)`; along long straight interiors use `max(h, straightMm)` so per-ring work is O(1) while staying <= 0.02 mm Hausdorff. */
+  morphedSample: Object.freeze({ minMm: 0.02, maxMm: 0.5, straightMm: 0.3, cornerMult: 2.5 }),
   /** a safety bound on the number of rings */
   maxRings: 2000,
   /** TASK 778: pocket start mark target (circle + cross) total span = startMarkDiaMult x bit diameter; circle diameter = startMarkCircleRatio of that */
@@ -435,145 +438,194 @@ export const ringChains = (L) => ringRuns(L, true);
  *  Morphed spiral's paths: a morphed turn never reaches into another area's arm). */
 export const ringSegments = (L) => ringRuns(L, false);
 
-// ── the morphed spiral (see THE RULES) ──
-function densify(pts, h) {
+// ── the morphed spiral (see THE RULES; TASK 856: O(K) linear streaming + straight-edge sampling + non-accumulating propagate) ──
+// Measured cause of pre-856 O(K^4) time / O(K^3) memory: propagate appended all outer samples onto inner segments (`|S_k| = sum_{j<=k} D_j`) and
+// stacked zero-length corner holds into single segGrid cells (14,891 segments in one cell at 40 rings), while densify shrunk h with s/10 along straight edges.
+function densifyAdaptive(pts, h, margin, hCoarse) {
   const out = [];
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i], b = pts[(i + 1) % pts.length];
-    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / h));
-    for (let k = 0; k < n; k++) out.push(P(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n));
-  }
-  return out;
-}
-// a uniform grid over a closed sample list's segments (i -> i + 1, the list repeats its first sample at the end) for nearest-point queries
-function segGrid(S, cell) {
-  const map = new Map(), key = (i, j) => i * 73856093 ^ j * 19349663;
-  for (let i = 0; i < S.length - 1; i++) {
-    const a = S[i].p, b = S[i + 1].p;
-    const x0 = Math.floor(Math.min(a.x, b.x) / cell), x1 = Math.floor(Math.max(a.x, b.x) / cell), y0 = Math.floor(Math.min(a.y, b.y) / cell), y1 = Math.floor(Math.max(a.y, b.y) / cell);
-    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const k = key(x, y); let c = map.get(k); if (!c) { c = []; map.set(k, c); } c.push(i); }
-  }
-  return { cell, map, key, S };
-}
-function nearestOn(g, q) {
-  for (let R = g.cell; ; R *= 2) {
-    const x0 = Math.floor((q.x - R) / g.cell), x1 = Math.floor((q.x + R) / g.cell), y0 = Math.floor((q.y - R) / g.cell), y1 = Math.floor((q.y + R) / g.cell);
-    let best = null;
-    const seen = new Set();
-    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
-      for (const i of g.map.get(g.key(x, y)) || []) {
-        if (seen.has(i)) continue;
-        seen.add(i);
-        const f = distToSeg(q, g.S[i].p, g.S[i + 1].p);
-        if (!best || f.d < best.d) best = { i, t: f.t, d: f.d };
-      }
+    const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+    if (L <= 2 * margin + hCoarse) {
+      const n = Math.max(1, Math.ceil(L / h));
+      for (let k = 0; k < n; k++) out.push(P(a.x + (dx * k) / n, a.y + (dy * k) / n));
+    } else {
+      const ux = dx / L, uy = dy / L, nEdge = Math.ceil(margin / h);
+      for (let k = 0; k < nEdge; k++) { const d = (margin * k) / nEdge; out.push(P(a.x + ux * d, a.y + uy * d)); }
+      const midL = L - 2 * margin, nMid = Math.max(1, Math.ceil(midL / hCoarse));
+      for (let k = 0; k < nMid; k++) { const d = margin + (midL * k) / nMid; out.push(P(a.x + ux * d, a.y + uy * d)); }
+      for (let k = 0; k < nEdge; k++) { const d = L - margin + (margin * k) / nEdge; out.push(P(a.x + ux * d, a.y + uy * d)); }
     }
-    if (best && best.d <= R) return best;
-    if (R > 1e6) return best;
   }
-}
-const phiAt = (S, f) => S[f.i].phi + (S[f.i + 1].phi - S[f.i].phi) * f.t;
-// a ring's samples with phi by arc length from its first vertex: [{ p, phi }] closed (the last = the first, phi 1)
-function byLength(pts) {
-  const L = pathLength(pts, true);
-  const out = [];
-  let acc = 0;
-  pts.forEach((p, i) => { if (i) acc += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y); out.push({ p, phi: acc / L }); });
-  out.push({ p: pts[0], phi: 1 });
   return out;
 }
-// ring k + 1's samples with the phi of their nearest point on ring k (outer, sampled with phi), rotated to start at phi 0: [{ p, phi }] closed, or null.
-// Between two inner samples the phi of their nearest points can jump (a convex corner of the inner ring: its nearest point jumps across the outer
-// ring's corner; a part of the outer ring the inner one does not reach): every outer sample whose phi lies in that jump is put on the inner segment
-// at ITS nearest point there (an outer corner's samples all land on the inner corner: the corner HOLDS while phi sweeps the outer corner).
-// TASK 804: phi steps BACK by more than this (a tenth of a turn) only where the inner ring's nearest points jump over an arm it does not reach that covers
-// more than half the outer ring (a split: another area's lobe; measured 0.40 to 0.50 on the bow-tie, the dumbbell, the S, the U), never by rounding (at
-// most 0.008, the circle's smallest ring): such a step is the jump FORWARD over the arm (both rings wind the same way)
+function byLengthFlat(pts) {
+  const L = pathLength(pts, true), n = pts.length + 1;
+  const px = new Float64Array(n), py = new Float64Array(n), phi = new Float64Array(n);
+  let acc = 0;
+  for (let i = 0; i < pts.length; i++) {
+    if (i) acc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    px[i] = pts[i].x; py[i] = pts[i].y; phi[i] = acc / L;
+  }
+  px[n - 1] = pts[0].x; py[n - 1] = pts[0].y; phi[n - 1] = 1;
+  return { n, px, py, phi };
+}
+function makeOuterQueryFlat(S, cell) {
+  const m = S.n - 1, { px, py, phi } = S;
+  const vx = new Float64Array(m), vy = new Float64Array(m), L2arr = new Float64Array(m);
+  let gMinX = Infinity, gMaxX = -Infinity, gMinY = Infinity, gMaxY = -Infinity;
+  const map = new Map(), key = (i, j) => (i * 73856093) ^ (j * 19349663);
+  for (let i = 0; i < m; i++) {
+    const x1 = px[i], y1 = py[i], x2 = px[i + 1], y2 = py[i + 1], dx = x2 - x1, dy = y2 - y1;
+    vx[i] = dx; vy[i] = dy; L2arr[i] = dx * dx + dy * dy;
+    const x0 = Math.floor(Math.min(x1, x2) / cell), gx1 = Math.floor(Math.max(x1, x2) / cell);
+    const y0 = Math.floor(Math.min(y1, y2) / cell), gy1 = Math.floor(Math.max(y1, y2) / cell);
+    if (x0 < gMinX) gMinX = x0; if (gx1 > gMaxX) gMaxX = gx1;
+    if (y0 < gMinY) gMinY = y0; if (gy1 > gMaxY) gMaxY = gy1;
+    for (let x = x0; x <= gx1; x++) for (let y = y0; y <= gy1; y++) { const k = key(x, y); let c = map.get(k); if (!c) { c = []; map.set(k, c); } c.push(i); }
+  }
+  const seen = new Int32Array(m);
+  let stamp = 0;
+  return (qx, qy) => {
+    for (let R = cell; ; R *= 2) {
+      let bestI = -1, bestT = 0, bestD2 = Infinity;
+      const x0 = Math.max(gMinX, Math.floor((qx - R) / cell)), x1 = Math.min(gMaxX, Math.floor((qx + R) / cell));
+      const y0 = Math.max(gMinY, Math.floor((qy - R) / cell)), y1 = Math.min(gMaxY, Math.floor((qy + R) / cell));
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > m) {
+        for (let i = 0; i < m; i++) {
+          const L2 = L2arr[i], t = L2 > 0 ? Math.max(0, Math.min(1, ((qx - px[i]) * vx[i] + (qy - py[i]) * vy[i]) / L2)) : 0;
+          const dx = qx - px[i] - t * vx[i], dy = qy - py[i] - t * vy[i], d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; bestI = i; bestT = t; }
+        }
+        return phi[bestI] + (phi[bestI + 1] - phi[bestI]) * bestT;
+      }
+      stamp++;
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+        const bucket = map.get(key(x, y));
+        if (!bucket) continue;
+        for (let bi = 0; bi < bucket.length; bi++) {
+          const i = bucket[bi];
+          if (seen[i] === stamp) continue;
+          seen[i] = stamp;
+          const L2 = L2arr[i], t = L2 > 0 ? Math.max(0, Math.min(1, ((qx - px[i]) * vx[i] + (qy - py[i]) * vy[i]) / L2)) : 0;
+          const dx = qx - px[i] - t * vx[i], dy = qy - py[i] - t * vy[i], d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; bestI = i; bestT = t; }
+        }
+      }
+      if ((bestI >= 0 && bestD2 <= R * R) || R > 1e6) return phi[bestI] + (phi[bestI + 1] - phi[bestI]) * bestT;
+    }
+  };
+}
 const WRAP_BACK = 0.1;
-function propagate(inner, outer, h, s) {
-  const g = segGrid(outer, Math.max(s, h * 4));
-  const raw = inner.map((q) => phiAt(outer, nearestOn(g, q)));
-  const ph = [];
-  raw.forEach((v, j) => {
-    if (!j) { ph.push(v % 1); return; }
-    let x = v + Math.round(ph[j - 1] - v); // the unwrapped value nearest the previous one
-    if (x < ph[j - 1] - WRAP_BACK) x += 1;  // TASK 804: see WRAP_BACK
-    if (x < ph[j - 1]) x = ph[j - 1];      // never backwards (rounding)
-    ph.push(x);
-  });
-  let last = raw[0] + Math.round(ph[ph.length - 1] - raw[0]);
-  if (last < ph[ph.length - 1]) last += 1;
-  if (Math.abs(last - ph[0] - 1) > 0.25) return null; // the rings do not wind the same way round (never for nested offsets)
-  const n = inner.length, oPhi = outer.map((x) => x.phi); // outer: phi 0 .. 1, closed
-  const firstAbove = (v) => { let lo = 0, hi = oPhi.length; while (lo < hi) { const m = (lo + hi) >> 1; if (oPhi[m] <= v) lo = m + 1; else hi = m; } return lo; };
-  const S = [];
+function propagateFlat(inner, outer, h, s) {
+  const query = makeOuterQueryFlat(outer, Math.max(s * 1.5, h * 4));
+  const n = inner.length, raw = new Float64Array(n), ph = new Float64Array(n);
+  for (let j = 0; j < n; j++) raw[j] = query(inner[j].x, inner[j].y);
+  for (let j = 0; j < n; j++) {
+    const v = raw[j];
+    if (!j) { ph[0] = v % 1; continue; }
+    let x = v + Math.round(ph[j - 1] - v);
+    if (x < ph[j - 1] - WRAP_BACK) x += 1;
+    if (x < ph[j - 1]) x = ph[j - 1];
+    ph[j] = x;
+  }
+  let last = raw[0] + Math.round(ph[n - 1] - raw[0]);
+  if (last < ph[n - 1]) last += 1;
+  if (Math.abs(last - ph[0] - 1) > 0.25) return null;
+  const oN = outer.n, oPx = outer.px, oPy = outer.py, oPhi = outer.phi;
+  const firstAbove = (v) => { let lo = 0, hi = oN; while (lo < hi) { const m = (lo + hi) >> 1; if (oPhi[m] <= v) lo = m + 1; else hi = m; } return lo; };
+  const sx = [], sy = [], sp = [], isInn = [];
+  // Collapse stacked zero-length corner holds (p == p == p) and collinear non-inner outer projections so S never grows cumulatively across rings
+  const pushPt = (x, y, phi, innFlag) => {
+    while (sx.length >= 2) {
+      const k1 = sx.length - 1, k2 = sx.length - 2;
+      if (sx[k2] === sx[k1] && sy[k2] === sy[k1] && sx[k1] === x && sy[k1] === y) { sx.pop(); sy.pop(); sp.pop(); isInn.pop(); continue; }
+      if (!isInn[k1]) {
+        const dx = x - sx[k2], dy = y - sy[k2], L2 = dx * dx + dy * dy, dphi = phi - sp[k2];
+        if (L2 > 0 && dphi > 0) {
+          const bx = sx[k1] - sx[k2], by = sy[k1] - sy[k2], u = (bx * dx + by * dy) / L2;
+          if (u >= 0 && u <= 1 && (bx * dy - by * dx) ** 2 / L2 <= 1e-22 && Math.abs(sp[k1] - (sp[k2] + u * dphi)) <= 1e-11) {
+            sx.pop(); sy.pop(); sp.pop(); isInn.pop(); continue;
+          }
+        }
+      }
+      break;
+    }
+    sx.push(x); sy.push(y); sp.push(phi); isInn.push(innFlag);
+  };
   for (let j = 0; j < n; j++) {
     const a = ph[j], b = j + 1 < n ? ph[j + 1] : last, q = inner[j], qn = inner[(j + 1) % n];
-    S.push({ p: q, phi: a });
-    for (let m = Math.floor(a); m <= Math.floor(b); m++) { // the outer samples with phi in (a, b) (phi unwrapped by whole turns m)
-      for (let i = firstAbove(a - m); i < oPhi.length && oPhi[i] + m < b; i++) {
+    pushPt(q.x, q.y, a, 1);
+    const vx = qn.x - q.x, vy = qn.y - q.y, L2 = vx * vx + vy * vy;
+    for (let m = Math.floor(a); m <= Math.floor(b); m++) {
+      for (let i = firstAbove(a - m); i < oN && oPhi[i] + m < b; i++) {
         if (oPhi[i] + m <= a) continue;
-        const f = distToSeg(outer[i].p, q, qn);
-        S.push({ p: P(q.x + (qn.x - q.x) * f.t, q.y + (qn.y - q.y) * f.t), phi: oPhi[i] + m });
+        const t = L2 > 0 ? Math.max(0, Math.min(1, ((oPx[i] - q.x) * vx + (oPy[i] - q.y) * vy) / L2)) : 0;
+        pushPt(q.x + vx * t, q.y + vy * t, oPhi[i] + m, 0);
       }
     }
   }
-  S.push({ p: inner[0], phi: last });
-  // rotate to phi = 0 (an integer): the loop runs from ph[0] to ph[0] + 1
-  const c = Math.ceil(ph[0] - 1e-12);
-  const ext = [...S, ...S.slice(1).map((x) => ({ p: x.p, phi: x.phi + (last - ph[0]) }))];
+  pushPt(inner[0].x, inner[0].y, last, 1);
+  const c = Math.ceil(ph[0] - 1e-12), span = last - ph[0], mLen = sx.length, extLen = mLen * 2 - 1;
+  const xAt = (idx) => (idx < mLen ? sx[idx] : sx[idx - mLen + 1]);
+  const yAt = (idx) => (idx < mLen ? sy[idx] : sy[idx - mLen + 1]);
+  const phiExt = (idx) => (idx < mLen ? sp[idx] : sp[idx - mLen + 1] + span);
   const cross = (v) => {
-    for (let i = 0; i < ext.length - 1; i++) {
-      const A = ext[i], B = ext[i + 1];
-      if (A.phi <= v && B.phi >= v) {
-        const t = B.phi > A.phi ? (v - A.phi) / (B.phi - A.phi) : 0;
-        return { i, pt: { p: P(A.p.x + (B.p.x - A.p.x) * t, A.p.y + (B.p.y - A.p.y) * t), phi: v } };
+    for (let i = 0; i < extLen - 1; i++) {
+      const ap = phiExt(i), bp = phiExt(i + 1);
+      if (ap <= v && bp >= v) {
+        const ax = xAt(i), ay = yAt(i), bx = xAt(i + 1), by = yAt(i + 1);
+        const t = bp > ap ? (v - ap) / (bp - ap) : 0;
+        return { i, x: ax + (bx - ax) * t, y: ay + (by - ay) * t };
       }
     }
     return null;
   };
   const s0 = cross(c), s1 = cross(c + 1);
   if (!s0 || !s1) return null;
-  const out = [s0.pt, ...ext.slice(s0.i + 1, s1.i + 1).filter((x) => x.phi > c && x.phi < c + 1), s1.pt];
-  return out.map((x) => ({ p: x.p, phi: x.phi - c }));
+  let cnt = 2;
+  for (let i = s0.i + 1; i <= s1.i; i++) { const p = phiExt(i); if (p > c && p < c + 1) cnt++; }
+  const outX = new Float64Array(cnt), outY = new Float64Array(cnt), outPhi = new Float64Array(cnt);
+  outX[0] = s0.x; outY[0] = s0.y; outPhi[0] = 0;
+  let w = 1;
+  for (let i = s0.i + 1; i <= s1.i; i++) { const p = phiExt(i); if (p > c && p < c + 1) { outX[w] = xAt(i); outY[w] = yAt(i); outPhi[w] = p - c; w++; } }
+  outX[w] = s1.x; outY[w] = s1.y; outPhi[w] = 1;
+  return { n: cnt, px: outX, py: outY, phi: outPhi };
 }
-// the point of a sampled ring at phi (piecewise linear between its samples). Where several samples share phi (an arc of the ring whose nearest points
-// on the ring inside it all hold one corner) the point is the LAST of them, or with `first` the first of them (TASK 804: the turn walks such an arc
-// once, never back: see transition)
-function ringAt(S, phi, first = false) {
-  let lo = 0, hi = S.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (first ? S[m].phi < phi : S[m].phi <= phi) lo = m; else hi = m; }
-  if (first && S[hi].phi === phi) return S[hi].p;
-  const A = S[lo], B = S[hi];
-  const t = B.phi > A.phi ? Math.max(0, Math.min(1, (phi - A.phi) / (B.phi - A.phi))) : 0;
-  return P(A.p.x + (B.p.x - A.p.x) * t, A.p.y + (B.p.y - A.p.y) * t);
+function ringAtFlat(S, phi, first = false) {
+  let lo = 0, hi = S.n - 1;
+  const sp = S.phi;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (first ? sp[m] < phi : sp[m] <= phi) lo = m; else hi = m; }
+  if (first && sp[hi] === phi) return { x: S.px[hi], y: S.py[hi] };
+  const pa = sp[lo], pb = sp[hi];
+  const t = pb > pa ? Math.max(0, Math.min(1, (phi - pa) / (pb - pa))) : 0;
+  return { x: S.px[lo] + (S.px[hi] - S.px[lo]) * t, y: S.py[lo] + (S.py[hi] - S.py[lo]) * t };
 }
-// the turn from ring `inner` out to ring `outer` (both sampled with phi from 0 to 1) for a stepover s: at phi the point (1 - phi) * s from B toward A
-// (the lerp A + phi * (B - A) where |A - B| <= s)
-// the reach from the outer ring toward A, in stepovers, for |A - B| = l stepovers: l (the lerp) up to sqrt 2 (an inner corner of 90 degrees or more: the lerp is exactly the
-// inner offset there), then falling linearly to 1 at l = 2 and 1 beyond (an arm the inner ring does not reach: the turn follows the outer ring one stepover in)
 const CAP = Math.SQRT2, ARM = 2;
 const depthOf = (l) => (l <= CAP ? l : l >= ARM ? 1 : CAP - ((CAP - 1) * (l - CAP)) / (ARM - CAP));
-function transition(inner, outer, s) {
-  // at one phi (both rings may hold an arc there) the inner ring's samples come first (a stable sort), each with the FIRST outer point at that phi, then
-  // the outer ring's samples, each with the LAST inner point there: the turn walks the inner arc, then the outer arc, never back (TASK 804: it went back
-  // over the arc it had just walked, a fold that crossed itself on a star's or a blob's hollow corners)
-  const ev = [...inner.map((x) => ({ phi: x.phi, A: x.p })), ...outer.map((x) => ({ phi: x.phi, B: x.p }))].sort((a, b) => a.phi - b.phi);
-  const out = ev.map((e) => {
-    const A = e.A || ringAt(inner, e.phi), B = e.B || ringAt(outer, e.phi, true);
-    const L = Math.hypot(A.x - B.x, A.y - B.y), k = L <= CAP * s ? 1 - e.phi : ((1 - e.phi) * depthOf(L / s) * s) / L;
-    return P(B.x + k * (A.x - B.x), B.y + k * (A.y - B.y));
-  });
-  out.phis = ev.map((e) => e.phi); // TASK 804: each point's phi
+function transitionFlat(inner, outer, s) {
+  const nI = inner.n, nO = outer.n, out = [];
+  let i = 0, j = 0;
+  while (i < nI || j < nO) {
+    let phi, ax, ay, bx, by;
+    if (j >= nO || (i < nI && inner.phi[i] <= outer.phi[j])) {
+      phi = inner.phi[i]; ax = inner.px[i]; ay = inner.py[i]; i++;
+      const B = ringAtFlat(outer, phi, true); bx = B.x; by = B.y;
+    } else {
+      phi = outer.phi[j]; bx = outer.px[j]; by = outer.py[j]; j++;
+      const A = ringAtFlat(inner, phi, false); ax = A.x; ay = A.y;
+    }
+    const L = Math.hypot(ax - bx, ay - by), k = L <= CAP * s ? 1 - phi : ((1 - phi) * depthOf(L / s) * s) / L;
+    out.push(P(bx + k * (ax - bx), by + k * (ay - by)));
+  }
   return out;
 }
 /** The morphed spiral through `rings` (outermost first, one closed loop each, open {x,y}[]) for a stepover s: { points, turns: [start index of each
  *  turn in points] } (an open path: the central loop, a turn per ring out, the closing turn along rings[0]), or null. */
 export function morphedSpiral(rings, s, opts = null) {
   if (!rings.length) return null;
-  const h = Math.min(0.5, Math.max(0.02, s / 10));
-  // phi = 0 is a CHAIN of nearest points from the middle of the innermost ring's longest edge out to the outermost ring (each one stepover from the
-  // next: every turn starts where its two rings are one stepover apart, never at a corner, so the path is continuous and the next turn out leaves on time)
+  const MS = POCKET_CLEARING.morphedSample;
+  const h = Math.min(MS.maxMm, Math.max(MS.minMm, s / 10)), margin = s * MS.cornerMult, hCoarse = Math.max(h, MS.straightMm);
   const R0 = rings.map(positive);
   const nearestOnPoly = (poly, p) => {
     let best = null;
@@ -597,21 +649,25 @@ export function morphedSpiral(rings, s, opts = null) {
   }
   const o = R0[0], at = nearestOnPoly(o, c);
   const start = [at.p, ...o.slice(at.i + 1), ...o.slice(0, at.i + 1)];
-  const sampled = [byLength(densify(start, h))];
+  const tol = POCKET_CLEARING.pathTolMm;
+  const toPts = (S) => { const a = new Array(S.n); for (let i = 0; i < S.n; i++) a[i] = P(S.px[i], S.py[i]); return a; };
+  // Stream outer -> inner keeping only adjacent ring pair (prev, curr) in memory and simplifying each transition turn on the fly
+  let prev = byLengthFlat(densifyAdaptive(start, h, margin, hCoarse));
+  const closingTurn = rings.length > 1 ? simplifyPath(toPts(prev), tol) : null;
+  const revTurns = [];
   for (let k = 1; k < rings.length; k++) {
-    const S = propagate(densify(positive(rings[k]), h), sampled[k - 1], h, s);
-    if (!S) return null;
-    sampled.push(S);
+    const curr = propagateFlat(densifyAdaptive(R0[k], h, margin, hCoarse), prev, h, s);
+    if (!curr) return null;
+    revTurns.push(simplifyPath(transitionFlat(curr, prev, s), tol));
+    prev = curr;
   }
-  const K = sampled.length - 1, tol = POCKET_CLEARING.pathTolMm;
-  const turns = [sampled[K].map((x) => x.p)];
-  for (let k = K - 1; k >= 0; k--) turns.push(transition(sampled[k + 1], sampled[k], s));
-  if (K > 0) turns.push(sampled[0].map((x) => x.p));
+  const turns = [simplifyPath(toPts(prev), tol)];
+  for (let i = revTurns.length - 1; i >= 0; i--) turns.push(revTurns[i]);
+  if (closingTurn) turns.push(closingTurn);
   const points = [], starts = [];
   for (const t of turns) {
-    const sp = simplifyPath(t, tol);
     starts.push(points.length ? points.length - 1 : 0);
-    for (const p of points.length ? sp.slice(1) : sp) points.push(p);
+    for (const p of points.length ? t.slice(1) : t) points.push(p);
   }
   return { points, turns: starts };
 }

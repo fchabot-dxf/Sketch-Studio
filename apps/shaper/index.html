@@ -360,11 +360,15 @@
     .shaper-fusion-status[data-state="connecting"] { color: #cbd5e1; }
     .shaper-fusion-status[data-state="unavailable"] { color: #fcd34d; }
     .shaper-fusion-status[data-state="error"] { color: #fca5a5; }
+    /* TASK 799 (SA-13): live toolpaths sync loading wheel in the Fusion bar (hidden when idle). */
+    .shaper-fusion-spin { display: inline-block; width: 14px; height: 14px; margin-left: auto; flex: 0 0 auto; border-radius: 50%; border: 2px solid rgba(76, 154, 255, 0.25); border-top-color: #4c9aff; border-right-color: #4c9aff; animation: sk-spin 0.8s linear infinite; }
+    .shaper-fusion-spin[hidden] { display: none; }
     /* TASK 795: the selection list under Add selection: one row per selection (its words + an X), Clear all from two on. */
     .shaper-fusion-list { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
     .shaper-fusion-list[hidden] { display: none; }
     .shaper-fusion-sel { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 30px; padding: 0 4px 0 10px; border: 1px solid #464950; border-radius: 6px; background: #26292f; color: #e5e7eb; font-size: 12px; }
     .shaper-fusion-sel:hover, .shaper-fusion-sel:focus-within { border-color: #1be09e; }
+    .shaper-fusion-sel-icon { width: 14px; height: 14px; flex: none; color: #94a3b8; }
     .shaper-fusion-sel-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .shaper-fusion-sel-x, .shaper-fusion-clear { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: #cbd5e1; font: 12px system-ui, sans-serif; cursor: pointer; }
     .shaper-fusion-sel-x:hover, .shaper-fusion-clear:hover { background: #3b3f47; color: #fff; }
@@ -549,6 +553,7 @@
     .cut-inline .cut-num { flex: 1; width: auto; padding-left: 10px; }
     .cut-num::selection { background: var(--sk-prep-select-text); }
     .cut-unit, .cut-unit-fixed { color: var(--sk-prep-unit); font-size: 11px; flex: 0 0 auto; }
+    .cut-unit-fixed[hidden] { display: none; }
     .cut-inline .cut-unit, .cut-inline .cut-unit-fixed { padding-right: 10px; }
     .cut-hint { font-size: 11px; color: var(--sk-prep-unit); padding: 4px 12px 0; }
     /* TASK 805: a hint is a TOOLTIP AT THE CURSOR (packages/ui/cursor-tooltip.js: a fixed, pointer-events-none overlay; src/hint.js), never text in the card: nothing here
@@ -669,7 +674,7 @@
     .cut-clear-pop .cut-type-opt { height: auto; min-height: 30px; flex-wrap: wrap; row-gap: 2px; padding: 5px 10px; }
     .cut-clear-pop .cut-type-opt span { text-transform: none; }
     .cut-clear-pop .cut-clear-name { flex: 1; min-width: 0; line-height: 1.2; }
-    .cut-row[data-row="rasterAngle"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cut-row[data-row="rasterAngle"] .cut-presets .cut-preset { font-size: 12px; }
     @media (max-width: 640px), (pointer: coarse) {
       .cut-clear-pop { width: 128px; padding: 8px; gap: 4px; }
       .cut-clear-pop .cut-type-opt { min-height: 40px; font-size: 13px; gap: 6px; padding: 4px 8px; }

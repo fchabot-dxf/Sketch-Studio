@@ -53,7 +53,9 @@ async function run({ width, height }) {
   };
   const select = (payload) => evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(JSON.stringify(payload))})`);
   try {
-    await send('Page.addScriptToEvaluateOnNewDocument', { source: `if (new URLSearchParams(location.search).get('host') === 'fusion') { window.__sent = []; window.adsk = { fusionSendData(action, body) { window.__sent.push(JSON.parse(body)); } }; }` });
+    // window.__sent = what the selection list sends. TASK 799's live toolpaths sync ('toolpaths' / 'toolpaths_clear', debounced after every import / plan
+    // change, checked by fusion-toolpaths-799-*) is a separate channel: left out, so it can never land inside these exact-sends checks (795d: 1 run in 7 did).
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: `if (new URLSearchParams(location.search).get('host') === 'fusion') { window.__sent = []; window.adsk = { fusionSendData(action, body) { const m = JSON.parse(body); if (m.action !== 'toolpaths' && m.action !== 'toolpaths_clear') window.__sent.push(m); } }; }` });
     await navigate(url);
     await waitForApp('design-canvas');
     await waitFor(`!!document.getElementById('btn-fusion-add-selection') && !document.getElementById('view-prepare').hidden`, 'the Fusion Prepare bar');
@@ -85,6 +87,11 @@ async function run({ width, height }) {
     assert.ok(!(await sent()).includes('clear_selection:sel-B'), `[${label}] only A was cleared`);
     assert.ok((await sent()).includes('clear_selection:sel-A'), `[${label}] the X sent clear_selection(sel-A): ${JSON.stringify(await sent())}`);
     assert.ok(await evalJs(`!document.getElementById('btn-fusion-clear-selections')`), `[${label}] Clear all is hidden with one row`);
+
+    // the pointer stayed where A's X was, and row B moved up under it (a real hover: highlight_selection(sel-B)); move off the list and let that leave's
+    // highlight_selection(null) arrive, so only the Undo's own sends are counted below
+    await mouseTo(2, height - 2);
+    await waitFor(`!document.querySelector('.shaper-fusion-sel:hover') && window.__sent[window.__sent.length - 1].action === 'highlight_selection' && window.__sent[window.__sent.length - 1].selectionId === null`, 'the pointer left the list and highlight_selection(null) arrived');
 
     // the footer Undo: the row is back, nothing is sent
     await evalJs(`window.__sent.length = 0`);

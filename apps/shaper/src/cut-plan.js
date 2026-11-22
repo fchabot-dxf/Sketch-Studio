@@ -13,7 +13,7 @@ import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, pointInPolygon, loopSuccessors } from '#core/loop-geometry.js'; // TASK 832: loopSuccessors (followDesign)
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
-import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker, finishInLoop } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket
+import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker, finishInLoop, autoRasterAngle, pocketRings } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket; TASK 853: autoRasterAngle
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's cone goes to the 3D Review with its shape
@@ -497,7 +497,7 @@ export const OPEN_PATH_AUTOPASS_NOTE = 'AutoPass runs back along it on the next 
 // TASK 745: the PROGRAMMED POCKET. The last stepover / finish allowance / raster angle / Loop (TASK 750) set on any record are the next record's when its
 // Clearing is first set to a computed pattern (null = never set: the declared default, #core POCKET_CLEARING; the allowance by document unit; Loop off).
 // A new pocket's Clearing is Freehand (the default). App state, like the step depth above.
-let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle, lastLoopV = false;
+let lastStepoverV = POCKET_CLEARING.stepoverPct.default, lastAllowanceV = null, lastRasterAngleV = POCKET_CLEARING.rasterAngle.default, lastLoopV = false;
 export const lastStepover = () => lastStepoverV;
 export function rememberStepover(pct) { const n = Number(pct); if (n > 0) lastStepoverV = n; return lastStepoverV; }
 export const lastFinishAllowance = () => lastAllowanceV ?? allowanceDefault(docUnit());
@@ -505,7 +505,7 @@ export function rememberFinishAllowance(mm) { const n = Number(mm); if (Number.i
 export const lastLoop = () => lastLoopV;
 export function rememberLoop(on) { lastLoopV = on === true; return lastLoopV; }
 export const lastRasterAngle = () => lastRasterAngleV;
-export function rememberRasterAngle(deg) { const n = Number(deg); if (Number.isFinite(n)) lastRasterAngleV = n; return lastRasterAngleV; }
+export function rememberRasterAngle(v) { if (v === 'auto') { lastRasterAngleV = 'auto'; return lastRasterAngleV; } const n = Number(v); if (Number.isFinite(n)) lastRasterAngleV = n; return lastRasterAngleV; }
 
 /**
  * clearingSummary(key, storedRec, state, loops, loopPolys, owned) — TASK 745: what a programmed pocket's clearing is, read off THE derivation (deriveCuts through
@@ -524,11 +524,25 @@ export function clearingSummary(key, storedRec, state, loops, loopPolys, owned, 
 }
 /** TASK 745: why the Morphed spiral is not possible on a target ({ morphed: null | 'islands' | 'splits' | another refusal }) for its record's settings, or null
  *  for a target that is not a pocket region. */
+const pocketFor = (key, rec, state, loops, loopPolys) => (deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys) || []).find((c) => c.isCompound) || null;
+const autoAngleOf = (pocket, rec, state) => {
+  if (!pocket || clearingPattern(rec) !== 'raster' || rec.rasterAngle !== 'auto') return null;
+  const rings = pocketRings(pocket, state);
+  return rings ? autoRasterAngle(rings.outer) : null;
+};
+/** TASK 853: resolved Auto raster angle for a target (degrees), or null when not a Raster Auto pocket; O(V) without morphedBlocker. */
+export function pocketAutoAngle(key, storedRec, state, loops, loopPolys) {
+  const rec = effectiveCutRecord(withPocketTool(storedRec));
+  if (!rec || rec.cutType !== 'pocket' || clearingPattern(rec) !== 'raster' || rec.rasterAngle !== 'auto') return null;
+  return autoAngleOf(pocketFor(key, rec, state, loops, loopPolys), rec, state);
+}
 export function clearingAvailability(key, storedRec, state, loops, loopPolys) {
   const rec = effectiveCutRecord(withPocketTool(storedRec));
   if (!rec || rec.cutType !== 'pocket') return null;
-  const pocket = (deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys) || []).find((c) => c.isCompound);
-  return pocket ? { morphed: morphedBlocker(pocket, rec, state) } : null;
+  const pocket = pocketFor(key, rec, state, loops, loopPolys);
+  if (!pocket) return null;
+  const autoAngle = autoAngleOf(pocket, rec, state);
+  return { morphed: morphedBlocker(pocket, rec, state), ...(Number.isFinite(autoAngle) ? { autoAngle } : {}) };
 }
 /** TASK 745: the words of a refusal / a disabled choice. */
 export const CLEARING_REFUSED = {
@@ -552,7 +566,8 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const LINES_WHY = { splits: ' (the pocket narrows: one per area)', islands: ' (the pocket has islands)' }; // TASK 804: "one per area"
 export function clearingWords(sum) {
   if (!sum || sum.refused) return null;
-  const what = sum.pattern === 'raster' ? `raster ${angleText(Number(sum.settings.angle), { show: 'deg' })}: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
+  const angle = sum.pattern === 'raster' ? (sum.settings && sum.settings.angle === 'auto' ? `auto (${angleText(sum.angle, { show: 'deg' })})` : angleText(Number(sum.settings.angle), { show: 'deg' })) : '';
+  const what = sum.pattern === 'raster' ? `raster ${angle}: ${plural(sum.passes, 'pass', 'passes')} + ${plural(sum.cleanup, 'ring', 'rings')}`
     : sum.pattern === 'morphed' ? `morphed spiral: ${plural(sum.turns, 'turn', 'turns')}${!sum.loop && sum.lines > 1 ? ` in ${sum.lines} paths${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}` : ''}` // TASK 804: one per area
     : `spiral, ${plural(sum.loops, 'turn', 'turns')}${sum.loop ? '' : ` in ${plural(sum.lines, 'line', 'lines')}${sum.linesWhy ? LINES_WHY[sum.linesWhy] : ''}`}`;
   if (!sum.loop) return `${what} + wall`;

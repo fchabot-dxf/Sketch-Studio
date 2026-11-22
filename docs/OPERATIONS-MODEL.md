@@ -690,3 +690,48 @@ thread), `prepare-stage.js` (the session, the Preview, the row spinner), `prepar
 - **The default order** ranks a Roughing / Contour by its generated cuts: while they are generating (or it is open) it keeps the rank its last cuts gave and
   is sorted again when they arrive; a new operation of unknown rank in a user-ordered list is placed again by the rule once, if nothing moved meanwhile. A
   version 2 document being read is still ordered at once (derived on the main thread).
+
+---
+
+## 12. Task 806 / SA-16: Select in Fusion per Operation
+
+Lets the operator re-select Fusion entities for a single operation directly from its row in the operations list, without rebuilding unrelated operations or losing their settings.
+
+### 12.1 Row Action & Visibility
+- In **Fusion mode** (`isFusion()`), every non-Stock, non-STL operation row (`!op.stl && op.tickable !== false`) exposes a **Select in Fusion** action (works even when the operation is currently EMPTY so an emptied or newly created op can be populated from Fusion).
+- In **web mode** (outside Fusion), on the **Stock** entry, and on **STL** operations (`op.stl === true`), the action is hidden so non-Fusion users and non-B-Rep entries see zero UI change.
+
+### 12.2 Request Payload (`select_for_operation`)
+Clicking **Select in Fusion** on operation `op`:
+1. Collects `tokens`: the ordered unique `sources` tokens attached to every geometry key referenced by `op.geometry` (`region.sources` / `chain.sources`, deduplicated).
+2. Collects `keepTokens`: the ordered unique `sources` tokens attached to geometry keys referenced by **other** operations (`other.id !== op.id && other.tickable !== false && !other.stl`), so removing an entity from `op` never drops it from Fusion's persistent selection while another operation still uses it.
+3. Sends `{ action: 'select_for_operation', opKey: op.id, label: op.label, tokens, keepTokens }` over the Fusion bridge.
+
+### 12.3 Applying `selection_data.assign` on Return
+- Every region/chain carries its `sources` array through selection storage and prepare-history snapshots; `regionSig` ignores `id`, `label`, and `sources` so matching shapes retain their identity and settings even when a pocket/wall picks up or drops a face token.
+- `importFusionSelection` never short-circuits on `payloadSig` when `data.assign` is present, because an assignment update may change only `assign` or assign an existing geometry set to a specific operation.
+- When `selection_data` arrives with `assign: { opKey, tokens }`:
+  1. The imported regions/chains reconcile the Fusion selection pool (updating geometry entries, renaming matched signatures, preserving `sources`).
+  2. Look up `target = opById(assign.opKey)`.
+  3. Build the new geometry ref list for `target`: every imported geometry key whose `sources` intersects `assign.tokens` (`sources.some(t => tokenSet.has(t))`). (If `assign.tokens` is empty, the new ref list is `[]`.)
+  4. Replace `target.geometry` with that list while preserving `target`'s `type`, `settings`, `ticked`, `color`, `customName`, and list position. If `0` geometry refs match, `target` remains in the operations list marked `EMPTY` (never deleted). Other operations keep their existing refs (apart from global `renameGeometry` renames/removals for removed persistent entities).
+  5. Both Undo and Redo record a single history step in the palette: Undo restores the pre-edit operation state and sends `restore_selection { selectionId }` to Fusion when persistent selection tokens changed; Redo restores the post-edit state and syncs Fusion's persistent selection (`restore_selection { selectionId, tokens }`) so palette and Fusion stay aligned.
+
+---
+
+## 13. Task 855 / SA-19: Per-Design Fusion Workspace & Attribute Persistence
+
+Moves Fusion-mode palette state out of shared browser IndexedDB storage and stores it per Fusion design inside the `.f3d` (`shaper-addin/project` design attribute).
+
+### 13.1 Workspace Isolation & Browser Storage
+- **Web mode (`!isFusionMode()`)**: 100% unchanged (`getProjectStore()`, shared tabs, Google Drive).
+- **Older add-in fallback**: if `pong` does not advertise `projectBridge: true`, Fusion mode preserves existing browser workspace behavior.
+- **SA-19 Fusion mode (`projectBridge: true`)**: uses `createMemoryAdapter()` so browser IndexedDB (`openTabsBuffer` / `my-designs`) is never read as active state or overwritten.
+- **Legacy pre-855 browser work**: when switching onto a Fusion design that has `project === null` and non-empty pre-existing Shaper work exists in browser storage, offer it **once** in Prepare's notice bar (`"Open the panel's previous work"` + Dismiss, guarded by a one-time `localStorage` flag `shaper-fusion-legacy-offered`) so nothing is silently lost and web-mode storage is never mutated.
+
+### 13.2 Serialization, Debounce & Region Remapping
+- `captureFusionProject()` serializes `{ version: 1, operations, nextSeq, listOrder, regions (source + sources only, no slope/levels), stock, prepareSettings, selections (id, fusion, kind, name, text, cutKeys, base, sigs, thicknessMm, regionCount, items — no shapeIds/sketchId/payloadSig/contentSig) }`. Undo/redo history is **never** persisted.
+- Debounced write (`PROJECT_SAVE_DEBOUNCE_MS = 2000`): schedules `save_project` only when the project signature differs from the last saved/loaded baseline for the current `docToken`, flushing any pending dirty state for the previous `docToken` before switching when `design_context` arrives.
+- On `design_context`: swaps workspace to `project` (or fresh empty workspace if `null`), resets undo/redo stacks, applies stock/settings/operations/selections metadata, and sends `request_selection { docToken }`. When `selection_data` arrives, `importFusionSelection` treats matching `selectionId` entries via 795c canonical `regionSig` identity (`renameGeometry(..., { keepEmpty: true })` + `keepSettings`) so operations, settings, `tabsAt`, and order attach to freshly extracted geometry, while removed model regions leave their operations `EMPTY`.
+
+

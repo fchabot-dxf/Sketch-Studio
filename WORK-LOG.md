@@ -17631,3 +17631,52 @@ Follow-up guards from advisor's live Fusion verification alongside shaper-addin 
   - `tests/perdesign-855-node.test.js` (fail-first on `855d: select_for_operation carries docToken`, then `51 checks passed`), `tests/param-hints-770-node.test.js` (`ok (5278 checks, 139 entries)` scanning `fusion-bridge.js`), `tests/opselect-806-node.test.js` (`30 checks passed`), `tests/fusion-mode-663-node.test.js` (`64 checks passed`).
   - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=562 pass=562 fail=0 deferred=10 elapsed=103s` (10 `// gate: exclusive` deferred on merge lock).
   - Live tests (sequential): `tests/perdesign-855-live.test.js` (with 855d notice clear & wrong_design assertions, `ok`), `tests/opselect-806-live.test.js` (`ok`), `tests/op-paths-817-live.test.js` (`ok`, desktop `longTasksDuringGeneration: []`, phone `[[7690,53]]`), `tests/selection-list-795-live.test.js` (`ok`). Screenshots in `.evidence/855d/`.
+
+## TURN 856
+- **TASK**: `856` (Morphed spiral `O(K)` streaming + straight-edge sampling fix in `packages/core/pocket-clearing.js`).
+- **ROOT CAUSE MEASURED (`7957e1c2`)**:
+  - `propagate` appended every outer sample onto every inner ring (`|S_k| = sum_{j<=k} D_j`: at `40` rings on `sq60 1/16in`, `totalS = 1,707,742`, ring `k=39` hit `61,533` samples) and stacked zero-length corner holds into single `segGrid` cells (`worstBucket = 3,708` at `20r` -> `14,891` at `40r`); meanwhile `cell = Math.max(s, h*4)` missed diagonal `s * sqrt(2)` corner projections so `44,240 / 60,920` calls doubled radius `R *= 2` (`83,238,907` `distToSeg` calls at `40r`).
+  - `sq60 1/16in` `70` rings `--cpu-prof`: `16,127.9 ms`, `heapAfter = 3,081.7 MB` (`nearestOn 32.5% + distToSeg 18.8% + GC 17.8% + transition 12.7% + propagate 10.1%`); `100+` rings hung / OOM'd.
+- **CHANGE (`packages/core/pocket-clearing.js`)**:
+  - Declared ONE sampling rule in `POCKET_CLEARING.morphedSample = Object.freeze({ minMm: 0.02, maxMm: 0.5, straightMm: 0.3, cornerMult: 2.5 })` (`lines 165-167`), with no ring cap and no timeout.
+  - Replaced `densify`, `segGrid`, `nearestOn`, `phiAt`, `byLength`, `propagate`, `ringAt`, `transition` (`lines 441-673`) with `densifyAdaptive` (`h = clamp(s/10, minMm, maxMm)` within `cornerMult * s` corner bands & short/curved edges; `hCoarse = max(h, straightMm)` along long straight interiors), `Float64Array`-backed `byLengthFlat`, `makeOuterQueryFlat` (`cell = max(1.8 * s, 4 * h)`), non-accumulating `propagateFlat` (collapsing stacked corner holds and redundant collinear interior projections), `ringAtFlat`, sorted merge-walk `transitionFlat`, and outer->inner streaming `morphedSpiral` holding only `(prev, curr)` and running `simplifyPath(..., 0.01)` per turn on the fly.
+- **BENCHMARK TABLE (BEFORE `7957e1c2` vs AFTER, `node --expose-gc`, `square60` + `bowtie804`, `1/16 in` + `0.508 mm` tip)**:
+  - Note on `100%` stepover floors (`clearingSettings` clamps stepover to `[1, 100]%`): `bowtie804 1/16in` has min `21` rings (`1.5875 mm`), `square60 0.508mm` has min `58` rings, and `bowtie804 0.508mm` has min `65` rings.
+  - Before (`7957e1c2`): `square60 1/16in`: `20r` `386.2 ms / 120.2 MB`, `40r` `4846.7 ms / 716.8 MB`, `70r` `16127.9 ms / 3081.7 MB` (`17321.4 ms / 2781.8 MB` in `dump-ref.mjs`), `100r`/`144r` hangs/OOM; `square60 0.508mm` `58r (min)` `29011.9 ms / 1860.5 MB`; `bowtie804 1/16in` `21r (min)` `672.6 ms / 72.9 MB`, `41r (50%)` `5129.6 ms / 304.3 MB` (`loop=true: 7329.7 ms / 814.6 MB`).
+  - After (`after-table2.mjs` + `after-table.mjs`, `planMs` includes full `planClearing` [Clipper `ringLevels` + `morphedSpiral` + `pathCrossings` + `sweepPaths` + `diffRegions`], `morphed0Ms` is `morphedSpiral` alone):
+
+| Shape | Bit | Req rings | Actual rings (`s`) | Before time / heap | After `morphed0` ms | After `plan` ms (`loop=false`) | After `heapPlan` MB | After `loop=true` ms / heap MB |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| square | 1/16in | 20 | 20 (`1.4353 mm`) | 386.2 ms / 120.2 MB | 19.8 | 45.8 | 11.4 | - |
+| square | 1/16in | 40 | 40 (`0.7176 mm`) | 4846.7 ms / 716.8 MB | 22.0 | 60.7 | 17.1 | - |
+| square | 1/16in | 70 | 70 (`0.4101 mm`) | 16127.9 ms / 3081.7 MB | 32.0 | 133.6 | 17.8 | 171.9 / 24.8 |
+| square | 1/16in | 100 | 100 (`0.2871 mm`) | hang / OOM | 42.1 | 185.7 | 15.7 | - |
+| square | 1/16in | 144 | 144 (`0.1993 mm`) | hang / OOM | 55.0 | 331.0 | 16.6 | 479.2 / 61.6 |
+| square | 0.508mm | min (20/40 N/A) | 58 (`0.5080 mm`) | 29011.9 ms / 1860.5 MB | 25.1 | 94.0 | 36.4 | - |
+| square | 0.508mm | 70 | 70 (`0.4178 mm`) | hang / OOM | 29.5 | 112.2 | 25.3 | 159.3 / 13.9 |
+| square | 0.508mm | 100 | 100 (`0.2925 mm`) | hang / OOM | 40.3 | 142.8 | 17.5 | - |
+| square | 0.508mm | 144 | 144 (`0.2031 mm`) | hang / OOM | 56.9 | 286.3 | 14.7 | 391.2 / 25.2 |
+| bowtie804 | 1/16in | min (20 N/A) | 21 (`1.5875 mm`) | 672.6 ms / 72.9 MB | 27.8 | 130.1 | 43.1 | - |
+| bowtie804 | 1/16in | 40 | 40 (`0.8034 mm`) | 5129.6 ms / 304.3 MB (`41r`) | 85.5 | 308.4 | 59.3 | - |
+| bowtie804 | 1/16in | 70 | 70 (`0.4591 mm`) | hang / OOM | 276.9 | 740.9 | 87.6 | 926.2 / 66.2 |
+| bowtie804 | 1/16in | 100 | 100 (`0.3214 mm`) | hang / OOM | 489.8 | 1357.7 | 122.0 | - |
+| bowtie804 | 1/16in | 144 | 144 (`0.2232 mm`) | hang / OOM | 655.8 | 2587.9 | 118.5 | 3658.0 / 137.0 |
+| bowtie804 | 0.508mm | min (20/40 N/A) | 65 (`0.5080 mm`) | hang / OOM | 247.2 | 670.2 | 81.1 | - |
+| bowtie804 | 0.508mm | 70 | 70 (`0.4668 mm`) | hang / OOM | 278.4 | 672.1 | 63.6 | 1099.4 / 113.9 |
+| bowtie804 | 0.508mm | 100 | 100 (`0.3268 mm`) | hang / OOM | 509.5 | 1240.1 | 94.5 | - |
+| bowtie804 | 0.508mm | 144 | 144 (`0.2269 mm`) | hang / OOM | 1198.3 | 2490.7 | 25.0 | 4282.3 / 150.6 |
+
+- **GEOMETRY & CORPUS EQUIVALENCE**:
+  - Pre-856 fixture `tests/fixtures/pocket-856-morphed-pre.json` generated ONCE from `7957e1c2fc7d21486b2d4d2227ee705a340b4d9c`.
+  - Max Hausdorff distance across all 14 cases (`0.00005..0.01253 mm`, all `<= 0.02 mm`): `ownerBowtie 0.01137 mm`, `smallBowtie 0.00997 mm`, `square 0.00066 mm`, `circle 0.00033 mm`, `L 0.00995 mm`, `U 0.01250 mm`, `Ueven 0.00005 mm`, `star 0.01253 mm`, `bowtie 0.01004 mm`, `dumbbell 0.00294 mm`, `S 0.00880 mm`, `sq60 20r 0.00044 mm`, `sq60 40r 0.00989 mm`, `sq60 70r 0.00997 mm`.
+  - All shapes have `0` crossings, every ring cut (leftover within pre-856 bound), and `Morphed + Loop` (task 850) still `1` loop per area with `0` stray crossings outside declared closing legs.
+  - Rebased ONLY the `34` changed non-refused morphed cases in `tests/fixtures/opfirst/baseline.json` under `rebased['856']` with `why: "morphed sampling: same paths within 0.02 mm (task 856)"` (and updated `tests/pocket-clearing-749-node.test.js:177` to skip Hausdorff-equivalent non-refused morphed md5 check while still asserting `island` refusal); all non-morphed / refused corpus cases remain byte-identical.
+- **TESTS & EVIDENCE**:
+  - New `tests/pocket-morphed-perf-856-node.test.js` (`// gate: exclusive`): failed first on `7957e1c2` (`70` rings `17059.0 ms`), now passes (`timing sq60: 70r=127.3ms, 144r=293.8ms`, `pocket-morphed-perf-856: 119 checks passed`).
+  - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=563 pass=563 fail=0 deferred=11 elapsed=82s`, `PROFILES-LEFT 0` (`11` exclusive timing tests deferred by merge-gate lock held by `D:\APPS\Sketch-Studio-merge`; `pocket-morphed-perf-856-node.test.js` verified directly standalone).
+  - Node suites re-run directly: `pocket-nocross-804-node.test.js`, `pocket-clearing-745-node.test.js` (`13327 checks`), `pocket-clearing-750-node.test.js` (`7925 checks`), `pocket-spiral-loop-850-node.test.js` (`1581 checks`), `pocket-clearing-749-node.test.js` (`1271 checks`).
+  - Sequential PowerShell live suites all exit 0: `pocket-loop-750-{live,phone-live,phone-b-live,fusion-live}`, `pocket-nocross-804-{live,phone-live}`, `pocket-startmark-775-{live,phone-live,fusion-live}`, `pocket-clearing-745-{live,phone-live,lists-live,phone-lists-live,export-live,phone-export-live}`, `pocket-auto-angle-853-live`.
+  - `.evidence/856/` screenshots inspected: `804-desktop-bowtie-morphed.png` (`MD5 89230A987B6EDE5221D7F1133DDBFE32`), `804-desktop-bowtie-morphed-loop-on.png` (`MD5 3C6928049492400D06D68D025EC0D247`), `desktop-loop-morphed.png` (`MD5 30AD44F0CD5355016E28CA5662C40B66`), `desktop-prepare-pocket-morphed-startmark.png` (`MD5 B59ADEA951BB996FDF202EA7A181FAF4`).
+
+## TURN 856b
+- tests/pocket-clearing-749-node.test.js no longer skips the MD5 check for non-refused morphed exports (only the 804 L/dumbbell skip stays); the 4 changed expected MD5s (rectangle and circle, morphed, flat) are in MORPHED_856, justified by the 0.02 mm equivalence test tests/pocket-morphed-perf-856-node.test.js. With MORPHED_856 emptied the test fails (rectangle|morphed|{"passDepth":null}|flat expected 87e91412869ba75b4bd05e621064d2c1); with it, `ok (1289 checks)`. gate:quick pass=563 fail=0.

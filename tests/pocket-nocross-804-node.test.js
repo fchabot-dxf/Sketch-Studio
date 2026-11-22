@@ -9,7 +9,7 @@
 //  3. The Morphed spiral's fold fix: the L's path is main's within 0.01 mm both ways (tests/fixtures/pocket-804-morphed-main.json), with fewer reversals.
 import assert from 'node:assert';
 import fs from 'node:fs';
-import { planClearing, clearingSettings, ringChains, ringSegments } from '#core/pocket-clearing.js';
+import { planClearing, clearingSettings, ringChains, ringSegments, strayCrossings } from '#core/pocket-clearing.js';
 import { pathCrossings } from '#core/path-crossings.js';
 import { offsetRegions, regionsFromRings } from '#core/plot/clip.js';
 import { SHAPES_804, BIT_MM, ALLOW_MM } from './helpers/pocket-shapes-804.js';
@@ -24,9 +24,8 @@ const planOf = (sh, pattern, more) => planClearing({ outer: sh.outer, holes: sh.
 const written = (plan) => [...plan.clear.map((c) => ({ points: c.points, closed: c.closed })), ...(plan.loop ? [] : [...plan.wall, ...plan.islands.flat()].map((w) => ({ points: w, closed: true })))];
 // the refusals allowed (a reason, never a crossing path)
 const REFUSED = { 'morphed|annulus': 'morphed islands', 'morphed|island': 'morphed islands', 'morphed|blob': 'morphed area' };
-// the Loops refused (cut as the open paths + the wall, the note says so): the Morphed spiral's way back half way between its turns would cross them where
-// a turn reaches into a corner its inner ring does not (the L's and the U's hollow corners, the star's and the triangles' sharp tips)
-const LOOP_REFUSED = { 'morphed|L': 'loop cross', 'morphed|U': 'loop cross', 'morphed|star': 'loop cross', 'morphed|bowtie': 'loop cross', 'morphed|S|2': 'loop cross' }; // |2: at pitch 2 only
+// TASK 850: Morphed + Loop is no longer refused for 'loop cross' (one closed loop per area with declared closing return legs)
+const LOOP_REFUSED = {};
 
 // ── 1. THE HARD RULE ──
 const table = [];
@@ -40,9 +39,13 @@ for (const [name, sh] of Object.entries(SHAPES_804)) {
     const wantLoop = loop ? LOOP_REFUSED[`${pattern}|${name}`] || null : null;
     eq(plan.loopRefused, wantLoop, `${tag}: the Loop refused ${wantLoop || 'never'}`);
     if (plan.loopRefused) ok(CLEARING_REFUSED[plan.loopRefused], `${tag}: the Loop's refusal has its words`);
-    const x = pathCrossings(written(plan));
-    eq(x.count, 0, `${tag}: no crossing (${JSON.stringify(x.crossings.slice(0, 3))})`);
-    if (plan.loop) eq(plan.loopCrossings, 0, `${tag}: the plan's own count says 0`);
+    if (!plan.loop) {
+      const x = pathCrossings(written(plan));
+      eq(x.count, 0, `${tag}: no crossing (${JSON.stringify(x.crossings.slice(0, 3))})`);
+    } else {
+      const stray = strayCrossings(plan.clear.map((c) => ({ points: c.points, closed: true, turns: c.turns })));
+      eq(stray.length, 0, `${tag}: no crossing outside closing legs (${JSON.stringify(stray.slice(0, 3))})`);
+    }
     table.push(`${tag}: ${plan.clear.length} path(s), 0 crossings${plan.loopRefused ? ` (Loop refused: ${plan.loopRefused})` : ''}`);
   }
 }
@@ -76,8 +79,8 @@ for (const name of Object.keys(LINES)) {
   eq(CLEARING_REFUSED['morphed area'], 'the morphed turns of one area would cross each other: use Spiral or Raster', 'what remains refused says what happens');
 }
 
-// ── 4. THE GRADUAL LOOP (Spiral, Morphed spiral): one closed path per chain (Spiral) / segment (Morphed), the finish turn exactly r from the wall, inside
-// R inset by r, the leftover == Loop off's, the cutting arm's step = pitch' x stepover (<= pitch x stepover); the path length at pitch 1 vs 2 ──
+// ── 4. TASK 850: ONE CLOSED LOOP PER AREA (Spiral, Morphed spiral): one closed path per area of A0, rings cut at normal stepover s, native finish,
+// inside R inset by r, the leftover == Loop off's, 0 crossings outside declared closing return legs ──
 const distTo = (sh) => {
   const loops = [sh.outer, ...(sh.holes || [])].map((r) => r.map(([x, y]) => ({ x, y })));
   const dseg = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L = vx * vx + vy * vy; const t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L)) : 0; return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy); };
@@ -91,28 +94,27 @@ for (const [name, sh] of Object.entries(SHAPES_804)) for (const pattern of ['lin
   for (const pitch of [1, 1.5, 2]) {
     const on = planOf(sh, pattern, { loop: true, loopPitch: pitch }), tag = `${name} ${pattern} Loop pitch ${pitch}`;
     if (on.loopRefused) { eq(on.loopRefused, LOOP_REFUSED[`${pattern}|${name}`] || LOOP_REFUSED[`${pattern}|${name}|${pitch}`] || null, `${tag}: refused only as listed`); row.push('refused'); continue; }
-    eq(pathCrossings(on.clear.map((c) => ({ points: c.points, closed: true }))).count, 0, `${tag}: zero crossings`);
+    eq(strayCrossings(on.clear.map((c) => ({ points: c.points, closed: true, turns: c.turns }))).length, 0, `${tag}: zero crossings outside closing legs`);
     ok(on.clear.every((c) => c.closed && c.role === 'loop' && c.points[0].x === c.points.at(-1).x && c.points[0].y === c.points.at(-1).y), `${tag}: closed paths (first point == last)`);
-    if (pattern === 'linked') eq(on.loopCount, sh.chains, `${tag}: ${sh.chains} closed loop(s), one per chain`);
-    else eq(on.loopCount, off.clear.length, `${tag}: one closed loop per segment`);
-    let worstIn = Infinity, worstF = 0;
+    eq(on.loopCount, 1, `${tag}: one closed loop per area of A0`);
+    eq(on.nativeFinish, true, `${tag}: finish is the Origin's native Inside/Outside cut`);
+    let worstIn = Infinity;
     for (const c of on.clear) {
       for (const p of c.points) worstIn = Math.min(worstIn, dist(p) - r);
-      for (const t of c.turns.filter((u) => u.kind === 'finish')) for (const p of c.points.slice(t.start, t.end + 1)) worstF = Math.max(worstF, Math.abs(dist(p) - r));
     }
     ok(worstIn >= -0.02, `${tag}: every point inside R inset by r (worst ${worstIn.toFixed(4)})`);
-    ok(worstF <= 0.01, `${tag}: the finish turns exactly r from the wall / island (worst ${worstF.toFixed(5)})`);
-    ok(on.clear.some((c) => c.turns.some((t) => t.kind === 'finish')), `${tag}: the wall's finish turn is in a loop`);
+    ok(!on.clear.some((c) => c.turns.some((t) => t.kind === 'finish')), `${tag}: no finish turn in the loop (native finish)`);
     ok(Math.abs(on.leftover.area - off.leftover.area) <= Math.max(0.2, off.leftover.area * 0.01), `${tag}: the leftover == Loop off's (${on.leftover.area.toFixed(3)} vs ${off.leftover.area.toFixed(3)} mm²)`);
-    ok(on.loopStep <= pitch * s + 1e-9, `${tag}: the cutting arm steps ${on.loopStep.toFixed(3)} mm <= ${pitch} x the stepover`);
-    ok(on.loopStep / 2 <= s + 1e-9, `${tag}: neighbouring cuts (the return arm half way) at most one stepover apart (${(on.loopStep / 2).toFixed(3)} mm)`);
+    ok(Math.abs(on.loopStep - s) <= 1e-9, `${tag}: rings cut at normal stepover s (${on.loopStep.toFixed(3)} mm)`);
     row.push(`${on.loopCount} loop(s) ${(on.length / 1000).toFixed(2)} m step ${on.loopStep.toFixed(2)} mm`);
   }
   lengths.push(`${name} ${pattern}: Loop off ${((off.length + off.finishLength) / 1000).toFixed(2)} m | pitch 1: ${row[0]} | 1.5: ${row[1]} | 2: ${row[2]}`);
 }
 {
   const sp = planOf(SHAPES_804.bowtie, 'linked', { loop: true });
-  eq(clearingWords({ ...sp, settings: settings(SHAPES_804.bowtie, 'linked', { loop: true }) }), `spiral, ${sp.loops} turns + wall: 2 closed loops (the pocket narrows: one per area)`, 'the bow-tie Loop words');
+  eq(clearingWords({ ...sp, settings: settings(SHAPES_804.bowtie, 'linked', { loop: true }) }), `spiral, ${sp.loops} turns + wall: one closed loop`, 'the bow-tie Loop words');
+  const mo = planOf(SHAPES_804.bowtie, 'morphed', { loop: true });
+  eq(clearingWords({ ...mo, settings: settings(SHAPES_804.bowtie, 'morphed', { loop: true }) }), `morphed spiral: ${mo.turns} turns + wall: one closed loop`, 'the bow-tie Morphed Loop words');
   const ann = planOf(SHAPES_804.annulus, 'linked', { loop: true });
   eq(clearingWords({ ...ann, settings: settings(SHAPES_804.annulus, 'linked', { loop: true }) }), `spiral, ${ann.loops} turns + wall: one closed loop`, "round one island: one closed loop (the wall's rings and the island's bridged)");
 }

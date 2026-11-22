@@ -160,7 +160,7 @@ try {
     ok(bits.length > 0, `${name}: travel present`);
     const roles = new Set(bits.flatMap((b) => b.travel.map((t) => t.role)));
     ok(roles.has(clearing === 'linked' ? 'linked' : 'raster') || roles.has('loop'), `${name}: the clearing lines carry their direction (${[...roles]})`);
-    ok(roles.has('wall') === (!loop || clearing === 'raster'), `${name}: the wall has its bit-centre path unless the Loop is on (its closed loop IS the wall pass; TASK 835e: Raster's wall is the Origin's inside cut, Loop on or off) (${[...roles]})`);
+    ok(roles.has('wall'), `${name}: the wall has its bit-centre path (TASK 835e / 850: every pattern's wall is the Origin's inside cut, Loop on or off) (${[...roles]})`);
     ok(items.some((it) => it.cutType === 'pocket' || it.cutType === 'online' || it.cutType === 'inside'), `${name}: the file's own elements`);
   }
 

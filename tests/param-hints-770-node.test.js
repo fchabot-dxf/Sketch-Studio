@@ -91,7 +91,7 @@ for (const { boundaryCtx, wallsCtx, ...record } of STATES) {
     for (const c of row.querySelectorAll('[data-hint]')) { seen.add(c.dataset.hint); eq(c.textContent, hintLabel(c.dataset.hint), `${name}: the element ${c.dataset.hint} shows its name`); if (c !== trig) eq(hintFor(c), hintText(c.dataset.hint), `${name}: its tooltip is its hint`); }
   }
   for (const row of host.querySelectorAll('.cut-row[data-off]')) { // TASK 813: a greyed row stays in place: its label's tooltip is the reason, then the table's text
-    const trig = row.querySelector('[data-hint]'), base = hintText(trig.dataset.hint, { loop: record.loop === true, pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' });
+    const trig = row.querySelector('[data-hint]'), base = hintText(trig.dataset.hint, { loop: finishInLoop(record.clearing, record.loop === true), pocket: record.cutType === 'pocket', online: record.cutType === 'online', roughing: record.cutType === 'roughing', contour: record.cutType === 'contour' });
     ok(hintFor(trig).endsWith(base) && hintFor(trig).length > base.length + 10, `${name} ${row.dataset.row}: the greyed row's tooltip starts with its reason`);
   }
   for (const tab of [...host.querySelectorAll('.cut-tab')].filter(visible)) { // TASK 810: a Roughing / Contour card's tabs: each shows its name, its tooltip is its hint
@@ -159,6 +159,8 @@ for (const m of opListJs.matchAll(/id:\s*'([A-Za-z]+)'/g)) seen.add(m[1]);
 for (const m of opListJs.matchAll(/dataset\.hint = '([A-Za-z]+)'/g)) seen.add(m[1]); // TASK S3: a row's out-of-date mark (opOutOfDate)
 const stageJs = fs.readFileSync(new URL('../apps/shaper/src/prepare-stage.js', import.meta.url), 'utf8'); // TASK S3: the operations toolbar's Recalculate (its name and tooltip)
 for (const m of stageJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'\)/g)) seen.add(m[1]);
+const fusionBridgeJs = fs.readFileSync(new URL('../apps/shaper/src/fusion-bridge.js', import.meta.url), 'utf8'); // TASK 855d: cross-design switch notice
+for (const m of fusionBridgeJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'/g)) seen.add(m[1]);
 const stlCardJs = fs.readFileSync(new URL('../apps/shaper/src/stl-card.js', import.meta.url), 'utf8'); // TASK 790: the STL card's rows and title
 const toolTableJs = fs.readFileSync(new URL('../apps/shaper/src/tool-table-window.js', import.meta.url), 'utf8'); // TASK 842: the Tool table window's labels
 for (const m of toolTableJs.matchAll(/data-hint="([A-Za-z]+)"|hint: '([A-Za-z]+)'/g)) seen.add(m[1] || m[2]);

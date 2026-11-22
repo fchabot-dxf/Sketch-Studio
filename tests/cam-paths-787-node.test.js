@@ -150,23 +150,8 @@ const rec = (over) => effectiveCutRecord({ ...defaultCutRecord(), ...over });
   const TIGHT = { cutType: 'pocket', cutDepth: 5, toolDia: 6.35, stepover: 40, finishAllowance: 1.5 };
   const cutsFor = (over) => deriveCuts(target, rec({ ...TIGHT, ...over }), st, loops, loopPolys, new Set());
   for (const clearing of ['linked', 'raster', 'morphed']) {
-    // TASK 835e: Raster's finish is the Origin's native inside cut, Loop on or off: with nothing to clear its Loop on IS its Loop off (the wall alone)
-    if (clearing === 'raster') { eq([cutsFor({ clearing, loop: true }), cutsFor({ clearing, loop: false })].map((cs) => cs.map((c) => c.clearing && c.clearing.role)), [['wall'], ['wall']], 'raster: nothing to clear: the wall as an Inside cut, Loop on or off (TASK 835e)'); continue; }
-    const on = cutsFor({ clearing, loop: true });
-    const loopsCut = on.filter((c) => c.kind === 'clearing');
-    ok(loopsCut.length >= 1 && loopsCut.every((c) => c.clearing.role === 'loop' && c.centers[0].closed), `${clearing}, Loop on: the finish turn is cut as a closed loop`);
-    eq(on.filter((c) => c.clearing && c.clearing.role === 'wall').length, 0, `${clearing}, Loop on: no separate wall cut`);
-    const summary = loopsCut[loopsCut.length - 1].clearing.summary;
-    eq([summary.loop, summary.loopRefused], [true, null], `${clearing}, Loop on: the plan says Loop (not dropped)`);
-    const mark = on.find((c) => c.kind === 'mark');
-    ok(mark, `${clearing}, Loop on: the start mark is written`);
-    const p = mark.clearing.point, ring = loopsCut[0].centers[0].points;
-    ok(ring.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < 1e-9), `${clearing}, Loop on: the start mark is on the loop`);
-    const svg = exportShaperSVG({ state: st, entries: [{ target, rec: { ...defaultCutRecord(), ...TIGHT, clearing, loop: true } }], encoding: exportEncoding(), docUnit: 'mm', options: {}, loopPolys });
-    ok(/shaper:cutType="guide"/.test(svg) && /shaper:cutType="online"/.test(svg) && !/shaper:cutType="inside"/.test(svg), `${clearing}, Loop on: the file has the loop (on line) and the start mark (guide), no Inside wall`);
-    // Loop off: unchanged (the wall as an Inside cut; nothing to clear, so no route and no start mark)
-    const off = cutsFor({ clearing, loop: false });
-    eq(off.map((c) => c.clearing && c.clearing.role), ['wall'], `${clearing}, Loop off: the wall alone, as before`);
+    // TASK 835e / 850: every programmed pattern's finish is the Origin's native inside cut, Loop on or off: with nothing to clear its Loop on IS its Loop off (the wall alone)
+    eq([cutsFor({ clearing, loop: true }), cutsFor({ clearing, loop: false })].map((cs) => cs.map((c) => c.clearing && c.clearing.role)), [['wall'], ['wall']], `${clearing}: nothing to clear: the wall as an Inside cut, Loop on or off (TASK 835e / 850)`);
   }
 
   // 7b: a depth-UNSET programmed pocket with Loop off: the 3D model treats it like any depth-unset pocket (not shown, never cut through)

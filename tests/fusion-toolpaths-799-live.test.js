@@ -106,9 +106,9 @@ try {
   assert.strictEqual(tp1.length, 1, 'exactly ONE toolpaths event after debounce');
   assert.strictEqual(tp1[0].payload.revision, 1, 'revision 1');
   assert.strictEqual(tp1[0].payload.frame.topHeightMm, 19, 'frame topHeightMm preserved');
-  assert.ok(tp1[0].payload.paths.some((p) => p.cutType === 'pocket' && p.z === 8), 'pocket path at z=8');
-  assert.ok(tp1[0].payload.paths.some((p) => p.cutType === 'interior' && p.z === 19), 'hole path at z=19');
-  assert.ok(tp1[0].payload.paths.some((p) => p.cutType === 'exterior' && p.z === 19), 'outline path at z=19');
+  assert.ok(tp1[0].payload.paths.some((p) => p.cutType === 'pocket' && p.z === 8 && p.toolDia === 3.175 && p.clearing === 'freehand' && p.role === 'wall'), 'pocket path at z=8 with toolDia, clearing=freehand, role=wall');
+  assert.ok(tp1[0].payload.paths.some((p) => p.cutType === 'interior' && p.z === 19 && p.toolDia === 3.175 && p.clearing === undefined && p.role === 'outline'), 'hole path at z=19 with toolDia, role=outline');
+  assert.ok(tp1[0].payload.paths.some((p) => p.cutType === 'exterior' && p.z === 19 && p.toolDia === 3.175 && p.clearing === undefined && p.role === 'outline'), 'outline path at z=19 with toolDia, role=outline');
 
   // Untick Pocket in Prepare Operations list -> debounced ONE toolpaths event with ticked operations only!
   const pocketId = await evalJs(`import('/apps/shaper/src/operations-store.js').then((m) => m.storeOps().find((o) => o.type === 'pocket').id)`);
@@ -142,7 +142,9 @@ try {
   await waitFor(`window.adsk._sent.some((m) => m.action === 'toolpaths')`, 'toolpaths sent after Spiral + OK');
   const tp4 = await evalJs(`window.adsk._sent.filter((m) => m.action === 'toolpaths')`);
   assert.strictEqual(tp4[0].payload.revision, 4, 'revision 4');
-  assert.strictEqual(tp4[0].payload.paths.filter((p) => p.op === pocketId && p.cutType === 'guide' && p.points.length === 2).length, 2, 'pocket start mark cross sent');
+  assert.strictEqual(tp4[0].payload.paths.filter((p) => p.op === pocketId && p.cutType === 'guide' && p.points.length === 2 && p.clearing === 'linked' && p.role === 'start').length, 2, 'pocket start mark cross sent with clearing=linked and role=start');
+  assert.ok(tp4[0].payload.paths.some((p) => p.op === pocketId && p.cutType === 'pocket' && p.clearing === 'linked' && p.role === 'clearing'), 'spiral clearing path sent with clearing=linked and role=clearing');
+  assert.ok(tp4[0].payload.paths.some((p) => p.op === pocketId && p.cutType === 'pocket' && p.clearing === 'linked' && p.role === 'wall'), 'spiral wall path sent with clearing=linked and role=wall');
 
   // Older add-in replying Unknown action for toolpaths -> no error banner shown.
   await evalJs(`document.getElementById('prepare-notice').hidden = true; document.getElementById('prepare-notice').textContent = '';`);

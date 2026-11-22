@@ -274,7 +274,7 @@ let saved = null;
     eq(h.count('.sk-pocket-start'), 1, 'Prepare: 1 pocket start mark target');
     ok(/\+ wall: one closed loop, stepover/.test(h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l))[0]), 'the note (TASK 825: the warnings come first): one closed loop (nothing about where it starts): ' + h.note().filter((l) => !/^Leftover: |^Sharp inside corners|of it missed between passes/.test(l))[0]);
     const pocketEls = elementsOf(shaperSvgOf(st, [{ target: { kind: 'loop', id: kP.slice(5) }, rec: V2_PLAN.get(kP) }]));
-    eq(pocketEls.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['guide', false]], 'the pocket download: ONE closed on-line path + 1 guide start mark');
+    eq(pocketEls.map((e) => [e.cutType, /Z$/.test(e.d)]), [['online', true], ['inside', true], ['guide', false]], 'the pocket download: ONE closed on-line path + native inside wall cut + 1 guide start mark (TASK 850)');
     saved = { plan: JSON.stringify([...V2_PLAN.entries()]), svg: shaperSvgOf(st, planEntries()) };
     const d = await app.storedDoc();
     ok(storedRecords(d.hosts.shaper).some(([, r]) => r.cutType === 'online' && r.holdPart === 'off' && r.tabWidth === 12), 'the autosave stores the On line record');

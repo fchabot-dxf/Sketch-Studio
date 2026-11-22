@@ -162,6 +162,9 @@ export const POCKET_CLEARING = Object.freeze({
   /** arcs sampled / rounded at this chord sagitta (mm); paths simplified to this deviation (mm) */
   chordTolMm: 0.005,
   pathTolMm: 0.01,
+  /** TASK 856: morphed spiral sampling bounds (mm) and corner-band width (in stepovers). Near vertices (`cornerMult * s`) and on short/curved segments
+   *  sample at `h = clamp(s / 10, minMm, maxMm)`; along long straight interiors use `max(h, straightMm)` so per-ring work is O(1) while staying <= 0.02 mm Hausdorff. */
+  morphedSample: Object.freeze({ minMm: 0.02, maxMm: 0.5, straightMm: 0.3, cornerMult: 2.5 }),
   /** a safety bound on the number of rings */
   maxRings: 2000,
   /** TASK 778: pocket start mark target (circle + cross) total span = startMarkDiaMult x bit diameter; circle diameter = startMarkCircleRatio of that */
@@ -169,11 +172,10 @@ export const POCKET_CLEARING = Object.freeze({
   startMarkCircleRatio: 0.6,
 });
 const PATTERNS = new Set(['linked', 'raster', 'morphed']);
-/** TASK 835e (owner turn 3168: "In pocket can programmed path use a finish path that's the inside cut, so we use native commands"): WHERE a programmed pocket's
- *  FINISH is written, in ONE place. Spiral and Morphed spiral with Loop on: in their closed loops (On line turns at r: the wall exact for the card's bit
- *  only). Raster (Loop on or off) and every pattern with Loop off: the Origin's NATIVE cuts (THE RULES "FINISH PASS": the pocket's outer loop as an INSIDE
- *  cut, each island's as an OUTSIDE cut: the wall exact for whatever bit is in the machine, an offset settable at the Origin). */
-export const finishInLoop = (pattern, loop) => Boolean(loop) && pattern !== 'raster';
+/** TASK 835e / TASK 850 (owner turns 3166-3169: every programmed pattern with Loop on or off uses the Origin's native Inside / Outside finish cut): WHERE a
+ *  programmed pocket's FINISH is written, in ONE place. Always false (never inside the clearing loop): the pocket's outer loop is written as an INSIDE cut and
+ *  each island's as an OUTSIDE cut (the wall exact for whatever bit is in the machine, an offset settable at the Origin). */
+export const finishInLoop = (_pattern, _loop) => false;
 /** TASK 835e (owner, 2026-11-21: a closed On line path that CROSSES itself still cuts as a loop with AutoPass; Studio follows an On line path exactly): THE
  *  CROSSING RULE of the programmed paths, in ONE place. #core/path-crossings counts every crossing; one is ALLOWED only on a stretch declared as a CLOSING
  *  LEG (a turn of kind 'close': a straight leg back to its loop's start over floor the same depth pass has already swept, built by closingLeg); everywhere
@@ -436,213 +438,244 @@ export const ringChains = (L) => ringRuns(L, true);
  *  Morphed spiral's paths: a morphed turn never reaches into another area's arm). */
 export const ringSegments = (L) => ringRuns(L, false);
 
-// ── the morphed spiral (see THE RULES) ──
-function densify(pts, h) {
+// ── the morphed spiral (see THE RULES; TASK 856: O(K) linear streaming + straight-edge sampling + non-accumulating propagate) ──
+// Measured cause of pre-856 O(K^4) time / O(K^3) memory: propagate appended all outer samples onto inner segments (`|S_k| = sum_{j<=k} D_j`) and
+// stacked zero-length corner holds into single segGrid cells (14,891 segments in one cell at 40 rings), while densify shrunk h with s/10 along straight edges.
+function densifyAdaptive(pts, h, margin, hCoarse) {
   const out = [];
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i], b = pts[(i + 1) % pts.length];
-    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / h));
-    for (let k = 0; k < n; k++) out.push(P(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n));
-  }
-  return out;
-}
-// a uniform grid over a closed sample list's segments (i -> i + 1, the list repeats its first sample at the end) for nearest-point queries
-function segGrid(S, cell) {
-  const map = new Map(), key = (i, j) => i * 73856093 ^ j * 19349663;
-  for (let i = 0; i < S.length - 1; i++) {
-    const a = S[i].p, b = S[i + 1].p;
-    const x0 = Math.floor(Math.min(a.x, b.x) / cell), x1 = Math.floor(Math.max(a.x, b.x) / cell), y0 = Math.floor(Math.min(a.y, b.y) / cell), y1 = Math.floor(Math.max(a.y, b.y) / cell);
-    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const k = key(x, y); let c = map.get(k); if (!c) { c = []; map.set(k, c); } c.push(i); }
-  }
-  return { cell, map, key, S };
-}
-function nearestOn(g, q) {
-  for (let R = g.cell; ; R *= 2) {
-    const x0 = Math.floor((q.x - R) / g.cell), x1 = Math.floor((q.x + R) / g.cell), y0 = Math.floor((q.y - R) / g.cell), y1 = Math.floor((q.y + R) / g.cell);
-    let best = null;
-    const seen = new Set();
-    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
-      for (const i of g.map.get(g.key(x, y)) || []) {
-        if (seen.has(i)) continue;
-        seen.add(i);
-        const f = distToSeg(q, g.S[i].p, g.S[i + 1].p);
-        if (!best || f.d < best.d) best = { i, t: f.t, d: f.d };
-      }
+    const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+    if (L <= 2 * margin + hCoarse) {
+      const n = Math.max(1, Math.ceil(L / h));
+      for (let k = 0; k < n; k++) out.push(P(a.x + (dx * k) / n, a.y + (dy * k) / n));
+    } else {
+      const ux = dx / L, uy = dy / L, nEdge = Math.ceil(margin / h);
+      for (let k = 0; k < nEdge; k++) { const d = (margin * k) / nEdge; out.push(P(a.x + ux * d, a.y + uy * d)); }
+      const midL = L - 2 * margin, nMid = Math.max(1, Math.ceil(midL / hCoarse));
+      for (let k = 0; k < nMid; k++) { const d = margin + (midL * k) / nMid; out.push(P(a.x + ux * d, a.y + uy * d)); }
+      for (let k = 0; k < nEdge; k++) { const d = L - margin + (margin * k) / nEdge; out.push(P(a.x + ux * d, a.y + uy * d)); }
     }
-    if (best && best.d <= R) return best;
-    if (R > 1e6) return best;
   }
-}
-const phiAt = (S, f) => S[f.i].phi + (S[f.i + 1].phi - S[f.i].phi) * f.t;
-// a ring's samples with phi by arc length from its first vertex: [{ p, phi }] closed (the last = the first, phi 1)
-function byLength(pts) {
-  const L = pathLength(pts, true);
-  const out = [];
-  let acc = 0;
-  pts.forEach((p, i) => { if (i) acc += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y); out.push({ p, phi: acc / L }); });
-  out.push({ p: pts[0], phi: 1 });
   return out;
 }
-// ring k + 1's samples with the phi of their nearest point on ring k (outer, sampled with phi), rotated to start at phi 0: [{ p, phi }] closed, or null.
-// Between two inner samples the phi of their nearest points can jump (a convex corner of the inner ring: its nearest point jumps across the outer
-// ring's corner; a part of the outer ring the inner one does not reach): every outer sample whose phi lies in that jump is put on the inner segment
-// at ITS nearest point there (an outer corner's samples all land on the inner corner: the corner HOLDS while phi sweeps the outer corner).
-// TASK 804: phi steps BACK by more than this (a tenth of a turn) only where the inner ring's nearest points jump over an arm it does not reach that covers
-// more than half the outer ring (a split: another area's lobe; measured 0.40 to 0.50 on the bow-tie, the dumbbell, the S, the U), never by rounding (at
-// most 0.008, the circle's smallest ring): such a step is the jump FORWARD over the arm (both rings wind the same way)
+function byLengthFlat(pts) {
+  const L = pathLength(pts, true), n = pts.length + 1;
+  const px = new Float64Array(n), py = new Float64Array(n), phi = new Float64Array(n);
+  let acc = 0;
+  for (let i = 0; i < pts.length; i++) {
+    if (i) acc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    px[i] = pts[i].x; py[i] = pts[i].y; phi[i] = acc / L;
+  }
+  px[n - 1] = pts[0].x; py[n - 1] = pts[0].y; phi[n - 1] = 1;
+  return { n, px, py, phi };
+}
+function makeOuterQueryFlat(S, cell) {
+  const m = S.n - 1, { px, py, phi } = S;
+  const vx = new Float64Array(m), vy = new Float64Array(m), L2arr = new Float64Array(m);
+  let gMinX = Infinity, gMaxX = -Infinity, gMinY = Infinity, gMaxY = -Infinity;
+  const map = new Map(), key = (i, j) => (i * 73856093) ^ (j * 19349663);
+  for (let i = 0; i < m; i++) {
+    const x1 = px[i], y1 = py[i], x2 = px[i + 1], y2 = py[i + 1], dx = x2 - x1, dy = y2 - y1;
+    vx[i] = dx; vy[i] = dy; L2arr[i] = dx * dx + dy * dy;
+    const x0 = Math.floor(Math.min(x1, x2) / cell), gx1 = Math.floor(Math.max(x1, x2) / cell);
+    const y0 = Math.floor(Math.min(y1, y2) / cell), gy1 = Math.floor(Math.max(y1, y2) / cell);
+    if (x0 < gMinX) gMinX = x0; if (gx1 > gMaxX) gMaxX = gx1;
+    if (y0 < gMinY) gMinY = y0; if (gy1 > gMaxY) gMaxY = gy1;
+    for (let x = x0; x <= gx1; x++) for (let y = y0; y <= gy1; y++) { const k = key(x, y); let c = map.get(k); if (!c) { c = []; map.set(k, c); } c.push(i); }
+  }
+  const seen = new Int32Array(m);
+  let stamp = 0;
+  return (qx, qy) => {
+    for (let R = cell; ; R *= 2) {
+      let bestI = -1, bestT = 0, bestD2 = Infinity;
+      const x0 = Math.max(gMinX, Math.floor((qx - R) / cell)), x1 = Math.min(gMaxX, Math.floor((qx + R) / cell));
+      const y0 = Math.max(gMinY, Math.floor((qy - R) / cell)), y1 = Math.min(gMaxY, Math.floor((qy + R) / cell));
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > m) {
+        for (let i = 0; i < m; i++) {
+          const L2 = L2arr[i], t = L2 > 0 ? Math.max(0, Math.min(1, ((qx - px[i]) * vx[i] + (qy - py[i]) * vy[i]) / L2)) : 0;
+          const dx = qx - px[i] - t * vx[i], dy = qy - py[i] - t * vy[i], d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; bestI = i; bestT = t; }
+        }
+        return phi[bestI] + (phi[bestI + 1] - phi[bestI]) * bestT;
+      }
+      stamp++;
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+        const bucket = map.get(key(x, y));
+        if (!bucket) continue;
+        for (let bi = 0; bi < bucket.length; bi++) {
+          const i = bucket[bi];
+          if (seen[i] === stamp) continue;
+          seen[i] = stamp;
+          const L2 = L2arr[i], t = L2 > 0 ? Math.max(0, Math.min(1, ((qx - px[i]) * vx[i] + (qy - py[i]) * vy[i]) / L2)) : 0;
+          const dx = qx - px[i] - t * vx[i], dy = qy - py[i] - t * vy[i], d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; bestI = i; bestT = t; }
+        }
+      }
+      if ((bestI >= 0 && bestD2 <= R * R) || R > 1e6) return phi[bestI] + (phi[bestI + 1] - phi[bestI]) * bestT;
+    }
+  };
+}
 const WRAP_BACK = 0.1;
-function propagate(inner, outer, h, s) {
-  const g = segGrid(outer, Math.max(s, h * 4));
-  const raw = inner.map((q) => phiAt(outer, nearestOn(g, q)));
-  const ph = [];
-  raw.forEach((v, j) => {
-    if (!j) { ph.push(v % 1); return; }
-    let x = v + Math.round(ph[j - 1] - v); // the unwrapped value nearest the previous one
-    if (x < ph[j - 1] - WRAP_BACK) x += 1;  // TASK 804: see WRAP_BACK
-    if (x < ph[j - 1]) x = ph[j - 1];      // never backwards (rounding)
-    ph.push(x);
-  });
-  let last = raw[0] + Math.round(ph[ph.length - 1] - raw[0]);
-  if (last < ph[ph.length - 1]) last += 1;
-  if (Math.abs(last - ph[0] - 1) > 0.25) return null; // the rings do not wind the same way round (never for nested offsets)
-  const n = inner.length, oPhi = outer.map((x) => x.phi); // outer: phi 0 .. 1, closed
-  const firstAbove = (v) => { let lo = 0, hi = oPhi.length; while (lo < hi) { const m = (lo + hi) >> 1; if (oPhi[m] <= v) lo = m + 1; else hi = m; } return lo; };
-  const S = [];
+function propagateFlat(inner, outer, h, s) {
+  const query = makeOuterQueryFlat(outer, Math.max(s * 1.5, h * 4));
+  const n = inner.length, raw = new Float64Array(n), ph = new Float64Array(n);
+  for (let j = 0; j < n; j++) raw[j] = query(inner[j].x, inner[j].y);
+  for (let j = 0; j < n; j++) {
+    const v = raw[j];
+    if (!j) { ph[0] = v % 1; continue; }
+    let x = v + Math.round(ph[j - 1] - v);
+    if (x < ph[j - 1] - WRAP_BACK) x += 1;
+    if (x < ph[j - 1]) x = ph[j - 1];
+    ph[j] = x;
+  }
+  let last = raw[0] + Math.round(ph[n - 1] - raw[0]);
+  if (last < ph[n - 1]) last += 1;
+  if (Math.abs(last - ph[0] - 1) > 0.25) return null;
+  const oN = outer.n, oPx = outer.px, oPy = outer.py, oPhi = outer.phi;
+  const firstAbove = (v) => { let lo = 0, hi = oN; while (lo < hi) { const m = (lo + hi) >> 1; if (oPhi[m] <= v) lo = m + 1; else hi = m; } return lo; };
+  const sx = [], sy = [], sp = [], isInn = [];
+  // Collapse stacked zero-length corner holds (p == p == p) and collinear non-inner outer projections so S never grows cumulatively across rings
+  const pushPt = (x, y, phi, innFlag) => {
+    while (sx.length >= 2) {
+      const k1 = sx.length - 1, k2 = sx.length - 2;
+      if (sx[k2] === sx[k1] && sy[k2] === sy[k1] && sx[k1] === x && sy[k1] === y) { sx.pop(); sy.pop(); sp.pop(); isInn.pop(); continue; }
+      if (!isInn[k1]) {
+        const dx = x - sx[k2], dy = y - sy[k2], L2 = dx * dx + dy * dy, dphi = phi - sp[k2];
+        if (L2 > 0 && dphi > 0) {
+          const bx = sx[k1] - sx[k2], by = sy[k1] - sy[k2], u = (bx * dx + by * dy) / L2;
+          if (u >= 0 && u <= 1 && (bx * dy - by * dx) ** 2 / L2 <= 1e-22 && Math.abs(sp[k1] - (sp[k2] + u * dphi)) <= 1e-11) {
+            sx.pop(); sy.pop(); sp.pop(); isInn.pop(); continue;
+          }
+        }
+      }
+      break;
+    }
+    sx.push(x); sy.push(y); sp.push(phi); isInn.push(innFlag);
+  };
   for (let j = 0; j < n; j++) {
     const a = ph[j], b = j + 1 < n ? ph[j + 1] : last, q = inner[j], qn = inner[(j + 1) % n];
-    S.push({ p: q, phi: a });
-    for (let m = Math.floor(a); m <= Math.floor(b); m++) { // the outer samples with phi in (a, b) (phi unwrapped by whole turns m)
-      for (let i = firstAbove(a - m); i < oPhi.length && oPhi[i] + m < b; i++) {
+    pushPt(q.x, q.y, a, 1);
+    const vx = qn.x - q.x, vy = qn.y - q.y, L2 = vx * vx + vy * vy;
+    for (let m = Math.floor(a); m <= Math.floor(b); m++) {
+      for (let i = firstAbove(a - m); i < oN && oPhi[i] + m < b; i++) {
         if (oPhi[i] + m <= a) continue;
-        const f = distToSeg(outer[i].p, q, qn);
-        S.push({ p: P(q.x + (qn.x - q.x) * f.t, q.y + (qn.y - q.y) * f.t), phi: oPhi[i] + m });
+        const t = L2 > 0 ? Math.max(0, Math.min(1, ((oPx[i] - q.x) * vx + (oPy[i] - q.y) * vy) / L2)) : 0;
+        pushPt(q.x + vx * t, q.y + vy * t, oPhi[i] + m, 0);
       }
     }
   }
-  S.push({ p: inner[0], phi: last });
-  // rotate to phi = 0 (an integer): the loop runs from ph[0] to ph[0] + 1
-  const c = Math.ceil(ph[0] - 1e-12);
-  const ext = [...S, ...S.slice(1).map((x) => ({ p: x.p, phi: x.phi + (last - ph[0]) }))];
+  pushPt(inner[0].x, inner[0].y, last, 1);
+  const c = Math.ceil(ph[0] - 1e-12), span = last - ph[0], mLen = sx.length, extLen = mLen * 2 - 1;
+  const xAt = (idx) => (idx < mLen ? sx[idx] : sx[idx - mLen + 1]);
+  const yAt = (idx) => (idx < mLen ? sy[idx] : sy[idx - mLen + 1]);
+  const phiExt = (idx) => (idx < mLen ? sp[idx] : sp[idx - mLen + 1] + span);
   const cross = (v) => {
-    for (let i = 0; i < ext.length - 1; i++) {
-      const A = ext[i], B = ext[i + 1];
-      if (A.phi <= v && B.phi >= v) {
-        const t = B.phi > A.phi ? (v - A.phi) / (B.phi - A.phi) : 0;
-        return { i, pt: { p: P(A.p.x + (B.p.x - A.p.x) * t, A.p.y + (B.p.y - A.p.y) * t), phi: v } };
+    for (let i = 0; i < extLen - 1; i++) {
+      const ap = phiExt(i), bp = phiExt(i + 1);
+      if (ap <= v && bp >= v) {
+        const ax = xAt(i), ay = yAt(i), bx = xAt(i + 1), by = yAt(i + 1);
+        const t = bp > ap ? (v - ap) / (bp - ap) : 0;
+        return { i, x: ax + (bx - ax) * t, y: ay + (by - ay) * t };
       }
     }
     return null;
   };
   const s0 = cross(c), s1 = cross(c + 1);
   if (!s0 || !s1) return null;
-  const out = [s0.pt, ...ext.slice(s0.i + 1, s1.i + 1).filter((x) => x.phi > c && x.phi < c + 1), s1.pt];
-  return out.map((x) => ({ p: x.p, phi: x.phi - c }));
+  let cnt = 2;
+  for (let i = s0.i + 1; i <= s1.i; i++) { const p = phiExt(i); if (p > c && p < c + 1) cnt++; }
+  const outX = new Float64Array(cnt), outY = new Float64Array(cnt), outPhi = new Float64Array(cnt);
+  outX[0] = s0.x; outY[0] = s0.y; outPhi[0] = 0;
+  let w = 1;
+  for (let i = s0.i + 1; i <= s1.i; i++) { const p = phiExt(i); if (p > c && p < c + 1) { outX[w] = xAt(i); outY[w] = yAt(i); outPhi[w] = p - c; w++; } }
+  outX[w] = s1.x; outY[w] = s1.y; outPhi[w] = 1;
+  return { n: cnt, px: outX, py: outY, phi: outPhi };
 }
-// the point of a sampled ring at phi (piecewise linear between its samples). Where several samples share phi (an arc of the ring whose nearest points
-// on the ring inside it all hold one corner) the point is the LAST of them, or with `first` the first of them (TASK 804: the turn walks such an arc
-// once, never back: see transition)
-function ringAt(S, phi, first = false) {
-  let lo = 0, hi = S.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (first ? S[m].phi < phi : S[m].phi <= phi) lo = m; else hi = m; }
-  if (first && S[hi].phi === phi) return S[hi].p;
-  const A = S[lo], B = S[hi];
-  const t = B.phi > A.phi ? Math.max(0, Math.min(1, (phi - A.phi) / (B.phi - A.phi))) : 0;
-  return P(A.p.x + (B.p.x - A.p.x) * t, A.p.y + (B.p.y - A.p.y) * t);
+function ringAtFlat(S, phi, first = false) {
+  let lo = 0, hi = S.n - 1;
+  const sp = S.phi;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (first ? sp[m] < phi : sp[m] <= phi) lo = m; else hi = m; }
+  if (first && sp[hi] === phi) return { x: S.px[hi], y: S.py[hi] };
+  const pa = sp[lo], pb = sp[hi];
+  const t = pb > pa ? Math.max(0, Math.min(1, (phi - pa) / (pb - pa))) : 0;
+  return { x: S.px[lo] + (S.px[hi] - S.px[lo]) * t, y: S.py[lo] + (S.py[hi] - S.py[lo]) * t };
 }
-// the turn from ring `inner` out to ring `outer` (both sampled with phi from 0 to 1) for a stepover s: at phi the point (1 - phi) * s from B toward A
-// (the lerp A + phi * (B - A) where |A - B| <= s)
-// the reach from the outer ring toward A, in stepovers, for |A - B| = l stepovers: l (the lerp) up to sqrt 2 (an inner corner of 90 degrees or more: the lerp is exactly the
-// inner offset there), then falling linearly to 1 at l = 2 and 1 beyond (an arm the inner ring does not reach: the turn follows the outer ring one stepover in)
 const CAP = Math.SQRT2, ARM = 2;
 const depthOf = (l) => (l <= CAP ? l : l >= ARM ? 1 : CAP - ((CAP - 1) * (l - CAP)) / (ARM - CAP));
-function transition(inner, outer, s) {
-  // at one phi (both rings may hold an arc there) the inner ring's samples come first (a stable sort), each with the FIRST outer point at that phi, then
-  // the outer ring's samples, each with the LAST inner point there: the turn walks the inner arc, then the outer arc, never back (TASK 804: it went back
-  // over the arc it had just walked, a fold that crossed itself on a star's or a blob's hollow corners)
-  const ev = [...inner.map((x) => ({ phi: x.phi, A: x.p })), ...outer.map((x) => ({ phi: x.phi, B: x.p }))].sort((a, b) => a.phi - b.phi);
-  const out = ev.map((e) => {
-    const A = e.A || ringAt(inner, e.phi), B = e.B || ringAt(outer, e.phi, true);
-    const L = Math.hypot(A.x - B.x, A.y - B.y), k = L <= CAP * s ? 1 - e.phi : ((1 - e.phi) * depthOf(L / s) * s) / L;
-    return P(B.x + k * (A.x - B.x), B.y + k * (A.y - B.y));
-  });
-  out.phis = ev.map((e) => e.phi); // TASK 804: each point's phi
+function transitionFlat(inner, outer, s) {
+  const nI = inner.n, nO = outer.n, out = [];
+  let i = 0, j = 0;
+  while (i < nI || j < nO) {
+    let phi, ax, ay, bx, by;
+    if (j >= nO || (i < nI && inner.phi[i] <= outer.phi[j])) {
+      phi = inner.phi[i]; ax = inner.px[i]; ay = inner.py[i]; i++;
+      const B = ringAtFlat(outer, phi, true); bx = B.x; by = B.y;
+    } else {
+      phi = outer.phi[j]; bx = outer.px[j]; by = outer.py[j]; j++;
+      const A = ringAtFlat(inner, phi, false); ax = A.x; ay = A.y;
+    }
+    const L = Math.hypot(ax - bx, ay - by), k = L <= CAP * s ? 1 - phi : ((1 - phi) * depthOf(L / s) * s) / L;
+    out.push(P(bx + k * (ax - bx), by + k * (ay - by)));
+  }
   return out;
 }
 /** The morphed spiral through `rings` (outermost first, one closed loop each, open {x,y}[]) for a stepover s: { points, turns: [start index of each
  *  turn in points] } (an open path: the central loop, a turn per ring out, the closing turn along rings[0]), or null. */
-export function morphedSpiral(rings, s) {
+export function morphedSpiral(rings, s, opts = null) {
   if (!rings.length) return null;
-  const h = Math.min(0.5, Math.max(0.02, s / 10));
-  // phi = 0 is a CHAIN of nearest points from the middle of the innermost ring's longest edge out to the outermost ring (each one stepover from the
-  // next: every turn starts where its two rings are one stepover apart, never at a corner, so the path is continuous and the next turn out leaves on time)
+  const MS = POCKET_CLEARING.morphedSample;
+  const h = Math.min(MS.maxMm, Math.max(MS.minMm, s / 10)), margin = s * MS.cornerMult, hCoarse = Math.max(h, MS.straightMm);
   const R0 = rings.map(positive);
   const nearestOnPoly = (poly, p) => {
     let best = null;
     for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], f = distToSeg(p, a, b); if (!best || f.d < best.d) best = { i, t: f.t, d: f.d, p: P(a.x + (b.x - a.x) * f.t, a.y + (b.y - a.y) * f.t) }; }
     return best;
   };
-  const inn = R0[R0.length - 1];
-  let li = 0;
-  const segL = (o, i) => Math.hypot(o[(i + 1) % o.length].x - o[i].x, o[(i + 1) % o.length].y - o[i].y);
-  for (let i = 1; i < inn.length; i++) if (segL(inn, i) > segL(inn, li)) li = i;
-  let c = P((inn[li].x + inn[(li + 1) % inn.length].x) / 2, (inn[li].y + inn[(li + 1) % inn.length].y) / 2);
-  for (let k = R0.length - 2; k >= 0; k--) c = nearestOnPoly(R0[k], c).p;
+  let c;
+  if (opts && opts.endOnOuter) {
+    c = opts.endOnOuter;
+  } else {
+    const inn = R0[R0.length - 1];
+    if (opts && opts.seedFrom) {
+      c = nearestOnPoly(inn, opts.seedFrom).p;
+    } else {
+      let li = 0;
+      const segL = (o, i) => Math.hypot(o[(i + 1) % o.length].x - o[i].x, o[(i + 1) % o.length].y - o[i].y);
+      for (let i = 1; i < inn.length; i++) if (segL(inn, i) > segL(inn, li)) li = i;
+      c = P((inn[li].x + inn[(li + 1) % inn.length].x) / 2, (inn[li].y + inn[(li + 1) % inn.length].y) / 2);
+    }
+    for (let k = R0.length - 2; k >= 0; k--) c = nearestOnPoly(R0[k], c).p;
+  }
   const o = R0[0], at = nearestOnPoly(o, c);
   const start = [at.p, ...o.slice(at.i + 1), ...o.slice(0, at.i + 1)];
-  const sampled = [byLength(densify(start, h))];
+  const tol = POCKET_CLEARING.pathTolMm;
+  const toPts = (S) => { const a = new Array(S.n); for (let i = 0; i < S.n; i++) a[i] = P(S.px[i], S.py[i]); return a; };
+  // Stream outer -> inner keeping only adjacent ring pair (prev, curr) in memory and simplifying each transition turn on the fly
+  let prev = byLengthFlat(densifyAdaptive(start, h, margin, hCoarse));
+  const closingTurn = rings.length > 1 ? simplifyPath(toPts(prev), tol) : null;
+  const revTurns = [];
   for (let k = 1; k < rings.length; k++) {
-    const S = propagate(densify(positive(rings[k]), h), sampled[k - 1], h, s);
-    if (!S) return null;
-    sampled.push(S);
+    const curr = propagateFlat(densifyAdaptive(R0[k], h, margin, hCoarse), prev, h, s);
+    if (!curr) return null;
+    revTurns.push(simplifyPath(transitionFlat(curr, prev, s), tol));
+    prev = curr;
   }
-  const K = sampled.length - 1, tol = POCKET_CLEARING.pathTolMm;
-  const turns = [sampled[K].map((x) => x.p)], phis = [sampled[K].map((x) => x.phi)];
-  for (let k = K - 1; k >= 0; k--) { const t = transition(sampled[k + 1], sampled[k], s); turns.push(t); phis.push(t.phis); }
-  if (K > 0) { turns.push(sampled[0].map((x) => x.p)); phis.push(sampled[0].map((x) => x.phi)); }
+  const turns = [simplifyPath(toPts(prev), tol)];
+  for (let i = revTurns.length - 1; i >= 0; i--) turns.push(revTurns[i]);
+  if (closingTurn) turns.push(closingTurn);
   const points = [], starts = [];
   for (const t of turns) {
-    const sp = simplifyPath(t, tol);
     starts.push(points.length ? points.length - 1 : 0);
-    for (const p of points.length ? sp.slice(1) : sp) points.push(p);
+    for (const p of points.length ? t.slice(1) : t) points.push(p);
   }
-  return { points, turns: starts, dense: turns.map((t, j) => ({ pts: t, phi: phis[j] })) }; // TASK 804: each turn's points with their phi (the Loop's return arm)
-}
-/** TASK 804: the Morphed spiral's GRADUAL LOOP of one segment: the morphed spiral through `rings` (outermost first: the finish turn, or the segment's own
- *  outermost ring; the cutting levels pitch' x s apart) out to its closing turn, then the RETURN arm back in: at each phi the point half way between a
- *  turn and the next one out (the middle of the band they cut), from the outermost back to the middle, ending where the spiral began. A loopBuilder, or
- *  null (no spiral, or its turns would cross: the caller refuses the Loop). */
-function morphedGradualLoop(rings, s, finish) {
-  const sp = morphedSpiral(rings, s);
-  if (!sp) return null;
-  const T = sp.dense;
-  if (T.length < 2) { const b = loopBuilder(); b.turn(sp.points, 'morphed'); if (!same(b.last(), b.pts[0])) b.leg([b.pts[0]]); return b; } // one ring: its own loop
-  const at = (t, phi) => { // the turn's point at phi (the first of several at one phi)
-    let lo = 0, hi = t.phi.length - 1;
-    if (phi <= t.phi[0]) return t.pts[0];
-    if (phi >= t.phi[hi]) return t.pts[hi];
-    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (t.phi[m] < phi) lo = m; else hi = m; }
-    const f = t.phi[hi] > t.phi[lo] ? (phi - t.phi[lo]) / (t.phi[hi] - t.phi[lo]) : 1;
-    return P(t.pts[lo].x + (t.pts[hi].x - t.pts[lo].x) * f, t.pts[lo].y + (t.pts[hi].y - t.pts[lo].y) * f);
-  };
-  const back = [];
-  for (let j = T.length - 2; j >= 0; j--) { // between turn j and turn j + 1, phi from 1 down to 0
-    const ph = [...new Set([...T[j].phi, ...T[j + 1].phi])].filter((v) => v >= 0 && v <= 1).sort((x, y) => y - x);
-    const mid = ph.map((v) => { const p = at(T[j], v), q = at(T[j + 1], v); return P((p.x + q.x) / 2, (p.y + q.y) / 2); });
-    back.push(...(back.length ? mid.slice(1) : mid));
-  }
-  const b = loopBuilder(), last = sp.turns[sp.turns.length - 1];
-  b.turn(sp.points.slice(0, last + 1), 'morphed');
-  b.turn(sp.points.slice(last), finish ? 'finish' : 'ring'); // its closing turn: the finish turn when the segment reaches the wall
-  b.turn(simplifyPath(back, POCKET_CLEARING.pathTolMm), 'return');
-  if (!same(b.last(), b.pts[0])) b.leg([b.pts[0]]);
-  b.cutStep = s;
-  return b;
+  return { points, turns: starts };
 }
 
-// ── TASK 750: the LOOP (see THE RULES): closed paths (first point == last point) ──
+// ── TASK 750 / TASK 850: the LOOP (see THE RULES): ONE closed loop per area of A0 (first point == last point) ──
 const same = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 1e-9;
-// a loop being built: its points, its turns ([{ start, end, kind }]: pts[start..end] is a turn / pass / ring: 'ring' | 'finish' | 'pass' | 'cleanup' |
-// 'morphed'), the length of its legs (links, steps, returns: the rest) and the turns its legs cross
+// a loop being built: its points, its turns ([{ start, end, kind }]: pts[start..end] is a turn / pass / ring: 'ring' | 'pass' | 'cleanup' | 'morphed' |
+// 'link' | 'close'), the length of its legs (links, steps: the rest) and the turns its legs cross
 function loopBuilder() {
   const pts = [], turns = [];
   // a point equal to the last one (within 1e-9 mm) is not added again; a turn's own point replaces a leg's computed copy of it (its exact vertex is kept)
@@ -654,19 +687,6 @@ function loopBuilder() {
 }
 const inRing = (p, ring) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], q = ring[j]; if ((a.y > p.y) !== (q.y > p.y) && p.x < ((q.x - a.x) * (p.y - a.y)) / (q.y - a.y) + a.x) c = !c; } return c; };
 const inRegion = (p, g) => inRing(p, toXY(g.outer)) && !g.holes.some((h) => inRing(p, toXY(h)));
-// ── TASK 804: THE GRADUAL LOOP (see THE RULES): per chain, a double spiral of exact offset levels with its transitions side by side ──
-// a point ON a closed loop (open {x,y}[]): { i, t, p } on its segment i -> i + 1
-const onLoop = (pts, i, t) => { const a = pts[i], b = pts[(i + 1) % pts.length]; return { i, t, p: P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) }; };
-// the point `len` further along a closed loop from `at` (its own direction)
-function aheadOn(pts, at, len) {
-  let i = at.i, t = at.t, left = len;
-  for (let n = 0; n <= pts.length + 1; n++) {
-    const a = pts[i], b = pts[(i + 1) % pts.length], L = Math.hypot(b.x - a.x, b.y - a.y), rest = (1 - t) * L;
-    if (rest >= left && L > 0) return onLoop(pts, i, t + left / L);
-    left -= rest; i = (i + 1) % pts.length; t = 0;
-  }
-  return onLoop(pts, i, 0);
-}
 // a closed loop walked from `from` to `to` (points on it) FORWARD (dir 1, the loop's own direction) or BACKWARD (dir -1), never through `to` before the end
 function walkLoop(pts, from, to, dir) {
   const n = pts.length, out = [from.p];
@@ -677,169 +697,287 @@ function walkLoop(pts, from, to, dir) {
   return out.filter((q, j) => j === 0 || !same(q, out[j - 1]));
 }
 const containsPt = (loop, q) => inRing(q, loop);
-// C lies BETWEEN loops A and B (one inside the other): A inside C inside B, or B inside C inside A
-const between = (C, A, B) => (containsPt(C, A[0]) && containsPt(B, C[0])) || (containsPt(C, B[0]) && containsPt(A, C[0]));
-// the loops of a chain at the offsets D (positive): a loop of the chain itself where D is its offset, else the contour of R at that offset that lies between
-// the chain's two loops round it; null when there is none
-function levelLoops(seq, D, R) {
-  const known = seq.slice().sort((x, y) => y.delta - x.delta); // by delta, the centre first
-  const levels = [];
-  for (const d of D) {
-    const hit = known.find((q) => Math.abs(q.delta - d) < 1e-9);
-    if (hit) { levels.push(positive(hit.pts)); continue; }
-    const inner = known.filter((q) => q.delta > d).pop(), outer = known.find((q) => q.delta < d);
-    const C = inner && outer ? contoursOf(offsetRegions(R, -d, POCKET_CLEARING.chordTolMm)).find((c) => between(c, inner.pts, outer.pts)) : null;
-    if (!C) return null;
-    levels.push(positive(C));
+
+// TASK 850: arc-length distance along a closed contour `pts` from `at` to `target` in direction +1
+function arcPosAlong(pts, at, target) {
+  const n = pts.length;
+  const distToEnd = (i, t) => (1 - t) * Math.hypot(pts[(i + 1) % n].x - pts[i].x, pts[(i + 1) % n].y - pts[i].y);
+  if (target.i === at.i && target.t >= at.t - 1e-9) {
+    return (target.t - at.t) * Math.hypot(pts[(at.i + 1) % n].x - pts[at.i].x, pts[(at.i + 1) % n].y - pts[at.i].y);
   }
-  return levels;
+  let L = distToEnd(at.i, at.t);
+  for (let k = (at.i + 1) % n; k !== target.i; k = (k + 1) % n) L += distToEnd(k, 0);
+  L += target.t * Math.hypot(pts[(target.i + 1) % n].x - pts[target.i].x, pts[(target.i + 1) % n].y - pts[target.i].y);
+  return L;
 }
-// the CUTTING offsets of a chain: from its centre out every pitch' x s (pitch' <= pitch, equal steps) to its outermost clearing ring: { cutD (centre
-// first), step }
-function cuttingOffsets(clear, s, pitch) {
-  const centre = clear[clear.length - 1], top = clear[0];
-  const span = centre.delta - top.delta, N = span > 1e-9 ? Math.ceil(span / (pitch * s) - 1e-9) : 0, step = N ? span / N : 0;
-  return { cutD: Array.from({ length: N + 1 }, (_, i) => centre.delta - i * step), step };
+function walkSegmentForward(pts, from, to) {
+  const n = pts.length, out = [from.p];
+  if (!(from.i === to.i && to.t >= from.t - 1e-9)) {
+    for (let j = (from.i + 1) % n; ; j = (j + 1) % n) { out.push(pts[j]); if (j === to.i) break; }
+  }
+  out.push(to.p);
+  return out.filter((q, j) => j === 0 || !same(q, out[j - 1]));
 }
-/**
- * gradualLoop(seq, R, s, pitch) -> a closed loop (loopBuilder) or null: THE GRADUAL LOOP of one chain. `seq` = its loops from the outer turnaround (the
- * finish turn, or a branch's own outermost ring) to the CENTRE: [{ pts (closed loop, open {x,y}[]), delta (its offset from R's edge), finish }], each
- * inside the previous (or, round an island, each round the previous). The CUTTING levels: from the centre out every pitch' x s (pitch' <= pitch: the
- * same steps from the centre to the outermost clearing ring), then the finish turn; the RETURN levels: half way between two cutting levels (exact
- * offsets of R, the one between its neighbours). The path: the centre ring, then out ring by ring to the finish turn (whole), then back in on the
- * return levels the other way round, then one step to the start. Every level is walked whole but for a short WINDOW (lambda along it from the SEAM: a
- * chain of nearest points from the middle of the centre's longest edge out, `seam` picks another edge), where the steps between levels run SIDE BY
- * SIDE: out from a_i to b_(i+2) (cutting), in from b_j to a_(j-2) (return), all parallel; no step passes over a level.
- */
-function gradualLoop(seq, R, s, pitch, seam = 0, lambdaScale = 1, along = false) {
-  const fin = seq[0].finish ? seq[0] : null, clear = fin ? seq.slice(1) : seq;
-  if (!clear.length) return finishTurnLoop(positive(fin.pts));
-  const { cutD, step } = cuttingOffsets(clear, s, pitch);
-  if (fin) cutD.push(fin.delta);
-  const D = []; // the levels from the centre out: cutting, return, cutting, ..., the outermost cutting level
-  cutD.forEach((d, i) => { if (i) D.push((cutD[i - 1] + d) / 2); D.push(d); });
-  const levels = levelLoops(seq, D, R);
-  if (!levels) return null;
-  if (levels.length === 1) { const b = loopBuilder(); b.turn(loopFrom(levels[0], ringStart(levels[0])), fin ? 'finish' : 'ring'); return b; }
-  // the seam: from the middle of the centre's (seam + 1)-th longest edge, the nearest point of each level out
-  const c0 = levels[0], order = c0.map((_, i) => i).sort((x, y) => Math.hypot(c0[(y + 1) % c0.length].x - c0[y].x, c0[(y + 1) % c0.length].y - c0[y].y) - Math.hypot(c0[(x + 1) % c0.length].x - c0[x].x, c0[(x + 1) % c0.length].y - c0[x].y));
-  if (seam >= order.length) return null;
-  // seam 0: the middle of the centre ring's longest edge as 749's line starts there (ringStart on the ring as offset gives it: the same start mark)
-  const A = [seam === 0 ? (() => { const f = nearestOnLoop(c0, ringStart(clear[clear.length - 1].pts).p); return { i: f.i, t: f.t, p: f.p }; })() : onLoop(c0, order[seam], 0.5)];
-  for (let i = 1; i < levels.length; i++) { const f = nearestOnLoop(levels[i], A[i - 1].p); A.push({ i: f.i, t: f.t, p: f.p }); }
-  const edge = Math.hypot(c0[(order[seam] + 1) % c0.length].x - c0[order[seam]].x, c0[(order[seam] + 1) % c0.length].y - c0[order[seam]].y);
-  const lambda = Math.min(step || s, edge / 4) * lambdaScale;
-  // the window's other side: lambda on along the centre ring, then the nearest point of each level out (two chains of nearest points: the window is
-  // the band between two normals, as wide in angle on a small ring as on a big one, so its steps stay parallel)
-  // (`along`: else lambda on along every level, the window as long on each: where two normals of a hollow corner meet, the other way holds)
-  const B = [aheadOn(c0, A[0], lambda)];
-  for (let i = 1; i < levels.length; i++) { const f = along ? aheadOn(levels[i], A[i], lambda) : nearestOnLoop(levels[i], B[i - 1].p); B.push({ i: f.i, t: f.t, p: f.p }); }
-  const M = levels.length - 1, b = loopBuilder();
-  for (let i = 0; i < M; i += 2) { b.turn(walkLoop(levels[i], B[i], A[i], 1), 'ring'); b.leg([B[i + 2].p]); } // out: each cutting level, then the step out
-  b.turn([...walkLoop(levels[M], B[M], A[M], 1), B[M].p], fin ? 'finish' : 'ring'); // the outer turnaround, whole
-  for (let j = M - 1; j >= 1; j -= 2) { b.leg([A[j].p]); b.turn(walkLoop(levels[j], A[j], B[j], -1), 'return'); } // in: each return level the other way
-  b.leg([B[0].p]); // the step to the start
-  b.cutStep = step || null;
-  b.centre = { pts: levels[0], A: A[0], B: B[0], ahead: lambda }; // the centre ring, walked first from B to A (a bridge to another loop starts there)
-  return b;
+// Walk closed ring `pts` once around from `startAt` back to `startAt`, visiting sorted side-branch detours `[{ at, fn }]` along the way
+function walkRingWithDetours(b, pts, startAt, detours, kind = 'ring') {
+  const ordered = detours.map((d) => ({ ...d, s: arcPosAlong(pts, startAt, d.at) })).sort((x, y) => x.s - y.s);
+  let cur = startAt;
+  for (const d of ordered) {
+    b.turn(walkSegmentForward(pts, cur, d.at), kind);
+    d.fn(b, d.at.p);
+    cur = d.at;
+  }
+  const n = pts.length, rest = [cur.p];
+  if (!ordered.length || !(cur.i === startAt.i && startAt.t > cur.t + 1e-9)) {
+    for (let j = (cur.i + 1) % n; ; j = (j + 1) % n) { rest.push(pts[j]); if (j === startAt.i) break; }
+  }
+  rest.push(startAt.p);
+  b.turn(rest.filter((q, j) => j === 0 || !same(q, rest[j - 1])), kind);
+}
+// TASK 850: append a declared closing return leg (turn kind 'close') from `fromPt` to `toPt`, straight when inside area `g` and over floor already swept by
+// `b`, else pulled tight along `chainPts` (the anchor chain from `toPt` out to `fromPt`)
+function appendCloseLeg(b, fromPt, toPt, chainPts, g, r) {
+  const inG = offsetRegions([g], 0.01);
+  const near = [fromPt, ...(chainPts || []), toPt], m = 2 * r + 0.2;
+  const bx = [Math.min(...near.map((q) => q.x)) - m, Math.min(...near.map((q) => q.y)) - m, Math.max(...near.map((q) => q.x)) + m, Math.max(...near.map((q) => q.y)) + m];
+  const inBox = (u, v) => Math.max(u.x, v.x) >= bx[0] && Math.min(u.x, v.x) <= bx[2] && Math.max(u.y, v.y) >= bx[1] && Math.min(u.y, v.y) <= bx[3];
+  const local = [];
+  for (let i = 0; i + 1 < b.pts.length; i++) if (inBox(b.pts[i], b.pts[i + 1])) {
+    const last = local[local.length - 1];
+    if (last && last.end === i) { last.points.push([b.pts[i + 1].x, b.pts[i + 1].y]); last.end = i + 1; }
+    else local.push({ points: [[b.pts[i].x, b.pts[i].y], [b.pts[i + 1].x, b.pts[i + 1].y]], closed: false, end: i + 1 });
+  }
+  const sweptBefore = local.length ? sweepPaths(local.map(({ points }) => ({ points, closed: false })), r, POCKET_CLEARING.chordTolMm) : [];
+  const fitsBefore = offsetRegions(sweptBefore, -(r - 0.02), POCKET_CLEARING.chordTolMm);
+  const safeSeg = (a, z) => {
+    if (!insideSeg(a, z, inG)) return false;
+    const L = Math.hypot(z.x - a.x, z.y - a.y), n = Math.max(2, Math.ceil(L / 0.25));
+    for (let k = 1; k < n; k++) {
+      const p = P(a.x + ((z.x - a.x) * k) / n, a.y + ((z.y - a.y) * k) / n);
+      if (!fitsBefore.some((reg) => inRegion(p, reg))) return false;
+    }
+    return true;
+  };
+  let path = [fromPt, toPt];
+  if (!safeSeg(fromPt, toPt) && chainPts && chainPts.length >= 2) {
+    const raw = [fromPt, ...chainPts.slice().reverse(), toPt].filter((q, i, l) => i === 0 || !same(q, l[i - 1]));
+    const short = [raw[0]];
+    for (let i = 0; i < raw.length - 1;) {
+      let next = i + 1;
+      for (let j = raw.length - 1; j > i + 1; j--) if (safeSeg(raw[i], raw[j])) { next = j; break; }
+      short.push(raw[next]);
+      i = next;
+    }
+    path = short;
+  }
+  const len = pathLength(path, false);
+  b.legs += len;
+  b.turn([b.last(), ...path.slice(1)], 'close');
+}
+// Shorten the end of an open morphed polyline by `trimMm` (interpolating on the segment so a long straight edge is never popped whole), avoiding tangential
+// overlap with the previous turn where the closing leg turns inward
+function trimMorphedEnd(pts, minIdx = 2, trimMm = 0.25) {
+  const out = pts.slice();
+  let rem = trimMm;
+  while (out.length > minIdx + 1 && rem > 1e-9) {
+    const a = out[out.length - 2], b = out[out.length - 1], L = Math.hypot(b.x - a.x, b.y - a.y);
+    if (L <= rem + 1e-9) { rem -= L; out.pop(); }
+    else { const t = (L - rem) / L; out[out.length - 1] = P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t); rem = 0; }
+  }
+  return out;
 }
 
-/** TASK 804: the Spiral's Loop CHAINS ([seq] for gradualLoop): per chain of the ring tree (ringChains) its rings' outer contours, after the wall's finish
- *  turn when it reaches the wall; per island its rings round it (the holes of the rings, each family going on into the hole round it), after the island's
- *  finish turn. With no allowance ring 0 IS the finish turn. A finish turn no chain reaches is its own loop (`alone`). */
-function spiralLoopChains(L, finishLoops, r, a, s) {
-  const d = (k) => r + a + k * s, used = new Set(), seqs = [], bridges = [];
-  const finishFor = (pts, hole) => { // the finish turn round this ring 0 contour (the wall's: around it; an island's: inside it)
-    const c = finishLoops.findIndex((F, c) => !used.has(c) && (hole ? containsPt(pts, F[0]) && !containsPt(F, pts[0]) : containsPt(F, pts[0])));
-    if (c < 0) return null;
-    used.add(c);
-    return { pts: finishLoops[c], delta: r, finish: true };
-  };
-  const withFinish = (seq, hole) => {
-    if (a > 0) { const f = finishFor(seq[0].pts, hole); return f ? [f, ...seq] : seq; }
-    seq[0] = { ...seq[0], finish: true }; return seq;
-  };
-  const deepHoles = []; // per seq: the hole contours of its deepest region (a chain that stays round an island to its end), to bridge to
-  for (const ch of ringChains(L)) {
-    const seq = ch.map(({ k, g }) => ({ pts: toXY(g.outer), delta: d(k) }));
-    seqs.push(ch[0].k === 0 ? withFinish(seq, false) : seq);
-    deepHoles.push(ch[ch.length - 1].g.holes.map((h) => h[0]));
-  }
-  // the islands' families: from each hole of ring 0 out, the hole of the next ring round it (one family goes on where two meet: the first found)
-  const holes = L.map((E) => E.flatMap((g) => g.holes.map(toXY)).filter((h) => h.length >= 3));
-  const taken = holes.map((H) => H.map(() => false));
-  (holes[0] || []).forEach((h0, c0) => {
-    taken[0][c0] = true;
-    const seq = [{ pts: h0, delta: d(0) }];
-    for (let k = 1, cur = h0; k < holes.length; k++) {
-      const c = holes[k].findIndex((h, c) => !taken[k][c] && containsPt(h, cur[0]));
-      if (c < 0) break;
-      taken[k][c] = true; cur = holes[k][c]; seq.push({ pts: cur, delta: d(k) });
+/** TASK 850: Spiral + Loop = ONE closed loop per area of A0 (L[0]). Every ring contour in the area (outer contours and island hole contours across L[0..K])
+ *  is cut once in order at the normal stepover s (inside out along the area's deepest stem; side branches entered from their parent ring, cut in order to
+ *  their leaf, and returned to the parent ring by a declared 'close' leg over already-swept floor), then closed back to the stem's start by a declared 'close'
+ *  leg over already-swept floor. Checked with strayCrossings (0 crossings outside 'close' legs). */
+function spiralLoops(L, r, s) {
+  if (!L.length) return [];
+  const loopsOut = [];
+  for (const g0 of L[0]) {
+    const outerNodes = L.map((E, k) => E.filter((reg) => (k === 0 ? reg === g0 : inRegion(P(reg.outer[0][0], reg.outer[0][1]), g0))).map((reg) => ({
+      k, kind: 'outer', g: reg, pts: positive(toXY(reg.outer)), children: [], parent: null, depth: 1, area: regionsArea([reg]),
+    })));
+    for (let k = 1; k < L.length; k++) for (const u of outerNodes[k]) {
+      const par = outerNodes[k - 1].find((m) => inRegion(u.pts[0], m.g)) || outerNodes[k - 1][0];
+      u.parent = par; par.children.push({ child: u });
     }
-    const into = deepHoles.findIndex((hs) => hs.some((q) => same(P(q[0], q[1]), seq[seq.length - 1].pts[0])));
-    if (into >= 0 && !bridges.some(([o]) => o === into)) bridges.push([into, seqs.length]); // its family ends on a hole of that chain's deepest region
-    seqs.push(withFinish(seq, true));
-  });
-  const alone = finishLoops.filter((_, c) => !used.has(c));
-  return { seqs, alone, bridges };
-}
-/** TASK 804: two gradual loops whose centre rings face each other across a strip no path runs in (the wall's chain and an island's, where the rings round
- *  the island never split) joined into ONE closed loop by two parallel BRIDGES: from p1 on the first centre ring to its nearest point q1 on the second,
- *  round the second loop (the other way) to q2, the nearest point of p2 (a stepover on from p1), back to p2. p1 is half way round the first centre ring
- *  from its seam (away from both windows). */
-function bridgeLoops(b1, b2, s) {
-  const c1 = b1.centre, c2 = b2.centre, L1 = pathLength(c1.pts, true), L2 = pathLength(c2.pts, true);
-  const t0 = b1.turns[0];
-  const posOn = (c, q) => pathLength(walkLoop(c.pts, c.B, q, 1), false); // how far along the centre walk (from B) a point of the centre ring is
-  for (const f of [0.5, 0.25, 0.75]) { // p1: half way round the first centre walk (else a quarter): q1, q2 must lie on the second's walk, in order
-    const p1 = aheadOn(c1.pts, c1.B, (L1 - c1.ahead) * f), p2 = aheadOn(c1.pts, p1, s);
-    const n1 = nearestOnLoop(c2.pts, p1.p), n2 = nearestOnLoop(c2.pts, p2.p);
-    const q1 = { i: n1.i, t: n1.t, p: n1.p }, q2 = { i: n2.i, t: n2.t, p: n2.p };
-    const a1 = posOn(c2, q1), a2 = posOn(c2, q2);
-    if (!(a1 > 1e-6 && a2 > a1 + 1e-6 && a2 < L2 - c2.ahead - 1e-6)) continue;
-    // the second loop as a cycle from q2 round to q1 (the arc q1 -> q2 of its centre ring left out), walked backwards: q1 ... q2
-    const cyc = [...walkLoop(c2.pts, q2, c2.A, 1), ...b2.pts.slice(b2.turns[0].end + 1), ...walkLoop(c2.pts, c2.B, q1, 1)];
-    const out = loopBuilder();
-    out.turn(walkLoop(c1.pts, c1.B, p1, 1), 'ring');
-    out.leg([q1.p]);
-    out.turn(cyc.reverse(), 'bridged');
-    out.leg([p2.p]);
-    out.turn(walkLoop(c1.pts, p2, c1.A, 1), 'ring');
-    const shift = out.pts.length - 1 - t0.end; // b1.pts[t0.end] is A, the last point so far
-    for (const t of b1.turns.slice(1)) out.turns.push({ start: t.start + shift, end: t.end + shift, kind: t.kind });
-    out.pts.push(...b1.pts.slice(t0.end + 1));
-    out.legs += b1.legs + b2.legs;
-    out.cutStep = Math.max(b1.cutStep || 0, b2.cutStep || 0);
-    return out;
-  }
-  return null;
-}
-// THE GRADUAL LOOP of every chain, each checked against itself and the ones before (THE HARD RULE): a chain whose window crosses tries it measured the
-// other way, then half as long, then the next seam (the centre's next longest edge); null when none is crossing-free
-function gradualLoops(seqs, alone, R, s, pitch, bridges = []) {
-  const done = [];
-  const paths = () => done.map((b) => ({ points: b.pts, closed: true }));
-  for (const seq of seqs) {
-    let got = null;
-    for (let seam = 0; seam < 8 && !got; seam++) for (const [sc, along] of [[1, false], [1, true], [0.5, false], [0.5, true]]) {
-      const b = gradualLoop(seq, R, s, pitch, seam, sc, along);
-      if (b && !pathCrossings([{ points: b.pts, closed: true }, ...paths()]).count) { got = b; break; }
+    const holeNodes = L.map((_, k) => outerNodes[k].flatMap((on) => on.g.holes.map((h) => ({
+      k, kind: 'hole', host: on, g: on.g, pts: positive(toXY(h)), children: [], parent: null, depth: 1, area: Math.abs(signedArea(toXY(h))),
+    })).filter((hn) => hn.pts.length >= 3)));
+    for (let k = L.length - 1; k >= 0; k--) for (const h of holeNodes[k]) {
+      const up = k + 1 < L.length ? holeNodes[k + 1].find((H) => containsPt(H.pts, h.pts[0]) && !containsPt(h.pts, H.pts[0])) : null;
+      if (up) { h.parent = up; up.children.push({ child: h }); continue; }
+      const reg = h.host.g, regClear = diffRegions([reg], (h.host.children || []).map((c) => c.child.g)), regIn = offsetRegions(regClear, 0.005);
+      let best = null;
+      const step = Math.max(1, Math.floor(h.pts.length / 24));
+      for (let i = 0; i < h.pts.length; i += step) {
+        const q = h.pts[i], f = nearestOnLoop(h.host.pts, q);
+        if ((!best || f.d < best.d) && insideSeg(q, f.p, regIn)) best = { atParent: f, atChild: { i, t: 0, p: q }, d: f.d, parent: h.host, regIn };
+      }
+      if (!best && h.host.children.length) {
+        const fullIn = offsetRegions([reg], 0.005);
+        for (const c of h.host.children) for (let i = 0; i < h.pts.length; i += step) {
+          const q = h.pts[i], f = nearestOnLoop(c.child.pts, q);
+          if ((!best || f.d < best.d) && insideSeg(q, f.p, fullIn)) best = { atParent: f, atChild: { i, t: 0, p: q }, d: f.d, parent: c.child, regIn: fullIn };
+        }
+      }
+      if (!best) { const q = h.pts[0], f = nearestOnLoop(h.host.pts, q); best = { atParent: f, atChild: { i: 0, t: 0, p: q }, d: f.d, parent: h.host, regIn }; }
+      h.parent = best.parent; best.parent.children.push({ child: h, edgeHint: best });
     }
-    if (!got) return null;
-    done.push(got);
+    const allNodes = [...outerNodes.flat(), ...holeNodes.flat()];
+    const computeDepth = (u) => { u.depth = u.children.length ? 1 + Math.max(...u.children.map((c) => computeDepth(c.child))) : 1; return u.depth; };
+    const root = outerNodes[0][0];
+    computeDepth(root);
+    const depthToRoot = (u) => { let d = 0; for (let p = u; p; p = p.parent) d++; return d; };
+    const startLeaf = allNodes.filter((u) => !u.children.length).sort((x, y) => {
+      const dx = depthToRoot(x), dy = depthToRoot(y);
+      return dy !== dx ? dy - dx : x.kind !== y.kind ? (x.kind === 'outer' ? -1 : 1) : y.area - x.area;
+    })[0];
+    const stemSet = new Set(), stemPath = [];
+    for (let u = startLeaf; u; u = u.parent) { stemSet.add(u); stemPath.push(u); }
+
+    const b = loopBuilder();
+    b.cutStep = s;
+    const pStart = ringStart(startLeaf.pts);
+    const cutBranch = (edge, parentExitPt, returnTarget, bObj, anchorChain) => {
+      const u = edge.child, enterAt = edge.edgeHint ? edge.edgeHint.atChild : nearestOnLoop(u.pts, parentExitPt);
+      bObj.leg([enterAt.p]);
+      const chainNow = [...anchorChain, enterAt.p];
+      const kids = u.children.slice().sort((x, y) => y.child.depth - x.child.depth || y.child.area - x.child.area);
+      const mainEdge = kids[0] || null, sideEdges = kids.slice(1);
+      const detours = sideEdges.map((se) => ({
+        at: se.edgeHint ? se.edgeHint.atParent : nearestOnLoop(u.pts, ringStart(se.child.pts).p),
+        fn: (bb, pOnU) => cutBranch(se, pOnU, pOnU, bb, [pOnU]),
+      }));
+      walkRingWithDetours(bObj, u.pts, enterAt, detours, 'ring');
+      if (mainEdge) cutBranch(mainEdge, enterAt.p, returnTarget, bObj, chainNow);
+      else appendCloseLeg(bObj, bObj.last(), returnTarget, chainNow, g0, r);
+    };
+
+    let curEnter = pStart;
+    const stemAnchors = [pStart.p];
+    for (let idx = 0; idx < stemPath.length; idx++) {
+      const u = stemPath[idx];
+      if (idx > 0) {
+        const prev = stemPath[idx - 1], viaEdge = u.children.find((c) => c.child === prev), f = nearestOnLoop(u.pts, curEnter.p);
+        curEnter = viaEdge && viaEdge.edgeHint && !insideSeg(curEnter.p, f.p, viaEdge.edgeHint.regIn) ? viaEdge.edgeHint.atParent : f;
+        b.leg([curEnter.p]);
+        stemAnchors.push(curEnter.p);
+      }
+      const detours = u.children.filter((c) => !stemSet.has(c.child)).map((se) => ({
+        at: se.edgeHint ? se.edgeHint.atParent : nearestOnLoop(u.pts, ringStart(se.child.pts).p),
+        fn: (bb, pOnU) => cutBranch(se, pOnU, pOnU, bb, [pOnU]),
+      }));
+      walkRingWithDetours(b, u.pts, curEnter, detours, 'ring');
+    }
+    appendCloseLeg(b, b.last(), pStart.p, stemAnchors, g0, r);
+    loopsOut.push(b);
   }
-  // the bridges (an island's family into the wall's chain): one closed loop where the joined loop crosses nothing, else the two stay apart
-  const gone = new Set();
-  for (const [o, h] of bridges) {
-    const m = bridgeLoops(done[o], done[h], s);
-    if (!m) continue;
-    const others = done.filter((_, i) => i !== o && i !== h && !gone.has(i)).map((b) => ({ points: b.pts, closed: true }));
-    if (pathCrossings([{ points: m.pts, closed: true }, ...others]).count) continue;
-    done[o] = m; gone.add(h);
+  return strayCrossings(loopsOut.map((b) => ({ points: b.pts, closed: true, turns: b.turns }))).length ? null : loopsOut;
+}
+
+/** TASK 850: Morphed + Loop = ONE closed loop per area of A0 (L[0]), joining the area's morphed segments at the normal stepover s and closing with declared
+ *  'close' leg(s) over already-swept floor. Checked with strayCrossings (0 crossings outside 'close' legs). */
+function morphedLoops(L, r, s, allChains, allSps) {
+  if (!L.length) return [];
+  const loopsOut = [];
+  for (const g0 of L[0]) {
+    const singleArea = L[0].length === 1;
+    const chains = singleArea ? allChains : ringSegments(L.map((E, k) => E.filter((reg) => (k === 0 ? reg === g0 : inRegion(P(reg.outer[0][0], reg.outer[0][1]), g0)))));
+    const segNodes = chains.map((ch, idx) => {
+      const rings = ch.map((n) => positive(toXY(n.g.outer)));
+      const sp = singleArea ? allSps[idx] : morphedSpiral(rings, s);
+      if (!sp) return null;
+      return {
+        ch, rings, sp,
+        kTop: ch[0].k, kBot: ch[ch.length - 1].k,
+        gTop: ch[0].g, gBot: ch[ch.length - 1].g,
+        outerRing: rings[0], innerRing: rings[rings.length - 1],
+        children: [], parent: null, depth: 1, area: regionsArea([ch[0].g]),
+      };
+    });
+    if (segNodes.some((x) => !x)) return null;
+    for (const u of segNodes) {
+      if (u.kTop === 0) continue;
+      const par = segNodes.find((m) => m.kBot === u.kTop - 1 && inRegion(u.outerRing[0], m.gBot));
+      u.parent = par; par.children.push({ child: u });
+    }
+    const rootSeg = segNodes.find((u) => u.kTop === 0);
+    const computeDepth = (u) => { u.depth = u.ch.length + (u.children.length ? Math.max(...u.children.map((c) => computeDepth(c.child))) : 0); return u.depth; };
+    computeDepth(rootSeg);
+    const startLeaf = segNodes[0];
+    const stemSet = new Set(), stemPath = [];
+    for (let u = startLeaf; u; u = u.parent) { stemSet.add(u); stemPath.push(u); }
+
+    for (let idx = 1; idx < stemPath.length; idx++) {
+      const u = stemPath[idx], prev = stemPath[idx - 1];
+      if (nearestOnLoop(prev.outerRing, u.sp.points[0]).d > s + 0.1) {
+        const spSeeded = morphedSpiral(u.rings, s, { seedFrom: prev.sp.points[prev.sp.points.length - 1] });
+        if (spSeeded && !pathCrossings([{ points: spSeeded.points, closed: false }]).count) u.sp = spSeeded;
+      }
+    }
+    for (let idx = stemPath.length - 1; idx >= 1; idx--) {
+      const u = stemPath[idx], prev = stemPath[idx - 1];
+      const targetEnd = nearestOnLoop(prev.outerRing, u.sp.points[0]).p;
+      if (Math.hypot(prev.sp.points[prev.sp.points.length - 1].x - targetEnd.x, prev.sp.points[prev.sp.points.length - 1].y - targetEnd.y) > 0.05) {
+        const spAligned = morphedSpiral(prev.rings, s, { endOnOuter: targetEnd });
+        if (spAligned && !pathCrossings([{ points: spAligned.points, closed: false }]).count) prev.sp = spAligned;
+      }
+    }
+
+    const b = loopBuilder();
+    b.cutStep = s;
+    const pStart = startLeaf.sp.points[0];
+    const cutMorphedBranch = (u, returnTarget, bObj, anchorChain) => {
+      const sp = u.sp, uEnd = sp.points[sp.points.length - 1];
+      bObj.leg([uEnd]);
+      const chainNow = [...anchorChain, ...sp.turns.map((idx) => sp.points[idx]).reverse()];
+      const kids = u.children.slice().sort((x, y) => y.child.depth - x.child.depth || y.child.area - x.child.area);
+      const mainEdge = kids[0] || null, sideEdges = kids.slice(1);
+      if (!kids.length) {
+        bObj.turn(trimMorphedEnd(sp.points.slice().reverse(), 2), 'morphed');
+        appendCloseLeg(bObj, bObj.last(), returnTarget, chainNow, g0, r);
+        return;
+      }
+      if (u.rings.length > 1) bObj.turn(sp.points.slice(sp.turns[1]).reverse(), 'morphed');
+      const enterInnerAt = nearestOnLoop(u.innerRing, bObj.last());
+      const detours = sideEdges.map((se) => ({
+        at: nearestOnLoop(u.innerRing, se.child.sp.points[se.child.sp.points.length - 1]),
+        fn: (bb, pOnU) => cutMorphedBranch(se.child, pOnU, bb, [pOnU]),
+      }));
+      walkRingWithDetours(bObj, u.innerRing, enterInnerAt, detours, 'morphed');
+      if (mainEdge) cutMorphedBranch(mainEdge.child, returnTarget, bObj, chainNow);
+      else appendCloseLeg(bObj, bObj.last(), returnTarget, chainNow, g0, r);
+    };
+
+    const stemAnchors = [];
+    for (let idx = 0; idx < stemPath.length; idx++) {
+      const u = stemPath[idx], isLastStem = idx === stemPath.length - 1;
+      if (idx === 0) {
+        const pts = isLastStem ? trimMorphedEnd(u.sp.points, u.sp.turns.at(-1) + 2) : u.sp.points;
+        b.turn(pts, 'morphed');
+        for (const tIdx of u.sp.turns) if (tIdx < pts.length) stemAnchors.push(pts[tIdx]);
+      } else {
+        const uStartAt = nearestOnLoop(u.innerRing, u.sp.points[0]);
+        b.leg([uStartAt.p]);
+        stemAnchors.push(uStartAt.p);
+        const detours = u.children.filter((c) => !stemSet.has(c.child)).map((se) => ({
+          at: nearestOnLoop(u.innerRing, se.child.sp.points[se.child.sp.points.length - 1]),
+          fn: (bb, pOnU) => cutMorphedBranch(se.child, pOnU, bb, [pOnU]),
+        }));
+        walkRingWithDetours(b, u.innerRing, uStartAt, detours, 'morphed');
+        if (u.rings.length > 1) {
+          const rawRest = u.sp.points.slice(u.sp.turns[1]);
+          b.turn(isLastStem ? trimMorphedEnd(rawRest, 2) : rawRest, 'morphed');
+          for (const tIdx of u.sp.turns.slice(1)) if (tIdx < u.sp.points.length) stemAnchors.push(u.sp.points[tIdx]);
+        }
+      }
+    }
+    appendCloseLeg(b, b.last(), pStart, stemAnchors, g0, r);
+    loopsOut.push(b);
   }
-  const out = done.filter((_, i) => !gone.has(i));
-  for (const F of alone) out.push(finishTurnLoop(F));
-  return out;
+  return strayCrossings(loopsOut.map((b) => ({ points: b.pts, closed: true, turns: b.turns }))).length ? null : loopsOut;
 }
 
 /** TASK 835 / 835d / 835e: THE RASTER'S LOOP (see THE RULES): per area of A0 ONE closed path that CUTS BOTH WAYS: its PIECES (every pass one chord in each),
@@ -1266,24 +1404,20 @@ function loopPieces(c) {
   }
   return out;
 }
-// the nearest point of a ring to q ({ i, t, d, p }): q itself where it lies on the ring (no allowance: the step has no length, and no 0.0001 mm jog)
-const onRing = (pts, q) => { const f = nearestOnLoop(pts, q); return f.d < 1e-3 ? { ...f, p: q } : f; };
 // the items ({ kind: a turn's kind | null (a leg), pts }) as a closed loop (loopBuilder)
 function assemble(items) {
   const b = loopBuilder();
   for (const it of items) if (it.kind) b.turn(it.pts, it.kind); else b.leg(it.pts);
   return b;
 }
-/** A finish turn no clearing reaches, as a closed loop of its own (Raster's rule above; TASK 787: every pattern's, when there is nothing to clear). */
-function finishTurnLoop(F) { const b = loopBuilder(); b.turn(loopFrom(F, ringStart(F)), 'finish'); return b; }
 
 // ── the plan of one pocket (memoised: the same loops + settings give the same plan) ──
 const MEMO = new Map(), MEMO_MAX = 48;
 /**
  * planClearing({ outer, holes }, settings) -> the clearing of a pocket region (THE RULES), independent of depth:
  *   { pattern, clear: [{ points, closed, role: 'linked' | 'raster' | 'cleanup' | 'morphed', level?, index, count }] (in cutting order; a Spiral line also
- *     carries its rings: [{ level, start, end, finish }] (TASK 750 Loop on: the finish turn at r has level -1, or 0 with no allowance; finish = true) and
- *     links: [from], see linkedSpiral); TASK 750 Loop on: clear = the closed loops [{ points (first == last), closed: true, role: 'loop', index, count }],
+ *     carries its rings: [{ level, start, end, finish }] and
+ *     links: [from], see linkedSpiral); TASK 750 / 850 Loop on: clear = the closed loops [{ points (first == last), closed: true, role: 'loop', index, count }],
  *     loop: true, loopCount, loopCrossings, loopExtra (mm), loopRefused (null | 'raster join' | 'loop cross': Loop off cut instead, the note says so),
  *     levels (Spiral / Morphed spiral: the number of rings), loops
  *     (their loops), lines (Spiral: its lines) + linesWhy (null | 'islands' | 'splits': why there are several), passes (Raster), cleanup (Raster: the
@@ -1325,22 +1459,16 @@ function computePlan({ outer, holes }, st) {
     levels = L.length;
     loops = L.reduce((n, E) => n + contoursOf(E).length, 0);
   }
-  // TASK 750, LOOP on: the finish turns = the contours of R inset by exactly r (the wall's, each island's); with no allowance ring 0 already is that turn
-  const Rr = st.loop ? offsetRegions(R, -r, POCKET_CLEARING.chordTolMm) : [];
-  const finishLoops = st.loop && a > 0 ? contoursOf(Rr) : [];
+  const Rr = st.loop && pattern === 'raster' ? offsetRegions(R, -r, POCKET_CLEARING.chordTolMm) : [];
   let built = null, loopRefused = null; // the closed loops (loopBuilder) when Loop is on
   if (pattern === 'linked') {
-    // with Loop on the finish level is joined outside ring 0 by the same rule (the link from ring 0 is the allowance long)
-    const finishLevel = finishLoops.length ? [finishLoops] : [];
-    const ls = linkedSpiral([...finishLevel, ...L.map(contoursOf)]);
-    const shift = finishLevel.length;
+    const ls = linkedSpiral(L.map(contoursOf));
     lines = ls.length;
     linesWhy = lines > 1 ? (holes.length ? 'islands' : 'splits') : null;
     ls.forEach((ln, i) => clear.push({ points: ln.points, closed: false, role: 'linked', index: i + 1, count: ls.length,
-      rings: ln.rings.map((g) => ({ ...g, level: g.level - shift, finish: st.loop && g.level === 0 })), links: ln.links }));
-    if (st.loop) { // TASK 804: THE GRADUAL LOOP per chain (zero crossings), or refused (cut as the lines + the wall; the note says so)
-      const { seqs, alone, bridges } = spiralLoopChains(L, finishLoops, r, a, s);
-      built = gradualLoops(seqs, alone, R, s, st.pitch, bridges);
+      rings: ln.rings.map((g) => ({ ...g, finish: false })), links: ln.links }));
+    if (st.loop && L.length) { // TASK 850: ONE closed loop per area of A0 (the rings in order at normal stepover + declared closing return leg(s) over swept floor)
+      built = spiralLoops(L, r, s);
       if (!built) loopRefused = 'loop cross';
       else linesWhy = built.length > 1 ? (holes.length ? 'islands' : 'splits') : null;
     }
@@ -1357,21 +1485,10 @@ function computePlan({ outer, holes }, st) {
     lines = sps.length;
     linesWhy = lines > 1 ? 'splits' : null;
     sps.forEach((sp, i) => { turns += sp.turns.length; clear.push({ points: sp.points, closed: false, role: 'morphed', index: i + 1, count: sps.length, turnStarts: sp.turns }); });
-    if (st.loop && sps.length) { // TASK 804: THE GRADUAL LOOP per segment (the morphed spiral out, the return arm in the middle of its bands), crossing-free or refused
-      const used = new Set(), done = [];
-      for (const ch of chains) {
-        const seq = ch.map(({ k, g }) => ({ pts: toXY(g.outer), delta: d0 + k * s }));
-        const { cutD, step } = cuttingOffsets(seq, s, st.pitch);
-        let rings = levelLoops(seq, cutD, R), fin = ch[0].k === 0 && !(a > 0); // with no allowance ring 0 IS the finish turn
-        if (rings && ch[0].k === 0 && a > 0) { // the segment that reaches the wall ends on the wall's finish turn
-          const c = finishLoops.findIndex((F, c) => !used.has(c) && containsPt(F, seq[0].pts[0]));
-          if (c >= 0) { used.add(c); rings = [...rings, positive(finishLoops[c])]; fin = true; }
-        }
-        const b = rings ? morphedGradualLoop(rings.slice().reverse(), step || s, fin) : null;
-        if (!b || pathCrossings([{ points: b.pts, closed: true }, ...done.map((x) => ({ points: x.pts, closed: true }))]).count) { loopRefused = 'loop cross'; break; }
-        done.push(b);
-      }
-      if (!loopRefused) built = [...done, ...finishLoops.filter((_, c) => !used.has(c)).map(finishTurnLoop)];
+    if (st.loop && sps.length) { // TASK 850: ONE closed loop per area of A0 (the area's morphed segments joined + declared closing return leg(s) over swept floor)
+      built = morphedLoops(L, r, s, chains, sps);
+      if (!built) loopRefused = 'loop cross';
+      else linesWhy = built.length > 1 ? 'splits' : null;
     }
   } else if (pattern === 'raster') {
     rasterAngle = st.angle === 'auto' ? autoRasterAngle(outer) : st.angle;
@@ -1391,34 +1508,24 @@ function computePlan({ outer, holes }, st) {
       linesWhy = holes.length ? 'islands' : A0.length > 1 ? 'splits' : null;
     }
   }
-  // TASK 787: Loop on with NOTHING to clear (A0 empty: the bit + the allowance fill the pocket, only the finish turns fit): the loops are the finish turns
-  // alone, each a loop of its own, as the Spiral's lines and Raster's rule already give: the Loop and its start mark are kept, never dropped silently
-  if (st.loop && finishInLoop(pattern, true) && !built && !loopRefused && !clear.length && finishLoops.length) built = finishLoops.map(finishTurnLoop);
-  // TASK 778: the pocket START MARK point (always ON the clearing route, never on an island): Spiral / Morphed = middle of the innermost ring's
-  // longest edge (first point of the first line/spiral, which stays on the loop when Loop is on); Raster = start of the first pass (TASK 835 Loop on: the first loop's seam, its first point).
+  // TASK 778 / 850: the pocket START MARK point (always ON the clearing route, never on an island): the first clearing path's first point.
   const innerStart = pattern === 'linked' || pattern === 'morphed' ? (clear.length && clear[0].points.length ? clear[0].points[0] : null) : null;
   const loop = Boolean(built && built.length);
   let loopCrossings = 0, loopExtra = 0, loopStep = 0;
   if (loop) {
-    loopStep = built.reduce((m, b) => Math.max(m, b.cutStep || 0), 0); // TASK 804: the cutting arm's widest step (mm): pitch' x stepover
-    loopCrossings = pathCrossings(built.map((b) => ({ points: b.pts, closed: true }))).count; // TASK 804: THE crossing check (TASK 835e: a Raster loop's on its closing legs only, strayCrossings)
+    loopStep = built.reduce((m, b) => Math.max(m, b.cutStep || 0), 0);
+    loopCrossings = pathCrossings(built.map((b) => ({ points: b.pts, closed: true }))).count;
     loopExtra = built.reduce((t, b) => t + b.legs, 0);
     clear = built.map((b, i) => ({ points: b.pts, closed: true, role: 'loop', index: i + 1, count: built.length, turns: b.turns }));
     if (pattern !== 'linked') linesWhy = clear.length > 1 ? linesWhy : null;
   }
-  // TASK 804: the Spiral's gradual Loop: the start mark at its first loop's seam on the centre ring (the middle of that ring's longest edge: ON the route)
-  const seamStart = loop && pattern === 'linked' && built[0].centre ? built[0].centre.A.p : null;
-  const startPoint = seamStart || innerStart || (clear.length && clear[0].points.length ? clear[0].points[0] : null);
+  const startPoint = (loop ? clear[0].points[0] : innerStart) || (clear.length && clear[0].points.length ? clear[0].points[0] : null);
   // what the bit sweeps (the clearing + the finish pass) and what it leaves
-  // TASK 804b: a Raster loop walks back along its wall ring and its islands' steps (a path folding back on itself, which Clipper's offset of the whole path
-  // does not sweep: the two sides cancel): its sweep is the union of its turns' and legs' sweeps, each piece swept on its own
-  // TASK 835e: a Raster loop swept piece by piece (loopPieces); a Loop-off ZIGZAG by its passes alone, each on its own (the sweep of the whole path cancels
-  // where its neighbouring passes overlap: owner bow-tie at 90 degrees / 75 %, 321 mm2 "left"; its joins run along the clean-up ring or a short hop between
-  // pass ends: they only add to what the passes, the clean-up ring and the finish sweep, so the leftover is never under-reported)
+  // TASK 835e / 850: any closed loop with turns is swept piece by piece (loopPieces); a Loop-off ZIGZAG by its passes alone
   const nativeFinish = !finishInLoop(pattern, loop);
   const zigPasses = (c) => c.turns.filter((t) => t.kind === 'pass').map((t) => ({ points: c.points.slice(t.start, t.end + 1), closed: false }));
-  const sweepOf = (c) => (pattern === 'raster' && c.turns ? (c.closed ? loopPieces(c) : zigPasses(c)) : [c]).map((q) => ({ points: q.points.map((p) => [p.x, p.y]), closed: q.closed }));
-  const all = [...clear.flatMap(sweepOf), ...(nativeFinish ? finish : [])]; // Loop on (Spiral / Morphed): the finish turns are in the loops
+  const sweepOf = (c) => (c.turns ? (c.closed ? loopPieces(c) : zigPasses(c)) : [c]).map((q) => ({ points: q.points.map((p) => [p.x, p.y]), closed: q.closed }));
+  const all = [...clear.flatMap(sweepOf), ...(nativeFinish ? finish : [])];
   const swept = sweepPaths(all, r, POCKET_CLEARING.chordTolMm);
   const leftR = withoutSlivers(diffRegions(R, swept));
   const area = regionsArea(leftR);
@@ -1428,7 +1535,7 @@ function computePlan({ outer, holes }, st) {
   const finishLength = nativeFinish ? [...wall, ...islands.flat()].reduce((t, pts) => t + pathLength(pts, true), 0) : 0;
   return { pattern, clear, levels, loops, passes, cleanup, turns, wall, islands, swept, leftover: { area, unreachable, missed: Math.max(0, area - unreachable), regions: leftR }, length, finishLength, lines, linesWhy,
     loop, loopCount: loop ? clear.length : 0, loopCrossings, loopExtra, loopStep, loopRefused, startPoint, morphedBlocked, refused: null,
-    ...(pattern === 'raster' ? { ...(st.angle === 'auto' ? { angle: rasterAngle } : {}), nativeFinish, passLines } : {}) }; // TASK 835e: Raster: its finish the native cuts (finishInLoop); its passes one by one; TASK 853: resolved angle for 'auto'
+    ...(pattern === 'raster' ? { ...(st.angle === 'auto' ? { angle: rasterAngle } : {}), nativeFinish, passLines } : loop ? { nativeFinish } : {}) }; // TASK 835e / 850: nativeFinish on Raster and on Loop; TASK 853: resolved angle for 'auto'
 }
 
 /** A pocket cut's region rings ({ outer, holes }: closed [[x,y],...], arcs exact to chordTolMm) from its loops (#core/hold-part loopWalk), or null. */

@@ -138,6 +138,7 @@ const PARAMS = {
   stlOrient: { label: 'Orient…', hint: 'Shows the part in 3D: click the face that sits on the bed (any face, any angle) and the part turns to rest on it. Done slices it again; Cancel leaves it as it was.' }, // TASK 808
   stlUnits: { label: 'Units', hint: 'What one unit in the STL file is: STL files do not say.' },
   stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. An opened STL’s height is the board thickness too; an inserted one leaves the board as it is.' }, // TASK 841
+  fusionSwitchDesign: { label: 'Switch design', hint: ({ doc } = {}) => `Switch back to ${doc || 'that design'} in Fusion to edit this operation.` },
 };
 
 /** The hints of the choices, by parameter then choice id (their labels are their own declarations': CHOICE_SOURCES). */

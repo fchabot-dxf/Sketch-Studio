@@ -22,6 +22,7 @@ import { STOCK_TYPE_ID } from './shaper.js';
 import { getStock, setStock } from './stock.js';
 import { loadBits, saveBits } from './tool-table.js';
 import { forget as forgetPaths } from './op-paths.js';
+import { hintText } from './param-hints.js';
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
@@ -476,6 +477,12 @@ export function mountFusionPrepareBar({
     noticeEl.hidden = false;
     noticeEl.classList.toggle('is-error', Boolean(isError));
   };
+  const clearNotice = () => {
+    if (!noticeEl) return;
+    noticeEl.textContent = '';
+    noticeEl.hidden = true;
+    noticeEl.classList.remove('is-error');
+  };
 
   const fusionMode = isFusionMode(globalTarget && globalTarget.location);
   const useTargetTimers = globalTarget
@@ -523,7 +530,7 @@ export function mountFusionPrepareBar({
   };
   const flushProjectSave = () => {
     clearSaveTimer();
-    if (!projectBridgeActive || switchingContext || pendingInitialSelection || !bridge.canSend()) return false;
+    if (!projectBridgeActive || !currentDocToken || switchingContext || pendingInitialSelection || !bridge.canSend()) return false;
     const proj = projectNow();
     const sig = JSON.stringify(proj);
     if (sig === lastSavedProjectSig) return false;
@@ -536,7 +543,7 @@ export function mountFusionPrepareBar({
     return true;
   };
   const notifyProjectChanged = () => {
-    if (!projectBridgeActive || switchingContext || pendingInitialSelection) return;
+    if (!projectBridgeActive || !currentDocToken || switchingContext || pendingInitialSelection) return;
     const sig = JSON.stringify(projectNow());
     if (sig === lastSavedProjectSig) {
       clearSaveTimer();
@@ -561,7 +568,10 @@ export function mountFusionPrepareBar({
       if (detail && detail.receivedAction === FUSION_ACTIONS.CLEAR_SELECTION) pendingClear = null;
       if (!bridge.canSend()) statusEl.dataset.state = (waiting && !timedOut) ? 'waiting' : 'unavailable';
       else if (statusEl.dataset.state !== 'connected') statusEl.dataset.state = 'error';
-      showNotice(text, true);
+      const display = (detail && detail.receivedAction === FUSION_ACTIONS.SELECT_FOR_OPERATION && detail.code === 'wrong_design')
+        ? hintText('fusionSwitchDesign', { doc: detail.docName })
+        : text;
+      showNotice(display, true);
     },
     onSelectionData: (data) => {
       // TASK 855b: a selection names the design it was extracted from (docToken). One of ANOTHER design (it arrived after a
@@ -610,6 +620,7 @@ export function mountFusionPrepareBar({
       statusEl.textContent = docName ? `Connected to Fusion: ${docName}` : 'Connected to Fusion';
       statusEl.dataset.state = 'connected';
       renderList();
+      clearNotice();
       onDesignContextChange(data);
       if (hasSel && bridge.canSend()) {
         bridge.send(FUSION_ACTIONS.REQUEST_SELECTION, currentDocToken ? { docToken: currentDocToken } : {});
@@ -796,6 +807,7 @@ export function mountFusionPrepareBar({
     if (!canSelectForOperation(op) || !syncAvailability()) return { ok: false, reason: 'unavailable' };
     const payload = buildSelectForOperationPayload(op);
     if (!payload) return { ok: false, reason: 'invalid operation' };
+    if (currentDocToken) payload.docToken = currentDocToken;
     return bridge.send(FUSION_ACTIONS.SELECT_FOR_OPERATION, payload);
   };
 

@@ -17688,3 +17688,22 @@ Added `toolDia`, `clearing`, and `role` to each path item in `buildToolpathsPayl
 - Behaviour change for existing users: `toolpaths` messages now include `toolDia`, `role`, and (on pockets) `clearing` per path; older add-ins ignore unknown fields.
 - Tests: fail-first in `tests/fusion-toolpaths-799-node.test.js` (`freehand pocket wall carries toolDia, clearing=freehand, role=wall`); after changes `fusion-toolpaths-799-node: 47 checks passed` (covering Outside, Inside, On Line, freehand Pocket, Spiral, Raster+Loop, V-bit pocket, and 500k relief `8.4 ms`). Extended `tests/fusion-toolpaths-799-live.test.js`.
 
+## TURN 860
+Fixed headless browser teardown hangs (`TIMEOUT after 90s` after `ok`) and leftover profile storms in `tests/helpers/cdp-browser.js` + `tests/helpers/cdp-teardown.js`.
+- **Root causes measured before fix (`repro_load.cjs`, `probe_860.mjs`, advisor logs in `.evidence/860/`)**:
+  1. `cdp-browser.js` `close()` and `navigate()` raced against `sleep(10000)` / `sleep(20000)` / `setTimeout(rej, 2000)` without clearing timers; 12/16 baseline load tests without `process.exit(0)` sat waiting `9.97s - 10.29s` after `ok` (`repro-before.log`), pushing `export-sim-801-perf-live` (`ok` at ~87s) to `TIMEOUT 90.2s`.
+  2. When Edge's root exited during `Browser.close`, `taskkill /PID /T /F` exited `128`/`255`/`1` (`ERROR: The process "..." not found` / `There is no running instance of the task`), failed to reach child holders (`crashpad-handler`, `gpu-process`, `NetworkService`, `StorageService`, `renderer`, all carrying `--user-data-dir`), and `removeProfileDir` then ran `rmSync(maxRetries=10, retryDelay=100)` (~5.5s) + `10s` PowerShell CIM + `rmSync(maxRetries=25, retryDelay=200)` (~65s linear backoff), killing already-passed tests at 90s.
+  3. If `taskkill /PID /T /F` hit `ETIMEDOUT` (`3000ms`), `proc.kill('SIGKILL')` was not called and the stuck `ChildProcess` handle stayed ref'd in Node for 45-75s (e.g. `cam-export-786-live` exited at `65.18s` after printing `leaving locked profile dir`).
+- **Fix (`tests/helpers/cdp-teardown.js`, `tests/helpers/cdp-browser.js`)**:
+  - Added `raceWithTimeout` (clears timers in `finally`) for `close()` and `navigate()`.
+  - Declared `TEARDOWN_BOUNDS` (`CLOSE_GRACEFUL_MS=3000`, `TREE_WAIT_MS=4000`, `TREE_POLL_MS=150`, `RM_RETRIES=4` @ `50ms`, `RM_FINAL_RETRIES=4` @ `100ms`; worst-case bound `8.5s <= 10s`).
+  - `teardownBrowserSession` / `teardownBrowserSessionSync`: graceful CDP `Browser.close` -> `killRootTree` (captures stderr, silences benign `not found` / `no running instance of the task`, falls back to `proc.kill('SIGKILL')`) -> fast `rmSync`; runs `waitForProcessTree` (`<= 4s` CIM holder poll/kill, falling back to `process.kill(pid, 'SIGKILL')`) only when root stays alive or `rmSync` gets `EPERM`/`EBUSY` -> one short retry -> calls `proc.unref()` if still terminating, logs ONE `leaving locked profile dir ... for gate sweep` line, and hands off leftovers to `scripts/gate.cjs` `sweepProfiles`.
+- **Tests & Before/After Numbers**:
+  - Added `tests/cdp-teardown-860.test.js` (`quick` tier: teardown order, bounded wait + `proc.unref()`, locked dir handoff, zero timer leaks, `<= 10s` bound).
+  - Baseline 16-file 8-worker `repro_load.cjs` (`task-2328`): `BATCH jobs=8 files=16 pass=15 fail=1 max_ok_to_exit=10.29s elapsed=140.7s`.
+  - Final 16-file 8-worker `repro_load.cjs` (`task-2501`): `BATCH jobs=8 files=16 pass=15 fail=1 max_ok_to_exit=6.58s elapsed=130.9s` (`ok -> exit = 0.01s - 0.33s` on 10/11 ok-line tests; only `export-sim-801-perf-live` timed out at 90.3s in its own body under 8-way CPU contention).
+  - 8-test previously-failing wave (`diag_wave.cjs`, `task-2497`): `8/8` passed (`8.67s - 46.63s`, `ok -> exit = 0.01s - 0.33s`, `footer-settings-726-live` `6.67s`), 0 `taskkill` errors, 0 leftover dirs.
+  - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=575 pass=575 fail=0 elapsed=120s`, `PROFILES-LEFT 0`.
+  - `npm.cmd run gate:live`: `GATE tier=live jobs=live=8 files=324 pass=315 fail=9 elapsed=1165s`, `SMOKE 13/13`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0` (24 stale pre-run dirs swept; `shortcuts-747-live` and `op-ticks-798-live` pass standalone).
+
+

@@ -38,7 +38,9 @@ placed there: on a line, curve or axis only the position is expected (as in Fusi
 expected. Constraint cells: **PASS**; **REFUSED-TOLD** (nothing made, a notice says why); **PASS-TOLD** (a pair that is not valid, and the
 user is told); **FAIL-SILENT**.
 
-<!-- TOTALS -->
+**Totals (live, after merging origin/main at 2a0c106d): 424 cells, 322 PASS, 102 not.** Drawing 341 cells (31 tool points x 11
+targets): 262 PASS, 38 FAIL-NOCONSTRAINT, 19 FAIL-OFFTARGET, 22 FAIL-NOSNAP. Constraint tools 61 pick sets: 38 PASS, 3 REFUSED-TOLD,
+20 FAIL-SILENT. Select drags 22: 22 PASS. One run of the whole file takes 10 - 12 minutes (1.4 - 1.7 s a cell, with other seats' tests running on the PC).
 
 ## Failing cells, grouped by cause (one row per cause)
 
@@ -53,7 +55,7 @@ user is told); **FAIL-SILENT**.
 | G | `constraint-tools.js:69`: the H / V tool refuses a LINE pick whenever `state.pendingConstraint` exists, but entering ANY constraint tool always sets it, `{ type, firstElement: null }` when nothing is pre-selected (SketchStudio's ribbon path `apps/sketchstudio/ui/ui-manager.js:97`; the shared `switchToTool`, keys and the other hosts, `packages/ui/input-manager.js:1589`): a click on a line can never be made horizontal / vertical (only a pre-selected line works, `ui-manager.js:64-70` / `input-manager.js:1578-1586`); the tool goes back to Select silently (`input-manager.js:758-762`). | hv on a slanted line, hv on a line = **2** (every H / V click on a line) | not covered |
 | H | `constraint-tools.js:291` (Midpoint: only a line is a shape pick) and `input-manager.js:758-762`: a point + an ARC (Fusion makes a midpoint on an arc) ends the tool silently, in both orders. | midpoint point + arc, arc + point = **2** | not covered |
 | I | Invalid pairs: the handlers return false or only `console.warn`, so the user is never told why: `constraint-tools.js:113` (parallel / perpendicular with an arc or circle: warn + silent Select), `:134` (coincident line + line), `:69` (H / V point then line), `:343` (symmetric point + line), `:246` (tangent line + line: warn, the tool stays, nothing made), `:391` (equal line + circle: warn, tool stays). | 7 invalid-pair cells, all FAIL-SILENT | not covered (owner's call: a notice for an invalid pick) |
-| J | `packages/ui/input-handlers/bezier-tool.js:12-14` and `:105-113`: the Bezier pen snaps only to its own first anchor (TASK 762, declared: "Anchors land at the raw world point"); every other snap is hidden and dropped. | Bezier anchor 1, anchor 2 x all 11 targets: FAIL-NOSNAP, 4 px off = **22** | a DECLARED behaviour (task 762), listed for the owner: Fusion's spline snaps its points. |
+| J | `packages/ui/input-handlers/bezier-tool.js:12-14` and `:105-113`: the Bezier pen snaps only to its own first anchor (TASK 762, declared: "Anchors land at the raw world point"); every other snap is hidden and dropped. | Bezier anchor 1, anchor 2 x all 11 targets: FAIL-NOSNAP, 4 px off = **22** | a DECLARED behaviour (task 762), listed for the owner (a divergence from Fusion if Fusion's spline points snap: not checked in Fusion here). |
 
 What passes, for reference: the Line tool (the reference: every click x every target), the Arc tool (centre / start / end), the circle's
 CENTRE, the polygon's CENTRE, the rectangle's last click (2-point corner 2, centre-mode corner, 3-point point 3), every slot point except
@@ -68,7 +70,7 @@ made by `makeRect…` and again by the corner loop, `rect-tool.js:244`/`:259`/`:
 
 ## Representative failures (screenshots)
 
-Saved by `AUDIT_869_EVIDENCE=.evidence/869/final` (local evidence, not committed), 3x zoom, 340 x 220 px around the target:
+Saved by `AUDIT_869_EVIDENCE=.evidence/869/final3` (local evidence, not committed), 3x zoom, 340 x 220 px around the target:
 
 - `circle-rim-on-joint.png` (cause C): the Circle tool, rim clicked 4 px off a line's end point. The snap ring shows on the point, but the
   new circle's rim passes beside it (its radius went to the raw pointer) and no point-on-circle holds it.
@@ -83,4 +85,114 @@ Abbreviations: ok = PASS, NOCON = FAIL-NOCONSTRAINT, OFF d = FAIL-OFFTARGET (d p
 Targets: joint = a line's free end; midspan = a line at 25 %; midpoint = a line's middle; arcEdge = the middle of an arc's sweep;
 circleEdge / circleCentre; construction = a construction line at 25 %; offsetLine = the inner loop of an Offset at 25 %; origin; axisX / axisY.
 
-<!-- TABLES -->
+### 1. Drawing tools x snap targets (each cell: the point placed by that click, 4 px off the target)
+
+| tool | point | joint | midspan | midpoint | arcEdge | circleEdge | circleCentre | construction | offsetLine | origin | axisX | axisY |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| line | start | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| line | end | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| arc | centre | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| arc | start | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| arc | end | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| circle | centre | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| circle | rim | OFF 4.0 | ok | OFF 2.8 | OFF 2.8 | ok | OFF 2.8 | ok | OFF 2.8 | OFF 4.0 | OFF 2.9 | OFF 4.0 |
+| rect(rect-2pt) | corner 1 | ok | NOCON | NOCON | NOCON | NOCON | ok | NOCON | NOCON | ok | NOCON | NOCON |
+| rect(rect-2pt) | corner 2 | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| rect(rect-center) | centre | NOCON | NOCON | NOCON | NOCON | NOCON | NOCON | NOCON | NOCON | NOCON | NOCON | NOCON |
+| rect(rect-center) | corner | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| rect(rect-3pt) | point 1 | ok | NOCON | NOCON | NOCON | NOCON | ok | NOCON | NOCON | ok | NOCON | NOCON |
+| rect(rect-3pt) | point 2 | ok | NOCON | NOCON | NOCON | NOCON | ok | NOCON | NOCON | ok | NOCON | NOCON |
+| rect(rect-3pt) | point 3 | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| polygon | centre | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| polygon | vertex | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 | OFF 4.0 |
+| slot(slot-c2c) | centre 1 | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-c2c) | centre 2 | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-overall) | end 1 | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-overall) | end 2 | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-center) | centre | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-center) | end centre | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-arc-3pt) | start | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-arc-3pt) | end | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-arc-3pt) | arc point | NOCON | ok | ok | ok | ok | NOCON | ok | ok | NOCON | ok | ok |
+| slot(slot-arc-center) | centre | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-arc-center) | start | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| slot(slot-arc-center) | end | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| bezier | anchor 1 | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP |
+| bezier | anchor 2 | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP | NOSNAP |
+| text | anchor | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+
+### 3. Select tool: drag onto the target, release
+
+| tool | point | joint | midspan | midpoint | arcEdge | circleEdge | circleCentre | construction | offsetLine | origin | axisX | axisY |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| select-drag | line end | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+| select-drag | rect corner | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok | ok |
+
+### 2. Constraint tools x picks (P = a free point (a line end), RC = a rectangle corner (twin joints), ORG = the origin, CC = the circle centre,
+LA = a line, DL = another line, SL = a slanted line, K = a construction line, OL = an offset-made line, RS = a rectangle side, A = an arc,
+C = a circle, AX = the X axis; "tool after each pick" = the active tool after each press)
+
+| tool | picks | valid pair | result | made | tool after each pick | notice |
+|---|---|---|---|---|---|---|
+| coincident | P+CC | yes | PASS | ["coincident"] | ["coincident","coincident"] | [] |
+| coincident | P+ORG | yes | PASS | ["coincident"] | ["coincident","coincident"] | [] |
+| coincident | RC+P | yes | PASS | ["coincident"] | ["coincident","coincident"] | [] |
+| coincident | P+LA | yes | FAIL-SILENT | [] | ["coincident","select"] | [] |
+| coincident | LA+P | yes | FAIL-SILENT | [] | ["select","select"] | [] |
+| coincident | RC+OL | yes | FAIL-SILENT | [] | ["coincident","select"] | [] |
+| coincident | OL+RC | yes | FAIL-SILENT | [] | ["select","select"] | [] |
+| coincident | P+K | yes | FAIL-SILENT | [] | ["coincident","select"] | [] |
+| coincident | P+A | yes | FAIL-SILENT | [] | ["coincident","select"] | [] |
+| coincident | A+P | yes | FAIL-SILENT | [] | ["select","select"] | [] |
+| coincident | P+C | yes | FAIL-SILENT | [] | ["coincident","select"] | [] |
+| coincident | C+P | yes | FAIL-SILENT | [] | ["select","select"] | [] |
+| coincident | P+AX | yes | PASS | ["pointOnLine"] | ["coincident","coincident"] | [] |
+| coincident | AX+P | yes | PASS | ["pointOnLine"] | ["coincident","coincident"] | [] |
+| coincident | LA+K | no | FAIL-SILENT | [] | ["select","select"] | [] |
+| midpoint | P+K | yes | PASS | ["midpoint"] | ["midpoint","midpoint"] | [] |
+| midpoint | K+P | yes | PASS | ["midpoint"] | ["midpoint","midpoint"] | [] |
+| midpoint | RC+OL | yes | REFUSED-TOLD | [] | ["midpoint","midpoint"] | ["⚠️Midpoint rejected — creates a conflict (res: 5.3224) [ERR-CSOLVE-01]"] |
+| midpoint | P+A | yes | FAIL-SILENT | [] | ["midpoint","select"] | [] |
+| midpoint | A+P | yes | FAIL-SILENT | [] | ["select","select"] | [] |
+| tangent | LA+C | yes | PASS | ["tangent"] | ["tangent","tangent"] | [] |
+| tangent | C+LA | yes | PASS | ["tangent"] | ["tangent","tangent"] | [] |
+| tangent | LA+A | yes | PASS | ["tangent"] | ["tangent","tangent"] | [] |
+| tangent | A+LA | yes | PASS | ["tangent"] | ["tangent","tangent"] | [] |
+| tangent | A+C | yes | PASS | ["tangent"] | ["tangent","tangent"] | [] |
+| tangent | OL+C | yes | PASS | ["tangent"] | ["tangent","tangent"] | [] |
+| tangent | LA+K | no | FAIL-SILENT | [] | ["tangent","tangent"] | [] |
+| parallel | LA+K | yes | PASS | ["parallel"] | ["parallel","parallel"] | [] |
+| parallel | K+LA | yes | PASS | ["parallel"] | ["parallel","parallel"] | [] |
+| parallel | LA+OL | yes | PASS | ["parallel"] | ["parallel","parallel"] | [] |
+| parallel | DL+AX | yes | PASS | ["parallel"] | ["parallel","parallel"] | [] |
+| parallel | AX+DL | yes | PASS | ["parallel"] | ["parallel","parallel"] | [] |
+| parallel | LA+C | no | FAIL-SILENT | [] | ["parallel","select"] | [] |
+| perp | LA+RS | yes | PASS | ["perpendicular"] | ["perp","perp"] | [] |
+| perp | SL+OL | yes | PASS | ["perpendicular"] | ["perp","perp"] | [] |
+| perp | OL+SL | yes | PASS | ["perpendicular"] | ["perp","perp"] | [] |
+| perp | SL+AX | yes | PASS | ["perpendicular"] | ["perp","perp"] | [] |
+| perp | OL+DL | yes | REFUSED-TOLD | [] | ["perp","perp"] | ["⚠️Perpendicular rejected — creates a conflict (res: 1.3807) [ERR-CSOLVE-01]"] |
+| perp | LA+AX | yes | REFUSED-TOLD | [] | ["perp","perp"] | ["⚠️Perpendicular rejected — creates a conflict (res: 0.0000) [ERR-CSOLVE-01]"] |
+| perp | LA+A | no | FAIL-SILENT | [] | ["perp","select"] | [] |
+| parallel | SL+LA | yes | PASS | ["parallel"] | ["parallel","parallel"] | [] |
+| equal | LA+K | yes | PASS | ["equal"] | ["equal","equal"] | [] |
+| equal | LA+OL | yes | PASS | ["equal"] | ["equal","equal"] | [] |
+| equal | A+C | yes | PASS | ["equal"] | ["equal","equal"] | [] |
+| equal | C+A | yes | PASS | ["equal"] | ["equal","equal"] | [] |
+| equal | LA+C | no | FAIL-SILENT | [] | ["equal","equal"] | [] |
+| collinear | LA+DL | yes | PASS | ["collinear"] | ["collinear","collinear"] | [] |
+| collinear | LA+OL | yes | PASS | ["collinear"] | ["collinear","collinear"] | [] |
+| collinear | DL+AX | yes | PASS | ["collinear"] | ["collinear","collinear"] | [] |
+| collinear | K+LA | yes | PASS | ["collinear"] | ["collinear","collinear"] | [] |
+| hv | SL | yes | FAIL-SILENT | [] | ["select"] | [] |
+| hv | DL | yes | FAIL-SILENT | [] | ["select"] | [] |
+| hv | P+CC | yes | PASS | ["horizontal"] | ["hv","hv"] | [] |
+| hv | P+ORG | yes | PASS | ["horizontal"] | ["hv","hv"] | [] |
+| hv | RC+P | yes | PASS | ["vertical"] | ["hv","hv"] | [] |
+| hv | P+LA | no | FAIL-SILENT | [] | ["hv","select"] | [] |
+| symmetric | P+CC+K | yes | PASS | ["symmetric"] | ["symmetric","symmetric","symmetric"] | [] |
+| symmetric | LA+DL+K | yes | PASS | ["symmetric"] | ["symmetric","symmetric","symmetric"] | [] |
+| symmetric | A+C+K | yes | PASS | ["symmetric"] | ["symmetric","symmetric","symmetric"] | [] |
+| symmetric | P+CC+AX | yes | PASS | ["symmetric"] | ["symmetric","symmetric","symmetric"] | [] |
+| symmetric | P+LA+K | no | FAIL-SILENT | [] | ["symmetric","select","select"] | [] |
+

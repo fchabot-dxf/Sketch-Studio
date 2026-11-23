@@ -4,8 +4,11 @@
 
 import { TOOL_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { curveRefusal } from '#core/curve-kinds.js';
 import { dbg } from '#core/debug.js';
-import { findShapeById, isReferenceShapeId } from '#core/reference-lines.js';
+import { findShapeById } from '#core/reference-lines.js';
+import { findCoincidentCluster } from '#ui/snap-detection.js';
+import { showNotification } from '#ui/notification-manager.js';
 
 export function setupConstraintTools(svg, appState) {
     dbg.log('constraints', '[constraint-tools] Setting up constraint tools...');
@@ -127,32 +130,59 @@ function handleShapeConstraintPointerDown(e, svg, state, hitShape) {
     }
 }
 
+const COINCIDENT_CURVE_TYPES = new Set(['line', 'circle', 'arc', 'bezier']);
+
+function applyPointOnShape(state, jointId, shape) {
+    if (!shape) { showNotification('Pick a valid point and line/curve.', 'warning'); return; }
+    const why = curveRefusal(shape, TOOL_MODES.COINCIDENT);
+    if (why) { showNotification(why, 'warning'); return; }
+    const cluster = findCoincidentCluster(jointId, state.constraints);
+    if (shape.type === 'line' && Array.isArray(shape.joints) && shape.joints.some(j => cluster.has(j))) {
+        showNotification('That point is already on that line.', 'warning');
+        return;
+    }
+    if ((state.constraints || []).some(c => c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.shape === shape.id && cluster.has(c.joint))) {
+        showNotification('Point is already constrained to that curve.', 'warning');
+        return;
+    }
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: jointId, shape: shape.id }, { source: 'toolbar' });
+}
+
 function handleCoincidentPointerDown(e, svg, state, hitJoint, hitShape) {
-    // COINCIDENT tool: joint + joint -> coincident; joint + a built-in axis (task 539) -> point on that axis (point-on-line). Point-on-line
-    // with a real line is handled by other flows.
-    const axisHit = hitShape && hitShape.shape && hitShape.shape.reference ? hitShape.shape : null;
-    if (!hitJoint && !axisHit) return false;
+    // COINCIDENT tool (Fusion semantics): joint + joint -> coincident; joint + curve/axis (or curve/axis + joint) -> pointOnLine.
+    const shapeHit = !hitJoint && hitShape && hitShape.shape && (hitShape.shape.reference || COINCIDENT_CURVE_TYPES.has(hitShape.shape.type))
+        ? hitShape.shape
+        : null;
+    if (!hitJoint && !shapeHit) return false;
     const pending = state.pendingConstraint && state.pendingConstraint.firstElement;
 
     if (!pending) {
+        const why = curveRefusal(hitJoint ? hitJoint.j : shapeHit, TOOL_MODES.COINCIDENT);
+        if (why) { showNotification(why, 'warning'); return true; }
         if (hitJoint) {
             state.pendingConstraint = { type: TOOL_MODES.COINCIDENT, firstElement: { type: 'joint', id: hitJoint.id } };
             state.selectedJoints.add(hitJoint.id);
         } else {
-            state.pendingConstraint = { type: TOOL_MODES.COINCIDENT, firstElement: { type: 'shape', id: axisHit.id } };
-            state.selectedShapes.add(axisHit.id);
+            state.pendingConstraint = { type: TOOL_MODES.COINCIDENT, firstElement: { type: 'shape', id: shapeHit.id } };
+            state.selectedShapes.add(shapeHit.id);
         }
         return true;
     }
     const first = pending;
     if (first.type === 'joint' && hitJoint) {
-        if (first.id !== hitJoint.id) {
+        if (first.id === hitJoint.id) {
+            showNotification('Pick two different points, or a point and a line/curve.', 'warning');
+        } else if (findCoincidentCluster(first.id, state.constraints).has(hitJoint.id)) {
+            showNotification('Those points are already coincident.', 'warning');
+        } else {
             ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [first.id, hitJoint.id] }, { source: 'toolbar' });
         }
-    } else if (first.type === 'joint' && axisHit) {
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: first.id, shape: axisHit.id }, { source: 'toolbar' });
-    } else if (first.type === 'shape' && isReferenceShapeId(first.id) && hitJoint) {
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: hitJoint.id, shape: first.id }, { source: 'toolbar' });
+    } else if (first.type === 'joint' && shapeHit) {
+        applyPointOnShape(state, first.id, shapeHit);
+    } else if (first.type === 'shape' && hitJoint) {
+        applyPointOnShape(state, hitJoint.id, findShapeById(state.shapes, first.id));
+    } else if (first.type === 'shape' && shapeHit) {
+        showNotification('Coincident constrains two points, or a point and a line/curve.', 'warning');
     }
 
     // Cleanup selection highlights

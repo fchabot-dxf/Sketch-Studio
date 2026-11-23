@@ -4,6 +4,19 @@
 
 import { updatePreview } from '#ui/preview-manager.js';
 import { showDualInput, showSingleInput, setLiveInputValue, updateInputPosition } from '#ui/numeric-input-manager.js';
+import { applySnapConstraint } from '#core/snap-constraints.js';
+
+/** Extract `{ x, y }` from a snap target (`.pt` or `.x`/`.y`). */
+export const snapPoint = (snap) => (snap ? (snap.pt || (typeof snap.x === 'number' && typeof snap.y === 'number' ? { x: snap.x, y: snap.y } : null)) : null);
+
+/**
+ * Apply the constraint for a locked drawing snap onto `jointId` (grid snaps are visual-only).
+ * Shared by line-tool and rect-tool so corner/endpoint/midpoint/on-curve snap rules live in ONE place.
+ */
+export function applyLockedSnap(state, jointId, snap, excludeJoints = []) {
+    if (!jointId || !snap || !snap.isLocked || snap.type === 'grid') return false;
+    return applySnapConstraint(state, jointId, snap, { excludeJoints });
+}
 
 /**
  * TASK 782: THE minimum size of a shape a click (or Enter) may place, in the document base unit: a double click on one spot, or a click on the

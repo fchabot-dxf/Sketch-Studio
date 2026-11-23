@@ -9,12 +9,11 @@ import { TOOL_MODES, SNAP, CONSTRAINT_TYPES, INFERENCE_TYPES } from '#core/const
 import { addConstraint } from '#core/constraints.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { findNearbyJoint } from '#core/joints.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { hideInput, setupNumericInput } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -447,26 +446,13 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     lineState.lockedAngle = null;
 
     try{
-        if (state.active && state.active.startSnapTarget && state.active.startSnapTarget.isLocked) {
-            const sst = state.active.startSnapTarget;
-            dbg.log('line-tool', '[line-tool] applying recorded startSnapTarget', { startId, snap: sst });
-            if (sst.type !== 'grid') {
-                applySnapConstraint(state, startId, sst, { excludeJoints: [endId] });
-            } else {
-                dbg.log('line-tool', '[line-tool] start snap is grid - visual only (no constraint)');
-            }
+        if (state.active && state.active.startSnapTarget) {
+            applyLockedSnap(state, startId, state.active.startSnapTarget, [endId]);
         }
     }catch(_){ }
     try{
-        if (hitSnap && hitSnap.isLocked && !typedLock) {
-            dbg.log('line-tool', '[line-tool] applying end snap', { endId, snap: hitSnap });
-            if (hitSnap.type !== 'grid') {
-                applySnapConstraint(state, endId, hitSnap, { excludeJoints: [startId] });
-            } else {
-                dbg.log('line-tool', '[line-tool] end snap is grid - visual only (no constraint)');
-            }
-        } else {
-            dbg.log('line-tool', '[line-tool] end snap not applied (missing or not locked)', { hitSnap });
+        if (!typedLock) {
+            applyLockedSnap(state, endId, hitSnap, [startId]);
         }
     }catch(_){ }
 
@@ -619,8 +605,8 @@ export function finalizeLineFromActive(svg, state) {
         }
     }catch(_){ }
 
-    try{ if (state.active && state.active.startSnapTarget && state.active.startSnapTarget.isLocked) applySnapConstraint(state, startId, state.active.startSnapTarget, { excludeJoints: [endId] }); }catch(_){ }
-    try{ if (state.active && state.active.preview && state.active.preview.snapTarget && state.active.preview.snapTarget.isLocked) applySnapConstraint(state, endId, state.active.preview.snapTarget, { excludeJoints: [startId] }); }catch(_){ }
+    try{ applyLockedSnap(state, startId, state.active && state.active.startSnapTarget, [endId]); }catch(_){ }
+    try{ applyLockedSnap(state, endId, state.active && state.active.preview && state.active.preview.snapTarget, [startId]); }catch(_){ }
 
     endSegmentStep(state);
     try{

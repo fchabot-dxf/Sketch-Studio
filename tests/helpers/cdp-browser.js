@@ -7,8 +7,9 @@ import fsp from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync, execSync } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { teardownBrowserSession, teardownBrowserSessionSync, raceWithTimeout } from './cdp-teardown.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -80,52 +81,6 @@ const activeSessions = new Set();
 let handlersInstalled = false;
 let fatalInFlight = false;
 
-function killHoldersByDir(userDir) {
-  if (!userDir) return;
-  const token = path.basename(userDir);
-  if (!token) return;
-  if (process.platform === 'win32') {
-    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = `${escaped}(?=[\\\\/"''\\s]|$)`;
-    const psScript = `Get-CimInstance Win32_Process -Filter "name = 'msedge.exe' or name = 'chrome.exe' or name = 'chromium.exe'" | Where-Object { $_.CommandLine -match '${pattern}' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-    const r = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', windowsHide: true, timeout: 10000 });
-    if (r.error) console.warn('cdp-browser: powershell process sweep failed: ' + r.error.message);
-    else if (r.status !== 0 && r.stderr) console.warn('cdp-browser: powershell process sweep warning: ' + r.stderr.trim());
-  } else {
-    const r = spawnSync('pkill', ['-9', '-f', token], { stdio: 'ignore', timeout: 5000 });
-    if (r.error && r.error.code !== 'ENOENT') console.warn('cdp-browser: pkill sweep failed: ' + r.error.message);
-  }
-}
-
-function killBrowserTreeSync(proc, userDir, forceDirSweep = false) {
-  if (proc && proc.pid && proc.exitCode === null) {
-    if (process.platform === 'win32') {
-      try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore', windowsHide: true }); } catch (e) { console.warn('cdp-browser: taskkill failed: ' + e.message); }
-    } else {
-      try { proc.kill('SIGKILL'); } catch (e) { console.warn('cdp-browser: proc.kill failed: ' + e.message); }
-    }
-  }
-  if (forceDirSweep) killHoldersByDir(userDir);
-}
-
-function removeProfileDir(userDir, proc) {
-  if (!userDir || !fs.existsSync(userDir)) return true;
-  try {
-    fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    return true;
-  } catch (e) {
-    console.warn(`cdp-browser: rmSync failed for ${userDir} (${e.message}); killing browser process tree and retrying`);
-    killBrowserTreeSync(proc, userDir, true);
-    try {
-      fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 25, retryDelay: 200 });
-      return true;
-    } catch (e2) {
-      console.warn(`cdp-browser: could not remove profile dir ${userDir}: ${e2.message}`);
-      return false;
-    }
-  }
-}
-
 function installProcessHandlers() {
   if (handlersInstalled) return;
   handlersInstalled = true;
@@ -175,10 +130,7 @@ export async function launchBrowser(opts = {}) {
       if (closedSync) return;
       closedSync = true;
       activeSessions.delete(session);
-      if (ws) { try { ws.close(); } catch (e) { console.warn('cdp-browser: ws.close on exit failed: ' + e.message); } }
-      if (srv.server) { try { srv.server.close(); } catch (e) { console.warn('cdp-browser: server.close on exit failed: ' + e.message); } }
-      killBrowserTreeSync(proc, userDir, false);
-      removeProfileDir(userDir, proc);
+      teardownBrowserSessionSync({ proc, userDir, ws, server: srv.server });
     },
   };
   activeSessions.add(session);
@@ -187,24 +139,7 @@ export async function launchBrowser(opts = {}) {
     if (closing) return closing;
     closing = (async () => {
       try {
-        if (proc) {
-          const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-          if (dbgPort > 0) {
-            try {
-              const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-              const bws = new WebSocket(v.webSocketDebuggerUrl);
-              await new Promise((res, rej) => { bws.addEventListener('open', res); bws.addEventListener('error', rej); setTimeout(rej, 2000); });
-              bws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-              await Promise.race([exited, sleep(3000)]);
-              bws.close();
-            } catch (e) { console.warn('cdp-browser: Browser.close failed, falling back to the process kill: ' + (e && e.message)); }
-          }
-          if (ws) { try { ws.close(); } catch (e) { console.warn('cdp-browser: ws.close failed: ' + e.message); } }
-          killBrowserTreeSync(proc, userDir, false);
-          await Promise.race([exited, sleep(10000)]);
-        }
-        if (srv.server) srv.server.close();
-        removeProfileDir(userDir, proc);
+        await teardownBrowserSession({ proc, userDir, dbgPort, ws, server: srv.server });
       } finally {
         closedSync = true;
         activeSessions.delete(session);
@@ -269,7 +204,7 @@ export async function launchBrowser(opts = {}) {
     const navigate = async (url, timeoutMs = 20000) => {
       const loaded = once('Page.loadEventFired');
       await send('Page.navigate', { url });
-      await Promise.race([loaded, sleep(timeoutMs)]);
+      await raceWithTimeout(loaded, timeoutMs);
     };
     // Waits until the app has finished its initial restore of the stored design (document-buffer.js sets data-doc-ready="1" on the Design canvas, TASK 474/542): the app is
     // then ready for input. This is THE "page loaded" condition for a live test; never a fixed sleep after navigate.

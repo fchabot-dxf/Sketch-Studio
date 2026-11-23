@@ -115,9 +115,10 @@
     const tools = { line: 'line-tool', rect: 'rect-tool', circle: 'circle-tool', arc: 'arc-tool', polygon: 'polygon-tool', 'select (joint drag)': 'selection-tools' };
     for (const [name, file] of Object.entries(tools)) {
       const src = read('packages/ui/input-handlers/' + file + '.js');
-      assert(/applySnapConstraint\s*\(/.test(src), name + ' tool applies its snap through applySnapConstraint');
+      assert(/(applySnapConstraint|applyLockedSnap)\s*\(/.test(src), name + ' tool applies its snap through applySnapConstraint (directly, or the shared applyLockedSnap of base-tool, task 867)');
       assert(!/axis-x|axis-y|y\s*=\s*0.*snap|snap.*\.y\s*=\s*0/.test(src.replace(/\/\/.*$/gm, '')), name + ' tool has no axis snapping of its own');
     }
+    assert(/export function applyLockedSnap[\s\S]*?applySnapConstraint\s*\(/.test(read('packages/ui/input-handlers/base-tool.js')), 'applyLockedSnap (line + rect tools) calls applySnapConstraint');
     const input = read('packages/ui/input-manager.js');
     assert(/findSnap\s*\(/.test(input), 'the input manager snaps through findSnap');
     // TASK 762: the bezier pen snaps ONLY to its own first anchor (the closing joint snap of the input manager, applied through applySnapConstraint):

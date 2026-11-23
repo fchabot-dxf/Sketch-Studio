@@ -66,11 +66,8 @@ function dispatchConstraintPointerDown(e, svg, state, hitJoint, hitShape) {
 
 /** Make a horizontal / vertical on two joints; one already holding the same constraint is told, not silently dropped by the duplicate check. */
 function makeHorizontalVertical(state, type, joints) {
-    if (hasConstraint(state.constraints, type, { joints })) {
-        refuse(`That is already ${type === CONSTRAINT_TYPES.HORIZONTAL ? 'horizontal' : 'vertical'}.`);
-        return;
-    }
-    ConstraintManager.createConstraint(state, type, { joints }, { source: 'toolbar' });
+    const made = ConstraintManager.createConstraint(state, type, { joints }, { source: 'toolbar' });
+    if (!made && hasConstraint(state.constraints, type, { joints })) refuse(`That is already ${type === CONSTRAINT_TYPES.HORIZONTAL ? 'horizontal' : 'vertical'}.`);
 }
 
 function handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape) {

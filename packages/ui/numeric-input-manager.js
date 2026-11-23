@@ -7,10 +7,12 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined, sizeRefusal, SIZE_REFUSAL } from '#core/dimension-seams.js';
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { basePer, parse as parseLength } from '#core/units.js';
-import { previewDimensionInput, quantityText } from '#core/parameters.js';
+import { previewDimensionInput, quantityText, isDimension } from '#core/parameters.js';
 import { evaluateText } from '#core/expression.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
+import { dimLabelAt } from '#ui/hover-manager.js';
+import { findSnap } from '#ui/snap-detection.js';
 
 export const NUMERIC_INPUT_STYLE_ID = 'sk-numeric-input-styles';
 
@@ -503,6 +505,8 @@ export function showEditInput(svg, state, constraint, initialKey) {
     uiState.exactText = (!hasFormula && typeof prefillValue === 'number') ? String(isAngleDim ? prefillValue : prefillValue / basePer(docUnit())) : null;
     uiState.singleInput.inputMode = 'text';
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : defaultValue;
+    const len = uiState.singleInput.value.length;
+    uiState.singleInput.setSelectionRange(typeof initialKey === 'string' ? len : 0, len);
     updateAssist({ complete: typeof initialKey === 'string' });
 
     requestAnimationFrame(() => {
@@ -514,6 +518,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // handlers of that same press, which then do their own job on the settled document (one press, not two). Added while the opening press
     // is already past the document's capture phase, so that press never closes the box it opens. resetState removes it.
     document.addEventListener('pointerdown', handleOutsidePress, true);
+    document.addEventListener('mousedown', suppressDimFocusLoss, true);
     uiState.outsideListening = true;
 }
 
@@ -691,7 +696,68 @@ function endPlacing(target, state) {
     if (state && state.placingConstraint === target) state.placingConstraint = null;
 }
 
+// TASK 866: identify a dimension text label or leader/dimension line under a pointer event on uiState.svg.
+// Text (.dim-label) always wins; a leader/dimension bar yields to real geometry underneath (e.g. a 0-offset dimension lying directly on a line).
+// No existing hit-test covered the thin dimension / leader lines (dimLabelAt only tests label boxes), so leaderLineAt is the one helper for them.
+function isOverGeometry(e, state, svg) {
+    const realShapes = state.shapes.filter((s) => !s.reference);
+    return !!findSnap(state.joints, realShapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, 0.3);
+}
+function dimensionOfElement(el, state) {
+    if (el.classList.contains('pattern-label')) return null;
+    const c = state.constraints[parseInt(el.dataset.constraintIdx, 10)];
+    return isDimension(c) ? c : null;
+}
+function leaderLineAt(svg, state, e) {
+    const tol = e.pointerType === 'touch' ? 6 : 3;
+    for (const ln of svg.querySelectorAll('line[data-constraint-idx]')) {
+        const a = worldToScreen(svg, { x: +ln.getAttribute('x1'), y: +ln.getAttribute('y1') });
+        const b = worldToScreen(svg, { x: +ln.getAttribute('x2'), y: +ln.getAttribute('y2') });
+        const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy;
+        const t = l2 > 0 ? Math.max(0, Math.min(1, ((e.clientX - a.x) * vx + (e.clientY - a.y) * vy) / l2)) : 0;
+        if (Math.hypot(e.clientX - (a.x + t * vx), e.clientY - (a.y + t * vy)) <= tol) {
+            const c = dimensionOfElement(ln, state);
+            if (c) return c;
+        }
+    }
+    return null;
+}
+function clickedDimensionConstraint(e) {
+    const state = uiState.appState, svg = uiState.svg;
+    const labelEl = e.target.closest('.dim-label[data-constraint-idx]');
+    if (labelEl && svg.contains(labelEl)) {
+        const c = dimensionOfElement(labelEl, state);
+        if (c) return c;
+    }
+    const hit = dimLabelAt(svg, state, e.clientX, e.clientY);
+    if (isDimension(hit)) return hit;
+    const dimEl = e.target.closest('[data-constraint-idx]');
+    const onGeometry = e.target.classList.contains('shape-elem') || e.target.classList.contains('joint');
+    const leader = (dimEl && svg.contains(dimEl) ? dimensionOfElement(dimEl, state) : null) || (onGeometry ? null : leaderLineAt(svg, state, e));
+    return leader && !isOverGeometry(e, state, svg) ? leader : null;
+}
+
+// TASK 866: insert a referenced parameter name at the edit box's caret (replacing any active selection), keeping box open and focused.
+function insertEditText(name) {
+    const el = uiState.singleInput;
+    const from = Math.min(el.selectionStart, el.selectionEnd), to = Math.max(el.selectionStart, el.selectionEnd);
+    el.value = el.value.slice(0, from) + name + el.value.slice(to);
+    el.setSelectionRange(from + name.length, from + name.length);
+    el.focus();
+    uiState.undoneToDefault = false;
+    uiState.typed[0] = true;
+    if (uiState.completion) uiState.completion.close();
+    updateAssist({ complete: false });
+}
+
+// TASK 866: touch taps emit a deferred compatibility mousedown after touchend; preventing default keeps #dimInput focused and mobile keypad open.
+function suppressDimFocusLoss(e) {
+    if (!uiState.active || uiState.mode !== 'edit' || !uiState.target) return;
+    if (clickedDimensionConstraint(e)) e.preventDefault();
+}
+
 // TASK 723: a press outside the open dimension box (the canvas, a glyph, another label, the ribbon, the footer, the Parameters window, ...).
+// TASK 866: a press on another dimension's text / leader inserts its parameter name at the caret and keeps the box open; pressing self does nothing.
 // A VALID text that differs from what the box opened with is applied exactly as Enter applies it (handleCommit: one undo step, the same
 // solve / fx / naming path). Anything else (unchanged, empty, refused) is dropped with no notice: the dimension keeps what it has, and a
 // just-placed one stays placed with its measured value (as Enter on the unchanged text leaves it). The press is not stopped.
@@ -700,6 +766,15 @@ function handleOutsidePress(e) {
     if (e.button === 1) return; // the middle button pans the view (as the wheel zooms it): navigating is not working elsewhere, the box stays
     const path = e.composedPath();
     if ([uiState.singleInput, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el))) return;
+    const dim = clickedDimensionConstraint(e);
+    if (dim) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (dim !== uiState.target && dim.name) insertEditText(dim.name);
+        else uiState.singleInput.focus();
+        return;
+    }
     const text = uiState.singleInput.value;
     // an untouched box (724) or a text equal to the opening one is no edit: never commit its rounded display text (a just-placed dimension keeps its exact measured value)
     const changed = !boxUntouched() && text.trim() !== String(uiState.defaults[0]).trim();
@@ -906,7 +981,11 @@ function placeAssist() {
 }
 
 function resetState() {
-    if (uiState.outsideListening) { document.removeEventListener('pointerdown', handleOutsidePress, true); uiState.outsideListening = false; }
+    if (uiState.outsideListening) {
+        document.removeEventListener('pointerdown', handleOutsidePress, true);
+        document.removeEventListener('mousedown', suppressDimFocusLoss, true);
+        uiState.outsideListening = false;
+    }
     hideAssist();
     if (uiState.target) uiState.target.__editing = false;
     uiState.active = false;

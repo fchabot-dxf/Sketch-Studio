@@ -19,7 +19,7 @@ const render = (joints, shapes, constraints) => {
   return svg.innerHTML;
 };
 const leaderOf = (html) => { // the solid leader <line> from the rim to the label: the first <line ... stroke-opacity="1"/> with x1 = rim
-  const m = [...html.matchAll(/<line x1="([-\d.e]+)" y1="([-\d.e]+)" x2="([-\d.e]+)" y2="([-\d.e]+)" style="stroke:var\(--sk-constraint-stroke[^"]*" stroke-width="[^"]*" stroke-opacity="1"\/>/g)];
+  const m = [...html.matchAll(/<line x1="([-\d.e]+)" y1="([-\d.e]+)" x2="([-\d.e]+)" y2="([-\d.e]+)" style="stroke:var\(--sk-constraint-stroke[^"]*" stroke-width="[^"]*" stroke-opacity="1"(?: data-constraint-idx="\d+")?\/>/g)];
   assert.ok(m.length >= 1, 'a leader line was drawn');
   return { x: +m[0][1], y: +m[0][2], lx: +m[0][3], ly: +m[0][4] };
 };

@@ -1,4 +1,5 @@
-// tests/snap-constraint-audit-869-cells.js -- TASK 869 (AUDIT, report only): the matrix of tests/snap-constraint-audit-869-live.test.js.
+// tests/audits/snap-constraint-audit-869-cells.js -- TASK 869 (AUDIT, report only): the matrix of tests/audits/snap-constraint-audit-869.mjs
+// (an audit tool outside the gate: node tests/audits/snap-constraint-audit-869.mjs).
 // The bug FAMILY audited: a snap / pick the app DETECTS whose constraint is never APPLIED (the Rectangle's first corner, task 867), or a
 // tool that ends without doing what its picks asked and without a word (the Coincident tool on a point then a line, task 868).
 // Driver-agnostic: every cell runs through a `driver` (the live test's one drives the real page with CDP mouse and keys) that offers

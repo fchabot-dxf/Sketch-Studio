@@ -10,9 +10,11 @@ and without telling the user. The owner's report (2026-11-23) showed two members
 
 ## How it was measured
 
-`tests/snap-constraint-audit-869-live.test.js` (an audit tool: it prints one line per cell and exits 0 whatever the cells say;
-`AUDIT_869_ONLY=<regexp>` narrows it, `AUDIT_869_EVIDENCE=<dir>` saves the screenshots and the rows as JSON). The cells are in
-`tests/snap-constraint-audit-869-cells.js`.
+`tests/audits/snap-constraint-audit-869.mjs`, an audit tool OUTSIDE the gate (`scripts/gate.cjs` picks up only `*.test.js` in `tests/`,
+`packages/core/tests` and `tests/harness`; a full run takes 10 - 12 minutes, past the gate's 90 s per-file limit). Run it by hand:
+`node tests/audits/snap-constraint-audit-869.mjs`. It prints one line per cell and exits 0 whatever the cells say;
+`AUDIT_869_ONLY=<regexp>` narrows it (e.g. `AUDIT_869_ONLY='^constraint coincident'`), `AUDIT_869_EVIDENCE=<dir>` saves the screenshots
+and the rows as JSON. The cells are in `tests/audits/snap-constraint-audit-869-cells.js`.
 
 - The real SketchStudio page, headless, desktop 1600 x 900, real mouse and keys through CDP (no app state is touched: the design is
   read back from the project store after the autosave, as the other SketchStudio live tests do). Grid magnet off, as in
@@ -40,7 +42,7 @@ user is told); **FAIL-SILENT**.
 
 **Totals (live, after merging origin/main at 2a0c106d): 424 cells, 322 PASS, 102 not.** Drawing 341 cells (31 tool points x 11
 targets): 262 PASS, 38 FAIL-NOCONSTRAINT, 19 FAIL-OFFTARGET, 22 FAIL-NOSNAP. Constraint tools 61 pick sets: 38 PASS, 3 REFUSED-TOLD,
-20 FAIL-SILENT. Select drags 22: 22 PASS. One run of the whole file takes 10 - 12 minutes (1.4 - 1.7 s a cell, with other seats' tests running on the PC).
+20 FAIL-SILENT. Select drags 22: 22 PASS. One run of the whole tool takes 10 - 12 minutes (1.4 - 1.7 s a cell, with other seats' tests running on the PC).
 
 ## Failing cells, grouped by cause (one row per cause)
 

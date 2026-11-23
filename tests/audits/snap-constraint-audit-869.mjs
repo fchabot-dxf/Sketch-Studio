@@ -1,11 +1,13 @@
-// tests/snap-constraint-audit-869-live.test.js -- TASK 869: an AUDIT TOOL, not an assertion test. It prints one line per cell of the snap /
-// pick matrix of the shared Design tab and EXITS 0 whatever the cells say (the known-bad cells are reported, not failed; the owner may turn
-// cells into assertions later). It fails only when it cannot run (no fixture, a page error), so the gate keeps it alive.
+// tests/audits/snap-constraint-audit-869.mjs -- TASK 869: an AUDIT TOOL OUTSIDE THE GATE (scripts/gate.cjs finds only *.test.js in tests/,
+// packages/core/tests and tests/harness; a full run takes 10 - 12 minutes, past the gate's 90 s per-file limit). Run it by hand:
+//   node tests/audits/snap-constraint-audit-869.mjs
+// It prints one line per cell of the snap / pick matrix of the shared Design tab and EXITS 0 whatever the cells say (the known-bad cells are
+// reported, not failed; the owner may turn cells into assertions later). It fails only when it cannot run (no fixture, a page error).
 // The family audited (owner turn 3382): a snap or a pick the app DETECTS whose constraint is never APPLIED (the Rectangle's first corner,
 // task 867), or a tool that ends without doing what its picks asked and without a word (the Coincident tool, a point then a line, task 868).
 // The real SketchStudio, headless, desktop 1600 x 900, REAL mouse and keys through CDP. The fixture is drawn with the real tools (a line, a
 // circle, an arc, a construction line, a rectangle and its Offset, a slanted line, a line and a rectangle to drag), at a user's scale (2 - 3.5
-// px per mm, the wheel). The cells (tests/snap-constraint-audit-869-cells.js):
+// px per mm, the wheel). The cells (tests/audits/snap-constraint-audit-869-cells.js):
 //   1. every drawing tool x every point it places x every snap target kind: the snap marker on hover, the placed point ON the target (screen
 //      px) and a constraint holding it there (coincident / pointOnLine / midpoint), the Line tool being the reference;
 //   2. every constraint tool x pick pairs (both orders, a rectangle corner, an offset-made line, an axis, some pairs that are not valid):
@@ -18,9 +20,9 @@
 // three representative screenshots of docs/SNAP-CONSTRAINT-AUDIT-869.md and the rows as JSON there.
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
-import { installFakeDriveSession } from './helpers/fake-drive-session.js';
-import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { launchBrowser, sleep, sendRealKey } from '../helpers/cdp-browser.js';
+import { installFakeDriveSession } from '../helpers/fake-drive-session.js';
+import { CREATE_NAMED_DESIGN } from '../helpers/named-design.js';
 import { buildFixture, runMatrix } from './snap-constraint-audit-869-cells.js';
 
 const ONLY = process.env.AUDIT_869_ONLY ? new RegExp(process.env.AUDIT_869_ONLY) : null;
@@ -116,6 +118,6 @@ await (async () => {
     const by = {}; for (const r of rows) by[r.status] = (by[r.status] || 0) + 1;
     console.log(`AUDIT 869: ${rows.length} cells ${JSON.stringify(by)} (${((Date.now() - t0) / 1000).toFixed(0)} s; reloads ${rows.filter((r) => r.revert === 'reload').length})`);
     if (EVIDENCE) { fs.mkdirSync(EVIDENCE, { recursive: true }); fs.writeFileSync(path.join(EVIDENCE, `rows-live${ONLY ? '-' + process.env.AUDIT_869_ONLY.replace(/[^a-z0-9]+/gi, '_').slice(0, 40) : ''}.json`), JSON.stringify(rows, null, 1)); }
-    console.log('snap-constraint-audit-869-live.test.js: audit printed (exit 0 whatever the cells say)');
+    console.log('snap-constraint-audit-869.mjs: audit printed (exit 0 whatever the cells say)');
   } finally { await cdp.close(); }
 })();

@@ -17688,3 +17688,16 @@ Added `toolDia`, `clearing`, and `role` to each path item in `buildToolpathsPayl
 - Behaviour change for existing users: `toolpaths` messages now include `toolDia`, `role`, and (on pockets) `clearing` per path; older add-ins ignore unknown fields.
 - Tests: fail-first in `tests/fusion-toolpaths-799-node.test.js` (`freehand pocket wall carries toolDia, clearing=freehand, role=wall`); after changes `fusion-toolpaths-799-node: 47 checks passed` (covering Outside, Inside, On Line, freehand Pocket, Spiral, Raster+Loop, V-bit pocket, and 500k relief `8.4 ms`). Extended `tests/fusion-toolpaths-799-live.test.js`.
 
+## TURN 861: Split `tests/export-sim-801-perf-live.test.js` into 3 <= 60 s live tests
+`tests/export-sim-801-perf-live.test.js` took `102 s` alone (exceeding `scripts/gate.cjs` `FILE_LIMIT_MS = 90000`).
+- **Measured phases alone**:
+  - `waveRelief({ n: 320 }) + binaryStl`: `36 ms` (`208,640` triangles).
+  - Combined Wave Relief (Phase A alone): `69.75 s` (> `60 s` target because `4` playback sleeps = `28 s` + swiftshader 3D/Show-passes rebuilds up to `2,762 ms` & `500 ms` frames). Split Phase A into two independent files per advisor direction `(a)`.
+  - Dense Raster Pocket (Phase B alone): `41.79 s` (under `60 s`).
+- **Split (`tests/helpers/export-sim-perf-live.js` + 3 tests; old `tests/export-sim-801-perf-live.test.js` `git rm`d)**:
+  - `tests/helpers/export-sim-perf-live.js`: shared `SIM_PERF_CONFIG`, `launchSimPerfSession`, `openWaveReliefSession`, `measureRun`, `scrubFraction`, `setView`, `stats`.
+  - `tests/export-sim-801-perf-wave-3d-live.test.js`: wave relief 3D `4x` + scrub cache (`29.76 s`, `29.79 s`, `30.23 s` across 3 solo runs).
+  - `tests/export-sim-801-perf-wave-passes-live.test.js`: wave relief `Show passes` (`perf-wave-passes-top.png`), finished-part triangle check, `2D`, `Paths` (`55.51 s`, `54.62 s`, `55.07 s` across 3 solo runs).
+  - `tests/export-sim-801-perf-raster-live.test.js`: dense raster `3D`, `Show passes`, `2D`, `Paths` (`43.79 s`, `41.56 s`, `41.72 s` across 3 solo runs).
+  - No other references to `export-sim-801-perf-live` in repo outside `WORK-LOG.md`. No app code changed; no `// gate: exclusive` added; `FILE_LIMIT_MS` untouched. Note: changing `tests/helpers/` triggers all live tests in `--tier merge --plan`.
+

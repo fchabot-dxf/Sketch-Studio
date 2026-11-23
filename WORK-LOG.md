@@ -17812,3 +17812,10 @@ Fixed headless browser teardown hangs (`TIMEOUT after 90s` after `ok`) and lefto
   - `node tests/opselect-806-node.test.js` (`33 checks passed`), `node tests/fusion-mode-663-live.test.js` (`ok`), `node tests/selection-mirror-795c-node.test.js` (`52 checks passed`), `node tests/perdesign-855-node.test.js` (`51 checks passed`), `node tests/opselect-806-live.test.js` (`ok`), `node tests/stockkeep-864-live.test.js` (`[1280x800] PASS`, `[390x844] PASS`), `node tests/fusion-import-664-live.test.js` (`ok`), `node tests/perdesign-855-live.test.js` (`ok`).
   - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=578 pass=578 fail=0 elapsed=123s`, `PROFILES-LEFT 0`.
 
+
+## TURN 868
+Owner 3380: the Coincident tool, a point then a line, ended with no constraint and no notice.
+Cause: packages/ui/input-handlers/constraint-tools.js handleCoincidentPointerDown only handled joint+joint and joint+built-in axis; any real line fell through every branch (silent reset to Select).
+Fix (one place, commit 78792105): joint + line/curve (either order) now adds pointOnLine via applyPointOnShape; redundant / same-point / invalid picks show the existing notice.
+Evidence: tests/coincident-868-node.test.js (25 checks; fails on the old constraint-tools.js, passes now), tests/coincident-868-live.test.js (desktop 1280 + phone 390 PASS), .evidence/868/*.png.
+Behaviour change: Coincident with point+real line now constrains (was a silent no-op); picking the same point twice, an already-coincident pair, or an already-on-line point now shows a warning.

@@ -7,8 +7,12 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { curveRefusal } from '#core/curve-kinds.js';
 import { dbg } from '#core/debug.js';
 import { findShapeById } from '#core/reference-lines.js';
+import { hasConstraint } from '#core/constraints.js';
 import { findCoincidentCluster } from '#ui/snap-detection.js';
 import { showNotification } from '#ui/notification-manager.js';
+
+/** A refused or invalid pick of a constraint tool: tell the user why (the one notice every handler below uses; never a console.warn only). */
+function refuse(why) { showNotification(why, 'warning'); }
 
 export function setupConstraintTools(svg, appState) {
     dbg.log('constraints', '[constraint-tools] Setting up constraint tools...');
@@ -60,6 +64,15 @@ function dispatchConstraintPointerDown(e, svg, state, hitJoint, hitShape) {
     return false;
 }
 
+/** Make a horizontal / vertical on two joints; one already holding the same constraint is told, not silently dropped by the duplicate check. */
+function makeHorizontalVertical(state, type, joints) {
+    if (hasConstraint(state.constraints, type, { joints })) {
+        refuse(`That is already ${type === CONSTRAINT_TYPES.HORIZONTAL ? 'horizontal' : 'vertical'}.`);
+        return;
+    }
+    ConstraintManager.createConstraint(state, type, { joints }, { source: 'toolbar' });
+}
+
 function handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape) {
     // Case 1: Line (Immediate)
     if (hitShape && hitShape.shape && hitShape.shape.type === 'line') {
@@ -68,13 +81,16 @@ function handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape) 
         const j2 = state.joints.get(s.joints[1]);
         if (!j1 || !j2) return false;
 
-        // If we were pending a joint, this is a mismatch (Joint + Line invalid for H/V) -> Exit
-        if (state.pendingConstraint) return false;
+        // A first POINT already picked: a point then a line is no pair (a pending constraint with no firstElement is "nothing picked yet")
+        if (state.pendingConstraint && state.pendingConstraint.firstElement) {
+            refuse('Horizontal / Vertical takes a line, or two points: pick the second point (not a line).');
+            return false;
+        }
 
         const dx = Math.abs(j2.x - j1.x);
         const dy = Math.abs(j2.y - j1.y);
         const constraintType = dx > dy ? CONSTRAINT_TYPES.HORIZONTAL : CONSTRAINT_TYPES.VERTICAL;
-        ConstraintManager.createConstraint(state, constraintType, { joints: [s.joints[0], s.joints[1]] }, { source: 'toolbar' });
+        makeHorizontalVertical(state, constraintType, [s.joints[0], s.joints[1]]);
         return true;
     }
 
@@ -86,8 +102,8 @@ function handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape) 
             return true;
         } else {
             const first = state.pendingConstraint.firstElement;
-            if (first.type !== 'joint') return false; // Mismatch (Line + Joint invalid)
-            if (first.id === hitJoint.id) return false; // Self-click
+            if (first.type !== 'joint') { refuse('Horizontal / Vertical takes a line, or two points.'); return false; } // Mismatch (Line + Joint invalid)
+            if (first.id === hitJoint.id) { refuse('Pick a second point, a different one.'); return false; } // Self-click
 
             const constraintType = state.currentTool === TOOL_MODES.HORIZONTAL_VERTICAL ? CONSTRAINT_TYPES.HORIZONTAL : state.currentTool; // Default to Horiz for 2-points if generic H/V tool, or specific if split
             // Note: The generic H/V tool usually infers from lines. For 2 points, we default to Horizontal or Vertical based on alignment? 
@@ -99,7 +115,7 @@ function handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape) 
             const dy = Math.abs(j2.y - j1.y);
             const type = (state.currentTool === TOOL_MODES.HORIZONTAL_VERTICAL) ? (dx > dy ? CONSTRAINT_TYPES.HORIZONTAL : CONSTRAINT_TYPES.VERTICAL) : state.currentTool;
 
-            ConstraintManager.createConstraint(state, type, { joints: [first.id, hitJoint.id] }, { source: 'toolbar' });
+            makeHorizontalVertical(state, type, [first.id, hitJoint.id]);
             
             state.selectedJoints.delete(first.id);
             resetConstraintState(state);
@@ -107,13 +123,14 @@ function handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape) 
         }
     }
 
+    if (hitShape && hitShape.shape) refuse('Horizontal / Vertical takes a line, or two points.');
     return false;
 }
 
 function handleShapeConstraintPointerDown(e, svg, state, hitShape) {
     if (!hitShape) return false;
     // ENFORCE LINE TYPE
-    if (hitShape.shape.type !== 'line') { console.warn('Parallel/Perpendicular requires a Line'); return false; }
+    if (hitShape.shape.type !== 'line') { refuse(`${state.currentTool === TOOL_MODES.PARALLEL ? 'Parallel' : 'Perpendicular'} takes two lines (not a circle or an arc).`); return false; }
     
     if (!state.pendingConstraint || !state.pendingConstraint.firstElement) {
         state.pendingConstraint = { type: state.currentTool, firstElement: { type: 'shape', id: hitShape.shape.id } };
@@ -121,7 +138,7 @@ function handleShapeConstraintPointerDown(e, svg, state, hitShape) {
         return true;
     } else {
         const firstId = state.pendingConstraint.firstElement.id;
-        if (firstId === hitShape.shape.id) return false;
+        if (firstId === hitShape.shape.id) { refuse('Pick a second line, a different one.'); return false; }
         const constraintType = state.currentTool === TOOL_MODES.PARALLEL ? CONSTRAINT_TYPES.PARALLEL : CONSTRAINT_TYPES.PERPENDICULAR;
         ConstraintManager.createConstraint(state, constraintType, { shapes: [firstId, hitShape.shape.id] }, { source: 'toolbar' });
         state.selectedShapes.delete(firstId);
@@ -200,7 +217,7 @@ function handleCollinearPointerDown(e, svg, state, hitShape) {
     // FIX: Require Lines, not Joints
     if (!hitShape) return false;
     const shape = hitShape.shape;
-    if (shape.type !== 'line') return false;
+    if (shape.type !== 'line') { refuse('Collinear takes two lines (not a circle or an arc).'); return false; }
 
     // Initialize pending constraint if needed
     if (!state.pendingConstraint) state.pendingConstraint = { type: TOOL_MODES.COLLINEAR, selectionBuffer: [] };
@@ -212,7 +229,7 @@ function handleCollinearPointerDown(e, svg, state, hitShape) {
     }
     if (!state.pendingConstraint.selectionBuffer) state.pendingConstraint.selectionBuffer = [];
 
-    if (state.pendingConstraint.selectionBuffer.some(s => s.id === shape.id)) return false;
+    if (state.pendingConstraint.selectionBuffer.some(s => s.id === shape.id)) { refuse('Pick a second line, a different one.'); return false; }
 
     state.pendingConstraint.selectionBuffer.push(shape);
     state.selectedShapes.add(shape.id);
@@ -251,7 +268,7 @@ function handleTangentPointerDown(e, svg, state, hitShape) {
     }
     if (!state.pendingConstraint.selectionBuffer) state.pendingConstraint.selectionBuffer = [];
 
-    if (state.pendingConstraint.selectionBuffer.some(s => s.id === shape.id)) return false;
+    if (state.pendingConstraint.selectionBuffer.some(s => s.id === shape.id)) { refuse('Pick a second curve, a different one.'); return false; }
 
     state.pendingConstraint.selectionBuffer.push(shape);
     state.selectedShapes.add(shape.id);
@@ -273,7 +290,7 @@ function handleTangentPointerDown(e, svg, state, hitShape) {
         else if (circleLike(s1) && circleLike(s2)) {
             ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { shapes: [s1.id, s2.id] }, { source: 'toolbar' });
         } else {
-            console.warn('[constraint-tools] TANGENT requires a Line+Circle/Arc or Circle/Arc+Circle/Arc');
+            refuse('Tangent takes a line and a circle or arc, or two circles / arcs (not two lines).');
         }
         
         state.selectedShapes.delete(s1.id);
@@ -312,12 +329,20 @@ function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
             buffer.push({ type: 'joint', id: hitJoint.id });
             state.selectedJoints.add(hitJoint.id);
         }
+    } else if (hitShape && hitShape.shape.type === 'arc') {
+        refuse('Midpoint of an arc is not available yet: pick a point and a line.');
+        return false;
     } else if (hitShape && hitShape.shape.type === 'line') {
+        if (buffer.some(x => x.type === 'shape' && x.id !== hitShape.shape.id)) {
+            refuse('Midpoint takes a point and a line (or three points), not two lines.');
+            return false;
+        }
         if (!buffer.some(x => x.type === 'shape' && x.id === hitShape.shape.id)) {
             buffer.push({ type: 'shape', id: hitShape.shape.id, shape: hitShape.shape });
             state.selectedShapes.add(hitShape.shape.id);
         }
     } else {
+        if (hitShape && hitShape.shape) refuse('Midpoint takes a point and a line (or three points).');
         return false;
     }
 
@@ -369,9 +394,9 @@ function handleSymmetricPointerDown(e, svg, state, hitJoint, hitShape) {
 
     if (buffer.length < 2) {
         const item = entityOf(hitJoint ? hitJoint.id : null, hitJoint ? null : hitShape && hitShape.shape);
-        if (!item) return false;
-        if (buffer.length === 1 && buffer[0].family !== item.family) return false;      // two points, two lines or two circles / arcs
-        if (buffer.some(x => x.type === item.type && x.id === item.id)) return false;    // the same entity twice
+        if (!item) { if (hitShape && hitShape.shape) refuse('Symmetric takes points, lines, circles or arcs.'); return false; }
+        if (buffer.length === 1 && buffer[0].family !== item.family) { refuse('Symmetric takes two of the same kind: two points, two lines or two circles / arcs.'); return false; } // two points, two lines or two circles / arcs
+        if (buffer.some(x => x.type === item.type && x.id === item.id)) { refuse('Pick a second one, a different one.'); return false; }   // the same entity twice
         buffer.push(item);
         selectionOf(item).add(item.id);
         return true;
@@ -379,7 +404,7 @@ function handleSymmetricPointerDown(e, svg, state, hitJoint, hitShape) {
 
     // the third pick: the symmetry line
     const line = !hitJoint && hitShape && hitShape.shape && hitShape.shape.type === 'line' ? hitShape.shape : null;
-    if (!line) return false;
+    if (!line) { refuse('Symmetric: the third pick is the line to mirror across (a sketch line, a construction line or an axis).'); return false; }
     const [e1, e2] = buffer;
     const params = e1.type === 'joint' ? { joints: [e1.id, e2.id], line: line.id } : { shapes: [e1.id, e2.id], line: line.id };
     ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.SYMMETRIC, params, { source: 'toolbar' });
@@ -404,7 +429,7 @@ function handleEqualPointerDown(e, svg, state, hitShape) {
     }
     if (!state.pendingConstraint.selectionBuffer) state.pendingConstraint.selectionBuffer = [];
 
-    if (state.pendingConstraint.selectionBuffer.some(s => s.id === shape.id)) return false;
+    if (state.pendingConstraint.selectionBuffer.some(s => s.id === shape.id)) { refuse('Pick a second curve, a different one.'); return false; }
 
     state.pendingConstraint.selectionBuffer.push(shape);
     state.selectedShapes.add(shape.id);
@@ -418,7 +443,7 @@ function handleEqualPointerDown(e, svg, state, hitShape) {
         if ((s1.type === 'line' && s2.type === 'line') || (isCircleLike(s1) && isCircleLike(s2))) {
             ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' });
         } else {
-            console.warn('[constraint-tools] EQUAL requires two lines or two circles/arcs');
+            refuse('Equal takes two lines, or two circles / arcs (not a line and a circle).');
         }
 
         state.selectedShapes.delete(s1.id);

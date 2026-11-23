@@ -8,6 +8,7 @@
     style: {},
     focus: () => {},
     select: () => {},
+    setSelectionRange: () => {},
     value: '',
     addEventListener: () => {},
     removeEventListener: () => {}

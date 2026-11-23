@@ -38,6 +38,7 @@
     value: '',
     focus() { this._focused = true; },
     select() { this._selected = true; },
+    setSelectionRange() {},
     addEventListener(ev, fn) {
       if (!listeners.has(ev)) listeners.set(ev, []);
       listeners.get(ev).push(fn);

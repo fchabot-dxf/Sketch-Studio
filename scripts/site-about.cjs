@@ -15,12 +15,13 @@ const APPS_MARK = '<!--ABOUT:APPS-->', BUILD_MARK = '<!--ABOUT:BUILD-->', APP_MA
 
 const aboutApps = () => REGISTRY.filter((a) => a.about !== false);
 
-function appItem(app, { hostOf, addinUrl, addinLine, addinApp }) {
+function appItem(app, { hostOf, addinUrl, setupUrl = null, addinLine, addinApp }) {
   const host = hostOf[app.id];
   if (!host) throw new Error(`site-about: no SITE_HOST address for the app "${app.id}"`);
   const icon = 'data:image/svg+xml,' + encodeURIComponent(app.icon);
+  const setupLink = setupUrl ? `<a href="${esc(setupUrl)}">Download installer (Windows)</a> · ` : '';
   const addin = app.id === addinApp
-    ? `\n      <p class="addin">${esc(addinLine)} <a href="${esc(addinUrl)}">Download the add-in (.zip)</a></p>` : '';
+    ? `\n      <p class="addin">${esc(addinLine)} ${setupLink}<a href="${esc(addinUrl)}">Download the add-in (.zip)</a></p>` : '';
   return `<li class="app" data-app="${app.id}">
     <img src="${icon}" alt="" width="56" height="56">
     <div>

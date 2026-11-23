@@ -167,7 +167,7 @@ try {
   eq(avail.version, 'Version 9.8.7 · 31 KB', 'the add-in version (and size)');
   eq(avail.unavailable, null, 'no "not available" message');
   deepEq(avail.steps, ADDIN_INSTALL_STEPS, 'the install steps are listed');
-  ok(ADDIN_INSTALL_STEPS.join(' ').includes('UTILITIES tab > ADD-INS > Scripts and Add-Ins') && ADDIN_INSTALL_STEPS.join(' ').includes('green + next to My Add-Ins') && ADDIN_INSTALL_STEPS.join(' ').includes('Run on Startup'), 'the steps name Fusion\'s menus');
+  ok(ADDIN_INSTALL_STEPS.join(' ').includes('UTILITIES tab > ADD-INS > Scripts and Add-Ins') && ADDIN_INSTALL_STEPS.join(' ').includes('green + next to My Add-Ins') && ADDIN_INSTALL_STEPS.join(' ').includes('Pick the unzipped shaper-addin folder, then Run.') && !ADDIN_INSTALL_STEPS.join(' ').includes('Run on Startup'), 'the steps name Fusion\'s menus');
   const missing = await renderWith(async () => ({ available: false }));
   eq(missing.unavailable, ADDIN_UNAVAILABLE, 'no json: "not available in this build"');
   eq(missing.link, null, 'no json: no link');

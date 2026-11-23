@@ -17,12 +17,21 @@ export const ADDIN_VIEW_ID = 'fusion-addin';
 export const ADDIN_RELEASE_JSON = 'downloads/shaper-addin.json';
 export const ADDIN_UNAVAILABLE = 'The add-in download is not available in this build.';
 
+// Declared once so signing the installer later changes only this line.
+export const ADDIN_SMARTSCREEN_NOTE = "If Windows shows 'Windows protected your PC', click More info, then Run anyway.";
+
+export const ADDIN_SETUP_STEPS = [
+  `Run shaper-addin-setup.exe. ${ADDIN_SMARTSCREEN_NOTE}`,
+  'Restart Fusion if it was open.',
+  'The Shaper button is in the UTILITIES tab.',
+];
+
 // The install steps (Fusion's own menu names, as Fusion writes them).
 export const ADDIN_INSTALL_STEPS = [
   'Unzip shaper-addin.zip.',
   'In Fusion: UTILITIES tab > ADD-INS > Scripts and Add-Ins.',
   'Add-Ins tab: the green + next to My Add-Ins.',
-  'Pick the unzipped shaper-addin folder, then Run (tick Run on Startup to keep it).',
+  'Pick the unzipped shaper-addin folder, then Run.',
   'The Shaper button is in the UTILITIES tab.',
 ];
 
@@ -52,7 +61,12 @@ export async function loadAddinRelease({ fetchImpl = (u, o) => fetch(u, o), base
   if (!res.ok) throw new Error(`The add-in release could not be read (HTTP ${res.status}).`);
   const info = await res.json();
   if (!info || typeof info.version !== 'string' || typeof info.zip !== 'string') throw new Error('The add-in release file has no version or zip.');
-  return { available: true, version: info.version, bytes: info.bytes, zipUrl: new URL(info.zip, url).href };
+  const out = { available: true, version: info.version, bytes: info.bytes, zipUrl: new URL(info.zip, url).href };
+  if (typeof info.setup === 'string' && info.setup) {
+    out.setupUrl = new URL(info.setup, url).href;
+    if (info.setup_bytes != null) out.setupBytes = info.setup_bytes;
+  }
+  return out;
 }
 
 const kb = (bytes) => (Number.isFinite(bytes) ? ` · ${Math.max(1, Math.round(bytes / 1024))} KB` : '');
@@ -64,18 +78,28 @@ export function fusionAddinView({ load = loadAddinRelease } = {}) {
     render(container) {
       const doc = container.ownerDocument;
       const el = (tag, cls, text) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+      const stepList = (items, addinAttr) => {
+        const ul = el('ul', 'sk-check-steps'); ul.dataset.addin = addinAttr;
+        items.forEach((text, i) => {
+          const li = el('li');
+          li.append(el('span', 'mark', `${i + 1}.`), el('span', 'txt', text));
+          ul.appendChild(li);
+        });
+        return ul;
+      };
+      const downloadLink = (addinAttr, href, filename, label) => {
+        const a = el('a', 'sk-sidebar-item'); a.dataset.addin = addinAttr; a.href = href; a.setAttribute('download', filename);
+        a.innerHTML = `<span class="sk-sidebar-ic" aria-hidden="true">${SIDEBAR_ICONS.download}</span><span>${label}</span>`;
+        return a;
+      };
       container.dataset.addin = 'view';
       container.appendChild(el('p', 'sk-note', 'The Fusion 360 add-in opens this Shaper app in a Fusion palette: select a body or sketch in Fusion and add it to the cut plan.'));
       const release = el('div'); release.dataset.addin = 'release';
       release.appendChild(el('p', 'sk-note', 'Reading the add-in release…'));
       container.appendChild(release);
-      container.appendChild(el('p', 'sk-note', 'Install:'));
-      const steps = el('ul', 'sk-check-steps'); steps.dataset.addin = 'steps';
-      ADDIN_INSTALL_STEPS.forEach((text, i) => {
-        const li = el('li');
-        li.append(el('span', 'mark', `${i + 1}.`), el('span', 'txt', text));
-        steps.appendChild(li);
-      });
+      const stepsLabel = el('p', 'sk-note', 'Install:');
+      container.appendChild(stepsLabel);
+      const steps = stepList(ADDIN_INSTALL_STEPS, 'steps');
       container.appendChild(steps);
 
       const show = (nodes) => { release.replaceChildren(...nodes); };
@@ -85,8 +109,17 @@ export function fusionAddinView({ load = loadAddinRelease } = {}) {
           show([m]);
           return;
         }
-        const a = el('a', 'sk-sidebar-item'); a.dataset.addin = 'download'; a.href = r.zipUrl; a.setAttribute('download', 'shaper-addin.zip');
-        a.innerHTML = `<span class="sk-sidebar-ic" aria-hidden="true">${SIDEBAR_ICONS.download}</span><span>Download (.zip)</span>`;
+        if (r.setupUrl) {
+          stepsLabel.hidden = true;
+          const setupLink = downloadLink('setup', r.setupUrl, 'shaper-addin-setup.exe', 'Download installer (Windows)');
+          const v = el('p', 'sk-note', `Version ${r.version}${kb(r.setupBytes)}`); v.dataset.addin = 'version';
+          const setupSteps = stepList(ADDIN_SETUP_STEPS, 'setup-steps');
+          const manual = el('p', 'sk-note', 'Mac, or manual install:'); manual.dataset.addin = 'manual';
+          const zipLink = downloadLink('download', r.zipUrl, 'shaper-addin.zip', 'Download (.zip)');
+          show([setupLink, v, setupSteps, manual, zipLink]);
+          return;
+        }
+        const a = downloadLink('download', r.zipUrl, 'shaper-addin.zip', 'Download (.zip)');
         const v = el('p', 'sk-note', `Version ${r.version}${kb(r.bytes)}`); v.dataset.addin = 'version';
         show([a, v]);
       }, (err) => {

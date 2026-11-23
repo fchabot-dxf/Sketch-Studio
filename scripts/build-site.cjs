@@ -99,10 +99,10 @@ function stampBuild(out, stamp) {
 // "Fusion add-in" view reads <dir>/<json> (apps/shaper/src/addin-download.js ADDIN_RELEASE_JSON); a site built without --addin has no json, and
 // the view says the download is not available in this build. `dir` is the REPO path (next to the page in development); in the site the files are
 // at sitePath of it, downloads/ (TASK 763: https://shaper-svg.pages.dev/downloads/shaper-addin.zip).
-const ADDIN_DOWNLOAD = { app: 'shaper', dir: 'apps/shaper/downloads', zip: 'shaper-addin.zip', json: 'shaper-addin.json',
+const ADDIN_DOWNLOAD = { app: 'shaper', dir: 'apps/shaper/downloads', zip: 'shaper-addin.zip', setup: 'shaper-addin-setup.exe', json: 'shaper-addin.json',
   about: 'The Fusion 360 add-in that opens Shaper in a Fusion palette.' }; // TASK 828: the one line the About page gives under Shaper, with the zip's link
 
-// Check the release folder BEFORE the site is written (the json names the zip and gives its sha256 / size); -> what copyAddinDownload copies.
+// Check the release folder BEFORE the site is written (the json names the zip and optional setup, with their sha256 / size); -> what copyAddinDownload copies.
 function readAddinRelease(fromDir) {
   const src = path.resolve(fromDir);
   const jsonFile = path.join(src, ADDIN_DOWNLOAD.json), zipFile = path.join(src, ADDIN_DOWNLOAD.zip);
@@ -113,16 +113,34 @@ function readAddinRelease(fromDir) {
   const zip = fs.readFileSync(zipFile);
   const sha = crypto.createHash('sha256').update(zip).digest('hex');
   if (info.sha256 !== sha || info.bytes !== zip.length) throw new Error(`build-site --addin: ${ADDIN_DOWNLOAD.zip} (${zip.length} bytes, sha256 ${sha}) is not the one ${ADDIN_DOWNLOAD.json} describes (${info.bytes} bytes, sha256 ${info.sha256})`);
-  return { jsonFile, zipFile, version: info.version, bytes: zip.length, sha256: sha };
+  if (info.setup == null) return { jsonFile, zipFile, version: info.version, bytes: zip.length, sha256: sha, setupFile: null };
+  if (info.setup !== ADDIN_DOWNLOAD.setup) throw new Error(`build-site --addin: ${ADDIN_DOWNLOAD.json} names the setup "${info.setup}", expected "${ADDIN_DOWNLOAD.setup}"`);
+  const setupFile = path.join(src, info.setup);
+  if (!fs.existsSync(setupFile)) throw new Error(`build-site --addin: ${setupFile} does not exist (run shaper-addin's make_release.py --out ${fromDir})`);
+  const setupBuf = fs.readFileSync(setupFile);
+  const setupSha = crypto.createHash('sha256').update(setupBuf).digest('hex');
+  if (info.setup_sha256 !== setupSha || info.setup_bytes !== setupBuf.length) {
+    throw new Error(`build-site --addin: ${info.setup} (${setupBuf.length} bytes, sha256 ${setupSha}) is not the one ${ADDIN_DOWNLOAD.json} describes (${info.setup_bytes} bytes, sha256 ${info.setup_sha256})`);
+  }
+  return { jsonFile, zipFile, version: info.version, bytes: zip.length, sha256: sha, setupFile, setup: info.setup, setupBytes: setupBuf.length, setupSha256: setupSha };
 }
-// ... and copy both to <out>/<sitePath of ADDIN_DOWNLOAD.dir>/.
+// ... and copy release files to <out>/<sitePath of ADDIN_DOWNLOAD.dir>/.
 function copyAddinDownload(release, out) {
   const dir = sitePath(ADDIN_DOWNLOAD.app, ADDIN_DOWNLOAD.dir);
   const dst = path.join(out, ...dir.split('/'));
   fs.mkdirSync(dst, { recursive: true });
   fs.copyFileSync(release.jsonFile, path.join(dst, ADDIN_DOWNLOAD.json));
   fs.copyFileSync(release.zipFile, path.join(dst, ADDIN_DOWNLOAD.zip));
-  return { version: release.version, bytes: release.bytes, sha256: release.sha256, files: [`${dir}/${ADDIN_DOWNLOAD.json}`, `${dir}/${ADDIN_DOWNLOAD.zip}`] };
+  const files = [`${dir}/${ADDIN_DOWNLOAD.json}`, `${dir}/${ADDIN_DOWNLOAD.zip}`];
+  const outInfo = { version: release.version, bytes: release.bytes, sha256: release.sha256, files };
+  if (release.setupFile) {
+    fs.copyFileSync(release.setupFile, path.join(dst, release.setup));
+    files.push(`${dir}/${release.setup}`);
+    outInfo.setup = release.setup;
+    outInfo.setupBytes = release.setupBytes;
+    outInfo.setupSha256 = release.setupSha256;
+  }
+  return outInfo;
 }
 
 const SKIP_DIRS = new Set(['tests', 'node_modules']);
@@ -191,7 +209,16 @@ function buildSite(app, outDir = path.join(REPO_ROOT, 'dist'), { addin = null } 
   stampBuild(out, build);
   fs.writeFileSync(path.join(out, '_redirects'), siteRedirects(app));
   fs.writeFileSync(path.join(out, '404.html'), NOT_FOUND_PAGE);
-  writeAbout(out, { hostOf: SITE_HOST, addinUrl: `https://${SITE_HOST[ADDIN_DOWNLOAD.app]}/${sitePath(ADDIN_DOWNLOAD.app, ADDIN_DOWNLOAD.dir)}/${ADDIN_DOWNLOAD.zip}`, addinLine: ADDIN_DOWNLOAD.about, addinApp: ADDIN_DOWNLOAD.app, build, app }); // TASK 828 (+ 828b: app = whose site)
+  const dlBase = `https://${SITE_HOST[ADDIN_DOWNLOAD.app]}/${sitePath(ADDIN_DOWNLOAD.app, ADDIN_DOWNLOAD.dir)}`;
+  writeAbout(out, {
+    hostOf: SITE_HOST,
+    addinUrl: `${dlBase}/${ADDIN_DOWNLOAD.zip}`,
+    setupUrl: release && release.setup ? `${dlBase}/${release.setup}` : null,
+    addinLine: ADDIN_DOWNLOAD.about,
+    addinApp: ADDIN_DOWNLOAD.app,
+    build,
+    app,
+  }); // TASK 828 (+ 828b + 859)
   checkRootLayout(app, out, closure);
   const identity = writeIdentity(app, out, SITE_HOST[app]); // after the proof: it adds links to the built page
   const addinRelease = release ? copyAddinDownload(release, out) : null;

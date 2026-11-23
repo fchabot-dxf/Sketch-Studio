@@ -8,7 +8,7 @@ import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { FUSION_ACTIONS, mountFusionPrepareBar } from '../apps/shaper/src/fusion-bridge.js';
 import { regionSig } from '../apps/shaper/src/selection-edit.js';
 import { getSelections, setSelections, formatSummaryItem } from '../apps/shaper/src/selection-list.js';
-import { storeOps, opById, setOpSettings, regionOf, insertOp } from '../apps/shaper/src/operations-store.js';
+import { storeOps, opById, setOpSettings, regionOf, insertOp, setRegion } from '../apps/shaper/src/operations-store.js';
 import { createPrepareStage } from '../apps/shaper/src/prepare-stage.js';
 import { CUT_TYPES } from '../apps/shaper/src/shaper.js';
 
@@ -241,6 +241,18 @@ prepare.afterRestore();
 const stlRow = selectRow(stlOp.id);
 ok(stlRow, 'STL op row exists');
 ok(!stlRow.querySelector('.ops-fusion-sel'), 'STL op hides Select in Fusion');
+
+// 4c. TASK 864: Stock row hides Select in Fusion, yet keepTokens preserves Stock's source tokens when updating another op
+setRegion('loop:stock-864', { sources: ['tok-stock'] });
+const stockOp = insertOp(0, { type: 'stock', settings: { cutDepth: 12 }, geometry: [{ key: 'loop:stock-864', seq: 100 }] });
+prepare.afterRestore();
+const realStockRow = selectRow(stockOp.id);
+ok(realStockRow, 'Stock op row exists');
+ok(!realStockRow.querySelector('.ops-fusion-sel'), 'Stock op hides Select in Fusion');
+sent.length = 0;
+selectRow(onlineOp.id).querySelector('.ops-fusion-sel').click();
+const reqWithStock = sent.find(([, b]) => b.action === 'select_for_operation');
+ok(reqWithStock && reqWithStock[1].keepTokens.includes('tok-stock'), 'keepTokens preserves Stock source token');
 
 // 5. Web mode (without onSelectInFusion) hides Select in Fusion
 const opsElWeb = app.document.createElement('div');

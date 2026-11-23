@@ -18,7 +18,6 @@ import { emptyDocument } from '#ui/project-store.js';
 import { getSelections, setSelections, onSelectionsChange, selectionRowsOf } from './selection-list.js'; // TASK 795 / 795c: the selection list the Prepare bar shows
 import { storeOps, regionOf, captureStore, applyStore, renameGeometry } from './operations-store.js';
 import { partKeyOf } from './cut-plan.js';
-import { STOCK_TYPE_ID } from './shaper.js';
 import { getStock, setStock } from './stock.js';
 import { loadBits, saveBits } from './tool-table.js';
 import { forget as forgetPaths } from './op-paths.js';
@@ -177,7 +176,7 @@ export function buildSelectForOperationPayload(op) {
   }
   const keepTokens = [], seenKeep = new Set();
   for (const other of storeOps()) {
-    if (other.id === op.id || other.type === STOCK_TYPE_ID) continue;
+    if (other.id === op.id) continue; // include Stock so updating another op in Fusion preserves Stock's entities too
     for (const ref of (other.geometry || [])) {
       const reg = regionOf(partKeyOf(ref.key));
       const srcs = reg && Array.isArray(reg.sources) ? reg.sources : [];

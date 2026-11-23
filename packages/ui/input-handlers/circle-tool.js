@@ -4,9 +4,8 @@ import { addConstraint } from '#core/constraints.js';
 import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
-import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall, applyLockedSnap, snapPoint } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -83,6 +82,16 @@ export function handleCirclePointerMove(e, svg, state, w){
     return true;
 }
 
+/**
+ * A rim click on an existing POINT (a joint, a circle centre, the origin) puts that point ON the new circle: the point-on-curve the Line tool makes for
+ * an end placed on a circle, made by the shared `applyLockedSnap` with the point as the subject and the new circle as the target. A rim click on a
+ * line, curve or axis only places the radius there (no constraint, as in Fusion); a typed radius is the user's own size and takes none.
+ */
+function applyRimSnap(state, shapeId, snap, rimPt) {
+    if (circleState.lockedRadius != null || !snap || (snap.type !== 'joint' && snap.type !== 'point')) return;
+    applyLockedSnap(state, snap.id || snap.targetId, { type: 'shape', isLocked: true, targetId: shapeId, pt: rimPt });
+}
+
 export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlobal){
     if(!state.active || state.active.mode!==TOOL_MODES.CIRCLE) return false;
 
@@ -96,13 +105,8 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     }
 
     // Otherwise (if we Dragged OR if this is the Second Click), finalize the circle.
-    let snapForEnd = hitSnap;
-    if (state.active.waitingForSecondClick) {
-        try {
-            snapForEnd = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [state.active.start]);
-        } catch (_) { snapForEnd = null; }
-    }
-    const endPt = (snapForEnd && snapForEnd.isLocked && snapForEnd.pt) ? snapForEnd.pt : w;
+    const snapForEnd = state.activeSnap || hitSnap;   // the click's locked snap, read as the Line tool and the Rectangle read it
+    const endPt = (snapForEnd && snapForEnd.isLocked && snapPoint(snapForEnd)) || w;
     const center = state.joints.get(state.active.start);
     if(!center) return false;
     const dx = endPt.x - center.x, dy = endPt.y - center.y;
@@ -125,6 +129,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
             applySnapConstraint(state, state.active.start, state.active.centerSnapTarget); 
         } 
     }catch(_){ }
+    applyRimSnap(state, shapeId, snapForEnd, endPt);
 
     circleState.lockedRadius = null; circleState.boxOpen = false;
     localState.isDragging = false;

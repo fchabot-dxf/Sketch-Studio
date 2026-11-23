@@ -8,10 +8,9 @@ import { TOOL_MODES, POLYGON_SIDES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
 import { makePolygon, clampPolygonSides } from '#core/shapes.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
-import { findSnap } from '#ui/snap-detection.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { hideInput } from '#ui/numeric-input-manager.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 // The live box: `sides` / `lockedRadius` are what the user typed in it (null = not typed: the cursor sets the size, state.polygonSides the sides).
@@ -115,16 +114,14 @@ export function handlePolygonPointerUp(e, svg, state, hitSnap, w) {
         openCreationBoxes(e, BOX, [0, polygonSides(state)]);
         return true;
     }
-    let snapForEnd = hitSnap;
-    if (state.active.waitingForSecondClick) {
-        try { snapForEnd = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [state.active.start]); } catch (_) { snapForEnd = null; }
-    }
-    const endPt = (snapForEnd && snapForEnd.isLocked && snapForEnd.pt) ? snapForEnd.pt : w;
-    return createPolygon(state, sizedEnd(state.joints.get(state.active.start) || endPt, endPt));
+    const snapForEnd = state.activeSnap || hitSnap;   // the click's locked snap, read as the Line tool and the Rectangle read it
+    const endPt = (snapForEnd && snapForEnd.isLocked && snapPoint(snapForEnd)) || w;
+    // a typed size is the user's own: the corner then lies where the size puts it, not on the snap
+    return createPolygon(state, sizedEnd(state.joints.get(state.active.start) || endPt, endPt), live.lockedRadius == null ? snapForEnd : null);
 }
 
-/** Build the polygon from the active centre joint to `endPt` (the first corner). Returns true when the event was handled. */
-export function createPolygon(state, endPt) {
+/** Build the polygon from the active centre joint to `endPt` (the first corner, with `vertexSnap` = the locked snap it was placed on, if any). Returns true when the event was handled. */
+export function createPolygon(state, endPt, vertexSnap = null) {
     const center = state.joints.get(state.active && state.active.start);
     if (!center || !endPt) { resetLive(); state.closeDrawStep(); state.active = null; return false; }
     const radius = Math.hypot(endPt.x - center.x, endPt.y - center.y);
@@ -147,6 +144,7 @@ export function createPolygon(state, endPt) {
     try {
         if (state.active.centerSnapTarget && state.active.centerSnapTarget.isLocked) applySnapConstraint(state, state.active.start, state.active.centerSnapTarget);
     } catch (_) { /* a snap that cannot constrain still leaves a valid polygon */ }
+    applyLockedSnap(state, vertexId, vertexSnap, [state.active.start]);
     state.endUndoGroup();
     state.active = null;
     return true;

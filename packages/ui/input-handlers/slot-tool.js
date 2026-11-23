@@ -18,7 +18,6 @@ import {
     makeSlotThreePointArc,
     makeSlotCenterPointArc,
 } from '#core/slot.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { hideInput, isInputActive, showSingleInput } from '#ui/numeric-input-manager.js';
 import { worldToScreen } from '#ui/coords.js';
@@ -29,6 +28,7 @@ import {
     setupDimensionListeners,
     openCreationBoxes,
     followCreationBoxes,
+    applyLockedSnap,
 } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -234,19 +234,11 @@ function redrawPreview(state, cursorPt) {
     }
 }
 
-function applyOptionalSnap(state, jointId, snap) {
-    try {
-        if (snap && snap.isLocked) applySnapConstraint(state, jointId, snap);
-    } catch (_) { /* snap constraint failure still leaves a valid slot */ }
-}
-
-function resolveOrAllocJoint(state, pt, snap) {
-    if (snap && snap.isLocked && snap.type === 'joint' && snap.jointId && !snap.otherSketch && state.joints.has(snap.jointId)) {
-        return { id: snap.jointId, reused: true };
-    }
+/** A new joint at `pt` (a slot point on an existing point is made coincident with it afterwards, by the snap: the way the Line tool does it). */
+function allocJoint(state, pt) {
     const id = state.genJ();
     state.joints.set(id, { x: pt.x, y: pt.y, fixed: false });
-    return { id, reused: false };
+    return id;
 }
 
 function commitSlot(svg, state, cursorPt) {
@@ -271,26 +263,28 @@ function commitSlot(svg, state, cursorPt) {
         state.saveState('Create Slot');
         if (mode === SLOT_MODES.THREE_POINT_ARC) {
             const p3Pick = active.picks[2];
-            const j1 = resolveOrAllocJoint(state, p1Pick.pt, p1Pick.snap);
-            const j2 = resolveOrAllocJoint(state, p2Pick.pt, p2Pick.snap);
+            const j1Id = allocJoint(state, p1Pick.pt);
+            const j2Id = allocJoint(state, p2Pick.pt);
+            const thirdSnap = p3Pick.snap;   // the arc point's snap: a POINT it was placed on is the arc's third joint (point-on-arc); a line / curve / axis only gave its position
+            const thirdJointId = (thirdSnap && thirdSnap.isLocked && thirdSnap.type === 'joint') ? (thirdSnap.id || thirdSnap.targetId) : null;
             let thirdArg = p3Pick.pt;
             let bindThird = false;
-            if (p3Pick.snap && p3Pick.snap.isLocked && p3Pick.snap.type === 'joint' && p3Pick.snap.jointId && !p3Pick.snap.otherSketch && state.joints.has(p3Pick.snap.jointId)) {
-                thirdArg = p3Pick.snap.jointId;
+            if (thirdJointId && state.joints.has(thirdJointId)) {
+                thirdArg = thirdJointId;
                 bindThird = true;
             }
-            built = makeSlotThreePointArc(state.joints, j1.id, j2.id, thirdArg, geom.width, state.genJ, isConstruction, { bindThirdJoint: bindThird });
-            if (!j1.reused) snapsToApply.push([j1.id, p1Pick.snap]);
-            if (!j2.reused) snapsToApply.push([j2.id, p2Pick.snap]);
+            built = makeSlotThreePointArc(state.joints, j1Id, j2Id, thirdArg, geom.width, state.genJ, isConstruction, { bindThirdJoint: bindThird });
+            snapsToApply.push([j1Id, p1Pick.snap]);
+            snapsToApply.push([j2Id, p2Pick.snap]);
         } else {
-            const jcm = resolveOrAllocJoint(state, p1Pick.pt, p1Pick.snap);
-            const jc1 = resolveOrAllocJoint(state, p2Pick.pt, p2Pick.snap);
+            const jcmId = allocJoint(state, p1Pick.pt);
+            const jc1Id = allocJoint(state, p2Pick.pt);
             const p3Pick = active.picks[2];
-            const jc2 = resolveOrAllocJoint(state, geom.c2, p3Pick && p3Pick.snap);
-            built = makeSlotCenterPointArc(state.joints, jcm.id, jc1.id, jc2.id, geom.sweep, geom.width, state.genJ, isConstruction);
-            if (!jcm.reused) snapsToApply.push([jcm.id, p1Pick.snap]);
-            if (!jc1.reused) snapsToApply.push([jc1.id, p2Pick.snap]);
-            if (!jc2.reused && p3Pick) snapsToApply.push([jc2.id, p3Pick.snap]);
+            const jc2Id = allocJoint(state, geom.c2);
+            built = makeSlotCenterPointArc(state.joints, jcmId, jc1Id, jc2Id, geom.sweep, geom.width, state.genJ, isConstruction);
+            snapsToApply.push([jcmId, p1Pick.snap]);
+            snapsToApply.push([jc1Id, p2Pick.snap]);
+            if (p3Pick) snapsToApply.push([jc2Id, p3Pick.snap]);
         }
     } else {
         const geom = currentStraightGeom(mode, p1Pick.pt, p2Pick.pt, cursor);
@@ -299,17 +293,17 @@ function commitSlot(svg, state, cursorPt) {
             return false;
         }
         state.saveState('Create Slot');
-        const j1 = resolveOrAllocJoint(state, p1Pick.pt, p1Pick.snap);
-        const j2 = resolveOrAllocJoint(state, p2Pick.pt, p2Pick.snap);
+        const j1Id = allocJoint(state, p1Pick.pt);
+        const j2Id = allocJoint(state, p2Pick.pt);
         if (mode === SLOT_MODES.CENTER_TO_CENTER) {
-            built = makeSlotCenterToCenter(state.joints, j1.id, j2.id, geom.width, state.genJ, isConstruction);
+            built = makeSlotCenterToCenter(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction);
         } else if (mode === SLOT_MODES.OVERALL) {
-            built = makeSlotOverall(state.joints, j1.id, j2.id, geom.width, state.genJ, isConstruction);
+            built = makeSlotOverall(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction);
         } else {
-            built = makeSlotCenterPoint(state.joints, j1.id, j2.id, geom.width, state.genJ, isConstruction);
+            built = makeSlotCenterPoint(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction);
         }
-        if (!j1.reused) snapsToApply.push([j1.id, p1Pick.snap]);
-        if (!j2.reused) snapsToApply.push([j2.id, p2Pick.snap]);
+        snapsToApply.push([j1Id, p1Pick.snap]);
+        snapsToApply.push([j2Id, p2Pick.snap]);
     }
 
     if (!built || !built.shapes || built.shapes.length === 0) {
@@ -320,7 +314,7 @@ function commitSlot(svg, state, cursorPt) {
 
     for (const s of built.shapes) state.shapes.push(s);
     for (const c of built.constraints) addConstraint(state, c.type, c);
-    for (const [jid, snap] of snapsToApply) applyOptionalSnap(state, jid, snap);
+    for (const [jid, snap] of snapsToApply) applyLockedSnap(state, jid, snap);
     // TASK 782: a typed length of the centre-point slot is kept as a dimension between its two end centres (the full length the box shows)
     if (mode === SLOT_MODES.CENTER_POINT && active.typedSpan > 0 && built.meta && built.meta.c1Id && built.meta.c2Id) {
         ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [built.meta.c1Id, built.meta.c2Id], value: active.typedSpan }, { source: 'slot' });

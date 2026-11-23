@@ -1,6 +1,6 @@
 // tests/selection-list-795-live.test.js — TASK 795: the SELECTION LIST in the Fusion palette (Shaper ?host=fusion, window.adsk.fusionSendData a recorder). Two selections
-// (selection_data with selectionId + summary, through window.fusionJavaScriptHandler.handle) are ADDED and listed in Prepare's bar; a real hover on a row sends
-// highlight_selection(id) and leaving it highlight_selection(null); a real click on a row's X removes that selection (clear_selection(id)); Clear all (from two rows) removes
+// (selection_data with selectionId + summary, through window.fusionJavaScriptHandler.handle) are ADDED and listed in Prepare's bar; a real hover on a row and leaving it
+// send nothing to Fusion (TASK 865); a real click on a row's X removes that selection (clear_selection(id)); Clear all (from two rows) removes
 // every one (clear_selection('all')); the footer Undo brings it back and sends nothing. Desktop (1280 x 800) and phone (390 x 844).
 // Screenshots (the bar, cropped): .evidence/795/list-<w>x<h>.png
 import assert from 'node:assert';
@@ -70,13 +70,13 @@ async function run({ width, height }) {
     assert.strictEqual(await evalJs(`window.__designController.state.shapes.length`), 8, `[${label}] both selections are in the design`);
     await shot(`list-${label}.png`);
 
-    // a real hover on the first row, then off it
+    // a real hover on the first row, then off it sends nothing to Fusion (TASK 865)
     const row = await centre('.shaper-fusion-sel[data-selection-id="sel-A"] .shaper-fusion-sel-text');
     await mouseTo(row.x, row.y);
-    await waitFor(`window.__sent.some((s) => s.action === 'highlight_selection' && s.selectionId === 'sel-A')`, 'highlight_selection(sel-A) on hover');
+    await waitFor(`!!document.querySelector('.shaper-fusion-sel[data-selection-id="sel-A"]:hover')`, 'row hovered');
     await mouseTo(2, height - 2);
-    await waitFor(`window.__sent.some((s) => s.action === 'highlight_selection' && s.selectionId === null)`, 'highlight_selection(null) on leaving');
-    assert.deepStrictEqual(await sent(), ['highlight_selection:sel-A', 'highlight_selection:null'], `[${label}] hover sends highlight, leaving restores`);
+    await waitFor(`!document.querySelector('.shaper-fusion-sel:hover')`, 'pointer left the row');
+    assert.deepStrictEqual(await sent(), [], `[${label}] hover and leaving send nothing to Fusion`);
 
     // the X of the first row (a real click)
     await evalJs(`window.__sent.length = 0`);
@@ -88,10 +88,9 @@ async function run({ width, height }) {
     assert.ok((await sent()).includes('clear_selection:sel-A'), `[${label}] the X sent clear_selection(sel-A): ${JSON.stringify(await sent())}`);
     assert.ok(await evalJs(`!document.getElementById('btn-fusion-clear-selections')`), `[${label}] Clear all is hidden with one row`);
 
-    // the pointer stayed where A's X was, and row B moved up under it (a real hover: highlight_selection(sel-B)); move off the list and let that leave's
-    // highlight_selection(null) arrive, so only the Undo's own sends are counted below
+    // move off the list before testing Undo so no hover state lingers
     await mouseTo(2, height - 2);
-    await waitFor(`!document.querySelector('.shaper-fusion-sel:hover') && window.__sent[window.__sent.length - 1].action === 'highlight_selection' && window.__sent[window.__sent.length - 1].selectionId === null`, 'the pointer left the list and highlight_selection(null) arrived');
+    await waitFor(`!document.querySelector('.shaper-fusion-sel:hover')`, 'the pointer left the list');
 
     // the footer Undo: the row is back, nothing is sent
     await evalJs(`window.__sent.length = 0`);

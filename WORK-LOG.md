@@ -17800,3 +17800,15 @@ Fixed headless browser teardown hangs (`TIMEOUT after 90s` after `ok`) and lefto
 - Test `tests/prepare-notice-900-live.test.js` (Fusion stub, onError text, widths 641/700/860/1000/1400/480; rect intersection with `#prepare-ops` and the cut card column, no clipping, inside the viewport; normal Shaper at 1400 and 860 printed).
 - BEFORE (origin/main CSS) the test FAILED: `fusion 860: notice {"l":215,"t":183,"r":645,...} overlaps #prepare-ops {"l":12,"t":183,"r":300,...}` (plus 641, 700, 1000, and the cut card column at 641/700/480). AFTER: `prepare-notice-900-live: all passed`; fusion 860 notice l=312 r=636, ops 12..300, cut column 648..848. Normal 1400: l=312 r=894.9 (no overlap); normal 860 overlapped ops before, after l=312 r=636.
 - Environment note: the Edge launcher here exits code 0 at once (a stub), so cdp-browser.js reports "exited before DevToolsActivePort"; I ran the live tests with a scratchpad `--require` shim that swaps msedge.exe for Chrome (not committed).
+## TURN 865 (stop sending `highlight_selection` to the Fusion add-in)
+- **Removed `highlight_selection` sending (`apps/shaper/src/fusion-bridge.js`)**: dropped `FUSION_ACTIONS.HIGHLIGHT_SELECTION`, `highlighted`, `sendHighlight`, the four `mouseenter`/`mouseleave`/`focusin`/`focusout` row listeners, and the `renderList()` cleanup for removed highlighted rows. Selection rows keep X removal, Clear all, Undo/Redo, and row text unchanged.
+- **Behaviour change**: hovering or focusing a selection row in Prepare's Fusion bar no longer sends `highlight_selection` to Fusion (so Fusion no longer highlights that selection).
+- **Updated tests**:
+  - `tests/fusion-mode-663-node.test.js`: removed `HIGHLIGHT_SELECTION` from the `FUSION_ACTIONS` protocol check (`64 checks passed`).
+  - `tests/selection-list-795-node.test.js`: rewrote row hover/focus assertion to `eq(sent, [], 'hover / focus a row sends nothing to Fusion')` (`72 checks passed`).
+  - `tests/selection-list-795-live.test.js`: replaced `highlight_selection` hover/leave waits with asserting `await sent()` is `[]`, and cleaned up the post-X pointer-move wait (`[1280x800] ok`, `[390x844] ok`, `selection-list-795-live: ok`).
+- **Verification**:
+  - `git grep -n "highlight_selection" -- apps/` exited 1 (0 matches).
+  - `node tests/opselect-806-node.test.js` (`33 checks passed`), `node tests/fusion-mode-663-live.test.js` (`ok`), `node tests/selection-mirror-795c-node.test.js` (`52 checks passed`), `node tests/perdesign-855-node.test.js` (`51 checks passed`), `node tests/opselect-806-live.test.js` (`ok`), `node tests/stockkeep-864-live.test.js` (`[1280x800] PASS`, `[390x844] PASS`), `node tests/fusion-import-664-live.test.js` (`ok`), `node tests/perdesign-855-live.test.js` (`ok`).
+  - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=578 pass=578 fail=0 elapsed=123s`, `PROFILES-LEFT 0`.
+

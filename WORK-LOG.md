@@ -17769,4 +17769,16 @@ Fixed headless browser teardown hangs (`TIMEOUT after 90s` after `ok`) and lefto
   - Fail-first `tests/addin-setup-859-node.test.js` (`SyntaxError: ... does not provide an export named 'ADDIN_SETUP_STEPS'`); after changes `33 checks passed`.
   - Updated `tests/addin-download-733-node.test.js` (`57 checks passed`), `tests/about-828.test.js` (`about-828 OK`), `tests/site-root-763.test.js` (`266 checks`), `npm.cmd run gate:quick` (`GATE tier=quick jobs=quick=22 files=564 pass=564 fail=0 deferred=11 elapsed=98s`).
   - Sequential live tests: `tests/addin-setup-859-live.test.js` (real `D:/APPS/shaper-addin/make_release.py --out ...`, `setup_bytes=2166328`, `ok`), `tests/addin-download-733-live.test.js` (`ok`), `tests/about-828-live.test.js` (`about-828-live OK`), `tests/site-root-763-live.test.js` (`ok`). Screenshots in `.evidence/859/`.
+## TURN 861: Split `tests/export-sim-801-perf-live.test.js` into 3 <= 60 s live tests
+`tests/export-sim-801-perf-live.test.js` took `102 s` alone (exceeding `scripts/gate.cjs` `FILE_LIMIT_MS = 90000`).
+- **Measured phases alone**:
+  - `waveRelief({ n: 320 }) + binaryStl`: `36 ms` (`208,640` triangles).
+  - Combined Wave Relief (Phase A alone): `69.75 s` (> `60 s` target because `4` playback sleeps = `28 s` + swiftshader 3D/Show-passes rebuilds up to `2,762 ms` & `500 ms` frames). Split Phase A into two independent files per advisor direction `(a)`.
+  - Dense Raster Pocket (Phase B alone): `41.79 s` (under `60 s`).
+- **Split (`tests/helpers/export-sim-perf-live.js` + 3 tests; old `tests/export-sim-801-perf-live.test.js` `git rm`d)**:
+  - `tests/helpers/export-sim-perf-live.js`: shared `SIM_PERF_CONFIG`, `launchSimPerfSession`, `openWaveReliefSession`, `measureRun`, `scrubFraction`, `setView`, `stats`.
+  - `tests/export-sim-801-perf-wave-3d-live.test.js`: wave relief 3D `4x` + scrub cache (`29.76 s`, `29.79 s`, `30.23 s` across 3 solo runs).
+  - `tests/export-sim-801-perf-wave-passes-live.test.js`: wave relief `Show passes` (`perf-wave-passes-top.png`), finished-part triangle check, `2D`, `Paths` (`55.51 s`, `54.62 s`, `55.07 s` across 3 solo runs).
+  - `tests/export-sim-801-perf-raster-live.test.js`: dense raster `3D`, `Show passes`, `2D`, `Paths` (`43.79 s`, `41.56 s`, `41.72 s` across 3 solo runs).
+  - No other references to `export-sim-801-perf-live` in repo outside `WORK-LOG.md`. No app code changed; no `// gate: exclusive` added; `FILE_LIMIT_MS` untouched. Note: changing `tests/helpers/` triggers all live tests in `--tier merge --plan`.
 

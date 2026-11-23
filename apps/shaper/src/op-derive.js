@@ -80,17 +80,25 @@ export function bitCentrePaths(state, written) {
 /** TASK 801: what the Export SIMULATION reads of each element of the file beside its travel (bitCentrePaths, `bitPaths` its result): its MEMBERSHIP (its entry's key,
  *  '<op id>|<geometry key>': the 3D schedule) and its place among that membership's elements (`ord`: the exporter writes one element per cut, in the derivation's
  *  order); and for a cut with NO travel (#core deriveCutTravel determines none: a Roughing level the Origin pockets, a plain On line cut) the derivation's own tool
- *  paths (deriveCutFootprint's toolPaths: [{ points, closed }], in their drawn order: no cutting direction), so the timeline still plays it for its length. null for
- *  an element of no entry (TASK 798's frame guide). */
+ *  paths (deriveCutFootprint's toolPaths: [{ points, closed }], in their drawn order: no cutting direction), so the timeline still plays it for its length. TASK 857:
+ *  a pocket the Origin clears (a freehand pocket, a Roughing level: deriveCutFootprint's kind 'pocket') also carries `pocketArea` ([{ fillRule, rings, finishRings }]:
+ *  the area its bit clears, the rings Prepare draws), the Paths view's cut band of it. null for an element of no entry (TASK 798's frame guide). */
 export function simElements(state, written, bitPaths) {
   const seen = new Map(), travelled = new Set((bitPaths || []).map((b) => b.index));
   return written.map(({ cut, entry }, index) => {
     if (!entry || typeof entry.key !== 'string') return null;
     const ord = seen.get(entry.key) || 0;
     seen.set(entry.key, ord + 1);
-    if (!cut || travelled.has(index)) return { key: entry.key, ord };
-    const toolPaths = deriveCutFootprint([cut], cut.rec, state).flatMap((fp) => (fp.kind === 'guide' ? [] : fp.toolPaths || [])).filter((tp) => tp.points && tp.points.length >= 2).map((tp) => ({ points: tp.points, closed: Boolean(tp.closed) }));
-    return toolPaths.length ? { key: entry.key, ord, toolPaths } : { key: entry.key, ord };
+    const hasTravel = travelled.has(index);
+    if (!cut || (hasTravel && !cut.isCompound)) return { key: entry.key, ord };
+    const fps = deriveCutFootprint([cut], cut.rec, state);
+    const toolPaths = hasTravel ? null : fps.flatMap((fp) => (fp.kind === 'guide' ? [] : fp.toolPaths || [])).filter((tp) => tp.points && tp.points.length >= 2).map((tp) => ({ points: tp.points, closed: Boolean(tp.closed) }));
+    const pocketArea = fps.filter((fp) => fp.kind === 'pocket' && fp.rings && fp.rings.length).map((fp) => ({
+      fillRule: fp.fillRule,
+      rings: fp.rings.filter((r) => r.length >= 3),
+      finishRings: (fp.finishRings || []).filter((r) => r.length >= 3),
+    })).filter((a) => a.rings.length || a.finishRings.length);
+    return { key: entry.key, ord, ...(toolPaths && toolPaths.length ? { toolPaths } : {}), ...(pocketArea.length ? { pocketArea } : {}) };
   });
 }
 

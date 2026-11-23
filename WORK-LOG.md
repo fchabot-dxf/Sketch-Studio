@@ -17688,3 +17688,16 @@ Added `toolDia`, `clearing`, and `role` to each path item in `buildToolpathsPayl
 - Behaviour change for existing users: `toolpaths` messages now include `toolDia`, `role`, and (on pockets) `clearing` per path; older add-ins ignore unknown fields.
 - Tests: fail-first in `tests/fusion-toolpaths-799-node.test.js` (`freehand pocket wall carries toolDia, clearing=freehand, role=wall`); after changes `fusion-toolpaths-799-node: 47 checks passed` (covering Outside, Inside, On Line, freehand Pocket, Spiral, Raster+Loop, V-bit pocket, and 500k relief `8.4 ms`). Extended `tests/fusion-toolpaths-799-live.test.js`.
 
+## TURN 859: Offer the Windows installer (`shaper-addin-setup.exe`) for the Fusion add-in
+- **`scripts/build-site.cjs`**: added `setup: 'shaper-addin-setup.exe'` to `ADDIN_DOWNLOAD`. When `shaper-addin.json` includes `setup`, `readAddinRelease` validates filename, file presence, `setup_bytes`, and `setup_sha256` before writing any output, and `copyAddinDownload` copies it to `downloads/shaper-addin-setup.exe`. Without `setup` in the json, the build emits zip + json only with no error.
+- **`scripts/site-about.cjs`**: when `buildSite` passes a `setupUrl` (release with `setup`), Shaper's entry on `about.html` includes `<a href="...shaper-addin-setup.exe">Download installer (Windows)</a> · <a href="...shaper-addin.zip">Download the add-in (.zip)</a>`; without `setup` (or `--addin`), only the zip link appears.
+- **`apps/shaper/src/addin-download.js`**:
+  - Declared `ADDIN_SMARTSCREEN_NOTE` once (`"If Windows shows 'Windows protected your PC', click More info, then Run anyway."`) and `ADDIN_SETUP_STEPS` (3 installer steps).
+  - Updated `ADDIN_INSTALL_STEPS` step 4 to `"Pick the unzipped shaper-addin folder, then Run."` (removed `tick Run on Startup`; verified zero other occurrences across repo).
+  - `loadAddinRelease` returns `setupUrl` / `setupBytes` when `setup` is present in `shaper-addin.json`, and omits them when absent.
+  - `fusionAddinView`: when `setupUrl` is present, renders `"Download installer (Windows)"` (`download="shaper-addin-setup.exe"`) first + version/size + 3 installer steps, followed by `"Mac, or manual install:"` + `"Download (.zip)"` + the 5 zip steps; when absent, renders today's zip-only view unchanged.
+- **Tests & Evidence**:
+  - Fail-first `tests/addin-setup-859-node.test.js` (`SyntaxError: ... does not provide an export named 'ADDIN_SETUP_STEPS'`); after changes `33 checks passed`.
+  - Updated `tests/addin-download-733-node.test.js` (`57 checks passed`), `tests/about-828.test.js` (`about-828 OK`), `tests/site-root-763.test.js` (`266 checks`), `npm.cmd run gate:quick` (`GATE tier=quick jobs=quick=22 files=564 pass=564 fail=0 deferred=11 elapsed=98s`).
+  - Sequential live tests: `tests/addin-setup-859-live.test.js` (real `D:/APPS/shaper-addin/make_release.py --out ...`, `setup_bytes=2166328`, `ok`), `tests/addin-download-733-live.test.js` (`ok`), `tests/about-828-live.test.js` (`about-828-live OK`), `tests/site-root-763-live.test.js` (`ok`). Screenshots in `.evidence/859/`.
+

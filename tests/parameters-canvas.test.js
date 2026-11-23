@@ -30,7 +30,7 @@ const mkEl = (tag) => {
 const dimInput = {
   id: 'dimInput', inputMode: '', value: '', style: {},
   classList: { _set: new Set(['hidden']), add(s) { this._set.add(s); }, remove(s) { this._set.delete(s); }, contains(s) { return this._set.has(s); } },
-  focus() {}, select() {},
+  focus() {}, select() {}, setSelectionRange() {},
   addEventListener(ev, fn) { if (!listeners.has(ev)) listeners.set(ev, []); listeners.get(ev).push(fn); },
   removeEventListener() {},
 };

@@ -100,7 +100,7 @@ applyStyleTemplate('default');
   const dim = { id: 'r', type: 'distance', isRadius: true, shape: 'circ', value: 10, offset: 25, labelPos: { x: 60, y: -40 } };
   const svg = { viewBox: { baseVal: { x: -50, y: -80, width: 140, height: 140 } }, getBoundingClientRect: () => ({ width: 700, height: 700 }), innerHTML: '' };
   draw(j, circle, svg, null, null, [dim], new Set(), new Set(), 'select', null, new Set(), null, null, null, null, null, false, null);
-  const m = [...svg.innerHTML.matchAll(/<line x1="([-\d.e]+)" y1="([-\d.e]+)" x2="([-\d.e]+)" y2="([-\d.e]+)" style="stroke:var\(--sk-constraint-stroke[^"]*" stroke-width="[^"]*" stroke-opacity="1"\/>/g)][0];
+  const m = [...svg.innerHTML.matchAll(/<line x1="([-\d.e]+)" y1="([-\d.e]+)" x2="([-\d.e]+)" y2="([-\d.e]+)" style="stroke:var\(--sk-constraint-stroke[^"]*" stroke-width="[^"]*" stroke-opacity="1"(?: data-constraint-idx="\d+")?\/>/g)][0];
   const ang = Math.atan2(-40, 60);
   near(+m[1], 10 * Math.cos(ang), 'radius leader starts on the rim toward the value'); near(+m[2], 10 * Math.sin(ang), 'radius leader starts on the rim');
   near(+m[3], 60, 'radius leader ends at projected label X'); near(+m[4], -40, 'radius leader ends at projected label Y');

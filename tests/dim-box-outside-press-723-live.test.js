@@ -195,17 +195,17 @@ try {
     await key('Escape', 'Escape', 27);
     await tool('tool-select');
 
-    // 4. a valid text + a double press on d2's label: d1 applied, d2's box open
+    // 4. TASK 866: pressing d2's label while d1's box is open inserts d2 at the caret and keeps d1's box open (no commit / no switch); Esc closes
     await openBox(d1);
     await typeText('10');
-    await P.twice(await labelOf(d2));
+    await P.tap(await labelOf(d2));
     const after4 = await box();
     const v4 = await val(d1);
-    console.log(`[${kind}] 4. 10 -> double press on d2's label -> box ${JSON.stringify(after4)}, d1 ${v4}, d2 ${await val(d2)}`);
-    check(v4 === 10, `4. d1 took 10 (d1 ${v4})`);
-    check(after4.open === true && num(after4.value) === v2Start, `4. the box is open on d2, prefilled with its ${v2Start} (box ${JSON.stringify(after4)})`);
-    await key('Escape', 'Escape', 27);
-    check((await box()).open === false, '4. Esc closes d2\'s box');
+    console.log(`[${kind}] 4. 10 -> press d2's label -> box ${JSON.stringify(after4)}, d1 ${v4}`);
+    check(after4.open === true && after4.value === '10d2' && after4.focused === true, `4. pressing d2's label inserted d2 and kept d1 open (box ${JSON.stringify(after4)})`);
+    check(v4 === 'label hidden (its box is open)', `4. d1 stayed open without committing (d1 ${v4})`);
+    await evalJs(`document.getElementById('dimInput').focus()`); await key('Escape', 'Escape', 27);
+    check((await box()).open === false, '4. Esc closes d1\'s box');
 
     // 5. a valid text + a press-drag on line B: d1 applied, line B moved in the same press
     await openBox(d1);

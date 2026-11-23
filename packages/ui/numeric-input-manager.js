@@ -505,10 +505,8 @@ export function showEditInput(svg, state, constraint, initialKey) {
     uiState.exactText = (!hasFormula && typeof prefillValue === 'number') ? String(isAngleDim ? prefillValue : prefillValue / basePer(docUnit())) : null;
     uiState.singleInput.inputMode = 'text';
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : defaultValue;
-    if (typeof uiState.singleInput.setSelectionRange === 'function') {
-        const len = uiState.singleInput.value.length;
-        uiState.singleInput.setSelectionRange(typeof initialKey === 'string' ? len : 0, len);
-    }
+    const len = uiState.singleInput.value.length;
+    uiState.singleInput.setSelectionRange(typeof initialKey === 'string' ? len : 0, len);
     updateAssist({ complete: typeof initialKey === 'string' });
 
     requestAnimationFrame(() => {
@@ -700,71 +698,52 @@ function endPlacing(target, state) {
 
 // TASK 866: identify a dimension text label or leader/dimension line under a pointer event on uiState.svg.
 // Text (.dim-label) always wins; a leader/dimension bar yields to real geometry underneath (e.g. a 0-offset dimension lying directly on a line).
+// No existing hit-test covered the thin dimension / leader lines (dimLabelAt only tests label boxes), so leaderLineAt is the one helper for them.
 function isOverGeometry(e, state, svg) {
-    if (!svg || !state.joints || !Array.isArray(state.shapes) || !Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return false;
-    const realShapes = state.shapes.filter((s) => s && !s.reference);
+    const realShapes = state.shapes.filter((s) => !s.reference);
     return !!findSnap(state.joints, realShapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, 0.3);
+}
+function dimensionOfElement(el, state) {
+    if (el.classList.contains('pattern-label')) return null;
+    const c = state.constraints[parseInt(el.dataset.constraintIdx, 10)];
+    return isDimension(c) ? c : null;
+}
+function leaderLineAt(svg, state, e) {
+    const tol = e.pointerType === 'touch' ? 6 : 3;
+    for (const ln of svg.querySelectorAll('line[data-constraint-idx]')) {
+        const a = worldToScreen(svg, { x: +ln.getAttribute('x1'), y: +ln.getAttribute('y1') });
+        const b = worldToScreen(svg, { x: +ln.getAttribute('x2'), y: +ln.getAttribute('y2') });
+        const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy;
+        const t = l2 > 0 ? Math.max(0, Math.min(1, ((e.clientX - a.x) * vx + (e.clientY - a.y) * vy) / l2)) : 0;
+        if (Math.hypot(e.clientX - (a.x + t * vx), e.clientY - (a.y + t * vy)) <= tol) {
+            const c = dimensionOfElement(ln, state);
+            if (c) return c;
+        }
+    }
+    return null;
 }
 function clickedDimensionConstraint(e) {
     const state = uiState.appState, svg = uiState.svg;
-    if (!state || !Array.isArray(state.constraints) || !e) return null;
-    const rawTarget = e.target;
-    const labelEl = (rawTarget && typeof rawTarget.closest === 'function') ? rawTarget.closest('.dim-label[data-constraint-idx]') : null;
-    if (labelEl && (!svg || typeof svg.contains !== 'function' || svg.contains(labelEl))) {
-        if (!labelEl.classList || !labelEl.classList.contains('pattern-label')) {
-            const idx = parseInt(labelEl.dataset ? labelEl.dataset.constraintIdx : labelEl.getAttribute('data-constraint-idx'), 10);
-            const c = Number.isInteger(idx) ? state.constraints[idx] : null;
-            if (isDimension(c)) return c;
-        }
+    const labelEl = e.target.closest('.dim-label[data-constraint-idx]');
+    if (labelEl && svg.contains(labelEl)) {
+        const c = dimensionOfElement(labelEl, state);
+        if (c) return c;
     }
-    if (svg && Number.isFinite(e.clientX) && Number.isFinite(e.clientY)) {
-        const hit = dimLabelAt(svg, state, e.clientX, e.clientY);
-        if (isDimension(hit)) return hit;
-    }
-    let leaderCand = null;
-    const dimEl = (rawTarget && typeof rawTarget.closest === 'function') ? rawTarget.closest('[data-constraint-idx]') : null;
-    if (dimEl && (!svg || typeof svg.contains !== 'function' || svg.contains(dimEl))) {
-        if (!dimEl.classList || !dimEl.classList.contains('pattern-label')) {
-            const idx = parseInt(dimEl.dataset ? dimEl.dataset.constraintIdx : dimEl.getAttribute('data-constraint-idx'), 10);
-            const c = Number.isInteger(idx) ? state.constraints[idx] : null;
-            if (isDimension(c)) leaderCand = c;
-        }
-    }
-    if (!leaderCand && svg && Number.isFinite(e.clientX) && Number.isFinite(e.clientY) && typeof svg.querySelectorAll === 'function'
-        && (!rawTarget || rawTarget === svg || !rawTarget.classList || (!rawTarget.classList.contains('shape-elem') && !rawTarget.classList.contains('joint')))) {
-        const tol = e.pointerType === 'touch' ? 6 : 3;
-        const ctm = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
-        if (ctm && typeof DOMPoint === 'function') {
-            for (const ln of svg.querySelectorAll('line[data-constraint-idx]')) {
-                const m = typeof ln.getScreenCTM === 'function' ? (ln.getScreenCTM() || ctm) : ctm;
-                const a = new DOMPoint(+ln.getAttribute('x1'), +ln.getAttribute('y1')).matrixTransform(m);
-                const b = new DOMPoint(+ln.getAttribute('x2'), +ln.getAttribute('y2')).matrixTransform(m);
-                const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy;
-                const t = l2 > 0 ? Math.max(0, Math.min(1, ((e.clientX - a.x) * vx + (e.clientY - a.y) * vy) / l2)) : 0;
-                if (Math.hypot(e.clientX - (a.x + t * vx), e.clientY - (a.y + t * vy)) <= tol) {
-                    const idx = parseInt(ln.getAttribute('data-constraint-idx'), 10);
-                    const c = Number.isInteger(idx) ? state.constraints[idx] : null;
-                    if (isDimension(c)) { leaderCand = c; break; }
-                }
-            }
-        }
-    }
-    return leaderCand && !isOverGeometry(e, state, svg) ? leaderCand : null;
+    const hit = dimLabelAt(svg, state, e.clientX, e.clientY);
+    if (isDimension(hit)) return hit;
+    const dimEl = e.target.closest('[data-constraint-idx]');
+    const onGeometry = e.target.classList.contains('shape-elem') || e.target.classList.contains('joint');
+    const leader = (dimEl && svg.contains(dimEl) ? dimensionOfElement(dimEl, state) : null) || (onGeometry ? null : leaderLineAt(svg, state, e));
+    return leader && !isOverGeometry(e, state, svg) ? leader : null;
 }
 
 // TASK 866: insert a referenced parameter name at the edit box's caret (replacing any active selection), keeping box open and focused.
 function insertEditText(name) {
     const el = uiState.singleInput;
-    if (!el) return;
-    const v = el.value == null ? '' : String(el.value);
-    const s = Number.isInteger(el.selectionStart) ? el.selectionStart : v.length;
-    const end = Number.isInteger(el.selectionEnd) ? el.selectionEnd : s;
-    const from = Math.max(0, Math.min(s, end, v.length));
-    const to = Math.max(from, Math.min(Math.max(s, end), v.length));
-    el.value = v.slice(0, from) + name + v.slice(to);
-    const caret = from + name.length;
-    if (typeof el.setSelectionRange === 'function') el.setSelectionRange(caret, caret);
-    if (typeof el.focus === 'function') el.focus();
+    const from = Math.min(el.selectionStart, el.selectionEnd), to = Math.max(el.selectionStart, el.selectionEnd);
+    el.value = el.value.slice(0, from) + name + el.value.slice(to);
+    el.setSelectionRange(from + name.length, from + name.length);
+    el.focus();
     uiState.undoneToDefault = false;
     uiState.typed[0] = true;
     if (uiState.completion) uiState.completion.close();
@@ -785,15 +764,15 @@ function suppressDimFocusLoss(e) {
 function handleOutsidePress(e) {
     if (!uiState.active || uiState.mode !== 'edit' || !uiState.target) return;
     if (e.button === 1) return; // the middle button pans the view (as the wheel zooms it): navigating is not working elsewhere, the box stays
-    const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+    const path = e.composedPath();
     if ([uiState.singleInput, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el))) return;
     const dim = clickedDimensionConstraint(e);
     if (dim) {
         e.preventDefault();
         e.stopPropagation();
-        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-        if (dim !== uiState.target && typeof dim.name === 'string' && dim.name) insertEditText(dim.name);
-        else if (typeof uiState.singleInput.focus === 'function') uiState.singleInput.focus();
+        e.stopImmediatePropagation();
+        if (dim !== uiState.target && dim.name) insertEditText(dim.name);
+        else uiState.singleInput.focus();
         return;
     }
     const text = uiState.singleInput.value;

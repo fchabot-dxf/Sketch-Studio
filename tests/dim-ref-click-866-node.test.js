@@ -48,9 +48,12 @@ async function runHost(host) {
     await app.pause(550);
     app.dblclick(p2.x, p2.y, { target: label2 });
     await boxReady(app);
+    // Fusion: editing a dimension opens its box with the whole value selected (typing replaces it)
+    let v = view(app);
+    assert.ok(v.value.length > 0 && v.start === 0 && v.end === v.value.length, `${host} 0: the box opens with its value selected: ${JSON.stringify(v)}`);
     app.document.getElementById('dimInput').select();
     app.click(p1.x, p1.y, { target: label1 });
-    let v = view(app);
+    v = view(app);
     assert.deepStrictEqual(v, { open: true, value: 'd1', start: 2, end: 2, active: 'dimInput' }, `${host} 1: click d1 replaces prefill: ${JSON.stringify(v)}`);
 
     // Type '/2' and Enter -> d2 becomes d1 / 2 = 30

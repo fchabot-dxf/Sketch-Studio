@@ -439,7 +439,7 @@ function updateSnapTarget(e, svg, state) {
     const snapBoost = snapBoostFor(isTouch);
 
     // Determine if we need snap (active operation) or just hover (idle)
-    const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION, TOOL_MODES.TEXT].includes(state.currentTool); // TASK 845: the Text tool's anchor snaps
+    const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION, TOOL_MODES.TEXT, TOOL_MODES.BEZIER].includes(state.currentTool); // TASK 845: the Text tool's anchor snaps; TASK 872: the Bezier pen's anchors
     // BUG-1: a box-select MARQUEE must show ONLY the selection box — never a snap/coincident glyph. The marquee sets
     // state.active.type='marquee' (with NO state.drag), which would otherwise make needsSnap true → a leaked snapTarget
     // → the renderer's icon-coincident near a line. A marquee is NOT a drag-to-snap op, so exclude it.
@@ -722,7 +722,7 @@ function handlePointerDown(e, svg, state) {
             handled = handleDrawingPointerDown(e, svg, state, clickSnap || state.snapTarget, w);
             break;
         case TOOL_MODES.BEZIER:
-            handled = handleBezierPointerDown(e, svg, state, w);
+            handled = handleBezierPointerDown(e, svg, state, clickSnap || state.snapTarget, w);
             break;
         case TOOL_MODES.TEXT: // TASK 845: the anchor where the press is (snapped like a drawing tool's point), then the editor
             handled = handleTextPointerDown(e, svg, state, clickSnap || state.snapTarget, w, hostNotify);

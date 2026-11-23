@@ -10,21 +10,25 @@
 //
 // ADDITIVE: this module adds a NEW tool mode's interaction; it touches NO existing shape/constraint/tool behaviour.
 // The endpoints are JOINTS (participate in the solver / snapping later); the 2 control points are shape DATA, not
-// solver-constrained — matching the #core bezier shape MVP (UNIFY-3). Anchors land at the raw world point, except the CLOSING one:
-// TASK 762: CLOSING ON THE FIRST ANCHOR, as the Line tool ends on its first point. With two or more anchors placed, while the app's snap
-// (input-manager updateSnapTarget: the SAME locked snap the Line tool takes) is the path's FIRST anchor, the snap marker shows on it and a
-// press places the anchor THERE: on release the anchor is a new joint made coincident with the first one (#core/snap-constraints.js
-// applySnapConstraint: the Line tool's coincident), the segment is committed and the path ENDS, closed (a loop of #core/loop-finder.js findLoops).
+// solver-constrained — matching the #core bezier shape MVP (UNIFY-3).
+// TASK 872: every ANCHOR snaps and attaches as the Line tool's points do (and as Fusion's spline): the app's locked snap (input-manager
+// updateSnapTarget: joints, line mid-span and midpoints, arc / circle edges, circle centres, construction / offset-made lines, origin, axes)
+// shows its marker on hover, the anchor lands on it and gets the constraint the Line tool makes there through the shared base-tool
+// applyLockedSnap (coincident / point-on-line ...). The tangent HANDLES are free: they are shape data, not points of the sketch (the Line tool
+// has no counterpart; Fusion's spline tangent handles are dragged free too).
+// TASK 762: CLOSING ON THE FIRST ANCHOR, as the Line tool ends on its first point. With two or more anchors placed, while the snap is the
+// path's FIRST anchor, a press places the anchor THERE: on release the anchor is a new joint made coincident with the first one, the segment
+// is committed and the path ENDS, closed (a loop of #core/loop-finder.js findLoops).
 // The closing anchor is what an anchor always is: a click makes a CORNER (the last segment arrives along its own handle), a drag makes it
 // SMOOTH (symmetric handles: the incoming one on the last segment, the outgoing one becomes the FIRST segment's first control point, so
-// the curve passes the closing point without a kink). Only the path's own first anchor closes it (no other point is snapped to).
+// the curve passes the closing point without a kink).
 
 import { TOOL_MODES, SNAP, TIME } from '#core/constants.js';
 import { makeBezier } from '#core/shapes.js';
 import { newShapeId } from '#core/shape-id.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
-import { applySnapConstraint } from '#core/snap-constraints.js'; // TASK 762: the closing coincident, the Line tool's
+import { applyLockedSnap, snapPoint } from '#ui/input-handlers/base-tool.js'; // TASK 872: the Line tool's snap point + constraint, shared
 
 // Module-level pen session (mirrors the other create tools' module state). anchors: committed anchors of the
 // current path, each { jointId, x, y, hOutX, hOutY, hInX, hInY } in WORLD coords.
@@ -57,7 +61,7 @@ function endPath(state) {
   try { state.active = null; clearPreview(state); } catch (_) {}
 }
 
-export function handleBezierPointerDown(e, svg, state, w) {
+export function handleBezierPointerDown(e, svg, state, snap, w) {
   if (state.currentTool !== TOOL_MODES.BEZIER) return false;
   const now = Date.now();
 
@@ -80,37 +84,39 @@ export function handleBezierPointerDown(e, svg, state, w) {
     try { state.beginDrawStep && state.beginDrawStep(); } catch (_) {}
   }
 
-  // Begin placing this anchor (corner by default; a drag upgrades it to smooth in pointermove). TASK 762: on the first anchor's snap it is placed
-  // exactly there and closes the path on release.
-  const close = closingSnap(state);
-  const at = close ? { x: pen.anchors[0].x, y: pen.anchors[0].y } : w;
-  pen.down = { x: at.x, y: at.y, hOutX: at.x, hOutY: at.y, hInX: at.x, hInY: at.y, close };
+  // Begin placing this anchor (corner by default; a drag upgrades it to smooth in pointermove). TASK 872: on a locked snap it is placed exactly
+  // there and gets that snap's constraint on release; TASK 762: on the first anchor's joint it closes the path.
+  const hit = anchorSnap(state, snap);
+  const close = !!hit && pen.anchors.length >= 2 && hit.type === 'joint' && hit.targetId === pen.anchors[0].jointId;
+  const at = hit ? snapPoint(hit) : w;
+  pen.down = { x: at.x, y: at.y, hOutX: at.x, hOutY: at.y, hInX: at.x, hInY: at.y, snap: hit, close };
   pen.dragging = false;
   pen.dragStartScreen = { x: e.clientX, y: e.clientY };
   pen.lastDownTime = now;
   pen.lastAnchorScreen = { x: e.clientX, y: e.clientY };
 
   state.active = { mode: TOOL_MODES.BEZIER };   // marks a live session so the renderer draws the pending preview
-  showClosingSnap(state, close);
+  showSnap(state, hit);
   updateBezierPreview(state, { x: at.x, y: at.y });
   return true;
 }
 
-// TASK 762: the app's snap when it is the path's FIRST anchor, locked (the Line tool's rule: within the snap magnet) and two or more anchors are
-// placed (one segment at least: the closing segment makes a loop), else null.
-function closingSnap(state) {
-  const s = state.snapTarget;
-  return (!pen.finished && pen.anchors.length >= 2 && s && s.isLocked && s.type === 'joint' && s.targetId === pen.anchors[0].jointId) ? s : null;
+// TASK 872: the snap an anchor takes: the app's LOCKED snap (the Line tool's rule: within the snap magnet), except the path's last anchor
+// itself (a second anchor on the same point makes no segment), else null.
+function anchorSnap(state, snap) {
+  if (!snap || !snap.isLocked || !snapPoint(snap)) return null;
+  const last = pen.anchors.length ? pen.anchors[pen.anchors.length - 1] : null;
+  return (last && snap.type === 'joint' && snap.targetId === last.jointId) ? null : snap;
 }
-// The renderer's snap marker (svg-renderer: a joint snap's ring) shows the closing snap only; the pen snaps to nothing else.
-function showClosingSnap(state, close) { state.snapTarget = close || null; state.activeSnap = close || null; }
+// The renderer's snap marker shows the snap the next anchor will take (none while a handle is dragged: the handles do not snap).
+function showSnap(state, snap) { state.snapTarget = snap || null; state.activeSnap = snap || null; }
 
 export function handleBezierPointerMove(e, svg, state, w) {
   if (state.currentTool !== TOOL_MODES.BEZIER) return false;
-  // The pen snaps only to its first anchor (TASK 762: the closing snap, decided at the press while an anchor is being placed): any other snap
-  // updateSnapTarget found (state.active is set, so it computes one) is not shown.
-  const close = pen.down ? pen.down.close : closingSnap(state);
-  showClosingSnap(state, close);
+  // TASK 872: while an anchor is being placed the marker stays on the snap decided at the press (the handle drag does not snap); between
+  // anchors it is the snap updateSnapTarget found for the pointer.
+  const hit = pen.down ? pen.down.snap : anchorSnap(state, state.snapTarget);
+  showSnap(state, hit);
 
   if (pen.down) {
     const dsx = e.clientX - pen.dragStartScreen.x, dsy = e.clientY - pen.dragStartScreen.y;
@@ -122,7 +128,7 @@ export function handleBezierPointerMove(e, svg, state, w) {
       pen.down.hInX  = pen.down.x - dx; pen.down.hInY  = pen.down.y - dy;
     }
   }
-  updateBezierPreview(state, close && !pen.down ? { x: pen.anchors[0].x, y: pen.anchors[0].y } : { x: w.x, y: w.y });
+  updateBezierPreview(state, hit && !pen.down ? snapPoint(hit) : { x: w.x, y: w.y });
   return true;
 }
 
@@ -134,6 +140,7 @@ export function handleBezierPointerUp(e, svg, state, w) {
   const a = pen.down;
   const jointId = state.genJ();
   state.joints.set(jointId, { x: a.x, y: a.y, fixed: false });
+  if (a.snap) applyLockedSnap(state, jointId, a.snap);
   const anchor = { jointId, x: a.x, y: a.y, hOutX: a.hOutX, hOutY: a.hOutY, hInX: a.hInX, hInY: a.hInY };
 
   // Commit the cubic from the PREVIOUS anchor to this one (c1 = prev.hOut, c2 = this.hIn). A corner anchor has its
@@ -152,9 +159,8 @@ export function handleBezierPointerUp(e, svg, state, w) {
     if (a.close) {
       // TASK 762: the closing anchor: a smooth one (dragged) leaves along the first segment, a corner (clicked) keeps the first segment as drawn
       if (a.hOutX !== a.x || a.hOutY !== a.y) pen.firstSegment.c1 = [a.hOutX, a.hOutY];
-      applySnapConstraint(state, jointId, a.close);
       if (state.saveState) state.saveState();
-      showClosingSnap(state, null);
+      showSnap(state, null);
       endPath(state);
       return true;
     }

@@ -108,11 +108,11 @@
   }
 
   // every snapping tool reaches the axis through the shared path (findSnap via the input manager, applySnapConstraint for the
-  // constraint); none has its own snapping copy. The bezier pen takes only the snap on its first anchor (task 762): it gets no axis snap.
+  // constraint); none has its own snapping copy (the bezier pen's anchors too, task 872).
   {
     const fs = await import('node:fs');
     const read = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
-    const tools = { line: 'line-tool', rect: 'rect-tool', circle: 'circle-tool', arc: 'arc-tool', polygon: 'polygon-tool', 'select (joint drag)': 'selection-tools' };
+    const tools = { line: 'line-tool', rect: 'rect-tool', circle: 'circle-tool', arc: 'arc-tool', polygon: 'polygon-tool', bezier: 'bezier-tool', 'select (joint drag)': 'selection-tools' };
     for (const [name, file] of Object.entries(tools)) {
       const src = read('packages/ui/input-handlers/' + file + '.js');
       assert(/(applySnapConstraint|applyLockedSnap)\s*\(/.test(src), name + ' tool applies its snap through applySnapConstraint (directly, or the shared applyLockedSnap of base-tool, task 867)');
@@ -121,10 +121,6 @@
     assert(/export function applyLockedSnap[\s\S]*?applySnapConstraint\s*\(/.test(read('packages/ui/input-handlers/base-tool.js')), 'applyLockedSnap (line + rect tools) calls applySnapConstraint');
     const input = read('packages/ui/input-manager.js');
     assert(/findSnap\s*\(/.test(input), 'the input manager snaps through findSnap');
-    // TASK 762: the bezier pen snaps ONLY to its own first anchor (the closing joint snap of the input manager, applied through applySnapConstraint):
-    // no axis snap, no snapping copy of its own
-    { const pen = read('packages/ui/input-handlers/bezier-tool.js').replace(/\/\/.*$/gm, '');
-      assert(!/findSnap|axis-x|axis-y|AXIS_SNAP_TARGETS/.test(pen) && /s\.type === 'joint' && s\.targetId === pen\.anchors\[0\]\.jointId/.test(pen) && /applySnapConstraint\s*\(/.test(pen), 'the bezier pen takes only the joint snap on its first anchor (no axis snap, no snapping copy)'); }
     // the declaration is read in exactly these places
     for (const f of ['packages/ui/snap-detection.js', 'packages/core/snap-constraints.js', 'packages/ui/svg-renderer.js', 'packages/ui/input-manager.js', 'packages/ui/input-handlers/selection-tools.js']) assert(/AXIS_SNAP_TARGETS/.test(read(f)), f + ' reads the axis declaration');
   }

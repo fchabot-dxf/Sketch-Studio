@@ -160,7 +160,7 @@ for (const host of ['sketchstudio', 'shaper']) {
     // b. the Bezier tool closes on its first anchor
     for (const smooth of [false, true]) {
       scene(); st.clearDocument(); st.saveState('clear'); app.tool('bezier');
-      const A = S(0, 10), B = S(60, 10), Cc = S(30, -30);
+      const A = S(10, 10), B = S(70, 10), Cc = S(40, -30); // TASK 872: off the Y axis (an anchor ON the axis now gets its point-on-line)
       app.click(A.x, A.y); app.click(B.x, B.y); app.drag(Cc, { x: Cc.x - 50, y: Cc.y }, 6);
       const first = st.shapes[0].joints[0];
       app.move(A.x + 5, A.y - 4);
@@ -182,7 +182,7 @@ for (const host of ['sketchstudio', 'shaper']) {
     // a press OUTSIDE the magnet is an ordinary anchor
     scene(); st.clearDocument(); st.saveState('clear'); app.tool('bezier');
     {
-      const A = S(0, 10), B = S(60, 10), Cc = S(30, -30);
+      const A = S(10, 10), B = S(70, 10), Cc = S(40, -30); // TASK 872: off the Y axis (an anchor ON the axis now gets its point-on-line)
       app.click(A.x, A.y); app.click(B.x, B.y); app.click(Cc.x, Cc.y); app.click(A.x + 16, A.y);
       ok(st.constraints.length === 0 && st.shapes.length === 3 && !!st.active, `${host} b: 16 px off the first anchor: an ordinary anchor, the path goes on`);
       app.enter();

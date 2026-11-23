@@ -650,8 +650,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // The thin dimension lines a moved or narrow value needs (see dimension-lead.js): an extension of the dimension line and/or
   // a leader to the text. Both stay out of the markup when the value sits where it normally does.
-  const leadLines = (lead, strokeColor, visualOpacity) => [lead.extension, lead.leader].filter(Boolean).map(s =>
-    `<line class="dim-lead" x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${visualOpacity}"/>`);
+  const leadLines = (lead, strokeColor, visualOpacity, cIdx = null) => [lead.extension, lead.leader].filter(Boolean).map(s =>
+    `<line class="dim-lead"${cIdx != null ? ` data-constraint-idx="${cIdx}"` : ''} x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${visualOpacity}"/>`);
 
   // Fusion: the dimension labels no glyph may cover (see freeGlyphSpot). Default keeps its glyph positions untouched.
   const dimLabelBounds = [];
@@ -2661,7 +2661,7 @@ switch(c.type){
           const edgeX = center.x + Math.cos(angle) * radius;
           const edgeY = center.y + Math.sin(angle) * radius;
 
-          out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          out.push(`<line data-constraint-idx="${cIdx}" x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
 
           // TASK 448: on an ARC, a leader outside the arc's sweep still meets the arc's CIRCLE at that angle; a thin dashed
           // EXTENSION of the circle runs from the nearest arc end to that point (inside the sweep: none; circle: none).
@@ -2676,7 +2676,7 @@ switch(c.type){
                 const dS = wrap(angle - aStart), dE = wrap(angle - aEnd);
                 const fromStart = Math.abs(dS) <= Math.abs(dE);
                 const from = fromStart ? pS : pE, d = fromStart ? dS : dE;
-                out.push(`<path d="M ${from.x} ${from.y} A ${radius} ${radius} 0 0 ${d > 0 ? 1 : 0} ${edgeX} ${edgeY}" fill="none" class="dim-arc-extension" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(3)},${scale(2)}" stroke-opacity="${visualOpacity * 0.8}"/>`);
+                out.push(`<path d="M ${from.x} ${from.y} A ${radius} ${radius} 0 0 ${d > 0 ? 1 : 0} ${edgeX} ${edgeY}" fill="none" class="dim-arc-extension" data-constraint-idx="${cIdx}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(3)},${scale(2)}" stroke-opacity="${visualOpacity * 0.8}"/>`);
               }
             }
           }
@@ -2686,7 +2686,7 @@ switch(c.type){
 
           // Arrow at circle edge
           const arrowSize = scale(6);
-          out.push(`<polygon points="${edgeX},${edgeY} ${edgeX - Math.cos(angle)*arrowSize + Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize - Math.cos(angle)*arrowSize/2} ${edgeX - Math.cos(angle)*arrowSize - Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize + Math.cos(angle)*arrowSize/2}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
+          out.push(`<polygon data-constraint-idx="${cIdx}" points="${edgeX},${edgeY} ${edgeX - Math.cos(angle)*arrowSize + Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize - Math.cos(angle)*arrowSize/2} ${edgeX - Math.cos(angle)*arrowSize - Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize + Math.cos(angle)*arrowSize/2}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
           // Label with "R" prefix (wrap in parentheses when driven = false)
           const labelW = scale(50);
           const labelH = scale(18);
@@ -2719,22 +2719,22 @@ switch(c.type){
           out.push(`<line x1="${ext2Start.x}" y1="${ext2Start.y}" x2="${ext2End.x}" y2="${ext2End.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${0.6 * visualOpacity}"/>`);
 
           // Draw dimension line with arrows
-          out.push(`<line x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${dimLineEnd.x}" y2="${dimLineEnd.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          out.push(`<line data-constraint-idx="${cIdx}" x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${dimLineEnd.x}" y2="${dimLineEnd.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
 
           // Arrow markers (small triangles at ends). Too narrow for two: they flip OUTSIDE the extension lines, pointing in,
           // each with a short stub of dimension line (Fusion).
           const arrowSizeLin = scale(DIM_ARROW_PX);
           const sa = narrow ? -1 : 1;
           const aax = adx * sa, aay = ady * sa;
-          out.push(`<polygon points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + aax*arrowSizeLin + nx*arrowSizeLin/2},${dimLineStart.y + aay*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineStart.x + aax*arrowSizeLin - nx*arrowSizeLin/2},${dimLineStart.y + aay*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
-          out.push(`<polygon points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - aax*arrowSizeLin + nx*arrowSizeLin/2},${dimLineEnd.y - aay*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineEnd.x - aax*arrowSizeLin - nx*arrowSizeLin/2},${dimLineEnd.y - aay*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
+          out.push(`<polygon data-constraint-idx="${cIdx}" points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + aax*arrowSizeLin + nx*arrowSizeLin/2},${dimLineStart.y + aay*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineStart.x + aax*arrowSizeLin - nx*arrowSizeLin/2},${dimLineStart.y + aay*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
+          out.push(`<polygon data-constraint-idx="${cIdx}" points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - aax*arrowSizeLin + nx*arrowSizeLin/2},${dimLineEnd.y - aay*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineEnd.x - aax*arrowSizeLin - nx*arrowSizeLin/2},${dimLineEnd.y - aay*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
           let leadStart = dimLineStart, leadEnd = dimLineEnd;
           if (narrow) {
             const stub = scale(DIM_ARROW_PX + DIM_NARROW_STUB_PX);
             leadStart = { x: dimLineStart.x - adx * stub, y: dimLineStart.y - ady * stub };
             leadEnd = { x: dimLineEnd.x + adx * stub, y: dimLineEnd.y + ady * stub };
-            out.push(`<line class="dim-stub" x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${leadStart.x}" y2="${leadStart.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
-            out.push(`<line class="dim-stub" x1="${dimLineEnd.x}" y1="${dimLineEnd.y}" x2="${leadEnd.x}" y2="${leadEnd.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+            out.push(`<line class="dim-stub" data-constraint-idx="${cIdx}" x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${leadStart.x}" y2="${leadStart.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+            out.push(`<line class="dim-stub" data-constraint-idx="${cIdx}" x1="${dimLineEnd.x}" y1="${dimLineEnd.y}" x2="${leadEnd.x}" y2="${leadEnd.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
           }
 
           // Clickable text label with background (only editable in select or dim tool)
@@ -2748,7 +2748,7 @@ switch(c.type){
           const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
 
           const placed = placeDimLabel(annotX, annotY, adx, ady, displayVal, undefined, centred, labelStrokeColor);
-          out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX), { underline: !DIM_LABEL_BOX }), strokeColor, visualOpacity));
+          out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX), { underline: !DIM_LABEL_BOX }), strokeColor, visualOpacity, cIdx));
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
@@ -2776,9 +2776,10 @@ switch(c.type){
             const strokeColor = isPlacing ? '#3B82F6' : '#2563eb';
             const visualOpacity = isPlacing ? 0.4 : 1.0;
             
+            const cIdx = constraints.indexOf(c);
             const largeArcFlag = (delta > Math.PI) ? 1 : 0;
             const sweepFlag = 1;
-            out.push(`<path d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+            out.push(`<path data-constraint-idx="${cIdx}" d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
             // If the label was slid past either arrow along the circle, extend the arc from the nearest arrow tip to reach it
             const TAU = Math.PI * 2;
             const normA = (v) => ((v % TAU) + TAU) % TAU;
@@ -2789,17 +2790,15 @@ switch(c.type){
               const fromStart = Math.abs(dS) <= Math.abs(dE);
               const fromPt = fromStart ? { x: sx, y: sy } : { x: ex, y: ey };
               const dExt = fromStart ? dS : dE;
-              out.push(`<path d="M ${fromPt.x} ${fromPt.y} A ${radius} ${radius} 0 0 ${dExt > 0 ? 1 : 0} ${labelX} ${labelY}" fill="none" class="dim-arc-extension" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+              out.push(`<path d="M ${fromPt.x} ${fromPt.y} A ${radius} ${radius} 0 0 ${dExt > 0 ? 1 : 0} ${labelX} ${labelY}" fill="none" class="dim-arc-extension" data-constraint-idx="${cIdx}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
             }
             
             // Draw Arrows
             const arrowSize = scale(6);
             // Start Arrow
-            out.push(`<polygon points="${sx},${sy} ${sx - Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy + Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize} ${sx + Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy - Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
+            out.push(`<polygon data-constraint-idx="${cIdx}" points="${sx},${sy} ${sx - Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy + Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize} ${sx + Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy - Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
             // End Arrow
-            out.push(`<polygon points="${ex},${ey} ${ex - Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey + Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize} ${ex + Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey - Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
-            
-            const cIdx = constraints.indexOf(c);
+            out.push(`<polygon data-constraint-idx="${cIdx}" points="${ex},${ey} ${ex - Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey + Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize} ${ex + Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey - Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
             
             const labelW = scale(40);
             const labelH = scale(18);

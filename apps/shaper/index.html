@@ -353,7 +353,8 @@
     .sk-edge.sk-edge-guide { stroke: var(--sk-prep-guide); }
     .sk-edge.sk-edge-stock { stroke: var(--sk-prep-stock); stroke-width: 1.75; stroke-dasharray: 7 3.5; }
     .sk-stock-label { fill: var(--sk-prep-stock); font-family: system-ui, sans-serif; font-size: 5px; font-weight: 600; letter-spacing: 0.04em; }
-    #prepare-notice { position: absolute; left: 50%; top: calc(12px + var(--sk-prep-ribbon-h, 0px)); transform: translateX(-50%); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
+    /* TASK 900: the notice lies BETWEEN the Operations card (left 12 + the rail, 288 wide, then a 12 px gap) and the cut card (12 from the right, --sk-prep-panel-w wide, then a 12 px gap); long text wraps inside that room */
+    #prepare-notice { position: absolute; left: calc(12px + var(--sk-prep-ribbon-w, 0px) + 288px + 12px); max-width: calc(100% - (12px + var(--sk-prep-ribbon-w, 0px) + 288px + 12px) - (24px + var(--sk-prep-panel-w, 200px))); box-sizing: border-box; top: calc(12px + var(--sk-prep-ribbon-h, 0px)); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
     #prepare-notice[hidden] { display: none; }
     #prepare-notice.is-error { background: #3f1518; color: #fecaca; border-color: #ef4444; }
     /* TASK 663: Fusion-mode bar inside Prepare (mounted in JS only when ?host=fusion). */
@@ -385,8 +386,8 @@
     @media (max-width: 640px), (pointer: coarse) { .shaper-fusion-sel-x, .shaper-fusion-clear { min-width: 36px; height: 36px; } .shaper-fusion-sel { min-height: 38px; } }
     #view-prepare.is-fusion #prepare-notice { top: calc(var(--sk-fusion-bar-h, 44px) + 12px + var(--sk-prep-ribbon-h, 0px)); pointer-events: auto; }
     #view-prepare.is-fusion #prepare-panel { top: calc(var(--sk-fusion-bar-h, 44px) + 12px + var(--sk-prep-ribbon-hr, 0px)); z-index: 8; } /* TASK 795: below the bar, whatever height the selection list gives it (fusion-bridge.js sets the variable); above the notice (z 6, wider than the room beside the card) so an open cut-type menu is never covered by it */
-    @media (max-width: 640px) {
-      #view-prepare.is-fusion #prepare-notice { left: calc(12px + var(--sk-prep-ribbon-w, 0px)); transform: none; max-width: calc(100% - 236px - var(--sk-prep-ribbon-w, 0px)); }
+    @media (max-width: 640px) { /* TASK 900: the Operations card is at the bottom here, so the notice starts at the left edge and stops before the cut card */
+      #prepare-notice { left: calc(12px + var(--sk-prep-ribbon-w, 0px)); max-width: calc(100% - (12px + var(--sk-prep-ribbon-w, 0px)) - (24px + var(--sk-prep-panel-w, 200px))); }
     }
     .sk-hl { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
     .sk-hl-select { stroke: var(--sk-prep-geo-selected); stroke-width: 2.25; }
@@ -475,7 +476,8 @@
     /* TASK 455: the cut card, built to the owner-approved mock-up (values only): 200px card, #0A0A0B, 14px radius; 34px fields on
        #2A2B2D with 6px radius; labels 11px; values 15px/600 with a 11px lighter unit; popovers open to the LEFT with the blue
        focus border. The mock-up's font is IBM Plex Sans; the app loads no web font, so the closest system stack is used. */
-    #prepare-panel { width: 200px; }
+    #view-prepare { --sk-prep-panel-w: 200px; } /* TASK 900: the cut card column's width, one value for the column and for the notice that stops before it */
+    #prepare-panel { width: var(--sk-prep-panel-w); }
     #prepare-panel .cut-card { position: relative; pointer-events: auto; box-sizing: border-box; width: 200px; background: var(--sk-prep-card-bg); border-radius: 14px; padding: 16px 14px; color: var(--sk-prep-chip-text); font: 15px 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; box-shadow: 0 8px 28px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 12px; }
     .cut-card-title { display: none; }
     .cut-field-label { display: block; font-size: 11px; color: var(--sk-prep-unit); margin: 0 0 6px; padding-left: 12px; text-transform: lowercase; }
@@ -579,7 +581,7 @@
     @media (max-width: 640px), (pointer: coarse) {
       .cut-box { height: 44px; }
       .cut-step, .cut-flip { width: 44px; font-size: 22px; }
-      #prepare-panel { width: 236px; }
+      #view-prepare { --sk-prep-panel-w: 236px; }
       #prepare-panel .cut-card { width: 236px; }
       .review-stepbox .cut-step { width: 44px; height: 44px; font-size: 22px; }
       .review-stepbox input { height: 44px; box-sizing: border-box; }

@@ -65,7 +65,6 @@ export const FUSION_ACTIONS = Object.freeze({
   ERROR: 'error',
   ADD_SELECTION: 'add_selection',
   SELECTION_DATA: 'selection_data', // TASK 855b (SA-19): carries the docToken of the design it was extracted from; applied only while that design is the current design_context
-  HIGHLIGHT_SELECTION: 'highlight_selection', // TASK 795 (SA-12): { selectionId | null } brightens one selection's overlay in Fusion (null: all back to their cut-type colours)
   CLEAR_SELECTION: 'clear_selection', // TASK 795 (SA-12 / SA-15): { selectionId, group? } | { selectionId: 'all' }
   RESTORE_SELECTION: 'restore_selection', // TASK 795c (SA-15): { selectionId, tokens? } restores the cleared token list on Undo/Redo
   SELECT_FOR_OPERATION: 'select_for_operation', // TASK 806 (SA-16): { opKey, label, tokens, keepTokens }
@@ -459,7 +458,7 @@ export function mountFusionPrepareBar({
   spinEl.setAttribute('aria-label', 'Updating toolpaths in Fusion');
   spinEl.title = 'Updating toolpaths in Fusion…';
 
-  // TASK 795: the SELECTION LIST: one row per selection in the design (its words, an X), Clear all from 2 on. A row hovered or focused is highlighted in Fusion.
+  // TASK 795: the SELECTION LIST: one row per selection in the design (its words, an X), Clear all from 2 on.
   const listEl = document.createElement('div');
   listEl.id = 'shaper-fusion-selections';
   listEl.className = 'shaper-fusion-list';
@@ -510,7 +509,6 @@ export function mountFusionPrepareBar({
   };
 
   let onIncomingAction = () => {};
-  let highlighted = null; // the selection id last sent in highlight_selection (null: none)
   let pendingClear = null; // TASK 795c: { selectionId, group } awaiting re-sent selection_data from add-in
   let projectBridgeActive = false;
   let currentDocToken = null;
@@ -635,12 +633,6 @@ export function mountFusionPrepareBar({
     onMessage: (action) => { onIncomingAction(action); },
   });
 
-  // TASK 795 (SA-12) / TASK 795c (SA-15): only a selection the add-in sent (entry.fusion) has an overlay in Fusion.
-  const sendHighlight = (id) => {
-    if (highlighted === id) return;
-    highlighted = id;
-    if (bridge.canSend()) bridge.send(FUSION_ACTIONS.HIGHLIGHT_SELECTION, { selectionId: id });
-  };
   const renderList = () => {
     const rows = getSelections().flatMap(selectionRowsOf);
     listEl.hidden = rows.length === 0;
@@ -678,12 +670,6 @@ export function mountFusionPrepareBar({
       });
       if (iconEl) row.append(iconEl, text, x);
       else row.append(text, x);
-      if (r.fusion) {
-        row.addEventListener('mouseenter', () => sendHighlight(r.id));
-        row.addEventListener('mouseleave', () => sendHighlight(null));
-        row.addEventListener('focusin', () => sendHighlight(r.id));
-        row.addEventListener('focusout', () => sendHighlight(null));
-      }
       frag.append(row);
     }
     if (rows.length >= 2) {
@@ -696,7 +682,6 @@ export function mountFusionPrepareBar({
       frag.append(clear);
     }
     listEl.replaceChildren(frag);
-    if (highlighted && !rows.some((r) => r.id === highlighted)) sendHighlight(null); // the highlighted selection left the list: no mouseleave will come
   };
   const stopList = onSelectionsChange(({ removed, all, sync = true, restoreIds = null, redoClear = null, redoPayloads = null }) => {
     if (bridge.canSend()) {

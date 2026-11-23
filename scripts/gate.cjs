@@ -53,9 +53,9 @@ const EVERY_TEST_TRIGGERS = [
 const ALIASES = { '#core/': 'packages/core/', '#ui/': 'packages/ui/', '#app/': 'apps/sketchstudio/' };
 
 const FILE_LIMIT_MS = 90000;
-// Concurrency per tier. node tests: cores - 2. live: 8. TASK 613 measured 12 green in 4 isolated runs, but the advisor merge run at 12 went RED (4 of 419: browser launch "did not expose CDP port" / "timed out waiting for DevToolsActivePort", and two "TIMEOUT after 90s" at shutdown) because other seats run live tests outside the lock; 6 was the TASK 568 pick.
+// Concurrency per tier. node tests: cores - 2. live: 6. 2026-11-23: merge gates at 8 went red with 3-32 load timeouts on files that pass alone; owner chose 6.
 const QUICK_JOBS = Math.max(1, os.cpus().length - 2);
-const LIVE_JOBS = 8;
+const LIVE_JOBS = 6;
 
 // Machine-wide state lives outside every repo so all worktrees share it.
 const STATE_DIR = process.env.LOCALAPPDATA || os.tmpdir();

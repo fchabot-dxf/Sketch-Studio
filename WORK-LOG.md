@@ -17732,4 +17732,13 @@ Fixed headless browser teardown hangs (`TIMEOUT after 90s` after `ok`) and lefto
   - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=575 pass=575 fail=0 elapsed=120s`, `PROFILES-LEFT 0`.
   - `npm.cmd run gate:live`: `GATE tier=live jobs=live=8 files=324 pass=315 fail=9 elapsed=1165s`, `SMOKE 13/13`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0` (24 stale pre-run dirs swept; `shortcuts-747-live` and `op-ticks-798-live` pass standalone).
 
+## TURN 862
+- **TASK**: `862` (Set `LIVE_JOBS = 6` in `scripts/gate.cjs`, owner turn 3331 choice B).
+- **CHANGE (`scripts/gate.cjs`)**:
+  - Updated `LIVE_JOBS` from `8` to `6` (`line 58`) and updated the comment above it (`line 56`: `live: 6. 2026-11-23: merge gates at 8 went red with 3-32 load timeouts on files that pass alone; owner chose 6.`).
+  - Grepped `LIVE_JOBS|live=8|live: 8` across `scripts/`, `docs/`, `AGENTS.md`, `NEXT-SESSION.md`, `tests/`: no other live=8 references or test assertions; `NEXT-SESSION.md:94,112` are historical backlog notes (`LIVE_JOBS 10-12 measurement`), left untouched.
+- **TESTS**:
+  - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=565 pass=565 fail=0 deferred=11 elapsed=99s`.
+  - `node scripts/gate.cjs --tier live --list`: exit 0 (`324` live files listed; `--plan` waited on merge lock held by `pid 72332` in `D:\APPS\Sketch-Studio-merge`, cancelled).
+
 

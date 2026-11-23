@@ -1,19 +1,31 @@
 #!/usr/bin/env node
 // scripts/gate.cjs — the ONE test runner, in tiers (TASK 568).
 //   node scripts/gate.cjs [--tier quick|live|full|merge] [--base REF] [--head REF] [--plan] [--jobs N] [--list]     (npm run gate / gate:quick / gate:live)
-//   quick = every test that launches no browser, run wide in parallel. For builders while they iterate. NEVER WAITS for the lock (TASK 606): it takes
-//           the lock only if free, for the exclusive tests; if another gate holds it, it DEFERS the exclusive tests (see below) and exits on what ran.
-//   live  = the browser tests + shell-smoke, run side by side at LIVE_JOBS. Takes the machine-wide lock.
-//   full  = quick + live + the headless-left check. What the gate has always covered (default). Takes the lock.
-//   merge = quick + shell-smoke + only the live tests AFFECTED by the branch's changes (see AFFECTED below). Takes the lock.
+//   quick = every test that launches no browser, run wide in parallel. For builders while they iterate. NEVER WAITS for a browser run (TASK 606): it
+//           declares its timings estimate (~4 min: 569 files, ~2850 s summed over 22 jobs, + ~55 s of exclusive tests), which the library runs in its
+//           one-place SIDE lane for short jobs (see SHARED CPU LOCK below), so it waits only while another short job holds that lane; if the MAIN lane
+//           is held, it DEFERS the exclusive tests (see below) and exits on what ran. (An estimate above SIDE_LANE_MAX_MIN would make the library
+//           queue it in the main lane like a gate: a quick run that long is a heavy run.)
+//   live  = the browser tests + shell-smoke, run side by side at LIVE_JOBS. Holds the shared CPU lock's main lane, waiting for it.
+//   full  = quick + live + the headless-left check. What the gate has always covered (default). Holds the main lane.
+//   merge = quick + shell-smoke + only the live tests AFFECTED by the branch's changes (see AFFECTED below). Holds the main lane.
 //           node scripts/gate.cjs --tier merge [--base origin/main] [--head HEAD]  (npm run gate:merge -- --base origin/main)
 //           --plan prints the picked live tests and why, then exits.
 // EXCLUSIVE tests (TASK 579): a test whose pass/fail depends on wall time (a ms limit, a per-frame budget, a runtime budget) declares it with a first-column
 //   comment line `// gate: exclusive` in its own file. Such a test keeps its tier but does not run in the parallel batch: after the batch of its tier
-//   it runs ALONE, one at a time, with nothing else from this gate running, while this gate holds the machine-wide lock (so another worktree's live run
-//   cannot load the CPU under it either). quick takes the lock for that exclusive part only (and releases it right after) if it is free, else prints `DEFERRED <file> (lock held by ...)` per
-//   test and runs none of them (the merge / full tier runs them); live/full/merge already hold the lock, waiting for it.
+//   it runs ALONE, one at a time, with nothing else from this gate running, and only while no OTHER run holds the shared lock's main lane (no heavy run
+//   of any project beside it). Before each one the gate asks the library's status: when the main lane is held by another run (only possible in the
+//   quick tier, which holds the side lane) it prints `DEFERRED <file> (the shared CPU lock is held: <holder>; ...)` for it and the rest and runs none
+//   of them (the merge / full tier runs them); live/full/merge hold the main lane themselves, so theirs always run.
 //   Each prints `EXCLUSIVE <file> <seconds>`. Why a marker and not a list here: the declaration stays next to the test whose limit needs it.
+// SHARED CPU LOCK (TASK 873): ONE machine-wide lock for the heavy runs of every project on this PC (b-spline, DDCS, Sketch-Studio take turns), its
+//   library ~/.shared-cpu/cpu_lock.sh (owned by the b-spline advisor). The gate takes it AS project `sketch` through the library itself (Git Bash
+//   sources it and calls cpu_lock_take / cpu_lock_release / cpu_lock_status), never by writing its files. CPU_LOCK_PID = this gate's pid, so the
+//   holder record names a process alive for the whole run (the library's default, the bash's own pid, dies right after the take: judged stale).
+//   Taken once per run before any test, held to the end, released on every exit (green, red, a thrown error, Ctrl-C / SIGTERM). The eta it declares
+//   comes from the timings file (see etaMinutes); the library puts an eta <= SIDE_LANE_MAX_MIN in its side lane, so the browser tiers declare at least
+//   SIDE_LANE_MAX_MIN + 1. While it waits, the library prints who holds the lock (`cpu_lock: waiting for <project> (<what>, eta <eta>)`).
+//   `bash ~/.shared-cpu/cpu_lock.sh status` shows the holder. Never delete the lock: a dead holder is judged stale by the library itself.
 // Exit 0 only if no file failed, smoke passed every check (N/N, smokeGreen) (live/full) and no headless browser is left (live/full).
 //
 // HOW A FILE'S TIER IS KNOWN (declared once, here): a test is `live` when its relative-import closure reaches
@@ -59,7 +71,6 @@ const LIVE_JOBS = 8;
 
 // Machine-wide state lives outside every repo so all worktrees share it.
 const STATE_DIR = process.env.LOCALAPPDATA || os.tmpdir();
-const LOCK_FILE = path.join(STATE_DIR, 'sketch-studio-gate.lock');
 const TIMINGS_FILE = path.join(STATE_DIR, 'sketch-studio-gate-timings.json');
 
 // ---------------------------------------------------------------- args
@@ -231,54 +242,73 @@ function affectedLive(liveFiles, base, head) {
   return { picked, everything: null, changed };
 }
 
-// ---------------------------------------------------------------- machine-wide lock
-function pidAlive(pid) {
-  try { process.kill(pid, 0); return true; } catch (e) {
-    if (e.code === 'ESRCH') return false;
-    if (e.code === 'EPERM') return true;
-    throw e;
-  }
-}
+// ---------------------------------------------------------------- the shared CPU lock (TASK 873; see SHARED CPU LOCK in the header)
+const CPU_LOCK_LIB = path.join(os.homedir(), '.shared-cpu', 'cpu_lock.sh').replace(/\\/g, '/');
+const CPU_LOCK_PROJECT = 'sketch';
+const SIDE_LANE_MAX_MIN = 5; // the library's CPU_LOCK_SHORT_MIN: a take whose eta is <= this many minutes runs in its side lane, beside the main holder
 
 const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-let heldLock = false;
-function releaseLock() {
-  if (!heldLock) return;
-  heldLock = false;
-  const holder = JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8'));
-  if (holder.pid === process.pid) fs.unlinkSync(LOCK_FILE);
+// Git for Windows' bash (the library is a bash file; bash is not on a PowerShell / cmd PATH): <git>/mingw64/libexec/git-core -> <git>/bin/bash.exe
+let bashPath = null;
+function gitBash() {
+  if (bashPath) return bashPath;
+  const r = spawnSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true });
+  if (r.status !== 0) throw new Error(`gate: git --exec-path failed: ${r.stderr}`);
+  const bash = path.resolve(r.stdout.trim(), '..', '..', '..', 'bin', 'bash.exe');
+  if (!fs.existsSync(bash)) throw new Error(`gate: Git Bash not found at ${bash} (the shared CPU lock library needs it)`);
+  if (!fs.existsSync(CPU_LOCK_LIB)) throw new Error(`gate: the shared CPU lock library is missing: ${CPU_LOCK_LIB}`);
+  bashPath = bash;
+  return bash;
+}
+// `source <library>; <body>` in Git Bash with this gate's pid as the holder pid; "$2".. are `args`
+const cpuLockSpawnArgs = (body, args) => [gitBash(), ['-c', `source "$1" && ${body}`, 'bash', CPU_LOCK_LIB, ...args],
+  { env: { ...process.env, CPU_LOCK_PID: String(process.pid) }, windowsHide: true }];
+// The library records pid=$(cat /proc/$CPU_LOCK_PID/winpid || echo $CPU_LOCK_PID): an MSYS pid is mapped to ITS Windows pid. This gate's pid is a
+// Windows pid; if an MSYS process has the same number, the library would record that process instead: refuse loudly rather than hold a wrong record.
+const TAKE_BODY = '{ [ ! -e "/proc/$CPU_LOCK_PID" ] || { echo "gate: pid $CPU_LOCK_PID is also an MSYS pid: the shared CPU lock would record that process, not this gate; run the gate again" >&2; exit 3; }; } && cpu_lock_take "$2" "$3" "$4"';
+
+let cpuLockTaking = false; // a take has started in this run: release on every exit path (the release also clears this project's waiting mark)
+// blocks until the library grants the lock (main lane, or its side lane for an eta <= SIDE_LANE_MAX_MIN); the library's lines go to our stdout
+function takeCpuLock(what, eta) {
+  cpuLockTaking = true;
+  const [bash, args, opts] = cpuLockSpawnArgs(TAKE_BODY, [CPU_LOCK_PROJECT, what, eta]);
+  return new Promise((resolve, reject) => {
+    const child = spawn(bash, args, { ...opts, stdio: ['ignore', 'inherit', 'inherit'] });
+    child.on('error', reject);
+    child.on('close', (code, signal) => (code === 0 ? resolve() : reject(new Error(`gate: cpu_lock_take ended with ${signal || `exit ${code}`}`))));
+  });
+}
+function releaseCpuLock() {
+  if (!cpuLockTaking) return;
+  cpuLockTaking = false;
+  const [bash, args, opts] = cpuLockSpawnArgs('cpu_lock_release "$2"', [CPU_LOCK_PROJECT]);
+  const r = spawnSync(bash, args, { ...opts, stdio: ['ignore', 'inherit', 'inherit'] });
+  if (r.error) throw r.error;
+  if (r.status !== 0) throw new Error(`gate: cpu_lock_release exited ${r.status}`);
+}
+// the library's status: its main-lane holder line (`project=.. what=.. start=.. eta=.. pid=.. host=..`) when ANOTHER run holds the main lane, else null
+function otherMainHolder() {
+  const [bash, args, opts] = cpuLockSpawnArgs('cpu_lock_status', []);
+  const r = spawnSync(bash, args, { ...opts, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (r.error) throw r.error;
+  if (r.status !== 0) throw new Error(`gate: cpu_lock_status exited ${r.status}: ${r.stderr}`);
+  const first = r.stdout.split(/\r?\n/)[0];
+  if (first === 'free') return null;
+  const m = first.match(/^held: (.*?)\s*$/);
+  if (!m) throw new Error(`gate: cpu_lock_status printed an unknown first line: ${first}`);
+  return new RegExp(`(?:^| )pid=${process.pid}(?: |$)`).test(m[1]) ? null : m[1];
 }
 
-// wait=false (the quick tier, TASK 606): never waits; returns the live holder's record if another gate holds the lock, else null once it is ours.
-function acquireLock(tier, wait = true) {
-  const mine = { pid: process.pid, worktree: REPO_ROOT, tier, started: new Date().toISOString() };
-  let lastShown = '';
-  let lastShownAt = 0;
-  for (;;) {
-    try {
-      fs.writeFileSync(LOCK_FILE, JSON.stringify(mine), { flag: 'wx' });
-      heldLock = true;
-      if (lastShown) console.log('LOCK acquired: running');
-      return null;
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-    }
-    let holder;
-    try { holder = JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8')); } catch (e) {
-      if (e.code === 'ENOENT') continue; // released between our write and our read: try again
-      throw e;
-    }
-    if (!pidAlive(holder.pid)) {
-      console.log(`LOCK stale (pid ${holder.pid} is dead; was ${holder.tier} in ${holder.worktree} since ${holder.started}): taking over`);
-      fs.unlinkSync(LOCK_FILE);
-      continue;
-    }
-    if (!wait) return holder;
-    const msg = `LOCK held by pid ${holder.pid}: ${holder.tier} in ${holder.worktree} since ${holder.started}; waiting`;
-    if (msg !== lastShown || Date.now() - lastShownAt > 60000) { console.log(msg); lastShown = msg; lastShownAt = Date.now(); }
-    sleepSync(3000);
+// Minutes this run is expected to hold the lock, from the timings file (each file's seconds in the last run it ran in): a pool's wall time is about
+// its files' summed seconds over its jobs; the exclusive tests run one after another. parts: [{ files, jobs }]. A file never timed counts 0.
+function etaMinutes(parts, timings) {
+  let seconds = 0;
+  for (const { files, jobs } of parts) {
+    const { parallel, exclusive } = splitExclusive(files);
+    seconds += parallel.reduce((s, f) => s + (timings[f] || 0), 0) / jobs + exclusive.reduce((s, f) => s + (timings[f] || 0), 0);
   }
+  return Math.max(1, Math.ceil(seconds / 60));
 }
 
 // ---------------------------------------------------------------- timings (longest-first scheduling)
@@ -336,29 +366,22 @@ async function runPool(files, tier, jobs, timings, longestFirst) {
   return results;
 }
 
-// the exclusive tests of one tier, one at a time, nothing else of this gate running; under the machine-wide lock (taken here only if the tier did not already)
-async function runExclusive(files, tier, results, lockSeconds, deferred) {
-  if (!files.length) return;
-  const tookLock = !heldLock;
-  if (tookLock) {
-    const holder = acquireLock(tier, tier !== 'quick'); // the quick tier never waits (TASK 606)
+// the exclusive tests of one tier, one at a time, nothing else of this gate running, and none while ANOTHER run holds the shared lock's main lane:
+// the library's status is asked before each one; once another run holds it, this one and the rest are DEFERRED (only the quick tier, in the side
+// lane, can meet that; live/full/merge hold the main lane themselves)
+async function runExclusive(files, tier, results, deferred) {
+  for (let i = 0; i < files.length; i++) {
+    const holder = otherMainHolder();
     if (holder) {
-      for (const file of files) console.log(`DEFERRED ${file} (lock held by ${holder.tier} in ${holder.worktree}, pid ${holder.pid}; the merge / full tier runs it)`);
-      console.log(`DEFERRED ${files.length}`);
-      deferred.push(...files);
+      for (const file of files.slice(i)) console.log(`DEFERRED ${file} (the shared CPU lock is held: ${holder}; the merge / full tier runs it)`);
+      console.log(`DEFERRED ${files.length - i}`);
+      deferred.push(...files.slice(i));
       return;
     }
-  }
-  const t0 = Date.now();
-  try {
-    for (const file of files) {
-      const r = await runFile(file, tier);
-      results.push(r);
-      console.log(`EXCLUSIVE ${r.file} ${(r.ms / 1000).toFixed(1)}`);
-      if (!r.ok) console.log(`FAIL ${r.file} (${(r.ms / 1000).toFixed(1)}s)`);
-    }
-  } finally {
-    if (tookLock) { releaseLock(); lockSeconds.push(`${tier}=${((Date.now() - t0) / 1000).toFixed(0)}s`); }
+    const r = await runFile(files[i], tier);
+    results.push(r);
+    console.log(`EXCLUSIVE ${r.file} ${(r.ms / 1000).toFixed(1)}`);
+    if (!r.ok) console.log(`FAIL ${r.file} (${(r.ms / 1000).toFixed(1)}s)`);
   }
 }
 
@@ -477,29 +500,39 @@ async function main() {
     if (plan) return;
   }
   const started = Date.now();
+  const timings = loadTimings();
+  const quickJobs = jobs || QUICK_JOBS;
+  const liveJobs = jobs || LIVE_JOBS;
 
-  if (wantLive) acquireLock(tier);
-  const onSignal = () => { releaseLock(); process.exit(130); };
+  // the shared CPU lock, for the whole run (TASK 873). The quick tier declares its own estimate (<= SIDE_LANE_MAX_MIN: the library's side lane).
+  // A browser tier must hold the MAIN lane (its browsers and exclusive tests must not run beside another heavy run), and the library sends an eta
+  // <= SIDE_LANE_MAX_MIN to the side lane, so a browser tier declares at least SIDE_LANE_MAX_MIN + 1 (only a short merge or a run with no timings
+  // estimates less; the WORK-LOG's merge runs took 8 to 28 min).
+  const parts = [...(wantQuick ? [{ files: tiers.quick, jobs: quickJobs }] : []), ...(wantLive ? [{ files: liveFiles, jobs: liveJobs }] : [])];
+  const estimate = etaMinutes(parts, timings);
+  const eta = wantLive ? Math.max(estimate, SIDE_LANE_MAX_MIN + 1) : estimate;
+  const what = `gate:${tier} ${REPO_ROOT.replace(/\\/g, '/')}`;
+  const onSignal = () => { releaseCpuLock(); process.exit(130); };
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
+  console.log(`CPU-LOCK taking the shared CPU lock as ${CPU_LOCK_PROJECT} (${what}, eta ~${eta}min; timings estimate ${estimate} min)`);
+  await takeCpuLock(what, `~${eta}min`);
 
   const results = [];
   let smoke = null;
   let counts = null;
   let sweep = null;
-  const timings = loadTimings();
-  const deferred = []; // quick: exclusive tests not run because another gate held the lock
-  const lockSeconds = []; // quick: how long the exclusive part held the lock
+  const deferred = []; // exclusive tests not run because another run held the shared lock's main lane
   try {
     if (wantQuick) {
       const q = splitExclusive(tiers.quick);
-      results.push(...await runPool(q.parallel, 'quick', jobs || QUICK_JOBS, timings, true));
-      await runExclusive(q.exclusive, 'quick', results, lockSeconds, deferred);
+      results.push(...await runPool(q.parallel, 'quick', quickJobs, timings, true));
+      await runExclusive(q.exclusive, 'quick', results, deferred);
     }
     if (wantLive) {
       const l = splitExclusive(liveFiles);
-      results.push(...await runPool(l.parallel, 'live', jobs || LIVE_JOBS, timings, true));
-      await runExclusive(l.exclusive, 'live', results, lockSeconds, deferred);
+      results.push(...await runPool(l.parallel, 'live', liveJobs, timings, true));
+      await runExclusive(l.exclusive, 'live', results, deferred);
       smoke = runSmoke();
       counts = headlessCheck(smoke.pid);
     }
@@ -510,7 +543,7 @@ async function main() {
       console.warn(`gate: profile sweep failed: ${e.message}`);
     }
   } finally {
-    releaseLock();
+    releaseCpuLock();
   }
 
   const failed = results.filter(r => !r.ok);
@@ -520,10 +553,9 @@ async function main() {
   console.log('\nSLOWEST 15 (seconds, tier, file):');
   for (const r of [...results].sort((a, b) => b.ms - a.ms).slice(0, 15)) console.log(`  ${(r.ms / 1000).toFixed(1).padStart(6)}  ${r.tier.padEnd(5)}  ${r.file}`);
 
-  const jobsText = [wantQuick ? `quick=${jobs || QUICK_JOBS}` : null, wantLive ? `live=${jobs || LIVE_JOBS}` : null].filter(Boolean).join(',');
+  const jobsText = [wantQuick ? `quick=${quickJobs}` : null, wantLive ? `live=${liveJobs}` : null].filter(Boolean).join(',');
   console.log(`GATE tier=${tier} jobs=${jobsText} files=${results.length} pass=${results.length - failed.length} fail=${failed.length}${deferred.length ? ` deferred=${deferred.length}` : ''} elapsed=${((Date.now() - started) / 1000).toFixed(0)}s`);
   for (const f of failed) console.log(`FAIL ${f.file}`);
-  if (lockSeconds.length) console.log(`LOCK held for the exclusive tests only: ${lockSeconds.join(' ')}`);
   for (const k of KNOWN_FAILURES) if (!failed.some(f => f.file === k)) console.log(`KNOWN-NOW-PASSING ${k}`);
   if (smoke) {
     console.log(`SMOKE ${smoke.score}`);
@@ -540,5 +572,5 @@ async function main() {
 module.exports = { isProfileDirName, isProfileInUse, shouldSweepProfileDir, sweepProfiles, getRunningBrowserCommandLines };
 
 if (require.main === module) {
-  main().catch((e) => { releaseLock(); console.error(e.stack || e.message); process.exit(2); });
+  main().catch((e) => { releaseCpuLock(); console.error(e.stack || e.message); process.exit(2); });
 }

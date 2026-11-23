@@ -10,7 +10,7 @@ import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, STOCK_TYPE_ID, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations
 import { keyOf, parseKey, recordOf, getCutRecord, getPlanRecord, planRecords, planMemberItems, pathsCtx, pathsOf, pathsSigOf, itemOutOfDate, planOwnedLoops, stockKeyOf, rememberStepDepth, rememberAdaptiveSteps, rememberStepDeviation, steppedNoteItems,
   holdSummary, holdNoteItems, lastTabCount, rememberTabCount, lastTabWidth, rememberTabWidth, lastHoldThickness, rememberHoldThickness,
-  clearingSummary, clearingNoteItems, clearingAvailability, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
+  clearingSummary, clearingNoteItems, clearingAvailability, pocketAutoAngle, lastStepover, rememberStepover, lastFinishAllowance, rememberFinishAllowance, lastLoop, rememberLoop, lastRasterAngle, rememberRasterAngle,
   CONTOUR_KIND, rememberContour, levelsSummary, levelsNoteItems, resolveEntry, setOpFields } from './cut-plan.js'; // SP1j-4: shared cut-plan store; TASK 742: Hold part; TASK 745: the programmed pocket; TASK 792: Roughing / Contour; TASK S2: the operation writers
 import { CONTOUR_TYPE, opById, membersOf, planKeyOf } from './operations-store.js'; // TASK S2: the active operation, a shape's memberships
 import { cutLengthNote } from './tool-table.js'; // TASK 842: an operation deeper than its bit's cutting length (one note line)
@@ -898,14 +898,18 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // so they show as opened and after a Preview of the current settings; the tabs' are read here (a light outline derivation)
     const peek = { ctx: viewCtx(), request: false };
     const clearSum = clearingSummary(pk, rec, state, loops, loopPolys, own, peek);
-    const clearAv = clearingAvailability(pk, rec, state, loops, loopPolys);
     const note = [...steppedNoteItems(rec), ...levelsNoteItems(rec, levelsSummary(pk, rec, state, loops, loopPolys, own, peek)), // TASK 792: Roughing / Contour
       ...holdNoteItems(rec, hold), ...clearingNoteItems(rec, clearSum)];
     const d = e ? (contour ? e.rec.baseDepth : e.rec.cutDepth) : null;
     const deep = cutLengthNote(rec, Number(rec.cutDepth) > 0 ? Number(rec.cutDepth) : d, docUnit()); // TASK 842: deeper than the bit's cutting length: one plain line (never blocks)
     if (deep) note.push({ text: deep });
-    return { kind: parseKey(ref.key).kind, record: rec, note, hold, clearing: clearAv,
-      rasterResolved: clearSum && clearSum.pattern === 'raster' ? (Number.isFinite(clearSum.angle) ? clearSum.angle : Number(clearSum.settings && clearSum.settings.angle)) : (clearAv && Number.isFinite(clearAv.autoAngle) ? clearAv.autoAngle : null),
+    let clearAvail;
+    const getClearingAvail = () => (clearAvail !== undefined ? clearAvail : (clearAvail = clearingAvailability(pk, rec, state, loops, loopPolys)));
+    const rasterAngle = clearSum && clearSum.pattern === 'raster'
+      ? (Number.isFinite(clearSum.angle) ? clearSum.angle : Number(clearSum.settings && clearSum.settings.angle))
+      : pocketAutoAngle(pk, rec, state, loops, loopPolys);
+    return { kind: parseKey(ref.key).kind, record: rec, note, hold, clearing: getClearingAvail, clearingSum: clearSum,
+      rasterResolved: Number.isFinite(rasterAngle) ? rasterAngle : null,
       levels: Boolean(e && hasLevels(e.rec)), partDepth: Number(d) > 0 ? Number(d) : null, // TASK 809: it (a Contour: its part) cuts a part's levels; TASK 810: the part's depth
       walls: contour && e ? { shown: Boolean(e.rec.slope || hasLevels(e.rec)), value: wallsOf(e.rec), defaultId: wallsDefault(e.rec) } : null }; // TASK 810: a Contour's walls
   };

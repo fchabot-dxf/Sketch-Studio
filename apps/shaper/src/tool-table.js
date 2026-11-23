@@ -22,8 +22,10 @@ import SettingsManager, { lengthText, angleText } from '#core/settings-manager.j
 export const TOOL_TABLE_KEY = 'SHAPER_TOOL_TABLE';
 export const TOOL_TABLE_VERSION = 1;
 export const BIT_UNITS = Object.freeze(['mm', 'in']);
+/** TASK 852d: default V-bit flat tip width (0.02 in = 0.508 mm) for new V-bits and read-time fallback for stored V-bits/records without one. */
+export const DEFAULT_VBIT_TIP_WIDTH_MM = 0.508;
 /** The cut-record fields a bit sets (recordFieldsOf): the bit's copy in an operation. */
-export const BIT_RECORD_FIELDS = Object.freeze(['bitId', 'bitName', 'toolDia', 'cutterShape', 'cutterAngle', 'cornerRadius', 'taperAngle', 'shankDia', 'cutLength']);
+export const BIT_RECORD_FIELDS = Object.freeze(['bitId', 'bitName', 'toolDia', 'cutterShape', 'cutterAngle', 'tipWidth', 'cornerRadius', 'taperAngle', 'shankDia', 'cutLength']);
 /** The fields the card's Custom pick clears (the link to a table bit and its cutting length; the cutter itself stays as it is). */
 export const CUSTOM_CLEARS = Object.freeze(['bitId', 'bitName', 'cutLength']);
 const NAME_MAX = 60;
@@ -74,6 +76,10 @@ export function validateBit(raw, others = []) {
     else if (positive(b.diameter) && b.cornerRadius > b.diameter / 2 * (1 + 1e-12)) out.push('The corner radius can be at most half the diameter.');
   }
   if (has('angle') && !(positive(b.angle) && b.angle < 180)) out.push('The V-bit’s angle must be between 0° and 180°.');
+  if (has('tipWidth')) {
+    if (!positive(b.tipWidth)) out.push('The tip width must be more than 0.');
+    else if (positive(b.diameter) && !(b.tipWidth < b.diameter)) out.push('The tip width must be smaller than the diameter.');
+  }
   if (has('tipDiameter') && !positive(b.tipDiameter)) out.push('The tip diameter must be more than 0.');
   if (has('taperAngle') && !(positive(b.taperAngle) && b.taperAngle < 90)) out.push('The taper angle (per side) must be between 0° and 90°.');
   if (has('shankDiameter')) {
@@ -86,18 +92,20 @@ export function validateBit(raw, others = []) {
 
 /** The bit's DIAMETER as an operation takes it (its toolDia, written to the file as shaper:toolDia): a tapered bit's TIP (see recordFieldsOf). */
 export const bitToolDia = (bit) => (isTapered(bit.type) ? bit.tipDiameter : bit.diameter);
+/** TASK 852d: a V-bit record's tip width (mm), reading DEFAULT_VBIT_TIP_WIDTH_MM when an old record or Custom V-bit has none. */
+export const vbitTipWidth = (rec) => (rec && Number(rec.tipWidth) > 0 ? Number(rec.tipWidth) : DEFAULT_VBIT_TIP_WIDTH_MM);
 
 /**
  * The cut-record fields an operation takes from a bit (its COPY of the bit): bitId, bitName, cutterShape = the type, toolDia (a tapered bit: its TIP diameter:
  * the Origin offsets an inside / outside cut by half the toolDia, and the tip is what cuts at the bottom of the cut, on the line; the cone above it is the
- * wall's draft), cutterAngle (a V-bit), cornerRadius (a bowl bit), taperAngle + shankDia (a tapered bit), cutLength (when set). A field the bit does not have is `undefined` (the
+ * wall's draft), cutterAngle (a V-bit), tipWidth (a V-bit: TASK 852d), cornerRadius (a bowl bit), taperAngle + shankDia (a tapered bit), cutLength (when set). A field the bit does not have is `undefined` (the
  * operation's own field is removed: setOpFields), except cutterAngle, which only a V-bit sets.
  */
 export function recordFieldsOf(bit) {
   const b = normalizeBit(bit), tapered = isTapered(b.type);
   return {
     bitId: b.id, bitName: b.name, cutterShape: b.type, toolDia: bitToolDia(b),
-    ...(b.type === 'vbit' ? { cutterAngle: b.angle } : {}),
+    ...(b.type === 'vbit' ? { cutterAngle: b.angle, tipWidth: b.tipWidth } : { tipWidth: undefined }),
     cornerRadius: b.type === 'bowl' ? b.cornerRadius : undefined,
     taperAngle: tapered ? b.taperAngle : undefined,
     shankDia: tapered ? b.shankDiameter : undefined,
@@ -142,7 +150,8 @@ export function bitSummary(bit) {
  */
 export function suggestBitName(bit) {
   const b = normalizeBit(bit), L = (mm) => `${bitLengthText(mm, b.unit)} ${b.unit}`, t = bitType(b.type);
-  if (!t || t.fields.some((f) => !positive(b[f]))) return '';
+  const need = b.type === 'vbit' ? ['diameter', 'angle'] : t ? t.fields : [];
+  if (!t || need.some((f) => !positive(b[f]))) return '';
   const label = b.type === 'bowl' ? 'bowl bit' : t.label;
   if (b.type === 'bowl') return `${L(b.diameter)} ${label}, ${L(b.cornerRadius)} corner`;
   if (isTapered(b.type)) return `${L(b.tipDiameter)} ${angleText(b.taperAngle, { show: 'deg' })} ${label}`;
@@ -167,7 +176,8 @@ export function loadBits(settings = SettingsManager) {
   if (!v || typeof v !== 'object' || !Array.isArray(v.bits)) { console.warn('[tool-table] the stored table is not { v, bits }: the defaults are shown'); return DEFAULT_BITS.map((b) => ({ ...b })); }
   const out = [];
   for (const raw of v.bits) {
-    const b = normalizeBit(raw), why = validateBit(b, out);
+    const withDefaults = raw && raw.type === 'vbit' && (raw.tipWidth == null || raw.tipWidth === '') ? { ...raw, tipWidth: DEFAULT_VBIT_TIP_WIDTH_MM } : raw; // TASK 852d: read-time default for stored V-bits without tipWidth (stored table untouched)
+    const b = normalizeBit(withDefaults), why = validateBit(b, out);
     if (!b.id || why.length) { console.warn('[tool-table] a stored bit was left out:', b.name || b.id, why.join(' ')); continue; }
     out.push(b);
   }

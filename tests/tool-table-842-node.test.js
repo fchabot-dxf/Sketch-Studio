@@ -43,7 +43,7 @@ const IN = (t) => parseUnit(t, 'in');
   eq(validateBit({ ...good, diameter: 0 }), ['The diameter must be more than 0.'], 'a zero diameter');
   eq(validateBit({ ...good, type: 'drill' }), ['Pick the bit’s type.'], 'an unknown type');
   eq(validateBit({ ...good, id: 'b2' }, [good]), ['Another bit is already named “1/8 upcut”.'], 'a name used twice in the table');
-  eq(validateBit({ id: 'v', name: 'V', type: 'vbit', unit: 'mm', diameter: 6, angle: 180 }), ['The V-bit’s angle must be between 0° and 180°.'], 'a V-bit angle out of range');
+  eq(validateBit({ id: 'v', name: 'V', type: 'vbit', unit: 'mm', diameter: 6, angle: 180, tipWidth: 0.508 }), ['The V-bit’s angle must be between 0° and 180°.'], 'a V-bit angle out of range');
   eq(validateBit({ id: 't', name: 'T', type: 'taperball', unit: 'mm', tipDiameter: 1, taperAngle: 3.5, shankDiameter: 1 }), ['The shank must be wider than the tip.'], 'a tapered shank no wider than its tip');
   eq(validateBit({ id: 't', name: 'T', type: 'taperflat', unit: 'mm', tipDiameter: 1, taperAngle: 0, shankDiameter: 6 }), ['The taper angle (per side) must be between 0° and 90°.'], 'a zero taper');
   eq(validateBit({ ...good, cutLength: -1 }), ['The cutting length must be more than 0 (or empty).'], 'a negative cutting length');
@@ -138,8 +138,8 @@ const UPCUT = { id: 'bit-up', name: '1/8 upcut', type: 'endmill', unit: 'in', di
 const TBN = { id: 'bit-tbn', name: 'TBN 1mm', type: 'taperball', unit: 'mm', tipDiameter: 1, taperAngle: 3.5, shankDiameter: IN('1/4') };
 {
   // the record a bit sets (pure)
-  eq(recordFieldsOf(UPCUT), { bitId: 'bit-up', bitName: '1/8 upcut', cutterShape: 'endmill', toolDia: 3.175, cornerRadius: undefined, taperAngle: undefined, shankDia: undefined, cutLength: 12.7 }, 'an end mill: its name, shape, diameter, cutting length (no cone)');
-  eq(recordFieldsOf(TBN), { bitId: 'bit-tbn', bitName: 'TBN 1mm', cutterShape: 'taperball', toolDia: 1, cornerRadius: undefined, taperAngle: 3.5, shankDia: 6.35, cutLength: undefined }, 'a tapered bit: toolDia = its TIP, its cone');
+  eq(recordFieldsOf(UPCUT), { bitId: 'bit-up', bitName: '1/8 upcut', cutterShape: 'endmill', toolDia: 3.175, tipWidth: undefined, cornerRadius: undefined, taperAngle: undefined, shankDia: undefined, cutLength: 12.7 }, 'an end mill: its name, shape, diameter, cutting length (no cone)');
+  eq(recordFieldsOf(TBN), { bitId: 'bit-tbn', bitName: 'TBN 1mm', cutterShape: 'taperball', toolDia: 1, tipWidth: undefined, cornerRadius: undefined, taperAngle: 3.5, shankDia: 6.35, cutLength: undefined }, 'a tapered bit: toolDia = its TIP, its cone');
   eq(toolOf({ cutType: 'pocket', ...recordFieldsOf(UPCUT) }).label, '1/8 upcut', 'the tool is named by the bit');
   eq(toolOf({ cutType: 'pocket', toolDia: 3.175, cutterShape: 'endmill' }).label, '⅛″ end mill', 'a Custom bit: named as before');
   ok(toolOf({ cutType: 'pocket', ...recordFieldsOf(UPCUT) }).key !== toolOf({ cutType: 'pocket', toolDia: 3.175, cutterShape: 'endmill' }).key, 'two bits of one size, one named: two tools');

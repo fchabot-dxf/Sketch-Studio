@@ -52,10 +52,10 @@ const IN = (t) => parseUnit(t, 'in');
     { id: 'em-3mm', name: '3 mm end mill', type: 'endmill', unit: 'mm', diameter: 3 }, { id: 'bn-1-8in', name: '1/8 in ball nose', type: 'ballnose', unit: 'in', diameter: IN('1/8') },
     { id: 'vb-60', name: '60° V-bit', type: 'vbit', unit: 'in', diameter: IN('1/4'), angle: 60 },
   ];
-  saveBits(old, s);
+  s.set(TOOL_TABLE_KEY, { v: 1, bits: old }, { persist: 'local' });
   const before = JSON.stringify(s.get(TOOL_TABLE_KEY));
   const again = createSettingsManager({ storage });
-  eq(loadBits(again), old.map(normalizeBit), 'a stored table is read exactly as stored');
+  eq(loadBits(again), old.map((b) => normalizeBit(b.type === 'vbit' ? { tipWidth: 0.508, ...b } : b)), 'a stored table reads a V-bit without tipWidth as 0.508 mm');
   eq(JSON.stringify(again.get(TOOL_TABLE_KEY)), before, 'reading it writes nothing');
   console.log('2 defaults: ok');
 }
@@ -84,7 +84,7 @@ const IN = (t) => parseUnit(t, 'in');
   eq(suggestBitName({ type: 'bowl', unit: 'mm', diameter: null }), '', 'no size yet: no suggestion');
   eq(bitSummary(b), '1/4 in (6.35 mm), 1/16 in (1.587 mm) corner', 'listed with its corner radius');
   ok(BIT_RECORD_FIELDS.includes('cornerRadius'), 'the record field');
-  eq(recordFieldsOf(b), { bitId: 'w', bitName: 'Bowl', cutterShape: 'bowl', toolDia: IN('1/4'), cornerRadius: IN('1/16'), taperAngle: undefined, shankDia: undefined, cutLength: undefined }, 'the operation copy');
+  eq(recordFieldsOf(b), { bitId: 'w', bitName: 'Bowl', cutterShape: 'bowl', toolDia: IN('1/4'), tipWidth: undefined, cornerRadius: IN('1/16'), taperAngle: undefined, shankDia: undefined, cutLength: undefined }, 'the operation copy');
   eq(recordFieldsOf({ id: 'e', name: 'E', type: 'endmill', unit: 'mm', diameter: 6 }).cornerRadius, undefined, 'an end mill: no corner radius (the operation\'s own is removed)');
   console.log('3 bowl type: ok');
 }

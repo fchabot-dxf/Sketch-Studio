@@ -279,8 +279,9 @@ export function describeOperations(state, entries = planEntries(), frame = null,
   for (const stored of storeOps()) {
     const records = (byOp.get(stored.id) || []).map(({ i, ...r }) => r);
     if (!records.length && !every && !pending.has(stored.id) && !outOfDate.has(stored.id)) continue; // TASK S2: an export's list (every: false): only what it cuts
-    const rec = records.length ? records[0].rec : { cutType: stored.type, ...stored.settings }; // TASK S2: EVERY operation is listed (an empty one, one that cuts nothing), with its own settings
-    const op = { key: stored.id, id: stored.id, tool: toolOf(rec), cutType: stored.type, settings: settingsOf(rec), records, shapes: stored.geometry.map((r) => r.key), first: records.length ? byOp.get(stored.id)[0].i : Infinity, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable); TASK S2: `shapes` = its geometry keys
+    const storedRec = { cutType: stored.type, ...stored.settings };
+    const rec = records.length ? records[0].rec : storedRec; // TASK S2: EVERY operation is listed (an empty one, one that cuts nothing), with its own settings
+    const op = { key: stored.id, id: stored.id, tool: toolOf(storedRec), cutType: stored.type, settings: settingsOf(rec), records, shapes: stored.geometry.map((r) => r.key), first: records.length ? byOp.get(stored.id)[0].i : Infinity, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable); TASK S2: `shapes` = its geometry keys
     op.rank = levelsRank(op);
     op.pending = pending.has(stored.id); // TASK 817: its paths are not generated yet (its row spins while they are generating)
     op.outOfDate = outOfDate.has(stored.id); // TASK S3: its inputs changed since it was generated (its row's mark; Recalculate)
@@ -302,7 +303,8 @@ function plannedGeometry(state, entries) {
 }
 function orderView(state, op, entries, geo) {
   const recs = op.geometry.map((ref) => resolveEntry(planKeyOf(op, ref), recordOf(op, ref))).filter(Boolean);
-  const rec = recs.length ? recs[0].rec : { cutType: op.type, ...op.settings };
+  const storedRec = { cutType: op.type, ...op.settings };
+  const rec = recs.length ? recs[0].rec : storedRec;
   const levels = Boolean((cutTypeById(op.type) || {}).levelsOp); // only a Roughing / Contour ranks by its cuts
   const mine = levels ? entries.filter((e) => op.geometry.some((ref) => e.planKey === planKeyOf(op, ref))) : [];
   const pending = new Set(); // TASK 817: a Roughing / Contour ranks by its GENERATED cuts: not there yet = its rank is not known (`unknown`)
@@ -310,7 +312,7 @@ function orderView(state, op, entries, geo) {
   const unknown = pending.size > 0, derived = levelsRank({ cutType: op.type, records });
   if (levels && !unknown) LAST_RANK.set(op, derived);
   const was = unknown ? LAST_RANK.get(op) : undefined; // TASK 817: while its new paths are generating (or it is open), the rank its last generated cuts gave (`provisional`)
-  return { key: op.id, tool: toolOf(rec), cutType: op.type, settings: settingsOf(rec), rank: was !== undefined ? was : derived, first: Math.min(...op.geometry.map((r) => r.seq)), unknown, provisional: unknown && was !== undefined };
+  return { key: op.id, tool: toolOf(storedRec), cutType: op.type, settings: settingsOf(rec), rank: was !== undefined ? was : derived, first: Math.min(...op.geometry.map((r) => r.seq)), unknown, provisional: unknown && was !== undefined };
 }
 const LAST_RANK = new WeakMap(); // TASK 817: a stored operation -> the rank its generated cuts last gave
 const OLD_GUIDE_KEY = JSON.stringify([null, 'guide', null]); // the one Guide operation's key before task S1 (a Guide declared no settings)

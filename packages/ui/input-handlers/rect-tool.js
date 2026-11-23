@@ -93,9 +93,7 @@ function applyRectSnaps(state, pairs) {
     const placed = pairs.map(([jid]) => jid).filter(Boolean);
     for (const [jid, snap] of pairs) {
         if (!jid || !snap) continue;
-        try {
-            applyLockedSnap(state, jid, snap, placed.filter((id) => id !== jid));
-        } catch (_) { }
+        applyLockedSnap(state, jid, snap, placed.filter((id) => id !== jid));
     }
 }
 

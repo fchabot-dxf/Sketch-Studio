@@ -210,9 +210,7 @@ try {
   rows()[0].dispatchEvent(new app.window.Event('mouseleave'));
   rows()[1].dispatchEvent(new app.window.Event('focusin'));
   rows()[1].dispatchEvent(new app.window.Event('focusout'));
-  eq(sent, [['highlight_selection', { selectionId: 'sel-A', action: 'highlight_selection' }], ['highlight_selection', { selectionId: null, action: 'highlight_selection' }],
-    ['highlight_selection', { selectionId: 'sel-B', action: 'highlight_selection' }], ['highlight_selection', { selectionId: null, action: 'highlight_selection' }]],
-  'hover / focus a row: highlight_selection(id); leaving: highlight_selection(null)');
+  eq(sent, [], 'hover / focus a row sends nothing to Fusion');
   sent.length = 0;
   rows()[0].querySelector('.shaper-fusion-sel-x').dispatchEvent(new app.window.Event('click', { bubbles: true }));
   eq(sent, [['clear_selection', { selectionId: 'sel-A', action: 'clear_selection' }]], 'the X sends clear_selection(id)');

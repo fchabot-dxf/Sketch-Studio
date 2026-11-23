@@ -12,7 +12,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion fai
 (async () => {
   const dimInput = {
     classList: { _set: new Set(), add(s) { this._set.add(s); }, remove(s) { this._set.delete(s); }, contains(s) { return this._set.has(s); } },
-    style: {}, focus() {}, select() {}, value: '', addEventListener() {}, removeEventListener() {}
+    style: {}, focus() {}, select() {}, setSelectionRange() {}, value: '', addEventListener() {}, removeEventListener() {}
   };
   global.document = { getElementById: (id) => (id === 'dimInput' ? dimInput : null), addEventListener() {}, removeEventListener() {} }; // the open box listens for a press outside it (task 723)
   global.window = global.window || {};

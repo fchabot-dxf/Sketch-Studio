@@ -22,8 +22,8 @@ function conflict(doc, state, engine) {
   ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COLLINEAR, { shapes: [h, v] });
   const t = toasts(doc);
   assert.strictEqual(t.length, 1, 'one toast');
-  assert.strictEqual(t[0].getAttribute('data-level'), 'error', 'the notice\'s own level');
-  assert(/perpendicular/.test(t[0].textContent), 'the notice text: ' + t[0].textContent);
+  assert.strictEqual(t[0].getAttribute('data-level'), 'overconstrained', 'the notice\'s own level');
+  assert.strictEqual(t[0].textContent.trim(), 'Sketch geometry over constrained', 'the notice text (task 874)');
 }
 
 for (const host of ['shaper', 'penplotter']) {

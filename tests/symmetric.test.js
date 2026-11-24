@@ -181,13 +181,13 @@ const onMirrorOf = (S, q, l1, lineId) => { const s = L.shape(S, l1), [a, b] = en
   ok(create(S, { joints: [a1, b1], line: 'ref_axis_y' }) && create(S, { joints: [a2, b2], line: 'ref_axis_y' }), 'two point pairs about Y: created'); extra += 2;
   ok(solve(S).converged, 'point pairs: converged');
   refused({ joints: [b1, a1], line: 'ref_axis_y' }, 'the same symmetric again (other pick order): a duplicate');
-  ok(/already symmetric/.test(refused({ shapes: [l1, l2], line: 'ref_axis_y' }, 'two lines whose ends already mirror')), 'redundant: "already symmetric"');
+  ok(/^Sketch geometry over constrained$/.test(refused({ shapes: [l1, l2], line: 'ref_axis_y' }, 'two lines whose ends already mirror')), 'redundant: "already symmetric"');
   // both points fixed and not mirrored: nothing can move
   const f1 = L.point(S, 5, 5), f2 = L.point(S, 9, 9); P(S, f1).fixed = true; P(S, f2).fixed = true;
-  ok(/fixed and not symmetric/.test(refused({ joints: [f1, f2], line: 'ref_axis_x' }, 'two fixed points that are not mirrored')), 'fixed + not mirrored: says so');
+  ok(/^Sketch geometry over constrained$/.test(refused({ joints: [f1, f2], line: 'ref_axis_x' }, 'two fixed points that are not mirrored')), 'fixed + not mirrored: says so');
   // both fixed and already mirrored: redundant
   const g1 = L.point(S, 5, 7), g2 = L.point(S, 5, -7); P(S, g1).fixed = true; P(S, g2).fixed = true;
-  ok(/already symmetric/.test(refused({ joints: [g1, g2], line: 'ref_axis_x' }, 'two fixed points that are already mirrored')), 'fixed + mirrored: redundant');
+  ok(/^Sketch geometry over constrained$/.test(refused({ joints: [g1, g2], line: 'ref_axis_x' }, 'two fixed points that are already mirrored')), 'fixed + mirrored: redundant');
   ok(dof(S, 'after the refusals') >= 0, 'the sketch is still consistent');
 }
 

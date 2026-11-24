@@ -206,7 +206,7 @@ export async function runCell(row, cols, variant) {
         // a SYMMETRIC the app refuses as redundant ("already symmetric", task 563) whose raw add leaves the finite-difference nullity unchanged:
         // refused by rule, rightly (task 572: two rect tops sharing a corner lie on ONE horizontal line, which mirrors onto itself, so the
         // constraint holds for every motion). PlaneGCS's helper-point translation counts it as removing 2 there (.evidence/572/probe-rr.mjs).
-        const redundantByRule = row.id === 'symmetric' && rawOk && S.msgs.some(m => /already symmetric/.test(m)) && fdNull(S).nullity === fd0;
+        const redundantByRule = row.id === 'symmetric' && rawOk && S.msgs.some(m => /^Sketch geometry over constrained$/.test(m)) && fdNull(S).nullity === fd0;
         if (redundantByRule) rec.notes.push('refused as redundant (already symmetric): the raw add leaves the finite-difference nullity unchanged');
         else if (rec.oracleFeasible && o.mapped) rec.issues.push('refused-feasible');
       } else rec.issues.push('ui-refused-without-attempt');

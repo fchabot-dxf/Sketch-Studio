@@ -186,6 +186,11 @@ export function setupNotifications() {
     }
 }
 
+// The over-constrained notice (owner turns 3418-3423): the app's own red toast with Fusion's icon, a round red circle with a white X, and
+// exactly the message it is given (ConstraintManager.announceOverConstrained is the only caller). Declared ONCE here as the notice type
+// 'overconstrained'. It has no Copy button: it is not a diagnostic (the reason stays in the debug log).
+const OVER_CONSTRAINED_ICON = `<svg width="22" height="22" viewBox="0 0 40 40" aria-hidden="true"><defs><radialGradient id="oc-red" cx="35%" cy="28%" r="80%"><stop offset="0" stop-color="#ff8a80"/><stop offset="0.35" stop-color="#e01b1b"/><stop offset="1" stop-color="#8e0000"/></radialGradient></defs><circle cx="20" cy="20" r="18" fill="url(#oc-red)" stroke="#fff" stroke-width="2.5"/><path d="M13 13 L27 27 M27 13 L13 27" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
+
 // TASK 760: options.action = { label, onClick }: ONE button at the end of the toast (the import's "Close them" offer, #ui/close-path-actions.js);
 // a press runs onClick and dismisses the toast. Without it the toast is exactly as before.
 export function showNotification(message, type = 'info', duration = 3000, { action = null } = {}) {
@@ -211,6 +216,7 @@ export function showNotification(message, type = 'info', duration = 3000, { acti
     let bg = '#ef4444'; // error (red)
     let text = 'white';
     let icon = '⚠️';
+    const overConstrained = type === 'overconstrained'; // red like an error; the icon is the SVG, no Copy button
     
     if (type === 'warning') {
         bg = '#f59e0b'; // warning (amber)
@@ -255,7 +261,8 @@ export function showNotification(message, type = 'info', duration = 3000, { acti
     copyBtn.style.cssText = `margin-right:8px; pointer-events:auto; background:rgba(255,255,255,0.08); border:none; color:${text}; border-radius:4px; padding:2px 8px; font-size:13px; cursor:pointer; user-select:none;`;
 
     const iconSpan = document.createElement('span');
-    iconSpan.textContent = icon;
+    if (overConstrained) { iconSpan.style.cssText = 'display:flex; flex:0 0 auto;'; iconSpan.innerHTML = OVER_CONSTRAINED_ICON; } // a constant, no user text
+    else iconSpan.textContent = icon;
 
     const pre = document.createElement('pre');
     pre.tabIndex = 0;
